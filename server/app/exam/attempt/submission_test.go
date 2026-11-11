@@ -43,14 +43,14 @@ func TestSubmitSealsExactAcknowledgedStateBeforePublishingEffects(t *testing.T) 
 		SittingID: f.sitting.ID, ClassID: f.sitting.ClassID, CandidateUserID: f.userID,
 		ParticipationID: participationID, Generation: 3, ConnectionID: f.connectionID}
 
-	result, err := f.service.SubmitExamAttempt(context.Background(), f.invocation, SubmitCommand{
+	result, err := f.service.SubmitExamAttempt(context.Background(), f.inv, SubmitCommand{
 		Access: WorkspaceMutationAccess{CandidateAccess: CandidateAccess{AttemptID: f.attemptID,
 			ConnectionID: f.connectionID, ContinuityCredential: credential}, ParticipationID: participationID, Generation: 3},
 		ExpectedCurrentRevisionID: revisionID, ExpectedWorkspaceCursor: 11, FinalFocusLossSequence: 7,
 		IdempotencyKey: "test-key",
 	})
 	require.NoError(t, err)
-	principal := f.invocation.Principal()
+	principal := f.inv.Principal()
 	sealAccess := f.submissions.resolvedAccess
 	require.Equal(t, f.attemptID, sealAccess.AttemptID, "access=%#v seal=%#v result=%#v effects=%#v", sealAccess, f.submissions.seal, result, f.publisher.Calls())
 	require.Equal(t, participationID, sealAccess.ParticipationID, "access=%#v seal=%#v result=%#v effects=%#v", sealAccess, f.submissions.seal, result, f.publisher.Calls())
@@ -76,7 +76,7 @@ func TestSubmitSealsExactAcknowledgedStateBeforePublishingEffects(t *testing.T) 
 	}
 	require.Len(t, f.audit.values, 1)
 	require.Equal(t, f.attemptID.String(), f.audit.values["exam_attempt_id"])
-	wantIdempotency, prepareErr := prepareSubmissionIdempotency(f.invocation, "test-key", f.attemptID, revisionID, 11, 7)
+	wantIdempotency, prepareErr := prepareSubmissionIdempotency(f.inv, "test-key", f.attemptID, revisionID, 11, 7)
 	require.NoError(t, prepareErr)
 	require.Equal(t, wantIdempotency, f.submissions.idempotency)
 	require.Equal(t, f.userID, f.mail.request.CandidateUserID, "mail request=%#v seal=%#v", f.mail.request, f.submissions.seal)
@@ -111,7 +111,7 @@ func TestSubmitReplayReturnsRetainedReceiptAndSuppressesEffects(t *testing.T) {
 		SittingID: f.sitting.ID, ClassID: f.sitting.ClassID, CandidateUserID: f.userID,
 		ParticipationID: mutationAccess.ParticipationID, Generation: mutationAccess.Generation, ConnectionID: mutationAccess.ConnectionID, Replayed: true}
 
-	result, err := f.service.SubmitExamAttempt(context.Background(), f.invocation, SubmitCommand{Access: mutationAccess,
+	result, err := f.service.SubmitExamAttempt(context.Background(), f.inv, SubmitCommand{Access: mutationAccess,
 		ExpectedCurrentRevisionID: revisionID, ExpectedWorkspaceCursor: 0, FinalFocusLossSequence: 0,
 		IdempotencyKey: "test-key"})
 	require.NoError(t, err)
@@ -132,7 +132,7 @@ func TestManagedSubmissionNestedOwnershipMismatchIsConcealed(t *testing.T) {
 	submissionID := model.NewSubmissionID()
 	f.submissions.authorization = &store.ExamSubmissionAuthorization{SubmissionID: submissionID,
 		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID, CandidateUserID: model.NewUserID(), AcademicUnitID: model.NewAcademicUnitID()}
-	_, err := f.service.GetExamSubmission(context.Background(), f.invocation, GetSubmissionQuery{ExamID: model.NewExamID(),
+	_, err := f.service.GetExamSubmission(context.Background(), f.inv, GetSubmissionQuery{ExamID: model.NewExamID(),
 		SittingID: f.sitting.ID, AttemptID: f.attemptID, SubmissionID: submissionID})
 	require.True(t, apperror.Is(err, "resource.not_found"), "error=%v order=%v", err, f.order)
 	require.True(t, chainHasCode(err, "exam.attempt.not_found"), "error=%v order=%v", err, f.order)
@@ -153,7 +153,7 @@ func TestOpenSubmissionFileAuthorizesThenStreamsRetainedStarterBytes(t *testing.
 		SizeBytes: 4, SHA256: strings.Repeat("a", 64)}, StorageOrigin: model.AttemptWorkspaceStorageStarter,
 		StarterObjectID: starterID, ContentVersion: version}
 
-	opened, err := f.service.OpenExamSubmissionFile(context.Background(), f.invocation, OpenSubmissionFileQuery{
+	opened, err := f.service.OpenExamSubmissionFile(context.Background(), f.inv, OpenSubmissionFileQuery{
 		GetSubmissionQuery: GetSubmissionQuery{ExamID: f.sitting.ExamID, SittingID: f.sitting.ID,
 			AttemptID: f.attemptID, SubmissionID: submission.ID}, EntryID: entryID})
 	require.NoError(t, err)
@@ -180,7 +180,7 @@ func TestOpenSubmissionFileStreamsRetainedAttemptOriginBytes(t *testing.T) {
 		AttemptObjectID: objectID, ContentVersion: version}
 	f.content.openAttemptBody = "work"
 
-	opened, err := f.service.OpenExamSubmissionFile(context.Background(), f.invocation, OpenSubmissionFileQuery{
+	opened, err := f.service.OpenExamSubmissionFile(context.Background(), f.inv, OpenSubmissionFileQuery{
 		GetSubmissionQuery: GetSubmissionQuery{ExamID: f.sitting.ExamID, SittingID: f.sitting.ID,
 			AttemptID: f.attemptID, SubmissionID: submission.ID}, EntryID: entryID})
 	require.NoError(t, err)
@@ -207,7 +207,7 @@ func TestOpenSubmissionFileFailsClosedOnRetainedSelectorMismatch(t *testing.T) {
 		SHA256: strings.Repeat("b", 64)}, StorageOrigin: model.AttemptWorkspaceStorageAttempt,
 		AttemptObjectID: model.NewAttemptWorkspaceObjectID(), ContentVersion: model.NewWorkspaceContentVersion()}
 
-	_, err := f.service.OpenExamSubmissionFile(context.Background(), f.invocation, OpenSubmissionFileQuery{
+	_, err := f.service.OpenExamSubmissionFile(context.Background(), f.inv, OpenSubmissionFileQuery{
 		GetSubmissionQuery: GetSubmissionQuery{ExamID: f.sitting.ExamID, SittingID: f.sitting.ID,
 			AttemptID: f.attemptID, SubmissionID: submission.ID}, EntryID: entryID})
 	var fault *apperror.Error
@@ -235,7 +235,7 @@ func TestListSubmissionManifestReturnsBoundedEntryIDKeysetAfterAuthorization(t *
 				ContentVersion: model.NewWorkspaceContentVersion(), MediaType: "text/x-go", SizeBytes: 4, SHA256: strings.Repeat("a", 64)},
 		}}
 
-	page, err := f.service.ListExamSubmissionManifest(context.Background(), f.invocation, ListSubmissionManifestQuery{
+	page, err := f.service.ListExamSubmissionManifest(context.Background(), f.inv, ListSubmissionManifestQuery{
 		GetSubmissionQuery: GetSubmissionQuery{ExamID: f.sitting.ExamID, SittingID: f.sitting.ID,
 			AttemptID: f.attemptID, SubmissionID: submission.ID}, AfterEntryID: ids[0], Limit: 2,
 	})
@@ -256,7 +256,7 @@ func TestGetSubmissionAuthorizesCanonicalResourceBeforeProtectedRead(t *testing.
 		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID, CandidateUserID: model.NewUserID(), AcademicUnitID: model.NewAcademicUnitID()}
 	f.submissions.submission = submission
 
-	got, err := f.service.GetExamSubmission(context.Background(), f.invocation, GetSubmissionQuery{ExamID: f.sitting.ExamID,
+	got, err := f.service.GetExamSubmission(context.Background(), f.inv, GetSubmissionQuery{ExamID: f.sitting.ExamID,
 		SittingID: f.sitting.ID, AttemptID: f.attemptID, SubmissionID: submission.ID})
 	require.NoError(t, err)
 	require.Equal(t, *f.submissions.authorization, got.Authorization, "got=%#v authorized", got)

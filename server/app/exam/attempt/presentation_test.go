@@ -33,7 +33,7 @@ func TestProtectedPresentationUsesCurrentRevisionAndSanitizesCandidateMarkdown(t
 		Resources: []store.CandidateExamResource{{ResourceID: model.NewExamResourceID(), DisplayName: "Reference",
 			DescriptionMarkdown: "Read _carefully_. <iframe src=https://evil.test></iframe> [data](data:text/html,bad)", Position: 0, MediaType: model.ExamResourceMediaText, SizeBytes: 4, SHA256: strings.Repeat("a", 64)}},
 	}
-	result, err := f.service.GetCandidateExamPresentation(context.Background(), f.invocation, CandidateAccess{
+	result, err := f.service.GetCandidateExamPresentation(context.Background(), f.inv, CandidateAccess{
 		AttemptID: f.attemptID, ConnectionID: f.connectionID, ContinuityCredential: credential,
 	})
 	require.NoError(t, err)
@@ -50,7 +50,7 @@ func TestProtectedPresentationUsesCurrentRevisionAndSanitizesCandidateMarkdown(t
 	}
 	require.Equal(t, model.HashToken(credential), f.persistence.candidateAccess.ContinuityCredentialHash)
 	require.Equal(t, f.userID, f.persistence.candidateAccess.CandidateUserID)
-	require.Equal(t, f.invocation.Principal().SessionID, f.persistence.candidateAccess.SessionID)
+	require.Equal(t, f.inv.Principal().SessionID, f.persistence.candidateAccess.SessionID)
 }
 
 func TestProtectedPresentationRejectsInvalidFrozenCapacity(t *testing.T) {
@@ -68,7 +68,7 @@ func TestProtectedPresentationRejectsInvalidFrozenCapacity(t *testing.T) {
 				AttemptID: f.attemptID, SittingID: f.sitting.ID, Capacity: test.capacity,
 				RuntimeCapabilities: runtimeCapabilitiesFixture(f, f.revision.ID), BrowserPolicy: disabledCandidateBrowserPolicyFixture(f.revision.ID),
 			}
-			_, err := f.service.GetCandidateExamPresentation(context.Background(), f.invocation, CandidateAccess{AttemptID: f.attemptID, ConnectionID: f.connectionID, ContinuityCredential: model.NewCredentialToken()})
+			_, err := f.service.GetCandidateExamPresentation(context.Background(), f.inv, CandidateAccess{AttemptID: f.attemptID, ConnectionID: f.connectionID, ContinuityCredential: model.NewCredentialToken()})
 			var fault *apperror.Error
 			require.ErrorAs(t, err, &fault)
 			require.Equal(t, "exam.attempt.unavailable", fault.Code())
@@ -79,10 +79,10 @@ func TestProtectedPresentationRejectsInvalidFrozenCapacity(t *testing.T) {
 func TestProtectedPresentationRejectsAConnectionFromAnotherSession(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	f.persistence.authorizedSession = f.invocation.Principal().SessionID
-	principal := f.invocation.Principal()
+	f.persistence.authorizedSession = f.inv.Principal().SessionID
+	principal := f.inv.Principal()
 	principal.SessionID = model.NewSessionID()
-	otherSession := invocation.New(principal, f.invocation.RequestMetadata())
+	otherSession := invocation.New(principal, f.inv.RequestMetadata())
 	_, err := f.service.GetCandidateExamPresentation(context.Background(), otherSession, CandidateAccess{
 		AttemptID: f.attemptID, ConnectionID: f.connectionID, ContinuityCredential: model.NewCredentialToken(),
 	})

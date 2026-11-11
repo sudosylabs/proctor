@@ -23,7 +23,7 @@ const (
 )
 
 func prepareWorkspaceIdempotency(
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	operation, key string,
 	examID model.ExamID,
 	revision int64,
@@ -32,7 +32,7 @@ func prepareWorkspaceIdempotency(
 	size int64,
 	contentSHA256 string,
 ) (*store.CommandIdempotency, error) {
-	return idempotency.Require(invocation, operation, key, struct {
+	return idempotency.Require(inv, operation, key, struct {
 		ExamID                 string `json:"exam_id"`
 		ExpectedDraftRevision  int64  `json:"expected_draft_revision"`
 		ExpectedContentVersion string `json:"expected_content_version,omitempty"`

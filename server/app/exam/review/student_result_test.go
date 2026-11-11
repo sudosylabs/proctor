@@ -23,18 +23,18 @@ func TestCandidateResultRequiresSessionOwnershipAndSanitizesRemarks(t *testing.T
 	f.persistence.student = &model.StudentResult{ReviewID: f.reviewID, SubmissionID: f.submissionID,
 		AttemptID: f.attemptID, CandidateUserID: f.userID,
 		StudentRemarksMarkdown: "Safe **text** <script>alert(1)</script> ![remote](https://tracker.example/x)", ReleasedAt: f.at}
-	result, err := f.service.GetStudentExamResult(context.Background(), f.invocation, f.attemptID)
+	result, err := f.service.GetStudentExamResult(context.Background(), f.inv, f.attemptID)
 	require.NoError(t, err)
 	require.Equal(t, "Safe **text**  remote", result.StudentRemarksMarkdown)
-	wrongPrincipal := f.invocation.Principal()
+	wrongPrincipal := f.inv.Principal()
 	wrongPrincipal.UserID = model.NewUserID()
-	wrong := invocation.New(wrongPrincipal, f.invocation.RequestMetadata())
+	wrong := invocation.New(wrongPrincipal, f.inv.RequestMetadata())
 	_, err = f.service.GetStudentExamResult(context.Background(), wrong, f.attemptID)
 	require.Error(t, err, "GetStudentResult() accepted another candidate")
-	patPrincipal := f.invocation.Principal()
+	patPrincipal := f.inv.Principal()
 	patPrincipal.CredentialType = model.CredentialPersonalAccessToken
 	patPrincipal.SessionID = ""
-	pat := invocation.New(patPrincipal, f.invocation.RequestMetadata())
+	pat := invocation.New(patPrincipal, f.inv.RequestMetadata())
 	_, err = f.service.GetStudentExamResult(context.Background(), pat, f.attemptID)
 	require.Error(t, err, "GetStudentResult() accepted non-Session principal")
 }

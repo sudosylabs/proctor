@@ -24,9 +24,9 @@ import (
 )
 
 // Logout revokes the caller's current Session.
-func (s *Service) Logout(ctx context.Context, invocation invocation.Invocation) (resultErr error) {
+func (s *Service) Logout(ctx context.Context, inv invocation.Invocation) (resultErr error) {
 	defer func() { recordOperational(s.operational, "authentication", "logout", resultErr) }()
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.ValidateMFARecovery() != nil {
 		return access.InvalidTokenAppError()
 	}
@@ -34,7 +34,7 @@ func (s *Service) Logout(ctx context.Context, invocation invocation.Invocation) 
 	return s.revokeSession(
 		ctx,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionSessionManage,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
 			Operation:  "logout",

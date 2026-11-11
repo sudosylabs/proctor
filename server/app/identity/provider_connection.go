@@ -27,17 +27,17 @@ type BeginProviderConnectionCommand struct {
 // strong recent authentication and audits the attempt it begins.
 func (s *Service) BeginProviderConnection(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command BeginProviderConnectionCommand,
 ) (*model.ExternalAuthenticationStart, error) {
-	if err := access.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
+	if err := access.RequireStrongRecentSession(inv.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 		return nil, err
 	}
 
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionExternalIdentityManage,
-		Resource:   model.Resource{Type: model.ResourceUser, ID: invocation.Principal().UserID.String()},
+		Resource:   model.Resource{Type: model.ResourceUser, ID: inv.Principal().UserID.String()},
 		Operation:  "connect_provider",
 		Value:      map[string]any{"provider": strings.ToLower(strings.TrimSpace(command.ProviderID))},
 	})
@@ -54,7 +54,7 @@ func (s *Service) BeginProviderConnection(
 		"",
 		command.Source,
 		model.ExternalAuthenticationPurposeConnect,
-		invocation.Principal().UserID,
+		inv.Principal().UserID,
 		auditID,
 		"",
 		"",

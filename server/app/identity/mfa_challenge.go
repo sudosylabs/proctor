@@ -35,10 +35,10 @@ type ChallengeMFACommand struct {
 // TOTP or recovery code.
 func (s *Service) ChallengeMFA(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ChallengeMFACommand,
 ) (*model.Session, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	// A Session the Access Policy restricts to MFA enrollment may satisfy the
 	// policy with a challenge, for example after an external sign-in by a
 	// User who already has a local second factor. Assisted recovery may not.
@@ -51,7 +51,7 @@ func (s *Service) ChallengeMFA(
 	if err := s.requireMFAEnabled(); err != nil {
 		return nil, err
 	}
-	if err := s.limitMFAFactorAttempt(ctx, invocation); err != nil {
+	if err := s.limitMFAFactorAttempt(ctx, inv); err != nil {
 		return nil, err
 	}
 
@@ -60,7 +60,7 @@ func (s *Service) ChallengeMFA(
 		return nil, appErr
 	}
 
-	auditID, appErr := s.beginMFAAudit(ctx, invocation, model.ActionMFAChallenge, resource, nil)
+	auditID, appErr := s.beginMFAAudit(ctx, inv, model.ActionMFAChallenge, resource, nil)
 	if appErr != nil {
 		return nil, appErr
 	}
@@ -170,7 +170,7 @@ func (s *Service) requireMFARecoverySession(principal model.Principal, recent bo
 	return nil
 }
 
-func (s *Service) limitMFAFactorAttempt(ctx context.Context, invocation invocation.Invocation) error {
+func (s *Service) limitMFAFactorAttempt(ctx context.Context, inv invocation.Invocation) error {
 	_, limited, err := s.attempts.account(ctx, authenticationAttemptIntent{
 		purpose: authenticationAttemptPurposeMFA,
 		window:  s.loginRateLimit.Window,
@@ -178,12 +178,12 @@ func (s *Service) limitMFAFactorAttempt(ctx context.Context, invocation invocati
 			{
 				dimension: authenticationAttemptDimensionIdentity,
 				maximum:   s.loginRateLimit.MaximumAttempts,
-				identity:  invocation.Principal().UserID.String(),
+				identity:  inv.Principal().UserID.String(),
 			},
 			{
 				dimension: authenticationAttemptDimensionSource,
 				maximum:   s.loginRateLimit.MaximumSourceAttempts,
-				source:    invocation.RequestMetadata().IPAddress,
+				source:    inv.RequestMetadata().IPAddress,
 			},
 		},
 	})

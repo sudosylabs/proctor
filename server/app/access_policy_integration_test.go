@@ -75,8 +75,8 @@ func TestAccessPolicyTwoNodePostgreSQLFenceAndSafeRevisionFanout(t *testing.T) {
 	strengthenRoleAdministratorSession(t, primary.Handler(), login.Tokens.AccessToken)
 	principal, err := primary.App.Identity.AuthenticateAccess(context.Background(), login.Tokens.AccessToken)
 	require.NoError(t, err)
-	invocation := invocation.New(*principal, model.RequestMetadata{RequestID: "access-policy-two-node"})
-	current, err := primary.App.Administration.GetAccessPolicy(context.Background(), invocation)
+	inv := invocation.New(*principal, model.RequestMetadata{RequestID: "access-policy-two-node"})
+	current, err := primary.App.Administration.GetAccessPolicy(context.Background(), inv)
 	require.NoError(t, err, "initial policy = %#v", current)
 	require.NotNil(t, current.Policy, "initial policy = %#v", current)
 	require.Equal(t, int64(1), current.Policy.Revision, "initial policy = %#v", current)
@@ -107,7 +107,7 @@ func TestAccessPolicyTwoNodePostgreSQLFenceAndSafeRevisionFanout(t *testing.T) {
 			settings model.AccessPolicySettings
 			key      string
 		}) {
-			view, replaceErr := candidate.app.Administration.ReplaceAccessPolicy(context.Background(), invocation, administration.ReplaceAccessPolicyCommand{
+			view, replaceErr := candidate.app.Administration.ReplaceAccessPolicy(context.Background(), inv, administration.ReplaceAccessPolicyCommand{
 				ExpectedRevision: 1, Settings: candidate.settings, IdempotencyKey: candidate.key,
 			})
 			outcomes <- outcome{view: view, err: replaceErr}
@@ -130,9 +130,9 @@ func TestAccessPolicyTwoNodePostgreSQLFenceAndSafeRevisionFanout(t *testing.T) {
 	require.Equal(t, 1, successes, "outcomes success/conflict")
 	require.Equal(t, 1, conflicts, "outcomes success/conflict")
 
-	primaryDiscovery, err := primary.App.Administration.DiscoverAccess(context.Background(), invocation)
+	primaryDiscovery, err := primary.App.Administration.DiscoverAccess(context.Background(), inv)
 	require.NoError(t, err)
-	secondaryDiscovery, err := secondary.App.Administration.DiscoverAccess(context.Background(), invocation)
+	secondaryDiscovery, err := secondary.App.Administration.DiscoverAccess(context.Background(), inv)
 	require.NoError(t, err)
 	require.Equal(t, int64(2), primaryDiscovery.PolicyRevision, "discovery diverged: primary=%#v secondary=%#v", primaryDiscovery, secondaryDiscovery)
 	require.Equal(t, int64(2), secondaryDiscovery.PolicyRevision, "discovery diverged: primary=%#v secondary=%#v", primaryDiscovery, secondaryDiscovery)
@@ -148,7 +148,7 @@ func TestAccessPolicyTwoNodePostgreSQLFenceAndSafeRevisionFanout(t *testing.T) {
 
 	// Exercise lost-response replay through the real HTTP, application, and
 	// PostgreSQL graph after the authoritative revision has advanced.
-	authoritative, err := primary.App.Administration.GetAccessPolicy(context.Background(), invocation)
+	authoritative, err := primary.App.Administration.GetAccessPolicy(context.Background(), inv)
 	require.NoError(t, err, "authoritative policy = %#v", authoritative)
 	require.NotNil(t, authoritative.Policy, "authoritative policy = %#v", authoritative)
 	settings := authoritative.Policy.Settings()
@@ -238,7 +238,7 @@ func TestAccessPolicyTwoNodePostgreSQLFenceAndSafeRevisionFanout(t *testing.T) {
 		StartsAt: model.TimeFromMillis(model.GetMillis() - 100),
 	})
 	require.NoError(t, err)
-	beforeDisable, err := primary.App.Administration.GetAccessPolicy(context.Background(), invocation)
+	beforeDisable, err := primary.App.Administration.GetAccessPolicy(context.Background(), inv)
 	require.NoError(t, err)
 	disableLocal := beforeDisable.Policy.Settings()
 	disableLocal.LocalLoginEnabled = false
@@ -246,26 +246,26 @@ func TestAccessPolicyTwoNodePostgreSQLFenceAndSafeRevisionFanout(t *testing.T) {
 	disableLocal.PublicRegistrationEnabled = false
 	disableLocal.InvitationLocalCredentialEnabled = false
 	disableLocal.ProviderAdmissions = map[string]model.ProviderAdmissionMode{"campus": model.ProviderAdmissionLinkedOnly}
-	_, err = primary.App.Administration.ReplaceAccessPolicy(context.Background(), invocation, administration.ReplaceAccessPolicyCommand{
+	_, err = primary.App.Administration.ReplaceAccessPolicy(context.Background(), inv, administration.ReplaceAccessPolicyCommand{
 		ExpectedRevision: beforeDisable.Policy.Revision, Settings: disableLocal,
 		IdempotencyKey: "access-policy-application-lockout",
 	})
 	require.NoError(t, err)
 	removedProviderStore := openAdditionalUserSettingsStore(t, dataSource)
 	removedProviderNode := testlib.Setup(t, testlib.WithConfig(baseConfig), testlib.WithStore(removedProviderStore))
-	_, err = removedProviderNode.App.Administration.EndRoleBinding(context.Background(), invocation, administration.EndRoleBindingCommand{
+	_, err = removedProviderNode.App.Administration.EndRoleBinding(context.Background(), inv, administration.EndRoleBindingCommand{
 		ID: removedProviderBinding.ID,
 	})
 	require.True(t, apperror.Is(err, "role_binding.last_system_admin"), "removed-provider node counted unavailable external administrator: %v", err)
-	_, err = primary.App.Administration.EndRoleBinding(context.Background(), invocation, administration.EndRoleBindingCommand{
+	_, err = primary.App.Administration.EndRoleBinding(context.Background(), inv, administration.EndRoleBindingCommand{
 		ID: removedProviderBinding.ID,
 	})
 	require.NoError(t, err)
-	_, err = primary.App.Identity.SetUserEnabled(context.Background(), invocation, identity.SetUserEnabledCommand{
+	_, err = primary.App.Identity.SetUserEnabled(context.Background(), inv, identity.SetUserEnabledCommand{
 		ID: externalAdmin.ID, Enabled: false,
 	})
 	require.True(t, apperror.Is(err, "user.last_system_admin"), "disable only policy-usable administrator error = %v", err)
-	_, err = primary.App.Administration.EndRoleBinding(context.Background(), invocation, administration.EndRoleBindingCommand{
+	_, err = primary.App.Administration.EndRoleBinding(context.Background(), inv, administration.EndRoleBindingCommand{
 		ID: externalBinding.ID,
 	})
 	require.True(t, apperror.Is(err, "role_binding.last_system_admin"), "end only policy-usable administrator binding error = %v", err)

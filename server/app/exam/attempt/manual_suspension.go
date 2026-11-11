@@ -54,11 +54,11 @@ type ManualSuspensionResult struct {
 // connection_lost.
 func (s *Service) SuspendExamAttempt(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ManualSuspensionCommand,
 ) (_ ManualSuspensionResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil {
 		return ManualSuspensionResult{}, apperror.New("authentication.token_invalid")
 	}
@@ -71,12 +71,12 @@ func (s *Service) SuspendExamAttempt(
 		return ManualSuspensionResult{}, apperror.Invalid("exam.attempt.invalid", "manual_suspension")
 	}
 
-	commandIdempotency, err := prepareManualSuspensionIdempotency(invocation, command)
+	commandIdempotency, err := prepareManualSuspensionIdempotency(inv, command)
 	if err != nil {
 		return ManualSuspensionResult{}, err
 	}
 
-	management, err := s.managers.AuthorizeSittingManage(ctx, invocation, command.SittingID)
+	management, err := s.managers.AuthorizeSittingManage(ctx, inv, command.SittingID)
 	override := management.Override
 	if err != nil {
 		return ManualSuspensionResult{}, err
@@ -96,7 +96,7 @@ func (s *Service) SuspendExamAttempt(
 	}
 
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     action,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: command.SittingID.String()},
 		ScopeType:  model.RoleScopeClass,

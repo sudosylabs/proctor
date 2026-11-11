@@ -34,9 +34,9 @@ func (s *Service) requireDesktopRegistration() error {
 // ListDesktopRegistrations lists the calling User's Desktop Registrations.
 func (s *Service) ListDesktopRegistrations(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 ) ([]*model.DesktopRegistration, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if err := requireInteractiveSession(principal, false, s.now(), s.recentAuthenticationTTL); err != nil {
 		return nil, err
 	}
@@ -51,10 +51,10 @@ func (s *Service) ListDesktopRegistrations(
 // Registrations and the Sessions it holds, from a recent interactive Session.
 func (s *Service) RevokeDesktopRegistration(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command RevokeDesktopRegistrationCommand,
 ) error {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	at := model.TimeUTC(s.now())
 	if err := requireInteractiveSession(principal, true, at, s.recentAuthenticationTTL); err != nil {
 		return err
@@ -65,7 +65,7 @@ func (s *Service) RevokeDesktopRegistration(
 	}
 
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionDesktopRegistrationRevoke,
 		Resource:   model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
 		Operation:  "revoke",

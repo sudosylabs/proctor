@@ -52,7 +52,7 @@ type ArchiveProgrammeLevelCommand struct {
 // GetProgrammeLevel reads one Programme Level after authorizing the caller.
 func (s *Service) GetProgrammeLevel(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	id model.ProgrammeLevelID,
 ) (*model.ProgrammeLevel, error) {
 	if !id.IsValid() {
@@ -61,7 +61,7 @@ func (s *Service) GetProgrammeLevel(
 
 	if err := s.authorizer.Authorize(
 		ctx,
-		invocation,
+		inv,
 		model.ActionProgrammeLevelView,
 		model.Resource{Type: model.ResourceProgrammeLevel, ID: id.String()},
 	); err != nil {
@@ -79,7 +79,7 @@ func (s *Service) GetProgrammeLevel(
 // ListProgrammeLevels lists Programme Levels after authorizing the caller.
 func (s *Service) ListProgrammeLevels(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query ListProgrammeLevelsQuery,
 ) (paging.Page[*model.ProgrammeLevel], error) {
 	programmeID := query.ProgrammeID
@@ -94,7 +94,7 @@ func (s *Service) ListProgrammeLevels(
 
 	if err = s.authorizer.Authorize(
 		ctx,
-		invocation,
+		inv,
 		model.ActionProgrammeLevelView,
 		model.Resource{Type: model.ResourceProgramme, ID: programmeID.String()},
 	); err != nil {
@@ -117,7 +117,7 @@ func (s *Service) ListProgrammeLevels(
 // CreateProgrammeLevel creates a Programme Level after authorizing the caller.
 func (s *Service) CreateProgrammeLevel(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command CreateProgrammeLevelCommand,
 ) (*model.ProgrammeLevel, error) {
 	programmeID := command.ProgrammeID
@@ -126,7 +126,7 @@ func (s *Service) CreateProgrammeLevel(
 	}
 
 	resource := model.Resource{Type: model.ResourceProgramme, ID: programmeID.String()}
-	scope, err := s.authorizer.AuthorizeWithScope(ctx, invocation, model.ActionProgrammeLevelManage, resource)
+	scope, err := s.authorizer.AuthorizeWithScope(ctx, inv, model.ActionProgrammeLevelManage, resource)
 	scopeType, scopeID := scope.ScopeType, scope.ScopeID
 	if err != nil {
 		return nil, err
@@ -153,7 +153,7 @@ func (s *Service) CreateProgrammeLevel(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionProgrammeLevelManage,
 			Resource:   resource,
 			ScopeType:  scopeType,
@@ -176,10 +176,10 @@ func (s *Service) CreateProgrammeLevel(
 // UpdateProgrammeLevel updates a Programme Level after authorizing the caller.
 func (s *Service) UpdateProgrammeLevel(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command UpdateProgrammeLevelCommand,
 ) (*model.ProgrammeLevel, error) {
-	current, scopeType, scopeID, err := s.levelForMutation(ctx, invocation, command.ID)
+	current, scopeType, scopeID, err := s.levelForMutation(ctx, inv, command.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +209,7 @@ func (s *Service) UpdateProgrammeLevel(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionProgrammeLevelManage,
 			Resource:   resource,
 			ScopeType:  scopeType,
@@ -231,8 +231,8 @@ func (s *Service) UpdateProgrammeLevel(
 }
 
 // ArchiveProgrammeLevel archives a Programme Level after authorizing the caller.
-func (s *Service) ArchiveProgrammeLevel(ctx context.Context, invocation invocation.Invocation, command ArchiveProgrammeLevelCommand) error {
-	current, scopeType, scopeID, err := s.levelForMutation(ctx, invocation, command.ID)
+func (s *Service) ArchiveProgrammeLevel(ctx context.Context, inv invocation.Invocation, command ArchiveProgrammeLevelCommand) error {
+	current, scopeType, scopeID, err := s.levelForMutation(ctx, inv, command.ID)
 	if err != nil {
 		return err
 	}
@@ -245,7 +245,7 @@ func (s *Service) ArchiveProgrammeLevel(ctx context.Context, invocation invocati
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionProgrammeLevelManage,
 			Resource:   resource,
 			ScopeType:  scopeType,
@@ -270,7 +270,7 @@ func (s *Service) ArchiveProgrammeLevel(ctx context.Context, invocation invocati
 
 func (s *Service) levelForMutation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	id model.ProgrammeLevelID,
 ) (*model.ProgrammeLevel, model.RoleScopeType, string, error) {
 	if !id.IsValid() {
@@ -279,7 +279,7 @@ func (s *Service) levelForMutation(
 
 	scope, err := s.authorizer.AuthorizeWithScope(
 		ctx,
-		invocation,
+		inv,
 		model.ActionProgrammeLevelManage,
 		model.Resource{Type: model.ResourceProgrammeLevel, ID: id.String()},
 	)

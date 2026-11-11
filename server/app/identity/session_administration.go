@@ -48,7 +48,7 @@ type RevokeUserSessionsCommand struct {
 // ListUserSessions pages one User's Sessions for an administrator.
 func (s *Service) ListUserSessions(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query ListUserSessionsQuery,
 ) (paging.Page[*model.Session], error) {
 	userID := query.UserID
@@ -66,7 +66,7 @@ func (s *Service) ListUserSessions(
 
 	if err := s.authorizer.Authorize(
 		ctx,
-		invocation,
+		inv,
 		model.ActionSessionView,
 		model.Resource{Type: model.ResourceUser, ID: userID.String()},
 	); err != nil {
@@ -95,7 +95,7 @@ func (s *Service) ListUserSessions(
 // notifies the User.
 func (s *Service) RevokeUserSession(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command RevokeUserSessionCommand,
 ) error {
 	userID := command.UserID
@@ -109,7 +109,7 @@ func (s *Service) RevokeUserSession(
 
 	if err := s.authorizer.Authorize(
 		ctx,
-		invocation,
+		inv,
 		model.ActionSessionManage,
 		model.Resource{Type: model.ResourceUser, ID: userID.String()},
 	); err != nil {
@@ -138,7 +138,7 @@ func (s *Service) RevokeUserSession(
 	return s.revokeSession(
 		ctx,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionSessionManage,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: userID.String()},
 			Operation:  "revoke_session",
@@ -162,7 +162,7 @@ func (s *Service) RevokeUserSession(
 // for an administration batch row, and notifies the User.
 func (s *Service) RevokeUserSessions(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command RevokeUserSessionsCommand,
 ) error {
 	userID := command.UserID
@@ -172,7 +172,7 @@ func (s *Service) RevokeUserSessions(
 
 	if err := s.authorizer.Authorize(
 		ctx,
-		invocation,
+		inv,
 		model.ActionSessionManage,
 		model.Resource{Type: model.ResourceUser, ID: userID.String()},
 	); err != nil {
@@ -185,7 +185,7 @@ func (s *Service) RevokeUserSessions(
 	}
 
 	now := model.TimeUTC(s.now())
-	commandIdempotency, err := idempotency.Prepare(invocation, "user_sessions.revoke", command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Prepare(inv, "user_sessions.revoke", command.IdempotencyKey, struct {
 		UserID string `json:"user_id"`
 	}{userID.String()})
 	if err != nil {
@@ -209,7 +209,7 @@ func (s *Service) RevokeUserSessions(
 	return s.revokeAllSessions(
 		ctx,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionSessionManage,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: userID.String()},
 			Operation:  "revoke_sessions",

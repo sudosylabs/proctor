@@ -104,7 +104,7 @@ func invitationBatchDuplicateKey(operation InvitationBatchOperation, item Invita
 
 func (s *Service) runInvitationBatchItem(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	batch RunInvitationBatchCommand,
 	item InvitationBatchItemCommand,
 	itemKey string,
@@ -114,7 +114,7 @@ func (s *Service) runInvitationBatchItem(
 ) (model.InvitationID, InvitationBatchItemStatus, error) {
 	switch batch.Operation {
 	case InvitationBatchStudentClassCreate:
-		view, err := s.IssueStudentClassInvitation(ctx, invocation, IssueStudentClassInvitationCommand{
+		view, err := s.IssueStudentClassInvitation(ctx, inv, IssueStudentClassInvitationCommand{
 			TargetEmail:               item.TargetEmail,
 			ClassID:                   model.ClassID(batch.ScopeID),
 			IntendedStartsAt:          item.IntendedStartsAt,
@@ -133,7 +133,7 @@ func (s *Service) runInvitationBatchItem(
 		})
 		return invitationBatchViewOutcome(view, err)
 	case InvitationBatchTeacherAcademicUnitCreate:
-		view, err := s.IssueTeacherAcademicUnitInvitation(ctx, invocation, IssueTeacherAcademicUnitInvitationCommand{
+		view, err := s.IssueTeacherAcademicUnitInvitation(ctx, inv, IssueTeacherAcademicUnitInvitationCommand{
 			TargetEmail:               item.TargetEmail,
 			AcademicUnitID:            model.AcademicUnitID(batch.ScopeID),
 			RoleID:                    item.RoleID,
@@ -153,7 +153,7 @@ func (s *Service) runInvitationBatchItem(
 		})
 		return invitationBatchViewOutcome(view, err)
 	case InvitationBatchAcademicUnitRoleCreate:
-		view, err := s.IssueAcademicUnitRoleInvitation(ctx, invocation, IssueAcademicUnitRoleInvitationCommand{
+		view, err := s.IssueAcademicUnitRoleInvitation(ctx, inv, IssueAcademicUnitRoleInvitationCommand{
 			TargetEmail:               item.TargetEmail,
 			AcademicUnitID:            model.AcademicUnitID(batch.ScopeID),
 			RoleID:                    item.RoleID,
@@ -167,7 +167,7 @@ func (s *Service) runInvitationBatchItem(
 		})
 		return invitationBatchViewOutcome(view, err)
 	case InvitationBatchInstitutionRoleCreate:
-		view, err := s.IssueInstitutionRoleInvitation(ctx, invocation, IssueInstitutionRoleInvitationCommand{
+		view, err := s.IssueInstitutionRoleInvitation(ctx, inv, IssueInstitutionRoleInvitationCommand{
 			TargetEmail:               item.TargetEmail,
 			InstitutionID:             model.InstitutionID(batch.ScopeID),
 			RoleID:                    item.RoleID,
@@ -181,7 +181,7 @@ func (s *Service) runInvitationBatchItem(
 		})
 		return invitationBatchViewOutcome(view, err)
 	case InvitationBatchResend:
-		view, err := s.ResendInvitation(ctx, invocation, ResendInvitationCommand{
+		view, err := s.ResendInvitation(ctx, inv, ResendInvitationCommand{
 			ID:                        model.InvitationID(strings.TrimSpace(item.InvitationID.String())),
 			ExpectedRevision:          item.ExpectedRevision,
 			IdempotencyKey:            itemKey,
@@ -193,7 +193,7 @@ func (s *Service) runInvitationBatchItem(
 		})
 		return invitationBatchAdministrationOutcome(view, err)
 	case InvitationBatchRevoke:
-		view, err := s.RevokeInvitation(ctx, invocation, RevokeInvitationCommand{
+		view, err := s.RevokeInvitation(ctx, inv, RevokeInvitationCommand{
 			ID:                        model.InvitationID(strings.TrimSpace(item.InvitationID.String())),
 			ExpectedRevision:          item.ExpectedRevision,
 			IdempotencyKey:            itemKey,

@@ -38,11 +38,11 @@ type CorrectionAcknowledgementResult struct {
 // the Attempt's current Exam Revision.
 func (s *Service) AcknowledgeExamAttemptCorrection(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command AcknowledgeCorrectionCommand,
 ) (_ CorrectionAcknowledgementResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	selector, err := candidateSelector(invocation, command.Access.CandidateAccess)
+	selector, err := candidateSelector(inv, command.Access.CandidateAccess)
 	if err != nil ||
 		!command.Access.ParticipationID.IsValid() ||
 		command.Access.Generation < 1 ||
@@ -51,7 +51,7 @@ func (s *Service) AcknowledgeExamAttemptCorrection(
 		return CorrectionAcknowledgementResult{}, apperror.Invalid("exam.attempt.invalid", "correction_acknowledgement")
 	}
 
-	commandIdempotency, err := idempotency.Require(invocation, store.ExamAttemptCorrectionAcknowledgementOperation, command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Require(inv, store.ExamAttemptCorrectionAcknowledgementOperation, command.IdempotencyKey, struct {
 		AttemptID                 string `json:"exam_attempt_id"`
 		ParticipationID           string `json:"participation_id"`
 		Generation                int64  `json:"generation"`
@@ -87,7 +87,7 @@ func (s *Service) AcknowledgeExamAttemptCorrection(
 	resource := model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()}
 	if err = s.auditor.RecordAuthorizationDecision(
 		ctx,
-		invocation,
+		inv,
 		model.ActionExamSittingParticipate,
 		resource,
 		model.RoleScopeClass,
@@ -99,7 +99,7 @@ func (s *Service) AcknowledgeExamAttemptCorrection(
 
 	auditEvent, err := s.auditor.PrepareAtScope(
 		ctx,
-		invocation,
+		inv,
 		model.ActionExamSittingParticipate,
 		resource,
 		model.RoleScopeClass,
@@ -127,7 +127,7 @@ func (s *Service) AcknowledgeExamAttemptCorrection(
 
 	// The receipt is immutable; the gates are freshly resolved after commit,
 	// including an exact replay or another correction published in the meantime.
-	presentation, err := s.GetCandidateExamPresentation(ctx, invocation, command.Access.CandidateAccess)
+	presentation, err := s.GetCandidateExamPresentation(ctx, inv, command.Access.CandidateAccess)
 	if err != nil {
 		return CorrectionAcknowledgementResult{}, err
 	}

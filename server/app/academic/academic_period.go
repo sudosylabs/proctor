@@ -59,7 +59,7 @@ type ArchiveAcademicPeriodCommand struct {
 // GetAcademicPeriod reads one Academic Period after authorizing the caller.
 func (s *Service) GetAcademicPeriod(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	id model.AcademicPeriodID,
 ) (*model.AcademicPeriod, error) {
 	if !id.IsValid() {
@@ -68,7 +68,7 @@ func (s *Service) GetAcademicPeriod(
 
 	if err := s.authorizer.Authorize(
 		ctx,
-		invocation,
+		inv,
 		model.ActionAcademicPeriodView,
 		model.Resource{Type: model.ResourceAcademicPeriod, ID: id.String()},
 	); err != nil {
@@ -86,7 +86,7 @@ func (s *Service) GetAcademicPeriod(
 // ListAcademicPeriods lists Academic Periods after authorizing the caller.
 func (s *Service) ListAcademicPeriods(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query ListAcademicPeriodsQuery,
 ) (paging.Page[*model.AcademicPeriod], error) {
 	limit, probe, err := paging.ResolveLimit(query.Limit, "limit")
@@ -94,7 +94,7 @@ func (s *Service) ListAcademicPeriods(
 		return paging.Page[*model.AcademicPeriod]{}, err
 	}
 
-	visibility, err := s.authorizer.AuthorizeAcademicPeriodList(ctx, invocation)
+	visibility, err := s.authorizer.AuthorizeAcademicPeriodList(ctx, inv)
 	if err != nil {
 		return paging.Page[*model.AcademicPeriod]{}, err
 	}
@@ -116,7 +116,7 @@ func (s *Service) ListAcademicPeriods(
 // CreateAcademicPeriod creates an Academic Period after authorizing the caller.
 func (s *Service) CreateAcademicPeriod(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command CreateAcademicPeriodCommand,
 ) (*model.AcademicPeriod, error) {
 	periodID, err := model.ParseAcademicPeriodID(s.newID())
@@ -141,11 +141,11 @@ func (s *Service) CreateAcademicPeriod(
 	if err := candidate.Validate(); err != nil {
 		return nil, apperror.DomainInvalid("academic_period.invalid", err)
 	}
-	if err = s.authorizer.AuthorizeAcademicPeriodOwner(ctx, invocation, model.ActionAcademicPeriodManage, candidate); err != nil {
+	if err = s.authorizer.AuthorizeAcademicPeriodOwner(ctx, inv, model.ActionAcademicPeriodManage, candidate); err != nil {
 		return nil, err
 	}
 
-	commandIdempotency, err := idempotency.Prepare(invocation, "academic_period.create", command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Prepare(inv, "academic_period.create", command.IdempotencyKey, struct {
 		OwnerType, OwnerID             string
 		Name, DisplayName, Description string
 		StartAt, EndAt                 int64
@@ -166,7 +166,7 @@ func (s *Service) CreateAcademicPeriod(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionAcademicPeriodManage,
 			Resource:   model.Resource{Type: model.ResourceAcademicPeriod, ID: candidate.ID.String()},
 			ScopeType:  academicPeriodOwnerScopeType(candidate.Owner),
@@ -211,7 +211,7 @@ func (s *Service) CreateAcademicPeriod(
 // UpdateAcademicPeriod updates an Academic Period after authorizing the caller.
 func (s *Service) UpdateAcademicPeriod(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command UpdateAcademicPeriodCommand,
 ) (*model.AcademicPeriod, error) {
 	id := command.ID
@@ -220,7 +220,7 @@ func (s *Service) UpdateAcademicPeriod(
 	}
 
 	resource := model.Resource{Type: model.ResourceAcademicPeriod, ID: id.String()}
-	if err := s.authorizer.Authorize(ctx, invocation, model.ActionAcademicPeriodManage, resource); err != nil {
+	if err := s.authorizer.Authorize(ctx, inv, model.ActionAcademicPeriodManage, resource); err != nil {
 		return nil, err
 	}
 
@@ -258,7 +258,7 @@ func (s *Service) UpdateAcademicPeriod(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionAcademicPeriodManage,
 			Resource:   resource,
 			ScopeType:  academicPeriodOwnerScopeType(candidate.Owner),
@@ -280,14 +280,14 @@ func (s *Service) UpdateAcademicPeriod(
 }
 
 // ArchiveAcademicPeriod archives an Academic Period after authorizing the caller.
-func (s *Service) ArchiveAcademicPeriod(ctx context.Context, invocation invocation.Invocation, command ArchiveAcademicPeriodCommand) error {
+func (s *Service) ArchiveAcademicPeriod(ctx context.Context, inv invocation.Invocation, command ArchiveAcademicPeriodCommand) error {
 	id := command.ID
 	if !id.IsValid() {
 		return apperror.New("request.invalid").WithField("field", "academic_period_id")
 	}
 
 	resource := model.Resource{Type: model.ResourceAcademicPeriod, ID: id.String()}
-	if err := s.authorizer.Authorize(ctx, invocation, model.ActionAcademicPeriodManage, resource); err != nil {
+	if err := s.authorizer.Authorize(ctx, inv, model.ActionAcademicPeriodManage, resource); err != nil {
 		return err
 	}
 
@@ -303,7 +303,7 @@ func (s *Service) ArchiveAcademicPeriod(ctx context.Context, invocation invocati
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionAcademicPeriodManage,
 			Resource:   resource,
 			ScopeType:  academicPeriodOwnerScopeType(current.Owner),

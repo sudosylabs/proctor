@@ -94,7 +94,7 @@ type ProfilePictureContent struct {
 // publishes them as the User's custom profile picture in one audited step.
 func (s *Service) UploadProfilePicture(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command UploadProfilePictureCommand,
 ) (*model.User, error) {
 	userID := command.UserID
@@ -107,7 +107,7 @@ func (s *Service) UploadProfilePicture(
 		return nil, apperror.New("request.invalid").WithField("field", "profile_picture")
 	}
 
-	if err := s.authorizer.AuthorizeProfilePictureWrite(ctx, invocation, userID); err != nil {
+	if err := s.authorizer.AuthorizeProfilePictureWrite(ctx, inv, userID); err != nil {
 		return nil, err
 	}
 
@@ -125,7 +125,7 @@ func (s *Service) UploadProfilePicture(
 	}
 
 	at := model.TimeUTC(s.now())
-	staged, err := s.stageProfilePictureUpload(ctx, invocation, current, at)
+	staged, err := s.stageProfilePictureUpload(ctx, inv, current, at)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +141,7 @@ func (s *Service) UploadProfilePicture(
 		}
 
 		err = s.files.DiscardProfilePictureUpload(ctx, &store.ProfilePictureUploadDiscard{
-			ActorID:                   invocation.Principal().UserID,
+			ActorID:                   inv.Principal().UserID,
 			UserID:                    current.ID,
 			ExpectedUserRevision:      current.Revision,
 			ExpectedActiveEntryID:     currentState.EntryID,
@@ -157,7 +157,7 @@ func (s *Service) UploadProfilePicture(
 		return current, nil
 	}
 
-	return s.publishProfilePicture(ctx, invocation, current, staged, renditions, at)
+	return s.publishProfilePicture(ctx, inv, current, staged, renditions, at)
 }
 
 // stagedProfilePictureUpload is the pending file entry, revision and upload lease staged for one upload.
@@ -204,7 +204,7 @@ func (s *Service) checkProfilePicturePrecondition(
 // has none yet.
 func (s *Service) stageProfilePictureUpload(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	current *model.User,
 	at time.Time,
 ) (stagedProfilePictureUpload, error) {
@@ -231,7 +231,7 @@ func (s *Service) stageProfilePictureUpload(
 		return stagedProfilePictureUpload{}, profilePictureStoreErrors.Translate(err)
 	}
 
-	lease, err := model.NewUploadLease(model.NewUploadLeaseID(), revision.ID, invocation.Principal().UserID, at, at.Add(time.Hour))
+	lease, err := model.NewUploadLease(model.NewUploadLeaseID(), revision.ID, inv.Principal().UserID, at, at.Add(time.Hour))
 	if err != nil {
 		return stagedProfilePictureUpload{}, profilePictureStoreErrors.Translate(err)
 	}
@@ -265,7 +265,7 @@ func profilePictureNormalizationError(err error) error {
 // the change effect.
 func (s *Service) publishProfilePicture(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	current *model.User,
 	staged stagedProfilePictureUpload,
 	renditions []model.FileRendition,
@@ -278,7 +278,7 @@ func (s *Service) publishProfilePicture(
 	}
 
 	action := model.ActionUserManage
-	if invocation.Principal().UserID == current.ID {
+	if inv.Principal().UserID == current.ID {
 		action = model.ActionUserProfilePictureManage
 	}
 
@@ -286,7 +286,7 @@ func (s *Service) publishProfilePicture(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     action,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: current.ID.String()},
 			Operation:  "set_profile_picture",
@@ -296,7 +296,7 @@ func (s *Service) publishProfilePicture(
 		func() time.Time { return changedAt },
 		func(ctx context.Context, reference access.MutationReference) (*store.ProfilePicturePublicationResult, error) {
 			return s.files.PublishProfilePicture(ctx, &store.ProfilePicturePublication{
-				ActorID:              invocation.Principal().UserID,
+				ActorID:              inv.Principal().UserID,
 				UserID:               current.ID,
 				ExpectedUserRevision: current.Revision,
 				EntryID:              entryID,
@@ -371,7 +371,7 @@ func sameNormalizedProfilePicture(state *store.ProfilePictureState, renditions [
 // reverts to the default one.
 func (s *Service) RemoveProfilePicture(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command RemoveProfilePictureCommand,
 ) (*model.User, error) {
 	userID := command.UserID
@@ -379,7 +379,7 @@ func (s *Service) RemoveProfilePicture(
 	if !userID.IsValid() || expectedSHA256 == "" {
 		return nil, apperror.New("request.invalid").WithField("field", "if_match")
 	}
-	if err := s.authorizer.AuthorizeProfilePictureWrite(ctx, invocation, userID); err != nil {
+	if err := s.authorizer.AuthorizeProfilePictureWrite(ctx, inv, userID); err != nil {
 		return nil, err
 	}
 
@@ -400,7 +400,7 @@ func (s *Service) RemoveProfilePicture(
 	}
 
 	action := model.ActionUserManage
-	if invocation.Principal().UserID == current.ID {
+	if inv.Principal().UserID == current.ID {
 		action = model.ActionUserProfilePictureManage
 	}
 
@@ -409,7 +409,7 @@ func (s *Service) RemoveProfilePicture(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     action,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: current.ID.String()},
 			Operation:  "remove_profile_picture",
@@ -422,7 +422,7 @@ func (s *Service) RemoveProfilePicture(
 		},
 		func(ctx context.Context, reference access.MutationReference) (*model.User, error) {
 			return s.files.RemoveProfilePicture(ctx, &store.ProfilePictureRemoval{
-				ActorID:                   invocation.Principal().UserID,
+				ActorID:                   inv.Principal().UserID,
 				UserID:                    current.ID,
 				ExpectedUserRevision:      current.Revision,
 				EntryID:                   state.EntryID,
@@ -450,14 +450,14 @@ func (s *Service) RemoveProfilePicture(
 // renders the default one and proposes its durable generation.
 func (s *Service) GetProfilePicture(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query GetProfilePictureQuery,
 ) (*ProfilePictureContent, error) {
 	id := query.UserID
 	if !id.IsValid() || (query.Size != 128 && query.Size != 256 && query.Size != 512) {
 		return nil, apperror.New("request.invalid")
 	}
-	if _, err := s.authorizer.AuthorizeProfileRead(ctx, invocation, id); err != nil {
+	if _, err := s.authorizer.AuthorizeProfileRead(ctx, inv, id); err != nil {
 		return nil, err
 	}
 

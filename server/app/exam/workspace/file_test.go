@@ -26,7 +26,7 @@ func TestServiceCreatesAFileOnlyAfterOpaqueContentAndDurableFinalize(t *testing.
 	t.Parallel()
 	fixture := newServiceFixture(t)
 	body := []byte("package main\n")
-	result, err := fixture.service.CreateExamStarterWorkspaceFile(context.Background(), fixture.invocation, CreateFileCommand{
+	result, err := fixture.service.CreateExamStarterWorkspaceFile(context.Background(), fixture.inv, CreateFileCommand{
 		ExamID: fixture.examID, ExpectedDraftRevision: 1, Path: "cmd/main.go", MediaType: "text/x-go",
 		ExpectedSHA256: strings.Repeat("a", 64), Body: bytes.NewReader(body), Size: int64(len(body)), IdempotencyKey: "test-key",
 	})
@@ -43,7 +43,7 @@ func TestServiceCreatesAFileOnlyAfterOpaqueContentAndDurableFinalize(t *testing.
 	}, fixture.publisher.Calls())
 	require.Nil(t, fixture.auditor.values["path"])
 	require.Nil(t, fixture.auditor.values["sha256"])
-	wantIdempotency, prepareErr := prepareWorkspaceIdempotency(fixture.invocation, idempotencyOperationCreateFile,
+	wantIdempotency, prepareErr := prepareWorkspaceIdempotency(fixture.inv, idempotencyOperationCreateFile,
 		"test-key", fixture.examID, 1, "", "", "cmd/main.go", "text/x-go", int64(len(body)), strings.Repeat("a", 64))
 	require.NoError(t, prepareErr)
 	require.Equal(t, wantIdempotency, fixture.persistence.idempotency)
@@ -54,7 +54,7 @@ func TestFileFinalizationPreservesReservationMicroseconds(t *testing.T) {
 	fixture := newServiceFixture(t)
 	at := time.Date(2026, 8, 14, 10, 0, 0, 123456789, time.UTC)
 	fixture.service.now = func() time.Time { return at }
-	result, err := fixture.service.CreateExamStarterWorkspaceFile(context.Background(), fixture.invocation, CreateFileCommand{
+	result, err := fixture.service.CreateExamStarterWorkspaceFile(context.Background(), fixture.inv, CreateFileCommand{
 		ExamID: fixture.examID, ExpectedDraftRevision: 1, Path: "empty.txt", MediaType: "text/plain",
 		ExpectedSHA256: strings.Repeat("a", 64), Body: bytes.NewReader(nil), Size: 0, IdempotencyKey: "microsecond-file",
 	})
@@ -72,7 +72,7 @@ func TestServiceDoesNotDeleteOrReclaimAStagedObjectAfterUnknownFinalize(t *testi
 	t.Parallel()
 	fixture := newServiceFixture(t)
 	fixture.persistence.finalizeErr = context.DeadlineExceeded
-	_, err := fixture.service.CreateExamStarterWorkspaceFile(context.Background(), fixture.invocation, CreateFileCommand{
+	_, err := fixture.service.CreateExamStarterWorkspaceFile(context.Background(), fixture.inv, CreateFileCommand{
 		ExamID: fixture.examID, ExpectedDraftRevision: 1, Path: "main.go", MediaType: "text/x-go",
 		ExpectedSHA256: strings.Repeat("a", 64), Body: strings.NewReader("x"), Size: 1, IdempotencyKey: "test-key",
 	})
@@ -86,10 +86,10 @@ func TestServiceExactCreateFileRetryReturnsCommittedOutcomeWithoutRepublishing(t
 	command := CreateFileCommand{ExamID: fixture.examID, ExpectedDraftRevision: 1, Path: "main.go", MediaType: "text/plain",
 		ExpectedSHA256: strings.Repeat("a", 64), Size: 1, IdempotencyKey: "test-key"}
 	command.Body = strings.NewReader("x")
-	first, err := fixture.service.CreateExamStarterWorkspaceFile(context.Background(), fixture.invocation, command)
+	first, err := fixture.service.CreateExamStarterWorkspaceFile(context.Background(), fixture.inv, command)
 	require.NoError(t, err)
 	command.Body = strings.NewReader("x")
-	replayed, err := fixture.service.CreateExamStarterWorkspaceFile(context.Background(), fixture.invocation, command)
+	replayed, err := fixture.service.CreateExamStarterWorkspaceFile(context.Background(), fixture.inv, command)
 	require.NoError(t, err)
 	require.True(t, replayed.Replayed, "first=%#v replayed=%#v", first, replayed)
 	require.Equal(t, first.Entry.ID, replayed.Entry.ID, "first=%#v replayed=%#v", first, replayed)
@@ -116,10 +116,10 @@ func TestServiceExactReplaceFileRetryReturnsCommittedOutcomeWithoutRepublishing(
 		ExpectedContentVersion: model.NewWorkspaceContentVersion(), MediaType: "text/plain", ExpectedSHA256: strings.Repeat("a", 64), Size: 1,
 		IdempotencyKey: "test-key"}
 	command.Body = strings.NewReader("x")
-	first, err := fixture.service.ReplaceExamStarterWorkspaceFile(context.Background(), fixture.invocation, command)
+	first, err := fixture.service.ReplaceExamStarterWorkspaceFile(context.Background(), fixture.inv, command)
 	require.NoError(t, err)
 	command.Body = strings.NewReader("x")
-	replayed, err := fixture.service.ReplaceExamStarterWorkspaceFile(context.Background(), fixture.invocation, command)
+	replayed, err := fixture.service.ReplaceExamStarterWorkspaceFile(context.Background(), fixture.inv, command)
 	require.NoError(t, err)
 	require.True(t, replayed.Replayed, "first=%#v replayed=%#v", first, replayed)
 	require.Equal(t, first.Entry.ID, replayed.Entry.ID, "first=%#v replayed=%#v", first, replayed)
@@ -140,7 +140,7 @@ func TestServiceReplaceRequiresAndCarriesExpectedContentVersion(t *testing.T) {
 	t.Parallel()
 	fixture := newServiceFixture(t)
 	expected := model.WorkspaceContentVersion("wwwwwwwwwwwwwwwwwwwwwwwwww")
-	result, err := fixture.service.ReplaceExamStarterWorkspaceFile(context.Background(), fixture.invocation, ReplaceFileCommand{
+	result, err := fixture.service.ReplaceExamStarterWorkspaceFile(context.Background(), fixture.inv, ReplaceFileCommand{
 		ExamID: fixture.examID, EntryID: model.StarterWorkspaceEntryID("dddddddddddddddddddddddddd"), ExpectedDraftRevision: 1,
 		ExpectedContentVersion: expected, MediaType: "text/plain", ExpectedSHA256: strings.Repeat("a", 64), Body: strings.NewReader("x"), Size: 1,
 		IdempotencyKey: "test-key",
@@ -149,7 +149,7 @@ func TestServiceReplaceRequiresAndCarriesExpectedContentVersion(t *testing.T) {
 	require.Equal(t, int64(2), result.DraftRevision, "result=%#v err=%v mutation", result, err)
 	require.NotNil(t, fixture.persistence.mutation, "result=%#v err=%v mutation", result, err)
 	require.Equal(t, expected, fixture.persistence.mutation.ExpectedContentVersion, "result=%#v err=%v mutation", result, err)
-	wantIdempotency, prepareErr := prepareWorkspaceIdempotency(fixture.invocation, idempotencyOperationReplaceFile,
+	wantIdempotency, prepareErr := prepareWorkspaceIdempotency(fixture.inv, idempotencyOperationReplaceFile,
 		"test-key", fixture.examID, 1, expected, "dddddddddddddddddddddddddd", "", "text/plain", 1, strings.Repeat("a", 64))
 	require.NoError(t, prepareErr)
 	require.Equal(t, wantIdempotency, fixture.persistence.idempotency)
@@ -159,7 +159,7 @@ func TestServiceMapsStaleContentVersionAndReclaimsNewObject(t *testing.T) {
 	t.Parallel()
 	fixture := newServiceFixture(t)
 	fixture.persistence.finalizeErr = store.NewErrConflict("exam_starter_workspace_entry", "workspace_content_version", nil)
-	_, err := fixture.service.ReplaceExamStarterWorkspaceFile(context.Background(), fixture.invocation, ReplaceFileCommand{
+	_, err := fixture.service.ReplaceExamStarterWorkspaceFile(context.Background(), fixture.inv, ReplaceFileCommand{
 		ExamID: fixture.examID, EntryID: model.StarterWorkspaceEntryID("dddddddddddddddddddddddddd"), ExpectedDraftRevision: 1,
 		ExpectedContentVersion: model.WorkspaceContentVersion("wwwwwwwwwwwwwwwwwwwwwwwwww"), MediaType: "text/plain",
 		ExpectedSHA256: strings.Repeat("a", 64), Body: strings.NewReader("x"), Size: 1,
@@ -182,7 +182,7 @@ func TestServiceClassifiesInvalidStagedBytesSeparatelyFromBackendFailure(t *test
 		t.Run(test.name, func(t *testing.T) {
 			fixture := newServiceFixture(t)
 			fixture.content.stageErr = test.err
-			_, err := fixture.service.CreateExamStarterWorkspaceFile(context.Background(), fixture.invocation, CreateFileCommand{
+			_, err := fixture.service.CreateExamStarterWorkspaceFile(context.Background(), fixture.inv, CreateFileCommand{
 				ExamID: fixture.examID, ExpectedDraftRevision: 1, Path: "main.go", MediaType: "text/plain",
 				ExpectedSHA256: strings.Repeat("a", 64), Body: strings.NewReader("x"), Size: 1,
 				IdempotencyKey: "test-key",

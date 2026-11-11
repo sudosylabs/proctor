@@ -20,7 +20,7 @@ func TestServiceStopsWhenCurrentManagerMembershipCannotBeRead(t *testing.T) {
 	fixture := newServiceFixture(t)
 	failure := errors.New("membership unavailable")
 	fixture.service.academicUnitMembers = fakeMemberships{err: failure}
-	_, err := fixture.service.CreateExamStarterWorkspaceDirectory(context.Background(), fixture.invocation, CreateDirectoryCommand{
+	_, err := fixture.service.CreateExamStarterWorkspaceDirectory(context.Background(), fixture.inv, CreateDirectoryCommand{
 		ExamID: fixture.examID, ExpectedDraftRevision: 1, Path: "src", IdempotencyKey: "test-key",
 	})
 	require.Equal(t, "exam.starter_workspace.unavailable", faultCode(err))

@@ -100,7 +100,7 @@ func (s *Service) recoveryAuditEvent(
 	action model.Action,
 	resource model.Resource,
 	institutionID model.InstitutionID,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	principal *model.Principal,
 	authenticationMethod string,
 ) *model.AuditEvent {
@@ -108,7 +108,7 @@ func (s *Service) recoveryAuditEvent(
 		action,
 		resource,
 		institutionID,
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		s.nodeID,
 		principal,
 		authenticationMethod,

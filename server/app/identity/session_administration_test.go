@@ -252,8 +252,8 @@ func TestAdminSessionIdempotentNoOpPreparesNoticeForAuthoritativeRace(t *testing
 		revokeAllResult: &store.UserSessionsRevocationResult{Sessions: []*model.Session{}, TokenHashes: []string{}}}
 	mailer := &securityNoticeMailerFake{events: &events}
 	service := &Service{sessions: persistence, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: mailer, publisher: sessionAdministrationPublisher(&events), now: time.Now}
-	invocation := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
-	require.NoError(t, service.RevokeUserSessions(context.Background(), invocation, RevokeUserSessionsCommand{UserID: model.UserID(userID), IdempotencyKey: "row"}))
+	inv := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
+	require.NoError(t, service.RevokeUserSessions(context.Background(), inv, RevokeUserSessionsCommand{UserID: model.UserID(userID), IdempotencyKey: "row"}))
 	require.Len(t, mailer.requests, 1, "idempotent no-op mail")
 	require.NotNil(t, persistence.revokeAllInput, "idempotent no-op mail")
 	require.NotNil(t, persistence.revokeAllInput.Occurrence, "idempotent no-op mail")
@@ -268,8 +268,8 @@ func TestAdminSessionRetainedOutcomeBypassesMailAfterNewSession(t *testing.T) {
 		revokeAllResult: &store.UserSessionsRevocationResult{Sessions: []*model.Session{}, TokenHashes: []string{}}}
 	mailer := &securityNoticeMailerFake{events: &events, err: errors.New("mail unavailable")}
 	service := &Service{sessions: persistence, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: mailer, publisher: sessionAdministrationPublisher(&events), now: time.Now}
-	invocation := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
-	require.NoError(t, service.RevokeUserSessions(context.Background(), invocation, RevokeUserSessionsCommand{UserID: model.UserID(userID), IdempotencyKey: "row", Batch: batchitem.New(batchitem.Fields{RetainedOutcome: true})}))
+	inv := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
+	require.NoError(t, service.RevokeUserSessions(context.Background(), inv, RevokeUserSessionsCommand{UserID: model.UserID(userID), IdempotencyKey: "row", Batch: batchitem.New(batchitem.Fields{RetainedOutcome: true})}))
 	require.Empty(t, mailer.requests, "retained mail")
 	require.Equal(t, []string{"authorize-manage", "get-user", "audit-begin", "store-revoke-all"}, events)
 }
@@ -316,8 +316,8 @@ func TestAdminSessionRevocationOutcomesPreserveAuditAndBatchResult(t *testing.T)
 			}
 			effects := sessionAdministrationPublisher(&events)
 			service := &Service{sessions: persistence, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: audit, mail: &securityNoticeMailerFake{events: &events}, publisher: effects, now: func() time.Time { return now }}
-			invocation := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
-			err := service.RevokeUserSessions(context.Background(), invocation, RevokeUserSessionsCommand{
+			inv := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
+			err := service.RevokeUserSessions(context.Background(), inv, RevokeUserSessionsCommand{
 				UserID: model.UserID(userID), IdempotencyKey: "repeat-command", Batch: batchitem.New(batchitem.Fields{Replayed: &unchanged}),
 			})
 			wantCode := ""

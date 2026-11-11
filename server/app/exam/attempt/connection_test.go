@@ -27,7 +27,7 @@ func TestConnectDelegatesAtomicAdmissionAndPassesOnlyCredentialHash(t *testing.T
 	f := newFixture(t)
 	credential := model.NewCredentialToken()
 	command := validConnectCommand(f, credential, "test-key")
-	result, err := f.service.ConnectExamAttempt(context.Background(), f.invocation, command)
+	result, err := f.service.ConnectExamAttempt(context.Background(), f.inv, command)
 	require.NoError(t, err)
 	require.Equal(t, f.revision.ID, result.Attempt.AdmissionRevisionID)
 	require.Equal(t, f.sitting.ClassID, result.ClassID)
@@ -55,7 +55,7 @@ func TestConnectDelegatesAtomicAdmissionAndPassesOnlyCredentialHash(t *testing.T
 	require.NotContains(t, fmt.Sprintf("%#v", result.Participation), model.HashToken(credential))
 	require.Nil(t, f.audit.values["continuity_credential"])
 	require.Nil(t, f.audit.values["credential_hash"])
-	wantIdempotency, prepareErr := prepareConnectIdempotency(f.invocation, command)
+	wantIdempotency, prepareErr := prepareConnectIdempotency(f.inv, command)
 	require.NoError(t, prepareErr)
 	require.Equal(t, wantIdempotency, f.persistence.idempotency)
 	auditCapture := fmt.Sprintf("%#v", f.audit.values)
@@ -67,22 +67,22 @@ func TestConnectRejectsMalformedCredentialAndPATBeforeReads(t *testing.T) {
 	t.Parallel()
 	for _, mutate := range []func(*fixture){
 		func(f *fixture) {
-			f.invocation = invocation.New(model.Principal{UserID: f.userID}, model.RequestMetadata{})
+			f.inv = invocation.New(model.Principal{UserID: f.userID}, model.RequestMetadata{})
 		},
 		func(f *fixture) {
-			principal := f.invocation.Principal()
+			principal := f.inv.Principal()
 			principal.CredentialType = model.CredentialPersonalAccessToken
 			principal.SessionID = ""
 			principal.AuthenticationStrength = ""
 			principal.AuthenticatedAt = time.Time{}
 			principal.ClientType = model.SessionClientCLI
 			principal.CredentialScopes = []string{string(model.ActionExamSittingView)}
-			f.invocation = invocation.New(principal, model.RequestMetadata{})
+			f.inv = invocation.New(principal, model.RequestMetadata{})
 		},
 	} {
 		f := newFixture(t)
 		mutate(f)
-		_, err := f.service.ConnectExamAttempt(context.Background(), f.invocation, ConnectCommand{
+		_, err := f.service.ConnectExamAttempt(context.Background(), f.inv, ConnectCommand{
 			SittingID: f.sitting.ID, ContinuityCredential: "not-canonical", IdempotencyKey: "test-key",
 		})
 		require.Error(t, err)
@@ -97,7 +97,7 @@ func TestConnectReplayAfterCorrectionAndPauseSuppressesTransientOpenEvent(t *tes
 	f.persistence.connectionOpened = false
 	f.sitting.State = model.ExamSittingPaused
 	f.sitting.ExamRevisionID = model.NewExamRevisionID()
-	result, err := f.service.ConnectExamAttempt(context.Background(), f.invocation, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
+	result, err := f.service.ConnectExamAttempt(context.Background(), f.inv, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
 	require.NoError(t, err, "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
 	require.True(t, result.Replayed, "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
 	require.Empty(t, f.publisher.Calls(), "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
@@ -109,7 +109,7 @@ func TestReconnectThatOpensANewConnectionPublishesOneOpenEffect(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	f.persistence.firstAdmission = false
-	result, err := f.service.ConnectExamAttempt(context.Background(), f.invocation, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
+	result, err := f.service.ConnectExamAttempt(context.Background(), f.inv, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
 	require.NoError(t, err, "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
 	require.False(t, result.FirstAdmission, "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
 	require.True(t, result.ConnectionOpened, "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
@@ -122,7 +122,7 @@ func TestDifferentKeyConvergenceOnExistingOpenConnectionPublishesNoEffect(t *tes
 	f := newFixture(t)
 	f.persistence.firstAdmission = false
 	f.persistence.connectionOpened = false
-	result, err := f.service.ConnectExamAttempt(context.Background(), f.invocation, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
+	result, err := f.service.ConnectExamAttempt(context.Background(), f.inv, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
 	require.NoError(t, err, "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
 	require.False(t, result.FirstAdmission, "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
 	require.False(t, result.ConnectionOpened, "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
@@ -135,7 +135,7 @@ func TestConnectReplayOfClosedConnectionRequiresNewKey(t *testing.T) {
 	f := newFixture(t)
 	f.persistence.replayed = true
 	f.persistence.connectClosed = true
-	_, err := f.service.ConnectExamAttempt(context.Background(), f.invocation, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
+	_, err := f.service.ConnectExamAttempt(context.Background(), f.inv, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault, "error=%v effects=%#v", err, f.publisher.Calls())
 	require.Equal(t, "exam.attempt.connection_closed", fault.Code(), "error=%v effects=%#v", err, f.publisher.Calls())
@@ -147,7 +147,7 @@ func TestConnectReplayOfEndedParticipationRequiresNewKey(t *testing.T) {
 	f := newFixture(t)
 	f.persistence.replayed = true
 	f.persistence.participationEnded = true
-	_, err := f.service.ConnectExamAttempt(context.Background(), f.invocation, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
+	_, err := f.service.ConnectExamAttempt(context.Background(), f.inv, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault, "error=%v effects=%#v", err, f.publisher.Calls())
 	require.Equal(t, "exam.attempt.connection_closed", fault.Code(), "error=%v effects=%#v", err, f.publisher.Calls())
@@ -158,7 +158,7 @@ func TestConnectRejectsAConnectionOutcomeBoundToAnotherSession(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	f.persistence.connectionSession = model.NewSessionID()
-	_, err := f.service.ConnectExamAttempt(context.Background(), f.invocation, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
+	_, err := f.service.ConnectExamAttempt(context.Background(), f.inv, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault, "error=%v effects=%#v", err, f.publisher.Calls())
 	require.Equal(t, "exam.attempt.unavailable", fault.Code(), "error=%v effects=%#v", err, f.publisher.Calls())
@@ -169,7 +169,7 @@ func TestConnectFailureCompletesAuditAndPublishesNoEffect(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	f.persistence.connectErr = store.NewErrConflict("exam_sitting", "exam_sitting_state", nil)
-	_, err := f.service.ConnectExamAttempt(context.Background(), f.invocation, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
+	_, err := f.service.ConnectExamAttempt(context.Background(), f.inv, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault, "error=%v audit=%q effects=%#v order=%v", err, f.audit.failedCode, f.publisher.Calls(), f.order)
 	require.Equal(t, "exam.attempt.sitting_not_open", fault.Code(), "error=%v audit=%q effects=%#v order=%v", err, f.audit.failedCode, f.publisher.Calls(), f.order)
@@ -184,7 +184,7 @@ func TestExpiredReplayReturnsCandidateSafeConnectionLoss(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	f.persistence.connectErr = store.NewErrConflict("attempt_participation", "attempt_participation_expired", nil)
-	_, err := f.service.ConnectExamAttempt(context.Background(), f.invocation, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
+	_, err := f.service.ConnectExamAttempt(context.Background(), f.inv, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault, "error=%v effects=%#v", err, f.publisher.Calls())
 	require.Equal(t, "exam.attempt.connection_lost", fault.Code(), "error=%v effects=%#v", err, f.publisher.Calls())
@@ -195,11 +195,11 @@ func TestTrustedCloseCommitsBeforeManagerEffectAndSuppressesNoop(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	credential := model.NewCredentialToken()
-	connected, err := f.service.ConnectExamAttempt(context.Background(), f.invocation, validConnectCommand(f, credential, "test-key"))
+	connected, err := f.service.ConnectExamAttempt(context.Background(), f.inv, validConnectCommand(f, credential, "test-key"))
 	require.NoError(t, err)
 	f.order = nil
 	f.persistence.closeChanged = true
-	closed, err := f.service.CloseExamAttemptConnection(context.Background(), f.invocation, CloseConnectionCommand{
+	closed, err := f.service.CloseExamAttemptConnection(context.Background(), f.inv, CloseConnectionCommand{
 		AttemptID: connected.Attempt.ID, SittingID: f.sitting.ID, ClassID: f.sitting.ClassID,
 		ConnectionID: connected.Connection.ID, Reason: model.AttemptConnectionCloseTransport,
 	})
@@ -210,7 +210,7 @@ func TestTrustedCloseCommitsBeforeManagerEffectAndSuppressesNoop(t *testing.T) {
 	require.Equal(t, []string{"audit", "close", "effects"}, f.order)
 	f.order = nil
 	f.persistence.closeChanged = false
-	_, err = f.service.CloseExamAttemptConnection(context.Background(), f.invocation, CloseConnectionCommand{
+	_, err = f.service.CloseExamAttemptConnection(context.Background(), f.inv, CloseConnectionCommand{
 		AttemptID: connected.Attempt.ID, SittingID: f.sitting.ID, ClassID: f.sitting.ClassID,
 		ConnectionID: connected.Connection.ID, Reason: model.AttemptConnectionCloseTransport,
 	})
@@ -227,11 +227,11 @@ func TestTrustedCloseStillFencesCandidateAndSessionOwnership(t *testing.T) {
 		func(principal *model.Principal) { principal.SessionID = model.NewSessionID() },
 	} {
 		f := newFixture(t)
-		connected, err := f.service.ConnectExamAttempt(context.Background(), f.invocation, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
+		connected, err := f.service.ConnectExamAttempt(context.Background(), f.inv, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
 		require.NoError(t, err)
-		principal := f.invocation.Principal()
+		principal := f.inv.Principal()
 		mutate(&principal)
-		_, err = f.service.CloseExamAttemptConnection(context.Background(), invocation.New(principal, f.invocation.RequestMetadata()), CloseConnectionCommand{
+		_, err = f.service.CloseExamAttemptConnection(context.Background(), invocation.New(principal, f.inv.RequestMetadata()), CloseConnectionCommand{
 			AttemptID: connected.Attempt.ID, SittingID: f.sitting.ID, ClassID: f.sitting.ClassID,
 			ConnectionID: connected.Connection.ID, Reason: model.AttemptConnectionCloseTransport,
 		})
@@ -245,7 +245,7 @@ func TestTrustedCloseStillFencesCandidateAndSessionOwnership(t *testing.T) {
 func TestTrustedCloseRejectsUnknownReasonBeforeAudit(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	_, err := f.service.CloseExamAttemptConnection(context.Background(), f.invocation, CloseConnectionCommand{
+	_, err := f.service.CloseExamAttemptConnection(context.Background(), f.inv, CloseConnectionCommand{
 		AttemptID: model.NewExamAttemptID(), SittingID: f.sitting.ID, ClassID: f.sitting.ClassID,
 		ConnectionID: model.NewAttemptConnectionID(), Reason: "unknown",
 	})

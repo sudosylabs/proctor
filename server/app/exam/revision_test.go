@@ -42,7 +42,7 @@ func TestPublicationPublishesAfterCurrentManagerAuthorizationAndSuppressesReplay
 	})
 	require.NoError(t, err)
 	command := PublishRevisionCommand{ExamID: f.examID, ExpectedDraftRevision: 3, IdempotencyKey: "test-key"}
-	got, err := service.PublishExamRevision(context.Background(), f.invocation, command)
+	got, err := service.PublishExamRevision(context.Background(), f.inv, command)
 	require.NoError(t, err)
 	require.Equal(t, model.ActionExamPublish, f.authorizer.action, "publication action=%q input=%#v result=%#v effects", f.authorizer.action, revisions.input, got)
 	require.NotNil(t, revisions.input, "publication action=%q input=%#v result=%#v effects", f.authorizer.action, revisions.input, got)
@@ -56,7 +56,7 @@ func TestPublicationPublishesAfterCurrentManagerAuthorizationAndSuppressesReplay
 	assertStoreIdempotency(t, revisions.idempotency, f.userID, idempotencyOperationPublishRevision, "test-key",
 		fmt.Sprintf(`{"exam_id":%q,"expected_draft_revision":3}`, f.examID))
 	revisions.replayed = true
-	_, err = service.PublishExamRevision(context.Background(), f.invocation, command)
+	_, err = service.PublishExamRevision(context.Background(), f.inv, command)
 	require.NoError(t, err)
 	require.Equal(t, []realtimetest.Call{{Method: realtimetest.Publish, Event: published}}, publisher.Calls(), "replay republished effect")
 }
@@ -77,7 +77,7 @@ func TestPublicationUsesOverrideForNonManager(t *testing.T) {
 		InstitutionOrigin: "https://institution.example",
 	})
 	require.NoError(t, err)
-	_, err = service.PublishExamRevision(context.Background(), f.invocation, PublishRevisionCommand{ExamID: f.examID, ExpectedDraftRevision: 1, IdempotencyKey: "test-key"})
+	_, err = service.PublishExamRevision(context.Background(), f.inv, PublishRevisionCommand{ExamID: f.examID, ExpectedDraftRevision: 1, IdempotencyKey: "test-key"})
 	require.NoError(t, err)
 	require.Equal(t, model.ActionExamPublishOverride, f.authorizer.action, "override action=%q input=%#v", f.authorizer.action, revisions.input)
 	require.True(t, revisions.input.ManagerOverride, "override action=%q input=%#v", f.authorizer.action, revisions.input)
@@ -101,7 +101,7 @@ func TestPublicationMapsCapacityConflict(t *testing.T) {
 		InstitutionOrigin: "https://institution.example",
 	})
 	require.NoError(t, err)
-	_, err = service.PublishExamRevision(context.Background(), f.invocation,
+	_, err = service.PublishExamRevision(context.Background(), f.inv,
 		PublishRevisionCommand{ExamID: f.examID, ExpectedDraftRevision: 3, IdempotencyKey: "test-key"})
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault)

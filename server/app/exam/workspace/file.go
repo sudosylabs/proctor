@@ -47,7 +47,7 @@ type ReplaceFileCommand struct {
 // -1 means the length is not known in advance.
 func (s *Service) CreateExamStarterWorkspaceFile(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command CreateFileCommand,
 ) (_ Result, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -64,7 +64,7 @@ func (s *Service) CreateExamStarterWorkspaceFile(
 	}
 
 	commandIdempotency, err := prepareWorkspaceIdempotency(
-		invocation,
+		inv,
 		idempotencyOperationCreateFile,
 		command.IdempotencyKey,
 		command.ExamID,
@@ -80,14 +80,14 @@ func (s *Service) CreateExamStarterWorkspaceFile(
 		return Result{}, err
 	}
 
-	authorization, err := s.authorizeExam(ctx, invocation, command.ExamID, true)
+	authorization, err := s.authorizeExam(ctx, inv, command.ExamID, true)
 	if err != nil {
 		return Result{}, err
 	}
 
 	return s.stageAndFinalize(
 		ctx,
-		invocation,
+		inv,
 		authorization,
 		command.ExamID,
 		"",
@@ -110,7 +110,7 @@ func (s *Service) CreateExamStarterWorkspaceFile(
 // Content Version.
 func (s *Service) ReplaceExamStarterWorkspaceFile(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ReplaceFileCommand,
 ) (_ Result, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -127,7 +127,7 @@ func (s *Service) ReplaceExamStarterWorkspaceFile(
 	}
 
 	commandIdempotency, err := prepareWorkspaceIdempotency(
-		invocation,
+		inv,
 		idempotencyOperationReplaceFile,
 		command.IdempotencyKey,
 		command.ExamID,
@@ -143,14 +143,14 @@ func (s *Service) ReplaceExamStarterWorkspaceFile(
 		return Result{}, err
 	}
 
-	authorization, err := s.authorizeExam(ctx, invocation, command.ExamID, true)
+	authorization, err := s.authorizeExam(ctx, inv, command.ExamID, true)
 	if err != nil {
 		return Result{}, err
 	}
 
 	return s.stageAndFinalize(
 		ctx,
-		invocation,
+		inv,
 		authorization,
 		command.ExamID,
 		command.EntryID,
@@ -170,7 +170,7 @@ func (s *Service) ReplaceExamStarterWorkspaceFile(
 
 func (s *Service) stageAndFinalize(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	authorization authorizationDecision,
 	examID model.ExamID,
 	entryID model.StarterWorkspaceEntryID,
@@ -198,7 +198,7 @@ func (s *Service) stageAndFinalize(
 	object, err := model.NewStagedStarterWorkspaceObject(
 		objectID,
 		examID,
-		invocation.Principal().UserID,
+		inv.Principal().UserID,
 		at,
 		at.Add(model.StarterWorkspaceUploadLease),
 	)
@@ -228,7 +228,7 @@ func (s *Service) stageAndFinalize(
 
 	mutation := &store.ExamStarterWorkspaceMutation{
 		ExamID:                 examID,
-		ActorUserID:            invocation.Principal().UserID,
+		ActorUserID:            inv.Principal().UserID,
 		ManagerOverride:        authorization.override,
 		ExpectedDraftRevision:  expectedRevision,
 		ChangedAt:              at,
@@ -241,7 +241,7 @@ func (s *Service) stageAndFinalize(
 		SizeBytes:              staged.SizeBytes,
 		SHA256:                 staged.SHA256,
 	}
-	result, err := s.runMutation(ctx, invocation, authorization, auditOperation, effectOperation, mutation, commandIdempotency, run)
+	result, err := s.runMutation(ctx, inv, authorization, auditOperation, effectOperation, mutation, commandIdempotency, run)
 	if err != nil {
 		if !apperror.Is(err, "exam.starter_workspace.unavailable") {
 			_ = s.workspaces.MarkObjectReclaimable(ctx, &store.StarterWorkspaceObjectReclaim{ObjectID: objectID, At: at})

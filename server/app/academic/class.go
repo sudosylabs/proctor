@@ -60,14 +60,14 @@ type ArchiveClassCommand struct {
 }
 
 // GetClass reads one Class after authorizing the caller.
-func (s *Service) GetClass(ctx context.Context, invocation invocation.Invocation, id model.ClassID) (*model.Class, error) {
+func (s *Service) GetClass(ctx context.Context, inv invocation.Invocation, id model.ClassID) (*model.Class, error) {
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "class_id")
 	}
 
 	if err := s.authorizer.Authorize(
 		ctx,
-		invocation,
+		inv,
 		model.ActionClassView,
 		model.Resource{Type: model.ResourceClass, ID: id.String()},
 	); err != nil {
@@ -85,7 +85,7 @@ func (s *Service) GetClass(ctx context.Context, invocation invocation.Invocation
 // ListClasses lists Classes after authorizing the caller.
 func (s *Service) ListClasses(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query ListClassesQuery,
 ) (paging.Page[*model.Class], error) {
 	levelID := query.ProgrammeLevelID
@@ -99,7 +99,7 @@ func (s *Service) ListClasses(
 	}
 
 	resource := model.Resource{Type: model.ResourceProgrammeLevel, ID: levelID.String()}
-	if err = s.authorizer.Authorize(ctx, invocation, model.ActionClassView, resource); err != nil {
+	if err = s.authorizer.Authorize(ctx, inv, model.ActionClassView, resource); err != nil {
 		return paging.Page[*model.Class]{}, err
 	}
 
@@ -118,7 +118,7 @@ func (s *Service) ListClasses(
 // SearchClasses searches Classes after authorizing the caller.
 func (s *Service) SearchClasses(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query SearchClassesQuery,
 ) (paging.Page[*model.Class], error) {
 	unitID := query.AcademicUnitID
@@ -132,7 +132,7 @@ func (s *Service) SearchClasses(
 	}
 
 	resource := model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()}
-	if err = s.authorizer.Authorize(ctx, invocation, model.ActionClassView, resource); err != nil {
+	if err = s.authorizer.Authorize(ctx, inv, model.ActionClassView, resource); err != nil {
 		return paging.Page[*model.Class]{}, err
 	}
 
@@ -150,14 +150,14 @@ func (s *Service) SearchClasses(
 }
 
 // CreateClass creates a Class after authorizing the caller.
-func (s *Service) CreateClass(ctx context.Context, invocation invocation.Invocation, command CreateClassCommand) (*model.Class, error) {
+func (s *Service) CreateClass(ctx context.Context, inv invocation.Invocation, command CreateClassCommand) (*model.Class, error) {
 	levelID := command.ProgrammeLevelID
 	if !levelID.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "programme_level_id")
 	}
 
 	resource := model.Resource{Type: model.ResourceProgrammeLevel, ID: levelID.String()}
-	scope, err := s.authorizer.AuthorizeWithScope(ctx, invocation, model.ActionClassManage, resource)
+	scope, err := s.authorizer.AuthorizeWithScope(ctx, inv, model.ActionClassManage, resource)
 	scopeType, scopeID := scope.ScopeType, scope.ScopeID
 	if err != nil {
 		return nil, err
@@ -189,7 +189,7 @@ func (s *Service) CreateClass(ctx context.Context, invocation invocation.Invocat
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionClassManage,
 			Resource:   resource,
 			ScopeType:  scopeType,
@@ -210,14 +210,14 @@ func (s *Service) CreateClass(ctx context.Context, invocation invocation.Invocat
 }
 
 // UpdateClass updates a Class after authorizing the caller.
-func (s *Service) UpdateClass(ctx context.Context, invocation invocation.Invocation, command UpdateClassCommand) (*model.Class, error) {
+func (s *Service) UpdateClass(ctx context.Context, inv invocation.Invocation, command UpdateClassCommand) (*model.Class, error) {
 	id := command.ID
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "class_id")
 	}
 
 	resource := model.Resource{Type: model.ResourceClass, ID: id.String()}
-	if err := s.authorizer.Authorize(ctx, invocation, model.ActionClassManage, resource); err != nil {
+	if err := s.authorizer.Authorize(ctx, inv, model.ActionClassManage, resource); err != nil {
 		return nil, err
 	}
 
@@ -265,7 +265,7 @@ func (s *Service) UpdateClass(ctx context.Context, invocation invocation.Invocat
 
 	if candidate.ProgrammeLevelID != current.ProgrammeLevelID {
 		destination := model.Resource{Type: model.ResourceProgrammeLevel, ID: candidate.ProgrammeLevelID.String()}
-		if err := s.authorizer.Authorize(ctx, invocation, model.ActionClassManage, destination); err != nil {
+		if err := s.authorizer.Authorize(ctx, inv, model.ActionClassManage, destination); err != nil {
 			return nil, err
 		}
 	}
@@ -284,7 +284,7 @@ func (s *Service) UpdateClass(ctx context.Context, invocation invocation.Invocat
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionClassManage,
 			Resource:   resource,
 			Operation:  "patch",
@@ -306,14 +306,14 @@ func (s *Service) UpdateClass(ctx context.Context, invocation invocation.Invocat
 }
 
 // ArchiveClass archives a Class after authorizing the caller.
-func (s *Service) ArchiveClass(ctx context.Context, invocation invocation.Invocation, command ArchiveClassCommand) error {
+func (s *Service) ArchiveClass(ctx context.Context, inv invocation.Invocation, command ArchiveClassCommand) error {
 	id := command.ID
 	if !id.IsValid() {
 		return apperror.New("request.invalid").WithField("field", "class_id")
 	}
 
 	resource := model.Resource{Type: model.ResourceClass, ID: id.String()}
-	if err := s.authorizer.Authorize(ctx, invocation, model.ActionClassManage, resource); err != nil {
+	if err := s.authorizer.Authorize(ctx, inv, model.ActionClassManage, resource); err != nil {
 		return err
 	}
 
@@ -334,7 +334,7 @@ func (s *Service) ArchiveClass(ctx context.Context, invocation invocation.Invoca
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionClassManage,
 			Resource:   resource,
 			Operation:  "archive",

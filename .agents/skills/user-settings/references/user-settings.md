@@ -96,8 +96,8 @@ One focused User Settings application module exposes only two use cases, which
 `app.App` promotes:
 
 ~~~text
-ReadOwnUserSettings(invocation) -> current exact document
-ReplaceOwnUserSettings(invocation, source, format version, expected revision,
+ReadOwnUserSettings(inv) -> current exact document
+ReplaceOwnUserSettings(inv, source, format version, expected revision,
                        idempotency key) -> replacement result
 ~~~
 

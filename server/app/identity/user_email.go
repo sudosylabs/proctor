@@ -49,19 +49,19 @@ func userEmailState(account *model.User) *UserEmailState {
 // sends the warning and verification mail.
 func (s *Service) ChangeUserEmail(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ChangeUserEmailCommand,
 ) (*UserEmailState, error) {
 	if s.authorizer == nil || s.auditor == nil {
 		return nil, apperror.New("administration.unavailable")
 	}
-	if err := access.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
+	if err := access.RequireStrongRecentSession(inv.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 		return nil, err
 	}
 
 	if err := s.authorizer.Authorize(
 		ctx,
-		invocation,
+		inv,
 		model.ActionUserManage,
 		model.Resource{Type: model.ResourceUser, ID: command.UserID.String()},
 	); err != nil {
@@ -88,7 +88,7 @@ func (s *Service) ChangeUserEmail(
 		ctx,
 		accountRecoveryAttemptEmailChangeNotice,
 		id.String(),
-		invocation.RequestMetadata().IPAddress,
+		inv.RequestMetadata().IPAddress,
 	); err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func (s *Service) ChangeUserEmail(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionUserManage,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: id.String()},
 			Operation:  "change_email",
@@ -118,19 +118,19 @@ func (s *Service) ChangeUserEmail(
 // administrator and notifies the User.
 func (s *Service) VerifyUserEmailPrivileged(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command VerifyUserEmailPrivilegedCommand,
 ) (*UserEmailState, error) {
 	if s.authorizer == nil || s.auditor == nil {
 		return nil, apperror.New("administration.unavailable")
 	}
-	if err := access.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
+	if err := access.RequireStrongRecentSession(inv.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 		return nil, err
 	}
 
 	if err := s.authorizer.Authorize(
 		ctx,
-		invocation,
+		inv,
 		model.ActionUserManage,
 		model.Resource{Type: model.ResourceUser, ID: command.UserID.String()},
 	); err != nil {
@@ -155,7 +155,7 @@ func (s *Service) VerifyUserEmailPrivileged(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionUserManage,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: id.String()},
 			Operation:  "verify_email_privileged",
@@ -267,7 +267,7 @@ type CompleteEmailChangeUndoCommand struct {
 // response conceals whether the credential ever existed.
 func (s *Service) CompleteEmailChangeUndo(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command CompleteEmailChangeUndoCommand,
 ) error {
 	if err := s.checkAccountRecoveryRateLimit(
@@ -292,7 +292,7 @@ func (s *Service) CompleteEmailChangeUndo(
 		model.ActionAuthenticationEmailChangeUndo,
 		model.Resource{Type: model.ResourceUser},
 		institution.ID,
-		invocation,
+		inv,
 		nil,
 		"email_change_undo_token",
 	)

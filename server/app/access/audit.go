@@ -65,7 +65,7 @@ func (a MailAuditAdapter) Fail(ctx context.Context, auditID model.AuditEventID, 
 // PrepareControl begins the audit attempt of canceling or retrying a delivery.
 func (a MailAuditAdapter) PrepareControl(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	institution model.Resource,
 	delivery *model.MailDelivery,
 	operation string,
@@ -81,12 +81,12 @@ func (a MailAuditAdapter) PrepareControl(
 
 	event, appErr := a.audit.BeginCriticalActionAtScope(
 		ctx,
-		invocation.Principal(),
+		inv.Principal(),
 		model.ActionMailManage,
 		model.Resource{Type: model.ResourceMailDelivery, ID: delivery.ID.String()},
 		model.RoleScopeInstitution,
 		institution.ID,
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		map[string]any{"operation": operation, "value": delivery.Auditable()},
 		delivery.Auditable(),
 	)
@@ -100,7 +100,7 @@ func (a MailAuditAdapter) PrepareControl(
 // PrepareTest builds the audit event of sending a test message.
 func (a MailAuditAdapter) PrepareTest(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	institution model.Resource,
 	deliveryID model.MailDeliveryID,
 ) (*model.AuditEvent, error) {
@@ -111,7 +111,7 @@ func (a MailAuditAdapter) PrepareTest(
 		return nil, AuditUnavailable(errors.New("mail audit dependencies are invalid"))
 	}
 
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return nil, InvalidTokenAppError()
 	}
@@ -124,7 +124,7 @@ func (a MailAuditAdapter) PrepareTest(
 		return nil, apperror.DomainInvalid("audit.internal", err)
 	}
 
-	metadata := invocation.RequestMetadata()
+	metadata := inv.RequestMetadata()
 	return &model.AuditEvent{
 		ActorID:    principal.UserID,
 		SessionID:  principal.SessionID,

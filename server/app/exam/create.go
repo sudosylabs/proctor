@@ -29,10 +29,10 @@ type CreateCommand struct {
 
 // CreateExam idempotently creates an Exam with its initial Exam Draft in the
 // given Academic Unit.
-func (a *Authoring) CreateExam(ctx context.Context, invocation invocation.Invocation, command CreateCommand) (_ View, resultErr error) {
+func (a *Authoring) CreateExam(ctx context.Context, inv invocation.Invocation, command CreateCommand) (_ View, resultErr error) {
 	defer func() { a.recordOperational("create", resultErr) }()
 	defer func() { resultErr = publicFailures.Present(resultErr) }()
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil {
 		return View{}, apperror.Invalid("exam.invalid", "principal")
 	}
@@ -40,7 +40,7 @@ func (a *Authoring) CreateExam(ctx context.Context, invocation invocation.Invoca
 		return View{}, apperror.Invalid("exam.invalid", "academic_unit_id")
 	}
 
-	commandIdempotency, err := idempotency.Require(invocation, idempotencyOperationCreate, command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Require(inv, idempotencyOperationCreate, command.IdempotencyKey, struct {
 		AcademicUnitID       string `json:"academic_unit_id"`
 		Title                string `json:"title"`
 		InstructionsMarkdown string `json:"instructions_markdown"`
@@ -81,12 +81,12 @@ func (a *Authoring) CreateExam(ctx context.Context, invocation invocation.Invoca
 	}
 
 	resource := model.Resource{Type: model.ResourceAcademicUnit, ID: command.AcademicUnitID.String()}
-	if err = a.authorizer.Authorize(ctx, invocation, action, resource); err != nil {
+	if err = a.authorizer.Authorize(ctx, inv, action, resource); err != nil {
 		return View{}, err
 	}
 
 	auditID, err := a.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     action,
 		Resource:   resource,
 		ScopeType:  model.RoleScopeAcademicUnit,

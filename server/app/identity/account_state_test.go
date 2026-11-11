@@ -235,8 +235,8 @@ func TestAccountSelfDisableIsRejectedAfterAuthorization(t *testing.T) {
 	events := []string{}
 	userID := model.NewID()
 	service := &Service{users: &accountStateStoreFake{events: &events}, authorizer: &accountAuthorizerFake{events: &events}, capabilities: &accessPolicyCapabilitiesFake{}, auditor: &institutionAuditorFake{events: &events}, mail: &securityNoticeMailerFake{events: &events}, publisher: accountStatePublisher(t, &events), now: time.Now}
-	invocation := invocation.New(model.Principal{UserID: model.UserID(userID)}, model.RequestMetadata{})
-	_, err := service.SetUserEnabled(context.Background(), invocation, SetUserEnabledCommand{ID: model.UserID(userID), Enabled: false})
+	inv := invocation.New(model.Principal{UserID: model.UserID(userID)}, model.RequestMetadata{})
+	_, err := service.SetUserEnabled(context.Background(), inv, SetUserEnabledCommand{ID: model.UserID(userID), Enabled: false})
 	require.True(t, apperror.Is(err, "request.invalid"), "error = %v", err)
 	require.Equal(t, []string{"authorize-manage"}, events, "events")
 }

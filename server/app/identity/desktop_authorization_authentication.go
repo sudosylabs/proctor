@@ -31,10 +31,10 @@ type AuthenticateDesktopAuthorizationLocallyCommand struct {
 // Session as the proof of the bound Desktop authorization.
 func (s *Service) AuthenticateDesktopAuthorizationSession(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command AuthenticateDesktopAuthorizationCommand,
 ) (*DesktopAuthorizationBrowserContext, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.MFAEnrollmentRequired {
 		return nil, mfaEnrollmentRequiredAppError()
 	}
@@ -61,7 +61,7 @@ func (s *Service) AuthenticateDesktopAuthorizationSession(
 		return nil, err
 	}
 
-	return s.DesktopAuthorizationContext(ctx, invocation, command.Binding)
+	return s.DesktopAuthorizationContext(ctx, inv, command.Binding)
 }
 
 // AuthenticateDesktopAuthorizationLocally proves a local password, and a
@@ -69,7 +69,7 @@ func (s *Service) AuthenticateDesktopAuthorizationSession(
 // without creating a Web Session.
 func (s *Service) AuthenticateDesktopAuthorizationLocally(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command AuthenticateDesktopAuthorizationLocallyCommand,
 ) (*DesktopAuthorizationBrowserContext, error) {
 	if !model.IsValidCredentialToken(command.Binding) {
@@ -105,7 +105,7 @@ func (s *Service) AuthenticateDesktopAuthorizationLocally(
 		s.resetLocalAuthenticationAttempts(ctx, proof)
 	}
 
-	return s.DesktopAuthorizationContext(ctx, invocation, command.Binding)
+	return s.DesktopAuthorizationContext(ctx, inv, command.Binding)
 }
 
 func (s *Service) recordDesktopAuthorizationProof(

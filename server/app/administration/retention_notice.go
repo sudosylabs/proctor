@@ -24,11 +24,11 @@ type RetentionNoticePage struct {
 // It grants no underlying record access and has no read-acknowledgement effect.
 func (s *Service) ListRetentionNotices(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	after model.RetentionRetirementID,
 	limit int,
 ) (*RetentionNoticePage, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return nil, apperror.New("authentication.required")
 	}

@@ -97,10 +97,10 @@ func (s *Service) CancelDesktopReauthentication(
 // primary proof. No Session is created and the Registration is unchanged.
 func (s *Service) CompleteDesktopReauthentication(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command CompleteDesktopReauthenticationCommand,
 ) (*DesktopReauthenticationResult, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	credentialID, err := requireDesktopDPoPSession(principal)
 	if err != nil {
 		return nil, err
@@ -123,7 +123,7 @@ func (s *Service) CompleteDesktopReauthentication(
 	}
 
 	result, err := access.RunAudited(ctx, s.auditor, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionAuthenticationReauthenticate,
 		Resource:   model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
 		Operation:  desktopReauthenticationOperation(principal.AuthenticationMethod),
@@ -180,7 +180,7 @@ type desktopReauthenticationRejection struct {
 // is the actor and the Desktop Session's account the resource.
 func (s *Service) recordRejectedDesktopReauthentication(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	rejection desktopReauthenticationRejection,
 ) error {
 	if s.securityAudit == nil || !rejection.actor.IsValid() || !rejection.target.IsValid() || !rejection.institutionID.IsValid() {
@@ -194,7 +194,7 @@ func (s *Service) recordRejectedDesktopReauthentication(
 		model.Resource{Type: model.ResourceUser, ID: rejection.target.String()},
 		model.RoleScopeInstitution,
 		rejection.institutionID.String(),
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		map[string]any{"operation": rejection.operation},
 	)
 	if err != nil {

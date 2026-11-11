@@ -25,7 +25,7 @@ func TestFinalizeAndReleaseUseDistinctAuthorizationAndEffects(t *testing.T) {
 	t.Parallel()
 	f := newReviewFixture(t)
 	f.persistence.mode = "finalize"
-	finalized, err := f.service.FinalizeExamIntegrityReview(context.Background(), f.invocation, TerminalCommand{SubmissionID: f.submissionID,
+	finalized, err := f.service.FinalizeExamIntegrityReview(context.Background(), f.inv, TerminalCommand{SubmissionID: f.submissionID,
 		ReviewID: f.reviewID, ExpectedReviewRevision: 2, IdempotencyKey: "test-key"})
 	require.NoError(t, err, "finalized=%#v error=%v auth=%#v", finalized, err, f.authorizer)
 	require.Equal(t, model.SubmissionReviewFinalized, finalized.Review.State, "finalized=%#v error=%v auth=%#v", finalized, err, f.authorizer)
@@ -34,12 +34,12 @@ func TestFinalizeAndReleaseUseDistinctAuthorizationAndEffects(t *testing.T) {
 	// invalidates the Sitting board.
 	finalizedCalls := reviewCalls(t, realtime.NewExamIntegrityReviewFinalizedEvent, finalized)
 	require.Equal(t, finalizedCalls, f.publisher.Calls())
-	wantFinalize, prepareErr := prepareTerminalIdempotency(f.invocation, store.ExamIntegrityReviewFinalizeOperation,
+	wantFinalize, prepareErr := prepareTerminalIdempotency(f.inv, store.ExamIntegrityReviewFinalizeOperation,
 		"test-key", f.submissionID, f.reviewID, 2)
 	require.NoError(t, prepareErr)
 	require.Equal(t, wantFinalize, f.persistence.idempotency)
 	f.persistence.mode = "release"
-	released, err := f.service.ReleaseStudentExamResult(context.Background(), f.invocation, TerminalCommand{SubmissionID: f.submissionID,
+	released, err := f.service.ReleaseStudentExamResult(context.Background(), f.inv, TerminalCommand{SubmissionID: f.submissionID,
 		ReviewID: f.reviewID, ExpectedReviewRevision: 3, IdempotencyKey: "test-key"})
 	require.NoError(t, err, "released=%#v error=%v auth=%#v", released, err, f.authorizer)
 	require.Equal(t, model.SubmissionReviewReleased, released.Review.ReleaseState, "released=%#v error=%v auth=%#v", released, err, f.authorizer)
@@ -61,7 +61,7 @@ func TestFinalizeAndReleaseUseDistinctAuthorizationAndEffects(t *testing.T) {
 		realtimetest.Call{Method: realtimetest.Publish, Event: activity},
 		realtimetest.Call{Method: realtimetest.Publish, Event: board},
 	), f.publisher.Calls())
-	wantRelease, prepareErr := prepareTerminalIdempotency(f.invocation, store.ExamIntegrityReviewReleaseOperation,
+	wantRelease, prepareErr := prepareTerminalIdempotency(f.inv, store.ExamIntegrityReviewReleaseOperation,
 		"test-key", f.submissionID, f.reviewID, 3)
 	require.NoError(t, prepareErr)
 	require.Equal(t, wantRelease, f.persistence.idempotency)
@@ -79,7 +79,7 @@ func TestReleasePreparationFailureIsAuditedAsAttempt(t *testing.T) {
 	f := newReviewFixture(t)
 	f.persistence.mode = "release"
 	f.persistence.prepareErr = store.NewErrConflict("submission_review", "integrity_review_state", nil)
-	_, err := f.service.ReleaseStudentExamResult(context.Background(), f.invocation, TerminalCommand{SubmissionID: f.submissionID,
+	_, err := f.service.ReleaseStudentExamResult(context.Background(), f.inv, TerminalCommand{SubmissionID: f.submissionID,
 		ReviewID: f.reviewID, ExpectedReviewRevision: 3, IdempotencyKey: "test-key"})
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault)
@@ -96,7 +96,7 @@ func TestReleaseReplayReturnsRetainedResultWithoutPreparingMail(t *testing.T) {
 	t.Parallel()
 	f := newReviewFixture(t)
 	f.persistence.mode, f.persistence.replayed = "release", true
-	released, err := f.service.ReleaseStudentExamResult(context.Background(), f.invocation, TerminalCommand{SubmissionID: f.submissionID,
+	released, err := f.service.ReleaseStudentExamResult(context.Background(), f.inv, TerminalCommand{SubmissionID: f.submissionID,
 		ReviewID: f.reviewID, ExpectedReviewRevision: 3, IdempotencyKey: "test-key"})
 	require.NoError(t, err, "released=%#v error=%v mail=%#v release", released, err, f.mail)
 	require.True(t, released.Replayed, "released=%#v error=%v mail=%#v release", released, err, f.mail)

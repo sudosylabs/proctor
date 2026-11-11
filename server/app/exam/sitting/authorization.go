@@ -22,11 +22,11 @@ import (
 // AuthorizeSittingView rechecks the current relationship and permission used by an
 // exact read without returning Sitting state. Realtime subscriptions use this
 // gate before accepting or retaining a resource-scoped subscription.
-func (s *Service) AuthorizeSittingView(ctx context.Context, invocation invocation.Invocation, sittingID model.ExamSittingID) error {
+func (s *Service) AuthorizeSittingView(ctx context.Context, inv invocation.Invocation, sittingID model.ExamSittingID) error {
 	if !sittingID.IsValid() {
 		return apperror.Invalid("exam.sitting.invalid", "exam_sitting_id")
 	}
-	if invocation.Principal().Validate() != nil {
+	if inv.Principal().Validate() != nil {
 		return apperror.Invalid("exam.sitting.invalid", "principal")
 	}
 
@@ -45,7 +45,7 @@ func (s *Service) AuthorizeSittingView(ctx context.Context, invocation invocatio
 
 	_, err = s.authorizeManagerAction(
 		ctx,
-		invocation,
+		inv,
 		value.Sitting.ExamID,
 		model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
 		model.TimeUTC(s.now()),
@@ -60,19 +60,19 @@ func (s *Service) AuthorizeSittingView(ctx context.Context, invocation invocatio
 // Browser history has no administrator or general examination override.
 func (s *Service) AuthorizeBrowserActivityView(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	sittingID model.ExamSittingID,
 ) (access.BrowserActivityAuthorization, error) {
-	unitID, err := s.authorizeBrowserActivityView(ctx, invocation, sittingID)
+	unitID, err := s.authorizeBrowserActivityView(ctx, inv, sittingID)
 	return access.BrowserActivityAuthorization{AcademicUnitID: unitID}, err
 }
 
 func (s *Service) authorizeBrowserActivityView(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	sittingID model.ExamSittingID,
 ) (model.AcademicUnitID, error) {
-	if !sittingID.IsValid() || invocation.Principal().Validate() != nil {
+	if !sittingID.IsValid() || inv.Principal().Validate() != nil {
 		return "", apperror.Invalid("exam.sitting.invalid", "exam_sitting_id")
 	}
 
@@ -89,7 +89,7 @@ func (s *Service) authorizeBrowserActivityView(
 		return "", apperror.New("exam.sitting.unavailable").Wrap(errors.New("Exam Sitting Store returned a mismatched snapshot"))
 	}
 
-	examAccess, err := s.exams.Access(ctx, value.Sitting.ExamID, invocation.Principal().UserID)
+	examAccess, err := s.exams.Access(ctx, value.Sitting.ExamID, inv.Principal().UserID)
 	if err != nil {
 		return "", storeErrors.Translate(err)
 	}
@@ -101,7 +101,7 @@ func (s *Service) authorizeBrowserActivityView(
 	if !examAccess.ActorIsManager {
 		if err := s.authorizer.RecordDenial(
 			ctx,
-			invocation,
+			inv,
 			model.ActionExamAttemptBrowserActivityView,
 			resource,
 			examAccess.Exam.AcademicUnitID,
@@ -112,7 +112,7 @@ func (s *Service) authorizeBrowserActivityView(
 		return "", apperror.New("exam.sitting.not_found")
 	}
 
-	if err := s.authorizer.Authorize(ctx, invocation, model.ActionExamAttemptBrowserActivityView, resource); err != nil {
+	if err := s.authorizer.Authorize(ctx, inv, model.ActionExamAttemptBrowserActivityView, resource); err != nil {
 		return "", err
 	}
 
@@ -126,13 +126,13 @@ func (s *Service) authorizeBrowserActivityView(
 // the canonical Submission resource for its scoped, durable decision audit.
 func (s *Service) AuthorizeSubmissionView(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	examID model.ExamID,
 	submissionID model.SubmissionID,
 ) error {
 	_, err := s.authorizeSubmission(
 		ctx,
-		invocation,
+		inv,
 		examID,
 		submissionID,
 		model.ActionSubmissionView,
@@ -145,13 +145,13 @@ func (s *Service) AuthorizeSubmissionView(
 // exact-unit membership decision for draft decisions and finalization.
 func (s *Service) AuthorizeSubmissionReview(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	examID model.ExamID,
 	submissionID model.SubmissionID,
 ) (access.ManagerAuthorization, error) {
 	override, err := s.authorizeSubmission(
 		ctx,
-		invocation,
+		inv,
 		examID,
 		submissionID,
 		model.ActionSubmissionReview,
@@ -164,13 +164,13 @@ func (s *Service) AuthorizeSubmissionReview(
 // permission from evidence review and finalization.
 func (s *Service) AuthorizeSubmissionRelease(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	examID model.ExamID,
 	submissionID model.SubmissionID,
 ) (access.ManagerAuthorization, error) {
 	override, err := s.authorizeSubmission(
 		ctx,
-		invocation,
+		inv,
 		examID,
 		submissionID,
 		model.ActionSubmissionRelease,
@@ -181,7 +181,7 @@ func (s *Service) AuthorizeSubmissionRelease(
 
 func (s *Service) authorizeSubmission(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	examID model.ExamID,
 	submissionID model.SubmissionID,
 	action, overrideAction model.Action,
@@ -189,13 +189,13 @@ func (s *Service) authorizeSubmission(
 	if !examID.IsValid() || !submissionID.IsValid() {
 		return false, apperror.Invalid("exam.sitting.invalid", "submission_id")
 	}
-	if invocation.Principal().Validate() != nil {
+	if inv.Principal().Validate() != nil {
 		return false, apperror.Invalid("exam.sitting.invalid", "principal")
 	}
 
 	decision, err := s.authorizeManagerAction(
 		ctx,
-		invocation,
+		inv,
 		examID,
 		model.Resource{Type: model.ResourceSubmission, ID: submissionID.String()},
 		model.TimeUTC(s.now()),
@@ -214,22 +214,22 @@ func (s *Service) authorizeSubmission(
 // It returns no mutable Sitting state and performs no mutation.
 func (s *Service) AuthorizeSittingManage(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	sittingID model.ExamSittingID,
 ) (access.ManagerAuthorization, error) {
-	override, err := s.authorizeSittingManage(ctx, invocation, sittingID)
+	override, err := s.authorizeSittingManage(ctx, inv, sittingID)
 	return access.ManagerAuthorization{Override: override}, err
 }
 
 func (s *Service) authorizeSittingManage(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	sittingID model.ExamSittingID,
 ) (bool, error) {
 	if !sittingID.IsValid() {
 		return false, apperror.Invalid("exam.sitting.invalid", "exam_sitting_id")
 	}
-	if invocation.Principal().Validate() != nil {
+	if inv.Principal().Validate() != nil {
 		return false, apperror.Invalid("exam.sitting.invalid", "principal")
 	}
 
@@ -248,7 +248,7 @@ func (s *Service) authorizeSittingManage(
 
 	decision, err := s.authorizeManagerAction(
 		ctx,
-		invocation,
+		inv,
 		value.Sitting.ExamID,
 		model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
 		model.TimeUTC(s.now()),
@@ -271,14 +271,14 @@ type authorizationDecision struct {
 
 func (s *Service) authorizeExam(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	examID model.ExamID,
 	at time.Time,
 	ordinaryAction, overrideAction model.Action,
 ) (authorizationDecision, error) {
 	return s.authorizeManagerAction(
 		ctx,
-		invocation,
+		inv,
 		examID,
 		model.Resource{Type: model.ResourceExam, ID: examID.String()},
 		at,
@@ -289,13 +289,13 @@ func (s *Service) authorizeExam(
 
 func (s *Service) authorizeManagerAction(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	examID model.ExamID,
 	resource model.Resource,
 	at time.Time,
 	ordinaryAction, overrideAction model.Action,
 ) (authorizationDecision, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil || !examID.IsValid() {
 		return authorizationDecision{}, apperror.Invalid("exam.sitting.invalid", "exam_id")
 	}
@@ -312,7 +312,7 @@ func (s *Service) authorizeManagerAction(
 	if err != nil {
 		return authorizationDecision{}, apperror.New("exam.sitting.unavailable").Wrap(err)
 	}
-	if err = s.authorizer.Authorize(ctx, invocation, action, resource); err != nil {
+	if err = s.authorizer.Authorize(ctx, inv, action, resource); err != nil {
 		return authorizationDecision{}, err
 	}
 

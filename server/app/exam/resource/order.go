@@ -29,7 +29,7 @@ type ReorderCommand struct {
 // Resources, fenced by ExpectedDraftRevision. ResourceIDs must not repeat.
 func (s *Service) ReorderExamResources(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	c ReorderCommand,
 ) (_ []store.ExamResourceRecord, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -60,7 +60,7 @@ func (s *Service) ReorderExamResources(
 	}
 
 	commandIdempotency, err := prepareResourceIdempotency(
-		invocation,
+		inv,
 		idempotencyOperationReorderResources,
 		c.IdempotencyKey,
 		c.ExamID,
@@ -77,7 +77,7 @@ func (s *Service) ReorderExamResources(
 		return nil, err
 	}
 
-	authorization, err := s.authorizeExam(ctx, invocation, c.ExamID, true)
+	authorization, err := s.authorizeExam(ctx, inv, c.ExamID, true)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +96,7 @@ func (s *Service) ReorderExamResources(
 			}
 		}
 
-		if same && s.currentActiveDraft(ctx, invocation, c.ExamID, c.ExpectedDraftRevision) {
+		if same && s.currentActiveDraft(ctx, inv, c.ExamID, c.ExpectedDraftRevision) {
 			return nil, apperror.New("exam.resource.no_changes")
 		}
 	}
@@ -108,7 +108,7 @@ func (s *Service) ReorderExamResources(
 	}
 
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     action,
 		Resource:   model.Resource{Type: model.ResourceExam, ID: c.ExamID.String()},
 		ScopeType:  model.RoleScopeAcademicUnit,
@@ -124,7 +124,7 @@ func (s *Service) ReorderExamResources(
 		ctx,
 		&store.ExamResourceReorder{
 			ExamID:                c.ExamID,
-			ActorUserID:           invocation.Principal().UserID,
+			ActorUserID:           inv.Principal().UserID,
 			ManagerOverride:       authorization.override,
 			ExpectedDraftRevision: c.ExpectedDraftRevision,
 			ResourceIDs:           append([]model.ExamResourceID(nil), c.ResourceIDs...),

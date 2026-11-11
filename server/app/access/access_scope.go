@@ -36,11 +36,11 @@ type AuthorizedScopeConstraint struct {
 // exact resource authorization after the bounded lookup.
 func (s *Authorizer) AuthorizePreflight(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	action model.Action,
 	resourceType model.ResourceType,
 ) error {
-	constraint, err := s.GrantedScopes(ctx, invocation.Principal(), action, resourceType)
+	constraint, err := s.GrantedScopes(ctx, inv.Principal(), action, resourceType)
 	if err != nil {
 		return err
 	}
@@ -56,12 +56,12 @@ func (s *Authorizer) AuthorizePreflight(
 	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
 	if err := s.deps.Audit.RecordAuthorizationDecision(
 		ctx,
-		invocation.Principal(),
+		inv.Principal(),
 		action,
 		resource,
 		model.RoleScopeInstitution,
 		institution.ID.String(),
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		false,
 	); err != nil {
 		return err
@@ -72,7 +72,7 @@ func (s *Authorizer) AuthorizePreflight(
 
 func (s *Authorizer) authorizeAcademicPeriodPreflight(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	action model.Action,
 	resource model.Resource,
 ) error {
@@ -80,7 +80,7 @@ func (s *Authorizer) authorizeAcademicPeriodPreflight(
 		return apperror.New("authorization.request.invalid")
 	}
 
-	allowed, resolved, err := s.academicPeriodCoarseAuthority(ctx, invocation.Principal(), action)
+	allowed, resolved, err := s.academicPeriodCoarseAuthority(ctx, inv.Principal(), action)
 	if err != nil {
 		return err
 	}
@@ -90,12 +90,12 @@ func (s *Authorizer) authorizeAcademicPeriodPreflight(
 
 	if err := s.deps.Audit.RecordAuthorizationDecision(
 		ctx,
-		invocation.Principal(),
+		inv.Principal(),
 		action,
 		resource,
 		model.RoleScopeInstitution,
 		resolved.institutionID.String(),
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		false,
 	); err != nil {
 		return err
@@ -133,9 +133,9 @@ func (s *Authorizer) academicPeriodCoarseAuthority(
 // AuthorizeAcademicPeriodList authorizes listing Academic Periods and returns the visibility the listing applies.
 func (s *Authorizer) AuthorizeAcademicPeriodList(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 ) (store.AcademicPeriodVisibilityScope, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	constraint, err := s.GrantedScopes(
 		ctx,
 		principal,
@@ -165,7 +165,7 @@ func (s *Authorizer) AuthorizeAcademicPeriodList(
 		resource,
 		model.RoleScopeInstitution,
 		institution.ID.String(),
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		allowed,
 	); err != nil {
 		return store.AcademicPeriodVisibilityScope{}, err
@@ -181,9 +181,9 @@ func (s *Authorizer) AuthorizeAcademicPeriodList(
 // AuthorizeUserSearch authorizes a User directory search and returns the visibility the search applies.
 func (s *Authorizer) AuthorizeUserSearch(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 ) (store.UserVisibilityScope, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	visibility, err := s.userVisibilityScope(ctx, principal)
 	if err != nil {
 		return store.UserVisibilityScope{}, err
@@ -215,7 +215,7 @@ func (s *Authorizer) AuthorizeUserSearch(
 		resource,
 		scopeType,
 		scopeID,
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		allowed,
 	); err != nil {
 		return store.UserVisibilityScope{}, err
@@ -233,9 +233,9 @@ func (s *Authorizer) AuthorizeUserSearch(
 // decision at the Institution, as the other list authorizations do.
 func (s *Authorizer) AuthorizeClassSearch(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 ) (store.ClassVisibilityScope, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	constraint, err := s.GrantedScopes(ctx, principal, model.ActionClassView, model.ResourceClass)
 	if err != nil {
 		return store.ClassVisibilityScope{}, err
@@ -260,7 +260,7 @@ func (s *Authorizer) AuthorizeClassSearch(
 		resource,
 		model.RoleScopeInstitution,
 		institution.ID.String(),
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		allowed,
 	); err != nil {
 		return store.ClassVisibilityScope{}, err
@@ -282,9 +282,9 @@ func (s *Authorizer) AuthorizeClassSearch(
 // decision instant, which the Store also uses to check ordinary membership.
 func (s *Authorizer) AuthorizeExamList(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 ) (store.ExamListVisibility, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	decisionAt := model.TimeUTC(s.now())
 	ordinary, err := s.GrantedScopesAt(ctx, principal, model.ActionExamView, model.ResourceExam, decisionAt)
 	if err != nil {
@@ -316,7 +316,7 @@ func (s *Authorizer) AuthorizeExamList(
 		resource,
 		model.RoleScopeInstitution,
 		institution.ID.String(),
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		hasOrdinary || hasOverride,
 	); err != nil {
 		return store.ExamListVisibility{}, err
@@ -363,10 +363,10 @@ func (s *Authorizer) userVisibilityScope(
 // AuthorizeRoleBindingPreflight checks that the caller holds the action at some scope before a Role Binding is loaded.
 func (s *Authorizer) AuthorizeRoleBindingPreflight(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	action model.Action,
 ) error {
-	constraint, err := s.GrantedScopes(ctx, invocation.Principal(), action, model.ResourceInstitution)
+	constraint, err := s.GrantedScopes(ctx, inv.Principal(), action, model.ResourceInstitution)
 	if err != nil {
 		return err
 	}
@@ -382,12 +382,12 @@ func (s *Authorizer) AuthorizeRoleBindingPreflight(
 	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
 	if err := s.deps.Audit.RecordAuthorizationDecision(
 		ctx,
-		invocation.Principal(),
+		inv.Principal(),
 		action,
 		resource,
 		model.RoleScopeInstitution,
 		institution.ID.String(),
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		false,
 	); err != nil {
 		return err
@@ -399,7 +399,7 @@ func (s *Authorizer) AuthorizeRoleBindingPreflight(
 // AuthorizeRoleBindingScope authorizes the action on a Role Binding scope and returns that scope as a Resource.
 func (s *Authorizer) AuthorizeRoleBindingScope(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	action model.Action,
 	scopeType model.RoleScopeType,
 	scopeID string,
@@ -408,7 +408,7 @@ func (s *Authorizer) AuthorizeRoleBindingScope(
 	if err != nil {
 		return model.Resource{}, err
 	}
-	if err := s.Authorize(ctx, invocation, action, resource); err != nil {
+	if err := s.Authorize(ctx, inv, action, resource); err != nil {
 		return model.Resource{}, err
 	}
 	return resource, nil
@@ -1187,13 +1187,13 @@ func (r *ScopeResolver) resolveUser(ctx context.Context, resource model.Resource
 
 // CanViewInstitutionUsers derives Institution-wide user.view exactly as the
 // User directory does, without recording a decision.
-func (s *Authorizer) CanViewInstitutionUsers(ctx context.Context, invocation invocation.Invocation) (bool, error) {
-	constraint, err := s.GrantedScopes(ctx, invocation.Principal(), model.ActionUserView, model.ResourceUser)
+func (s *Authorizer) CanViewInstitutionUsers(ctx context.Context, inv invocation.Invocation) (bool, error) {
+	constraint, err := s.GrantedScopes(ctx, inv.Principal(), model.ActionUserView, model.ResourceUser)
 	return constraint.InstitutionWide, err
 }
 
 // CanViewRoleBindings evaluates role_binding.view on the Resource without
 // recording a decision.
-func (s *Authorizer) CanViewRoleBindings(ctx context.Context, invocation invocation.Invocation, resource model.Resource) (bool, error) {
-	return s.Can(ctx, invocation.Principal(), model.ActionRoleBindingView, resource)
+func (s *Authorizer) CanViewRoleBindings(ctx context.Context, inv invocation.Invocation, resource model.Resource) (bool, error) {
+	return s.Can(ctx, inv.Principal(), model.ActionRoleBindingView, resource)
 }

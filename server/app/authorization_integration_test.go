@@ -509,7 +509,7 @@ func TestAcademicUnitVisibilityIsBoundedAcrossUsersBindingsAndAudits(t *testing.
 	login := loginIntegrationUser(t, helper.Handler(), viewer.Username, password, model.SessionClientCLI, "scoped-device")
 	principal, appErr := helper.App.Identity.AuthenticateAccess(ctx, login.Tokens.AccessToken)
 	require.NoError(t, appErr)
-	invocation := invocation.New(*principal, model.RequestMetadata{
+	inv := invocation.New(*principal, model.RequestMetadata{
 		RequestID: model.NewID(), IPAddress: "127.0.0.1", UserAgent: "access-visibility-integration-test",
 	})
 
@@ -686,7 +686,7 @@ func TestAcademicUnitVisibilityIsBoundedAcrossUsersBindingsAndAudits(t *testing.
 	historicalRead := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users/"+historicalUser.ID.String(), nil, login.Tokens.AccessToken)
 	require.Equal(t, http.StatusForbidden, historicalRead.Code, "historical user read status = %d: %s", historicalRead.Code, historicalRead.Body.String())
 
-	bindings, listErr := helper.App.Administration.ListRoleBindings(ctx, invocation, administration.ListRoleBindingsQuery{UserID: bindingUser.ID})
+	bindings, listErr := helper.App.Administration.ListRoleBindings(ctx, inv, administration.ListRoleBindingsQuery{UserID: bindingUser.ID})
 	require.NoError(t, listErr)
 	seenBindings := map[string]bool{}
 	for _, binding := range bindings {

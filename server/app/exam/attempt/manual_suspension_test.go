@@ -53,7 +53,7 @@ func TestSuspendByManagerAuthorizesFirstAndKeepsPrivateReasonOutOfAuditAndEffect
 	reason := "candidate left the examination room"
 	command := ManualSuspensionCommand{ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID,
 		ExpectedAttemptRevision: 3, PrivateReason: reason, IdempotencyKey: "kick-key"}
-	result, err := f.service.SuspendExamAttempt(context.Background(), f.invocation, command)
+	result, err := f.service.SuspendExamAttempt(context.Background(), f.inv, command)
 	require.NoError(t, err)
 	input := f.persistence.manualSuspension
 	require.NotNil(t, input, "result=%#v input=%#v order=%v", result, input, f.order)
@@ -75,7 +75,7 @@ func TestSuspendByManagerAuthorizesFirstAndKeepsPrivateReasonOutOfAuditAndEffect
 	require.Equal(t, store.ExamAttemptSuspendOperation, f.audit.operation, "audit=%#v result=%#v", f.audit, result)
 	require.NotContains(t, fmt.Sprintf("%#v", f.audit.values), reason, "audit=%#v result=%#v", f.audit, result)
 	require.NotContains(t, fmt.Sprintf("%#v", result), reason, "audit=%#v result=%#v", f.audit, result)
-	want, err := prepareManualSuspensionIdempotency(f.invocation, command)
+	want, err := prepareManualSuspensionIdempotency(f.inv, command)
 	require.NoError(t, err)
 	require.Equal(t, want, f.persistence.idempotency)
 }
@@ -87,7 +87,7 @@ func TestSuspendByManagerReplaySuppressesEffectAndPropagatesOverride(t *testing.
 	f.managerOverride = true
 	f.persistence.attempt, _ = managerAttemptFixture(t, f, model.ExamAttemptActive, 3, "")
 	f.persistence.manualSuspensionResult = manualSuspensionResultFixture(t, f, managerID, 3, true)
-	result, err := f.service.SuspendExamAttempt(context.Background(), f.invocation, ManualSuspensionCommand{ExamID: f.sitting.ExamID,
+	result, err := f.service.SuspendExamAttempt(context.Background(), f.inv, ManualSuspensionCommand{ExamID: f.sitting.ExamID,
 		SittingID: f.sitting.ID, AttemptID: f.attemptID, ExpectedAttemptRevision: 3, PrivateReason: "override kick",
 		IdempotencyKey: "kick-key"})
 	require.NoError(t, err, "result=%#v err=%v effects=%d input=%#v", result, err, len(f.publisher.Calls()), f.persistence.manualSuspension)
@@ -101,7 +101,7 @@ func TestSuspendByManagerConcealsSelfAndValidatesBeforeAuthorization(t *testing.
 	t.Parallel()
 	f := newFixture(t)
 	f.persistence.attempt, _ = managerAttemptFixture(t, f, model.ExamAttemptActive, 3, "")
-	_, err := f.service.SuspendExamAttempt(context.Background(), f.invocation, ManualSuspensionCommand{ExamID: f.sitting.ExamID,
+	_, err := f.service.SuspendExamAttempt(context.Background(), f.inv, ManualSuspensionCommand{ExamID: f.sitting.ExamID,
 		SittingID: f.sitting.ID, AttemptID: f.attemptID, ExpectedAttemptRevision: 3, PrivateReason: "self", IdempotencyKey: "kick-key"})
 	require.True(t, apperror.Is(err, "resource.not_found"), "self kick error=%v audit=%#v", err, f.audit)
 	require.True(t, chainHasCode(err, "exam.attempt.not_found"), "self kick error=%v audit=%#v", err, f.audit)
@@ -111,7 +111,7 @@ func TestSuspendByManagerConcealsSelfAndValidatesBeforeAuthorization(t *testing.
 	for _, reason := range []string{"", " padded ", "\xff", strings.Repeat("é", model.AttemptSuspensionPrivateReasonMaximumRunes+1)} {
 		f := newFixture(t)
 		useManagerCall(f)
-		_, err := f.service.SuspendExamAttempt(context.Background(), f.invocation, ManualSuspensionCommand{ExamID: f.sitting.ExamID,
+		_, err := f.service.SuspendExamAttempt(context.Background(), f.inv, ManualSuspensionCommand{ExamID: f.sitting.ExamID,
 			SittingID: f.sitting.ID, AttemptID: f.attemptID, ExpectedAttemptRevision: 3, PrivateReason: reason, IdempotencyKey: "kick-key"})
 		require.Error(t, err, "reason=%q error=%v order", reason, err)
 		require.Empty(t, f.order, "reason=%q error=%v order", reason, err)
@@ -126,7 +126,7 @@ func TestSuspendByManagerRejectsInconsistentStoreOutcome(t *testing.T) {
 	stored := manualSuspensionResultFixture(t, f, managerID, 3, false)
 	stored.Suspension.FlagID = model.NewIntegrityFlagID()
 	f.persistence.manualSuspensionResult = stored
-	_, err := f.service.SuspendExamAttempt(context.Background(), f.invocation, ManualSuspensionCommand{ExamID: f.sitting.ExamID,
+	_, err := f.service.SuspendExamAttempt(context.Background(), f.inv, ManualSuspensionCommand{ExamID: f.sitting.ExamID,
 		SittingID: f.sitting.ID, AttemptID: f.attemptID, ExpectedAttemptRevision: 3, PrivateReason: "kick", IdempotencyKey: "kick-key"})
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault)
@@ -148,7 +148,7 @@ func TestReallowAcceptsClosedManualSuspension(t *testing.T) {
 	stored.Suspension.Source, stored.Suspension.FlagID = model.AttemptSuspensionSourceManual, ""
 	stored.Suspension.SuspendedByUserID = active.SuspendedByUserID
 	f.persistence.reallowResult = stored
-	result, err := f.service.ReallowExamAttempt(context.Background(), f.invocation, ReallowCommand{ExamID: f.sitting.ExamID, SittingID: f.sitting.ID,
+	result, err := f.service.ReallowExamAttempt(context.Background(), f.inv, ReallowCommand{ExamID: f.sitting.ExamID, SittingID: f.sitting.ID,
 		AttemptID: f.attemptID, SuspensionID: suspensionID, ExpectedAttemptRevision: 2, PrivateReason: "candidate returned",
 		IdempotencyKey: "reallow-key"})
 	require.NoError(t, err, "Reallow(manual) = %#v", result)
@@ -169,7 +169,7 @@ func TestSuspendByManagerRecordsLapsedLeaseAsConnectionLossInsteadOfKick(t *test
 	f.persistence.manualSuspensionErr = store.NewErrConflict("attempt_participation", "attempt_participation_expired", nil)
 	f.persistence.resolvedExpiry = &due
 	f.persistence.expireResult = expiryResultFixture(t, f, due, false)
-	_, err := f.service.SuspendExamAttempt(context.Background(), f.invocation, ManualSuspensionCommand{ExamID: f.sitting.ExamID,
+	_, err := f.service.SuspendExamAttempt(context.Background(), f.inv, ManualSuspensionCommand{ExamID: f.sitting.ExamID,
 		SittingID: f.sitting.ID, AttemptID: f.attemptID, ExpectedAttemptRevision: 3,
 		PrivateReason: "candidate left the examination room", IdempotencyKey: "kick-key"})
 	var fault *apperror.Error
@@ -193,7 +193,7 @@ func TestSuspendByManagerRefusesPastScheduledEnd(t *testing.T) {
 	useManagerCall(f)
 	f.persistence.attempt, _ = managerAttemptFixture(t, f, model.ExamAttemptActive, 3, "")
 	f.persistence.manualSuspensionErr = store.NewErrConflict("exam_sitting", "exam_sitting_deadline_reached", nil)
-	_, err := f.service.SuspendExamAttempt(context.Background(), f.invocation, ManualSuspensionCommand{ExamID: f.sitting.ExamID,
+	_, err := f.service.SuspendExamAttempt(context.Background(), f.inv, ManualSuspensionCommand{ExamID: f.sitting.ExamID,
 		SittingID: f.sitting.ID, AttemptID: f.attemptID, ExpectedAttemptRevision: 3,
 		PrivateReason: "candidate left the examination room", IdempotencyKey: "kick-key"})
 	var fault *apperror.Error

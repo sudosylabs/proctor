@@ -44,7 +44,7 @@ func TestConfigureDraftNativePolicyOrderAndFailures(t *testing.T) {
 				fixture.authorizer.err = errors.New("denied")
 			}
 			policy := nativeObservePolicy(t)
-			view, err := fixture.service.ConfigureExamDraftNativePolicy(context.Background(), fixture.invocation, ConfigureDraftNativePolicyCommand{ExamID: fixture.examID, ExpectedDraftRevision: test.revision, NativePolicy: policy, IdempotencyKey: "native-key"})
+			view, err := fixture.service.ConfigureExamDraftNativePolicy(context.Background(), fixture.inv, ConfigureDraftNativePolicyCommand{ExamID: fixture.examID, ExpectedDraftRevision: test.revision, NativePolicy: policy, IdempotencyKey: "native-key"})
 			if test.want != "" {
 				require.Error(t, err, "error = %v, want %s", err, test.want)
 				require.False(t, !apperror.Is(err, test.want) && err.Error() != test.want, "error = %v, want %s", err, test.want)
@@ -76,7 +76,7 @@ func TestConfigureDraftNativePolicyNoOpAndMalformed(t *testing.T) {
 		if invalid {
 			policy.BaselineID = "disabled"
 		}
-		_, err := fixture.service.ConfigureExamDraftNativePolicy(context.Background(), fixture.invocation, ConfigureDraftNativePolicyCommand{ExamID: fixture.examID, ExpectedDraftRevision: 1, NativePolicy: policy, IdempotencyKey: "native-key"})
+		_, err := fixture.service.ConfigureExamDraftNativePolicy(context.Background(), fixture.inv, ConfigureDraftNativePolicyCommand{ExamID: fixture.examID, ExpectedDraftRevision: 1, NativePolicy: policy, IdempotencyKey: "native-key"})
 		require.Error(t, err, "invalid or no-op mutation reached persistence")
 		require.Nil(t, fixture.persistence.nativePolicyUpdate, "invalid or no-op mutation reached persistence")
 		require.Empty(t, fixture.publisher.Calls(), "invalid or no-op mutation reached persistence")

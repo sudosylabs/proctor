@@ -53,7 +53,7 @@ type ExtendCommand struct {
 // ExpectedRevision, with a private reason kept out of ordinary audit fields.
 func (s *Service) CancelExamSitting(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command CancelCommand,
 ) (_ store.ExamSittingSnapshot, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -64,7 +64,7 @@ func (s *Service) CancelExamSitting(
 		return store.ExamSittingSnapshot{}, apperror.Invalid("exam.sitting.invalid", "cancellation")
 	}
 
-	commandIdempotency, err := prepareTransitionIdempotency(invocation, idempotencyOperationCancel, ManagerTransitionCommand(command))
+	commandIdempotency, err := prepareTransitionIdempotency(inv, idempotencyOperationCancel, ManagerTransitionCommand(command))
 	if err != nil {
 		return store.ExamSittingSnapshot{}, err
 	}
@@ -73,7 +73,7 @@ func (s *Service) CancelExamSitting(
 	at := model.TimeUTC(s.now())
 	authorization, err := s.authorizeManagerAction(
 		ctx,
-		invocation,
+		inv,
 		command.ExamID,
 		resource,
 		at,
@@ -95,7 +95,7 @@ func (s *Service) CancelExamSitting(
 	}
 
 	fanout, err := s.mail.Prepare(ctx, ScheduleMailRequest{
-		ActorUserID:     invocation.Principal().UserID,
+		ActorUserID:     inv.Principal().UserID,
 		ExamID:          command.ExamID,
 		ExamRevisionID:  snapshot.Sitting.ExamRevisionID,
 		SittingID:       command.SittingID,
@@ -120,7 +120,7 @@ func (s *Service) CancelExamSitting(
 		"reason_code":               string(model.ExamSittingReasonManagerCanceled),
 	}
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     authorization.action,
 		Resource:   resource,
 		ScopeType:  model.RoleScopeAcademicUnit,
@@ -135,7 +135,7 @@ func (s *Service) CancelExamSitting(
 	result, err := s.sittings.Cancel(ctx, &store.ExamSittingCancellation{
 		ExamID:           command.ExamID,
 		SittingID:        command.SittingID,
-		ActorUserID:      invocation.Principal().UserID,
+		ActorUserID:      inv.Principal().UserID,
 		ManagerOverride:  authorization.override,
 		ExpectedRevision: command.ExpectedRevision,
 		PrivateReason:    command.PrivateReason,
@@ -165,14 +165,14 @@ func (s *Service) CancelExamSitting(
 // decision, fenced by ExpectedRevision.
 func (s *Service) PauseExamSitting(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ManagerTransitionCommand,
 ) (_ store.ExamSittingSnapshot, resultErr error) {
 	defer func() { s.recordOperational("pause", resultErr) }()
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	return s.runManagerTransition(
 		ctx,
-		invocation,
+		inv,
 		command,
 		"pause",
 		idempotencyOperationPause,
@@ -193,14 +193,14 @@ func (s *Service) PauseExamSitting(
 // decision, fenced by ExpectedRevision.
 func (s *Service) ResumeExamSitting(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ManagerTransitionCommand,
 ) (_ store.ExamSittingSnapshot, resultErr error) {
 	defer func() { s.recordOperational("resume", resultErr) }()
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	return s.runManagerTransition(
 		ctx,
-		invocation,
+		inv,
 		command,
 		"resume",
 		idempotencyOperationResume,
@@ -221,14 +221,14 @@ func (s *Service) ResumeExamSitting(
 // decision, fenced by ExpectedRevision, and schedules its sealing Job.
 func (s *Service) CloseExamSitting(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ManagerTransitionCommand,
 ) (_ store.ExamSittingSnapshot, resultErr error) {
 	defer func() { s.recordOperational("close", resultErr) }()
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	return s.runManagerTransition(
 		ctx,
-		invocation,
+		inv,
 		command,
 		"early_close",
 		idempotencyOperationClose,
@@ -249,7 +249,7 @@ func (s *Service) CloseExamSitting(
 // ScheduledEndAt, fenced by ExpectedRevision.
 func (s *Service) ExtendExamSitting(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ExtendCommand,
 ) (_ store.ExamSittingSnapshot, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -262,7 +262,7 @@ func (s *Service) ExtendExamSitting(
 		return store.ExamSittingSnapshot{}, apperror.Invalid("exam.sitting.invalid", "extend")
 	}
 
-	commandIdempotency, err := prepareExtensionIdempotency(invocation, command)
+	commandIdempotency, err := prepareExtensionIdempotency(inv, command)
 	if err != nil {
 		return store.ExamSittingSnapshot{}, err
 	}
@@ -271,7 +271,7 @@ func (s *Service) ExtendExamSitting(
 	at := model.TimeUTC(s.now())
 	authorization, err := s.authorizeManagerAction(
 		ctx,
-		invocation,
+		inv,
 		command.ExamID,
 		resource,
 		at,
@@ -298,7 +298,7 @@ func (s *Service) ExtendExamSitting(
 		store.ExamSittingTransitionManagerExtended,
 	)
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     authorization.action,
 		Resource:   resource,
 		ScopeType:  model.RoleScopeAcademicUnit,
@@ -313,7 +313,7 @@ func (s *Service) ExtendExamSitting(
 	result, err := s.sittings.Extend(ctx, &store.ExamSittingExtension{
 		ExamID:           command.ExamID,
 		SittingID:        command.SittingID,
-		ActorUserID:      invocation.Principal().UserID,
+		ActorUserID:      inv.Principal().UserID,
 		ManagerOverride:  authorization.override,
 		ExpectedRevision: command.ExpectedRevision,
 		ScheduledEndAt:   deadline,
@@ -344,7 +344,7 @@ type managerTransitionStoreCall func(
 
 func (s *Service) runManagerTransition(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ManagerTransitionCommand,
 	operation, idempotencyOperation string,
 	transition store.ExamSittingLifecycleTransitionCode,
@@ -358,7 +358,7 @@ func (s *Service) runManagerTransition(
 		return store.ExamSittingSnapshot{}, apperror.Invalid("exam.sitting.invalid", operation)
 	}
 
-	commandIdempotency, err := prepareTransitionIdempotency(invocation, idempotencyOperation, command)
+	commandIdempotency, err := prepareTransitionIdempotency(inv, idempotencyOperation, command)
 	if err != nil {
 		return store.ExamSittingSnapshot{}, err
 	}
@@ -367,7 +367,7 @@ func (s *Service) runManagerTransition(
 	at := model.TimeUTC(s.now())
 	authorization, err := s.authorizeManagerAction(
 		ctx,
-		invocation,
+		inv,
 		command.ExamID,
 		resource,
 		at,
@@ -391,7 +391,7 @@ func (s *Service) runManagerTransition(
 
 	auditValue := managerLifecycleAuditValue(command.ExamID, command.SittingID, command.ExpectedRevision, transition)
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     authorization.action,
 		Resource:   resource,
 		ScopeType:  model.RoleScopeAcademicUnit,
@@ -406,7 +406,7 @@ func (s *Service) runManagerTransition(
 	input := &store.ExamSittingManagerTransition{
 		ExamID:           command.ExamID,
 		SittingID:        command.SittingID,
-		ActorUserID:      invocation.Principal().UserID,
+		ActorUserID:      inv.Principal().UserID,
 		ManagerOverride:  authorization.override,
 		ExpectedRevision: command.ExpectedRevision,
 		PrivateReason:    command.PrivateReason,

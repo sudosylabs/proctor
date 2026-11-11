@@ -45,14 +45,14 @@ type KeyStateView struct {
 
 // GetMailKeyState reports the configured and required primary mail payload
 // keys and the keys still referenced by active payloads.
-func (s *Operations) GetMailKeyState(ctx context.Context, invocation invocation.Invocation) (KeyStateView, error) {
+func (s *Operations) GetMailKeyState(ctx context.Context, inv invocation.Invocation) (KeyStateView, error) {
 	if s == nil {
 		return KeyStateView{}, apperror.New("mail.unavailable")
 	}
-	if err := access.RequireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
+	if err := access.RequireStrongRecentSession(inv.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
 		return KeyStateView{}, err
 	}
-	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionMailRekey); err != nil {
+	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, inv, model.ActionMailRekey); err != nil {
 		return KeyStateView{}, err
 	}
 	if s.deps.Mail == nil || s.deps.Sealer == nil {
@@ -82,15 +82,15 @@ func (s *Operations) GetMailKeyState(ctx context.Context, invocation invocation.
 
 // StartMailRekey starts the Job that re-encrypts active mail payloads away
 // from a retiring key to the configured primary key.
-func (s *Operations) StartMailRekey(ctx context.Context, invocation invocation.Invocation, retiringKeyID string) (RekeyView, error) {
+func (s *Operations) StartMailRekey(ctx context.Context, inv invocation.Invocation, retiringKeyID string) (RekeyView, error) {
 	if s == nil {
 		return RekeyView{}, apperror.New("mail.unavailable")
 	}
-	if err := access.RequireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
+	if err := access.RequireStrongRecentSession(inv.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
 		return RekeyView{}, err
 	}
 
-	resource, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionMailRekey)
+	resource, err := s.deps.Authorization.AuthorizeInstitution(ctx, inv, model.ActionMailRekey)
 	if err != nil {
 		return RekeyView{}, err
 	}
@@ -122,12 +122,12 @@ func (s *Operations) StartMailRekey(ctx context.Context, invocation invocation.I
 		return RekeyView{}, apperror.New("mail.unavailable").Wrap(err)
 	}
 
-	job.CreatedByUserID = invocation.Principal().UserID
+	job.CreatedByUserID = inv.Principal().UserID
 	operation, err := access.RunAudited(
 		ctx,
 		s.rekeyAudit,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionMailRekey,
 			Resource:   resource,
 			ScopeType:  model.RoleScopeInstitution,

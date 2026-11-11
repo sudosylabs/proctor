@@ -21,12 +21,12 @@ import (
 
 func (r *Records) authorizeScope(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	scope model.RetentionHoldScope,
 	ordinary, override model.Action,
 	excludeSelf bool,
 ) (*store.ExamRecordsScope, model.Action, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess || scope.Validate() != nil {
 		return nil, "", apperror.Invalid("exam.invalid", "scope")
 	}
@@ -41,7 +41,7 @@ func (r *Records) authorizeScope(
 	}
 
 	if excludeSelf && principal.UserID == resolved.CandidateUserID {
-		if err = r.authorizer.RecordDenial(ctx, invocation, ordinary, scope.Resource(), resolved.AcademicUnitID); err != nil {
+		if err = r.authorizer.RecordDenial(ctx, inv, ordinary, scope.Resource(), resolved.AcademicUnitID); err != nil {
 			return nil, "", err
 		}
 		return nil, "", apperror.New("exam.not_found")
@@ -71,7 +71,7 @@ func (r *Records) authorizeScope(
 		}
 	}
 
-	if err = r.authorizer.Authorize(ctx, invocation, action, scope.Resource()); err != nil {
+	if err = r.authorizer.Authorize(ctx, inv, action, scope.Resource()); err != nil {
 		return nil, "", err
 	}
 
@@ -80,7 +80,7 @@ func (r *Records) authorizeScope(
 
 func (r *Records) beginMutation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	scope *store.ExamRecordsScope,
 	action model.Action,
 	operation string,
@@ -95,7 +95,7 @@ func (r *Records) beginMutation(
 	}
 
 	id, err := r.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     action,
 		Resource:   scope.Scope.Resource(),
 		ScopeType:  model.RoleScopeAcademicUnit,
@@ -109,7 +109,7 @@ func (r *Records) beginMutation(
 
 	return store.ExamRecordsMutation{
 		Scope:        scope.Scope,
-		Principal:    invocation.Principal(),
+		Principal:    inv.Principal(),
 		Action:       action,
 		AuditEventID: id,
 		AuditAt:      model.TimeUTC(r.now()),

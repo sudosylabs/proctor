@@ -35,12 +35,12 @@ func TestMetadataAndOrderNoOpsDoNotBeginAudit(t *testing.T) {
 	f := newFixture(t)
 	record := testRecord(f.examID, model.NewExamResourceID(), model.NewFileEntryID(), model.NewFileRevisionID(), 1)
 	f.persistence.items = []store.ExamResourceRecord{record}
-	_, err := f.service.EditExamResourceMetadata(context.Background(), f.invocation, EditMetadataCommand{ExamID: f.examID, ResourceID: record.Resource.ID, ExpectedDraftRevision: 1, DisplayName: examResourceString(record.Resource.DisplayName), DescriptionMarkdown: examResourceString(record.Resource.DescriptionMarkdown), IdempotencyKey: "test-key"})
+	_, err := f.service.EditExamResourceMetadata(context.Background(), f.inv, EditMetadataCommand{ExamID: f.examID, ResourceID: record.Resource.ID, ExpectedDraftRevision: 1, DisplayName: examResourceString(record.Resource.DisplayName), DescriptionMarkdown: examResourceString(record.Resource.DescriptionMarkdown), IdempotencyKey: "test-key"})
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault, "metadata no-op error")
 	require.Equal(t, "exam.resource.no_changes", fault.Code(), "metadata no-op error")
 	require.False(t, f.auditor.began, "metadata no-op error")
-	_, err = f.service.ReorderExamResources(context.Background(), f.invocation, ReorderCommand{ExamID: f.examID, ExpectedDraftRevision: 1, ResourceIDs: []model.ExamResourceID{record.Resource.ID}, IdempotencyKey: "test-key"})
+	_, err = f.service.ReorderExamResources(context.Background(), f.inv, ReorderCommand{ExamID: f.examID, ExpectedDraftRevision: 1, ResourceIDs: []model.ExamResourceID{record.Resource.ID}, IdempotencyKey: "test-key"})
 	require.ErrorAs(t, err, &fault, "reorder no-op error")
 	require.Equal(t, "exam.resource.no_changes", fault.Code(), "reorder no-op error")
 	require.False(t, f.auditor.began, "reorder no-op error")
@@ -48,7 +48,7 @@ func TestMetadataAndOrderNoOpsDoNotBeginAudit(t *testing.T) {
 
 type fixture struct {
 	service     *Service
-	invocation  invocation.Invocation
+	inv         invocation.Invocation
 	examID      model.ExamID
 	unitID      model.AcademicUnitID
 	userID      model.UserID
@@ -93,7 +93,7 @@ func newFixture(t *testing.T) *fixture {
 	})
 	require.NoError(t, err)
 	f.service = service
-	f.invocation = invocation.New(model.Principal{UserID: f.userID, SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientWeb, AuthenticatedAt: at}, model.RequestMetadata{})
+	f.inv = invocation.New(model.Principal{UserID: f.userID, SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientWeb, AuthenticatedAt: at}, model.RequestMetadata{})
 	return f
 }
 

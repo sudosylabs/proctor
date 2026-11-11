@@ -117,7 +117,7 @@ func (a MutationAuditAdapter) Fail(ctx context.Context, auditID model.AuditEvent
 // PrepareAtScope builds the audit draft of a mutation that a Store aggregate inserts itself.
 func (a MutationAuditAdapter) PrepareAtScope(
 	_ context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	action model.Action,
 	resource model.Resource,
 	scopeType model.RoleScopeType,
@@ -126,13 +126,13 @@ func (a MutationAuditAdapter) PrepareAtScope(
 	value map[string]any,
 ) (*model.AuditEvent, error) {
 	return a.audit.prepareCriticalActionAtScope(
-		invocation.Principal(),
+		inv.Principal(),
 		"",
 		action,
 		resource,
 		scopeType,
 		scopeID,
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		map[string]any{"operation": operation, "value": value},
 		nil,
 	)
@@ -141,7 +141,7 @@ func (a MutationAuditAdapter) PrepareAtScope(
 // RecordAuthorizationDecision persists an authorization decision for the invocation.
 func (a MutationAuditAdapter) RecordAuthorizationDecision(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	action model.Action,
 	resource model.Resource,
 	scopeType model.RoleScopeType,
@@ -150,12 +150,12 @@ func (a MutationAuditAdapter) RecordAuthorizationDecision(
 ) error {
 	return a.audit.RecordAuthorizationDecision(
 		ctx,
-		invocation.Principal(),
+		inv.Principal(),
 		action,
 		resource,
 		scopeType,
 		scopeID,
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		allowed,
 	)
 }

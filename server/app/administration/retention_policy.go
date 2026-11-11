@@ -31,9 +31,9 @@ type ReplaceRetentionPolicyCommand struct {
 // GetRetentionPolicy returns the current administrative policy.
 func (s *Service) GetRetentionPolicy(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 ) (*model.RetentionPolicy, error) {
-	institution, _, err := s.authorizeRetentionPolicy(ctx, invocation, model.ActionRetentionPolicyView)
+	institution, _, err := s.authorizeRetentionPolicy(ctx, inv, model.ActionRetentionPolicyView)
 	if err != nil {
 		return nil, err
 	}
@@ -47,11 +47,11 @@ func (s *Service) GetRetentionPolicy(
 // ReplaceRetentionPolicy replaces the current policy.
 func (s *Service) ReplaceRetentionPolicy(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ReplaceRetentionPolicyCommand,
 ) (*model.RetentionPolicy, error) {
 	if err := access.RequireStrongRecentSession(
-		invocation.Principal(),
+		inv.Principal(),
 		s.now(),
 		s.recentAuthenticationTTL,
 	); err != nil {
@@ -60,7 +60,7 @@ func (s *Service) ReplaceRetentionPolicy(
 
 	institution, resource, err := s.authorizeRetentionPolicy(
 		ctx,
-		invocation,
+		inv,
 		model.ActionRetentionPolicyManage,
 	)
 	if err != nil {
@@ -74,7 +74,7 @@ func (s *Service) ReplaceRetentionPolicy(
 	}
 
 	idempotency, err := idempotency.Prepare(
-		invocation,
+		inv,
 		"retention_policy.replace",
 		command.IdempotencyKey,
 		struct {
@@ -95,7 +95,7 @@ func (s *Service) ReplaceRetentionPolicy(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionRetentionPolicyManage,
 			Resource:   resource,
 			ScopeType:  model.RoleScopeInstitution,
@@ -122,7 +122,7 @@ func (s *Service) ReplaceRetentionPolicy(
 				ctx,
 				&store.RetentionPolicyReplacement{
 					RetentionMutation: store.RetentionMutation{
-						Principal:               invocation.Principal(),
+						Principal:               inv.Principal(),
 						RecentAuthenticationTTL: s.recentAuthenticationTTL,
 						AuditEventID:            reference.ID,
 						AuditAt:                 reference.MutationAt,
@@ -149,7 +149,7 @@ func (s *Service) ReplaceRetentionPolicy(
 // Institution.
 func (s *Service) authorizeRetentionPolicy(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	action model.Action,
 ) (*model.Institution, model.Resource, error) {
 	institution, err := s.institutions.GetSingleton(ctx)
@@ -157,7 +157,7 @@ func (s *Service) authorizeRetentionPolicy(
 		return nil, model.Resource{}, retentionPolicyError(err)
 	}
 	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
-	if err := s.authorizer.Authorize(ctx, invocation, action, resource); err != nil {
+	if err := s.authorizer.Authorize(ctx, inv, action, resource); err != nil {
 		return nil, model.Resource{}, err
 	}
 	return institution, resource, nil

@@ -27,7 +27,7 @@ import (
 
 type serviceFixture struct {
 	service     *Service
-	invocation  invocation.Invocation
+	inv         invocation.Invocation
 	examID      model.ExamID
 	persistence *fakeWorkspaceStore
 	authorizer  *fakeWorkspaceAuthorizer
@@ -65,7 +65,7 @@ func newServiceFixture(t *testing.T) *serviceFixture {
 		CredentialID: model.PrincipalCredentialID("cccccccccccccccccccccccccc"), CredentialType: model.CredentialSessionAccess,
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientWeb,
 		AuthenticatedAt: at}
-	return &serviceFixture{service: service, invocation: invocation.New(principal, model.RequestMetadata{}),
+	return &serviceFixture{service: service, inv: invocation.New(principal, model.RequestMetadata{}),
 		examID: examID, persistence: persistence, authorizer: authorizer, auditor: auditor, publisher: publisher, content: content}
 }
 

@@ -49,7 +49,7 @@ type ReplaceContentCommand struct {
 // Resource to the Exam Draft, fenced by ExpectedDraftRevision.
 func (s *Service) CreateExamResource(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command CreateCommand,
 ) (_ store.ExamResourceRecord, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -65,7 +65,7 @@ func (s *Service) CreateExamResource(
 
 	command.DisplayName = strings.TrimSpace(command.DisplayName)
 	commandIdempotency, err := prepareResourceIdempotency(
-		invocation,
+		inv,
 		idempotencyOperationAddResource,
 		command.IdempotencyKey,
 		command.ExamID,
@@ -82,7 +82,7 @@ func (s *Service) CreateExamResource(
 		return store.ExamResourceRecord{}, err
 	}
 
-	authorization, err := s.authorizeExam(ctx, invocation, command.ExamID, true)
+	authorization, err := s.authorizeExam(ctx, inv, command.ExamID, true)
 	if err != nil {
 		return store.ExamResourceRecord{}, err
 	}
@@ -94,7 +94,7 @@ func (s *Service) CreateExamResource(
 
 	position := min(len(items), model.ExamResourceMaximumCount-1)
 	at := model.TimeUTC(s.now())
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	resourceID, entryID, revisionID, leaseID := s.newResourceID(), s.newEntryID(), s.newRevisionID(), s.newLeaseID()
 	entry, err := model.NewFileEntryForPurpose(entryID, model.FilePurposeExamResource, model.FileIndexingNone, at)
 	if err != nil {
@@ -148,14 +148,14 @@ func (s *Service) CreateExamResource(
 		return store.ExamResourceRecord{}, apperror.New("exam.resource.content_invalid").Wrap(errors.New("content checksum mismatch"))
 	}
 
-	return s.finalizeUpload(ctx, invocation, authorization, resource, leaseID, &rendition, command.ExpectedDraftRevision, commandIdempotency, "add")
+	return s.finalizeUpload(ctx, inv, authorization, resource, leaseID, &rendition, command.ExpectedDraftRevision, commandIdempotency, "add")
 }
 
 // ReplaceExamResourceContent idempotently uploads and selects new content for
 // an existing Exam Resource, fenced by ExpectedDraftRevision.
 func (s *Service) ReplaceExamResourceContent(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ReplaceContentCommand,
 ) (_ store.ExamResourceRecord, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -171,7 +171,7 @@ func (s *Service) ReplaceExamResourceContent(
 	}
 
 	commandIdempotency, err := prepareResourceIdempotency(
-		invocation,
+		inv,
 		idempotencyOperationReplaceResourceContent,
 		command.IdempotencyKey,
 		command.ExamID,
@@ -188,7 +188,7 @@ func (s *Service) ReplaceExamResourceContent(
 		return store.ExamResourceRecord{}, err
 	}
 
-	authorization, err := s.authorizeExam(ctx, invocation, command.ExamID, true)
+	authorization, err := s.authorizeExam(ctx, inv, command.ExamID, true)
 	if err != nil {
 		return store.ExamResourceRecord{}, err
 	}
@@ -202,7 +202,7 @@ func (s *Service) ReplaceExamResourceContent(
 	}
 
 	at := model.TimeUTC(s.now())
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	revisionID, leaseID := s.newRevisionID(), s.newLeaseID()
 	revision, err := model.NewFileRevision(
 		revisionID,
@@ -251,7 +251,7 @@ func (s *Service) ReplaceExamResourceContent(
 
 	return s.finalizeUpload(
 		ctx,
-		invocation,
+		inv,
 		authorization,
 		&updated,
 		leaseID,
@@ -264,7 +264,7 @@ func (s *Service) ReplaceExamResourceContent(
 
 func (s *Service) finalizeUpload(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	authorization authorizationDecision,
 	resource *model.ExamResource,
 	leaseID model.UploadLeaseID,
@@ -279,7 +279,7 @@ func (s *Service) finalizeUpload(
 	}
 
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     action,
 		Resource:   model.Resource{Type: model.ResourceExam, ID: resource.ExamID.String()},
 		ScopeType:  model.RoleScopeAcademicUnit,
@@ -301,7 +301,7 @@ func (s *Service) finalizeUpload(
 		ctx,
 		&store.ExamResourceUploadFinalization{
 			ExamID:                resource.ExamID,
-			ActorUserID:           invocation.Principal().UserID,
+			ActorUserID:           inv.Principal().UserID,
 			ManagerOverride:       authorization.override,
 			ExpectedDraftRevision: expected,
 			Resource:              resource,

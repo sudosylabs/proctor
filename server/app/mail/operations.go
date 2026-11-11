@@ -77,7 +77,7 @@ type InstitutionAuthorization struct {
 // AuthorizeInstitution reads the Institution and authorizes action on it.
 func (a InstitutionAuthorization) AuthorizeInstitution(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	action model.Action,
 ) (model.Resource, error) {
 	if a.Authorizer == nil || a.Institutions == nil {
@@ -90,7 +90,7 @@ func (a InstitutionAuthorization) AuthorizeInstitution(
 	}
 
 	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
-	if err = a.Authorizer.Authorize(ctx, invocation, action, resource); err != nil {
+	if err = a.Authorizer.Authorize(ctx, inv, action, resource); err != nil {
 		return model.Resource{}, err
 	}
 
@@ -196,11 +196,11 @@ func NewOperations(deps OperationsDependencies) (*Operations, error) {
 }
 
 // GetMailMetrics returns the current mail delivery metrics snapshot.
-func (s *Operations) GetMailMetrics(ctx context.Context, invocation invocation.Invocation) (MetricsSnapshot, error) {
+func (s *Operations) GetMailMetrics(ctx context.Context, inv invocation.Invocation) (MetricsSnapshot, error) {
 	if s == nil {
 		return MetricsSnapshot{}, apperror.New("mail.unavailable")
 	}
-	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionMailView); err != nil {
+	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, inv, model.ActionMailView); err != nil {
 		return MetricsSnapshot{}, err
 	}
 	return s.deps.Metrics.Snapshot(), nil
@@ -208,12 +208,12 @@ func (s *Operations) GetMailMetrics(ctx context.Context, invocation invocation.I
 
 // SendTestMail queues a rate-limited test message to the recently
 // authenticated caller's own verified address, with audit.
-func (s *Operations) SendTestMail(ctx context.Context, invocation invocation.Invocation) (DeliveryView, error) {
+func (s *Operations) SendTestMail(ctx context.Context, inv invocation.Invocation) (DeliveryView, error) {
 	if s == nil {
 		return DeliveryView{}, apperror.New("mail.unavailable")
 	}
 
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return DeliveryView{}, access.InvalidTokenAppError()
 	}
@@ -221,7 +221,7 @@ func (s *Operations) SendTestMail(ctx context.Context, invocation invocation.Inv
 		return DeliveryView{}, apperror.New("authentication.reauthentication_required")
 	}
 
-	institutionResource, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionMailManage)
+	institutionResource, err := s.deps.Authorization.AuthorizeInstitution(ctx, inv, model.ActionMailManage)
 	if err != nil {
 		return DeliveryView{}, err
 	}
@@ -252,7 +252,7 @@ func (s *Operations) SendTestMail(ctx context.Context, invocation invocation.Inv
 		return DeliveryView{}, apperror.New("mail.unavailable").Wrap(err)
 	}
 
-	audit, err := s.deps.Audit.PrepareTest(ctx, invocation, institutionResource, prepared.Delivery.ID)
+	audit, err := s.deps.Audit.PrepareTest(ctx, inv, institutionResource, prepared.Delivery.ID)
 	if err != nil {
 		return DeliveryView{}, err
 	}
@@ -276,18 +276,18 @@ func (s *Operations) SendTestMail(ctx context.Context, invocation invocation.Inv
 // GetMailDelivery returns one mail delivery.
 func (s *Operations) GetMailDelivery(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	id model.MailDeliveryID,
 ) (DeliveryView, error) {
 	if s == nil {
 		return DeliveryView{}, apperror.New("mail.unavailable")
 	}
 
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil {
 		return DeliveryView{}, access.InvalidTokenAppError()
 	}
-	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionMailView); err != nil {
+	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, inv, model.ActionMailView); err != nil {
 		return DeliveryView{}, err
 	}
 	if !id.IsValid() {
@@ -305,16 +305,16 @@ func (s *Operations) GetMailDelivery(
 // ListMailDeliveries lists one page of mail deliveries.
 func (s *Operations) ListMailDeliveries(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query ListDeliveriesQuery,
 ) (DeliveryPage, error) {
 	if s == nil {
 		return DeliveryPage{}, apperror.New("mail.unavailable")
 	}
-	if invocation.Principal().Validate() != nil {
+	if inv.Principal().Validate() != nil {
 		return DeliveryPage{}, access.InvalidTokenAppError()
 	}
-	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionMailView); err != nil {
+	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, inv, model.ActionMailView); err != nil {
 		return DeliveryPage{}, err
 	}
 	if query.Limit < 1 || query.Limit > paging.MaximumLimit {
@@ -361,14 +361,14 @@ func (s *Operations) ListMailDeliveries(
 // at maximum. Suppressed and canceled deliveries are policy and operator
 // outcomes rather than failures, so they are not counted. The administration
 // counts read it.
-func (s *Operations) CountFailedMailDeliveries(ctx context.Context, invocation invocation.Invocation, maximum int) (int, error) {
+func (s *Operations) CountFailedMailDeliveries(ctx context.Context, inv invocation.Invocation, maximum int) (int, error) {
 	if s == nil {
 		return 0, apperror.New("mail.unavailable")
 	}
-	if invocation.Principal().Validate() != nil {
+	if inv.Principal().Validate() != nil {
 		return 0, access.InvalidTokenAppError()
 	}
-	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionMailView); err != nil {
+	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, inv, model.ActionMailView); err != nil {
 		return 0, err
 	}
 
@@ -397,36 +397,36 @@ func listError(err error) error {
 // CancelMailDelivery cancels one mail delivery, with audit.
 func (s *Operations) CancelMailDelivery(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	id model.MailDeliveryID,
 ) (DeliveryView, error) {
 	if s == nil {
 		return DeliveryView{}, apperror.New("mail.unavailable")
 	}
-	return s.mutate(ctx, invocation, "cancel", id, false, s.deps.Mail.CancelDelivery)
+	return s.mutate(ctx, inv, "cancel", id, false, s.deps.Mail.CancelDelivery)
 }
 
 // RetryMailDelivery retries one mail delivery, with audit.
 func (s *Operations) RetryMailDelivery(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	id model.MailDeliveryID,
 ) (DeliveryView, error) {
 	if s == nil {
 		return DeliveryView{}, apperror.New("mail.unavailable")
 	}
-	return s.mutate(ctx, invocation, "retry", id, true, s.deps.Mail.RetryDelivery)
+	return s.mutate(ctx, inv, "retry", id, true, s.deps.Mail.RetryDelivery)
 }
 
 func (s *Operations) mutate(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	operation string,
 	id model.MailDeliveryID,
 	retry bool,
 	apply func(context.Context, *store.MailDeliveryMutation) (*model.MailDelivery, error),
 ) (DeliveryView, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return DeliveryView{}, access.InvalidTokenAppError()
 	}
@@ -434,7 +434,7 @@ func (s *Operations) mutate(
 		return DeliveryView{}, apperror.New("authentication.reauthentication_required")
 	}
 
-	institutionResource, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionMailManage)
+	institutionResource, err := s.deps.Authorization.AuthorizeInstitution(ctx, inv, model.ActionMailManage)
 	if err != nil {
 		return DeliveryView{}, err
 	}
@@ -458,7 +458,7 @@ func (s *Operations) mutate(
 		}
 	}
 
-	auditID, err := s.deps.Audit.PrepareControl(ctx, invocation, institutionResource, delivery, operation)
+	auditID, err := s.deps.Audit.PrepareControl(ctx, inv, institutionResource, delivery, operation)
 	if err != nil {
 		return DeliveryView{}, err
 	}

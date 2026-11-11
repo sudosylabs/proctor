@@ -38,7 +38,7 @@ func assertPreparedIdempotency(t *testing.T, got *store.CommandIdempotency, user
 func TestResourceIdempotencyOperationAndDocumentCompatibility(t *testing.T) {
 	t.Parallel()
 	userID := model.NewUserID()
-	invocation := invocation.New(model.Principal{UserID: userID}, model.RequestMetadata{})
+	inv := invocation.New(model.Principal{UserID: userID}, model.RequestMetadata{})
 	examID, resourceID := model.NewExamID(), model.NewExamResourceID()
 	ids := []string{resourceID.String()}
 	tests := []struct {
@@ -70,7 +70,7 @@ func TestResourceIdempotencyOperationAndDocumentCompatibility(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			prepared, err := prepareResourceIdempotency(invocation, test.operation, "key", examID, 2, test.resource,
+			prepared, err := prepareResourceIdempotency(inv, test.operation, "key", examID, 2, test.resource,
 				test.nameValue, test.description, test.media, test.size, test.sha, test.ids)
 			require.NoError(t, err, "%s", test.name)
 			assertPreparedIdempotency(t, prepared, userID, wantOperations[test.name], "key", test.document)
@@ -82,12 +82,12 @@ func TestResourceIdempotencyOperationAndDocumentCompatibility(t *testing.T) {
 func TestMetadataIdempotencyPreservesFieldPresence(t *testing.T) {
 	t.Parallel()
 	userID := model.NewUserID()
-	invocation := invocation.New(model.Principal{UserID: userID}, model.RequestMetadata{})
+	inv := invocation.New(model.Principal{UserID: userID}, model.RequestMetadata{})
 	examID, resourceID := model.NewExamID(), model.NewExamResourceID()
 	empty := ""
-	nameOnly, err := prepareMetadataIdempotency(invocation, EditMetadataCommand{ExamID: examID, ResourceID: resourceID, ExpectedDraftRevision: 1, DisplayName: &empty, IdempotencyKey: "same-key"})
+	nameOnly, err := prepareMetadataIdempotency(inv, EditMetadataCommand{ExamID: examID, ResourceID: resourceID, ExpectedDraftRevision: 1, DisplayName: &empty, IdempotencyKey: "same-key"})
 	require.NoError(t, err)
-	descriptionOnly, err := prepareMetadataIdempotency(invocation, EditMetadataCommand{ExamID: examID, ResourceID: resourceID, ExpectedDraftRevision: 1, DescriptionMarkdown: &empty, IdempotencyKey: "same-key"})
+	descriptionOnly, err := prepareMetadataIdempotency(inv, EditMetadataCommand{ExamID: examID, ResourceID: resourceID, ExpectedDraftRevision: 1, DescriptionMarkdown: &empty, IdempotencyKey: "same-key"})
 	require.NoError(t, err)
 	require.NotEqual(t, descriptionOnly.Fingerprint, nameOnly.Fingerprint, "metadata field presence was erased")
 	assertPreparedIdempotency(t, nameOnly, userID, idempotencyOperationEditResourceMetadata, "same-key",
@@ -98,8 +98,8 @@ func TestMetadataIdempotencyPreservesFieldPresence(t *testing.T) {
 
 func TestPrepareIdempotencyRequiresKey(t *testing.T) {
 	t.Parallel()
-	invocation := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
-	_, err := idempotency.Require(invocation, "operation", "", struct{}{})
+	inv := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
+	_, err := idempotency.Require(inv, "operation", "", struct{}{})
 	fault, ok := apperror.As(err)
 	require.True(t, ok)
 	require.Equal(t, "idempotency.key_required", fault.Code())

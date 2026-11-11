@@ -40,10 +40,10 @@ type CommitStudentProgressionCommand struct {
 // GetStudentProgression reads one Student Progression, its rows and its Class names.
 func (s *Service) GetStudentProgression(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	id model.OnboardingImportID,
 ) (OnboardingImportView, []OnboardingImportRowView, error) {
-	view, rows, err := s.getImport(ctx, invocation, id, model.OnboardingImportStudentProgression)
+	view, rows, err := s.getImport(ctx, inv, id, model.OnboardingImportStudentProgression)
 	if err != nil {
 		return OnboardingImportView{}, nil, studentProgressionError(err)
 	}
@@ -86,7 +86,7 @@ type ListStudentProgressionsQuery struct {
 // first page also carries the total.
 func (s *Service) ListStudentProgressions(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query ListStudentProgressionsQuery,
 ) (paging.Counted[OnboardingImportView], error) {
 	limit, probe, err := paging.ResolveLimit(query.Limit, "limit")
@@ -128,7 +128,7 @@ func (s *Service) ListStudentProgressions(
 		return paging.Counted[OnboardingImportView]{}, studentProgressionError(err)
 	}
 
-	scope, err := s.visibility(ctx, invocation, model.ActionAcademicProgressionManage)
+	scope, err := s.visibility(ctx, inv, model.ActionAcademicProgressionManage)
 	if err != nil {
 		return paging.Counted[OnboardingImportView]{}, err
 	}
@@ -184,12 +184,12 @@ func (s *Service) ListStudentProgressions(
 // digest and revision still match.
 func (s *Service) CommitStudentProgression(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command CommitStudentProgressionCommand,
 ) (OnboardingImportView, error) {
 	view, err := s.commitImport(
 		ctx,
-		invocation,
+		inv,
 		CommitOnboardingImportCommand{
 			ID:               command.ID,
 			ExpectedRevision: command.ExpectedRevision,
@@ -205,28 +205,28 @@ func (s *Service) CommitStudentProgression(
 // CancelStudentProgression cancels an unfinished Student Progression.
 func (s *Service) CancelStudentProgression(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	id model.OnboardingImportID,
 ) (OnboardingImportView, error) {
-	view, err := s.cancelImport(ctx, invocation, id, model.OnboardingImportStudentProgression)
+	view, err := s.cancelImport(ctx, inv, id, model.OnboardingImportStudentProgression)
 	return view, studentProgressionError(err)
 }
 
 // StudentProgressionReport writes a finished Student Progression's row report.
 func (s *Service) StudentProgressionReport(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	id model.OnboardingImportID,
 	output io.Writer,
 ) error {
-	return studentProgressionError(s.reportImport(ctx, invocation, id, output, model.OnboardingImportStudentProgression))
+	return studentProgressionError(s.reportImport(ctx, inv, id, output, model.OnboardingImportStudentProgression))
 }
 
 // DryRunStudentProgression proposes the preview of moving a source Class's Students
 // into a destination Class.
 func (s *Service) DryRunStudentProgression(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command DryRunStudentProgressionCommand,
 ) (OnboardingImportView, error) {
 	sourcePeriodID, sourceClassID :=
@@ -251,7 +251,7 @@ func (s *Service) DryRunStudentProgression(
 	for _, classID := range []model.ClassID{sourceClassID, destinationClassID} {
 		resource := model.Resource{Type: model.ResourceClass, ID: classID.String()}
 		for _, action := range []model.Action{model.ActionAcademicProgressionManage, model.ActionClassMembersManage} {
-			if err := s.authorize(ctx, invocation, action, resource); err != nil {
+			if err := s.authorize(ctx, inv, action, resource); err != nil {
 				return OnboardingImportView{}, err
 			}
 		}
@@ -301,7 +301,7 @@ func (s *Service) DryRunStudentProgression(
 	if effectiveAt.Before(destinationPeriod.StartsAt) || !effectiveAt.Before(destinationPeriod.EndsAt) {
 		return OnboardingImportView{}, apperror.New("student_progression.effective_date_conflict")
 	}
-	if err = s.validatePrincipal(ctx, invocation.Principal()); err != nil {
+	if err = s.validatePrincipal(ctx, inv.Principal()); err != nil {
 		return OnboardingImportView{}, err
 	}
 
@@ -318,8 +318,8 @@ func (s *Service) DryRunStudentProgression(
 		State:                     model.OnboardingImportParsing,
 		ScopeType:                 model.RoleScopeClass,
 		ScopeID:                   destinationClass.ID.String(),
-		ActorUserID:               invocation.Principal().UserID,
-		Principal:                 invocation.Principal(),
+		ActorUserID:               inv.Principal().UserID,
+		Principal:                 inv.Principal(),
 		SourcePeriodID:            sourcePeriod.ID,
 		SourceClassID:             sourceClass.ID,
 		DestinationPeriodID:       destinationPeriod.ID,
@@ -338,7 +338,7 @@ func (s *Service) DryRunStudentProgression(
 	created, err := runProgressionAudited(
 		ctx,
 		s.auditor,
-		invocation,
+		inv,
 		"student_progression.dry_run",
 		id.String(),
 		sourceClass.ID,
@@ -368,7 +368,7 @@ func (s *Service) DryRunStudentProgression(
 func runProgressionAudited[T any](
 	ctx context.Context,
 	audit access.MutationAuditor,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	operation, progressionID string,
 	sourceClassID, destinationClassID model.ClassID,
 	at time.Time,
@@ -376,7 +376,7 @@ func runProgressionAudited[T any](
 	mapError func(error) error,
 ) (T, error) {
 	destination := access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionAcademicProgressionManage,
 		Resource:   model.Resource{Type: model.ResourceClass, ID: destinationClassID.String()},
 		ScopeType:  model.RoleScopeClass,
@@ -391,7 +391,7 @@ func runProgressionAudited[T any](
 		func() time.Time { return at },
 		func(ctx context.Context, destinationReference access.MutationReference) (T, error) {
 			source := access.Mutation{
-				Invocation: invocation,
+				Invocation: inv,
 				Action:     model.ActionAcademicProgressionManage,
 				Resource:   model.Resource{Type: model.ResourceClass, ID: sourceClassID.String()},
 				ScopeType:  model.RoleScopeClass,

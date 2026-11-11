@@ -28,7 +28,7 @@ func TestApparentReorderNoOpWithArchivedExamReachesAuditedStoreGuard(t *testing.
 	f.access.archived = true
 	f.persistence.reorderErr = store.NewErrConflict("exam", "exam_archived", nil)
 
-	_, err := f.service.ReorderExamResources(context.Background(), f.invocation, ReorderCommand{ExamID: f.examID, ExpectedDraftRevision: 1, ResourceIDs: []model.ExamResourceID{record.Resource.ID}, IdempotencyKey: "test-key"})
+	_, err := f.service.ReorderExamResources(context.Background(), f.inv, ReorderCommand{ExamID: f.examID, ExpectedDraftRevision: 1, ResourceIDs: []model.ExamResourceID{record.Resource.ID}, IdempotencyKey: "test-key"})
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault)
 	require.Equal(t, "exam.archived", fault.Code())
@@ -47,7 +47,7 @@ func TestReorderPublishesCommittedRevisionAndReportsTransientFailure(t *testing.
 	unavailable := errors.New("realtime unavailable")
 	f.publisher.Fail = func(realtimetest.Call) error { return unavailable }
 
-	items, err := f.service.ReorderExamResources(context.Background(), f.invocation, ReorderCommand{ExamID: f.examID, ExpectedDraftRevision: 1, ResourceIDs: []model.ExamResourceID{second.Resource.ID, first.Resource.ID}, IdempotencyKey: "test-key"})
+	items, err := f.service.ReorderExamResources(context.Background(), f.inv, ReorderCommand{ExamID: f.examID, ExpectedDraftRevision: 1, ResourceIDs: []model.ExamResourceID{second.Resource.ID, first.Resource.ID}, IdempotencyKey: "test-key"})
 	require.NoError(t, err)
 	require.Len(t, items, 2)
 	// Contract: the reorder publishes the Draft update at the committed
@@ -56,7 +56,7 @@ func TestReorderPublishesCommittedRevisionAndReportsTransientFailure(t *testing.
 		draftUpdated(t, f.examID, 7),
 		{Method: realtimetest.Report, Operation: "exam_resource_changed", Err: unavailable},
 	}, f.publisher.Calls())
-	want, prepareErr := prepareResourceIdempotency(f.invocation, idempotencyOperationReorderResources, "test-key",
+	want, prepareErr := prepareResourceIdempotency(f.inv, idempotencyOperationReorderResources, "test-key",
 		f.examID, 1, "", "", "", "", 0, "", []string{second.Resource.ID.String(), first.Resource.ID.String()})
 	require.NoError(t, prepareErr)
 	require.Equal(t, want, f.persistence.idempotency)

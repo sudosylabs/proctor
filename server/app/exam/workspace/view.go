@@ -32,11 +32,11 @@ type OpenedFile struct {
 // Workspace to a caller authorized to view the Exam.
 func (s *Service) ListExamStarterWorkspace(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	examID model.ExamID,
 ) (_ []store.ExamStarterWorkspaceItem, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	if _, err := s.authorizeExam(ctx, invocation, examID, false); err != nil {
+	if _, err := s.authorizeExam(ctx, inv, examID, false); err != nil {
 		return nil, err
 	}
 
@@ -53,7 +53,7 @@ func (s *Service) ListExamStarterWorkspace(
 // the body.
 func (s *Service) OpenExamStarterWorkspaceFile(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	examID model.ExamID,
 	entryID model.StarterWorkspaceEntryID,
 ) (_ OpenedFile, resultErr error) {
@@ -61,7 +61,7 @@ func (s *Service) OpenExamStarterWorkspaceFile(
 	if !entryID.IsValid() {
 		return OpenedFile{}, apperror.Invalid("exam.starter_workspace.invalid", "entry_id")
 	}
-	if _, err := s.authorizeExam(ctx, invocation, examID, false); err != nil {
+	if _, err := s.authorizeExam(ctx, inv, examID, false); err != nil {
 		return OpenedFile{}, err
 	}
 

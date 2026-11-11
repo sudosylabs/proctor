@@ -24,7 +24,7 @@ import (
 // distinguish existing, mismatched, or missing Attempts.
 func (s *Service) GetExamAttempt(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
@@ -36,7 +36,7 @@ func (s *Service) GetExamAttempt(
 	// Authorization precedes every Attempt read so a caller without Sitting
 	// view authority cannot distinguish existing, mismatched, or missing
 	// Attempts; the authorizer records that decision.
-	if err := s.managers.AuthorizeSittingView(ctx, invocation, sittingID); err != nil {
+	if err := s.managers.AuthorizeSittingView(ctx, inv, sittingID); err != nil {
 		return store.ExamAttemptManagerSnapshot{}, err
 	}
 
@@ -66,10 +66,10 @@ func (s *Service) GetExamAttempt(
 		return store.ExamAttemptManagerSnapshot{}, apperror.New("exam.attempt.not_found")
 	}
 
-	if snapshot.Attempt.CandidateUserID == invocation.Principal().UserID {
+	if snapshot.Attempt.CandidateUserID == inv.Principal().UserID {
 		resource := model.Resource{Type: model.ResourceExamSitting, ID: snapshot.Attempt.SittingID.String()}
 		auditID, auditErr := s.auditor.Begin(ctx, access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionExamSittingView,
 			Resource:   resource,
 			ScopeType:  model.RoleScopeAcademicUnit,
@@ -140,11 +140,11 @@ type SittingCandidateStatusesPage struct {
 // offered.
 func (s *Service) ListSittingCandidateStatuses(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query SittingCandidateStatusesQuery,
 ) (_ SittingCandidateStatusesPage, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil ||
 		!query.ExamID.IsValid() ||
 		!query.SittingID.IsValid() ||
@@ -154,12 +154,12 @@ func (s *Service) ListSittingCandidateStatuses(
 		return SittingCandidateStatusesPage{}, apperror.Invalid("exam.attempt.invalid", "candidate_statuses")
 	}
 
-	if err := s.managers.AuthorizeSittingView(ctx, invocation, query.SittingID); err != nil {
+	if err := s.managers.AuthorizeSittingView(ctx, inv, query.SittingID); err != nil {
 		return SittingCandidateStatusesPage{}, err
 	}
 
 	reallowAuthorized := false
-	if _, err := s.managers.AuthorizeSittingManage(ctx, invocation, query.SittingID); err == nil {
+	if _, err := s.managers.AuthorizeSittingManage(ctx, inv, query.SittingID); err == nil {
 		reallowAuthorized = true
 	} else {
 		var fault *apperror.Error
@@ -205,7 +205,7 @@ func (s *Service) ListSittingCandidateStatuses(
 // own Attempt.
 func (s *Service) ListExamAttempts(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query ListManagedAttemptsQuery,
 ) (_ ManagedAttemptPage, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -217,14 +217,14 @@ func (s *Service) ListExamAttempts(
 		return ManagedAttemptPage{}, apperror.Invalid("exam.attempt.invalid", "attempt_list")
 	}
 
-	if err := s.managers.AuthorizeSittingView(ctx, invocation, query.SittingID); err != nil {
+	if err := s.managers.AuthorizeSittingView(ctx, inv, query.SittingID); err != nil {
 		return ManagedAttemptPage{}, err
 	}
 
 	rows, err := s.attempts.List(ctx, store.ExamAttemptManagerListOptions{
 		ExamID:                 query.ExamID,
 		SittingID:              query.SittingID,
-		ExcludeCandidateUserID: invocation.Principal().UserID,
+		ExcludeCandidateUserID: inv.Principal().UserID,
 		States:                 append([]model.ExamAttemptState(nil), query.States...),
 		BeforeCreatedAt:        model.TimeUTC(query.BeforeCreatedAt),
 		BeforeAttemptID:        query.BeforeAttemptID,

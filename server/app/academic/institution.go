@@ -28,7 +28,7 @@ type UpdateInstitutionCommand struct {
 // GetInstitution reads one Institution after authorizing the caller.
 func (s *Service) GetInstitution(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 ) (*model.Institution, error) {
 	institution, err := s.institutions.GetSingleton(ctx)
 	if err != nil {
@@ -37,7 +37,7 @@ func (s *Service) GetInstitution(
 
 	if err := s.authorizer.Authorize(
 		ctx,
-		invocation,
+		inv,
 		model.ActionInstitutionManage,
 		model.Resource{Type: model.ResourceInstitution, ID: institution.ResourceID()},
 	); err != nil {
@@ -50,7 +50,7 @@ func (s *Service) GetInstitution(
 // UpdateInstitution updates an Institution after authorizing the caller.
 func (s *Service) UpdateInstitution(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command UpdateInstitutionCommand,
 ) (*model.Institution, error) {
 	current, err := s.institutions.GetSingleton(ctx)
@@ -61,7 +61,7 @@ func (s *Service) UpdateInstitution(
 	resource := model.Resource{Type: model.ResourceInstitution, ID: current.ResourceID()}
 	if err := s.authorizer.Authorize(
 		ctx,
-		invocation,
+		inv,
 		model.ActionInstitutionManage,
 		resource,
 	); err != nil {
@@ -91,7 +91,7 @@ func (s *Service) UpdateInstitution(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionInstitutionManage,
 			Resource:   resource,
 			Operation:  "patch",

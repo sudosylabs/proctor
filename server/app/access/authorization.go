@@ -196,7 +196,7 @@ func (s *Authorizer) evaluateResolved(
 // AuthorizeAcademicPeriodOwner authorizes the action on an Academic Period through its owner's scope.
 func (s *Authorizer) AuthorizeAcademicPeriodOwner(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	action model.Action,
 	period *model.AcademicPeriod,
 ) error {
@@ -209,11 +209,11 @@ func (s *Authorizer) AuthorizeAcademicPeriodOwner(
 	if !known || definition.ResourceType != model.ResourceAcademicPeriod {
 		return apperror.New("authorization.request.invalid")
 	}
-	if appErr := s.authorizeAcademicPeriodPreflight(ctx, invocation, action, resource); appErr != nil {
+	if appErr := s.authorizeAcademicPeriodPreflight(ctx, inv, action, resource); appErr != nil {
 		return appErr
 	}
 
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	resolved, appErr := s.deps.Resolver.resolve(ctx, period.Owner.Resource())
 	if appErr != nil {
 		return appErr
@@ -232,7 +232,7 @@ func (s *Authorizer) AuthorizeAcademicPeriodOwner(
 		resource,
 		scopeType,
 		scopeID,
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		allowed,
 	); appErr != nil {
 		return appErr
@@ -291,11 +291,11 @@ func personalAccessTokenAllows(
 // durably recorded against the invocation's principal and request metadata.
 func (s *Authorizer) Authorize(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	action model.Action,
 	resource model.Resource,
 ) error {
-	return s.authorizeCurrentState(ctx, invocation.Principal(), action, resource, invocation.RequestMetadata())
+	return s.authorizeCurrentState(ctx, inv.Principal(), action, resource, inv.RequestMetadata())
 }
 
 // AuthorizationScope reports the role-binding scope that granted a decision.
@@ -308,11 +308,11 @@ type AuthorizationScope struct {
 // which granted the decision, for use cases that audit at that scope.
 func (s *Authorizer) AuthorizeWithScope(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	action model.Action,
 	resource model.Resource,
 ) (AuthorizationScope, error) {
-	scopeType, scopeID, err := s.authorizeCurrentStateWithScope(ctx, invocation.Principal(), action, resource, invocation.RequestMetadata())
+	scopeType, scopeID, err := s.authorizeCurrentStateWithScope(ctx, inv.Principal(), action, resource, inv.RequestMetadata())
 	if err != nil {
 		return AuthorizationScope{}, err
 	}
@@ -348,14 +348,14 @@ func (s *Authorizer) InstitutionResource(ctx context.Context) (model.Resource, e
 // and returns that Resource for the caller's audit.
 func (s *Authorizer) AuthorizeInstitution(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	action model.Action,
 ) (model.Resource, error) {
 	resource, err := s.InstitutionResource(ctx)
 	if err != nil {
 		return model.Resource{}, err
 	}
-	if err := s.Authorize(ctx, invocation, action, resource); err != nil {
+	if err := s.Authorize(ctx, inv, action, resource); err != nil {
 		return model.Resource{}, err
 	}
 	return resource, nil
@@ -363,8 +363,8 @@ func (s *Authorizer) AuthorizeInstitution(
 
 // AuthorizeUserRead authorizes reading another User through the caller's
 // current visibility scope.
-func (s *Authorizer) AuthorizeUserRead(ctx context.Context, invocation invocation.Invocation, userID model.UserID) error {
-	_, err := s.authorizeUserRead(ctx, invocation, userID.String())
+func (s *Authorizer) AuthorizeUserRead(ctx context.Context, inv invocation.Invocation, userID model.UserID) error {
+	_, err := s.authorizeUserRead(ctx, inv, userID.String())
 	return err
 }
 
@@ -373,19 +373,19 @@ func (s *Authorizer) AuthorizeUserRead(ctx context.Context, invocation invocatio
 // as self-review. The caller returns its own concealing error afterwards.
 func (s *Authorizer) RecordDenial(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	action model.Action,
 	resource model.Resource,
 	unitID model.AcademicUnitID,
 ) error {
 	return s.deps.Audit.RecordAuthorizationDecision(
 		ctx,
-		invocation.Principal(),
+		inv.Principal(),
 		action,
 		resource,
 		model.RoleScopeAcademicUnit,
 		unitID.String(),
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		false,
 	)
 }
@@ -408,10 +408,10 @@ func (s *Authorizer) authorizeCurrentState(
 // current user.manage grant and records the decision against the exact User.
 func (s *Authorizer) AuthorizeAccountStateManage(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	userID model.UserID,
 ) error {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	resource := model.Resource{Type: model.ResourceUser, ID: userID.String()}
 	definition, known := model.DefinitionForAction(model.ActionUserManage)
 	if principal.Validate() != nil {
@@ -453,7 +453,7 @@ func (s *Authorizer) AuthorizeAccountStateManage(
 		resource,
 		model.RoleScopeInstitution,
 		institution.ID.String(),
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		allowed,
 	); appErr != nil {
 		return appErr
@@ -504,10 +504,10 @@ func (s *Authorizer) authorizeCurrentStateWithScope(
 // Academic Unit or Class reports false with a nil error.
 func (s *Authorizer) authorizeUserRead(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	userID string,
 ) (bool, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	userResource := model.Resource{Type: model.ResourceUser, ID: userID}
 	visibility, appErr := s.userVisibilityScope(ctx, principal)
 	if appErr != nil {
@@ -515,7 +515,7 @@ func (s *Authorizer) authorizeUserRead(
 	}
 
 	if visibility.InstitutionWide {
-		appErr = s.authorizeCurrentState(ctx, principal, model.ActionUserView, userResource, invocation.RequestMetadata())
+		appErr = s.authorizeCurrentState(ctx, principal, model.ActionUserView, userResource, inv.RequestMetadata())
 		return appErr == nil, appErr
 	}
 
@@ -552,7 +552,7 @@ func (s *Authorizer) authorizeUserRead(
 		userResource,
 		scopeType,
 		scopeID,
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		allowed,
 	); err != nil {
 		return false, err
@@ -647,10 +647,10 @@ type ProfileReadAuthorization struct {
 // the caller may read all of it.
 func (s *Authorizer) AuthorizeProfileRead(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	userID model.UserID,
 ) (ProfileReadAuthorization, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil {
 		return ProfileReadAuthorization{}, InvalidTokenAppError()
 	}
@@ -658,7 +658,7 @@ func (s *Authorizer) AuthorizeProfileRead(
 		return ProfileReadAuthorization{FullProfile: true}, nil
 	}
 
-	fullProfile, err := s.authorizeUserRead(ctx, invocation, userID.String())
+	fullProfile, err := s.authorizeUserRead(ctx, inv, userID.String())
 	if err != nil {
 		return ProfileReadAuthorization{}, err
 	}
@@ -671,12 +671,12 @@ func (s *Authorizer) AuthorizeProfileRead(
 // User directory summary shows; it never admits a request.
 func (s *Authorizer) RoleBindingViewScope(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	at time.Time,
 ) (store.UserVisibilityScope, error) {
 	constraint, err := s.GrantedScopesAt(
 		ctx,
-		invocation.Principal(),
+		inv.Principal(),
 		model.ActionRoleBindingView,
 		model.ResourceInstitution,
 		model.TimeUTC(at),
@@ -696,12 +696,12 @@ func (s *Authorizer) RoleBindingViewScope(
 // AuthorizeProfilePictureWrite authorizes replacing or removing a User's
 // profile picture: the owner needs user.profile_picture.manage and anyone
 // else needs user.manage on the User.
-func (s *Authorizer) AuthorizeProfilePictureWrite(ctx context.Context, invocation invocation.Invocation, userID model.UserID) error {
+func (s *Authorizer) AuthorizeProfilePictureWrite(ctx context.Context, inv invocation.Invocation, userID model.UserID) error {
 	action := model.ActionUserManage
-	if invocation.Principal().UserID == userID {
+	if inv.Principal().UserID == userID {
 		action = model.ActionUserProfilePictureManage
 	}
-	return s.Authorize(ctx, invocation, action, model.Resource{Type: model.ResourceUser, ID: userID.String()})
+	return s.Authorize(ctx, inv, action, model.Resource{Type: model.ResourceUser, ID: userID.String()})
 }
 
 // RecordAuthorizationDecision durably records a decision a caller made from

@@ -36,7 +36,7 @@ type mutationRunner func(
 
 func (s *Service) runMutation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	authorization authorizationDecision,
 	auditOperation string,
 	effectOperation ChangeOperation,
@@ -45,7 +45,7 @@ func (s *Service) runMutation(
 	run mutationRunner,
 ) (Result, error) {
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     authorization.action,
 		Resource:   model.Resource{Type: model.ResourceExam, ID: mutation.ExamID.String()},
 		ScopeType:  model.RoleScopeAcademicUnit,

@@ -26,11 +26,11 @@ type authorizationDecision struct {
 
 func (s *Service) authorizeSitting(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
 ) (authorizationDecision, error) {
-	p := invocation.Principal()
+	p := inv.Principal()
 	if p.Validate() != nil {
 		return authorizationDecision{}, apperror.Invalid("exam.sitting.correction.invalid", "principal")
 	}
@@ -63,7 +63,7 @@ func (s *Service) authorizeSitting(
 
 	if err = s.authorizer.Authorize(
 		ctx,
-		invocation,
+		inv,
 		action,
 		model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
 	); err != nil {

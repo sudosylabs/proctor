@@ -130,9 +130,9 @@ type mailAuditFake struct {
 	failCalls  int
 }
 
-func (a *mailAuditFake) PrepareTest(_ context.Context, invocation invocation.Invocation, resource model.Resource, id model.MailDeliveryID) (*model.AuditEvent, error) {
+func (a *mailAuditFake) PrepareTest(_ context.Context, inv invocation.Invocation, resource model.Resource, id model.MailDeliveryID) (*model.AuditEvent, error) {
 	a.calls++
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	return &model.AuditEvent{ActorID: principal.UserID, SessionID: principal.SessionID, Action: string(model.ActionMailManage), Resource: model.Resource{Type: model.ResourceMailDelivery, ID: id.String()}, ScopeType: model.RoleScopeInstitution, ScopeID: resource.ID, Status: model.AuditStatusSuccess, NodeID: "test", ClientType: string(principal.ClientType), AuthMethod: principal.AuthenticationMethod}, nil
 }
 

@@ -20,11 +20,11 @@ func TestRecursiveRemovalBindsFlagToDraftCommand(t *testing.T) {
 	t.Parallel()
 	f := newServiceFixture(t)
 	command := RemoveEntryCommand{ExamID: f.examID, EntryID: model.NewStarterWorkspaceEntryID(), ExpectedDraftRevision: 1, IdempotencyKey: "remove"}
-	_, err := f.service.RemoveExamStarterWorkspaceEntry(context.Background(), f.invocation, command)
+	_, err := f.service.RemoveExamStarterWorkspaceEntry(context.Background(), f.inv, command)
 	require.NoError(t, err)
 	ordinary := *f.persistence.idempotency
 	command.Recursive = true
-	_, err = f.service.RemoveExamStarterWorkspaceEntry(context.Background(), f.invocation, command)
+	_, err = f.service.RemoveExamStarterWorkspaceEntry(context.Background(), f.inv, command)
 	require.NoError(t, err)
 	require.True(t, f.persistence.mutation.Recursive, "recursive removal lost its Draft precondition or semantic identity")
 	require.Equal(t, int64(1), f.persistence.mutation.ExpectedDraftRevision, "recursive removal lost its Draft precondition or semantic identity")

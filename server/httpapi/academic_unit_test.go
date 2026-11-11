@@ -52,10 +52,10 @@ func (a *academicUnitHTTPApplication) AuthenticateBearer(
 
 func (a *academicUnitHTTPApplication) GetAcademicUnit(
 	_ context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	id model.AcademicUnitID,
 ) (*model.AcademicUnit, error) {
-	if invocation.Principal().UserID != a.principal.UserID || id != a.unit.ID {
+	if inv.Principal().UserID != a.principal.UserID || id != a.unit.ID {
 		return nil, apperror.New("request.invalid")
 	}
 	if a.getErr != nil {
@@ -82,10 +82,10 @@ func (a *academicUnitHTTPApplication) SearchAcademicUnits(
 
 func (a *academicUnitHTTPApplication) CreateAcademicUnit(
 	_ context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command academic.CreateAcademicUnitCommand,
 ) (*model.AcademicUnit, error) {
-	if invocation.Principal().UserID != a.principal.UserID {
+	if inv.Principal().UserID != a.principal.UserID {
 		return nil, apperror.New("request.invalid")
 	}
 	a.createCommand = command
@@ -94,10 +94,10 @@ func (a *academicUnitHTTPApplication) CreateAcademicUnit(
 
 func (a *academicUnitHTTPApplication) UpdateAcademicUnit(
 	_ context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command academic.UpdateAcademicUnitCommand,
 ) (*model.AcademicUnit, error) {
-	if invocation.Principal().UserID != a.principal.UserID {
+	if inv.Principal().UserID != a.principal.UserID {
 		return nil, apperror.New("request.invalid")
 	}
 	a.updateCommand = command
@@ -106,10 +106,10 @@ func (a *academicUnitHTTPApplication) UpdateAcademicUnit(
 
 func (a *academicUnitHTTPApplication) ArchiveAcademicUnit(
 	_ context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command academic.ArchiveAcademicUnitCommand,
 ) error {
-	if invocation.Principal().UserID != a.principal.UserID {
+	if inv.Principal().UserID != a.principal.UserID {
 		return apperror.New("request.invalid")
 	}
 	a.archiveCommand = command

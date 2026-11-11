@@ -21,14 +21,14 @@ import (
 // Submission to a caller authorized to view its Submission Review.
 func (s *Service) ListNativeConditions(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query store.NativeConditionListOptions,
 ) (_ *store.NativeConditionPage, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	if !query.SubmissionID.IsValid() || query.Limit < 1 || query.Limit > 100 || query.AfterID != "" && !query.AfterID.IsValid() {
 		return nil, apperror.Invalid("exam.integrity_review.invalid", "native_condition_list")
 	}
-	if err := s.authorizer.AuthorizeSubmissionView(ctx, invocation, query.SubmissionID); err != nil {
+	if err := s.authorizer.AuthorizeSubmissionView(ctx, inv, query.SubmissionID); err != nil {
 		return nil, err
 	}
 

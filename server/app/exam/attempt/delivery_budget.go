@@ -31,11 +31,11 @@ type StopDeliveryDetailsCommand struct {
 // for one Attempt Participation of the candidate's Attempt.
 func (s *Service) DeliveryBudget(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query DeliveryBudgetQuery,
 ) (_ *model.DeliveryBudgetSnapshot, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	release, admissionErr := s.enterControl(ctx, invocation, false)
+	release, admissionErr := s.enterControl(ctx, inv, false)
 	if admissionErr != nil {
 		return nil, admissionErr
 	}
@@ -45,7 +45,7 @@ func (s *Service) DeliveryBudget(
 		return nil, apperror.Invalid("exam.attempt.invalid", "participation_id")
 	}
 
-	deliveryAccess, err := nativeDeliverySelector(invocation, NativeDeliveryQuery{Access: query.Access, StreamID: query.ParticipationID.String()})
+	deliveryAccess, err := nativeDeliverySelector(inv, NativeDeliveryQuery{Access: query.Access, StreamID: query.ParticipationID.String()})
 	if err != nil {
 		return nil, err
 	}
@@ -70,17 +70,17 @@ func (s *Service) DeliveryBudget(
 // statuses.
 func (s *Service) StopDeliveryDetails(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command StopDeliveryDetailsCommand,
 ) (_ *model.StopDeliveryDetailsResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	release, admissionErr := s.enterControl(ctx, invocation, false)
+	release, admissionErr := s.enterControl(ctx, inv, false)
 	if admissionErr != nil {
 		return nil, admissionErr
 	}
 	defer release()
 
-	candidateAccess, err := candidateSelector(invocation, command.Access)
+	candidateAccess, err := candidateSelector(inv, command.Access)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func (s *Service) StopDeliveryDetails(
 		return nil, apperror.Invalid("exam.attempt.invalid", "stop_delivery_details")
 	}
 
-	commandIdempotency, err := idempotency.Require(invocation, store.DeliveryStopDetailsOperation, command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Require(inv, store.DeliveryStopDetailsOperation, command.IdempotencyKey, struct {
 		Attempt model.ExamAttemptID
 		Request model.StopDeliveryDetails
 	}{candidateAccess.AttemptID, command.Request})
@@ -105,7 +105,7 @@ func (s *Service) StopDeliveryDetails(
 	}
 
 	audit, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionExamSittingParticipate,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
 		ScopeType:  model.RoleScopeClass,

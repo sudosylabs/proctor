@@ -64,7 +64,7 @@ func accountDisableReason(command SetUserEnabledCommand) (string, error) {
 // same Store operation; their revocation is published after commit.
 func (s *Service) SetUserEnabled(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command SetUserEnabledCommand,
 ) (*model.User, error) {
 	userID := command.ID
@@ -76,10 +76,10 @@ func (s *Service) SetUserEnabled(
 	if err != nil {
 		return nil, err
 	}
-	if err = s.authorizer.AuthorizeAccountStateManage(ctx, invocation, userID); err != nil {
+	if err = s.authorizer.AuthorizeAccountStateManage(ctx, inv, userID); err != nil {
 		return nil, err
 	}
-	if invocation.Principal().UserID == userID && !command.Enabled {
+	if inv.Principal().UserID == userID && !command.Enabled {
 		return nil, apperror.New("request.invalid").WithField("field", "user_id")
 	}
 
@@ -89,7 +89,7 @@ func (s *Service) SetUserEnabled(
 	}
 
 	disabled := !command.Enabled
-	commandIdempotency, err := idempotency.Prepare(invocation, "user.enabled_state", command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Prepare(inv, "user.enabled_state", command.IdempotencyKey, struct {
 		UserID  string `json:"user_id"`
 		Enabled bool   `json:"enabled"`
 		Reason  string `json:"reason,omitempty"`
@@ -135,7 +135,7 @@ func (s *Service) SetUserEnabled(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionUserManage,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: userID.String()},
 			Operation:  operation,

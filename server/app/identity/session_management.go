@@ -39,9 +39,9 @@ type RevokeOtherSessionsResult struct {
 // ListSessions lists the caller's active Sessions.
 func (s *Service) ListSessions(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 ) ([]*model.Session, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil {
 		return nil, access.InvalidTokenAppError()
 	}
@@ -59,10 +59,10 @@ func (s *Service) ListSessions(
 // RevokeSession revokes one of the caller's own Sessions.
 func (s *Service) RevokeSession(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command RevokeSessionCommand,
 ) error {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil {
 		return access.InvalidTokenAppError()
 	}
@@ -87,7 +87,7 @@ func (s *Service) RevokeSession(
 	return s.revokeSession(
 		ctx,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionSessionManage,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
 			Operation:  "revoke_own_session",
@@ -106,9 +106,9 @@ func (s *Service) RevokeSession(
 // RevokeAllSessions revokes every active Session of the caller.
 func (s *Service) RevokeAllSessions(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 ) error {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil {
 		return access.InvalidTokenAppError()
 	}
@@ -116,7 +116,7 @@ func (s *Service) RevokeAllSessions(
 	return s.revokeAllSessions(
 		ctx,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionSessionManage,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
 			Operation:  "revoke_own_sessions",
@@ -136,9 +136,9 @@ func (s *Service) RevokeAllSessions(
 // Session; the kept Session is recorded in the audit result.
 func (s *Service) RevokeOtherSessions(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 ) (*RevokeOtherSessionsResult, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil || !principal.SessionID.IsValid() {
 		return nil, access.InvalidTokenAppError()
 	}
@@ -146,7 +146,7 @@ func (s *Service) RevokeOtherSessions(
 	count, err := s.revokeAllSessionsCounted(
 		ctx,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionSessionManage,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
 			Operation:  "revoke_other_sessions",

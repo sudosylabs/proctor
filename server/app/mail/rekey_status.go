@@ -58,16 +58,16 @@ type RekeyStatusView struct {
 // GetMailRekeyStatus reports the progress of one mail rekey Job.
 func (s *Operations) GetMailRekeyStatus(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	jobID model.JobID,
 ) (RekeyStatusView, error) {
 	if s == nil {
 		return RekeyStatusView{}, apperror.New("mail.unavailable")
 	}
-	if err := access.RequireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
+	if err := access.RequireStrongRecentSession(inv.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
 		return RekeyStatusView{}, err
 	}
-	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionMailRekey); err != nil {
+	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, inv, model.ActionMailRekey); err != nil {
 		return RekeyStatusView{}, err
 	}
 	if s.rekeyJobs == nil || !jobID.IsValid() {

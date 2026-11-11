@@ -51,27 +51,27 @@ func TestBrowserHistoryExportRejectsOverrideAndRechecksBeforeOpeningBytes(t *tes
 			f.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: f.unitID, UserID: f.userID}}
 			persistence.value.Categories = []model.RetentionCategory{model.RetentionCategoryBrowserActivity}
 			query := ExportQuery{Scope: persistence.value.Scope, ExportID: persistence.value.ID}
-			_, err := service.GetExamExport(context.Background(), f.invocation, query)
+			_, err := service.GetExamExport(context.Background(), f.inv, query)
 			require.NoError(t, err)
 			// Unit membership is part of ordinary export authorization;
 			// the independently permitted export override leaves the exact
 			// Browser Activity Manager predicate and permission intact.
 			f.memberships.items = nil
-			_, err = service.GetExamExport(context.Background(), f.invocation, query)
+			_, err = service.GetExamExport(context.Background(), f.inv, query)
 			require.NoError(t, err)
 			f.persistence.actorIsManager = false
-			_, err = service.GetExamExport(context.Background(), f.invocation, query)
+			_, err = service.GetExamExport(context.Background(), f.inv, query)
 			require.Error(t, err, "export metadata retained removed Browser Activity access")
 			require.True(t, auth.self, "export metadata retained removed Browser Activity access")
-			_, err = service.OpenExamExport(context.Background(), f.invocation, query)
+			_, err = service.OpenExamExport(context.Background(), f.inv, query)
 			require.Error(t, err, "unauthorized history reached archive bytes")
 			require.Equal(t, 0, content.opens, "unauthorized history reached archive bytes")
-			_, err = service.CreateExamExport(context.Background(), f.invocation, CreateExportCommand{Scope: query.Scope, Categories: persistence.value.Categories, IdempotencyKey: "replay"})
+			_, err = service.CreateExamExport(context.Background(), f.inv, CreateExportCommand{Scope: query.Scope, Categories: persistence.value.Categories, IdempotencyKey: "replay"})
 			require.Error(t, err, "override created browser history export")
 			require.Nil(t, persistence.create, "override created browser history export")
 			auditErr := errors.New("denial audit unavailable")
 			auth.denyErr = auditErr
-			_, err = service.GetExamExport(context.Background(), f.invocation, query)
+			_, err = service.GetExamExport(context.Background(), f.inv, query)
 			require.ErrorIs(t, err, auditErr)
 		})
 	}

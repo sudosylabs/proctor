@@ -50,7 +50,7 @@ type ArchiveAcademicUnitCommand struct {
 // application-owned authorization and one atomic durable mutation.
 func (s *Service) CreateAcademicUnit(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command CreateAcademicUnitCommand,
 ) (*model.AcademicUnit, error) {
 	parentID := command.ParentID
@@ -60,7 +60,7 @@ func (s *Service) CreateAcademicUnit(
 	if parentID == "" {
 		action = model.ActionAcademicUnitManage
 		var err error
-		institution, err = s.authorizer.AuthorizeInstitution(ctx, invocation, action)
+		institution, err = s.authorizer.AuthorizeInstitution(ctx, inv, action)
 		if err != nil {
 			return nil, err
 		}
@@ -73,7 +73,7 @@ func (s *Service) CreateAcademicUnit(
 
 		action = model.ActionAcademicUnitManage
 		authorized = model.Resource{Type: model.ResourceAcademicUnit, ID: parentID.String()}
-		if err := s.authorizer.Authorize(ctx, invocation, action, authorized); err != nil {
+		if err := s.authorizer.Authorize(ctx, inv, action, authorized); err != nil {
 			return nil, err
 		}
 
@@ -107,7 +107,7 @@ func (s *Service) CreateAcademicUnit(
 		return nil, apperror.DomainInvalid("academic_unit.invalid", err)
 	}
 
-	idempotency, err := idempotency.Prepare(invocation, "academic_unit.create", command.IdempotencyKey, struct {
+	idempotency, err := idempotency.Prepare(inv, "academic_unit.create", command.IdempotencyKey, struct {
 		ParentID, Name, DisplayName, Description string
 	}{command.ParentID.String(), command.Name, command.DisplayName, command.Description})
 	if err != nil {
@@ -118,7 +118,7 @@ func (s *Service) CreateAcademicUnit(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     action,
 			Resource:   authorized,
 			Operation:  "create",
@@ -165,7 +165,7 @@ func (s *Service) CreateAcademicUnit(
 // UpdateAcademicUnit updates an Academic Unit after authorizing the caller.
 func (s *Service) UpdateAcademicUnit(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command UpdateAcademicUnitCommand,
 ) (*model.AcademicUnit, error) {
 	if !command.ID.IsValid() {
@@ -175,7 +175,7 @@ func (s *Service) UpdateAcademicUnit(
 	resource := model.Resource{Type: model.ResourceAcademicUnit, ID: command.ID.String()}
 	if err := s.authorizer.Authorize(
 		ctx,
-		invocation,
+		inv,
 		model.ActionAcademicUnitManage,
 		resource,
 	); err != nil {
@@ -228,7 +228,7 @@ func (s *Service) UpdateAcademicUnit(
 
 		if err = s.authorizer.Authorize(
 			ctx,
-			invocation,
+			inv,
 			model.ActionAcademicUnitManage,
 			destination,
 		); err != nil {
@@ -240,7 +240,7 @@ func (s *Service) UpdateAcademicUnit(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionAcademicUnitManage,
 			Resource:   resource,
 			Operation:  "patch",
@@ -270,7 +270,7 @@ func (s *Service) UpdateAcademicUnit(
 // ArchiveAcademicUnit archives an Academic Unit after authorizing the caller.
 func (s *Service) ArchiveAcademicUnit(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ArchiveAcademicUnitCommand,
 ) error {
 	if !command.ID.IsValid() {
@@ -280,7 +280,7 @@ func (s *Service) ArchiveAcademicUnit(
 	resource := model.Resource{Type: model.ResourceAcademicUnit, ID: command.ID.String()}
 	if err := s.authorizer.Authorize(
 		ctx,
-		invocation,
+		inv,
 		model.ActionAcademicUnitManage,
 		resource,
 	); err != nil {
@@ -299,7 +299,7 @@ func (s *Service) ArchiveAcademicUnit(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionAcademicUnitManage,
 			Resource:   resource,
 			Operation:  "archive",

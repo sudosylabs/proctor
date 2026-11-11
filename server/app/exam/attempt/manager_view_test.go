@@ -28,7 +28,7 @@ func TestManagerListAuthorizesBeforeBoundedStoreRead(t *testing.T) {
 		rows[index].Attempt = attempt
 	}
 	f.persistence.managerRows = rows
-	page, err := f.service.ListExamAttempts(context.Background(), f.invocation, ListManagedAttemptsQuery{
+	page, err := f.service.ListExamAttempts(context.Background(), f.inv, ListManagedAttemptsQuery{
 		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, Limit: 2,
 	})
 	require.NoError(t, err)
@@ -50,7 +50,7 @@ func TestManagerListValidatesAndDeepClonesActiveSuspension(t *testing.T) {
 		State: model.AttemptSuspensionActive, Source: model.AttemptSuspensionSourcePolicy,
 		CandidateReason: model.AttemptSuspensionCandidateReasonSecureContinuityLost, StartedAt: f.at}
 	f.persistence.managerRows = []store.ExamAttemptManagerSnapshot{{Attempt: attempt, ActiveSuspension: suspension}}
-	page, err := f.service.ListExamAttempts(context.Background(), f.invocation, ListManagedAttemptsQuery{
+	page, err := f.service.ListExamAttempts(context.Background(), f.inv, ListManagedAttemptsQuery{
 		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, Limit: 1,
 	})
 	require.NoError(t, err, "page=%#v error", page)

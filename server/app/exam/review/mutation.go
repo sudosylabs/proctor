@@ -30,10 +30,10 @@ type Result struct {
 
 func (s *Service) authorizeReviewMutation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	submissionID model.SubmissionID,
 ) (bool, *store.ExamIntegrityReviewAuthorization, error) {
-	management, err := s.authorizer.AuthorizeSubmissionReview(ctx, invocation, submissionID)
+	management, err := s.authorizer.AuthorizeSubmissionReview(ctx, inv, submissionID)
 	if err != nil {
 		return false, nil, err
 	}
@@ -43,10 +43,10 @@ func (s *Service) authorizeReviewMutation(
 
 func (s *Service) authorizeReleaseMutation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	submissionID model.SubmissionID,
 ) (bool, *store.ExamIntegrityReviewAuthorization, error) {
-	management, err := s.authorizer.AuthorizeSubmissionRelease(ctx, invocation, submissionID)
+	management, err := s.authorizer.AuthorizeSubmissionRelease(ctx, inv, submissionID)
 	if err != nil {
 		return false, nil, err
 	}

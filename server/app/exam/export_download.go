@@ -35,11 +35,11 @@ type ExportDownload struct {
 // authority over its scope and sources.
 func (s *Exports) GetExamExport(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	q ExportQuery,
 ) (_ *model.ExamExport, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	result, err := s.getExport(ctx, invocation, q)
+	result, err := s.getExport(ctx, inv, q)
 	if err != nil {
 		return nil, err
 	}
@@ -52,11 +52,11 @@ func (s *Exports) GetExamExport(
 // authority is not bypassed.
 func (s *Exports) OpenExamExport(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	q ExportQuery,
 ) (_ *ExportDownload, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	result, err := s.getExport(ctx, invocation, q)
+	result, err := s.getExport(ctx, inv, q)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func (s *Exports) OpenExamExport(
 	// Storage can block across expiry or an authority change. Re-read through
 	// the authoritative Store before exposing a body; node wall-clock time
 	// cannot extend or shorten the archive's PostgreSQL-clocked lifetime.
-	current, err := s.getExport(ctx, invocation, q)
+	current, err := s.getExport(ctx, inv, q)
 	if err == nil {
 		err = requireReadyExport(current)
 	}
@@ -91,12 +91,12 @@ func (s *Exports) OpenExamExport(
 	return &ExportDownload{Export: current.Export, Body: body}, nil
 }
 
-func (s *Exports) getExport(ctx context.Context, invocation invocation.Invocation, q ExportQuery) (*store.ExamExportDownload, error) {
+func (s *Exports) getExport(ctx context.Context, inv invocation.Invocation, q ExportQuery) (*store.ExamExportDownload, error) {
 	if !q.ExportID.IsValid() {
 		return nil, apperror.Invalid("exam.invalid", "exam_export_id")
 	}
 
-	action, unit, err := s.authorizeExport(ctx, invocation, q.Scope)
+	action, unit, err := s.authorizeExport(ctx, inv, q.Scope)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +104,7 @@ func (s *Exports) getExport(ctx context.Context, invocation invocation.Invocatio
 	result, err := s.exports.Get(
 		ctx,
 		&store.ExamExportAccess{
-			ExamRecordsMutation: store.ExamRecordsMutation{Scope: q.Scope, Principal: invocation.Principal(), Action: action},
+			ExamRecordsMutation: store.ExamRecordsMutation{Scope: q.Scope, Principal: inv.Principal(), Action: action},
 			ExportID:            q.ExportID,
 		},
 	)
@@ -112,11 +112,11 @@ func (s *Exports) getExport(ctx context.Context, invocation invocation.Invocatio
 		return nil, examExportStoreErrors.Translate(err)
 	}
 
-	if !result.ConsistentWith(q.ExportID, q.Scope, invocation.Principal().UserID) {
+	if !result.ConsistentWith(q.ExportID, q.Scope, inv.Principal().UserID) {
 		return nil, apperror.New("exam.export.unavailable").Wrap(errors.New("invalid export read result"))
 	}
 
-	if err = s.authorizeSources(ctx, invocation, q.Scope, action, unit, result.Export.Categories, result.Submissions); err != nil {
+	if err = s.authorizeSources(ctx, inv, q.Scope, action, unit, result.Export.Categories, result.Submissions); err != nil {
 		return nil, err
 	}
 

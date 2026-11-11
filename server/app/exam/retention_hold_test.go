@@ -31,7 +31,7 @@ func TestRecordsHoldReleaseRequiresStrongRecentProof(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f, records, persistence, _ := newRecordsFixture(t)
-			principal := f.invocation.Principal()
+			principal := f.inv.Principal()
 			principal.AuthenticationStrength = model.AuthenticationSingleFactor
 			if tc.strong {
 				principal.AuthenticationStrength = model.AuthenticationMultiFactor
@@ -40,8 +40,8 @@ func TestRecordsHoldReleaseRequiresStrongRecentProof(t *testing.T) {
 			if !tc.recent {
 				principal.AuthenticatedAt = principal.AuthenticatedAt.Add(-time.Hour)
 			}
-			invocation := invocation.New(principal, model.RequestMetadata{})
-			_, err := records.ReleaseRetentionHold(context.Background(), invocation, ReleaseRetentionHoldCommand{Scope: persistence.scope.Scope,
+			inv := invocation.New(principal, model.RequestMetadata{})
+			_, err := records.ReleaseRetentionHold(context.Background(), inv, ReleaseRetentionHoldCommand{Scope: persistence.scope.Scope,
 				HoldID: model.NewRetentionHoldID(), ExpectedRevision: 1, ReasonCode: "case_closed", PrivateReason: "Case resolved.", IdempotencyKey: "release-key"})
 			if tc.want == "" {
 				require.NoError(t, err, "release")

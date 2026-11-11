@@ -51,11 +51,11 @@ type ReallowResult struct {
 // Attempt and preserves all evidence.
 func (s *Service) ReallowExamAttempt(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ReallowCommand,
 ) (_ ReallowResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil {
 		return ReallowResult{}, apperror.New("authentication.token_invalid")
 	}
@@ -69,14 +69,14 @@ func (s *Service) ReallowExamAttempt(
 		return ReallowResult{}, apperror.Invalid("exam.attempt.invalid", "reallow")
 	}
 
-	commandIdempotency, err := prepareReallowIdempotency(invocation, command)
+	commandIdempotency, err := prepareReallowIdempotency(inv, command)
 	if err != nil {
 		return ReallowResult{}, err
 	}
 
 	// Authorize the exact Sitting before reading the Attempt so existence is
 	// not probeable; later exits complete the audit attempt as failed.
-	management, err := s.managers.AuthorizeSittingManage(ctx, invocation, command.SittingID)
+	management, err := s.managers.AuthorizeSittingManage(ctx, inv, command.SittingID)
 	override := management.Override
 	if err != nil {
 		return ReallowResult{}, err
@@ -96,7 +96,7 @@ func (s *Service) ReallowExamAttempt(
 	}
 
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     action,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: command.SittingID.String()},
 		ScopeType:  model.RoleScopeClass,

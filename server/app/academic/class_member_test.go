@@ -176,8 +176,8 @@ func TestClassMemberRetainedEnrollmentBypassesChangedMembershipAndMail(t *testin
 	persistence := &classMemberStoreFake{events: &events, active: []*model.ClassMember{{ID: model.NewClassMemberID(), ClassID: model.NewClassID()}}}
 	mailer := &classMemberMailFake{events: &events}
 	service := mustNew(Dependencies{Store: &catalogFake{classMember: persistence, class: &classMemberClassStoreFake{events: &events}, user: &classMemberUserStoreFake{events: &events}}, Authorizer: &programmeAuthorizerFake{events: &events}, Auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, Mail: mailer, Now: func() time.Time { return time.UnixMilli(500) }, NewID: func() string { return model.NewClassMemberID().String() }, Publisher: &realtimetest.Publisher{}})
-	invocation := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
-	result, err := service.EnrollClassMember(context.Background(), invocation, EnrollClassMemberCommand{ClassID: model.NewClassID(),
+	inv := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
+	result, err := service.EnrollClassMember(context.Background(), inv, EnrollClassMemberCommand{ClassID: model.NewClassID(),
 		UserID: model.NewUserID(), StartAt: 100, IdempotencyKey: "row", Batch: batchitem.New(batchitem.Fields{RetainedOutcome: true})})
 	require.NoError(t, err, "retained enrollment")
 	require.NotNil(t, result, "retained enrollment")

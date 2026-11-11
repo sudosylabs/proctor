@@ -36,7 +36,7 @@ type SearchAcademicUnitsQuery struct {
 // academic_unit.view on that unit.
 func (s *Service) GetAcademicUnit(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	id model.AcademicUnitID,
 ) (*model.AcademicUnit, error) {
 	if !id.IsValid() {
@@ -45,7 +45,7 @@ func (s *Service) GetAcademicUnit(
 	resource := model.Resource{Type: model.ResourceAcademicUnit, ID: id.String()}
 	if err := s.authorizer.Authorize(
 		ctx,
-		invocation,
+		inv,
 		model.ActionAcademicUnitView,
 		resource,
 	); err != nil {
@@ -62,7 +62,7 @@ func (s *Service) GetAcademicUnit(
 // ParentID is empty.
 func (s *Service) ListAcademicUnits(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query ListAcademicUnitsQuery,
 ) (paging.Page[*model.AcademicUnit], error) {
 	parentID := query.ParentID
@@ -79,7 +79,7 @@ func (s *Service) ListAcademicUnits(
 		resource := model.Resource{Type: model.ResourceAcademicUnit, ID: parentID.String()}
 		if err = s.authorizer.Authorize(
 			ctx,
-			invocation,
+			inv,
 			model.ActionAcademicUnitView,
 			resource,
 		); err != nil {
@@ -91,7 +91,7 @@ func (s *Service) ListAcademicUnits(
 	if parentID == "" {
 		institution, err = s.authorizer.AuthorizeInstitution(
 			ctx,
-			invocation,
+			inv,
 			model.ActionAcademicUnitView,
 		)
 	} else {
@@ -118,7 +118,7 @@ func (s *Service) ListAcademicUnits(
 // academic_unit.view.
 func (s *Service) SearchAcademicUnits(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query SearchAcademicUnitsQuery,
 ) (paging.Page[*model.AcademicUnit], error) {
 	limit, probe, err := paging.ResolveLimit(query.Limit, "limit")
@@ -128,7 +128,7 @@ func (s *Service) SearchAcademicUnits(
 
 	institution, err := s.authorizer.AuthorizeInstitution(
 		ctx,
-		invocation,
+		inv,
 		model.ActionAcademicUnitView,
 	)
 	if err != nil {

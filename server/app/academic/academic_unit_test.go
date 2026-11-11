@@ -36,11 +36,11 @@ type academicUnitAuthorizerStub struct {
 
 func (s academicUnitAuthorizerStub) Authorize(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	action model.Action,
 	resource model.Resource,
 ) error {
-	return s.authorize(ctx, invocation, action, resource)
+	return s.authorize(ctx, inv, action, resource)
 }
 
 func (s academicUnitAuthorizerStub) InstitutionResource(
@@ -54,10 +54,10 @@ func (s academicUnitAuthorizerStub) InstitutionResource(
 
 func (s academicUnitAuthorizerStub) AuthorizeInstitution(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	action model.Action,
 ) (model.Resource, error) {
-	return s.authorizeInstallation(ctx, invocation, action)
+	return s.authorizeInstallation(ctx, inv, action)
 }
 
 type academicUnitReadStore struct {

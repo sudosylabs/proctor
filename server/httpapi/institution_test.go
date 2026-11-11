@@ -47,9 +47,9 @@ func (a *institutionHTTPApplication) AuthenticateBearer(
 
 func (a *institutionHTTPApplication) GetInstitution(
 	_ context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 ) (*model.Institution, error) {
-	if invocation.Principal().UserID != a.principal.UserID {
+	if inv.Principal().UserID != a.principal.UserID {
 		return nil, apperror.New("request.invalid")
 	}
 	return a.result, nil
@@ -57,10 +57,10 @@ func (a *institutionHTTPApplication) GetInstitution(
 
 func (a *institutionHTTPApplication) UpdateInstitution(
 	_ context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command academic.UpdateInstitutionCommand,
 ) (*model.Institution, error) {
-	if invocation.Principal().UserID != a.principal.UserID {
+	if inv.Principal().UserID != a.principal.UserID {
 		return nil, apperror.New("request.invalid")
 	}
 	a.command = command

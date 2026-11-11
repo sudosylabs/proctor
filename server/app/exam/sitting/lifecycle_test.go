@@ -57,7 +57,7 @@ func TestCancelRetainsPrivateReasonOnlyInStoreCommand(t *testing.T) {
 		ExamID: fixture.examID, SittingID: fixture.sittingID, ExpectedRevision: 1,
 		PrivateReason: "Room became unavailable", IdempotencyKey: "test-key",
 	}
-	got, err := fixture.service.CancelExamSitting(context.Background(), fixture.invocation, command)
+	got, err := fixture.service.CancelExamSitting(context.Background(), fixture.inv, command)
 	require.NoError(t, err)
 	require.NotNil(t, got.Sitting)
 	require.Equal(t, model.ExamSittingCanceled, got.Sitting.State)
@@ -67,7 +67,7 @@ func TestCancelRetainsPrivateReasonOnlyInStoreCommand(t *testing.T) {
 	require.Equal(t, int64(1), fixture.persistence.cancel.ExpectedRevision)
 	require.Same(t, fixture.mail.result, fixture.persistence.cancel.Mail, "cancellation mail = %#v, store", fixture.mail.request)
 	require.Equal(t, store.ExamSittingMailCanceled, fixture.mail.request.ChangeKind, "cancellation mail = %#v, store", fixture.mail.request)
-	wantIdempotency, err := prepareTransitionIdempotency(fixture.invocation, idempotencyOperationCancel, ManagerTransitionCommand(command))
+	wantIdempotency, err := prepareTransitionIdempotency(fixture.inv, idempotencyOperationCancel, ManagerTransitionCommand(command))
 	require.NoError(t, err)
 	require.Equal(t, wantIdempotency, fixture.persistence.command)
 	wantAudit := map[string]any{"exam_id": fixture.examID.String(), "exam_sitting_id": fixture.sittingID.String(),
@@ -89,7 +89,7 @@ func TestPauseAuthorizesCurrentManagerAndKeepsPrivateReasonOutOfAuditAndEffect(t
 	require.NoError(t, paused.Pause(testNow.Add(time.Minute)))
 	fixture.persistence.lifecycle = lifecycleResult(paused, store.ExamSittingTransitionManagerPaused, true, false)
 
-	got, err := fixture.service.PauseExamSitting(context.Background(), fixture.invocation, ManagerTransitionCommand{
+	got, err := fixture.service.PauseExamSitting(context.Background(), fixture.inv, ManagerTransitionCommand{
 		ExamID: fixture.examID, SittingID: fixture.sittingID, ExpectedRevision: current.Revision,
 		PrivateReason: "Candidate requested clarification", IdempotencyKey: "test-key",
 	})
@@ -103,7 +103,7 @@ func TestPauseAuthorizesCurrentManagerAndKeepsPrivateReasonOutOfAuditAndEffect(t
 	require.Equal(t, wantAudit, fixture.auditor.value)
 	require.NotNil(t, fixture.persistence.pause)
 	require.Equal(t, "Candidate requested clarification", fixture.persistence.pause.PrivateReason)
-	wantIdempotency, err := prepareTransitionIdempotency(fixture.invocation, idempotencyOperationPause, ManagerTransitionCommand{
+	wantIdempotency, err := prepareTransitionIdempotency(fixture.inv, idempotencyOperationPause, ManagerTransitionCommand{
 		ExamID: fixture.examID, SittingID: fixture.sittingID, ExpectedRevision: current.Revision,
 		PrivateReason: "Candidate requested clarification", IdempotencyKey: "test-key",
 	})
@@ -130,34 +130,34 @@ func TestLifecycleManagerCommandsUseExplicitStatesJobsAndReplaySuppression(t *te
 	}{
 		{name: "pause remains available after archive", archived: true, transition: store.ExamSittingTransitionManagerPaused,
 			run: func(f sittingFixture, current *model.ExamSitting) (store.ExamSittingSnapshot, error) {
-				return f.service.PauseExamSitting(context.Background(), f.invocation, ManagerTransitionCommand{ExamID: f.examID, SittingID: f.sittingID,
+				return f.service.PauseExamSitting(context.Background(), f.inv, ManagerTransitionCommand{ExamID: f.examID, SittingID: f.sittingID,
 					ExpectedRevision: current.Revision, PrivateReason: "Investigating active incident", IdempotencyKey: "test-key"})
 			}, input: func(fake *sittingStoreFake) any { return fake.pause }, wantAction: model.ActionExamSittingManage},
 		{name: "resume rejects archived Exam", archived: true, transition: store.ExamSittingTransitionManagerResumed,
 			run: func(f sittingFixture, current *model.ExamSitting) (store.ExamSittingSnapshot, error) {
-				return f.service.ResumeExamSitting(context.Background(), f.invocation, ManagerTransitionCommand{ExamID: f.examID, SittingID: f.sittingID,
+				return f.service.ResumeExamSitting(context.Background(), f.inv, ManagerTransitionCommand{ExamID: f.examID, SittingID: f.sittingID,
 					ExpectedRevision: current.Revision, PrivateReason: "Issue resolved", IdempotencyKey: "test-key"})
 			}, wantFault: "exam.archived"},
 		{name: "resume active Sitting", transition: store.ExamSittingTransitionManagerResumed,
 			run: func(f sittingFixture, current *model.ExamSitting) (store.ExamSittingSnapshot, error) {
-				return f.service.ResumeExamSitting(context.Background(), f.invocation, ManagerTransitionCommand{ExamID: f.examID, SittingID: f.sittingID,
+				return f.service.ResumeExamSitting(context.Background(), f.inv, ManagerTransitionCommand{ExamID: f.examID, SittingID: f.sittingID,
 					ExpectedRevision: current.Revision, PrivateReason: "Issue resolved", IdempotencyKey: "test-key"})
 			}, input: func(fake *sittingStoreFake) any { return fake.resume }, wantAction: model.ActionExamSittingManage},
 		{name: "extend rejects archived Exam", archived: true, transition: store.ExamSittingTransitionManagerExtended,
 			run: func(f sittingFixture, current *model.ExamSitting) (store.ExamSittingSnapshot, error) {
-				return f.service.ExtendExamSitting(context.Background(), f.invocation, ExtendCommand{ExamID: f.examID, SittingID: f.sittingID,
+				return f.service.ExtendExamSitting(context.Background(), f.inv, ExtendCommand{ExamID: f.examID, SittingID: f.sittingID,
 					ExpectedRevision: current.Revision, ScheduledEndAt: current.ScheduledEndAt.Add(time.Hour),
 					PrivateReason: "Compensating for disruption", IdempotencyKey: "test-key"})
 			}, wantFault: "exam.archived"},
 		{name: "extend active Sitting", transition: store.ExamSittingTransitionManagerExtended,
 			run: func(f sittingFixture, current *model.ExamSitting) (store.ExamSittingSnapshot, error) {
-				return f.service.ExtendExamSitting(context.Background(), f.invocation, ExtendCommand{ExamID: f.examID, SittingID: f.sittingID,
+				return f.service.ExtendExamSitting(context.Background(), f.inv, ExtendCommand{ExamID: f.examID, SittingID: f.sittingID,
 					ExpectedRevision: current.Revision, ScheduledEndAt: current.ScheduledEndAt.Add(time.Hour),
 					PrivateReason: "Compensating for disruption", IdempotencyKey: "test-key"})
 			}, input: func(fake *sittingStoreFake) any { return fake.extend }, wantAction: model.ActionExamSittingManage},
 		{name: "early close remains available after archive", archived: true, transition: store.ExamSittingTransitionManagerClosed,
 			run: func(f sittingFixture, current *model.ExamSitting) (store.ExamSittingSnapshot, error) {
-				return f.service.CloseExamSitting(context.Background(), f.invocation, ManagerTransitionCommand{ExamID: f.examID, SittingID: f.sittingID,
+				return f.service.CloseExamSitting(context.Background(), f.inv, ManagerTransitionCommand{ExamID: f.examID, SittingID: f.sittingID,
 					ExpectedRevision: current.Revision, PrivateReason: "Safety stop", IdempotencyKey: "test-key"})
 			}, input: func(fake *sittingStoreFake) any { return fake.earlyClose }, wantAction: model.ActionExamSittingManage, finalizes: true},
 	}
@@ -198,23 +198,23 @@ func TestLifecycleManagerCommandsUseExplicitStatesJobsAndReplaySuppression(t *te
 			var wantIdempotency *store.CommandIdempotency
 			switch test.transition {
 			case store.ExamSittingTransitionManagerPaused:
-				wantIdempotency, err = prepareTransitionIdempotency(fixture.invocation, idempotencyOperationPause, ManagerTransitionCommand{
+				wantIdempotency, err = prepareTransitionIdempotency(fixture.inv, idempotencyOperationPause, ManagerTransitionCommand{
 					ExamID: fixture.examID, SittingID: fixture.sittingID, ExpectedRevision: current.Revision,
 					PrivateReason: "Investigating active incident", IdempotencyKey: "test-key",
 				})
 			case store.ExamSittingTransitionManagerResumed:
-				wantIdempotency, err = prepareTransitionIdempotency(fixture.invocation, idempotencyOperationResume, ManagerTransitionCommand{
+				wantIdempotency, err = prepareTransitionIdempotency(fixture.inv, idempotencyOperationResume, ManagerTransitionCommand{
 					ExamID: fixture.examID, SittingID: fixture.sittingID, ExpectedRevision: current.Revision,
 					PrivateReason: "Issue resolved", IdempotencyKey: "test-key",
 				})
 			case store.ExamSittingTransitionManagerExtended:
-				wantIdempotency, err = prepareExtensionIdempotency(fixture.invocation, ExtendCommand{
+				wantIdempotency, err = prepareExtensionIdempotency(fixture.inv, ExtendCommand{
 					ExamID: fixture.examID, SittingID: fixture.sittingID, ExpectedRevision: current.Revision,
 					ScheduledEndAt: current.ScheduledEndAt.Add(time.Hour), PrivateReason: "Compensating for disruption",
 					IdempotencyKey: "test-key",
 				})
 			case store.ExamSittingTransitionManagerClosed:
-				wantIdempotency, err = prepareTransitionIdempotency(fixture.invocation, idempotencyOperationClose, ManagerTransitionCommand{
+				wantIdempotency, err = prepareTransitionIdempotency(fixture.inv, idempotencyOperationClose, ManagerTransitionCommand{
 					ExamID: fixture.examID, SittingID: fixture.sittingID, ExpectedRevision: current.Revision,
 					PrivateReason: "Safety stop", IdempotencyKey: "test-key",
 				})
@@ -234,7 +234,7 @@ func TestLifecycleManagerCommandsUseExplicitStatesJobsAndReplaySuppression(t *te
 	paused := cloneSitting(current)
 	_ = paused.Pause(testNow)
 	fixture.persistence.lifecycle = lifecycleResult(paused, store.ExamSittingTransitionManagerPaused, true, true)
-	_, err := fixture.service.PauseExamSitting(context.Background(), fixture.invocation, ManagerTransitionCommand{ExamID: fixture.examID, SittingID: fixture.sittingID,
+	_, err := fixture.service.PauseExamSitting(context.Background(), fixture.inv, ManagerTransitionCommand{ExamID: fixture.examID, SittingID: fixture.sittingID,
 		ExpectedRevision: current.Revision, PrivateReason: "Replay", IdempotencyKey: "test-key"})
 	require.NoError(t, err)
 	require.Empty(t, fixture.publisher.Calls())
@@ -249,7 +249,7 @@ func TestPauseUsesExplicitOverrideWithoutCurrentExactUnitMembership(t *testing.T
 	_ = paused.Pause(testNow)
 	fixture.persistence.lifecycle = lifecycleResult(paused, store.ExamSittingTransitionManagerPaused, true, false)
 
-	_, err := fixture.service.PauseExamSitting(context.Background(), fixture.invocation, ManagerTransitionCommand{ExamID: fixture.examID,
+	_, err := fixture.service.PauseExamSitting(context.Background(), fixture.inv, ManagerTransitionCommand{ExamID: fixture.examID,
 		SittingID: fixture.sittingID, ExpectedRevision: current.Revision, PrivateReason: "Administrator intervention",
 		IdempotencyKey: "test-key"})
 	require.NoError(t, err)
@@ -265,19 +265,19 @@ func TestLifecycleCommandsValidatePrivateReasonBounds(t *testing.T) {
 		run  func(string) error
 	}{
 		{"pause", func(reason string) error {
-			_, err := fixture.service.PauseExamSitting(context.Background(), fixture.invocation, ManagerTransitionCommand{ExamID: fixture.examID, SittingID: fixture.sittingID, ExpectedRevision: 1, PrivateReason: reason, IdempotencyKey: "test-key"})
+			_, err := fixture.service.PauseExamSitting(context.Background(), fixture.inv, ManagerTransitionCommand{ExamID: fixture.examID, SittingID: fixture.sittingID, ExpectedRevision: 1, PrivateReason: reason, IdempotencyKey: "test-key"})
 			return err
 		}},
 		{"resume", func(reason string) error {
-			_, err := fixture.service.ResumeExamSitting(context.Background(), fixture.invocation, ManagerTransitionCommand{ExamID: fixture.examID, SittingID: fixture.sittingID, ExpectedRevision: 1, PrivateReason: reason, IdempotencyKey: "test-key"})
+			_, err := fixture.service.ResumeExamSitting(context.Background(), fixture.inv, ManagerTransitionCommand{ExamID: fixture.examID, SittingID: fixture.sittingID, ExpectedRevision: 1, PrivateReason: reason, IdempotencyKey: "test-key"})
 			return err
 		}},
 		{"extend", func(reason string) error {
-			_, err := fixture.service.ExtendExamSitting(context.Background(), fixture.invocation, ExtendCommand{ExamID: fixture.examID, SittingID: fixture.sittingID, ExpectedRevision: 1, ScheduledEndAt: testNow.Add(time.Hour), PrivateReason: reason, IdempotencyKey: "test-key"})
+			_, err := fixture.service.ExtendExamSitting(context.Background(), fixture.inv, ExtendCommand{ExamID: fixture.examID, SittingID: fixture.sittingID, ExpectedRevision: 1, ScheduledEndAt: testNow.Add(time.Hour), PrivateReason: reason, IdempotencyKey: "test-key"})
 			return err
 		}},
 		{"close", func(reason string) error {
-			_, err := fixture.service.CloseExamSitting(context.Background(), fixture.invocation, ManagerTransitionCommand{ExamID: fixture.examID, SittingID: fixture.sittingID, ExpectedRevision: 1, PrivateReason: reason, IdempotencyKey: "test-key"})
+			_, err := fixture.service.CloseExamSitting(context.Background(), fixture.inv, ManagerTransitionCommand{ExamID: fixture.examID, SittingID: fixture.sittingID, ExpectedRevision: 1, PrivateReason: reason, IdempotencyKey: "test-key"})
 			return err
 		}},
 	}

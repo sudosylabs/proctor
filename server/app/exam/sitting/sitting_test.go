@@ -27,7 +27,7 @@ var testNow = time.Date(2026, 8, 15, 9, 0, 0, 0, time.UTC)
 
 type sittingFixture struct {
 	service     *Service
-	invocation  invocation.Invocation
+	inv         invocation.Invocation
 	userID      model.UserID
 	unitID      model.AcademicUnitID
 	examID      model.ExamID
@@ -80,7 +80,7 @@ func newFixture(t *testing.T) sittingFixture {
 		NewID:         func() model.ExamSittingID { return sittingID },
 	})
 	require.NoError(t, err)
-	return sittingFixture{service: service, invocation: invocation.New(testPrincipal(userID), model.RequestMetadata{}), userID: userID,
+	return sittingFixture{service: service, inv: invocation.New(testPrincipal(userID), model.RequestMetadata{}), userID: userID,
 		unitID: unitID, examID: examID, revisionID: revisionID, classID: classID, sittingID: sittingID,
 		persistence: persistence, access: accessStore, memberships: memberships, authorizer: authorizer, auditor: auditor,
 		systemAudit: systemAudit, publisher: publisher, jobs: jobs, mail: mailPreparer}

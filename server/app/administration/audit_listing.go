@@ -38,10 +38,10 @@ type ListAuditEventsQuery struct {
 // visibility; an academic-only reader receives redacted events.
 func (s *Service) ListAuditEvents(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query ListAuditEventsQuery,
 ) (paging.Counted[*model.AuditEvent], error) {
-	visibility, err := s.authorizeAuditList(ctx, invocation)
+	visibility, err := s.authorizeAuditList(ctx, inv)
 	if err != nil {
 		return paging.Counted[*model.AuditEvent]{}, err
 	}
@@ -124,13 +124,13 @@ func academicAuditProjection(events []*model.AuditEvent) []*model.AuditEvent {
 // audit visibility: every event with Institution-wide audit.view, otherwise
 // the academic events beneath the Academic Units where the caller holds
 // academic_audit.view. It records exactly one authorization decision.
-func (s *Service) authorizeAuditList(ctx context.Context, invocation invocation.Invocation) (store.AuditVisibilityScope, error) {
+func (s *Service) authorizeAuditList(ctx context.Context, inv invocation.Invocation) (store.AuditVisibilityScope, error) {
 	institution, err := s.institutions.GetSingleton(ctx)
 	if err != nil {
 		return store.AuditVisibilityScope{}, auditListingError(err)
 	}
 
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	global, err := s.authorizer.GrantedScopes(ctx, principal, model.ActionAuditView, model.ResourceInstitution)
 	if err != nil {
 		return store.AuditVisibilityScope{}, err
@@ -145,7 +145,7 @@ func (s *Service) authorizeAuditList(ctx context.Context, invocation invocation.
 			resource,
 			model.RoleScopeInstitution,
 			institution.ID.String(),
-			invocation.RequestMetadata(),
+			inv.RequestMetadata(),
 			true,
 		); err != nil {
 			return store.AuditVisibilityScope{}, err
@@ -174,7 +174,7 @@ func (s *Service) authorizeAuditList(ctx context.Context, invocation invocation.
 		resource,
 		scopeType,
 		scopeID,
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		allowed,
 	); err != nil {
 		return store.AuditVisibilityScope{}, err

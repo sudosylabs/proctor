@@ -50,10 +50,10 @@ func TestAcknowledgeCorrectionUsesExactParticipationFenceAndSemanticIdempotency(
 		IdempotencyKey: "acknowledge-key",
 	}
 
-	result, err := f.service.AcknowledgeExamAttemptCorrection(context.Background(), f.invocation, command)
+	result, err := f.service.AcknowledgeExamAttemptCorrection(context.Background(), f.inv, command)
 	require.NoError(t, err)
 	input := f.persistence.correctionAcknowledgement
-	principal := f.invocation.Principal()
+	principal := f.inv.Principal()
 	require.NotNil(t, input)
 	require.Equal(t, f.attemptID, input.Access.AttemptID)
 	require.Equal(t, principal.UserID, input.Access.CandidateUserID)
@@ -72,7 +72,7 @@ func TestAcknowledgeCorrectionUsesExactParticipationFenceAndSemanticIdempotency(
 	require.Equal(t, correctionRevisionID, result.CorrectionRevisionID)
 	require.Equal(t, currentRevisionID, result.CurrentRevisionID)
 	require.Equal(t, f.at, result.AcknowledgedAt.Time)
-	wantIdempotency, prepareErr := idempotency.Require(f.invocation, store.ExamAttemptCorrectionAcknowledgementOperation,
+	wantIdempotency, prepareErr := idempotency.Require(f.inv, store.ExamAttemptCorrectionAcknowledgementOperation,
 		command.IdempotencyKey, struct {
 			AttemptID                 string `json:"exam_attempt_id"`
 			ParticipationID           string `json:"participation_id"`
@@ -115,7 +115,7 @@ func TestAcknowledgeCorrectionReplayReturnsRetainedResultAfterFreshAuthorization
 	command := AcknowledgeCorrectionCommand{Access: validWorkspaceMutationAccess(f), CorrectionRevisionID: correctionRevisionID,
 		ExpectedCurrentRevisionID: currentRevisionID, IdempotencyKey: "replay-key"}
 
-	result, err := f.service.AcknowledgeExamAttemptCorrection(context.Background(), f.invocation, command)
+	result, err := f.service.AcknowledgeExamAttemptCorrection(context.Background(), f.inv, command)
 	require.NoError(t, err)
 	require.Equal(t, f.at.Add(-time.Minute), result.AcknowledgedAt.Time, "result=%#v calls=%d order=%v", result, f.persistence.correctionAcknowledgementCalls, f.order)
 	require.Equal(t, 1, f.persistence.correctionAcknowledgementCalls, "result=%#v calls=%d order=%v", result, f.persistence.correctionAcknowledgementCalls, f.order)
@@ -137,7 +137,7 @@ func TestAcknowledgeCorrectionReplayReturnsRetainedResultAfterFreshAuthorization
 		ChangedAreas:            []model.ExamCorrectionChangedArea{model.ExamCorrectionChangedBrowserPolicy},
 		AffectedCapabilities:    []model.CandidateCapability{model.CandidateCapabilityBrowser},
 		AcknowledgementRequired: true, AcknowledgementState: model.CorrectionAcknowledgementPending}}
-	result, err = f.service.AcknowledgeExamAttemptCorrection(context.Background(), f.invocation, command)
+	result, err = f.service.AcknowledgeExamAttemptCorrection(context.Background(), f.inv, command)
 	require.NoError(t, err, "stale acknowledgement reopened capability: %#v", result)
 	require.Equal(t, laterRevisionID, result.CurrentRevisionID, "stale acknowledgement reopened capability: %#v", result)
 	require.Equal(t, f.at.Add(-time.Minute), result.AcknowledgedAt.Time, "stale acknowledgement reopened capability: %#v", result)

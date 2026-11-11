@@ -19,10 +19,10 @@ import (
 )
 
 func workspaceMutationSelector(
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	mutationAccess WorkspaceMutationAccess,
 ) (store.ExamAttemptWorkspaceMutationAccess, error) {
-	read, err := candidateSelector(invocation, mutationAccess.CandidateAccess)
+	read, err := candidateSelector(inv, mutationAccess.CandidateAccess)
 	if err != nil {
 		return store.ExamAttemptWorkspaceMutationAccess{}, err
 	}
@@ -119,7 +119,7 @@ func (s *Service) resolveWorkspaceMutationTarget(
 
 func (s *Service) applyWorkspaceMutation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	target *store.ExamAttemptWorkspaceMutationTarget,
 	mutation *store.ExamAttemptWorkspaceMutation,
 	commandIdempotency *store.CommandIdempotency,
@@ -127,7 +127,7 @@ func (s *Service) applyWorkspaceMutation(
 	expectedVersion model.WorkspaceContentVersion,
 ) (WorkspaceMutationResult, error) {
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionExamSittingParticipate,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
 		ScopeType:  model.RoleScopeClass,

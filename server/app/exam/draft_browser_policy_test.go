@@ -24,7 +24,7 @@ func TestConfigureBrowserPolicyUsesInstallationPin(t *testing.T) {
 			fixture.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: fixture.unitID, UserID: fixture.userID}}
 			policy, err := model.NewBrowserPolicy(true, "start", []model.BrowserPolicyRule{{RuleID: "start", Origin: origin, PathPrefix: "/", HostMatch: model.BrowserPolicyHostExact, BlockedNavigationOutcome: model.BrowserPolicyBlockedNavigationRecord, InstitutionHTTPException: true}})
 			require.NoError(t, err)
-			result, err := fixture.service.ConfigureExamDraftBrowserPolicy(context.Background(), fixture.invocation, ConfigureDraftBrowserPolicyCommand{ExamID: fixture.examID, ExpectedDraftRevision: 1, Policy: policy, IdempotencyKey: "browser-pin"})
+			result, err := fixture.service.ConfigureExamDraftBrowserPolicy(context.Background(), fixture.inv, ConfigureDraftBrowserPolicyCommand{ExamID: fixture.examID, ExpectedDraftRevision: 1, Policy: policy, IdempotencyKey: "browser-pin"})
 			if origin == "http://institution.example" {
 				require.NoError(t, err, "matching exception: %#v", result)
 				require.True(t, result.Draft.BrowserPolicy.Enabled, "matching exception: %#v", result)

@@ -46,9 +46,9 @@ type PersonalAccessTokenGrantableScope struct {
 // CreatePersonalAccessToken accepts for the same principal.
 func (s *Service) ListGrantablePersonalAccessTokenScopes(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 ) (*PersonalAccessTokenGrantableScopes, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if err := requireInteractiveSession(principal, false, s.now(), s.recentAuthenticationTTL); err != nil {
 		return nil, err
 	}

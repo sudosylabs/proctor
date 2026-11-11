@@ -3,11 +3,11 @@
 Use cases are direct methods with typed commands or queries and typed results:
 
 ~~~go
-CreateAcademicUnit(ctx, invocation, command) (*model.AcademicUnit, error)
-GetAcademicUnit(ctx, invocation, query) (*model.AcademicUnit, error)
+CreateAcademicUnit(ctx, inv, command) (*model.AcademicUnit, error)
+GetAcademicUnit(ctx, inv, query) (*model.AcademicUnit, error)
 ~~~
 
-A use case takes `(ctx, invocation, command)` with an `XCommand` for a
+A use case takes `(ctx, inv, command)` with an `XCommand` for a
 mutation or an `XQuery` for a read, passed by value, and returns a domain model
 or an `XResult`. Ports to infrastructure or another module that are not use
 cases name their argument for that port, such as a renderer `RenderRequest`.
@@ -17,7 +17,7 @@ cases name their argument for that port, such as a renderer `RenderRequest`.
 The `app/invocation` leaf owns that one call type so the parent and every Exam
 child module share it without a parent import, and transports import it
 directly. Every use case and consumer-owned port takes
-`invocation invocation.Invocation`, and no module declares a local call type,
+`inv invocation.Invocation`, and no module declares a local call type,
 alias, or conversion between call types.
 Actorless work carries `invocation.System` in the same position, which names
 either the durable Job execution (`invocation.Job`) or a non-durable runtime

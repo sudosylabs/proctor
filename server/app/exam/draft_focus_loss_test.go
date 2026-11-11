@@ -27,7 +27,7 @@ func TestConfigureDraftFocusLossOwnsAuthorizationAuditPersistenceAndSafeEffect(t
 	fixture.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: fixture.unitID, UserID: fixture.userID}}
 	focus := model.FocusLossPolicy{Enabled: false, MinimumDuration: 500 * time.Millisecond, IncidentCount: 100, Window: 4 * time.Hour, Outcome: model.IntegrityOutcomeFlagAndSuspend}
 	command := "test-key"
-	view, err := fixture.service.ConfigureExamDraftFocusLoss(context.Background(), fixture.invocation, ConfigureDraftFocusLossCommand{
+	view, err := fixture.service.ConfigureExamDraftFocusLoss(context.Background(), fixture.inv, ConfigureDraftFocusLossCommand{
 		ExamID: fixture.examID, ExpectedDraftRevision: 1, Enabled: focus.Enabled, MinimumDuration: focus.MinimumDuration, IncidentCount: focus.IncidentCount, Window: focus.Window, Outcome: focus.Outcome, IdempotencyKey: command,
 	})
 	require.NoError(t, err)
@@ -58,7 +58,7 @@ func TestConfigureDraftFocusLossNoChangeSkipsAuditPersistenceAndEffect(t *testin
 	fixture := newAuthoringFixture(t)
 	fixture.persistence.actorIsManager = true
 	fixture.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: fixture.unitID, UserID: fixture.userID}}
-	_, err := fixture.service.ConfigureExamDraftFocusLoss(context.Background(), fixture.invocation, ConfigureDraftFocusLossCommand{
+	_, err := fixture.service.ConfigureExamDraftFocusLoss(context.Background(), fixture.inv, ConfigureDraftFocusLossCommand{
 		ExamID: fixture.examID, ExpectedDraftRevision: 1, Enabled: model.DefaultExamPolicySet().FocusLoss.Enabled, MinimumDuration: model.DefaultExamPolicySet().FocusLoss.MinimumDuration, IncidentCount: model.DefaultExamPolicySet().FocusLoss.IncidentCount, Window: model.DefaultExamPolicySet().FocusLoss.Window, Outcome: model.DefaultExamPolicySet().FocusLoss.Outcome, IdempotencyKey: "test-key",
 	})
 	var fault *apperror.Error
@@ -86,7 +86,7 @@ func TestConfigureDraftFocusLossArchivedNoOpAndStaleEditsReachAuditedStoreGuard(
 			fixture.persistence.actorIsManager = true
 			fixture.persistence.archived = test.archived
 			fixture.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: fixture.unitID, UserID: fixture.userID}}
-			_, err := fixture.service.ConfigureExamDraftFocusLoss(context.Background(), fixture.invocation, ConfigureDraftFocusLossCommand{
+			_, err := fixture.service.ConfigureExamDraftFocusLoss(context.Background(), fixture.inv, ConfigureDraftFocusLossCommand{
 				ExamID: fixture.examID, ExpectedDraftRevision: test.revision, Enabled: model.DefaultExamPolicySet().FocusLoss.Enabled, MinimumDuration: model.DefaultExamPolicySet().FocusLoss.MinimumDuration, IncidentCount: model.DefaultExamPolicySet().FocusLoss.IncidentCount, Window: model.DefaultExamPolicySet().FocusLoss.Window, Outcome: model.DefaultExamPolicySet().FocusLoss.Outcome, IdempotencyKey: "test-key",
 			})
 			var fault *apperror.Error
@@ -107,7 +107,7 @@ func TestConfigureDraftFocusLossReplayDoesNotRepublish(t *testing.T) {
 	fixture.persistence.replayed = true
 	fixture.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: fixture.unitID, UserID: fixture.userID}}
 	focus := model.FocusLossPolicy{Enabled: false, MinimumDuration: time.Second, IncidentCount: 2, Window: time.Minute, Outcome: model.IntegrityOutcomeFlag}
-	_, err := fixture.service.ConfigureExamDraftFocusLoss(context.Background(), fixture.invocation, ConfigureDraftFocusLossCommand{
+	_, err := fixture.service.ConfigureExamDraftFocusLoss(context.Background(), fixture.inv, ConfigureDraftFocusLossCommand{
 		ExamID: fixture.examID, ExpectedDraftRevision: 1, Enabled: focus.Enabled, MinimumDuration: focus.MinimumDuration, IncidentCount: focus.IncidentCount, Window: focus.Window, Outcome: focus.Outcome, IdempotencyKey: "test-key",
 	})
 	require.NoError(t, err)

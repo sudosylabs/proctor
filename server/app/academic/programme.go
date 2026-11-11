@@ -50,12 +50,12 @@ type ArchiveProgrammeCommand struct {
 }
 
 // GetProgramme reads one Programme after authorizing the caller.
-func (s *Service) GetProgramme(ctx context.Context, invocation invocation.Invocation, id model.ProgrammeID) (*model.Programme, error) {
+func (s *Service) GetProgramme(ctx context.Context, inv invocation.Invocation, id model.ProgrammeID) (*model.Programme, error) {
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "programme_id")
 	}
 	resource := model.Resource{Type: model.ResourceProgramme, ID: id.String()}
-	if err := s.authorizer.Authorize(ctx, invocation, model.ActionProgrammeView, resource); err != nil {
+	if err := s.authorizer.Authorize(ctx, inv, model.ActionProgrammeView, resource); err != nil {
 		return nil, err
 	}
 	programme, err := s.programmes.Get(ctx, id)
@@ -68,7 +68,7 @@ func (s *Service) GetProgramme(ctx context.Context, invocation invocation.Invoca
 // ListProgrammes lists Programmes after authorizing the caller.
 func (s *Service) ListProgrammes(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query ListProgrammesQuery,
 ) (paging.Page[*model.Programme], error) {
 	unitID := query.AcademicUnitID
@@ -83,7 +83,7 @@ func (s *Service) ListProgrammes(
 
 	if err = s.authorizer.Authorize(
 		ctx,
-		invocation,
+		inv,
 		model.ActionProgrammeView,
 		model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()},
 	); err != nil {
@@ -106,7 +106,7 @@ func (s *Service) ListProgrammes(
 // CreateProgramme creates a Programme after authorizing the caller.
 func (s *Service) CreateProgramme(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command CreateProgrammeCommand,
 ) (*model.Programme, error) {
 	unitID := command.AcademicUnitID
@@ -115,7 +115,7 @@ func (s *Service) CreateProgramme(
 	}
 
 	resource := model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()}
-	scope, err := s.authorizer.AuthorizeWithScope(ctx, invocation, model.ActionProgrammeManage, resource)
+	scope, err := s.authorizer.AuthorizeWithScope(ctx, inv, model.ActionProgrammeManage, resource)
 	scopeType, scopeID := scope.ScopeType, scope.ScopeID
 	if err != nil {
 		return nil, err
@@ -142,7 +142,7 @@ func (s *Service) CreateProgramme(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionProgrammeManage,
 			Resource:   resource,
 			ScopeType:  scopeType,
@@ -165,10 +165,10 @@ func (s *Service) CreateProgramme(
 // UpdateProgramme updates a Programme after authorizing the caller.
 func (s *Service) UpdateProgramme(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command UpdateProgrammeCommand,
 ) (*model.Programme, error) {
-	current, scopeType, scopeID, err := s.getForMutation(ctx, invocation, command.ID)
+	current, scopeType, scopeID, err := s.getForMutation(ctx, inv, command.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +197,7 @@ func (s *Service) UpdateProgramme(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionProgrammeManage,
 			Resource:   resource,
 			ScopeType:  scopeType,
@@ -219,8 +219,8 @@ func (s *Service) UpdateProgramme(
 }
 
 // ArchiveProgramme archives a Programme after authorizing the caller.
-func (s *Service) ArchiveProgramme(ctx context.Context, invocation invocation.Invocation, command ArchiveProgrammeCommand) error {
-	current, scopeType, scopeID, err := s.getForMutation(ctx, invocation, command.ID)
+func (s *Service) ArchiveProgramme(ctx context.Context, inv invocation.Invocation, command ArchiveProgrammeCommand) error {
+	current, scopeType, scopeID, err := s.getForMutation(ctx, inv, command.ID)
 	if err != nil {
 		return err
 	}
@@ -233,7 +233,7 @@ func (s *Service) ArchiveProgramme(ctx context.Context, invocation invocation.In
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionProgrammeManage,
 			Resource:   resource,
 			ScopeType:  scopeType,
@@ -258,7 +258,7 @@ func (s *Service) ArchiveProgramme(ctx context.Context, invocation invocation.In
 
 func (s *Service) getForMutation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	id model.ProgrammeID,
 ) (*model.Programme, model.RoleScopeType, string, error) {
 	if !id.IsValid() {
@@ -267,7 +267,7 @@ func (s *Service) getForMutation(
 
 	scope, err := s.authorizer.AuthorizeWithScope(
 		ctx,
-		invocation,
+		inv,
 		model.ActionProgrammeManage,
 		model.Resource{Type: model.ResourceProgramme, ID: id.String()},
 	)

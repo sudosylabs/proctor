@@ -21,7 +21,7 @@ import (
 // actor-less system event.
 func (s *Service) beginDesktopIssueAudit(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	userID model.UserID,
 	institutionID model.InstitutionID,
 ) (*model.AuditEvent, error) {
@@ -32,14 +32,14 @@ func (s *Service) beginDesktopIssueAudit(
 		ctx,
 		access.AccountAuditActor{
 			UserID:     userID,
-			SessionID:  invocation.Principal().SessionID,
+			SessionID:  inv.Principal().SessionID,
 			ClientType: model.SessionClientWeb,
 		},
 		model.ActionAuthenticationDesktopAuthorization,
 		model.Resource{Type: model.ResourceUser, ID: userID.String()},
 		model.RoleScopeInstitution,
 		institutionID.String(),
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		map[string]any{"operation": "issue_code"},
 	)
 }
@@ -49,7 +49,7 @@ func (s *Service) beginDesktopIssueAudit(
 // identity.
 func (s *Service) beginDesktopExchangeAudit(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	userID model.UserID,
 	institutionID model.InstitutionID,
 ) (*model.AuditEvent, error) {
@@ -63,7 +63,7 @@ func (s *Service) beginDesktopExchangeAudit(
 		model.Resource{Type: model.ResourceUser, ID: userID.String()},
 		model.RoleScopeInstitution,
 		institutionID.String(),
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		map[string]any{"operation": "exchange"},
 	)
 }
@@ -74,12 +74,12 @@ func (s *Service) beginDesktopExchangeAudit(
 // handoff's account the resource.
 func (s *Service) recordRejectedDesktopIssue(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	userID model.UserID,
 	institutionID model.InstitutionID,
 	errorCode string,
 ) error {
-	caller := invocation.Principal()
+	caller := inv.Principal()
 	if s.securityAudit == nil || !caller.UserID.IsValid() || !userID.IsValid() || !institutionID.IsValid() {
 		return apperror.New("audit.unavailable")
 	}
@@ -95,7 +95,7 @@ func (s *Service) recordRejectedDesktopIssue(
 		model.Resource{Type: model.ResourceUser, ID: userID.String()},
 		model.RoleScopeInstitution,
 		institutionID.String(),
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		map[string]any{"operation": "issue_code"},
 	)
 	if err != nil {
@@ -110,7 +110,7 @@ func (s *Service) recordRejectedDesktopIssue(
 // disclosed.
 func (s *Service) beginDesktopWithdrawalAudit(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	userID model.UserID,
 	institutionID model.InstitutionID,
 	sessionID model.SessionID,
@@ -125,7 +125,7 @@ func (s *Service) beginDesktopWithdrawalAudit(
 		model.Resource{Type: model.ResourceUser, ID: userID.String()},
 		model.RoleScopeInstitution,
 		institutionID.String(),
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		map[string]any{"operation": "withdraw", "value": map[string]any{"session_id": sessionID}},
 	)
 }

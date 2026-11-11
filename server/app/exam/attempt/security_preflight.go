@@ -35,10 +35,10 @@ type ReportSecurityPreflightCommand struct {
 
 func (s *Service) securityPreflightAccess(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	sittingID model.ExamSittingID,
 ) (store.SecurityPreflightAccess, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return store.SecurityPreflightAccess{}, apperror.New("authentication.token_invalid")
 	}
@@ -63,7 +63,7 @@ func (s *Service) securityPreflightAccess(
 }
 func (s *Service) beginPreflightAudit(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	sittingID model.ExamSittingID,
 	operation string,
 ) (model.AuditEventID, error) {
@@ -76,7 +76,7 @@ func (s *Service) beginPreflightAudit(
 	}
 
 	return s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionExamSittingParticipate,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
 		ScopeType:  model.RoleScopeClass,
@@ -92,11 +92,11 @@ func (s *Service) beginPreflightAudit(
 // manifest, and configuration digests.
 func (s *Service) PrepareExamSecurityPreflight(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command PrepareSecurityPreflightCommand,
 ) (_ *store.SecurityPreflightPrepared, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	release, admissionErr := s.enterControl(ctx, invocation, false)
+	release, admissionErr := s.enterControl(ctx, inv, false)
 	if admissionErr != nil {
 		return nil, admissionErr
 	}
@@ -110,13 +110,13 @@ func (s *Service) PrepareExamSecurityPreflight(
 		return nil, apperror.Invalid("exam.attempt.invalid", "security_preflight")
 	}
 
-	preflightAccess, err := s.securityPreflightAccess(ctx, invocation, command.SittingID)
+	preflightAccess, err := s.securityPreflightAccess(ctx, inv, command.SittingID)
 	if err != nil {
 		return nil, err
 	}
 
 	commandIdempotency, err := idempotency.Require(
-		invocation,
+		inv,
 		store.SecurityPreflightPrepareOperation,
 		command.IdempotencyKey,
 		struct {
@@ -137,7 +137,7 @@ func (s *Service) PrepareExamSecurityPreflight(
 		return nil, err
 	}
 
-	audit, err := s.beginPreflightAudit(ctx, invocation, command.SittingID, store.SecurityPreflightPrepareOperation)
+	audit, err := s.beginPreflightAudit(ctx, inv, command.SittingID, store.SecurityPreflightPrepareOperation)
 	if err != nil {
 		return nil, err
 	}
@@ -173,11 +173,11 @@ func (s *Service) PrepareExamSecurityPreflight(
 // resolved only for the caller's own user and Session.
 func (s *Service) ReportExamSecurityPreflight(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ReportSecurityPreflightCommand,
 ) (_ *model.SecurityPreflightResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	release, admissionErr := s.enterControl(ctx, invocation, false)
+	release, admissionErr := s.enterControl(ctx, inv, false)
 	if admissionErr != nil {
 		return nil, admissionErr
 	}
@@ -187,9 +187,9 @@ func (s *Service) ReportExamSecurityPreflight(
 		return nil, apperror.Invalid("exam.attempt.invalid", "security_preflight_report")
 	}
 
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	// Authenticate before looking up a resource selector or beginning an audit.
-	preflightAccess, err := s.securityPreflightAccess(ctx, invocation, "")
+	preflightAccess, err := s.securityPreflightAccess(ctx, inv, "")
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +200,7 @@ func (s *Service) ReportExamSecurityPreflight(
 	}
 
 	preflightAccess.SittingID = sittingID
-	commandIdempotency, err := idempotency.Require(invocation, store.SecurityPreflightReportOperation, command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Require(inv, store.SecurityPreflightReportOperation, command.IdempotencyKey, struct {
 		PreflightID string                        `json:"preflight_id"`
 		Report      model.SecurityPreflightReport `json:"report"`
 	}{command.PreflightID, command.Report})
@@ -208,7 +208,7 @@ func (s *Service) ReportExamSecurityPreflight(
 		return nil, err
 	}
 
-	audit, err := s.beginPreflightAudit(ctx, invocation, sittingID, store.SecurityPreflightReportOperation)
+	audit, err := s.beginPreflightAudit(ctx, inv, sittingID, store.SecurityPreflightReportOperation)
 	if err != nil {
 		return nil, err
 	}
@@ -254,11 +254,11 @@ var securityPreflightStoreErrors = storeErrors.With(
 // Session. It does not grant or renew a Participation Lease.
 func (s *Service) RecoverExamSecurityPolicy(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	attemptID model.ExamAttemptID,
 ) (_ *store.SecurityPolicyRecovery, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	release, admissionErr := s.enterControl(ctx, invocation, false)
+	release, admissionErr := s.enterControl(ctx, inv, false)
 	if admissionErr != nil {
 		return nil, admissionErr
 	}
@@ -268,7 +268,7 @@ func (s *Service) RecoverExamSecurityPolicy(
 		return nil, apperror.Invalid("exam.attempt.invalid", "attempt_id")
 	}
 
-	preflightAccess, err := s.securityPreflightAccess(ctx, invocation, "")
+	preflightAccess, err := s.securityPreflightAccess(ctx, inv, "")
 	if err != nil {
 		return nil, err
 	}
@@ -297,12 +297,12 @@ type UpdateSecurityCoverageCommand struct {
 // and checked against the caller's desktop build.
 func (s *Service) UpdateExamSecurityCoverage(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command UpdateSecurityCoverageCommand,
 ) (_ model.SecurityCoverageResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	// Malformed updates are refused before they can occupy the live lane.
-	selector, err := candidateSelector(invocation, command.Access)
+	selector, err := candidateSelector(inv, command.Access)
 	if err != nil {
 		return model.SecurityCoverageResult{}, err
 	}
@@ -310,13 +310,13 @@ func (s *Service) UpdateExamSecurityCoverage(
 		return model.SecurityCoverageResult{}, apperror.Invalid("exam.attempt.invalid", "security_coverage")
 	}
 
-	release, admissionErr := s.enterControl(ctx, invocation, true)
+	release, admissionErr := s.enterControl(ctx, inv, true)
 	if admissionErr != nil {
 		return model.SecurityCoverageResult{}, admissionErr
 	}
 	defer release()
 
-	build, err := s.desktopBuilds.ResolveAttemptDesktopBuild(ctx, invocation.Principal())
+	build, err := s.desktopBuilds.ResolveAttemptDesktopBuild(ctx, inv.Principal())
 	if err != nil || build.Build.Validate() != nil || build.Build.NativeAgreement == nil || build.CompatibilityPolicyRevision < 1 {
 		return model.SecurityCoverageResult{}, apperror.New("exam.attempt.desktop_incompatible").Wrap(err)
 	}

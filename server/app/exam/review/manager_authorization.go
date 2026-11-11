@@ -42,20 +42,20 @@ type SittingManagerAuthorizer struct {
 // and Review.
 func (a SittingManagerAuthorizer) AuthorizeSubmissionView(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	submissionID model.SubmissionID,
 ) error {
 	authorization, err := a.resolve(ctx, submissionID)
 	if err != nil {
 		return err
 	}
-	if authorization.CandidateUserID == invocation.Principal().UserID {
-		return a.denySelf(ctx, invocation, authorization, model.ActionSubmissionView)
+	if authorization.CandidateUserID == inv.Principal().UserID {
+		return a.denySelf(ctx, inv, authorization, model.ActionSubmissionView)
 	}
 
 	return a.Sittings.AuthorizeSubmissionView(
 		ctx,
-		invocation,
+		inv,
 		authorization.ExamID,
 		submissionID,
 	)
@@ -65,20 +65,20 @@ func (a SittingManagerAuthorizer) AuthorizeSubmissionView(
 // reports whether the decision rested on the override Action.
 func (a SittingManagerAuthorizer) AuthorizeSubmissionReview(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	submissionID model.SubmissionID,
 ) (access.ManagerAuthorization, error) {
 	authorization, err := a.resolve(ctx, submissionID)
 	if err != nil {
 		return access.ManagerAuthorization{}, err
 	}
-	if authorization.CandidateUserID == invocation.Principal().UserID {
-		return access.ManagerAuthorization{}, a.denySelf(ctx, invocation, authorization, model.ActionSubmissionReview)
+	if authorization.CandidateUserID == inv.Principal().UserID {
+		return access.ManagerAuthorization{}, a.denySelf(ctx, inv, authorization, model.ActionSubmissionReview)
 	}
 
 	management, err := a.Sittings.AuthorizeSubmissionReview(
 		ctx,
-		invocation,
+		inv,
 		authorization.ExamID,
 		submissionID,
 	)
@@ -93,20 +93,20 @@ func (a SittingManagerAuthorizer) AuthorizeSubmissionReview(
 // candidate, and reports whether the decision rested on the override Action.
 func (a SittingManagerAuthorizer) AuthorizeSubmissionRelease(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	submissionID model.SubmissionID,
 ) (access.ManagerAuthorization, error) {
 	authorization, err := a.resolve(ctx, submissionID)
 	if err != nil {
 		return access.ManagerAuthorization{}, err
 	}
-	if authorization.CandidateUserID == invocation.Principal().UserID {
-		return access.ManagerAuthorization{}, a.denySelf(ctx, invocation, authorization, model.ActionSubmissionRelease)
+	if authorization.CandidateUserID == inv.Principal().UserID {
+		return access.ManagerAuthorization{}, a.denySelf(ctx, inv, authorization, model.ActionSubmissionRelease)
 	}
 
 	management, err := a.Sittings.AuthorizeSubmissionRelease(
 		ctx,
-		invocation,
+		inv,
 		authorization.ExamID,
 		submissionID,
 	)
@@ -142,18 +142,18 @@ func (a SittingManagerAuthorizer) resolve(
 
 func (a SittingManagerAuthorizer) denySelf(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	authorization *store.ExamIntegrityReviewAuthorization,
 	action model.Action,
 ) error {
 	err := a.Audit.RecordAuthorizationDecision(
 		ctx,
-		invocation.Principal(),
+		inv.Principal(),
 		action,
 		model.Resource{Type: model.ResourceSubmission, ID: authorization.SubmissionID.String()},
 		model.RoleScopeAcademicUnit,
 		authorization.AcademicUnitID.String(),
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		false,
 	)
 	if err != nil {

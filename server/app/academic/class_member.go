@@ -60,11 +60,11 @@ func (s *Service) publishMembershipChanged(
 // EnrollClassMember enrolls a User in a Class after authorizing the caller.
 func (s *Service) EnrollClassMember(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command EnrollClassMemberCommand,
 ) (*model.ClassEnrollment, error) {
 	classID := command.ClassID
-	resource, err := s.authorizeClass(ctx, invocation, classID, model.ActionClassMembersManage)
+	resource, err := s.authorizeClass(ctx, inv, classID, model.ActionClassMembersManage)
 	if err != nil {
 		return nil, err
 	}
@@ -81,16 +81,16 @@ func (s *Service) EnrollClassMember(
 
 	at := model.TimeUTC(s.now())
 	if command.Batch.Fields().RetainedOutcome {
-		return s.enrollRetainedClassMember(ctx, invocation, command, resource, userID, memberID, at)
+		return s.enrollRetainedClassMember(ctx, inv, command, resource, userID, memberID, at)
 	}
 
-	plan, err := s.planClassEnrollment(ctx, invocation, command, userID, memberID, at)
+	plan, err := s.planClassEnrollment(ctx, inv, command, userID, memberID, at)
 	if err != nil {
 		return nil, err
 	}
 
 	candidate, previous := plan.candidate, plan.previous
-	commandIdempotency, err := prepareClassEnrollmentIdempotency(invocation, command, candidate)
+	commandIdempotency, err := prepareClassEnrollmentIdempotency(inv, command, candidate)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ func (s *Service) EnrollClassMember(
 		return nil, err
 	}
 
-	return s.runClassEnrollment(ctx, invocation, command, resource, plan, recipient, prepared, commandIdempotency, at)
+	return s.runClassEnrollment(ctx, inv, command, resource, plan, recipient, prepared, commandIdempotency, at)
 }
 
 // classEnrollmentPlan is the validated candidate membership and any membership it transfers from.
@@ -127,12 +127,12 @@ type classEnrollmentPlan struct {
 
 // prepareClassEnrollmentIdempotency prepares the enrollment command idempotency from its semantic fields.
 func prepareClassEnrollmentIdempotency(
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command EnrollClassMemberCommand,
 	candidate *model.ClassMember,
 ) (*store.CommandIdempotency, error) {
 	return idempotency.Prepare(
-		invocation,
+		inv,
 		"class_member.enroll",
 		command.IdempotencyKey,
 		struct {
@@ -172,7 +172,7 @@ func (s *Service) enrollClassMember(
 // enrollRetainedClassMember replays a batch enrollment whose outcome the batch already retained.
 func (s *Service) enrollRetainedClassMember(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command EnrollClassMemberCommand,
 	resource model.Resource,
 	userID model.UserID,
@@ -194,7 +194,7 @@ func (s *Service) enrollRetainedClassMember(
 		if retainedPrevious.UserID != userID {
 			return nil, apperror.New("resource.not_found").WithField("resource", "class_member")
 		}
-		if _, err = s.authorizeClass(ctx, invocation, retainedPrevious.ClassID, model.ActionClassMembersManage); err != nil {
+		if _, err = s.authorizeClass(ctx, inv, retainedPrevious.ClassID, model.ActionClassMembersManage); err != nil {
 			return nil, concealMembershipAuthorizationError(err, "class_member")
 		}
 		if command.Batch.Fields().Authorization != nil {
@@ -209,7 +209,7 @@ func (s *Service) enrollRetainedClassMember(
 		EndsAt:   model.OptionalTimeFromMillis(command.EndAt),
 	}
 	candidate.PrepareCreate(memberID, at)
-	commandIdempotency, commandErr := prepareClassEnrollmentIdempotency(invocation, command, candidate)
+	commandIdempotency, commandErr := prepareClassEnrollmentIdempotency(inv, command, candidate)
 	if commandErr != nil {
 		return nil, commandErr
 	}
@@ -222,7 +222,7 @@ func (s *Service) enrollRetainedClassMember(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionClassMembersManage,
 			Resource:   resource,
 			Operation:  "enroll",
@@ -256,7 +256,7 @@ func (s *Service) enrollRetainedClassMember(
 			}
 
 			sourceAttempt := access.Mutation{
-				Invocation: invocation,
+				Invocation: inv,
 				Action:     model.ActionClassMembersManage,
 				Resource:   model.Resource{Type: model.ResourceClass, ID: retainedPrevious.ClassID.String()},
 				Operation:  "transfer_out",
@@ -289,7 +289,7 @@ func (s *Service) enrollRetainedClassMember(
 // planClassEnrollment validates the candidate membership and authorizes any active membership it transfers from.
 func (s *Service) planClassEnrollment(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command EnrollClassMemberCommand,
 	userID model.UserID,
 	memberID model.ClassMemberID,
@@ -322,7 +322,7 @@ func (s *Service) planClassEnrollment(
 		if previous.ClassID == candidate.ClassID {
 			return classEnrollmentPlan{}, apperror.New("class.enrollment_conflict").WithField("resource", "class_member")
 		}
-		if _, err = s.authorizeClass(ctx, invocation, previous.ClassID, model.ActionClassMembersManage); err != nil {
+		if _, err = s.authorizeClass(ctx, inv, previous.ClassID, model.ActionClassMembersManage); err != nil {
 			return classEnrollmentPlan{}, concealMembershipAuthorizationError(err, "class_member")
 		}
 
@@ -420,7 +420,7 @@ func (s *Service) prepareEnrollmentNotice(
 // runClassEnrollment audits and stores the enrollment, nesting the source audit when it transfers a membership.
 func (s *Service) runClassEnrollment(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command EnrollClassMemberCommand,
 	resource model.Resource,
 	plan classEnrollmentPlan,
@@ -431,7 +431,7 @@ func (s *Service) runClassEnrollment(
 ) (*model.ClassEnrollment, error) {
 	candidate, previous := plan.candidate, plan.previous
 	destinationAttempt := access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionClassMembersManage,
 		Resource:   resource,
 		Operation:  "enroll",
@@ -474,7 +474,7 @@ func (s *Service) runClassEnrollment(
 
 			expectedPreviousID = previous.ID
 			sourceAttempt := access.Mutation{
-				Invocation: invocation,
+				Invocation: inv,
 				Action:     model.ActionClassMembersManage,
 				Resource:   model.Resource{Type: model.ResourceClass, ID: previous.ClassID.String()},
 				Operation:  "transfer_out",
@@ -527,7 +527,7 @@ func (s *Service) runClassEnrollment(
 // EndClassMember ends a Class Membership after authorizing the caller.
 func (s *Service) EndClassMember(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command EndClassMemberCommand,
 ) (*model.ClassMember, error) {
 	id := command.ID
@@ -537,7 +537,7 @@ func (s *Service) EndClassMember(
 
 	if err := s.authorizer.AuthorizePreflight(
 		ctx,
-		invocation,
+		inv,
 		model.ActionClassMembersManage,
 		model.ResourceClass,
 	); err != nil {
@@ -545,7 +545,7 @@ func (s *Service) EndClassMember(
 	}
 
 	if command.Batch.Fields().RetainedOutcome {
-		return s.endRetainedClassMember(ctx, invocation, command)
+		return s.endRetainedClassMember(ctx, inv, command)
 	}
 
 	current, err := s.classMembers.Get(ctx, id)
@@ -553,7 +553,7 @@ func (s *Service) EndClassMember(
 		return nil, ClassMemberStoreErrors.Translate(err)
 	}
 
-	resource, err := s.authorizeClass(ctx, invocation, current.ClassID, model.ActionClassMembersManage)
+	resource, err := s.authorizeClass(ctx, inv, current.ClassID, model.ActionClassMembersManage)
 	if err != nil {
 		return nil, concealMembershipAuthorizationError(err, "class_member")
 	}
@@ -566,7 +566,7 @@ func (s *Service) EndClassMember(
 		return nil, ClassMemberStoreErrors.Translate(err)
 	}
 
-	commandIdempotency, err := prepareClassMemberEndIdempotency(invocation, command)
+	commandIdempotency, err := prepareClassMemberEndIdempotency(inv, command)
 	if err != nil {
 		return nil, err
 	}
@@ -596,7 +596,7 @@ func (s *Service) EndClassMember(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionClassMembersManage,
 			Resource:   resource,
 			Operation:  "end",
@@ -632,8 +632,8 @@ func (s *Service) EndClassMember(
 }
 
 // prepareClassMemberEndIdempotency prepares the end command idempotency and binds its batch provenance.
-func prepareClassMemberEndIdempotency(invocation invocation.Invocation, command EndClassMemberCommand) (*store.CommandIdempotency, error) {
-	commandIdempotency, err := idempotency.Prepare(invocation, "class_member.end", command.IdempotencyKey, struct {
+func prepareClassMemberEndIdempotency(inv invocation.Invocation, command EndClassMemberCommand) (*store.CommandIdempotency, error) {
+	commandIdempotency, err := idempotency.Prepare(inv, "class_member.end", command.IdempotencyKey, struct {
 		ID      string `json:"id"`
 		ScopeID string `json:"scope_id,omitempty"`
 	}{command.ID.String(), strings.TrimSpace(command.BatchScopeID)})
@@ -663,10 +663,10 @@ func (s *Service) endClassMember(
 // endRetainedClassMember replays a batch end whose outcome the batch already retained.
 func (s *Service) endRetainedClassMember(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command EndClassMemberCommand,
 ) (*model.ClassMember, error) {
-	commandIdempotency, err := prepareClassMemberEndIdempotency(invocation, command)
+	commandIdempotency, err := prepareClassMemberEndIdempotency(inv, command)
 	if err != nil {
 		return nil, err
 	}
@@ -677,7 +677,7 @@ func (s *Service) endRetainedClassMember(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionClassMembersManage,
 			Resource:   model.Resource{Type: model.ResourceClass, ID: strings.TrimSpace(command.BatchScopeID)},
 			Operation:  "end",
@@ -722,7 +722,7 @@ func (s *Service) publishEnrollmentChanged(ctx context.Context, result *store.Cl
 
 func (s *Service) authorizeClass(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	classID model.ClassID,
 	action model.Action,
 ) (model.Resource, error) {
@@ -731,7 +731,7 @@ func (s *Service) authorizeClass(
 	}
 
 	resource := model.Resource{Type: model.ResourceClass, ID: classID.String()}
-	if err := s.authorizer.Authorize(ctx, invocation, action, resource); err != nil {
+	if err := s.authorizer.Authorize(ctx, inv, action, resource); err != nil {
 		return model.Resource{}, err
 	}
 
@@ -769,10 +769,10 @@ type ClassMemberPage struct {
 // ListClassMembersPage lists a page of Class Memberships after authorizing the caller.
 func (s *Service) ListClassMembersPage(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query ListClassMembersPageQuery,
 ) (*ClassMemberPage, error) {
-	if _, err := s.authorizeClass(ctx, invocation, query.ClassID, model.ActionClassMembersView); err != nil {
+	if _, err := s.authorizeClass(ctx, inv, query.ClassID, model.ActionClassMembersView); err != nil {
 		return nil, err
 	}
 

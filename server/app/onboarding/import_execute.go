@@ -121,11 +121,11 @@ func (s *Service) executeImport(ctx context.Context, id model.OnboardingImportID
 
 func (s *Service) executeImportRow(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	current *store.OnboardingImport,
 	row store.OnboardingImportRow,
 ) (model.OnboardingImportRowStatus, model.InvitationID, string, string, error) {
-	if err := s.validatePrincipal(ctx, invocation.Principal()); err != nil {
+	if err := s.validatePrincipal(ctx, inv.Principal()); err != nil {
 		if onboardingImportRetryableError(err) {
 			return "", "", "", "", err
 		}
@@ -152,12 +152,12 @@ func (s *Service) executeImportRow(
 
 		run := func(ctx context.Context, sourceAuditID, destinationAuditID model.AuditEventID) (AcademicAdministrationBatchResult, error) {
 			if progression {
-				if err := s.authorizeImport(ctx, invocation, current, true); err != nil {
+				if err := s.authorizeImport(ctx, inv, current, true); err != nil {
 					return AcademicAdministrationBatchResult{}, err
 				}
 			}
 
-			return s.RunAcademicAdministrationBatch(ctx, invocation, RunAcademicAdministrationBatchCommand{
+			return s.RunAcademicAdministrationBatch(ctx, inv, RunAcademicAdministrationBatchCommand{
 				Operation:                     operation,
 				ScopeType:                     row.ScopeType,
 				ScopeID:                       row.ScopeID,
@@ -184,7 +184,7 @@ func (s *Service) executeImportRow(
 			result, runErr = runProgressionAudited(
 				ctx,
 				s.auditor,
-				invocation,
+				inv,
 				"student_progression.execute_row",
 				row.ImportID.String(),
 				current.SourceClassID,
@@ -220,7 +220,7 @@ func (s *Service) executeImportRow(
 		return model.OnboardingImportRowFailed, "", "", item.ErrorCode, nil
 	}
 
-	result, err := s.RunInvitationBatch(ctx, invocation, RunInvitationBatchCommand{
+	result, err := s.RunInvitationBatch(ctx, inv, RunInvitationBatchCommand{
 		Operation:                 InvitationBatchOperation(row.Operation),
 		ScopeType:                 row.ScopeType,
 		ScopeID:                   row.ScopeID,

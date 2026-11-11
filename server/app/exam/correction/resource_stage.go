@@ -53,7 +53,7 @@ type ResourceStage struct {
 // ExpiresAt.
 func (s *Service) StageExamSittingCorrectionResourceContent(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	c StageResourceContentCommand,
 ) (_ ResourceStage, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -71,18 +71,18 @@ func (s *Service) StageExamSittingCorrectionResourceContent(
 		return ResourceStage{}, apperror.Invalid("exam.sitting.correction.invalid", "upload")
 	}
 
-	commandIdempotency, err := prepareStageIdempotency(invocation, c)
+	commandIdempotency, err := prepareStageIdempotency(inv, c)
 	if err != nil {
 		return ResourceStage{}, err
 	}
 
-	auth, err := s.authorizeSitting(ctx, invocation, c.ExamID, c.SittingID)
+	auth, err := s.authorizeSitting(ctx, inv, c.ExamID, c.SittingID)
 	if err != nil {
 		return ResourceStage{}, err
 	}
 
 	at := model.TimeUTC(s.now())
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	resourceID := c.ResourceID
 	entryID := model.FileEntryID("")
 	var entry *model.FileEntry
@@ -129,7 +129,7 @@ func (s *Service) StageExamSittingCorrectionResourceContent(
 	}
 
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     auth.action,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: c.SittingID.String()},
 		ScopeType:  model.RoleScopeAcademicUnit,

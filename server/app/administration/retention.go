@@ -55,8 +55,8 @@ type RetentionRecordView struct {
 }
 
 // GetRetentionControl returns the retention cleanup control.
-func (s *Service) GetRetentionControl(ctx context.Context, invocation invocation.Invocation) (*model.RetentionControl, error) {
-	inst, _, err := s.authorizeRetentionPolicy(ctx, invocation, model.ActionRetentionPolicyView)
+func (s *Service) GetRetentionControl(ctx context.Context, inv invocation.Invocation) (*model.RetentionControl, error) {
+	inst, _, err := s.authorizeRetentionPolicy(ctx, inv, model.ActionRetentionPolicyView)
 	if err != nil {
 		return nil, err
 	}
@@ -73,10 +73,10 @@ func (s *Service) GetRetentionControl(ctx context.Context, invocation invocation
 // GetRetentionPreview returns one retention preview.
 func (s *Service) GetRetentionPreview(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	id model.RetentionPreviewID,
 ) (*model.RetentionPreview, error) {
-	inst, _, err := s.authorizeRetentionPolicy(ctx, invocation, model.ActionRetentionPolicyView)
+	inst, _, err := s.authorizeRetentionPolicy(ctx, inv, model.ActionRetentionPolicyView)
 	if err != nil {
 		return nil, err
 	}
@@ -99,10 +99,10 @@ func (s *Service) GetRetentionPreview(
 // Retention Policy revision would retire.
 func (s *Service) CreateRetentionPreview(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command CreateRetentionPreviewCommand,
 ) (*model.RetentionPreview, error) {
-	inst, resource, err := s.authorizeRetentionPolicy(ctx, invocation, model.ActionRetentionPolicyView)
+	inst, resource, err := s.authorizeRetentionPolicy(ctx, inv, model.ActionRetentionPolicyView)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ func (s *Service) CreateRetentionPreview(
 	}
 
 	idempotency, err := idempotency.Prepare(
-		invocation,
+		inv,
 		store.RetentionPreviewOperation,
 		command.IdempotencyKey,
 		struct {
@@ -130,7 +130,7 @@ func (s *Service) CreateRetentionPreview(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionRetentionPolicyView,
 			Resource:   resource,
 			ScopeType:  model.RoleScopeInstitution,
@@ -142,7 +142,7 @@ func (s *Service) CreateRetentionPreview(
 		func(ctx context.Context, reference access.MutationReference) (*model.RetentionPreview, error) {
 			return s.retention.CreatePreview(ctx, &store.RetentionPreviewCreation{
 				RetentionMutation: store.RetentionMutation{
-					Principal:    invocation.Principal(),
+					Principal:    inv.Principal(),
 					AuditEventID: reference.ID,
 					AuditAt:      reference.MutationAt,
 				},
@@ -167,14 +167,14 @@ func (s *Service) CreateRetentionPreview(
 // retention_cleanup.manage.
 func (s *Service) ChangeRetentionControl(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ChangeRetentionControlCommand,
 ) (*model.RetentionControl, error) {
-	if err := access.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
+	if err := access.RequireStrongRecentSession(inv.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 		return nil, err
 	}
 
-	inst, resource, err := s.authorizeRetentionPolicy(ctx, invocation, model.ActionRetentionCleanupManage)
+	inst, resource, err := s.authorizeRetentionPolicy(ctx, inv, model.ActionRetentionCleanupManage)
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +192,7 @@ func (s *Service) ChangeRetentionControl(
 	}
 
 	idempotency, err := idempotency.Prepare(
-		invocation,
+		inv,
 		store.RetentionControlOperation,
 		command.IdempotencyKey,
 		struct {
@@ -217,7 +217,7 @@ func (s *Service) ChangeRetentionControl(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionRetentionCleanupManage,
 			Resource:   resource,
 			ScopeType:  model.RoleScopeInstitution,
@@ -235,7 +235,7 @@ func (s *Service) ChangeRetentionControl(
 				ctx,
 				&store.RetentionControlChange{
 					RetentionMutation: store.RetentionMutation{
-						Principal:               invocation.Principal(),
+						Principal:               inv.Principal(),
 						AuditEventID:            reference.ID,
 						AuditAt:                 reference.MutationAt,
 						RecentAuthenticationTTL: s.recentAuthenticationTTL,
@@ -264,11 +264,11 @@ func (s *Service) ChangeRetentionControl(
 // eligibility.
 func (s *Service) ListRetentionRecords(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	after model.SubmissionID,
 	limit int,
 ) (*RetentionRecordPage, error) {
-	if _, _, err := s.authorizeRetentionPolicy(ctx, invocation, model.ActionRetentionPolicyView); err != nil {
+	if _, _, err := s.authorizeRetentionPolicy(ctx, inv, model.ActionRetentionPolicyView); err != nil {
 		return nil, err
 	}
 	if limit < 1 || limit > model.RetentionMaximumPageSize || !after.IsZero() && !after.IsValid() {

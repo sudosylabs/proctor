@@ -34,7 +34,7 @@ type WaiveReviewCommand struct {
 // denied.
 func (r *Records) GetSubmissionReviewWaiver(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	scope model.RetentionHoldScope,
 ) (_ *model.SubmissionReviewWaiver, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -44,7 +44,7 @@ func (r *Records) GetSubmissionReviewWaiver(
 
 	if _, _, err := r.authorizeScope(
 		ctx,
-		invocation,
+		inv,
 		scope,
 		model.ActionExamRecordsComplete,
 		model.ActionExamRecordsCompleteOverride,
@@ -72,7 +72,7 @@ func (r *Records) GetSubmissionReviewWaiver(
 // the expected discrepancy count. The Submission's own candidate is denied.
 func (r *Records) WaiveSubmissionReview(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command WaiveReviewCommand,
 ) (_ *model.SubmissionReviewWaiver, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -87,14 +87,14 @@ func (r *Records) WaiveSubmissionReview(
 
 	key := command.IdempotencyKey
 	command.IdempotencyKey = ""
-	commandIdempotency, err := idempotency.Require(invocation, store.ExamRecordsWaiveReviewOperation, key, command)
+	commandIdempotency, err := idempotency.Require(inv, store.ExamRecordsWaiveReviewOperation, key, command)
 	if err != nil {
 		return nil, err
 	}
 
 	scope, action, err := r.authorizeScope(
 		ctx,
-		invocation,
+		inv,
 		command.Scope,
 		model.ActionExamRecordsComplete,
 		model.ActionExamRecordsCompleteOverride,
@@ -106,7 +106,7 @@ func (r *Records) WaiveSubmissionReview(
 
 	mutation, err := r.beginMutation(
 		ctx,
-		invocation,
+		inv,
 		scope,
 		action,
 		"waive_review",

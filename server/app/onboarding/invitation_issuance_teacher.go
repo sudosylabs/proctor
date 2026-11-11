@@ -26,7 +26,7 @@ import (
 // delegable Role and mails the claim.
 func (s *Service) IssueTeacherAcademicUnitInvitation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command IssueTeacherAcademicUnitInvitationCommand,
 ) (InvitationView, error) {
 	if !command.AcademicUnitID.IsValid() {
@@ -44,10 +44,10 @@ func (s *Service) IssueTeacherAcademicUnitInvitation(
 	}
 
 	resource := model.Resource{Type: model.ResourceAcademicUnit, ID: command.AcademicUnitID.String()}
-	if err = s.authorize(ctx, invocation, model.ActionInvitationCreate, resource); err != nil {
+	if err = s.authorize(ctx, inv, model.ActionInvitationCreate, resource); err != nil {
 		return InvitationView{}, err
 	}
-	if err = s.authorize(ctx, invocation, model.ActionAcademicUnitMembersManage, resource); err != nil {
+	if err = s.authorize(ctx, inv, model.ActionAcademicUnitMembersManage, resource); err != nil {
 		return InvitationView{}, err
 	}
 
@@ -63,20 +63,20 @@ func (s *Service) IssueTeacherAcademicUnitInvitation(
 	if err = validateInvitationDelegableRole(role, model.RoleScopeAcademicUnit); err != nil {
 		return InvitationView{}, err
 	}
-	if err = s.authorizeActionDelegation(ctx, invocation, role.Permissions, model.RoleScopeAcademicUnit, command.AcademicUnitID.String()); err != nil {
+	if err = s.authorizeActionDelegation(ctx, inv, role.Permissions, model.RoleScopeAcademicUnit, command.AcademicUnitID.String()); err != nil {
 		return InvitationView{}, err
 	}
 
 	semantic := command
 	semantic.IdempotencyKey = ""
-	commandIdempotency, err := idempotency.Prepare(invocation, "invitation.teacher_academic_unit.issue", command.IdempotencyKey, semantic)
+	commandIdempotency, err := idempotency.Prepare(inv, "invitation.teacher_academic_unit.issue", command.IdempotencyKey, semantic)
 	if err != nil {
 		return InvitationView{}, err
 	}
 
 	batchitem.BindOnboardingImport(commandIdempotency, command.onboardingImportID, command.onboardingImportRowNumber)
 	attempt := access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionInvitationCreate,
 		Resource:   resource,
 		ScopeType:  model.RoleScopeAcademicUnit,
@@ -101,7 +101,7 @@ func (s *Service) IssueTeacherAcademicUnitInvitation(
 	placeholderClaimHash := strings.Repeat("0", model.TokenHashLength)
 	if command.onboardingImportID.IsValid() && !command.batchDuplicate {
 		candidate, candidateErr := newTeacherAcademicUnitInvitationValue(
-			invocation,
+			inv,
 			command,
 			unit.ID,
 			role,
@@ -113,7 +113,7 @@ func (s *Service) IssueTeacherAcademicUnitInvitation(
 		if candidateErr != nil {
 			return InvitationView{}, candidateErr
 		}
-		if view, handled, noOpErr := s.resolveOnboardingInvitationNoOp(ctx, invocation, attempt, candidate, commandIdempotency); handled {
+		if view, handled, noOpErr := s.resolveOnboardingInvitationNoOp(ctx, inv, attempt, candidate, commandIdempotency); handled {
 			return view, noOpErr
 		}
 	}
@@ -124,7 +124,7 @@ func (s *Service) IssueTeacherAcademicUnitInvitation(
 
 	if command.batchDuplicate {
 		candidate, candidateErr := newTeacherAcademicUnitInvitationValue(
-			invocation,
+			inv,
 			command,
 			unit.ID,
 			role,
@@ -153,7 +153,7 @@ func (s *Service) IssueTeacherAcademicUnitInvitation(
 	}
 
 	invitation, err := newTeacherAcademicUnitInvitationValue(
-		invocation,
+		inv,
 		command,
 		unit.ID,
 		role,
@@ -196,7 +196,7 @@ func (s *Service) IssueTeacherAcademicUnitInvitation(
 
 // newTeacherAcademicUnitInvitationValue builds the Teacher Academic Unit Invitation for the command with the given claim hash.
 func newTeacherAcademicUnitInvitationValue(
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command IssueTeacherAcademicUnitInvitationCommand,
 	unitID model.AcademicUnitID,
 	role *model.Role,
@@ -220,7 +220,7 @@ func newTeacherAcademicUnitInvitationValue(
 			Locale:      command.SuggestedLocale,
 			Timezone:    command.SuggestedTimezone,
 		},
-		InviterUserID: invocation.Principal().UserID,
+		InviterUserID: inv.Principal().UserID,
 		ScopeType:     model.RoleScopeAcademicUnit,
 		ScopeID:       unitID.String(),
 		ClaimHash:     claimHash,

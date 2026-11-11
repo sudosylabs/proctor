@@ -35,7 +35,7 @@ func TestSessionLengthLimitsFollowTheDeploymentLifetimes(t *testing.T) {
 
 func TestAccessPolicyPreflightNamesTheRefusedSessionLength(t *testing.T) {
 	t.Parallel()
-	service, persistence, _, _, _, invocation := accessPolicyFixture(t)
+	service, persistence, _, _, _, inv := accessPolicyFixture(t)
 	service.sessionLimits = model.SessionLengthLimits{IdleMinimumMinutes: 16, IdleDefaultMinutes: 120, IdleMaximumMinutes: 120,
 		AbsoluteMinimumMinutes: 16, AbsoluteDefaultMinutes: 1440, AbsoluteMaximumMinutes: 1440}
 	for _, test := range []struct {
@@ -51,7 +51,7 @@ func TestAccessPolicyPreflightNamesTheRefusedSessionLength(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			settings := persistence.snapshot.Policy.Settings()
 			settings.SessionIdleMinutes, settings.SessionAbsoluteMinutes = test.idle, test.absolute
-			_, err := service.PreflightAccessPolicy(context.Background(), invocation, PreflightAccessPolicyCommand{
+			_, err := service.PreflightAccessPolicy(context.Background(), inv, PreflightAccessPolicyCommand{
 				ExpectedRevision: persistence.snapshot.Policy.Revision, Settings: settings})
 			failure, ok := apperror.As(err)
 			require.True(t, ok, "err=%v", err)
@@ -61,7 +61,7 @@ func TestAccessPolicyPreflightNamesTheRefusedSessionLength(t *testing.T) {
 	}
 	settings := persistence.snapshot.Policy.Settings()
 	settings.SessionIdleMinutes, settings.SessionAbsoluteMinutes = 60, 600
-	_, err := service.PreflightAccessPolicy(context.Background(), invocation, PreflightAccessPolicyCommand{
+	_, err := service.PreflightAccessPolicy(context.Background(), inv, PreflightAccessPolicyCommand{
 		ExpectedRevision: persistence.snapshot.Policy.Revision, Settings: settings})
 	require.NoError(t, err)
 	require.Equal(t, service.sessionLimits, persistence.preflightInput.SessionLimits, "the store rechecks the same limits")

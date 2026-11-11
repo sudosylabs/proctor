@@ -43,13 +43,13 @@ type EndAffiliationCommand struct {
 // ListAffiliations lists Affiliations after authorizing the caller.
 func (s *Service) ListAffiliations(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	userID model.UserID,
 ) ([]*model.Affiliation, error) {
 	if !userID.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "user_id")
 	}
-	if err := s.authorizer.AuthorizeUserRead(ctx, invocation, userID); err != nil {
+	if err := s.authorizer.AuthorizeUserRead(ctx, inv, userID); err != nil {
 		return nil, err
 	}
 
@@ -67,10 +67,10 @@ func (s *Service) ListAffiliations(
 // CreateAffiliation creates an Affiliation after authorizing the caller.
 func (s *Service) CreateAffiliation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command CreateAffiliationCommand,
 ) (*model.Affiliation, error) {
-	resource, err := s.authorizeUser(ctx, invocation, command.UserID)
+	resource, err := s.authorizeUser(ctx, inv, command.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +92,7 @@ func (s *Service) CreateAffiliation(
 		return nil, apperror.DomainInvalid("affiliation.invalid", validationErr)
 	}
 
-	commandIdempotency, err := idempotency.Prepare(invocation, "affiliation.add", command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Prepare(inv, "affiliation.add", command.IdempotencyKey, struct {
 		UserID  string                `json:"user_id"`
 		Kind    model.AffiliationKind `json:"kind"`
 		StartAt int64                 `json:"start_at"`
@@ -110,7 +110,7 @@ func (s *Service) CreateAffiliation(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionUserManage,
 			Resource:   resource,
 			Operation:  "create",
@@ -150,7 +150,7 @@ func (s *Service) CreateAffiliation(
 // EndAffiliation ends an Affiliation after authorizing the caller.
 func (s *Service) EndAffiliation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command EndAffiliationCommand,
 ) (*model.Affiliation, error) {
 	id := command.ID
@@ -163,7 +163,7 @@ func (s *Service) EndAffiliation(
 		return nil, AffiliationStoreErrors.Translate(err)
 	}
 
-	resource, err := s.authorizeUser(ctx, invocation, current.UserID)
+	resource, err := s.authorizeUser(ctx, inv, current.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +182,7 @@ func (s *Service) EndAffiliation(
 		}
 	}
 
-	commandIdempotency, err := idempotency.Prepare(invocation, "affiliation.end", command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Prepare(inv, "affiliation.end", command.IdempotencyKey, struct {
 		ID        string              `json:"id"`
 		ScopeType model.RoleScopeType `json:"scope_type,omitempty"`
 		ScopeID   string              `json:"scope_id,omitempty"`
@@ -199,7 +199,7 @@ func (s *Service) EndAffiliation(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionUserManage,
 			Resource:   resource,
 			Operation:  "end",
@@ -238,12 +238,12 @@ func (s *Service) EndAffiliation(
 	return result, nil
 }
 
-func (s *Service) authorizeUser(ctx context.Context, invocation invocation.Invocation, userID model.UserID) (model.Resource, error) {
+func (s *Service) authorizeUser(ctx context.Context, inv invocation.Invocation, userID model.UserID) (model.Resource, error) {
 	if !userID.IsValid() {
 		return model.Resource{}, apperror.New("request.invalid").WithField("field", "user_id")
 	}
 	resource := model.Resource{Type: model.ResourceUser, ID: userID.String()}
-	if err := s.authorizer.Authorize(ctx, invocation, model.ActionUserManage, resource); err != nil {
+	if err := s.authorizer.Authorize(ctx, inv, model.ActionUserManage, resource); err != nil {
 		return model.Resource{}, err
 	}
 	return resource, nil

@@ -57,20 +57,20 @@ type SittingManagerAuthorizer struct {
 // AuthorizeSittingView authorizes a manager's read of a Sitting's Attempts.
 func (a SittingManagerAuthorizer) AuthorizeSittingView(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	sittingID model.ExamSittingID,
 ) error {
-	return a.Sittings.AuthorizeSittingView(ctx, invocation, sittingID)
+	return a.Sittings.AuthorizeSittingView(ctx, inv, sittingID)
 }
 
 // AuthorizeSittingManage authorizes a manager intervention in a Sitting's
 // Attempts and reports whether it rested on the override Action.
 func (a SittingManagerAuthorizer) AuthorizeSittingManage(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	sittingID model.ExamSittingID,
 ) (access.ManagerAuthorization, error) {
-	management, err := a.Sittings.AuthorizeSittingManage(ctx, invocation, sittingID)
+	management, err := a.Sittings.AuthorizeSittingManage(ctx, inv, sittingID)
 	if err != nil {
 		return access.ManagerAuthorization{}, err
 	}
@@ -82,10 +82,10 @@ func (a SittingManagerAuthorizer) AuthorizeSittingManage(
 // Sitting's Attempts and reports the Academic Unit it is audited at.
 func (a SittingManagerAuthorizer) AuthorizeBrowserActivityView(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	sittingID model.ExamSittingID,
 ) (access.BrowserActivityAuthorization, error) {
-	browserActivity, err := a.Sittings.AuthorizeBrowserActivityView(ctx, invocation, sittingID)
+	browserActivity, err := a.Sittings.AuthorizeBrowserActivityView(ctx, inv, sittingID)
 	if err != nil {
 		return access.BrowserActivityAuthorization{}, err
 	}
@@ -100,7 +100,7 @@ func (a SittingManagerAuthorizer) AuthorizeBrowserActivityView(
 // Manager decision is asked.
 func (a SittingManagerAuthorizer) AuthorizeSubmissionView(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	submissionID model.SubmissionID,
 ) error {
 	if a.Submissions == nil || a.Audit == nil || !submissionID.IsValid() {
@@ -119,15 +119,15 @@ func (a SittingManagerAuthorizer) AuthorizeSubmissionView(
 		return apperror.New("exam.attempt.unavailable").Wrap(errors.New("Submission authorization projection is incomplete"))
 	}
 
-	if authorization.CandidateUserID == invocation.Principal().UserID {
+	if authorization.CandidateUserID == inv.Principal().UserID {
 		if err = a.Audit.RecordAuthorizationDecision(
 			ctx,
-			invocation.Principal(),
+			inv.Principal(),
 			model.ActionSubmissionView,
 			model.Resource{Type: model.ResourceSubmission, ID: authorization.SubmissionID.String()},
 			model.RoleScopeAcademicUnit,
 			authorization.AcademicUnitID.String(),
-			invocation.RequestMetadata(),
+			inv.RequestMetadata(),
 			false,
 		); err != nil {
 			return err
@@ -138,7 +138,7 @@ func (a SittingManagerAuthorizer) AuthorizeSubmissionView(
 
 	return a.Sittings.AuthorizeSubmissionView(
 		ctx,
-		invocation,
+		inv,
 		authorization.ExamID,
 		submissionID,
 	)

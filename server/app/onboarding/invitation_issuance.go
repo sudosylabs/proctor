@@ -22,7 +22,7 @@ import (
 // candidate Invitation would change nothing; handled reports whether the caller must return the view and error.
 func (s *Service) resolveOnboardingInvitationNoOp(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	attempt access.Mutation,
 	candidate *model.Invitation,
 	commandIdempotency *store.CommandIdempotency,
@@ -33,7 +33,7 @@ func (s *Service) resolveOnboardingInvitationNoOp(
 	}
 
 	if noOp {
-		view, err = s.completeOnboardingInvitationNoOp(ctx, invocation, attempt, candidate, commandIdempotency)
+		view, err = s.completeOnboardingInvitationNoOp(ctx, inv, attempt, candidate, commandIdempotency)
 		return view, true, err
 	}
 
@@ -50,7 +50,7 @@ func issuedInvitationView(created *store.InvitationCommandResult) InvitationView
 
 func (s *Service) completeOnboardingInvitationNoOp(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	attempt access.Mutation,
 	candidate *model.Invitation,
 	commandIdempotency *store.CommandIdempotency,

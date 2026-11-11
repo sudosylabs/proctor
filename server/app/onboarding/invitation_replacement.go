@@ -24,7 +24,7 @@ import (
 // reauthorizing the replacement's target.
 func (s *Service) ReplaceInvitation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ReplaceInvitationCommand,
 ) (InvitationAdministrationView, error) {
 	id := command.ID
@@ -35,7 +35,7 @@ func (s *Service) ReplaceInvitation(
 		return InvitationAdministrationView{}, err
 	}
 
-	visibility, err := s.visibility(ctx, invocation, model.ActionInvitationManage)
+	visibility, err := s.visibility(ctx, inv, model.ActionInvitationManage)
 	if err != nil {
 		return InvitationAdministrationView{}, err
 	}
@@ -53,7 +53,7 @@ func (s *Service) ReplaceInvitation(
 		return InvitationAdministrationView{}, err
 	}
 
-	replacement, rawClaim, err := s.prepareReplacement(ctx, invocation, command, lifetime)
+	replacement, rawClaim, err := s.prepareReplacement(ctx, inv, command, lifetime)
 	if err != nil {
 		return InvitationAdministrationView{}, err
 	}
@@ -69,7 +69,7 @@ func (s *Service) ReplaceInvitation(
 	}
 
 	currentAttempt := access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionInvitationManage,
 		Resource:   invitationResource(current.Invitation),
 		ScopeType:  current.Invitation.ScopeType,
@@ -78,7 +78,7 @@ func (s *Service) ReplaceInvitation(
 		Value:      current.Invitation.Auditable(),
 	}
 	replacementAttempt := access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionInvitationCreate,
 		Resource:   invitationResource(replacement),
 		ScopeType:  replacement.ScopeType,
@@ -106,7 +106,7 @@ func (s *Service) ReplaceInvitation(
 						Occurrence:              prepared.Occurrence,
 						Delivery:                prepared.Delivery,
 						DeliveryJob:             prepared.Job,
-						ActorUserID:             invocation.Principal().UserID,
+						ActorUserID:             inv.Principal().UserID,
 						CurrentAuditEventID:     currentReference.ID,
 						ReplacementAuditEventID: replacementReference.ID,
 						AuditAt:                 currentReference.MutationAt,
@@ -126,7 +126,7 @@ func (s *Service) ReplaceInvitation(
 
 func (s *Service) prepareReplacement(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ReplaceInvitationCommand,
 	lifetime time.Duration,
 ) (*model.Invitation, string, error) {
@@ -147,7 +147,7 @@ func (s *Service) prepareReplacement(
 		rawClaim: rawClaim,
 		startsAt: model.TimeFromMillis(command.IntendedStartsAt),
 		endsAt:   model.OptionalTimeFromMillis(command.IntendedEndsAt),
-		actor:    invocation.Principal().UserID,
+		actor:    inv.Principal().UserID,
 		lifetime: lifetime,
 	}
 	var (
@@ -156,11 +156,11 @@ func (s *Service) prepareReplacement(
 	)
 	switch purpose {
 	case model.InvitationPurposeStudentClass:
-		value, err = s.prepareStudentClassReplacement(ctx, invocation, command, draft)
+		value, err = s.prepareStudentClassReplacement(ctx, inv, command, draft)
 	case model.InvitationPurposeTeacherAcademicUnit, model.InvitationPurposeAcademicUnitRole:
-		value, err = s.prepareAcademicUnitReplacement(ctx, invocation, command, draft)
+		value, err = s.prepareAcademicUnitReplacement(ctx, inv, command, draft)
 	case model.InvitationPurposeInstitutionRole:
-		value, err = s.prepareInstitutionRoleReplacement(ctx, invocation, command, draft)
+		value, err = s.prepareInstitutionRoleReplacement(ctx, inv, command, draft)
 	default:
 		return nil, "", apperror.New("request.invalid").WithField("field", "purpose")
 	}
@@ -186,7 +186,7 @@ type invitationReplacementDraft struct {
 // prepareStudentClassReplacement authorizes the Class target and builds the replacement Student Class Invitation.
 func (s *Service) prepareStudentClassReplacement(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ReplaceInvitationCommand,
 	draft invitationReplacementDraft,
 ) (*model.Invitation, error) {
@@ -197,7 +197,7 @@ func (s *Service) prepareStudentClassReplacement(
 
 	resource := model.Resource{Type: model.ResourceClass, ID: classID.String()}
 	for _, action := range []model.Action{model.ActionInvitationCreate, model.ActionClassMembersManage} {
-		if err = s.authorize(ctx, invocation, action, resource); err != nil {
+		if err = s.authorize(ctx, inv, action, resource); err != nil {
 			return nil, err
 		}
 	}
@@ -250,7 +250,7 @@ func (s *Service) prepareStudentClassReplacement(
 // Teacher Academic Unit or Academic Unit Role Invitation.
 func (s *Service) prepareAcademicUnitReplacement(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ReplaceInvitationCommand,
 	draft invitationReplacementDraft,
 ) (*model.Invitation, error) {
@@ -272,7 +272,7 @@ func (s *Service) prepareAcademicUnitReplacement(
 	}
 
 	for _, action := range required {
-		if err = s.authorize(ctx, invocation, action, resource); err != nil {
+		if err = s.authorize(ctx, inv, action, resource); err != nil {
 			return nil, err
 		}
 	}
@@ -289,7 +289,7 @@ func (s *Service) prepareAcademicUnitReplacement(
 	if err = validateInvitationDelegableRole(role, model.RoleScopeAcademicUnit); err != nil {
 		return nil, err
 	}
-	if err = s.authorizeActionDelegation(ctx, invocation, role.Permissions, model.RoleScopeAcademicUnit, unitID.String()); err != nil {
+	if err = s.authorizeActionDelegation(ctx, inv, role.Permissions, model.RoleScopeAcademicUnit, unitID.String()); err != nil {
 		return nil, err
 	}
 
@@ -356,11 +356,11 @@ func (s *Service) prepareAcademicUnitReplacement(
 // delegated Role, and builds the replacement Institution Role Invitation.
 func (s *Service) prepareInstitutionRoleReplacement(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ReplaceInvitationCommand,
 	draft invitationReplacementDraft,
 ) (*model.Invitation, error) {
-	if err := access.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
+	if err := access.RequireStrongRecentSession(inv.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 		return nil, err
 	}
 
@@ -376,7 +376,7 @@ func (s *Service) prepareInstitutionRoleReplacement(
 
 	resource := model.Resource{Type: model.ResourceInstitution, ID: institutionID.String()}
 	for _, action := range []model.Action{model.ActionInvitationCreate, model.ActionRoleBindingManage} {
-		if err = s.authorize(ctx, invocation, action, resource); err != nil {
+		if err = s.authorize(ctx, inv, action, resource); err != nil {
 			return nil, err
 		}
 	}
@@ -388,7 +388,7 @@ func (s *Service) prepareInstitutionRoleReplacement(
 	if err = validateInvitationDelegableRole(role, model.RoleScopeInstitution); err != nil {
 		return nil, err
 	}
-	if err = s.authorizeActionDelegation(ctx, invocation, role.Permissions, model.RoleScopeInstitution, institutionID.String()); err != nil {
+	if err = s.authorizeActionDelegation(ctx, inv, role.Permissions, model.RoleScopeInstitution, institutionID.String()); err != nil {
 		return nil, err
 	}
 

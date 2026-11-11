@@ -40,7 +40,7 @@ func TestRetentionApprovalRequiresAuthorityAndCriticalAudit(t *testing.T) {
 			lifecycle := &retentionLifecycleFake{}
 			fixture.service.retention = lifecycle
 			command := ChangeRetentionControlCommand{ExpectedRevision: 1, ExpectedPolicyRevision: 1, PreviewID: model.NewRetentionPreviewID(), State: model.RetentionControlEnabled, IdempotencyKey: "approve-cleanup"}
-			call := fixture.invocation
+			call := fixture.inv
 			switch gate {
 			case "authority":
 				fixture.authorization.err = apperror.New("authorization.denied")
@@ -70,17 +70,17 @@ func TestRetentionApprovalRequiresAuthorityAndCriticalAudit(t *testing.T) {
 func TestRetentionApprovalPassesExactReviewedPolicyAndCredential(t *testing.T) {
 	fixture := newRetentionPolicyFixture(t)
 	control := &model.RetentionControl{InstitutionID: fixture.institution.ID, Revision: 2, State: model.RetentionControlEnabled,
-		ApprovedPolicyRevision: 7, ApprovedPreviewID: model.NewRetentionPreviewID(), ChangedByUserID: fixture.invocation.Principal().UserID, UpdatedAt: fixture.service.now()}
+		ApprovedPolicyRevision: 7, ApprovedPreviewID: model.NewRetentionPreviewID(), ChangedByUserID: fixture.inv.Principal().UserID, UpdatedAt: fixture.service.now()}
 	lifecycle := &retentionLifecycleFake{result: &store.RetentionControlResult{Control: control}}
 	fixture.service.retention = lifecycle
 	application := fixture.service
-	value, err := application.ChangeRetentionControl(t.Context(), fixture.invocation, ChangeRetentionControlCommand{
+	value, err := application.ChangeRetentionControl(t.Context(), fixture.inv, ChangeRetentionControlCommand{
 		ExpectedRevision: 1, ExpectedPolicyRevision: 7, PreviewID: control.ApprovedPreviewID, State: model.RetentionControlEnabled, IdempotencyKey: "approve-cleanup"})
 	require.NoError(t, err, "approval")
 	require.Same(t, control, value, "approval")
 	require.Equal(t, int64(7), lifecycle.change.ExpectedPolicyRevision, "lost review, authority or atomic audit fence: %+v, %+v", lifecycle.change, lifecycle.command)
 	require.Equal(t, control.ApprovedPreviewID, lifecycle.change.PreviewID, "lost review, authority or atomic audit fence: %+v, %+v", lifecycle.change, lifecycle.command)
-	require.Equal(t, fixture.invocation.Principal().CredentialID, lifecycle.change.Principal.CredentialID, "lost review, authority or atomic audit fence: %+v, %+v", lifecycle.change, lifecycle.command)
+	require.Equal(t, fixture.inv.Principal().CredentialID, lifecycle.change.Principal.CredentialID, "lost review, authority or atomic audit fence: %+v, %+v", lifecycle.change, lifecycle.command)
 	require.Equal(t, model.AuditEventID(fixture.audit.beginID), lifecycle.change.AuditEventID, "lost review, authority or atomic audit fence: %+v, %+v", lifecycle.change, lifecycle.command)
 	require.Positive(t, int64(lifecycle.change.RecentAuthenticationTTL), "lost review, authority or atomic audit fence: %+v, %+v", lifecycle.change, lifecycle.command)
 	require.Equal(t, store.RetentionControlOperation, lifecycle.command.Operation, "lost review, authority or atomic audit fence: %+v, %+v", lifecycle.change, lifecycle.command)

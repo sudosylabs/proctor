@@ -39,8 +39,8 @@ type ArchiveRoleCommand struct {
 }
 
 // ListRoles returns every Role to a caller with Institution-wide role.view.
-func (s *Service) ListRoles(ctx context.Context, invocation invocation.Invocation) ([]*model.Role, error) {
-	if _, err := s.authorizeRoles(ctx, invocation, model.ActionRoleView); err != nil {
+func (s *Service) ListRoles(ctx context.Context, inv invocation.Invocation) ([]*model.Role, error) {
+	if _, err := s.authorizeRoles(ctx, inv, model.ActionRoleView); err != nil {
 		return nil, err
 	}
 	roles, err := s.roles.List(ctx)
@@ -54,11 +54,11 @@ func (s *Service) ListRoles(ctx context.Context, invocation invocation.Invocatio
 }
 
 // GetRole returns one Role to a caller with Institution-wide role.view.
-func (s *Service) GetRole(ctx context.Context, invocation invocation.Invocation, id model.RoleID) (*model.Role, error) {
+func (s *Service) GetRole(ctx context.Context, inv invocation.Invocation, id model.RoleID) (*model.Role, error) {
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "role_id")
 	}
-	if _, err := s.authorizeRoles(ctx, invocation, model.ActionRoleView); err != nil {
+	if _, err := s.authorizeRoles(ctx, inv, model.ActionRoleView); err != nil {
 		return nil, err
 	}
 	role, err := s.roles.Get(ctx, id)
@@ -70,8 +70,8 @@ func (s *Service) GetRole(ctx context.Context, invocation invocation.Invocation,
 
 // CreateRole creates a custom Role. The caller needs Institution-wide
 // role.manage and must be able to delegate every permission it grants.
-func (s *Service) CreateRole(ctx context.Context, invocation invocation.Invocation, command CreateRoleCommand) (*model.Role, error) {
-	resource, err := s.authorizeRoles(ctx, invocation, model.ActionRoleManage)
+func (s *Service) CreateRole(ctx context.Context, inv invocation.Invocation, command CreateRoleCommand) (*model.Role, error) {
+	resource, err := s.authorizeRoles(ctx, inv, model.ActionRoleManage)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +89,7 @@ func (s *Service) CreateRole(ctx context.Context, invocation invocation.Invocati
 
 	if err := s.authorizeActionDelegation(
 		ctx,
-		invocation,
+		inv,
 		candidate.Permissions,
 		model.RoleScopeInstitution,
 		resource.ID,
@@ -101,7 +101,7 @@ func (s *Service) CreateRole(ctx context.Context, invocation invocation.Invocati
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionRoleManage,
 			Resource:   resource,
 			Operation:  "create",
@@ -122,13 +122,13 @@ func (s *Service) CreateRole(ctx context.Context, invocation invocation.Invocati
 // UpdateRole patches a custom Role, refusing a built-in one. Added
 // permissions must be delegable by the caller; a committed change drops every
 // User's cached authorization.
-func (s *Service) UpdateRole(ctx context.Context, invocation invocation.Invocation, command UpdateRoleCommand) (*model.Role, error) {
+func (s *Service) UpdateRole(ctx context.Context, inv invocation.Invocation, command UpdateRoleCommand) (*model.Role, error) {
 	id := command.ID
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "role_id")
 	}
 
-	resource, err := s.authorizeRoles(ctx, invocation, model.ActionRoleManage)
+	resource, err := s.authorizeRoles(ctx, inv, model.ActionRoleManage)
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +159,7 @@ func (s *Service) UpdateRole(ctx context.Context, invocation invocation.Invocati
 	if added := addedRolePermissions(current.Permissions, candidate.Permissions); len(added) > 0 {
 		if err = s.authorizeActionDelegation(
 			ctx,
-			invocation,
+			inv,
 			added,
 			model.RoleScopeInstitution,
 			resource.ID,
@@ -172,7 +172,7 @@ func (s *Service) UpdateRole(ctx context.Context, invocation invocation.Invocati
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionRoleManage,
 			Resource:   resource,
 			Operation:  "patch",
@@ -213,13 +213,13 @@ func addedRolePermissions(current, candidate []string) []string {
 
 // ArchiveRole archives a custom Role, refusing a built-in one, then drops
 // every User's cached authorization.
-func (s *Service) ArchiveRole(ctx context.Context, invocation invocation.Invocation, command ArchiveRoleCommand) error {
+func (s *Service) ArchiveRole(ctx context.Context, inv invocation.Invocation, command ArchiveRoleCommand) error {
 	id := command.ID
 	if !id.IsValid() {
 		return apperror.New("request.invalid").WithField("field", "role_id")
 	}
 
-	resource, err := s.authorizeRoles(ctx, invocation, model.ActionRoleManage)
+	resource, err := s.authorizeRoles(ctx, inv, model.ActionRoleManage)
 	if err != nil {
 		return err
 	}
@@ -236,7 +236,7 @@ func (s *Service) ArchiveRole(ctx context.Context, invocation invocation.Invocat
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionRoleManage,
 			Resource:   resource,
 			Operation:  "archive",
@@ -264,13 +264,13 @@ func (s *Service) ArchiveRole(ctx context.Context, invocation invocation.Invocat
 
 // authorizeRoles authorizes a Role Action on the singleton Institution and
 // returns that Resource.
-func (s *Service) authorizeRoles(ctx context.Context, invocation invocation.Invocation, action model.Action) (model.Resource, error) {
+func (s *Service) authorizeRoles(ctx context.Context, inv invocation.Invocation, action model.Action) (model.Resource, error) {
 	institution, err := s.institutions.GetSingleton(ctx)
 	if err != nil {
 		return model.Resource{}, roleStoreErrors.Translate(err)
 	}
 	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
-	if err := s.authorizer.Authorize(ctx, invocation, action, resource); err != nil {
+	if err := s.authorizer.Authorize(ctx, inv, action, resource); err != nil {
 		return model.Resource{}, err
 	}
 	return resource, nil
@@ -280,12 +280,12 @@ func (s *Service) authorizeRoles(ctx context.Context, invocation invocation.Invo
 // at the scope.
 func (s *Service) authorizeActionDelegation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	actions []string,
 	scopeType model.RoleScopeType,
 	scopeID string,
 ) error {
-	allowed, err := s.authorizer.CanDelegateActionsAtScope(ctx, invocation.Principal(), actions, scopeType, scopeID)
+	allowed, err := s.authorizer.CanDelegateActionsAtScope(ctx, inv.Principal(), actions, scopeType, scopeID)
 	if err != nil {
 		return err
 	}

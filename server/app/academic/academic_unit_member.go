@@ -42,10 +42,10 @@ type EndAcademicUnitMemberCommand struct {
 // CreateAcademicUnitMember creates an Academic Unit Membership after authorizing the caller.
 func (s *Service) CreateAcademicUnitMember(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command CreateAcademicUnitMemberCommand,
 ) (*model.AcademicUnitMember, error) {
-	resource, err := s.authorizeUnit(ctx, invocation, command.AcademicUnitID, model.ActionAcademicUnitMembersManage)
+	resource, err := s.authorizeUnit(ctx, inv, command.AcademicUnitID, model.ActionAcademicUnitMembersManage)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func (s *Service) CreateAcademicUnitMember(
 		}
 	}
 
-	commandIdempotency, err := idempotency.Prepare(invocation, "academic_unit_member.add", command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Prepare(inv, "academic_unit_member.add", command.IdempotencyKey, struct {
 		AcademicUnitID string `json:"academic_unit_id"`
 		UserID         string `json:"user_id"`
 		StartAt        int64  `json:"start_at"`
@@ -107,7 +107,7 @@ func (s *Service) CreateAcademicUnitMember(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionAcademicUnitMembersManage,
 			Resource:   resource,
 			Operation:  "create_member",
@@ -144,7 +144,7 @@ func (s *Service) CreateAcademicUnitMember(
 // EndAcademicUnitMember ends an Academic Unit Membership after authorizing the caller.
 func (s *Service) EndAcademicUnitMember(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command EndAcademicUnitMemberCommand,
 ) (*model.AcademicUnitMember, error) {
 	id := command.ID
@@ -154,7 +154,7 @@ func (s *Service) EndAcademicUnitMember(
 
 	if err := s.authorizer.AuthorizePreflight(
 		ctx,
-		invocation,
+		inv,
 		model.ActionAcademicUnitMembersManage,
 		model.ResourceAcademicUnit,
 	); err != nil {
@@ -166,7 +166,7 @@ func (s *Service) EndAcademicUnitMember(
 		return nil, AcademicUnitMemberStoreErrors.Translate(err)
 	}
 
-	resource, err := s.authorizeUnit(ctx, invocation, current.AcademicUnitID, model.ActionAcademicUnitMembersManage)
+	resource, err := s.authorizeUnit(ctx, inv, current.AcademicUnitID, model.ActionAcademicUnitMembersManage)
 	if err != nil {
 		return nil, concealMembershipAuthorizationError(err, "academic_unit_member")
 	}
@@ -174,7 +174,7 @@ func (s *Service) EndAcademicUnitMember(
 		return nil, apperror.New("resource.not_found").WithField("resource", "academic_unit_member")
 	}
 
-	commandIdempotency, err := idempotency.Prepare(invocation, "academic_unit_member.end", command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Prepare(inv, "academic_unit_member.end", command.IdempotencyKey, struct {
 		ID      string `json:"id"`
 		ScopeID string `json:"scope_id,omitempty"`
 	}{id.String(), strings.TrimSpace(command.BatchScopeID)})
@@ -210,7 +210,7 @@ func (s *Service) EndAcademicUnitMember(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionAcademicUnitMembersManage,
 			Resource:   resource,
 			Operation:  "end_member",
@@ -255,7 +255,7 @@ func concealMembershipAuthorizationError(err error, resource string) error {
 
 func (s *Service) authorizeUnit(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	unitID model.AcademicUnitID,
 	action model.Action,
 ) (model.Resource, error) {
@@ -264,7 +264,7 @@ func (s *Service) authorizeUnit(
 	}
 
 	resource := model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()}
-	if err := s.authorizer.Authorize(ctx, invocation, action, resource); err != nil {
+	if err := s.authorizer.Authorize(ctx, inv, action, resource); err != nil {
 		return model.Resource{}, err
 	}
 
@@ -310,10 +310,10 @@ const academicUnitMemberRolesHere = 5
 // ListAcademicUnitMembersPage lists a page of Academic Unit Memberships after authorizing the caller.
 func (s *Service) ListAcademicUnitMembersPage(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query ListAcademicUnitMembersPageQuery,
 ) (*AcademicUnitMemberPage, error) {
-	resource, err := s.authorizeUnit(ctx, invocation, query.AcademicUnitID, model.ActionAcademicUnitMembersView)
+	resource, err := s.authorizeUnit(ctx, inv, query.AcademicUnitID, model.ActionAcademicUnitMembersView)
 	if err != nil {
 		return nil, err
 	}
@@ -346,7 +346,7 @@ func (s *Service) ListAcademicUnitMembersPage(
 	if result.Members == nil {
 		result.Members = []*model.AcademicUnitMember{}
 	}
-	if err := s.describeMembers(ctx, invocation, resource, result, now); err != nil {
+	if err := s.describeMembers(ctx, inv, resource, result, now); err != nil {
 		return nil, err
 	}
 
@@ -359,7 +359,7 @@ func (s *Service) ListAcademicUnitMembersPage(
 // are; email stays with Institution-wide user.view, as in the User directory.
 func (s *Service) describeMembers(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	unit model.Resource,
 	page *AcademicUnitMemberPage,
 	now time.Time,
@@ -382,7 +382,7 @@ func (s *Service) describeMembers(
 		return AcademicUnitMemberStoreErrors.Translate(err)
 	}
 
-	showEmail, err := s.authorizer.CanViewInstitutionUsers(ctx, invocation)
+	showEmail, err := s.authorizer.CanViewInstitutionUsers(ctx, inv)
 	if err != nil {
 		return err
 	}
@@ -401,7 +401,7 @@ func (s *Service) describeMembers(
 		}
 	}
 
-	showRoles, err := s.authorizer.CanViewRoleBindings(ctx, invocation, unit)
+	showRoles, err := s.authorizer.CanViewRoleBindings(ctx, inv, unit)
 	if err != nil || !showRoles {
 		return err
 	}

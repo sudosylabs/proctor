@@ -26,7 +26,7 @@ import (
 // Unit and mails the claim.
 func (s *Service) IssueAcademicUnitRoleInvitation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command IssueAcademicUnitRoleInvitationCommand,
 ) (InvitationView, error) {
 	if !command.AcademicUnitID.IsValid() {
@@ -45,7 +45,7 @@ func (s *Service) IssueAcademicUnitRoleInvitation(
 
 	resource := model.Resource{Type: model.ResourceAcademicUnit, ID: command.AcademicUnitID.String()}
 	for _, action := range []model.Action{model.ActionInvitationCreate, model.ActionRoleBindingManage} {
-		if err = s.authorize(ctx, invocation, action, resource); err != nil {
+		if err = s.authorize(ctx, inv, action, resource); err != nil {
 			return InvitationView{}, err
 		}
 	}
@@ -62,19 +62,19 @@ func (s *Service) IssueAcademicUnitRoleInvitation(
 	if err = validateInvitationDelegableRole(role, model.RoleScopeAcademicUnit); err != nil {
 		return InvitationView{}, err
 	}
-	if err = s.authorizeActionDelegation(ctx, invocation, role.Permissions, model.RoleScopeAcademicUnit, command.AcademicUnitID.String()); err != nil {
+	if err = s.authorizeActionDelegation(ctx, inv, role.Permissions, model.RoleScopeAcademicUnit, command.AcademicUnitID.String()); err != nil {
 		return InvitationView{}, err
 	}
 
 	semantic := command
 	semantic.IdempotencyKey = ""
-	commandIdempotency, err := idempotency.Prepare(invocation, "invitation.academic_unit_role.issue", command.IdempotencyKey, semantic)
+	commandIdempotency, err := idempotency.Prepare(inv, "invitation.academic_unit_role.issue", command.IdempotencyKey, semantic)
 	if err != nil {
 		return InvitationView{}, err
 	}
 
 	batchitem.BindOnboardingImport(commandIdempotency, command.onboardingImportID, command.onboardingImportRowNumber)
-	return s.issueAuthorizedScopedRole(ctx, invocation, authorizedScopedRoleInvitationIssue{
+	return s.issueAuthorizedScopedRole(ctx, inv, authorizedScopedRoleInvitationIssue{
 		targetEmail:               command.TargetEmail,
 		purpose:                   model.InvitationPurposeAcademicUnitRole,
 		resource:                  resource,
@@ -98,10 +98,10 @@ func (s *Service) IssueAcademicUnitRoleInvitation(
 // and mails the claim.
 func (s *Service) IssueInstitutionRoleInvitation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command IssueInstitutionRoleInvitationCommand,
 ) (InvitationView, error) {
-	if err := access.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
+	if err := access.RequireStrongRecentSession(inv.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 		return InvitationView{}, err
 	}
 
@@ -121,7 +121,7 @@ func (s *Service) IssueInstitutionRoleInvitation(
 
 	resource := model.Resource{Type: model.ResourceInstitution, ID: command.InstitutionID.String()}
 	for _, action := range []model.Action{model.ActionInvitationCreate, model.ActionRoleBindingManage} {
-		if err = s.authorize(ctx, invocation, action, resource); err != nil {
+		if err = s.authorize(ctx, inv, action, resource); err != nil {
 			return InvitationView{}, err
 		}
 	}
@@ -133,19 +133,19 @@ func (s *Service) IssueInstitutionRoleInvitation(
 	if err = validateInvitationDelegableRole(role, model.RoleScopeInstitution); err != nil {
 		return InvitationView{}, err
 	}
-	if err = s.authorizeActionDelegation(ctx, invocation, role.Permissions, model.RoleScopeInstitution, command.InstitutionID.String()); err != nil {
+	if err = s.authorizeActionDelegation(ctx, inv, role.Permissions, model.RoleScopeInstitution, command.InstitutionID.String()); err != nil {
 		return InvitationView{}, err
 	}
 
 	semantic := command
 	semantic.IdempotencyKey = ""
-	commandIdempotency, err := idempotency.Prepare(invocation, "invitation.institution_role.issue", command.IdempotencyKey, semantic)
+	commandIdempotency, err := idempotency.Prepare(inv, "invitation.institution_role.issue", command.IdempotencyKey, semantic)
 	if err != nil {
 		return InvitationView{}, err
 	}
 
 	batchitem.BindOnboardingImport(commandIdempotency, command.onboardingImportID, command.onboardingImportRowNumber)
-	return s.issueAuthorizedScopedRole(ctx, invocation, authorizedScopedRoleInvitationIssue{
+	return s.issueAuthorizedScopedRole(ctx, inv, authorizedScopedRoleInvitationIssue{
 		targetEmail:               command.TargetEmail,
 		purpose:                   model.InvitationPurposeInstitutionRole,
 		resource:                  resource,
@@ -166,11 +166,11 @@ func (s *Service) IssueInstitutionRoleInvitation(
 
 func (s *Service) issueAuthorizedScopedRole(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	issue authorizedScopedRoleInvitationIssue,
 ) (InvitationView, error) {
 	attempt := access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionInvitationCreate,
 		Resource:   issue.resource,
 		ScopeType:  issue.scopeType,
@@ -202,7 +202,7 @@ func (s *Service) issueAuthorizedScopedRole(
 			RoleActions:      issue.role.Permissions,
 			IntendedStartsAt: startsAt,
 			IntendedEndsAt:   model.OptionalTimeFromMillis(issue.intendedEndsAt),
-			InviterUserID:    invocation.Principal().UserID,
+			InviterUserID:    inv.Principal().UserID,
 			ScopeType:        issue.scopeType,
 			ScopeID:          issue.scopeID,
 			ClaimHash:        strings.Repeat("0", model.TokenHashLength),
@@ -218,7 +218,7 @@ func (s *Service) issueAuthorizedScopedRole(
 			return InvitationView{}, invitationStoreErrors.Translate(noOpErr)
 		}
 		if noOp {
-			return s.completeOnboardingInvitationNoOp(ctx, invocation, attempt, candidate, issue.idempotency)
+			return s.completeOnboardingInvitationNoOp(ctx, inv, attempt, candidate, issue.idempotency)
 		}
 	}
 
@@ -236,7 +236,7 @@ func (s *Service) issueAuthorizedScopedRole(
 			RoleActions:      issue.role.Permissions,
 			IntendedStartsAt: startsAt,
 			IntendedEndsAt:   model.OptionalTimeFromMillis(issue.intendedEndsAt),
-			InviterUserID:    invocation.Principal().UserID,
+			InviterUserID:    inv.Principal().UserID,
 			ScopeType:        issue.scopeType,
 			ScopeID:          issue.scopeID,
 			ClaimHash:        strings.Repeat("0", model.TokenHashLength),
@@ -271,7 +271,7 @@ func (s *Service) issueAuthorizedScopedRole(
 		RoleActions:      issue.role.Permissions,
 		IntendedStartsAt: startsAt,
 		IntendedEndsAt:   model.OptionalTimeFromMillis(issue.intendedEndsAt),
-		InviterUserID:    invocation.Principal().UserID,
+		InviterUserID:    inv.Principal().UserID,
 		ScopeType:        issue.scopeType,
 		ScopeID:          issue.scopeID,
 		ClaimHash:        model.HashInvitationClaim(rawClaim),

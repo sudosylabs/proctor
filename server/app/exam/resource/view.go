@@ -29,14 +29,14 @@ type Opened struct {
 // authorized to view the Exam.
 func (s *Service) ListExamResources(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	examID model.ExamID,
 ) (_ []store.ExamResourceRecord, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	if !examID.IsValid() {
 		return nil, apperror.Invalid("exam.resource.invalid", "exam_id")
 	}
-	if _, err := s.authorizeExam(ctx, invocation, examID, false); err != nil {
+	if _, err := s.authorizeExam(ctx, inv, examID, false); err != nil {
 		return nil, err
 	}
 
@@ -52,7 +52,7 @@ func (s *Service) ListExamResources(
 // for a caller authorized to view the Exam. The caller must close the body.
 func (s *Service) OpenExamResource(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	examID model.ExamID,
 	resourceID model.ExamResourceID,
 ) (_ Opened, resultErr error) {
@@ -60,7 +60,7 @@ func (s *Service) OpenExamResource(
 	if !examID.IsValid() || !resourceID.IsValid() {
 		return Opened{}, apperror.Invalid("exam.resource.invalid", "identity")
 	}
-	if _, err := s.authorizeExam(ctx, invocation, examID, false); err != nil {
+	if _, err := s.authorizeExam(ctx, inv, examID, false); err != nil {
 		return Opened{}, err
 	}
 	record, err := s.resources.Get(ctx, examID, resourceID)

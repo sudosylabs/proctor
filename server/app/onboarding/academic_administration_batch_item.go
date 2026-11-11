@@ -23,14 +23,14 @@ import (
 
 func (s *Service) runAcademicAdministrationBatchItem(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	batch RunAcademicAdministrationBatchCommand,
 	item AcademicAdministrationBatchItemCommand,
 	itemKey string,
 	metadata *store.CommandBatch,
 	retained bool,
 ) (string, InvitationBatchItemStatus, error) {
-	authority := academicAdministrationBatchAuthority(invocation, batch)
+	authority := academicAdministrationBatchAuthority(inv, batch)
 	if model.UserID(strings.TrimSpace(item.UserID.String())).IsValid() {
 		authority.RecipientUserID = model.UserID(strings.TrimSpace(item.UserID.String()))
 	}
@@ -41,7 +41,7 @@ func (s *Service) runAcademicAdministrationBatchItem(
 	switch batch.Operation {
 	case AcademicAdministrationAffiliationAdd:
 		var replayed bool
-		value, err := s.academic.CreateAffiliation(ctx, invocation, academic.CreateAffiliationCommand{
+		value, err := s.academic.CreateAffiliation(ctx, inv, academic.CreateAffiliationCommand{
 			UserID:         item.UserID,
 			Kind:           item.AffiliationKind,
 			StartAt:        item.StartAt,
@@ -59,7 +59,7 @@ func (s *Service) runAcademicAdministrationBatchItem(
 		return administrationItemOutcome(value, replayed, metadata, err)
 	case AcademicAdministrationAffiliationEnd:
 		var replayed bool
-		value, err := s.academic.EndAffiliation(ctx, invocation, academic.EndAffiliationCommand{
+		value, err := s.academic.EndAffiliation(ctx, inv, academic.EndAffiliationCommand{
 			ID:             model.AffiliationID(item.RelationshipID),
 			IdempotencyKey: itemKey,
 			BatchScopeType: batch.ScopeType,
@@ -76,7 +76,7 @@ func (s *Service) runAcademicAdministrationBatchItem(
 		return administrationItemOutcome(value, replayed, metadata, err)
 	case AcademicAdministrationAcademicUnitMemberAdd:
 		var replayed bool
-		value, err := s.academic.CreateAcademicUnitMember(ctx, invocation, academic.CreateAcademicUnitMemberCommand{
+		value, err := s.academic.CreateAcademicUnitMember(ctx, inv, academic.CreateAcademicUnitMemberCommand{
 			AcademicUnitID: model.AcademicUnitID(batch.ScopeID),
 			UserID:         item.UserID,
 			StartAt:        item.StartAt,
@@ -93,7 +93,7 @@ func (s *Service) runAcademicAdministrationBatchItem(
 		return administrationItemOutcome(value, replayed, metadata, err)
 	case AcademicAdministrationAcademicUnitMemberEnd:
 		var replayed bool
-		value, err := s.academic.EndAcademicUnitMember(ctx, invocation, academic.EndAcademicUnitMemberCommand{
+		value, err := s.academic.EndAcademicUnitMember(ctx, inv, academic.EndAcademicUnitMemberCommand{
 			ID:             model.AcademicUnitMemberID(item.RelationshipID),
 			IdempotencyKey: itemKey,
 			BatchScopeID:   batch.ScopeID,
@@ -109,7 +109,7 @@ func (s *Service) runAcademicAdministrationBatchItem(
 		return administrationItemOutcome(value, replayed, metadata, err)
 	case AcademicAdministrationClassEnroll, AcademicAdministrationClassTransfer:
 		var replayed bool
-		value, err := s.academic.EnrollClassMember(ctx, invocation, academic.EnrollClassMemberCommand{
+		value, err := s.academic.EnrollClassMember(ctx, inv, academic.EnrollClassMemberCommand{
 			ClassID:            model.ClassID(batch.ScopeID),
 			UserID:             item.UserID,
 			StartAt:            item.StartAt,
@@ -144,7 +144,7 @@ func (s *Service) runAcademicAdministrationBatchItem(
 		return value.Membership.ID.String(), status, nil
 	case AcademicAdministrationClassEnd:
 		var replayed bool
-		value, err := s.academic.EndClassMember(ctx, invocation, academic.EndClassMemberCommand{
+		value, err := s.academic.EndClassMember(ctx, inv, academic.EndClassMemberCommand{
 			ID:             model.ClassMemberID(item.RelationshipID),
 			IdempotencyKey: itemKey,
 			BatchScopeID:   batch.ScopeID,
@@ -160,7 +160,7 @@ func (s *Service) runAcademicAdministrationBatchItem(
 		return administrationItemOutcome(value, replayed, metadata, err)
 	case AcademicAdministrationRoleBindingCreate:
 		var replayed bool
-		value, err := s.administration.CreateRoleBinding(ctx, invocation, administration.CreateRoleBindingCommand{
+		value, err := s.administration.CreateRoleBinding(ctx, inv, administration.CreateRoleBindingCommand{
 			UserID:         item.UserID,
 			RoleID:         item.RoleID,
 			ScopeType:      batch.ScopeType,
@@ -180,7 +180,7 @@ func (s *Service) runAcademicAdministrationBatchItem(
 		return administrationItemOutcome(value, replayed, metadata, err)
 	case AcademicAdministrationRoleBindingEnd:
 		var replayed bool
-		value, err := s.administration.EndRoleBinding(ctx, invocation, administration.EndRoleBindingCommand{
+		value, err := s.administration.EndRoleBinding(ctx, inv, administration.EndRoleBindingCommand{
 			ID:             model.RoleBindingID(item.RelationshipID),
 			IdempotencyKey: itemKey,
 			BatchScopeType: batch.ScopeType,
@@ -197,7 +197,7 @@ func (s *Service) runAcademicAdministrationBatchItem(
 		return administrationItemOutcome(value, replayed, metadata, err)
 	case AcademicAdministrationUserEnable, AcademicAdministrationUserDisable:
 		var replayed bool
-		value, err := s.identity.SetUserEnabled(ctx, invocation, identity.SetUserEnabledCommand{
+		value, err := s.identity.SetUserEnabled(ctx, inv, identity.SetUserEnabledCommand{
 			ID:             item.UserID,
 			Enabled:        batch.Operation == AcademicAdministrationUserEnable,
 			IdempotencyKey: itemKey,
@@ -213,7 +213,7 @@ func (s *Service) runAcademicAdministrationBatchItem(
 		return administrationItemOutcome(value, replayed, metadata, err)
 	case AcademicAdministrationUserSessionsRevoke:
 		var replayed bool
-		err := s.identity.RevokeUserSessions(ctx, invocation, identity.RevokeUserSessionsCommand{
+		err := s.identity.RevokeUserSessions(ctx, inv, identity.RevokeUserSessionsCommand{
 			UserID:         item.UserID,
 			IdempotencyKey: itemKey,
 			Batch: batchitem.New(batchitem.Fields{
@@ -242,7 +242,7 @@ func (s *Service) runAcademicAdministrationBatchItem(
 }
 
 func academicAdministrationBatchAuthority(
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	batch RunAcademicAdministrationBatchCommand,
 ) *store.CommandAuthorization {
 	var action model.Action
@@ -268,7 +268,7 @@ func academicAdministrationBatchAuthority(
 	}
 
 	return &store.CommandAuthorization{
-		Principal: invocation.Principal(),
+		Principal: inv.Principal(),
 		ScopeType: batch.ScopeType,
 		ScopeID:   batch.ScopeID,
 		Actions:   actions,

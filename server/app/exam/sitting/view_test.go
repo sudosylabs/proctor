@@ -23,7 +23,7 @@ func TestGetAuthorizesExactSittingResource(t *testing.T) {
 	fixture := newFixture(t)
 	fixture.persistence.snapshot = &store.ExamSittingSnapshot{Sitting: fixture.sitting(t)}
 
-	got, err := fixture.service.GetExamSitting(context.Background(), fixture.invocation, fixture.examID, fixture.sittingID)
+	got, err := fixture.service.GetExamSitting(context.Background(), fixture.inv, fixture.examID, fixture.sittingID)
 	require.NoError(t, err)
 	require.NotNil(t, got.Sitting)
 	require.Equal(t, fixture.sittingID, got.Sitting.ID)
@@ -40,7 +40,7 @@ func TestGetRejectsMismatchedExamOwnership(t *testing.T) {
 	foreign.ExamID = model.NewExamID()
 	fixture.persistence.snapshot = &store.ExamSittingSnapshot{Sitting: foreign}
 
-	_, err := fixture.service.GetExamSitting(context.Background(), fixture.invocation, fixture.examID, fixture.sittingID)
+	_, err := fixture.service.GetExamSitting(context.Background(), fixture.inv, fixture.examID, fixture.sittingID)
 	assertFaultCode(t, err, "exam.sitting.unavailable")
 }
 
@@ -55,7 +55,7 @@ func TestListAppliesBoundedFiltersAndLookAhead(t *testing.T) {
 	fixture.persistence.items = []store.ExamSittingSnapshot{{Sitting: first}, {Sitting: &second}}
 	overlapStart, overlapEnd := testNow.Add(30*time.Minute), testNow.Add(4*time.Hour)
 
-	page, err := fixture.service.ListExamSittings(context.Background(), fixture.invocation, ListQuery{
+	page, err := fixture.service.ListExamSittings(context.Background(), fixture.inv, ListQuery{
 		ExamID: fixture.examID, ClassID: fixture.classID, States: []model.ExamSittingState{model.ExamSittingScheduled},
 		OverlapStartAt: overlapStart, OverlapEndAt: overlapEnd, Limit: 1,
 	})

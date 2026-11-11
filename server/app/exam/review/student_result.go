@@ -21,11 +21,11 @@ import (
 // Attempt, with sanitized student remarks.
 func (s *Service) GetStudentExamResult(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	attemptID model.ExamAttemptID,
 ) (_ *model.StudentResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if !attemptID.IsValid() || principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return nil, apperror.Invalid("exam.integrity_review.invalid", "student_result")
 	}

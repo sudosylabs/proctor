@@ -178,7 +178,7 @@ var academicAdministrationImportHeaders = map[string]struct{}{
 
 func (s *Service) parseImportCSV(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	current *store.OnboardingImport,
 	body io.Reader,
 ) ([]store.OnboardingImportRow, []string, string, error) {
@@ -213,7 +213,7 @@ func (s *Service) parseImportCSV(
 			return nil, nil, "", invalidOnboardingImportFile("invalid CSV row")
 		}
 
-		row, rowErr := s.parseOnboardingImportRow(ctx, invocation, current, number, indexes, record)
+		row, rowErr := s.parseOnboardingImportRow(ctx, inv, current, number, indexes, record)
 		if rowErr != nil {
 			return nil, nil, "", rowErr
 		}
@@ -278,7 +278,7 @@ func parseOnboardingImportHeader(mode model.OnboardingImportMode, header []strin
 // returned error is either an invalid-file error or a retryable resolution error.
 func (s *Service) parseOnboardingImportRow(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	current *store.OnboardingImport,
 	number int,
 	indexes map[string]int,
@@ -327,7 +327,7 @@ func (s *Service) parseOnboardingImportRow(
 
 	var boundsErr error
 	row.StartsAt, row.EndsAt, boundsErr = parseOnboardingImportBounds(values["start_at"], values["end_at"])
-	resolveErr := s.resolveAndValidateImportRow(ctx, invocation, current, values, &row)
+	resolveErr := s.resolveAndValidateImportRow(ctx, inv, current, values, &row)
 	if onboardingImportRetryableError(resolveErr) {
 		return store.OnboardingImportRow{}, resolveErr
 	}

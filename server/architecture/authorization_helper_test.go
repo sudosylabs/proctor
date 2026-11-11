@@ -64,8 +64,8 @@ type sittings interface {
 
 type adapter struct{ sittings sittings }
 
-func (a adapter) AuthorizeSittingView(ctx context.Context, invocation invocation.Invocation, id string) error {
-	return a.sittings.AuthorizeView(ctx, invocation, id)
+func (a adapter) AuthorizeSittingView(ctx context.Context, inv invocation.Invocation, id string) error {
+	return a.sittings.AuthorizeView(ctx, inv, id)
 }
 
 func (a adapter) authorizeLocally(context.Context, string) bool { return true }

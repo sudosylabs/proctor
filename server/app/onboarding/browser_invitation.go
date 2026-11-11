@@ -145,7 +145,7 @@ func (s *Service) StartBrowserInvitation(
 // through its browser handle and proof, creating the local account.
 func (s *Service) AcceptBrowserInvitation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command BrowserInvitationAcceptanceCommand,
 ) (*InvitationAcceptanceView, error) {
 	resolution, invitation, err := s.resolveBrowserInvitation(ctx, command.Handle, command.BrowserProof)
@@ -170,11 +170,11 @@ func (s *Service) AcceptBrowserInvitation(
 	var accepted *InvitationAcceptanceView
 	switch invitation.Purpose {
 	case model.InvitationPurposeStudentClass:
-		accepted, err = s.acceptStudentClassByClaimHash(ctx, invocation, base, resolution.InvitationClaimHash)
+		accepted, err = s.acceptStudentClassByClaimHash(ctx, inv, base, resolution.InvitationClaimHash)
 	case model.InvitationPurposeTeacherAcademicUnit:
 		accepted, err = s.acceptTeacherAcademicUnitByClaimHash(
 			ctx,
-			invocation,
+			inv,
 			AcceptTeacherAcademicUnitInvitationCommand(base),
 			resolution.InvitationClaimHash,
 		)
@@ -193,10 +193,10 @@ func (s *Service) AcceptBrowserInvitation(
 // handle and proof for the caller's web Session.
 func (s *Service) AcceptBrowserInvitationWithSession(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command BrowserInvitationSessionAcceptanceCommand,
 ) (*InvitationAcceptanceView, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil ||
 		principal.CredentialType != model.CredentialSessionAccess ||
 		principal.ClientType != model.SessionClientWeb {
@@ -216,7 +216,7 @@ func (s *Service) AcceptBrowserInvitationWithSession(
 
 	accepted, err := s.acceptScopedRoleByClaimHash(
 		ctx,
-		invocation,
+		inv,
 		resolution.InvitationClaimHash,
 		invitation.Purpose,
 		browserInvitationProof(resolution, command.Handle, command.BrowserProof),

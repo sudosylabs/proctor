@@ -26,7 +26,7 @@ import (
 // MaximumInvitationBatchItems rows after one batch authorization at the scope.
 func (s *Service) RunInvitationBatch(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command RunInvitationBatchCommand,
 ) (InvitationBatchResult, error) {
 	command.ScopeID = strings.TrimSpace(command.ScopeID)
@@ -43,12 +43,12 @@ func (s *Service) RunInvitationBatch(
 	if err != nil {
 		return InvitationBatchResult{}, err
 	}
-	if err = s.authorize(ctx, invocation, model.ActionOnboardingBatchManage, resource); err != nil {
+	if err = s.authorize(ctx, inv, model.ActionOnboardingBatchManage, resource); err != nil {
 		return InvitationBatchResult{}, err
 	}
 
 	if command.Operation == InvitationBatchAcademicUnitRoleCreate || command.Operation == InvitationBatchInstitutionRoleCreate {
-		if err = access.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
+		if err = access.RequireStrongRecentSession(inv.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 			return InvitationBatchResult{}, err
 		}
 	}
@@ -85,7 +85,7 @@ func (s *Service) RunInvitationBatch(
 		if duplicate && (command.Operation == InvitationBatchResend || command.Operation == InvitationBatchRevoke) {
 			canonicalItem := itemsByKey[winner]
 			canonical, canonicalErr := idempotency.Prepare(
-				invocation,
+				inv,
 				invitationBatchLifecycleOperation(command.Operation),
 				canonicalKey,
 				invitationLifecycleIdempotencySemantic{
@@ -104,7 +104,7 @@ func (s *Service) RunInvitationBatch(
 
 		outcome.InvitationID, outcome.Status, err = s.runInvitationBatchItem(
 			ctx,
-			invocation,
+			inv,
 			command,
 			item,
 			itemKey,

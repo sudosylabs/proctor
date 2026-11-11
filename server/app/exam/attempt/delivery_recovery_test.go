@@ -71,7 +71,7 @@ func TestBrowserDeliveryRefusalRequiresFreshOwnedRecovery(t *testing.T) {
 				p.refusal = store.NewErrNotFound("browser_delivery", string(source))
 			}
 			f.service.browserDelivery, f.service.deliveryBudget = p, p
-			_, err := f.service.BrowserDeliveryReceipts(context.Background(), f.invocation, BrowserSourceQuery{Access: CandidateAccess{AttemptID: f.attemptID}, SourceSessionID: source, ParticipationID: part}, 1, 32)
+			_, err := f.service.BrowserDeliveryReceipts(context.Background(), f.inv, BrowserSourceQuery{Access: CandidateAccess{AttemptID: f.attemptID}, SourceSessionID: source, ParticipationID: part}, 1, 32)
 			var fault *apperror.Error
 			require.ErrorAs(t, err, &fault)
 			var carrier interface {

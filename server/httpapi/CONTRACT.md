@@ -1281,7 +1281,7 @@ type createAcademicUnitRequest struct {
     DisplayName string `json:"display_name"`
 }
 
-unit, err := academicUnits.CreateAcademicUnit(ctx, invocation, command)
+unit, err := academicUnits.CreateAcademicUnit(ctx, inv, command)
 writeJSON(writer, http.StatusCreated, academicUnitResponseFromModel(unit))
 ```
 

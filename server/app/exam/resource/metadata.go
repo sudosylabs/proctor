@@ -33,7 +33,7 @@ type EditMetadataCommand struct {
 // left unchanged, but at least one must be set.
 func (s *Service) EditExamResourceMetadata(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command EditMetadataCommand,
 ) (_ store.ExamResourceRecord, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -50,12 +50,12 @@ func (s *Service) EditExamResourceMetadata(
 	}
 
 	command.DescriptionMarkdown = cloneStringPointer(command.DescriptionMarkdown)
-	commandIdempotency, err := prepareMetadataIdempotency(invocation, command)
+	commandIdempotency, err := prepareMetadataIdempotency(inv, command)
 	if err != nil {
 		return store.ExamResourceRecord{}, err
 	}
 
-	authorization, err := s.authorizeExam(ctx, invocation, command.ExamID, true)
+	authorization, err := s.authorizeExam(ctx, inv, command.ExamID, true)
 	if err != nil {
 		return store.ExamResourceRecord{}, err
 	}
@@ -81,16 +81,16 @@ func (s *Service) EditExamResourceMetadata(
 	if validationErr != nil {
 		return store.ExamResourceRecord{}, apperror.Invalid("exam.resource.invalid", "metadata").Wrap(validationErr)
 	}
-	if !changed && s.currentActiveDraft(ctx, invocation, command.ExamID, command.ExpectedDraftRevision) {
+	if !changed && s.currentActiveDraft(ctx, inv, command.ExamID, command.ExpectedDraftRevision) {
 		return store.ExamResourceRecord{}, apperror.New("exam.resource.no_changes")
 	}
 
-	return s.updateMetadata(ctx, invocation, authorization, command, commandIdempotency)
+	return s.updateMetadata(ctx, inv, authorization, command, commandIdempotency)
 }
 
 func (s *Service) updateMetadata(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	authorization authorizationDecision,
 	c EditMetadataCommand,
 	commandIdempotency *store.CommandIdempotency,
@@ -102,7 +102,7 @@ func (s *Service) updateMetadata(
 	}
 
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     action,
 		Resource:   model.Resource{Type: model.ResourceExam, ID: c.ExamID.String()},
 		ScopeType:  model.RoleScopeAcademicUnit,
@@ -135,7 +135,7 @@ func (s *Service) updateMetadata(
 		ctx,
 		&store.ExamResourceMetadataUpdate{
 			ExamID:                c.ExamID,
-			ActorUserID:           invocation.Principal().UserID,
+			ActorUserID:           inv.Principal().UserID,
 			ManagerOverride:       authorization.override,
 			ExpectedDraftRevision: c.ExpectedDraftRevision,
 			ResourceID:            c.ResourceID,

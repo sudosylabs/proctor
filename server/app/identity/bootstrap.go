@@ -175,7 +175,7 @@ func (s *Service) GetInstallationStatus(
 // the deployment bootstrap secret. Attempts are rate limited per source.
 func (s *Service) BootstrapInstallation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command BootstrapInstallationCommand,
 ) (*model.InstallationBootstrapResult, error) {
 	if strings.TrimSpace(command.InstitutionName) == "" ||
@@ -214,7 +214,7 @@ func (s *Service) BootstrapInstallation(
 		return nil, PasswordHashError(err, "installation.unavailable")
 	}
 
-	metadata := invocation.RequestMetadata()
+	metadata := inv.RequestMetadata()
 	administrator, defaultPictureJob, err := jobs.PrepareUserDefaultProfilePictureJob(&model.User{
 		Username:    command.AdministratorUsername,
 		Email:       command.AdministratorEmail,

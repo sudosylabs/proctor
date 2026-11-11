@@ -203,22 +203,22 @@ func TestAcademicPeriodCreateIdempotencyBindsCanonicalOwner(t *testing.T) {
 	makeService := func(persistence *academicPeriodStoreFake) *Service {
 		return mustNew(Dependencies{Store: &catalogFake{academicPeriod: persistence}, Authorizer: &academicPeriodAuthorizerFake{events: &events}, Auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, Now: func() time.Time { return time.UnixMilli(500) }, NewID: model.NewID})
 	}
-	invocation := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
+	inv := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
 	institutionID := model.NewInstitutionID().String()
 	institution := &academicPeriodStoreFake{events: &events}
-	_, err := makeService(institution).CreateAcademicPeriod(context.Background(), invocation, CreateAcademicPeriodCommand{
+	_, err := makeService(institution).CreateAcademicPeriod(context.Background(), inv, CreateAcademicPeriodCommand{
 		OwnerType: " institution ", OwnerID: " " + institutionID + " ",
 		Name: "period", DisplayName: "Period", StartAt: 100, EndAt: 200, IdempotencyKey: "same-key",
 	})
 	require.NoError(t, err)
 	canonical := &academicPeriodStoreFake{events: &events}
-	_, err = makeService(canonical).CreateAcademicPeriod(context.Background(), invocation, CreateAcademicPeriodCommand{
+	_, err = makeService(canonical).CreateAcademicPeriod(context.Background(), inv, CreateAcademicPeriodCommand{
 		OwnerType: string(model.ResourceInstitution), OwnerID: institutionID,
 		Name: "period", DisplayName: "Period", StartAt: 100, EndAt: 200, IdempotencyKey: "same-key",
 	})
 	require.NoError(t, err)
 	unit := &academicPeriodStoreFake{events: &events}
-	_, err = makeService(unit).CreateAcademicPeriod(context.Background(), invocation, CreateAcademicPeriodCommand{
+	_, err = makeService(unit).CreateAcademicPeriod(context.Background(), inv, CreateAcademicPeriodCommand{
 		OwnerType: string(model.ResourceAcademicUnit), OwnerID: model.NewAcademicUnitID().String(),
 		Name: "period", DisplayName: "Period", StartAt: 100, EndAt: 200, IdempotencyKey: "same-key",
 	})

@@ -166,8 +166,8 @@ func TestAcademicUnitCreateReplayDoesNotPublishAgain(t *testing.T) {
 	service := mustNew(Dependencies{Store: &catalogFake{academicUnit: creator}, Authorizer: academicUnitAuthorizerStub{authorizeInstallation: func(context.Context, invocation.Invocation, model.Action) (model.Resource, error) {
 		return model.Resource{Type: model.ResourceInstitution, ID: institutionID}, nil
 	}}, Auditor: &academicUnitCommandAuditor{events: &events, beginID: model.NewID()}, Now: func() time.Time { return time.UnixMilli(500) }, NewID: model.NewID, Publisher: academicUnitPublisherIn(&events)})
-	invocation := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
-	got, err := service.CreateAcademicUnit(context.Background(), invocation, CreateAcademicUnitCommand{Name: "engineering", DisplayName: "Engineering", IdempotencyKey: "retry-key"})
+	inv := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
+	got, err := service.CreateAcademicUnit(context.Background(), inv, CreateAcademicUnitCommand{Name: "engineering", DisplayName: "Engineering", IdempotencyKey: "retry-key"})
 	require.NoError(t, err)
 	require.Same(t, saved, got, "Create()")
 	assertAcademicUnitCreateEvents(t, events, "audit-begin", "store-idempotent")

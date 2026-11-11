@@ -87,10 +87,10 @@ func (s *Service) requirePersonalAccessTokenAdministration() error {
 // the actions the caller may delegate, and returns its credential once.
 func (s *Service) CreatePersonalAccessToken(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command CreatePersonalAccessTokenCommand,
 ) (*model.PersonalAccessTokenCreation, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	at := model.TimeUTC(s.now())
 	if err := requireInteractiveSession(
 		principal, true, at, s.recentAuthenticationTTL,
@@ -166,7 +166,7 @@ func (s *Service) CreatePersonalAccessToken(
 		principal,
 		model.ActionPersonalAccessTokenCreate,
 		resource,
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		parameters,
 		nil,
 	)
@@ -216,9 +216,9 @@ func (s *Service) CreatePersonalAccessToken(
 // ListPersonalAccessTokens lists the caller's PATs.
 func (s *Service) ListPersonalAccessTokens(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 ) ([]*model.PersonalAccessToken, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if err := requireInteractiveSession(principal, false, s.now(), s.recentAuthenticationTTL); err != nil {
 		return nil, err
 	}
@@ -232,10 +232,10 @@ func (s *Service) ListPersonalAccessTokens(
 // RevokePersonalAccessToken revokes one of the caller's PATs.
 func (s *Service) RevokePersonalAccessToken(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command RevokePersonalAccessTokenCommand,
 ) (*model.PersonalAccessToken, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if err := requireInteractiveSession(principal, false, s.now(), s.recentAuthenticationTTL); err != nil {
 		return nil, err
 	}
@@ -265,7 +265,7 @@ func (s *Service) RevokePersonalAccessToken(
 		principal,
 		model.ActionPersonalAccessTokenRevoke,
 		resource,
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		map[string]any{"personal_access_token_id": command.TokenID},
 		current.Auditable(),
 	)
@@ -312,10 +312,10 @@ func (s *Service) RevokePersonalAccessToken(
 // PATs.
 func (s *Service) SetPersonalAccessTokenDisabled(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command SetPersonalAccessTokenDisabledCommand,
 ) (*model.PersonalAccessToken, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	at := model.TimeUTC(s.now())
 	action := model.ActionPersonalAccessTokenDisable
 	if !command.Disabled {
@@ -354,7 +354,7 @@ func (s *Service) SetPersonalAccessTokenDisabled(
 		principal,
 		action,
 		resource,
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		map[string]any{
 			"personal_access_token_id": command.TokenID,
 			"disabled":                 command.Disabled,

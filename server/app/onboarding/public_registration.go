@@ -35,7 +35,7 @@ type RegisterLocalUserCommand struct {
 // RegisterLocalUser registers an unverified local account when the Access Policy
 // allows public registration, mailing its email verification. A duplicate
 // identity is indistinguishable from accepted work.
-func (s *Service) RegisterLocalUser(ctx context.Context, invocation invocation.Invocation, command RegisterLocalUserCommand) error {
+func (s *Service) RegisterLocalUser(ctx context.Context, inv invocation.Invocation, command RegisterLocalUserCommand) error {
 	registrationEnabled, localLoginEnabled, err := s.publicRegistrationPolicy(ctx)
 	if err != nil {
 		return registrationUnavailable(err)
@@ -120,7 +120,7 @@ func (s *Service) RegisterLocalUser(ctx context.Context, invocation invocation.I
 		model.ActionAuthenticationPublicRegistration,
 		model.Resource{Type: model.ResourceUser, ID: account.ID.String()},
 		institutionID,
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		s.nodeID,
 		nil,
 		"anonymous",

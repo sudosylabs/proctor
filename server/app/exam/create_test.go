@@ -26,7 +26,7 @@ func TestCreateOwnsAuthorizationAuditPersistenceAndEffects(t *testing.T) {
 	t.Parallel()
 	fixture := newAuthoringFixture(t)
 	fixture.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: fixture.unitID, UserID: fixture.userID}}
-	got, err := fixture.service.CreateExam(context.Background(), fixture.invocation, CreateCommand{
+	got, err := fixture.service.CreateExam(context.Background(), fixture.inv, CreateCommand{
 		AcademicUnitID: fixture.unitID, Title: "  Algorithms  ", InstructionsMarkdown: "Use **Go**.",
 		IdempotencyKey: "test-key",
 	})
@@ -55,7 +55,7 @@ func TestCreateOwnsAuthorizationAuditPersistenceAndEffects(t *testing.T) {
 func TestCreateUsesExplicitOverrideWithoutMembership(t *testing.T) {
 	t.Parallel()
 	fixture := newAuthoringFixture(t)
-	_, err := fixture.service.CreateExam(context.Background(), fixture.invocation, CreateCommand{AcademicUnitID: fixture.unitID, Title: "Networks", IdempotencyKey: "test-key"})
+	_, err := fixture.service.CreateExam(context.Background(), fixture.inv, CreateCommand{AcademicUnitID: fixture.unitID, Title: "Networks", IdempotencyKey: "test-key"})
 	require.NoError(t, err)
 	require.Equal(t, model.ActionExamCreateOverride, fixture.authorizer.action, "action")
 }
@@ -63,7 +63,7 @@ func TestCreateUsesExplicitOverrideWithoutMembership(t *testing.T) {
 func TestCreateRequiresIdempotencyBeforeResolutionOrAuthorization(t *testing.T) {
 	t.Parallel()
 	fixture := newAuthoringFixture(t)
-	_, err := fixture.service.CreateExam(context.Background(), fixture.invocation, CreateCommand{AcademicUnitID: fixture.unitID, Title: "Networks"})
+	_, err := fixture.service.CreateExam(context.Background(), fixture.inv, CreateCommand{AcademicUnitID: fixture.unitID, Title: "Networks"})
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault)
 	require.Equal(t, "idempotency.key_required", fault.Code())
@@ -73,7 +73,7 @@ func TestCreateRequiresIdempotencyBeforeResolutionOrAuthorization(t *testing.T) 
 func TestCreateRejectsInvalidDraftBeforeResolutionOrAuthorization(t *testing.T) {
 	t.Parallel()
 	fixture := newAuthoringFixture(t)
-	_, err := fixture.service.CreateExam(context.Background(), fixture.invocation, CreateCommand{AcademicUnitID: fixture.unitID, Title: "   ", IdempotencyKey: "test-key"})
+	_, err := fixture.service.CreateExam(context.Background(), fixture.inv, CreateCommand{AcademicUnitID: fixture.unitID, Title: "   ", IdempotencyKey: "test-key"})
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault)
 	require.Equal(t, "exam.invalid", fault.Code())
@@ -86,7 +86,7 @@ func TestCreateReplayDoesNotRepublish(t *testing.T) {
 	fixture.persistence.replayed = true
 	fixture.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: fixture.unitID, UserID: fixture.userID}}
 	command := "test-key"
-	_, err := fixture.service.CreateExam(context.Background(), fixture.invocation, CreateCommand{AcademicUnitID: fixture.unitID, Title: "Networks", IdempotencyKey: command})
+	_, err := fixture.service.CreateExam(context.Background(), fixture.inv, CreateCommand{AcademicUnitID: fixture.unitID, Title: "Networks", IdempotencyKey: command})
 	require.NoError(t, err)
 	require.NotNil(t, fixture.persistence.idempotency, "idempotency/effects")
 	require.Equal(t, "exam.create", fixture.persistence.idempotency.Operation, "idempotency/effects")
@@ -98,7 +98,7 @@ func TestCreateFailureCompletesAuditAsFailed(t *testing.T) {
 	fixture := newAuthoringFixture(t)
 	fixture.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: fixture.unitID, UserID: fixture.userID}}
 	fixture.persistence.err = store.NewErrConflict("exam", "exams_pkey", errors.New("duplicate"))
-	_, err := fixture.service.CreateExam(context.Background(), fixture.invocation, CreateCommand{AcademicUnitID: fixture.unitID, Title: "Networks", IdempotencyKey: "test-key"})
+	_, err := fixture.service.CreateExam(context.Background(), fixture.inv, CreateCommand{AcademicUnitID: fixture.unitID, Title: "Networks", IdempotencyKey: "test-key"})
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault)
 	require.Equal(t, "exam.conflict", fault.Code())
@@ -112,7 +112,7 @@ func TestCreateFailedAuditCompletionPreservesStoreFailure(t *testing.T) {
 	fixture.persistence.err = store.NewErrConflict("exam", "exams_pkey", errors.New("duplicate"))
 	auditErr := errors.New("audit completion unavailable")
 	fixture.auditor.failErr = auditErr
-	_, err := fixture.service.CreateExam(context.Background(), fixture.invocation, CreateCommand{AcademicUnitID: fixture.unitID, Title: "Networks", IdempotencyKey: "test-key"})
+	_, err := fixture.service.CreateExam(context.Background(), fixture.inv, CreateCommand{AcademicUnitID: fixture.unitID, Title: "Networks", IdempotencyKey: "test-key"})
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault)
 	require.Equal(t, "exam.conflict", fault.Code())

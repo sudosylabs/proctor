@@ -41,11 +41,11 @@ type CandidateActivityPage struct {
 // also reflects that desktop's Session and registration.
 func (s *Service) ListCandidateExamActivity(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query CandidateActivityQuery,
 ) (_ CandidateActivityPage, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil ||
 		principal.CredentialType != model.CredentialSessionAccess ||
 		query.Limit < 1 ||

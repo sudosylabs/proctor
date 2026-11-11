@@ -25,7 +25,7 @@ func TestWorkspaceJournalReturnsOrderedRecoveryWithoutPathsInSelector(t *testing
 		Entries: []model.AttemptWorkspaceJournalEntry{{WorkspaceID: workspaceID, Cursor: 5, EntryID: entryID,
 			EntryKind: model.StarterWorkspaceEntryDirectory, Operation: model.AttemptWorkspaceMutationCreateDirectory,
 			NewPath: "src", ChangedAt: f.at}}}
-	page, err := f.service.ListCandidateExamWorkspaceJournal(context.Background(), f.invocation, WorkspaceJournalQuery{Access: CandidateAccess{
+	page, err := f.service.ListCandidateExamWorkspaceJournal(context.Background(), f.inv, WorkspaceJournalQuery{Access: CandidateAccess{
 		AttemptID: f.attemptID, ConnectionID: f.connectionID, ContinuityCredential: model.NewCredentialToken(),
 	}, AfterCursor: 4, Limit: 20})
 	require.NoError(t, err, "page=%#v options=%#v error", page, f.workspace.journalOptions)

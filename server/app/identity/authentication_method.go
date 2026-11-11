@@ -64,18 +64,18 @@ func (s *Service) requireAuthenticationMethods() error {
 
 // requireAuthenticationMethodSession admits a change to the caller's own
 // authentication methods only from a strong, recently authenticated Session.
-func (s *Service) requireAuthenticationMethodSession(invocation invocation.Invocation) error {
-	return access.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL)
+func (s *Service) requireAuthenticationMethodSession(inv invocation.Invocation) error {
+	return access.RequireStrongRecentSession(inv.Principal(), s.now(), s.recentAuthenticationTTL)
 }
 
 // AuthenticationMethods lists the current User's local password and linked
 // External Identities, ordered by identity.
-func (s *Service) AuthenticationMethods(ctx context.Context, invocation invocation.Invocation) (AuthenticationMethodView, error) {
-	if invocation.Principal().Validate() != nil {
+func (s *Service) AuthenticationMethods(ctx context.Context, inv invocation.Invocation) (AuthenticationMethodView, error) {
+	if inv.Principal().Validate() != nil {
 		return AuthenticationMethodView{}, access.InvalidTokenAppError()
 	}
 
-	userID := invocation.Principal().UserID
+	userID := inv.Principal().UserID
 	view := AuthenticationMethodView{Providers: []AuthenticationProviderMethodView{}}
 	if _, err := s.passwords.GetByUser(ctx, userID); err == nil {
 		view.Password = true
@@ -115,12 +115,12 @@ func (s *Service) AuthenticationMethods(ctx context.Context, invocation invocati
 
 // EnrollPassword adds a local password to the current User after strong
 // recent authentication.
-func (s *Service) EnrollPassword(ctx context.Context, invocation invocation.Invocation, password string) error {
-	if err := s.requireAuthenticationMethodSession(invocation); err != nil {
+func (s *Service) EnrollPassword(ctx context.Context, inv invocation.Invocation, password string) error {
+	if err := s.requireAuthenticationMethodSession(inv); err != nil {
 		return err
 	}
 
-	userID := invocation.Principal().UserID
+	userID := inv.Principal().UserID
 	user, err := s.users.Get(ctx, userID)
 	if err != nil {
 		return authenticationMethodStoreErrors.Translate(err)
@@ -138,7 +138,7 @@ func (s *Service) EnrollPassword(ctx context.Context, invocation invocation.Invo
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionExternalIdentityManage,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: userID.String()},
 			Operation:  "enroll_password",
@@ -163,12 +163,12 @@ func (s *Service) EnrollPassword(ctx context.Context, invocation invocation.Invo
 // strong recent authentication. The calling Session stays live; every other
 // Session of the User is revoked, outstanding password-reset links stop
 // working, and the account address receives the password-changed notice.
-func (s *Service) ChangePassword(ctx context.Context, invocation invocation.Invocation, command ChangePasswordCommand) error {
-	if err := s.requireAuthenticationMethodSession(invocation); err != nil {
+func (s *Service) ChangePassword(ctx context.Context, inv invocation.Invocation, command ChangePasswordCommand) error {
+	if err := s.requireAuthenticationMethodSession(inv); err != nil {
 		return err
 	}
 
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	user, err := s.users.Get(ctx, principal.UserID)
 	if err != nil {
 		return authenticationMethodStoreErrors.Translate(err)
@@ -191,7 +191,7 @@ func (s *Service) ChangePassword(ctx context.Context, invocation invocation.Invo
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionExternalIdentityManage,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: user.ID.String()},
 			Operation:  "change_password",
@@ -224,17 +224,17 @@ func (s *Service) ChangePassword(ctx context.Context, invocation invocation.Invo
 // RemovePassword removes the current User's local password after strong
 // recent authentication and publishes the Session revocations the Store
 // reports.
-func (s *Service) RemovePassword(ctx context.Context, invocation invocation.Invocation) error {
-	if err := s.requireAuthenticationMethodSession(invocation); err != nil {
+func (s *Service) RemovePassword(ctx context.Context, inv invocation.Invocation) error {
+	if err := s.requireAuthenticationMethodSession(inv); err != nil {
 		return err
 	}
 
-	userID := invocation.Principal().UserID
+	userID := inv.Principal().UserID
 	result, appErr := access.RunAudited(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionExternalIdentityManage,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: userID.String()},
 			Operation:  "remove_password",
@@ -263,20 +263,20 @@ func (s *Service) RemovePassword(ctx context.Context, invocation invocation.Invo
 // UnlinkExternalIdentity removes one of the current User's linked External
 // Identities after strong recent authentication and publishes the Session
 // revocations the Store reports.
-func (s *Service) UnlinkExternalIdentity(ctx context.Context, invocation invocation.Invocation, id model.ExternalIdentityID) error {
-	if err := s.requireAuthenticationMethodSession(invocation); err != nil {
+func (s *Service) UnlinkExternalIdentity(ctx context.Context, inv invocation.Invocation, id model.ExternalIdentityID) error {
+	if err := s.requireAuthenticationMethodSession(inv); err != nil {
 		return err
 	}
 	if !id.IsValid() {
 		return apperror.New("request.invalid")
 	}
 
-	userID := invocation.Principal().UserID
+	userID := inv.Principal().UserID
 	result, appErr := access.RunAudited(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionExternalIdentityManage,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: userID.String()},
 			Operation:  "unlink_provider",

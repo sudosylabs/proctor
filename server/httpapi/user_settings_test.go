@@ -28,7 +28,7 @@ import (
 type userSettingsHTTPApplication struct {
 	result         user.UserSettingsView
 	err            error
-	invocation     invocation.Invocation
+	inv            invocation.Invocation
 	calls          int
 	replaceResult  user.UserSettingsReplacementResult
 	replaceErr     error
@@ -38,21 +38,21 @@ type userSettingsHTTPApplication struct {
 
 func (a *userSettingsHTTPApplication) ReplaceOwnUserSettings(
 	_ context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command user.ReplaceOwnUserSettingsCommand,
 ) (user.UserSettingsReplacementResult, error) {
 	a.replaceCalls++
-	a.invocation = invocation
+	a.inv = inv
 	a.replaceCommand = command
 	return a.replaceResult, a.replaceErr
 }
 
 func (a *userSettingsHTTPApplication) ReadOwnUserSettings(
 	_ context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 ) (user.UserSettingsView, error) {
 	a.calls++
-	a.invocation = invocation
+	a.inv = inv
 	return a.result, a.err
 }
 
@@ -185,8 +185,8 @@ func TestUserSettingsHTTPReadsExactSelfDocumentWithoutCaching(t *testing.T) {
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
 	require.Equal(t, "private, no-store", response.Header().Get("Cache-Control"))
-	require.Equal(t, 1, applicationFake.calls, "calls/invocation = %d/%#v", applicationFake.calls, applicationFake.invocation)
-	require.Equal(t, principal.UserID, applicationFake.invocation.Principal().UserID, "calls/invocation = %d/%#v", applicationFake.calls, applicationFake.invocation)
+	require.Equal(t, 1, applicationFake.calls, "calls/invocation = %d/%#v", applicationFake.calls, applicationFake.inv)
+	require.Equal(t, principal.UserID, applicationFake.inv.Principal().UserID, "calls/invocation = %d/%#v", applicationFake.calls, applicationFake.inv)
 	var body userSettingsResponse
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
 	require.Equal(t, source, body.Source)

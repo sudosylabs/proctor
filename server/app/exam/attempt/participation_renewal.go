@@ -56,14 +56,14 @@ type ParticipationRenewal struct {
 // generation fence.
 func (s *Service) RenewExamAttemptParticipation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command RenewParticipationCommand,
 ) (_ ParticipationRenewal, resultErr error) {
 	defer func() { s.recordOperational("renew", resultErr) }()
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	// Requests that can never renew are refused before admission, so they
 	// take no worker, queue place, or allowance from the live lane.
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return ParticipationRenewal{}, apperror.New("authentication.token_invalid")
 	}
@@ -81,7 +81,7 @@ func (s *Service) RenewExamAttemptParticipation(
 		return ParticipationRenewal{}, apperror.Invalid("exam.attempt.invalid", "renewal")
 	}
 
-	release, admissionErr := s.enterControl(ctx, invocation, true)
+	release, admissionErr := s.enterControl(ctx, inv, true)
 	if admissionErr != nil {
 		return ParticipationRenewal{}, admissionErr
 	}

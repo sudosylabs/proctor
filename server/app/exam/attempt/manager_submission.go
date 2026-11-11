@@ -35,11 +35,11 @@ type ManagerEndCommand struct {
 // Sitting before reading the Attempt so existence is not probeable.
 func (s *Service) EndExamAttemptByManager(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ManagerEndCommand,
 ) (_ store.ExamSubmissionReceipt, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil {
 		return store.ExamSubmissionReceipt{}, apperror.New("authentication.token_invalid")
 	}
@@ -52,14 +52,14 @@ func (s *Service) EndExamAttemptByManager(
 		return store.ExamSubmissionReceipt{}, apperror.Invalid("exam.attempt.invalid", "manager_end")
 	}
 
-	commandIdempotency, err := prepareManagerEndIdempotency(invocation, command)
+	commandIdempotency, err := prepareManagerEndIdempotency(inv, command)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, err
 	}
 
 	// Authorize the exact Sitting before reading the Attempt so existence is
 	// not probeable; later exits complete the audit attempt as failed.
-	management, err := s.managers.AuthorizeSittingManage(ctx, invocation, command.SittingID)
+	management, err := s.managers.AuthorizeSittingManage(ctx, inv, command.SittingID)
 	override := management.Override
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, err
@@ -82,7 +82,7 @@ func (s *Service) EndExamAttemptByManager(
 	}
 
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     action,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: command.SittingID.String()},
 		ScopeType:  model.RoleScopeClass,

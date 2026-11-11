@@ -43,7 +43,7 @@ type DesktopAuthorizationExchangeResult struct {
 // verifier and DPoP proof for a Desktop Session and Desktop Registration.
 func (s *Service) ExchangeDesktopAuthorization(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ExchangeDesktopAuthorizationCommand,
 ) (*DesktopAuthorizationExchangeResult, error) {
 	if !model.IsValidCredentialToken(command.Code) ||
@@ -88,7 +88,7 @@ func (s *Service) ExchangeDesktopAuthorization(
 		return nil, err
 	}
 
-	compatibility, err := s.evaluateDesktopExchangeCompatibility(ctx, invocation, command)
+	compatibility, err := s.evaluateDesktopExchangeCompatibility(ctx, inv, command)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +108,7 @@ func (s *Service) ExchangeDesktopAuthorization(
 		return nil, apperror.New("authentication.desktop_authorization.unavailable").Wrap(err)
 	}
 
-	audit, err := s.beginDesktopExchangeAudit(ctx, invocation, resolved.UserID, institution.ID)
+	audit, err := s.beginDesktopExchangeAudit(ctx, inv, resolved.UserID, institution.ID)
 	if err != nil || audit == nil || !audit.ID.IsValid() {
 		return nil, apperror.New("audit.unavailable").Wrap(err)
 	}
@@ -178,7 +178,7 @@ func (s *Service) ExchangeDesktopAuthorization(
 		Origin:                s.dpop.deps.Policy.Origin,
 	})
 	if nonceErr != nil {
-		return nil, s.withdrawUndisclosedDesktopSession(ctx, invocation, institution.ID, result, nonceErr)
+		return nil, s.withdrawUndisclosedDesktopSession(ctx, inv, institution.ID, result, nonceErr)
 	}
 
 	return &DesktopAuthorizationExchangeResult{
@@ -221,9 +221,9 @@ func (s *Service) verifyDesktopExchangeProof(
 
 // evaluateDesktopExchangeCompatibility requires the exchanging desktop build to be compatible and ready.
 func (s *Service) evaluateDesktopExchangeCompatibility(
-	ctx context.Context, invocation invocation.Invocation, command ExchangeDesktopAuthorizationCommand,
+	ctx context.Context, inv invocation.Invocation, command ExchangeDesktopAuthorizationCommand,
 ) (DesktopCompatibilityResult, error) {
-	compatibility, err := s.EvaluateDesktopCompatibility(ctx, invocation, desktopCompatibilityQueryFromAuthorization(command))
+	compatibility, err := s.EvaluateDesktopCompatibility(ctx, inv, desktopCompatibilityQueryFromAuthorization(command))
 	if err != nil {
 		return DesktopCompatibilityResult{}, apperror.New("authentication.desktop_authorization.unavailable").Wrap(err)
 	}
@@ -251,7 +251,7 @@ func (s *Service) evaluateDesktopExchangeCompatibility(
 // withdrawUndisclosedDesktopSession revokes and audits the withdrawal of an exchanged Session whose nonce could not be issued.
 func (s *Service) withdrawUndisclosedDesktopSession(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	institutionID model.InstitutionID,
 	result *store.DesktopAuthorizationExchangeResult,
 	nonceErr error,
@@ -266,7 +266,7 @@ func (s *Service) withdrawUndisclosedDesktopSession(
 	revokeCtx := context.WithoutCancel(ctx)
 	withdrawal, auditErr := s.beginDesktopWithdrawalAudit(
 		revokeCtx,
-		invocation,
+		inv,
 		result.Session.UserID,
 		institutionID,
 		result.Session.ID,

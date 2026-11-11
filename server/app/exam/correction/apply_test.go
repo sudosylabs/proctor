@@ -25,7 +25,7 @@ func TestApplyUsesOneAtomicStoreCommandAndSuppressesReplayEffects(t *testing.T) 
 	t.Parallel()
 	f := newCorrectionFixture(t)
 	f.persistence.applyReplayed = true
-	result, err := f.service.ApplyExamSittingCorrection(context.Background(), f.invocation, ApplyCommand{ExamID: f.examID, SittingID: f.sittingID, ExpectedSittingRevision: 3, ExpectedCurrentRevisionID: f.baseRevisionID, Instructions: OptionalInstructions{Present: true, Markdown: "Updated"}, Resources: []ResourceManifestItem{}, AffectedCapabilities: []model.CandidateCapability{model.CandidateCapabilityBrowser, model.CandidateCapabilitySubmission, model.CandidateCapabilityWorkspace}, CandidateSummary: "The instructions were corrected.", AcknowledgementRequired: true, PrivateReason: "Correct a discovered ambiguity", IdempotencyKey: "test-key"})
+	result, err := f.service.ApplyExamSittingCorrection(context.Background(), f.inv, ApplyCommand{ExamID: f.examID, SittingID: f.sittingID, ExpectedSittingRevision: 3, ExpectedCurrentRevisionID: f.baseRevisionID, Instructions: OptionalInstructions{Present: true, Markdown: "Updated"}, Resources: []ResourceManifestItem{}, AffectedCapabilities: []model.CandidateCapability{model.CandidateCapabilityBrowser, model.CandidateCapabilitySubmission, model.CandidateCapabilityWorkspace}, CandidateSummary: "The instructions were corrected.", AcknowledgementRequired: true, PrivateReason: "Correct a discovered ambiguity", IdempotencyKey: "test-key"})
 	require.NoError(t, err)
 	require.Equal(t, f.baseRevisionID, result.PreviousRevisionID)
 	require.False(t, result.RevisionID.IsZero())
@@ -41,7 +41,7 @@ func TestApplyUsesOneAtomicStoreCommandAndSuppressesReplayEffects(t *testing.T) 
 		_, ok := f.auditor.value[forbidden]
 		require.False(t, ok, "unsafe audit field %q", forbidden)
 	}
-	wantIdempotency, prepareErr := prepareApplyIdempotency(f.invocation, ApplyCommand{ExamID: f.examID, SittingID: f.sittingID,
+	wantIdempotency, prepareErr := prepareApplyIdempotency(f.inv, ApplyCommand{ExamID: f.examID, SittingID: f.sittingID,
 		ExpectedSittingRevision: 3, ExpectedCurrentRevisionID: f.baseRevisionID,
 		Instructions: OptionalInstructions{Present: true, Markdown: "Updated"}, Resources: []ResourceManifestItem{},
 		AffectedCapabilities: []model.CandidateCapability{model.CandidateCapabilityBrowser, model.CandidateCapabilitySubmission, model.CandidateCapabilityWorkspace}, CandidateSummary: "The instructions were corrected.", AcknowledgementRequired: true,
@@ -57,7 +57,7 @@ func TestApplyPublishesOnlyAfterCommitAndReportsTransientFailure(t *testing.T) {
 	f.publisher.Fail = func(realtimetest.Call) error { return unavailable }
 	candidateID := model.NewUserID()
 	f.sittings.candidateIDs = []model.UserID{candidateID}
-	result, err := f.service.ApplyExamSittingCorrection(context.Background(), f.invocation, ApplyCommand{ExamID: f.examID, SittingID: f.sittingID, ExpectedSittingRevision: 3, ExpectedCurrentRevisionID: f.baseRevisionID, Instructions: OptionalInstructions{Present: true, Markdown: "Updated"}, Resources: []ResourceManifestItem{}, AffectedCapabilities: []model.CandidateCapability{model.CandidateCapabilityBrowser, model.CandidateCapabilitySubmission, model.CandidateCapabilityWorkspace}, CandidateSummary: "The instructions were corrected.", PrivateReason: "Correct a discovered ambiguity", IdempotencyKey: "test-key"})
+	result, err := f.service.ApplyExamSittingCorrection(context.Background(), f.inv, ApplyCommand{ExamID: f.examID, SittingID: f.sittingID, ExpectedSittingRevision: 3, ExpectedCurrentRevisionID: f.baseRevisionID, Instructions: OptionalInstructions{Present: true, Markdown: "Updated"}, Resources: []ResourceManifestItem{}, AffectedCapabilities: []model.CandidateCapability{model.CandidateCapabilityBrowser, model.CandidateCapabilitySubmission, model.CandidateCapabilityWorkspace}, CandidateSummary: "The instructions were corrected.", PrivateReason: "Correct a discovered ambiguity", IdempotencyKey: "test-key"})
 	require.NoError(t, err)
 	require.NotNil(t, f.persistence.application)
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
@@ -87,7 +87,7 @@ func TestApplyPublishesOnlyAfterCommitAndReportsTransientFailure(t *testing.T) {
 func TestApplyRejectsNonCanonicalPrivateReasonBeforeAuthorization(t *testing.T) {
 	t.Parallel()
 	f := newCorrectionFixture(t)
-	_, err := f.service.ApplyExamSittingCorrection(context.Background(), f.invocation, ApplyCommand{ExamID: f.examID, SittingID: f.sittingID, ExpectedSittingRevision: 3, ExpectedCurrentRevisionID: f.baseRevisionID, PrivateReason: " padded ", IdempotencyKey: "test-key"})
+	_, err := f.service.ApplyExamSittingCorrection(context.Background(), f.inv, ApplyCommand{ExamID: f.examID, SittingID: f.sittingID, ExpectedSittingRevision: 3, ExpectedCurrentRevisionID: f.baseRevisionID, PrivateReason: " padded ", IdempotencyKey: "test-key"})
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault)
 	require.Equal(t, "exam.sitting.correction.invalid", fault.Code())

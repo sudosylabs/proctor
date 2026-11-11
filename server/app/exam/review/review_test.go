@@ -25,7 +25,7 @@ import (
 
 type reviewFixture struct {
 	service      *Service
-	invocation   invocation.Invocation
+	inv          invocation.Invocation
 	persistence  *reviewStoreFake
 	authorizer   *reviewAuthorizerFake
 	auditor      *reviewAuditorFake
@@ -53,7 +53,7 @@ func newReviewFixture(t *testing.T) *reviewFixture {
 		NewReviewID: model.NewSubmissionReviewID, NewDecisionID: model.NewIntegrityReviewDecisionID})
 	require.NoError(t, err)
 	f.service = service
-	f.invocation = invocation.New(model.Principal{UserID: f.userID, SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
+	f.inv = invocation.New(model.Principal{UserID: f.userID, SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: f.at}, model.RequestMetadata{})
 	return f

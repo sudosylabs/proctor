@@ -103,27 +103,27 @@ func (a *inboundTestApplication) AppendExamAttemptBrowserActivity(_ context.Cont
 	return a.browserAppendResult, a.browserAppendErr
 }
 
-func (a *inboundTestApplication) CloseExamAttemptConnection(ctx context.Context, invocation invocation.Invocation, command attempt.CloseConnectionCommand) (attempt.ConnectionClosedResult, error) {
+func (a *inboundTestApplication) CloseExamAttemptConnection(ctx context.Context, inv invocation.Invocation, command attempt.CloseConnectionCommand) (attempt.ConnectionClosedResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.closeCalls = append(a.closeCalls, command)
 	a.closeContextErr = ctx.Err()
-	a.closePrincipal = invocation.Principal()
-	a.closeMetadata = invocation.RequestMetadata()
+	a.closePrincipal = inv.Principal()
+	a.closeMetadata = inv.RequestMetadata()
 	return attempt.ConnectionClosedResult{}, nil
 }
 
 func (a *inboundTestApplication) AuthorizeWebSocketSubscription(
 	_ context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	action model.Action,
 	resource model.Resource,
 ) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.authorizations = append(a.authorizations, inboundAuthorizationCall{
-		principal: invocation.Principal(),
-		metadata:  invocation.RequestMetadata(),
+		principal: inv.Principal(),
+		metadata:  inv.RequestMetadata(),
 		action:    action,
 		resource:  resource,
 	})

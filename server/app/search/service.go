@@ -98,7 +98,7 @@ func New(deps Dependencies) *Service {
 // authorization; a type the caller may not list contributes no matches, and
 // the search is denied only when the caller may list none of the requested
 // types. The query text never enters logs or audit records.
-func (s *Service) Search(ctx context.Context, invocation invocation.Invocation, query Query) (Result, error) {
+func (s *Service) Search(ctx context.Context, inv invocation.Invocation, query Query) (Result, error) {
 	term, types, limit, err := validateQuery(query)
 	if err != nil {
 		return Result{}, err
@@ -111,15 +111,15 @@ func (s *Service) Search(ctx context.Context, invocation invocation.Invocation, 
 		switch kind {
 		case TypeExam:
 			var page exam.CatalogPage
-			page, searchErr = s.deps.Exams.ListExams(ctx, invocation, exam.ListQuery{Query: term, Limit: limit})
+			page, searchErr = s.deps.Exams.ListExams(ctx, inv, exam.ListQuery{Query: term, Limit: limit})
 			if searchErr == nil {
 				result.Exams = page.Items
 			}
 		case TypeClass:
-			result.Classes, searchErr = s.searchClasses(ctx, invocation, term, limit)
+			result.Classes, searchErr = s.searchClasses(ctx, inv, term, limit)
 		case TypeUser:
 			var page paging.Page[*model.User]
-			page, searchErr = s.deps.Users.SearchUserPage(ctx, invocation, user.SearchUsersQuery{Query: term, Limit: limit})
+			page, searchErr = s.deps.Users.SearchUserPage(ctx, inv, user.SearchUsersQuery{Query: term, Limit: limit})
 			if searchErr == nil {
 				result.Users = page.Items
 			}
@@ -144,11 +144,11 @@ func (s *Service) Search(ctx context.Context, invocation invocation.Invocation, 
 
 func (s *Service) searchClasses(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	term string,
 	limit int,
 ) ([]*model.Class, error) {
-	visibility, err := s.deps.ClassAuthorization.AuthorizeClassSearch(ctx, invocation)
+	visibility, err := s.deps.ClassAuthorization.AuthorizeClassSearch(ctx, inv)
 	if err != nil {
 		return nil, err
 	}

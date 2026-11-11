@@ -18,18 +18,18 @@ import (
 )
 
 // authorize authorizes an Action on a concrete Resource.
-func (s *Service) authorize(ctx context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource) error {
+func (s *Service) authorize(ctx context.Context, inv invocation.Invocation, action model.Action, resource model.Resource) error {
 	if s.authorizer == nil {
 		return apperror.New("invitation.unavailable")
 	}
-	return s.authorizer.Authorize(ctx, invocation, action, resource)
+	return s.authorizer.Authorize(ctx, inv, action, resource)
 }
 
 // authorizeActionDelegation refuses unless the caller may grant every Action
 // at the scope.
 func (s *Service) authorizeActionDelegation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	actions []string,
 	scopeType model.RoleScopeType,
 	scopeID string,
@@ -38,7 +38,7 @@ func (s *Service) authorizeActionDelegation(
 		return apperror.New("invitation.unavailable")
 	}
 
-	allowed, err := s.authorizer.CanDelegateActionsAtScope(ctx, invocation.Principal(), actions, scopeType, scopeID)
+	allowed, err := s.authorizer.CanDelegateActionsAtScope(ctx, inv.Principal(), actions, scopeType, scopeID)
 	if err != nil {
 		return err
 	}
@@ -56,7 +56,7 @@ func (s *Service) authorizeActionDelegation(
 // action, so its scopes are resolved for Class resources.
 func (s *Service) visibility(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	action model.Action,
 ) (store.InvitationVisibilityScope, error) {
 	resourceType := model.ResourceInstitution
@@ -72,7 +72,7 @@ func (s *Service) visibility(
 		return store.InvitationVisibilityScope{}, apperror.New("invitation.unavailable")
 	}
 
-	constraint, err := s.authorizer.GrantedScopes(ctx, invocation.Principal(), action, resourceType)
+	constraint, err := s.authorizer.GrantedScopes(ctx, inv.Principal(), action, resourceType)
 	if err != nil {
 		return store.InvitationVisibilityScope{}, err
 	}
@@ -95,12 +95,12 @@ func (s *Service) visibility(
 
 	if err = s.authorizer.RecordAuthorizationDecision(
 		ctx,
-		invocation.Principal(),
+		inv.Principal(),
 		action,
 		resource,
 		scopeType,
 		scopeID,
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		allowed,
 	); err != nil {
 		return store.InvitationVisibilityScope{}, err

@@ -14,9 +14,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-func prepareDecisionIdempotency(invocation invocation.Invocation, command SaveDecisionCommand) (*store.CommandIdempotency, error) {
+func prepareDecisionIdempotency(inv invocation.Invocation, command SaveDecisionCommand) (*store.CommandIdempotency, error) {
 	return idempotency.Require(
-		invocation,
+		inv,
 		store.ExamIntegrityReviewDecisionOperation,
 		command.IdempotencyKey,
 		struct {
@@ -39,9 +39,9 @@ func prepareDecisionIdempotency(invocation invocation.Invocation, command SaveDe
 	)
 }
 
-func prepareDraftIdempotency(invocation invocation.Invocation, command UpdateDraftCommand) (*store.CommandIdempotency, error) {
+func prepareDraftIdempotency(inv invocation.Invocation, command UpdateDraftCommand) (*store.CommandIdempotency, error) {
 	return idempotency.Require(
-		invocation,
+		inv,
 		store.ExamIntegrityReviewDraftOperation,
 		command.IdempotencyKey,
 		struct {
@@ -61,13 +61,13 @@ func prepareDraftIdempotency(invocation invocation.Invocation, command UpdateDra
 }
 
 func prepareTerminalIdempotency(
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	operation, key string,
 	submissionID model.SubmissionID,
 	reviewID model.SubmissionReviewID,
 	expectedRevision int64,
 ) (*store.CommandIdempotency, error) {
-	return idempotency.Require(invocation, operation, key, struct {
+	return idempotency.Require(inv, operation, key, struct {
 		SubmissionID     string `json:"submission_id"`
 		ReviewID         string `json:"submission_review_id"`
 		ExpectedRevision int64  `json:"expected_review_revision"`

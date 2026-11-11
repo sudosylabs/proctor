@@ -23,7 +23,7 @@ func TestOpenUsesExactAuthoritativeRenditionWithoutStorageDiscovery(t *testing.T
 	f := newFixture(t)
 	record := testRecord(f.examID, model.NewExamResourceID(), model.NewFileEntryID(), model.NewFileRevisionID(), 1)
 	f.persistence.items = []store.ExamResourceRecord{record}
-	opened, err := f.service.OpenExamResource(context.Background(), f.invocation, f.examID, record.Resource.ID)
+	opened, err := f.service.OpenExamResource(context.Background(), f.inv, f.examID, record.Resource.ID)
 	require.NoError(t, err)
 	defer opened.Body.Close()
 	body, _ := io.ReadAll(opened.Body)

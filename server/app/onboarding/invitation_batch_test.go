@@ -36,8 +36,8 @@ func TestInvitationBatchRunsIndependentRowsAndRecoversCommittedItems(t *testing.
 			{IdempotencyKey: "row-2", TargetEmail: "invalid@example.edu", RoleID: model.NewRoleID()},
 			{IdempotencyKey: "row-3", TargetEmail: " FIRST@example.edu "},
 		}}
-	invocation := invocation.New(model.Principal{UserID: actorID}, model.RequestMetadata{RequestID: "request-1"})
-	first, err := service.RunInvitationBatch(context.Background(), invocation, command)
+	inv := invocation.New(model.Principal{UserID: actorID}, model.RequestMetadata{RequestID: "request-1"})
+	first, err := service.RunInvitationBatch(context.Background(), inv, command)
 	require.NoError(t, err)
 	require.Equal(t, 1, first.Succeeded, "first batch result=%#v executions", first)
 	require.Equal(t, 0, first.NoOp, "first batch result=%#v executions", first)
@@ -55,7 +55,7 @@ func TestInvitationBatchRunsIndependentRowsAndRecoversCommittedItems(t *testing.
 
 	command.Items = []InvitationBatchItemCommand{command.Items[2], command.Items[1], command.Items[0]}
 	composer.disabled = true
-	second, err := service.RunInvitationBatch(context.Background(), invocation, command)
+	second, err := service.RunInvitationBatch(context.Background(), inv, command)
 	require.NoError(t, err)
 	require.Equal(t, 0, second.Succeeded, "replayed batch result=%#v executions", second)
 	require.Equal(t, 1, second.NoOp, "replayed batch result=%#v executions", second)

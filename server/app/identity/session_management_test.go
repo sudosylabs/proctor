@@ -36,10 +36,10 @@ func TestSelfSessionServiceUsesCallerOwnershipAndPostCommitEffects(t *testing.T)
 	}
 	effects := revocationsIn(&events, "effects")
 	service := &Service{sessions: persistence, auditor: &mutationAttemptAuditorFake{events: &events, beginID: model.NewID()}, publisher: effects, now: func() time.Time { return now }}
-	invocation := invocation.New(principal, model.RequestMetadata{})
+	inv := invocation.New(principal, model.RequestMetadata{})
 	err := service.RevokeSession(
 		context.Background(),
-		invocation,
+		inv,
 		RevokeSessionCommand{SessionID: session.ID},
 	)
 	require.NoError(t, err)
@@ -124,15 +124,15 @@ func TestSelfSessionRevocationsRequireAuditBeforeMutationAndEffects(t *testing.T
 				}
 				self := &Service{sessions: persistence, auditor: audit, publisher: effects, now: func() time.Time { return now }}
 				var err error
-				invocation := invocation.New(principal, model.RequestMetadata{})
+				inv := invocation.New(principal, model.RequestMetadata{})
 				switch operation {
 				case "revoke_own_session":
-					err = self.RevokeSession(context.Background(), invocation, RevokeSessionCommand{SessionID: principal.SessionID})
+					err = self.RevokeSession(context.Background(), inv, RevokeSessionCommand{SessionID: principal.SessionID})
 				case "revoke_own_sessions":
-					err = self.RevokeAllSessions(context.Background(), invocation)
+					err = self.RevokeAllSessions(context.Background(), inv)
 				case "revoke_other_sessions":
 					var result *RevokeOtherSessionsResult
-					result, err = self.RevokeOtherSessions(context.Background(), invocation)
+					result, err = self.RevokeOtherSessions(context.Background(), inv)
 					if err == nil {
 						require.Equal(t, 1, result.RevokedSessionCount)
 						require.Equal(t, principal.SessionID, persistence.allRevocation.KeepSessionID)
@@ -140,7 +140,7 @@ func TestSelfSessionRevocationsRequireAuditBeforeMutationAndEffects(t *testing.T
 						require.Equal(t, map[string]any{"kept_session_id": principal.SessionID.String()}, audit.attempt.Value)
 					}
 				case "logout":
-					err = self.Logout(context.Background(), invocation)
+					err = self.Logout(context.Background(), inv)
 				}
 				if outcome != "success" {
 					require.Error(t, err, "failed audit allowed revocation/effect: error=%v session=%#v effects=%#v", err, persistence.session, effects.Calls())
@@ -206,23 +206,23 @@ func TestSelfSessionRevocationRepeatOutcomes(t *testing.T) {
 			effects := revocationsIn(&events, "effects")
 			self := &Service{sessions: persistence, auditor: audit, publisher: effects, now: func() time.Time { return now }}
 			var err error
-			invocation := invocation.New(principal, model.RequestMetadata{})
+			inv := invocation.New(principal, model.RequestMetadata{})
 			switch operation {
 			case "revoke_own_session":
-				err = self.RevokeSession(context.Background(), invocation, RevokeSessionCommand{SessionID: principal.SessionID})
+				err = self.RevokeSession(context.Background(), inv, RevokeSessionCommand{SessionID: principal.SessionID})
 				require.True(t, apperror.Is(err, "session.not_found"), "repeat = %v audit=%#v", err, audit)
 				require.Equal(t, "session.not_found", audit.failCode, "repeat = %v audit=%#v", err, audit)
 			case "revoke_own_sessions":
-				err = self.RevokeAllSessions(context.Background(), invocation)
+				err = self.RevokeAllSessions(context.Background(), inv)
 				require.NoError(t, err)
 				require.True(t, persistence.allRevocation.NoOp)
 			case "revoke_other_sessions":
-				result, revokeErr := self.RevokeOtherSessions(context.Background(), invocation)
+				result, revokeErr := self.RevokeOtherSessions(context.Background(), inv)
 				require.NoError(t, revokeErr)
 				require.Zero(t, result.RevokedSessionCount)
 				require.True(t, persistence.allRevocation.NoOp)
 			case "logout":
-				err = self.Logout(context.Background(), invocation)
+				err = self.Logout(context.Background(), inv)
 				require.NoError(t, err)
 			}
 			require.Equal(t, 1, persistence.revokeCalls)

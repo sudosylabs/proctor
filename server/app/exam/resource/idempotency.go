@@ -23,7 +23,7 @@ const (
 )
 
 func prepareResourceIdempotency(
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	operation, key string,
 	examID model.ExamID,
 	revision int64,
@@ -33,7 +33,7 @@ func prepareResourceIdempotency(
 	sha string,
 	ids []string,
 ) (*store.CommandIdempotency, error) {
-	return idempotency.Require(invocation, operation, key, struct {
+	return idempotency.Require(inv, operation, key, struct {
 		ExamID                string   `json:"exam_id"`
 		ExpectedDraftRevision int64    `json:"expected_draft_revision"`
 		ResourceID            string   `json:"resource_id,omitempty"`
@@ -46,8 +46,8 @@ func prepareResourceIdempotency(
 	}{examID.String(), revision, resourceID, name, description, string(media), size, sha, ids})
 }
 
-func prepareMetadataIdempotency(invocation invocation.Invocation, command EditMetadataCommand) (*store.CommandIdempotency, error) {
-	return idempotency.Require(invocation, idempotencyOperationEditResourceMetadata, command.IdempotencyKey, struct {
+func prepareMetadataIdempotency(inv invocation.Invocation, command EditMetadataCommand) (*store.CommandIdempotency, error) {
+	return idempotency.Require(inv, idempotencyOperationEditResourceMetadata, command.IdempotencyKey, struct {
 		ExamID                string  `json:"exam_id"`
 		ExpectedDraftRevision int64   `json:"expected_draft_revision"`
 		ResourceID            string  `json:"resource_id"`

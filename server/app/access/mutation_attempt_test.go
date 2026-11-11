@@ -253,13 +253,13 @@ func TestMutationAttemptReturnsSuccessWithoutCompletingIt(t *testing.T) {
 	resource := model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewID()}
 	value := map[string]any{"name": "computer-science"}
 	prior := map[string]any{"name": "computing"}
-	invocation := invocation.Invocation{}
+	inv := invocation.Invocation{}
 	auditor := &mutationAttemptAuditorFake{events: &events, beginID: auditID}
 	clockCalls := 0
 	got, err := RunAudited(
 		context.Background(), auditor,
 		Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionAcademicUnitManage,
 			Resource:   resource,
 			Operation:  "patch",
@@ -283,7 +283,7 @@ func TestMutationAttemptReturnsSuccessWithoutCompletingIt(t *testing.T) {
 	)
 	require.NoError(t, err, "RunAudited()")
 	require.Equal(t, "saved", got, "RunAudited()")
-	require.Equal(t, invocation, auditor.attempt.Invocation)
+	require.Equal(t, inv, auditor.attempt.Invocation)
 	require.Equal(t, model.ActionAcademicUnitManage, auditor.attempt.Action)
 	require.Equal(t, resource, auditor.attempt.Resource)
 	require.Equal(t, "patch", auditor.attempt.Operation)

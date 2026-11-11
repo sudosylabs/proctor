@@ -44,7 +44,7 @@ type UpdateScheduleCommand struct {
 // with its lifecycle Jobs.
 func (s *Service) ScheduleExamSitting(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ScheduleCommand,
 ) (_ store.ExamSittingSnapshot, resultErr error) {
 	defer func() { s.recordOperational("schedule", resultErr) }()
@@ -59,12 +59,12 @@ func (s *Service) ScheduleExamSitting(
 		return store.ExamSittingSnapshot{}, apperror.Invalid("exam.sitting.invalid", "schedule")
 	}
 
-	commandIdempotency, err := prepareScheduleIdempotency(invocation, command)
+	commandIdempotency, err := prepareScheduleIdempotency(inv, command)
 	if err != nil {
 		return store.ExamSittingSnapshot{}, err
 	}
 
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil {
 		return store.ExamSittingSnapshot{}, apperror.Invalid("exam.sitting.invalid", "principal")
 	}
@@ -72,7 +72,7 @@ func (s *Service) ScheduleExamSitting(
 	at := model.TimeUTC(s.now())
 	authorization, err := s.authorizeExam(
 		ctx,
-		invocation,
+		inv,
 		command.ExamID,
 		at,
 		model.ActionExamSittingCreate,
@@ -126,7 +126,7 @@ func (s *Service) ScheduleExamSitting(
 		"class_id":         command.ClassID.String(),
 	}
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     authorization.action,
 		Resource:   model.Resource{Type: model.ResourceExam, ID: command.ExamID.String()},
 		ScopeType:  model.RoleScopeAcademicUnit,
@@ -175,7 +175,7 @@ func (s *Service) ScheduleExamSitting(
 // unchanged, but at least one must be set.
 func (s *Service) UpdateExamSittingSchedule(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command UpdateScheduleCommand,
 ) (_ store.ExamSittingSnapshot, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -192,7 +192,7 @@ func (s *Service) UpdateExamSittingSchedule(
 		return store.ExamSittingSnapshot{}, apperror.Invalid("exam.sitting.invalid", "schedule")
 	}
 
-	commandIdempotency, err := prepareScheduleUpdateIdempotency(invocation, command)
+	commandIdempotency, err := prepareScheduleUpdateIdempotency(inv, command)
 	if err != nil {
 		return store.ExamSittingSnapshot{}, err
 	}
@@ -201,7 +201,7 @@ func (s *Service) UpdateExamSittingSchedule(
 	at := model.TimeUTC(s.now())
 	authorization, err := s.authorizeManagerAction(
 		ctx,
-		invocation,
+		inv,
 		command.ExamID,
 		resource,
 		at,
@@ -263,7 +263,7 @@ func (s *Service) UpdateExamSittingSchedule(
 	}
 
 	fanout, err := s.mail.Prepare(ctx, ScheduleMailRequest{
-		ActorUserID:     invocation.Principal().UserID,
+		ActorUserID:     inv.Principal().UserID,
 		ExamID:          command.ExamID,
 		ExamRevisionID:  revisionID,
 		SittingID:       command.SittingID,
@@ -289,7 +289,7 @@ func (s *Service) UpdateExamSittingSchedule(
 		"expected_sitting_revision": command.ExpectedRevision,
 	}
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     authorization.action,
 		Resource:   resource,
 		ScopeType:  model.RoleScopeAcademicUnit,
@@ -304,7 +304,7 @@ func (s *Service) UpdateExamSittingSchedule(
 	result, err := s.sittings.UpdateSchedule(ctx, &store.ExamSittingScheduleUpdate{
 		ExamID:           command.ExamID,
 		SittingID:        command.SittingID,
-		ActorUserID:      invocation.Principal().UserID,
+		ActorUserID:      inv.Principal().UserID,
 		ManagerOverride:  authorization.override,
 		ExpectedRevision: command.ExpectedRevision,
 		ExamRevisionID:   revisionID,

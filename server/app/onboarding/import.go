@@ -112,7 +112,7 @@ func (s *Service) requireImports() error {
 // UploadOnboardingImport stages an onboarding import file and proposes its parse Job.
 func (s *Service) UploadOnboardingImport(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command UploadOnboardingImportCommand,
 ) (OnboardingImportView, error) {
 	command.ScopeID = strings.TrimSpace(command.ScopeID)
@@ -138,13 +138,13 @@ func (s *Service) UploadOnboardingImport(
 	}
 
 	resource := onboardingImportResource(command.ScopeType, command.ScopeID)
-	if err := s.authorize(ctx, invocation, model.ActionOnboardingBatchManage, resource); err != nil {
+	if err := s.authorize(ctx, inv, model.ActionOnboardingBatchManage, resource); err != nil {
 		return OnboardingImportView{}, err
 	}
-	if err := s.validatePrincipal(ctx, invocation.Principal()); err != nil {
+	if err := s.validatePrincipal(ctx, inv.Principal()); err != nil {
 		return OnboardingImportView{}, err
 	}
-	if err := s.validateExternalTarget(ctx, invocation, command.Mode, command.ScopeID, command.RoleID.String(), true); err != nil {
+	if err := s.validateExternalTarget(ctx, inv, command.Mode, command.ScopeID, command.RoleID.String(), true); err != nil {
 		return OnboardingImportView{}, err
 	}
 
@@ -153,7 +153,7 @@ func (s *Service) UploadOnboardingImport(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionOnboardingBatchManage,
 			Resource:   resource,
 			ScopeType:  command.ScopeType,
@@ -183,8 +183,8 @@ func (s *Service) UploadOnboardingImport(
 				State:       model.OnboardingImportParsing,
 				ScopeType:   command.ScopeType,
 				ScopeID:     command.ScopeID,
-				ActorUserID: invocation.Principal().UserID,
-				Principal:   invocation.Principal(),
+				ActorUserID: inv.Principal().UserID,
+				Principal:   inv.Principal(),
 				ParseJobID:  job.ID,
 				CreatedAt:   at,
 				UpdatedAt:   at,
@@ -231,21 +231,21 @@ func newOnboardingImportJob(kind model.JobType, id model.OnboardingImportID, at 
 // GetOnboardingImport reads one onboarding import and its rows.
 func (s *Service) GetOnboardingImport(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	id model.OnboardingImportID,
 ) (OnboardingImportView, []OnboardingImportRowView, error) {
-	return s.getImport(ctx, invocation, id, "")
+	return s.getImport(ctx, inv, id, "")
 }
 
 // countOpenOnboardingImports counts the unexpired, unfinished administrative
 // imports within the caller's onboarding_batch.view scopes, the authority
 // GetOnboardingImport checks for those modes, stopping at maximum. Student
 // progressions are authorized per Class pair and are not counted.
-func (s *Service) countOpenOnboardingImports(ctx context.Context, invocation invocation.Invocation, maximum int) (int, error) {
+func (s *Service) countOpenOnboardingImports(ctx context.Context, inv invocation.Invocation, maximum int) (int, error) {
 	if err := s.requireImports(); err != nil {
 		return 0, err
 	}
-	scope, err := s.visibility(ctx, invocation, model.ActionOnboardingBatchView)
+	scope, err := s.visibility(ctx, inv, model.ActionOnboardingBatchView)
 	if err != nil {
 		return 0, err
 	}
@@ -258,7 +258,7 @@ func (s *Service) countOpenOnboardingImports(ctx context.Context, invocation inv
 
 func (s *Service) getImport(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	id model.OnboardingImportID,
 	expectedMode model.OnboardingImportMode,
 ) (OnboardingImportView, []OnboardingImportRowView, error) {
@@ -270,7 +270,7 @@ func (s *Service) getImport(
 	if err != nil {
 		return OnboardingImportView{}, nil, onboardingImportStoreErrors.Translate(err)
 	}
-	if err = s.authorizeImport(ctx, invocation, value, false); err != nil {
+	if err = s.authorizeImport(ctx, inv, value, false); err != nil {
 		return OnboardingImportView{}, nil, err
 	}
 	if expectedMode != "" && value.Mode != expectedMode {
@@ -305,7 +305,7 @@ func (s *Service) getImport(
 // listed here. Items carry the summary projection without rows.
 func (s *Service) ListOnboardingImports(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query ListOnboardingImportsQuery,
 ) (paging.Page[OnboardingImportView], error) {
 	limit, probe, err := paging.ResolveLimit(query.Limit, "limit")
@@ -333,7 +333,7 @@ func (s *Service) ListOnboardingImports(
 		return paging.Page[OnboardingImportView]{}, err
 	}
 
-	scope, err := s.visibility(ctx, invocation, model.ActionOnboardingBatchView)
+	scope, err := s.visibility(ctx, inv, model.ActionOnboardingBatchView)
 	if err != nil {
 		return paging.Page[OnboardingImportView]{}, err
 	}
@@ -361,7 +361,7 @@ func (s *Service) ListOnboardingImports(
 
 func (s *Service) authorizeImport(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	value *store.OnboardingImport,
 	mutation bool,
 ) error {
@@ -375,17 +375,17 @@ func (s *Service) authorizeImport(
 			action = model.ActionOnboardingBatchManage
 		}
 
-		return s.authorize(ctx, invocation, action, onboardingImportResource(value.ScopeType, value.ScopeID))
+		return s.authorize(ctx, inv, action, onboardingImportResource(value.ScopeType, value.ScopeID))
 	}
 
 	for _, classID := range []model.ClassID{value.SourceClassID, value.DestinationClassID} {
 		resource := model.Resource{Type: model.ResourceClass, ID: classID.String()}
-		if err := s.authorize(ctx, invocation, model.ActionAcademicProgressionManage, resource); err != nil {
+		if err := s.authorize(ctx, inv, model.ActionAcademicProgressionManage, resource); err != nil {
 			return err
 		}
 
 		if mutation {
-			if err := s.authorize(ctx, invocation, model.ActionClassMembersManage, resource); err != nil {
+			if err := s.authorize(ctx, inv, model.ActionClassMembersManage, resource); err != nil {
 				return err
 			}
 		}

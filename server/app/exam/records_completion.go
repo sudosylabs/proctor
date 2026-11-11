@@ -30,7 +30,7 @@ type CompleteRecordsCommand struct {
 // records.
 func (r *Records) GetExamSittingRecords(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
 ) (_ *store.ExamRecordsCompletionSnapshot, resultErr error) {
@@ -42,7 +42,7 @@ func (r *Records) GetExamSittingRecords(
 
 	if _, _, err := r.authorizeScope(
 		ctx,
-		invocation,
+		inv,
 		scope,
 		model.ActionExamRecordsComplete,
 		model.ActionExamRecordsCompleteOverride,
@@ -68,7 +68,7 @@ func (r *Records) GetExamSittingRecords(
 // revision.
 func (r *Records) CompleteExamSittingRecords(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command CompleteRecordsCommand,
 ) (_ *model.ExamSittingRecordsCompletion, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -81,14 +81,14 @@ func (r *Records) CompleteExamSittingRecords(
 
 	key := command.IdempotencyKey
 	command.IdempotencyKey = ""
-	commandIdempotency, err := idempotency.Require(invocation, store.ExamRecordsCompleteOperation, key, command)
+	commandIdempotency, err := idempotency.Require(inv, store.ExamRecordsCompleteOperation, key, command)
 	if err != nil {
 		return nil, err
 	}
 
 	scope, action, err := r.authorizeScope(
 		ctx,
-		invocation,
+		inv,
 		command.Scope,
 		model.ActionExamRecordsComplete,
 		model.ActionExamRecordsCompleteOverride,
@@ -98,7 +98,7 @@ func (r *Records) CompleteExamSittingRecords(
 		return nil, err
 	}
 
-	mutation, err := r.beginMutation(ctx, invocation, scope, action, "complete_records", map[string]any{"expected_revision": command.ExpectedRevision,
+	mutation, err := r.beginMutation(ctx, inv, scope, action, "complete_records", map[string]any{"expected_revision": command.ExpectedRevision,
 		"acknowledged_evidence_revision": command.AcknowledgedEvidenceRevision})
 	if err != nil {
 		return nil, err

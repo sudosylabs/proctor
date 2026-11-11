@@ -41,7 +41,7 @@ func TestRecordsRequiresManagerAndExactMembershipOrScopedOverride(t *testing.T) 
 				f.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: f.unitID}}
 			}
 			command := CompleteRecordsCommand{Scope: persistence.scope.Scope, ExpectedRevision: 1, IdempotencyKey: "completion-key"}
-			value, err := records.CompleteExamSittingRecords(context.Background(), f.invocation, command)
+			value, err := records.CompleteExamSittingRecords(context.Background(), f.inv, command)
 			require.NoError(t, err)
 			require.True(t, value.IsCurrent(), "completion failed to carry current authority: %#v, %#v", value, persistence.completion)
 			require.Equal(t, tc.want, f.authorizer.action, "completion failed to carry current authority: %#v, %#v", value, persistence.completion)
@@ -58,14 +58,14 @@ func TestRecordsRequiresManagerAndExactMembershipOrScopedOverride(t *testing.T) 
 func TestRecordsIdempotencyAndAuditFailClosed(t *testing.T) {
 	f, records, persistence, _ := newRecordsFixture(t)
 	command := CompleteRecordsCommand{Scope: persistence.scope.Scope, ExpectedRevision: 1}
-	_, err := records.CompleteExamSittingRecords(context.Background(), f.invocation, command)
+	_, err := records.CompleteExamSittingRecords(context.Background(), f.inv, command)
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault, "required key")
 	require.Equal(t, "idempotency.key_required", fault.Code(), "required key")
 	require.Empty(t, *f.order, "required key")
 	command.IdempotencyKey = "completion-key"
 	persistence.err = store.NewErrConflict("authorization", "authority", nil)
-	_, err = records.CompleteExamSittingRecords(context.Background(), f.invocation, command)
+	_, err = records.CompleteExamSittingRecords(context.Background(), f.inv, command)
 	require.ErrorAs(t, err, &fault, "current authority failure")
 	require.Equal(t, "resource.not_found", fault.Code(), "current authority failure")
 	require.Equal(t, "exam.not_found", f.auditor.failedCode, "current authority failure")

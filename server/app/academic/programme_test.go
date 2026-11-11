@@ -108,11 +108,11 @@ func (a *programmeAuthorizerFake) AuthorizePreflight(_ context.Context, _ invoca
 
 func (a *programmeAuthorizerFake) AuthorizeWithScope(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	action model.Action,
 	resource model.Resource,
 ) (access.AuthorizationScope, error) {
-	if err := a.Authorize(ctx, invocation, action, resource); err != nil {
+	if err := a.Authorize(ctx, inv, action, resource); err != nil {
 		return access.AuthorizationScope{}, err
 	}
 	if resource.Type == model.ResourceClass {

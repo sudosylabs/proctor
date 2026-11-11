@@ -113,7 +113,7 @@ func (r Result) applied() AppliedCorrection {
 // ExpectedSittingRevision and ExpectedCurrentRevisionID.
 func (s *Service) ApplyExamSittingCorrection(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	c ApplyCommand,
 ) (_ AppliedCorrection, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -132,12 +132,12 @@ func (s *Service) ApplyExamSittingCorrection(
 		}
 	}
 
-	commandIdempotency, err := prepareApplyIdempotency(invocation, c)
+	commandIdempotency, err := prepareApplyIdempotency(inv, c)
 	if err != nil {
 		return AppliedCorrection{}, err
 	}
 
-	auth, err := s.authorizeSitting(ctx, invocation, c.ExamID, c.SittingID)
+	auth, err := s.authorizeSitting(ctx, inv, c.ExamID, c.SittingID)
 	if err != nil {
 		return AppliedCorrection{}, err
 	}
@@ -154,7 +154,7 @@ func (s *Service) ApplyExamSittingCorrection(
 		"acknowledgement_required":     c.AcknowledgementRequired,
 	}
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     auth.action,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: c.SittingID.String()},
 		ScopeType:  model.RoleScopeAcademicUnit,
@@ -197,7 +197,7 @@ func (s *Service) ApplyExamSittingCorrection(
 			SittingID:               c.SittingID,
 			CurrentRevisionID:       c.ExpectedCurrentRevisionID,
 			ExpectedSittingRevision: c.ExpectedSittingRevision,
-			ActorUserID:             invocation.Principal().UserID,
+			ActorUserID:             inv.Principal().UserID,
 			ManagerOverride:         auth.override,
 			InstructionsMarkdown:    instructions,
 			BrowserPolicy:           browserPolicy,

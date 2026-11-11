@@ -39,11 +39,11 @@ func assertPreparedIdempotency(t *testing.T, got *store.CommandIdempotency, user
 func TestIdempotencyDocumentsAndStoreBoundaryCompatibility(t *testing.T) {
 	t.Parallel()
 	userID := model.NewUserID()
-	invocation := invocation.New(model.Principal{UserID: userID}, model.RequestMetadata{})
+	inv := invocation.New(model.Principal{UserID: userID}, model.RequestMetadata{})
 	submissionID, reviewID := model.NewSubmissionID(), model.NewSubmissionReviewID()
 	flagID := model.NewIntegrityFlagID()
 
-	decision, err := prepareDecisionIdempotency(invocation, SaveDecisionCommand{SubmissionID: submissionID, ReviewID: reviewID,
+	decision, err := prepareDecisionIdempotency(inv, SaveDecisionCommand{SubmissionID: submissionID, ReviewID: reviewID,
 		FlagID: flagID, ExpectedReviewRevision: 2, ExpectedDecisionRevision: 1, Outcome: model.IntegrityReviewConfirmed,
 		PrivateRationale: "verified", IdempotencyKey: "decision-key"})
 	require.NoError(t, err)
@@ -51,7 +51,7 @@ func TestIdempotencyDocumentsAndStoreBoundaryCompatibility(t *testing.T) {
 		fmt.Sprintf(`{"submission_id":%q,"submission_review_id":%q,"integrity_flag_id":%q,"expected_review_revision":2,"expected_decision_revision":1,"outcome":"confirmed","private_rationale":"verified"}`,
 			submissionID, reviewID, flagID))
 
-	draft, err := prepareDraftIdempotency(invocation, UpdateDraftCommand{SubmissionID: submissionID, ReviewID: reviewID,
+	draft, err := prepareDraftIdempotency(inv, UpdateDraftCommand{SubmissionID: submissionID, ReviewID: reviewID,
 		ExpectedReviewRevision: 2, ManagerNotes: "private", StudentRemarksMarkdown: "Visible", IdempotencyKey: "draft-key"})
 	require.NoError(t, err)
 	assertPreparedIdempotency(t, draft, userID, store.ExamIntegrityReviewDraftOperation, "draft-key",
@@ -59,7 +59,7 @@ func TestIdempotencyDocumentsAndStoreBoundaryCompatibility(t *testing.T) {
 			submissionID, reviewID))
 
 	for _, operation := range []string{store.ExamIntegrityReviewFinalizeOperation, store.ExamIntegrityReviewReleaseOperation} {
-		terminal, prepareErr := prepareTerminalIdempotency(invocation, operation, "terminal-key", submissionID, reviewID, 3)
+		terminal, prepareErr := prepareTerminalIdempotency(inv, operation, "terminal-key", submissionID, reviewID, 3)
 		require.NoError(t, prepareErr)
 		assertPreparedIdempotency(t, terminal, userID, operation, "terminal-key",
 			fmt.Sprintf(`{"submission_id":%q,"submission_review_id":%q,"expected_review_revision":3}`, submissionID, reviewID))
@@ -82,8 +82,8 @@ func TestIdempotencyOperationCompatibility(t *testing.T) {
 
 func TestPrepareIdempotencyRequiresKey(t *testing.T) {
 	t.Parallel()
-	invocation := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
-	_, err := idempotency.Require(invocation, "operation", "", struct{}{})
+	inv := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
+	_, err := idempotency.Require(inv, "operation", "", struct{}{})
 	fault, ok := apperror.As(err)
 	require.True(t, ok)
 	require.Equal(t, "idempotency.key_required", fault.Code())

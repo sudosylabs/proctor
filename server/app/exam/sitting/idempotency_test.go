@@ -39,20 +39,20 @@ func assertPreparedIdempotency(t *testing.T, got *store.CommandIdempotency, user
 func TestIdempotencyDocumentsAndStoreBoundaryCompatibility(t *testing.T) {
 	t.Parallel()
 	userID := model.NewUserID()
-	invocation := invocation.New(model.Principal{UserID: userID}, model.RequestMetadata{})
+	inv := invocation.New(model.Principal{UserID: userID}, model.RequestMetadata{})
 	examID, sittingID := model.NewExamID(), model.NewExamSittingID()
 	revisionID, classID := model.NewExamRevisionID(), model.NewClassID()
 	start := time.Date(2026, 8, 24, 10, 0, 0, 0, time.UTC)
 	end := start.Add(2 * time.Hour)
 
-	scheduled, err := prepareScheduleIdempotency(invocation, ScheduleCommand{ExamID: examID, ExamRevisionID: revisionID,
+	scheduled, err := prepareScheduleIdempotency(inv, ScheduleCommand{ExamID: examID, ExamRevisionID: revisionID,
 		ClassID: classID, ScheduledStartAt: start, ScheduledEndAt: end, IdempotencyKey: "schedule-key"})
 	require.NoError(t, err)
 	assertPreparedIdempotency(t, scheduled, userID, idempotencyOperationSchedule, "schedule-key",
 		fmt.Sprintf(`{"exam_id":%q,"exam_revision_id":%q,"class_id":%q,"scheduled_start_at":"2026-08-24T10:00:00Z","scheduled_end_at":"2026-08-24T12:00:00Z"}`, examID, revisionID, classID))
 
 	changedEnd := end.Add(time.Hour)
-	updated, err := prepareScheduleUpdateIdempotency(invocation, UpdateScheduleCommand{ExamID: examID, SittingID: sittingID,
+	updated, err := prepareScheduleUpdateIdempotency(inv, UpdateScheduleCommand{ExamID: examID, SittingID: sittingID,
 		ExpectedRevision: 2, ScheduledEndAt: &changedEnd, IdempotencyKey: "update-key"})
 	require.NoError(t, err)
 	assertPreparedIdempotency(t, updated, userID, idempotencyOperationUpdateSchedule, "update-key",
@@ -60,13 +60,13 @@ func TestIdempotencyDocumentsAndStoreBoundaryCompatibility(t *testing.T) {
 
 	transition := ManagerTransitionCommand{ExamID: examID, SittingID: sittingID, ExpectedRevision: 3, PrivateReason: "room unavailable", IdempotencyKey: "transition-key"}
 	for _, operation := range []string{idempotencyOperationCancel, idempotencyOperationPause, idempotencyOperationResume, idempotencyOperationClose} {
-		prepared, prepareErr := prepareTransitionIdempotency(invocation, operation, transition)
+		prepared, prepareErr := prepareTransitionIdempotency(inv, operation, transition)
 		require.NoError(t, prepareErr)
 		assertPreparedIdempotency(t, prepared, userID, operation, "transition-key",
 			fmt.Sprintf(`{"exam_id":%q,"exam_sitting_id":%q,"expected_revision":3,"private_reason":"room unavailable"}`, examID, sittingID))
 	}
 
-	extended, err := prepareExtensionIdempotency(invocation, ExtendCommand{ExamID: examID, SittingID: sittingID,
+	extended, err := prepareExtensionIdempotency(inv, ExtendCommand{ExamID: examID, SittingID: sittingID,
 		ExpectedRevision: 4, ScheduledEndAt: changedEnd, PrivateReason: "extra time", IdempotencyKey: "extend-key"})
 	require.NoError(t, err)
 	assertPreparedIdempotency(t, extended, userID, idempotencyOperationExtend, "extend-key",
@@ -92,8 +92,8 @@ func TestIdempotencyOperationCompatibility(t *testing.T) {
 
 func TestPrepareIdempotencyRequiresKey(t *testing.T) {
 	t.Parallel()
-	invocation := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
-	_, err := idempotency.Require(invocation, "operation", "", struct{}{})
+	inv := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
+	_, err := idempotency.Require(inv, "operation", "", struct{}{})
 	fault, ok := apperror.As(err)
 	require.True(t, ok)
 	require.Equal(t, "idempotency.key_required", fault.Code())

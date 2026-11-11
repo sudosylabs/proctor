@@ -34,7 +34,7 @@ type AuthenticateDesktopReauthenticationPasswordCommand struct {
 // proof is refreshed.
 func (s *Service) AuthenticateDesktopReauthenticationPassword(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command AuthenticateDesktopReauthenticationPasswordCommand,
 ) (*DesktopReauthenticationBrowserContext, error) {
 	current, err := s.boundDesktopReauthentication(ctx, command.Binding)
@@ -93,7 +93,7 @@ func (s *Service) AuthenticateDesktopReauthenticationPassword(
 		return nil, passwordWorkError(err, "authentication.internal")
 	}
 
-	if _, err = s.recordDesktopReauthenticationProof(ctx, invocation, &store.DesktopReauthenticationAuthentication{
+	if _, err = s.recordDesktopReauthenticationProof(ctx, inv, &store.DesktopReauthenticationAuthentication{
 		BindingHash:          model.HashToken(command.Binding),
 		UserID:               current.UserID,
 		AuthenticationMethod: "password",
@@ -107,14 +107,14 @@ func (s *Service) AuthenticateDesktopReauthenticationPassword(
 		s.warn(ctx, "desktop reauthentication rate-limit reset failed", err)
 	}
 
-	return s.DesktopReauthenticationContext(ctx, invocation, command.Binding)
+	return s.DesktopReauthenticationContext(ctx, inv, command.Binding)
 }
 
 // authenticate records a fresh proof and audits a refusal that proved another
 // account than the Desktop Session's.
 func (s *Service) recordDesktopReauthenticationProof(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	input *store.DesktopReauthenticationAuthentication,
 ) (*store.DesktopReauthenticationAuthenticationResult, error) {
 	result, err := s.browserAuthentications.AuthenticateDesktopReauthentication(ctx, input)
@@ -134,7 +134,7 @@ func (s *Service) recordDesktopReauthenticationProof(
 		return nil, apperror.New("audit.unavailable").Wrap(err)
 	}
 
-	if auditErr := s.recordRejectedDesktopReauthentication(ctx, invocation, desktopReauthenticationRejection{
+	if auditErr := s.recordRejectedDesktopReauthentication(ctx, inv, desktopReauthenticationRejection{
 		actor:         input.UserID,
 		target:        result.UserID,
 		institutionID: institution.ID,
@@ -176,7 +176,7 @@ func (s *Service) resolveExternalReauthentication(
 // exact External Identity on the reauthentication bound to the login state.
 func (s *Service) authenticateExternalReauthentication(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	transactionID model.BrowserAuthenticationTransactionID,
 	identity *model.ExternalIdentity,
 	method string,
@@ -193,7 +193,7 @@ func (s *Service) authenticateExternalReauthentication(
 		return apperror.New("authentication.desktop_reauthentication.invalid")
 	}
 
-	_, err := s.recordDesktopReauthenticationProof(ctx, invocation, &store.DesktopReauthenticationAuthentication{
+	_, err := s.recordDesktopReauthenticationProof(ctx, inv, &store.DesktopReauthenticationAuthentication{
 		TransactionID:        transactionID,
 		UserID:               identity.UserID,
 		AuthenticationMethod: method,

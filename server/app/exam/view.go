@@ -32,9 +32,9 @@ type View struct {
 
 // GetExam returns an Exam and its Exam Draft to a caller authorized to view
 // it, directly or through an override.
-func (a *Authoring) GetExam(ctx context.Context, invocation invocation.Invocation, id model.ExamID) (_ View, resultErr error) {
+func (a *Authoring) GetExam(ctx context.Context, inv invocation.Invocation, id model.ExamID) (_ View, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil || !id.IsValid() {
 		return View{}, apperror.Invalid("exam.invalid", "exam_id")
 	}
@@ -61,7 +61,7 @@ func (a *Authoring) GetExam(ctx context.Context, invocation invocation.Invocatio
 
 	if err = a.authorizer.Authorize(
 		ctx,
-		invocation,
+		inv,
 		action,
 		model.Resource{Type: model.ResourceExam, ID: id.String()},
 	); err != nil {
@@ -82,8 +82,8 @@ func (a *Authoring) GetExam(ctx context.Context, invocation invocation.Invocatio
 // AuthorizeExamView performs the same current relationship and role decision used
 // by Get without loading authored Draft content. Realtime subscriptions use it
 // so a scoped role alone cannot reveal Exam events to a non-manager.
-func (a *Authoring) AuthorizeExamView(ctx context.Context, invocation invocation.Invocation, examID model.ExamID) error {
-	principal := invocation.Principal()
+func (a *Authoring) AuthorizeExamView(ctx context.Context, inv invocation.Invocation, examID model.ExamID) error {
+	principal := inv.Principal()
 	if principal.Validate() != nil || !examID.IsValid() {
 		return apperror.Invalid("exam.invalid", "exam_id")
 	}
@@ -108,7 +108,7 @@ func (a *Authoring) AuthorizeExamView(ctx context.Context, invocation invocation
 		return err
 	}
 
-	return a.authorizer.Authorize(ctx, invocation, action, model.Resource{Type: model.ResourceExam, ID: examID.String()})
+	return a.authorizer.Authorize(ctx, inv, action, model.Resource{Type: model.ResourceExam, ID: examID.String()})
 }
 
 func projectView(snapshot *store.ExamAuthoringSnapshot) View {

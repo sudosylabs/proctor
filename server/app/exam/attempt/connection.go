@@ -87,7 +87,7 @@ type ConnectionResult struct {
 // the same transaction (store/sqlstore/connect_security.go).
 func (s *Service) ConnectExamAttempt(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ConnectCommand,
 ) (_ ConnectionResult, resultErr error) {
 	defer func() { s.recordOperational("connect", resultErr) }()
@@ -96,7 +96,7 @@ func (s *Service) ConnectExamAttempt(
 		return ConnectionResult{}, apperror.Invalid("exam.attempt.invalid", "security")
 	}
 
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return ConnectionResult{}, apperror.New("authentication.token_invalid")
 	}
@@ -118,7 +118,7 @@ func (s *Service) ConnectExamAttempt(
 		return ConnectionResult{}, err
 	}
 
-	commandIdempotency, err := prepareConnectIdempotency(invocation, command)
+	commandIdempotency, err := prepareConnectIdempotency(inv, command)
 	if err != nil {
 		return ConnectionResult{}, err
 	}
@@ -145,7 +145,7 @@ func (s *Service) ConnectExamAttempt(
 	participationID, connectionID := s.newParticipationID(), s.newConnectionID()
 
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionExamSittingParticipate,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: command.SittingID.String()},
 		ScopeType:  model.RoleScopeClass,
@@ -248,12 +248,12 @@ type ConnectionClosedResult struct {
 // state.
 func (s *Service) CloseExamAttemptConnection(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command CloseConnectionCommand,
 ) (_ ConnectionClosedResult, resultErr error) {
 	defer func() { s.recordOperational("close", resultErr) }()
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	if invocation.Principal().Validate() != nil ||
+	if inv.Principal().Validate() != nil ||
 		!command.AttemptID.IsValid() ||
 		!command.SittingID.IsValid() ||
 		!command.ClassID.IsValid() ||
@@ -263,7 +263,7 @@ func (s *Service) CloseExamAttemptConnection(
 	}
 
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionExamSittingParticipate,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: command.SittingID.String()},
 		ScopeType:  model.RoleScopeClass,
@@ -277,8 +277,8 @@ func (s *Service) CloseExamAttemptConnection(
 
 	stored, err := s.attempts.CloseConnection(ctx, &store.ExamAttemptConnectionClose{
 		ConnectionID:    command.ConnectionID,
-		CandidateUserID: invocation.Principal().UserID,
-		SessionID:       invocation.Principal().SessionID,
+		CandidateUserID: inv.Principal().UserID,
+		SessionID:       inv.Principal().SessionID,
 		Reason:          command.Reason,
 		AuditEventID:    auditID,
 		AuditAt:         model.TimeUTC(s.now()),

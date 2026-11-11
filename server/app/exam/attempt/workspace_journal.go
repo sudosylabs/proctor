@@ -40,11 +40,11 @@ type WorkspaceJournalPage struct {
 // reload the manifest.
 func (s *Service) ListCandidateExamWorkspaceJournal(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query WorkspaceJournalQuery,
 ) (_ WorkspaceJournalPage, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	candidateAccess, err := candidateSelector(invocation, query.Access)
+	candidateAccess, err := candidateSelector(inv, query.Access)
 	if err != nil {
 		return WorkspaceJournalPage{}, err
 	}

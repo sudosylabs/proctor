@@ -88,10 +88,10 @@ type SelfAuditPage struct {
 // because the history includes credential and Session changes.
 func (s *Service) ListSelfAuditEvents(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query ListSelfAuditEventsQuery,
 ) (SelfAuditPage, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return SelfAuditPage{}, apperror.New("authentication.required")
 	}

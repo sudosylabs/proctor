@@ -20,10 +20,10 @@ func TestRemovePassesOwnedIdempotencyToStore(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	resourceID := model.NewExamResourceID()
-	_, err := f.service.RemoveExamResource(context.Background(), f.invocation, RemoveCommand{ExamID: f.examID,
+	_, err := f.service.RemoveExamResource(context.Background(), f.inv, RemoveCommand{ExamID: f.examID,
 		ResourceID: resourceID, ExpectedDraftRevision: 1, IdempotencyKey: "remove-key"})
 	require.NoError(t, err)
-	want, err := prepareResourceIdempotency(f.invocation, idempotencyOperationRemoveResource, "remove-key",
+	want, err := prepareResourceIdempotency(f.inv, idempotencyOperationRemoveResource, "remove-key",
 		f.examID, 1, resourceID.String(), "", "", "", 0, "", nil)
 	require.NoError(t, err)
 	require.Equal(t, want, f.persistence.idempotency)

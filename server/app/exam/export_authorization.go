@@ -21,17 +21,17 @@ import (
 
 func (s *Exports) authorizeExport(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	scope model.RetentionHoldScope,
 ) (model.Action, model.AcademicUnitID, error) {
 	if scope.Validate() != nil ||
 		!scope.SittingID.IsValid() ||
-		invocation.Principal().Validate() != nil ||
-		invocation.Principal().CredentialType != model.CredentialSessionAccess {
+		inv.Principal().Validate() != nil ||
+		inv.Principal().CredentialType != model.CredentialSessionAccess {
 		return "", "", apperror.Invalid("exam.invalid", "export_scope")
 	}
 
-	examAccess, err := s.exams.Access(ctx, scope.ExamID, invocation.Principal().UserID)
+	examAccess, err := s.exams.Access(ctx, scope.ExamID, inv.Principal().UserID)
 	if err != nil {
 		return "", "", examExportStoreErrors.Translate(err)
 	}
@@ -42,7 +42,7 @@ func (s *Exports) authorizeExport(
 	action, err := manageraccess.SelectAction(
 		ctx,
 		s.academicUnitMembers,
-		invocation.Principal().UserID,
+		inv.Principal().UserID,
 		examAccess,
 		model.TimeUTC(s.now()),
 		model.ActionExamRecordsExport,
@@ -51,7 +51,7 @@ func (s *Exports) authorizeExport(
 	if err != nil {
 		return "", "", apperror.New("exam.export.unavailable").Wrap(err)
 	}
-	if err = s.authorizer.Authorize(ctx, invocation, action, scope.Resource()); err != nil {
+	if err = s.authorizer.Authorize(ctx, inv, action, scope.Resource()); err != nil {
 		return "", "", err
 	}
 
@@ -60,7 +60,7 @@ func (s *Exports) authorizeExport(
 
 func (s *Exports) authorizeSources(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	scope model.RetentionHoldScope,
 	action model.Action,
 	unit model.AcademicUnitID,
@@ -77,13 +77,13 @@ func (s *Exports) authorizeSources(
 	}
 
 	if scope.SubmissionID.IsZero() {
-		if err := s.authorizer.Authorize(ctx, invocation, sittingView, scope.Resource()); err != nil {
+		if err := s.authorizer.Authorize(ctx, inv, sittingView, scope.Resource()); err != nil {
 			return err
 		}
 	}
 
 	if slices.Contains(categories, model.RetentionCategoryBrowserActivity) {
-		examAccess, err := s.exams.Access(ctx, scope.ExamID, invocation.Principal().UserID)
+		examAccess, err := s.exams.Access(ctx, scope.ExamID, inv.Principal().UserID)
 		if err != nil {
 			return examExportStoreErrors.Translate(err)
 		}
@@ -94,7 +94,7 @@ func (s *Exports) authorizeSources(
 		if !examAccess.ActorIsManager {
 			if err := s.authorizer.RecordDenial(
 				ctx,
-				invocation,
+				inv,
 				model.ActionExamAttemptBrowserActivityView,
 				model.Resource{Type: model.ResourceExamSitting, ID: scope.SittingID.String()},
 				unit,
@@ -107,7 +107,7 @@ func (s *Exports) authorizeSources(
 
 		if err := s.authorizer.Authorize(
 			ctx,
-			invocation,
+			inv,
 			model.ActionExamAttemptBrowserActivityView,
 			model.Resource{Type: model.ResourceExamSitting, ID: scope.SittingID.String()},
 		); err != nil {
@@ -129,14 +129,14 @@ func (s *Exports) authorizeSources(
 		}
 
 		resource := model.Resource{Type: model.ResourceSubmission, ID: a.SubmissionID.String()}
-		if a.CandidateUserID == invocation.Principal().UserID {
-			if err := s.authorizer.RecordDenial(ctx, invocation, view, resource, unit); err != nil {
+		if a.CandidateUserID == inv.Principal().UserID {
+			if err := s.authorizer.RecordDenial(ctx, inv, view, resource, unit); err != nil {
 				return err
 			}
 			return apperror.New("exam.not_found")
 		}
 
-		if err := s.authorizer.Authorize(ctx, invocation, view, resource); err != nil {
+		if err := s.authorizer.Authorize(ctx, inv, view, resource); err != nil {
 			return err
 		}
 

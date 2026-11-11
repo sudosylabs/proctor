@@ -33,7 +33,7 @@ type CreateExportCommand struct {
 // access to every selected source category.
 func (s *Exports) CreateExamExport(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command CreateExportCommand,
 ) (_ *model.ExamExport, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -50,12 +50,12 @@ func (s *Exports) CreateExamExport(
 
 	key := command.IdempotencyKey
 	command.IdempotencyKey = ""
-	commandIdempotency, err := idempotency.Require(invocation, store.ExamExportCreateOperation, key, command)
+	commandIdempotency, err := idempotency.Require(inv, store.ExamExportCreateOperation, key, command)
 	if err != nil {
 		return nil, err
 	}
 
-	action, unit, err := s.authorizeExport(ctx, invocation, command.Scope)
+	action, unit, err := s.authorizeExport(ctx, inv, command.Scope)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func (s *Exports) CreateExamExport(
 	if err != nil {
 		return nil, examExportStoreErrors.Translate(err)
 	}
-	if err = s.authorizeSources(ctx, invocation, command.Scope, action, unit, command.Categories, selected); err != nil {
+	if err = s.authorizeSources(ctx, inv, command.Scope, action, unit, command.Categories, selected); err != nil {
 		return nil, err
 	}
 
@@ -74,7 +74,7 @@ func (s *Exports) CreateExamExport(
 	}
 
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     action,
 		Resource:   command.Scope.Resource(),
 		ScopeType:  model.RoleScopeAcademicUnit,
@@ -90,7 +90,7 @@ func (s *Exports) CreateExamExport(
 		ExamExportAccess: store.ExamExportAccess{
 			ExamRecordsMutation: store.ExamRecordsMutation{
 				Scope:        command.Scope,
-				Principal:    invocation.Principal(),
+				Principal:    inv.Principal(),
 				Action:       action,
 				AuditEventID: auditID,
 				AuditAt:      model.TimeUTC(s.now()),
@@ -117,7 +117,7 @@ func (s *Exports) CreateExamExport(
 
 	if result.Validate() != nil ||
 		result.Scope != command.Scope ||
-		result.RequesterUserID != invocation.Principal().UserID ||
+		result.RequesterUserID != inv.Principal().UserID ||
 		!slices.Equal(result.Categories, command.Categories) {
 		return nil, apperror.New("exam.export.unavailable").Wrap(errors.New("invalid export creation result"))
 	}

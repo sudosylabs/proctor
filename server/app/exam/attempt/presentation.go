@@ -51,11 +51,11 @@ type Resource struct {
 // capabilities, browser policy, and live corrections.
 func (s *Service) GetCandidateExamPresentation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	candidateAccess CandidateAccess,
 ) (_ Presentation, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	selector, err := candidateSelector(invocation, candidateAccess)
+	selector, err := candidateSelector(inv, candidateAccess)
 	if err != nil {
 		return Presentation{}, err
 	}
@@ -107,11 +107,11 @@ type OpenResourceQuery struct {
 // to the candidate's live Attempt.
 func (s *Service) OpenCandidateExamResource(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query OpenResourceQuery,
 ) (_ OpenedContent, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	selector, err := candidateSelector(invocation, query.Access)
+	selector, err := candidateSelector(inv, query.Access)
 	if err != nil {
 		return OpenedContent{}, err
 	}

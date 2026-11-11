@@ -35,7 +35,7 @@ type DesktopAuthorizationApproval struct {
 // authenticated as another.
 func (s *Service) ApproveDesktopAuthorization(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ApproveDesktopAuthorizationCommand,
 ) (*DesktopAuthorizationApproval, error) {
 	if !model.IsValidCredentialToken(command.Binding) || !model.IsValidCredentialToken(command.State) {
@@ -52,16 +52,16 @@ func (s *Service) ApproveDesktopAuthorization(
 		return nil, apperror.New("authentication.desktop_authorization.unavailable").Wrap(err)
 	}
 
-	if caller := invocation.Principal(); caller.UserID != "" && caller.UserID != current.UserID {
+	if caller := inv.Principal(); caller.UserID != "" && caller.UserID != current.UserID {
 		failure := apperror.New("authentication.desktop_authorization.rejected")
-		if auditErr := s.recordRejectedDesktopIssue(ctx, invocation, current.UserID, institution.ID, failure.Code()); auditErr != nil {
+		if auditErr := s.recordRejectedDesktopIssue(ctx, inv, current.UserID, institution.ID, failure.Code()); auditErr != nil {
 			return nil, apperror.New("audit.unavailable").Wrap(auditErr)
 		}
 
 		return nil, failure
 	}
 
-	audit, err := s.beginDesktopIssueAudit(ctx, invocation, current.UserID, institution.ID)
+	audit, err := s.beginDesktopIssueAudit(ctx, inv, current.UserID, institution.ID)
 	if err != nil || audit == nil || !audit.ID.IsValid() {
 		return nil, apperror.New("audit.unavailable").Wrap(err)
 	}

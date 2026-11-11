@@ -34,22 +34,22 @@ func (f *ownRetentionNoticesFake) ListNotices(_ context.Context, user model.User
 func TestRetentionNoticesUseExactSessionRecipientAndRejectForeignProjection(t *testing.T) {
 	t.Parallel()
 	fixture := newRetentionPolicyFixture(t)
-	user := fixture.invocation.Principal().UserID
+	user := fixture.inv.Principal().UserID
 	persistence := &ownRetentionNoticesFake{items: []model.RetentionNotice{{RecipientUserID: user}, {RecipientUserID: user}}}
 	fixture.service.retention = persistence
 	app := fixture.service
-	page, err := app.ListRetentionNotices(t.Context(), fixture.invocation, "", 1)
+	page, err := app.ListRetentionNotices(t.Context(), fixture.inv, "", 1)
 	require.NoError(t, err, "page=%#v err", page)
 	require.True(t, page.HasMore, "page=%#v err", page)
 	require.Len(t, page.Items, 1, "page=%#v err", page)
 	require.Equal(t, user, persistence.requestedUser, "page=%#v err", page)
 	require.Equal(t, 2, persistence.limit, "page=%#v err", page)
 	persistence.items = []model.RetentionNotice{{RecipientUserID: model.NewUserID()}}
-	page, err = app.ListRetentionNotices(t.Context(), fixture.invocation, "", 1)
+	page, err = app.ListRetentionNotices(t.Context(), fixture.inv, "", 1)
 	require.True(t, apperror.Is(err, "retention.unavailable"), "foreign recipient escaped")
 	require.Nil(t, page, "foreign recipient escaped")
 	for _, kind := range []string{"PAT", "restricted"} {
-		p := fixture.invocation.Principal()
+		p := fixture.inv.Principal()
 		if kind == "PAT" {
 			p.CredentialType = model.CredentialPersonalAccessToken
 			p.SessionID = ""
@@ -57,7 +57,7 @@ func TestRetentionNoticesUseExactSessionRecipientAndRejectForeignProjection(t *t
 			p.MFARecoveryRequired = true
 		}
 		persistence.requestedUser = ""
-		page, err = app.ListRetentionNotices(t.Context(), invocation.New(p, fixture.invocation.RequestMetadata()), "", 1)
+		page, err = app.ListRetentionNotices(t.Context(), invocation.New(p, fixture.inv.RequestMetadata()), "", 1)
 		require.True(t, apperror.Is(err, "authentication.required"), "%s accessed notices", kind)
 		require.Nil(t, page, "%s accessed notices", kind)
 		require.True(t, persistence.requestedUser.IsZero(), "%s accessed notices", kind)

@@ -100,11 +100,11 @@ func (s *Service) requireMFARekey() error {
 // authorizeMFARekey authorizes mfa.rekey on the installation's Institution for
 // a strong, recent Session and returns that Resource for the audit. Without
 // Job and MFA stores the key ring is unavailable.
-func (s *Service) authorizeMFARekey(ctx context.Context, invocation invocation.Invocation) (model.Resource, error) {
+func (s *Service) authorizeMFARekey(ctx context.Context, inv invocation.Invocation) (model.Resource, error) {
 	if !s.mfaRekeyEnabled {
 		return model.Resource{}, apperror.New("authentication.mfa.unavailable")
 	}
-	if err := access.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
+	if err := access.RequireStrongRecentSession(inv.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 		return model.Resource{}, err
 	}
 	institution, err := s.institutions.GetSingleton(ctx)
@@ -112,15 +112,15 @@ func (s *Service) authorizeMFARekey(ctx context.Context, invocation invocation.I
 		return model.Resource{}, apperror.New("authentication.mfa.unavailable").Wrap(err)
 	}
 	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
-	if err = s.authorizer.Authorize(ctx, invocation, model.ActionMFARekey, resource); err != nil {
+	if err = s.authorizer.Authorize(ctx, inv, model.ActionMFARekey, resource); err != nil {
 		return model.Resource{}, err
 	}
 	return resource, nil
 }
 
 // GetMFAKeyState reports the MFA key ring to an operator with mfa.rekey.
-func (s *Service) GetMFAKeyState(ctx context.Context, invocation invocation.Invocation) (MFAKeyStateView, error) {
-	if _, err := s.authorizeMFARekey(ctx, invocation); err != nil {
+func (s *Service) GetMFAKeyState(ctx context.Context, inv invocation.Invocation) (MFAKeyStateView, error) {
+	if _, err := s.authorizeMFARekey(ctx, inv); err != nil {
 		return MFAKeyStateView{}, err
 	}
 	if s.mfa.deps.Sealer == nil {
@@ -156,8 +156,8 @@ func (s *Service) GetMFAKeyState(ctx context.Context, invocation invocation.Invo
 // StartMFARekey fences the MFA key ring on this node's configured primary and
 // queues the Job that re-seals every live TOTP secret under it. The retiring
 // key must be another key of the configured ring.
-func (s *Service) StartMFARekey(ctx context.Context, invocation invocation.Invocation, command StartMFARekeyCommand) (MFARekeyView, error) {
-	resource, err := s.authorizeMFARekey(ctx, invocation)
+func (s *Service) StartMFARekey(ctx context.Context, inv invocation.Invocation, command StartMFARekeyCommand) (MFARekeyView, error) {
+	resource, err := s.authorizeMFARekey(ctx, inv)
 	if err != nil {
 		return MFARekeyView{}, err
 	}
@@ -189,9 +189,9 @@ func (s *Service) StartMFARekey(ctx context.Context, invocation invocation.Invoc
 		return MFARekeyView{}, apperror.New("authentication.mfa.unavailable").Wrap(err)
 	}
 
-	job.CreatedByUserID = invocation.Principal().UserID
+	job.CreatedByUserID = inv.Principal().UserID
 	operation, err := access.RunAudited(ctx, s.auditor, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionMFARekey,
 		Resource:   resource,
 		ScopeType:  model.RoleScopeInstitution,
@@ -235,10 +235,10 @@ func (s *Service) StartMFARekey(ctx context.Context, invocation invocation.Invoc
 // unrelated Jobs.
 func (s *Service) GetMFARekeyStatus(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	jobID model.JobID,
 ) (MFARekeyStatusView, error) {
-	if _, err := s.authorizeMFARekey(ctx, invocation); err != nil {
+	if _, err := s.authorizeMFARekey(ctx, inv); err != nil {
 		return MFARekeyStatusView{}, err
 	}
 	if !jobID.IsValid() {

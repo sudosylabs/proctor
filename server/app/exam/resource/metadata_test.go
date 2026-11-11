@@ -26,7 +26,7 @@ func TestApparentMetadataNoOpWithStaleDraftReachesAuditedStoreGuard(t *testing.T
 	f.access.draftRevision = 2
 	f.persistence.updateErr = store.NewErrConflict("exam_draft", "exam_draft_revision", nil)
 
-	_, err := f.service.EditExamResourceMetadata(context.Background(), f.invocation, EditMetadataCommand{ExamID: f.examID, ResourceID: record.Resource.ID, ExpectedDraftRevision: 1, DisplayName: examResourceString(record.Resource.DisplayName), DescriptionMarkdown: examResourceString(record.Resource.DescriptionMarkdown), IdempotencyKey: "test-key"})
+	_, err := f.service.EditExamResourceMetadata(context.Background(), f.inv, EditMetadataCommand{ExamID: f.examID, ResourceID: record.Resource.ID, ExpectedDraftRevision: 1, DisplayName: examResourceString(record.Resource.DisplayName), DescriptionMarkdown: examResourceString(record.Resource.DescriptionMarkdown), IdempotencyKey: "test-key"})
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault)
 	require.Equal(t, "exam.draft.revision_conflict", fault.Code())
@@ -52,12 +52,12 @@ func TestMetadataPatchPreservesOmittedFieldsAndAllowsExplicitEmptyDescription(t 
 			record.Resource.DescriptionMarkdown = "Existing"
 			f.persistence.items = []store.ExamResourceRecord{record}
 			f.persistence.updateResult = &store.ExamResourceCommandResult{Value: &record}
-			_, err := f.service.EditExamResourceMetadata(context.Background(), f.invocation, EditMetadataCommand{ExamID: f.examID, ResourceID: record.Resource.ID, ExpectedDraftRevision: 1, DisplayName: test.displayName, DescriptionMarkdown: test.description, IdempotencyKey: "test-key"})
+			_, err := f.service.EditExamResourceMetadata(context.Background(), f.inv, EditMetadataCommand{ExamID: f.examID, ResourceID: record.Resource.ID, ExpectedDraftRevision: 1, DisplayName: test.displayName, DescriptionMarkdown: test.description, IdempotencyKey: "test-key"})
 			require.NoError(t, err)
 			require.NotNil(t, f.persistence.metadataUpdate)
 			require.Equal(t, test.wantName, f.persistence.metadataUpdate.DisplayName)
 			require.Equal(t, test.wantDesc, f.persistence.metadataUpdate.DescriptionMarkdown)
-			want, prepareErr := prepareMetadataIdempotency(f.invocation, EditMetadataCommand{ExamID: f.examID,
+			want, prepareErr := prepareMetadataIdempotency(f.inv, EditMetadataCommand{ExamID: f.examID,
 				ResourceID: record.Resource.ID, ExpectedDraftRevision: 1, DisplayName: test.displayName,
 				DescriptionMarkdown: test.description, IdempotencyKey: "test-key"})
 			require.NoError(t, prepareErr)
@@ -69,7 +69,7 @@ func TestMetadataPatchPreservesOmittedFieldsAndAllowsExplicitEmptyDescription(t 
 func TestMetadataPatchRejectsOmittedFieldsBeforeAudit(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	_, err := f.service.EditExamResourceMetadata(context.Background(), f.invocation, EditMetadataCommand{ExamID: f.examID, ResourceID: model.NewExamResourceID(), ExpectedDraftRevision: 1, IdempotencyKey: "test-key"})
+	_, err := f.service.EditExamResourceMetadata(context.Background(), f.inv, EditMetadataCommand{ExamID: f.examID, ResourceID: model.NewExamResourceID(), ExpectedDraftRevision: 1, IdempotencyKey: "test-key"})
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault)
 	require.Equal(t, "exam.resource.invalid", fault.Code())

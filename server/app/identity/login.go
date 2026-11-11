@@ -47,7 +47,7 @@ type LoginResult struct {
 // Desktop authorization instead.
 func (s *Service) Login(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command LoginCommand,
 ) (_ *LoginResult, resultErr error) {
 	defer func() { recordOperational(s.operational, "authentication", "login", resultErr) }()
@@ -63,7 +63,7 @@ func (s *Service) Login(
 
 		if auditErr := s.recordLocalLoginFailure(
 			ctx,
-			invocation,
+			inv,
 			subject.userID,
 			command.ClientType,
 			appErrorCode(err),
@@ -74,7 +74,7 @@ func (s *Service) Login(
 		return nil, err
 	}
 
-	auditID, err := s.beginLocalLogin(ctx, invocation, proof.User.ID, command.ClientType)
+	auditID, err := s.beginLocalLogin(ctx, inv, proof.User.ID, command.ClientType)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ func (s *Service) Login(
 // cannot grow the audit table without bound.
 func (s *Service) beginLocalLogin(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	userID model.UserID,
 	clientType model.SessionClientType,
 ) (model.AuditEventID, error) {
@@ -128,7 +128,7 @@ func (s *Service) beginLocalLogin(
 		return "", access.AuditUnavailable(errors.New("local login audit service is unavailable"))
 	}
 
-	event, err := s.securityAudit.BeginLocalLogin(ctx, userID, clientType, invocation.RequestMetadata())
+	event, err := s.securityAudit.BeginLocalLogin(ctx, userID, clientType, inv.RequestMetadata())
 	if err != nil {
 		return "", err
 	}
@@ -153,7 +153,7 @@ func (s *Service) completeLocalLogin(
 
 func (s *Service) recordLocalLoginFailure(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	target model.UserID,
 	clientType model.SessionClientType,
 	errorCode string,
@@ -161,5 +161,5 @@ func (s *Service) recordLocalLoginFailure(
 	if s.securityAudit == nil {
 		return access.AuditUnavailable(errors.New("local login audit service is unavailable"))
 	}
-	return s.securityAudit.RecordLocalLoginFailure(ctx, target, clientType, invocation.RequestMetadata(), errorCode)
+	return s.securityAudit.RecordLocalLoginFailure(ctx, target, clientType, inv.RequestMetadata(), errorCode)
 }

@@ -47,17 +47,17 @@ type AppendBrowserActivityCommand struct {
 // audited against the Sitting's Class.
 func (s *Service) StartExamAttemptBrowserActivity(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command StartBrowserActivityCommand,
 ) (_ model.BrowserSourceStatus, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	release, admissionErr := s.enterControl(ctx, invocation, false)
+	release, admissionErr := s.enterControl(ctx, inv, false)
 	if admissionErr != nil {
 		return model.BrowserSourceStatus{}, admissionErr
 	}
 	defer release()
 
-	candidateAccess, err := candidateSelector(invocation, command.CandidateAccess)
+	candidateAccess, err := candidateSelector(inv, command.CandidateAccess)
 	if err != nil {
 		return model.BrowserSourceStatus{}, err
 	}
@@ -84,7 +84,7 @@ func (s *Service) StartExamAttemptBrowserActivity(
 	}
 
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionExamSittingParticipate,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
 		ScopeType:  model.RoleScopeClass,
@@ -102,7 +102,7 @@ func (s *Service) StartExamAttemptBrowserActivity(
 	if err != nil {
 		var refusal *store.BrowserSourceRefusal
 		if errors.As(err, &refusal) {
-			presentation, projectionErr := s.GetCandidateExamPresentation(ctx, invocation, command.CandidateAccess)
+			presentation, projectionErr := s.GetCandidateExamPresentation(ctx, inv, command.CandidateAccess)
 			if projectionErr != nil {
 				return model.BrowserSourceStatus{}, projectionErr
 			}
@@ -127,11 +127,11 @@ func (s *Service) StartExamAttemptBrowserActivity(
 // are reported without marking the audit failed.
 func (s *Service) AppendExamAttemptBrowserActivity(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command AppendBrowserActivityCommand,
 ) (_ model.BrowserActivityAcknowledgement, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	candidateAccess, err := candidateSelector(invocation, command.CandidateAccess)
+	candidateAccess, err := candidateSelector(inv, command.CandidateAccess)
 	if err != nil ||
 		!command.ParticipationID.IsValid() ||
 		command.Generation < 1 ||
@@ -151,7 +151,7 @@ func (s *Service) AppendExamAttemptBrowserActivity(
 	}
 
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionExamSittingParticipate,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
 		ScopeType:  model.RoleScopeClass,
@@ -276,7 +276,7 @@ type BrowserActivityPage struct {
 // reports the candidate's own Attempt as not found.
 func (s *Service) ListExamAttemptBrowserActivity(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query BrowserActivityPageQuery,
 ) (_ BrowserActivityPage, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -292,7 +292,7 @@ func (s *Service) ListExamAttemptBrowserActivity(
 
 	// Authorize the exact Sitting before reading the Attempt so existence is
 	// not probeable; later exits complete the audit attempt as failed.
-	browserActivity, err := s.managers.AuthorizeBrowserActivityView(ctx, invocation, query.SittingID)
+	browserActivity, err := s.managers.AuthorizeBrowserActivityView(ctx, inv, query.SittingID)
 	unitID := browserActivity.AcademicUnitID
 	if err != nil {
 		return BrowserActivityPage{}, err
@@ -300,7 +300,7 @@ func (s *Service) ListExamAttemptBrowserActivity(
 
 	resource := model.Resource{Type: model.ResourceExamSitting, ID: query.SittingID.String()}
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionExamAttemptBrowserActivityView,
 		Resource:   resource,
 		ScopeType:  model.RoleScopeAcademicUnit,
@@ -330,7 +330,7 @@ func (s *Service) ListExamAttemptBrowserActivity(
 		)
 	}
 
-	if snapshot.Attempt.SittingID != query.SittingID || snapshot.Attempt.CandidateUserID == invocation.Principal().UserID {
+	if snapshot.Attempt.SittingID != query.SittingID || snapshot.Attempt.CandidateUserID == inv.Principal().UserID {
 		return BrowserActivityPage{}, s.failAudit(ctx, auditID, apperror.New("exam.attempt.not_found"))
 	}
 
@@ -364,7 +364,7 @@ type BrowserSourceQuery struct {
 	ParticipationID model.AttemptParticipationID
 }
 
-func browserSourceSelector(invocation invocation.Invocation, query BrowserSourceQuery) (store.BrowserDeliveryAccess, error) {
+func browserSourceSelector(inv invocation.Invocation, query BrowserSourceQuery) (store.BrowserDeliveryAccess, error) {
 	selector := string(query.SourceSessionID)
 	if query.SourceSessionID == "" {
 		selector = query.ParticipationID.String()
@@ -376,7 +376,7 @@ func browserSourceSelector(invocation invocation.Invocation, query BrowserSource
 		return store.BrowserDeliveryAccess{}, apperror.Invalid("exam.attempt.invalid", "participation_id")
 	}
 
-	deliveryAccess, err := nativeDeliverySelector(invocation, NativeDeliveryQuery{Access: query.Access, StreamID: selector})
+	deliveryAccess, err := nativeDeliverySelector(inv, NativeDeliveryQuery{Access: query.Access, StreamID: selector})
 	if err != nil {
 		return store.BrowserDeliveryAccess{}, err
 	}
@@ -393,17 +393,17 @@ func browserSourceSelector(invocation invocation.Invocation, query BrowserSource
 // desktop.
 func (s *Service) BrowserSourceStatus(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query BrowserSourceQuery,
 ) (_ *model.BrowserSourceStatus, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	release, admissionErr := s.enterControl(ctx, invocation, false)
+	release, admissionErr := s.enterControl(ctx, inv, false)
 	if admissionErr != nil {
 		return nil, admissionErr
 	}
 	defer release()
 
-	deliveryAccess, err := browserSourceSelector(invocation, query)
+	deliveryAccess, err := browserSourceSelector(inv, query)
 	if err != nil {
 		return nil, err
 	}
@@ -424,11 +424,11 @@ func (s *Service) BrowserSourceStatus(
 // participation and must not name a source session.
 func (s *Service) BrowserSourceList(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query BrowserSourceQuery,
 ) (_ []model.BrowserSourceStatus, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	release, admissionErr := s.enterControl(ctx, invocation, false)
+	release, admissionErr := s.enterControl(ctx, inv, false)
 	if admissionErr != nil {
 		return nil, admissionErr
 	}
@@ -438,7 +438,7 @@ func (s *Service) BrowserSourceList(
 		return nil, apperror.Invalid("exam.attempt.invalid", "participation_id")
 	}
 
-	deliveryAccess, err := browserSourceSelector(invocation, query)
+	deliveryAccess, err := browserSourceSelector(inv, query)
 	if err != nil {
 		return nil, err
 	}

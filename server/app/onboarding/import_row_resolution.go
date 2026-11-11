@@ -21,7 +21,7 @@ import (
 
 func (s *Service) resolveAndValidateImportRow(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	current *store.OnboardingImport,
 	values map[string]string,
 	row *store.OnboardingImportRow,
@@ -30,7 +30,7 @@ func (s *Service) resolveAndValidateImportRow(
 		return errors.New("timezone is too long")
 	}
 	if current.Mode == model.OnboardingImportAcademicAdministration {
-		return s.resolveAcademicAdministrationImportRow(ctx, invocation, current, values, row)
+		return s.resolveAcademicAdministrationImportRow(ctx, inv, current, values, row)
 	}
 
 	if current.Mode == model.OnboardingImportStudentClass {
@@ -73,12 +73,12 @@ func (s *Service) resolveAndValidateImportRow(
 		return validateImportTeacherCandidate(current.ActorUserID, unit, role, row)
 	}
 
-	return s.resolveInstitutionImportRow(ctx, invocation, current, values, row)
+	return s.resolveInstitutionImportRow(ctx, inv, current, values, row)
 }
 
 func (s *Service) resolveInstitutionImportRow(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	current *store.OnboardingImport,
 	values map[string]string,
 	row *store.OnboardingImportRow,
@@ -101,7 +101,7 @@ func (s *Service) resolveInstitutionImportRow(
 
 		if err = s.previewRoleAuthorization(
 			ctx,
-			invocation,
+			inv,
 			role,
 			model.ResourceInstitution,
 			model.RoleScopeInstitution,
@@ -134,12 +134,12 @@ func (s *Service) resolveInstitutionImportRow(
 		if kind == "teacher" {
 			resource := model.Resource{Type: model.ResourceAcademicUnit, ID: unit.ID.String()}
 			for _, action := range []model.Action{model.ActionInvitationCreate, model.ActionAcademicUnitMembersManage} {
-				if err = s.authorize(ctx, invocation, action, resource); err != nil {
+				if err = s.authorize(ctx, inv, action, resource); err != nil {
 					return err
 				}
 			}
 
-			if err = s.authorizeActionDelegation(ctx, invocation, role.Permissions, model.RoleScopeAcademicUnit, unit.ID.String()); err != nil {
+			if err = s.authorizeActionDelegation(ctx, inv, role.Permissions, model.RoleScopeAcademicUnit, unit.ID.String()); err != nil {
 				return err
 			}
 
@@ -147,7 +147,7 @@ func (s *Service) resolveInstitutionImportRow(
 		} else {
 			if err = s.previewRoleAuthorization(
 				ctx,
-				invocation,
+				inv,
 				role,
 				model.ResourceAcademicUnit,
 				model.RoleScopeAcademicUnit,
@@ -210,7 +210,7 @@ func (s *Service) resolveInstitutionImportRow(
 
 	resource := model.Resource{Type: model.ResourceClass, ID: class.ID.String()}
 	for _, action := range []model.Action{model.ActionInvitationCreate, model.ActionClassMembersManage} {
-		if err = s.authorize(ctx, invocation, action, resource); err != nil {
+		if err = s.authorize(ctx, inv, action, resource); err != nil {
 			return err
 		}
 	}
@@ -245,13 +245,13 @@ func (s *Service) resolveExactAcademicUnit(
 
 func (s *Service) previewRoleAuthorization(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	role *model.Role,
 	resourceType model.ResourceType,
 	scopeType model.RoleScopeType,
 	scopeID string,
 ) error {
-	if err := access.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
+	if err := access.RequireStrongRecentSession(inv.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 		return err
 	}
 	if err := validateInvitationDelegableRole(role, scopeType); err != nil {
@@ -260,12 +260,12 @@ func (s *Service) previewRoleAuthorization(
 
 	resource := model.Resource{Type: resourceType, ID: scopeID}
 	for _, action := range []model.Action{model.ActionInvitationCreate, model.ActionRoleBindingManage} {
-		if err := s.authorize(ctx, invocation, action, resource); err != nil {
+		if err := s.authorize(ctx, inv, action, resource); err != nil {
 			return err
 		}
 	}
 
-	return s.authorizeActionDelegation(ctx, invocation, role.Permissions, scopeType, scopeID)
+	return s.authorizeActionDelegation(ctx, inv, role.Permissions, scopeType, scopeID)
 }
 
 func validateImportStudentCandidate(

@@ -67,8 +67,8 @@ func TestUserSettingsUnsupportedFormatIsOpaqueAndReadOnlyAfterRollback(t *testin
 	require.NoError(t, persistence.GetMaster().Get(ctx, &before, `
 		SELECT source, format_version, revision, updated_at
 		FROM user_settings_documents WHERE user_id = $1`, account.ID.String()))
-	invocation := invocation.New(*principal, model.RequestMetadata{RequestID: "settings-compatibility"})
-	view, err := helper.App.Users.ReadOwnUserSettings(ctx, invocation)
+	inv := invocation.New(*principal, model.RequestMetadata{RequestID: "settings-compatibility"})
+	view, err := helper.App.Users.ReadOwnUserSettings(ctx, inv)
 	require.NoError(t, err)
 	require.Equal(t, source, view.Source, "ReadOwnUserSettings() = %#v, persisted = %#v", view, before)
 	require.Equal(t, 2, view.FormatVersion, "ReadOwnUserSettings() = %#v, persisted = %#v", view, before)
@@ -81,7 +81,7 @@ func TestUserSettingsUnsupportedFormatIsOpaqueAndReadOnlyAfterRollback(t *testin
 		"submit unsupported target version":            2,
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, replaceErr := helper.App.Users.ReplaceOwnUserSettings(ctx, invocation, user.ReplaceOwnUserSettingsCommand{
+			_, replaceErr := helper.App.Users.ReplaceOwnUserSettings(ctx, inv, user.ReplaceOwnUserSettingsCommand{
 				Source: "{}\n", FormatVersion: targetVersion, ExpectedRevision: view.Revision,
 				IdempotencyKey: "settings-compatibility-" + string(rune('0'+targetVersion)),
 			})
@@ -105,7 +105,7 @@ func TestUserSettingsUnsupportedFormatIsOpaqueAndReadOnlyAfterRollback(t *testin
 	require.Empty(t, audits)
 
 	// A second read proves that the first read did not attempt a hidden repair.
-	again, err := helper.App.Users.ReadOwnUserSettings(ctx, invocation)
+	again, err := helper.App.Users.ReadOwnUserSettings(ctx, inv)
 	require.NoError(t, err)
 	require.Equal(t, source, again.Source)
 	require.False(t, again.Writable)

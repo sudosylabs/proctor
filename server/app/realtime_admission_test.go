@@ -28,8 +28,8 @@ func TestAuthorizeWebSocketExamSubscriptionUsesExamRelationshipGate(t *testing.T
 	err := admission.AuthorizeWebSocketSubscription(context.Background(), invocation.New(principal, model.RequestMetadata{RequestID: "subscribe"}),
 		model.ActionExamView, model.Resource{Type: model.ResourceExam, ID: examID.String()})
 	require.NoError(t, err)
-	require.Equal(t, examID, exams.examID, "authorization = %s %#v", exams.examID, exams.invocation)
-	require.Equal(t, principal.UserID, exams.invocation.Principal().UserID, "authorization = %s %#v", exams.examID, exams.invocation)
+	require.Equal(t, examID, exams.examID, "authorization = %s %#v", exams.examID, exams.inv)
+	require.Equal(t, principal.UserID, exams.inv.Principal().UserID, "authorization = %s %#v", exams.examID, exams.inv)
 }
 
 func TestAuthorizeWebSocketExamSubscriptionConcealsMissingAndDeniedExams(t *testing.T) {
@@ -53,8 +53,8 @@ func TestAuthorizeWebSocketSittingSubscriptionUsesRelationshipGate(t *testing.T)
 		invocation.New(principal, model.RequestMetadata{RequestID: "sitting-subscribe"}), model.ActionExamSittingView,
 		model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()})
 	require.NoError(t, err)
-	require.Equal(t, sittingID, sittings.sittingID, "authorization = %s %#v", sittings.sittingID, sittings.invocation)
-	require.Equal(t, principal.UserID, sittings.invocation.Principal().UserID, "authorization = %s %#v", sittings.sittingID, sittings.invocation)
+	require.Equal(t, sittingID, sittings.sittingID, "authorization = %s %#v", sittings.sittingID, sittings.inv)
+	require.Equal(t, principal.UserID, sittings.inv.Principal().UserID, "authorization = %s %#v", sittings.sittingID, sittings.inv)
 }
 
 func TestAuthorizeWebSocketSittingSubscriptionConcealsMissingAndDeniedTargets(t *testing.T) {
@@ -70,24 +70,24 @@ func TestAuthorizeWebSocketSittingSubscriptionConcealsMissingAndDeniedTargets(t 
 }
 
 type realtimeExamViewFake struct {
-	invocation invocation.Invocation
-	examID     model.ExamID
-	err        error
+	inv    invocation.Invocation
+	examID model.ExamID
+	err    error
 }
 
-func (f *realtimeExamViewFake) AuthorizeExamView(_ context.Context, invocation invocation.Invocation, examID model.ExamID) error {
-	f.invocation, f.examID = invocation, examID
+func (f *realtimeExamViewFake) AuthorizeExamView(_ context.Context, inv invocation.Invocation, examID model.ExamID) error {
+	f.inv, f.examID = inv, examID
 	return f.err
 }
 
 type realtimeSittingViewFake struct {
-	invocation invocation.Invocation
-	sittingID  model.ExamSittingID
-	err        error
+	inv       invocation.Invocation
+	sittingID model.ExamSittingID
+	err       error
 }
 
-func (f *realtimeSittingViewFake) AuthorizeSittingView(_ context.Context, invocation invocation.Invocation, sittingID model.ExamSittingID) error {
-	f.invocation, f.sittingID = invocation, sittingID
+func (f *realtimeSittingViewFake) AuthorizeSittingView(_ context.Context, inv invocation.Invocation, sittingID model.ExamSittingID) error {
+	f.inv, f.sittingID = inv, sittingID
 	return f.err
 }
 

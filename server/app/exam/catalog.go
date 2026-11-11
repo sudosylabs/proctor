@@ -49,7 +49,7 @@ type ArchiveCommand struct {
 // ListExams returns one page of the Exams the caller may see, filtered by
 // Academic Unit, text, archive state, and Sitting state or window. Limit
 // defaults to 50 and the archive filter to active Exams.
-func (a *Authoring) ListExams(ctx context.Context, invocation invocation.Invocation, query ListQuery) (_ CatalogPage, resultErr error) {
+func (a *Authoring) ListExams(ctx context.Context, inv invocation.Invocation, query ListQuery) (_ CatalogPage, resultErr error) {
 	defer func() { resultErr = publicFailures.Present(resultErr) }()
 	if query.Limit == 0 {
 		query.Limit = 50
@@ -59,7 +59,7 @@ func (a *Authoring) ListExams(ctx context.Context, invocation invocation.Invocat
 	}
 
 	query.Query = strings.TrimSpace(query.Query)
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil ||
 		query.Limit < 1 ||
 		query.Limit > 200 ||
@@ -76,7 +76,7 @@ func (a *Authoring) ListExams(ctx context.Context, invocation invocation.Invocat
 		return CatalogPage{}, apperror.Invalid("exam.invalid", "archive_filter")
 	}
 
-	visibility, err := a.authorizer.AuthorizeExamList(ctx, invocation)
+	visibility, err := a.authorizer.AuthorizeExamList(ctx, inv)
 	if err != nil {
 		return CatalogPage{}, err
 	}
@@ -123,16 +123,16 @@ func (a *Authoring) ListExams(ctx context.Context, invocation invocation.Invocat
 // ArchiveExam idempotently archives an Exam, fenced by ExpectedExamRevision.
 func (a *Authoring) ArchiveExam(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ArchiveCommand,
 ) (_ model.Exam, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil || !command.ExamID.IsValid() || command.ExpectedExamRevision < 1 {
 		return model.Exam{}, apperror.Invalid("exam.invalid", "exam_revision")
 	}
 
-	commandIdempotency, err := idempotency.Require(invocation, idempotencyOperationArchive, command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Require(inv, idempotencyOperationArchive, command.IdempotencyKey, struct {
 		ExamID               string `json:"exam_id"`
 		ExpectedExamRevision int64  `json:"expected_exam_revision"`
 	}{ExamID: command.ExamID.String(), ExpectedExamRevision: command.ExpectedExamRevision})
@@ -155,12 +155,12 @@ func (a *Authoring) ArchiveExam(
 	}
 
 	resource := model.Resource{Type: model.ResourceExam, ID: command.ExamID.String()}
-	if err = a.authorizer.Authorize(ctx, invocation, action, resource); err != nil {
+	if err = a.authorizer.Authorize(ctx, inv, action, resource); err != nil {
 		return model.Exam{}, err
 	}
 
 	auditID, err := a.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     action,
 		Resource:   resource,
 		ScopeType:  model.RoleScopeAcademicUnit,

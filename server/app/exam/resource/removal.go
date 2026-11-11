@@ -29,7 +29,7 @@ type RemoveCommand struct {
 // Draft, fenced by ExpectedDraftRevision.
 func (s *Service) RemoveExamResource(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	c RemoveCommand,
 ) (_ store.ExamResourceRecord, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -38,7 +38,7 @@ func (s *Service) RemoveExamResource(
 	}
 
 	commandIdempotency, err := prepareResourceIdempotency(
-		invocation,
+		inv,
 		idempotencyOperationRemoveResource,
 		c.IdempotencyKey,
 		c.ExamID,
@@ -55,7 +55,7 @@ func (s *Service) RemoveExamResource(
 		return store.ExamResourceRecord{}, err
 	}
 
-	authorization, err := s.authorizeExam(ctx, invocation, c.ExamID, true)
+	authorization, err := s.authorizeExam(ctx, inv, c.ExamID, true)
 	if err != nil {
 		return store.ExamResourceRecord{}, err
 	}
@@ -67,7 +67,7 @@ func (s *Service) RemoveExamResource(
 	}
 
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     action,
 		Resource:   model.Resource{Type: model.ResourceExam, ID: c.ExamID.String()},
 		ScopeType:  model.RoleScopeAcademicUnit,
@@ -83,7 +83,7 @@ func (s *Service) RemoveExamResource(
 		ctx,
 		&store.ExamResourceRemoval{
 			ExamID:                c.ExamID,
-			ActorUserID:           invocation.Principal().UserID,
+			ActorUserID:           inv.Principal().UserID,
 			ManagerOverride:       authorization.override,
 			ExpectedDraftRevision: c.ExpectedDraftRevision,
 			ResourceID:            c.ResourceID,

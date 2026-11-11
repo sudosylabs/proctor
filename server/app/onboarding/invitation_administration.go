@@ -25,10 +25,10 @@ import (
 // scopes; the first page also carries their total.
 func (s *Service) ListInvitations(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query ListInvitationsQuery,
 ) (InvitationAdministrationPage, error) {
-	visibility, err := s.visibility(ctx, invocation, model.ActionInvitationView)
+	visibility, err := s.visibility(ctx, inv, model.ActionInvitationView)
 	if err != nil {
 		return InvitationAdministrationPage{}, err
 	}
@@ -86,8 +86,8 @@ func (s *Service) ListInvitations(
 // countPendingInvitations counts the unexpired pending Invitations within the
 // caller's invitation.view visibility, authorized and audited exactly as
 // ListInvitations is, stopping at maximum.
-func (s *Service) countPendingInvitations(ctx context.Context, invocation invocation.Invocation, maximum int) (int, error) {
-	visibility, err := s.visibility(ctx, invocation, model.ActionInvitationView)
+func (s *Service) countPendingInvitations(ctx context.Context, inv invocation.Invocation, maximum int) (int, error) {
+	visibility, err := s.visibility(ctx, inv, model.ActionInvitationView)
 	if err != nil {
 		return 0, err
 	}
@@ -108,14 +108,14 @@ func (s *Service) countPendingInvitations(ctx context.Context, invocation invoca
 // scopes.
 func (s *Service) GetInvitation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	id model.InvitationID,
 ) (InvitationAdministrationView, error) {
 	if !id.IsValid() {
 		return InvitationAdministrationView{}, apperror.New("request.invalid").WithField("field", "invitation_id")
 	}
 
-	visibility, err := s.visibility(ctx, invocation, model.ActionInvitationView)
+	visibility, err := s.visibility(ctx, inv, model.ActionInvitationView)
 	if err != nil {
 		return InvitationAdministrationView{}, err
 	}
@@ -132,7 +132,7 @@ func (s *Service) GetInvitation(
 // caller's invitation.manage scopes and mails it.
 func (s *Service) ResendInvitation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ResendInvitationCommand,
 ) (InvitationAdministrationView, error) {
 	id := command.ID
@@ -140,7 +140,7 @@ func (s *Service) ResendInvitation(
 		return InvitationAdministrationView{}, apperror.New("request.invalid").WithField("field", "invitation_id")
 	}
 
-	visibility, err := s.visibility(ctx, invocation, model.ActionInvitationManage)
+	visibility, err := s.visibility(ctx, inv, model.ActionInvitationManage)
 	if err != nil {
 		return InvitationAdministrationView{}, err
 	}
@@ -158,14 +158,14 @@ func (s *Service) ResendInvitation(
 		}
 
 		if invitationPurposeRequiresInteractiveBatch(current.Invitation.Purpose) {
-			if err = access.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
+			if err = access.RequireStrongRecentSession(inv.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 				return InvitationAdministrationView{}, err
 			}
 		}
 	}
 
 	commandIdempotency, err := idempotency.Prepare(
-		invocation,
+		inv,
 		"invitation.resend",
 		command.IdempotencyKey,
 		invitationLifecycleIdempotencySemantic{ID: id.String(), Revision: command.ExpectedRevision},
@@ -175,7 +175,7 @@ func (s *Service) ResendInvitation(
 	}
 
 	attempt := access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionInvitationManage,
 		Resource:   invitationResource(current.Invitation),
 		ScopeType:  current.Invitation.ScopeType,
@@ -245,7 +245,7 @@ func (s *Service) ResendInvitation(
 				return nil, apperror.New("invitation.unavailable").Wrap(linkErr)
 			}
 
-			prepared, prepareErr := s.mail.PrepareInvitationResend(current.Invitation, actionURL, invocation.Principal().UserID, at)
+			prepared, prepareErr := s.mail.PrepareInvitationResend(current.Invitation, actionURL, inv.Principal().UserID, at)
 			if prepareErr != nil {
 				return nil, apperror.New("invitation.mail_unavailable").Wrap(prepareErr)
 			}
@@ -257,7 +257,7 @@ func (s *Service) ResendInvitation(
 				Occurrence:       prepared.Occurrence,
 				Delivery:         prepared.Delivery,
 				DeliveryJob:      prepared.Job,
-				ActorUserID:      invocation.Principal().UserID,
+				ActorUserID:      inv.Principal().UserID,
 				AuditEventID:     reference.ID,
 				AuditAt:          reference.MutationAt,
 			}
@@ -288,7 +288,7 @@ func (s *Service) ResendInvitation(
 // invitation.manage scopes and mails the revocation notice.
 func (s *Service) RevokeInvitation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command RevokeInvitationCommand,
 ) (InvitationAdministrationView, error) {
 	id := command.ID
@@ -296,7 +296,7 @@ func (s *Service) RevokeInvitation(
 		return InvitationAdministrationView{}, apperror.New("request.invalid").WithField("field", "invitation_id")
 	}
 
-	visibility, err := s.visibility(ctx, invocation, model.ActionInvitationManage)
+	visibility, err := s.visibility(ctx, inv, model.ActionInvitationManage)
 	if err != nil {
 		return InvitationAdministrationView{}, err
 	}
@@ -314,14 +314,14 @@ func (s *Service) RevokeInvitation(
 		}
 
 		if invitationPurposeRequiresInteractiveBatch(current.Invitation.Purpose) {
-			if err = access.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
+			if err = access.RequireStrongRecentSession(inv.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 				return InvitationAdministrationView{}, err
 			}
 		}
 	}
 
 	commandIdempotency, err := idempotency.Prepare(
-		invocation,
+		inv,
 		"invitation.revoke",
 		command.IdempotencyKey,
 		invitationLifecycleIdempotencySemantic{ID: id.String(), Revision: command.ExpectedRevision},
@@ -331,7 +331,7 @@ func (s *Service) RevokeInvitation(
 	}
 
 	attempt := access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionInvitationManage,
 		Resource:   invitationResource(current.Invitation),
 		ScopeType:  current.Invitation.ScopeType,
@@ -383,7 +383,7 @@ func (s *Service) RevokeInvitation(
 			}
 
 			at := model.TimeUTC(reference.MutationAt)
-			prepared, prepareErr := s.mail.PrepareInvitationRevocation(current.Invitation, invocation.Principal().UserID, at)
+			prepared, prepareErr := s.mail.PrepareInvitationRevocation(current.Invitation, inv.Principal().UserID, at)
 			if prepareErr != nil {
 				return nil, apperror.New("invitation.mail_unavailable").Wrap(prepareErr)
 			}
@@ -391,7 +391,7 @@ func (s *Service) RevokeInvitation(
 			input := &store.InvitationRevocation{
 				ID:               id,
 				ExpectedRevision: command.ExpectedRevision,
-				ActorUserID:      invocation.Principal().UserID,
+				ActorUserID:      inv.Principal().UserID,
 				RevocationNotice: &store.PreparedMail{
 					Occurrence: prepared.Occurrence,
 					Delivery:   prepared.Delivery,

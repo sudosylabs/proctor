@@ -84,8 +84,8 @@ type ReplaceAccessPolicyCommand struct {
 
 // GetAccessPolicy returns the Access Policy, its recent history and the
 // deployment capabilities it is weighed against.
-func (s *Service) GetAccessPolicy(ctx context.Context, invocation invocation.Invocation) (AccessPolicyView, error) {
-	institution, resource, err := s.authorizeAccessPolicy(ctx, invocation, model.ActionAccessPolicyView)
+func (s *Service) GetAccessPolicy(ctx context.Context, inv invocation.Invocation) (AccessPolicyView, error) {
+	institution, resource, err := s.authorizeAccessPolicy(ctx, inv, model.ActionAccessPolicyView)
 	_ = institution
 	_ = resource
 	if err != nil {
@@ -102,13 +102,13 @@ func (s *Service) GetAccessPolicy(ctx context.Context, invocation invocation.Inv
 // needs a strong, recent Session and access_policy.manage.
 func (s *Service) PreflightAccessPolicy(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command PreflightAccessPolicyCommand,
 ) (AccessPolicyPreflightResult, error) {
-	if err := s.requireStrongRecent(invocation); err != nil {
+	if err := s.requireStrongRecent(inv); err != nil {
 		return AccessPolicyPreflightResult{}, err
 	}
-	if _, _, err := s.authorizeAccessPolicy(ctx, invocation, model.ActionAccessPolicyManage); err != nil {
+	if _, _, err := s.authorizeAccessPolicy(ctx, inv, model.ActionAccessPolicyManage); err != nil {
 		return AccessPolicyPreflightResult{}, err
 	}
 
@@ -131,14 +131,14 @@ func (s *Service) PreflightAccessPolicy(
 // idempotency fences, then propagates the Sessions it revoked or shortened.
 func (s *Service) ReplaceAccessPolicy(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ReplaceAccessPolicyCommand,
 ) (AccessPolicyView, error) {
-	if err := s.requireStrongRecent(invocation); err != nil {
+	if err := s.requireStrongRecent(inv); err != nil {
 		return AccessPolicyView{}, err
 	}
 
-	institution, _, err := s.authorizeAccessPolicy(ctx, invocation, model.ActionAccessPolicyManage)
+	institution, _, err := s.authorizeAccessPolicy(ctx, inv, model.ActionAccessPolicyManage)
 	if err != nil {
 		return AccessPolicyView{}, err
 	}
@@ -152,7 +152,7 @@ func (s *Service) ReplaceAccessPolicy(
 	}
 
 	idempotency, err := idempotency.Prepare(
-		invocation,
+		inv,
 		"access_policy.replace",
 		command.IdempotencyKey,
 		struct {
@@ -169,7 +169,7 @@ func (s *Service) ReplaceAccessPolicy(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionAccessPolicyManage,
 			Resource:   model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()},
 			ScopeType:  model.RoleScopeInstitution,
@@ -181,7 +181,7 @@ func (s *Service) ReplaceAccessPolicy(
 		func(ctx context.Context, reference access.MutationReference) (*store.AccessPolicyReplacementResult, error) {
 			return s.accessPolicies.Replace(ctx, &store.AccessPolicyReplacement{
 				Preflight:    *input,
-				ActorID:      invocation.Principal().UserID,
+				ActorID:      inv.Principal().UserID,
 				AuditEventID: reference.ID,
 				AuditAt:      reference.MutationAt,
 			}, idempotency)
@@ -225,7 +225,7 @@ func accessPolicyReplacementAuditValue(command ReplaceAccessPolicyCommand) map[s
 // Institution.
 func (s *Service) authorizeAccessPolicy(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	action model.Action,
 ) (*model.Institution, model.Resource, error) {
 	institution, err := s.institutions.GetSingleton(ctx)
@@ -234,15 +234,15 @@ func (s *Service) authorizeAccessPolicy(
 	}
 
 	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
-	if err = s.authorizer.Authorize(ctx, invocation, action, resource); err != nil {
+	if err = s.authorizer.Authorize(ctx, inv, action, resource); err != nil {
 		return nil, model.Resource{}, err
 	}
 
 	return institution, resource, nil
 }
 
-func (s *Service) requireStrongRecent(invocation invocation.Invocation) error {
-	return access.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL)
+func (s *Service) requireStrongRecent(inv invocation.Invocation) error {
+	return access.RequireStrongRecentSession(inv.Principal(), s.now(), s.recentAuthenticationTTL)
 }
 
 func (s *Service) preflightInput(

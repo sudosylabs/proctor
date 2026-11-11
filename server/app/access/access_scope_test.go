@@ -160,16 +160,16 @@ func TestAccessControlAcademicPeriodPreflightDeniesBeforeInspection(t *testing.T
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password",
 		AuthenticationStrength: model.AuthenticationSingleFactor, AuthenticatedAt: model.NowUTC(), ClientType: model.SessionClientWeb,
 	}
-	invocation := invocation.New(principal, model.RequestMetadata{})
+	inv := invocation.New(principal, model.RequestMetadata{})
 	resource := model.Resource{Type: model.ResourceAcademicPeriod, ID: model.NewAcademicPeriodID().String()}
-	err = access.authorizeCurrentState(context.Background(), principal, model.ActionAcademicPeriodView, resource, invocation.RequestMetadata())
+	err = access.authorizeCurrentState(context.Background(), principal, model.ActionAcademicPeriodView, resource, inv.RequestMetadata())
 	require.True(t, apperror.Is(err, "authorization.denied"), "target preflight error = %v, want authorization.denied", err)
 	period := &model.AcademicPeriod{
 		ID: model.NewAcademicPeriodID(), Owner: model.NewAcademicUnitAcademicPeriodOwner(unitID),
 		CreatedAt: model.NowUTC(), UpdatedAt: model.NowUTC(), Revision: 1,
 		Name: "period", DisplayName: "Period", StartsAt: model.TimeFromMillis(1), EndsAt: model.TimeFromMillis(2),
 	}
-	err = access.AuthorizeAcademicPeriodOwner(context.Background(), invocation, model.ActionAcademicPeriodManage, period)
+	err = access.AuthorizeAcademicPeriodOwner(context.Background(), inv, model.ActionAcademicPeriodManage, period)
 	require.True(t, apperror.Is(err, "authorization.denied"), "owner preflight error = %v, want authorization.denied", err)
 	require.Equal(t, 0, periods.gets, "preflight inspected target or owner: period gets")
 	require.Equal(t, 0, units.listAncestors, "preflight inspected target or owner: period gets")
@@ -189,9 +189,9 @@ func TestAccessControlMembershipPreflightDeniesBeforeOpaqueTargetInspection(t *t
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password",
 		AuthenticationStrength: model.AuthenticationSingleFactor, AuthenticatedAt: model.NowUTC(), ClientType: model.SessionClientWeb,
 	}
-	invocation := invocation.New(principal, model.RequestMetadata{})
+	inv := invocation.New(principal, model.RequestMetadata{})
 	err = access.AuthorizePreflight(
-		context.Background(), invocation, model.ActionClassMembersManage, model.ResourceClass,
+		context.Background(), inv, model.ActionClassMembersManage, model.ResourceClass,
 	)
 	require.True(t, apperror.Is(err, "authorization.denied"), "preflight error = %v, want authorization.denied", err)
 	require.Equal(t, 0, classes.gets, "preflight inspected")
@@ -242,9 +242,9 @@ func TestAccessControlAcademicPeriodScopeInheritanceAndInstitutionView(t *testin
 	allowed, err = access.Can(context.Background(), principal, model.ActionAcademicPeriodView, siblingResource)
 	require.NoError(t, err, "cross-subtree view")
 	require.False(t, allowed, "cross-subtree view")
-	invocation := invocation.New(principal, model.RequestMetadata{})
-	require.NoError(t, access.authorizeCurrentState(context.Background(), principal, model.ActionAcademicPeriodView, unitResource, invocation.RequestMetadata()))
-	err = access.authorizeCurrentState(context.Background(), principal, model.ActionAcademicPeriodView, siblingResource, invocation.RequestMetadata())
+	inv := invocation.New(principal, model.RequestMetadata{})
+	require.NoError(t, access.authorizeCurrentState(context.Background(), principal, model.ActionAcademicPeriodView, unitResource, inv.RequestMetadata()))
+	err = access.authorizeCurrentState(context.Background(), principal, model.ActionAcademicPeriodView, siblingResource, inv.RequestMetadata())
 	require.True(t, apperror.Is(err, "authorization.denied"), "preflight plus terminal cross-subtree view = %v", err)
 	institutionResource := model.Resource{Type: model.ResourceAcademicPeriod, ID: institutionPeriodID.String()}
 	allowed, err = access.Can(context.Background(), principal, model.ActionAcademicPeriodView, institutionResource)

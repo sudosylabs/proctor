@@ -39,7 +39,7 @@ func TestExamAttemptSubmissionAuthorizationResolvesCanonicalExamBeforeCurrentMan
 	require.NoError(t, adapter.AuthorizeSubmissionView(context.Background(), call, submissionID))
 	require.Equal(t, examID, sittings.examID, "authorization call = exam")
 	require.Equal(t, submissionID, sittings.submissionID, "authorization call = exam")
-	require.Equal(t, principal.UserID, sittings.invocation.Principal().UserID, "authorization call = exam")
+	require.Equal(t, principal.UserID, sittings.inv.Principal().UserID, "authorization call = exam")
 }
 
 type submissionAuthorizationAuditFake struct {
@@ -109,15 +109,15 @@ func (f *submissionAuthorizationStoreFake) Resolve(context.Context, model.Submis
 
 type submissionAuthorizationSittingFake struct {
 	SittingAuthorizer
-	invocation   invocation.Invocation
+	inv          invocation.Invocation
 	examID       model.ExamID
 	submissionID model.SubmissionID
 }
 
-func (f *submissionAuthorizationSittingFake) AuthorizeSubmissionView(_ context.Context, invocation invocation.Invocation,
+func (f *submissionAuthorizationSittingFake) AuthorizeSubmissionView(_ context.Context, inv invocation.Invocation,
 	examID model.ExamID, submissionID model.SubmissionID,
 ) error {
-	f.invocation, f.examID, f.submissionID = invocation, examID, submissionID
+	f.inv, f.examID, f.submissionID = inv, examID, submissionID
 	return nil
 }
 

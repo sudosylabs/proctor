@@ -37,7 +37,7 @@ func (s *Service) previewProgression(ctx context.Context, id model.OnboardingImp
 		return store.NewErrConflict("student_progression", "state", nil)
 	}
 
-	invocation := invocation.New(current.Principal, model.RequestMetadata{})
+	inv := invocation.New(current.Principal, model.RequestMetadata{})
 	if err = s.validatePrincipal(ctx, current.Principal); err != nil {
 		return err
 	}
@@ -45,7 +45,7 @@ func (s *Service) previewProgression(ctx context.Context, id model.OnboardingImp
 	for _, classID := range []model.ClassID{current.SourceClassID, current.DestinationClassID} {
 		resource := model.Resource{Type: model.ResourceClass, ID: classID.String()}
 		for _, action := range []model.Action{model.ActionAcademicProgressionManage, model.ActionClassMembersManage} {
-			if err = s.authorize(ctx, invocation, action, resource); err != nil {
+			if err = s.authorize(ctx, inv, action, resource); err != nil {
 				return err
 			}
 		}

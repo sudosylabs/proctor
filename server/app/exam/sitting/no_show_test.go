@@ -34,7 +34,7 @@ func TestListNoShowsAuthorizesClosingSittingAndReturnsBoundedPage(t *testing.T) 
 	ids := []model.UserID{model.NewUserID(), model.NewUserID(), model.NewUserID()}
 	slices.SortFunc(ids, func(left, right model.UserID) int { return strings.Compare(left.String(), right.String()) })
 	fixture.persistence.noShows = []store.ExamSittingNoShow{{CandidateUserID: ids[0]}, {CandidateUserID: ids[1]}, {CandidateUserID: ids[2]}}
-	page, err := fixture.service.ListExamSittingNoShows(context.Background(), fixture.invocation, ListNoShowsQuery{ExamID: fixture.examID, SittingID: fixture.sittingID, AfterCandidateUserID: model.UserID(""), Limit: 2})
+	page, err := fixture.service.ListExamSittingNoShows(context.Background(), fixture.inv, ListNoShowsQuery{ExamID: fixture.examID, SittingID: fixture.sittingID, AfterCandidateUserID: model.UserID(""), Limit: 2})
 	require.NoError(t, err, "page=%#v options=%#v err", page, fixture.persistence.noShowOptions)
 	require.Len(t, page.Items, 2, "page=%#v options=%#v err", page, fixture.persistence.noShowOptions)
 	require.True(t, page.HasMore, "page=%#v options=%#v err", page, fixture.persistence.noShowOptions)

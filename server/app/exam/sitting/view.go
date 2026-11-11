@@ -40,7 +40,7 @@ type Page struct {
 // directly or through an override.
 func (s *Service) GetExamSitting(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
 ) (_ store.ExamSittingSnapshot, resultErr error) {
@@ -52,7 +52,7 @@ func (s *Service) GetExamSitting(
 	at := model.TimeUTC(s.now())
 	if _, err := s.authorizeManagerAction(
 		ctx,
-		invocation,
+		inv,
 		examID,
 		model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
 		at,
@@ -83,7 +83,7 @@ func (s *Service) GetExamSitting(
 
 // ListExamSittings returns one page of an Exam's Sittings, optionally
 // filtered by state, to a caller authorized to view the Exam.
-func (s *Service) ListExamSittings(ctx context.Context, invocation invocation.Invocation, query ListQuery) (_ Page, resultErr error) {
+func (s *Service) ListExamSittings(ctx context.Context, inv invocation.Invocation, query ListQuery) (_ Page, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	query.States = append([]model.ExamSittingState(nil), query.States...)
 	options, err := listOptions(query)
@@ -91,7 +91,7 @@ func (s *Service) ListExamSittings(ctx context.Context, invocation invocation.In
 		return Page{}, err
 	}
 	at := model.TimeUTC(s.now())
-	if _, err = s.authorizeExam(ctx, invocation, query.ExamID, at, model.ActionExamView, model.ActionExamViewOverride); err != nil {
+	if _, err = s.authorizeExam(ctx, inv, query.ExamID, at, model.ActionExamView, model.ActionExamViewOverride); err != nil {
 		return Page{}, err
 	}
 	options.Limit++

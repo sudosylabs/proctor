@@ -36,7 +36,7 @@ type ConfigureDraftFocusLossCommand struct {
 // cannot supply or weaken Connection Loss.
 func (a *Authoring) ConfigureExamDraftFocusLoss(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ConfigureDraftFocusLossCommand,
 ) (_ View, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -47,7 +47,7 @@ func (a *Authoring) ConfigureExamDraftFocusLoss(
 		Window:          command.Window,
 		Outcome:         command.Outcome,
 	}
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil || !command.ExamID.IsValid() || command.ExpectedDraftRevision < 1 {
 		return View{}, apperror.Invalid("exam.invalid", "draft_revision")
 	}
@@ -60,7 +60,7 @@ func (a *Authoring) ConfigureExamDraftFocusLoss(
 		return View{}, apperror.Invalid("exam.invalid", "focus_loss").Wrap(err)
 	}
 
-	commandIdempotency, err := idempotency.Require(invocation, idempotencyOperationConfigureDraftFocusLoss, command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Require(inv, idempotencyOperationConfigureDraftFocusLoss, command.IdempotencyKey, struct {
 		ExamID                      string                          `json:"exam_id"`
 		ExpectedDraftRevision       int64                           `json:"expected_draft_revision"`
 		Enabled                     bool                            `json:"enabled"`
@@ -96,7 +96,7 @@ func (a *Authoring) ConfigureExamDraftFocusLoss(
 	}
 
 	resource := model.Resource{Type: model.ResourceExam, ID: command.ExamID.String()}
-	if err = a.authorizer.Authorize(ctx, invocation, action, resource); err != nil {
+	if err = a.authorizer.Authorize(ctx, inv, action, resource); err != nil {
 		return View{}, err
 	}
 
@@ -118,7 +118,7 @@ func (a *Authoring) ConfigureExamDraftFocusLoss(
 	}
 
 	auditID, err := a.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     action,
 		Resource:   resource,
 		ScopeType:  model.RoleScopeAcademicUnit,

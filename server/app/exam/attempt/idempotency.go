@@ -18,21 +18,21 @@ import (
 )
 
 func prepareWorkspaceMutationIdempotency(
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	key string,
 	attemptID model.ExamAttemptID,
 	operation model.AttemptWorkspaceMutationKind,
 	semantic any,
 ) (*store.CommandIdempotency, error) {
-	return idempotency.Require(invocation, store.ExamAttemptWorkspaceMutationOperation, key, struct {
+	return idempotency.Require(inv, store.ExamAttemptWorkspaceMutationOperation, key, struct {
 		AttemptID string `json:"exam_attempt_id"`
 		Operation string `json:"operation"`
 		Command   any    `json:"command"`
 	}{attemptID.String(), string(operation), semantic})
 }
 
-func prepareConnectIdempotency(invocation invocation.Invocation, command ConnectCommand) (*store.CommandIdempotency, error) {
-	principal := invocation.Principal()
+func prepareConnectIdempotency(inv invocation.Invocation, command ConnectCommand) (*store.CommandIdempotency, error) {
+	principal := inv.Principal()
 	var proposal json.RawMessage
 	if command.InitialConfiguration != nil {
 		canonical, err := command.InitialConfiguration.CanonicalAdmission()
@@ -43,7 +43,7 @@ func prepareConnectIdempotency(invocation invocation.Invocation, command Connect
 		proposal = canonical
 	}
 
-	return idempotency.Require(invocation, store.ExamAttemptConnectOperation, command.IdempotencyKey, struct {
+	return idempotency.Require(inv, store.ExamAttemptConnectOperation, command.IdempotencyKey, struct {
 		SittingID                string                `json:"exam_sitting_id"`
 		SessionID                string                `json:"session_id"`
 		ContinuityCredentialHash string                `json:"continuity_credential_hash"`
@@ -60,9 +60,9 @@ func prepareConnectIdempotency(invocation invocation.Invocation, command Connect
 	})
 }
 
-func prepareReallowIdempotency(invocation invocation.Invocation, command ReallowCommand) (*store.CommandIdempotency, error) {
+func prepareReallowIdempotency(inv invocation.Invocation, command ReallowCommand) (*store.CommandIdempotency, error) {
 	return idempotency.Require(
-		invocation,
+		inv,
 		store.ExamAttemptReallowOperation,
 		command.IdempotencyKey,
 		struct {
@@ -84,10 +84,10 @@ func prepareReallowIdempotency(invocation invocation.Invocation, command Reallow
 }
 
 func prepareManualSuspensionIdempotency(
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ManualSuspensionCommand,
 ) (*store.CommandIdempotency, error) {
-	return idempotency.Require(invocation, store.ExamAttemptSuspendOperation, command.IdempotencyKey, struct {
+	return idempotency.Require(inv, store.ExamAttemptSuspendOperation, command.IdempotencyKey, struct {
 		ExamID                  string `json:"exam_id"`
 		SittingID               string `json:"exam_sitting_id"`
 		AttemptID               string `json:"exam_attempt_id"`
@@ -102,8 +102,8 @@ func prepareManualSuspensionIdempotency(
 	})
 }
 
-func prepareManagerEndIdempotency(invocation invocation.Invocation, command ManagerEndCommand) (*store.CommandIdempotency, error) {
-	return idempotency.Require(invocation, store.ExamSubmissionManagerEndOperation, command.IdempotencyKey, struct {
+func prepareManagerEndIdempotency(inv invocation.Invocation, command ManagerEndCommand) (*store.CommandIdempotency, error) {
+	return idempotency.Require(inv, store.ExamSubmissionManagerEndOperation, command.IdempotencyKey, struct {
 		ExamID                  string `json:"exam_id"`
 		SittingID               string `json:"exam_sitting_id"`
 		AttemptID               string `json:"exam_attempt_id"`
@@ -119,13 +119,13 @@ func prepareManagerEndIdempotency(invocation invocation.Invocation, command Mana
 }
 
 func prepareSubmissionIdempotency(
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	key string,
 	attemptID model.ExamAttemptID,
 	expectedCurrentRevisionID model.ExamRevisionID,
 	expectedWorkspaceCursor, finalFocusLossSequence int64,
 ) (*store.CommandIdempotency, error) {
-	return idempotency.Require(invocation, store.ExamSubmissionSealOperation, key, struct {
+	return idempotency.Require(inv, store.ExamSubmissionSealOperation, key, struct {
 		AttemptID                 string `json:"exam_attempt_id"`
 		ExpectedCurrentRevisionID string `json:"expected_current_revision_id"`
 		WorkspaceCursor           int64  `json:"expected_workspace_cursor"`

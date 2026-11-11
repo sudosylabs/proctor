@@ -189,24 +189,24 @@ func TestPersonalAccessTokenAdministrationUsesControlledClockForStateChanges(t *
 	preparer := &personalAccessTokenMailPreparerFake{}
 	service, err := personalAccessTokenTestService(&Service{personalAccessTokens: tokens, users: &personalAccessTokenUserStoreFake{}, academicUnits: &personalAccessTokenAcademicUnitStoreFake{}, institutions: &personalAccessTokenInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}, securityAudit: &personalAccessTokenAuditorFake{}, authorizer: &personalAccessTokenScopeAuthorizerFake{allowed: true}, mail: preparer, personalAccessTokenPolicy: PersonalAccessTokenPolicy{MinimumLifetime: time.Minute, MaximumLifetime: 24 * time.Hour, MaximumPerUser: 3}, recentAuthenticationTTL: 15 * time.Minute, newCredential: func() string { return "credential" }, now: func() time.Time { return now }})
 	require.NoError(t, err)
-	invocation := invocation.New(personalAccessTokenSessionPrincipal(userID, now), model.RequestMetadata{})
+	inv := invocation.New(personalAccessTokenSessionPrincipal(userID, now), model.RequestMetadata{})
 
 	_, err = service.SetPersonalAccessTokenDisabled(
-		context.Background(), invocation,
+		context.Background(), inv,
 		SetPersonalAccessTokenDisabledCommand{TokenID: token.ID, Disabled: true},
 	)
 	require.NoError(t, err)
 	require.Equal(t, now.UnixMilli(), tokens.stateAt, "state change at")
 	require.Equal(t, 3, tokens.stateMaximum, "state change at")
 	_, err = service.SetPersonalAccessTokenDisabled(
-		context.Background(), invocation,
+		context.Background(), inv,
 		SetPersonalAccessTokenDisabledCommand{TokenID: token.ID, Disabled: false},
 	)
 	require.NoError(t, err)
 
 	tokens.current = token
 	_, err = service.RevokePersonalAccessToken(
-		context.Background(), invocation,
+		context.Background(), inv,
 		RevokePersonalAccessTokenCommand{TokenID: token.ID},
 	)
 	require.NoError(t, err)
@@ -233,11 +233,11 @@ func TestPersonalAccessTokenAdministrationRequiresRecentSessionForCreationAndEna
 		&personalAccessTokenInstitutionStoreFake{}, &personalAccessTokenAuditorFake{}, now,
 	)
 	stale := personalAccessTokenSessionPrincipal(userID, now.Add(-15*time.Minute-time.Microsecond))
-	invocation := invocation.New(stale, model.RequestMetadata{})
+	inv := invocation.New(stale, model.RequestMetadata{})
 
-	_, err := service.CreatePersonalAccessToken(context.Background(), invocation, CreatePersonalAccessTokenCommand{})
+	_, err := service.CreatePersonalAccessToken(context.Background(), inv, CreatePersonalAccessTokenCommand{})
 	require.True(t, apperror.Is(err, "authentication.reauthentication_required"), "create error = %v", err)
-	_, err = service.SetPersonalAccessTokenDisabled(context.Background(), invocation, SetPersonalAccessTokenDisabledCommand{
+	_, err = service.SetPersonalAccessTokenDisabled(context.Background(), inv, SetPersonalAccessTokenDisabledCommand{
 		TokenID: model.NewPersonalAccessTokenID(), Disabled: false,
 	})
 	require.True(t, apperror.Is(err, "authentication.reauthentication_required"), "enable error = %v", err)

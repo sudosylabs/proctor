@@ -27,9 +27,9 @@ import (
 // the new set once.
 func (s *Service) RegenerateMFARecoveryCodes(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 ) ([]string, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if err := s.requireMFAStrongRecentSession(principal); err != nil {
 		return nil, err
 	}
@@ -58,7 +58,7 @@ func (s *Service) RegenerateMFARecoveryCodes(
 	}
 
 	auditID, appErr := s.beginMFAAudit(
-		ctx, invocation, model.ActionMFARecoveryCodesRegenerate, resource, nil,
+		ctx, inv, model.ActionMFARecoveryCodesRegenerate, resource, nil,
 	)
 	if appErr != nil {
 		return nil, appErr

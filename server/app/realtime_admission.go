@@ -57,7 +57,7 @@ var (
 // Resource takes the audited Access Control decision.
 func (s *RealtimeAdmission) AuthorizeWebSocketSubscription(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	action model.Action,
 	resource model.Resource,
 ) (resultErr error) {
@@ -71,16 +71,16 @@ func (s *RealtimeAdmission) AuthorizeWebSocketSubscription(
 		if err != nil {
 			return invalidRealtimeRequest("subscription")
 		}
-		return realtimeExamFailures.Conceal(s.exams.AuthorizeExamView(ctx, invocation, examID))
+		return realtimeExamFailures.Conceal(s.exams.AuthorizeExamView(ctx, inv, examID))
 	}
 	if action == model.ActionExamSittingView && resource.Type == model.ResourceExamSitting {
 		sittingID, err := model.ParseExamSittingID(resource.ID)
 		if err != nil {
 			return invalidRealtimeRequest("subscription")
 		}
-		return realtimeSittingFailures.Conceal(s.sittings.AuthorizeSittingView(ctx, invocation, sittingID))
+		return realtimeSittingFailures.Conceal(s.sittings.AuthorizeSittingView(ctx, inv, sittingID))
 	}
-	err := s.authorization.Authorize(ctx, invocation, action, resource)
+	err := s.authorization.Authorize(ctx, inv, action, resource)
 	recordOperational(s.operational, "authorization", "decision", err)
 	return err
 }

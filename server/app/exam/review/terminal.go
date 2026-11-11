@@ -39,13 +39,13 @@ const (
 // Submission.
 func (s *Service) FinalizeExamIntegrityReview(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command TerminalCommand,
 ) (_ Result, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	return s.terminalMutation(
 		ctx,
-		invocation,
+		inv,
 		command.SubmissionID,
 		command.ReviewID,
 		command.ExpectedReviewRevision,
@@ -59,13 +59,13 @@ func (s *Service) FinalizeExamIntegrityReview(
 // ExpectedReviewRevision, for a caller authorized to release results.
 func (s *Service) ReleaseStudentExamResult(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command TerminalCommand,
 ) (_ Result, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	return s.terminalMutation(
 		ctx,
-		invocation,
+		inv,
 		command.SubmissionID,
 		command.ReviewID,
 		command.ExpectedReviewRevision,
@@ -76,7 +76,7 @@ func (s *Service) ReleaseStudentExamResult(
 
 func (s *Service) terminalMutation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	submissionID model.SubmissionID,
 	reviewID model.SubmissionReviewID,
 	expectedRevision int64,
@@ -90,7 +90,7 @@ func (s *Service) terminalMutation(
 		return Result{}, apperror.Invalid("exam.integrity_review.invalid", "review")
 	}
 
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil {
 		return Result{}, apperror.Invalid("exam.integrity_review.invalid", "principal")
 	}
@@ -100,7 +100,7 @@ func (s *Service) terminalMutation(
 		operation = store.ExamIntegrityReviewReleaseOperation
 	}
 
-	commandIdempotency, err := prepareTerminalIdempotency(invocation, operation, idempotencyKey, submissionID, reviewID, expectedRevision)
+	commandIdempotency, err := prepareTerminalIdempotency(inv, operation, idempotencyKey, submissionID, reviewID, expectedRevision)
 	if err != nil {
 		return Result{}, err
 	}
@@ -108,9 +108,9 @@ func (s *Service) terminalMutation(
 	var override bool
 	var authorization *store.ExamIntegrityReviewAuthorization
 	if kind == terminalRelease {
-		override, authorization, err = s.authorizeReleaseMutation(ctx, invocation, submissionID)
+		override, authorization, err = s.authorizeReleaseMutation(ctx, inv, submissionID)
 	} else {
-		override, authorization, err = s.authorizeReviewMutation(ctx, invocation, submissionID)
+		override, authorization, err = s.authorizeReviewMutation(ctx, inv, submissionID)
 	}
 
 	if err != nil {
@@ -123,7 +123,7 @@ func (s *Service) terminalMutation(
 	}
 
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     action,
 		Resource:   model.Resource{Type: model.ResourceSubmission, ID: submissionID.String()},
 		ScopeType:  model.RoleScopeAcademicUnit,

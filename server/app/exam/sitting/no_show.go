@@ -38,7 +38,7 @@ type ListNoShowsQuery struct {
 // view the Sitting.
 func (s *Service) ListExamSittingNoShows(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query ListNoShowsQuery,
 ) (_ NoShowPage, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -50,7 +50,7 @@ func (s *Service) ListExamSittingNoShows(
 		return NoShowPage{}, apperror.Invalid("exam.sitting.invalid", "no_show_list")
 	}
 
-	snapshot, err := s.GetExamSitting(ctx, invocation, query.ExamID, query.SittingID)
+	snapshot, err := s.GetExamSitting(ctx, inv, query.ExamID, query.SittingID)
 	if err != nil {
 		return NoShowPage{}, err
 	}

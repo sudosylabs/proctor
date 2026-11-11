@@ -23,8 +23,8 @@ type CandidateAccess struct {
 	ContinuityCredential string
 }
 
-func candidateSelector(invocation invocation.Invocation, candidateAccess CandidateAccess) (store.CandidateAttemptAccess, error) {
-	principal := invocation.Principal()
+func candidateSelector(inv invocation.Invocation, candidateAccess CandidateAccess) (store.CandidateAttemptAccess, error) {
+	principal := inv.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return store.CandidateAttemptAccess{}, apperror.New("authentication.token_invalid")
 	}

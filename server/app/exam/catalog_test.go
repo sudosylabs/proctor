@@ -30,7 +30,7 @@ func TestListCatalogUsesAuthorizedPersistenceVisibilityAndBoundedSummary(t *test
 	updatedAt := time.Date(2026, 8, 14, 7, 0, 0, 0, time.UTC)
 	fixture.persistence.summaries = []store.ExamSummary{{ID: fixture.examID, AcademicUnitID: fixture.unitID, CreatorUserID: fixture.userID,
 		OwnerUserID: fixture.userID, Title: "Systems", UpdatedAt: updatedAt, Revision: 3, ManagerCount: 2}}
-	page, err := fixture.service.ListExams(context.Background(), fixture.invocation, ListQuery{AcademicUnitID: fixture.unitID, Query: "  Systems  ",
+	page, err := fixture.service.ListExams(context.Background(), fixture.inv, ListQuery{AcademicUnitID: fixture.unitID, Query: "  Systems  ",
 		ArchiveFilter: store.ExamArchiveActive, Limit: 50})
 	require.NoError(t, err)
 	require.Len(t, page.Items, 1)
@@ -49,7 +49,7 @@ func TestArchiveOwnsAuthorizationAuditPersistenceAndSafeEffect(t *testing.T) {
 	fixture := newAuthoringFixture(t)
 	fixture.persistence.actorIsManager = true
 	fixture.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: fixture.unitID, UserID: fixture.userID}}
-	result, err := fixture.service.ArchiveExam(context.Background(), fixture.invocation, ArchiveCommand{ExamID: fixture.examID,
+	result, err := fixture.service.ArchiveExam(context.Background(), fixture.inv, ArchiveCommand{ExamID: fixture.examID,
 		ExpectedExamRevision: 1, IdempotencyKey: "test-key"})
 	require.NoError(t, err)
 	require.True(t, result.IsArchived(), "archive = %#v store=%#v effect", result, fixture.persistence.archive)
@@ -80,7 +80,7 @@ func TestArchiveReplayAfterCurrentArchiveDoesNotRepublish(t *testing.T) {
 	fixture.persistence.archived = true
 	fixture.persistence.replayed = true
 	fixture.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: fixture.unitID, UserID: fixture.userID}}
-	_, err := fixture.service.ArchiveExam(context.Background(), fixture.invocation, ArchiveCommand{ExamID: fixture.examID,
+	_, err := fixture.service.ArchiveExam(context.Background(), fixture.inv, ArchiveCommand{ExamID: fixture.examID,
 		ExpectedExamRevision: 1, IdempotencyKey: "test-key"})
 	require.NoError(t, err)
 	require.NotNil(t, fixture.persistence.archive, "replay store/effect")
@@ -100,7 +100,7 @@ func TestArchiveNewAttemptRejectsArchivedAndStaleExamThroughAuditedStoreGuard(t 
 			fixture.persistence.actorIsManager = true
 			fixture.persistence.archived = test.archived
 			fixture.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: fixture.unitID, UserID: fixture.userID}}
-			_, err := fixture.service.ArchiveExam(context.Background(), fixture.invocation, ArchiveCommand{ExamID: fixture.examID,
+			_, err := fixture.service.ArchiveExam(context.Background(), fixture.inv, ArchiveCommand{ExamID: fixture.examID,
 				ExpectedExamRevision: test.revision, IdempotencyKey: "test-key"})
 			var fault *apperror.Error
 			require.ErrorAs(t, err, &fault, "archive error/audit")
@@ -114,7 +114,7 @@ func TestListExamsDefaultsLimitAndActiveArchiveFilter(t *testing.T) {
 	t.Parallel()
 	fixture := newAuthoringFixture(t)
 	fixture.authorizer.listVisibility = store.ExamListVisibility{ActorUserID: fixture.userID}
-	_, err := fixture.service.ListExams(context.Background(), fixture.invocation, ListQuery{})
+	_, err := fixture.service.ListExams(context.Background(), fixture.inv, ListQuery{})
 	require.NoError(t, err)
 	options := fixture.persistence.listOptions
 	require.Equal(t, 51, options.Limit, "list options = %#v, want limit 50 and active archive filter", options)
@@ -126,11 +126,11 @@ func TestListExamsReportsMoreOnlyWhenTheProbeRowExists(t *testing.T) {
 	fixture := newAuthoringFixture(t)
 	fixture.authorizer.listVisibility = store.ExamListVisibility{ActorUserID: fixture.userID}
 	fixture.persistence.summaries = []store.ExamSummary{{ID: model.NewExamID()}, {ID: model.NewExamID()}}
-	full, err := fixture.service.ListExams(context.Background(), fixture.invocation, ListQuery{Limit: 2})
+	full, err := fixture.service.ListExams(context.Background(), fixture.inv, ListQuery{Limit: 2})
 	require.NoError(t, err)
 	require.Len(t, full.Items, 2)
 	require.False(t, full.HasMore, "an exactly full final page has no successor")
-	more, err := fixture.service.ListExams(context.Background(), fixture.invocation, ListQuery{Limit: 1})
+	more, err := fixture.service.ListExams(context.Background(), fixture.inv, ListQuery{Limit: 1})
 	require.NoError(t, err)
 	require.Equal(t, fixture.persistence.summaries[:1], more.Items)
 	require.True(t, more.HasMore)

@@ -23,16 +23,16 @@ import (
 )
 
 type sessionReauthenticationHTTPFake struct {
-	calls      int
-	invocation invocation.Invocation
-	command    identity.ReauthenticatePasswordCommand
+	calls   int
+	inv     invocation.Invocation
+	command identity.ReauthenticatePasswordCommand
 }
 
-func (f *sessionReauthenticationHTTPFake) ReauthenticatePassword(_ context.Context, invocation invocation.Invocation, command identity.ReauthenticatePasswordCommand) (*model.Session, error) {
+func (f *sessionReauthenticationHTTPFake) ReauthenticatePassword(_ context.Context, inv invocation.Invocation, command identity.ReauthenticatePasswordCommand) (*model.Session, error) {
 	f.calls++
-	f.invocation = invocation
+	f.inv = inv
 	f.command = command
-	return &model.Session{ID: invocation.Principal().SessionID, ReauthenticatedAt: model.OptionalTimeFrom(time.Now())}, nil
+	return &model.Session{ID: inv.Principal().SessionID, ReauthenticatedAt: model.OptionalTimeFrom(time.Now())}, nil
 }
 
 func TestPasswordReauthenticationHTTPRejectsIdentitySelectionAndProtectsResponse(t *testing.T) {
@@ -59,7 +59,7 @@ func TestPasswordReauthenticationHTTPRejectsIdentitySelectionAndProtectsResponse
 		})
 	}
 	require.Equal(t, 1, fake.calls, "transport did not bind the immutable current identity")
-	require.Equal(t, principal.UserID, fake.invocation.Principal().UserID, "transport did not bind the immutable current identity")
+	require.Equal(t, principal.UserID, fake.inv.Principal().UserID, "transport did not bind the immutable current identity")
 	require.Equal(t, "secret", fake.command.Password, "transport did not bind the immutable current identity")
 }
 

@@ -25,7 +25,7 @@ import (
 // IssueStudentClassInvitation invites a Student into a Class and mails the claim.
 func (s *Service) IssueStudentClassInvitation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command IssueStudentClassInvitationCommand,
 ) (InvitationView, error) {
 	if !command.ClassID.IsValid() {
@@ -38,10 +38,10 @@ func (s *Service) IssueStudentClassInvitation(
 	}
 
 	resource := model.Resource{Type: model.ResourceClass, ID: command.ClassID.String()}
-	if err = s.authorize(ctx, invocation, model.ActionInvitationCreate, resource); err != nil {
+	if err = s.authorize(ctx, inv, model.ActionInvitationCreate, resource); err != nil {
 		return InvitationView{}, err
 	}
-	if err = s.authorize(ctx, invocation, model.ActionClassMembersManage, resource); err != nil {
+	if err = s.authorize(ctx, inv, model.ActionClassMembersManage, resource); err != nil {
 		return InvitationView{}, err
 	}
 
@@ -60,14 +60,14 @@ func (s *Service) IssueStudentClassInvitation(
 
 	semantic := command
 	semantic.IdempotencyKey = ""
-	commandIdempotency, err := idempotency.Prepare(invocation, "invitation.student_class.issue", command.IdempotencyKey, semantic)
+	commandIdempotency, err := idempotency.Prepare(inv, "invitation.student_class.issue", command.IdempotencyKey, semantic)
 	if err != nil {
 		return InvitationView{}, err
 	}
 
 	batchitem.BindOnboardingImport(commandIdempotency, command.onboardingImportID, command.onboardingImportRowNumber)
 	attempt := access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionInvitationCreate,
 		Resource:   resource,
 		ScopeType:  model.RoleScopeClass,
@@ -92,7 +92,7 @@ func (s *Service) IssueStudentClassInvitation(
 	placeholderClaimHash := strings.Repeat("0", model.TokenHashLength)
 	if command.onboardingImportID.IsValid() && !command.batchDuplicate {
 		candidate, candidateErr := newStudentClassInvitationValue(
-			invocation,
+			inv,
 			command,
 			class.ID,
 			period.ID,
@@ -104,7 +104,7 @@ func (s *Service) IssueStudentClassInvitation(
 		if candidateErr != nil {
 			return InvitationView{}, candidateErr
 		}
-		if view, handled, noOpErr := s.resolveOnboardingInvitationNoOp(ctx, invocation, attempt, candidate, commandIdempotency); handled {
+		if view, handled, noOpErr := s.resolveOnboardingInvitationNoOp(ctx, inv, attempt, candidate, commandIdempotency); handled {
 			return view, noOpErr
 		}
 	}
@@ -115,7 +115,7 @@ func (s *Service) IssueStudentClassInvitation(
 
 	if command.batchDuplicate {
 		candidate, candidateErr := newStudentClassInvitationValue(
-			invocation,
+			inv,
 			command,
 			class.ID,
 			period.ID,
@@ -144,7 +144,7 @@ func (s *Service) IssueStudentClassInvitation(
 	}
 
 	invitation, err := newStudentClassInvitationValue(
-		invocation,
+		inv,
 		command,
 		class.ID,
 		period.ID,
@@ -187,7 +187,7 @@ func (s *Service) IssueStudentClassInvitation(
 
 // newStudentClassInvitationValue builds the Student Class Invitation for the command with the given claim hash.
 func newStudentClassInvitationValue(
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command IssueStudentClassInvitationCommand,
 	classID model.ClassID,
 	periodID model.AcademicPeriodID,
@@ -210,7 +210,7 @@ func newStudentClassInvitationValue(
 			Locale:      command.SuggestedLocale,
 			Timezone:    command.SuggestedTimezone,
 		},
-		InviterUserID: invocation.Principal().UserID,
+		InviterUserID: inv.Principal().UserID,
 		ScopeType:     model.RoleScopeClass,
 		ScopeID:       classID.String(),
 		ClaimHash:     claimHash,

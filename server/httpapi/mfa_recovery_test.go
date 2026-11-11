@@ -24,8 +24,8 @@ import (
 
 type recoveryMFAHTTPFake struct{ MFA }
 
-func (recoveryMFAHTTPFake) GetMFAStatus(_ context.Context, invocation invocation.Invocation) (*identity.MFAStatus, error) {
-	return &identity.MFAStatus{MFARecoveryRequired: invocation.Principal().MFARecoveryRequired, AuthenticationMethod: "oidc", AuthenticationProviderID: "campus", AuthenticationStrength: model.AuthenticationSingleFactor, RecentlyAuthenticated: true}, nil
+func (recoveryMFAHTTPFake) GetMFAStatus(_ context.Context, inv invocation.Invocation) (*identity.MFAStatus, error) {
+	return &identity.MFAStatus{MFARecoveryRequired: inv.Principal().MFARecoveryRequired, AuthenticationMethod: "oidc", AuthenticationProviderID: "campus", AuthenticationStrength: model.AuthenticationSingleFactor, RecentlyAuthenticated: true}, nil
 }
 func (recoveryMFAHTTPFake) SetupMFA(context.Context, invocation.Invocation, identity.SetupMFACommand) (*identity.MFASetup, error) {
 	return &identity.MFASetup{Secret: "once-only", ProvisioningURI: "otpauth://totp/Proctor", ExpiresAt: time.Now().Add(time.Minute)}, nil
@@ -57,8 +57,8 @@ func TestMFARestrictedSessionOnlyReachesExplicitRecoveryRoutes(t *testing.T) {
 
 type enrollmentMFAHTTPFake struct{ MFA }
 
-func (enrollmentMFAHTTPFake) GetMFAStatus(_ context.Context, invocation invocation.Invocation) (*identity.MFAStatus, error) {
-	return &identity.MFAStatus{MFAEnrollmentRequired: invocation.Principal().MFAEnrollmentRequired, AuthenticationMethod: "oidc", AuthenticationProviderID: "campus", AuthenticationStrength: model.AuthenticationSingleFactor, RecentlyAuthenticated: true}, nil
+func (enrollmentMFAHTTPFake) GetMFAStatus(_ context.Context, inv invocation.Invocation) (*identity.MFAStatus, error) {
+	return &identity.MFAStatus{MFAEnrollmentRequired: inv.Principal().MFAEnrollmentRequired, AuthenticationMethod: "oidc", AuthenticationProviderID: "campus", AuthenticationStrength: model.AuthenticationSingleFactor, RecentlyAuthenticated: true}, nil
 }
 func (enrollmentMFAHTTPFake) SetupMFA(context.Context, invocation.Invocation, identity.SetupMFACommand) (*identity.MFASetup, error) {
 	return &identity.MFASetup{Secret: "once-only", ProvisioningURI: "otpauth://totp/Proctor", ExpiresAt: time.Now().Add(time.Minute)}, nil

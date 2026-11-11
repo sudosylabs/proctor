@@ -61,10 +61,10 @@ type UserSettingsDiagnostic struct {
 // expected revision is current, and is idempotent per key.
 func (s *Service) ReplaceOwnUserSettings(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ReplaceOwnUserSettingsCommand,
 ) (UserSettingsReplacementResult, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return UserSettingsReplacementResult{}, apperror.New("authentication.token_invalid")
 	}
@@ -112,7 +112,7 @@ func (s *Service) ReplaceOwnUserSettings(
 	}
 
 	idempotency, err := idempotency.Prepare(
-		invocation,
+		inv,
 		"user_settings.replace",
 		command.IdempotencyKey,
 		struct {
@@ -129,7 +129,7 @@ func (s *Service) ReplaceOwnUserSettings(
 	if current.Revision == command.ExpectedRevision &&
 		(current.Source != command.Source || current.FormatVersion != command.FormatVersion) {
 		audit, err = s.settingsAuditor.PrepareReplacement(ctx, access.UserSettingsAuditInput{
-			Invocation:        invocation,
+			Invocation:        inv,
 			UserID:            principal.UserID,
 			PreviousRevision:  current.Revision,
 			ResultingRevision: nextRevision,
@@ -188,8 +188,8 @@ var userSettingsStoreErrors = apperror.StoreTable{
 
 // ReadOwnUserSettings returns only the document owned by the interactive Session
 // principal. There is intentionally no caller-supplied User identifier.
-func (s *Service) ReadOwnUserSettings(ctx context.Context, invocation invocation.Invocation) (UserSettingsView, error) {
-	principal := invocation.Principal()
+func (s *Service) ReadOwnUserSettings(ctx context.Context, inv invocation.Invocation) (UserSettingsView, error) {
+	principal := inv.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return UserSettingsView{}, apperror.New("authentication.token_invalid")
 	}

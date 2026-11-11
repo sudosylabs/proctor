@@ -96,8 +96,8 @@ func TestUserSettingsTwoNodePostgreSQLConvergencePublishesOnePrivateRefetchHint(
 	require.NoError(t, err)
 	principal, err := primary.App.Identity.AuthenticateAccess(ctx, login.Tokens.AccessToken)
 	require.NoError(t, err)
-	invocation := invocation.New(*principal, model.RequestMetadata{RequestID: "settings-two-node"})
-	before, err := primary.App.Users.ReadOwnUserSettings(ctx, invocation)
+	inv := invocation.New(*principal, model.RequestMetadata{RequestID: "settings-two-node"})
+	before, err := primary.App.Users.ReadOwnUserSettings(ctx, inv)
 	require.NoError(t, err)
 
 	type outcome struct {
@@ -118,7 +118,7 @@ func TestUserSettingsTwoNodePostgreSQLConvergencePublishesOnePrivateRefetchHint(
 			source string
 			key    string
 		}) {
-			result, replaceErr := candidate.app.Users.ReplaceOwnUserSettings(ctx, invocation, user.ReplaceOwnUserSettingsCommand{
+			result, replaceErr := candidate.app.Users.ReplaceOwnUserSettings(ctx, inv, user.ReplaceOwnUserSettingsCommand{
 				Source: candidate.source, FormatVersion: 1,
 				ExpectedRevision: before.Revision, IdempotencyKey: candidate.key,
 			})
@@ -142,9 +142,9 @@ func TestUserSettingsTwoNodePostgreSQLConvergencePublishesOnePrivateRefetchHint(
 	require.Equal(t, 1, successes, "concurrent outcomes success/conflict/winner = %d/%d/%#v", successes, conflicts, winner)
 	require.Equal(t, 1, conflicts, "concurrent outcomes success/conflict/winner = %d/%d/%#v", successes, conflicts, winner)
 	require.True(t, winner.Changed, "concurrent outcomes success/conflict/winner = %d/%d/%#v", successes, conflicts, winner)
-	primaryView, err := primary.App.Users.ReadOwnUserSettings(ctx, invocation)
+	primaryView, err := primary.App.Users.ReadOwnUserSettings(ctx, inv)
 	require.NoError(t, err)
-	secondaryView, err := secondary.App.Users.ReadOwnUserSettings(ctx, invocation)
+	secondaryView, err := secondary.App.Users.ReadOwnUserSettings(ctx, inv)
 	require.NoError(t, err)
 	require.Equal(t, winner.Revision, primaryView.Revision, "authoritative views diverged: primary=%#v secondary=%#v winner=%#v", primaryView, secondaryView, winner)
 	require.Equal(t, winner.Revision, secondaryView.Revision, "authoritative views diverged: primary=%#v secondary=%#v winner=%#v", primaryView, secondaryView, winner)
@@ -214,8 +214,8 @@ func TestUserSettingsUnknownOutcomeReconcilesByReadWithoutContentLeak(t *testing
 	require.NoError(t, err)
 	principal, err := helper.App.Identity.AuthenticateAccess(ctx, login.Tokens.AccessToken)
 	require.NoError(t, err)
-	invocation := invocation.New(*principal, model.RequestMetadata{RequestID: "settings-unknown-outcome"})
-	before, err := helper.App.Users.ReadOwnUserSettings(ctx, invocation)
+	inv := invocation.New(*principal, model.RequestMetadata{RequestID: "settings-unknown-outcome"})
+	before, err := helper.App.Users.ReadOwnUserSettings(ctx, inv)
 	require.NoError(t, err)
 	const source = "{\n  // private-comment-marker\n  \"private.visual.key\": \"private-value-marker\",\n}\n"
 	command := user.ReplaceOwnUserSettingsCommand{
@@ -223,13 +223,13 @@ func TestUserSettingsUnknownOutcomeReconcilesByReadWithoutContentLeak(t *testing
 		IdempotencyKey: "private-idempotency-marker",
 	}
 	uncertain.failNext.Store(true)
-	_, err = helper.App.Users.ReplaceOwnUserSettings(ctx, invocation, command)
+	_, err = helper.App.Users.ReplaceOwnUserSettings(ctx, inv, command)
 	require.True(t, apperror.Is(err, "user_settings.unavailable"), "unknown replacement outcome error = %v", err)
-	authoritative, err := helper.App.Users.ReadOwnUserSettings(ctx, invocation)
+	authoritative, err := helper.App.Users.ReadOwnUserSettings(ctx, inv)
 	require.NoError(t, err)
 	require.Equal(t, source, authoritative.Source)
 	require.NotEqual(t, before.Revision, authoritative.Revision)
-	replayed, err := helper.App.Users.ReplaceOwnUserSettings(ctx, invocation, command)
+	replayed, err := helper.App.Users.ReplaceOwnUserSettings(ctx, inv, command)
 	require.NoError(t, err, "retained replay = %#v", replayed)
 	require.True(t, replayed.Replayed, "retained replay = %#v", replayed)
 	require.Equal(t, authoritative.Revision, replayed.Revision, "retained replay = %#v", replayed)

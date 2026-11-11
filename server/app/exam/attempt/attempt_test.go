@@ -34,29 +34,29 @@ func TestManagerAttemptOperationsAuthorizeBeforeReadingAttempts(t *testing.T) {
 		run           func(*fixture, model.ExamAttemptID) error
 	}{
 		"get": {authorization: "manager.authorize", run: func(f *fixture, attemptID model.ExamAttemptID) error {
-			_, err := f.service.GetExamAttempt(context.Background(), f.invocation, f.sitting.ExamID, f.sitting.ID, attemptID)
+			_, err := f.service.GetExamAttempt(context.Background(), f.inv, f.sitting.ExamID, f.sitting.ID, attemptID)
 			return err
 		}},
 		"reallow": {authorization: "manager.manage", run: func(f *fixture, attemptID model.ExamAttemptID) error {
-			_, err := f.service.ReallowExamAttempt(context.Background(), f.invocation, ReallowCommand{
+			_, err := f.service.ReallowExamAttempt(context.Background(), f.inv, ReallowCommand{
 				ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: attemptID, SuspensionID: model.NewAttemptSuspensionID(),
 				ExpectedAttemptRevision: 2, PrivateReason: "probe", IdempotencyKey: "probe-key"})
 			return err
 		}},
 		"end": {authorization: "manager.manage", run: func(f *fixture, attemptID model.ExamAttemptID) error {
-			_, err := f.service.EndExamAttemptByManager(context.Background(), f.invocation, ManagerEndCommand{
+			_, err := f.service.EndExamAttemptByManager(context.Background(), f.inv, ManagerEndCommand{
 				ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: attemptID,
 				ExpectedAttemptRevision: 2, PrivateReason: "probe", IdempotencyKey: "probe-key"})
 			return err
 		}},
 		"suspend": {authorization: "manager.manage", run: func(f *fixture, attemptID model.ExamAttemptID) error {
-			_, err := f.service.SuspendExamAttempt(context.Background(), f.invocation, ManualSuspensionCommand{
+			_, err := f.service.SuspendExamAttempt(context.Background(), f.inv, ManualSuspensionCommand{
 				ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: attemptID,
 				ExpectedAttemptRevision: 2, PrivateReason: "probe", IdempotencyKey: "probe-key"})
 			return err
 		}},
 		"browser_activity": {authorization: "browser.authorize", run: func(f *fixture, attemptID model.ExamAttemptID) error {
-			_, err := f.service.ListExamAttemptBrowserActivity(context.Background(), f.invocation, BrowserActivityPageQuery{
+			_, err := f.service.ListExamAttemptBrowserActivity(context.Background(), f.inv, BrowserActivityPageQuery{
 				ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: attemptID, Limit: 10})
 			return err
 		}},
@@ -111,7 +111,7 @@ func TestContentSelectorsPreserveCandidateAccessErrors(t *testing.T) {
 
 type fixture struct {
 	service                   *Service
-	invocation                invocation.Invocation
+	inv                       invocation.Invocation
 	userID                    model.UserID
 	attemptID                 model.ExamAttemptID
 	connectionID              model.AttemptConnectionID
@@ -211,7 +211,7 @@ func newFixture(t *testing.T) *fixture {
 	})
 	require.NoError(t, err)
 	f.service = service
-	f.invocation = invocation.New(model.Principal{UserID: f.userID, SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
+	f.inv = invocation.New(model.Principal{UserID: f.userID, SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientDesktop, DesktopRegistrationID: model.NewDesktopRegistrationID(),
 		DPoPKeyThumbprint: strings.Repeat("A", 43), RegisteredDesktopKey: true,
@@ -229,9 +229,9 @@ func validConnectCommand(f *fixture, credential, key string) ConnectCommand {
 }
 
 func useManagerCall(f *fixture) model.UserID {
-	principal := f.invocation.Principal()
+	principal := f.inv.Principal()
 	principal.UserID = model.NewUserID()
-	f.invocation = invocation.New(principal, f.invocation.RequestMetadata())
+	f.inv = invocation.New(principal, f.inv.RequestMetadata())
 	return principal.UserID
 }
 

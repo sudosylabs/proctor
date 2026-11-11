@@ -20,7 +20,7 @@ import (
 func TestSaveDecisionAuthorizesAuditsAtomicallyAndSuppressesPrivateRationale(t *testing.T) {
 	t.Parallel()
 	f := newReviewFixture(t)
-	result, err := f.service.SaveExamIntegrityDecision(context.Background(), f.invocation, SaveDecisionCommand{
+	result, err := f.service.SaveExamIntegrityDecision(context.Background(), f.inv, SaveDecisionCommand{
 		SubmissionID: f.submissionID, FlagID: f.flagID, ExpectedReviewRevision: 0,
 		ExpectedDecisionRevision: 0, Outcome: model.IntegrityReviewConfirmed,
 		PrivateRationale: "The retained continuity evidence was verified.", IdempotencyKey: "test-key",
@@ -40,7 +40,7 @@ func TestSaveDecisionAuthorizesAuditsAtomicallyAndSuppressesPrivateRationale(t *
 		_, exists := f.auditor.value[forbidden]
 		require.False(t, exists, "private field %q in audit %#v", forbidden, f.auditor.value)
 	}
-	wantIdempotency, prepareErr := prepareDecisionIdempotency(f.invocation, SaveDecisionCommand{
+	wantIdempotency, prepareErr := prepareDecisionIdempotency(f.inv, SaveDecisionCommand{
 		SubmissionID: f.submissionID, FlagID: f.flagID, ExpectedReviewRevision: 0,
 		ExpectedDecisionRevision: 0, Outcome: model.IntegrityReviewConfirmed,
 		PrivateRationale: "The retained continuity evidence was verified.", IdempotencyKey: "test-key",
@@ -54,9 +54,9 @@ func TestUpdateDraftPassesOwnedIdempotencyToStore(t *testing.T) {
 	f := newReviewFixture(t)
 	command := UpdateDraftCommand{SubmissionID: f.submissionID, ReviewID: f.reviewID, ExpectedReviewRevision: 1,
 		ManagerNotes: "private", StudentRemarksMarkdown: "Visible", IdempotencyKey: "draft-key"}
-	_, err := f.service.UpdateExamIntegrityReview(context.Background(), f.invocation, command)
+	_, err := f.service.UpdateExamIntegrityReview(context.Background(), f.inv, command)
 	require.NoError(t, err)
-	want, err := prepareDraftIdempotency(f.invocation, command)
+	want, err := prepareDraftIdempotency(f.inv, command)
 	require.NoError(t, err)
 	require.Equal(t, want, f.persistence.idempotency)
 }
@@ -65,7 +65,7 @@ func TestExactDecisionReplayReturnsRetainedResultWithoutEffect(t *testing.T) {
 	t.Parallel()
 	f := newReviewFixture(t)
 	f.persistence.replayed = true
-	result, err := f.service.SaveExamIntegrityDecision(context.Background(), f.invocation, SaveDecisionCommand{
+	result, err := f.service.SaveExamIntegrityDecision(context.Background(), f.inv, SaveDecisionCommand{
 		SubmissionID: f.submissionID, FlagID: f.flagID, Outcome: model.IntegrityReviewConfirmed,
 		PrivateRationale: "The retained continuity evidence was verified.", IdempotencyKey: "test-key",
 	})

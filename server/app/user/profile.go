@@ -66,8 +66,8 @@ type CurrentUserContextView struct {
 
 // GetCurrentUserContext returns the navigation projection of the Session's
 // User. Only a Session credential may read it.
-func (s *Service) GetCurrentUserContext(ctx context.Context, invocation invocation.Invocation) (*CurrentUserContextView, error) {
-	principal := invocation.Principal()
+func (s *Service) GetCurrentUserContext(ctx context.Context, inv invocation.Invocation) (*CurrentUserContextView, error) {
+	principal := inv.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return nil, apperror.New("authentication.token_invalid")
 	}
@@ -129,10 +129,10 @@ type UserDirectoryEntry struct {
 // match within the same visibility.
 func (s *Service) SearchUsers(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query SearchUsersQuery,
 ) (paging.Counted[UserDirectoryEntry], error) {
-	page, options, err := s.listUsers(ctx, invocation, query)
+	page, options, err := s.listUsers(ctx, inv, query)
 	if err != nil {
 		return paging.Counted[UserDirectoryEntry]{}, err
 	}
@@ -147,7 +147,7 @@ func (s *Service) SearchUsers(
 		return paging.Counted[UserDirectoryEntry]{}, apperror.New("administration.unavailable").WithField("resource", "user")
 	}
 
-	entries, err := s.summarizeUsers(ctx, invocation, page.Items, options.Visibility)
+	entries, err := s.summarizeUsers(ctx, inv, page.Items, options.Visibility)
 	if err != nil {
 		return paging.Counted[UserDirectoryEntry]{}, err
 	}
@@ -161,7 +161,7 @@ func (s *Service) SearchUsers(
 // role_binding.view scopes, resolved once for the page.
 func (s *Service) summarizeUsers(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	users []*model.User,
 	visibility store.UserVisibilityScope,
 ) ([]UserDirectoryEntry, error) {
@@ -193,7 +193,7 @@ func (s *Service) summarizeUsers(
 		membershipsByUser[summary.UserID] = summary
 	}
 
-	roleScope, err := s.authorizer.RoleBindingViewScope(ctx, invocation, visibility.ActiveAt)
+	roleScope, err := s.authorizer.RoleBindingViewScope(ctx, inv, visibility.ActiveAt)
 	if err != nil {
 		return nil, err
 	}
@@ -234,10 +234,10 @@ func (s *Service) summarizeUsers(
 // SearchUserPage is the uncounted directory read that global search composes.
 func (s *Service) SearchUserPage(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query SearchUsersQuery,
 ) (paging.Page[*model.User], error) {
-	page, _, err := s.listUsers(ctx, invocation, query)
+	page, _, err := s.listUsers(ctx, inv, query)
 	return page, err
 }
 
@@ -246,7 +246,7 @@ func (s *Service) SearchUserPage(
 // visibility.
 func (s *Service) listUsers(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query SearchUsersQuery,
 ) (paging.Page[*model.User], store.UserListOptions, error) {
 	limit, probe, err := paging.ResolveLimit(query.Limit, "limit")
@@ -262,7 +262,7 @@ func (s *Service) listUsers(
 		return paging.Page[*model.User]{}, store.UserListOptions{}, apperror.Invalid("request.invalid", "academic_unit_id")
 	}
 
-	visibility, err := s.authorizer.AuthorizeUserSearch(ctx, invocation)
+	visibility, err := s.authorizer.AuthorizeUserSearch(ctx, inv)
 	if err != nil {
 		return paging.Page[*model.User]{}, store.UserListOptions{}, err
 	}
@@ -297,11 +297,11 @@ func (s *Service) listUsers(
 
 // GetUserProfile reads one User profile; a scoped grant reads the limited
 // projection without the mailbox and account metadata.
-func (s *Service) GetUserProfile(ctx context.Context, invocation invocation.Invocation, id model.UserID) (*model.User, error) {
+func (s *Service) GetUserProfile(ctx context.Context, inv invocation.Invocation, id model.UserID) (*model.User, error) {
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "user_id")
 	}
-	read, err := s.authorizer.AuthorizeProfileRead(ctx, invocation, id)
+	read, err := s.authorizer.AuthorizeProfileRead(ctx, inv, id)
 	if err != nil {
 		return nil, err
 	}
@@ -364,7 +364,7 @@ func scopedUserProjection(user *model.User) *model.User {
 // caller to manage that User, and audits the change.
 func (s *Service) UpdateUserProfile(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command UpdateUserProfileCommand,
 ) (*model.User, error) {
 	id := command.ID
@@ -374,7 +374,7 @@ func (s *Service) UpdateUserProfile(
 
 	if err := s.authorizer.Authorize(
 		ctx,
-		invocation,
+		inv,
 		model.ActionUserManage,
 		model.Resource{Type: model.ResourceUser, ID: id.String()},
 	); err != nil {
@@ -408,7 +408,7 @@ func (s *Service) UpdateUserProfile(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionUserManage,
 			Resource:   resource,
 			Operation:  "update_profile",

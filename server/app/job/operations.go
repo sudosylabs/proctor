@@ -70,7 +70,7 @@ type InstitutionAuthorization struct {
 // AuthorizeInstitution reads the Institution and authorizes action on it.
 func (a InstitutionAuthorization) AuthorizeInstitution(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	action model.Action,
 ) (model.Resource, error) {
 	institution, err := a.Institutions.GetSingleton(ctx)
@@ -79,7 +79,7 @@ func (a InstitutionAuthorization) AuthorizeInstitution(
 	}
 
 	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
-	if err = a.Authorizer.Authorize(ctx, invocation, action, resource); err != nil {
+	if err = a.Authorizer.Authorize(ctx, inv, action, resource); err != nil {
 		return model.Resource{}, err
 	}
 
@@ -116,11 +116,11 @@ type RetryCommand struct{ ID model.JobID }
 
 // ListJobs lists one page of operator-visible Jobs, with who started each and
 // what it is about.
-func (s *Operations) ListJobs(ctx context.Context, invocation invocation.Invocation, query ListQuery) (Page, error) {
+func (s *Operations) ListJobs(ctx context.Context, inv invocation.Invocation, query ListQuery) (Page, error) {
 	if s == nil {
 		return Page{}, apperror.New("job.unavailable")
 	}
-	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionJobView); err != nil {
+	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, inv, model.ActionJobView); err != nil {
 		return Page{}, err
 	}
 
@@ -140,14 +140,14 @@ func (s *Operations) ListJobs(ctx context.Context, invocation invocation.Invocat
 // maximum. The administration counts read it.
 func (s *Operations) CountRecentJobFailures(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	within time.Duration,
 	maximum int,
 ) (int, error) {
 	if s == nil {
 		return 0, apperror.New("job.unavailable")
 	}
-	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionJobView); err != nil {
+	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, inv, model.ActionJobView); err != nil {
 		return 0, err
 	}
 
@@ -160,11 +160,11 @@ func (s *Operations) CountRecentJobFailures(
 }
 
 // GetJob returns one operator-visible Job.
-func (s *Operations) GetJob(ctx context.Context, invocation invocation.Invocation, id model.JobID) (View, error) {
+func (s *Operations) GetJob(ctx context.Context, inv invocation.Invocation, id model.JobID) (View, error) {
 	if s == nil {
 		return View{}, apperror.New("job.unavailable")
 	}
-	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionJobView); err != nil {
+	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, inv, model.ActionJobView); err != nil {
 		return View{}, err
 	}
 	view, err := s.deps.Jobs.Get(ctx, id)
@@ -181,13 +181,13 @@ func (s *Operations) GetJob(ctx context.Context, invocation invocation.Invocatio
 // ListJobAttempts lists the execution attempts of one Job.
 func (s *Operations) ListJobAttempts(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query AttemptListQuery,
 ) (AttemptPage, error) {
 	if s == nil {
 		return AttemptPage{}, apperror.New("job.unavailable")
 	}
-	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionJobView); err != nil {
+	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, inv, model.ActionJobView); err != nil {
 		return AttemptPage{}, err
 	}
 
@@ -200,31 +200,31 @@ func (s *Operations) ListJobAttempts(
 }
 
 // CancelJob cancels one Job whose type is cancelable, with audit.
-func (s *Operations) CancelJob(ctx context.Context, invocation invocation.Invocation, command CancelCommand) (View, error) {
+func (s *Operations) CancelJob(ctx context.Context, inv invocation.Invocation, command CancelCommand) (View, error) {
 	if s == nil {
 		return View{}, apperror.New("job.unavailable")
 	}
-	return s.controlJob(ctx, invocation, "cancel", command.ID, s.deps.Jobs.PrepareCancellation, s.deps.Jobs.Cancel)
+	return s.controlJob(ctx, inv, "cancel", command.ID, s.deps.Jobs.PrepareCancellation, s.deps.Jobs.Cancel)
 }
 
 // RetryJob retries one Job whose type supports an explicit retry in its
 // current status, with audit.
-func (s *Operations) RetryJob(ctx context.Context, invocation invocation.Invocation, command RetryCommand) (View, error) {
+func (s *Operations) RetryJob(ctx context.Context, inv invocation.Invocation, command RetryCommand) (View, error) {
 	if s == nil {
 		return View{}, apperror.New("job.unavailable")
 	}
-	return s.controlJob(ctx, invocation, "retry", command.ID, s.deps.Jobs.PrepareRetry, s.deps.Jobs.Retry)
+	return s.controlJob(ctx, inv, "retry", command.ID, s.deps.Jobs.PrepareRetry, s.deps.Jobs.Retry)
 }
 
 func (s *Operations) controlJob(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	operation string,
 	id model.JobID,
 	prepare func(context.Context, model.JobID) (ControlTarget, error),
 	apply func(context.Context, ControlTarget, AuditReference) (View, error),
 ) (View, error) {
-	resource, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionJobManage)
+	resource, err := s.deps.Authorization.AuthorizeInstitution(ctx, inv, model.ActionJobManage)
 	if err != nil {
 		return View{}, err
 	}
@@ -236,7 +236,7 @@ func (s *Operations) controlJob(
 
 	view := target.View()
 	auditID, err := s.deps.Audit.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionJobManage,
 		Resource:   resource,
 		Operation:  operation,

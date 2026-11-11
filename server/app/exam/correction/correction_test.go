@@ -25,7 +25,7 @@ import (
 
 type correctionFixture struct {
 	service        *Service
-	invocation     invocation.Invocation
+	inv            invocation.Invocation
 	examID         model.ExamID
 	sittingID      model.ExamSittingID
 	baseRevisionID model.ExamRevisionID
@@ -82,7 +82,7 @@ func newCorrectionFixture(t *testing.T) *correctionFixture {
 	})
 	require.NoError(t, err)
 	f.service = service
-	f.invocation = invocation.New(model.Principal{UserID: f.userID, SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientWeb, AuthenticatedAt: f.at}, model.RequestMetadata{})
+	f.inv = invocation.New(model.Principal{UserID: f.userID, SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientWeb, AuthenticatedAt: f.at}, model.RequestMetadata{})
 	return f
 }
 

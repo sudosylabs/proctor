@@ -49,7 +49,7 @@ func (s *Service) failMFAMutation(
 // resource, which is its own subject.
 func (s *Service) beginMFAAudit(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	action model.Action,
 	resource model.Resource,
 	prior any,
@@ -60,16 +60,16 @@ func (s *Service) beginMFAAudit(
 
 	var subject model.UserID
 	if resource.Type != model.ResourceUser {
-		subject = invocation.Principal().UserID
+		subject = inv.Principal().UserID
 	}
 
 	event, err := s.securityAudit.BeginCriticalActionForSubject(
 		ctx,
-		invocation.Principal(),
+		inv.Principal(),
 		subject,
 		action,
 		resource,
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 		nil,
 		prior,
 	)

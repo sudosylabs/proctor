@@ -39,11 +39,11 @@ func assertPreparedIdempotency(t *testing.T, got *store.CommandIdempotency, user
 func TestIdempotencyDocumentsAndStoreBoundaryCompatibility(t *testing.T) {
 	t.Parallel()
 	userID := model.NewUserID()
-	invocation := invocation.New(model.Principal{UserID: userID}, model.RequestMetadata{})
+	inv := invocation.New(model.Principal{UserID: userID}, model.RequestMetadata{})
 	examID, sittingID, revisionID := model.NewExamID(), model.NewExamSittingID(), model.NewExamRevisionID()
 	resourceID, stageID := model.NewExamResourceID(), model.NewExamCorrectionResourceStageID()
 
-	staged, err := prepareStageIdempotency(invocation, StageResourceContentCommand{ExamID: examID, SittingID: sittingID,
+	staged, err := prepareStageIdempotency(inv, StageResourceContentCommand{ExamID: examID, SittingID: sittingID,
 		BaseRevisionID: revisionID, Target: store.ExamCorrectionResourceReplacement, ResourceID: resourceID,
 		MediaType: model.ExamResourceMediaPDF, Size: 12, ExpectedSHA256: "digest", IdempotencyKey: "stage-key"})
 	require.NoError(t, err)
@@ -51,7 +51,7 @@ func TestIdempotencyDocumentsAndStoreBoundaryCompatibility(t *testing.T) {
 		fmt.Sprintf(`{"exam_id":%q,"exam_sitting_id":%q,"base_revision_id":%q,"target":"replacement","resource_id":%q,"media_type":"application/pdf","size":12,"sha256":"digest"}`,
 			examID, sittingID, revisionID, resourceID))
 
-	applied, err := prepareApplyIdempotency(invocation, ApplyCommand{ExamID: examID, SittingID: sittingID,
+	applied, err := prepareApplyIdempotency(inv, ApplyCommand{ExamID: examID, SittingID: sittingID,
 		ExpectedSittingRevision: 3, ExpectedCurrentRevisionID: revisionID,
 		Instructions:         OptionalInstructions{Present: true, Markdown: "Updated"},
 		Resources:            []ResourceManifestItem{{ResourceID: resourceID, DisplayName: "Reference", DescriptionMarkdown: "Read it", StageID: stageID}},
@@ -71,8 +71,8 @@ func TestIdempotencyOperationCompatibility(t *testing.T) {
 
 func TestPrepareIdempotencyRequiresKey(t *testing.T) {
 	t.Parallel()
-	invocation := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
-	_, err := idempotency.Require(invocation, "operation", "", struct{}{})
+	inv := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
+	_, err := idempotency.Require(inv, "operation", "", struct{}{})
 	fault, ok := apperror.As(err)
 	require.True(t, ok)
 	require.Equal(t, "idempotency.key_required", fault.Code())

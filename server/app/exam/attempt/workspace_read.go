@@ -55,11 +55,11 @@ type WorkspacePage struct {
 // cursor.
 func (s *Service) ListCandidateExamWorkspace(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query WorkspaceQuery,
 ) (_ WorkspacePage, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	selector, err := candidateSelector(invocation, query.Access)
+	selector, err := candidateSelector(inv, query.Access)
 	if err != nil {
 		return WorkspacePage{}, err
 	}
@@ -106,11 +106,11 @@ type OpenWorkspaceFileQuery struct {
 // copy or Attempt-written content.
 func (s *Service) OpenCandidateExamWorkspaceFile(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query OpenWorkspaceFileQuery,
 ) (_ OpenedContent, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	selector, err := candidateSelector(invocation, query.Access)
+	selector, err := candidateSelector(inv, query.Access)
 	if err != nil {
 		return OpenedContent{}, err
 	}

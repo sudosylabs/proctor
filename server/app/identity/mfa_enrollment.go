@@ -127,9 +127,9 @@ func (s *Service) requireMFA() error {
 // Session assurance.
 func (s *Service) GetMFAStatus(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 ) (*MFAStatus, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if err := s.requireMFARecoverySession(principal, false); err != nil {
 		return nil, err
 	}
@@ -192,10 +192,10 @@ func (s *Service) GetMFAStatus(
 // sealed secret.
 func (s *Service) SetupMFA(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command SetupMFACommand,
 ) (*MFASetup, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if err := s.requireMFARecoverySession(principal, true); err != nil {
 		return nil, err
 	}
@@ -238,7 +238,7 @@ func (s *Service) SetupMFA(
 	}
 
 	auditID, appErr := s.beginMFAAudit(
-		ctx, invocation, model.ActionMFASetup, resource, nil,
+		ctx, inv, model.ActionMFASetup, resource, nil,
 	)
 	if appErr != nil {
 		return nil, appErr
@@ -268,17 +268,17 @@ func (s *Service) SetupMFA(
 // returns the new recovery codes once.
 func (s *Service) ActivateMFA(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ActivateMFACommand,
 ) (*MFAActivation, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if err := s.requireMFARecoverySession(principal, true); err != nil {
 		return nil, err
 	}
 	if err := s.requireMFAEnabled(); err != nil {
 		return nil, err
 	}
-	if err := s.limitMFAFactorAttempt(ctx, invocation); err != nil {
+	if err := s.limitMFAFactorAttempt(ctx, inv); err != nil {
 		return nil, err
 	}
 
@@ -322,7 +322,7 @@ func (s *Service) ActivateMFA(
 	}
 
 	auditID, appErr := s.beginMFAAudit(
-		ctx, invocation, model.ActionMFAActivate, resource, credential.Auditable(),
+		ctx, inv, model.ActionMFAActivate, resource, credential.Auditable(),
 	)
 	if appErr != nil {
 		return nil, appErr
@@ -358,9 +358,9 @@ func (s *Service) ActivateMFA(
 // requires it.
 func (s *Service) DisableMFA(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 ) error {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if err := s.requireMFAStrongRecentSession(principal); err != nil {
 		return err
 	}
@@ -381,7 +381,7 @@ func (s *Service) DisableMFA(
 		return appErr
 	}
 
-	auditID, appErr := s.beginMFAAudit(ctx, invocation, model.ActionMFADisable, resource, nil)
+	auditID, appErr := s.beginMFAAudit(ctx, inv, model.ActionMFADisable, resource, nil)
 	if appErr != nil {
 		return appErr
 	}

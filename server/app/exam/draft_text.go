@@ -33,11 +33,11 @@ type EditDraftTextCommand struct {
 // unchanged, but at least one must be set.
 func (a *Authoring) EditExamDraftText(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command EditDraftTextCommand,
 ) (_ View, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil || !command.ExamID.IsValid() || command.ExpectedDraftRevision < 1 {
 		return View{}, apperror.Invalid("exam.invalid", "draft_revision")
 	}
@@ -51,7 +51,7 @@ func (a *Authoring) EditExamDraftText(
 	}
 
 	instructions := cloneStringPointer(command.InstructionsMarkdown)
-	commandIdempotency, err := idempotency.Require(invocation, idempotencyOperationEditDraftText, command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Require(inv, idempotencyOperationEditDraftText, command.IdempotencyKey, struct {
 		ExamID                string  `json:"exam_id"`
 		ExpectedDraftRevision int64   `json:"expected_draft_revision"`
 		Title                 *string `json:"title"`
@@ -77,7 +77,7 @@ func (a *Authoring) EditExamDraftText(
 	}
 
 	resource := model.Resource{Type: model.ResourceExam, ID: command.ExamID.String()}
-	if err = a.authorizer.Authorize(ctx, invocation, action, resource); err != nil {
+	if err = a.authorizer.Authorize(ctx, inv, action, resource); err != nil {
 		return View{}, err
 	}
 
@@ -105,7 +105,7 @@ func (a *Authoring) EditExamDraftText(
 	}
 
 	auditID, err := a.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     action,
 		Resource:   resource,
 		ScopeType:  model.RoleScopeAcademicUnit,

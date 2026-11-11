@@ -46,17 +46,17 @@ func TestNativeConditionsRequireCurrentDetailedReviewAuthority(t *testing.T) {
 	f.service.authorizer = auth
 	f.service.reviews = p
 	query := store.NativeConditionListOptions{SubmissionID: f.submissionID, Limit: 100}
-	_, err := f.service.ListNativeConditions(context.Background(), f.invocation, query)
+	_, err := f.service.ListNativeConditions(context.Background(), f.inv, query)
 	require.ErrorIs(t, err, denied, "private conditions read before authorization")
 	require.Equal(t, 0, p.calls, "private conditions read before authorization")
 	auth.err = nil
-	page, err := f.service.ListNativeConditions(context.Background(), f.invocation, query)
+	page, err := f.service.ListNativeConditions(context.Background(), f.inv, query)
 	require.NoError(t, err, "authorized condition read failed")
 	require.NotNil(t, page.Items, "authorized condition read failed")
 	require.Equal(t, 1, p.calls, "authorized condition read failed")
 	require.Equal(t, 2, auth.calls, "authorized condition read failed")
 	query.Limit = 101
-	_, err = f.service.ListNativeConditions(context.Background(), f.invocation, query)
+	_, err = f.service.ListNativeConditions(context.Background(), f.inv, query)
 	require.Error(t, err, "unbounded review read")
 	require.Equal(t, 1, p.calls, "unbounded review read")
 }

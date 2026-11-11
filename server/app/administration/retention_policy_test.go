@@ -26,7 +26,7 @@ func TestRetentionPolicyReadAuthorizesExactInstitutionAndReturnsCopy(t *testing.
 	t.Parallel()
 	fixture := newRetentionPolicyFixture(t)
 	application := fixture.service
-	result, err := application.GetRetentionPolicy(t.Context(), fixture.invocation)
+	result, err := application.GetRetentionPolicy(t.Context(), fixture.inv)
 	require.NoError(t, err, "GetRetentionPolicy")
 	require.NotNil(t, result, "GetRetentionPolicy")
 	require.Equal(t, fixture.policies.policy, result, "GetRetentionPolicy")
@@ -36,7 +36,7 @@ func TestRetentionPolicyReadAuthorizesExactInstitutionAndReturnsCopy(t *testing.
 	require.Equal(t, 0, fixture.policies.policy.SubmissionRetentionDays, "read result shares mutable Store policy")
 	fixture.authorization.err = apperror.New("authorization.denied")
 	fixture.policies.getCalls = 0
-	result, err = application.GetRetentionPolicy(t.Context(), fixture.invocation)
+	result, err = application.GetRetentionPolicy(t.Context(), fixture.inv)
 	require.Nil(t, result, "denied read = %#v, %v; Store calls", result, err)
 	require.True(t, apperror.Is(err, "authorization.denied"), "denied read = %#v, %v; Store calls", result, err)
 	require.Equal(t, 0, fixture.policies.getCalls, "denied read = %#v, %v; Store calls", result, err)
@@ -57,7 +57,7 @@ func TestRetentionPolicyReadRejectsUnavailableOrForeignFacts(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			fixture := newRetentionPolicyFixture(t)
 			test.alter(&fixture)
-			result, err := fixture.service.GetRetentionPolicy(t.Context(), fixture.invocation)
+			result, err := fixture.service.GetRetentionPolicy(t.Context(), fixture.inv)
 			require.Nil(t, result, "read = %#v, %v", result, err)
 			require.True(t, apperror.Is(err, "retention_policy.unavailable"), "read = %#v, %v", result, err)
 		})
@@ -81,7 +81,7 @@ func TestRetentionPolicyReplacementRequiresStrongRecentSessionBeforeWork(t *test
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			fixture := newRetentionPolicyFixture(t)
-			principal := fixture.invocation.Principal()
+			principal := fixture.inv.Principal()
 			test.alter(&principal)
 			result, err := fixture.service.ReplaceRetentionPolicy(t.Context(), invocation.New(principal, model.RequestMetadata{}), retentionPolicyCommand())
 			require.Nil(t, result, "unassured replacement = %#v, %v; authorization calls", result, err)
@@ -117,7 +117,7 @@ func TestRetentionPolicyReplacementRejectsInvalidIntentBeforeAuditAndStore(t *te
 			fixture := newRetentionPolicyFixture(t)
 			command := retentionPolicyCommand()
 			test.alter(&fixture, &command)
-			result, err := fixture.service.ReplaceRetentionPolicy(t.Context(), fixture.invocation, command)
+			result, err := fixture.service.ReplaceRetentionPolicy(t.Context(), fixture.inv, command)
 			require.Nil(t, result, "invalid replacement = %#v, %v", result, err)
 			require.True(t, apperror.Is(err, test.code), "invalid replacement = %#v, %v", result, err)
 			require.Nil(t, fixture.policies.replaceInput, "invalid replacement = %#v, %v", result, err)
@@ -134,7 +134,7 @@ func TestRetentionPolicyReplacementPassesAtomicAuditAndIdempotency(t *testing.T)
 	require.NoError(t, next.Replace(1, command.Settings, fixture.at))
 	fixture.policies.result = &store.RetentionPolicyReplacementResult{Policy: next, Changed: true}
 	application := fixture.service
-	result, err := application.ReplaceRetentionPolicy(t.Context(), fixture.invocation, command)
+	result, err := application.ReplaceRetentionPolicy(t.Context(), fixture.inv, command)
 	require.NoError(t, err, "replace")
 	require.NotNil(t, result, "replace")
 	require.Equal(t, next, result, "replace")
@@ -149,7 +149,7 @@ func TestRetentionPolicyReplacementPassesAtomicAuditAndIdempotency(t *testing.T)
 	require.Equal(t, false, fixture.audit.attempt.Value["candidate_notices"])
 	input, idempotency := fixture.policies.replaceInput, fixture.policies.command
 	require.NotNil(t, input, "atomic input")
-	require.Equal(t, fixture.invocation.Principal(), input.Principal, "atomic input")
+	require.Equal(t, fixture.inv.Principal(), input.Principal, "atomic input")
 	require.Equal(t, fixture.service.recentAuthenticationTTL, input.RecentAuthenticationTTL, "atomic input")
 	require.Equal(t, int64(1), input.ExpectedRevision, "atomic input")
 	require.Equal(t, command.Settings, input.Settings, "atomic input")
@@ -173,7 +173,7 @@ func TestRetentionPolicyReplacementReplayAndNoOpUseStoreOutcome(t *testing.T) {
 		fixture.policies.result = &store.RetentionPolicyReplacementResult{Policy: retained, Replayed: replay}
 		command := retentionPolicyCommand()
 		command.Settings = model.RetentionPolicySettings{}
-		result, err := fixture.service.ReplaceRetentionPolicy(t.Context(), fixture.invocation, command)
+		result, err := fixture.service.ReplaceRetentionPolicy(t.Context(), fixture.inv, command)
 		require.NoError(t, err, "replayed=%t: result", replay)
 		require.NotNil(t, result, "replayed=%t: result", replay)
 		require.Equal(t, retained, result, "replayed=%t: result", replay)
@@ -187,7 +187,7 @@ func TestRetentionPolicyReplacementFingerprintIncludesInstitutionSettingsAndRevi
 	t.Parallel()
 	fixture := newRetentionPolicyFixture(t)
 	command := retentionPolicyCommand()
-	_, err := fixture.service.ReplaceRetentionPolicy(t.Context(), fixture.invocation, command)
+	_, err := fixture.service.ReplaceRetentionPolicy(t.Context(), fixture.inv, command)
 	require.NoError(t, err)
 	original := *fixture.policies.command
 	for _, change := range []func(*ReplaceRetentionPolicyCommand){
@@ -200,14 +200,14 @@ func TestRetentionPolicyReplacementFingerprintIncludesInstitutionSettingsAndRevi
 	} {
 		candidate := command
 		change(&candidate)
-		_, err = fixture.service.ReplaceRetentionPolicy(t.Context(), fixture.invocation, candidate)
+		_, err = fixture.service.ReplaceRetentionPolicy(t.Context(), fixture.inv, candidate)
 		require.NoError(t, err)
 		require.Equal(t, original.KeyDigest, fixture.policies.command.KeyDigest, "a different replacement can replay the same retained outcome")
 		require.NotEqual(t, original.Fingerprint, fixture.policies.command.Fingerprint, "a different replacement can replay the same retained outcome")
 	}
 	fixture.institution.ID = model.NewInstitutionID()
 	fixture.policies.result.Policy.InstitutionID = fixture.institution.ID
-	_, err = fixture.service.ReplaceRetentionPolicy(t.Context(), fixture.invocation, command)
+	_, err = fixture.service.ReplaceRetentionPolicy(t.Context(), fixture.inv, command)
 	require.NoError(t, err)
 	require.Equal(t, original.KeyDigest, fixture.policies.command.KeyDigest, "a replacement Institution can replay the previous Institution's outcome")
 	require.NotEqual(t, original.Fingerprint, fixture.policies.command.Fingerprint, "a replacement Institution can replay the previous Institution's outcome")
@@ -231,7 +231,7 @@ func TestRetentionPolicyReplacementMapsFailuresAndTerminalizesAudit(t *testing.T
 		t.Run(test.name, func(t *testing.T) {
 			fixture := newRetentionPolicyFixture(t)
 			fixture.policies.replaceErr = test.err
-			result, err := fixture.service.ReplaceRetentionPolicy(t.Context(), fixture.invocation, retentionPolicyCommand())
+			result, err := fixture.service.ReplaceRetentionPolicy(t.Context(), fixture.inv, retentionPolicyCommand())
 			require.Nil(t, result, "failure = %#v, %v; audit = %s", result, err, fixture.audit.failID)
 			require.True(t, apperror.Is(err, test.code), "failure = %#v, %v; audit = %s", result, err, fixture.audit.failID)
 			require.Equal(t, fixture.audit.beginID, fixture.audit.failID, "failure = %#v, %v; audit = %s", result, err, fixture.audit.failID)
@@ -250,13 +250,13 @@ func TestRetentionPolicyReplacementFailsClosedWhenAuditFails(t *testing.T) {
 	fixture := newRetentionPolicyFixture(t)
 	auditFailure := apperror.New("audit.unavailable")
 	fixture.audit.beginErr = auditFailure
-	result, err := fixture.service.ReplaceRetentionPolicy(t.Context(), fixture.invocation, retentionPolicyCommand())
+	result, err := fixture.service.ReplaceRetentionPolicy(t.Context(), fixture.inv, retentionPolicyCommand())
 	require.Nil(t, result, "failed audit preparation")
 	require.ErrorIs(t, err, auditFailure, "failed audit preparation")
 	require.Nil(t, fixture.policies.replaceInput, "failed audit preparation")
 	fixture.audit.beginErr, fixture.audit.failErr = nil, auditFailure
 	fixture.policies.replaceErr = &store.ErrRetentionPolicyRevisionConflict{CurrentRevision: 7}
-	result, err = fixture.service.ReplaceRetentionPolicy(t.Context(), fixture.invocation, retentionPolicyCommand())
+	result, err = fixture.service.ReplaceRetentionPolicy(t.Context(), fixture.inv, retentionPolicyCommand())
 	require.Nil(t, result, "failed terminal audit")
 	require.ErrorIs(t, err, auditFailure, "failed terminal audit")
 }
@@ -269,7 +269,7 @@ func TestRetentionPolicyReplacementRejectsMalformedOrForeignOutcome(t *testing.T
 	} {
 		fixture := newRetentionPolicyFixture(t)
 		fixture.policies.result = result
-		returned, err := fixture.service.ReplaceRetentionPolicy(t.Context(), fixture.invocation, retentionPolicyCommand())
+		returned, err := fixture.service.ReplaceRetentionPolicy(t.Context(), fixture.inv, retentionPolicyCommand())
 		require.Nil(t, returned, "malformed Store outcome returned %#v, %v", returned, err)
 		require.True(t, apperror.Is(err, "retention_policy.unavailable"), "malformed Store outcome returned %#v, %v", returned, err)
 	}
@@ -308,7 +308,7 @@ type retentionPolicyFixture struct {
 	authorization *resourceAuthorizerFake
 	audit         *accessPolicyAuditFake
 	institution   *model.Institution
-	invocation    invocation.Invocation
+	inv           invocation.Invocation
 	at            time.Time
 }
 
@@ -326,7 +326,7 @@ func newRetentionPolicyFixture(t *testing.T) retentionPolicyFixture {
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
 		AuthenticatedAt: at, MFACompletedAt: model.OptionalTimeFrom(at), ClientType: model.SessionClientWeb}
 	return retentionPolicyFixture{service: service, policies: policies, authorization: authorization, audit: audit, institution: institution,
-		invocation: invocation.New(principal, model.RequestMetadata{RequestID: "retention-policy"}), at: at}
+		inv: invocation.New(principal, model.RequestMetadata{RequestID: "retention-policy"}), at: at}
 }
 
 func retentionPolicyCommand() ReplaceRetentionPolicyCommand {

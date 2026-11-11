@@ -25,17 +25,17 @@ func TestMetadataWorkspaceMutationsPassOwnedIdempotencyToStore(t *testing.T) {
 		path      string
 	}{
 		{name: "create directory", operation: idempotencyOperationCreateDirectory, path: "src", invoke: func(f *serviceFixture, _ model.StarterWorkspaceEntryID) error {
-			_, err := f.service.CreateExamStarterWorkspaceDirectory(context.Background(), f.invocation, CreateDirectoryCommand{ExamID: f.examID,
+			_, err := f.service.CreateExamStarterWorkspaceDirectory(context.Background(), f.inv, CreateDirectoryCommand{ExamID: f.examID,
 				ExpectedDraftRevision: 1, Path: "src", IdempotencyKey: "test-key"})
 			return err
 		}},
 		{name: "move entry", operation: idempotencyOperationMoveEntry, path: "src/main.go", invoke: func(f *serviceFixture, id model.StarterWorkspaceEntryID) error {
-			_, err := f.service.MoveExamStarterWorkspaceEntry(context.Background(), f.invocation, MoveEntryCommand{ExamID: f.examID, EntryID: id,
+			_, err := f.service.MoveExamStarterWorkspaceEntry(context.Background(), f.inv, MoveEntryCommand{ExamID: f.examID, EntryID: id,
 				ExpectedDraftRevision: 1, Path: "src/main.go", IdempotencyKey: "test-key"})
 			return err
 		}},
 		{name: "remove entry", operation: idempotencyOperationRemoveEntry, invoke: func(f *serviceFixture, id model.StarterWorkspaceEntryID) error {
-			_, err := f.service.RemoveExamStarterWorkspaceEntry(context.Background(), f.invocation, RemoveEntryCommand{ExamID: f.examID, EntryID: id,
+			_, err := f.service.RemoveExamStarterWorkspaceEntry(context.Background(), f.inv, RemoveEntryCommand{ExamID: f.examID, EntryID: id,
 				ExpectedDraftRevision: 1, IdempotencyKey: "test-key"})
 			return err
 		}},
@@ -49,7 +49,7 @@ func TestMetadataWorkspaceMutationsPassOwnedIdempotencyToStore(t *testing.T) {
 			if test.operation != idempotencyOperationCreateDirectory {
 				semanticEntryID = entryID.String()
 			}
-			want, err := prepareWorkspaceIdempotency(fixture.invocation, test.operation, "test-key", fixture.examID,
+			want, err := prepareWorkspaceIdempotency(fixture.inv, test.operation, "test-key", fixture.examID,
 				1, "", semanticEntryID, test.path, "", 0, "")
 			require.NoError(t, err)
 			require.Equal(t, want, fixture.persistence.idempotency)
@@ -60,7 +60,7 @@ func TestMetadataWorkspaceMutationsPassOwnedIdempotencyToStore(t *testing.T) {
 func TestServiceRejectsInvalidPathsBeforeAuthorizationOrStorage(t *testing.T) {
 	t.Parallel()
 	fixture := newServiceFixture(t)
-	_, err := fixture.service.CreateExamStarterWorkspaceDirectory(context.Background(), fixture.invocation, CreateDirectoryCommand{
+	_, err := fixture.service.CreateExamStarterWorkspaceDirectory(context.Background(), fixture.inv, CreateDirectoryCommand{
 		ExamID: fixture.examID, ExpectedDraftRevision: 1, Path: "../escape",
 		IdempotencyKey: "test-key",
 	})

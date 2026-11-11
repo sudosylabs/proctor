@@ -124,7 +124,7 @@ type AcademicAdministrationBatchResult struct {
 // authorization at the scope.
 func (s *Service) RunAcademicAdministrationBatch(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command RunAcademicAdministrationBatchCommand,
 ) (AcademicAdministrationBatchResult, error) {
 	command.ScopeID = strings.TrimSpace(command.ScopeID)
@@ -146,12 +146,12 @@ func (s *Service) RunAcademicAdministrationBatch(
 	if command.progression {
 		batchAction = model.ActionAcademicProgressionManage
 	}
-	if err = s.authorize(ctx, invocation, batchAction, resource); err != nil {
+	if err = s.authorize(ctx, inv, batchAction, resource); err != nil {
 		return AcademicAdministrationBatchResult{}, err
 	}
 
 	if command.Operation.requiresStrongRecentSession() {
-		if err = access.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
+		if err = access.RequireStrongRecentSession(inv.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 			return AcademicAdministrationBatchResult{}, err
 		}
 	}
@@ -196,7 +196,7 @@ func (s *Service) RunAcademicAdministrationBatch(
 		retained := false
 		if s.commandOutcomes != nil {
 			lookup := &store.CommandIdempotency{
-				UserID:    invocation.Principal().UserID,
+				UserID:    inv.Principal().UserID,
 				Operation: academicAdministrationCommandOperation(command.Operation),
 				KeyDigest: sha256.Sum256([]byte(itemKey)),
 				Retention: idempotency.Retention,
@@ -220,7 +220,7 @@ func (s *Service) RunAcademicAdministrationBatch(
 
 		outcome.ResourceID, outcome.Status, err = s.runAcademicAdministrationBatchItem(
 			ctx,
-			invocation,
+			inv,
 			command,
 			item,
 			itemKey,

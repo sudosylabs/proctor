@@ -29,10 +29,10 @@ type ReauthenticatePasswordCommand struct {
 // records the recent authentication on that Session.
 func (s *Service) ReauthenticatePassword(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ReauthenticatePasswordCommand,
 ) (*model.Session, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.ValidateMFARecovery() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return nil, access.InvalidTokenAppError()
 	}
@@ -91,7 +91,7 @@ func (s *Service) ReauthenticatePassword(
 	}
 
 	result, err := access.RunAudited(ctx, s.auditor, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionAuthenticationReauthenticate,
 		Resource:   model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
 		Operation:  "password",

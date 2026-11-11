@@ -39,14 +39,14 @@ type CompleteEmailVerificationCommand struct {
 // current email address and prepares the mail that delivers it.
 func (s *Service) RequestEmailVerification(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command RequestEmailVerificationCommand,
 ) error {
 	if !s.mail.Enabled() {
 		return accountRecoveryUnavailable(fmt.Errorf("mail delivery is disabled"))
 	}
 
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if err := s.checkAccountRecoveryRateLimit(
 		ctx,
 		accountRecoveryAttemptEmailVerificationRequest,
@@ -86,7 +86,7 @@ func (s *Service) RequestEmailVerification(
 		model.ActionAuthenticationEmailVerificationRequest,
 		model.Resource{Type: model.ResourceUser, ID: user.ID.String()},
 		institution.ID,
-		invocation,
+		inv,
 		&principal,
 		"session",
 	)
@@ -127,7 +127,7 @@ func (s *Service) RequestEmailVerification(
 // the verified User.
 func (s *Service) CompleteEmailVerification(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command CompleteEmailVerificationCommand,
 ) (*model.User, error) {
 	if err := s.checkAccountRecoveryRateLimit(
@@ -152,7 +152,7 @@ func (s *Service) CompleteEmailVerification(
 		model.ActionAuthenticationEmailVerificationComplete,
 		model.Resource{Type: model.ResourceUser},
 		institution.ID,
-		invocation,
+		inv,
 		nil,
 		"email_verification_token",
 	)

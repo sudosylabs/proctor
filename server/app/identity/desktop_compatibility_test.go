@@ -259,9 +259,9 @@ func TestDesktopCompatibilityServiceEvaluatesAuthoritativePolicy(t *testing.T) {
 
 func TestDesktopCompatibilityPolicyReadUsesAdministrativeViewAuthorization(t *testing.T) {
 	t.Parallel()
-	service, persistence, authorization, _, invocation := desktopCompatibilityServiceFixture(t)
+	service, persistence, authorization, _, inv := desktopCompatibilityServiceFixture(t)
 
-	policy, err := service.GetDesktopCompatibilityPolicy(context.Background(), invocation)
+	policy, err := service.GetDesktopCompatibilityPolicy(context.Background(), inv)
 	require.NoError(t, err)
 	require.Equal(t, model.ActionAccessPolicyView, authorization.action, "authorization")
 	require.NotSame(t, persistence.policy, policy, "authorization")
@@ -270,7 +270,7 @@ func TestDesktopCompatibilityPolicyReadUsesAdministrativeViewAuthorization(t *te
 
 func TestDesktopCompatibilityPolicyReplacementRequiresStrongRecentSystemAdministratorSession(t *testing.T) {
 	t.Parallel()
-	service, persistence, authorization, audit, invocation := desktopCompatibilityServiceFixture(t)
+	service, persistence, authorization, audit, inv := desktopCompatibilityServiceFixture(t)
 	settings := model.DesktopCompatibilityPolicySettings{
 		MinimumDesktopRelease:  "1.2.3",
 		RevokedDesktopBuildIDs: []string{"darwin-old"},
@@ -284,7 +284,7 @@ func TestDesktopCompatibilityPolicyReplacementRequiresStrongRecentSystemAdminist
 		Changed: true,
 	}
 
-	result, err := service.ReplaceDesktopCompatibilityPolicy(context.Background(), invocation, ReplaceDesktopCompatibilityPolicyCommand{
+	result, err := service.ReplaceDesktopCompatibilityPolicy(context.Background(), inv, ReplaceDesktopCompatibilityPolicyCommand{
 		ExpectedRevision: 1,
 		Settings:         settings,
 		IdempotencyKey:   "desktop-policy-1",
@@ -293,7 +293,7 @@ func TestDesktopCompatibilityPolicyReplacementRequiresStrongRecentSystemAdminist
 	require.Equal(t, int64(2), result.Revision, "result=%#v input=%#v command=%#v audit=%#v", result, persistence.replaceInput, persistence.command, audit.attempt)
 	require.Equal(t, model.ActionDesktopCompatibilityPolicyManage, authorization.action, "result=%#v input=%#v command=%#v audit=%#v", result, persistence.replaceInput, persistence.command, audit.attempt)
 	require.NotNil(t, persistence.replaceInput, "result=%#v input=%#v command=%#v audit=%#v", result, persistence.replaceInput, persistence.command, audit.attempt)
-	require.Equal(t, invocation.Principal().UserID, persistence.replaceInput.ActorID, "result=%#v input=%#v command=%#v audit=%#v", result, persistence.replaceInput, persistence.command, audit.attempt)
+	require.Equal(t, inv.Principal().UserID, persistence.replaceInput.ActorID, "result=%#v input=%#v command=%#v audit=%#v", result, persistence.replaceInput, persistence.command, audit.attempt)
 	require.Equal(t, model.AuditEventID(audit.beginID), persistence.replaceInput.AuditEventID, "result=%#v input=%#v command=%#v audit=%#v", result, persistence.replaceInput, persistence.command, audit.attempt)
 	require.NotNil(t, persistence.command, "result=%#v input=%#v command=%#v audit=%#v", result, persistence.replaceInput, persistence.command, audit.attempt)
 	require.Equal(t, "desktop_compatibility_policy.replace", persistence.command.Operation, "result=%#v input=%#v command=%#v audit=%#v", result, persistence.replaceInput, persistence.command, audit.attempt)
@@ -355,11 +355,11 @@ func TestDesktopCompatibilityPolicyReplacementRejectsWeakOrStaleCredentialsBefor
 
 func TestDesktopCompatibilityPolicyReplacementFailsClosedWhenAuditBeginFails(t *testing.T) {
 	t.Parallel()
-	service, persistence, _, audit, invocation := desktopCompatibilityServiceFixture(t)
+	service, persistence, _, audit, inv := desktopCompatibilityServiceFixture(t)
 	auditError := apperror.New("audit.unavailable")
 	audit.beginErr = auditError
 
-	_, err := service.ReplaceDesktopCompatibilityPolicy(context.Background(), invocation, ReplaceDesktopCompatibilityPolicyCommand{
+	_, err := service.ReplaceDesktopCompatibilityPolicy(context.Background(), inv, ReplaceDesktopCompatibilityPolicyCommand{
 		ExpectedRevision: 1,
 		Settings:         persistence.policy.Settings(),
 		IdempotencyKey:   "desktop-policy-audit-unavailable",
@@ -397,9 +397,9 @@ func TestDesktopCompatibilityPolicyReplacementMapsRevisionAndSystemAdministrator
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			service, persistence, _, audit, invocation := desktopCompatibilityServiceFixture(t)
+			service, persistence, _, audit, inv := desktopCompatibilityServiceFixture(t)
 			persistence.replaceErr = test.storeErr
-			_, err := service.ReplaceDesktopCompatibilityPolicy(context.Background(), invocation, ReplaceDesktopCompatibilityPolicyCommand{
+			_, err := service.ReplaceDesktopCompatibilityPolicy(context.Background(), inv, ReplaceDesktopCompatibilityPolicyCommand{
 				ExpectedRevision: 1,
 				Settings:         persistence.policy.Settings(),
 				IdempotencyKey:   "failed-" + test.name,
@@ -476,9 +476,9 @@ func TestDevelopmentCompatibilitySkipsBuildChecksButKeepsAvailabilityAndValidati
 
 func TestDevelopmentLoginDoesNotBypassProtectedAttemptBuildChecks(t *testing.T) {
 	t.Parallel()
-	service, persistence, _, _, invocation := desktopCompatibilityServiceFixture(t)
+	service, persistence, _, _, inv := desktopCompatibilityServiceFixture(t)
 	service.skipDesktopBuildChecks = true
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	principal.ClientType = model.SessionClientDesktop
 	principal.RegisteredDesktopKey = true
 	principal.DesktopRegistrationID = model.NewDesktopRegistrationID()

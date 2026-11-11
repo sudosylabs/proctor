@@ -44,7 +44,7 @@ type CompletePasswordResetCommand struct {
 // Operational failures are logged without the requested email or raw token.
 func (s *Service) RequestPasswordReset(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command RequestPasswordResetCommand,
 ) error {
 	localLoginAllowed, err := s.accessPolicy.AllowsLocalLogin(ctx)
@@ -113,7 +113,7 @@ func (s *Service) RequestPasswordReset(
 		model.ActionAuthenticationPasswordResetRequest,
 		model.Resource{Type: model.ResourceUser, ID: user.ID.String()},
 		institution.ID,
-		invocation,
+		inv,
 		nil,
 		"anonymous",
 	)
@@ -156,7 +156,7 @@ func (s *Service) RequestPasswordReset(
 // password, and revokes the User's Sessions after the reset commits.
 func (s *Service) CompletePasswordReset(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command CompletePasswordResetCommand,
 ) (*model.User, error) {
 	if err := s.checkAccountRecoveryRateLimit(
@@ -188,7 +188,7 @@ func (s *Service) CompletePasswordReset(
 		model.ActionAuthenticationPasswordResetComplete,
 		model.Resource{Type: model.ResourceUser},
 		institution.ID,
-		invocation,
+		inv,
 		nil,
 		"password_reset_token",
 	)

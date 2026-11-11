@@ -1043,7 +1043,7 @@ func (f *examAttemptHTTPFake) AcknowledgeExamAttemptCorrection(_ context.Context
 		CurrentRevisionID: command.ExpectedCurrentRevisionID, RuntimeCapabilities: capabilities, AcknowledgedAt: model.OptionalTimeFrom(f.attempt.UpdatedAt.Add(time.Minute))}, nil
 }
 
-func (f *examAttemptHTTPFake) ReallowExamAttempt(_ context.Context, invocation invocation.Invocation, command attempt.ReallowCommand) (attempt.ReallowResult, error) {
+func (f *examAttemptHTTPFake) ReallowExamAttempt(_ context.Context, inv invocation.Invocation, command attempt.ReallowCommand) (attempt.ReallowResult, error) {
 	f.reallow = command
 	examAttempt := *f.attempt
 	examAttempt.State, examAttempt.UpdatedAt, examAttempt.Revision = model.ExamAttemptActive, examAttempt.UpdatedAt.Add(time.Minute), command.ExpectedAttemptRevision+1
@@ -1053,10 +1053,10 @@ func (f *examAttemptHTTPFake) ReallowExamAttempt(_ context.Context, invocation i
 			ParticipationID: model.NewAttemptParticipationID(), FlagID: model.NewIntegrityFlagID(), Generation: 1,
 			State: model.AttemptSuspensionClosed, Source: model.AttemptSuspensionSourcePolicy,
 			CandidateReason: model.AttemptSuspensionCandidateReasonSecureContinuityLost, StartedAt: examAttempt.CreatedAt,
-			EndedAt: model.OptionalTimeFrom(examAttempt.UpdatedAt), ReallowedByUserID: invocation.Principal().UserID}}, nil
+			EndedAt: model.OptionalTimeFrom(examAttempt.UpdatedAt), ReallowedByUserID: inv.Principal().UserID}}, nil
 }
 
-func (f *examAttemptHTTPFake) SuspendExamAttempt(_ context.Context, invocation invocation.Invocation, command attempt.ManualSuspensionCommand) (attempt.ManualSuspensionResult, error) {
+func (f *examAttemptHTTPFake) SuspendExamAttempt(_ context.Context, inv invocation.Invocation, command attempt.ManualSuspensionCommand) (attempt.ManualSuspensionResult, error) {
 	f.suspend = command
 	examAttempt := *f.attempt
 	examAttempt.State, examAttempt.UpdatedAt, examAttempt.Revision = model.ExamAttemptSuspended, examAttempt.UpdatedAt.Add(time.Minute), command.ExpectedAttemptRevision+1
@@ -1065,7 +1065,7 @@ func (f *examAttemptHTTPFake) SuspendExamAttempt(_ context.Context, invocation i
 		Suspension: store.ExamAttemptSuspensionView{ID: model.NewAttemptSuspensionID(), AttemptID: examAttempt.ID,
 			ParticipationID: model.NewAttemptParticipationID(), Generation: 1, State: model.AttemptSuspensionActive,
 			Source: model.AttemptSuspensionSourceManual, CandidateReason: model.AttemptSuspensionCandidateReasonManagerSuspended,
-			StartedAt: examAttempt.UpdatedAt, SuspendedByUserID: invocation.Principal().UserID}}, nil
+			StartedAt: examAttempt.UpdatedAt, SuspendedByUserID: inv.Principal().UserID}}, nil
 }
 
 func (f *examAttemptHTTPFake) GetCandidateExamPresentation(_ context.Context, _ invocation.Invocation, access attempt.CandidateAccess) (attempt.Presentation, error) {

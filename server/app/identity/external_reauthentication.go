@@ -28,10 +28,10 @@ type BeginExternalReauthenticationCommand struct {
 // external Session, returning to the closed task the command names.
 func (s *Service) BeginExternalReauthentication(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command BeginExternalReauthenticationCommand,
 ) (*model.ExternalAuthenticationStart, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.ValidateMFARecovery() != nil ||
 		principal.CredentialType != model.CredentialSessionAccess ||
 		principal.ClientType != model.SessionClientWeb {
@@ -57,7 +57,7 @@ func (s *Service) BeginExternalReauthentication(
 	}
 
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionAuthenticationReauthenticate,
 		Resource:   model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
 		Operation:  "external",

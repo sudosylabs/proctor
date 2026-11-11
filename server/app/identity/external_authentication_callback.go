@@ -32,7 +32,7 @@ type CompleteExternalAuthenticationCommand struct {
 // its login state was begun with.
 func (s *Service) CompleteExternalAuthentication(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command CompleteExternalAuthenticationCommand,
 ) (*model.ExternalAuthenticationCompletion, error) {
 	result, appErr := s.completeExternalCallback(
@@ -40,7 +40,7 @@ func (s *Service) CompleteExternalAuthentication(
 		command.ProviderID,
 		command.Binding,
 		command.Callback,
-		invocation.RequestMetadata(),
+		inv.RequestMetadata(),
 	)
 	return result, appErr
 }

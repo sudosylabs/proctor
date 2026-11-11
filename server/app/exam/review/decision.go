@@ -44,7 +44,7 @@ type UpdateDraftCommand struct {
 // decision revisions.
 func (s *Service) SaveExamIntegrityDecision(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command SaveDecisionCommand,
 ) (_ Result, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -57,12 +57,12 @@ func (s *Service) SaveExamIntegrityDecision(
 		return Result{}, apperror.Invalid("exam.integrity_review.invalid", "decision")
 	}
 
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil {
 		return Result{}, apperror.Invalid("exam.integrity_review.invalid", "principal")
 	}
 
-	commandIdempotency, err := prepareDecisionIdempotency(invocation, command)
+	commandIdempotency, err := prepareDecisionIdempotency(inv, command)
 	if err != nil {
 		return Result{}, err
 	}
@@ -85,14 +85,14 @@ func (s *Service) SaveExamIntegrityDecision(
 		return Result{}, apperror.Invalid("exam.integrity_review.invalid", "decision").Wrap(decisionErr)
 	}
 
-	override, authorization, err := s.authorizeReviewMutation(ctx, invocation, command.SubmissionID)
+	override, authorization, err := s.authorizeReviewMutation(ctx, inv, command.SubmissionID)
 	if err != nil {
 		return Result{}, err
 	}
 
 	at := model.TimeUTC(s.now())
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionSubmissionReview,
 		Resource:   model.Resource{Type: model.ResourceSubmission, ID: command.SubmissionID.String()},
 		ScopeType:  model.RoleScopeAcademicUnit,
@@ -145,7 +145,7 @@ func (s *Service) SaveExamIntegrityDecision(
 // Submission Review, creating the Review when ExpectedReviewRevision is zero.
 func (s *Service) UpdateExamIntegrityReview(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command UpdateDraftCommand,
 ) (_ Result, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -156,12 +156,12 @@ func (s *Service) UpdateExamIntegrityReview(
 		return Result{}, apperror.Invalid("exam.integrity_review.invalid", "draft")
 	}
 
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil {
 		return Result{}, apperror.Invalid("exam.integrity_review.invalid", "principal")
 	}
 
-	commandIdempotency, err := prepareDraftIdempotency(invocation, command)
+	commandIdempotency, err := prepareDraftIdempotency(inv, command)
 	if err != nil {
 		return Result{}, err
 	}
@@ -179,14 +179,14 @@ func (s *Service) UpdateExamIntegrityReview(
 		return Result{}, apperror.Invalid("exam.integrity_review.invalid", "draft").Wrap(err)
 	}
 
-	override, authorization, err := s.authorizeReviewMutation(ctx, invocation, command.SubmissionID)
+	override, authorization, err := s.authorizeReviewMutation(ctx, inv, command.SubmissionID)
 	if err != nil {
 		return Result{}, err
 	}
 
 	at := model.TimeUTC(s.now())
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionSubmissionReview,
 		Resource:   model.Resource{Type: model.ResourceSubmission, ID: command.SubmissionID.String()},
 		ScopeType:  model.RoleScopeAcademicUnit,

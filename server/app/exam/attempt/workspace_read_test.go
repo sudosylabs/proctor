@@ -32,7 +32,7 @@ func TestStarterOriginWorkspaceFileOpensPinnedStarterBytesWithAttemptObjectIdent
 		StorageOrigin: model.AttemptWorkspaceStorageStarter, StarterObjectID: starterID,
 		AttemptObjectID: attemptObjectID, ContentVersion: version,
 	}
-	opened, err := f.service.OpenCandidateExamWorkspaceFile(context.Background(), f.invocation, OpenWorkspaceFileQuery{Access: CandidateAccess{
+	opened, err := f.service.OpenCandidateExamWorkspaceFile(context.Background(), f.inv, OpenWorkspaceFileQuery{Access: CandidateAccess{
 		AttemptID: f.attemptID, ConnectionID: f.connectionID, ContinuityCredential: model.NewCredentialToken(),
 	}, EntryID: entryID})
 	require.NoError(t, err)
@@ -49,7 +49,7 @@ func TestWorkspaceListUsesPathFreeSnapshotCursor(t *testing.T) {
 	f.workspace.page = &store.CandidateAttemptWorkspacePage{WorkspaceID: workspaceID, Cursor: 7,
 		Items: []store.CandidateAttemptWorkspaceItem{{EntryID: model.NewAttemptWorkspaceEntryID(),
 			Kind: model.StarterWorkspaceEntryDirectory, Path: "cmd"}}, HasMore: true}
-	page, err := f.service.ListCandidateExamWorkspace(context.Background(), f.invocation, WorkspaceQuery{Access: CandidateAccess{
+	page, err := f.service.ListCandidateExamWorkspace(context.Background(), f.inv, WorkspaceQuery{Access: CandidateAccess{
 		AttemptID: f.attemptID, ConnectionID: f.connectionID, ContinuityCredential: model.NewCredentialToken(),
 	}, ExpectedCursor: -1, Limit: 20})
 	require.NoError(t, err)
@@ -73,7 +73,7 @@ func TestWorkspaceListRejectsUnboundedOrInvalidCursorsBeforeStore(t *testing.T) 
 	} {
 		f := newFixture(t)
 		query.Access.AttemptID, query.Access.ConnectionID = f.attemptID, f.connectionID
-		_, err := f.service.ListCandidateExamWorkspace(context.Background(), f.invocation, query)
+		_, err := f.service.ListCandidateExamWorkspace(context.Background(), f.inv, query)
 		var fault *apperror.Error
 		require.ErrorAs(t, err, &fault, "query=%#v error=%v calls", query, err)
 		require.Equal(t, "exam.attempt.invalid", fault.Code(), "query=%#v error=%v calls", query, err)
@@ -90,7 +90,7 @@ func TestOpenAttemptOriginWorkspaceFileUsesOpaqueAttemptObject(t *testing.T) {
 		SizeBytes: 4, SHA256: strings.Repeat("c", 64)}, StorageOrigin: model.AttemptWorkspaceStorageAttempt,
 		AttemptObjectID: objectID, ContentVersion: version}
 	f.content.openAttemptBody = "work"
-	opened, err := f.service.OpenCandidateExamWorkspaceFile(context.Background(), f.invocation, OpenWorkspaceFileQuery{Access: CandidateAccess{AttemptID: f.attemptID,
+	opened, err := f.service.OpenCandidateExamWorkspaceFile(context.Background(), f.inv, OpenWorkspaceFileQuery{Access: CandidateAccess{AttemptID: f.attemptID,
 		ConnectionID: f.connectionID, ContinuityCredential: model.NewCredentialToken()}, EntryID: entryID})
 	require.NoError(t, err)
 	defer opened.Body.Close()

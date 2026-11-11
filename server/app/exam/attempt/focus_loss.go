@@ -76,12 +76,12 @@ type FocusLossEvaluation struct {
 // the Attempt.
 func (s *Service) EvaluateExamAttemptFocusLoss(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command FocusLossCommand,
 ) (_ FocusLossEvaluation, resultErr error) {
 	defer func() { s.recordOperational("focus_loss", resultErr) }()
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	selector, err := focusLossSelector(invocation, command)
+	selector, err := focusLossSelector(inv, command)
 	if err != nil {
 		return FocusLossEvaluation{}, err
 	}
@@ -89,7 +89,7 @@ func (s *Service) EvaluateExamAttemptFocusLoss(
 	target, err := s.focusLoss.ResolveFocusLossTarget(ctx, selector)
 	if err != nil {
 		if endedFocusLossCandidate(err) {
-			return s.evaluateEndedFocusLoss(ctx, invocation, command, selector)
+			return s.evaluateEndedFocusLoss(ctx, inv, command, selector)
 		}
 		return FocusLossEvaluation{}, storeError(storeErrors, err)
 	}
@@ -99,7 +99,7 @@ func (s *Service) EvaluateExamAttemptFocusLoss(
 	}
 
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionExamSittingParticipate,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
 		ScopeType:  model.RoleScopeClass,
@@ -132,7 +132,7 @@ func (s *Service) EvaluateExamAttemptFocusLoss(
 			if auditErr := s.auditor.Fail(ctx, auditID, "exam.attempt.state_conflict"); auditErr != nil {
 				return FocusLossEvaluation{}, auditErr
 			}
-			return s.evaluateEndedFocusLoss(ctx, invocation, command, selector)
+			return s.evaluateEndedFocusLoss(ctx, inv, command, selector)
 		}
 
 		return FocusLossEvaluation{}, s.failAudit(ctx, auditID, err)
@@ -166,7 +166,7 @@ func endedFocusLossCandidate(err error) bool {
 
 func (s *Service) evaluateEndedFocusLoss(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command FocusLossCommand,
 	selector store.ExamAttemptFocusLossAccess,
 ) (FocusLossEvaluation, error) {
@@ -179,7 +179,7 @@ func (s *Service) evaluateEndedFocusLoss(
 	}
 
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionExamSittingParticipate,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
 		ScopeType:  model.RoleScopeClass,
@@ -240,8 +240,8 @@ func (s *Service) evaluateEndedFocusLoss(
 	return result, nil
 }
 
-func focusLossSelector(invocation invocation.Invocation, command FocusLossCommand) (store.ExamAttemptFocusLossAccess, error) {
-	selector, err := candidateSelector(invocation, CandidateAccess{
+func focusLossSelector(inv invocation.Invocation, command FocusLossCommand) (store.ExamAttemptFocusLossAccess, error) {
+	selector, err := candidateSelector(inv, CandidateAccess{
 		AttemptID:            command.AttemptID,
 		ConnectionID:         command.ConnectionID,
 		ContinuityCredential: command.ContinuityCredential,

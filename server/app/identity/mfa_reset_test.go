@@ -135,8 +135,8 @@ func TestMFAFactorAttemptsAreBoundedBeforeVerification(t *testing.T) {
 	base := &mfaApplicationStoreFake{}
 	service := newTestMFAApplicationService(t, base, &securityAuditorFake{}, &realtimetest.Publisher{}, now)
 	service.loginRateLimit.MaximumAttempts = 1
-	invocation := invocation.New(principal, model.RequestMetadata{IPAddress: "127.0.0.1"})
-	_, _ = service.ChallengeMFA(context.Background(), invocation, ChallengeMFACommand{Code: "000000"})
-	_, err := service.ChallengeMFA(context.Background(), invocation, ChallengeMFACommand{Code: "000001"})
+	inv := invocation.New(principal, model.RequestMetadata{IPAddress: "127.0.0.1"})
+	_, _ = service.ChallengeMFA(context.Background(), inv, ChallengeMFACommand{Code: "000000"})
+	_, err := service.ChallengeMFA(context.Background(), inv, ChallengeMFACommand{Code: "000001"})
 	require.True(t, apperror.Is(err, "authentication.rate_limited"), "unbounded factor challenge: %v", err)
 }

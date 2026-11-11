@@ -17,9 +17,9 @@ import (
 
 const idempotencyOperationApplyCorrection = "exam.sitting.correction.apply"
 
-func prepareStageIdempotency(invocation invocation.Invocation, command StageResourceContentCommand) (*store.CommandIdempotency, error) {
+func prepareStageIdempotency(inv invocation.Invocation, command StageResourceContentCommand) (*store.CommandIdempotency, error) {
 	return idempotency.Require(
-		invocation,
+		inv,
 		store.ExamCorrectionResourceStageOperation,
 		command.IdempotencyKey,
 		struct {
@@ -44,7 +44,7 @@ func prepareStageIdempotency(invocation invocation.Invocation, command StageReso
 	)
 }
 
-func prepareApplyIdempotency(invocation invocation.Invocation, command ApplyCommand) (*store.CommandIdempotency, error) {
+func prepareApplyIdempotency(inv invocation.Invocation, command ApplyCommand) (*store.CommandIdempotency, error) {
 	var browserPolicy string
 	if command.BrowserPolicy.Present {
 		encoded, err := model.EncodeBrowserPolicy(command.BrowserPolicy.Policy)
@@ -69,7 +69,7 @@ func prepareApplyIdempotency(invocation invocation.Invocation, command ApplyComm
 	}
 
 	return idempotency.Require(
-		invocation,
+		inv,
 		idempotencyOperationApplyCorrection,
 		command.IdempotencyKey,
 		struct {

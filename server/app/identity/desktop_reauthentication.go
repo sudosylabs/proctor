@@ -113,10 +113,10 @@ func requireDesktopDPoPSession(principal model.Principal) (model.SessionCredenti
 // calling Desktop Session and returns the hosted page to open.
 func (s *Service) StartDesktopReauthentication(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command StartDesktopReauthenticationCommand,
 ) (*DesktopReauthenticationStart, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	credentialID, err := requireDesktopDPoPSession(principal)
 	if err != nil {
 		return nil, err

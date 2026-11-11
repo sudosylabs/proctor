@@ -320,7 +320,7 @@ var desktopAuthorizationStoreErrors = apperror.StoreTable{
 // Desktop build and returns the hosted page to open.
 func (s *Service) StartDesktopAuthorization(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command StartDesktopAuthorizationCommand,
 ) (*DesktopAuthorizationStart, error) {
 	if err := s.checkDesktopAuthorizationAttempt(
@@ -345,7 +345,7 @@ func (s *Service) StartDesktopAuthorization(
 		return nil, apperror.New("authentication.desktop_authorization.unavailable")
 	}
 
-	compatibility, err := s.EvaluateDesktopCompatibility(ctx, invocation, desktopCompatibilityQueryFromStart(command))
+	compatibility, err := s.EvaluateDesktopCompatibility(ctx, inv, desktopCompatibilityQueryFromStart(command))
 	if err != nil {
 		return nil, apperror.New("authentication.desktop_authorization.unavailable").Wrap(err)
 	}

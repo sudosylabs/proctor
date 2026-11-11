@@ -75,14 +75,14 @@ type OpenSubmissionFileQuery struct {
 // with Submission view.
 func (s *Service) OpenExamSubmissionFile(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query OpenSubmissionFileQuery,
 ) (_ OpenedContent, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	if !query.EntryID.IsValid() {
 		return OpenedContent{}, apperror.Invalid("exam.attempt.invalid", "submission_entry_id")
 	}
-	if _, err := s.resolveManagedSubmission(ctx, invocation, query.GetSubmissionQuery); err != nil {
+	if _, err := s.resolveManagedSubmission(ctx, inv, query.GetSubmissionQuery); err != nil {
 		return OpenedContent{}, err
 	}
 
@@ -142,14 +142,14 @@ func validSubmissionFileSelector(selector *store.ExamSubmissionFileSelector,
 // manifest for a caller with Submission view.
 func (s *Service) ListExamSubmissionManifest(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query ListSubmissionManifestQuery,
 ) (_ SubmissionManifestPage, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	if query.Limit < 1 || query.Limit > model.ExamSubmissionManifestReadMaximum {
 		return SubmissionManifestPage{}, apperror.Invalid("exam.attempt.invalid", "submission_manifest")
 	}
-	if _, err := s.resolveManagedSubmission(ctx, invocation, query.GetSubmissionQuery); err != nil {
+	if _, err := s.resolveManagedSubmission(ctx, inv, query.GetSubmissionQuery); err != nil {
 		return SubmissionManifestPage{}, err
 	}
 
@@ -227,11 +227,11 @@ func validSubmissionManifestItem(item store.ExamSubmissionManifestItem) bool {
 // named Exam, Sitting, and Attempt is reported as not found.
 func (s *Service) GetExamSubmission(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query GetSubmissionQuery,
 ) (_ ManagedSubmission, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	authorization, err := s.resolveManagedSubmission(ctx, invocation, query)
+	authorization, err := s.resolveManagedSubmission(ctx, inv, query)
 	if err != nil {
 		return ManagedSubmission{}, err
 	}
@@ -253,13 +253,13 @@ func (s *Service) GetExamSubmission(
 
 func (s *Service) resolveManagedSubmission(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query GetSubmissionQuery,
 ) (*store.ExamSubmissionAuthorization, error) {
 	if !query.ExamID.IsValid() || !query.SittingID.IsValid() || !query.AttemptID.IsValid() || !query.SubmissionID.IsValid() {
 		return nil, apperror.Invalid("exam.attempt.invalid", "submission")
 	}
-	if err := s.managers.AuthorizeSubmissionView(ctx, invocation, query.SubmissionID); err != nil {
+	if err := s.managers.AuthorizeSubmissionView(ctx, inv, query.SubmissionID); err != nil {
 		return nil, err
 	}
 
@@ -286,12 +286,12 @@ func (s *Service) resolveManagedSubmission(
 // final Focus Loss sequence.
 func (s *Service) SubmitExamAttempt(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command SubmitCommand,
 ) (_ store.ExamSubmissionReceipt, resultErr error) {
 	defer func() { s.recordOperational("submit", resultErr) }()
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	workspaceAccess, err := workspaceMutationSelector(invocation, command.Access)
+	workspaceAccess, err := workspaceMutationSelector(inv, command.Access)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, err
 	}
@@ -300,7 +300,7 @@ func (s *Service) SubmitExamAttempt(
 	}
 
 	commandIdempotency, err := prepareSubmissionIdempotency(
-		invocation,
+		inv,
 		command.IdempotencyKey,
 		workspaceAccess.AttemptID,
 		command.ExpectedCurrentRevisionID,
@@ -340,7 +340,7 @@ func (s *Service) SubmitExamAttempt(
 	}
 
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionExamSittingParticipate,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
 		ScopeType:  model.RoleScopeClass,

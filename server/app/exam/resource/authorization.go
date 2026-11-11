@@ -25,11 +25,11 @@ type authorizationDecision struct {
 
 func (s *Service) authorizeExam(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	examID model.ExamID,
 	manage bool,
 ) (authorizationDecision, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil {
 		return authorizationDecision{}, apperror.Invalid("exam.resource.invalid", "principal")
 	}
@@ -56,7 +56,7 @@ func (s *Service) authorizeExam(
 	if err != nil {
 		return authorizationDecision{}, apperror.New("exam.resource.unavailable").Wrap(err)
 	}
-	if err = s.authorizer.Authorize(ctx, invocation, action, model.Resource{Type: model.ResourceExam, ID: examID.String()}); err != nil {
+	if err = s.authorizer.Authorize(ctx, inv, action, model.Resource{Type: model.ResourceExam, ID: examID.String()}); err != nil {
 		return authorizationDecision{}, err
 	}
 
@@ -69,11 +69,11 @@ func (s *Service) authorizeExam(
 // command so its locked guards remain authoritative.
 func (s *Service) currentActiveDraft(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	examID model.ExamID,
 	expectedRevision int64,
 ) bool {
-	snapshot, err := s.exams.Get(ctx, examID, invocation.Principal().UserID)
+	snapshot, err := s.exams.Get(ctx, examID, inv.Principal().UserID)
 	return err == nil &&
 		snapshot != nil &&
 		snapshot.Exam != nil &&

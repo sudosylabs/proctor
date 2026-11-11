@@ -29,7 +29,7 @@ func TestReallowRequiresExactSuspensionAndKeepsPrivateReasonOutOfEffects(t *test
 	f.persistence.attempt, f.persistence.managerSuspension = managerAttemptFixture(t, f, model.ExamAttemptSuspended, 2, suspensionID)
 	f.persistence.reallowResult = reallowResultFixture(t, f, suspensionID, false)
 	reason := "manager verified secure connectivity"
-	result, err := f.service.ReallowExamAttempt(context.Background(), f.invocation, ReallowCommand{
+	result, err := f.service.ReallowExamAttempt(context.Background(), f.inv, ReallowCommand{
 		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID, SuspensionID: suspensionID,
 		ExpectedAttemptRevision: 2, PrivateReason: reason, IdempotencyKey: "test-key",
 	})
@@ -53,7 +53,7 @@ func TestReallowRequiresExactSuspensionAndKeepsPrivateReasonOutOfEffects(t *test
 	for _, capture := range []any{f.audit.values, result} {
 		require.NotContains(t, fmt.Sprintf("%#v", capture), reason, "private reason escaped persistence input: %#v", capture)
 	}
-	wantIdempotency, prepareErr := prepareReallowIdempotency(f.invocation, ReallowCommand{
+	wantIdempotency, prepareErr := prepareReallowIdempotency(f.inv, ReallowCommand{
 		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID, SuspensionID: suspensionID,
 		ExpectedAttemptRevision: 2, PrivateReason: reason, IdempotencyKey: "test-key",
 	})
@@ -69,7 +69,7 @@ func TestReallowAcceptsClosedFocusLossSuspension(t *testing.T) {
 	f.persistence.attempt, f.persistence.managerSuspension = managerAttemptFixture(t, f, model.ExamAttemptSuspended, 2, suspensionID)
 	f.persistence.reallowResult = reallowResultFixtureWithReason(t, f, suspensionID, false,
 		model.AttemptSuspensionCandidateReasonFocusLossPolicy)
-	result, err := f.service.ReallowExamAttempt(context.Background(), f.invocation, ReallowCommand{
+	result, err := f.service.ReallowExamAttempt(context.Background(), f.inv, ReallowCommand{
 		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID, SuspensionID: suspensionID,
 		ExpectedAttemptRevision: 2, PrivateReason: "manager reviewed the focus loss", IdempotencyKey: "test-key",
 	})
@@ -85,7 +85,7 @@ func TestManagerAttemptMissingAfterAuthorizationCompletesFailedAudit(t *testing.
 	f.persistence.attempt, f.persistence.managerSuspension = managerAttemptFixture(t, f, model.ExamAttemptSuspended, 2,
 		model.NewAttemptSuspensionID())
 	f.persistence.getErr = store.NewErrNotFound("exam_attempt", "missing")
-	_, err := f.service.ReallowExamAttempt(context.Background(), f.invocation, ReallowCommand{
+	_, err := f.service.ReallowExamAttempt(context.Background(), f.inv, ReallowCommand{
 		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: model.NewExamAttemptID(), SuspensionID: model.NewAttemptSuspensionID(),
 		ExpectedAttemptRevision: 2, PrivateReason: "probe", IdempotencyKey: "probe-key"})
 	require.True(t, apperror.Is(err, "resource.not_found"), "error=%v audit=%#v order=%v", err, f.audit, f.order)
@@ -98,7 +98,7 @@ func TestReallowValidatesReasonBeforeAuthorization(t *testing.T) {
 	t.Parallel()
 	for _, reason := range []string{"", " padded ", "\xff", strings.Repeat("é", model.AttemptSuspensionPrivateReasonMaximumRunes+1)} {
 		f := newFixture(t)
-		_, err := f.service.ReallowExamAttempt(context.Background(), f.invocation, ReallowCommand{
+		_, err := f.service.ReallowExamAttempt(context.Background(), f.inv, ReallowCommand{
 			ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID, SuspensionID: model.NewAttemptSuspensionID(),
 			ExpectedAttemptRevision: 1, PrivateReason: reason, IdempotencyKey: "test-key",
 		})
@@ -116,7 +116,7 @@ func TestReallowReplaySuppressesEffectAndPropagatesAuthorizedOverride(t *testing
 	suspensionID := model.NewAttemptSuspensionID()
 	f.persistence.attempt, f.persistence.managerSuspension = managerAttemptFixture(t, f, model.ExamAttemptSuspended, 2, suspensionID)
 	f.persistence.reallowResult = reallowResultFixture(t, f, suspensionID, true)
-	result, err := f.service.ReallowExamAttempt(context.Background(), f.invocation, ReallowCommand{
+	result, err := f.service.ReallowExamAttempt(context.Background(), f.inv, ReallowCommand{
 		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID, SuspensionID: suspensionID,
 		ExpectedAttemptRevision: 2, PrivateReason: "authorized override review", IdempotencyKey: "test-key",
 	})
@@ -142,7 +142,7 @@ func reallowResultFixtureWithReason(t *testing.T, f *fixture, suspensionID model
 		ParticipationID: model.NewAttemptParticipationID(), FlagID: model.NewIntegrityFlagID(), Generation: 2,
 		State: model.AttemptSuspensionClosed, Source: model.AttemptSuspensionSourcePolicy,
 		CandidateReason: reason, StartedAt: f.at.Add(-time.Minute),
-		EndedAt: model.OptionalTimeFrom(f.at), ReallowedByUserID: f.invocation.Principal().UserID}
+		EndedAt: model.OptionalTimeFrom(f.at), ReallowedByUserID: f.inv.Principal().UserID}
 	return &store.ExamAttemptReallowResult{ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, ClassID: f.sitting.ClassID,
 		CandidateUserID: f.userID, Attempt: attempt, Suspension: suspension, Replayed: replayed}
 }

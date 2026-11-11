@@ -32,8 +32,8 @@ type ResetUserMFACommand struct {
 
 // ResetUserMFA removes another User's second factor after an
 // institution-assisted identity verification and requires reenrollment.
-func (s *Service) ResetUserMFA(ctx context.Context, invocation invocation.Invocation, command ResetUserMFACommand) error {
-	principal := invocation.Principal()
+func (s *Service) ResetUserMFA(ctx context.Context, inv invocation.Invocation, command ResetUserMFACommand) error {
+	principal := inv.Principal()
 	if err := s.requireMFAStrongRecentSession(principal); err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func (s *Service) ResetUserMFA(ctx context.Context, invocation invocation.Invoca
 	}
 
 	resource := model.Resource{Type: model.ResourceUser, ID: command.UserID.String()}
-	if err := s.authorizer.Authorize(ctx, invocation, model.ActionUserMFAReset, resource); err != nil {
+	if err := s.authorizer.Authorize(ctx, inv, model.ActionUserMFAReset, resource); err != nil {
 		return err
 	}
 
@@ -63,7 +63,7 @@ func (s *Service) ResetUserMFA(ctx context.Context, invocation invocation.Invoca
 		return err
 	}
 
-	auditID, err := s.beginMFAAudit(ctx, invocation, model.ActionUserMFAReset, resource, map[string]any{
+	auditID, err := s.beginMFAAudit(ctx, inv, model.ActionUserMFAReset, resource, map[string]any{
 		"identity_verified":      true,
 		"reason":                 reason,
 		"verification_reference": reference,

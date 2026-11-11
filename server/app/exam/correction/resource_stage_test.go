@@ -25,7 +25,7 @@ func TestStageResourceContentReservesBeforeDeterministicWriteAndReturnsAuthorita
 	t.Parallel()
 	f := newCorrectionFixture(t)
 	sha := strings.Repeat("a", 64)
-	got, err := f.service.StageExamSittingCorrectionResourceContent(context.Background(), f.invocation, StageResourceContentCommand{
+	got, err := f.service.StageExamSittingCorrectionResourceContent(context.Background(), f.inv, StageResourceContentCommand{
 		ExamID: f.examID, SittingID: f.sittingID, BaseRevisionID: f.baseRevisionID,
 		Target: store.ExamCorrectionResourceAddition, MediaType: model.ExamResourceMediaText,
 		Body: strings.NewReader("notes"), Size: 5, ExpectedSHA256: sha, IdempotencyKey: "test-key",
@@ -50,7 +50,7 @@ func TestStageResourceContentReservesBeforeDeterministicWriteAndReturnsAuthorita
 		_, ok := f.auditor.value[forbidden]
 		require.False(t, ok, "unsafe audit field %q in %#v", forbidden, f.auditor.value)
 	}
-	wantIdempotency, prepareErr := prepareStageIdempotency(f.invocation, StageResourceContentCommand{
+	wantIdempotency, prepareErr := prepareStageIdempotency(f.inv, StageResourceContentCommand{
 		ExamID: f.examID, SittingID: f.sittingID, BaseRevisionID: f.baseRevisionID,
 		Target: store.ExamCorrectionResourceAddition, MediaType: model.ExamResourceMediaText,
 		Size: 5, ExpectedSHA256: sha, IdempotencyKey: "test-key",
@@ -63,7 +63,7 @@ func TestStageResourceContentReadyReplaySkipsContentWrite(t *testing.T) {
 	t.Parallel()
 	f := newCorrectionFixture(t)
 	f.persistence.returnReady = true
-	_, err := f.service.StageExamSittingCorrectionResourceContent(context.Background(), f.invocation, StageResourceContentCommand{ExamID: f.examID, SittingID: f.sittingID, BaseRevisionID: f.baseRevisionID, Target: store.ExamCorrectionResourceAddition, MediaType: model.ExamResourceMediaText, Body: strings.NewReader("notes"), Size: 5, ExpectedSHA256: strings.Repeat("a", 64), IdempotencyKey: "test-key"})
+	_, err := f.service.StageExamSittingCorrectionResourceContent(context.Background(), f.inv, StageResourceContentCommand{ExamID: f.examID, SittingID: f.sittingID, BaseRevisionID: f.baseRevisionID, Target: store.ExamCorrectionResourceAddition, MediaType: model.ExamResourceMediaText, Body: strings.NewReader("notes"), Size: 5, ExpectedSHA256: strings.Repeat("a", 64), IdempotencyKey: "test-key"})
 	require.NoError(t, err)
 	require.Equal(t, 0, f.content.calls, "content")
 	require.Equal(t, 0, f.persistence.readyCalls, "content")
@@ -79,7 +79,7 @@ func TestStageResourceContentCapacityRefusalLeavesOnlyPendingReservation(t *test
 	t.Parallel()
 	f := newCorrectionFixture(t)
 	f.content.err = correctionCapacityError{}
-	_, err := f.service.StageExamSittingCorrectionResourceContent(context.Background(), f.invocation, StageResourceContentCommand{
+	_, err := f.service.StageExamSittingCorrectionResourceContent(context.Background(), f.inv, StageResourceContentCommand{
 		ExamID: f.examID, SittingID: f.sittingID, BaseRevisionID: f.baseRevisionID,
 		Target: store.ExamCorrectionResourceAddition, MediaType: model.ExamResourceMediaText,
 		Body: strings.NewReader("notes"), Size: 5, ExpectedSHA256: strings.Repeat("a", 64), IdempotencyKey: "test-key",
@@ -101,7 +101,7 @@ func TestStageResourceContentUsesReservedTimeForConcurrentReplay(t *testing.T) {
 	t.Parallel()
 	f := newCorrectionFixture(t)
 	f.persistence.stageCreatedAt = f.at.Add(-time.Minute)
-	_, err := f.service.StageExamSittingCorrectionResourceContent(context.Background(), f.invocation, StageResourceContentCommand{
+	_, err := f.service.StageExamSittingCorrectionResourceContent(context.Background(), f.inv, StageResourceContentCommand{
 		ExamID: f.examID, SittingID: f.sittingID, BaseRevisionID: f.baseRevisionID,
 		Target: store.ExamCorrectionResourceAddition, MediaType: model.ExamResourceMediaText,
 		Body: strings.NewReader("notes"), Size: 5, ExpectedSHA256: strings.Repeat("a", 64), IdempotencyKey: "test-key",
@@ -114,7 +114,7 @@ func TestStageResourceContentUsesExplicitOverrideWithoutCurrentUnitMembership(t 
 	t.Parallel()
 	f := newCorrectionFixture(t)
 	f.memberships.empty = true
-	_, err := f.service.StageExamSittingCorrectionResourceContent(context.Background(), f.invocation, StageResourceContentCommand{ExamID: f.examID, SittingID: f.sittingID, BaseRevisionID: f.baseRevisionID, Target: store.ExamCorrectionResourceAddition, MediaType: model.ExamResourceMediaText, Body: strings.NewReader("notes"), Size: 5, ExpectedSHA256: strings.Repeat("a", 64), IdempotencyKey: "test-key"})
+	_, err := f.service.StageExamSittingCorrectionResourceContent(context.Background(), f.inv, StageResourceContentCommand{ExamID: f.examID, SittingID: f.sittingID, BaseRevisionID: f.baseRevisionID, Target: store.ExamCorrectionResourceAddition, MediaType: model.ExamResourceMediaText, Body: strings.NewReader("notes"), Size: 5, ExpectedSHA256: strings.Repeat("a", 64), IdempotencyKey: "test-key"})
 	require.NoError(t, err)
 	require.Equal(t, model.ActionExamSittingManageOverride, f.authorizer.action, "action=%s reservation=%#v", f.authorizer.action, f.persistence.reservation)
 	require.True(t, f.persistence.reservation.ManagerOverride, "action=%s reservation=%#v", f.authorizer.action, f.persistence.reservation)
@@ -125,7 +125,7 @@ func TestStageResourceContentStopsWhenCurrentManagerMembershipCannotBeRead(t *te
 	f := newCorrectionFixture(t)
 	failure := errors.New("membership unavailable")
 	f.memberships.err = failure
-	_, err := f.service.StageExamSittingCorrectionResourceContent(context.Background(), f.invocation, StageResourceContentCommand{ExamID: f.examID, SittingID: f.sittingID, BaseRevisionID: f.baseRevisionID, Target: store.ExamCorrectionResourceAddition, MediaType: model.ExamResourceMediaText, Body: strings.NewReader("notes"), Size: 5, ExpectedSHA256: strings.Repeat("a", 64), IdempotencyKey: "test-key"})
+	_, err := f.service.StageExamSittingCorrectionResourceContent(context.Background(), f.inv, StageResourceContentCommand{ExamID: f.examID, SittingID: f.sittingID, BaseRevisionID: f.baseRevisionID, Target: store.ExamCorrectionResourceAddition, MediaType: model.ExamResourceMediaText, Body: strings.NewReader("notes"), Size: 5, ExpectedSHA256: strings.Repeat("a", 64), IdempotencyKey: "test-key"})
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault)
 	require.Equal(t, "exam.sitting.correction.unavailable", fault.Code())
@@ -140,7 +140,7 @@ func TestStageReplacementPinsFileEntryFromExactBaseRevision(t *testing.T) {
 	f := newCorrectionFixture(t)
 	resourceID, entryID := model.NewExamResourceID(), model.NewFileEntryID()
 	f.revisions.snapshot = &model.ExamRevision{ID: f.baseRevisionID, ExamID: f.examID, Resources: []model.ExamRevisionResource{{ResourceID: resourceID, FileEntryID: entryID}}}
-	_, err := f.service.StageExamSittingCorrectionResourceContent(context.Background(), f.invocation, StageResourceContentCommand{ExamID: f.examID, SittingID: f.sittingID, BaseRevisionID: f.baseRevisionID, Target: store.ExamCorrectionResourceReplacement, ResourceID: resourceID, MediaType: model.ExamResourceMediaText, Body: strings.NewReader("notes"), Size: 5, ExpectedSHA256: strings.Repeat("a", 64), IdempotencyKey: "test-key"})
+	_, err := f.service.StageExamSittingCorrectionResourceContent(context.Background(), f.inv, StageResourceContentCommand{ExamID: f.examID, SittingID: f.sittingID, BaseRevisionID: f.baseRevisionID, Target: store.ExamCorrectionResourceReplacement, ResourceID: resourceID, MediaType: model.ExamResourceMediaText, Body: strings.NewReader("notes"), Size: 5, ExpectedSHA256: strings.Repeat("a", 64), IdempotencyKey: "test-key"})
 	require.NoError(t, err)
 	require.Nil(t, f.persistence.reservation.Entry)
 	require.Equal(t, entryID, f.persistence.reservation.FileEntryID)

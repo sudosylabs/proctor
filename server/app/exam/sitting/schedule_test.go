@@ -30,7 +30,7 @@ func TestScheduleCreatesAuthorizedSittingAndPublishesSafeEffect(t *testing.T) {
 		ScheduledStartAt: start, ScheduledEndAt: end, IdempotencyKey: "test-key",
 	}
 
-	got, err := fixture.service.ScheduleExamSitting(context.Background(), fixture.invocation, command)
+	got, err := fixture.service.ScheduleExamSitting(context.Background(), fixture.inv, command)
 	require.NoError(t, err)
 	require.NotNil(t, got.Sitting)
 	require.Equal(t, fixture.sittingID, got.Sitting.ID)
@@ -50,7 +50,7 @@ func TestScheduleCreatesAuthorizedSittingAndPublishesSafeEffect(t *testing.T) {
 	require.True(t, fixture.jobs.boundaryEnd.Equal(end), "store schedule")
 	require.Same(t, fixture.mail.result, fixture.persistence.schedule.Mail, "store schedule")
 	require.Equal(t, store.ExamSittingMailScheduled, fixture.mail.request.ChangeKind, "store schedule")
-	wantIdempotency, err := prepareScheduleIdempotency(fixture.invocation, command)
+	wantIdempotency, err := prepareScheduleIdempotency(fixture.inv, command)
 	require.NoError(t, err)
 	require.Equal(t, wantIdempotency, fixture.persistence.command)
 	wantAudit := map[string]any{
@@ -72,7 +72,7 @@ func TestScheduleUsesExplicitOverrideWithoutCurrentExactUnitMembership(t *testin
 	fixture.memberships.items = nil
 	start, end := testNow.Add(time.Hour), testNow.Add(3*time.Hour)
 
-	_, err := fixture.service.ScheduleExamSitting(context.Background(), fixture.invocation, ScheduleCommand{
+	_, err := fixture.service.ScheduleExamSitting(context.Background(), fixture.inv, ScheduleCommand{
 		ExamID: fixture.examID, ExamRevisionID: fixture.revisionID, ClassID: fixture.classID,
 		ScheduledStartAt: start, ScheduledEndAt: end, IdempotencyKey: "test-key",
 	})
@@ -88,7 +88,7 @@ func TestScheduleAuthorizationFailureStopsMutationAndAudit(t *testing.T) {
 	fixture.authorizer.err = errors.New("denied")
 	start, end := testNow.Add(time.Hour), testNow.Add(3*time.Hour)
 
-	_, err := fixture.service.ScheduleExamSitting(context.Background(), fixture.invocation, ScheduleCommand{
+	_, err := fixture.service.ScheduleExamSitting(context.Background(), fixture.inv, ScheduleCommand{
 		ExamID: fixture.examID, ExamRevisionID: fixture.revisionID, ClassID: fixture.classID,
 		ScheduledStartAt: start, ScheduledEndAt: end, IdempotencyKey: "test-key",
 	})
@@ -102,7 +102,7 @@ func TestScheduleStopsWhenCurrentManagerMembershipCannotBeRead(t *testing.T) {
 	testFixture := newFixture(t)
 	failure := errors.New("membership unavailable")
 	testFixture.memberships.err = failure
-	_, err := testFixture.service.ScheduleExamSitting(context.Background(), testFixture.invocation, ScheduleCommand{
+	_, err := testFixture.service.ScheduleExamSitting(context.Background(), testFixture.inv, ScheduleCommand{
 		ExamID: testFixture.examID, ExamRevisionID: testFixture.revisionID, ClassID: testFixture.classID,
 		ScheduledStartAt: testNow.Add(time.Hour), ScheduledEndAt: testNow.Add(3 * time.Hour), IdempotencyKey: "test-key",
 	})
@@ -125,7 +125,7 @@ func TestReplayedCommandsDoNotPublishEffects(t *testing.T) {
 	}
 	start, end := testNow.Add(time.Hour), testNow.Add(3*time.Hour)
 
-	got, err := fixture.service.ScheduleExamSitting(context.Background(), fixture.invocation, ScheduleCommand{
+	got, err := fixture.service.ScheduleExamSitting(context.Background(), fixture.inv, ScheduleCommand{
 		ExamID: fixture.examID, ExamRevisionID: fixture.revisionID, ClassID: fixture.classID,
 		ScheduledStartAt: start, ScheduledEndAt: end, IdempotencyKey: "test-key",
 	})
@@ -152,7 +152,7 @@ func TestUpdateScheduleUsesSittingManagementAndOptimisticFence(t *testing.T) {
 		ExamID: fixture.examID, SittingID: fixture.sittingID, ExpectedRevision: 1,
 		ScheduledStartAt: &changedStart, ScheduledEndAt: &changedEnd, IdempotencyKey: "test-key",
 	}
-	got, err := fixture.service.UpdateExamSittingSchedule(context.Background(), fixture.invocation, command)
+	got, err := fixture.service.UpdateExamSittingSchedule(context.Background(), fixture.inv, command)
 	require.NoError(t, err)
 	require.NotNil(t, got.Sitting)
 	require.Equal(t, int64(2), got.Sitting.Revision)
@@ -163,7 +163,7 @@ func TestUpdateScheduleUsesSittingManagementAndOptimisticFence(t *testing.T) {
 	require.Equal(t, int64(1), input.ExpectedRevision, "store update")
 	require.False(t, input.ManagerOverride, "store update")
 	require.NotNil(t, fixture.persistence.command, "store update")
-	wantIdempotency, err := prepareScheduleUpdateIdempotency(fixture.invocation, command)
+	wantIdempotency, err := prepareScheduleUpdateIdempotency(fixture.inv, command)
 	require.NoError(t, err)
 	require.Equal(t, wantIdempotency, fixture.persistence.command)
 	require.Same(t, fixture.jobs.open, input.OpenJob, "boundary Jobs = %#v %#v, factory revision/times = %d %v %v", input.OpenJob, input.DeadlineJob, fixture.jobs.boundaryRevision, fixture.jobs.boundaryStart, fixture.jobs.boundaryEnd)
@@ -196,7 +196,7 @@ func TestUpdateScheduleReturnsCurrentNoChangesOnlyForCurrentActiveScheduledState
 	fixture.persistence.snapshot = &store.ExamSittingSnapshot{Sitting: current}
 	revisionID := fixture.revisionID
 
-	_, err := fixture.service.UpdateExamSittingSchedule(context.Background(), fixture.invocation, UpdateScheduleCommand{
+	_, err := fixture.service.UpdateExamSittingSchedule(context.Background(), fixture.inv, UpdateScheduleCommand{
 		ExamID: fixture.examID, SittingID: fixture.sittingID, ExpectedRevision: 1,
 		ExamRevisionID: &revisionID, IdempotencyKey: "test-key",
 	})
@@ -214,7 +214,7 @@ func TestUpdateScheduleSendsStaleNoOpToStore(t *testing.T) {
 	fixture.persistence.err = store.NewErrConflict("exam_sitting", "exam_sitting_revision", nil)
 	revisionID := fixture.revisionID
 
-	_, err := fixture.service.UpdateExamSittingSchedule(context.Background(), fixture.invocation, UpdateScheduleCommand{
+	_, err := fixture.service.UpdateExamSittingSchedule(context.Background(), fixture.inv, UpdateScheduleCommand{
 		ExamID: fixture.examID, SittingID: fixture.sittingID, ExpectedRevision: 1,
 		ExamRevisionID: &revisionID, IdempotencyKey: "test-key",
 	})
@@ -233,7 +233,7 @@ func TestUpdateScheduleSendsArchivedAndNonScheduledNoOpsToStore(t *testing.T) {
 		fixture.persistence.err = store.NewErrConflict("exam_sitting", "exam_archived", nil)
 		revisionID := fixture.revisionID
 
-		_, err := fixture.service.UpdateExamSittingSchedule(context.Background(), fixture.invocation, UpdateScheduleCommand{
+		_, err := fixture.service.UpdateExamSittingSchedule(context.Background(), fixture.inv, UpdateScheduleCommand{
 			ExamID: fixture.examID, SittingID: fixture.sittingID, ExpectedRevision: 1,
 			ExamRevisionID: &revisionID, IdempotencyKey: "test-key",
 		})
@@ -250,7 +250,7 @@ func TestUpdateScheduleSendsArchivedAndNonScheduledNoOpsToStore(t *testing.T) {
 		fixture.persistence.err = store.NewErrConflict("exam_sitting", "exam_sitting_state", nil)
 		revisionID := fixture.revisionID
 
-		_, err := fixture.service.UpdateExamSittingSchedule(context.Background(), fixture.invocation, UpdateScheduleCommand{
+		_, err := fixture.service.UpdateExamSittingSchedule(context.Background(), fixture.inv, UpdateScheduleCommand{
 			ExamID: fixture.examID, SittingID: fixture.sittingID, ExpectedRevision: current.Revision,
 			ExamRevisionID: &revisionID, IdempotencyKey: "test-key",
 		})
@@ -268,7 +268,7 @@ func TestUpdateRejectsMismatchedStoreOutcome(t *testing.T) {
 	start := testNow.Add(2 * time.Hour)
 	fixture.persistence.result = &store.ExamSittingCommandResult{Value: &store.ExamSittingSnapshot{Sitting: foreign}}
 
-	_, err := fixture.service.UpdateExamSittingSchedule(context.Background(), fixture.invocation, UpdateScheduleCommand{
+	_, err := fixture.service.UpdateExamSittingSchedule(context.Background(), fixture.inv, UpdateScheduleCommand{
 		ExamID: fixture.examID, SittingID: fixture.sittingID, ExpectedRevision: 1,
 		ScheduledStartAt: &start, IdempotencyKey: "test-key",
 	})
@@ -288,7 +288,7 @@ func TestReplayedUpdateAndCancellationDoNotPublishEffects(t *testing.T) {
 		require.NoError(t, err)
 		fixture.persistence.result = &store.ExamSittingCommandResult{Value: &store.ExamSittingSnapshot{Sitting: updated}, Replayed: true}
 
-		_, err = fixture.service.UpdateExamSittingSchedule(context.Background(), fixture.invocation, UpdateScheduleCommand{
+		_, err = fixture.service.UpdateExamSittingSchedule(context.Background(), fixture.inv, UpdateScheduleCommand{
 			ExamID: fixture.examID, SittingID: fixture.sittingID, ExpectedRevision: 1,
 			ScheduledStartAt: &start, ScheduledEndAt: &end, IdempotencyKey: "test-key",
 		})
@@ -304,7 +304,7 @@ func TestReplayedUpdateAndCancellationDoNotPublishEffects(t *testing.T) {
 		require.NoError(t, canceled.Cancel(model.ExamSittingReasonManagerCanceled, testNow))
 		fixture.persistence.result = &store.ExamSittingCommandResult{Value: &store.ExamSittingSnapshot{Sitting: canceled}, Replayed: true}
 
-		_, err := fixture.service.CancelExamSitting(context.Background(), fixture.invocation, CancelCommand{
+		_, err := fixture.service.CancelExamSitting(context.Background(), fixture.inv, CancelCommand{
 			ExamID: fixture.examID, SittingID: fixture.sittingID, ExpectedRevision: 1,
 			PrivateReason: "Manager canceled", IdempotencyKey: "test-key",
 		})

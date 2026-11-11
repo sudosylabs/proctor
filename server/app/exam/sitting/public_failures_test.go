@@ -51,7 +51,7 @@ func TestObservedUseCaseRecordsItsConcealedOutcome(t *testing.T) {
 	recorder := &operationalRecorderFake{}
 	f.service.operational = recorder
 	f.authorizer.err = apperror.New("authorization.denied")
-	_, err := f.service.PauseExamSitting(t.Context(), f.invocation, ManagerTransitionCommand{
+	_, err := f.service.PauseExamSitting(t.Context(), f.inv, ManagerTransitionCommand{
 		ExamID: f.examID, SittingID: f.sittingID, ExpectedRevision: 1,
 		PrivateReason: "Candidate requested clarification", IdempotencyKey: "test-key",
 	})

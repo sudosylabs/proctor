@@ -41,7 +41,7 @@ func TestWorkspaceMutationFingerprintCompatibility(t *testing.T) {
 	userID, attemptID := model.NewUserID(), model.NewExamAttemptID()
 	entryID := model.NewAttemptWorkspaceEntryID()
 	version := model.WorkspaceContentVersion("aaaaaaaaaaaaaaaaaaaaaaaaaa")
-	invocation := invocation.New(model.Principal{UserID: userID}, model.RequestMetadata{})
+	inv := invocation.New(model.Principal{UserID: userID}, model.RequestMetadata{})
 	tests := []struct {
 		name      string
 		operation model.AttemptWorkspaceMutationKind
@@ -85,7 +85,7 @@ func TestWorkspaceMutationFingerprintCompatibility(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			prepared, err := prepareWorkspaceMutationIdempotency(invocation, "execution-key", attemptID, test.operation, test.semantic)
+			prepared, err := prepareWorkspaceMutationIdempotency(inv, "execution-key", attemptID, test.operation, test.semantic)
 			require.NoError(t, err)
 			outer := fmt.Sprintf(`{"exam_attempt_id":%q,"operation":%q,"command":%s}`,
 				attemptID, test.operation, test.document)
@@ -98,13 +98,13 @@ func TestWorkspaceMutationFingerprintCompatibility(t *testing.T) {
 func TestCommandIdempotencyDocumentsAndStoreBoundaryCompatibility(t *testing.T) {
 	t.Parallel()
 	userID, sessionID := model.NewUserID(), model.NewSessionID()
-	invocation := invocation.New(model.Principal{UserID: userID, SessionID: sessionID}, model.RequestMetadata{})
+	inv := invocation.New(model.Principal{UserID: userID, SessionID: sessionID}, model.RequestMetadata{})
 	sittingID, attemptID := model.NewExamSittingID(), model.NewExamAttemptID()
 	credential := model.NewCredentialToken()
 
 	manifest := model.CurrentAttemptConfigurationManifestFingerprint()
 	security := model.ConnectSecurity{Kind: "preflight", PreflightID: "fixture-preflight", ReportDigest: model.SHA256Fingerprint([]byte("fixture-report"))}
-	connected, err := prepareConnectIdempotency(invocation, ConnectCommand{Security: security, SittingID: sittingID,
+	connected, err := prepareConnectIdempotency(inv, ConnectCommand{Security: security, SittingID: sittingID,
 		ContinuityCredential: credential, ConfigurationManifestFingerprint: manifest, IdempotencyKey: "connect-key"})
 	require.NoError(t, err)
 	assertPreparedIdempotency(t, connected, userID, store.ExamAttemptConnectOperation, "connect-key",
@@ -112,7 +112,7 @@ func TestCommandIdempotencyDocumentsAndStoreBoundaryCompatibility(t *testing.T) 
 			sittingID, sessionID, model.HashToken(credential), manifest, security.ReportDigest))
 
 	examID, suspensionID := model.NewExamID(), model.NewAttemptSuspensionID()
-	reallowed, err := prepareReallowIdempotency(invocation, ReallowCommand{ExamID: examID, SittingID: sittingID,
+	reallowed, err := prepareReallowIdempotency(inv, ReallowCommand{ExamID: examID, SittingID: sittingID,
 		AttemptID: attemptID, SuspensionID: suspensionID, ExpectedAttemptRevision: 3,
 		PrivateReason: "reviewed", IdempotencyKey: "reallow-key"})
 	require.NoError(t, err)
@@ -121,7 +121,7 @@ func TestCommandIdempotencyDocumentsAndStoreBoundaryCompatibility(t *testing.T) 
 			examID, sittingID, attemptID, suspensionID))
 
 	revisionID := model.NewExamRevisionID()
-	submitted, err := prepareSubmissionIdempotency(invocation, "submit-key", attemptID, revisionID, 11, 7)
+	submitted, err := prepareSubmissionIdempotency(inv, "submit-key", attemptID, revisionID, 11, 7)
 	require.NoError(t, err)
 	assertPreparedIdempotency(t, submitted, userID, store.ExamSubmissionSealOperation, "submit-key",
 		fmt.Sprintf(`{"exam_attempt_id":%q,"expected_current_revision_id":%q,"expected_workspace_cursor":11,"final_focus_loss_sequence":7}`,

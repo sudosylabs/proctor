@@ -26,7 +26,7 @@ import (
 // creating the local account and Class Membership it grants.
 func (s *Service) AcceptStudentClassInvitation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command AcceptStudentClassInvitationCommand,
 ) (*InvitationAcceptanceView, error) {
 	if err := s.checkInvitationAttempt(ctx, model.HashInvitationClaim(command.Claim), command.Source); err != nil {
@@ -37,12 +37,12 @@ func (s *Service) AcceptStudentClassInvitation(
 	}
 
 	claimHash := model.HashInvitationClaim(command.Claim)
-	return s.acceptStudentClassByClaimHash(ctx, invocation, command, claimHash)
+	return s.acceptStudentClassByClaimHash(ctx, inv, command, claimHash)
 }
 
 func (s *Service) acceptStudentClassByClaimHash(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command AcceptStudentClassInvitationCommand,
 	claimHash string,
 ) (*InvitationAcceptanceView, error) {
@@ -116,7 +116,7 @@ func (s *Service) acceptStudentClassByClaimHash(
 		return nil, apperror.New("invitation.mail_unavailable").Wrap(err)
 	}
 
-	metadata := invocation.RequestMetadata()
+	metadata := inv.RequestMetadata()
 	event := &model.AuditEvent{
 		ActorID:       account.ID,
 		SubjectUserID: account.ID,
@@ -177,7 +177,7 @@ func (s *Service) acceptStudentClassByClaimHash(
 // claim, creating the local account, membership and Role Binding it grants.
 func (s *Service) AcceptTeacherAcademicUnitInvitation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command AcceptTeacherAcademicUnitInvitationCommand,
 ) (*InvitationAcceptanceView, error) {
 	if err := s.checkInvitationAttempt(ctx, model.HashInvitationClaim(command.Claim), command.Source); err != nil {
@@ -188,12 +188,12 @@ func (s *Service) AcceptTeacherAcademicUnitInvitation(
 	}
 
 	claimHash := model.HashInvitationClaim(command.Claim)
-	return s.acceptTeacherAcademicUnitByClaimHash(ctx, invocation, command, claimHash)
+	return s.acceptTeacherAcademicUnitByClaimHash(ctx, inv, command, claimHash)
 }
 
 func (s *Service) acceptTeacherAcademicUnitByClaimHash(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command AcceptTeacherAcademicUnitInvitationCommand,
 	claimHash string,
 ) (*InvitationAcceptanceView, error) {
@@ -277,7 +277,7 @@ func (s *Service) acceptTeacherAcademicUnitByClaimHash(
 		return nil, apperror.New("invitation.mail_unavailable").Wrap(err)
 	}
 
-	metadata := invocation.RequestMetadata()
+	metadata := inv.RequestMetadata()
 	event := &model.AuditEvent{
 		ActorID:       account.ID,
 		SubjectUserID: account.ID,
@@ -331,25 +331,25 @@ func (s *Service) acceptTeacherAcademicUnitByClaimHash(
 // for the caller.
 func (s *Service) AcceptAcademicUnitRoleInvitation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command AcceptAcademicUnitRoleInvitationCommand,
 ) (*InvitationAcceptanceView, error) {
-	return s.acceptScopedRole(ctx, invocation, command.Claim, command.Source, model.InvitationPurposeAcademicUnitRole)
+	return s.acceptScopedRole(ctx, inv, command.Claim, command.Source, model.InvitationPurposeAcademicUnitRole)
 }
 
 // AcceptInstitutionRoleInvitation accepts an Institution Role Invitation by its raw claim
 // for the caller.
 func (s *Service) AcceptInstitutionRoleInvitation(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command AcceptInstitutionRoleInvitationCommand,
 ) (*InvitationAcceptanceView, error) {
-	return s.acceptScopedRole(ctx, invocation, command.Claim, command.Source, model.InvitationPurposeInstitutionRole)
+	return s.acceptScopedRole(ctx, inv, command.Claim, command.Source, model.InvitationPurposeInstitutionRole)
 }
 
 func (s *Service) acceptScopedRole(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	claim, source string,
 	purpose model.InvitationPurpose,
 ) (*InvitationAcceptanceView, error) {
@@ -357,7 +357,7 @@ func (s *Service) acceptScopedRole(
 		return nil, err
 	}
 
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return nil, access.InvalidTokenAppError()
 	}
@@ -366,17 +366,17 @@ func (s *Service) acceptScopedRole(
 	}
 
 	claimHash := model.HashInvitationClaim(claim)
-	return s.acceptScopedRoleByClaimHash(ctx, invocation, claimHash, purpose, nil)
+	return s.acceptScopedRoleByClaimHash(ctx, inv, claimHash, purpose, nil)
 }
 
 func (s *Service) acceptScopedRoleByClaimHash(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	claimHash string,
 	purpose model.InvitationPurpose,
 	browserTransaction *store.BrowserInvitationTransactionProof,
 ) (*InvitationAcceptanceView, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess || !model.IsValidTokenHash(claimHash) {
 		return nil, access.InvalidTokenAppError()
 	}
@@ -407,7 +407,7 @@ func (s *Service) acceptScopedRoleByClaimHash(
 	}
 
 	result, err := access.RunAudited(ctx, s.auditor, access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     model.ActionInvitationAccept,
 		Resource:   model.Resource{Type: resourceType, ID: invitation.ScopeID},
 		ScopeType:  invitation.ScopeType,

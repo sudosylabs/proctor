@@ -32,15 +32,15 @@ type CommitOnboardingImportCommand struct {
 // and revision still match, proposing its execution.
 func (s *Service) CommitOnboardingImport(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command CommitOnboardingImportCommand,
 ) (OnboardingImportView, error) {
-	return s.commitImport(ctx, invocation, command, "")
+	return s.commitImport(ctx, inv, command, "")
 }
 
 func (s *Service) commitImport(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command CommitOnboardingImportCommand,
 	expectedMode model.OnboardingImportMode,
 ) (OnboardingImportView, error) {
@@ -63,16 +63,16 @@ func (s *Service) commitImport(
 	}
 
 	resource := onboardingImportResource(current.ScopeType, current.ScopeID)
-	if err = s.authorizeImport(ctx, invocation, current, true); err != nil {
+	if err = s.authorizeImport(ctx, inv, current, true); err != nil {
 		return OnboardingImportView{}, err
 	}
 	if expectedMode != "" && current.Mode != expectedMode {
 		return OnboardingImportView{}, apperror.New("resource.not_found").WithField("resource", "student_progression")
 	}
-	if err = s.validatePrincipal(ctx, invocation.Principal()); err != nil {
+	if err = s.validatePrincipal(ctx, inv.Principal()); err != nil {
 		return OnboardingImportView{}, err
 	}
-	if current.ActorUserID != invocation.Principal().UserID {
+	if current.ActorUserID != inv.Principal().UserID {
 		return OnboardingImportView{}, access.DeniedError()
 	}
 
@@ -89,7 +89,7 @@ func (s *Service) commitImport(
 	}
 
 	attempt := access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     auditAction,
 		Resource:   resource,
 		ScopeType:  current.ScopeType,
@@ -110,8 +110,8 @@ func (s *Service) commitImport(
 	) (*store.OnboardingImport, error) {
 		return s.imports.CommitOnboardingImport(ctx, &store.OnboardingImportCommit{
 			ID:                 id,
-			ActorUserID:        invocation.Principal().UserID,
-			Principal:          invocation.Principal(),
+			ActorUserID:        inv.Principal().UserID,
+			Principal:          inv.Principal(),
 			ExpectedRevision:   command.ExpectedRevision,
 			PreviewDigest:      command.PreviewDigest,
 			Policy:             command.Policy,
@@ -128,7 +128,7 @@ func (s *Service) commitImport(
 		committed, err = runProgressionAudited(
 			ctx,
 			s.auditor,
-			invocation,
+			inv,
 			auditOperation,
 			id.String(),
 			current.SourceClassID,
@@ -165,15 +165,15 @@ func (s *Service) commitImport(
 // CancelOnboardingImport cancels an unfinished onboarding import.
 func (s *Service) CancelOnboardingImport(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	id model.OnboardingImportID,
 ) (OnboardingImportView, error) {
-	return s.cancelImport(ctx, invocation, id, "")
+	return s.cancelImport(ctx, inv, id, "")
 }
 
 func (s *Service) cancelImport(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	id model.OnboardingImportID,
 	expectedMode model.OnboardingImportMode,
 ) (OnboardingImportView, error) {
@@ -185,7 +185,7 @@ func (s *Service) cancelImport(
 	if err != nil {
 		return OnboardingImportView{}, onboardingImportStoreErrors.Translate(err)
 	}
-	if err = s.authorizeImport(ctx, invocation, current, true); err != nil {
+	if err = s.authorizeImport(ctx, inv, current, true); err != nil {
 		return OnboardingImportView{}, err
 	}
 	if expectedMode != "" && current.Mode != expectedMode {
@@ -199,7 +199,7 @@ func (s *Service) cancelImport(
 	}
 
 	attempt := access.Mutation{
-		Invocation: invocation,
+		Invocation: inv,
 		Action:     auditAction,
 		Resource:   onboardingImportResource(current.ScopeType, current.ScopeID),
 		ScopeType:  current.ScopeType,
@@ -214,9 +214,9 @@ func (s *Service) cancelImport(
 	) (*store.OnboardingImport, error) {
 		return s.imports.CancelOnboardingImport(ctx, &store.OnboardingImportCancellation{
 			ID:                 id,
-			ActorUserID:        invocation.Principal().UserID,
+			ActorUserID:        inv.Principal().UserID,
 			At:                 at,
-			Principal:          invocation.Principal(),
+			Principal:          inv.Principal(),
 			AuditEventID:       reference.ID,
 			SourceAuditEventID: sourceAuditID,
 			AuditAt:            reference.MutationAt,
@@ -227,7 +227,7 @@ func (s *Service) cancelImport(
 		canceled, err = runProgressionAudited(
 			ctx,
 			s.auditor,
-			invocation,
+			inv,
 			auditOperation,
 			id.String(),
 			current.SourceClassID,
@@ -301,7 +301,7 @@ func (s *Service) validatePrincipal(ctx context.Context, principal model.Princip
 
 func (s *Service) validateExternalTarget(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	mode model.OnboardingImportMode,
 	scopeID, roleID string,
 	preview bool,
@@ -320,7 +320,7 @@ func (s *Service) validateExternalTarget(
 
 		if preview {
 			for _, action := range []model.Action{model.ActionInvitationCreate, model.ActionClassMembersManage} {
-				if err = s.authorize(ctx, invocation, action, model.Resource{Type: model.ResourceClass, ID: scopeID}); err != nil {
+				if err = s.authorize(ctx, inv, action, model.Resource{Type: model.ResourceClass, ID: scopeID}); err != nil {
 					return err
 				}
 			}
@@ -342,12 +342,12 @@ func (s *Service) validateExternalTarget(
 		if preview {
 			resource := model.Resource{Type: model.ResourceAcademicUnit, ID: scopeID}
 			for _, action := range []model.Action{model.ActionInvitationCreate, model.ActionAcademicUnitMembersManage} {
-				if err = s.authorize(ctx, invocation, action, resource); err != nil {
+				if err = s.authorize(ctx, inv, action, resource); err != nil {
 					return err
 				}
 			}
 
-			return s.authorizeActionDelegation(ctx, invocation, role.Permissions, model.RoleScopeAcademicUnit, scopeID)
+			return s.authorizeActionDelegation(ctx, inv, role.Permissions, model.RoleScopeAcademicUnit, scopeID)
 		}
 	default:
 		return nil

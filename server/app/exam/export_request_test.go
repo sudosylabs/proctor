@@ -49,7 +49,7 @@ func TestExamExportsRequireDedicatedAndEveryOrdinaryReadPermission(t *testing.T)
 			if test.browser {
 				categories = []model.RetentionCategory{model.RetentionCategoryBrowserActivity}
 			}
-			_, err := service.CreateExamExport(context.Background(), f.invocation, CreateExportCommand{Scope: scope, Categories: categories, IdempotencyKey: "export-key"})
+			_, err := service.CreateExamExport(context.Background(), f.inv, CreateExportCommand{Scope: scope, Categories: categories, IdempotencyKey: "export-key"})
 			if test.deny != "" {
 				require.Error(t, err)
 				require.Nil(t, s.create)
@@ -74,13 +74,13 @@ func TestExamExportsSelfAccessAndMissingAuditFailClosed(t *testing.T) {
 	f, service, s, auth, _ := newExportFixture(t)
 	s.selected[0].CandidateUserID = f.userID
 	command := CreateExportCommand{Scope: s.value.Scope, Categories: s.value.Categories, IdempotencyKey: "export-key"}
-	_, err := service.CreateExamExport(context.Background(), f.invocation, command)
+	_, err := service.CreateExamExport(context.Background(), f.inv, command)
 	require.Error(t, err, "candidate exported own manager-only records")
 	require.True(t, auth.self, "candidate exported own manager-only records")
 	require.Nil(t, s.create, "candidate exported own manager-only records")
 	s.selected[0].CandidateUserID = model.NewUserID()
 	f.auditor.err = errors.New("audit unavailable")
-	_, err = service.CreateExamExport(context.Background(), f.invocation, command)
+	_, err = service.CreateExamExport(context.Background(), f.inv, command)
 	require.Error(t, err, "creation bypassed required audit")
 	require.Nil(t, s.create, "creation bypassed required audit")
 }
@@ -92,7 +92,7 @@ func TestExamExportReplayUsesCapturedScopeAfterSittingGrowsPastBound(t *testing.
 	s.selected = make([]store.ExamSubmissionAuthorization, model.ExamExportMaximumSubmissions+1)
 	s.value.Scope.SubmissionID = ""
 	command := CreateExportCommand{Scope: s.value.Scope, Categories: s.value.Categories, IdempotencyKey: "retained-export"}
-	_, err := service.CreateExamExport(context.Background(), f.invocation, command)
+	_, err := service.CreateExamExport(context.Background(), f.inv, command)
 	require.NoError(t, err)
 	require.NotNil(t, s.creationCommand, "original captured scope was not preserved")
 	require.Equal(t, store.ExamExportCreateOperation, s.creationCommand.Operation, "original captured scope was not preserved")
@@ -101,7 +101,7 @@ func TestExamExportReplayUsesCapturedScopeAfterSittingGrowsPastBound(t *testing.
 	require.Equal(t, original[0].SubmissionID, s.create.SubmissionIDs[0], "original captured scope was not preserved")
 	auth.deny = model.ActionSubmissionViewOverride
 	s.create = nil
-	_, err = service.CreateExamExport(context.Background(), f.invocation, command)
+	_, err = service.CreateExamExport(context.Background(), f.inv, command)
 	require.Error(t, err, "replay-aware scope skipped current ordinary read authority")
 	require.Nil(t, s.create, "replay-aware scope skipped current ordinary read authority")
 }

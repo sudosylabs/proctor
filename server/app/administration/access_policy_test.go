@@ -121,10 +121,10 @@ func accessPolicyFixture(t *testing.T) (*Service, *accessPolicyStoreFake, *acces
 
 func TestAccessPolicyPreflightUsesCurrentDeploymentCapabilities(t *testing.T) {
 	t.Parallel()
-	service, persistence, _, _, _, invocation := accessPolicyFixture(t)
+	service, persistence, _, _, _, inv := accessPolicyFixture(t)
 	settings := persistence.snapshot.Policy.Settings()
 	settings.ProviderAdmissions["campus-oidc"] = model.ProviderAdmissionAutoProvision
-	result, err := service.PreflightAccessPolicy(context.Background(), invocation, PreflightAccessPolicyCommand{ExpectedRevision: 1, Settings: settings})
+	result, err := service.PreflightAccessPolicy(context.Background(), inv, PreflightAccessPolicyCommand{ExpectedRevision: 1, Settings: settings})
 	require.NoError(t, err)
 	require.Empty(t, result.Blockers, "preflight = %#v input", result)
 	require.NotNil(t, persistence.preflightInput, "preflight = %#v input", result)
@@ -162,18 +162,18 @@ func TestAccessPolicyMutationRequiresInteractiveStrongRecentAuthentication(t *te
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			invocation := invocation.New(tc.principal, model.RequestMetadata{})
+			inv := invocation.New(tc.principal, model.RequestMetadata{})
 			operations := []struct {
 				name string
 				run  func() error
 			}{
 				{name: "preflight", run: func() error {
-					_, err := service.PreflightAccessPolicy(context.Background(), invocation,
+					_, err := service.PreflightAccessPolicy(context.Background(), inv,
 						PreflightAccessPolicyCommand{ExpectedRevision: 1, Settings: settings})
 					return err
 				}},
 				{name: "replace", run: func() error {
-					_, err := service.ReplaceAccessPolicy(context.Background(), invocation,
+					_, err := service.ReplaceAccessPolicy(context.Background(), inv,
 						ReplaceAccessPolicyCommand{ExpectedRevision: 1, Settings: settings, IdempotencyKey: "assurance"})
 					return err
 				}},
@@ -192,18 +192,18 @@ func TestAccessPolicyMutationRequiresInteractiveStrongRecentAuthentication(t *te
 
 func TestAccessPolicyReplacementIsIdempotentAndPublishesOnlyCommittedRevision(t *testing.T) {
 	t.Parallel()
-	service, persistence, _, publisher, audit, invocation := accessPolicyFixture(t)
+	service, persistence, _, publisher, audit, inv := accessPolicyFixture(t)
 	next := persistence.snapshot.Policy.Clone()
 	transition, err := next.Replace(1, func() model.AccessPolicySettings {
 		value := next.Settings()
 		value.DesktopAuthorizationEnabled = false
 		return value
-	}(), invocation.Principal().UserID, time.UnixMilli(2_000))
+	}(), inv.Principal().UserID, time.UnixMilli(2_000))
 	require.NoError(t, err)
 	persistence.result = &store.AccessPolicyReplacementResult{Snapshot: &store.AccessPolicySnapshot{Policy: next, History: []*model.AccessPolicyTransition{transition}}, Changed: true}
 	settings := persistence.snapshot.Policy.Settings()
 	settings.DesktopAuthorizationEnabled = false
-	result, err := service.ReplaceAccessPolicy(context.Background(), invocation, ReplaceAccessPolicyCommand{ExpectedRevision: 1, Settings: settings, IdempotencyKey: "policy-1"})
+	result, err := service.ReplaceAccessPolicy(context.Background(), inv, ReplaceAccessPolicyCommand{ExpectedRevision: 1, Settings: settings, IdempotencyKey: "policy-1"})
 	require.NoError(t, err)
 	require.Equal(t, int64(2), result.Policy.Revision, "result=%#v command=%#v replacement=%#v effects", result, persistence.command, persistence.replaceInput)
 	require.NotNil(t, persistence.command, "result=%#v command=%#v replacement=%#v effects", result, persistence.command, persistence.replaceInput)
@@ -221,7 +221,7 @@ func TestAccessPolicyReplacementIsIdempotentAndPublishesOnlyCommittedRevision(t 
 
 func TestAccessPolicyReplacementResolvesExactReplayBeforeRevisionPreflight(t *testing.T) {
 	t.Parallel()
-	service, persistence, _, publisher, audit, invocation := accessPolicyFixture(t)
+	service, persistence, _, publisher, audit, inv := accessPolicyFixture(t)
 	replayed := persistence.snapshot.Policy.Clone()
 	replayed.Revision = 2
 	replayed.UpdatedAt = replayed.UpdatedAt.Add(time.Second)
@@ -231,7 +231,7 @@ func TestAccessPolicyReplacementResolvesExactReplayBeforeRevisionPreflight(t *te
 	}
 	settings := persistence.snapshot.Policy.Settings()
 	settings.DesktopAuthorizationEnabled = false
-	result, err := service.ReplaceAccessPolicy(context.Background(), invocation, ReplaceAccessPolicyCommand{
+	result, err := service.ReplaceAccessPolicy(context.Background(), inv, ReplaceAccessPolicyCommand{
 		ExpectedRevision: 1, Settings: settings, IdempotencyKey: "lost-response",
 	})
 	require.NoError(t, err, "replay result = %#v", result)
@@ -245,11 +245,11 @@ func TestAccessPolicyReplacementResolvesExactReplayBeforeRevisionPreflight(t *te
 
 func TestAccessPolicyReplacementFingerprintIncludesSessionRevocationChoice(t *testing.T) {
 	t.Parallel()
-	service, persistence, _, _, _, invocation := accessPolicyFixture(t)
+	service, persistence, _, _, _, inv := accessPolicyFixture(t)
 	persistence.result = &store.AccessPolicyReplacementResult{Snapshot: persistence.snapshot}
 	settings := persistence.snapshot.Policy.Settings()
 	settings.DesktopAuthorizationEnabled = false
-	_, err := service.ReplaceAccessPolicy(context.Background(), invocation, ReplaceAccessPolicyCommand{
+	_, err := service.ReplaceAccessPolicy(context.Background(), inv, ReplaceAccessPolicyCommand{
 		ExpectedRevision: 1, Settings: settings, RevokeExistingSessions: true, IdempotencyKey: "policy-revoke",
 	})
 	require.NoError(t, err)
@@ -257,7 +257,7 @@ func TestAccessPolicyReplacementFingerprintIncludesSessionRevocationChoice(t *te
 	require.True(t, persistence.replaceInput.Preflight.RevokeExistingSessions)
 	withRevocation := persistence.command.Fingerprint
 	persistence.result = &store.AccessPolicyReplacementResult{Snapshot: persistence.snapshot}
-	_, err = service.ReplaceAccessPolicy(context.Background(), invocation, ReplaceAccessPolicyCommand{
+	_, err = service.ReplaceAccessPolicy(context.Background(), inv, ReplaceAccessPolicyCommand{
 		ExpectedRevision: 1, Settings: settings, RevokeExistingSessions: false, IdempotencyKey: "policy-revoke",
 	})
 	require.NoError(t, err)
@@ -266,11 +266,11 @@ func TestAccessPolicyReplacementFingerprintIncludesSessionRevocationChoice(t *te
 
 func TestAccessPolicyReplacementMapsConflictingIdempotencyReuse(t *testing.T) {
 	t.Parallel()
-	service, persistence, _, _, _, invocation := accessPolicyFixture(t)
+	service, persistence, _, _, _, inv := accessPolicyFixture(t)
 	persistence.replaceErr = &store.ErrIdempotencyConflict{}
 	settings := persistence.snapshot.Policy.Settings()
 	settings.DesktopAuthorizationEnabled = false
-	_, err := service.ReplaceAccessPolicy(context.Background(), invocation, ReplaceAccessPolicyCommand{
+	_, err := service.ReplaceAccessPolicy(context.Background(), inv, ReplaceAccessPolicyCommand{
 		ExpectedRevision: 1, Settings: settings, IdempotencyKey: "reused-key",
 	})
 	require.True(t, apperror.Is(err, "idempotency.conflict"), "error = %v", err)
@@ -291,11 +291,11 @@ func TestAccessPolicyReplacementCompletesRevisionBlockerAndStoreFailures(t *test
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			service, persistence, _, publisher, audit, invocation := accessPolicyFixture(t)
+			service, persistence, _, publisher, audit, inv := accessPolicyFixture(t)
 			persistence.replaceErr = tc.storeErr
 			settings := persistence.snapshot.Policy.Settings()
 			settings.DesktopAuthorizationEnabled = false
-			_, err := service.ReplaceAccessPolicy(context.Background(), invocation, ReplaceAccessPolicyCommand{
+			_, err := service.ReplaceAccessPolicy(context.Background(), inv, ReplaceAccessPolicyCommand{
 				ExpectedRevision: 1, Settings: settings, IdempotencyKey: "failed-" + tc.name,
 			})
 			require.True(t, apperror.Is(err, tc.wantCode), "error = %v, want %s", err, tc.wantCode)
@@ -309,10 +309,10 @@ func TestAccessPolicyReplacementCompletesRevisionBlockerAndStoreFailures(t *test
 
 func TestAccessPolicyReadFailsSafelyForMissingSnapshot(t *testing.T) {
 	t.Parallel()
-	service, persistence, _, _, _, invocation := accessPolicyFixture(t)
+	service, persistence, _, _, _, inv := accessPolicyFixture(t)
 	for _, snapshot := range []*store.AccessPolicySnapshot{nil, {}} {
 		persistence.snapshot = snapshot
-		_, err := service.GetAccessPolicy(context.Background(), invocation)
+		_, err := service.GetAccessPolicy(context.Background(), inv)
 		require.True(t, apperror.Is(err, "access_policy.unavailable"), "snapshot %#v error = %v", snapshot, err)
 	}
 }

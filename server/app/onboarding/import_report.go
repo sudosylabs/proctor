@@ -23,16 +23,16 @@ import (
 // OnboardingImportReport writes a finished onboarding import's row report.
 func (s *Service) OnboardingImportReport(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	id model.OnboardingImportID,
 	output io.Writer,
 ) error {
-	return s.reportImport(ctx, invocation, id, output, "")
+	return s.reportImport(ctx, inv, id, output, "")
 }
 
 func (s *Service) reportImport(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	id model.OnboardingImportID,
 	output io.Writer,
 	expectedMode model.OnboardingImportMode,
@@ -48,7 +48,7 @@ func (s *Service) reportImport(
 	if err != nil {
 		return onboardingImportStoreErrors.Translate(err)
 	}
-	if err = s.authorizeImport(ctx, invocation, current, false); err != nil {
+	if err = s.authorizeImport(ctx, inv, current, false); err != nil {
 		return err
 	}
 	if expectedMode != "" && current.Mode != expectedMode {

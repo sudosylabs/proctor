@@ -44,7 +44,7 @@ type RemoveEntryCommand struct {
 // Exam Draft's Starter Workspace, fenced by ExpectedDraftRevision.
 func (s *Service) CreateExamStarterWorkspaceDirectory(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command CreateDirectoryCommand,
 ) (_ Result, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -54,7 +54,7 @@ func (s *Service) CreateExamStarterWorkspaceDirectory(
 	}
 
 	commandIdempotency, err := prepareWorkspaceIdempotency(
-		invocation,
+		inv,
 		idempotencyOperationCreateDirectory,
 		command.IdempotencyKey,
 		command.ExamID,
@@ -70,7 +70,7 @@ func (s *Service) CreateExamStarterWorkspaceDirectory(
 		return Result{}, err
 	}
 
-	authorization, err := s.authorizeExam(ctx, invocation, command.ExamID, true)
+	authorization, err := s.authorizeExam(ctx, inv, command.ExamID, true)
 	if err != nil {
 		return Result{}, err
 	}
@@ -83,7 +83,7 @@ func (s *Service) CreateExamStarterWorkspaceDirectory(
 
 	mutation := &store.ExamStarterWorkspaceMutation{
 		ExamID:                command.ExamID,
-		ActorUserID:           invocation.Principal().UserID,
+		ActorUserID:           inv.Principal().UserID,
 		ManagerOverride:       authorization.override,
 		ExpectedDraftRevision: command.ExpectedDraftRevision,
 		ChangedAt:             at,
@@ -92,7 +92,7 @@ func (s *Service) CreateExamStarterWorkspaceDirectory(
 	}
 	return s.runMutation(
 		ctx,
-		invocation,
+		inv,
 		authorization,
 		"directory_create",
 		ChangeDirectoryCreated,
@@ -106,7 +106,7 @@ func (s *Service) CreateExamStarterWorkspaceDirectory(
 // Draft's Starter Workspace to a new path, fenced by ExpectedDraftRevision.
 func (s *Service) MoveExamStarterWorkspaceEntry(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command MoveEntryCommand,
 ) (_ Result, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -116,7 +116,7 @@ func (s *Service) MoveExamStarterWorkspaceEntry(
 	}
 
 	commandIdempotency, err := prepareWorkspaceIdempotency(
-		invocation,
+		inv,
 		idempotencyOperationMoveEntry,
 		command.IdempotencyKey,
 		command.ExamID,
@@ -132,7 +132,7 @@ func (s *Service) MoveExamStarterWorkspaceEntry(
 		return Result{}, err
 	}
 
-	authorization, err := s.authorizeExam(ctx, invocation, command.ExamID, true)
+	authorization, err := s.authorizeExam(ctx, inv, command.ExamID, true)
 	if err != nil {
 		return Result{}, err
 	}
@@ -140,14 +140,14 @@ func (s *Service) MoveExamStarterWorkspaceEntry(
 	at := model.TimeUTC(s.now())
 	mutation := &store.ExamStarterWorkspaceMutation{
 		ExamID:                command.ExamID,
-		ActorUserID:           invocation.Principal().UserID,
+		ActorUserID:           inv.Principal().UserID,
 		ManagerOverride:       authorization.override,
 		ExpectedDraftRevision: command.ExpectedDraftRevision,
 		ChangedAt:             at,
 		EntryID:               command.EntryID,
 		Path:                  path,
 	}
-	return s.runMutation(ctx, invocation, authorization, "entry_move", ChangeEntryMoved, mutation, commandIdempotency, s.workspaces.MoveEntry)
+	return s.runMutation(ctx, inv, authorization, "entry_move", ChangeEntryMoved, mutation, commandIdempotency, s.workspaces.MoveEntry)
 }
 
 // RemoveExamStarterWorkspaceEntry idempotently removes an entry, recursively
@@ -155,7 +155,7 @@ func (s *Service) MoveExamStarterWorkspaceEntry(
 // ExpectedDraftRevision.
 func (s *Service) RemoveExamStarterWorkspaceEntry(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command RemoveEntryCommand,
 ) (_ Result, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -163,7 +163,7 @@ func (s *Service) RemoveExamStarterWorkspaceEntry(
 		return Result{}, err
 	}
 
-	commandIdempotency, err := idempotency.Require(invocation, idempotencyOperationRemoveEntry, command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Require(inv, idempotencyOperationRemoveEntry, command.IdempotencyKey, struct {
 		ExamID                string `json:"exam_id"`
 		ExpectedDraftRevision int64  `json:"expected_draft_revision"`
 		EntryID               string `json:"entry_id,omitempty"`
@@ -173,7 +173,7 @@ func (s *Service) RemoveExamStarterWorkspaceEntry(
 		return Result{}, err
 	}
 
-	authorization, err := s.authorizeExam(ctx, invocation, command.ExamID, true)
+	authorization, err := s.authorizeExam(ctx, inv, command.ExamID, true)
 	if err != nil {
 		return Result{}, err
 	}
@@ -181,7 +181,7 @@ func (s *Service) RemoveExamStarterWorkspaceEntry(
 	at := model.TimeUTC(s.now())
 	mutation := &store.ExamStarterWorkspaceMutation{
 		ExamID:                command.ExamID,
-		ActorUserID:           invocation.Principal().UserID,
+		ActorUserID:           inv.Principal().UserID,
 		ManagerOverride:       authorization.override,
 		ExpectedDraftRevision: command.ExpectedDraftRevision,
 		ChangedAt:             at,
@@ -190,7 +190,7 @@ func (s *Service) RemoveExamStarterWorkspaceEntry(
 	}
 	return s.runMutation(
 		ctx,
-		invocation,
+		inv,
 		authorization,
 		"entry_remove",
 		ChangeEntryRemoved,

@@ -70,7 +70,7 @@ func TestMFASecurityTransitionsPrepareOneOrdinaryNoticeWithoutSecrets(t *testing
 	service := newTestMFAApplicationService(t, persistence, &securityAuditorFake{}, &realtimetest.Publisher{}, now)
 	service.mail = mailer
 	application := service
-	invocation := invocation.New(principal, model.RequestMetadata{RequestID: "mfa-notices"})
+	inv := invocation.New(principal, model.RequestMetadata{RequestID: "mfa-notices"})
 	const secret = "JBSWY3DPEHPK3PXP" // #nosec G101 -- Public synthetic TOTP seed.
 	sealed, err := service.mfa.sealTOTPSecret(principal.UserID.String(), secret)
 	require.NoError(t, err)
@@ -82,12 +82,12 @@ func TestMFASecurityTransitionsPrepareOneOrdinaryNoticeWithoutSecrets(t *testing
 	}
 	code, err := computeTOTP(secret, now.Unix()/30)
 	require.NoError(t, err)
-	_, err = application.ActivateMFA(context.Background(), invocation, ActivateMFACommand{Code: code})
+	_, err = application.ActivateMFA(context.Background(), inv, ActivateMFACommand{Code: code})
 	require.NoError(t, err)
 
-	_, err = application.RegenerateMFARecoveryCodes(context.Background(), invocation)
+	_, err = application.RegenerateMFARecoveryCodes(context.Background(), inv)
 	require.NoError(t, err)
-	require.NoError(t, application.DisableMFA(context.Background(), invocation))
+	require.NoError(t, application.DisableMFA(context.Background(), inv))
 	require.Len(t, mailer.requests, 3, "mail preparations")
 	for index, want := range []model.MailTemplateKey{
 		model.MailTemplateIdentityMFAEnabled,

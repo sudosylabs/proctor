@@ -27,7 +27,7 @@ func TestEditDraftTextOwnsAuthorizationAuditPersistenceAndSafeEffect(t *testing.
 	title := "  Distributed Systems  "
 	instructions := "Use **Go** and submit all files."
 	command := "test-key"
-	view, err := fixture.service.EditExamDraftText(context.Background(), fixture.invocation, EditDraftTextCommand{
+	view, err := fixture.service.EditExamDraftText(context.Background(), fixture.inv, EditDraftTextCommand{
 		ExamID: fixture.examID, ExpectedDraftRevision: 1,
 		Title: &title, InstructionsMarkdown: &instructions, IdempotencyKey: command,
 	})
@@ -59,7 +59,7 @@ func TestEditDraftTextNoChangeSkipsAuditPersistenceAndEffect(t *testing.T) {
 	fixture.persistence.actorIsManager = true
 	fixture.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: fixture.unitID, UserID: fixture.userID}}
 	title := "  Test  "
-	_, err := fixture.service.EditExamDraftText(context.Background(), fixture.invocation, EditDraftTextCommand{
+	_, err := fixture.service.EditExamDraftText(context.Background(), fixture.inv, EditDraftTextCommand{
 		ExamID: fixture.examID, ExpectedDraftRevision: 1, Title: &title,
 		IdempotencyKey: "test-key",
 	})
@@ -91,7 +91,7 @@ func TestEditDraftTextRejectsArchivedAndStaleDraftsWithoutPublishing(t *testing.
 			fixture.persistence.archived = test.archived
 			fixture.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: fixture.unitID, UserID: fixture.userID}}
 			title := "Changed"
-			_, err := fixture.service.EditExamDraftText(context.Background(), fixture.invocation, EditDraftTextCommand{
+			_, err := fixture.service.EditExamDraftText(context.Background(), fixture.inv, EditDraftTextCommand{
 				ExamID: fixture.examID, ExpectedDraftRevision: test.expectedRevision, Title: &title,
 				IdempotencyKey: "test-key",
 			})
@@ -113,7 +113,7 @@ func TestEditDraftTextArchivedNoOpStillRejectsAsArchived(t *testing.T) {
 	fixture.persistence.archived = true
 	fixture.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: fixture.unitID, UserID: fixture.userID}}
 	title := "  Test  "
-	_, err := fixture.service.EditExamDraftText(context.Background(), fixture.invocation, EditDraftTextCommand{
+	_, err := fixture.service.EditExamDraftText(context.Background(), fixture.inv, EditDraftTextCommand{
 		ExamID: fixture.examID, ExpectedDraftRevision: 1, Title: &title,
 		IdempotencyKey: "test-key",
 	})
@@ -133,7 +133,7 @@ func TestEditDraftTextReplayDoesNotRepublish(t *testing.T) {
 	fixture.persistence.replayed = true
 	fixture.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: fixture.unitID, UserID: fixture.userID}}
 	title := "Changed"
-	_, err := fixture.service.EditExamDraftText(context.Background(), fixture.invocation, EditDraftTextCommand{
+	_, err := fixture.service.EditExamDraftText(context.Background(), fixture.inv, EditDraftTextCommand{
 		ExamID: fixture.examID, ExpectedDraftRevision: 1, Title: &title,
 		IdempotencyKey: "test-key",
 	})
@@ -145,7 +145,7 @@ func TestEditDraftTextUsesExplicitOverrideWithoutManagerMembership(t *testing.T)
 	t.Parallel()
 	fixture := newAuthoringFixture(t)
 	title := "Changed"
-	_, err := fixture.service.EditExamDraftText(context.Background(), fixture.invocation, EditDraftTextCommand{
+	_, err := fixture.service.EditExamDraftText(context.Background(), fixture.inv, EditDraftTextCommand{
 		ExamID: fixture.examID, ExpectedDraftRevision: 1, Title: &title,
 		IdempotencyKey: "test-key",
 	})

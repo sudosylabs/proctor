@@ -55,15 +55,15 @@ type CountsResult struct {
 // out of the summary; a reduced test graph may lack some.
 type CountsDependencies struct {
 	// PendingInvitations counts pending Invitations that have not expired.
-	PendingInvitations func(ctx context.Context, invocation invocation.Invocation, maximum int) (int, error)
+	PendingInvitations func(ctx context.Context, inv invocation.Invocation, maximum int) (int, error)
 	// RecentJobFailures counts operator-visible Jobs that failed within the
 	// span.
-	RecentJobFailures func(ctx context.Context, invocation invocation.Invocation, within time.Duration, maximum int) (int, error)
+	RecentJobFailures func(ctx context.Context, inv invocation.Invocation, within time.Duration, maximum int) (int, error)
 	// FailedMailDeliveries counts mail deliveries in the failed terminal
 	// state.
-	FailedMailDeliveries func(ctx context.Context, invocation invocation.Invocation, maximum int) (int, error)
+	FailedMailDeliveries func(ctx context.Context, inv invocation.Invocation, maximum int) (int, error)
 	// OpenOnboardingImports counts administrative imports still in progress.
-	OpenOnboardingImports func(ctx context.Context, invocation invocation.Invocation, maximum int) (int, error)
+	OpenOnboardingImports func(ctx context.Context, inv invocation.Invocation, maximum int) (int, error)
 }
 
 // Counts answers the bounded counts behind the administration navigation,
@@ -84,9 +84,9 @@ func NewCounts(deps CountsDependencies) *Counts {
 // caller may not list is left out rather than failing the summary.
 func (s *Counts) AdministrationCounts(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 ) (CountsResult, error) {
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return CountsResult{}, access.InvalidTokenAppError()
 	}
@@ -94,25 +94,25 @@ func (s *Counts) AdministrationCounts(
 	var counts CountsResult
 	var err error
 	if counts.PendingInvitations, err = boundedCount(s.deps.PendingInvitations != nil, func() (int, error) {
-		return s.deps.PendingInvitations(ctx, invocation, MaximumCount)
+		return s.deps.PendingInvitations(ctx, inv, MaximumCount)
 	}); err != nil {
 		return CountsResult{}, err
 	}
 
 	if counts.FailedJobs, err = boundedCount(s.deps.RecentJobFailures != nil, func() (int, error) {
-		return s.deps.RecentJobFailures(ctx, invocation, failedJobWindow, MaximumCount)
+		return s.deps.RecentJobFailures(ctx, inv, failedJobWindow, MaximumCount)
 	}); err != nil {
 		return CountsResult{}, err
 	}
 
 	if counts.FailedMailDeliveries, err = boundedCount(s.deps.FailedMailDeliveries != nil, func() (int, error) {
-		return s.deps.FailedMailDeliveries(ctx, invocation, MaximumCount)
+		return s.deps.FailedMailDeliveries(ctx, inv, MaximumCount)
 	}); err != nil {
 		return CountsResult{}, err
 	}
 
 	if counts.OpenOnboardingImports, err = boundedCount(s.deps.OpenOnboardingImports != nil, func() (int, error) {
-		return s.deps.OpenOnboardingImports(ctx, invocation, MaximumCount)
+		return s.deps.OpenOnboardingImports(ctx, inv, MaximumCount)
 	}); err != nil {
 		return CountsResult{}, err
 	}

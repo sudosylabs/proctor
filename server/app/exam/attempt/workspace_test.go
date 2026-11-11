@@ -37,12 +37,12 @@ func TestCreateWorkspaceDirectoryRevalidatesMutationAccessAuditsAndPublishesSafe
 		CandidateUserID: f.userID, WorkspaceID: workspaceID,
 		Entry: &store.CandidateAttemptWorkspaceItem{EntryID: entryID, Kind: model.StarterWorkspaceEntryDirectory, Path: "src"}, Change: change}
 
-	result, err := f.service.CreateCandidateExamWorkspaceDirectory(context.Background(), f.invocation, CreateWorkspaceDirectoryCommand{Access: WorkspaceMutationAccess{CandidateAccess: CandidateAccess{AttemptID: f.attemptID, ConnectionID: f.connectionID,
+	result, err := f.service.CreateCandidateExamWorkspaceDirectory(context.Background(), f.inv, CreateWorkspaceDirectoryCommand{Access: WorkspaceMutationAccess{CandidateAccess: CandidateAccess{AttemptID: f.attemptID, ConnectionID: f.connectionID,
 		ContinuityCredential: credential}, ParticipationID: participationID, Generation: 4},
 		Path: "src", IdempotencyKey: "test-key",
 	})
 	require.NoError(t, err)
-	principal := f.invocation.Principal()
+	principal := f.inv.Principal()
 	workspaceAccess := f.workspace.resolvedAccess
 	require.Equal(t, f.attemptID, workspaceAccess.AttemptID, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.publisher.Calls())
 	require.Equal(t, participationID, workspaceAccess.ParticipationID, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.publisher.Calls())
@@ -68,7 +68,7 @@ func TestCreateWorkspaceDirectoryRevalidatesMutationAccessAuditsAndPublishesSafe
 	// Contract (guardrails 8 and 14): the audit begins before the durable write,
 	// and the write commits before its effect.
 	require.Equal(t, []string{"workspace.resolve", "audit", "workspace.apply", "effects"}, f.order)
-	wantIdempotency, prepareErr := prepareWorkspaceMutationIdempotency(f.invocation, "test-key", f.attemptID,
+	wantIdempotency, prepareErr := prepareWorkspaceMutationIdempotency(f.inv, "test-key", f.attemptID,
 		model.AttemptWorkspaceMutationCreateDirectory, struct {
 			Path string `json:"path"`
 		}{"src"})
@@ -91,7 +91,7 @@ func TestCreateWorkspaceFileStagesBeforeAtomicMutationAndSuppressesPrivateEffect
 		model.AttemptWorkspaceMutationCreateFile, "", "main.go", version, false)
 	f.content.attemptContent = &model.AttemptWorkspaceContent{MediaType: "text/plain", SizeBytes: 4, SHA256: checksum}
 
-	result, err := f.service.CreateCandidateExamWorkspaceFile(context.Background(), f.invocation, CreateWorkspaceFileCommand{Access: WorkspaceMutationAccess{CandidateAccess: CandidateAccess{AttemptID: f.attemptID, ConnectionID: f.connectionID,
+	result, err := f.service.CreateCandidateExamWorkspaceFile(context.Background(), f.inv, CreateWorkspaceFileCommand{Access: WorkspaceMutationAccess{CandidateAccess: CandidateAccess{AttemptID: f.attemptID, ConnectionID: f.connectionID,
 		ContinuityCredential: credential}, ParticipationID: participationID, Generation: 2},
 		Path: "main.go", MediaType: "text/plain", ExpectedSHA256: checksum, Body: strings.NewReader("main"), Size: 4,
 		IdempotencyKey: "test-key",
@@ -117,7 +117,7 @@ func TestCreateWorkspaceFileStagesBeforeAtomicMutationAndSuppressesPrivateEffect
 	// before the durable apply (guardrail 8), and the apply commits before its
 	// effect (guardrail 14).
 	require.Equal(t, []string{"workspace.resolve", "workspace.reserve", "content.stage", "workspace.ready", "audit", "workspace.apply", "effects"}, f.order)
-	wantIdempotency, prepareErr := prepareWorkspaceMutationIdempotency(f.invocation, "test-key", f.attemptID,
+	wantIdempotency, prepareErr := prepareWorkspaceMutationIdempotency(f.inv, "test-key", f.attemptID,
 		model.AttemptWorkspaceMutationCreateFile, struct {
 			Path, MediaType, SHA256 string
 			Size                    int64
@@ -140,9 +140,9 @@ func TestReplaceWorkspaceFilePassesOwnedIdempotencyToStore(t *testing.T) {
 	command := ReplaceWorkspaceFileCommand{Access: validWorkspaceMutationAccess(f),
 		EntryID: entryID, ExpectedPath: "main.go", ExpectedContentVersion: currentVersion, MediaType: "text/plain",
 		ExpectedSHA256: checksum, Body: strings.NewReader("main"), Size: 4, IdempotencyKey: "replace-key"}
-	_, err := f.service.ReplaceCandidateExamWorkspaceFile(context.Background(), f.invocation, command)
+	_, err := f.service.ReplaceCandidateExamWorkspaceFile(context.Background(), f.inv, command)
 	require.NoError(t, err)
-	want, err := prepareWorkspaceMutationIdempotency(f.invocation, "replace-key", f.attemptID,
+	want, err := prepareWorkspaceMutationIdempotency(f.inv, "replace-key", f.attemptID,
 		model.AttemptWorkspaceMutationReplaceFile, struct {
 			EntryID, Path, Version, MediaType, SHA256 string
 			Size                                      int64
@@ -163,7 +163,7 @@ func TestWorkspaceFileReplayReclaimsLosingStageAndPublishesNoEffect(t *testing.T
 	f.workspace.proposedEntryID = model.NewAttemptWorkspaceEntryID()
 	f.workspace.proposedVersion = model.NewWorkspaceContentVersion()
 	f.content.attemptContent = &model.AttemptWorkspaceContent{MediaType: "text/plain", SizeBytes: 1, SHA256: checksum}
-	_, err := f.service.CreateCandidateExamWorkspaceFile(context.Background(), f.invocation, CreateWorkspaceFileCommand{Access: validWorkspaceMutationAccess(f), Path: "retry.txt", MediaType: "text/plain", ExpectedSHA256: checksum,
+	_, err := f.service.CreateCandidateExamWorkspaceFile(context.Background(), f.inv, CreateWorkspaceFileCommand{Access: validWorkspaceMutationAccess(f), Path: "retry.txt", MediaType: "text/plain", ExpectedSHA256: checksum,
 		Body: strings.NewReader("x"), Size: 1, IdempotencyKey: "test-key",
 	})
 	require.NoError(t, err, "error=%v reclaimable=%v effects=%#v", err, f.workspace.reclaimable, f.publisher.Calls())
@@ -184,7 +184,7 @@ func TestWorkspaceDirectoryReplayAcceptsRetainedEntryInsteadOfFreshProposal(t *t
 	f.workspace.mutationResult = workspaceMutationResultFixture(f, workspaceID, retainedID, model.StarterWorkspaceEntryDirectory,
 		model.AttemptWorkspaceMutationCreateDirectory, "", "src", "", true)
 	f.workspace.proposedEntryID = model.NewAttemptWorkspaceEntryID()
-	result, err := f.service.CreateCandidateExamWorkspaceDirectory(context.Background(), f.invocation, CreateWorkspaceDirectoryCommand{Access: validWorkspaceMutationAccess(f), Path: "src", IdempotencyKey: "test-key"})
+	result, err := f.service.CreateCandidateExamWorkspaceDirectory(context.Background(), f.inv, CreateWorkspaceDirectoryCommand{Access: validWorkspaceMutationAccess(f), Path: "src", IdempotencyKey: "test-key"})
 	require.NoError(t, err, "result=%#v mutation=%#v error", result, f.workspace.mutation)
 	require.NotNil(t, result.Entry, "result=%#v mutation=%#v error", result, f.workspace.mutation)
 	require.Equal(t, retainedID, result.Entry.EntryID, "result=%#v mutation=%#v error", result, f.workspace.mutation)
@@ -214,7 +214,7 @@ func TestWorkspaceReadyObjectReclamationDistinguishesStableAndUnknownApplyOutcom
 			f.workspace.mutationErr = test.err
 			checksum := strings.Repeat("d", 64)
 			f.content.attemptContent = &model.AttemptWorkspaceContent{MediaType: "text/plain", SizeBytes: 1, SHA256: checksum}
-			_, err := f.service.CreateCandidateExamWorkspaceFile(context.Background(), f.invocation, CreateWorkspaceFileCommand{Access: validWorkspaceMutationAccess(f),
+			_, err := f.service.CreateCandidateExamWorkspaceFile(context.Background(), f.inv, CreateWorkspaceFileCommand{Access: validWorkspaceMutationAccess(f),
 				Path: "work.txt", MediaType: "text/plain", ExpectedSHA256: checksum, Body: strings.NewReader("x"), Size: 1,
 				IdempotencyKey: "test-key"})
 			var fault *apperror.Error
@@ -234,7 +234,7 @@ func TestWorkspaceMetadataMutationsCarrySelectiveEntryFences(t *testing.T) {
 		check     func(*testing.T, *store.ExamAttemptWorkspaceMutation)
 	}{
 		{name: "move", operation: model.AttemptWorkspaceMutationMoveEntry, invoke: func(f *fixture, id model.AttemptWorkspaceEntryID, _ model.WorkspaceContentVersion) error {
-			_, err := f.service.MoveCandidateExamWorkspaceEntry(context.Background(), f.invocation, MoveWorkspaceEntryCommand{Access: validWorkspaceMutationAccess(f),
+			_, err := f.service.MoveCandidateExamWorkspaceEntry(context.Background(), f.inv, MoveWorkspaceEntryCommand{Access: validWorkspaceMutationAccess(f),
 				EntryID: id, ExpectedPath: "old", DestinationPath: "new", IdempotencyKey: "test-key"})
 			return err
 		}, check: func(t *testing.T, mutation *store.ExamAttemptWorkspaceMutation) {
@@ -242,7 +242,7 @@ func TestWorkspaceMetadataMutationsCarrySelectiveEntryFences(t *testing.T) {
 			require.Equal(t, "new", mutation.DestinationPath)
 		}},
 		{name: "delete_file", operation: model.AttemptWorkspaceMutationDeleteEntry, invoke: func(f *fixture, id model.AttemptWorkspaceEntryID, version model.WorkspaceContentVersion) error {
-			_, err := f.service.DeleteCandidateExamWorkspaceEntry(context.Background(), f.invocation, DeleteWorkspaceEntryCommand{Access: validWorkspaceMutationAccess(f),
+			_, err := f.service.DeleteCandidateExamWorkspaceEntry(context.Background(), f.inv, DeleteWorkspaceEntryCommand{Access: validWorkspaceMutationAccess(f),
 				EntryID: id, ExpectedPath: "old", ExpectedContentVersion: version, IdempotencyKey: "test-key"})
 			return err
 		}, check: func(t *testing.T, mutation *store.ExamAttemptWorkspaceMutation) {
@@ -270,7 +270,7 @@ func TestWorkspaceMetadataMutationsCarrySelectiveEntryFences(t *testing.T) {
 			case model.AttemptWorkspaceMutationDeleteEntry:
 				semantic = struct{ EntryID, ExpectedPath, ExpectedContentVersion string }{entryID.String(), "old", version.String()}
 			}
-			want, prepareErr := prepareWorkspaceMutationIdempotency(f.invocation, "test-key", f.attemptID, test.operation, semantic)
+			want, prepareErr := prepareWorkspaceMutationIdempotency(f.inv, "test-key", f.attemptID, test.operation, semantic)
 			require.NoError(t, prepareErr)
 			require.Equal(t, want, f.workspace.idempotency)
 		})

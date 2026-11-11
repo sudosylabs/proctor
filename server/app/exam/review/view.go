@@ -40,14 +40,14 @@ type ListDiscrepanciesQuery struct {
 // Submission to a caller authorized to view it.
 func (s *Service) GetExamIntegrityReview(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	submissionID model.SubmissionID,
 ) (_ *store.ExamSubmissionReviewSnapshot, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	if !submissionID.IsValid() {
 		return nil, apperror.Invalid("exam.integrity_review.invalid", "submission_id")
 	}
-	if err := s.authorizer.AuthorizeSubmissionView(ctx, invocation, submissionID); err != nil {
+	if err := s.authorizer.AuthorizeSubmissionView(ctx, inv, submissionID); err != nil {
 		return nil, err
 	}
 
@@ -66,14 +66,14 @@ func (s *Service) GetExamIntegrityReview(
 // to a caller authorized to view its Submission Review.
 func (s *Service) ListExamIntegrityFlags(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query ListFlagsQuery,
 ) (_ *store.ExamIntegrityFlagPage, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	if !query.SubmissionID.IsValid() || query.Limit < 1 || query.Limit > store.ExamIntegrityReviewFlagReadMaximum {
 		return nil, apperror.Invalid("exam.integrity_review.invalid", "flag_list")
 	}
-	if err := s.authorizer.AuthorizeSubmissionView(ctx, invocation, query.SubmissionID); err != nil {
+	if err := s.authorizer.AuthorizeSubmissionView(ctx, inv, query.SubmissionID); err != nil {
 		return nil, err
 	}
 
@@ -105,7 +105,7 @@ func (s *Service) ListExamIntegrityFlags(
 // Submission Review.
 func (s *Service) ListExamIntegrityEvidence(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query ListEvidenceQuery,
 ) (_ *store.ExamIntegrityEvidencePage, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -116,7 +116,7 @@ func (s *Service) ListExamIntegrityEvidence(
 		return nil, apperror.Invalid("exam.integrity_review.invalid", "evidence_list")
 	}
 
-	if err := s.authorizer.AuthorizeSubmissionView(ctx, invocation, query.SubmissionID); err != nil {
+	if err := s.authorizer.AuthorizeSubmissionView(ctx, inv, query.SubmissionID); err != nil {
 		return nil, err
 	}
 
@@ -147,14 +147,14 @@ func (s *Service) ListExamIntegrityEvidence(
 // discrepancies to a caller authorized to view its Submission Review.
 func (s *Service) ListExamIntegrityDiscrepancies(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query ListDiscrepanciesQuery,
 ) (_ *store.ExamIntegrityDiscrepancyPage, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	if !query.SubmissionID.IsValid() || query.Limit < 1 || query.Limit > store.ExamIntegrityReviewDiscrepancyReadMaximum {
 		return nil, apperror.Invalid("exam.integrity_review.invalid", "discrepancy_list")
 	}
-	if err := s.authorizer.AuthorizeSubmissionView(ctx, invocation, query.SubmissionID); err != nil {
+	if err := s.authorizer.AuthorizeSubmissionView(ctx, inv, query.SubmissionID); err != nil {
 		return nil, err
 	}
 

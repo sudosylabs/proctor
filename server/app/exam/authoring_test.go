@@ -32,15 +32,15 @@ func TestCallClonesCredentialScopes(t *testing.T) {
 	principal.AuthenticationStrength = ""
 	principal.AuthenticatedAt = time.Time{}
 	principal.ClientType = model.SessionClientCLI
-	invocation := invocation.New(principal, model.RequestMetadata{RequestID: "request"})
+	inv := invocation.New(principal, model.RequestMetadata{RequestID: "request"})
 	principal.CredentialScopes[0] = string(model.ActionAuditView)
-	got := invocation.Principal()
+	got := inv.Principal()
 	require.Equal(t, string(model.ActionExamCreate), got.CredentialScopes[0])
 }
 
 type authoringFixture struct {
 	service     *Authoring
-	invocation  invocation.Invocation
+	inv         invocation.Invocation
 	unitID      model.AcademicUnitID
 	examID      model.ExamID
 	userID      model.UserID
@@ -86,7 +86,7 @@ func newAuthoringFixture(t *testing.T) authoringFixture {
 		InstitutionOrigin: "https://institution.example",
 	})
 	require.NoError(t, err)
-	return authoringFixture{service: service, invocation: invocation.New(testPrincipal(userID), model.RequestMetadata{}), unitID: unitID, examID: examID, userID: userID, order: &order, authorizer: authorizer, memberships: memberships, users: users, mail: mail, auditor: auditor, outcomes: outcomes, persistence: persistence, publisher: publisher, sittings: sittings}
+	return authoringFixture{service: service, inv: invocation.New(testPrincipal(userID), model.RequestMetadata{}), unitID: unitID, examID: examID, userID: userID, order: &order, authorizer: authorizer, memberships: memberships, users: users, mail: mail, auditor: auditor, outcomes: outcomes, persistence: persistence, publisher: publisher, sittings: sittings}
 }
 
 type commandOutcomesFake struct {

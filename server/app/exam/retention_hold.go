@@ -38,7 +38,7 @@ type ReleaseRetentionHoldCommand struct {
 // records scope to a caller authorized to manage holds.
 func (r *Records) ListRetentionHolds(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	query store.ExamRecordsHoldListOptions,
 ) (_ *store.ExamRecordsHoldPage, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -48,7 +48,7 @@ func (r *Records) ListRetentionHolds(
 
 	if _, _, err := r.authorizeScope(
 		ctx,
-		invocation,
+		inv,
 		query.Scope,
 		model.ActionExamRecordsHold,
 		model.ActionExamRecordsHoldOverride,
@@ -78,7 +78,7 @@ func (r *Records) ListRetentionHolds(
 // scope with a recorded reason.
 func (r *Records) CreateRetentionHold(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command CreateRetentionHoldCommand,
 ) (_ *model.RetentionHold, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -88,12 +88,12 @@ func (r *Records) CreateRetentionHold(
 
 	key := command.IdempotencyKey
 	command.IdempotencyKey = ""
-	commandIdempotency, err := idempotency.Require(invocation, store.ExamRecordsCreateHoldOperation, key, command)
+	commandIdempotency, err := idempotency.Require(inv, store.ExamRecordsCreateHoldOperation, key, command)
 	if err != nil {
 		return nil, err
 	}
 
-	scope, action, err := r.authorizeScope(ctx, invocation, command.Scope, model.ActionExamRecordsHold, model.ActionExamRecordsHoldOverride, false)
+	scope, action, err := r.authorizeScope(ctx, inv, command.Scope, model.ActionExamRecordsHold, model.ActionExamRecordsHoldOverride, false)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +105,7 @@ func (r *Records) CreateRetentionHold(
 
 	mutation, err := r.beginMutation(
 		ctx,
-		invocation,
+		inv,
 		scope,
 		action,
 		"create_hold",
@@ -136,7 +136,7 @@ func (r *Records) CreateRetentionHold(
 // no override.
 func (r *Records) ReleaseRetentionHold(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ReleaseRetentionHoldCommand,
 ) (_ *model.RetentionHold, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -148,23 +148,23 @@ func (r *Records) ReleaseRetentionHold(
 
 	key := command.IdempotencyKey
 	command.IdempotencyKey = ""
-	commandIdempotency, err := idempotency.Require(invocation, store.ExamRecordsReleaseHoldOperation, key, command)
+	commandIdempotency, err := idempotency.Require(inv, store.ExamRecordsReleaseHoldOperation, key, command)
 	if err != nil {
 		return nil, err
 	}
 
-	scope, action, err := r.authorizeScope(ctx, invocation, command.Scope, model.ActionRetentionHoldRelease, "", false)
+	scope, action, err := r.authorizeScope(ctx, inv, command.Scope, model.ActionRetentionHoldRelease, "", false)
 	if err != nil {
 		return nil, err
 	}
-	if !invocation.Principal().HasStrongAuthentication() {
+	if !inv.Principal().HasStrongAuthentication() {
 		return nil, apperror.New("authentication.strong_required")
 	}
-	if !invocation.Principal().IsRecentlyAuthenticated(model.TimeUTC(r.now()), r.recentTTL) {
+	if !inv.Principal().IsRecentlyAuthenticated(model.TimeUTC(r.now()), r.recentTTL) {
 		return nil, apperror.New("authentication.reauthentication_required")
 	}
 
-	mutation, err := r.beginMutation(ctx, invocation, scope, action, "release_hold", map[string]any{
+	mutation, err := r.beginMutation(ctx, inv, scope, action, "release_hold", map[string]any{
 		"retention_hold_id": command.HoldID.String(),
 		"expected_revision": command.ExpectedRevision,
 		"reason_code":       command.ReasonCode,

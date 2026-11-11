@@ -221,9 +221,9 @@ func (s *Service) ResolveAttemptDesktopBuild(
 // GetDesktopCompatibilityPolicy returns the current administrative policy.
 func (s *Service) GetDesktopCompatibilityPolicy(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 ) (*model.DesktopCompatibilityPolicy, error) {
-	if _, _, err := s.authorizeInstitutionAction(ctx, invocation, model.ActionAccessPolicyView); err != nil {
+	if _, _, err := s.authorizeInstitutionAction(ctx, inv, model.ActionAccessPolicyView); err != nil {
 		return nil, err
 	}
 	policy, err := s.desktopCompatibilityPolicies.Get(ctx)
@@ -236,11 +236,11 @@ func (s *Service) GetDesktopCompatibilityPolicy(
 // ReplaceDesktopCompatibilityPolicy replaces the current policy.
 func (s *Service) ReplaceDesktopCompatibilityPolicy(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	command ReplaceDesktopCompatibilityPolicyCommand,
 ) (*model.DesktopCompatibilityPolicy, error) {
 	if err := access.RequireStrongRecentSession(
-		invocation.Principal(),
+		inv.Principal(),
 		s.now(),
 		s.recentAuthenticationTTL,
 	); err != nil {
@@ -249,7 +249,7 @@ func (s *Service) ReplaceDesktopCompatibilityPolicy(
 
 	institution, resource, err := s.authorizeInstitutionAction(
 		ctx,
-		invocation,
+		inv,
 		model.ActionDesktopCompatibilityPolicyManage,
 	)
 	if err != nil {
@@ -263,7 +263,7 @@ func (s *Service) ReplaceDesktopCompatibilityPolicy(
 	}
 
 	commandIdempotency, err := idempotency.Prepare(
-		invocation,
+		inv,
 		"desktop_compatibility_policy.replace",
 		command.IdempotencyKey,
 		struct {
@@ -282,7 +282,7 @@ func (s *Service) ReplaceDesktopCompatibilityPolicy(
 		ctx,
 		s.auditor,
 		access.Mutation{
-			Invocation: invocation,
+			Invocation: inv,
 			Action:     model.ActionDesktopCompatibilityPolicyManage,
 			Resource:   resource,
 			ScopeType:  model.RoleScopeInstitution,
@@ -305,7 +305,7 @@ func (s *Service) ReplaceDesktopCompatibilityPolicy(
 			return s.desktopCompatibilityPolicies.Replace(
 				ctx,
 				&store.DesktopCompatibilityPolicyReplacement{
-					ActorID:          invocation.Principal().UserID,
+					ActorID:          inv.Principal().UserID,
 					ExpectedRevision: command.ExpectedRevision,
 					Settings:         command.Settings,
 					AuditEventID:     reference.ID,
@@ -328,7 +328,7 @@ func (s *Service) ReplaceDesktopCompatibilityPolicy(
 
 func (s *Service) authorizeInstitutionAction(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	action model.Action,
 ) (*model.Institution, model.Resource, error) {
 	institution, err := s.institutions.GetSingleton(ctx)
@@ -336,7 +336,7 @@ func (s *Service) authorizeInstitutionAction(
 		return nil, model.Resource{}, desktopCompatibilityPolicyError(err)
 	}
 	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
-	if err := s.authorizer.Authorize(ctx, invocation, action, resource); err != nil {
+	if err := s.authorizer.Authorize(ctx, inv, action, resource); err != nil {
 		return nil, model.Resource{}, err
 	}
 	return institution, resource, nil

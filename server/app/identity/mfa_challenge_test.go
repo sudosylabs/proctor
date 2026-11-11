@@ -44,13 +44,13 @@ func TestMFAChallengeRejectsReplayedRecoveryCodeAndPreservesEffectOrdering(t *te
 	effects := revocationsIn(&events, "effects")
 	service := newTestMFAApplicationService(t, persistence, audit, effects, now)
 	application := service
-	invocation := invocation.New(principal, model.RequestMetadata{RequestID: "request-a"})
+	inv := invocation.New(principal, model.RequestMetadata{RequestID: "request-a"})
 	command := ChallengeMFACommand{Code: "aaaa-aaaa-aaaa-aaaa-aaaa-aaaa"}
 
-	_, err := application.ChallengeMFA(context.Background(), invocation, command)
+	_, err := application.ChallengeMFA(context.Background(), inv, command)
 	require.NoError(t, err)
 	require.Equal(t, model.TimeUTC(now), persistence.upgradedAt, "Session upgrade instant")
-	_, err = application.ChallengeMFA(context.Background(), invocation, command)
+	_, err = application.ChallengeMFA(context.Background(), inv, command)
 	require.True(t, apperror.Is(err, "authentication.mfa.code_invalid"), "replayed challenge error = %v, want authentication.mfa.code_invalid", err)
 
 	// Contract (guardrails 8 and 14): the audit begins before the durable write,

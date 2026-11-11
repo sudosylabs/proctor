@@ -50,7 +50,7 @@ func TestExamExportDownloadRechecksAuthorityAfterStorageOpen(t *testing.T) {
 					base.artifactID = model.NewJobAttemptID()
 				}
 			}
-			download, err := service.OpenExamExport(context.Background(), f.invocation, ExportQuery{Scope: base.value.Scope, ExportID: base.value.ID})
+			download, err := service.OpenExamExport(context.Background(), f.inv, ExportQuery{Scope: base.value.Scope, ExportID: base.value.ID})
 			if scenario == "unchanged archive" || scenario == "node clock ahead" {
 				require.NoError(t, err, "current archive was not available")
 				require.NotNil(t, download, "current archive was not available")
@@ -80,7 +80,7 @@ func TestExamExportDownloadRechecksOrdinaryPermissionAndExpiry(t *testing.T) {
 	s.value.ReadyAt = model.OptionalTimeFrom(s.value.CreatedAt)
 	query := ExportQuery{Scope: s.value.Scope, ExportID: s.value.ID}
 	auth.deny = model.ActionSubmissionViewOverride
-	_, err := service.OpenExamExport(context.Background(), f.invocation, query)
+	_, err := service.OpenExamExport(context.Background(), f.inv, query)
 	require.Error(t, err, "download bypassed ordinary read authority")
 	require.Equal(t, 0, content.opens, "download bypassed ordinary read authority")
 	auth.deny = ""
@@ -88,7 +88,7 @@ func TestExamExportDownloadRechecksOrdinaryPermissionAndExpiry(t *testing.T) {
 	s.value.ExpiresAt = s.value.ExpiresAt.Add(-48 * time.Hour)
 	s.value.SourceExpiresAt = s.value.SourceExpiresAt.Add(-48 * time.Hour)
 	s.value.ReadyAt = model.OptionalTimeFrom(s.value.CreatedAt)
-	_, err = service.OpenExamExport(context.Background(), f.invocation, query)
+	_, err = service.OpenExamExport(context.Background(), f.inv, query)
 	require.Error(t, err, "expired download reached content")
 	require.Equal(t, 0, content.opens, "expired download reached content")
 }
@@ -107,7 +107,7 @@ func TestExamExportDownloadExpiresDuringStorageOpen(t *testing.T) {
 	body := &exportClosingBody{}
 	content.body = body
 	content.opened = func() { now = s.value.ExpiresAt }
-	_, err := service.OpenExamExport(context.Background(), f.invocation, ExportQuery{Scope: s.value.Scope, ExportID: s.value.ID})
+	_, err := service.OpenExamExport(context.Background(), f.inv, ExportQuery{Scope: s.value.Scope, ExportID: s.value.ID})
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault, "late storage Open escaped expiry")
 	require.Equal(t, "exam.export.expired", fault.Code(), "late storage Open escaped expiry")

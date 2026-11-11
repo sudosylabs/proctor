@@ -14,6 +14,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -28,15 +29,9 @@ const (
 	serverModule     = repositoryModule + "/server"
 )
 
-type importViolation struct {
-	file       string
-	importPath string
-}
-
-func (v importViolation) key() string {
-	return v.file + "\t" + v.importPath
-}
-
+// The planted cases exercise each matcher shape and every security edge. An
+// ordinary allowed edge needs no case: the production import graph exercises
+// it, and TestDependencyAllowancesAreUsed removes it once nothing imports it.
 func TestDependencyPolicyRejectsForbiddenImports(t *testing.T) {
 	t.Parallel()
 
@@ -45,70 +40,69 @@ func TestDependencyPolicyRejectsForbiddenImports(t *testing.T) {
 		from     string
 		imported string
 	}{
-		{name: "domain cannot import HTTP", from: serverModule + "/model", imported: "net/http"},
-		{name: "domain cannot import PostgreSQL client", from: serverModule + "/model", imported: "github.com/jackc/pgx/v5"},
-		{name: "model build tools cannot import server code", from: serverModule + "/model/internal/idgen", imported: serverModule + "/app"},
-		{name: "model build tools cannot import third-party code", from: serverModule + "/model/internal/idgen", imported: "golang.org/x/tools/go/packages"},
-		{name: "ACME adapter cannot import application", from: serverModule + "/internal/autocert", imported: serverModule + "/app"},
-		{name: "ACME adapter cannot import unrelated third-party code", from: serverModule + "/internal/autocert", imported: "github.com/gorilla/mux"},
-		{name: "OpenAPI compiler cannot use the process filesystem", from: serverModule + "/internal/openapidoc", imported: "os"},
-		{name: "OpenAPI compiler cannot import HTTP", from: serverModule + "/internal/openapidoc", imported: "net/http"},
-		{name: "store contracts cannot import SQL adapters", from: serverModule + "/store", imported: serverModule + "/store/sqlstore"},
-		{name: "application cannot import platform", from: serverModule + "/app", imported: serverModule + "/platform"},
-		{name: "Exam child cannot import parent application", from: serverModule + "/app/exam", imported: serverModule + "/app"},
-		{name: "Exam child cannot import HTTP transport", from: serverModule + "/app/exam", imported: serverModule + "/httpapi"},
-		{name: "Exam child cannot import platform", from: serverModule + "/app/exam", imported: serverModule + "/platform"},
-		{name: "Exam child cannot import SQL adapter", from: serverModule + "/app/exam", imported: serverModule + "/store/sqlstore"},
-		{name: "Realtime child cannot import parent application", from: serverModule + "/app/realtime", imported: serverModule + "/app"},
+		// Matcher shapes.
+		{name: "denied standard library", from: serverModule + "/model", imported: "net/http"},
+		{name: "denied standard library subtree", from: serverModule + "/httpapi", imported: "database/sql"},
+		{name: "denied standard library beside its exception", from: serverModule + "/internal/openapidoc", imported: "os"},
+		{name: "empty rule forbids project imports", from: serverModule + "/model/internal/idgen", imported: serverModule + "/app"},
+		{name: "empty rule forbids third-party imports", from: serverModule + "/model", imported: "github.com/jackc/pgx/v5"},
+		{name: "exact third-party allowance admits nothing else", from: serverModule + "/internal/autocert", imported: "github.com/gorilla/mux"},
+		{name: "exact allowance excludes its children", from: serverModule + "/filecontent", imported: repositoryModule + "/packages/vfs/local"},
+		{name: "subtree source governs its descendants", from: serverModule + "/app/job/internal", imported: serverModule + "/app"},
+		{name: "allow-within denies the rest of its range", from: serverModule + "/store", imported: serverModule + "/store/sqlstore"},
+		{name: "all-except denies descendants", from: serverModule + "/platform", imported: repositoryModule + "/packages/cache/redis"},
+		{name: "all-except denies an exact package", from: serverModule + "/platform", imported: serverModule + "/metrics"},
+		{name: "reusable module cannot import server", from: repositoryModule + "/packages/cache", imported: serverModule + "/model"},
+		{name: "deny-every-import rule", from: serverModule + "/cmd/ptool/helpers", imported: "context"},
+		{name: "unknown package fails closed", from: serverModule + "/services", imported: "context"},
+		{name: "unknown application child fails closed", from: serverModule + "/app/helpers", imported: "context"},
+		{name: "unknown Exam child fails closed", from: serverModule + "/app/exam/attempt/internal", imported: "context"},
+		{name: "unknown operator child fails closed", from: serverModule + "/cmd/proctor/helpers", imported: "context"},
+		{name: "unknown offline operator child fails closed", from: serverModule + "/operator/internal", imported: "context"},
+
+		// Leaves.
+		{name: "domain cannot import configuration", from: serverModule + "/model", imported: serverModule + "/config"},
+		{name: "configuration cannot import store contracts", from: serverModule + "/config", imported: serverModule + "/store"},
+		{name: "configuration cannot import the application", from: serverModule + "/config", imported: serverModule + "/app"},
+		{name: "localization cannot import application", from: serverModule + "/localization", imported: serverModule + "/app"},
+		{name: "invocation leaf cannot import store contracts", from: serverModule + "/app/invocation", imported: serverModule + "/store"},
+		{name: "safe Markdown imports no server package", from: serverModule + "/app/exam/safemarkdown", imported: serverModule + "/model"},
+		{name: "batch item context cannot import an application area", from: serverModule + "/app/internal/batchitem", imported: serverModule + "/app/identity"},
+
+		// Application areas. TestApplicationPackagesPointInward covers the
+		// transports, persistence adapters, platform and parent for every
+		// application package.
 		{name: "Realtime child cannot import persistence", from: serverModule + "/app/realtime", imported: serverModule + "/store"},
-		{name: "Realtime child cannot import WebSocket", from: serverModule + "/app/realtime", imported: serverModule + "/websocket"},
-		{name: "Realtime child cannot import platform", from: serverModule + "/app/realtime", imported: serverModule + "/platform"},
-		{name: "Realtime child cannot import SQL adapter", from: serverModule + "/app/realtime", imported: serverModule + "/store/sqlstore"},
 		{name: "Realtime child cannot import an application area", from: serverModule + "/app/realtime", imported: serverModule + "/app/identity"},
 		{name: "Realtime child cannot import an Exam area", from: serverModule + "/app/realtime", imported: serverModule + "/app/exam/attempt"},
 		{name: "Exam authoring cannot import Mail child", from: serverModule + "/app/exam", imported: serverModule + "/app/mail"},
 		{name: "Exam correction cannot import Mail child", from: serverModule + "/app/exam/correction", imported: serverModule + "/app/mail"},
 		{name: "Exam Attempt cannot import Exam Sitting", from: serverModule + "/app/exam/attempt", imported: serverModule + "/app/exam/sitting"},
 		{name: "Exam review cannot import Exam Sitting", from: serverModule + "/app/exam/review", imported: serverModule + "/app/exam/sitting"},
+		{name: "Exam Attempt cannot decide Exam Manager eligibility", from: serverModule + "/app/exam/attempt", imported: serverModule + "/app/exam/manageraccess"},
+		{name: "Exam Manager eligibility cannot import a use case", from: serverModule + "/app/exam/manageraccess", imported: serverModule + "/app/exam"},
 		{name: "Access Control cannot import an Exam area", from: serverModule + "/app/access", imported: serverModule + "/app/exam/sitting"},
-		{name: "Mail child cannot import parent application", from: serverModule + "/app/mail", imported: serverModule + "/app"},
-		{name: "Mail child cannot import HTTP transport", from: serverModule + "/app/mail", imported: serverModule + "/httpapi"},
-		{name: "Mail child cannot import platform", from: serverModule + "/app/mail", imported: serverModule + "/platform"},
-		{name: "Mail child cannot import SQL adapter", from: serverModule + "/app/mail", imported: serverModule + "/store/sqlstore"},
 		{name: "Mail child cannot import the identity area", from: serverModule + "/app/mail", imported: serverModule + "/app/identity"},
 		{name: "Mail child cannot import the Job engine", from: serverModule + "/app/mail", imported: serverModule + "/app/job"},
 		{name: "Mail child cannot import concrete Jobs", from: serverModule + "/app/mail", imported: serverModule + "/app/jobs"},
-		{name: "Job engine cannot import parent application", from: serverModule + "/app/job", imported: serverModule + "/app"},
+		{name: "mail rendering cannot import transport", from: serverModule + "/app/mail", imported: repositoryModule + "/packages/mail"},
 		{name: "Job engine cannot import the identity area", from: serverModule + "/app/job", imported: serverModule + "/app/identity"},
 		{name: "Job engine cannot import Mail child", from: serverModule + "/app/job", imported: serverModule + "/app/mail"},
 		{name: "Job engine cannot import concrete Jobs", from: serverModule + "/app/job", imported: serverModule + "/app/jobs"},
-		{name: "Search cannot import parent application", from: serverModule + "/app/search", imported: serverModule + "/app"},
-		{name: "Search cannot import HTTP transport", from: serverModule + "/app/search", imported: serverModule + "/httpapi"},
 		{name: "Search cannot import the identity area", from: serverModule + "/app/search", imported: serverModule + "/app/identity"},
-		{name: "application cannot import Redis client", from: serverModule + "/app", imported: "github.com/redis/go-redis/v9"},
-		{name: "Job engine descendants cannot import application", from: serverModule + "/app/job/internal", imported: serverModule + "/app"},
-		{name: "Job engine cannot import HTTP transport", from: serverModule + "/app/job", imported: serverModule + "/httpapi"},
-		{name: "Job engine cannot import platform", from: serverModule + "/app/job", imported: serverModule + "/platform"},
-		{name: "Job engine cannot import SQL adapter", from: serverModule + "/app/job", imported: serverModule + "/store/sqlstore"},
-		{name: "Job engine descendants cannot import Argon2", from: serverModule + "/app/job/internal", imported: "golang.org/x/crypto/argon2"},
-		{name: "concrete Jobs cannot import parent application", from: serverModule + "/app/jobs", imported: serverModule + "/app"},
-		{name: "concrete Jobs cannot import HTTP transport", from: serverModule + "/app/jobs", imported: serverModule + "/httpapi"},
-		{name: "concrete Jobs cannot import platform", from: serverModule + "/app/jobs", imported: serverModule + "/platform"},
-		{name: "concrete Jobs cannot import SQL adapter", from: serverModule + "/app/jobs", imported: serverModule + "/store/sqlstore"},
+
+		// File content.
 		{name: "File Content cannot import persistence", from: serverModule + "/filecontent", imported: serverModule + "/store"},
 		{name: "File Content cannot import HTTP", from: serverModule + "/filecontent", imported: "net/http"},
-		{name: "File Content cannot import WebSocket", from: serverModule + "/filecontent", imported: serverModule + "/websocket"},
 		{name: "File Content cannot locate platform services", from: serverModule + "/filecontent", imported: serverModule + "/platform"},
 		{name: "File Content cannot select configuration", from: serverModule + "/filecontent", imported: serverModule + "/config"},
-		{name: "domain cannot import configuration", from: serverModule + "/model", imported: serverModule + "/config"},
-		{name: "configuration cannot import store contracts", from: serverModule + "/config", imported: serverModule + "/store"},
-		{name: "configuration cannot import the application", from: serverModule + "/config", imported: serverModule + "/app"},
 		{name: "File Content cannot run Jobs", from: serverModule + "/filecontent", imported: serverModule + "/app/job"},
-		{name: "File Content cannot select a VFS backend", from: serverModule + "/filecontent", imported: repositoryModule + "/packages/vfs/local"},
-		{name: "File Content cannot select S3", from: serverModule + "/filecontent", imported: repositoryModule + "/packages/vfs/s3"},
+
+		// Transports.
 		{name: "HTTP cannot import SQL persistence", from: serverModule + "/httpapi", imported: serverModule + "/store/sqlstore"},
 		{name: "HTTP cannot import platform services", from: serverModule + "/httpapi", imported: serverModule + "/platform"},
-		{name: "HTTP cannot import SQL driver", from: serverModule + "/httpapi", imported: "database/sql"},
+		{name: "HTTP cannot build a batch item context", from: serverModule + "/httpapi", imported: serverModule + "/app/internal/batchitem"},
+		{name: "HTTP cannot import OpenTelemetry", from: serverModule + "/httpapi", imported: "go.opentelemetry.io/otel/trace"},
 		{name: "routing kernel cannot import the application parent", from: serverModule + "/httpapi/route", imported: serverModule + "/app"},
 		{name: "routing kernel cannot import an area", from: serverModule + "/httpapi/route", imported: serverModule + "/app/academic"},
 		{name: "routing kernel cannot import an Exam child", from: serverModule + "/httpapi/route", imported: serverModule + "/app/exam/sitting"},
@@ -120,47 +114,36 @@ func TestDependencyPolicyRejectsForbiddenImports(t *testing.T) {
 		{name: "WebSocket cannot import the routing kernel", from: serverModule + "/websocket", imported: serverModule + "/httpapi/route"},
 		{name: "hosted webapp cannot import the routing kernel", from: serverModule + "/webui", imported: serverModule + "/httpapi/route"},
 		{name: "ptool cannot import the routing kernel", from: serverModule + "/cmd/ptool/commands", imported: serverModule + "/httpapi/route"},
+
+		// Infrastructure.
 		{name: "SQL adapter cannot import application policy", from: serverModule + "/store/sqlstore", imported: serverModule + "/app"},
+		{name: "store layer cannot import application policy", from: serverModule + "/store/retrylayer", imported: serverModule + "/app"},
 		{name: "metrics cannot import application policy", from: serverModule + "/metrics", imported: serverModule + "/app"},
-		{name: "metrics cannot import concrete infrastructure", from: serverModule + "/metrics", imported: repositoryModule + "/packages/cache/redis"},
 		{name: "metrics cannot import an application area", from: serverModule + "/metrics", imported: serverModule + "/app/mail"},
-		{name: "metrics cannot import the Job engine", from: serverModule + "/metrics", imported: serverModule + "/app/job"},
+		{name: "metrics cannot import concrete infrastructure", from: serverModule + "/metrics", imported: repositoryModule + "/packages/cache/redis"},
 		{name: "metrics cannot select a VFS backend", from: serverModule + "/metrics", imported: repositoryModule + "/packages/vfs/s3"},
-		{name: "metrics cannot select a mail transport", from: serverModule + "/metrics", imported: repositoryModule + "/packages/mail/smtp"},
 		{name: "metrics cannot select a cluster adapter", from: serverModule + "/metrics", imported: serverModule + "/cluster/memberlist"},
 		{name: "metrics cannot import external-auth adapters", from: serverModule + "/metrics", imported: serverModule + "/platform/externalauth"},
 		{name: "metrics cannot import the composition root", from: serverModule + "/metrics", imported: serverModule},
-		{name: "tracing cannot import the store timing layer", from: serverModule + "/tracing", imported: serverModule + "/store/timerlayer"},
-		{name: "tracing cannot import the Job engine", from: serverModule + "/tracing", imported: serverModule + "/app/job"},
-		{name: "platform cannot import metrics", from: serverModule + "/platform", imported: serverModule + "/metrics"},
 		{name: "tracing cannot import application policy", from: serverModule + "/tracing", imported: serverModule + "/app"},
-		{name: "tracing cannot import HTTP", from: serverModule + "/tracing", imported: serverModule + "/httpapi"},
-		{name: "HTTP cannot import OpenTelemetry", from: serverModule + "/httpapi", imported: "go.opentelemetry.io/otel/trace"},
-		{name: "Job engine cannot import OpenTelemetry", from: serverModule + "/app/job", imported: "go.opentelemetry.io/otel/trace"},
-		{name: "store layer cannot import application policy", from: serverModule + "/store/retrylayer", imported: serverModule + "/app"},
+		{name: "tracing cannot import the store timing layer", from: serverModule + "/tracing", imported: serverModule + "/store/timerlayer"},
 		{name: "cluster adapter cannot import platform", from: serverModule + "/cluster/memberlist", imported: serverModule + "/platform"},
 		{name: "cluster adapter cannot import persistence", from: serverModule + "/cluster/memberlist", imported: serverModule + "/store"},
 		{name: "external adapter cannot import HTTP", from: serverModule + "/platform/externalauth/oidc", imported: serverModule + "/httpapi"},
-		{name: "platform cannot select concrete adapters", from: serverModule + "/platform", imported: "github.com/sudosylabs/proctor/packages/cache/redis"},
+
+		// Executables and commands.
 		{name: "operator executable cannot bypass its command tree", from: serverModule + "/cmd/proctor", imported: serverModule},
 		{name: "command tree cannot bypass root composition", from: serverModule + "/cmd/proctor/commands", imported: serverModule + "/app"},
 		{name: "command tree cannot open SQL directly", from: serverModule + "/cmd/proctor/commands", imported: "database/sql"},
-		{name: "unknown operator child package fails closed", from: serverModule + "/cmd/proctor/helpers", imported: "context"},
+		{name: "command tree cannot open the SQL store itself", from: serverModule + "/cmd/proctor/commands", imported: serverModule + "/store/sqlstore"},
 		{name: "offline operator commands cannot import the composition root", from: serverModule + "/operator", imported: serverModule},
 		{name: "offline operator commands cannot import application", from: serverModule + "/operator", imported: serverModule + "/app"},
 		{name: "offline operator commands cannot import an application area", from: serverModule + "/operator", imported: serverModule + "/app/identity"},
 		{name: "offline operator commands cannot import HTTP transport", from: serverModule + "/operator", imported: serverModule + "/httpapi"},
-		{name: "offline operator commands cannot import WebSocket", from: serverModule + "/operator", imported: serverModule + "/websocket"},
 		{name: "offline operator commands cannot import platform", from: serverModule + "/operator", imported: serverModule + "/platform"},
 		{name: "offline operator commands cannot open SQL directly", from: serverModule + "/operator", imported: "database/sql"},
 		{name: "offline operator commands cannot import a SQL driver", from: serverModule + "/operator", imported: "github.com/jackc/pgx/v5"},
-		{name: "offline operator child package fails closed", from: serverModule + "/operator/internal", imported: "context"},
-		{name: "command tree cannot open the SQL store itself", from: serverModule + "/cmd/proctor/commands", imported: serverModule + "/store/sqlstore"},
-		{name: "localization cannot import application", from: serverModule + "/localization", imported: serverModule + "/app"},
-		{name: "mail rendering cannot import transport", from: serverModule + "/app/mail", imported: repositoryModule + "/packages/mail"},
 		{name: "mail preview cannot import application", from: serverModule + "/cmd/mailpreview", imported: serverModule + "/app"},
-		{name: "reusable module cannot import server", from: repositoryModule + "/packages/cache", imported: serverModule + "/model"},
-		{name: "unknown package is fail closed", from: serverModule + "/services", imported: "context"},
 	}
 
 	for _, tt := range tests {
@@ -171,6 +154,7 @@ func TestDependencyPolicyRejectsForbiddenImports(t *testing.T) {
 	}
 }
 
+// The allowed cases exercise each matcher shape that admits an import.
 func TestDependencyPolicyAllowsInwardImports(t *testing.T) {
 	t.Parallel()
 
@@ -179,90 +163,18 @@ func TestDependencyPolicyAllowsInwardImports(t *testing.T) {
 		from     string
 		imported string
 	}{
-		{name: "store contracts may import domain", from: serverModule + "/store", imported: serverModule + "/model"},
-		{name: "domain may canonicalize internationalized host names", from: serverModule + "/model", imported: "golang.org/x/net/idna"},
-		{name: "configuration may import the domain model", from: serverModule + "/config", imported: serverModule + "/model"},
-		{name: "application may import store contracts", from: serverModule + "/app", imported: serverModule + "/store"},
-		{name: "application may import Job engine", from: serverModule + "/app", imported: serverModule + "/app/job"},
-		{name: "application may import concrete Jobs", from: serverModule + "/app", imported: serverModule + "/app/jobs"},
-		{name: "application may import Realtime child", from: serverModule + "/app", imported: serverModule + "/app/realtime"},
-		{name: "application may import Exam child", from: serverModule + "/app", imported: serverModule + "/app/exam"},
-		{name: "application may import Exam resource child", from: serverModule + "/app", imported: serverModule + "/app/exam/resource"},
-		{name: "application may import Exam workspace child", from: serverModule + "/app", imported: serverModule + "/app/exam/workspace"},
-		{name: "application may import Mail child", from: serverModule + "/app", imported: serverModule + "/app/mail"},
-		{name: "Mail child may import domain models", from: serverModule + "/app/mail", imported: serverModule + "/model"},
-		{name: "Mail child may import store contracts", from: serverModule + "/app/mail", imported: serverModule + "/store"},
-		{name: "Mail child may import secret sealing", from: serverModule + "/app/mail", imported: serverModule + "/secretseal"},
-		{name: "Mail child may import Exam mail contracts", from: serverModule + "/app/mail", imported: serverModule + "/app/exam"},
-		{name: "Mail child may import localization", from: serverModule + "/app/mail", imported: serverModule + "/localization"},
-		{name: "Mail operator service may authorize and audit", from: serverModule + "/app/mail", imported: serverModule + "/app/access"},
-		{name: "Job operator service may authorize and audit", from: serverModule + "/app/job", imported: serverModule + "/app/access"},
-		{name: "application may import Search", from: serverModule + "/app", imported: serverModule + "/app/search"},
-		{name: "Search may import the Exam catalog", from: serverModule + "/app/search", imported: serverModule + "/app/exam"},
-		{name: "Search may import the User directory", from: serverModule + "/app/search", imported: serverModule + "/app/user"},
-		{name: "HTTP may name operator mail results", from: serverModule + "/httpapi", imported: serverModule + "/app/mail"},
-		{name: "HTTP may name search results", from: serverModule + "/httpapi", imported: serverModule + "/app/search"},
-		{name: "Mail child may accept presentation filesystems", from: serverModule + "/app/mail", imported: "io/fs"},
-		{name: "Exam child may import domain models", from: serverModule + "/app/exam", imported: serverModule + "/model"},
-		{name: "Exam child may import store contracts", from: serverModule + "/app/exam", imported: serverModule + "/store"},
-		{name: "Exam use cases may import the mutation audit vocabulary", from: serverModule + "/app/exam/attempt", imported: serverModule + "/app/access"},
-		{name: "Exam children may import shared safe Markdown", from: serverModule + "/app/exam/review", imported: serverModule + "/app/exam/safemarkdown"},
-		{name: "Exam Sitting may compose its schedule mail", from: serverModule + "/app/exam/sitting", imported: serverModule + "/app/mail"},
-		{name: "Exam Attempt may compose its Submission receipt", from: serverModule + "/app/exam/attempt", imported: serverModule + "/app/mail"},
-		{name: "Exam review may compose its result-release notice", from: serverModule + "/app/exam/review", imported: serverModule + "/app/mail"},
-		{name: "Exam Sitting keeps the Exam Manager access rule", from: serverModule + "/app/exam/sitting", imported: serverModule + "/app/exam/manageraccess"},
-		{name: "Realtime child may import domain models", from: serverModule + "/app/realtime", imported: serverModule + "/model"},
-		{name: "Realtime child may import the error vocabulary", from: serverModule + "/app/realtime", imported: serverModule + "/app/apperror"},
-		{name: "Job engine may import store contracts", from: serverModule + "/app/job", imported: serverModule + "/store"},
-		{name: "concrete Jobs may import Job engine", from: serverModule + "/app/jobs", imported: serverModule + "/app/job"},
-		{name: "concrete Jobs may import Mail capabilities", from: serverModule + "/app/jobs", imported: serverModule + "/app/mail"},
-		{name: "concrete Jobs may import Exam capabilities", from: serverModule + "/app/jobs", imported: serverModule + "/app/exam/attempt"},
-		{name: "File Content may import domain models", from: serverModule + "/filecontent", imported: serverModule + "/model"},
-		{name: "File Content may import application content contracts", from: serverModule + "/filecontent", imported: serverModule + "/app/user"},
-		{name: "File Content may import VFS contracts", from: serverModule + "/filecontent", imported: repositoryModule + "/packages/vfs"},
-		{name: "File Content may import the canonical encoder", from: serverModule + "/filecontent", imported: "github.com/HugoSmits86/nativewebp"},
-		{name: "File Content may import bounded image transforms", from: serverModule + "/filecontent", imported: "github.com/disintegration/imaging"},
-		{name: "File Content may register supported image decoders", from: serverModule + "/filecontent", imported: "golang.org/x/image/webp"},
-		{name: "File Content may structurally validate PDFs", from: serverModule + "/filecontent", imported: "github.com/pdfcpu/pdfcpu/pkg/api"},
-		{name: "File Content may use private temporary spools", from: serverModule + "/filecontent", imported: "os"},
-		{name: "HTTP may import application", from: serverModule + "/httpapi", imported: serverModule + "/app"},
-		{name: "WebSocket may import Realtime child", from: serverModule + "/websocket", imported: serverModule + "/app/realtime"},
-		{name: "HTTP may import router library", from: serverModule + "/httpapi", imported: "github.com/gorilla/mux"},
-		{name: "HTTP resources may import the routing kernel", from: serverModule + "/httpapi", imported: serverModule + "/httpapi/route"},
-		{name: "root composition may import the routing kernel", from: serverModule, imported: serverModule + "/httpapi/route"},
-		{name: "routing kernel may import the error vocabulary", from: serverModule + "/httpapi/route", imported: serverModule + "/app/apperror"},
-		{name: "routing kernel may import router library", from: serverModule + "/httpapi/route", imported: "github.com/gorilla/mux"},
-		{name: "SQL adapter may import store contracts", from: serverModule + "/store/sqlstore", imported: serverModule + "/store"},
-		{name: "metrics may import timer recorder", from: serverModule + "/metrics", imported: serverModule + "/store/timerlayer"},
-		{name: "metrics may import Prometheus", from: serverModule + "/metrics", imported: "github.com/prometheus/client_golang/prometheus"},
-		{name: "metrics may wrap the platform cache and mailer ports", from: serverModule + "/metrics", imported: serverModule + "/platform"},
-		{name: "metrics may wrap the cluster transport contract", from: serverModule + "/metrics", imported: serverModule + "/cluster"},
-		{name: "metrics may wrap the VFS contract", from: serverModule + "/metrics", imported: repositoryModule + "/packages/vfs"},
-		{name: "metrics may name mail transport messages", from: serverModule + "/metrics", imported: repositoryModule + "/packages/mail"},
-		{name: "tracing may import OpenTelemetry", from: serverModule + "/tracing", imported: "go.opentelemetry.io/otel/sdk/trace"},
-		{name: "cache store layer may import cache contract", from: serverModule + "/store/localcachelayer", imported: repositoryModule + "/packages/cache"},
-		{name: "cluster adapter may import cluster contracts", from: serverModule + "/cluster/memberlist", imported: serverModule + "/cluster"},
-		{name: "application may import password hashing library", from: serverModule + "/app", imported: "golang.org/x/crypto/argon2"},
-		{name: "root composition may import platform", from: serverModule, imported: serverModule + "/platform"},
-		{name: "operator executable may import its command tree", from: serverModule + "/cmd/proctor", imported: serverModule + "/cmd/proctor/commands"},
-		{name: "operator command tree may import the root server facade", from: serverModule + "/cmd/proctor/commands", imported: serverModule},
-		{name: "operator command tree may import localization", from: serverModule + "/cmd/proctor/commands", imported: serverModule + "/localization"},
-		{name: "operator command tree may import the offline operator commands", from: serverModule + "/cmd/proctor/commands", imported: serverModule + "/operator"},
-		{name: "offline operator commands may import configuration", from: serverModule + "/operator", imported: serverModule + "/config"},
-		{name: "offline operator commands may import the SQL store and migrator", from: serverModule + "/operator", imported: serverModule + "/store/sqlstore"},
-		{name: "offline operator commands may import store contracts", from: serverModule + "/operator", imported: serverModule + "/store"},
-		{name: "offline operator commands may import domain models", from: serverModule + "/operator", imported: serverModule + "/model"},
-		{name: "operator command tree may import Cobra", from: serverModule + "/cmd/proctor/commands", imported: "github.com/spf13/cobra"},
-		{name: "operator command tree may read the monotonic clock", from: serverModule + "/cmd/proctor/commands", imported: "golang.org/x/sys/unix"},
-		{name: "mail preview may import mail rendering", from: serverModule + "/cmd/mailpreview", imported: serverModule + "/app/mail"},
-		{name: "mail preview may import localization", from: serverModule + "/cmd/mailpreview", imported: serverModule + "/localization"},
-		{name: "standard library remains available", from: serverModule + "/app", imported: "context"},
-		{name: "model build tools may import standard library", from: serverModule + "/model/internal/idgen", imported: "go/format"},
-		{name: "ACME adapter may import ACME protocol", from: serverModule + "/internal/autocert", imported: "golang.org/x/crypto/acme"},
-		{name: "ACME adapter may canonicalize IDNs", from: serverModule + "/internal/autocert", imported: "golang.org/x/net/idna"},
-		{name: "OpenAPI compiler may accept a filesystem", from: serverModule + "/internal/openapidoc", imported: "io/fs"},
-		{name: "OpenAPI compiler may validate OpenAPI", from: serverModule + "/internal/openapidoc", imported: "github.com/getkin/kin-openapi/openapi3"},
-		{name: "ptool may import the OpenAPI compiler", from: serverModule + "/cmd/ptool/commands", imported: serverModule + "/internal/openapidoc"},
+		{name: "exact project allowance", from: serverModule + "/config", imported: serverModule + "/model"},
+		{name: "exact third-party allowance", from: serverModule + "/internal/autocert", imported: "golang.org/x/crypto/acme"},
+		{name: "subtree allowance admits its root", from: serverModule + "/app", imported: serverModule + "/app/exam"},
+		{name: "subtree allowance admits a descendant", from: serverModule + "/app", imported: serverModule + "/app/exam/resource"},
+		{name: "subtree third-party allowance", from: serverModule + "/metrics", imported: "github.com/prometheus/client_golang/prometheus"},
+		{name: "descendants third-party allowance", from: serverModule + "/filecontent", imported: "github.com/pdfcpu/pdfcpu/pkg/api"},
+		{name: "allow-within admits its allowance", from: serverModule + "/store", imported: serverModule + "/model"},
+		{name: "all-except admits an unlisted package", from: serverModule + "/platform", imported: serverModule + "/config"},
+		{name: "all-imports rule", from: serverModule, imported: serverModule + "/platform"},
+		{name: "unlisted standard library", from: serverModule + "/app", imported: "context"},
+		{name: "standard library exception", from: serverModule + "/filecontent", imported: "os"},
+		{name: "test support crosses boundaries", from: serverModule + "/testlib", imported: serverModule + "/store/sqlstore"},
 	}
 
 	for _, tt := range tests {
@@ -273,23 +185,157 @@ func TestDependencyPolicyAllowsInwardImports(t *testing.T) {
 	}
 }
 
-func TestProductionImportsMatchDependencyPolicy(t *testing.T) {
-	violations := productionImportViolations(t)
-	keys := make([]string, 0, len(violations))
-	for key := range violations {
-		keys = append(keys, key)
+// TestApplicationPackagesPointInward holds every application package, and an
+// application child without its own rule, away from the transports, the
+// persistence and infrastructure adapters, the platform and the composition
+// root; a child also cannot import its parent.
+func TestApplicationPackagesPointInward(t *testing.T) {
+	t.Parallel()
+
+	outward := []string{
+		serverModule,
+		serverModule + "/httpapi",
+		serverModule + "/httpapi/route",
+		serverModule + "/websocket",
+		serverModule + "/webui",
+		serverModule + "/store/sqlstore",
+		serverModule + "/store/localcachelayer",
+		serverModule + "/platform",
+		serverModule + "/platform/externalauth",
+		serverModule + "/config",
+		serverModule + "/cluster",
+		serverModule + "/metrics",
+		serverModule + "/tracing",
+		serverModule + "/filecontent",
+		"net/http",
+		"database/sql",
+		"github.com/jackc/pgx/v5",
+		"github.com/redis/go-redis/v9",
 	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		violation := violations[key]
-		assert.Fail(t, fmt.Sprintf("forbidden production import: %s imports %s", violation.file, violation.importPath))
+	packages := []string{serverModule + "/app", serverModule + "/app/helpers"}
+	for _, rule := range dependencyRules {
+		for _, source := range rule.sources {
+			if !strings.HasPrefix(source.path, serverModule+"/app/") {
+				continue
+			}
+			packagePath := source.path
+			if source.match == matchDescendants {
+				packagePath += "/helpers"
+			}
+			packages = append(packages, packagePath)
+		}
+	}
+	require.Contains(t, packages, serverModule+"/app/identity", "application packages")
+
+	for _, packagePath := range packages {
+		imports := outward
+		if packagePath != serverModule+"/app" {
+			imports = append(slices.Clone(outward), serverModule+"/app")
+		}
+		for _, imported := range imports {
+			assert.True(t, forbiddenImport(packagePath, imported), "%s may import %s", packagePath, imported)
+		}
 	}
 }
 
-func productionImportViolations(t *testing.T) map[string]importViolation {
+func TestProductionImportsMatchDependencyPolicy(t *testing.T) {
+	var violations []string
+	for _, edge := range productionImports(t) {
+		if edge.importPath == "" {
+			violations = append(violations, fmt.Sprintf("unclassified production package: %s", edge.file))
+			continue
+		}
+		if forbiddenImport(edge.packagePath, edge.importPath) {
+			violations = append(violations, fmt.Sprintf("forbidden production import: %s imports %s", edge.file, edge.importPath))
+		}
+	}
+	sort.Strings(violations)
+	for _, violation := range slices.Compact(violations) {
+		assert.Fail(t, violation)
+	}
+}
+
+// TestDependencyAllowancesAreUsed fails when a rule allows an import that no
+// package the rule owns makes, so an allowance cannot outlive its last use.
+func TestDependencyAllowancesAreUsed(t *testing.T) {
+	imports := make(map[string][]string)
+	for _, edge := range productionImports(t) {
+		if edge.importPath != "" {
+			imports[edge.packagePath] = append(imports[edge.packagePath], edge.importPath)
+		}
+	}
+	for _, stale := range staleAllowances(dependencyRules, imports) {
+		assert.Fail(t, stale)
+	}
+}
+
+func TestDependencyAllowancesAreUsedRejectsPlantedViolations(t *testing.T) {
+	t.Parallel()
+
+	rules := []dependencyRule{
+		{
+			name:    "specific",
+			sources: []pathPattern{exact("example/area/leaf")},
+			project: only(exact(serverModule + "/store")),
+		},
+		{
+			name:    "broad",
+			sources: []pathPattern{subtree("example/area")},
+			project: only(
+				exact(serverModule+"/model"),
+				exact(serverModule+"/store"),
+				subtree(serverModule+"/app/exam"),
+				subtree(serverModule+"/app/mail"),
+			),
+			thirdParty: only(descendants("github.com/gorilla"), exact("golang.org/x/net/idna")),
+		},
+	}
+	imports := map[string][]string{
+		"example/area":      {serverModule + "/model", serverModule + "/app/exam/attempt", "golang.org/x/net/idna"},
+		"example/area/leaf": {serverModule + "/store"},
+	}
+
+	assert.Equal(t, []string{
+		`rule "broad" allows ` + serverModule + `/store, which no package it owns imports`,
+		`rule "broad" allows ` + serverModule + `/app/mail and below, which no package it owns imports`,
+		`rule "broad" allows below github.com/gorilla, which no package it owns imports`,
+	}, staleAllowances(rules, imports))
+}
+
+func staleAllowances(rules []dependencyRule, imports map[string][]string) []string {
+	owned := make([][]string, len(rules))
+	for packagePath, packageImports := range imports {
+		for index, rule := range rules {
+			if matchesAny(rule.sources, packagePath) {
+				owned[index] = append(owned[index], packageImports...)
+				break
+			}
+		}
+	}
+	var stale []string
+	for index, rule := range rules {
+		allowances := append(slices.Clone(rule.project.allowed), rule.thirdParty.allowed...)
+		for _, allowance := range allowances {
+			if !slices.ContainsFunc(owned[index], allowance.matches) {
+				stale = append(stale, fmt.Sprintf("rule %q allows %s, which no package it owns imports", rule.name, allowance))
+			}
+		}
+	}
+	return stale
+}
+
+// productionImport is one import of a production file. An unclassified
+// package's files appear once each with an empty importPath.
+type productionImport struct {
+	file        string
+	packagePath string
+	importPath  string
+}
+
+func productionImports(t *testing.T) []productionImport {
 	t.Helper()
 
-	violations := make(map[string]importViolation)
+	var imports []productionImport
 	repositoryRoot := filepath.Clean("../..")
 	modules := []struct {
 		root       string
@@ -302,21 +348,22 @@ func productionImportViolations(t *testing.T) map[string]importViolation {
 		{root: filepath.Join(repositoryRoot, "packages", "vfs"), modulePath: repositoryModule + "/packages/vfs", filePrefix: "packages/vfs"},
 	}
 	for _, module := range modules {
-		t.Run(fmt.Sprintf("root=%v", module.root), func(t *testing.T) {
-			if _, err := os.Stat(module.root); err != nil {
-				if os.IsNotExist(err) {
-					return
-				}
-				require.NoError(t, err, "inspect module root %q", module.root)
+		if _, err := os.Stat(module.root); err != nil {
+			if os.IsNotExist(err) {
+				continue
 			}
-			require.NoError(t, scanProductionImports(module.root, module.modulePath, module.filePrefix, violations))
-		})
+			require.NoError(t, err, "inspect module root %q", module.root)
+		}
+		moduleImports, err := scanProductionImports(module.root, module.modulePath, module.filePrefix)
+		require.NoError(t, err, "scan production imports under %q", module.root)
+		imports = append(imports, moduleImports...)
 	}
-	return violations
+	return imports
 }
 
-func scanProductionImports(moduleRoot, modulePath, filePrefix string, violations map[string]importViolation) error {
-	return filepath.WalkDir(moduleRoot, func(path string, entry fs.DirEntry, walkErr error) error {
+func scanProductionImports(moduleRoot, modulePath, filePrefix string) ([]productionImport, error) {
+	var imports []productionImport
+	err := filepath.WalkDir(moduleRoot, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -341,12 +388,9 @@ func scanProductionImports(moduleRoot, modulePath, filePrefix string, violations
 		if exemptProductionHelper(packagePath) {
 			return nil
 		}
+		file := filepath.ToSlash(filepath.Join(filePrefix, relativeFile))
 		if !knownProductionPackage(packagePath) {
-			violation := importViolation{file: filepath.ToSlash(relativeFile), importPath: "<unclassified production package>"}
-			if filePrefix != "" {
-				violation.file = filepath.ToSlash(filepath.Join(filePrefix, relativeFile))
-			}
-			violations[violation.key()] = violation
+			imports = append(imports, productionImport{file: file, packagePath: packagePath})
 			return nil
 		}
 
@@ -359,15 +403,9 @@ func scanProductionImports(moduleRoot, modulePath, filePrefix string, violations
 			if err != nil {
 				return fmt.Errorf("unquote import in %q: %w", relativeFile, err)
 			}
-			if forbiddenImport(packagePath, importPath) {
-				file := filepath.ToSlash(relativeFile)
-				if filePrefix != "" {
-					file = filepath.ToSlash(filepath.Join(filePrefix, relativeFile))
-				}
-				violation := importViolation{file: file, importPath: importPath}
-				violations[violation.key()] = violation
-			}
+			imports = append(imports, productionImport{file: file, packagePath: packagePath, importPath: importPath})
 		}
 		return nil
 	})
+	return imports, err
 }

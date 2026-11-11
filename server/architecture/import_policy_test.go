@@ -54,6 +54,17 @@ func (p pathPattern) matches(path string) bool {
 	}
 }
 
+func (p pathPattern) String() string {
+	switch p.match {
+	case matchSubtree:
+		return p.path + " and below"
+	case matchDescendants:
+		return "below " + p.path
+	default:
+		return p.path
+	}
+}
+
 type importAccess struct {
 	allowUnlisted bool
 	allowed       []pathPattern
@@ -144,31 +155,6 @@ var (
 	}
 )
 
-// transportApplicationImports are the inward packages a transport may name:
-// the application surface, the area packages whose command, query and result
-// types it maps, and the domain and presentation leaves.
-var transportApplicationImports = []pathPattern{
-	exact(serverModule + "/logging"),
-	exact(serverModule + "/app"),
-	exact(serverModule + "/app/academic"),
-	exact(serverModule + "/app/administration"),
-	exact(serverModule + "/app/apperror"),
-	exact(serverModule + "/app/identity"),
-	exact(serverModule + "/app/invocation"),
-	exact(serverModule + "/app/job"),
-	exact(serverModule + "/app/mail"),
-	exact(serverModule + "/app/onboarding"),
-	exact(serverModule + "/app/paging"),
-	exact(serverModule + "/app/realtime"),
-	exact(serverModule + "/app/search"),
-	exact(serverModule + "/app/user"),
-	subtree(serverModule + "/app/exam"),
-	exact(serverModule + "/model"),
-	exact(serverModule + "/store"),
-	exact(serverModule + "/localization"),
-	exact(serverModule + "/internal/weborigin"),
-}
-
 // dependencyRules is ordered from the most specific package boundary to the
 // broadest. The first matching rule owns a production package.
 var dependencyRules = []dependencyRule{
@@ -241,7 +227,6 @@ var dependencyRules = []dependencyRule{
 		sources:        []pathPattern{exact(serverModule + "/model")},
 		deniedStandard: standardInfrastructure,
 		project:        only(exact(serverModule + "/internal/canonicaljson")),
-		thirdParty:     only(exact("golang.org/x/net/idna")),
 	},
 	{
 		name:           "store contracts",
@@ -398,7 +383,6 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app/realtime"),
 			exact(serverModule+"/model"),
 			exact(serverModule+"/store"),
-			exact(serverModule+"/app/exam/safemarkdown"),
 		),
 	},
 	{
@@ -419,14 +403,14 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app/realtime"),
 			exact(serverModule+"/model"),
 			exact(serverModule+"/store"),
-			exact(serverModule+"/app/exam/safemarkdown"),
 		),
 	},
 	{
 		// The Attempt and Integrity review areas prepare the Submission
 		// receipt and the result-release notice, so they compose through
-		// app/mail.
-		name: "exam idempotency consumers",
+		// app/mail, and render candidate-visible Markdown through the shared
+		// safe Markdown leaf. Neither decides Exam Manager eligibility.
+		name: "exam mail and safe Markdown consumers",
 		sources: []pathPattern{
 			exact(serverModule + "/app/exam/attempt"),
 			exact(serverModule + "/app/exam/review"),
@@ -445,15 +429,9 @@ var dependencyRules = []dependencyRule{
 		),
 	},
 	{
-		name:           "exam application",
-		sources:        []pathPattern{subtree(serverModule + "/app/exam")},
+		name:           "safe Markdown",
+		sources:        []pathPattern{exact(serverModule + "/app/exam/safemarkdown")},
 		deniedStandard: standardInfrastructure,
-		project: only(
-			exact(serverModule+"/app/apperror"),
-			exact(serverModule+"/model"),
-			exact(serverModule+"/store"),
-			exact(serverModule+"/app/exam/safemarkdown"),
-		),
 	},
 	{
 		name:           "file-content adapter",
@@ -625,8 +603,21 @@ var dependencyRules = []dependencyRule{
 		),
 	},
 	{
+		// Only the areas that run batches import the batch item context, and
+		// the Go internal rule keeps every transport from building one.
+		name:           "batch item context",
+		sources:        []pathPattern{exact(serverModule + "/app/internal/batchitem")},
+		deniedStandard: standardInfrastructure,
+		project: only(
+			exact(serverModule+"/model"),
+			exact(serverModule+"/store"),
+		),
+	},
+	{
+		// The parent alone; an application child without its own rule fails
+		// closed.
 		name:           "application",
-		sources:        []pathPattern{subtree(serverModule + "/app")},
+		sources:        []pathPattern{exact(serverModule + "/app")},
 		deniedStandard: standardInfrastructure,
 		project: only(
 			exact(serverModule+"/logging"),
@@ -635,11 +626,8 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app/administration"),
 			exact(serverModule+"/app/identity"),
 			exact(serverModule+"/app/onboarding"),
-			exact(serverModule+"/app/paging"),
 			exact(serverModule+"/app/user"),
-			exact(serverModule+"/app/internal/batchitem"),
 			exact(serverModule+"/app/apperror"),
-			exact(serverModule+"/app/idempotency"),
 			exact(serverModule+"/app/invocation"),
 			exact(serverModule+"/model"),
 			exact(serverModule+"/store"),
@@ -651,7 +639,6 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/secretseal"),
 			subtree(serverModule+"/app/exam"),
 		),
-		thirdParty: only(exact("golang.org/x/crypto/argon2")),
 	},
 	{
 		name:    "hosted webapp transport",
@@ -681,15 +668,49 @@ var dependencyRules = []dependencyRule{
 		name:           "HTTP resources",
 		sources:        []pathPattern{subtree(serverModule + "/httpapi")},
 		deniedStandard: standardInfrastructureExceptHTTP,
-		project:        only(append([]pathPattern{exact(serverModule + "/httpapi/route")}, transportApplicationImports...)...),
-		thirdParty:     only(descendants("github.com/gorilla")),
+		// The resources name the application surface, the area packages whose
+		// command, query and result types they map, store result types, and
+		// the domain and presentation leaves; the routing kernel owns the
+		// router library and browser origins.
+		project: only(
+			exact(serverModule+"/httpapi/route"),
+			exact(serverModule+"/logging"),
+			exact(serverModule+"/app"),
+			exact(serverModule+"/app/academic"),
+			exact(serverModule+"/app/administration"),
+			exact(serverModule+"/app/apperror"),
+			exact(serverModule+"/app/identity"),
+			exact(serverModule+"/app/invocation"),
+			exact(serverModule+"/app/job"),
+			exact(serverModule+"/app/mail"),
+			exact(serverModule+"/app/onboarding"),
+			exact(serverModule+"/app/paging"),
+			exact(serverModule+"/app/search"),
+			exact(serverModule+"/app/user"),
+			subtree(serverModule+"/app/exam"),
+			exact(serverModule+"/model"),
+			exact(serverModule+"/store"),
+			exact(serverModule+"/localization"),
+		),
 	},
 	{
 		name:           "WebSocket transport",
 		sources:        []pathPattern{subtree(serverModule + "/websocket")},
 		deniedStandard: standardInfrastructureExceptHTTP,
-		project:        only(transportApplicationImports...),
-		thirdParty:     only(descendants("github.com/gorilla")),
+		// The socket delivers Realtime events and connects Attempts; it reaches
+		// no other area.
+		project: only(
+			exact(serverModule+"/logging"),
+			exact(serverModule+"/app/apperror"),
+			exact(serverModule+"/app/exam/attempt"),
+			exact(serverModule+"/app/invocation"),
+			exact(serverModule+"/app/realtime"),
+			exact(serverModule+"/model"),
+			exact(serverModule+"/store"),
+			exact(serverModule+"/localization"),
+			exact(serverModule+"/internal/weborigin"),
+		),
+		thirdParty: only(descendants("github.com/gorilla")),
 	},
 	{
 		name:    "cluster contracts",
@@ -732,7 +753,6 @@ var dependencyRules = []dependencyRule{
 		name:    "external-auth adapters",
 		sources: []pathPattern{subtree(serverModule + "/platform/externalauth")},
 		project: only(
-			exact(serverModule+"/app"),
 			exact(serverModule+"/config"),
 			exact(serverModule+"/model"),
 			exact(serverModule+"/platform/externalauth"),
@@ -891,8 +911,10 @@ func TestDependencyRulePrecedence(t *testing.T) {
 		{packagePath: serverModule + "/app/mail", wantRule: "mail application"},
 		{packagePath: serverModule + "/app/exam/manageraccess", wantRule: "exam manager access"},
 		{packagePath: serverModule + "/app/exam", wantRule: "exam manager access consumers"},
-		{packagePath: serverModule + "/app/exam/review", wantRule: "exam idempotency consumers"},
-		{packagePath: serverModule + "/app/exam/safemarkdown", wantRule: "exam application"},
+		{packagePath: serverModule + "/app/exam/review", wantRule: "exam mail and safe Markdown consumers"},
+		{packagePath: serverModule + "/app/exam/safemarkdown", wantRule: "safe Markdown"},
+		{packagePath: serverModule + "/app/internal/batchitem", wantRule: "batch item context"},
+		{packagePath: serverModule + "/app", wantRule: "application"},
 		{packagePath: serverModule + "/store/sqlstore", wantRule: "SQL store adapter"},
 		{packagePath: serverModule + "/platform/externalauth/oidc", wantRule: "external-auth adapters"},
 		{packagePath: serverModule + "/internal/openapidoc", wantRule: "OpenAPI compiler"},
@@ -913,135 +935,6 @@ func TestDependencyRulePrecedence(t *testing.T) {
 			require.Equal(t, tt.wantRule, rule.name, "dependencyRuleFor(%q)", tt.packagePath)
 		})
 	}
-}
-
-func TestExamIdempotencyConsumerAllowlist(t *testing.T) {
-	t.Parallel()
-
-	for _, packagePath := range []string{
-		serverModule + "/app/exam",
-		serverModule + "/app/exam/attempt",
-		serverModule + "/app/exam/correction",
-		serverModule + "/app/exam/resource",
-		serverModule + "/app/exam/review",
-		serverModule + "/app/exam/sitting",
-		serverModule + "/app/exam/workspace",
-	} {
-		assert.False(t, forbiddenImport(packagePath, serverModule+"/app/idempotency"), "%s cannot import the shared idempotency leaf", packagePath)
-	}
-	assert.True(t, forbiddenImport(serverModule+"/app/exam/safemarkdown", serverModule+"/app/idempotency"), "unlisted Exam child can import the shared idempotency leaf")
-	assert.True(t, forbiddenImport(serverModule+"/app/exam/attempt/internal", serverModule+"/app/idempotency"), "descendant of a listed Exam command owner can import the shared idempotency leaf")
-}
-
-func TestExamRealtimePublisherAllowlist(t *testing.T) {
-	t.Parallel()
-	publisher := serverModule + "/app/realtime"
-	for _, consumer := range []string{"/app/exam", "/app/exam/attempt", "/app/exam/correction", "/app/exam/resource",
-		"/app/exam/review", "/app/exam/sitting", "/app/exam/workspace"} {
-		assert.False(t, forbiddenImport(serverModule+consumer, publisher), "%s cannot import the realtime Publisher", consumer)
-		assert.True(t, forbiddenImport(publisher, serverModule+consumer), "realtime can import %s", consumer)
-	}
-	for _, consumer := range []string{"/app/exam/safemarkdown", "/app/exam/manageraccess"} {
-		assert.True(t, forbiddenImport(serverModule+consumer, publisher), "Exam leaf %s can import the realtime Publisher", consumer)
-	}
-}
-
-func TestInvocationLeafBoundary(t *testing.T) {
-	t.Parallel()
-	leaf := serverModule + "/app/invocation"
-	for _, consumer := range []string{"/app", "/app/idempotency", "/app/exam", "/app/exam/attempt", "/app/exam/correction",
-		"/app/exam/resource", "/app/exam/review", "/app/exam/sitting", "/app/exam/workspace"} {
-		assert.False(t, forbiddenImport(serverModule+consumer, leaf), "%s cannot import the shared invocation leaf", consumer)
-	}
-	assert.False(t, forbiddenImport(leaf, serverModule+"/model"), "invocation leaf cannot import model")
-	for _, dependency := range []string{"/app", "/app/apperror", "/app/idempotency", "/app/exam", "/store"} {
-		assert.True(t, forbiddenImport(leaf, serverModule+dependency), "invocation leaf can import forbidden dependency %s", dependency)
-	}
-}
-
-func TestExamManagerAccessBoundary(t *testing.T) {
-	t.Parallel()
-	leaf := serverModule + "/app/exam/manageraccess"
-	for _, consumer := range []string{"/app/exam", "/app/exam/correction", "/app/exam/resource", "/app/exam/sitting", "/app/exam/workspace"} {
-		assert.False(t, forbiddenImport(serverModule+consumer, leaf), "%s cannot import the shared Manager eligibility policy", consumer)
-	}
-	for _, consumer := range []string{"/app/exam/attempt", "/app/exam/review", "/app/exam/resource/internal"} {
-		assert.True(t, forbiddenImport(serverModule+consumer, leaf), "unlisted consumer %s can import the shared Manager eligibility policy", consumer)
-	}
-	for _, dependency := range []string{"/model", "/store"} {
-		assert.False(t, forbiddenImport(leaf, serverModule+dependency), "Manager eligibility policy cannot import %s", dependency)
-	}
-	for _, dependency := range []string{"/app", "/app/exam", "/app/exam/resource", "/app/idempotency", "/store/sqlstore"} {
-		assert.True(t, forbiddenImport(leaf, serverModule+dependency), "Manager eligibility policy can import forbidden dependency %s", dependency)
-	}
-}
-
-func TestAreaPackageBoundaries(t *testing.T) {
-	t.Parallel()
-	access, paging, academic := serverModule+"/app/access", serverModule+"/app/paging", serverModule+"/app/academic"
-	user := serverModule + "/app/user"
-	for _, consumer := range []string{"/app", "/app/academic", "/app/user"} {
-		assert.False(t, forbiddenImport(serverModule+consumer, access), "%s cannot import access", consumer)
-		assert.False(t, forbiddenImport(serverModule+consumer, paging), "%s cannot import paging", consumer)
-	}
-	for _, consumer := range []string{"/app", "/httpapi", "/websocket"} {
-		assert.False(t, forbiddenImport(serverModule+consumer, academic), "%s cannot import academic", consumer)
-	}
-	for _, dependency := range []string{"/model", "/store", "/app/apperror", "/app/invocation"} {
-		assert.False(t, forbiddenImport(access, serverModule+dependency), "access cannot import %s", dependency)
-	}
-	for _, dependency := range []string{"/access", "/paging", "/mail", "/realtime", "/idempotency"} {
-		assert.False(t, forbiddenImport(academic, serverModule+"/app"+dependency), "academic cannot import app%s", dependency)
-	}
-	for _, consumer := range []string{"/app", "/httpapi", "/filecontent"} {
-		assert.False(t, forbiddenImport(serverModule+consumer, user), "%s cannot import user", consumer)
-	}
-	for _, dependency := range []string{"/access", "/paging", "/idempotency", "/apperror", "/invocation", "/realtime"} {
-		assert.False(t, forbiddenImport(user, serverModule+"/app"+dependency), "user cannot import app%s", dependency)
-	}
-	for _, dependency := range []string{"/app/academic", "/app/mail", "/app/jobs"} {
-		assert.True(t, forbiddenImport(user, serverModule+dependency), "user can import forbidden dependency %s", dependency)
-	}
-	for _, area := range []string{access, paging, academic, user} {
-		for _, dependency := range []string{"/app", "/app/exam", "/app/job", "/httpapi", "/store/sqlstore", "/platform"} {
-			assert.True(t, forbiddenImport(area, serverModule+dependency), "%s can import forbidden dependency %s", area, dependency)
-		}
-	}
-	identity := serverModule + "/app/identity"
-	for _, consumer := range []string{"/app", "/httpapi", "/websocket"} {
-		assert.False(t, forbiddenImport(serverModule+consumer, identity), "%s cannot import identity", consumer)
-	}
-	for _, dependency := range []string{"/app/access", "/app/user", "/app/internal/batchitem", "/app/mail", "/app/realtime"} {
-		assert.False(t, forbiddenImport(identity, serverModule+dependency), "identity cannot import %s", dependency)
-	}
-	for _, dependency := range []string{"/app", "/app/academic", "/app/exam", "/httpapi", "/websocket", "/store/sqlstore", "/platform"} {
-		assert.True(t, forbiddenImport(identity, serverModule+dependency), "identity can import forbidden dependency %s", dependency)
-	}
-	administration := serverModule + "/app/administration"
-	for _, consumer := range []string{"/app", "/httpapi", "/websocket"} {
-		assert.False(t, forbiddenImport(serverModule+consumer, administration), "%s cannot import administration", consumer)
-	}
-	for _, dependency := range []string{"/app/access", "/app/identity", "/app/internal/batchitem", "/app/mail", "/app/paging", "/app/realtime"} {
-		assert.False(t, forbiddenImport(administration, serverModule+dependency), "administration cannot import %s", dependency)
-	}
-	for _, dependency := range []string{"/app", "/app/academic", "/app/exam", "/app/job", "/httpapi", "/websocket", "/store/sqlstore", "/platform"} {
-		assert.True(t, forbiddenImport(administration, serverModule+dependency), "administration can import forbidden dependency %s", dependency)
-	}
-	onboarding := serverModule + "/app/onboarding"
-	for _, consumer := range []string{"/app", "/httpapi", "/websocket"} {
-		assert.False(t, forbiddenImport(serverModule+consumer, onboarding), "%s cannot import onboarding", consumer)
-	}
-	for _, dependency := range []string{"/app/academic", "/app/administration", "/app/identity", "/app/internal/batchitem", "/app/jobs", "/app/realtime"} {
-		assert.False(t, forbiddenImport(onboarding, serverModule+dependency), "onboarding cannot import %s", dependency)
-	}
-	for _, dependency := range []string{"/app", "/app/exam", "/app/job", "/httpapi", "/websocket", "/store/sqlstore", "/platform"} {
-		assert.True(t, forbiddenImport(onboarding, serverModule+dependency), "onboarding can import forbidden dependency %s", dependency)
-	}
-	assert.True(t, forbiddenImport(administration, onboarding), "administration can import the onboarding area")
-	assert.True(t, forbiddenImport(access, academic), "access can import the academic area")
-	assert.True(t, forbiddenImport(access, paging), "access can import paging")
-	assert.True(t, forbiddenImport(paging, access), "paging can import access")
-	assert.True(t, forbiddenImport(paging, serverModule+"/model"), "paging can import model")
 }
 
 func TestUnclassifiedProductionPackageFailsClosed(t *testing.T) {

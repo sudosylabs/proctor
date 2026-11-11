@@ -34,11 +34,18 @@ before changing documentation or skill validation.
 
 - Tests remain hermetic and network-free.
 - A rule checked over the tree has a planted-violation test beside it that
-  proves the check rejects what it claims to; an allowlist entry carries its
-  reason and fails once it is stale.
-- Production package boundaries are declared as ordered rules in
-  `import_policy_test.go`. Every production package must match a rule and every
-  forbidden import fails the gate; do not add waiver or debt mechanisms.
+  proves the check rejects what it claims to. An allowlist entry carries its
+  reason; an import rule's allowance fails once no package the rule owns
+  imports it (`TestDependencyAllowancesAreUsed`), but other allowlists are not
+  checked for staleness, so remove an entry when its last use goes.
+- Production package boundaries are declared once, as ordered rules in
+  `dependencyRules` (`import_policy_test.go`). Every production package must
+  match a rule and every forbidden import fails the gate; do not add waiver or
+  debt mechanisms. Do not restate a rule in a per-package test or in prose: the
+  planted cases in `imports_test.go` exercise each matcher shape and security
+  edge, and the rule table in the
+  [dependency reference](../../.agents/skills/server-boundaries/references/dependencies.md)
+  is generated (`TestDependencyReferenceMatchesRules`).
 - Documentation validation inspects repository candidates when Git metadata is
   available and skips only the Git-specific check for an independently tested
   server module without a repository checkout.
@@ -49,8 +56,10 @@ Run `make -C server architecture` after changes here.
 
 ## Retired architecture tests
 
-These tests enforced style or shape and were removed. Do not bring one back
-as a test; extend the linter configuration or leave the rule to review.
+These tests enforced style or shape, restated another rule, or only kept
+retired names retired, and were removed. Do not bring one back as a test;
+extend the linter configuration, the rule that covers it, or leave it to
+review.
 
 | Retired test | Replaced by | Reason |
 | --- | --- | --- |
@@ -68,5 +77,14 @@ as a test; extend the linter configuration or leave the rule to review.
 | `TestStoreMutationsTakeOneInput` | review | Shape of Store method signatures. |
 | `TestStoreRevisionFencesNameTheirResource` | review | Shape of field names in Store inputs. |
 | `TestApplicationDeclaresNoForwardingNames` | review | Shape; the import policy already decides who may name what. |
+| `TestAreaPackageBoundaries` | `dependencyRules`, `TestApplicationPackagesPointInward` | Restated each area's import rule. |
+| `TestExamRealtimePublisherAllowlist` | `dependencyRules` (the Exam, realtime, safe Markdown and Exam Manager access rules) | Restated the rules. |
+| `TestInvocationLeafBoundary` | `dependencyRules` ("invocation application") | Restated the rule. |
+| `TestExamManagerAccessBoundary` | `dependencyRules` (the Exam rules and "exam manager access") | Restated the rules. |
+| `TestExamIdempotencyConsumerAllowlist` | `dependencyRules` (the Exam rules); an unlisted Exam child fails closed | Restated the rules. |
+| `TestUserSettingsApplicationBoundary` | `dependencyRules` ("user application") | One file's import allowlist; the package rule already forbids its targets. |
+| `TestApplicationFacadeDoesNotRetainPersistenceLocator` | `TestApplicationSurfaceIsNamedServices` | App holds only service pointers, never a Store contract, and declares no Store accessor. |
+| `TestApplicationDoesNotExportFocusedServiceImplementations` | review | Kept one retired type name retired. |
+| `TestRealtimeContractsHaveOneProductionOwner` | `dependencyRules`, `TestRealtimePeerContractsAreDeclaredOnlyByChild`, review | Kept retired parent names retired; the mechanics live in `app/realtime`, and a second name for a type is a review rule. |
 
 Each `...RejectsPlantedViolations` test left with its rule.

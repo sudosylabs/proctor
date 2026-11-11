@@ -23,7 +23,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -215,7 +215,7 @@ func (s *Service) BootstrapInstallation(
 	}
 
 	metadata := invocation.RequestMetadata()
-	administrator, defaultPictureJob, err := jobhandler.PrepareUserDefaultProfilePictureJob(&model.User{
+	administrator, defaultPictureJob, err := jobs.PrepareUserDefaultProfilePictureJob(&model.User{
 		Username:    command.AdministratorUsername,
 		Email:       command.AdministratorEmail,
 		DisplayName: command.AdministratorDisplayName,

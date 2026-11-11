@@ -40,7 +40,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
@@ -232,7 +232,7 @@ type Ports struct {
 	CountOpenImports        func(context.Context, invocation.Invocation, int) (int, error)
 	// ImportJobs is the port the onboarding import Jobs call, or nil when the
 	// Service has no onboarding imports.
-	ImportJobs jobhandler.OnboardingImportService
+	ImportJobs jobs.OnboardingImportService
 }
 
 // New builds the Service, keeping the Store contracts it calls, and the

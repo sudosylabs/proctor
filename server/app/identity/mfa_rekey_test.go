@@ -18,7 +18,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
@@ -115,9 +115,9 @@ func TestStartMFARekeyAuditsThenFencesAndWakesTheEngine(t *testing.T) {
 	require.Equal(t, fixture.sealer.PrimaryKeyID(), input.PrimaryKeyID)
 	require.Equal(t, fixture.retiringID, input.RetiringKeyID)
 	require.Equal(t, model.AuditEventID(fixture.auditor.beginID), input.AuditEventID)
-	command, err := jobhandler.DecodeMFARekeyCommand(input.Job.Command)
+	command, err := jobs.DecodeMFARekeyCommand(input.Job.Command)
 	require.NoError(t, err)
-	require.Equal(t, jobhandler.MFARekeyCommand{PrimaryKeyID: fixture.sealer.PrimaryKeyID(), RetiringKeyID: fixture.retiringID}, command)
+	require.Equal(t, jobs.MFARekeyCommand{PrimaryKeyID: fixture.sealer.PrimaryKeyID(), RetiringKeyID: fixture.retiringID}, command)
 	require.Equal(t, MFARekeyView{JobID: input.Job.ID, PrimaryKeyID: input.PrimaryKeyID, RetiringKeyID: input.RetiringKeyID, CreatedAt: input.Job.CreatedAt}, view)
 	require.Equal(t, 1, fixture.woke)
 }
@@ -180,7 +180,7 @@ func TestMFARekeyStatusHidesOtherJobTypesAndProjectsTheProof(t *testing.T) {
 	t.Parallel()
 	fixture := newMFAKeyServiceFixture(t)
 	at := time.Date(2026, 10, 23, 8, 0, 0, 0, time.UTC)
-	command, err := json.Marshal(jobhandler.MFARekeyCommand{PrimaryKeyID: fixture.sealer.PrimaryKeyID(), RetiringKeyID: fixture.retiringID})
+	command, err := json.Marshal(jobs.MFARekeyCommand{PrimaryKeyID: fixture.sealer.PrimaryKeyID(), RetiringKeyID: fixture.retiringID})
 	require.NoError(t, err)
 	other, err := model.NewJob(model.NewJobID(), model.JobTypeMailRekey, command, "mail-rekey:other", at, at, 10)
 	require.NoError(t, err)

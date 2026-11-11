@@ -270,7 +270,7 @@ var dependencyRules = []dependencyRule{
 	},
 	{
 		name:           "concrete jobs",
-		sources:        []pathPattern{subtree(serverModule + "/app/jobhandler")},
+		sources:        []pathPattern{subtree(serverModule + "/app/jobs")},
 		deniedStandard: standardInfrastructure,
 		project: only(
 			exact(serverModule+"/model"),
@@ -539,7 +539,7 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app/internal/batchitem"),
 			exact(serverModule+"/app/invocation"),
 			exact(serverModule+"/app/job"),
-			exact(serverModule+"/app/jobhandler"),
+			exact(serverModule+"/app/jobs"),
 			exact(serverModule+"/app/mail"),
 			exact(serverModule+"/app/paging"),
 			exact(serverModule+"/app/realtime"),
@@ -561,7 +561,7 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app/identity"),
 			exact(serverModule+"/app/internal/batchitem"),
 			exact(serverModule+"/app/invocation"),
-			exact(serverModule+"/app/jobhandler"),
+			exact(serverModule+"/app/jobs"),
 			exact(serverModule+"/app/mail"),
 			exact(serverModule+"/app/paging"),
 			exact(serverModule+"/app/realtime"),
@@ -582,7 +582,7 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app/identity"),
 			exact(serverModule+"/app/internal/batchitem"),
 			exact(serverModule+"/app/invocation"),
-			exact(serverModule+"/app/jobhandler"),
+			exact(serverModule+"/app/jobs"),
 			exact(serverModule+"/app/mail"),
 			exact(serverModule+"/app/paging"),
 			exact(serverModule+"/app/realtime"),
@@ -626,7 +626,7 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/model"),
 			exact(serverModule+"/store"),
 			exact(serverModule+"/app/job"),
-			exact(serverModule+"/app/jobhandler"),
+			exact(serverModule+"/app/jobs"),
 			exact(serverModule+"/app/realtime"),
 			exact(serverModule+"/app/mail"),
 			exact(serverModule+"/app/search"),
@@ -830,7 +830,7 @@ func TestDependencyRulePrecedence(t *testing.T) {
 		packagePath string
 		wantRule    string
 	}{
-		{packagePath: serverModule + "/app/jobhandler", wantRule: "concrete jobs"},
+		{packagePath: serverModule + "/app/jobs", wantRule: "concrete jobs"},
 		{packagePath: serverModule + "/app/idempotency", wantRule: "idempotency application"},
 		{packagePath: serverModule + "/app/invocation", wantRule: "invocation application"},
 		{packagePath: serverModule + "/app/apperror", wantRule: "application error vocabulary"},
@@ -950,7 +950,7 @@ func TestAreaPackageBoundaries(t *testing.T) {
 	for _, dependency := range []string{"/access", "/paging", "/idempotency", "/apperror", "/invocation", "/realtime"} {
 		assert.False(t, forbiddenImport(user, serverModule+"/app"+dependency), "user cannot import app%s", dependency)
 	}
-	for _, dependency := range []string{"/app/academic", "/app/mail", "/app/jobhandler"} {
+	for _, dependency := range []string{"/app/academic", "/app/mail", "/app/jobs"} {
 		assert.True(t, forbiddenImport(user, serverModule+dependency), "user can import forbidden dependency %s", dependency)
 	}
 	for _, area := range []string{access, paging, academic, user} {
@@ -982,7 +982,7 @@ func TestAreaPackageBoundaries(t *testing.T) {
 	for _, consumer := range []string{"/app", "/httpapi", "/websocket"} {
 		assert.False(t, forbiddenImport(serverModule+consumer, onboarding), "%s cannot import onboarding", consumer)
 	}
-	for _, dependency := range []string{"/app/academic", "/app/administration", "/app/identity", "/app/internal/batchitem", "/app/jobhandler", "/app/realtime"} {
+	for _, dependency := range []string{"/app/academic", "/app/administration", "/app/identity", "/app/internal/batchitem", "/app/jobs", "/app/realtime"} {
 		assert.False(t, forbiddenImport(onboarding, serverModule+dependency), "onboarding cannot import %s", dependency)
 	}
 	for _, dependency := range []string{"/app", "/app/exam", "/app/job", "/httpapi", "/websocket", "/store/sqlstore", "/platform"} {

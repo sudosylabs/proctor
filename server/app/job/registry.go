@@ -130,6 +130,64 @@ type Descriptor struct {
 	Handler               Handler
 }
 
+// NewDescriptor returns the descriptor of an ordinary Job: one that runs one
+// at a time, is tried five times, and is visible to operators only. A Job
+// that differs sets the fields that differ on the result, so its handler file
+// shows only what is particular to it. The defaults are:
+//
+//	Timeout            10 minutes
+//	Concurrency        1
+//	MaximumAttempts    5
+//	LeaseDuration      1 minute
+//	HeartbeatInterval  15 seconds
+//	BaseRetryDelay     1 second
+//	MaximumRetryDelay  1 minute
+//	Visibility         VisibilityOperator
+//	SuccessRetention   30 days
+//	FailureRetention   90 days
+//
+// It records no checkpoints, declares no progress stages or public error
+// codes, cannot be canceled, and cannot be retried by an operator.
+func NewDescriptor(jobType model.JobType, handler Handler) Descriptor {
+	return Descriptor{
+		Type:              jobType,
+		Timeout:           10 * time.Minute,
+		Concurrency:       1,
+		MaximumAttempts:   5,
+		LeaseDuration:     time.Minute,
+		HeartbeatInterval: 15 * time.Second,
+		BaseRetryDelay:    time.Second,
+		MaximumRetryDelay: time.Minute,
+		Visibility:        VisibilityOperator,
+		SuccessRetention:  30 * 24 * time.Hour,
+		FailureRetention:  90 * 24 * time.Hour,
+		Handler:           handler,
+	}
+}
+
+// Registration is everything one Job contributes to the engine: the
+// Descriptor that says how it runs and, when the Job is proposed on a
+// schedule, the Recurrence that proposes it. Recurrence is nil for a Job
+// that only other code enqueues.
+type Registration struct {
+	Descriptor Descriptor
+	Recurrence *Recurrence
+}
+
+// SplitRegistrations returns the descriptors and the recurrences of
+// registrations, each in registration order, as Dependencies takes them.
+func SplitRegistrations(registrations []Registration) ([]Descriptor, []Recurrence) {
+	descriptors := make([]Descriptor, 0, len(registrations))
+	var recurrences []Recurrence
+	for _, registration := range registrations {
+		descriptors = append(descriptors, registration.Descriptor)
+		if registration.Recurrence != nil {
+			recurrences = append(recurrences, *registration.Recurrence)
+		}
+	}
+	return descriptors, recurrences
+}
+
 type Registry struct {
 	descriptors map[model.JobType]Descriptor
 	types       []model.JobType

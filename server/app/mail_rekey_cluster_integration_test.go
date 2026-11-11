@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/job"
-	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
@@ -59,7 +59,7 @@ func TestMailRekeyOldPrimaryRelinquishesOnceAndNewPrimaryCompletes(t *testing.T)
 		RetiringKeyID: oldSealer.PrimaryKeyID(), Job: rekeyJob, AuditEventID: audit.ID, AuditAt: model.NowUTC()})
 	require.NoError(t, err)
 
-	oldDescriptor := jobhandler.NewMailRekeyDescriptor(persistence.Mail(), oldSealer)
+	oldDescriptor := jobs.NewMailRekey(persistence.Mail(), oldSealer).Descriptor
 	oldDescriptor.BaseRetryDelay, oldDescriptor.MaximumRetryDelay = 10*time.Millisecond, 10*time.Millisecond
 	oldDescriptor.LeaseDuration, oldDescriptor.HeartbeatInterval = mailRekeyClusterLease, mailRekeyClusterHeartbeat
 	oldNode, err := job.New(job.Dependencies{Store: persistence.Job(), Descriptors: []job.Descriptor{oldDescriptor},
@@ -81,7 +81,7 @@ func TestMailRekeyOldPrimaryRelinquishesOnceAndNewPrimaryCompletes(t *testing.T)
 	require.Len(t, attempts, 1, "no-compatible-node attempts")
 	require.Equal(t, "old-primary-node", attempts[0].NodeID, "no-compatible-node attempts")
 
-	newDescriptor := jobhandler.NewMailRekeyDescriptor(persistence.Mail(), newSealer)
+	newDescriptor := jobs.NewMailRekey(persistence.Mail(), newSealer).Descriptor
 	newDescriptor.BaseRetryDelay, newDescriptor.MaximumRetryDelay = 10*time.Millisecond, 10*time.Millisecond
 	newDescriptor.LeaseDuration, newDescriptor.HeartbeatInterval = mailRekeyClusterLease, mailRekeyClusterHeartbeat
 	newNode, err := job.New(job.Dependencies{Store: persistence.Job(), Descriptors: []job.Descriptor{newDescriptor},
@@ -114,15 +114,15 @@ const (
 	mailRekeyClusterConvergence = 30 * time.Second
 )
 
-func waitForMailRekeyJob(t *testing.T, jobs store.JobStore, jobID model.JobID,
+func waitForMailRekeyJob(t *testing.T, jobStore store.JobStore, jobID model.JobID,
 	ready func(*model.Job, []model.JobAttempt) bool,
 ) {
 	t.Helper()
 	deadline := time.Now().Add(mailRekeyClusterConvergence)
 	for {
-		job, err := jobs.Get(context.Background(), jobID)
+		job, err := jobStore.Get(context.Background(), jobID)
 		require.NoError(t, err)
-		attempts, err := jobs.ListAttempts(context.Background(), jobID)
+		attempts, err := jobStore.ListAttempts(context.Background(), jobID)
 		require.NoError(t, err)
 		if ready(job, attempts) {
 			return

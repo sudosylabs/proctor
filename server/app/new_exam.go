@@ -20,7 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/exam/workspace"
 	"github.com/sudosylabs/proctor/server/app/identity"
-	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
@@ -188,7 +188,7 @@ func newSittings(
 		Auditor:       shared.audit.MutationAudit(),
 		SystemAuditor: shared.audit.SystemAudit(),
 		Publisher:     shared.realtime,
-		Jobs:          jobhandler.NewExamSittingLifecycleJobFactory(time.Now, model.NewJobID),
+		Jobs:          jobs.NewExamSittingLifecycleJobFactory(time.Now, model.NewJobID),
 		Mail:          scheduleMail,
 		Now:           time.Now,
 		NewID:         model.NewExamSittingID,

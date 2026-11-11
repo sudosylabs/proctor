@@ -16,7 +16,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/identity"
-	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/app/realtime"
@@ -93,7 +93,7 @@ func New(deps Dependencies) (*App, error) {
 	}
 
 	acceptor.accept = onboardingPorts.AcceptExternalIdentity
-	jobs, err := newJobRuntime(deps, shared, authorizer, exams, users, defaultPictureJobs, onboardingPorts, wake)
+	runtime, err := newJobRuntime(deps, shared, authorizer, exams, users, defaultPictureJobs, onboardingPorts, wake)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +107,7 @@ func New(deps Dependencies) (*App, error) {
 		ClassAuthorization: authorizer,
 		Classes:            deps.Store.Class(),
 	})
-	counts := administration.NewCounts(administrationCountsDependencies(onboardingPorts, jobs))
+	counts := administration.NewCounts(administrationCountsDependencies(onboardingPorts, runtime))
 	return &App{
 		Identity:          identities,
 		Onboarding:        onboardings,
@@ -134,9 +134,9 @@ func New(deps Dependencies) (*App, error) {
 			authorization: authorizer,
 			operational:   deps.OperationalRecorder,
 		},
-		Jobs:      jobs.operations,
-		Mail:      jobs.mail,
-		jobEngine: jobs.engine,
+		Jobs:      runtime.operations,
+		Mail:      runtime.mail,
+		jobEngine: runtime.engine,
 	}, nil
 }
 
@@ -325,18 +325,18 @@ func newAcademic(deps Dependencies, shared sharedMechanics, authorizer *access.A
 
 // newDefaultProfilePictureJobs proposes default profile picture generation;
 // it exists only when Jobs are enabled.
-func newDefaultProfilePictureJobs(deps Dependencies) *jobhandler.DefaultProfilePictureJobs {
+func newDefaultProfilePictureJobs(deps Dependencies) *jobs.DefaultProfilePictureJobs {
 	if deps.Store.Job() == nil {
 		return nil
 	}
-	return jobhandler.NewDefaultProfilePictureJobs(jobhandler.DefaultProfilePictureJobsDependencies{Jobs: deps.Store.Job()})
+	return jobs.NewDefaultProfilePictureJobs(jobs.DefaultProfilePictureJobsDependencies{Jobs: deps.Store.Job()})
 }
 
 func newUsers(
 	deps Dependencies,
 	shared sharedMechanics,
 	authorizer *access.Authorizer,
-	defaultPictureJobs *jobhandler.DefaultProfilePictureJobs,
+	defaultPictureJobs *jobs.DefaultProfilePictureJobs,
 ) (*user.Service, error) {
 	var proposals user.DefaultPictureJobs
 	if defaultPictureJobs != nil {

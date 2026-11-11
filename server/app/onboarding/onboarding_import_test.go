@@ -20,7 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/job"
-	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -473,7 +473,7 @@ func TestOnboardingImportExecutionJobResumesSafeTerminalCheckpointAcrossWorkers(
 	require.NoError(t, err)
 	record.Checkpoint = json.RawMessage(`{"after_row":41,"processed":37}`)
 	service := &Service{imports: onboardingImportPersistenceFake{value: &store.OnboardingImport{ID: id, State: model.OnboardingImportCompleted, ValidRows: 37}}}
-	handler := jobhandler.NewOnboardingImportExecuteDescriptor(onboardingImportJobs{service: service}).Handler
+	handler := jobs.NewOnboardingImportExecute(onboardingImportJobs{service: service}).Descriptor.Handler
 	for worker := 0; worker < 2; worker++ {
 		outcome := handler.Run(context.Background(), job.NewExecution(record, &model.JobAttempt{ID: model.NewJobAttemptID()}, func(context.Context, job.CheckpointValue) error {
 			require.FailNow(t, "terminal recovery must not write another checkpoint")

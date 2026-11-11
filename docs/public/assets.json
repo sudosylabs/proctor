@@ -971,7 +971,7 @@
       "visual_system": "proctor-assurance-v1",
       "last_reviewed": "2026-08-30",
       "visual_review": {"status": "approved", "source_sha256": "44034fa48a2e4f1801fcd9abd9fa91a8e9810aec420678a0d752c0beaf071410", "reviewed": "2026-08-30", "method": "Exact SVG bytes inspected full-size in a browser and in-page at 1440x1024 and 390x844; responsive review confirmed containment, connector continuity, no horizontal overflow, and usable caption/full-size controls, while print-emulated element capture confirmed contrast and non-color meaning.", "checks": ["text_containment", "connector_continuity", "rendered_legibility", "narrow_viewport", "print_contrast"], "viewports": [{"name": "desktop", "width": 1440, "height": 1024}, {"name": "mobile", "width": 390, "height": 844}]},
-      "review_triggers": [".agents/skills/exam-lifecycle/references/examinations.md", "server/app/exam/attempt/service.go", "server/app/jobhandler/exam_attempt_expiry.go", "server/model/exam_attempt.go", "server/store/sqlstore/exam_attempt_store.go"]
+      "review_triggers": [".agents/skills/exam-lifecycle/references/examinations.md", "server/app/exam/attempt/service.go", "server/app/jobs/exam_attempt_expiry.go", "server/model/exam_attempt.go", "server/store/sqlstore/exam_attempt_store.go"]
     },
     {
       "id": "browser-activity-privacy-boundary",

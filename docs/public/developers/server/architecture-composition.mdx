@@ -119,7 +119,7 @@ word leads you through each step.
    connection. Effects run only after the Submission is durable, and their
    failures never undo it.
 5. **Background.** When a Sitting closes, the `exam_sitting.sealing` Job in
-   `app/jobhandler/exam_sitting_sealing.go` seals the remaining Attempts
+   `app/jobs/exam_sitting_sealing.go` seals the remaining Attempts
    through `attempt.Service.SealForSittingClose`.
 
 ## Follow `server.New`

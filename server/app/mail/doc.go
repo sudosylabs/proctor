@@ -36,5 +36,5 @@
 // app/apperror, app/invocation, app/paging and the strict Job document
 // decoder in app/job. It never imports its parent, an area package (the
 // identity area's test-mail rate limit reaches Operations through a port),
-// app/jobhandler, transports, platform, SQL, or concrete adapters.
+// app/jobs, transports, platform, SQL, or concrete adapters.
 package mail

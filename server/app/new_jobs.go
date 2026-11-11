@@ -11,13 +11,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/job"
-	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/app/user"
@@ -43,7 +44,7 @@ func newJobRuntime(
 	authorizer *access.Authorizer,
 	exams examServices,
 	users *user.Service,
-	defaultPictureJobs *jobhandler.DefaultProfilePictureJobs,
+	defaultPictureJobs *jobs.DefaultProfilePictureJobs,
 	onboardingPorts onboarding.Ports,
 	wake *jobWake,
 ) (jobRuntime, error) {
@@ -173,6 +174,11 @@ func validateActiveMailPayloadKeys(ctx context.Context, persistence store.MailSt
 	return nil
 }
 
+// historyCleanupRecurrencePosition is the place of the Job history cleanup
+// recurrence in the schedule: third, after default profile picture
+// reconciliation and the file purge.
+const historyCleanupRecurrencePosition = 2
+
 type applicationJobDefinitions struct {
 	descriptors   []job.Descriptor
 	recurrences   []job.Recurrence
@@ -187,7 +193,7 @@ func buildApplicationJobDefinitions(
 	shared sharedMechanics,
 	exams examServices,
 	users *user.Service,
-	defaultPictureJobs *jobhandler.DefaultProfilePictureJobs,
+	defaultPictureJobs *jobs.DefaultProfilePictureJobs,
 	onboardingPorts onboarding.Ports,
 	mailHealth *mail.Health,
 ) applicationJobDefinitions {
@@ -195,7 +201,7 @@ func buildApplicationJobDefinitions(
 		mailHealth = mail.NewHealth(deps.MailDeliverySender != nil && deps.MailDeliverySender.Enabled())
 	}
 
-	mailDelivery := jobhandler.MailDeliveryDependencies{
+	mailDelivery := jobs.MailDeliveryDependencies{
 		Deliveries: deps.Store.Mail(),
 		Sender:     deps.MailDeliverySender,
 		Sealer:     deps.MailSecretSealer,
@@ -205,69 +211,62 @@ func buildApplicationJobDefinitions(
 		Now:        time.Now,
 	}
 	retentionJobs := administration.NewRetentionJobs(shared.audit, deps.Store.Retention(), deps.Store.User(), shared.mail, time.Now)
-	jobs, now := deps.Store.Job(), time.Now
-	// This is the one place that lists every enabled Job and the schedule
-	// that proposes it. Each line names the collaborators that Job uses.
-	descriptors := []job.Descriptor{
-		jobhandler.NewDefaultProfilePictureDescriptor(users),
-		jobhandler.NewDefaultProfilePictureReconciliationDescriptor(deps.Store.User(), defaultPictureJobs, now),
-		jobhandler.NewFilePurgeDescriptor(jobhandler.FilePurgeDependencies{
+	jobStore, now := deps.Store.Job(), time.Now
+	// This is the one place that lists every enabled Job, one line per Job.
+	// Each line names the collaborators that Job uses; a Job proposed on a
+	// schedule carries its recurrence with it.
+	registrations := []job.Registration{
+		jobs.NewDefaultProfilePicture(users),
+		jobs.NewDefaultProfilePictureReconciliation(deps.Store.User(), defaultPictureJobs, jobStore, now),
+		jobs.NewFilePurge(jobs.FilePurgeDependencies{
 			Files:                   deps.Store.File(),
 			Content:                 deps.FileContent,
 			StarterWorkspaces:       deps.Store.ExamStarterWorkspace(),
 			StarterWorkspaceContent: deps.FileContent,
 			AttemptWorkspaces:       deps.Store.ExamAttemptWorkspace(),
 			AttemptWorkspaceContent: deps.FileContent,
-			Continuations:           jobs,
+			Jobs:                    jobStore,
 			Now:                     now,
 		}),
-		jobhandler.NewCommandOutcomeCleanupDescriptor(deps.Store.CommandOutcome()),
-		jobhandler.NewAuditAttemptSweepDescriptor(deps.Store.Audit()),
-		jobhandler.NewSessionPurgeDescriptor(deps.Store.Session(), deps.Store.SessionCredential(), deps.Sessions.RetiredRetention),
-		jobhandler.NewMailDeliveryDescriptor(mailDelivery),
-		jobhandler.NewMailCredentialDeliveryDescriptor(mailDelivery),
-		jobhandler.NewSittingMailExpansionDescriptor(deps.Store.ExamSitting(), exams.sittingMail),
-		jobhandler.NewMailCleanupDescriptor(deps.Store.Mail(), deps.Store.ExamSitting(), mailDelivery.Recorder),
-		jobhandler.NewMailRekeyDescriptor(deps.Store.Mail(), deps.MailSecretSealer),
-		jobhandler.NewMFARekeyDescriptor(deps.Store.MFA(), deps.MFASecretSealer),
-		jobhandler.NewInvitationMaintenanceDescriptor(deps.Store.Invitation(), deps.Store.OnboardingImport(), deps.FileContent, now),
-		jobhandler.NewExamSittingLifecycleDescriptor(exams.sittings),
-		jobhandler.NewExamSittingSealingDescriptor(exams.sittings, exams.attempts, jobs, now, model.NewJobID),
-		jobhandler.NewExamSittingLifecycleRecoveryDescriptor(exams.sittings),
-		jobhandler.NewExamExportBuildDescriptor(exams.exports),
-		jobhandler.NewExamExportCleanupDescriptor(deps.Store.ExamExport(), deps.FileContent),
-		jobhandler.NewRetentionExpiryDescriptor(deps.Store.Retention(), retentionJobs.ExpiryAudit, jobs, now),
-		jobhandler.NewRetentionReconcileDescriptor(deps.Store.Retention(), retentionJobs.Audit, jobs, now),
-		jobhandler.NewRetentionPurgeDescriptor(deps.Store.Retention(), deps.FileContent, jobs, now),
-		jobhandler.NewRetentionNoticeDescriptor(deps.Store.Retention(), retentionJobs.Notices, jobs, now),
+		jobs.NewCommandOutcomeCleanup(deps.Store.CommandOutcome(), jobStore, now),
+		jobs.NewAuditAttemptSweep(deps.Store.Audit(), jobStore, now),
+		jobs.NewSessionPurge(deps.Store.Session(), deps.Store.SessionCredential(), deps.Sessions.RetiredRetention, jobStore, now),
+		jobs.NewMailDelivery(mailDelivery),
+		jobs.NewMailCredentialDelivery(mailDelivery),
+		jobs.NewSittingMailExpansion(deps.Store.ExamSitting(), exams.sittingMail),
+		jobs.NewMailCleanup(deps.Store.Mail(), deps.Store.ExamSitting(), mailDelivery.Recorder, jobStore, now),
+		jobs.NewMailRekey(deps.Store.Mail(), deps.MailSecretSealer),
+		jobs.NewMFARekey(deps.Store.MFA(), deps.MFASecretSealer),
+		jobs.NewInvitationMaintenance(deps.Store.Invitation(), deps.Store.OnboardingImport(), deps.FileContent, jobStore, now),
+		jobs.NewExamSittingLifecycle(exams.sittings),
+		jobs.NewExamSittingSealing(exams.sittings, exams.attempts, jobStore, now, model.NewJobID),
+		jobs.NewExamSittingLifecycleRecovery(exams.sittings, jobStore, now),
+		jobs.NewExamExportBuild(exams.exports),
+		jobs.NewExamExportCleanup(deps.Store.ExamExport(), deps.FileContent, jobStore, now),
+		jobs.NewRetentionExpiry(deps.Store.Retention(), retentionJobs.ExpiryAudit, jobStore, now),
+		jobs.NewRetentionReconcile(deps.Store.Retention(), retentionJobs.Audit, jobStore, now),
+		jobs.NewRetentionPurge(deps.Store.Retention(), deps.FileContent, jobStore, now),
+		jobs.NewRetentionNotice(deps.Store.Retention(), retentionJobs.Notices, jobStore, now),
 	}
 	if onboardingPorts.ImportJobs != nil {
-		descriptors = append(descriptors, jobhandler.NewOnboardingImportDescriptors(onboardingPorts.ImportJobs)...)
+		registrations = append(registrations,
+			jobs.NewOnboardingImportParse(onboardingPorts.ImportJobs),
+			jobs.NewStudentProgressionPreview(onboardingPorts.ImportJobs),
+			jobs.NewOnboardingImportExecute(onboardingPorts.ImportJobs),
+		)
 	}
+	descriptors, recurrences := job.SplitRegistrations(registrations)
 
 	// Job history cleanup keeps each Job type for the retention its
-	// descriptor declares, so it is built after the rest.
-	descriptors = append(descriptors, jobhandler.NewJobHistoryCleanupDescriptor(jobs, jobs, now, descriptors))
+	// descriptor declares, so it is built after the rest. Its recurrence
+	// stays where it has always been scheduled, after the file purge.
+	historyCleanup := jobs.NewJobHistoryCleanup(jobStore, jobStore, now, descriptors)
+	descriptors = append(descriptors, historyCleanup.Descriptor)
+	recurrences = slices.Insert(recurrences, historyCleanupRecurrencePosition, *historyCleanup.Recurrence)
 
-	recurrences := []job.Recurrence{
-		jobhandler.NewDefaultProfilePictureReconciliationRecurrence(jobs, now),
-		jobhandler.NewFilePurgeRecurrence(jobs, now),
-		jobhandler.NewJobHistoryCleanupRecurrence(jobs, now),
-		jobhandler.NewCommandOutcomeCleanupRecurrence(jobs, now),
-		jobhandler.NewAuditAttemptSweepRecurrence(jobs, now),
-		jobhandler.NewSessionPurgeRecurrence(jobs, now),
-		jobhandler.NewMailCleanupRecurrence(jobs, now),
-		jobhandler.NewInvitationMaintenanceRecurrence(jobs, now),
-		jobhandler.NewExamSittingLifecycleRecoveryRecurrence(jobs, now),
-		jobhandler.NewExamExportCleanupRecurrence(jobs, now),
-		jobhandler.NewRetentionExpiryRecurrence(jobs, now),
-		jobhandler.NewRetentionReconcileRecurrence(jobs, now),
-		jobhandler.NewRetentionPurgeRecurrence(jobs, now),
-		jobhandler.NewRetentionNoticeRecurrence(jobs, now),
-	}
-	periodicTasks := []job.PeriodicTask{jobhandler.NewExamAttemptExpiryTask(exams.attempts)}
+	periodicTasks := []job.PeriodicTask{jobs.NewExamAttemptExpiryTask(exams.attempts)}
 	periodicTasks = append(periodicTasks, identity.MaintenanceTasks(deps.Store)...)
-	periodicTasks = append(periodicTasks, jobhandler.NewSittingMailReconciliationTask(deps.Store.ExamSitting(), exams.sittingMailPreparation))
+	periodicTasks = append(periodicTasks, jobs.NewSittingMailReconciliationTask(deps.Store.ExamSitting(), exams.sittingMailPreparation))
 	if deps.Store.Mail() != nil && deps.MailDeliverySender != nil {
 		periodicTasks = append(periodicTasks, job.PeriodicTask{
 			Name:     "mail-maintenance-monitor",
@@ -288,16 +287,16 @@ func buildApplicationJobDefinitions(
 // administrationCountsDependencies projects the summary's counters from the
 // services that exist; a reduced lifecycle test graph may lack some, and
 // their counts are then left out.
-func administrationCountsDependencies(onboardingPorts onboarding.Ports, jobs jobRuntime) administration.CountsDependencies {
+func administrationCountsDependencies(onboardingPorts onboarding.Ports, runtime jobRuntime) administration.CountsDependencies {
 	deps := administration.CountsDependencies{
 		PendingInvitations:    onboardingPorts.CountPendingInvitations,
 		OpenOnboardingImports: onboardingPorts.CountOpenImports,
 	}
-	if jobs.operations != nil {
-		deps.RecentJobFailures = jobs.operations.CountRecentJobFailures
+	if runtime.operations != nil {
+		deps.RecentJobFailures = runtime.operations.CountRecentJobFailures
 	}
-	if jobs.mail != nil {
-		deps.FailedMailDeliveries = jobs.mail.CountFailedMailDeliveries
+	if runtime.mail != nil {
+		deps.FailedMailDeliveries = runtime.mail.CountFailedMailDeliveries
 	}
 	return deps
 }

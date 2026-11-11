@@ -20,7 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/job"
-	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 	"github.com/sudosylabs/proctor/server/store/sqlstore"
@@ -75,7 +75,7 @@ func TestRecurringMaintenanceUsesOnePermanentOccurrenceAcrossNodesAndRestart(t *
 	persistence := openClusteredJobIntegrationStore(t)
 	occurrence := time.Date(2026, time.August, 11, 8, 0, 0, 0, time.UTC)
 	proposer := &signalingCleanupProposer{
-		next:  jobhandler.NewJobHistoryCleanupRecurrence(persistence.Job(), time.Now).Proposer,
+		next:  jobs.NewJobHistoryCleanup(persistence.Job(), persistence.Job(), time.Now, nil).Recurrence.Proposer,
 		calls: make(chan recurrenceProposalResult, 3),
 	}
 	first := newRecurrenceIntegrationEngine(t, persistence, "node-a", proposer, occurrence)
@@ -102,7 +102,7 @@ func TestRecurringMaintenanceRecoversTransientProposalFailureWithoutRepeatingCom
 	persistence := openClusteredJobIntegrationStore(t)
 	occurrence := time.Date(2026, time.August, 11, 8, 0, 0, 0, time.UTC)
 	proposer := &signalingCleanupProposer{
-		next:          jobhandler.NewJobHistoryCleanupRecurrence(persistence.Job(), time.Now).Proposer,
+		next:          jobs.NewJobHistoryCleanup(persistence.Job(), persistence.Job(), time.Now, nil).Recurrence.Proposer,
 		remainingFail: 1,
 		calls:         make(chan recurrenceProposalResult, 3),
 	}
@@ -126,7 +126,7 @@ func TestRecurringMaintenanceRecoversTransientProposalFailureWithoutRepeatingCom
 
 func newRecurrenceIntegrationEngine(t *testing.T, persistence *sqlstore.SQLStore, nodeID string, proposer job.OccurrenceProposer, occurrence time.Time) *job.Engine {
 	t.Helper()
-	descriptor := jobhandler.NewJobHistoryCleanupDescriptor(persistence.Job(), persistence.Job(), time.Now, nil)
+	descriptor := jobs.NewJobHistoryCleanup(persistence.Job(), persistence.Job(), time.Now, nil).Descriptor
 	descriptor.Handler = recurrenceIntegrationHandler{}
 	engine, err := job.New(job.Dependencies{
 		Store: persistence.Job(), Descriptors: []job.Descriptor{descriptor},
@@ -143,12 +143,12 @@ func waitForCleanupOccurrenceSucceeded(t *testing.T, persistence *sqlstore.SQLSt
 	key := "job-history-cleanup:" + occurrence.UTC().Format("2006-01-02")
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		jobs, err := persistence.Job().List(context.Background(), store.JobListOptions{Types: []model.JobType{model.JobTypeCleanup}, Limit: 10})
+		listed, err := persistence.Job().List(context.Background(), store.JobListOptions{Types: []model.JobType{model.JobTypeCleanup}, Limit: 10})
 		require.NoError(t, err)
-		if len(jobs) == 1 && jobs[0].DedupeKey == key && jobs[0].Status == model.JobStatusSucceeded {
+		if len(listed) == 1 && listed[0].DedupeKey == key && listed[0].Status == model.JobStatusSucceeded {
 			return
 		}
-		require.False(t, time.Now().After(deadline), "cleanup occurrence did not succeed: %#v", jobs)
+		require.False(t, time.Now().After(deadline), "cleanup occurrence did not succeed: %#v", listed)
 		time.Sleep(5 * time.Millisecond)
 	}
 }
@@ -156,11 +156,11 @@ func waitForCleanupOccurrenceSucceeded(t *testing.T, persistence *sqlstore.SQLSt
 func assertOneCleanupOccurrence(t *testing.T, persistence *sqlstore.SQLStore, occurrence time.Time) {
 	t.Helper()
 	key := "job-history-cleanup:" + occurrence.UTC().Format("2006-01-02")
-	var occurrences, jobs, attempts int
+	var occurrences, jobRows, attempts int
 	require.NoError(t, persistence.GetMaster().Get(context.Background(), &occurrences, `SELECT count(*) FROM job_permanent_occurrences WHERE type = $1 AND dedupe_key = $2`, model.JobTypeCleanup, key))
-	require.NoError(t, persistence.GetMaster().Get(context.Background(), &jobs, `SELECT count(*) FROM jobs WHERE type = $1 AND dedupe_key = $2`, model.JobTypeCleanup, key))
+	require.NoError(t, persistence.GetMaster().Get(context.Background(), &jobRows, `SELECT count(*) FROM jobs WHERE type = $1 AND dedupe_key = $2`, model.JobTypeCleanup, key))
 	require.NoError(t, persistence.GetMaster().Get(context.Background(), &attempts, `SELECT count(*) FROM job_attempts a JOIN jobs j ON j.id = a.job_id WHERE j.type = $1 AND j.dedupe_key = $2`, model.JobTypeCleanup, key))
 	require.Equal(t, 1, occurrences, "occurrences")
-	require.Equal(t, 1, jobs, "occurrences")
+	require.Equal(t, 1, jobRows, "occurrences")
 	require.Equal(t, 1, attempts, "occurrences")
 }

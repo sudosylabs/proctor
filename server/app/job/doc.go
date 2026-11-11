@@ -20,8 +20,8 @@
 // stage, result, public error code, or recurring occurrence.
 //
 // Domain-specific handlers, commands, and recurrence proposers live in the
-// sibling app/jobhandler package. Parent app supplies narrow use-case adapters and
-// constructs Engine from the immutable app/jobhandler catalog plus domain-owned
+// sibling app/jobs package. Parent app supplies narrow use-case adapters and
+// constructs Engine from the immutable app/jobs catalog plus domain-owned
 // PeriodicTasks. The module-root
 // server retains the constructed Engine and owns when it starts and closes;
 // construction itself is inert.
@@ -40,12 +40,12 @@
 //
 // The engine depends inward only on logging, model and store.JobStore.
 // Operations adds app/access, app/apperror and app/invocation. This package
-// never imports its parent, an area package, app/jobhandler, app/mail,
+// never imports its parent, an area package, app/jobs, app/mail,
 // transports, platform services, or concrete persistence adapters.
 //
 // Tests at this boundary cover registration, execution, fencing, recovery,
 // recurrence, projections, controls, operator authorization and audit order,
 // races, and shutdown. Concrete handler
-// tests live in app/jobhandler, while PostgreSQL and root-lifecycle tests provide
+// tests live in app/jobs, while PostgreSQL and root-lifecycle tests provide
 // cross-component recovery and wiring evidence.
 package job

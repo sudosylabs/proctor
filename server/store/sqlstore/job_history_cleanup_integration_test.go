@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/job"
-	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -32,9 +32,9 @@ func TestJobHistoryCleanupContinuesAcrossNodesPastOneDailyBatch(t *testing.T) {
 	for range 237 {
 		insertTerminalJobHistoryFixture(t, ss, model.JobTypeProfilePictureGenerateDefault, model.JobStatusSucceeded, 31*24*time.Hour, true)
 	}
-	registered := []job.Descriptor{jobhandler.NewDefaultProfilePictureDescriptor(nil)}
-	descriptor := jobhandler.NewJobHistoryCleanupDescriptor(ss.Job(), ss.Job(), time.Now, registered)
-	proposer := jobhandler.NewJobHistoryCleanupRecurrence(ss.Job(), time.Now).Proposer
+	registered := []job.Descriptor{jobs.NewDefaultProfilePicture(nil).Descriptor}
+	historyCleanup := jobs.NewJobHistoryCleanup(ss.Job(), ss.Job(), time.Now, registered)
+	descriptor, proposer := historyCleanup.Descriptor, historyCleanup.Recurrence.Proposer
 	require.NotNil(t, descriptor.Handler, "history cleanup catalog is incomplete")
 	require.NotNil(t, proposer, "history cleanup catalog is incomplete")
 	occurrence := model.NowUTC()

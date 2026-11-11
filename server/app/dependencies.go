@@ -17,7 +17,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/workspace"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/job"
-	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/app/user"
@@ -35,10 +35,10 @@ type FileContent interface {
 	user.ProfilePictureReadFiles
 	user.DefaultProfilePictureRenderFiles
 	user.DefaultProfilePictureGenerationFiles
-	jobhandler.FileRevisionContentPurger
-	jobhandler.StarterWorkspaceObjectPurger
-	jobhandler.AttemptWorkspaceObjectPurger
-	jobhandler.RetentionContentPurger
+	jobs.FileRevisionContentPurger
+	jobs.StarterWorkspaceObjectPurger
+	jobs.AttemptWorkspaceObjectPurger
+	jobs.RetentionContentPurger
 	exam.ExportContent
 	attempt.Content
 	resource.FileContent

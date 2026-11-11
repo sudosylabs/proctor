@@ -20,7 +20,7 @@ extend a Participation lease, and only PostgreSQL time can decide expiry.
 renewal, expiry enforcement, Focus Loss, correction acknowledgement, protected
 Workspace access, Submission sealing, and manager inspection. `app.App` names
 the Attempt service in its `Attempts` field, and the service publishes its own
-post-commit effects. `server/app/jobhandler/exam_attempt_expiry.go` only
+post-commit effects. `server/app/jobs/exam_attempt_expiry.go` only
 schedules bounded scans; it does not decide expiry semantics.
 
 The domain model owns valid states and transitions. The bounded Store contract

@@ -16,7 +16,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
@@ -170,7 +170,7 @@ func (s *Service) StartMFARekey(ctx context.Context, invocation invocation.Invoc
 		return MFARekeyView{}, apperror.Invalid("authentication.mfa.rekey.invalid", "retiring_key_id")
 	}
 
-	encoded, err := json.Marshal(jobhandler.MFARekeyCommand{PrimaryKeyID: primaryKeyID, RetiringKeyID: command.RetiringKeyID})
+	encoded, err := json.Marshal(jobs.MFARekeyCommand{PrimaryKeyID: primaryKeyID, RetiringKeyID: command.RetiringKeyID})
 	if err != nil {
 		return MFARekeyView{}, apperror.New("authentication.mfa.unavailable").Wrap(err)
 	}
@@ -273,7 +273,7 @@ func projectMFARekeyStatus(job *model.Job) (MFARekeyStatusView, error) {
 		return MFARekeyStatusView{}, errors.New("MFA rekey Job is invalid")
 	}
 
-	command, err := jobhandler.DecodeMFARekeyCommand(job.Command)
+	command, err := jobs.DecodeMFARekeyCommand(job.Command)
 	if err != nil ||
 		!secretseal.ValidKeyID(command.PrimaryKeyID) ||
 		!secretseal.ValidKeyID(command.RetiringKeyID) ||
@@ -294,7 +294,7 @@ func projectMFARekeyStatus(job *model.Job) (MFARekeyStatusView, error) {
 		MaximumAttempts: job.MaximumAttempts,
 	}
 	if len(job.Checkpoint) > 0 {
-		checkpoint, checkpointErr := jobhandler.DecodeMFARekeyCheckpoint(job.Checkpoint)
+		checkpoint, checkpointErr := jobs.DecodeMFARekeyCheckpoint(job.Checkpoint)
 		if checkpointErr != nil ||
 			job.Progress == nil ||
 			job.Progress.Current != checkpoint.Processed ||
@@ -316,7 +316,7 @@ func projectMFARekeyStatus(job *model.Job) (MFARekeyStatusView, error) {
 		return view, nil
 	}
 
-	result, err := jobhandler.DecodeMFARekeyResult(job.Result)
+	result, err := jobs.DecodeMFARekeyResult(job.Result)
 	if err != nil ||
 		job.Status != model.JobStatusSucceeded ||
 		result.PrimaryKeyID != command.PrimaryKeyID ||

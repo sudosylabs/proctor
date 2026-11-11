@@ -23,7 +23,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
@@ -352,7 +352,7 @@ func (s *Service) CreateLocalUser(
 		return nil, PasswordHashError(err, "authentication.internal")
 	}
 
-	created, job, err := jobhandler.PrepareUserDefaultProfilePictureJob(command.User, s.now())
+	created, job, err := jobs.PrepareUserDefaultProfilePictureJob(command.User, s.now())
 	if err != nil {
 		return nil, apperror.New("authentication.user.invalid").Wrap(err)
 	}

@@ -13,7 +13,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -22,9 +22,9 @@ import (
 // RetentionJobs are the retention Jobs' system audit and candidate notice
 // dispatcher, for the Job catalog.
 type RetentionJobs struct {
-	Audit       jobhandler.RetentionSystemAuditor
-	ExpiryAudit jobhandler.RetentionExpirySystemAuditor
-	Notices     jobhandler.RetentionNoticeDispatcher
+	Audit       jobs.RetentionSystemAuditor
+	ExpiryAudit jobs.RetentionExpirySystemAuditor
+	Notices     jobs.RetentionNoticeDispatcher
 }
 
 // NewRetentionJobs builds the retention Jobs' ports. Only composition can

@@ -18,7 +18,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -922,7 +922,7 @@ func (s *Service) prepareExternalProvisioning(
 	var provisioning externalProvisioning
 	var err error
 	provisioning.user = ExternalUserCandidate(assertion)
-	provisioning.user, provisioning.defaultPictureJob, err = jobhandler.PrepareUserDefaultProfilePictureJob(provisioning.user, nowTime)
+	provisioning.user, provisioning.defaultPictureJob, err = jobs.PrepareUserDefaultProfilePictureJob(provisioning.user, nowTime)
 	if err != nil {
 		return externalProvisioning{}, authenticationUnavailable(err)
 	}

@@ -16,7 +16,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
@@ -77,7 +77,7 @@ func (s *Service) acceptStudentClassByClaimHash(
 		return nil, identity.PasswordHashError(err, "invitation.unavailable")
 	}
 
-	account, defaultJob, err := jobhandler.PrepareUserDefaultProfilePictureJob(
+	account, defaultJob, err := jobs.PrepareUserDefaultProfilePictureJob(
 		&model.User{
 			Username:      command.Username,
 			Email:         invitation.TargetEmail,
@@ -228,7 +228,7 @@ func (s *Service) acceptTeacherAcademicUnitByClaimHash(
 		return nil, identity.PasswordHashError(err, "invitation.unavailable")
 	}
 
-	account, defaultJob, err := jobhandler.PrepareUserDefaultProfilePictureJob(
+	account, defaultJob, err := jobs.PrepareUserDefaultProfilePictureJob(
 		&model.User{
 			Username:      command.Username,
 			Email:         invitation.TargetEmail,
@@ -380,7 +380,7 @@ func (s *Service) acceptExternalIdentity(
 	at := model.TimeUTC(s.now())
 	userCandidate := identity.ExternalUserCandidate(assertion)
 	userCandidate.Email, userCandidate.EmailVerified = invitation.TargetEmail, true
-	account, defaultJob, preparationErr := jobhandler.PrepareUserDefaultProfilePictureJob(userCandidate, at)
+	account, defaultJob, preparationErr := jobs.PrepareUserDefaultProfilePictureJob(userCandidate, at)
 	var settings *model.UserSettingsDocument
 	if preparationErr == nil {
 		settings, preparationErr = user.PrepareInitialSettingsDocument(account)

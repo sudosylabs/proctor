@@ -29,7 +29,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/onboarding"
 
 	"github.com/sudosylabs/proctor/server/app/job"
-	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -255,9 +255,9 @@ func (constructionCommandOutcomeStoreStub) Has(context.Context, *store.CommandId
 func TestJobRecipeConnectsRuntimeOperationsAndProfileWake(t *testing.T) {
 	t.Parallel()
 
-	defaultJobs := jobhandler.NewDefaultProfilePictureJobs(jobhandler.DefaultProfilePictureJobsDependencies{Jobs: constructionEnqueueJobStoreStub{}})
+	defaultJobs := jobs.NewDefaultProfilePictureJobs(jobs.DefaultProfilePictureJobsDependencies{Jobs: constructionEnqueueJobStoreStub{}})
 	wake := &jobWake{}
-	jobs, err := newJobRuntime(
+	runtime, err := newJobRuntime(
 		Dependencies{
 			Store: constructionCatalogWithJobs{
 				jobs: constructionJobStoreStub{}, users: constructionUserStoreStub{},
@@ -278,8 +278,8 @@ func TestJobRecipeConnectsRuntimeOperationsAndProfileWake(t *testing.T) {
 		wake,
 	)
 	require.NoError(t, err)
-	require.NotNil(t, jobs.engine, "constructed Jobs = %#v, want runtime and operations", jobs)
-	require.NotNil(t, jobs.operations, "constructed Jobs = %#v, want runtime and operations", jobs)
+	require.NotNil(t, runtime.engine, "constructed Jobs = %#v, want runtime and operations", runtime)
+	require.NotNil(t, runtime.operations, "constructed Jobs = %#v, want runtime and operations", runtime)
 	// Contract: the proposal the profile service makes wakes the constructed
 	// runtime, which is only possible once newJobRuntime has attached it.
 	require.NoError(t, defaultJobs.ProposeDefaultProfilePicture(context.Background(), model.NewUserID(), time.Now()))
@@ -288,9 +288,9 @@ func TestJobRecipeConnectsRuntimeOperationsAndProfileWake(t *testing.T) {
 	require.NotNil(t, wake.wake, "the identity and onboarding Job wake was not connected to the runtime")
 	// Contract: New assembles App from this runtime.
 	values := appLiteralFieldValues(t)
-	require.Equal(t, "jobs.engine", values["jobEngine"], "assembled application did not retain the constructed Job runtime and operations")
-	require.Equal(t, "jobs.operations", values["Jobs"], "assembled application did not retain the constructed Job runtime and operations")
-	require.Equal(t, "jobs.mail", values["Mail"], "assembled application did not retain the constructed mail operations")
+	require.Equal(t, "runtime.engine", values["jobEngine"], "assembled application did not retain the constructed Job runtime and operations")
+	require.Equal(t, "runtime.operations", values["Jobs"], "assembled application did not retain the constructed Job runtime and operations")
+	require.Equal(t, "runtime.mail", values["Mail"], "assembled application did not retain the constructed mail operations")
 }
 
 // appLiteralFieldValues returns the source of each keyed value in the App
@@ -325,7 +325,7 @@ func appLiteralFieldValues(t *testing.T) map[string]string {
 // constructionOnboardingImportJobsStub stands in for the onboarding import
 // Jobs' port; building the Job definitions never calls it.
 type constructionOnboardingImportJobsStub struct {
-	jobhandler.OnboardingImportService
+	jobs.OnboardingImportService
 }
 
 func TestApplicationJobDefinitionsIncludeSittingLifecycleAndDailyRecovery(t *testing.T) {
@@ -344,7 +344,7 @@ func TestApplicationJobDefinitionsIncludeSittingLifecycleAndDailyRecovery(t *tes
 		sharedMechanics{},
 		examServices{sittings: &sitting.Service{}, attempts: &attempt.Service{}},
 		nil,
-		jobhandler.NewDefaultProfilePictureJobs(jobhandler.DefaultProfilePictureJobsDependencies{Jobs: constructionJobStoreStub{}}),
+		jobs.NewDefaultProfilePictureJobs(jobs.DefaultProfilePictureJobsDependencies{Jobs: constructionJobStoreStub{}}),
 		onboarding.Ports{ImportJobs: constructionOnboardingImportJobsStub{}},
 		mail.NewHealth(false),
 	)
@@ -396,11 +396,11 @@ func TestApplicationJobDefinitionsIncludeSittingLifecycleAndDailyRecovery(t *tes
 	for _, task := range definitions.periodicTasks {
 		periodicByName[task.Name] = task
 	}
-	periodic, exists := periodicByName[jobhandler.ExamAttemptExpiryTaskName]
+	periodic, exists := periodicByName[jobs.ExamAttemptExpiryTaskName]
 	require.True(t, exists, "Attempt expiry periodic task is absent")
-	require.Equal(t, jobhandler.ExamAttemptExpiryTaskName, periodic.Name)
-	require.Equal(t, jobhandler.ExamAttemptExpiryScanInterval, periodic.Interval)
-	runner, ok := periodic.Runner.(jobhandler.ExamAttemptExpiryRunner)
+	require.Equal(t, jobs.ExamAttemptExpiryTaskName, periodic.Name)
+	require.Equal(t, jobs.ExamAttemptExpiryScanInterval, periodic.Interval)
+	runner, ok := periodic.Runner.(jobs.ExamAttemptExpiryRunner)
 	require.True(t, ok)
 	require.NotNil(t, runner.Attempts)
 	// The identity area defines its maintenance passes; the application graph

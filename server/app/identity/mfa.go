@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
@@ -211,7 +211,7 @@ func (s *mfaMechanics) sealTOTPSecret(userID string, secret string) (sealedMFASe
 		return sealedMFASecret{}, errors.New("MFA secret sealing is unavailable")
 	}
 	envelope, err := s.deps.Sealer.Seal(
-		secretseal.Binding{Purpose: jobhandler.MFASealingPurpose, Owner: userID},
+		secretseal.Binding{Purpose: jobs.MFASealingPurpose, Owner: userID},
 		[]byte(secret),
 	)
 	if err != nil {
@@ -237,7 +237,7 @@ func (s *mfaMechanics) decrypt(
 		return "", secretseal.ErrInvalidEnvelope
 	}
 	plaintext, err := s.deps.Sealer.Open(
-		secretseal.Binding{Purpose: jobhandler.MFASealingPurpose, Owner: userID},
+		secretseal.Binding{Purpose: jobs.MFASealingPurpose, Owner: userID},
 		envelope,
 	)
 	if err != nil {

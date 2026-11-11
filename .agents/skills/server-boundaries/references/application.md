@@ -68,7 +68,7 @@ strict typed documents (`job.DecodeStrictUniqueDocument`) and safe outcomes.
 The engine depends only on the domain Job records and `store.JobStore`. The
 same package holds `job.Operations`, the operator Job service built on the
 engine, which adds `app/access`, `app/apperror` and `app/invocation`. The
-package never imports its parent, an area package, `app/jobhandler` or
+package never imports its parent, an area package, `app/jobs` or
 `app/mail`, and never selects infrastructure.
 
 The `app/realtime` child module owns transport-neutral realtime events and
@@ -110,7 +110,7 @@ its area prepares the mail: `sitting.ScheduleMail`,
 notice shows and call the composer, each behind the small preparer interface
 its area's tests fake. Consumers use the child package's owned contracts
 directly rather than redeclaring aliases; the child never imports the parent
-application, an area that sends mail, `app/jobhandler`, transports, platform,
+application, an area that sends mail, `app/jobs`, transports, platform,
 SQL, or deployment configuration. `mail.Operations` reaches the identity
 area's test-mail rate limit through a port
 (`identity.AttemptAccounting.AccountMailTest`), and the session assurance guard
@@ -363,8 +363,8 @@ for it. Collection visibility is a named `access.Authorizer` helper
 the Sitting service, and the three areas share `access.ManagerAuthorization`
 rather than translating one another's result. Actorless audit attempts begin
 through `access.SystemAuditAdapter`. Periodic runtime tasks are built beside
-what they run: `jobhandler.NewExamAttemptExpiryTask`,
-`jobhandler.NewSittingMailReconciliationTask`, `identity.MaintenanceTasks`.
+what they run: `jobs.NewExamAttemptExpiryTask`,
+`jobs.NewSittingMailReconciliationTask`, `identity.MaintenanceTasks`.
 
 `mail.InstitutionAuthorization` and `job.InstitutionAuthorization` give
 `mail.Operations` and `job.Operations` their own unavailable code when the

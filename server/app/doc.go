@@ -29,7 +29,7 @@
 //     apperror (the one application error type), invocation
 //     (the call context every use case takes), idempotency, realtime and exam
 //   - job (the durable Job engine and job.Operations, the operator Job
-//     service), jobhandler (the Job handlers) and mail (mail composition and
+//     service), jobs (the Job handlers) and mail (mail composition and
 //     mail.Operations, the operator mail service, with the mail telemetry
 //     contracts, health and delivery relevance policy)
 //   - area packages: academic, user, identity (sign-in, Sessions, MFA,

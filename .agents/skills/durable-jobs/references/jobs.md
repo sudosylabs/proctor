@@ -17,7 +17,7 @@ named domain Store operation remains responsible for cross-node convergence.
 `model.JobAttempt` records every execution claim and outcome so retries do not
 erase evidence. `store.JobStore` owns atomic enqueue, claim, fencing,
 checkpoint, terminal, and retention contracts. Application use cases own job
-creation and actor-sensitive cancellation authorization. The `app/jobhandler`
+creation and actor-sensitive cancellation authorization. The `app/jobs`
 package owns concrete handlers, typed payloads, progress meaning, descriptor
 policy, recurrence proposers, and one exported constructor per Job. Parent
 `app` supplies narrow use-case adapters, lists every enabled Job in
@@ -137,16 +137,19 @@ descriptor checks and the cooperative state transition belong to the engine. An 
 engine's validated transition and revision across that audit boundary without
 exposing persistence mechanics.
 
-Each `app/jobhandler` constructor (for example `NewFilePurgeDescriptor`) takes
-only the capabilities its handler uses; `app/new_jobs.go` registers them in one
-immutable instance-scoped list. Every descriptor declares whether it checkpoints, its timeout,
+Each `app/jobs` constructor (for example `NewFilePurge`) takes only the
+capabilities its handler and proposer use and returns a `job.Registration`: the
+Job's descriptor and, when it is scheduled, its recurrence. `app/new_jobs.go`
+registers them in one immutable instance-scoped list, one line per Job. A
+descriptor starts from `job.NewDescriptor`, whose documented defaults are the
+policy most Jobs share, and sets only the fields that differ. Every descriptor declares whether it checkpoints, its timeout,
 per-node concurrency, retry/backoff, cancelability, retention, and handler.
 Startup rejects duplicate types and missing handlers; there is no process-global
 mutable registration.
 
 Recurrence definitions are immutable constructor input to the same engine.
 Their default is daily; an explicit interval must divide one UTC day and lie
-between one minute and one day. `app/jobhandler` owns each recurrence name, interval,
+between one minute and one day. `app/jobs` owns each recurrence name, interval,
 typed command, stable interval-keyed identity, deduplication policy, and bounded
 work definition. Retention reconciliation, audit/receipt expiry, byte purge, and export cleanup run
 hourly; retention-notice expansion runs every ten minutes. Startup also proposes

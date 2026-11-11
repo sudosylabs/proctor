@@ -25,7 +25,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/job"
-	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/config"
@@ -68,7 +68,7 @@ func TestJobRunnerRecoversNodeLossAroundADurableDomainCommit(t *testing.T) {
 				Publisher: &realtimetest.Publisher{}, Defaults: recoveryDefaultPictures{}, Now: time.Now,
 			})
 			require.NoError(t, err)
-			realHandler := jobhandler.NewDefaultProfilePictureDescriptor(pictures).Handler
+			realHandler := jobs.NewDefaultProfilePicture(pictures).Descriptor.Handler
 			entered := make(chan struct{})
 			canceled := make(chan struct{})
 			handler := &recoveryCommitHandler{
@@ -281,5 +281,5 @@ func openClusteredJobIntegrationStore(t *testing.T) *sqlstore.SQLStore {
 // prepareUserDefaultProfilePictureJob prepares a test User and the default
 // profile picture Job its creation proposes.
 func prepareUserDefaultProfilePictureJob(user *model.User, at time.Time) (*model.User, *model.Job, error) {
-	return jobhandler.PrepareUserDefaultProfilePictureJob(user, at)
+	return jobs.PrepareUserDefaultProfilePictureJob(user, at)
 }

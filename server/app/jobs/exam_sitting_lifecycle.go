@@ -1,0 +1,225 @@
+// ---------------------------------------------------------------------------------------------
+// Copyright (c) 2026 Sudosy Labs. All rights reserved.
+// Licensed under the GNU Affero General Public License, version 3 only.
+// See LICENSE in the server module root for license information.
+// SPDX-License-Identifier: AGPL-3.0-only
+// ---------------------------------------------------------------------------------------------
+
+package jobs
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"time"
+
+	"github.com/sudosylabs/proctor/server/app/exam/sitting"
+	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/job"
+	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
+)
+
+// sittingLifecycle is the part of *sitting.Service the lifecycle, recovery and
+// sealing Jobs drive. It is a seam because the handler tests fake it: the real
+// service needs a Store, an audit trail and a clock to produce each result.
+type sittingLifecycle interface {
+	AdvanceDue(context.Context, invocation.System, model.ExamSittingID) (store.ExamSittingLifecycleResult, error)
+	ListLifecycleDue(context.Context, invocation.System, store.ExamSittingLifecycleDueOptions) ([]store.ExamSittingLifecycleDue, error)
+	FinishSealing(context.Context, invocation.System, model.ExamSittingID) (store.ExamSittingLifecycleResult, error)
+}
+
+// ExamSittingLifecycleJobResult is deliberately limited to safe lifecycle
+// state. The immutable command, audit documents, and private manager reasons
+// never enter the generic Job result.
+type ExamSittingLifecycleJobResult struct {
+	Changed    bool                                     `json:"changed"`
+	Transition store.ExamSittingLifecycleTransitionCode `json:"transition,omitempty"`
+	State      model.ExamSittingState                   `json:"state"`
+	Revision   int64                                    `json:"revision"`
+}
+
+type examSittingLifecycleHandler struct {
+	sittings sittingLifecycle
+}
+
+func (h examSittingLifecycleHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
+	if h.sittings == nil ||
+		execution.Attempt == nil ||
+		!execution.Job.ID.IsValid() ||
+		!execution.Attempt.ID.IsValid() {
+		return job.PermanentFailure("job.command.invalid", errors.New("Exam Sitting lifecycle Job execution is incomplete"))
+	}
+
+	command, err := model.DecodeExamSittingLifecycleCommand(execution.Job.Command)
+	if err != nil {
+		return job.PermanentFailure("job.command.invalid", err)
+	}
+
+	advanced, err := h.sittings.AdvanceDue(ctx, invocation.Job(execution.Job.ID, execution.Attempt.ID), command.ExamSittingID)
+	if err != nil {
+		return examSittingLifecycleFailure(err)
+	}
+
+	result := &advanced
+	if err = validateExamSittingLifecycleJobResult(command.ExamSittingID, result); err != nil {
+		return job.PermanentFailure("job.invariant_failed", err)
+	}
+
+	document, err := json.Marshal(ExamSittingLifecycleJobResult{
+		Changed:    result.Changed,
+		Transition: result.Transition,
+		State:      result.Value.Sitting.State,
+		Revision:   result.Value.Sitting.Revision,
+	})
+	return job.Outcome{Kind: job.OutcomeSucceeded, Result: document, Err: err}
+}
+
+func validateExamSittingLifecycleJobResult(sittingID model.ExamSittingID, result *store.ExamSittingLifecycleResult) error {
+	if result == nil || result.Value == nil || result.Value.Sitting == nil || result.Value.Sitting.ID != sittingID {
+		return errors.New("Exam Sitting lifecycle reconciliation returned an incomplete result")
+	}
+	if err := result.Value.Sitting.Validate(); err != nil {
+		return err
+	}
+	if result.Changed != (result.Transition != "") || (result.Transition != "" && !validExamSittingLifecycleTransition(result.Transition)) {
+		return errors.New("Exam Sitting lifecycle reconciliation returned an invalid transition")
+	}
+	return nil
+}
+
+func validExamSittingLifecycleTransition(value store.ExamSittingLifecycleTransitionCode) bool {
+	switch value {
+	case store.ExamSittingTransitionOpened,
+		store.ExamSittingTransitionManagerPaused,
+		store.ExamSittingTransitionManagerResumed,
+		store.ExamSittingTransitionManagerExtended,
+		store.ExamSittingTransitionManagerClosed,
+		store.ExamSittingTransitionAcademicStructureInvalid,
+		store.ExamSittingTransitionScheduleElapsed,
+		store.ExamSittingTransitionScheduledEndReached,
+		store.ExamSittingTransitionClosedNoAttempts,
+		store.ExamSittingTransitionSealingCompleted:
+		return true
+	default:
+		return false
+	}
+}
+
+// examSittingLifecycleFailure fails permanently only for input the Store refused. A
+// database constraint rejection can come from a concurrent transition or clock
+// skew, so it stays retryable within the attempt budget.
+func examSittingLifecycleFailure(err error) job.Outcome {
+	var invalid *store.ErrInvalidInput
+	if (errors.As(err, &invalid) && !store.IsConstraintViolation(err)) || store.IsNotFound(err) {
+		return job.PermanentFailure("job.invariant_failed", err)
+	}
+	return job.RetryableFailure("dependency.unavailable", err)
+}
+
+func examSittingLifecycleDescriptor(handler job.Handler) job.Descriptor {
+	descriptor := job.NewDescriptor(model.JobTypeExamSittingLifecycle, handler)
+	descriptor.PublicErrorCodes = []string{"dependency.unavailable", "job.command.invalid", "job.invariant_failed"}
+	descriptor.Timeout = time.Minute
+	descriptor.Concurrency = 4
+	descriptor.MaximumAttempts = 8
+	descriptor.MaximumRetryDelay = 30 * time.Second
+	descriptor.ExplicitRetryStatuses = []model.JobStatus{model.JobStatusFailed}
+	return descriptor
+}
+
+// ExamSittingLifecycleJobFactory builds the lifecycle Jobs a Sitting command
+// enqueues in the same transaction that schedules the Sitting.
+type ExamSittingLifecycleJobFactory struct {
+	now   func() time.Time
+	newID func() model.JobID
+}
+
+// NewExamSittingLifecycleJobFactory returns a factory that stamps Jobs with
+// now and identifies them with newID.
+func NewExamSittingLifecycleJobFactory(now func() time.Time, newID func() model.JobID) ExamSittingLifecycleJobFactory {
+	return ExamSittingLifecycleJobFactory{now: now, newID: newID}
+}
+
+// BoundaryJobs returns the Sitting's open Job, available at startAt, and its
+// deadline Job, available at endAt, deduplicated by Sitting, phase, and
+// resultingRevision.
+func (f ExamSittingLifecycleJobFactory) BoundaryJobs(
+	sittingID model.ExamSittingID,
+	resultingRevision int64,
+	startAt,
+	endAt time.Time,
+) (*model.Job, *model.Job, error) {
+	openJob, err := f.job(sittingID, model.ExamSittingLifecycleJobOpen, resultingRevision, startAt)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	deadlineJob, err := f.job(sittingID, model.ExamSittingLifecycleJobDeadline, resultingRevision, endAt)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return openJob, deadlineJob, nil
+}
+
+// DeadlineJob returns a Sitting deadline Job available at deadline,
+// deduplicated by Sitting and resultingRevision.
+func (f ExamSittingLifecycleJobFactory) DeadlineJob(
+	sittingID model.ExamSittingID,
+	resultingRevision int64,
+	deadline time.Time,
+) (*model.Job, error) {
+	return f.job(sittingID, model.ExamSittingLifecycleJobDeadline, resultingRevision, deadline)
+}
+
+// FinalizeJob returns the Sitting sealing Job that finalizes a closing
+// Sitting, available at availableAt and deduplicated by Sitting and
+// resultingRevision.
+func (f ExamSittingLifecycleJobFactory) FinalizeJob(
+	sittingID model.ExamSittingID,
+	resultingRevision int64,
+	availableAt time.Time,
+) (*model.Job, error) {
+	return f.jobOfType(sittingID, model.ExamSittingLifecycleJobFinalize, resultingRevision, availableAt, model.JobTypeExamSittingSealing)
+}
+
+func (f ExamSittingLifecycleJobFactory) job(
+	sittingID model.ExamSittingID,
+	phase model.ExamSittingLifecycleJobPhase,
+	resultingRevision int64,
+	availableAt time.Time,
+) (*model.Job, error) {
+	return f.jobOfType(sittingID, phase, resultingRevision, availableAt, model.JobTypeExamSittingLifecycle)
+}
+
+func (f ExamSittingLifecycleJobFactory) jobOfType(
+	sittingID model.ExamSittingID,
+	phase model.ExamSittingLifecycleJobPhase,
+	resultingRevision int64,
+	availableAt time.Time,
+	jobType model.JobType,
+) (*model.Job, error) {
+	if f.now == nil || f.newID == nil {
+		return nil, errors.New("Exam Sitting lifecycle Job dependencies are required")
+	}
+
+	command, err := model.EncodeExamSittingLifecycleCommand(model.ExamSittingLifecycleCommand{ExamSittingID: sittingID})
+	if err != nil {
+		return nil, err
+	}
+
+	dedupeKey, err := model.ExamSittingLifecycleDedupeKey(sittingID, phase, resultingRevision)
+	if err != nil {
+		return nil, err
+	}
+
+	at := model.TimeUTC(f.now())
+	return model.NewJob(f.newID(), jobType, command, dedupeKey, at, model.TimeUTC(availableAt), 8)
+}
+
+// NewExamSittingLifecycle registers the open and deadline
+// transitions of Exam Sittings.
+func NewExamSittingLifecycle(sittings *sitting.Service) job.Registration {
+	return job.Registration{Descriptor: examSittingLifecycleDescriptor(examSittingLifecycleHandler{sittings: sittings})}
+}

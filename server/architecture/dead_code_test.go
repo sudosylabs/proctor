@@ -52,7 +52,6 @@ var reachableOnlyFromTests = map[string]string{
 	"logging.Buffer.Bytes":                                 "the captured log sink other packages' tests assert through",
 	"logging.Buffer.Reset":                                 "the captured log sink other packages' tests assert through",
 	"logging.Buffer.flushPending":                          "Buffer.Write's line assembly",
-	"app/jobhandler.NewOnboardingImportExecuteDescriptor":  "app tests run the real descriptor in a test engine",
 	"filecontent.IsNotFound":                               "the root adapter tests classify File Content failures through it",
 	"filecontent.IsConflict":                               "the root adapter tests classify File Content failures through it",
 	"filecontent.IsUnavailable":                            "the root adapter tests classify File Content failures through it",

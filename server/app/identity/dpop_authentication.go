@@ -198,3 +198,12 @@ func principalFromDesktopAuthentication(resolved *resolvedAuthentication) *model
 		MFACompletedAt:           resolved.Session.MFACompletedAt,
 	}
 }
+
+// DPoPRequestProof carries the HTTP proof inputs that must be verified for a
+// Desktop-bound credential. A nil value means the credential was not
+// presented with the DPoP authorization scheme.
+type DPoPRequestProof struct {
+	Proof  string
+	Method string
+	Path   string
+}

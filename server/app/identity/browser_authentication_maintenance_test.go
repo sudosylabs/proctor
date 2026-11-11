@@ -18,6 +18,7 @@ import (
 )
 
 type browserAuthenticationMaintainerFake struct {
+	store.BrowserAuthenticationStore
 	results []*store.BrowserAuthenticationMaintenanceResult
 	limits  []int
 	err     error
@@ -40,7 +41,7 @@ func TestBrowserAuthenticationMaintenancePeriodicRunnerProcessesOnlyBoundedPages
 		results[index] = &store.BrowserAuthenticationMaintenanceResult{Expired: 1, More: true}
 	}
 	maintainer := &browserAuthenticationMaintainerFake{results: results}
-	err := (browserAuthenticationMaintenancePeriodicRunner{transactions: maintainer}).Run(context.Background())
+	err := (browserAuthenticationMaintenance{transactions: maintainer}).Run(context.Background())
 	require.NoError(t, err, "Run() error")
 	require.Len(t, maintainer.limits, browserAuthenticationMaintenanceMaximumPages, "Run() error")
 	for _, limit := range maintainer.limits {
@@ -51,9 +52,9 @@ func TestBrowserAuthenticationMaintenancePeriodicRunnerProcessesOnlyBoundedPages
 func TestBrowserAuthenticationMaintenancePeriodicRunnerStopsAndReportsFailure(t *testing.T) {
 	t.Parallel()
 	maintainer := &browserAuthenticationMaintainerFake{results: []*store.BrowserAuthenticationMaintenanceResult{{More: false}}}
-	require.NoError(t, (browserAuthenticationMaintenancePeriodicRunner{transactions: maintainer}).Run(context.Background()), "completed Run() error")
+	require.NoError(t, (browserAuthenticationMaintenance{transactions: maintainer}).Run(context.Background()), "completed Run() error")
 	require.Len(t, maintainer.limits, 1, "completed Run() error")
 	wantErr := errors.New("database unavailable")
 	maintainer = &browserAuthenticationMaintainerFake{err: wantErr}
-	require.ErrorIs(t, (browserAuthenticationMaintenancePeriodicRunner{transactions: maintainer}).Run(context.Background()), wantErr, "failed Run() error")
+	require.ErrorIs(t, (browserAuthenticationMaintenance{transactions: maintainer}).Run(context.Background()), wantErr, "failed Run() error")
 }

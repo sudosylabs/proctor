@@ -185,7 +185,7 @@ func (s *Service) RevokeUserSessions(
 	}
 
 	now := model.TimeUTC(s.now())
-	idempotency, err := idempotency.Prepare(invocation, "user_sessions.revoke", command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Prepare(invocation, "user_sessions.revoke", command.IdempotencyKey, struct {
 		UserID string `json:"user_id"`
 	}{userID.String()})
 	if err != nil {
@@ -193,9 +193,9 @@ func (s *Service) RevokeUserSessions(
 	}
 
 	batch := command.Batch.Fields()
-	batchitem.BindOnboardingImport(idempotency, batch.OnboardingImportID, batch.OnboardingImportRowNumber)
-	batchitem.BindAuthorization(idempotency, batch.Authorization)
-	batchitem.BindBatch(idempotency, batch.Metadata)
+	batchitem.BindOnboardingImport(commandIdempotency, batch.OnboardingImportID, batch.OnboardingImportRowNumber)
+	batchitem.BindAuthorization(commandIdempotency, batch.Authorization)
+	batchitem.BindBatch(commandIdempotency, batch.Metadata)
 	prepared := &store.PreparedMail{}
 	if !batch.RetainedOutcome {
 		recipient := *user
@@ -221,7 +221,7 @@ func (s *Service) RevokeUserSessions(
 			Delivery:    prepared.Delivery,
 			DeliveryJob: prepared.Job,
 			Reason:      model.SessionRevocationAdministratorAllSessions,
-			Command:     idempotency,
+			Command:     commandIdempotency,
 		},
 		sessionAdministrationStoreErrors.Translate,
 		batch.Replayed,

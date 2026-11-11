@@ -79,3 +79,20 @@ func (i *CacheInvalidator) InvalidateSessionActivity(
 }
 
 var _ realtime.AuthenticationInvalidator = (*CacheInvalidator)(nil)
+
+func (s *Service) authenticationCacheInvalidated(
+	ctx context.Context,
+	userID string,
+	hashes []string,
+) {
+	s.publisher.AuthenticationCacheInvalidated(ctx, model.UserID(userID), hashes)
+}
+
+func (s *Service) sessionsRevoked(
+	ctx context.Context,
+	userID model.UserID,
+	sessionIDs []model.SessionID,
+	hashes []string,
+) {
+	s.publisher.SessionsRevoked(ctx, userID, sessionIDs, hashes)
+}

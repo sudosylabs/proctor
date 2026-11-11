@@ -40,7 +40,7 @@ func (a onboardingImportJobs) PreviewProgression(ctx context.Context, id model.O
 }
 
 func (a onboardingImportJobs) Parse(ctx context.Context, id model.OnboardingImportID) (string, error) {
-	err := a.service.parse(ctx, id)
+	err := a.service.parseImport(ctx, id)
 	if err == nil {
 		return "", nil
 	}
@@ -63,7 +63,7 @@ func (a onboardingImportJobs) Execute(
 	after int,
 	checkpoint func(int, int) error,
 ) error {
-	return a.service.execute(ctx, id, after, checkpoint)
+	return a.service.executeImport(ctx, id, after, checkpoint)
 }
 
 func (a onboardingImportJobs) Fail(ctx context.Context, id model.OnboardingImportID, code string) error {

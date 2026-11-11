@@ -38,11 +38,11 @@ type UserEmailState struct {
 	EmailVerified bool
 }
 
-func userEmailState(user *model.User) *UserEmailState {
-	if user == nil {
+func userEmailState(account *model.User) *UserEmailState {
+	if account == nil {
 		return nil
 	}
-	return &UserEmailState{UserID: user.ID, EmailVerified: user.EmailVerified}
+	return &UserEmailState{UserID: account.ID, EmailVerified: account.EmailVerified}
 }
 
 // ChangeUserEmail changes a User's email address as an administrator and

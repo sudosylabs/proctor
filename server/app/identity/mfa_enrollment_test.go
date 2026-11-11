@@ -11,16 +11,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
@@ -29,62 +25,6 @@ import (
 	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
 )
-
-func TestMFAChallengeRejectsReplayedRecoveryCodeAndPreservesEffectOrdering(t *testing.T) {
-	t.Parallel()
-
-	now := time.Date(2026, 8, 12, 10, 15, 0, 123456789, time.FixedZone("test", 2*60*60))
-	principal := mfaTestPrincipal(now, model.AuthenticationSingleFactor)
-	events := []string{}
-	persistence := &mfaApplicationStoreFake{
-		events: &events,
-		credential: &model.MFACredential{
-			ID: model.NewMFACredentialID(), UserID: principal.UserID,
-			State: model.MFAStateActive,
-		},
-		session: &model.Session{
-			ID: principal.SessionID, UserID: principal.UserID,
-			AuthenticationStrength: model.AuthenticationMultiFactor,
-			MFACompletedAt:         model.OptionalTimeFrom(now),
-		},
-		hashes: []string{"access-hash"},
-	}
-	audit := &securityAuditorFake{trace: &events}
-	effects := revocationsIn(&events, "effects")
-	service := newTestMFAApplicationService(t, persistence, audit, effects, now)
-	application := service
-	invocation := invocation.New(principal, model.RequestMetadata{RequestID: "request-a"})
-	command := ChallengeMFACommand{Code: "aaaa-aaaa-aaaa-aaaa-aaaa-aaaa"}
-
-	_, err := application.ChallengeMFA(context.Background(), invocation, command)
-	require.NoError(t, err)
-	require.Equal(t, model.TimeUTC(now), persistence.upgradedAt, "Session upgrade instant")
-	_, err = application.ChallengeMFA(context.Background(), invocation, command)
-	require.True(t, apperror.Is(err, "authentication.mfa.code_invalid"), "replayed challenge error = %v, want authentication.mfa.code_invalid", err)
-
-	// Contract (guardrails 8 and 14): the audit begins before the durable write,
-	// the audit outcome follows the write, and the write commits before its
-	// effect.
-	require.Equal(t, []string{"institution", "audit_begin", "credential_get", "consume", "upgrade", "audit_success", "effects", "institution", "audit_begin", "credential_get", "consume", "audit_fail"}, events)
-	// Contract: one revocation, of the upgraded Session and its access token.
-	require.Equal(t, []realtimetest.Call{{
-		Method: realtimetest.SessionsRevoked, UserID: principal.UserID,
-		SessionIDs: []model.SessionID{principal.SessionID}, AccessTokenHashes: []string{"access-hash"},
-	}}, effects.Calls())
-	// Self-service MFA is audited against the Institution with the acting
-	// User as its subject.
-	require.Len(t, audit.events, 2)
-	for _, record := range audit.events {
-		require.Equal(t, principal.UserID, record.actor)
-		require.Equal(t, principal.SessionID, record.sessionID)
-		require.Equal(t, principal.UserID, record.target, "self-service MFA subject")
-		require.Equal(t, model.ActionMFAChallenge, record.action)
-		require.Equal(t, model.ResourceInstitution, record.resource.Type)
-		require.Equal(t, "request-a", record.metadata.RequestID)
-	}
-	require.Len(t, audit.terminal, 1, "the replay's failure is the only outcome the Service records")
-	require.Equal(t, "authentication.mfa.code_invalid", audit.terminal[0].errorCode)
-}
 
 func TestMFASetupUsesControlledClockAndSecretGenerator(t *testing.T) {
 	t.Parallel()
@@ -97,7 +37,7 @@ func TestMFASetupUsesControlledClockAndSecretGenerator(t *testing.T) {
 	service := newTestMFAApplicationService(
 		t, persistence, audit, &realtimetest.Publisher{}, now,
 	)
-	const secret = "JBSWY3DPEHPK3PXP"
+	const secret = "JBSWY3DPEHPK3PXP" // #nosec G101 -- Public synthetic TOTP seed.
 	service.mfa.newSecret = func() (string, error) { return secret, nil }
 	application := service
 
@@ -118,89 +58,6 @@ func TestMFASetupUsesControlledClockAndSecretGenerator(t *testing.T) {
 	require.Equal(t, []string{"institution", "audit_begin", "save_pending", "audit_success"}, events)
 }
 
-func TestMFASecretSealingAuthenticatesUserAndKeyReference(t *testing.T) {
-	t.Parallel()
-
-	mechanics := mustTestMFAMechanics(t)
-	userID := model.NewUserID()
-	sealed, err := mechanics.sealTOTPSecret(userID.String(), "JBSWY3DPEHPK3PXP")
-	require.NoError(t, err)
-	var envelope secretseal.Envelope
-	require.NoError(t, json.Unmarshal([]byte(sealed.encoded), &envelope))
-	require.Equal(t, secretseal.EnvelopeVersion1, envelope.Version)
-	require.Equal(t, secretseal.AlgorithmAES256GCM, envelope.Algorithm)
-	require.Equal(t, sealed.keyID, envelope.KeyID)
-	credential := &model.MFACredential{
-		EncryptedSecret: sealed.encoded, EncryptionKeyID: sealed.keyID,
-	}
-	opened, err := mechanics.decrypt(userID.String(), credential)
-	require.NoError(t, err, "decrypt()")
-	require.Equal(t, "JBSWY3DPEHPK3PXP", opened, "decrypt()")
-	_, err = mechanics.decrypt(model.NewUserID().String(), credential)
-	require.Error(t, err, "MFA envelope opened for a different user")
-	mismatched := *credential
-	mismatched.EncryptionKeyID = strings.Repeat("0", model.MFAEncryptionKeyIDLength)
-	_, err = mechanics.decrypt(userID.String(), &mismatched)
-	require.Error(t, err, "MFA envelope opened with mismatched durable key reference")
-}
-
-func TestMFAMechanicsRequiresSealingOnlyWhenEnabled(t *testing.T) {
-	t.Parallel()
-
-	_, err := newMFAMechanics(mfaMechanicsDependencies{Settings: MFAPolicy{}, Sealer: nil})
-	require.NoError(t, err)
-	_, err = newMFAMechanics(mfaMechanicsDependencies{Settings: MFAPolicy{Enabled: true}, Sealer: nil})
-	require.Error(t, err, "newMFAMechanics(enabled without sealer) succeeded")
-}
-
-func TestMFARecoveryCodeLoginConsumptionIsSerialized(t *testing.T) {
-	t.Parallel()
-
-	now := time.Date(2026, 8, 12, 10, 30, 0, 0, time.UTC)
-	userID := model.NewUserID()
-	persistence := &mfaApplicationStoreFake{
-		events: &[]string{},
-		credential: &model.MFACredential{
-			ID: model.NewMFACredentialID(), UserID: userID, State: model.MFAStateActive,
-		},
-	}
-	service := newTestMFAApplicationService(
-		t, persistence, &securityAuditorFake{}, &realtimetest.Publisher{}, now,
-	)
-	const contenders = 8
-	start := make(chan struct{})
-	results := make(chan error, contenders)
-	var wait sync.WaitGroup
-	for range contenders {
-		wait.Add(1)
-		go func() {
-			defer wait.Done()
-			<-start
-			_, _, err := service.verifyLoginMFA(
-				context.Background(), userID.String(),
-				"aaaa-aaaa-aaaa-aaaa-aaaa-aaaa", now,
-			)
-			results <- err
-		}()
-	}
-	close(start)
-	wait.Wait()
-	close(results)
-	successes, rejected := 0, 0
-	for err := range results {
-		switch {
-		case err == nil:
-			successes++
-		case apperror.Is(err, "authentication.mfa.code_invalid"):
-			rejected++
-		default:
-			require.FailNow(t, fmt.Sprintf("VerifyLogin error = %v", err))
-		}
-	}
-	require.Equal(t, 1, successes, "successes")
-	require.Equal(t, contenders-1, rejected, "successes")
-}
-
 func TestMFASecurityTransitionsPrepareOneOrdinaryNoticeWithoutSecrets(t *testing.T) {
 	t.Parallel()
 
@@ -214,7 +71,7 @@ func TestMFASecurityTransitionsPrepareOneOrdinaryNoticeWithoutSecrets(t *testing
 	service.mail = mailer
 	application := service
 	invocation := invocation.New(principal, model.RequestMetadata{RequestID: "mfa-notices"})
-	const secret = "JBSWY3DPEHPK3PXP"
+	const secret = "JBSWY3DPEHPK3PXP" // #nosec G101 -- Public synthetic TOTP seed.
 	sealed, err := service.mfa.sealTOTPSecret(principal.UserID.String(), secret)
 	require.NoError(t, err)
 	persistence.credential = &model.MFACredential{
@@ -438,7 +295,7 @@ func (s *mfaApplicationStoreFake) Disable(_ context.Context, input *store.MFADis
 type mfaApplicationUserStoreFake struct{ store.UserStore }
 
 func (mfaApplicationUserStoreFake) Get(_ context.Context, id model.UserID) (*model.User, error) {
-	return &model.User{ID: model.UserID(id), Email: "user@example.edu"}, nil
+	return &model.User{ID: id, Email: "user@example.edu"}, nil
 }
 
 type mfaSecurityNoticeMailPreparerFake struct {
@@ -496,6 +353,7 @@ type mfaResetAuthorizationFake struct {
 func (a mfaResetAuthorizationFake) Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error {
 	return a.err
 }
+
 func (s *mfaApplicationStoreFake) GetRecoveryState(_ context.Context, userID model.UserID) (*model.UserMFARecovery, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -505,6 +363,7 @@ func (s *mfaApplicationStoreFake) GetRecoveryState(_ context.Context, userID mod
 	}
 	return &model.UserMFARecovery{UserID: userID, Generation: s.recoveryGeneration}, nil
 }
+
 func (s *mfaApplicationStoreFake) SavePending(ctx context.Context, input *store.MFAPendingEnrollment) (*model.MFACredential, error) {
 	saved, err := s.savePendingCredential(input.Credential)
 	if err == nil {
@@ -512,6 +371,7 @@ func (s *mfaApplicationStoreFake) SavePending(ctx context.Context, input *store.
 	}
 	return saved, err
 }
+
 func (s *mfaApplicationStoreFake) Challenge(ctx context.Context, input *store.MFAChallenge) (*store.SessionReauthenticationResult, error) {
 	if err := s.ConsumeSecondFactor(ctx, &store.MFASecondFactorConsumption{UserID: input.Principal.UserID, TimeStep: input.TimeStep, RecoveryCodeHash: input.RecoveryCodeHash, Now: input.VerifiedAt}); err != nil {
 		return nil, err

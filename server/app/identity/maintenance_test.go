@@ -50,19 +50,19 @@ func TestMaintenanceTasksRunEachMaintainer(t *testing.T) {
 	browserPeriodic, exists := periodicByName["browser-authentication-maintenance"]
 	require.True(t, exists)
 	require.Equal(t, browserAuthenticationMaintenanceInterval, browserPeriodic.Interval)
-	browserRunner, ok := browserPeriodic.Runner.(browserAuthenticationMaintenancePeriodicRunner)
+	browserRunner, ok := browserPeriodic.Runner.(browserAuthenticationMaintenance)
 	require.True(t, ok, "Browser authentication maintenance runner = %#v", browserPeriodic.Runner)
 	require.NotNil(t, browserRunner.transactions)
 	externalPeriodic, exists := periodicByName["external-authentication-maintenance"]
 	require.True(t, exists)
 	require.Equal(t, externalAuthenticationMaintenanceInterval, externalPeriodic.Interval)
-	externalRunner, ok := externalPeriodic.Runner.(externalAuthenticationMaintenancePeriodicRunner)
+	externalRunner, ok := externalPeriodic.Runner.(externalAuthenticationMaintenance)
 	require.True(t, ok, "External authentication maintenance runner = %#v", externalPeriodic.Runner)
 	require.NotNil(t, externalRunner.states)
 	personalAccessTokenPeriodic, exists := periodicByName["personal-access-token-maintenance"]
 	require.True(t, exists)
 	require.Equal(t, personalAccessTokenMaintenanceInterval, personalAccessTokenPeriodic.Interval)
-	personalAccessTokenRunner, ok := personalAccessTokenPeriodic.Runner.(personalAccessTokenMaintenancePeriodicRunner)
+	personalAccessTokenRunner, ok := personalAccessTokenPeriodic.Runner.(personalAccessTokenMaintenance)
 	require.True(t, ok, "Personal access token maintenance runner = %#v", personalAccessTokenPeriodic.Runner)
 	require.NotNil(t, personalAccessTokenRunner.tokens)
 }

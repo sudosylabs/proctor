@@ -63,69 +63,6 @@ func newMFAMechanics(deps mfaMechanicsDependencies) (*mfaMechanics, error) {
 	return mechanics, nil
 }
 
-// SetupMFACommand starts pending TOTP enrollment.
-type SetupMFACommand struct {
-	AccountName string
-}
-
-// ActivateMFACommand activates pending MFA with a TOTP code.
-type ActivateMFACommand struct {
-	Code string
-}
-
-// ChallengeMFACommand upgrades the current session to multi-factor assurance.
-type ChallengeMFACommand struct {
-	Code string
-}
-
-// MFASetup is one-time setup material. It must never be logged or audited.
-type MFASetup struct {
-	Secret          string
-	ProvisioningURI string
-	ExpiresAt       time.Time
-}
-
-// MFAActivation is the one-time recovery-code delivery after activation.
-type MFAActivation struct {
-	RecoveryCodes []string
-}
-
-// MFAMethodAuthenticatorApp is the only second factor: a TOTP authenticator app.
-const MFAMethodAuthenticatorApp = "authenticator_app"
-
-// MFAStatus is the caller's enrollment status.
-type MFAStatus struct {
-	ServiceEnabled           bool
-	MFARecoveryRequired      bool
-	MFAEnrollmentRequired    bool
-	AuthenticationMethod     string
-	AuthenticationProviderID string
-	AuthenticationStrength   model.AuthenticationStrength
-	RecentlyAuthenticated    bool
-	Enabled                  bool
-	Pending                  bool
-	PendingExpiresAt         model.OptionalTime
-	RecoveryCodesRemaining   int
-	// Method is MFAMethodAuthenticatorApp while MFA is enabled or pending and
-	// empty otherwise.
-	Method string
-	// EnabledAt is when the credential was activated; unset unless enabled.
-	EnabledAt model.OptionalTime
-	// RecoveryCodesTotal is the size of the live issued recovery-code set,
-	// consumed codes included; zero unless enabled.
-	RecoveryCodesTotal int
-	// RecoveryCodesGeneratedAt is when the live set was issued; unset when
-	// there is none.
-	RecoveryCodesGeneratedAt model.OptionalTime
-	// PasswordChangedAt is unset for an account without a password credential.
-	PasswordChangedAt model.OptionalTime
-	// RecentAuthenticationTTL is the configured recent-authentication window;
-	// RecentlyAuthenticatedUntil is when it ends for this Session, set only
-	// while the Session is recently authenticated.
-	RecentAuthenticationTTL    time.Duration
-	RecentlyAuthenticatedUntil model.OptionalTime
-}
-
 func (s *mfaMechanics) consumeSecondFactor(
 	ctx context.Context,
 	mfaPersistence store.MFAStore,
@@ -437,4 +374,13 @@ func validateMFASecretKeys(ctx context.Context, persistence store.MFAStore, seal
 	}
 
 	return nil
+}
+
+// MFAPolicy is the enrollment and verification policy for TOTP MFA. Key-ring
+// construction remains at the server composition root.
+type MFAPolicy struct {
+	Enabled           bool
+	Issuer            string
+	SetupTTL          time.Duration
+	RecoveryCodeCount int
 }

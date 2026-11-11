@@ -73,9 +73,22 @@ func TestMigratedAuthenticationFlowsDoNotReclaimAttemptMechanics(t *testing.T) {
 
 	files := parseProductionGoFiles(t, ".")
 	for _, name := range []string{
-		"authentication.go",
+		"login.go",
+		"local_proof.go",
+		"login_rate_limit.go",
+		"local_user.go",
+		"session_issuance.go",
+		"access_authentication.go",
+		"session_refresh.go",
+		"logout.go",
 		"account_recovery.go",
+		"email_verification.go",
+		"password_reset.go",
 		"external_authentication.go",
+		"external_authentication_callback.go",
+		"external_identity_resolution.go",
+		"external_provider.go",
+		"provider_connection.go",
 		"bootstrap.go",
 	} {
 		file := files[name]

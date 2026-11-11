@@ -1,9 +1,16 @@
 // ---------------------------------------------------------------------------------------------
-// Copyright (c) 2026 Sudosy Labs. All rights reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// Modifications Copyright (c) 2026 Sudosy Labs. All rights reserved.
 // Licensed under the GNU Affero General Public License, version 3 only.
 // See LICENSE in the server module root for license information.
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
+//
+// Adapted from Mattermost server/platform/shared/mfa/mfa.go and
+// server/channels/app/user.go. Proctor retains the proven TOTP setup,
+// activation, validation, and replay-prevention flow while separating the
+// encrypted credential aggregate, hashed recovery codes, session assurance,
+// and durable security audit.
 
 package identity
 
@@ -13,13 +20,70 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
+
+// SetupMFACommand starts pending TOTP enrollment.
+type SetupMFACommand struct {
+	AccountName string
+}
+
+// ActivateMFACommand activates pending MFA with a TOTP code.
+type ActivateMFACommand struct {
+	Code string
+}
+
+// MFASetup is one-time setup material. It must never be logged or audited.
+type MFASetup struct {
+	Secret          string
+	ProvisioningURI string
+	ExpiresAt       time.Time
+}
+
+// MFAActivation is the one-time recovery-code delivery after activation.
+type MFAActivation struct {
+	RecoveryCodes []string
+}
+
+// MFAMethodAuthenticatorApp is the only second factor: a TOTP authenticator app.
+const MFAMethodAuthenticatorApp = "authenticator_app"
+
+// MFAStatus is the caller's enrollment status.
+type MFAStatus struct {
+	ServiceEnabled           bool
+	MFARecoveryRequired      bool
+	MFAEnrollmentRequired    bool
+	AuthenticationMethod     string
+	AuthenticationProviderID string
+	AuthenticationStrength   model.AuthenticationStrength
+	RecentlyAuthenticated    bool
+	Enabled                  bool
+	Pending                  bool
+	PendingExpiresAt         model.OptionalTime
+	RecoveryCodesRemaining   int
+	// Method is MFAMethodAuthenticatorApp while MFA is enabled or pending and
+	// empty otherwise.
+	Method string
+	// EnabledAt is when the credential was activated; unset unless enabled.
+	EnabledAt model.OptionalTime
+	// RecoveryCodesTotal is the size of the live issued recovery-code set,
+	// consumed codes included; zero unless enabled.
+	RecoveryCodesTotal int
+	// RecoveryCodesGeneratedAt is when the live set was issued; unset when
+	// there is none.
+	RecoveryCodesGeneratedAt model.OptionalTime
+	// PasswordChangedAt is unset for an account without a password credential.
+	PasswordChangedAt model.OptionalTime
+	// RecentAuthenticationTTL is the configured recent-authentication window;
+	// RecentlyAuthenticatedUntil is when it ends for this Session, set only
+	// while the Session is recently authenticated.
+	RecentAuthenticationTTL    time.Duration
+	RecentlyAuthenticatedUntil model.OptionalTime
+}
 
 // requireMFA checks the collaborators two-step verification uses: the Stores
 // it reads and writes, its effects, mail, mechanics, authorization, attempt
@@ -290,140 +354,6 @@ func (s *Service) ActivateMFA(
 	return &MFAActivation{RecoveryCodes: rawCodes}, nil
 }
 
-// ChallengeMFA upgrades the caller's Session to multi-factor assurance with a
-// TOTP or recovery code.
-func (s *Service) ChallengeMFA(
-	ctx context.Context,
-	invocation invocation.Invocation,
-	command ChallengeMFACommand,
-) (*model.Session, error) {
-	principal := invocation.Principal()
-	// A Session the Access Policy restricts to MFA enrollment may satisfy the
-	// policy with a challenge, for example after an external sign-in by a
-	// User who already has a local second factor. Assisted recovery may not.
-	if principal.MFARecoveryRequired {
-		return nil, apperror.New("authentication.session_required")
-	}
-	if err := s.requireMFARecoverySession(principal, false); err != nil {
-		return nil, err
-	}
-	if err := s.requireMFAEnabled(); err != nil {
-		return nil, err
-	}
-	if err := s.limitMFAFactorAttempt(ctx, invocation); err != nil {
-		return nil, err
-	}
-
-	resource, appErr := s.mfaAuditResource(ctx)
-	if appErr != nil {
-		return nil, appErr
-	}
-
-	auditID, appErr := s.beginMFAAudit(ctx, invocation, model.ActionMFAChallenge, resource, nil)
-	if appErr != nil {
-		return nil, appErr
-	}
-
-	now := model.TimeUTC(s.now())
-	proof, err := s.mfa.verifySecondFactor(ctx, s.mfaCredentials, principal.UserID.String(), command.Code, now)
-	if err != nil {
-		code := "authentication.mfa.code_invalid"
-		if failure, ok := apperror.As(err); ok {
-			code = failure.Code()
-		}
-		if auditErr := s.completeMFAAudit(ctx, auditID, model.AuditStatusFail, code, nil); auditErr != nil {
-			return nil, errors.Join(err, auditErr)
-		}
-
-		return nil, err
-	}
-
-	result, err := s.mfaCredentials.Challenge(ctx, &store.MFAChallenge{
-		Principal:        principal,
-		CredentialID:     proof.credentialID,
-		TimeStep:         proof.step,
-		RecoveryCodeHash: proof.recoveryHash,
-		VerifiedAt:       now,
-		AuditEventID:     auditID,
-	})
-	if err != nil {
-		if store.IsNotFound(err) {
-			if auditErr := s.completeMFAAudit(ctx, auditID, model.AuditStatusFail, "authentication.mfa.code_invalid", nil); auditErr != nil {
-				return nil, errors.Join(mfaInvalidCodeError(), auditErr)
-			}
-			return nil, mfaInvalidCodeError()
-		}
-
-		return nil, s.failMFAMutation(ctx, auditID, err)
-	}
-
-	if result == nil || result.Session == nil {
-		return nil, authenticationUnavailable(errors.New("MFA challenge returned no Session"))
-	}
-
-	s.publisher.SessionsRevoked(ctx, principal.UserID, []model.SessionID{principal.SessionID}, result.AccessTokenHashes)
-	return result.Session, nil
-}
-
-// RegenerateMFARecoveryCodes replaces the caller's recovery codes and returns
-// the new set once.
-func (s *Service) RegenerateMFARecoveryCodes(
-	ctx context.Context,
-	invocation invocation.Invocation,
-) ([]string, error) {
-	principal := invocation.Principal()
-	if err := s.requireMFAStrongRecentSession(principal); err != nil {
-		return nil, err
-	}
-	if err := s.requireMFAEnabled(); err != nil {
-		return nil, err
-	}
-
-	rawCodes, codes, err := s.mfa.newRecoveryCodes(
-		principal.UserID.String(), s.mfa.deps.Settings.RecoveryCodeCount,
-	)
-	if err != nil {
-		return nil, authenticationUnavailable(err)
-	}
-
-	now := model.TimeUTC(s.now())
-	prepared, appErr := s.prepareMFANotice(
-		ctx, principal.UserID, mail.MFANoticeRecoveryCodesRegenerated, now,
-	)
-	if appErr != nil {
-		return nil, appErr
-	}
-
-	resource, appErr := s.mfaAuditResource(ctx)
-	if appErr != nil {
-		return nil, appErr
-	}
-
-	auditID, appErr := s.beginMFAAudit(
-		ctx, invocation, model.ActionMFARecoveryCodesRegenerate, resource, nil,
-	)
-	if appErr != nil {
-		return nil, appErr
-	}
-
-	if err := s.mfaCredentials.ReplaceRecoveryCodes(ctx, &store.MFARecoveryCodesRegeneration{
-		Principal:               principal,
-		RecentAuthenticationTTL: s.recentAuthenticationTTL,
-		UserID:                  principal.UserID,
-		RecoveryCodes:           codes,
-		At:                      now,
-		AuditEventID:            auditID,
-		AuditAt:                 now,
-		Notice:                  mfaSecurityNotice(prepared),
-	}); err != nil {
-		return nil, s.failMFAMutation(
-			ctx, auditID, err)
-
-	}
-
-	return rawCodes, nil
-}
-
 // DisableMFA removes the caller's second factor unless the Access Policy
 // requires it.
 func (s *Service) DisableMFA(
@@ -517,47 +447,6 @@ func mfaSecurityNotice(prepared *store.PreparedMail) store.MFASecurityNotice {
 	}
 }
 
-// verifyLoginMFA verifies and consumes the second factor of a local
-// password sign-in. A User without an active credential signs in with one
-// factor.
-func (s *Service) verifyLoginMFA(
-	ctx context.Context,
-	userID string,
-	code string,
-	at time.Time,
-) (model.AuthenticationStrength, int64, error) {
-	credential, err := s.mfaCredentials.GetByUser(ctx, model.UserID(userID))
-	if store.IsNotFound(err) {
-		return model.AuthenticationSingleFactor, 0, nil
-	}
-	if err != nil {
-		return "", 0, authenticationUnavailable(err)
-	}
-	if !credential.IsActive() {
-		return model.AuthenticationSingleFactor, 0, nil
-	}
-	if !s.mfa.deps.Settings.Enabled {
-		return "", 0, apperror.New("authentication.mfa.unavailable")
-	}
-	if strings.TrimSpace(code) == "" {
-		return "", 0, apperror.New("authentication.mfa.required")
-	}
-	if appErr := s.consumeLoginSecondFactor(ctx, userID, code, at); appErr != nil {
-		return "", 0, appErr
-	}
-	return model.AuthenticationMultiFactor, at.UnixMilli(), nil
-}
-
-// consumeLoginSecondFactor consumes the sign-in factor against the MFA Store.
-func (s *Service) consumeLoginSecondFactor(
-	ctx context.Context,
-	userID string,
-	code string,
-	now time.Time,
-) error {
-	return s.mfa.consumeSecondFactor(ctx, s.mfaCredentials, userID, code, now)
-}
-
 func (s *Service) requireMFAEnabled() error {
 	if s.mfa.deps.Settings.Enabled {
 		return nil
@@ -585,134 +474,5 @@ func (s *Service) requireMFAStrongRecentSession(principal model.Principal) error
 	if !principal.HasStrongAuthentication() {
 		return apperror.New("authentication.strong_required")
 	}
-	return nil
-}
-
-func (s *Service) mfaAuditResource(ctx context.Context) (model.Resource, error) {
-	institution, err := s.institutions.GetSingleton(ctx)
-	if err != nil {
-		return model.Resource{}, mfaStoreErrors.Translate(err)
-	}
-	return model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}, nil
-}
-
-func (s *Service) failMFAMutation(
-	ctx context.Context,
-	auditID model.AuditEventID,
-	err error,
-) error {
-	mapped := mfaStoreErrors.Translate(err)
-	code := "authentication.mfa.unavailable"
-	if failure, ok := apperror.As(mapped); ok {
-		code = failure.Code()
-	}
-	if auditErr := s.completeMFAAudit(
-		ctx, auditID, model.AuditStatusFail, code, nil,
-	); auditErr != nil {
-		return errors.Join(mapped, auditErr)
-	}
-	return mapped
-}
-
-// beginMFAAudit records the attempt of an MFA mutation. Self-service MFA
-// mutations are audited against the Institution, with the acting User as
-// their subject. An administrator reset names the target User as its
-// resource, which is its own subject.
-func (s *Service) beginMFAAudit(
-	ctx context.Context,
-	invocation invocation.Invocation,
-	action model.Action,
-	resource model.Resource,
-	prior any,
-) (model.AuditEventID, error) {
-	if s.securityAudit == nil {
-		return "", access.AuditUnavailable(errors.New("MFA audit service is unavailable"))
-	}
-
-	var subject model.UserID
-	if resource.Type != model.ResourceUser {
-		subject = invocation.Principal().UserID
-	}
-
-	event, err := s.securityAudit.BeginCriticalActionForSubject(
-		ctx,
-		invocation.Principal(),
-		subject,
-		action,
-		resource,
-		invocation.RequestMetadata(),
-		nil,
-		prior,
-	)
-	if err != nil {
-		return "", err
-	}
-
-	return event.ID, nil
-}
-
-// completeMFAAudit records the terminal outcome of an MFA mutation the
-// Service itself, rather than its atomic Store operation, ends.
-func (s *Service) completeMFAAudit(
-	ctx context.Context,
-	auditID model.AuditEventID,
-	status model.AuditStatus,
-	errorCode string,
-	result any,
-) error {
-	if s.securityAudit == nil {
-		return access.AuditUnavailable(errors.New("MFA audit service is unavailable"))
-	}
-	_, err := s.securityAudit.CompleteCriticalAction(ctx, auditID, status, errorCode, result)
-	return err
-}
-
-// mfaRecoveryState is the two-step verification recovery state sign-in and
-// external authentication read for a User before issuing a Session.
-func (s *Service) mfaRecoveryState(ctx context.Context, userID model.UserID) (*model.UserMFARecovery, error) {
-	state, err := s.mfaCredentials.GetRecoveryState(ctx, userID)
-	if err != nil {
-		return nil, authenticationUnavailable(err)
-	}
-	if state.ReenrollmentRequired && !s.mfa.deps.Settings.Enabled {
-		return nil, apperror.New("authentication.mfa.unavailable")
-	}
-	return state, nil
-}
-
-func (s *Service) requireMFARecoverySession(principal model.Principal, recent bool) error {
-	if principal.ValidateMFARecovery() != nil || principal.CredentialType != model.CredentialSessionAccess {
-		return apperror.New("authentication.session_required")
-	}
-	if recent && !principal.IsRecentlyAuthenticated(s.now(), s.recentAuthenticationTTL) {
-		return apperror.New("authentication.reauthentication_required")
-	}
-	return nil
-}
-
-func (s *Service) limitMFAFactorAttempt(ctx context.Context, invocation invocation.Invocation) error {
-	_, limited, err := s.attempts.account(ctx, authenticationAttemptIntent{
-		purpose: authenticationAttemptPurposeMFA,
-		window:  s.loginRateLimit.Window,
-		limits: []AttemptLimit{
-			{
-				dimension: authenticationAttemptDimensionIdentity,
-				maximum:   s.loginRateLimit.MaximumAttempts,
-				identity:  invocation.Principal().UserID.String(),
-			},
-			{
-				dimension: authenticationAttemptDimensionSource,
-				maximum:   s.loginRateLimit.MaximumSourceAttempts,
-				source:    invocation.RequestMetadata().IPAddress,
-			},
-		},
-	})
-	if err != nil {
-		return RateLimitUnavailableAppError(err)
-	}
-	if limited {
-		return apperror.New("authentication.rate_limited")
-	}
-
 	return nil
 }

@@ -22,7 +22,7 @@ func TestExternalAuthenticationMaintenanceUsesBoundedPages(t *testing.T) {
 		results[index] = &store.ExternalLoginStateMaintenanceResult{More: true}
 	}
 	fake := &externalAuthenticationMaintainerFake{results: results}
-	require.NoError(t, (externalAuthenticationMaintenancePeriodicRunner{states: fake}).Run(context.Background()))
+	require.NoError(t, (externalAuthenticationMaintenance{states: fake}).Run(context.Background()))
 	require.Len(t, fake.limits, externalAuthenticationMaintenanceMaximumPages, "Maintain calls")
 	for _, limit := range fake.limits {
 		require.Equal(t, externalAuthenticationMaintenancePageSize, limit, "Maintain limit")
@@ -30,6 +30,7 @@ func TestExternalAuthenticationMaintenanceUsesBoundedPages(t *testing.T) {
 }
 
 type externalAuthenticationMaintainerFake struct {
+	store.ExternalLoginStateStore
 	results []*store.ExternalLoginStateMaintenanceResult
 	limits  []int
 }

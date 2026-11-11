@@ -21,19 +21,15 @@ const (
 	externalAuthenticationMaintenanceInterval     = time.Minute
 )
 
-type externalAuthenticationMaintainer interface {
-	Maintain(context.Context, int) (*store.ExternalLoginStateMaintenanceResult, error)
-}
-
-// externalAuthenticationMaintenancePeriodicRunner reconciles abandoned
+// externalAuthenticationMaintenance reconciles abandoned
 // provider-connection audit attempts and retained browser state in bounded,
 // database-clock pages. Every node may run it; PostgreSQL row claiming makes
 // overlapping passes safe without a durable maintenance Job.
-type externalAuthenticationMaintenancePeriodicRunner struct {
-	states externalAuthenticationMaintainer
+type externalAuthenticationMaintenance struct {
+	states store.ExternalLoginStateStore
 }
 
-func (r externalAuthenticationMaintenancePeriodicRunner) Run(ctx context.Context) error {
+func (r externalAuthenticationMaintenance) Run(ctx context.Context) error {
 	if r.states == nil {
 		return errors.New("external authentication maintenance persistence is unavailable")
 	}

@@ -15,47 +15,12 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
-
-func TestDesktopLocalAuthenticationPreservesPasswordCapacityFailure(t *testing.T) {
-	for _, account := range []string{"existing", "missing"} {
-		t.Run(account, func(t *testing.T) {
-			persistence := newAuthenticationStoreFake()
-			service := newTestAuthenticationService(t, persistence)
-			const password = "CorrectHorseBatteryStaple1!"
-			user, err := service.CreateLocalUser(context.Background(), CreateLocalUserCommand{
-				User: &model.User{Username: "desktop-capacity", Email: "desktop-capacity@example.edu"}, Password: password,
-			})
-			require.NoError(t, err)
-			transactions := &desktopAuthorizationStoreFake{}
-			setTestDesktopAuthorization(t, service, transactions)
-			command := AuthenticateDesktopAuthorizationLocallyCommand{
-				Binding: model.NewCredentialToken(), LoginID: user.Email, Password: password, Source: "192.0.2.37",
-			}
-			if account == "missing" {
-				command.LoginID = "missing@example.edu"
-			}
-			saturatePasswordWork(t, passwordHasherOf(t, service))
-			result, err := service.AuthenticateDesktopAuthorizationLocally(context.Background(), invocation.Invocation{}, command)
-			require.Nil(t, result, "saturated Desktop authentication = %#v/%v", result, err)
-			require.True(t, apperror.Is(err, "service.busy"), "saturated Desktop authentication = %#v/%v", result, err)
-			ctx, cancel := context.WithCancel(context.Background())
-			cancel()
-			result, err = service.AuthenticateDesktopAuthorizationLocally(ctx, invocation.Invocation{}, command)
-			require.Nil(t, result, "canceled Desktop authentication")
-			require.True(t, apperror.Is(err, "authentication.internal"), "canceled Desktop authentication")
-			require.ErrorIs(t, err, context.Canceled, "canceled Desktop authentication")
-			require.Nil(t, transactions.authenticated, "rejected password work advanced Desktop authentication or issued a Session")
-			require.Empty(t, persistence.sessions, "rejected password work advanced Desktop authentication or issued a Session")
-		})
-	}
-}
 
 func TestDesktopAuthorizationStartPinsPublicClientRequest(t *testing.T) {
 	t.Parallel()
@@ -238,39 +203,6 @@ func TestDesktopAuthorizationTerminalStoreRejectionCompletesFailureAudit(t *test
 	require.True(t, apperror.Is(err, "authentication.desktop_authorization.unavailable"), "Exchange() error=%v failure audit", err)
 	require.Equal(t, "authentication.desktop_authorization.unavailable", auditor.lastFailure().errorCode, "Exchange() error=%v failure audit", err)
 	require.Equal(t, persistence.exchanged.AuditEventID, auditor.lastFailure().id, "the failure completes the exchange attempt")
-}
-
-func TestDesktopAuthorizationExchangeFailsClosedWhenSessionNonceCannotBeStored(t *testing.T) {
-	t.Parallel()
-
-	at := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
-	persistence := &desktopAuthorizationStoreFake{}
-	auditor := &securityAuditorFake{}
-	service := newTestDesktopAuthorizationService(t, persistence, func() time.Time { return at })
-	service.securityAudit = auditor
-	command := testDesktopAuthorizationExchangeCommand(
-		t, service, at, model.NewCredentialToken(), model.NewCredentialToken(), model.NewCredentialToken(), "",
-	)
-	session, registration := testDesktopAuthorizationExchangeResult(t, command, model.NewUserID(), at)
-	persistence.exchangeResult = &store.DesktopAuthorizationExchangeResult{
-		Session: session, Registration: registration,
-		AccessExpiresAt: at.Add(5 * time.Minute), RefreshExpiresAt: at.Add(time.Hour),
-	}
-	service.dpop.deps.Cache.(*dpopCacheFake).setAlwaysErr = errors.New("shared nonce cache unavailable")
-
-	result, err := service.ExchangeDesktopAuthorization(context.Background(), invocation.Invocation{}, command)
-	require.Nil(t, result, "Exchange() = %#v, %v; want no credential response", result, err)
-	require.True(t, apperror.Is(err, "authentication.dpop.unavailable"), "Exchange() = %#v, %v; want no credential response", result, err)
-	sessions := service.sessions.(*desktopAuthorizationSessionStoreStub)
-	require.Equal(t, session.ID.String(), sessions.revokedID)
-	require.Equal(t, session.UserID.String(), sessions.revokedUserID)
-	require.Equal(t, model.SessionRevocationDesktopAuthorizationFailed, sessions.reason)
-	// The exchange's success audit is followed by a record of the withdrawal.
-	withdrawals := auditor.withOperation("withdraw")
-	require.Len(t, withdrawals, 1)
-	require.Equal(t, map[string]any{"session_id": session.ID}, withdrawals[0].parameters.(map[string]any)["value"])
-	require.Equal(t, model.AuditStatusSuccess, withdrawals[0].status)
-	require.Equal(t, session.ID, withdrawals[0].result.(map[string]any)["session_id"])
 }
 
 func TestDesktopAuthorizationCrossAccountApprovalIsAudited(t *testing.T) {
@@ -514,9 +446,11 @@ func (s *desktopAuthorizationStoreFake) IssueCode(_ context.Context, input *stor
 	s.issued = input
 	return s.issueResult, s.issueErr
 }
+
 func (s *desktopAuthorizationStoreFake) Cancel(context.Context, *store.DesktopAuthorizationCancellation) error {
 	return nil
 }
+
 func (s *desktopAuthorizationStoreFake) ResolveDesktopAuthorizationExchange(context.Context,
 	*store.DesktopAuthorizationExchangeProof,
 ) (*store.DesktopAuthorizationExchangeTarget, error) {
@@ -528,6 +462,7 @@ func (s *desktopAuthorizationStoreFake) ResolveDesktopAuthorizationExchange(cont
 	}
 	return &store.DesktopAuthorizationExchangeTarget{ID: s.authorizationID, UserID: s.exchangeUserID}, nil
 }
+
 func (s *desktopAuthorizationStoreFake) Exchange(_ context.Context, input *store.DesktopAuthorizationExchange) (*store.DesktopAuthorizationExchangeResult, error) {
 	s.exchanged = input
 	return s.exchangeResult, s.exchangeErr

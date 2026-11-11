@@ -21,18 +21,14 @@ const (
 	personalAccessTokenMaintenanceInterval     = time.Minute
 )
 
-type personalAccessTokenPreparationMaintainer interface {
-	MaintainMutationPreparations(context.Context, int) (*store.PersonalAccessTokenPreparationMaintenanceResult, error)
-}
-
-// personalAccessTokenMaintenancePeriodicRunner performs one bounded pass on
+// personalAccessTokenMaintenance performs one bounded pass on
 // every node. PostgreSQL SKIP LOCKED claiming converges without durable Jobs,
 // Attempts, occurrences, or permanent deduplication-ledger rows.
-type personalAccessTokenMaintenancePeriodicRunner struct {
-	tokens personalAccessTokenPreparationMaintainer
+type personalAccessTokenMaintenance struct {
+	tokens store.PersonalAccessTokenStore
 }
 
-func (r personalAccessTokenMaintenancePeriodicRunner) Run(ctx context.Context) error {
+func (r personalAccessTokenMaintenance) Run(ctx context.Context) error {
 	if r.tokens == nil {
 		return errors.New("personal access token preparation maintenance persistence is unavailable")
 	}

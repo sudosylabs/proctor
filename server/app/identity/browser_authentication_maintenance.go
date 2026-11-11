@@ -21,18 +21,14 @@ const (
 	browserAuthenticationMaintenanceInterval     = time.Minute
 )
 
-type browserAuthenticationMaintainer interface {
-	Maintain(context.Context, int) (*store.BrowserAuthenticationMaintenanceResult, error)
-}
-
-// browserAuthenticationMaintenancePeriodicRunner performs one bounded runtime
+// browserAuthenticationMaintenance performs one bounded runtime
 // pass. Every node may run it: PostgreSQL row claiming converges safely without
 // a durable Job, Attempt, occurrence, or permanent deduplication-ledger row.
-type browserAuthenticationMaintenancePeriodicRunner struct {
-	transactions browserAuthenticationMaintainer
+type browserAuthenticationMaintenance struct {
+	transactions store.BrowserAuthenticationStore
 }
 
-func (r browserAuthenticationMaintenancePeriodicRunner) Run(ctx context.Context) error {
+func (r browserAuthenticationMaintenance) Run(ctx context.Context) error {
 	if r.transactions == nil {
 		return errors.New("browser authentication maintenance persistence is unavailable")
 	}

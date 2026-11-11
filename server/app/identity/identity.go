@@ -7,30 +7,14 @@
 
 // Package identity owns who a caller is and how they prove it: local and
 // external sign-in, Sessions and their assurance, two-step verification,
-// personal access tokens, Desktop authorization, account recovery,
-// authentication methods, account state, email addresses, and installation
-// bootstrap.
-//
-// Service holds every one of these use cases as its own methods. Its fields
-// are the Store contracts the use cases call and one of each collaborator:
-// one authorizer, one security auditor beside the mutation auditor, one mail
-// composer, one realtime.Publisher for the security effects that follow a
-// commit, one password hasher and one attempt accounting. When one flow needs
-// another, such as external sign-in issuing a Session or handing a proof to
-// Desktop authorization, it calls the other method directly. New builds the
-// Service once and refuses it when a collaborator is missing. Each concern keeps its methods in the file named
-// for it.
-//
-// The mechanics the flows share stay inside the package behind them: the
-// password hasher, attempt accounting, the authentication cache invalidator,
-// DPoP, the access-policy view and the TOTP mechanics. The parent app package
-// builds the hasher, the attempt accounting and the invalidator once with the
-// exported constructors, and shares them with the onboarding area's
-// Invitations and public registration and with its own test mail and realtime
-// propagation.
-//
+// personal access tokens, Desktop authorization and reauthentication, account
+// recovery, authentication methods, account state, email addresses and
+// installation bootstrap. Service holds every one of these use cases.
 // Start with identity.go for the Service and its collaborators, then open the
-// file named for the concern you are changing.
+// file named for the flow you are changing: login.go, session_refresh.go,
+// mfa_enrollment.go, desktop_authorization_exchange.go and so on. The parent
+// app package builds the PasswordHasher, AttemptAccounting and CacheInvalidator
+// once and shares them with the onboarding area.
 package identity
 
 import (
@@ -41,7 +25,6 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/logging"
@@ -58,6 +41,17 @@ var (
 	ErrAuthenticationCacheMiss      = errors.New("authentication cache: key not found")
 	ErrAuthenticationCacheNotStored = errors.New("authentication cache: conditional write not applied")
 )
+
+// AuthenticationCache is the disposable cache authentication, DPoP and attempt
+// accounting share. Composition adapts the platform cache to it and translates
+// its outcomes into ErrAuthenticationCacheMiss and ErrAuthenticationCacheNotStored.
+type AuthenticationCache interface {
+	Get(context.Context, string) ([]byte, error)
+	SetAlways(context.Context, string, []byte, time.Duration) error
+	SetIfAbsent(context.Context, string, []byte, time.Duration) error
+	Delete(context.Context, string) error
+	Add(context.Context, string, int64, time.Duration) (int64, error)
+}
 
 // resourceAuthorizer is the one authorization port. A use case authorizes an
 // Action on a concrete Resource immediately before the work it guards,
@@ -78,52 +72,6 @@ var _ resourceAuthorizer = (*access.Authorizer)(nil)
 // nothing.
 type OperationalRecorder interface {
 	RecordOperational(subsystem, event string, err error)
-}
-
-func recordOperational(recorder OperationalRecorder, subsystem, event string, err error) {
-	if recorder != nil {
-		recorder.RecordOperational(subsystem, event, err)
-	}
-}
-
-// PasswordPolicy is the immutable password-hashing projection composition
-// supplies so password code does not import deployment config.
-type PasswordPolicy struct {
-	MinimumLength               int
-	MaximumLength               int
-	ArgonMemoryKiB              int
-	ArgonIterations             int
-	ArgonParallelism            int
-	ArgonSaltBytes              int
-	ArgonKeyBytes               int
-	MaximumConcurrentOperations int
-	HistoryCount                int
-}
-
-// PasswordWorkRecorder observes bounded runtime password work. Implementations
-// must be concurrency-safe and return promptly; nil disables recording.
-type PasswordWorkRecorder interface {
-	Started()
-	Finished(time.Duration)
-	Rejected()
-}
-
-// AccountRecoveryPolicy is the operator projection for email verification and
-// password reset TTLs and rate limits.
-type AccountRecoveryPolicy struct {
-	EmailVerificationTTL time.Duration
-	PasswordResetTTL     time.Duration
-	EmailChangeUndoTTL   time.Duration
-	RateLimit            LoginRateLimitPolicy
-}
-
-// MFAPolicy is the enrollment and verification policy for TOTP MFA. Key-ring
-// construction remains at the server composition root.
-type MFAPolicy struct {
-	Enabled           bool
-	Issuer            string
-	SetupTTL          time.Duration
-	RecoveryCodeCount int
 }
 
 // Dependencies are the collaborators New distributes to the Service. Hasher,
@@ -509,37 +457,4 @@ func (s *Service) constructAdministration(deps Dependencies) error {
 	}
 	s.mfaRekeyEnabled = true
 	return nil
-}
-
-// MaintenanceTasks returns the bounded periodic passes that expire and purge
-// browser authentication transactions, external login states and personal
-// access token preparations. Every node may run them.
-func MaintenanceTasks(catalog store.Catalog) []job.PeriodicTask {
-	return []job.PeriodicTask{
-		{
-			Name:     "browser-authentication-maintenance",
-			Interval: browserAuthenticationMaintenanceInterval,
-			Runner:   browserAuthenticationMaintenancePeriodicRunner{transactions: catalog.BrowserAuthentication()},
-		},
-		{
-			Name:     "external-authentication-maintenance",
-			Interval: externalAuthenticationMaintenanceInterval,
-			Runner:   externalAuthenticationMaintenancePeriodicRunner{states: catalog.ExternalLoginState()},
-		},
-		{
-			Name:     "personal-access-token-maintenance",
-			Interval: personalAccessTokenMaintenanceInterval,
-			Runner:   personalAccessTokenMaintenancePeriodicRunner{tokens: catalog.PersonalAccessToken()},
-		},
-	}
-}
-
-func sessionIDs(sessions []*model.Session) []model.SessionID {
-	ids := make([]model.SessionID, 0, len(sessions))
-	for _, session := range sessions {
-		if session != nil {
-			ids = append(ids, session.ID)
-		}
-	}
-	return ids
 }

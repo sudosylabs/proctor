@@ -117,3 +117,13 @@ func (s *Service) publishSessionsRevoked(
 		s.publisher.SessionsRevoked(ctx, model.UserID(userID), sessionIDs(sessions), hashes)
 	}
 }
+
+func sessionIDs(sessions []*model.Session) []model.SessionID {
+	ids := make([]model.SessionID, 0, len(sessions))
+	for _, session := range sessions {
+		if session != nil {
+			ids = append(ids, session.ID)
+		}
+	}
+	return ids
+}

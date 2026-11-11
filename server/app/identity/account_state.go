@@ -89,7 +89,7 @@ func (s *Service) SetUserEnabled(
 	}
 
 	disabled := !command.Enabled
-	idempotency, err := idempotency.Prepare(invocation, "user.enabled_state", command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Prepare(invocation, "user.enabled_state", command.IdempotencyKey, struct {
 		UserID  string `json:"user_id"`
 		Enabled bool   `json:"enabled"`
 		Reason  string `json:"reason,omitempty"`
@@ -99,11 +99,11 @@ func (s *Service) SetUserEnabled(
 	}
 
 	batch := command.Batch.Fields()
-	batchitem.BindOnboardingImport(idempotency, batch.OnboardingImportID, batch.OnboardingImportRowNumber)
-	batchitem.BindAuthorization(idempotency, batch.Authorization)
-	batchitem.BindBatch(idempotency, batch.Metadata)
+	batchitem.BindOnboardingImport(commandIdempotency, batch.OnboardingImportID, batch.OnboardingImportRowNumber)
+	batchitem.BindAuthorization(commandIdempotency, batch.Authorization)
+	batchitem.BindBatch(commandIdempotency, batch.Metadata)
 	alreadySatisfied := current.DisabledAt.Valid == disabled
-	if alreadySatisfied && idempotency == nil {
+	if alreadySatisfied && commandIdempotency == nil {
 		return current, nil
 	}
 
@@ -156,7 +156,7 @@ func (s *Service) SetUserEnabled(
 				RevocationReason: model.SessionRevocationAccountDisabled,
 				AuditEventID:     reference.ID,
 				AuditAt:          reference.MutationAt,
-				Command:          idempotency,
+				Command:          commandIdempotency,
 			}
 			value, storeErr := s.users.SetDisabled(ctx, input)
 			if batch.Replayed != nil {

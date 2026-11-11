@@ -25,10 +25,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"golang.org/x/crypto/argon2"
-
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/store"
+	"golang.org/x/crypto/argon2"
 )
 
 var ErrPasswordMismatch = errors.New("password does not match")
@@ -346,4 +345,26 @@ func parseBoundedParameter(value, prefix string, minimum, maximum uint64) (uint6
 		return 0, errors.New("Argon2id parameter outside safe bounds")
 	}
 	return parsed, nil
+}
+
+// PasswordPolicy is the immutable password-hashing projection composition
+// supplies so password code does not import deployment config.
+type PasswordPolicy struct {
+	MinimumLength               int
+	MaximumLength               int
+	ArgonMemoryKiB              int
+	ArgonIterations             int
+	ArgonParallelism            int
+	ArgonSaltBytes              int
+	ArgonKeyBytes               int
+	MaximumConcurrentOperations int
+	HistoryCount                int
+}
+
+// PasswordWorkRecorder observes bounded runtime password work. Implementations
+// must be concurrency-safe and return promptly; nil disables recording.
+type PasswordWorkRecorder interface {
+	Started()
+	Finished(time.Duration)
+	Rejected()
 }

@@ -262,7 +262,7 @@ func (s *Service) ReplaceDesktopCompatibilityPolicy(
 		return nil, apperror.New("idempotency.key_required")
 	}
 
-	idempotency, err := idempotency.Prepare(
+	commandIdempotency, err := idempotency.Prepare(
 		invocation,
 		"desktop_compatibility_policy.replace",
 		command.IdempotencyKey,
@@ -311,7 +311,7 @@ func (s *Service) ReplaceDesktopCompatibilityPolicy(
 					AuditEventID:     reference.ID,
 					AuditAt:          reference.MutationAt,
 				},
-				idempotency,
+				commandIdempotency,
 			)
 		},
 		desktopCompatibilityPolicyError,

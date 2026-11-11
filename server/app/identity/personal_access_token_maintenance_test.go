@@ -18,6 +18,7 @@ import (
 )
 
 type personalAccessTokenMaintainerFake struct {
+	store.PersonalAccessTokenStore
 	results []*store.PersonalAccessTokenPreparationMaintenanceResult
 	limits  []int
 	err     error
@@ -40,7 +41,7 @@ func TestPersonalAccessTokenMaintenancePeriodicRunnerIsBounded(t *testing.T) {
 		results[index] = &store.PersonalAccessTokenPreparationMaintenanceResult{Failed: 1, More: true}
 	}
 	maintainer := &personalAccessTokenMaintainerFake{results: results}
-	require.NoError(t, (personalAccessTokenMaintenancePeriodicRunner{tokens: maintainer}).Run(context.Background()), "Run() error")
+	require.NoError(t, (personalAccessTokenMaintenance{tokens: maintainer}).Run(context.Background()), "Run() error")
 	require.Len(t, maintainer.limits, personalAccessTokenMaintenanceMaximumPages, "Run() error")
 	for _, limit := range maintainer.limits {
 		require.Equal(t, personalAccessTokenMaintenancePageSize, limit, "MaintainMutationPreparations() limit")
@@ -50,9 +51,9 @@ func TestPersonalAccessTokenMaintenancePeriodicRunnerIsBounded(t *testing.T) {
 func TestPersonalAccessTokenMaintenancePeriodicRunnerReportsFailure(t *testing.T) {
 	t.Parallel()
 	maintainer := &personalAccessTokenMaintainerFake{results: []*store.PersonalAccessTokenPreparationMaintenanceResult{{}}}
-	require.NoError(t, (personalAccessTokenMaintenancePeriodicRunner{tokens: maintainer}).Run(context.Background()), "completed Run() error")
+	require.NoError(t, (personalAccessTokenMaintenance{tokens: maintainer}).Run(context.Background()), "completed Run() error")
 	require.Len(t, maintainer.limits, 1, "completed Run() error")
 	want := errors.New("database unavailable")
 	maintainer = &personalAccessTokenMaintainerFake{err: want}
-	require.ErrorIs(t, (personalAccessTokenMaintenancePeriodicRunner{tokens: maintainer}).Run(context.Background()), want)
+	require.ErrorIs(t, (personalAccessTokenMaintenance{tokens: maintainer}).Run(context.Background()), want)
 }

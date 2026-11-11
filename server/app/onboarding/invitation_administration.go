@@ -164,7 +164,7 @@ func (s *Service) ResendInvitation(
 		}
 	}
 
-	idempotency, err := idempotency.Prepare(
+	commandIdempotency, err := idempotency.Prepare(
 		invocation,
 		"invitation.resend",
 		command.IdempotencyKey,
@@ -183,7 +183,7 @@ func (s *Service) ResendInvitation(
 		Operation:  "resend",
 		Value:      current.Invitation.Auditable(),
 	}
-	if recovered, ok, recoverErr := s.recoverInvitationAdministrationOutcome(ctx, idempotency, attempt); ok {
+	if recovered, ok, recoverErr := s.recoverInvitationAdministrationOutcome(ctx, commandIdempotency, attempt); ok {
 		return recovered, recoverErr
 	}
 
@@ -194,7 +194,7 @@ func (s *Service) ResendInvitation(
 
 		view, duplicateErr := s.recordDuplicateInvitationView(
 			ctx,
-			idempotency,
+			commandIdempotency,
 			attempt,
 			store.InvitationBatchDuplicate{
 				LifecycleID:          id,
@@ -212,11 +212,11 @@ func (s *Service) ResendInvitation(
 		attempt,
 		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.InvitationAdministrationCommandResult, error) {
-			if idempotency != nil {
+			if commandIdempotency != nil {
 				replayed, replayErr := s.invitations.ReplayAdministration(
 					ctx,
 					&store.InvitationReplay{AuditEventID: reference.ID, AuditAt: reference.MutationAt},
-					idempotency,
+					commandIdempotency,
 				)
 				if replayErr == nil {
 					if replayed.Duplicate {
@@ -261,8 +261,8 @@ func (s *Service) ResendInvitation(
 				AuditEventID:     reference.ID,
 				AuditAt:          reference.MutationAt,
 			}
-			if idempotency != nil {
-				value, storeErr := s.invitations.ResendIdempotently(ctx, input, idempotency)
+			if commandIdempotency != nil {
+				value, storeErr := s.invitations.ResendIdempotently(ctx, input, commandIdempotency)
 				if storeErr == nil && value.Duplicate {
 					return nil, apperror.New("onboarding_batch.duplicate")
 				}
@@ -320,7 +320,7 @@ func (s *Service) RevokeInvitation(
 		}
 	}
 
-	idempotency, err := idempotency.Prepare(
+	commandIdempotency, err := idempotency.Prepare(
 		invocation,
 		"invitation.revoke",
 		command.IdempotencyKey,
@@ -339,14 +339,14 @@ func (s *Service) RevokeInvitation(
 		Operation:  "revoke",
 		Value:      current.Invitation.Auditable(),
 	}
-	if recovered, ok, recoverErr := s.recoverInvitationAdministrationOutcome(ctx, idempotency, attempt); ok {
+	if recovered, ok, recoverErr := s.recoverInvitationAdministrationOutcome(ctx, commandIdempotency, attempt); ok {
 		return recovered, recoverErr
 	}
 
 	if command.batchDuplicate {
 		view, duplicateErr := s.recordDuplicateInvitationView(
 			ctx,
-			idempotency,
+			commandIdempotency,
 			attempt,
 			store.InvitationBatchDuplicate{
 				LifecycleID:          id,
@@ -364,11 +364,11 @@ func (s *Service) RevokeInvitation(
 		attempt,
 		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.InvitationAdministrationCommandResult, error) {
-			if idempotency != nil {
+			if commandIdempotency != nil {
 				replayed, replayErr := s.invitations.ReplayAdministration(
 					ctx,
 					&store.InvitationReplay{AuditEventID: reference.ID, AuditAt: reference.MutationAt},
-					idempotency,
+					commandIdempotency,
 				)
 				if replayErr == nil {
 					if replayed.Duplicate {
@@ -400,8 +400,8 @@ func (s *Service) RevokeInvitation(
 				AuditEventID: reference.ID,
 				AuditAt:      reference.MutationAt,
 			}
-			if idempotency != nil {
-				value, storeErr := s.invitations.RevokeIdempotently(ctx, input, idempotency)
+			if commandIdempotency != nil {
+				value, storeErr := s.invitations.RevokeIdempotently(ctx, input, commandIdempotency)
 				if storeErr == nil && value.Duplicate {
 					return nil, apperror.New("onboarding_batch.duplicate")
 				}

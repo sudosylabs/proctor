@@ -7,7 +7,7 @@
 
 module github.com/sudosylabs/proctor/server
 
-go 1.26.10
+go 1.26.11
 
 require (
 	github.com/HugoSmits86/nativewebp v1.3.0

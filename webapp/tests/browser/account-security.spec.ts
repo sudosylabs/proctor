@@ -245,7 +245,7 @@ test("switching proof methods clears values, restores focus and preserves recove
 
 test("production QR and OTP work under the server Content Security Policy", { tag: "@cross-browser" }, async ({ page }) => {
   const serverSource = await readFile("../server/webui/webui.go", "utf8");
-  const policy = serverSource.match(/header\.Set\("Content-Security-Policy", "([^"]+)"\)/)?.[1];
+  const policy = serverSource.match(/header\.Set\(\s*"Content-Security-Policy",\s*"([^"]+)",?\s*\)/)?.[1];
   expect(policy).toBeDefined();
   await mockSecurity(page);
   await page.route("**/account/security", async (route) => route.fulfill({

@@ -109,7 +109,7 @@ func (s *Service) CreatePersonalAccessToken(
 	}
 
 	if command.AcademicUnitID != "" {
-		if !model.AcademicUnitID(command.AcademicUnitID).IsValid() {
+		if !command.AcademicUnitID.IsValid() {
 			return nil, invalidPersonalAccessTokenRequest("academic_unit_id")
 		}
 		if _, err = s.academicUnits.Get(ctx, command.AcademicUnitID); err != nil {
@@ -147,7 +147,7 @@ func (s *Service) CreatePersonalAccessToken(
 		Description:    command.Description,
 		TokenHash:      model.HashToken(rawCredential),
 		Scopes:         normalizedScopes,
-		AcademicUnitID: model.AcademicUnitID(command.AcademicUnitID),
+		AcademicUnitID: command.AcademicUnitID,
 		ExpiresAt:      model.TimeFromMillis(command.ExpiresAt),
 	}
 	parameters := map[string]any{

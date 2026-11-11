@@ -38,7 +38,9 @@ func TestExternalAuthenticationBeginUsesControlledCredentials(t *testing.T) {
 	t.Parallel()
 
 	at := time.Date(2026, 8, 12, 12, 0, 0, 0, time.UTC)
+	// #nosec G101 -- Synthetic state and binding tokens, fixed so the test can name them.
 	stateToken := "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE"
+	// #nosec G101 -- See stateToken.
 	bindingToken := "YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXpBQkNERUY"
 	generated := []string{stateToken, bindingToken}
 	next := 0

@@ -24,10 +24,14 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// MaximumAcademicAdministrationBatchItems bounds one batch request.
 const MaximumAcademicAdministrationBatchItems = 200
 
+// AcademicAdministrationBatchOperation names the one change a batch applies
+// to every item.
 type AcademicAdministrationBatchOperation string
 
+// The operations a batch may apply.
 const (
 	AcademicAdministrationAffiliationAdd        AcademicAdministrationBatchOperation = "affiliation.add"
 	AcademicAdministrationAffiliationEnd        AcademicAdministrationBatchOperation = "affiliation.end"
@@ -103,6 +107,8 @@ type RunAcademicAdministrationBatchCommand struct {
 	progressionDestinationAuditID model.AuditEventID
 }
 
+// AcademicAdministrationBatchItemResult is the outcome of one item, by its
+// position in the request. ErrorCode is set only when the item failed.
 type AcademicAdministrationBatchItemResult struct {
 	Index      int
 	Status     InvitationBatchItemStatus
@@ -110,6 +116,8 @@ type AcademicAdministrationBatchItemResult struct {
 	ErrorCode  string
 }
 
+// AcademicAdministrationBatchResult reports every item of a batch; one item
+// failing does not stop the others.
 type AcademicAdministrationBatchResult struct {
 	Operation AcademicAdministrationBatchOperation
 	Items     []AcademicAdministrationBatchItemResult

@@ -224,8 +224,8 @@ func (s *Service) ArchiveProgramme(ctx context.Context, inv invocation.Invocatio
 	if err != nil {
 		return err
 	}
-	if err := checkAcademicRevision(command.ExpectedRevision, current.Revision, "programme.conflict"); err != nil {
-		return err
+	if revisionErr := checkAcademicRevision(command.ExpectedRevision, current.Revision, "programme.conflict"); revisionErr != nil {
+		return revisionErr
 	}
 
 	resource := model.Resource{Type: model.ResourceProgramme, ID: current.ID.String()}

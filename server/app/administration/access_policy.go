@@ -48,6 +48,8 @@ func sessionLengthLimits(sessions identity.SessionPolicy, recentAuthentication t
 	}
 }
 
+// AccessPolicyView is the current Access Policy as an administrator sees it:
+// the policy and its history, with what the deployment can actually offer.
 type AccessPolicyView struct {
 	Policy             *model.AccessPolicy
 	History            []*model.AccessPolicyTransition
@@ -302,17 +304,28 @@ func (s *Service) view(snapshot *store.AccessPolicySnapshot) AccessPolicyView {
 	}
 }
 
+// PublicInstitutionPresentation is the Institution's name as shown to someone
+// who has not signed in.
 type PublicInstitutionPresentation struct {
 	ID                model.InstitutionID
 	Name, DisplayName string
 }
+
+// PublicAccessCapabilities says which ways into the installation are open
+// under the current Access Policy and deployment.
 type PublicAccessCapabilities struct {
 	LocalLogin, PublicRegistration, InvitationAdmission, DesktopAuthorization bool
 }
+
+// DesktopAuthorizationCompatibility is the range of Desktop authorization
+// protocol versions this server accepts.
 type DesktopAuthorizationCompatibility struct {
 	Protocol                       string
 	MinimumVersion, MaximumVersion int
 }
+
+// PublicAccessDiscovery is what an unauthenticated client may learn before
+// sign-in: where the installation lives and how it admits people.
 type PublicAccessDiscovery struct {
 	DiscoveryVersion int
 	CanonicalOrigin  string

@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -140,7 +141,7 @@ func TestAccountRecoveryAttemptAccountingFailsClosedWithoutCounterRollback(t *te
 
 	for _, failAt := range []int{1, 2} {
 		failAt := failAt
-		t.Run(string(rune('0'+failAt)), func(t *testing.T) {
+		t.Run(strconv.Itoa(failAt), func(t *testing.T) {
 			t.Parallel()
 			cache := &faultingAuthenticationAttemptCache{
 				expiringAuthenticationAttemptCache: newExpiringAuthenticationAttemptCache(time.Now),

@@ -47,8 +47,6 @@ func TestDependencyPolicyRejectsForbiddenImports(t *testing.T) {
 	}{
 		{name: "domain cannot import HTTP", from: serverModule + "/model", imported: "net/http"},
 		{name: "domain cannot import PostgreSQL client", from: serverModule + "/model", imported: "github.com/jackc/pgx/v5"},
-		{name: "identity-provider constraints cannot import domain", from: serverModule + "/identityprovider", imported: serverModule + "/model"},
-		{name: "identity-provider constraints cannot import configuration", from: serverModule + "/identityprovider", imported: serverModule + "/config"},
 		{name: "model build tools cannot import server code", from: serverModule + "/model/internal/idgen", imported: serverModule + "/app"},
 		{name: "model build tools cannot import third-party code", from: serverModule + "/model/internal/idgen", imported: "golang.org/x/tools/go/packages"},
 		{name: "ACME adapter cannot import application", from: serverModule + "/internal/autocert", imported: serverModule + "/app"},
@@ -98,6 +96,9 @@ func TestDependencyPolicyRejectsForbiddenImports(t *testing.T) {
 		{name: "File Content cannot import WebSocket", from: serverModule + "/filecontent", imported: serverModule + "/websocket"},
 		{name: "File Content cannot locate platform services", from: serverModule + "/filecontent", imported: serverModule + "/platform"},
 		{name: "File Content cannot select configuration", from: serverModule + "/filecontent", imported: serverModule + "/config"},
+		{name: "domain cannot import configuration", from: serverModule + "/model", imported: serverModule + "/config"},
+		{name: "configuration cannot import store contracts", from: serverModule + "/config", imported: serverModule + "/store"},
+		{name: "configuration cannot import the application", from: serverModule + "/config", imported: serverModule + "/app"},
 		{name: "File Content cannot run Jobs", from: serverModule + "/filecontent", imported: serverModule + "/app/job"},
 		{name: "File Content cannot select a VFS backend", from: serverModule + "/filecontent", imported: repositoryModule + "/packages/vfs/local"},
 		{name: "File Content cannot select S3", from: serverModule + "/filecontent", imported: repositoryModule + "/packages/vfs/s3"},
@@ -175,9 +176,8 @@ func TestDependencyPolicyAllowsInwardImports(t *testing.T) {
 		imported string
 	}{
 		{name: "store contracts may import domain", from: serverModule + "/store", imported: serverModule + "/model"},
-		{name: "domain may import identity-provider constraints", from: serverModule + "/model", imported: serverModule + "/identityprovider"},
 		{name: "domain may canonicalize internationalized host names", from: serverModule + "/model", imported: "golang.org/x/net/idna"},
-		{name: "configuration may import identity-provider constraints", from: serverModule + "/config", imported: serverModule + "/identityprovider"},
+		{name: "configuration may import the domain model", from: serverModule + "/config", imported: serverModule + "/model"},
 		{name: "application may import store contracts", from: serverModule + "/app", imported: serverModule + "/store"},
 		{name: "application may import Job engine", from: serverModule + "/app", imported: serverModule + "/app/job"},
 		{name: "application may import concrete Jobs", from: serverModule + "/app", imported: serverModule + "/app/jobs"},

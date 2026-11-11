@@ -189,10 +189,6 @@ var dependencyRules = []dependencyRule{
 		thirdParty: allImports(),
 	},
 	{
-		name:    "identity-provider contracts",
-		sources: []pathPattern{exact(serverModule + "/identityprovider")},
-	},
-	{
 		name:    "model build tools",
 		sources: []pathPattern{subtree(serverModule + "/model/internal/idgen")},
 	},
@@ -244,11 +240,8 @@ var dependencyRules = []dependencyRule{
 		name:           "domain model",
 		sources:        []pathPattern{exact(serverModule + "/model")},
 		deniedStandard: standardInfrastructure,
-		project: only(
-			exact(serverModule+"/identityprovider"),
-			exact(serverModule+"/internal/canonicaljson"),
-		),
-		thirdParty: only(exact("golang.org/x/net/idna")),
+		project:        only(exact(serverModule + "/internal/canonicaljson")),
+		thirdParty:     only(exact("golang.org/x/net/idna")),
 	},
 	{
 		name:           "store contracts",
@@ -838,7 +831,7 @@ var dependencyRules = []dependencyRule{
 	{
 		name:       "configuration",
 		sources:    []pathPattern{exact(serverModule + "/config")},
-		project:    only(exact(serverModule + "/identityprovider")),
+		project:    only(exact(serverModule + "/model")),
 		thirdParty: allImports(),
 	},
 	{

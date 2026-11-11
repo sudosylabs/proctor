@@ -295,7 +295,7 @@ func TestAccessPolicyOpenAPIDocument(t *testing.T) {
 		} `json:"propertyNames"`
 	}
 	require.NoError(t, json.Unmarshal(providerAdmissions, &providerGrammar))
-	require.Equal(t, model.AccessPolicyProviderMaxCount, providerGrammar.MaxProperties)
+	require.Equal(t, model.IdentityProviderMaxCount, providerGrammar.MaxProperties)
 	require.Equal(t, `^[a-z0-9][a-z0-9._-]{0,63}$`, providerGrammar.PropertyNames.Pattern)
 	providerAdmissionsResponse := document.Components.Schemas["AccessPolicyResponse"].Properties["provider_admissions"]
 	providerGrammar = struct {
@@ -305,13 +305,13 @@ func TestAccessPolicyOpenAPIDocument(t *testing.T) {
 		} `json:"propertyNames"`
 	}{}
 	require.NoError(t, json.Unmarshal(providerAdmissionsResponse, &providerGrammar))
-	require.Equal(t, model.AccessPolicyProviderMaxCount, providerGrammar.MaxProperties)
+	require.Equal(t, model.IdentityProviderMaxCount, providerGrammar.MaxProperties)
 	var providerProjection struct {
 		MaxItems int `json:"maxItems"`
 	}
 	availableProviders := document.Components.Schemas["AccessPolicyResponse"].Properties["available_providers"]
 	require.NoError(t, json.Unmarshal(availableProviders, &providerProjection))
-	require.Equal(t, model.AccessPolicyProviderMaxCount, providerProjection.MaxItems)
+	require.Equal(t, model.IdentityProviderMaxCount, providerProjection.MaxItems)
 	for _, responseName := range []string{"AccessPolicyOK", "AccessPolicyPreflightOK", "PublicAccessDiscoveryOK"} {
 		assert.Equal(t, "#/components/headers/NoStore", document.Components.Responses[responseName].Headers["Cache-Control"].Ref, "%s does not require no-store", responseName)
 	}

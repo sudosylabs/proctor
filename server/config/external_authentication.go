@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sudosylabs/proctor/server/identityprovider"
+	"github.com/sudosylabs/proctor/server/model"
 )
 
 const (
@@ -92,17 +92,17 @@ func validateExternalAuthentication(
 		)
 	}
 
-	if len(external.Providers) > identityprovider.MaximumCount {
+	if len(external.Providers) > model.IdentityProviderMaxCount {
 		add(
 			"authentication.external.providers",
-			fmt.Sprintf("must contain at most %d providers", identityprovider.MaximumCount),
+			fmt.Sprintf("must contain at most %d providers", model.IdentityProviderMaxCount),
 		)
 	}
 
 	seen := make(map[string]struct{}, len(external.Providers))
 	for index, provider := range external.Providers {
 		prefix := fmt.Sprintf("authentication.external.providers[%d]", index)
-		if !validConfigurationName(provider.ID, 64) {
+		if !model.IsValidIdentityProviderID(provider.ID) {
 			add(prefix+".id", "must contain 1-64 lowercase letters, numbers, dots, underscores, or hyphens")
 		} else if _, exists := seen[provider.ID]; exists {
 			add(prefix+".id", "must be unique")
@@ -345,28 +345,6 @@ func validateExternalClaims(
 			"must be configured together with multi_factor_attribute",
 		)
 	}
-}
-
-func validConfigurationName(value string, maximum int) bool {
-	if len(value) == 0 || len(value) > maximum {
-		return false
-	}
-
-	for index, character := range value {
-		if (character < 'a' || character > 'z') &&
-			(character < '0' || character > '9') &&
-			character != '.' &&
-			character != '_' &&
-			character != '-' {
-			return false
-		}
-
-		if index == 0 && (character == '.' || character == '_' || character == '-') {
-			return false
-		}
-	}
-
-	return true
 }
 
 func validClaimName(value string) bool {

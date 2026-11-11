@@ -12,8 +12,6 @@ import (
 	"fmt"
 	"slices"
 	"time"
-
-	"github.com/sudosylabs/proctor/server/identityprovider"
 )
 
 // ProviderAdmissionMode is the closed policy vocabulary for one configured
@@ -27,7 +25,6 @@ const (
 )
 
 const (
-	AccessPolicyProviderMaxCount       = identityprovider.MaximumCount
 	AccessPolicyTransitionHistoryLimit = 100
 	// AccessPolicyTransitionFieldMaxCount bounds the changed field names one
 	// transition records: every replaceable setting and revoke_existing_sessions.
@@ -162,7 +159,7 @@ func (p *AccessPolicy) Validate() error {
 	if p.CreatedAt.IsZero() || p.UpdatedAt.IsZero() || p.UpdatedAt.Before(p.CreatedAt) {
 		return invalidModelError(where, "access_policy", "timestamps", "must be ordered and set", details)
 	}
-	if len(p.ProviderAdmissions) > AccessPolicyProviderMaxCount {
+	if len(p.ProviderAdmissions) > IdentityProviderMaxCount {
 		return invalidModelError(where, "access_policy", "provider_admissions", "contains too many providers", details)
 	}
 
@@ -186,7 +183,7 @@ func (p *AccessPolicy) Validate() error {
 }
 
 func (s AccessPolicySettings) Validate() error {
-	if len(s.ProviderAdmissions) > AccessPolicyProviderMaxCount {
+	if len(s.ProviderAdmissions) > IdentityProviderMaxCount {
 		return invalidModelError("AccessPolicySettings.Validate", "access_policy_settings", "", "contains too many provider admissions", "")
 	}
 	if s.PublicRegistrationEnabled && !s.LocalLoginEnabled {

@@ -17,6 +17,10 @@ import (
 const (
 	IdentityProviderMaxLength = 64
 	IdentitySubjectMaxRunes   = 512
+	// IdentityProviderMaxCount bounds the external providers one installation
+	// configures, the Access Policy admits, and a safe provider projection
+	// lists.
+	IdentityProviderMaxCount = 64
 )
 
 var validIdentityProvider = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)

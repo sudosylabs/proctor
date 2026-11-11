@@ -3,8 +3,8 @@
 ## Dependency direction
 
 ~~~text
-identityprovider ← {model, config}
-internal/canonicaljson ← model ← store ← app/job
+internal/canonicaljson ← model ← {config, store}
+store ← app/job
 {model, store, logging, app/access, app/apperror, app/invocation} ← app/job ← {app, app/identity, app/jobs, app/mail, httpapi, server}
 {model, store} ← app/apperror ← {app, app/idempotency, app/exam, httpapi, websocket}
 model ← app/invocation ← {app, app/idempotency, app/exam}
@@ -71,10 +71,9 @@ are application-owned modules, not transports.
 
 | Package | Allowed production dependencies | Forbidden examples |
 | --- | --- | --- |
-| `identityprovider` | Standard library | Domain models, deployment configuration, application, persistence, transports |
-| `model` | Standard library, `identityprovider`, `internal/canonicaljson`, and narrowly justified domain libraries | `app`, HTTP, SQL, cluster, WebSocket, and any transport DTO or adapter-only persisted spelling |
+| `model` | Standard library, `internal/canonicaljson`, and narrowly justified domain libraries | `app`, HTTP, SQL, cluster, WebSocket, and any transport DTO or adapter-only persisted spelling |
 | `internal/canonicaljson` | Standard-library bounded JSON validation and encoding | Domain models, schema ownership, application, persistence, transports, infrastructure |
-| `config` | Standard library, `identityprovider`, and narrowly scoped IDNA hostname validation | Domain models, application, persistence, transports |
+| `config` | Standard library, `model` (for the grammars configuration shares with durable policy, such as provider identifiers), and narrowly scoped IDNA hostname validation | Application, persistence, transports |
 | `store` | `model` | `sqlstore`, HTTP, application services |
 | `store/sqlstore` | `model`, `store`, `config`, `migrations`, `internal/canonicaljson`, SQL libraries | Application services, transports, runtime composition |
 | `app/job` | `model`, `store.JobStore`, `logging`, standard library; for the operator Job service (`job.Operations`), `app/access`, `app/apperror`, `app/invocation` and the Store contracts it reads names and titles from | parent `app`, area packages, concrete Jobs, `app/mail`, transports, concrete adapters |

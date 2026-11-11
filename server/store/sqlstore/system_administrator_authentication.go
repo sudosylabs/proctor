@@ -28,7 +28,7 @@ type systemAdministratorAuthenticationPathScope struct {
 }
 
 func validAccessDeploymentCapabilities(capabilities store.AccessDeploymentCapabilities) bool {
-	if len(capabilities.Providers) > model.AccessPolicyProviderMaxCount {
+	if len(capabilities.Providers) > model.IdentityProviderMaxCount {
 		return false
 	}
 	for providerID := range capabilities.Providers {

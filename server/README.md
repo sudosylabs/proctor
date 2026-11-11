@@ -78,7 +78,6 @@ Top-level directories:
 | `httpapi/` | The REST API resources. One file per resource declares its routes, request and response types and errors. |
 | `httpapi/route/` | The routing kernel the resources are written against: how an endpoint is declared, compiled, authenticated and dispatched, Problem Details, and the public error catalog. Its package comment is the guide to adding an endpoint. |
 | `i18n/` | Translation data (`en.json`). No code. |
-| `identityprovider/` | Limits shared by external sign-in configuration and identity policy. |
 | `internal/` | Helpers private to this module: Let's Encrypt (`autocert`), certificate reload (`tlscert`), the OpenAPI compiler (`openapidoc`), the error catalog and the error-code analysis the tests use (`errorcatalog`, `errorflow`), `canonicaljson`, `weborigin`. |
 | `localization/` | Validates the translations and resolves a message for a locale. |
 | `logging/` | The structured logger every package writes to. |

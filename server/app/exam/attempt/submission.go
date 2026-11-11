@@ -179,7 +179,7 @@ func validSubmissionManifestPage(page *store.ExamSubmissionManifestPage, query L
 	if page == nil ||
 		page.SubmissionID != query.SubmissionID ||
 		page.WorkspaceCursor < 0 ||
-		!validWorkspaceSHA256(page.ManifestDigest) ||
+		!store.IsValidWorkspaceSHA256(page.ManifestDigest) ||
 		len(page.Items) > query.Limit ||
 		(page.HasMore && len(page.Items) != query.Limit) {
 		return false
@@ -267,7 +267,7 @@ func (s *Service) resolveManagedSubmission(
 	if err != nil {
 		return nil, storeError(storeErrors, err)
 	}
-	if !validSubmissionAuthorization(authorization, query.SubmissionID) {
+	if authorization.ConsistentWith(query.SubmissionID) != nil {
 		return nil, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Submission authorization projection"))
 	}
 
@@ -278,16 +278,6 @@ func (s *Service) resolveManagedSubmission(
 	}
 
 	return authorization, nil
-}
-
-func validSubmissionAuthorization(value *store.ExamSubmissionAuthorization, submissionID model.SubmissionID) bool {
-	return value != nil &&
-		value.SubmissionID == submissionID &&
-		value.ExamID.IsValid() &&
-		value.SittingID.IsValid() &&
-		value.AttemptID.IsValid() &&
-		value.CandidateUserID.IsValid() &&
-		value.AcademicUnitID.IsValid()
 }
 
 // SubmitExamAttempt idempotently seals the candidate's Submission from the
@@ -430,25 +420,8 @@ func projectSubmissionResult(
 	proposedID model.SubmissionID,
 	proposedCode model.SubmissionReceiptCode,
 ) (SubmissionResult, error) {
-	if stored == nil ||
-		!stored.Receipt.SubmissionID.IsValid() ||
-		!stored.Receipt.ReceiptCode.IsValid() ||
-		stored.Receipt.AttemptID != sealAccess.AttemptID ||
-		stored.Receipt.State != model.ExamAttemptSubmitted ||
-		stored.Receipt.WorkspaceCursor != sealAccess.ExpectedWorkspaceCursor ||
-		stored.Receipt.ExamRevisionID != sealAccess.ExpectedCurrentRevisionID ||
-		!validWorkspaceSHA256(stored.Receipt.ManifestDigest) ||
-		stored.Receipt.SubmittedAt.IsZero() ||
-		stored.Receipt.BrowserActivity.Validate() != nil ||
-		stored.ExamID != target.ExamID ||
-		stored.SittingID != target.SittingID ||
-		stored.ClassID != target.ClassID ||
-		stored.CandidateUserID != target.CandidateUserID ||
-		stored.ParticipationID != sealAccess.ParticipationID ||
-		stored.Generation != sealAccess.Generation ||
-		stored.ConnectionID != sealAccess.ConnectionID ||
-		(!stored.Replayed && (stored.Receipt.SubmissionID != proposedID || stored.Receipt.ReceiptCode != proposedCode)) {
-		return SubmissionResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Submission seal result"))
+	if err := stored.ConsistentWith(target, sealAccess, proposedID, proposedCode); err != nil {
+		return SubmissionResult{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
 	return SubmissionResult{

@@ -76,7 +76,7 @@ func (h examSittingLifecycleHandler) Run(ctx context.Context, execution job.Exec
 }
 
 func validateExamSittingLifecycleJobResult(sittingID model.ExamSittingID, result *store.ExamSittingLifecycleResult) error {
-	if result == nil || result.Value == nil || result.Value.Sitting == nil || result.Value.Sitting.ID != sittingID {
+	if result.ConsistentWith(sittingID) != nil {
 		return errors.New("Exam Sitting lifecycle reconciliation returned an incomplete result")
 	}
 	if err := result.Value.Sitting.Validate(); err != nil {

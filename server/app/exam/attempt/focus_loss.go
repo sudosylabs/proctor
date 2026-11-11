@@ -212,20 +212,8 @@ func (s *Service) evaluateEndedFocusLoss(
 		return FocusLossEvaluation{}, s.failAudit(ctx, auditID, err)
 	}
 
-	if stored == nil ||
-		stored.Discrepancy == nil ||
-		stored.Discrepancy.Validate() != nil ||
-		stored.Target != *target ||
-		stored.Discrepancy.SubmissionID != target.SubmissionID ||
-		stored.Discrepancy.AttemptID != selector.AttemptID ||
-		stored.Discrepancy.ParticipationID != selector.ParticipationID ||
-		stored.Discrepancy.Generation != selector.Generation ||
-		stored.Discrepancy.Sequence != command.Sequence ||
-		stored.Discrepancy.DurationMilliseconds != command.DurationMilliseconds ||
-		stored.Discrepancy.Source != command.Source ||
-		(!stored.Duplicate &&
-			(stored.Discrepancy.ID != discrepancyID || stored.Discrepancy.SignalID != signalID)) {
-		return FocusLossEvaluation{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent late Focus Loss outcome"))
+	if err = stored.ConsistentWith(target, selector, command.Sequence, command.DurationMilliseconds, command.Source, discrepancyID, signalID); err != nil {
+		return FocusLossEvaluation{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
 	result := FocusLossEvaluation{
@@ -300,31 +288,8 @@ func projectFocusLoss(
 	focusLossAccess store.ExamAttemptFocusLossAccess,
 	command FocusLossCommand,
 ) (FocusLossEvaluation, error) {
-	if stored == nil ||
-		stored.Signal == nil ||
-		stored.Signal.Validate() != nil ||
-		stored.ExamID != target.ExamID ||
-		stored.SittingID != target.SittingID ||
-		stored.ClassID != target.ClassID ||
-		stored.CandidateUserID != focusLossAccess.CandidateUserID ||
-		stored.AttemptID != focusLossAccess.AttemptID ||
-		stored.ParticipationID != focusLossAccess.ParticipationID ||
-		stored.Generation != focusLossAccess.Generation ||
-		stored.Signal.AttemptID != focusLossAccess.AttemptID ||
-		stored.Signal.ParticipationID != focusLossAccess.ParticipationID ||
-		stored.Signal.Generation != focusLossAccess.Generation ||
-		stored.Signal.Sequence != command.Sequence ||
-		stored.Signal.DurationMilliseconds != command.DurationMilliseconds ||
-		stored.Signal.Source != command.Source ||
-		stored.AcceptedSequence != command.Sequence ||
-		stored.DatabaseTime.IsZero() ||
-		!stored.DatabaseTime.Equal(stored.Signal.ReceivedAt) ||
-		stored.MissingBefore < 0 ||
-		stored.WindowIncidentCount < 0 ||
-		stored.RetainedEvidenceCount < 0 ||
-		stored.RetainedEvidenceCount > model.FocusLossMaximumEvidenceEpisodes ||
-		stored.DiagnosticCount < 0 {
-		return FocusLossEvaluation{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Focus Loss outcome"))
+	if err := stored.ConsistentWith(target, focusLossAccess, command.Sequence, command.DurationMilliseconds, command.Source); err != nil {
+		return FocusLossEvaluation{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
 	if !validFocusLossEnforcement(stored, focusLossAccess) {
@@ -466,7 +431,7 @@ func validFocusLossEnforcement(result *store.ExamAttemptFocusLossResult, focusLo
 	}
 
 	if result.Participation != nil &&
-		(!validParticipationView(result.Participation) ||
+		(result.Participation.Consistent() != nil ||
 			result.Participation.ID != focusLossAccess.ParticipationID ||
 			result.Participation.Generation != focusLossAccess.Generation) {
 		return false
@@ -484,7 +449,7 @@ func validFocusLossEnforcement(result *store.ExamAttemptFocusLossResult, focusLo
 	}
 
 	if result.Suspension != nil &&
-		(!validActiveSuspension(result.Suspension, focusLossAccess.AttemptID) ||
+		(result.Suspension.ConsistentActive(focusLossAccess.AttemptID) != nil ||
 			result.Flag == nil ||
 			result.Suspension.ParticipationID != focusLossAccess.ParticipationID ||
 			result.Suspension.Generation != focusLossAccess.Generation ||

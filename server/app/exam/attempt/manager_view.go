@@ -45,10 +45,8 @@ func (s *Service) GetExamAttempt(
 		return store.ExamAttemptManagerSnapshot{}, storeError(storeErrors, err)
 	}
 
-	if sitting == nil || sitting.Sitting == nil || sitting.Sitting.ID != sittingID || !sitting.AcademicUnitID.IsValid() {
-		return store.ExamAttemptManagerSnapshot{}, apperror.New("exam.attempt.unavailable").Wrap(
-			errors.New("inconsistent managed Attempt Sitting projection"),
-		)
+	if err = sitting.ConsistentWithOwningUnit(sittingID); err != nil {
+		return store.ExamAttemptManagerSnapshot{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
 	if sitting.Sitting.ExamID != examID {
@@ -60,14 +58,8 @@ func (s *Service) GetExamAttempt(
 		return store.ExamAttemptManagerSnapshot{}, storeError(storeErrors, err)
 	}
 
-	if snapshot == nil ||
-		snapshot.Attempt == nil ||
-		snapshot.Attempt.Validate() != nil ||
-		snapshot.Attempt.ExamID != examID ||
-		!validActiveSuspension(snapshot.ActiveSuspension, snapshot.Attempt.ID) {
-		return store.ExamAttemptManagerSnapshot{}, apperror.New("exam.attempt.unavailable").Wrap(
-			errors.New("inconsistent managed Attempt projection"),
-		)
+	if err = snapshot.ConsistentWith(examID); err != nil {
+		return store.ExamAttemptManagerSnapshot{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
 	if snapshot.Attempt.SittingID != sittingID {
@@ -188,16 +180,8 @@ func (s *Service) ListSittingCandidateStatuses(
 		return SittingCandidateStatusesPage{}, storeError(storeErrors, err)
 	}
 
-	if stored == nil ||
-		stored.ExamID != query.ExamID ||
-		stored.SittingID != query.SittingID ||
-		stored.ServerTime.IsZero() ||
-		!stored.SittingState.IsValid() ||
-		stored.SittingRevision < 1 ||
-		stored.Items == nil {
-		return SittingCandidateStatusesPage{}, apperror.New("exam.attempt.unavailable").Wrap(
-			errors.New("incomplete Sitting candidate-status projection"),
-		)
+	if err = stored.ConsistentWith(query.ExamID, query.SittingID); err != nil {
+		return SittingCandidateStatusesPage{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
 	page := SittingCandidateStatusesPage{SittingCandidateStatusPage: *stored, HasMore: len(stored.Items) > query.Limit}
@@ -259,12 +243,8 @@ func (s *Service) ListExamAttempts(
 			break
 		}
 
-		if row.Attempt == nil ||
-			row.Attempt.Validate() != nil ||
-			row.Attempt.ExamID != query.ExamID ||
-			row.Attempt.SittingID != query.SittingID ||
-			!validActiveSuspension(row.ActiveSuspension, row.Attempt.ID) {
-			return ManagedAttemptPage{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent managed Attempt page"))
+		if err = row.ConsistentWithSitting(query.ExamID, query.SittingID); err != nil {
+			return ManagedAttemptPage{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 		}
 
 		page.Items = append(page.Items, *cloneManagerSnapshot(&row))

@@ -287,15 +287,8 @@ func (s *Service) CloseExamAttemptConnection(
 		return ConnectionClosedResult{}, s.failAudit(ctx, auditID, err)
 	}
 
-	if stored == nil ||
-		stored.Connection == nil ||
-		!stored.ExamID.IsValid() ||
-		stored.AttemptID != command.AttemptID ||
-		stored.SittingID != command.SittingID ||
-		stored.Connection.ID != command.ConnectionID ||
-		stored.Connection.AttemptID != command.AttemptID ||
-		stored.Connection.Validate() != nil {
-		return ConnectionClosedResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Connection close outcome"))
+	if err = stored.ConsistentWith(command.AttemptID, command.SittingID, command.ConnectionID); err != nil {
+		return ConnectionClosedResult{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
 	result := ConnectionClosedResult{
@@ -322,24 +315,8 @@ func projectConnection(
 	sessionID model.SessionID,
 	sittingID model.ExamSittingID,
 ) (ConnectionResult, error) {
-	if stored == nil ||
-		stored.Attempt == nil ||
-		stored.Workspace == nil ||
-		stored.Participation == nil ||
-		stored.Connection == nil ||
-		stored.Attempt.Validate() != nil ||
-		stored.Workspace.Validate() != nil ||
-		!validParticipationView(stored.Participation) ||
-		stored.Connection.Validate() != nil ||
-		stored.Attempt.CandidateUserID != candidateID ||
-		stored.Attempt.SittingID != sittingID ||
-		stored.Workspace.AttemptID != stored.Attempt.ID ||
-		stored.ClassID != classID ||
-		stored.Participation.AttemptID != stored.Attempt.ID ||
-		stored.Connection.AttemptID != stored.Attempt.ID ||
-		stored.Connection.ParticipationID != stored.Participation.ID ||
-		stored.Connection.SessionID != sessionID {
-		return ConnectionResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Exam Attempt connection outcome"))
+	if err := stored.ConsistentWith(classID, candidateID, sessionID, sittingID); err != nil {
+		return ConnectionResult{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
 	if stored.Attempt.State != model.ExamAttemptActive ||
@@ -348,15 +325,8 @@ func projectConnection(
 		return ConnectionResult{}, apperror.New("exam.attempt.connection_closed")
 	}
 
-	if stored.Security.Validate() != nil ||
-		stored.Security.ParticipationID != stored.Participation.ID ||
-		stored.Security.Policy.Scope.AttemptID != stored.Attempt.ID ||
-		stored.Security.Generation != stored.Participation.Generation ||
-		stored.Configuration.Validate() != nil ||
-		stored.RuntimeCapabilities.Validate() != nil ||
-		!validCandidateBrowserPolicy(stored.RuntimeCapabilities, stored.BrowserPolicy) ||
-		!validCandidateLiveCorrections(stored.RuntimeCapabilities, stored.LiveCorrections) {
-		return ConnectionResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Exam Attempt configuration outcome"))
+	if err := stored.ConfigurationConsistent(); err != nil {
+		return ConnectionResult{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
 	revokedSessionIDs := append([]model.SessionID(nil), stored.RevokedSessionIDs...)

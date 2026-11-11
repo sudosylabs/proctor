@@ -86,8 +86,8 @@ func (s *Service) SuspendExamAttempt(
 	if err != nil {
 		return ManualSuspensionResult{}, storeError(storeErrors, err)
 	}
-	if sitting == nil || sitting.Sitting == nil || sitting.Sitting.ID != command.SittingID || !sitting.Sitting.ClassID.IsValid() {
-		return ManualSuspensionResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("incomplete Sitting ownership projection"))
+	if err = sitting.ConsistentWith(command.SittingID); err != nil {
+		return ManualSuspensionResult{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
 	action := model.ActionExamSittingManage
@@ -121,11 +121,7 @@ func (s *Service) SuspendExamAttempt(
 		return ManualSuspensionResult{}, s.failAudit(ctx, auditID, err)
 	}
 
-	if managerSnapshot == nil ||
-		managerSnapshot.Attempt == nil ||
-		managerSnapshot.Attempt.Validate() != nil ||
-		managerSnapshot.Attempt.ExamID != command.ExamID ||
-		!validActiveSuspension(managerSnapshot.ActiveSuspension, managerSnapshot.Attempt.ID) {
+	if managerSnapshot.ConsistentWith(command.ExamID) != nil {
 		return ManualSuspensionResult{}, s.failAudit(
 			ctx,
 			auditID,
@@ -195,39 +191,8 @@ func projectManualSuspension(
 	classID model.ClassID,
 	actorID model.UserID,
 ) (ManualSuspensionResult, error) {
-	if stored == nil ||
-		stored.Attempt == nil ||
-		stored.Participation == nil ||
-		stored.Suspension == nil ||
-		stored.ExamID != command.ExamID ||
-		stored.SittingID != command.SittingID ||
-		stored.ClassID != classID ||
-		!stored.CandidateUserID.IsValid() ||
-		stored.Attempt.ID != command.AttemptID ||
-		stored.Attempt.ExamID != command.ExamID ||
-		stored.Attempt.SittingID != command.SittingID ||
-		stored.Attempt.CandidateUserID != stored.CandidateUserID ||
-		stored.Attempt.State != model.ExamAttemptSuspended ||
-		stored.Attempt.Validate() != nil ||
-		stored.Attempt.Revision != command.ExpectedAttemptRevision+1 ||
-		!validParticipationView(stored.Participation) ||
-		stored.Participation.AttemptID != command.AttemptID ||
-		stored.Participation.State != model.AttemptParticipationEnded ||
-		stored.Participation.EndReason != model.AttemptParticipationEndKicked ||
-		!validActiveSuspension(stored.Suspension, command.AttemptID) ||
-		stored.Suspension.Source != model.AttemptSuspensionSourceManual ||
-		stored.Suspension.ParticipationID != stored.Participation.ID ||
-		stored.Suspension.Generation != stored.Participation.Generation ||
-		stored.Suspension.SuspendedByUserID != actorID ||
-		stored.ConnectionClosed != (stored.Connection != nil) ||
-		(stored.Connection != nil &&
-			(!stored.Connection.ID.IsValid() ||
-				stored.Connection.State != model.AttemptConnectionClosed ||
-				stored.Connection.CloseReason != model.AttemptConnectionCloseKicked ||
-				!stored.Connection.ClosedAt.Valid)) {
-		return ManualSuspensionResult{}, apperror.New("exam.attempt.unavailable").Wrap(
-			errors.New("inconsistent Attempt manual suspension outcome"),
-		)
+	if err := stored.ConsistentWith(command.ExamID, command.SittingID, command.AttemptID, command.ExpectedAttemptRevision, classID, actorID); err != nil {
+		return ManualSuspensionResult{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
 	result := ManualSuspensionResult{

@@ -9,6 +9,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -59,6 +60,54 @@ type ExamCorrectionResourceStage struct {
 	ReadyAt         time.Time
 	ConsumedAt      time.Time
 	Rendition       *model.FileRendition
+}
+
+// ConsistentWith reports an error unless the stage is identified, belongs to
+// the commanded Exam, Sitting and base Revision with the commanded target, names
+// its Resource, file entry, File Revision, upload lease and rendition, was
+// created by the acting User, carries an expiry, and, for a replacement, names
+// the Resource being replaced.
+func (s *ExamCorrectionResourceStage) ConsistentWith(
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	baseRevisionID model.ExamRevisionID,
+	target ExamCorrectionResourceStageTarget,
+	resourceID model.ExamResourceID,
+	actor model.UserID,
+) error {
+	if s == nil ||
+		!s.ID.IsValid() ||
+		s.ExamID != examID ||
+		s.SittingID != sittingID ||
+		s.BaseRevisionID != baseRevisionID ||
+		s.Target != target ||
+		!s.ResourceID.IsValid() ||
+		!s.FileEntryID.IsValid() ||
+		!s.FileRevisionID.IsValid() ||
+		!s.UploadLeaseID.IsValid() ||
+		!s.RenditionID.IsValid() ||
+		s.CreatedByUserID != actor ||
+		s.ExpiresAt.IsZero() ||
+		(target == ExamCorrectionResourceReplacement && s.ResourceID != resourceID) {
+		return errors.New("inconsistent stage outcome")
+	}
+
+	return nil
+}
+
+// RenditionConsistent reports an error unless a stage that has left pending
+// carries the valid rendition it names, for the File Revision it names. It is
+// asked only of a stage that already passed ConsistentWith.
+func (s *ExamCorrectionResourceStage) RenditionConsistent() error {
+	if s.State != ExamCorrectionResourceStagePending &&
+		(s.Rendition == nil ||
+			s.Rendition.ID != s.RenditionID ||
+			s.Rendition.RevisionID != s.FileRevisionID ||
+			s.Rendition.Validate() != nil) {
+		return errors.New("incomplete ready stage")
+	}
+
+	return nil
 }
 
 // ExamCorrectionResourceStageReservation preallocates every opaque identity
@@ -131,6 +180,50 @@ type ExamCorrectionResult struct {
 	PreviousRevisionID model.ExamRevisionID
 	EffectiveAt        time.Time
 	Replayed           bool
+}
+
+// Consistent reports an error unless the outcome carries the correction
+// Revision and the corrected Sitting's snapshot.
+func (r *ExamCorrectionResult) Consistent() error {
+	if r == nil ||
+		r.Revision == nil ||
+		r.Sitting == nil ||
+		r.Sitting.Sitting == nil {
+		return errors.New("missing correction outcome")
+	}
+
+	return nil
+}
+
+// ConsistentWith reports an error unless the outcome's Revision is a new,
+// numbered live-correction Revision of the commanded Exam that follows the
+// expected current Revision, its Sitting is the commanded one, now on that
+// Revision at the next Sitting revision and still open or paused, and the
+// correction took effect at the instant the Revision was published. It is asked
+// only of an outcome that already passed Consistent.
+func (r *ExamCorrectionResult) ConsistentWith(
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	expectedCurrentRevisionID model.ExamRevisionID,
+	expectedSittingRevision int64,
+) error {
+	if r.Revision.ExamID != examID ||
+		r.Revision.ID == expectedCurrentRevisionID ||
+		r.Revision.Kind != model.ExamRevisionPublicationLiveCorrection ||
+		r.Revision.Number < 1 ||
+		r.PreviousRevisionID != expectedCurrentRevisionID ||
+		r.Sitting.Sitting.ID != sittingID ||
+		r.Sitting.Sitting.ExamID != examID ||
+		r.Sitting.Sitting.ExamRevisionID != r.Revision.ID ||
+		r.Sitting.Sitting.Revision != expectedSittingRevision+1 ||
+		(r.Sitting.Sitting.State != model.ExamSittingOpen && r.Sitting.Sitting.State != model.ExamSittingPaused) ||
+		r.Sitting.Sitting.UpdatedAt.IsZero() ||
+		r.EffectiveAt.IsZero() ||
+		!model.TimeUTC(r.EffectiveAt).Equal(model.TimeUTC(r.Revision.PublishedAt)) {
+		return errors.New("inconsistent correction outcome")
+	}
+
+	return nil
 }
 
 // ExamCorrectionStore is the narrow durable core for live correction. Reserve

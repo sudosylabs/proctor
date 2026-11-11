@@ -71,11 +71,8 @@ func (s *Service) ListCandidateExamWorkspace(
 		return WorkspacePage{}, storeError(storeErrors, err)
 	}
 
-	if page == nil ||
-		!page.WorkspaceID.IsValid() ||
-		page.Cursor < 0 ||
-		(page.RefreshRequired && (len(page.Items) != 0 || page.HasMore)) {
-		return WorkspacePage{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("missing candidate Workspace page"))
+	if err = page.Consistent(); err != nil {
+		return WorkspacePage{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
 	return WorkspacePage{
@@ -115,8 +112,8 @@ func (s *Service) OpenCandidateExamWorkspaceFile(
 	if err != nil {
 		return OpenedContent{}, storeError(storeErrors, err)
 	}
-	if resolved == nil || resolved.Entry.EntryID != query.EntryID || resolved.ContentVersion.IsZero() {
-		return OpenedContent{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("incomplete candidate Workspace selector"))
+	if err = resolved.ConsistentWith(query.EntryID); err != nil {
+		return OpenedContent{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
 	var body io.ReadCloser

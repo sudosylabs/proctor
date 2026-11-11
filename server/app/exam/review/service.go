@@ -579,8 +579,8 @@ func (s *Service) ListExamIntegrityFlags(
 	if err != nil {
 		return nil, storeErrors.Translate(err)
 	}
-	if page == nil || len(page.Items) > query.Limit || (page.HasMore && len(page.Items) != query.Limit) {
-		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("inconsistent Flag page"))
+	if err = page.ConsistentWith(query.Limit); err != nil {
+		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(err)
 	}
 
 	clone := &store.ExamIntegrityFlagPage{Items: append([]store.ExamIntegrityFlagSummary(nil), page.Items...), HasMore: page.HasMore}
@@ -629,8 +629,8 @@ func (s *Service) ListExamIntegrityEvidence(
 	if err != nil {
 		return nil, storeErrors.Translate(err)
 	}
-	if page == nil || len(page.Items) > query.Limit || (page.HasMore && len(page.Items) != query.Limit) {
-		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("inconsistent Evidence page"))
+	if err = page.ConsistentWith(query.Limit); err != nil {
+		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(err)
 	}
 
 	clone := &store.ExamIntegrityEvidencePage{Items: append([]model.IntegrityEvidence(nil), page.Items...), HasMore: page.HasMore}
@@ -673,8 +673,8 @@ func (s *Service) ListExamIntegrityDiscrepancies(
 	if err != nil {
 		return nil, storeErrors.Translate(err)
 	}
-	if page == nil || len(page.Items) > query.Limit || (page.HasMore && len(page.Items) != query.Limit) {
-		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("inconsistent Discrepancy page"))
+	if err = page.ConsistentWith(query.Limit); err != nil {
+		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(err)
 	}
 
 	clone := &store.ExamIntegrityDiscrepancyPage{Items: append([]model.IntegrityDiscrepancy(nil), page.Items...),
@@ -749,7 +749,7 @@ func (s *Service) resolveMutationAuthorization(
 	if err != nil {
 		return false, nil, storeErrors.Translate(err)
 	}
-	if !validAuthorization(authorization, submissionID) {
+	if authorization.ConsistentWith(submissionID) != nil {
 		return false, nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("inconsistent Review authorization"))
 	}
 
@@ -757,13 +757,8 @@ func (s *Service) resolveMutationAuthorization(
 }
 
 func projectMutation(stored *store.ExamIntegrityReviewMutationResult, submissionID model.SubmissionID) (Result, error) {
-	if stored == nil ||
-		!validAuthorization(&stored.Authorization, submissionID) ||
-		stored.Review == nil ||
-		stored.Review.Validate() != nil ||
-		stored.Review.SubmissionID != submissionID ||
-		(stored.Decision != nil && (stored.Decision.Validate() != nil || stored.Decision.ReviewID != stored.Review.ID)) {
-		return Result{}, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("inconsistent Review mutation result"))
+	if err := stored.ConsistentWith(submissionID); err != nil {
+		return Result{}, apperror.New("exam.integrity_review.unavailable").Wrap(err)
 	}
 
 	review := *stored.Review
@@ -776,21 +771,11 @@ func projectMutation(stored *store.ExamIntegrityReviewMutationResult, submission
 	return result, nil
 }
 
-func validAuthorization(value *store.ExamIntegrityReviewAuthorization, submissionID model.SubmissionID) bool {
-	return value != nil &&
-		value.SubmissionID == submissionID &&
-		value.ExamID.IsValid() &&
-		value.SittingID.IsValid() &&
-		value.AttemptID.IsValid() &&
-		value.CandidateUserID.IsValid() &&
-		value.AcademicUnitID.IsValid()
-}
-
 func validSnapshot(snapshot *store.ExamSubmissionReviewSnapshot, submissionID model.SubmissionID) bool {
 	if snapshot == nil ||
 		snapshot.NativeConditions.Validate() != nil ||
 		snapshot.DeliveryInventoryRevision < 0 ||
-		!validAuthorization(&snapshot.Authorization, submissionID) ||
+		snapshot.Authorization.ConsistentWith(submissionID) != nil ||
 		snapshot.Submission == nil ||
 		snapshot.Submission.Validate() != nil ||
 		snapshot.Submission.ID != submissionID ||

@@ -100,14 +100,8 @@ func (a examAttemptManagerAuthorizationAdapter) AuthorizeSubmissionView(
 		return apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
-	if authorization == nil ||
-		authorization.SubmissionID != submissionID ||
-		!authorization.ExamID.IsValid() ||
-		!authorization.SittingID.IsValid() ||
-		!authorization.AttemptID.IsValid() ||
-		!authorization.CandidateUserID.IsValid() ||
-		!authorization.AcademicUnitID.IsValid() {
-		return apperror.New("exam.attempt.unavailable").Wrap(errors.New("Submission authorization projection is incomplete"))
+	if err = authorization.ConsistentWith(submissionID); err != nil {
+		return apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
 	if authorization.CandidateUserID == invocation.Principal().UserID {

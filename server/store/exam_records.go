@@ -9,6 +9,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -29,6 +30,22 @@ type ExamRecordsScope struct {
 	AttemptID       model.ExamAttemptID
 }
 
+// ConsistentWith reports an error unless the resolved records scope is the
+// scope that was asked for, names the Institution and Academic Unit that own
+// it, and, for a scope narrowed to one Submission, names that Submission's
+// candidate and Attempt.
+func (s *ExamRecordsScope) ConsistentWith(scope model.RetentionHoldScope) error {
+	if s == nil ||
+		s.Scope != scope ||
+		!s.AcademicUnitID.IsValid() ||
+		!s.InstitutionID.IsValid() ||
+		scope.SubmissionID.IsValid() && (!s.CandidateUserID.IsValid() || !s.AttemptID.IsValid()) {
+		return errors.New("Exam records scope projection is incomplete")
+	}
+
+	return nil
+}
+
 // ExamRecordsCompletionSnapshot exposes bounded counts, not student work.
 // PendingReviews counts Submissions with neither a finalized Review nor a
 // current waiver. Counts and state belong to the same database snapshot.
@@ -37,6 +54,22 @@ type ExamRecordsCompletionSnapshot struct {
 	SittingState    model.ExamSittingState
 	SubmissionCount int64
 	PendingReviews  int64
+}
+
+// ConsistentWith reports an error unless the snapshot carries a valid records
+// completion for the given Sitting and its counts are possible: neither is
+// negative and no more Reviews are pending than there are Submissions.
+func (s *ExamRecordsCompletionSnapshot) ConsistentWith(sittingID model.ExamSittingID) error {
+	if s == nil ||
+		s.Completion.Validate() != nil ||
+		s.Completion.SittingID != sittingID ||
+		s.SubmissionCount < 0 ||
+		s.PendingReviews < 0 ||
+		s.PendingReviews > s.SubmissionCount {
+		return errors.New("Exam records completion projection is incomplete")
+	}
+
+	return nil
 }
 
 type ExamRecordsMutation struct {
@@ -91,17 +124,94 @@ type ExamRecordsHoldPage struct {
 	HasMore bool
 }
 
+// ConsistentWith reports an error unless the page exists and holds no more
+// Retention Holds than the requested limit.
+func (p *ExamRecordsHoldPage) ConsistentWith(limit int) error {
+	if p == nil ||
+		len(p.Holds) > limit {
+		return errors.New("Retention hold page is incomplete")
+	}
+
+	return nil
+}
+
+// HoldsConsistentWith reports an error unless every Retention Hold on the page
+// is valid and scoped to the given Exam.
+func (p *ExamRecordsHoldPage) HoldsConsistentWith(examID model.ExamID) error {
+	for _, hold := range p.Holds {
+		if hold.Validate() != nil ||
+			hold.Scope.ExamID != examID {
+			return errors.New("Retention hold projection is invalid")
+		}
+	}
+
+	return nil
+}
+
 type ExamRecordsCompletionResult struct {
 	Completion *model.ExamSittingRecordsCompletion
 	Replayed   bool
 }
+
+// ConsistentWith reports an error unless the outcome carries a valid records
+// completion for the given Sitting.
+func (r *ExamRecordsCompletionResult) ConsistentWith(sittingID model.ExamSittingID) error {
+	if r == nil ||
+		r.Completion.Validate() != nil ||
+		r.Completion.SittingID != sittingID {
+		return errors.New("Exam records completion result is incomplete")
+	}
+
+	return nil
+}
+
 type ExamRecordsWaiverResult struct {
 	Waiver   *model.SubmissionReviewWaiver
 	Replayed bool
 }
+
+// ConsistentWith reports an error unless the outcome carries a valid
+// Submission Review waiver for the given Submission.
+func (r *ExamRecordsWaiverResult) ConsistentWith(submissionID model.SubmissionID) error {
+	if r == nil ||
+		r.Waiver.Validate() != nil ||
+		r.Waiver.SubmissionID != submissionID {
+		return errors.New("Submission Review waiver result is incomplete")
+	}
+
+	return nil
+}
+
 type ExamRecordsHoldResult struct {
 	Hold     *model.RetentionHold
 	Replayed bool
+}
+
+// ConsistentWith reports an error unless the outcome carries a valid Retention
+// Hold placed on the given scope.
+func (r *ExamRecordsHoldResult) ConsistentWith(scope model.RetentionHoldScope) error {
+	if r == nil ||
+		r.Hold.Validate() != nil ||
+		r.Hold.Scope != scope {
+		return errors.New("Retention hold creation result is incomplete")
+	}
+
+	return nil
+}
+
+// ConsistentWithRelease reports an error unless the outcome carries the valid
+// Retention Hold that was asked to be released, on the given scope, and that
+// Hold now records its release.
+func (r *ExamRecordsHoldResult) ConsistentWithRelease(holdID model.RetentionHoldID, scope model.RetentionHoldScope) error {
+	if r == nil ||
+		r.Hold.Validate() != nil ||
+		r.Hold.ID != holdID ||
+		r.Hold.Scope != scope ||
+		!r.Hold.ReleasedAt.Valid {
+		return errors.New("Retention hold release result is incomplete")
+	}
+
+	return nil
 }
 
 // ExamRecordsStore owns records completion and preservation. App preflights

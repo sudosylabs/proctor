@@ -86,8 +86,8 @@ func (s *Service) ReallowExamAttempt(
 	if err != nil {
 		return ReallowResult{}, storeError(storeErrors, err)
 	}
-	if snapshot == nil || snapshot.Sitting == nil || snapshot.Sitting.ID != command.SittingID || !snapshot.Sitting.ClassID.IsValid() {
-		return ReallowResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("incomplete Sitting ownership projection"))
+	if err = snapshot.ConsistentWith(command.SittingID); err != nil {
+		return ReallowResult{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
 	action := model.ActionExamSittingManage
@@ -122,11 +122,7 @@ func (s *Service) ReallowExamAttempt(
 		return ReallowResult{}, s.failAudit(ctx, auditID, err)
 	}
 
-	if managerSnapshot == nil ||
-		managerSnapshot.Attempt == nil ||
-		managerSnapshot.Attempt.Validate() != nil ||
-		managerSnapshot.Attempt.ExamID != command.ExamID ||
-		!validActiveSuspension(managerSnapshot.ActiveSuspension, managerSnapshot.Attempt.ID) {
+	if managerSnapshot.ConsistentWith(command.ExamID) != nil {
 		return ReallowResult{}, s.failAudit(
 			ctx,
 			auditID,
@@ -155,23 +151,17 @@ func (s *Service) ReallowExamAttempt(
 		return ReallowResult{}, s.failAudit(ctx, auditID, err)
 	}
 
-	if stored == nil ||
-		stored.Attempt == nil ||
-		stored.Suspension == nil ||
-		stored.ExamID != command.ExamID ||
-		stored.SittingID != command.SittingID ||
-		stored.ClassID != snapshot.Sitting.ClassID ||
-		!stored.CandidateUserID.IsValid() ||
-		stored.Attempt.ID != command.AttemptID ||
-		stored.Attempt.ExamID != command.ExamID ||
-		stored.Attempt.SittingID != command.SittingID ||
-		stored.Attempt.CandidateUserID != stored.CandidateUserID ||
-		stored.Attempt.State != model.ExamAttemptReady ||
-		stored.Attempt.Validate() != nil ||
-		stored.Attempt.Revision != command.ExpectedAttemptRevision+1 ||
-		stored.Suspension.ID != command.SuspensionID ||
-		!validClosedSuspension(stored.Suspension, command.AttemptID, principal.UserID) {
-		return ReallowResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Attempt re-allow outcome"))
+	err = stored.ConsistentWith(
+		command.ExamID,
+		command.SittingID,
+		snapshot.Sitting.ClassID,
+		command.AttemptID,
+		command.ExpectedAttemptRevision,
+		command.SuspensionID,
+		principal.UserID,
+	)
+	if err != nil {
+		return ReallowResult{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
 	result := ReallowResult{
@@ -198,18 +188,4 @@ func validReallowReason(reason string) bool {
 		utf8.RuneCountInString(reason) >= 1 &&
 		utf8.RuneCountInString(reason) <= model.AttemptSuspensionPrivateReasonMaximumRunes &&
 		len(reason) <= 4000
-}
-
-func validClosedSuspension(view *store.ExamAttemptSuspensionView, attemptID model.ExamAttemptID, actorID model.UserID) bool {
-	return view != nil &&
-		view.ID.IsValid() &&
-		view.AttemptID == attemptID &&
-		view.ParticipationID.IsValid() &&
-		validSuspensionProvenance(view) &&
-		view.Generation > 0 &&
-		view.State == model.AttemptSuspensionClosed &&
-		!view.StartedAt.IsZero() &&
-		view.EndedAt.Valid &&
-		!view.EndedAt.Time.Before(view.StartedAt) &&
-		view.ReallowedByUserID == actorID
 }

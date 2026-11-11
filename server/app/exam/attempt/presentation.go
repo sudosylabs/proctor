@@ -9,7 +9,6 @@ package attempt
 
 import (
 	"context"
-	"errors"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/safemarkdown"
@@ -65,14 +64,8 @@ func (s *Service) GetCandidateExamPresentation(
 		return Presentation{}, storeError(storeErrors, err)
 	}
 
-	if stored == nil ||
-		stored.Capacity.Validate() != nil ||
-		stored.RuntimeCapabilities.Validate() != nil ||
-		!validCandidateBrowserPolicy(stored.RuntimeCapabilities, stored.BrowserPolicy) ||
-		!validCandidateLiveCorrections(stored.RuntimeCapabilities, stored.LiveCorrections) ||
-		stored.RuntimeCapabilities.ExamRevision.AdmissionRevisionID.IsZero() ||
-		stored.RuntimeCapabilities.ExamRevision.CurrentRevisionID.IsZero() {
-		return Presentation{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("missing candidate presentation"))
+	if err = stored.Consistent(); err != nil {
+		return Presentation{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
 	result := Presentation{
@@ -130,11 +123,8 @@ func (s *Service) OpenCandidateExamResource(
 		return OpenedContent{}, storeError(storeErrors, err)
 	}
 
-	if resolved == nil ||
-		resolved.Resource.ResourceID != query.ResourceID ||
-		!resolved.FileRevisionID.IsValid() ||
-		!resolved.RenditionID.IsValid() {
-		return OpenedContent{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("incomplete candidate Resource selector"))
+	if err = resolved.ConsistentWith(query.ResourceID); err != nil {
+		return OpenedContent{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
 	body, err := s.deps.Content.OpenExamResource(ctx, resolved.FileRevisionID, resolved.RenditionID)

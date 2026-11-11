@@ -119,7 +119,7 @@ func (p *Publication) PublishExamRevision(
 	if err != nil {
 		return store.ExamRevisionSummary{}, examStoreErrors.Translate(err)
 	}
-	if examAccess == nil || examAccess.Exam == nil {
+	if examAccess.Consistent() != nil {
 		return store.ExamRevisionSummary{}, apperror.New("exam.unavailable").Wrap(errors.New("Exam access projection is incomplete"))
 	}
 
@@ -182,8 +182,8 @@ func (p *Publication) PublishExamRevision(
 		return store.ExamRevisionSummary{}, mapped
 	}
 
-	if result == nil || result.Revision == nil {
-		return store.ExamRevisionSummary{}, apperror.New("exam.unavailable").Wrap(errors.New("Exam Revision store returned no result"))
+	if err = result.Consistent(); err != nil {
+		return store.ExamRevisionSummary{}, apperror.New("exam.unavailable").Wrap(err)
 	}
 
 	if !result.Replayed {
@@ -262,7 +262,7 @@ func (p *Publication) authorizeView(ctx context.Context, invocation invocation.I
 	if err != nil {
 		return examStoreErrors.Translate(err)
 	}
-	if examAccess == nil || examAccess.Exam == nil {
+	if examAccess.Consistent() != nil {
 		return apperror.New("exam.unavailable").Wrap(errors.New("Exam access projection is incomplete"))
 	}
 

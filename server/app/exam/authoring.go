@@ -248,8 +248,8 @@ func (a *Authoring) CreateExam(ctx context.Context, invocation invocation.Invoca
 		return View{}, mapped
 	}
 
-	if result == nil || result.Value == nil {
-		return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no creation result"))
+	if err = result.Consistent(); err != nil {
+		return View{}, apperror.New("exam.unavailable").Wrap(err)
 	}
 
 	if !result.Replayed {
@@ -274,8 +274,8 @@ func (a *Authoring) GetExam(ctx context.Context, invocation invocation.Invocatio
 	if err != nil {
 		return View{}, examStoreErrors.Translate(err)
 	}
-	if examAccess == nil || examAccess.Exam == nil {
-		return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no access projection"))
+	if err = examAccess.Consistent(); err != nil {
+		return View{}, apperror.New("exam.unavailable").Wrap(err)
 	}
 
 	action, err := a.actionForAccess(
@@ -303,8 +303,8 @@ func (a *Authoring) GetExam(ctx context.Context, invocation invocation.Invocatio
 	if err != nil {
 		return View{}, examStoreErrors.Translate(err)
 	}
-	if snapshot == nil || snapshot.Exam == nil || snapshot.Draft == nil {
-		return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned an incomplete snapshot"))
+	if err = snapshot.Consistent(); err != nil {
+		return View{}, apperror.New("exam.unavailable").Wrap(err)
 	}
 
 	return project(snapshot), nil
@@ -323,8 +323,8 @@ func (a *Authoring) AuthorizeExamView(ctx context.Context, invocation invocation
 	if err != nil {
 		return examStoreErrors.Translate(err)
 	}
-	if examAccess == nil || examAccess.Exam == nil {
-		return apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no access projection"))
+	if err = examAccess.Consistent(); err != nil {
+		return apperror.New("exam.unavailable").Wrap(err)
 	}
 
 	action, err := a.actionForAccess(
@@ -381,8 +381,8 @@ func (a *Authoring) EditExamDraftText(
 	if err != nil {
 		return View{}, examStoreErrors.Translate(err)
 	}
-	if examAccess == nil || examAccess.Exam == nil {
-		return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no access projection"))
+	if err = examAccess.Consistent(); err != nil {
+		return View{}, apperror.New("exam.unavailable").Wrap(err)
 	}
 
 	action, err := a.actionForAccess(ctx, principal.UserID, examAccess, at, model.ActionExamManage, model.ActionExamManageOverride)
@@ -399,8 +399,8 @@ func (a *Authoring) EditExamDraftText(
 	if err != nil {
 		return View{}, examStoreErrors.Translate(err)
 	}
-	if snapshot == nil || snapshot.Exam == nil || snapshot.Draft == nil {
-		return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned an incomplete snapshot"))
+	if err = snapshot.Consistent(); err != nil {
+		return View{}, apperror.New("exam.unavailable").Wrap(err)
 	}
 
 	candidate := *snapshot.Draft
@@ -455,8 +455,8 @@ func (a *Authoring) EditExamDraftText(
 		return View{}, mapped
 	}
 
-	if result == nil || result.Value == nil || result.Value.Draft == nil {
-		return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no Draft update result"))
+	if err = result.DraftConsistent(); err != nil {
+		return View{}, apperror.New("exam.unavailable").Wrap(err)
 	}
 
 	if !result.Replayed {
@@ -523,8 +523,8 @@ func (a *Authoring) ConfigureExamDraftFocusLoss(
 	if err != nil {
 		return View{}, examStoreErrors.Translate(err)
 	}
-	if examAccess == nil || examAccess.Exam == nil {
-		return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no access projection"))
+	if err = examAccess.Consistent(); err != nil {
+		return View{}, apperror.New("exam.unavailable").Wrap(err)
 	}
 
 	action, err := a.actionForAccess(ctx, principal.UserID, examAccess, at, model.ActionExamManage, model.ActionExamManageOverride)
@@ -541,8 +541,8 @@ func (a *Authoring) ConfigureExamDraftFocusLoss(
 	if err != nil {
 		return View{}, examStoreErrors.Translate(err)
 	}
-	if snapshot == nil || snapshot.Exam == nil || snapshot.Draft == nil {
-		return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned an incomplete snapshot"))
+	if err = snapshot.Consistent(); err != nil {
+		return View{}, apperror.New("exam.unavailable").Wrap(err)
 	}
 
 	candidate := *snapshot.Draft
@@ -590,7 +590,7 @@ func (a *Authoring) ConfigureExamDraftFocusLoss(
 		return View{}, mapped
 	}
 
-	if result == nil || result.Value == nil || result.Value.Draft == nil {
+	if result.DraftConsistent() != nil {
 		return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no Focus Loss update result"))
 	}
 
@@ -644,8 +644,8 @@ func (a *Authoring) ConfigureExamDraftBrowserPolicy(
 	if err != nil {
 		return View{}, examStoreErrors.Translate(err)
 	}
-	if examAccess == nil || examAccess.Exam == nil {
-		return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no access projection"))
+	if err = examAccess.Consistent(); err != nil {
+		return View{}, apperror.New("exam.unavailable").Wrap(err)
 	}
 
 	action, err := a.actionForAccess(ctx, principal.UserID, examAccess, at, model.ActionExamManage, model.ActionExamManageOverride)
@@ -662,8 +662,8 @@ func (a *Authoring) ConfigureExamDraftBrowserPolicy(
 	if err != nil {
 		return View{}, examStoreErrors.Translate(err)
 	}
-	if snapshot == nil || snapshot.Exam == nil || snapshot.Draft == nil {
-		return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned an incomplete snapshot"))
+	if err = snapshot.Consistent(); err != nil {
+		return View{}, apperror.New("exam.unavailable").Wrap(err)
 	}
 
 	candidate := *snapshot.Draft
@@ -717,7 +717,7 @@ func (a *Authoring) ConfigureExamDraftBrowserPolicy(
 		return View{}, mapped
 	}
 
-	if result == nil || result.Value == nil || result.Value.Draft == nil {
+	if result.DraftConsistent() != nil {
 		return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no Browser Policy update result"))
 	}
 
@@ -835,8 +835,8 @@ func (a *Authoring) ConfigureExamDraftNativePolicy(
 	if err != nil {
 		return View{}, examStoreErrors.Translate(err)
 	}
-	if examAccess == nil || examAccess.Exam == nil {
-		return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no access projection"))
+	if err = examAccess.Consistent(); err != nil {
+		return View{}, apperror.New("exam.unavailable").Wrap(err)
 	}
 
 	action, err := a.actionForAccess(ctx, principal.UserID, examAccess, at, model.ActionExamManage, model.ActionExamManageOverride)
@@ -853,8 +853,8 @@ func (a *Authoring) ConfigureExamDraftNativePolicy(
 	if err != nil {
 		return View{}, examStoreErrors.Translate(err)
 	}
-	if snapshot == nil || snapshot.Exam == nil || snapshot.Draft == nil {
-		return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned an incomplete snapshot"))
+	if err = snapshot.Consistent(); err != nil {
+		return View{}, apperror.New("exam.unavailable").Wrap(err)
 	}
 
 	candidate := *snapshot.Draft
@@ -902,7 +902,7 @@ func (a *Authoring) ConfigureExamDraftNativePolicy(
 		return View{}, mapped
 	}
 
-	if result == nil || result.Value == nil || result.Value.Draft == nil {
+	if result.DraftConsistent() != nil {
 		return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no native policy update result"))
 	}
 

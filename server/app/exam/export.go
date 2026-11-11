@@ -130,7 +130,7 @@ func (s *Exports) authorize(
 	if err != nil {
 		return "", "", examExportStoreErrors.Translate(err)
 	}
-	if examAccess == nil || examAccess.Exam == nil || examAccess.Exam.ID != scope.ExamID || !examAccess.Exam.AcademicUnitID.IsValid() {
+	if examAccess.ConsistentWithExam(scope.ExamID) != nil {
 		return "", "", apperror.New("exam.export.unavailable").Wrap(err)
 	}
 
@@ -182,7 +182,7 @@ func (s *Exports) authorizeSources(
 		if err != nil {
 			return examExportStoreErrors.Translate(err)
 		}
-		if examAccess == nil || examAccess.Exam == nil || examAccess.Exam.ID != scope.ExamID || examAccess.Exam.AcademicUnitID != unit {
+		if examAccess.ConsistentWith(scope.ExamID, unit) != nil {
 			return apperror.New("exam.export.unavailable").Wrap(errors.New("invalid browser history access projection"))
 		}
 
@@ -359,12 +359,8 @@ func (s *Exports) get(ctx context.Context, invocation invocation.Invocation, q E
 		return nil, examExportStoreErrors.Translate(err)
 	}
 
-	if result == nil ||
-		result.Export.Validate() != nil ||
-		result.Export.ID != q.ExportID ||
-		result.Export.Scope != q.Scope ||
-		result.Export.RequesterUserID != invocation.Principal().UserID {
-		return nil, apperror.New("exam.export.unavailable").Wrap(errors.New("invalid export read result"))
+	if err = result.ConsistentWith(q.ExportID, q.Scope, invocation.Principal().UserID); err != nil {
+		return nil, apperror.New("exam.export.unavailable").Wrap(err)
 	}
 
 	if err = s.authorizeSources(ctx, invocation, q.Scope, action, unit, result.Export.Categories, result.Submissions); err != nil {
@@ -441,8 +437,8 @@ func requireReadyExport(result *store.ExamExportDownload) error {
 	if result.Export.State != model.ExamExportReady {
 		return apperror.New("exam.export.not_ready")
 	}
-	if result.Artifact.ExportID != result.Export.ID || !result.Artifact.AttemptID.IsValid() {
-		return apperror.New("exam.export.unavailable").Wrap(errors.New("invalid export artifact"))
+	if err := result.ArtifactConsistent(); err != nil {
+		return apperror.New("exam.export.unavailable").Wrap(err)
 	}
 	return nil
 }
@@ -460,8 +456,8 @@ func (s *Exports) BuildFromJob(ctx context.Context, system invocation.System, in
 	if err != nil {
 		return examExportStoreErrors.Translate(err)
 	}
-	if snapshot == nil || snapshot.Export.Validate() != nil || snapshot.Export.ID != input.ExportID {
-		return apperror.New("exam.export.unavailable").Wrap(errors.New("invalid export build snapshot"))
+	if err = snapshot.ConsistentWith(input.ExportID); err != nil {
+		return apperror.New("exam.export.unavailable").Wrap(err)
 	}
 	if snapshot.Export.State == model.ExamExportReady {
 		return nil
@@ -481,11 +477,8 @@ func (s *Exports) BuildFromJob(ctx context.Context, system invocation.System, in
 			err = apperror.New("exam.export.unavailable").Wrap(finishErr)
 		}
 	}()
-	if snapshot.Export.State != model.ExamExportQueued ||
-		len(snapshot.Records) < 1 ||
-		len(snapshot.Records) > model.ExamExportMaximumSnapshotBytes ||
-		len(snapshot.Files) != snapshot.Export.FileCount {
-		return apperror.New("exam.export.unavailable").Wrap(errors.New("invalid export build input"))
+	if err = snapshot.BuildInputConsistent(); err != nil {
+		return apperror.New("exam.export.unavailable").Wrap(err)
 	}
 
 	buildCtx, cancel := context.WithDeadline(ctx, snapshot.Export.SourceExpiresAt)

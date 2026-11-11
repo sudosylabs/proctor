@@ -9,6 +9,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -27,6 +28,18 @@ type ExamAuthoringSnapshot struct {
 	HasStarterWorkspace bool
 }
 
+// Consistent reports an error unless the snapshot carries both the Exam and
+// its Draft.
+func (s *ExamAuthoringSnapshot) Consistent() error {
+	if s == nil ||
+		s.Exam == nil ||
+		s.Draft == nil {
+		return errors.New("exam store returned an incomplete snapshot")
+	}
+
+	return nil
+}
+
 // ExamAccessSnapshot is the minimal projection needed to authorize an Exam
 // operation before authored Draft content is loaded.
 type ExamAccessSnapshot struct {
@@ -34,9 +47,81 @@ type ExamAccessSnapshot struct {
 	ActorIsManager bool
 }
 
+// Consistent reports an error unless the projection carries its Exam.
+func (s *ExamAccessSnapshot) Consistent() error {
+	if s == nil ||
+		s.Exam == nil {
+		return errors.New("exam store returned no access projection")
+	}
+
+	return nil
+}
+
+// ConsistentWithExam reports an error unless the projection carries the Exam
+// that was asked for and that Exam names the Academic Unit that owns it.
+func (s *ExamAccessSnapshot) ConsistentWithExam(examID model.ExamID) error {
+	if s == nil ||
+		s.Exam == nil ||
+		s.Exam.ID != examID ||
+		!s.Exam.AcademicUnitID.IsValid() {
+		return errors.New("Exam access projection names no owned Exam")
+	}
+
+	return nil
+}
+
+// ConsistentWith reports an error unless the projection carries the Exam that
+// was asked for and that Exam belongs to the given Academic Unit.
+func (s *ExamAccessSnapshot) ConsistentWith(examID model.ExamID, academicUnitID model.AcademicUnitID) error {
+	if s == nil ||
+		s.Exam == nil ||
+		s.Exam.ID != examID ||
+		s.Exam.AcademicUnitID != academicUnitID {
+		return errors.New("Exam records access projection is incomplete")
+	}
+
+	return nil
+}
+
+// ConsistentWithValidExam reports an error unless the projection carries a
+// valid Exam and it is the Exam that was asked for.
+func (s *ExamAccessSnapshot) ConsistentWithValidExam(examID model.ExamID) error {
+	if s == nil ||
+		s.Exam == nil ||
+		s.Exam.Validate() != nil ||
+		s.Exam.ID != examID {
+		return errors.New("Exam access projection is incomplete")
+	}
+
+	return nil
+}
+
 type ExamAuthoringCommandResult struct {
 	Value    *ExamAuthoringSnapshot
 	Replayed bool
+}
+
+// Consistent reports an error unless the command outcome carries the Exam
+// authoring snapshot it committed.
+func (r *ExamAuthoringCommandResult) Consistent() error {
+	if r == nil ||
+		r.Value == nil {
+		return errors.New("exam store returned no creation result")
+	}
+
+	return nil
+}
+
+// DraftConsistent reports an error unless the command outcome carries an Exam
+// authoring snapshot that includes the updated Draft.
+func (r *ExamAuthoringCommandResult) DraftConsistent() error {
+	if r == nil ||
+		r.Value == nil ||
+		r.Value.Draft == nil {
+		return errors.New("exam store returned no Draft update result")
+	}
+
+	return nil
 }
 
 type ExamArchiveFilter string
@@ -147,6 +232,18 @@ type ExamManagerCommandResult struct {
 	Replayed bool
 }
 
+// Consistent reports an error unless the command outcome carries both the
+// Exam and the Exam Manager relationship it changed.
+func (r *ExamManagerCommandResult) Consistent() error {
+	if r == nil ||
+		r.Exam == nil ||
+		r.Manager == nil {
+		return errors.New("exam store returned no manager result")
+	}
+
+	return nil
+}
+
 type ExamArchive struct {
 	ExamID           model.ExamID
 	ActorUserID      model.UserID
@@ -160,6 +257,17 @@ type ExamArchive struct {
 type ExamArchiveCommandResult struct {
 	Value    *model.Exam
 	Replayed bool
+}
+
+// Consistent reports an error unless the command outcome carries the archived
+// Exam.
+func (r *ExamArchiveCommandResult) Consistent() error {
+	if r == nil ||
+		r.Value == nil {
+		return errors.New("exam store returned no archive result")
+	}
+
+	return nil
 }
 
 // ExamAuthoringCreation is the complete first Exam aggregate and the durable

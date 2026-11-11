@@ -9,7 +9,6 @@ package user
 
 import (
 	"context"
-	"errors"
 	"slices"
 	"time"
 
@@ -77,14 +76,8 @@ func (s *Service) GetCurrentUserContext(ctx context.Context, invocation invocati
 		return nil, StoreErrors.Translate(err)
 	}
 
-	if value == nil ||
-		value.UserID != principal.UserID ||
-		value.Username == "" ||
-		value.DisplayName == "" ||
-		(value.ProfilePictureKind != model.ProfilePictureCustom && value.ProfilePictureKind != model.ProfilePictureDefault) ||
-		len(value.AvailableProductAreas) < 2 ||
-		len(value.ManagementScopes) > 20 {
-		return nil, apperror.New("administration.unavailable").Wrap(errors.New("current User context projection is incomplete"))
+	if err = value.ConsistentWith(principal.UserID); err != nil {
+		return nil, apperror.New("administration.unavailable").Wrap(err)
 	}
 
 	view := &CurrentUserContextView{

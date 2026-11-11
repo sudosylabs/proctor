@@ -224,49 +224,10 @@ func New(deps Dependencies) (*Service, error) {
 	return &Service{deps: deps, liveControls: controlAdmission{lane: liveControlLane}}, nil
 }
 
-func validActiveSuspension(view *store.ExamAttemptSuspensionView, attemptID model.ExamAttemptID) bool {
-	if view == nil {
-		return true
-	}
-	return view.ID.IsValid() &&
-		view.AttemptID == attemptID &&
-		view.ParticipationID.IsValid() &&
-		validSuspensionProvenance(view) &&
-		view.Generation > 0 &&
-		view.State == model.AttemptSuspensionActive &&
-		!view.StartedAt.IsZero() &&
-		!view.EndedAt.Valid &&
-		view.ReallowedByUserID.IsZero()
-}
-
 type ExpiryScanResult struct {
 	Due       int
 	Completed int
 	Replayed  int
-}
-
-// reallowableSuspensionReason names the policy suspension reasons a manager
-// may re-allow. Active and closed validation share it so the post-commit
-// check cannot reject an outcome the Store deliberately committed.
-func reallowableSuspensionReason(reason model.AttemptSuspensionCandidateReason) bool {
-	return reason == model.AttemptSuspensionCandidateReasonSecureContinuityLost ||
-		reason == model.AttemptSuspensionCandidateReasonFocusLossPolicy
-}
-
-// validSuspensionProvenance accepts a policy episode that links its Flag or a
-// manual episode (an Exam Manager's kick) that links its suspending manager.
-// Every re-allowable episode passes it in both its active and closed state.
-func validSuspensionProvenance(view *store.ExamAttemptSuspensionView) bool {
-	switch view.Source {
-	case model.AttemptSuspensionSourcePolicy:
-		return view.FlagID.IsValid() && reallowableSuspensionReason(view.CandidateReason) && view.SuspendedByUserID.IsZero()
-	case model.AttemptSuspensionSourceManual:
-		return view.FlagID.IsZero() &&
-			view.CandidateReason == model.AttemptSuspensionCandidateReasonManagerSuspended &&
-			view.SuspendedByUserID.IsValid()
-	default:
-		return false
-	}
 }
 
 type CandidateAccess struct {
@@ -306,51 +267,6 @@ func candidateSelector(invocation invocation.Invocation, candidateAccess Candida
 	}, nil
 }
 
-func validCandidateBrowserPolicy(capabilities store.CandidateRuntimeCapabilities, policy *store.CandidateBrowserPolicy) bool {
-	if slices.Contains(capabilities.PendingCorrectionCapabilities, model.CandidateCapabilityBrowser) {
-		return policy == nil
-	}
-
-	if policy == nil ||
-		!policy.PolicyRevisionID.IsValid() ||
-		policy.PolicyRevisionID != capabilities.ExamRevision.CurrentRevisionID ||
-		policy.PolicyRevisionNumber < 1 ||
-		policy.Policy.Validate() != nil ||
-		policy.BrowserActivityDisclosure.Validate() != nil ||
-		policy.BrowserActivityDisclosure.MayCreateIntegrityEvidence != policy.Policy.MayCreateIntegrityEvidence() {
-		return false
-	}
-
-	if policy.Policy.Enabled != (capabilities.Browser.State != store.CandidateBrowserDisabled) {
-		return false
-	}
-
-	if policy.Policy.Enabled &&
-		(policy.PolicyRevisionID != capabilities.Browser.PolicyRevisionID || policy.PolicyDigest != capabilities.Browser.PolicyDigest) {
-		return false
-	}
-
-	digest, err := model.BrowserPolicyDigest(policy.Policy)
-	return err == nil && policy.PolicyDigest == digest
-}
-
-func validCandidateLiveCorrections(capabilities store.CandidateRuntimeCapabilities, corrections []model.CandidateLiveCorrection) bool {
-	var previous int64
-	for _, correction := range corrections {
-		if correction.Validate() != nil ||
-			correction.RevisionNumber <= previous ||
-			correction.RevisionID == capabilities.ExamRevision.AdmissionRevisionID {
-			return false
-		}
-
-		previous = correction.RevisionNumber
-	}
-
-	pending := model.PendingCorrectionCapabilities(corrections)
-	return slices.Equal(pending, capabilities.PendingCorrectionCapabilities) &&
-		(len(pending) != 0) == capabilities.ExamRevision.AcknowledgementRequired
-}
-
 func cloneCandidateBrowserPolicy(value *store.CandidateBrowserPolicy) *store.CandidateBrowserPolicy {
 	if value == nil {
 		return nil
@@ -358,34 +274,6 @@ func cloneCandidateBrowserPolicy(value *store.CandidateBrowserPolicy) *store.Can
 	clone := *value
 	clone.Policy = value.Policy.Clone()
 	return &clone
-}
-
-func validParticipationView(view *store.ExamAttemptParticipationView) bool {
-	if view == nil ||
-		!view.ID.IsValid() ||
-		!view.AttemptID.IsValid() ||
-		view.Generation < 1 ||
-		view.RenewalSequence < 0 ||
-		view.StartedAt.IsZero() ||
-		view.UpdatedAt.IsZero() ||
-		view.UpdatedAt.Before(view.StartedAt) ||
-		view.LeaseExpiresAt.IsZero() ||
-		view.LeaseExpiresAt.Before(view.StartedAt) {
-		return false
-	}
-
-	switch view.State {
-	case model.AttemptParticipationActive:
-		return !view.EndedAt.Valid && view.EndReason == ""
-	case model.AttemptParticipationEnded:
-		return view.EndedAt.Valid &&
-			!view.EndedAt.Time.IsZero() &&
-			!view.EndedAt.Time.Before(view.StartedAt) &&
-			!view.EndedAt.Time.After(view.UpdatedAt) &&
-			view.EndReason != ""
-	default:
-		return false
-	}
 }
 
 func (s *Service) failAudit(ctx context.Context, auditID model.AuditEventID, err error) error {

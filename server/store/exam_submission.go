@@ -9,6 +9,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -99,6 +100,42 @@ type ExamSubmissionSealResult struct {
 	Replayed        bool
 }
 
+// ConsistentWith reports an error unless the outcome carries a complete
+// Submission receipt for the sealed Attempt at the acknowledged workspace cursor
+// and expected Exam Revision, names the resolved target's Exam, Sitting, Class
+// and candidate and the seal's Participation, generation and Connection, and
+// uses the proposed Submission ID and receipt code unless it replays an earlier
+// seal. It reads target, which the caller has already checked.
+func (r *ExamSubmissionSealResult) ConsistentWith(
+	target *ExamSubmissionSealTarget,
+	sealAccess ExamSubmissionSealAccess,
+	proposedID model.SubmissionID,
+	proposedCode model.SubmissionReceiptCode,
+) error {
+	if r == nil ||
+		!r.Receipt.SubmissionID.IsValid() ||
+		!r.Receipt.ReceiptCode.IsValid() ||
+		r.Receipt.AttemptID != sealAccess.AttemptID ||
+		r.Receipt.State != model.ExamAttemptSubmitted ||
+		r.Receipt.WorkspaceCursor != sealAccess.ExpectedWorkspaceCursor ||
+		r.Receipt.ExamRevisionID != sealAccess.ExpectedCurrentRevisionID ||
+		!IsValidWorkspaceSHA256(r.Receipt.ManifestDigest) ||
+		r.Receipt.SubmittedAt.IsZero() ||
+		r.Receipt.BrowserActivity.Validate() != nil ||
+		r.ExamID != target.ExamID ||
+		r.SittingID != target.SittingID ||
+		r.ClassID != target.ClassID ||
+		r.CandidateUserID != target.CandidateUserID ||
+		r.ParticipationID != sealAccess.ParticipationID ||
+		r.Generation != sealAccess.Generation ||
+		r.ConnectionID != sealAccess.ConnectionID ||
+		(!r.Replayed && (r.Receipt.SubmissionID != proposedID || r.Receipt.ReceiptCode != proposedCode)) {
+		return errors.New("inconsistent Submission seal result")
+	}
+
+	return nil
+}
+
 // ExamSubmissionAutomaticSealListOptions selects one deterministic bounded
 // page of unfinished Attempts for a Closing Sitting. AttemptID is the complete
 // keyset cursor; paths, credentials, and candidate-authored content never
@@ -149,6 +186,40 @@ type ExamSubmissionAutomaticSealResult struct {
 	ConnectionClosed bool
 }
 
+// ConsistentWith reports an error unless the outcome carries a complete
+// Submission receipt for the target Attempt at its current Exam Revision, names
+// the target's Exam, Sitting, Class, candidate, Participation, generation and
+// Connection, uses the proposed Submission ID and receipt code unless it replays
+// an earlier seal, and a replay closed no Connection.
+func (r *ExamSubmissionAutomaticSealResult) ConsistentWith(
+	target ExamSubmissionAutomaticSealTarget,
+	proposed model.SubmissionID,
+	proposedCode model.SubmissionReceiptCode,
+) error {
+	if r == nil ||
+		r.Receipt.State != model.ExamAttemptSubmitted ||
+		r.Receipt.AttemptID != target.AttemptID ||
+		r.Receipt.ExamRevisionID != target.CurrentRevisionID ||
+		!r.Receipt.SubmissionID.IsValid() ||
+		!r.Receipt.ReceiptCode.IsValid() ||
+		r.Receipt.WorkspaceCursor < 0 ||
+		!IsValidWorkspaceSHA256(r.Receipt.ManifestDigest) ||
+		r.Receipt.SubmittedAt.IsZero() ||
+		r.ExamID != target.ExamID ||
+		r.SittingID != target.SittingID ||
+		r.ClassID != target.ClassID ||
+		r.CandidateUserID != target.CandidateUserID ||
+		r.ParticipationID != target.ParticipationID ||
+		r.Generation != target.Generation ||
+		r.ConnectionID != target.ConnectionID ||
+		(!r.Replayed && (r.Receipt.SubmissionID != proposed || r.Receipt.ReceiptCode != proposedCode)) ||
+		(r.Replayed && r.ConnectionClosed) {
+		return errors.New("inconsistent automatic Submission result")
+	}
+
+	return nil
+}
+
 // ExamSubmissionManagerEndPreparation is the exact preflight projection for
 // an authorized manager seal. The target is safe application identity; SealAt
 // is reserved by PostgreSQL and Replayed means the same manager-ended terminal
@@ -186,6 +257,43 @@ type ExamSubmissionManagerEndResult struct {
 	ConnectionClosed bool
 }
 
+// ConsistentWith reports an error unless the outcome carries a complete
+// Submission receipt for the Attempt the manager ended, names the commanded Exam
+// and Sitting and the prepared target's Class, candidate, Participation,
+// generation and Connection, uses the proposed Submission ID and receipt code
+// unless it replays an earlier end, and a replay closed no Connection.
+func (r *ExamSubmissionManagerEndResult) ConsistentWith(
+	attemptID model.ExamAttemptID,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	target ExamSubmissionAutomaticSealTarget,
+	proposed model.SubmissionID,
+	proposedCode model.SubmissionReceiptCode,
+) error {
+	if r == nil ||
+		r.Receipt.State != model.ExamAttemptSubmitted ||
+		r.Receipt.AttemptID != attemptID ||
+		!r.Receipt.ExamRevisionID.IsValid() ||
+		!r.Receipt.SubmissionID.IsValid() ||
+		!r.Receipt.ReceiptCode.IsValid() ||
+		r.Receipt.WorkspaceCursor < 0 ||
+		!IsValidWorkspaceSHA256(r.Receipt.ManifestDigest) ||
+		r.Receipt.SubmittedAt.IsZero() ||
+		r.ExamID != examID ||
+		r.SittingID != sittingID ||
+		r.ClassID != target.ClassID ||
+		r.CandidateUserID != target.CandidateUserID ||
+		r.ParticipationID != target.ParticipationID ||
+		r.Generation != target.Generation ||
+		r.ConnectionID != target.ConnectionID ||
+		(!r.Replayed && (r.Receipt.SubmissionID != proposed || r.Receipt.ReceiptCode != proposedCode)) ||
+		(r.Replayed && r.ConnectionClosed) {
+		return errors.New("inconsistent manager-ended Submission result")
+	}
+
+	return nil
+}
+
 // ExamSubmissionAutomaticSealPreparation reserves the PostgreSQL action time
 // used by a fresh automatic receipt and reports whether the terminal aggregate
 // already exists. The terminal mutation still rechecks all lifecycle state.
@@ -204,6 +312,23 @@ type ExamSubmissionAuthorization struct {
 	AttemptID       model.ExamAttemptID
 	CandidateUserID model.UserID
 	AcademicUnitID  model.AcademicUnitID
+}
+
+// ConsistentWith reports an error unless the projection is for the Submission
+// that was asked for and names its Exam, Sitting, Attempt, candidate and
+// owning Academic Unit.
+func (a *ExamSubmissionAuthorization) ConsistentWith(submissionID model.SubmissionID) error {
+	if a == nil ||
+		a.SubmissionID != submissionID ||
+		!a.ExamID.IsValid() ||
+		!a.SittingID.IsValid() ||
+		!a.AttemptID.IsValid() ||
+		!a.CandidateUserID.IsValid() ||
+		!a.AcademicUnitID.IsValid() {
+		return errors.New("Submission authorization projection is incomplete")
+	}
+
+	return nil
 }
 
 // ExamSubmissionManifestItem is manager-visible protected metadata for one

@@ -9,6 +9,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -19,6 +20,17 @@ import (
 type ExamStarterWorkspaceItem struct {
 	Entry  model.StarterWorkspaceEntry
 	Object *model.StarterWorkspaceObject
+}
+
+// Consistent reports an error unless the file item carries the object that
+// holds its content.
+func (i *ExamStarterWorkspaceItem) Consistent() error {
+	if i == nil ||
+		i.Object == nil {
+		return errors.New("Starter Workspace Store returned incomplete file metadata")
+	}
+
+	return nil
 }
 
 type ExamStarterWorkspaceReservation struct {
@@ -53,6 +65,18 @@ type ExamStarterWorkspaceMutationResult struct {
 	DraftRevision     int64
 	ReclaimableObject model.StarterWorkspaceObjectID
 	Replayed          bool
+}
+
+// Consistent reports an error unless the outcome carries the changed entry and
+// the Draft revision the mutation produced.
+func (r *ExamStarterWorkspaceMutationResult) Consistent() error {
+	if r == nil ||
+		r.Entry == nil ||
+		r.DraftRevision < 1 {
+		return errors.New("Starter Workspace Store returned incomplete mutation result")
+	}
+
+	return nil
 }
 
 // ExamStarterWorkspaceStore owns the complete bounded Draft hierarchy.

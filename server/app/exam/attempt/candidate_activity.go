@@ -9,7 +9,6 @@ package attempt
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -70,8 +69,8 @@ func (s *Service) ListCandidateExamActivity(
 	if err != nil {
 		return CandidateActivityPage{}, storeError(storeErrors, err)
 	}
-	if stored == nil || stored.ServerTime.IsZero() || stored.Items == nil {
-		return CandidateActivityPage{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("incomplete candidate activity projection"))
+	if err = stored.Consistent(); err != nil {
+		return CandidateActivityPage{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
 	page := CandidateActivityPage{

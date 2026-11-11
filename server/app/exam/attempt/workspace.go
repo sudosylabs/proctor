@@ -9,7 +9,6 @@ package attempt
 
 import (
 	"context"
-	"encoding/hex"
 	"errors"
 	"io"
 	"strings"
@@ -124,11 +123,8 @@ func (s *Service) ListCandidateExamWorkspaceJournal(
 		return WorkspaceJournalPage{}, storeError(storeErrors, err)
 	}
 
-	if stored == nil ||
-		!stored.WorkspaceID.IsValid() ||
-		stored.CurrentCursor < query.AfterCursor ||
-		(stored.RefreshRequired && (len(stored.Entries) != 0 || stored.HasMore)) {
-		return WorkspaceJournalPage{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Attempt Workspace journal page"))
+	if err = stored.ConsistentWith(query.AfterCursor); err != nil {
+		return WorkspaceJournalPage{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
 	entries := make([]model.AttemptWorkspaceJournalEntry, len(stored.Entries))
@@ -386,7 +382,7 @@ func (s *Service) stageWorkspaceFile(
 		mediaType == "" ||
 		strings.TrimSpace(mediaType) != mediaType ||
 		len(mediaType) > 255 ||
-		!validWorkspaceSHA256(expectedSHA) {
+		!store.IsValidWorkspaceSHA256(expectedSHA) {
 		return WorkspaceMutationResult{}, apperror.Invalid("exam.attempt.invalid", "workspace_file")
 	}
 
@@ -533,19 +529,8 @@ func projectWorkspaceMutation(
 	expectedKind model.StarterWorkspaceEntryKind,
 	expectedVersion model.WorkspaceContentVersion,
 ) (WorkspaceMutationResult, error) {
-	if stored == nil ||
-		stored.SittingID != target.SittingID ||
-		stored.ClassID != target.ClassID ||
-		stored.CandidateUserID != target.CandidateUserID ||
-		stored.WorkspaceID != target.WorkspaceID ||
-		stored.Change.Validate() != nil ||
-		stored.Change.WorkspaceID != stored.WorkspaceID ||
-		stored.Change.Operation != operation ||
-		stored.Change.Cursor < 1 ||
-		(!stored.Replayed && stored.Change.EntryID != entryID) {
-		return WorkspaceMutationResult{}, apperror.New("exam.attempt.unavailable").Wrap(
-			errors.New("inconsistent Attempt Workspace mutation result"),
-		)
+	if err := stored.ConsistentWith(target, operation, entryID); err != nil {
+		return WorkspaceMutationResult{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
 	if operation == model.AttemptWorkspaceMutationDeleteEntry {
@@ -686,14 +671,6 @@ func validateWorkspacePath(value string) (string, error) {
 		return "", errors.New("Workspace path is not canonical")
 	}
 	return normalized, nil
-}
-
-func validWorkspaceSHA256(value string) bool {
-	if len(value) != 64 || strings.ToLower(value) != value {
-		return false
-	}
-	_, err := hex.DecodeString(value)
-	return err == nil
 }
 
 func validCandidateWorkspaceItem(item *store.CandidateAttemptWorkspaceItem) bool {

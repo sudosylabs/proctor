@@ -70,7 +70,7 @@ func (s *Service) EndExamAttemptByManager(
 		return store.ExamSubmissionReceipt{}, storeError(storeErrors, err)
 	}
 
-	if sitting == nil || sitting.Sitting == nil || sitting.Sitting.ID != command.SittingID || !sitting.Sitting.ClassID.IsValid() {
+	if sitting.ConsistentWith(command.SittingID) != nil {
 		return store.ExamSubmissionReceipt{}, apperror.New("exam.attempt.unavailable").Wrap(
 			errors.New("inconsistent manager-ended Sitting projection"),
 		)
@@ -107,11 +107,7 @@ func (s *Service) EndExamAttemptByManager(
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, err)
 	}
 
-	if managerSnapshot == nil ||
-		managerSnapshot.Attempt == nil ||
-		managerSnapshot.Attempt.Validate() != nil ||
-		managerSnapshot.Attempt.ExamID != command.ExamID ||
-		!validActiveSuspension(managerSnapshot.ActiveSuspension, managerSnapshot.Attempt.ID) {
+	if managerSnapshot.ConsistentWith(command.ExamID) != nil {
 		return store.ExamSubmissionReceipt{}, s.failAudit(
 			ctx,
 			auditID,
@@ -252,25 +248,8 @@ func projectManagerEndResult(
 	proposed model.SubmissionID,
 	proposedCode model.SubmissionReceiptCode,
 ) (SubmissionResult, error) {
-	if stored == nil ||
-		stored.Receipt.State != model.ExamAttemptSubmitted ||
-		stored.Receipt.AttemptID != command.AttemptID ||
-		!stored.Receipt.ExamRevisionID.IsValid() ||
-		!stored.Receipt.SubmissionID.IsValid() ||
-		!stored.Receipt.ReceiptCode.IsValid() ||
-		stored.Receipt.WorkspaceCursor < 0 ||
-		!validWorkspaceSHA256(stored.Receipt.ManifestDigest) ||
-		stored.Receipt.SubmittedAt.IsZero() ||
-		stored.ExamID != command.ExamID ||
-		stored.SittingID != command.SittingID ||
-		stored.ClassID != target.ClassID ||
-		stored.CandidateUserID != target.CandidateUserID ||
-		stored.ParticipationID != target.ParticipationID ||
-		stored.Generation != target.Generation ||
-		stored.ConnectionID != target.ConnectionID ||
-		(!stored.Replayed && (stored.Receipt.SubmissionID != proposed || stored.Receipt.ReceiptCode != proposedCode)) ||
-		(stored.Replayed && stored.ConnectionClosed) {
-		return SubmissionResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent manager-ended Submission result"))
+	if err := stored.ConsistentWith(command.AttemptID, command.ExamID, command.SittingID, target, proposed, proposedCode); err != nil {
+		return SubmissionResult{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
 	return SubmissionResult{

@@ -112,12 +112,8 @@ func (r *Records) authorize(
 		return nil, "", examRecordsStoreErrors.Translate(err)
 	}
 
-	if resolved == nil ||
-		resolved.Scope != scope ||
-		!resolved.AcademicUnitID.IsValid() ||
-		!resolved.InstitutionID.IsValid() ||
-		scope.SubmissionID.IsValid() && (!resolved.CandidateUserID.IsValid() || !resolved.AttemptID.IsValid()) {
-		return nil, "", apperror.New("exam.unavailable").Wrap(errors.New("Exam records scope projection is incomplete"))
+	if err = resolved.ConsistentWith(scope); err != nil {
+		return nil, "", apperror.New("exam.unavailable").Wrap(err)
 	}
 
 	if excludeSelf && principal.UserID == resolved.CandidateUserID {
@@ -133,8 +129,8 @@ func (r *Records) authorize(
 		if accessErr != nil {
 			return nil, "", examRecordsStoreErrors.Translate(accessErr)
 		}
-		if examAccess == nil || examAccess.Exam == nil || examAccess.Exam.ID != scope.ExamID || examAccess.Exam.AcademicUnitID != resolved.AcademicUnitID {
-			return nil, "", apperror.New("exam.unavailable").Wrap(errors.New("Exam records access projection is incomplete"))
+		if err = examAccess.ConsistentWith(scope.ExamID, resolved.AcademicUnitID); err != nil {
+			return nil, "", apperror.New("exam.unavailable").Wrap(err)
 		}
 
 		action, err = manageraccess.SelectAction(
@@ -189,13 +185,8 @@ func (r *Records) GetExamSittingRecords(
 		return nil, examRecordsStoreErrors.Translate(err)
 	}
 
-	if value == nil ||
-		value.Completion.Validate() != nil ||
-		value.Completion.SittingID != sittingID ||
-		value.SubmissionCount < 0 ||
-		value.PendingReviews < 0 ||
-		value.PendingReviews > value.SubmissionCount {
-		return nil, apperror.New("exam.unavailable").Wrap(errors.New("Exam records completion projection is incomplete"))
+	if err = value.ConsistentWith(sittingID); err != nil {
+		return nil, apperror.New("exam.unavailable").Wrap(err)
 	}
 
 	return value, nil
@@ -334,8 +325,8 @@ func (r *Records) CompleteExamSittingRecords(
 	if err != nil {
 		return nil, r.fail(ctx, mutation, err)
 	}
-	if result == nil || result.Completion.Validate() != nil || result.Completion.SittingID != command.Scope.SittingID {
-		return nil, apperror.New("exam.unavailable").Wrap(errors.New("Exam records completion result is incomplete"))
+	if err = result.ConsistentWith(command.Scope.SittingID); err != nil {
+		return nil, apperror.New("exam.unavailable").Wrap(err)
 	}
 
 	return result.Completion, nil
@@ -406,8 +397,8 @@ func (r *Records) WaiveSubmissionReview(
 	if err != nil {
 		return nil, r.fail(ctx, mutation, err)
 	}
-	if result == nil || result.Waiver.Validate() != nil || result.Waiver.SubmissionID != command.Scope.SubmissionID {
-		return nil, apperror.New("exam.unavailable").Wrap(errors.New("Submission Review waiver result is incomplete"))
+	if err = result.ConsistentWith(command.Scope.SubmissionID); err != nil {
+		return nil, apperror.New("exam.unavailable").Wrap(err)
 	}
 
 	return result.Waiver, nil
@@ -440,14 +431,12 @@ func (r *Records) ListRetentionHolds(
 	if err != nil {
 		return nil, examRecordsStoreErrors.Translate(err)
 	}
-	if page == nil || len(page.Holds) > query.Limit {
-		return nil, apperror.New("exam.unavailable").Wrap(errors.New("Retention hold page is incomplete"))
+	if err = page.ConsistentWith(query.Limit); err != nil {
+		return nil, apperror.New("exam.unavailable").Wrap(err)
 	}
 
-	for _, hold := range page.Holds {
-		if hold.Validate() != nil || hold.Scope.ExamID != query.Scope.ExamID {
-			return nil, apperror.New("exam.unavailable").Wrap(errors.New("Retention hold projection is invalid"))
-		}
+	if err = page.HoldsConsistentWith(query.Scope.ExamID); err != nil {
+		return nil, apperror.New("exam.unavailable").Wrap(err)
 	}
 
 	return page, nil
@@ -503,8 +492,8 @@ func (r *Records) CreateRetentionHold(
 	if err != nil {
 		return nil, r.fail(ctx, mutation, err)
 	}
-	if result == nil || result.Hold.Validate() != nil || result.Hold.Scope != command.Scope {
-		return nil, apperror.New("exam.unavailable").Wrap(errors.New("Retention hold creation result is incomplete"))
+	if err = result.ConsistentWith(command.Scope); err != nil {
+		return nil, apperror.New("exam.unavailable").Wrap(err)
 	}
 
 	return result.Hold, nil
@@ -564,12 +553,8 @@ func (r *Records) ReleaseRetentionHold(
 		return nil, r.fail(ctx, mutation, err)
 	}
 
-	if result == nil ||
-		result.Hold.Validate() != nil ||
-		result.Hold.ID != command.HoldID ||
-		result.Hold.Scope != command.Scope ||
-		!result.Hold.ReleasedAt.Valid {
-		return nil, apperror.New("exam.unavailable").Wrap(errors.New("Retention hold release result is incomplete"))
+	if err = result.ConsistentWithRelease(command.HoldID, command.Scope); err != nil {
+		return nil, apperror.New("exam.unavailable").Wrap(err)
 	}
 
 	return result.Hold, nil

@@ -9,6 +9,9 @@ package store
 
 import (
 	"context"
+	"encoding/hex"
+	"errors"
+	"strings"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -21,6 +24,17 @@ const ExamAttemptWorkspaceMutationOperation = "exam.attempt.workspace.mutate"
 // Sitting, Active Attempt, exact active unexpired Participation generation,
 // and owning Session-bound open Connection on every reservation, readiness,
 // mutation, and exact replay.
+// IsValidWorkspaceSHA256 reports whether value is a lowercase hexadecimal
+// SHA-256 digest, the form Attempt Workspace content and Submission manifest
+// digests are stored in.
+func IsValidWorkspaceSHA256(value string) bool {
+	if len(value) != 64 || strings.ToLower(value) != value {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
+}
+
 type ExamAttemptWorkspaceMutationAccess struct {
 	AttemptID                model.ExamAttemptID
 	ParticipationID          model.AttemptParticipationID
@@ -103,6 +117,32 @@ type ExamAttemptWorkspaceMutationResult struct {
 	Replayed        bool
 }
 
+// ConsistentWith reports an error unless the outcome names the resolved
+// target's Sitting, Class, candidate and Attempt Workspace, carries a valid
+// journal change of the requested operation in that workspace at a positive
+// cursor, and that change is for the proposed entry unless it replays an earlier
+// mutation. It reads target, which the caller has already checked.
+func (r *ExamAttemptWorkspaceMutationResult) ConsistentWith(
+	target *ExamAttemptWorkspaceMutationTarget,
+	operation model.AttemptWorkspaceMutationKind,
+	entryID model.AttemptWorkspaceEntryID,
+) error {
+	if r == nil ||
+		r.SittingID != target.SittingID ||
+		r.ClassID != target.ClassID ||
+		r.CandidateUserID != target.CandidateUserID ||
+		r.WorkspaceID != target.WorkspaceID ||
+		r.Change.Validate() != nil ||
+		r.Change.WorkspaceID != r.WorkspaceID ||
+		r.Change.Operation != operation ||
+		r.Change.Cursor < 1 ||
+		(!r.Replayed && r.Change.EntryID != entryID) {
+		return errors.New("inconsistent Attempt Workspace mutation result")
+	}
+
+	return nil
+}
+
 // CandidateWorkspaceJournalOptions requests ordered changes strictly after a
 // numeric cursor. Limit is 1..200. Paths remain in the protected response body
 // and never enter a URL, pagination token, audit field, log, or realtime event.
@@ -121,6 +161,21 @@ type CandidateWorkspaceJournalPage struct {
 	Entries         []model.AttemptWorkspaceJournalEntry
 	HasMore         bool
 	RefreshRequired bool
+}
+
+// ConsistentWith reports an error unless the page names its Attempt
+// Workspace, its current cursor is not behind the cursor the reader already
+// holds, and a page that asks for a refresh carries no entries and no further
+// page.
+func (p *CandidateWorkspaceJournalPage) ConsistentWith(afterCursor int64) error {
+	if p == nil ||
+		!p.WorkspaceID.IsValid() ||
+		p.CurrentCursor < afterCursor ||
+		(p.RefreshRequired && (len(p.Entries) != 0 || p.HasMore)) {
+		return errors.New("inconsistent Attempt Workspace journal page")
+	}
+
+	return nil
 }
 
 // ExamAttemptWorkspaceStore is the deep seam for the acknowledged live

@@ -71,7 +71,7 @@ func (s *Service) beginPreflightAudit(
 	if err != nil {
 		return "", storeError(storeErrors, err)
 	}
-	if snapshot == nil || snapshot.Sitting == nil || snapshot.Sitting.ID != sittingID || !snapshot.Sitting.ClassID.IsValid() {
+	if snapshot.ConsistentWith(sittingID) != nil {
 		return "", apperror.New("exam.attempt.unavailable").Wrap(errors.New("preflight Sitting ownership is invalid"))
 	}
 
@@ -161,11 +161,8 @@ func (s *Service) PrepareExamSecurityPreflight(
 		return nil, s.failAudit(ctx, audit, storeError(securityPreflightStoreErrors, err))
 	}
 
-	if result == nil ||
-		result.Challenge.Validate() != nil ||
-		result.Resolved.Policy.Validate(result.ServerTime) != nil ||
-		result.Resolved.Policy.SittingID != command.SittingID {
-		return nil, apperror.New("exam.attempt.unavailable").Wrap(errors.New("preflight Store returned an invalid policy"))
+	if err = result.ConsistentWith(command.SittingID); err != nil {
+		return nil, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
 	return result, nil
@@ -281,19 +278,8 @@ func (s *Service) RecoverExamSecurityPolicy(
 		return nil, storeError(securityPreflightStoreErrors, err)
 	}
 
-	if result == nil ||
-		result.ServerTime.IsZero() ||
-		result.SecurityCoverage.Validate() != nil ||
-		result.CurrentSources == nil ||
-		result.CurrentCoverage == nil ||
-		result.SourceResetReceipts == nil ||
-		len(result.CurrentSources) > 11 ||
-		len(result.CurrentCoverage) > 64 ||
-		len(result.SourceResetReceipts) > 11 ||
-		result.Security.Validate() != nil ||
-		result.Security.Policy.Scope.AttemptID != attemptID ||
-		result.FrozenAttemptConfiguration.Validate() != nil {
-		return nil, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent security policy recovery"))
+	if err = result.ConsistentWith(attemptID); err != nil {
+		return nil, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
 	return result, nil

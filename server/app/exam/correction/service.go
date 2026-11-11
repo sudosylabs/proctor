@@ -364,21 +364,8 @@ func (s *Service) StageExamSittingCorrectionResourceContent(
 }
 
 func validateStage(stage *store.ExamCorrectionResourceStage, c StageResourceContentCommand, actor model.UserID) error {
-	if stage == nil ||
-		!stage.ID.IsValid() ||
-		stage.ExamID != c.ExamID ||
-		stage.SittingID != c.SittingID ||
-		stage.BaseRevisionID != c.BaseRevisionID ||
-		stage.Target != c.Target ||
-		!stage.ResourceID.IsValid() ||
-		!stage.FileEntryID.IsValid() ||
-		!stage.FileRevisionID.IsValid() ||
-		!stage.UploadLeaseID.IsValid() ||
-		!stage.RenditionID.IsValid() ||
-		stage.CreatedByUserID != actor ||
-		stage.ExpiresAt.IsZero() ||
-		(c.Target == store.ExamCorrectionResourceReplacement && stage.ResourceID != c.ResourceID) {
-		return apperror.New("exam.sitting.correction.unavailable").Wrap(errors.New("inconsistent stage outcome"))
+	if err := stage.ConsistentWith(c.ExamID, c.SittingID, c.BaseRevisionID, c.Target, c.ResourceID, actor); err != nil {
+		return apperror.New("exam.sitting.correction.unavailable").Wrap(err)
 	}
 
 	if stage.State != store.ExamCorrectionResourceStagePending &&
@@ -387,12 +374,8 @@ func validateStage(stage *store.ExamCorrectionResourceStage, c StageResourceCont
 		return apperror.New("exam.sitting.correction.unavailable").Wrap(errors.New("invalid stage state"))
 	}
 
-	if stage.State != store.ExamCorrectionResourceStagePending &&
-		(stage.Rendition == nil ||
-			stage.Rendition.ID != stage.RenditionID ||
-			stage.Rendition.RevisionID != stage.FileRevisionID ||
-			stage.Rendition.Validate() != nil) {
-		return apperror.New("exam.sitting.correction.unavailable").Wrap(errors.New("incomplete ready stage"))
+	if err := stage.RenditionConsistent(); err != nil {
+		return apperror.New("exam.sitting.correction.unavailable").Wrap(err)
 	}
 
 	if stage.Rendition != nil &&
@@ -669,25 +652,13 @@ func (s *Service) failAudit(ctx context.Context, id model.AuditEventID, err erro
 	return mapped
 }
 func projectResult(stored *store.ExamCorrectionResult, c ApplyCommand) (Result, error) {
-	if stored == nil || stored.Revision == nil || stored.Sitting == nil || stored.Sitting.Sitting == nil {
-		return Result{}, apperror.New("exam.sitting.correction.unavailable").Wrap(errors.New("missing correction outcome"))
+	if err := stored.Consistent(); err != nil {
+		return Result{}, apperror.New("exam.sitting.correction.unavailable").Wrap(err)
 	}
 
 	s := stored.Sitting.Sitting
-	if stored.Revision.ExamID != c.ExamID ||
-		stored.Revision.ID == c.ExpectedCurrentRevisionID ||
-		stored.Revision.Kind != model.ExamRevisionPublicationLiveCorrection ||
-		stored.Revision.Number < 1 ||
-		stored.PreviousRevisionID != c.ExpectedCurrentRevisionID ||
-		s.ID != c.SittingID ||
-		s.ExamID != c.ExamID ||
-		s.ExamRevisionID != stored.Revision.ID ||
-		s.Revision != c.ExpectedSittingRevision+1 ||
-		(s.State != model.ExamSittingOpen && s.State != model.ExamSittingPaused) ||
-		s.UpdatedAt.IsZero() ||
-		stored.EffectiveAt.IsZero() ||
-		!model.TimeUTC(stored.EffectiveAt).Equal(model.TimeUTC(stored.Revision.PublishedAt)) {
-		return Result{}, apperror.New("exam.sitting.correction.unavailable").Wrap(errors.New("inconsistent correction outcome"))
+	if err := stored.ConsistentWith(c.ExamID, c.SittingID, c.ExpectedCurrentRevisionID, c.ExpectedSittingRevision); err != nil {
+		return Result{}, apperror.New("exam.sitting.correction.unavailable").Wrap(err)
 	}
 
 	return Result{

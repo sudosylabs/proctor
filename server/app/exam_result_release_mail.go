@@ -49,12 +49,8 @@ func (a examResultReleaseMailPreparationAdapter) PrepareResultRelease(ctx contex
 		return nil, err
 	}
 
-	if snapshot == nil ||
-		snapshot.Sitting == nil ||
-		snapshot.Sitting.Validate() != nil ||
-		snapshot.Sitting.ID != request.SittingID ||
-		snapshot.Sitting.ExamID != request.ExamID {
-		return nil, errors.New("result release Sitting projection is inconsistent")
+	if err = snapshot.ConsistentWithExam(request.SittingID, request.ExamID); err != nil {
+		return nil, err
 	}
 
 	revision, err := a.revisions.GetSummary(ctx, request.ExamID, snapshot.Sitting.ExamRevisionID)
@@ -62,11 +58,8 @@ func (a examResultReleaseMailPreparationAdapter) PrepareResultRelease(ctx contex
 		return nil, err
 	}
 
-	if revision == nil ||
-		revision.ID != snapshot.Sitting.ExamRevisionID ||
-		revision.ExamID != request.ExamID ||
-		revision.Title == "" {
-		return nil, errors.New("result release Exam revision projection is inconsistent")
+	if err = revision.ConsistentWith(snapshot.Sitting.ExamRevisionID, request.ExamID); err != nil {
+		return nil, err
 	}
 
 	occurrence, err := model.ResultReleaseOccurrenceID(request.ReviewID, request.ExpectedReviewRevision)

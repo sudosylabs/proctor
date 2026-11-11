@@ -115,20 +115,8 @@ func (s *Service) RenewExamAttemptParticipation(
 		return ParticipationRenewal{}, storeError(storeErrors, err)
 	}
 
-	if stored == nil ||
-		stored.SecurityCoverage.Validate() != nil ||
-		stored.AttemptID != command.AttemptID ||
-		stored.ParticipationID != command.ParticipationID ||
-		!stored.ExamID.IsValid() ||
-		!stored.SittingID.IsValid() ||
-		stored.CandidateUserID != principal.UserID ||
-		stored.Generation != command.Generation ||
-		stored.AcceptedSequence != command.Sequence ||
-		stored.DatabaseTime.IsZero() ||
-		stored.LeaseExpiresAt.IsZero() ||
-		!stored.LeaseExpiresAt.After(stored.DatabaseTime) ||
-		stored.LeaseExpiresAt.After(stored.DatabaseTime.Add(model.AttemptParticipationInitialLease)) {
-		return ParticipationRenewal{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Participation renewal outcome"))
+	if err = stored.ConsistentWith(command.AttemptID, command.ParticipationID, principal.UserID, command.Generation, command.Sequence); err != nil {
+		return ParticipationRenewal{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
 	result := ParticipationRenewal{

@@ -181,25 +181,8 @@ func projectAutomaticSubmissionResult(
 	proposed model.SubmissionID,
 	proposedCode model.SubmissionReceiptCode,
 ) (AutomaticSubmissionResult, error) {
-	if stored == nil ||
-		stored.Receipt.State != model.ExamAttemptSubmitted ||
-		stored.Receipt.AttemptID != target.AttemptID ||
-		stored.Receipt.ExamRevisionID != target.CurrentRevisionID ||
-		!stored.Receipt.SubmissionID.IsValid() ||
-		!stored.Receipt.ReceiptCode.IsValid() ||
-		stored.Receipt.WorkspaceCursor < 0 ||
-		!validWorkspaceSHA256(stored.Receipt.ManifestDigest) ||
-		stored.Receipt.SubmittedAt.IsZero() ||
-		stored.ExamID != target.ExamID ||
-		stored.SittingID != target.SittingID ||
-		stored.ClassID != target.ClassID ||
-		stored.CandidateUserID != target.CandidateUserID ||
-		stored.ParticipationID != target.ParticipationID ||
-		stored.Generation != target.Generation ||
-		stored.ConnectionID != target.ConnectionID ||
-		(!stored.Replayed && (stored.Receipt.SubmissionID != proposed || stored.Receipt.ReceiptCode != proposedCode)) ||
-		(stored.Replayed && stored.ConnectionClosed) {
-		return AutomaticSubmissionResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent automatic Submission result"))
+	if err := stored.ConsistentWith(target, proposed, proposedCode); err != nil {
+		return AutomaticSubmissionResult{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
 	return AutomaticSubmissionResult{SubmissionResult: SubmissionResult{

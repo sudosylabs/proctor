@@ -115,14 +115,8 @@ func (a examIntegrityReviewAuthorizationAdapter) resolve(ctx context.Context,
 		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(err)
 	}
 
-	if authorization == nil ||
-		authorization.SubmissionID != submissionID ||
-		!authorization.ExamID.IsValid() ||
-		!authorization.SittingID.IsValid() ||
-		!authorization.AttemptID.IsValid() ||
-		!authorization.CandidateUserID.IsValid() ||
-		!authorization.AcademicUnitID.IsValid() {
-		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("Review authorization projection is incomplete"))
+	if err = authorization.ConsistentWith(submissionID); err != nil {
+		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(err)
 	}
 
 	return authorization, nil

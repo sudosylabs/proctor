@@ -8,6 +8,7 @@
 package store
 
 import (
+	"errors"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -48,6 +49,21 @@ type SecurityPreflightPrepared struct {
 	FrozenAttemptConfiguration *model.AttemptConfiguration
 	Replayed                   bool
 }
+
+// ConsistentWith reports an error unless the prepared preflight carries a
+// valid challenge and a policy that is valid at the server time and resolved for
+// the given Sitting.
+func (p *SecurityPreflightPrepared) ConsistentWith(sittingID model.ExamSittingID) error {
+	if p == nil ||
+		p.Challenge.Validate() != nil ||
+		p.Resolved.Policy.Validate(p.ServerTime) != nil ||
+		p.Resolved.Policy.SittingID != sittingID {
+		return errors.New("preflight Store returned an invalid policy")
+	}
+
+	return nil
+}
+
 type SecurityPreflightReport struct {
 	Access       SecurityPreflightAccess
 	PreflightID  string
@@ -66,6 +82,29 @@ type SecurityPolicyRecovery struct {
 	ServerTime                 time.Time
 	Security                   model.AdmittedSecurity
 	FrozenAttemptConfiguration model.AttemptConfiguration
+}
+
+// ConsistentWith reports an error unless the recovery carries its server
+// time, valid security coverage, bounded and present source, coverage and reset
+// receipt lists, a valid admitted security posture bound to the given Attempt,
+// and a valid frozen Attempt configuration.
+func (r *SecurityPolicyRecovery) ConsistentWith(attemptID model.ExamAttemptID) error {
+	if r == nil ||
+		r.ServerTime.IsZero() ||
+		r.SecurityCoverage.Validate() != nil ||
+		r.CurrentSources == nil ||
+		r.CurrentCoverage == nil ||
+		r.SourceResetReceipts == nil ||
+		len(r.CurrentSources) > 11 ||
+		len(r.CurrentCoverage) > 64 ||
+		len(r.SourceResetReceipts) > 11 ||
+		r.Security.Validate() != nil ||
+		r.Security.Policy.Scope.AttemptID != attemptID ||
+		r.FrozenAttemptConfiguration.Validate() != nil {
+		return errors.New("inconsistent security policy recovery")
+	}
+
+	return nil
 }
 
 type ExamAttemptSecurityCoverageUpdate struct {

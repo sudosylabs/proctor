@@ -20,6 +20,8 @@ import (
 )
 
 func TestCommandOutcomeStore(t *testing.T, ss store.Store) {
+	t.Run("AuthorityFollowsActionInheritance", func(t *testing.T) { testCommandAuthorityFollowsActionInheritance(t, ss) })
+	t.Run("AuthorityAppliesTokenCeiling", func(t *testing.T) { testCommandAuthorityAppliesTokenCeiling(t, ss) })
 	ctx := context.Background()
 	institution := saveInstitution(t, ctx, ss)
 	user := saveUser(t, ctx, ss)

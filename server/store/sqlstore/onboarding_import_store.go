@@ -1533,8 +1533,7 @@ func requireAcademicAdministrationImportRowAuthority(
 			return store.NewErrConflict("onboarding_import_row", "role_changed", nil)
 		}
 
-		strictParent := teacherInvitationProtectedDelegationAction(delegated) && row.ScopeType != model.RoleScopeInstitution
-		if err = requirePrincipalActionAtScope(ctx, tx, principal, delegated, row.ScopeType, row.ScopeID, at, strictParent); err != nil {
+		if err = requirePrincipalActionAtScope(ctx, tx, principal, delegated, row.ScopeType, row.ScopeID, at, true); err != nil {
 			if !store.IsConflict(err) {
 				return err
 			}

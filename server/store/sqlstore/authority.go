@@ -43,28 +43,44 @@ import (
 //     its unarchived descendants (walked upwards from the resource as the
 //     "ancestors" of its unit) for an Action with InheritAcademicUnitScopes;
 //     a Class binding reaches exactly that Class for an Action that accepts a
-//     Class resource. access.roleBindingApplies applies those definition
-//     flags to every decision. Here only lockInviterActionGrantAtAcademicUnit
-//     binds them; every other statement counts each scope it names without
-//     reading the flags, and so assumes an Action that every one of those
-//     scopes can grant. Each lock*ActionGrant* helper states that assumption,
-//     its callers and the Actions they pass.
+//     Class resource. Every lock*ActionGrant* statement binds those flags
+//     from the Action's definition (grantScopesOf) and so counts, for the
+//     scope it sees, the bindings the application counts:
+//     access.roleBindingApplies for one
+//     resource (app/access/authorization.go) and
+//     access.Authorizer.accumulateBindingScope for a granted scope
+//     (app/access/access_scope.go).
 //   - A Personal Access Token may carry an Academic Unit ceiling
-//     (model.Principal.AcademicUnitID). The application counts a Role
-//     Binding for such a token only on resources within that unit
-//     (access.personalAccessTokenAllows for one resource, and
-//     accumulateBindingScope for a granted scope). The store does not
-//     recheck the ceiling: requireCurrentPrincipalCredential checks that the token is still
-//     current with the same scopes and the same ceiling,
-//     requirePrincipalActionAtScope that its scopes list the Action, and the
-//     helpers it reaches then count the User's Role Bindings wherever they
-//     are, inside the ceiling or not. For a token with a ceiling the recheck
-//     is weaker than the application's decision and is relied on only as a
-//     second line after it.
+//     (model.Principal.AcademicUnitID). requireCurrentPrincipalCredential
+//     checks that the token is still current with the same scopes and the
+//     same ceiling, requirePrincipalActionAtScope that its scopes list the
+//     Action, and the statements it reaches apply the ceiling (grantRule) as
+//     the application does for the scope they see. To act, the resource must
+//     lie within the ceiling, whichever binding grants
+//     (access.personalAccessTokenAllows, app/access/authorization.go). To
+//     hand an Action on, each binding is first clipped to the ceiling: an
+//     Institution binding counts as one at the ceiling, and a unit or Class
+//     binding only at or below it (accumulateBindingScope, as
+//     access.Authorizer.CanDelegateActionsAtScope reads it in
+//     app/access/access_scope.go). No ceiling reaches the Institution.
 //   - Ordinary Exam management needs the exam.manage Action, the Exam Manager
 //     relationship and a current membership of the Exam's Academic Unit; the
 //     system administrator Role's exam.manage.override at the Institution
 //     needs neither.
+//
+// The recheck does not see everything the application decided on, and leaves
+// the rest to that decision in front of it:
+//   - It sees a scope, not the resource, so it cannot refuse a token with a
+//     ceiling outright on a Sitting, Submission, User or Institution resource
+//     as access.personalAccessTokenAllows does; it refuses only the
+//     Institution scope.
+//   - It does not recheck an Action's PersonalAccessTokenForbidden or
+//     AcceptsResource; token creation already refuses forbidden scopes.
+//   - Invitation management names its actor rather than a principal, so
+//     neither the token nor its ceiling is rechecked there.
+//   - Its ancestry walk stops at an archived unit and still counts the
+//     bindings below it, where the application refuses a resource with any
+//     archived ancestor.
 //
 // The lock* helpers return the executor's error unchanged (sql.ErrNoRows when
 // no binding grants the Action, or the relationship does not hold) so each
@@ -76,10 +92,53 @@ import (
 
 // Role Bindings that grant one Action, locked for the transaction.
 //
-// These five statements are one query in five shapes. Each selects one Role
-// Binding of the User that is effective at the bound instant and whose Role
-// grants the bound Action, and shares that binding and its Role (FOR SHARE OF
-// rb, r) so neither can be ended, archived or edited before commit.
+// These three statements are one query in three shapes, one for each scope an
+// Action is checked at. Each selects one Role Binding of the User that is
+// effective at the bound instant, whose Role grants the bound Action and whose
+// scope both the Action's definition and the grantRule let count, and shares
+// that binding and its Role (FOR SHARE OF rb, r) so neither can be ended,
+// archived or edited before commit.
+
+// grantRule says how a lock*ActionGrant* statement counts Role Bindings
+// beyond the Action's definition: which application decision it repeats, and
+// under which credential ceiling. The zero value repeats
+// access.Authorizer.Authorize for a Session or a token without a ceiling.
+type grantRule struct {
+	// ceiling is the Personal Access Token's Academic Unit ceiling
+	// (model.Principal.AcademicUnitID), zero when there is none.
+	ceiling model.AcademicUnitID
+	// delegate repeats access.Authorizer.CanDelegateActionsAtScope: the User
+	// hands the Action on rather than exercising it, so under a ceiling each
+	// binding is clipped to the ceiling rather than the resource having to lie
+	// within it.
+	delegate bool
+	// strictParent, for a protected Action delegated below the Institution,
+	// refuses a binding at the target scope itself: the grant must come from
+	// above it, so nobody widens authority at their own level.
+	strictParent bool
+}
+
+// actionGrantScopes are the Role Binding scopes from which an Action's
+// definition lets a binding grant it.
+type actionGrantScopes struct {
+	institution, academicUnits, class bool
+}
+
+// grantScopesOf reads the scopes from the Action's definition
+// (model.ActionDefinition.SupportsRoleScope). An unknown or relationship-only
+// Action has none, so no binding grants it, as the application refuses it.
+func grantScopesOf(action model.Action) actionGrantScopes {
+	definition, known := model.DefinitionForAction(action)
+	if !known || definition.RelationshipOnly {
+		return actionGrantScopes{}
+	}
+
+	return actionGrantScopes{
+		institution:   definition.SupportsRoleScope(model.RoleScopeInstitution),
+		academicUnits: definition.SupportsRoleScope(model.RoleScopeAcademicUnit),
+		class:         definition.SupportsRoleScope(model.RoleScopeClass),
+	}
+}
 
 // effectiveRoleBindingSQL selects from the User's Role Bindings that are
 // effective at the bound instant, joined to their unarchived Roles.
@@ -99,24 +158,25 @@ const shareRoleBindingSQL = `
 	LIMIT 1
 	FOR SHARE OF rb, r`
 
-// academicUnitAncestorsCTE names "ancestors": the bound Academic Unit, when
-// unarchived, and each unarchived unit above it. Placeholder: Academic Unit.
+// academicUnitAncestorsCTE names "ancestors(id, parent_id, depth)": the bound
+// Academic Unit at depth 0, when unarchived, and each unarchived unit above
+// it, one deeper per step. Placeholder: Academic Unit.
 const academicUnitAncestorsCTE = `WITH RECURSIVE ancestors AS (
-		SELECT id, parent_id
+		SELECT id, parent_id, 0 depth
 		FROM academic_units
 		WHERE id = ?
 			AND archived_at IS NULL
 		UNION ALL
-		SELECT au.id, au.parent_id
+		SELECT au.id, au.parent_id, child.depth + 1
 		FROM academic_units au
 		JOIN ancestors child ON au.id = child.parent_id
 		WHERE au.archived_at IS NULL
-	)
-	`
+	)`
 
-// classAncestorsCTE names "ancestors": the Academic Unit that owns the bound
-// Class through its Programme Level and Programme, and each unit above it,
-// walking up while the unit below is unarchived. Placeholder: Class.
+// classAncestorsCTE names "ancestors(id, depth)": the Academic Unit that owns
+// the bound Class through its Programme Level and Programme at depth 0, and
+// each unit above it, walking up while the unit below is unarchived.
+// Placeholder: Class.
 const classAncestorsCTE = `WITH RECURSIVE class_unit AS (
 		SELECT p.academic_unit_id
 		FROM classes c
@@ -125,28 +185,59 @@ const classAncestorsCTE = `WITH RECURSIVE class_unit AS (
 		WHERE c.id = ?
 	),
 	ancestors AS (
-		SELECT academic_unit_id id
+		SELECT academic_unit_id id, 0 depth
 		FROM class_unit
 		UNION ALL
-		SELECT au.parent_id
+		SELECT au.parent_id, child.depth + 1
 		FROM academic_units au
 		JOIN ancestors child ON au.id = child.id
 		WHERE au.parent_id IS NOT NULL
 			AND au.archived_at IS NULL
+	)`
+
+// tokenCeilingCTE follows a CTE that names "ancestors" and names
+// "token_ceiling(unbounded, depth)", one row placing the Personal Access
+// Token's Academic Unit ceiling in the resource's ancestry: unbounded when
+// there is no ceiling; otherwise depth is the ceiling's depth among the
+// ancestors, NULL when the resource does not lie within the ceiling.
+// Placeholder: ceiling, NULL for none.
+const tokenCeilingCTE = `,
+	token_ceiling AS (
+		SELECT bound.id IS NULL unbounded, a.depth
+		FROM (SELECT CAST(? AS varchar) id) bound
+		LEFT JOIN ancestors a ON a.id = bound.id
 	)
 	`
 
+// withinTokenCeilingSQL is true when no ceiling bounds the decision, or the
+// ceiling lies in the resource's ancestry at the bound depth or above (0 is
+// the resource's own unit). An Institution or Class binding uses it: to act
+// the resource must lie within the ceiling, and to delegate the binding,
+// clipped to the ceiling, must still reach the resource. Placeholder: depth.
+const withinTokenCeilingSQL = `EXISTS (SELECT 1 FROM token_ceiling WHERE unbounded OR depth >= ?)`
+
+// grantingAncestorsSQL selects the "ancestors" at which an Academic Unit Role
+// Binding counts: all of them, less the resource's own unit (depth 0) under
+// strict parent; and under a ceiling, to act, all of them when the resource
+// lies within the ceiling, or, to delegate, those at or below the ceiling.
+// Placeholders: strict parent, delegate.
+const grantingAncestorsSQL = `SELECT a.id
+				FROM ancestors a
+				CROSS JOIN token_ceiling c
+				WHERE (NOT ? OR a.depth > 0)
+					AND (c.unbounded OR c.depth >= CASE WHEN ? THEN a.depth ELSE 0 END)`
+
 // lockActionGrantAtInstitution decides whether the User holds the Action on
 // the Institution at the instant at: a Role Binding scoped to exactly that
-// Institution whose Role grants the Action. It shares the granting Role
-// Binding and Role rows. It returns sql.ErrNoRows when nothing grants.
+// Institution whose Role grants the Action, for an Action with
+// InheritInstitutionScope. No Academic Unit ceiling reaches the Institution,
+// so under one nothing grants. It shares the granting Role Binding and Role
+// rows. It returns sql.ErrNoRows when nothing grants.
 //
 // It is the in-transaction counterpart of the Role Binding decision in
-// access.Authorizer.Authorize for an Institution resource. It does not read
-// the Action's InheritInstitutionScope; every Action a Role can carry has it.
-// Reached through requirePrincipalActionAtScope for a Personal Access Token,
-// it does not apply the token's Academic Unit ceiling, which the application
-// applies first (see the file comment).
+// access.Authorizer.Authorize for an Institution resource, and of
+// CanDelegateActionsAtScope at Institution scope, where no strict-parent rule
+// applies.
 func lockActionGrantAtInstitution(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -154,6 +245,7 @@ func lockActionGrantAtInstitution(
 	action model.Action,
 	institutionID string,
 	at time.Time,
+	rule grantRule,
 ) error {
 	var granted bool
 	return tx.Get(
@@ -162,30 +254,41 @@ func lockActionGrantAtInstitution(
 		effectiveRoleBindingSQL+`
 			AND rb.scope_type = 'institution'
 			AND rb.scope_id = ?
-			AND ? = ANY(r.permissions)`+shareRoleBindingSQL,
+			AND ? = ANY(r.permissions)
+			AND ?
+			AND ?`+shareRoleBindingSQL,
 		userID.String(),
 		at,
 		at,
 		institutionID,
 		string(action),
+		grantScopesOf(action).institution,
+		rule.ceiling.IsZero(),
 	)
 }
 
 // lockActionGrantAtAcademicUnit decides whether the User holds the Action on
-// the Academic Unit at the instant at: an Institution Role Binding, or a
-// binding at the unit or any unit above it, whose Role grants the Action. It
+// the Academic Unit at the instant at, counting only the binding scopes the
+// Action inherits from: an Institution Role Binding with
+// InheritInstitutionScope, and a binding at the unit or a unit above it with
+// InheritAcademicUnitScopes (strictly above with rule.strictParent), whose
+// Role grants the Action, under the rule's ceiling (see the file comment). It
 // reads the unit's ancestry and shares the granting Role Binding and Role
 // rows. It returns sql.ErrNoRows when nothing grants.
 //
-// It assumes an Action that inherits both Institution and Academic Unit scope
-// (InheritInstitutionScope and InheritAcademicUnitScopes) and reads neither
-// flag. For such an Action it is the in-transaction counterpart of the Role
-// Binding decision in access.Authorizer.Authorize for an Academic Unit
-// resource; for an Action without InheritAcademicUnitScopes it would count a
-// unit binding the application refuses. Its one caller,
-// requireInvitationManagementAuthority, passes invitation.manage, which
-// inherits both. A new caller whose Action may not inherit both must bind the
-// definition's flags instead, as lockInviterActionGrantAtAcademicUnit does.
+// It is the in-transaction counterpart of the Role Binding decision in
+// access.Authorizer.Authorize for a resource whose scope is the unit (an
+// Academic Unit, or an Exam it owns), and with rule.delegate of
+// CanDelegateActionsAtScope at the unit. For a Sitting or Submission the
+// unit's bindings are the same, but the application also refuses a token
+// with a ceiling outright, which this statement cannot see (see the file
+// comment).
+//
+// Its callers are requireUserActionAtScopeWithDelegation, reached through
+// requirePrincipalActionAtScope at Academic Unit scope (command batches,
+// onboarding imports, Exam records and exports), and
+// requireInvitationManagementAuthority, which passes invitation.manage for an
+// actor without a principal and so without a ceiling.
 func lockActionGrantAtAcademicUnit(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -193,125 +296,68 @@ func lockActionGrantAtAcademicUnit(
 	action model.Action,
 	academicUnitID string,
 	at time.Time,
+	rule grantRule,
 ) error {
-	var granted bool
-	return tx.Get(
-		ctx,
-		&granted,
-		academicUnitAncestorsCTE+effectiveRoleBindingSQL+`
-			AND ? = ANY(r.permissions)
-			AND (
-				rb.scope_type = 'institution'
-				OR (
-					rb.scope_type = 'academic_unit'
-					AND rb.scope_id IN (SELECT id FROM ancestors)
-				)
-			)`+shareRoleBindingSQL,
-		academicUnitID,
-		userID.String(),
-		at,
-		at,
-		string(action),
-	)
-}
+	scopes := grantScopesOf(action)
+	institutionDepth := 0
+	if rule.strictParent {
+		// Clipped to the ceiling, an Institution binding stands at the
+		// ceiling, which must then lie strictly above the unit.
+		institutionDepth = 1
+	}
 
-// lockDelegableActionGrantAtAcademicUnit is lockActionGrantAtAcademicUnit for
-// an Action the User hands on to someone else. With strictParent, a binding
-// at the unit itself does not count: the grant must come from the Institution
-// or a unit above, so nobody widens authority at their own level.
-//
-// Like lockActionGrantAtAcademicUnit it assumes an Action that inherits both
-// Institution and Academic Unit scope and reads neither flag. For such an
-// Action it is the in-transaction counterpart of
-// access.Authorizer.CanDelegateActionsAtScope, whose strict-parent rule covers
-// the protected delegation Actions; for an Action without
-// InheritAcademicUnitScopes it would count a unit binding the application
-// refuses.
-//
-// Its one caller is requireUserActionAtScopeWithDelegation, reached through
-// requirePrincipalActionAtScope at Academic Unit scope:
-//   - lockCommandAuthorization, for a batch's own Actions:
-//     onboarding_batch.manage with academic_unit.members.manage or
-//     role_binding.manage. All inherit both scopes. (user.manage and
-//     session.manage do not inherit Academic Unit scope; the application
-//     admits their batches at Institution scope only, which this helper never
-//     sees.)
-//   - lockExamRecordsAuthority: exam.records.complete, exam.records.hold,
-//     their overrides and retention_hold.release. All inherit both.
-//   - lockExamExportAuthority: exam.records.export or its override,
-//     submission.view and exam.sitting.view or their overrides, and
-//     exam.attempt.browser_activity.view. All inherit both.
-//   - requireOnboardingImportValueAuthorityAt (onboarding_batch.manage) and
-//     requireAcademicAdministrationImportRowAuthority for a row's own Action
-//     (academic_unit.members.manage, role_binding.manage). All inherit both.
-//   - lockCommandAuthorization (DelegatedActions) and
-//     requireAcademicAdministrationImportRowAuthority, for a Role Binding
-//     being created: every permission of the Role being bound. That set is
-//     open, so the assumption does NOT hold there: a Role may carry an Action
-//     without InheritAcademicUnitScopes (user.manage, session.manage,
-//     audit.view, role.manage and the other Institution-only Actions), and
-//     for it this recheck accepts an actor's unit binding that
-//     CanDelegateActionsAtScope does not count. The application decides
-//     first and refuses, so the recheck is weaker than that decision, not a
-//     way round it.
-//
-// For a Personal Access Token it does not apply the token's Academic Unit
-// ceiling either: it counts the User's binding at any unit above this one,
-// inside the ceiling or not. The application applies the ceiling first, and
-// this recheck is relied on only as a second line after it.
-//
-// A new caller whose Action may not inherit both scopes must bind the
-// definition's flags instead, as lockInviterActionGrantAtAcademicUnit does.
-func lockDelegableActionGrantAtAcademicUnit(
-	ctx context.Context,
-	tx *sqlxTxWrapper,
-	userID model.UserID,
-	action model.Action,
-	academicUnitID string,
-	at time.Time,
-	strictParent bool,
-) error {
 	var granted bool
 	return tx.Get(
 		ctx,
 		&granted,
-		academicUnitAncestorsCTE+effectiveRoleBindingSQL+`
+		academicUnitAncestorsCTE+tokenCeilingCTE+effectiveRoleBindingSQL+`
 			AND ? = ANY(r.permissions)
 			AND (
-				rb.scope_type = 'institution'
+				(
+					rb.scope_type = 'institution'
+					AND ?
+					AND `+withinTokenCeilingSQL+`
+				)
 				OR (
 					rb.scope_type = 'academic_unit'
-					AND rb.scope_id IN (SELECT id FROM ancestors)
-					AND (NOT ? OR rb.scope_id <> ?)
+					AND ?
+					AND rb.scope_id IN (`+grantingAncestorsSQL+`)
 				)
 			)`+shareRoleBindingSQL,
 		academicUnitID,
+		nullableID(rule.ceiling.String()),
 		userID.String(),
 		at,
 		at,
 		string(action),
-		strictParent,
-		academicUnitID,
+		scopes.institution,
+		institutionDepth,
+		scopes.academicUnits,
+		rule.strictParent,
+		rule.delegate,
 	)
 }
 
 // lockActionGrantAtClass decides whether the User holds the Action on the
-// Class at the instant at: an Institution Role Binding, a binding at exactly
-// that Class, or a binding at the Academic Unit that owns the Class or any
-// unit above it, whose Role grants the Action. It reads the Class lineage and
-// shares the granting Role Binding and Role rows. It returns sql.ErrNoRows
-// when nothing grants.
+// Class at the instant at, counting only the binding scopes the Action
+// inherits from: an Institution Role Binding with InheritInstitutionScope, a
+// binding at exactly that Class for an Action that accepts a Class resource
+// (not with rule.strictParent), and a binding at the Academic Unit that owns
+// the Class or any unit above it with InheritAcademicUnitScopes, whose Role
+// grants the Action, under the rule's ceiling (see the file comment). It
+// reads the Class lineage and shares the granting Role Binding and Role rows.
+// It returns sql.ErrNoRows when nothing grants.
 //
-// It assumes an Action that inherits both Institution and Academic Unit scope
-// and accepts a Class resource (model.ActionDefinition.SupportsRoleScope for
-// all three scopes) and reads none of that. For such an Action it is the
-// in-transaction counterpart of the Role Binding decision in
-// access.Authorizer.Authorize for a Class resource; for any other Action it
-// would count a binding the application refuses. Its one caller,
-// requireInvitationManagementAuthority, passes invitation.manage, which
-// satisfies all three. A new caller whose Action may not must first refuse
-// the scopes the definition does not support, or bind its flags as
-// lockInviterActionGrantAtAcademicUnit does.
+// It is the in-transaction counterpart of the Role Binding decision in
+// access.Authorizer.Authorize for a Class resource, and with rule.delegate of
+// CanDelegateActionsAtScope at the Class, whose strict-parent rule refuses
+// only the Class binding itself.
+//
+// Its callers are requireUserActionAtScopeWithDelegation, reached through
+// requirePrincipalActionAtScope at Class scope (command batches and
+// onboarding imports), and requireInvitationManagementAuthority, which passes
+// invitation.manage for an actor without a principal and so without a
+// ceiling.
 func lockActionGrantAtClass(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -319,102 +365,51 @@ func lockActionGrantAtClass(
 	action model.Action,
 	classID string,
 	at time.Time,
+	rule grantRule,
 ) error {
-	var granted bool
-	return tx.Get(
-		ctx,
-		&granted,
-		classAncestorsCTE+effectiveRoleBindingSQL+`
-			AND ? = ANY(r.permissions)
-			AND (
-				rb.scope_type = 'institution'
-				OR (rb.scope_type = 'class' AND rb.scope_id = ?)
-				OR (
-					rb.scope_type = 'academic_unit'
-					AND rb.scope_id IN (SELECT id FROM ancestors)
-				)
-			)`+shareRoleBindingSQL,
-		classID,
-		userID.String(),
-		at,
-		at,
-		string(action),
-		classID,
-	)
-}
+	scopes := grantScopesOf(action)
 
-// lockDelegableActionGrantAtClass is lockActionGrantAtClass for an Action the
-// User hands on to someone else. With strictParent, a binding at the Class
-// itself does not count: the grant must come from the Institution or an
-// Academic Unit above the Class.
-//
-// Like lockActionGrantAtClass it assumes an Action that inherits both
-// Institution and Academic Unit scope and accepts a Class resource, and reads
-// none of that. For such an Action it is the in-transaction counterpart of
-// access.Authorizer.CanDelegateActionsAtScope; for any other Action it would
-// count a binding the application refuses.
-//
-// Its one caller is requireUserActionAtScopeWithDelegation, reached through
-// requirePrincipalActionAtScope at Class scope:
-//   - lockCommandAuthorization, for a batch's own Actions:
-//     class.members.manage for a named Class member, and
-//     onboarding_batch.manage or academic.progression.manage with
-//     class.members.manage or role_binding.manage. All satisfy the
-//     assumption.
-//   - requireOnboardingImportValueAuthorityAt (onboarding_batch.manage; for
-//     student progression academic.progression.manage and
-//     class.members.manage) and
-//     requireAcademicAdministrationImportRowAuthority for a row's own Action
-//     (class.members.manage, role_binding.manage). All satisfy it.
-//   - lockCommandAuthorization (DelegatedActions) and
-//     requireAcademicAdministrationImportRowAuthority, for a Role Binding
-//     being created: every permission of the Role being bound. That set is
-//     open, so the assumption does NOT hold there: for an Action that does
-//     not accept a Class resource (exam.manage, user.manage) this recheck
-//     accepts an actor's binding at the Class, and for an Action without
-//     InheritAcademicUnitScopes a binding at a unit above it, neither of
-//     which CanDelegateActionsAtScope counts. The application decides first
-//     and refuses, so the recheck is weaker than that decision, not a way
-//     round it.
-//
-// For a Personal Access Token it does not apply the token's Academic Unit
-// ceiling either: it counts the User's binding at the Class or at any unit
-// above it, inside the ceiling or not. The application applies the ceiling
-// first, and this recheck is relied on only as a second line after it.
-//
-// A new caller whose Action may not satisfy the assumption must first refuse
-// the scopes the definition does not support, or bind its flags as
-// lockInviterActionGrantAtAcademicUnit does.
-func lockDelegableActionGrantAtClass(
-	ctx context.Context,
-	tx *sqlxTxWrapper,
-	userID model.UserID,
-	action model.Action,
-	classID string,
-	at time.Time,
-	strictParent bool,
-) error {
 	var granted bool
 	return tx.Get(
 		ctx,
 		&granted,
-		classAncestorsCTE+effectiveRoleBindingSQL+`
+		classAncestorsCTE+tokenCeilingCTE+effectiveRoleBindingSQL+`
 			AND ? = ANY(r.permissions)
 			AND (
-				rb.scope_type = 'institution'
-				OR (rb.scope_type = 'class' AND rb.scope_id = ? AND NOT ?)
+				(
+					rb.scope_type = 'institution'
+					AND ?
+					AND `+withinTokenCeilingSQL+`
+				)
+				OR (
+					rb.scope_type = 'class'
+					AND rb.scope_id = ?
+					AND ?
+					AND NOT ?
+					AND `+withinTokenCeilingSQL+`
+				)
 				OR (
 					rb.scope_type = 'academic_unit'
-					AND rb.scope_id IN (SELECT id FROM ancestors)
+					AND ?
+					AND rb.scope_id IN (`+grantingAncestorsSQL+`)
 				)
 			)`+shareRoleBindingSQL,
 		classID,
+		nullableID(rule.ceiling.String()),
 		userID.String(),
 		at,
 		at,
 		string(action),
+		scopes.institution,
+		0,
 		classID,
-		strictParent,
+		scopes.class,
+		rule.strictParent,
+		0,
+		scopes.academicUnits,
+		// The target is the Class, so no unit binding sits at it.
+		false,
+		rule.delegate,
 	)
 }
 
@@ -436,8 +431,9 @@ const shareOrderedRoleBindingSQL = `
 
 // lockInviterActionGrantAtInstitution decides whether the inviter holds the
 // Action on the Institution at the instant at, through a Role Binding scoped
-// to exactly that Institution. It shares the granting Role and Role Binding
-// rows. It returns sql.ErrNoRows when nothing grants.
+// to exactly that Institution, for an Action with InheritInstitutionScope. It
+// shares the granting Role and Role Binding rows. It returns sql.ErrNoRows
+// when nothing grants.
 //
 // It is the in-transaction counterpart of
 // access.Authorizer.CanDelegateActionsAtScope at Institution scope, where no
@@ -464,11 +460,13 @@ func lockInviterActionGrantAtInstitution(
 			AND (rb.end_at IS NULL OR rb.end_at > $2)
 			AND rb.scope_type = 'institution'
 			AND rb.scope_id = $3
-			AND $4 = ANY(r.permissions)`+shareOrderedRoleBindingSQL,
+			AND $4 = ANY(r.permissions)
+			AND $5`+shareOrderedRoleBindingSQL,
 		inviterID.String(),
 		model.TimeUTC(at),
 		institutionID,
 		string(action),
+		grantScopesOf(action).institution,
 	)
 }
 
@@ -536,19 +534,19 @@ func lockInviterActionGrantAtAcademicUnit(
 }
 
 // lockInviterActionGrantAtClass decides whether the inviter holds the Action
-// on the Class at the instant at: an Institution Role Binding, a binding at
-// exactly that Class, or a binding at the Academic Unit that owns the Class
-// or any unit above it. Unlike lockActionGrantAtClass, the Class, its
-// Programme Level and its Programme must be unarchived for a unit binding to
-// reach the Class. It shares the granting Role and Role Binding rows. It
+// on the Class at the instant at, counting only the binding scopes the Action
+// inherits from: an Institution Role Binding with InheritInstitutionScope, a
+// binding at exactly that Class for an Action that accepts a Class resource,
+// or a binding at the Academic Unit that owns the Class or any unit above it
+// with InheritAcademicUnitScopes. Unlike lockActionGrantAtClass, the Class,
+// its Programme Level and its Programme must be unarchived for a unit binding
+// to reach the Class. It shares the granting Role and Role Binding rows. It
 // returns sql.ErrNoRows when nothing grants.
 //
-// Like lockActionGrantAtClass it assumes an Action that inherits both
-// Institution and Academic Unit scope and accepts a Class resource, and for
-// such an Action is the in-transaction counterpart of the Role Binding
-// decision in access.Authorizer.Authorize for a Class resource. Its one
-// caller, requireStudentClassInvitationAuthority, passes invitation.create and
-// class.members.manage, which both satisfy that.
+// It is the in-transaction counterpart of the Role Binding decision in
+// access.Authorizer.Authorize for a Class resource. Its one caller,
+// requireStudentClassInvitationAuthority, passes invitation.create and
+// class.members.manage.
 func lockInviterActionGrantAtClass(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -557,6 +555,7 @@ func lockInviterActionGrantAtClass(
 	classID model.ClassID,
 	at time.Time,
 ) error {
+	scopes := grantScopesOf(action)
 	var granted struct {
 		RoleID        string `db:"role_id"`
 		RoleBindingID string `db:"role_binding_id"`
@@ -594,10 +593,11 @@ func lockInviterActionGrantAtClass(
 			AND (rb.end_at IS NULL OR rb.end_at > $3)
 			AND $4 = ANY(r.permissions)
 			AND (
-				rb.scope_type = 'institution'
-				OR (rb.scope_type = 'class' AND rb.scope_id = $1)
+				(rb.scope_type = 'institution' AND $5)
+				OR (rb.scope_type = 'class' AND rb.scope_id = $1 AND $6)
 				OR (
 					rb.scope_type = 'academic_unit'
+					AND $7
 					AND rb.scope_id IN (SELECT id FROM ancestors)
 				)
 			)`+shareOrderedRoleBindingSQL,
@@ -605,6 +605,9 @@ func lockInviterActionGrantAtClass(
 		inviterID.String(),
 		model.TimeUTC(at),
 		string(action),
+		scopes.institution,
+		scopes.class,
+		scopes.academicUnits,
 	)
 }
 

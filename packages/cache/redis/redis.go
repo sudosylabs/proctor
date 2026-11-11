@@ -168,7 +168,7 @@ func (s *Store[V]) Add(ctx context.Context, key string, delta int64, options cac
 	).AsInt64()
 	if err != nil {
 		if isInvalidCounterError(err) {
-			err = fmt.Errorf("%w: %v", cache.ErrInvalidValue, err)
+			err = fmt.Errorf("%w: %w", cache.ErrInvalidValue, err)
 		}
 		return 0, cache.Error("add", key, err)
 	}

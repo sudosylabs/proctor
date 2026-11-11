@@ -24,16 +24,16 @@ func (s *Service) nativeDeliveryFailure(ctx context.Context, deliveryAccess stor
 	if errors.Is(err, store.ErrDeliveryAdmissionFull) || !errors.As(mapped, &fault) || !SupportsDeliveryRecovery(fault.Code()) {
 		return mapped
 	}
-	target, readErr := s.attempts.ResolveNativeDeliveryTarget(ctx, deliveryAccess)
+	target, readErr := s.nativeDelivery.ResolveNativeDeliveryTarget(ctx, deliveryAccess)
 	if readErr != nil || target == nil || target.Security.Validate() != nil {
 		return mapped
 	}
 	part := target.Security.ParticipationID
-	budget, readErr := s.attempts.DeliveryBudget(ctx, store.DeliveryBudgetAccess{Access: deliveryAccess.Access, ParticipationID: part})
+	budget, readErr := s.deliveryBudget.DeliveryBudget(ctx, store.DeliveryBudgetAccess{Access: deliveryAccess.Access, ParticipationID: part})
 	if readErr != nil || budget == nil || budget.ParticipationID != part || budget.Generation != target.Security.Generation {
 		return mapped
 	}
-	status, readErr := s.attempts.NativeDeliveryStatus(ctx, deliveryAccess)
+	status, readErr := s.nativeDelivery.NativeDeliveryStatus(ctx, deliveryAccess)
 	if readErr != nil || status == nil || status.StreamID != deliveryAccess.StreamID {
 		return mapped
 	}
@@ -47,12 +47,12 @@ func (s *Service) browserDeliveryFailure(ctx context.Context, deliveryAccess sto
 		return mapped
 	}
 
-	status, readErr := s.attempts.BrowserSourceStatus(ctx, deliveryAccess)
+	status, readErr := s.browserDelivery.BrowserSourceStatus(ctx, deliveryAccess)
 	if readErr != nil || status == nil || status.SourceSessionID != deliveryAccess.SourceSessionID {
 		return mapped
 	}
 
-	budget, readErr := s.attempts.DeliveryBudget(
+	budget, readErr := s.deliveryBudget.DeliveryBudget(
 		ctx,
 		store.DeliveryBudgetAccess{Access: deliveryAccess.Access, ParticipationID: status.ParticipationID},
 	)

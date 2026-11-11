@@ -34,12 +34,12 @@ func TestBrowserSecurityWatermarks(t *testing.T, ss store.Store) {
 	require.True(t, result.SecurityInteractionAllowed)
 	require.Empty(t, result.DeliveryWatermarkRejections)
 	budget := func() *model.DeliveryBudgetSnapshot {
-		value, err := ss.ExamAttempt().DeliveryBudget(ctx, store.DeliveryBudgetAccess{Access: access, ParticipationID: connected.Participation.ID})
-		require.NoError(t, err)
+		value, budgetErr := ss.DeliveryBudget().DeliveryBudget(ctx, store.DeliveryBudgetAccess{Access: access, ParticipationID: connected.Participation.ID})
+		require.NoError(t, budgetErr)
 		return value
 	}
 	require.Equal(t, int64(3), budget().Browser.Participation.AllocatedPositions, "watermark allocation was not charged")
-	status, err := ss.ExamAttempt().BrowserSourceStatus(ctx, store.BrowserDeliveryAccess{Access: access, ParticipationID: connected.Participation.ID, SourceSessionID: first})
+	status, err := ss.BrowserDelivery().BrowserSourceStatus(ctx, store.BrowserDeliveryAccess{Access: access, ParticipationID: connected.Participation.ID, SourceSessionID: first})
 	require.NoError(t, err)
 	require.Equal(t, int64(0), status.HighestSeen, "allocation fabricated receipt")
 	require.Equal(t, int64(0), status.HighestContiguous, "allocation fabricated receipt")
@@ -90,7 +90,7 @@ func TestBrowserSecurityWatermarks(t *testing.T, ss store.Store) {
 	require.Equal(t, string(first), replay.DeliveryWatermarkRejections[0].SourceID, "compact receipt lost immutable source identity")
 	require.Equal(t, "closed_source", replay.DeliveryWatermarkRejections[0].Reason, "compact receipt lost immutable source identity")
 	// A newly observed allocation still cannot move the source's frozen boundary.
-	status, err = ss.ExamAttempt().BrowserSourceStatus(ctx, store.BrowserDeliveryAccess{Access: access, ParticipationID: connected.Participation.ID, SourceSessionID: first})
+	status, err = ss.BrowserDelivery().BrowserSourceStatus(ctx, store.BrowserDeliveryAccess{Access: access, ParticipationID: connected.Participation.ID, SourceSessionID: first})
 	require.NoError(t, err)
 	require.NotNil(t, status.Closure.KnownAtClose, "late watermark moved closed boundary")
 	require.Equal(t, int64(3), *status.Closure.KnownAtClose, "late watermark moved closed boundary")

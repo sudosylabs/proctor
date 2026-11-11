@@ -46,7 +46,7 @@ func (s *Service) beginBrowserDeliveryAudit(
 	deliveryAccess store.BrowserDeliveryAccess,
 	operation string,
 ) (model.AuditEventID, error) {
-	target, err := s.attempts.ResolveBrowserDeliveryTarget(ctx, deliveryAccess)
+	target, err := s.browserDelivery.ResolveBrowserDeliveryTarget(ctx, deliveryAccess)
 	if err != nil {
 		return "", deliveryStoreError(err)
 	}
@@ -102,7 +102,7 @@ func (s *Service) DeclareBrowserDeliveryGaps(
 		return nil, err
 	}
 
-	value, err := s.attempts.DeclareBrowserDeliveryGaps(
+	value, err := s.browserDelivery.DeclareBrowserDeliveryGaps(
 		ctx,
 		&store.BrowserDeliveryGapDeclaration{Access: deliveryAccess, Declaration: command.Declaration, AuditEventID: audit, AuditAt: s.now()},
 		commandIdempotency,
@@ -170,7 +170,7 @@ func (s *Service) SealBrowserDelivery(
 		return nil, err
 	}
 
-	value, err := s.attempts.SealBrowserDelivery(
+	value, err := s.browserDelivery.SealBrowserDelivery(
 		ctx,
 		&store.BrowserDeliveryFinalDeclaration{Access: deliveryAccess, Declaration: command.Declaration, AuditEventID: audit, AuditAt: s.now()},
 		commandIdempotency,
@@ -232,7 +232,7 @@ func (s *Service) UpdateBrowserDeliverySummary(
 		return nil, err
 	}
 
-	value, err := s.attempts.UpdateBrowserDeliverySummary(
+	value, err := s.browserDelivery.UpdateBrowserDeliverySummary(
 		ctx,
 		&store.BrowserDeliverySummaryUpdate{Access: deliveryAccess, Summary: command.Summary, AuditEventID: audit, AuditAt: s.now()},
 		idem,
@@ -276,7 +276,7 @@ func (s *Service) BrowserDeliveryReceipts(
 		return nil, apperror.Invalid("exam.attempt.invalid", "receipt_page")
 	}
 
-	value, err := s.attempts.BrowserDeliveryReceipts(ctx, deliveryAccess, first, limit)
+	value, err := s.browserDelivery.BrowserDeliveryReceipts(ctx, deliveryAccess, first, limit)
 	if err != nil {
 		return nil, s.browserDeliveryFailure(ctx, deliveryAccess, err)
 	}
@@ -338,7 +338,7 @@ func (s *Service) AppendHistoricalBrowserDelivery(
 	}
 
 	b := command.Batch
-	value, err := s.attempts.AppendHistoricalBrowserDelivery(
+	value, err := s.browserDelivery.AppendHistoricalBrowserDelivery(
 		ctx,
 		&store.BrowserActivityAppend{
 			Access:           deliveryAccess.Access,

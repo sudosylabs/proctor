@@ -38,8 +38,8 @@ func TestControlAllowanceSeparatesRenewalAndRecoveryAndSharesSessions(t *testing
 	require.NoError(t, err, "status load consumed renewal allowance")
 	release()
 	// A public status operation rejects before its Store can observe selectors.
-	p := &recoveryStoreFake{ExamAttemptStore: f.persistence}
-	f.service.attempts = p
+	p := &recoveryStoreFake{BrowserDeliveryStore: f.persistence, DeliveryBudgetStore: f.persistence}
+	f.service.browserDelivery, f.service.deliveryBudget = p, p
 	_, err = f.service.BrowserDeliveryReceipts(ctx, other, BrowserSourceQuery{Access: CandidateAccess{AttemptID: f.attemptID}, ParticipationID: model.NewAttemptParticipationID(), SourceSessionID: "00000000-0000-4000-8000-000000000001"}, 1, 32)
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault, "control overload reached persistence or lost its code")

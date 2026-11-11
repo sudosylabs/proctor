@@ -86,7 +86,7 @@ func (s *Service) EvaluateExamAttemptFocusLoss(
 		return FocusLossEvaluation{}, err
 	}
 
-	target, err := s.attempts.ResolveFocusLossTarget(ctx, selector)
+	target, err := s.focusLoss.ResolveFocusLossTarget(ctx, selector)
 	if err != nil {
 		if endedFocusLossCandidate(err) {
 			return s.evaluateEndedFocusLoss(ctx, invocation, command, selector)
@@ -115,7 +115,7 @@ func (s *Service) EvaluateExamAttemptFocusLoss(
 		return FocusLossEvaluation{}, err
 	}
 
-	stored, err := s.attempts.RecordFocusLoss(ctx, &store.ExamAttemptFocusLossSignal{
+	stored, err := s.focusLoss.RecordFocusLoss(ctx, &store.ExamAttemptFocusLossSignal{
 		Access:               selector,
 		SignalID:             s.newFocusLossSignalID(),
 		EvidenceID:           s.newEvidenceID(),
@@ -170,7 +170,7 @@ func (s *Service) evaluateEndedFocusLoss(
 	command FocusLossCommand,
 	selector store.ExamAttemptFocusLossAccess,
 ) (FocusLossEvaluation, error) {
-	target, err := s.attempts.ResolveEndedFocusLossTarget(ctx, selector)
+	target, err := s.focusLoss.ResolveEndedFocusLossTarget(ctx, selector)
 	if err != nil {
 		return FocusLossEvaluation{}, storeError(storeErrors, err)
 	}
@@ -198,7 +198,7 @@ func (s *Service) evaluateEndedFocusLoss(
 
 	discrepancyID := s.newDiscrepancyID()
 	signalID := s.newFocusLossSignalID()
-	stored, err := s.attempts.RecordEndedFocusLoss(ctx, &store.ExamAttemptFocusLossDiscrepancy{
+	stored, err := s.focusLoss.RecordEndedFocusLoss(ctx, &store.ExamAttemptFocusLossDiscrepancy{
 		Access:               selector,
 		DiscrepancyID:        discrepancyID,
 		SignalID:             signalID,

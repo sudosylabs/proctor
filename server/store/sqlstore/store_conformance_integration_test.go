@@ -329,7 +329,7 @@ func TestExamAttemptStore(t *testing.T) {
 	peerPersistence := openTestStore(t)
 	resetTestStore(t, persistence)
 	probe := examAttemptSQLProbe(t, persistence)
-	probe.ConcurrentExamAttempt = peerPersistence.ExamAttempt()
+	probe.ConcurrentExamFocusLoss = peerPersistence.ExamFocusLoss()
 	probe.LeadDatabaseClock = func(t *testing.T, ctx context.Context, id model.SessionID) {
 		t.Helper()
 		leadSessionDatabaseClock(t, ctx, persistence, id)

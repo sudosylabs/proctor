@@ -19,6 +19,19 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLNativeDeliveryStore is the PostgreSQL store.NativeDeliveryStore.
+//
+// Every operation rechecks current User and registered-key ownership before
+// replay. Live owners additionally require exact Connection continuity.
+// Gap and final declaration revisions, position and metadata charges, semantic
+// receipts, successful audit and the command outcome commit atomically. Status
+// expires closed owners using their original immutable upload deadline.
+type SQLNativeDeliveryStore struct{ *SQLStore }
+
+func newSQLNativeDeliveryStore(sqlStore *SQLStore) store.NativeDeliveryStore {
+	return &SQLNativeDeliveryStore{SQLStore: sqlStore}
+}
+
 type nativeDeliveryOwner struct {
 	ParticipationID     string         `db:"participation_id"`
 	Binding             []byte         `db:"binding_canonical"`
@@ -108,7 +121,7 @@ func closeNativeDelivery(
 	return closeParticipationBrowserSources(ctx, tx, participationID, reason, at)
 }
 
-func (s *SQLExamAttemptStore) lockNativeDelivery(
+func (s *SQLNativeDeliveryStore) lockNativeDelivery(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	access store.NativeDeliveryAccess,
@@ -117,7 +130,7 @@ func (s *SQLExamAttemptStore) lockNativeDelivery(
 }
 
 // Read projections must not settle evidence or complete lifecycle transitions.
-func (s *SQLExamAttemptStore) nativeDeliveryOwner(
+func (s *SQLNativeDeliveryStore) nativeDeliveryOwner(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	access store.NativeDeliveryAccess,
@@ -318,7 +331,7 @@ func lockNativeDeliveryAccess(ctx context.Context, tx *sqlxTxWrapper, access sto
 
 // closeEndedNativeDelivery closes an open owner whose Participation ended or
 // whose lease expired, or otherwise locks the Candidate guard.
-func (s *SQLExamAttemptStore) closeEndedNativeDelivery(
+func (s *SQLNativeDeliveryStore) closeEndedNativeDelivery(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	owner *nativeDeliveryOwner,
@@ -363,7 +376,7 @@ func (s *SQLExamAttemptStore) closeEndedNativeDelivery(
 		return err
 	}
 
-	_, err := s.lockCandidateGuard(ctx, tx, access.Access)
+	_, err := lockCandidateGuard(ctx, tx, access.Access)
 	return err
 }
 
@@ -537,7 +550,7 @@ func projectNativeDeliveryStatus(
 
 // NativeDeliveryStatus returns the current native delivery status of the stream
 // named by access, after verifying ownership.
-func (s *SQLExamAttemptStore) NativeDeliveryStatus(
+func (s *SQLNativeDeliveryStore) NativeDeliveryStatus(
 	ctx context.Context,
 	access store.NativeDeliveryAccess,
 ) (*model.NativeSecurityStreamStatus, error) {
@@ -555,7 +568,7 @@ func (s *SQLExamAttemptStore) NativeDeliveryStatus(
 
 // NativeDeliveryReceipt returns the stored receipt of native batch sequence, or
 // model.ErrDeliveryExpired once the upload deadline has passed.
-func (s *SQLExamAttemptStore) NativeDeliveryReceipt(
+func (s *SQLNativeDeliveryStore) NativeDeliveryReceipt(
 	ctx context.Context,
 	access store.NativeDeliveryAccess,
 	sequence int64,
@@ -658,7 +671,7 @@ func (nativeDeclarationOutcome) outcomeDocument() {}
 // DeclareNativeDeliveryGaps records the stream's declared delivery gaps. A
 // refused declaration returns *store.NativeDeliveryRefusal and exhausted
 // delivery capacity returns its capacity error.
-func (s *SQLExamAttemptStore) DeclareNativeDeliveryGaps(
+func (s *SQLNativeDeliveryStore) DeclareNativeDeliveryGaps(
 	ctx context.Context,
 	input *store.NativeDeliveryGapDeclaration,
 	command *store.CommandIdempotency,
@@ -690,7 +703,7 @@ func (s *SQLExamAttemptStore) DeclareNativeDeliveryGaps(
 // SealNativeDelivery records the stream's final delivery declaration and
 // returns the resulting status, with the same refusal and capacity errors as
 // DeclareNativeDeliveryGaps.
-func (s *SQLExamAttemptStore) SealNativeDelivery(
+func (s *SQLNativeDeliveryStore) SealNativeDelivery(
 	ctx context.Context,
 	input *store.NativeDeliveryFinalDeclaration,
 	command *store.CommandIdempotency,
@@ -719,7 +732,7 @@ func (s *SQLExamAttemptStore) SealNativeDelivery(
 	return result.Status, nil
 }
 
-func (s *SQLExamAttemptStore) declareNativeDelivery(
+func (s *SQLNativeDeliveryStore) declareNativeDelivery(
 	ctx context.Context,
 	access store.NativeDeliveryAccess,
 	auditID model.AuditEventID,
@@ -790,7 +803,7 @@ func decodeNativeDeclarationOutcome(raw []byte) (*nativeDeclarationOutcome, erro
 
 // hydrateNativeDeclaration checks a replayed declaration outcome against the
 // locked owner and attaches the stream's current status.
-func (s *SQLExamAttemptStore) hydrateNativeDeclaration(
+func (s *SQLNativeDeliveryStore) hydrateNativeDeclaration(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	request nativeDeclarationRequest,
@@ -819,7 +832,7 @@ func (s *SQLExamAttemptStore) hydrateNativeDeclaration(
 
 // executeNativeDeclaration performs a first native declaration inside the
 // idempotent mutation's transaction.
-func (s *SQLExamAttemptStore) executeNativeDeclaration(
+func (s *SQLNativeDeliveryStore) executeNativeDeclaration(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	request nativeDeclarationRequest,
@@ -1116,7 +1129,7 @@ func completeNativeDeliveryAudit(
 // under a NativeDeliverySummaryOperation command. An equal resubmission is a
 // replay; a changed summary within five seconds of the previous one is a
 // conflict unless it is the final one after closure.
-func (s *SQLExamAttemptStore) UpdateNativeDeliverySummary(
+func (s *SQLNativeDeliveryStore) UpdateNativeDeliverySummary(
 	ctx context.Context,
 	input *store.NativeDeliverySummaryUpdate,
 	command *store.CommandIdempotency,
@@ -1230,7 +1243,7 @@ func (s *SQLExamAttemptStore) UpdateNativeDeliverySummary(
 
 // ResolveNativeDeliveryTarget returns the Sitting, Class, and admitted security
 // binding that own the native delivery stream, after verifying ownership.
-func (s *SQLExamAttemptStore) ResolveNativeDeliveryTarget(
+func (s *SQLNativeDeliveryStore) ResolveNativeDeliveryTarget(
 	ctx context.Context,
 	access store.NativeDeliveryAccess,
 ) (*store.NativeDeliveryTarget, error) {

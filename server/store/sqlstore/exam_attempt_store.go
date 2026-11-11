@@ -21,8 +21,8 @@ import (
 )
 
 // SQLExamAttemptStore is the PostgreSQL store.ExamAttemptStore, which owns
-// Attempt admission, Participation leases, delivery, Focus Loss, and suspension
-// transitions.
+// Attempt admission, Participation leases, suspension and re-allow, correction
+// acknowledgement, and the manager and candidate projections of the Attempt.
 type SQLExamAttemptStore struct{ *SQLStore }
 
 func newSQLExamAttemptStore(sqlStore *SQLStore) store.ExamAttemptStore {
@@ -416,7 +416,7 @@ func (s *SQLExamAttemptStore) candidateGuard(ctx context.Context, access store.C
 	return guard, nil
 }
 
-func (s *SQLExamAttemptStore) lockCandidateGuard(
+func lockCandidateGuard(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	access store.CandidateAttemptAccess,
@@ -530,7 +530,7 @@ func (s *SQLExamAttemptStore) GetCandidatePresentation(
 		ctx context.Context,
 		tx *sqlxTxWrapper,
 	) (*store.CandidateExamPresentation, error) {
-		guard, err := s.lockCandidateGuard(ctx, tx, access)
+		guard, err := lockCandidateGuard(ctx, tx, access)
 		if err != nil {
 			return nil, err
 		}
@@ -698,7 +698,7 @@ func (s *SQLExamAttemptStore) listCandidateWorkspace(
 		ctx context.Context,
 		tx *sqlxTxWrapper,
 	) (*store.CandidateAttemptWorkspacePage, error) {
-		if _, err := s.lockCandidateGuard(ctx, tx, options.Access); err != nil {
+		if _, err := lockCandidateGuard(ctx, tx, options.Access); err != nil {
 			return nil, err
 		}
 		return listCandidateWorkspaceSnapshot(ctx, tx, options, continuation)

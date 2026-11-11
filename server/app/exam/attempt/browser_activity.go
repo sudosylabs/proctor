@@ -75,7 +75,7 @@ func (s *Service) StartExamAttemptBrowserActivity(
 		return model.BrowserSourceStatus{}, apperror.Invalid("exam.attempt.invalid", "browser_activity_source")
 	}
 
-	target, err := s.attempts.ResolveLiveDeliveryTarget(ctx, candidateAccess)
+	target, err := s.deliveryBudget.ResolveLiveDeliveryTarget(ctx, candidateAccess)
 	if err != nil {
 		return model.BrowserSourceStatus{}, storeError(storeErrors, err)
 	}
@@ -98,7 +98,7 @@ func (s *Service) StartExamAttemptBrowserActivity(
 
 	input.AuditEventID = auditID
 	input.AuditAt = s.now()
-	status, err := s.attempts.StartBrowserActivity(ctx, input)
+	status, err := s.browserDelivery.StartBrowserActivity(ctx, input)
 	if err != nil {
 		var refusal *store.BrowserSourceRefusal
 		if errors.As(err, &refusal) {
@@ -142,7 +142,7 @@ func (s *Service) AppendExamAttemptBrowserActivity(
 	}
 
 	events := append([]model.BrowserActivityEvent(nil), command.Events...)
-	target, err := s.attempts.ResolveLiveDeliveryTarget(ctx, candidateAccess)
+	target, err := s.deliveryBudget.ResolveLiveDeliveryTarget(ctx, candidateAccess)
 	if err != nil {
 		return model.BrowserActivityAcknowledgement{}, storeError(storeErrors, err)
 	}
@@ -163,7 +163,7 @@ func (s *Service) AppendExamAttemptBrowserActivity(
 		return model.BrowserActivityAcknowledgement{}, err
 	}
 
-	acknowledgement, err := s.attempts.AppendBrowserActivity(ctx, &store.BrowserActivityAppend{
+	acknowledgement, err := s.browserDelivery.AppendBrowserActivity(ctx, &store.BrowserActivityAppend{
 		Access:           candidateAccess,
 		AuditEventID:     auditID,
 		AuditAt:          s.now(),
@@ -334,7 +334,7 @@ func (s *Service) ListExamAttemptBrowserActivity(
 		return BrowserActivityPage{}, s.failAudit(ctx, auditID, apperror.New("exam.attempt.not_found"))
 	}
 
-	items, err := s.attempts.ListBrowserActivity(ctx, store.BrowserActivityListOptions{
+	items, err := s.browserDelivery.ListBrowserActivity(ctx, store.BrowserActivityListOptions{
 		ExamID:          query.ExamID,
 		SittingID:       query.SittingID,
 		AttemptID:       query.AttemptID,
@@ -408,7 +408,7 @@ func (s *Service) BrowserSourceStatus(
 		return nil, err
 	}
 
-	value, err := s.attempts.BrowserSourceStatus(ctx, deliveryAccess)
+	value, err := s.browserDelivery.BrowserSourceStatus(ctx, deliveryAccess)
 	if err != nil {
 		return nil, storeError(storeErrors, err)
 	}
@@ -443,7 +443,7 @@ func (s *Service) BrowserSourceList(
 		return nil, err
 	}
 
-	values, err := s.attempts.BrowserSourceList(ctx, deliveryAccess)
+	values, err := s.browserDelivery.BrowserSourceList(ctx, deliveryAccess)
 	if err != nil {
 		return nil, storeError(storeErrors, err)
 	}

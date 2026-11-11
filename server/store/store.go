@@ -25,6 +25,11 @@ type Catalog interface {
 	ExamRevision() ExamRevisionStore
 	ExamSitting() ExamSittingStore
 	ExamAttempt() ExamAttemptStore
+	ExamFocusLoss() ExamFocusLossStore
+	SecurityPreflight() SecurityPreflightStore
+	NativeDelivery() NativeDeliveryStore
+	BrowserDelivery() BrowserDeliveryStore
+	DeliveryBudget() DeliveryBudgetStore
 	ExamAttemptWorkspace() ExamAttemptWorkspaceStore
 	ExamSubmission() ExamSubmissionStore
 	ExamIntegrityReview() ExamIntegrityReviewStore

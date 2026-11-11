@@ -21,7 +21,7 @@ import (
 // ordered by receipt time, source, and sequence, continuing after the optional
 // keyset cursor. Limit must be 1..201, and the cursor fields must be set
 // together.
-func (s *SQLExamAttemptStore) ListBrowserActivity(
+func (s *SQLBrowserDeliveryStore) ListBrowserActivity(
 	ctx context.Context,
 	options store.BrowserActivityListOptions,
 ) ([]store.BrowserActivityRecord, error) {

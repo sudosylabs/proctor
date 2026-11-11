@@ -28,7 +28,7 @@ type ExamAttemptSQLProbe struct {
 	UnresolvedFocusLossMissing   func(*testing.T, context.Context, model.ExamAttemptID, int64) int64
 	AgeFocusLossPending          func(*testing.T, context.Context, model.ExamAttemptID, int64, int64, time.Duration)
 	FocusLossPersistence         func(*testing.T, context.Context, model.ExamAttemptID, int64) FocusLossPersistenceProbe
-	ConcurrentExamAttempt        store.ExamAttemptStore
+	ConcurrentExamFocusLoss      store.ExamFocusLossStore
 	AssertFocusLossSchema        func(*testing.T, context.Context)
 	// LeadDatabaseClock moves one Session's node-clock instants after the
 	// database clock, as a creating node whose clock leads PostgreSQL does.
@@ -222,7 +222,7 @@ func TestExamAttemptStore(t *testing.T, ss store.Store, probes ...ExamAttemptSQL
 	_, err = ss.ExamAttempt().GetCandidatePresentation(ctx, access)
 	require.NoError(t, err)
 	pausedFocusInput.AuditEventID, pausedFocusInput.AuditAt = saveExamAttemptAudit(t, ctx, ss, fixture).ID, model.NowUTC()
-	pausedFocus, err := ss.ExamAttempt().RecordFocusLoss(ctx, pausedFocusInput)
+	pausedFocus, err := ss.ExamFocusLoss().RecordFocusLoss(ctx, pausedFocusInput)
 	require.NoError(t, err)
 	require.Equal(t, pausedFocusInput.Sequence, pausedFocus.AcceptedSequence)
 	require.True(t, pausedFocus.Qualified)

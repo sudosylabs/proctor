@@ -169,7 +169,8 @@ func newFixture(t *testing.T) *fixture {
 	f.configuration, configurationErr = (model.AttemptConfigurationCandidate{ManifestFingerprint: f.desktopBuild.AttemptConfigurationManifestFingerprint, RegistryFingerprint: f.desktopBuild.DesktopSettingsRegistryFingerprint, UserSettingsRevision: model.NewUserSettingsRevision(), DesktopBuild: f.desktopBuild.DesktopBuildID, DesktopTarget: f.desktopBuild.TargetTuple(), Presentation: model.AttemptConfigurationPresentation{ColorTheme: "dark", ZoomPercent: 100, EditorFontSizePX: 14, EditorLineHeightPX: 22, ScreenReaderMode: "auto", AnnouncementMode: "auto", CursorStyle: "line", CursorBlinking: "blink"}, ApprovedCommands: []string{}, ApprovedKeybindings: []string{}}).Freeze(model.NewID())
 	require.NoError(t, configurationErr)
 	service, err := New(Dependencies{
-		Persistence: f.persistence, Workspace: f.workspace, Submissions: f.submissions, Sittings: &sittingFake{f: f}, Managers: &managerFake{f: f},
+		Persistence: f.persistence, FocusLoss: f.persistence, SecurityPreflight: f.persistence, NativeDelivery: f.persistence,
+		BrowserDelivery: f.persistence, DeliveryBudget: f.persistence, Workspace: f.workspace, Submissions: f.submissions, Sittings: &sittingFake{f: f}, Managers: &managerFake{f: f},
 		Auditor: f.audit, SystemAuditor: f.systemAudit, Publisher: f.publisher, Content: f.content, Mail: f.mail,
 		DesktopBuilds: &desktopBuildResolverFake{f: f},
 		Now:           func() time.Time { return f.at }, NewAttemptID: model.NewExamAttemptID, NewWorkspaceID: model.NewExamAttemptWorkspaceID,

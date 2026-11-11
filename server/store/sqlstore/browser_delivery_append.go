@@ -132,7 +132,7 @@ func decodeBrowserAppendOutcome(raw []byte) (browserAppendResult, error) {
 	return value, nil
 }
 
-func (s *SQLExamAttemptStore) debitBrowserAppend(ctx context.Context, access store.BrowserDeliveryAccess) error {
+func (s *SQLBrowserDeliveryStore) debitBrowserAppend(ctx context.Context, access store.BrowserDeliveryAccess) error {
 	allowed, err := runSQLTransaction(ctx, s.GetMaster().Begin, "browser append allowance", func(
 		ctx context.Context,
 		tx *sqlxTxWrapper,
@@ -190,7 +190,7 @@ func (s *SQLExamAttemptStore) debitBrowserAppend(ctx context.Context, access sto
 
 // AppendBrowserActivity appends live Browser Activity events for the caller's
 // open connection and returns their acknowledgement.
-func (s *SQLExamAttemptStore) AppendBrowserActivity(
+func (s *SQLBrowserDeliveryStore) AppendBrowserActivity(
 	ctx context.Context,
 	input *store.BrowserActivityAppend,
 ) (*model.BrowserActivityAcknowledgement, error) {
@@ -201,7 +201,7 @@ func (s *SQLExamAttemptStore) AppendBrowserActivity(
 // live connection ended. It requires a BrowserDeliveryAppendOperation command
 // owned by the Candidate and an access without connection or continuity
 // credential.
-func (s *SQLExamAttemptStore) AppendHistoricalBrowserDelivery(
+func (s *SQLBrowserDeliveryStore) AppendHistoricalBrowserDelivery(
 	ctx context.Context,
 	input *store.BrowserActivityAppend,
 	command *store.CommandIdempotency,
@@ -217,7 +217,7 @@ func (s *SQLExamAttemptStore) AppendHistoricalBrowserDelivery(
 
 	return s.appendBrowserActivity(ctx, input, command)
 }
-func (s *SQLExamAttemptStore) appendBrowserActivity(
+func (s *SQLBrowserDeliveryStore) appendBrowserActivity(
 	ctx context.Context,
 	input *store.BrowserActivityAppend,
 	command *store.CommandIdempotency,
@@ -274,7 +274,7 @@ func (s *SQLExamAttemptStore) appendBrowserActivity(
 
 // runHistoricalBrowserAppend runs a historical append as an idempotent
 // mutation whose replay is re-acknowledged from the retained event ledger.
-func (s *SQLExamAttemptStore) runHistoricalBrowserAppend(
+func (s *SQLBrowserDeliveryStore) runHistoricalBrowserAppend(
 	ctx context.Context,
 	input *store.BrowserActivityAppend,
 	access store.BrowserDeliveryAccess,
@@ -306,7 +306,7 @@ func (s *SQLExamAttemptStore) runHistoricalBrowserAppend(
 
 // hydrateBrowserAppendReplay checks a replayed historical append against the
 // retained event ledger and recomputes its acknowledgement without auditing.
-func (s *SQLExamAttemptStore) hydrateBrowserAppendReplay(
+func (s *SQLBrowserDeliveryStore) hydrateBrowserAppendReplay(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	input *store.BrowserActivityAppend,
@@ -375,7 +375,7 @@ type browserAppendAdmission struct {
 
 // performBrowserAppend admits, retains and acknowledges one append inside the
 // caller's transaction, completing its audit when audit is true.
-func (s *SQLExamAttemptStore) performBrowserAppend(
+func (s *SQLBrowserDeliveryStore) performBrowserAppend(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	input *store.BrowserActivityAppend,
@@ -436,7 +436,7 @@ func (s *SQLExamAttemptStore) performBrowserAppend(
 
 // fenceBrowserAppend locks the delivery and checks the source's policy,
 // generation, closure and upload expiry fence.
-func (s *SQLExamAttemptStore) fenceBrowserAppend(
+func (s *SQLBrowserDeliveryStore) fenceBrowserAppend(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	input *store.BrowserActivityAppend,

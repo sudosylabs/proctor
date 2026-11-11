@@ -24,7 +24,7 @@ func (s *Service) ScanExpiredDeliveries(ctx context.Context, system invocation.S
 		return ExpiryScanResult{}, apperror.Invalid("exam.attempt.invalid", "delivery_expiry_limit")
 	}
 
-	due, err := s.attempts.ListExpiredDeliveries(ctx, limit)
+	due, err := s.deliveryBudget.ListExpiredDeliveries(ctx, limit)
 	if err != nil {
 		return ExpiryScanResult{}, storeError(storeErrors, err)
 	}
@@ -52,7 +52,7 @@ func (s *Service) ScanExpiredDeliveries(ctx context.Context, system invocation.S
 			return result, err
 		}
 
-		changed, err := s.attempts.ExpireDelivery(ctx, &store.DeliveryExpiry{Due: d, AuditEventID: audit, AuditAt: s.now()})
+		changed, err := s.deliveryBudget.ExpireDelivery(ctx, &store.DeliveryExpiry{Due: d, AuditEventID: audit, AuditAt: s.now()})
 		if err != nil {
 			if auditErr := s.systemAuditor.Fail(ctx, audit, "exam.attempt.unavailable"); auditErr != nil {
 				return result, errors.Join(storeError(storeErrors, err), auditErr)

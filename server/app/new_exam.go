@@ -209,10 +209,15 @@ func newAttempts(
 		Revisions: deps.Store.ExamRevision(),
 	}
 	return attempt.New(attempt.Dependencies{
-		Persistence: deps.Store.ExamAttempt(),
-		Workspace:   deps.Store.ExamAttemptWorkspace(),
-		Submissions: deps.Store.ExamSubmission(),
-		Sittings:    deps.Store.ExamSitting(),
+		Persistence:       deps.Store.ExamAttempt(),
+		FocusLoss:         deps.Store.ExamFocusLoss(),
+		SecurityPreflight: deps.Store.SecurityPreflight(),
+		NativeDelivery:    deps.Store.NativeDelivery(),
+		BrowserDelivery:   deps.Store.BrowserDelivery(),
+		DeliveryBudget:    deps.Store.DeliveryBudget(),
+		Workspace:         deps.Store.ExamAttemptWorkspace(),
+		Submissions:       deps.Store.ExamSubmission(),
+		Sittings:          deps.Store.ExamSitting(),
 		Managers: attempt.SittingManagerAuthorizer{
 			Sittings:    sittings,
 			Submissions: deps.Store.ExamSubmission(),

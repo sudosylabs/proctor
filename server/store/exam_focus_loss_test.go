@@ -43,10 +43,10 @@ func TestFocusLossSignalContractIsHashOnlySequencedAndEffectSafe(t *testing.T) {
 		require.False(t, exists, "Focus Loss input lets the client supply %s", forbidden)
 	}
 	assertFocusLossResultSafe(t, reflect.TypeOf(result))
-	methods := reflect.TypeOf((*ExamAttemptStore)(nil)).Elem()
+	methods := reflect.TypeOf((*ExamFocusLossStore)(nil)).Elem()
 	for _, name := range []string{"ResolveFocusLossTarget", "RecordFocusLoss"} {
 		_, exists := methods.MethodByName(name)
-		require.True(t, exists, "ExamAttemptStore is missing %s", name)
+		require.True(t, exists, "ExamFocusLossStore is missing %s", name)
 	}
 }
 

@@ -8,6 +8,7 @@
 package store
 
 import (
+	"context"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -71,3 +72,30 @@ const NativeDeliveryAppendOperation = "exam.native_delivery.append"
 type NativeDeliveryRefusal struct{ Reason string }
 
 func (e *NativeDeliveryRefusal) Error() string { return "native delivery detail refused" }
+
+// NativeDeliveryStore persists the native security stream a Candidate's
+// Desktop delivers for one Participation: appended batches and their receipts,
+// declared gaps, the final declaration, and the summary of what was not
+// retained.
+type NativeDeliveryStore interface {
+	// ResolveNativeDeliveryTarget returns the Sitting, Class and admitted
+	// security binding that own the stream.
+	ResolveNativeDeliveryTarget(context.Context, NativeDeliveryAccess) (*NativeDeliveryTarget, error)
+	// NativeDeliveryStatus returns the stream's current delivery status.
+	NativeDeliveryStatus(context.Context, NativeDeliveryAccess) (*model.NativeSecurityStreamStatus, error)
+	// NativeDeliveryReceipt returns the stored receipt of the batch with the
+	// given sequence.
+	NativeDeliveryReceipt(context.Context, NativeDeliveryAccess, int64) (*model.NativeBatchReceipt, error)
+	// AppendNativeDelivery appends one batch to the stream and returns its
+	// acknowledgement. A replayed command returns the original receipt.
+	AppendNativeDelivery(context.Context, *NativeDeliveryAppend, *CommandIdempotency) (*model.NativeSecurityAcknowledgement, error)
+	// DeclareNativeDeliveryGaps records the gaps the stream declares in what
+	// it delivered. A refused declaration is a *NativeDeliveryRefusal.
+	DeclareNativeDeliveryGaps(context.Context, *NativeDeliveryGapDeclaration, *CommandIdempotency) (*model.DeliveryGapReceipt, error)
+	// SealNativeDelivery records the stream's final declaration and returns the
+	// resulting status.
+	SealNativeDelivery(context.Context, *NativeDeliveryFinalDeclaration, *CommandIdempotency) (*model.NativeSecurityStreamStatus, error)
+	// UpdateNativeDeliverySummary records the stream's summary of delivery it
+	// did not retain and returns the resulting status.
+	UpdateNativeDeliverySummary(context.Context, *NativeDeliverySummaryUpdate, *CommandIdempotency) (*model.NativeSecurityStreamStatus, error)
+}

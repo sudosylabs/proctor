@@ -64,10 +64,17 @@ const endedFocusLossAccessSelect = `SELECT a.exam_id, a.exam_sitting_id AS sitti
 	WHERE a.id = ?
 		AND a.candidate_user_id = ?`
 
-// ResolveEndedFocusLossTarget implements store.ExamAttemptStore: it resolves
+// ResolveEndedFocusLossTarget implements store.ExamFocusLossStore: it resolves
 // the audit scope for a Focus Loss report against an ended, sealed Submission
 // without mutating anything.
-func (s *SQLExamAttemptStore) ResolveEndedFocusLossTarget(ctx context.Context,
+//
+// It accepts only the exact candidate, Session, credential, Participation
+// generation, and Connection retained by a sealed Submission whose Attempt is
+// submitted and whose Participation and Connection are terminal. Voluntary
+// sealing records submitted; automatic sealing records sitting_closed for live
+// records and preserves any earlier terminal cause. It exists only to begin the
+// discrepancy audit.
+func (s *SQLExamFocusLossStore) ResolveEndedFocusLossTarget(ctx context.Context,
 	access store.ExamAttemptFocusLossAccess,
 ) (*store.ExamAttemptFocusLossDiscrepancyTarget, error) {
 	if err := validateFocusLossAccess(access); err != nil {
@@ -103,11 +110,17 @@ func validateEndedFocusLoss(input *store.ExamAttemptFocusLossDiscrepancy) error 
 	return nil
 }
 
-// RecordEndedFocusLoss implements store.ExamAttemptStore: it retains a late
+// RecordEndedFocusLoss implements store.ExamFocusLossStore: it retains a late
 // Focus Loss report as a bounded Integrity Discrepancy on the sealed
 // Submission. A matching same-sequence report is a duplicate; a differing one
 // is a focus_loss_sequence conflict.
-func (s *SQLExamAttemptStore) RecordEndedFocusLoss(ctx context.Context,
+//
+// It retains at most the bounded discrepancy maximum. It serializes on the
+// sealed Submission, accepts only a sequence above the submitted high-water and
+// prior discrepancy high-water, records explicit gaps, completes audit
+// atomically, and never mutates Submission integrity or a draft, finalized or
+// released Review. Exact same-sequence semantics replay.
+func (s *SQLExamFocusLossStore) RecordEndedFocusLoss(ctx context.Context,
 	input *store.ExamAttemptFocusLossDiscrepancy,
 ) (*store.ExamAttemptFocusLossDiscrepancyResult, error) {
 	if err := validateEndedFocusLoss(input); err != nil {

@@ -142,7 +142,7 @@ func (s *Service) PrepareExamSecurityPreflight(
 		return nil, err
 	}
 
-	result, err := s.attempts.PrepareSecurityPreflight(
+	result, err := s.securityPreflight.PrepareSecurityPreflight(
 		ctx,
 		&store.SecurityPreflightPrepare{
 			Access:                           preflightAccess,
@@ -194,7 +194,7 @@ func (s *Service) ReportExamSecurityPreflight(
 		return nil, err
 	}
 
-	sittingID, err := s.attempts.ResolveSecurityPreflightSitting(ctx, command.PreflightID, principal.UserID, principal.SessionID)
+	sittingID, err := s.securityPreflight.ResolveSecurityPreflightSitting(ctx, command.PreflightID, principal.UserID, principal.SessionID)
 	if err != nil {
 		return nil, storeError(securityPreflightStoreErrors, err)
 	}
@@ -213,7 +213,7 @@ func (s *Service) ReportExamSecurityPreflight(
 		return nil, err
 	}
 
-	result, err := s.attempts.ReportSecurityPreflight(
+	result, err := s.securityPreflight.ReportSecurityPreflight(
 		ctx,
 		&store.SecurityPreflightReport{
 			Access:       preflightAccess,
@@ -273,7 +273,7 @@ func (s *Service) RecoverExamSecurityPolicy(
 		return nil, err
 	}
 
-	result, err := s.attempts.RecoverSecurityPolicy(ctx, preflightAccess, attemptID)
+	result, err := s.securityPreflight.RecoverSecurityPolicy(ctx, preflightAccess, attemptID)
 	if err != nil {
 		return nil, storeError(securityPreflightStoreErrors, err)
 	}

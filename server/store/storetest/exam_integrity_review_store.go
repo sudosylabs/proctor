@@ -66,9 +66,9 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 		SignalID:      model.NewFocusLossSignalID(), Sequence: 3, DurationMilliseconds: 900,
 		Source:       model.FocusLossSourceFullscreenExited,
 		AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
-	lateTarget, err := ss.ExamAttempt().ResolveEndedFocusLossTarget(ctx, focusAccess)
+	lateTarget, err := ss.ExamFocusLoss().ResolveEndedFocusLossTarget(ctx, focusAccess)
 	require.NoError(t, err)
-	late, err := ss.ExamAttempt().RecordEndedFocusLoss(ctx, lateInput)
+	late, err := ss.ExamFocusLoss().RecordEndedFocusLoss(ctx, lateInput)
 	require.NoError(t, err)
 	require.NotNil(t, lateTarget, "RecordEndedFocusLoss() target")
 	require.NotNil(t, late, "RecordEndedFocusLoss() target")
@@ -83,7 +83,7 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 	replayLateInput := *lateInput
 	replayLateInput.DiscrepancyID, replayLateInput.SignalID = model.NewIntegrityDiscrepancyID(), model.NewFocusLossSignalID()
 	replayLateInput.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
-	replayedLate, err := ss.ExamAttempt().RecordEndedFocusLoss(ctx, &replayLateInput)
+	replayedLate, err := ss.ExamFocusLoss().RecordEndedFocusLoss(ctx, &replayLateInput)
 	require.NoError(t, err)
 	require.NotNil(t, replayedLate)
 	require.True(t, replayedLate.Duplicate)
@@ -92,7 +92,7 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 	changedLateInput := replayLateInput
 	changedLateInput.DurationMilliseconds++
 	changedLateInput.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
-	_, changedErr := ss.ExamAttempt().RecordEndedFocusLoss(ctx, &changedLateInput)
+	_, changedErr := ss.ExamFocusLoss().RecordEndedFocusLoss(ctx, &changedLateInput)
 	require.Error(t, changedErr, "RecordEndedFocusLoss(same sequence with changed semantics) succeeded")
 
 	authorization, err := reviews.Resolve(ctx, sealed.Receipt.SubmissionID)
@@ -346,7 +346,7 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 	postReleaseInput.DiscrepancyID, postReleaseInput.SignalID = model.NewIntegrityDiscrepancyID(), model.NewFocusLossSignalID()
 	postReleaseInput.Sequence = 4
 	postReleaseInput.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
-	postRelease, err := ss.ExamAttempt().RecordEndedFocusLoss(ctx, &postReleaseInput)
+	postRelease, err := ss.ExamFocusLoss().RecordEndedFocusLoss(ctx, &postReleaseInput)
 	require.NoError(t, err)
 	require.NotNil(t, postRelease)
 	require.False(t, postRelease.Duplicate)
@@ -479,14 +479,14 @@ func testEndedFocusLossAfterAutomaticSeal(t *testing.T, ctx context.Context, ss 
 		require.NotNil(t, sealed)
 		require.True(t, sealed.Receipt.SubmissionID.IsValid())
 		require.False(t, sealed.ConnectionClosed)
-		target, err := ss.ExamAttempt().ResolveEndedFocusLossTarget(ctx, access)
+		target, err := ss.ExamFocusLoss().ResolveEndedFocusLossTarget(ctx, access)
 		require.NoError(t, err)
 		input := &store.ExamAttemptFocusLossDiscrepancy{Access: access,
 			DiscrepancyID: model.NewIntegrityDiscrepancyID(),
 			SignalID:      model.NewFocusLossSignalID(), Sequence: 2, DurationMilliseconds: 700,
 			Source:       model.FocusLossSourceFullscreenExited,
 			AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
-		recorded, err := ss.ExamAttempt().RecordEndedFocusLoss(ctx, input)
+		recorded, err := ss.ExamFocusLoss().RecordEndedFocusLoss(ctx, input)
 		require.NoError(t, err)
 		require.NotNil(t, target, "automatic suspended late discrepancy target")
 		require.Equal(t, sealed.Receipt.SubmissionID, target.SubmissionID, "automatic suspended late discrepancy target")
@@ -507,9 +507,9 @@ func testEndedFocusLossAfterAutomaticSeal(t *testing.T, ctx context.Context, ss 
 		require.NoError(t, err)
 		connected, currentAccess := connectFocusLossFixture(t, ctx, ss, fixture, "review-automatic-selector-reconnect")
 		sealed := automaticSeal(t, "review-automatic-selector", fixture, connected.Attempt.ID)
-		_, err = ss.ExamAttempt().ResolveEndedFocusLossTarget(ctx, oldAccess)
+		_, err = ss.ExamFocusLoss().ResolveEndedFocusLossTarget(ctx, oldAccess)
 		require.Error(t, err, "ResolveEndedFocusLossTarget(previous generation) succeeded")
-		current, err := ss.ExamAttempt().ResolveEndedFocusLossTarget(ctx, currentAccess)
+		current, err := ss.ExamFocusLoss().ResolveEndedFocusLossTarget(ctx, currentAccess)
 		require.NoError(t, err)
 		require.NotNil(t, current)
 		require.Equal(t, sealed.Receipt.SubmissionID, current.SubmissionID)

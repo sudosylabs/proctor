@@ -22,7 +22,7 @@ import (
 // The rate debit commits separately from the append transaction: replay and a
 // refused request consume the same shared User/Attempt allowance. The Attempt
 // has exactly one candidate; Session and transport changes cannot refill it.
-func (s *SQLExamAttemptStore) debitNativeAppend(ctx context.Context, access store.NativeDeliveryAccess) error {
+func (s *SQLNativeDeliveryStore) debitNativeAppend(ctx context.Context, access store.NativeDeliveryAccess) error {
 	allowed, err := runSQLTransaction(ctx, s.GetMaster().Begin, "native append allowance", func(
 		ctx context.Context,
 		tx *sqlxTxWrapper,
@@ -100,7 +100,7 @@ func (nativeAppendOutcomeDocument) outcomeDocument() {}
 // Candidate, debiting the delivery budget first. A replay returns the original
 // receipt with current progress, and an expired upload deadline yields
 // model.ErrDeliveryExpired.
-func (s *SQLExamAttemptStore) AppendNativeDelivery(
+func (s *SQLNativeDeliveryStore) AppendNativeDelivery(
 	ctx context.Context,
 	input *store.NativeDeliveryAppend,
 	command *store.CommandIdempotency,
@@ -179,7 +179,7 @@ func decodeNativeAppendOutcome(raw []byte) (*nativeAppendOutcome, error) {
 
 // hydrateNativeAppend refreshes an append outcome with its retained receipt
 // and the stream's current delivery progress.
-func (s *SQLExamAttemptStore) hydrateNativeAppend(
+func (s *SQLNativeDeliveryStore) hydrateNativeAppend(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	input *store.NativeDeliveryAppend,
@@ -212,7 +212,7 @@ func (s *SQLExamAttemptStore) hydrateNativeAppend(
 }
 
 // finishNativeAppend completes the append audit and hydrates the outcome.
-func (s *SQLExamAttemptStore) finishNativeAppend(
+func (s *SQLNativeDeliveryStore) finishNativeAppend(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	input *store.NativeDeliveryAppend,
@@ -228,7 +228,7 @@ func (s *SQLExamAttemptStore) finishNativeAppend(
 
 // executeNativeAppend performs a first native append inside the idempotent
 // mutation's transaction.
-func (s *SQLExamAttemptStore) executeNativeAppend(
+func (s *SQLNativeDeliveryStore) executeNativeAppend(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	input *store.NativeDeliveryAppend,

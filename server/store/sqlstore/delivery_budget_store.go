@@ -16,6 +16,18 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLDeliveryBudgetStore is the PostgreSQL store.DeliveryBudgetStore. Stopping
+// detail delivery settles the native stream under the native delivery lock,
+// which it takes through native.
+type SQLDeliveryBudgetStore struct {
+	*SQLStore
+	native *SQLNativeDeliveryStore
+}
+
+func newSQLDeliveryBudgetStore(sqlStore *SQLStore) store.DeliveryBudgetStore {
+	return &SQLDeliveryBudgetStore{SQLStore: sqlStore, native: &SQLNativeDeliveryStore{SQLStore: sqlStore}}
+}
+
 // stopDeliveryDetailsOutcome is the persisted outcome of a stop-delivery-details
 // command: the model-owned result document as answered.
 type stopDeliveryDetailsOutcome struct {
@@ -240,9 +252,28 @@ func deliveryBudgetSnapshot(
 	return value, nil
 }
 
+// ResolveLiveDeliveryTarget returns the Sitting and Class that own the
+// Candidate's live Attempt, after locking its Candidate guard.
+func (s *SQLDeliveryBudgetStore) ResolveLiveDeliveryTarget(
+	ctx context.Context,
+	access store.CandidateAttemptAccess,
+) (*store.DeliveryOwnerTarget, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "resolve Browser source owner", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.DeliveryOwnerTarget, error) {
+		guard, err := lockCandidateGuard(ctx, tx, access)
+		if err != nil {
+			return nil, err
+		}
+
+		return &store.DeliveryOwnerTarget{SittingID: model.ExamSittingID(guard.SittingID), ClassID: model.ClassID(guard.ClassID)}, nil
+	})
+}
+
 // DeliveryBudget returns the current delivery budget snapshot of the
 // Participation named by access.
-func (s *SQLExamAttemptStore) DeliveryBudget(
+func (s *SQLDeliveryBudgetStore) DeliveryBudget(
 	ctx context.Context,
 	access store.DeliveryBudgetAccess,
 ) (*model.DeliveryBudgetSnapshot, error) {
@@ -256,7 +287,7 @@ func (s *SQLExamAttemptStore) DeliveryBudget(
 		return deliveryBudgetSnapshot(ctx, tx, access)
 	})
 }
-func (s *SQLExamAttemptStore) lockDeliveryStop(
+func (s *SQLDeliveryBudgetStore) lockDeliveryStop(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	access store.CandidateAttemptAccess,
@@ -285,7 +316,7 @@ func (s *SQLExamAttemptStore) lockDeliveryStop(
 	if err := lockDeliveryParticipationOwner(ctx, tx, value); err != nil {
 		return value, err
 	}
-	if _, err := s.lockCandidateGuard(ctx, tx, access); err != nil {
+	if _, err := lockCandidateGuard(ctx, tx, access); err != nil {
 		return value, err
 	}
 
@@ -296,7 +327,7 @@ func (s *SQLExamAttemptStore) lockDeliveryStop(
 // Participation so no further detail is accepted, and returns the settled
 // delivery status and budget. It requires a DeliveryStopDetailsOperation
 // command owned by the Candidate; replays return the retained result.
-func (s *SQLExamAttemptStore) StopDeliveryDetails(
+func (s *SQLDeliveryBudgetStore) StopDeliveryDetails(
 	ctx context.Context,
 	input *store.DeliveryDetailsStop,
 	command *store.CommandIdempotency,
@@ -351,7 +382,7 @@ func (s *SQLExamAttemptStore) StopDeliveryDetails(
 
 // executeDeliveryStop latches the requested delivery family and projects and
 // audits the resulting stop inside the mutation's transaction.
-func (s *SQLExamAttemptStore) executeDeliveryStop(
+func (s *SQLDeliveryBudgetStore) executeDeliveryStop(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	input *store.DeliveryDetailsStop,
@@ -384,7 +415,7 @@ func (s *SQLExamAttemptStore) executeDeliveryStop(
 
 // projectDeliveryStop builds the stop result from the current delivery status
 // and budget, settling Browser sources only on first execution.
-func (s *SQLExamAttemptStore) projectDeliveryStop(
+func (s *SQLDeliveryBudgetStore) projectDeliveryStop(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	input *store.DeliveryDetailsStop,
@@ -410,7 +441,7 @@ func (s *SQLExamAttemptStore) projectDeliveryStop(
 			return nil, err
 		}
 
-		owner, ownerErr := s.lockNativeDelivery(ctx, tx, store.NativeDeliveryAccess{
+		owner, ownerErr := s.native.lockNativeDelivery(ctx, tx, store.NativeDeliveryAccess{
 			Access:          input.Access,
 			StreamID:        stream,
 			ParticipationID: access.ParticipationID,

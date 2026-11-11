@@ -60,7 +60,7 @@ func TestBrowserIntegrityStore(t *testing.T, ss store.Store) {
 		_, err := appendBrowserActivityFixture(t, ctx, ss, &store.BrowserActivityAppend{Access: access, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, SourceSessionID: source, Events: events[from:end]})
 		require.NoError(t, err)
 	}
-	budget, err := ss.ExamAttempt().DeliveryBudget(ctx, store.DeliveryBudgetAccess{Access: access, ParticipationID: connected.Participation.ID})
+	budget, err := ss.DeliveryBudget().DeliveryBudget(ctx, store.DeliveryBudgetAccess{Access: access, ParticipationID: connected.Participation.ID})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), budget.BrowserFlagGroups)
 	require.Equal(t, int64(100), budget.BrowserEvidenceRecords)
@@ -72,7 +72,7 @@ func TestBrowserIntegrityStore(t *testing.T, ss store.Store) {
 	access.ConnectionID = ""
 	access.ContinuityCredentialHash = ""
 	historical := store.BrowserDeliveryAccess{Access: access, ParticipationID: connected.Participation.ID, SourceSessionID: source}
-	_, err = ss.ExamAttempt().SealBrowserDelivery(ctx, &store.BrowserDeliveryFinalDeclaration{Access: historical, Declaration: model.FinalDeliveryDeclaration{DeclarationID: "browser-evidence-final", FinalSequence: 103}, AuditEventID: browserDeliveryAuditFixture(t, ctx, ss, historical), AuditAt: model.NowUTC()}, examCommand(f.candidate.ID, store.BrowserDeliveryFinalOperation, "browser-evidence-final", "browser-evidence-final"))
+	_, err = ss.BrowserDelivery().SealBrowserDelivery(ctx, &store.BrowserDeliveryFinalDeclaration{Access: historical, Declaration: model.FinalDeliveryDeclaration{DeclarationID: "browser-evidence-final", FinalSequence: 103}, AuditEventID: browserDeliveryAuditFixture(t, ctx, ss, historical), AuditAt: model.NowUTC()}, examCommand(f.candidate.ID, store.BrowserDeliveryFinalOperation, "browser-evidence-final", "browser-evidence-final"))
 	require.NoError(t, err)
 	reviews := ss.ExamIntegrityReview()
 	sub := sealed.Receipt.SubmissionID
@@ -130,8 +130,8 @@ func TestBrowserIntegrityStore(t *testing.T, ss store.Store) {
 		}
 		go func() {
 			<-start
-			_, err := ss.ExamAttempt().AppendHistoricalBrowserDelivery(ctx, &copy, key)
-			outcomes <- err
+			_, appendErr := ss.BrowserDelivery().AppendHistoricalBrowserDelivery(ctx, &copy, key)
+			outcomes <- appendErr
 		}()
 	}
 	close(start)
@@ -148,7 +148,7 @@ func TestBrowserIntegrityStore(t *testing.T, ss store.Store) {
 	require.True(t, store.IsNotFound(err), "stale released result remained visible")
 	revision := current.Review.Revision
 	batch.AuditEventID = browserDeliveryAuditFixture(t, ctx, ss, historical)
-	_, err = ss.ExamAttempt().AppendHistoricalBrowserDelivery(ctx, batch, command)
+	_, err = ss.BrowserDelivery().AppendHistoricalBrowserDelivery(ctx, batch, command)
 	require.NoError(t, err)
 	current, err = reviews.Get(ctx, sub)
 	require.NoError(t, err)
@@ -170,7 +170,7 @@ func TestBrowserIntegrityStore(t *testing.T, ss store.Store) {
 	refinalized, err := reviews.Finalize(ctx, finalize, examCommand(f.manager.ID, store.ExamIntegrityReviewFinalizeOperation, "browser-refinalize", "browser-refinalize"))
 	require.NoError(t, err)
 	release(refinalized.Review.Revision, "browser-second-release")
-	finalBudget, err := ss.ExamAttempt().DeliveryBudget(ctx, store.DeliveryBudgetAccess{Access: access, ParticipationID: connected.Participation.ID})
+	finalBudget, err := ss.DeliveryBudget().DeliveryBudget(ctx, store.DeliveryBudgetAccess{Access: access, ParticipationID: connected.Participation.ID})
 	require.NoError(t, err)
 	require.Equal(t, budget.BrowserEvidenceBytes, finalBudget.BrowserEvidenceBytes, "overflow or replay copied more details")
 	require.Equal(t, int64(100), finalBudget.BrowserEvidenceRecords, "overflow or replay copied more details")
@@ -256,7 +256,7 @@ func TestBrowserIntegrityGroupCapacity(t *testing.T, ss store.Store) {
 			}
 		}
 	}
-	budget, err := ss.ExamAttempt().DeliveryBudget(ctx, store.DeliveryBudgetAccess{Access: access, ParticipationID: connected.Participation.ID})
+	budget, err := ss.DeliveryBudget().DeliveryBudget(ctx, store.DeliveryBudgetAccess{Access: access, ParticipationID: connected.Participation.ID})
 	require.NoError(t, err)
 	require.Equal(t, int64(256), budget.BrowserFlagGroups)
 	require.Equal(t, int64(256), budget.BrowserEvidenceRecords)
@@ -314,7 +314,7 @@ func TestBrowserIntegrityCopyBoundaries(t *testing.T, ss store.Store, seed func(
 			batch := &store.BrowserActivityAppend{Access: access, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, SourceSessionID: source, Events: []model.BrowserActivityEvent{nav, blocked, last}}
 			_, err = appendBrowserActivityFixture(t, ctx, ss, batch)
 			require.NoError(t, err)
-			budget, err := ss.ExamAttempt().DeliveryBudget(ctx, store.DeliveryBudgetAccess{Access: access, ParticipationID: connected.Participation.ID})
+			budget, err := ss.DeliveryBudget().DeliveryBudget(ctx, store.DeliveryBudgetAccess{Access: access, ParticipationID: connected.Participation.ID})
 			require.NoError(t, err)
 			copies := int64(1)
 			if mode == "already full" {

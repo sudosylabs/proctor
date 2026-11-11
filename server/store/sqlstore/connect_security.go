@@ -434,7 +434,7 @@ func validateSecurityResume(
 // Configuration, and native control state for the Candidate's active
 // Participation, so a desktop can recover after losing a Connect response. It
 // needs no open Connection, but an expired Participation lease is a conflict.
-func (s *SQLExamAttemptStore) RecoverSecurityPolicy(
+func (s *SQLSecurityPreflightStore) RecoverSecurityPolicy(
 	ctx context.Context,
 	access store.SecurityPreflightAccess,
 	attemptID model.ExamAttemptID,
@@ -510,7 +510,7 @@ func (s *SQLExamAttemptStore) RecoverSecurityPolicy(
 		}
 
 		access.SittingID = sittingID
-		guard, err := s.lockExamAttemptEligibility(ctx, tx, preflightConnectSelector(access), true)
+		guard, err := lockExamAttemptEligibility(ctx, tx, preflightConnectSelector(access), true)
 		if err != nil {
 			return nil, err
 		}

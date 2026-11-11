@@ -20,6 +20,14 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLSecurityPreflightStore is the PostgreSQL store.SecurityPreflightStore. It
+// serializes on the same Candidate eligibility locks as Attempt admission.
+type SQLSecurityPreflightStore struct{ *SQLStore }
+
+func newSQLSecurityPreflightStore(sqlStore *SQLStore) store.SecurityPreflightStore {
+	return &SQLSecurityPreflightStore{SQLStore: sqlStore}
+}
+
 func validSecurityPreflightAccess(access store.SecurityPreflightAccess) bool {
 	return access.SittingID.IsValid() &&
 		access.CandidateUserID.IsValid() &&
@@ -45,7 +53,7 @@ func preflightConnectSelector(access store.SecurityPreflightAccess) *store.ExamA
 func preflightConflict(reason string) error {
 	return store.NewErrConflict("security_preflight", reason, nil)
 }
-func (s *SQLExamAttemptStore) lockPreflightEligibility(
+func (s *SQLSecurityPreflightStore) lockPreflightEligibility(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	access store.SecurityPreflightAccess,
@@ -53,7 +61,7 @@ func (s *SQLExamAttemptStore) lockPreflightEligibility(
 	if err := requireDesktopCompatibilityPolicyRevision(ctx, tx, access.DesktopCompatibilityPolicyRevision); err != nil {
 		return examAttemptAdmissionGuard{}, err
 	}
-	return s.lockExamAttemptEligibility(ctx, tx, preflightConnectSelector(access), false)
+	return lockExamAttemptEligibility(ctx, tx, preflightConnectSelector(access), false)
 }
 
 // PrepareSecurityPreflight issues a security preflight challenge for the
@@ -61,7 +69,7 @@ func (s *SQLExamAttemptStore) lockPreflightEligibility(
 // A replay returns the original challenge with a refreshed Browser Activity
 // disclosure, and a policy change since preparation is a policy_changed
 // conflict.
-func (s *SQLExamAttemptStore) PrepareSecurityPreflight(
+func (s *SQLSecurityPreflightStore) PrepareSecurityPreflight(
 	ctx context.Context,
 	input *store.SecurityPreflightPrepare,
 	command *store.CommandIdempotency,
@@ -140,7 +148,7 @@ func (s *SQLExamAttemptStore) PrepareSecurityPreflight(
 	return result.Value, nil
 }
 
-func (s *SQLExamAttemptStore) prepareSecurityPreflight(
+func (s *SQLSecurityPreflightStore) prepareSecurityPreflight(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	input *store.SecurityPreflightPrepare,
@@ -597,7 +605,7 @@ func lockCurrentSecurityPreflight(
 // ReportSecurityPreflight evaluates the desktop's report against the prepared
 // preflight challenge at database time and records the result under command. A
 // policy change since preparation is a policy_changed conflict.
-func (s *SQLExamAttemptStore) ReportSecurityPreflight(
+func (s *SQLSecurityPreflightStore) ReportSecurityPreflight(
 	ctx context.Context,
 	input *store.SecurityPreflightReport,
 	command *store.CommandIdempotency,
@@ -743,7 +751,7 @@ func completeSecurityPreflightAudit(
 
 // ResolveSecurityPreflightSitting reveals only a stable resource selector owned
 // by this User and Session. Reporting rechecks current eligibility and fences.
-func (s *SQLExamAttemptStore) ResolveSecurityPreflightSitting(
+func (s *SQLSecurityPreflightStore) ResolveSecurityPreflightSitting(
 	ctx context.Context,
 	id string,
 	userID model.UserID,

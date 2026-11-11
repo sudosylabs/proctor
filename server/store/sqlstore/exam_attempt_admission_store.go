@@ -46,7 +46,7 @@ type examAttemptStarterRow struct {
 // locks the candidate User, then current membership, before the Exam/Sitting
 // lineage. allowPaused is reserved for exact replay recovery; every fresh
 // Connection still requires Open.
-func (s *SQLExamAttemptStore) lockExamAttemptEligibility(
+func lockExamAttemptEligibility(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	input *store.ExamAttemptConnect,

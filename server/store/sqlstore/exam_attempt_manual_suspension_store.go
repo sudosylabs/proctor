@@ -38,6 +38,20 @@ func (examAttemptManualSuspensionOutcome) outcomeDocument() {}
 // SuspendAttempt implements store.ExamAttemptStore: it applies an Exam
 // Manager's kick to the Attempt under an ExamAttemptSuspendOperation command,
 // and returns the retained result with Replayed set on exact retries.
+//
+// It locks the Attempt and Sitting, rechecks current Exam management authority
+// unless an authorized override is explicit, requires the expected revision of
+// an Active Attempt in an Open or Paused Sitting, ends the active Participation
+// as kicked, closes its open Connection as kicked, closes native delivery,
+// opens one manual Suspension episode without an Integrity Flag, and commits
+// audit and the idempotent outcome atomically using PostgreSQL time. Exact
+// retries return the retained result after current authority is rechecked.
+// Stable conflicts are exam_attempt_revision, exam_attempt_state,
+// exam_sitting_state, exam_sitting_deadline_reached when PostgreSQL time has
+// reached the Sitting's scheduled end, and attempt_participation_expired when
+// the active generation's lease has lapsed: that generation is Connection Loss,
+// never a kick, and the caller records it through ExpireParticipation. The
+// candidate's own Attempt and a missing manager relationship are not found.
 func (s *SQLExamAttemptStore) SuspendAttempt(
 	ctx context.Context,
 	input *store.ExamAttemptManualSuspension,

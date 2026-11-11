@@ -244,7 +244,12 @@ across a daylight-saving transition.
 
 The examination boundary is divided into cohesive Store contracts for Exam
 authoring/publication, Sittings, Attempts and Participation, Workspace and
-Submission, and Integrity and Review. They expose named atomic operations for
+Submission, and Integrity and Review. What a Candidate's Desktop reports
+around an Attempt has its own contracts beside `ExamAttemptStore`, which keeps
+the Attempt aggregate's lifecycle: `SecurityPreflightStore`,
+`ExamFocusLossStore`, `NativeDeliveryStore`, `BrowserDeliveryStore`, and
+`DeliveryBudgetStore` for the budget, detail stop, and upload expiry the two
+delivery families share. They expose named atomic operations for
 publication, Sitting scheduling/rescheduling/cancellation, live correction,
 first connection, participation fencing, workspace mutation, submission
 sealing, Sitting closure, suspension/re-allow, and review finalization. The

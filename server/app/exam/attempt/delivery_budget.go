@@ -50,7 +50,7 @@ func (s *Service) DeliveryBudget(
 		return nil, err
 	}
 
-	value, err := s.attempts.DeliveryBudget(
+	value, err := s.deliveryBudget.DeliveryBudget(
 		ctx,
 		store.DeliveryBudgetAccess{Access: deliveryAccess.Access, ParticipationID: query.ParticipationID},
 	)
@@ -96,7 +96,7 @@ func (s *Service) StopDeliveryDetails(
 		return nil, err
 	}
 
-	target, err := s.attempts.ResolveLiveDeliveryTarget(ctx, candidateAccess)
+	target, err := s.deliveryBudget.ResolveLiveDeliveryTarget(ctx, candidateAccess)
 	if err != nil {
 		return nil, storeError(storeErrors, err)
 	}
@@ -117,7 +117,7 @@ func (s *Service) StopDeliveryDetails(
 		return nil, err
 	}
 
-	value, err := s.attempts.StopDeliveryDetails(
+	value, err := s.deliveryBudget.StopDeliveryDetails(
 		ctx,
 		&store.DeliveryDetailsStop{Access: candidateAccess, Request: command.Request, AuditEventID: audit, AuditAt: s.now()},
 		commandIdempotency,

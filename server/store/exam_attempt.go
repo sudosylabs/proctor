@@ -21,8 +21,6 @@ const (
 	ExamAttemptExpireParticipationOperation       = "exam.attempt.expire_participation"
 	ExamAttemptReallowOperation                   = "exam.attempt.reallow"
 	ExamAttemptSuspendOperation                   = "exam.attempt.suspend"
-	ExamAttemptFocusLossOperation                 = "exam.attempt.focus_loss.record"
-	ExamAttemptFocusLossDiscrepancyOperation      = "exam.attempt.focus_loss.discrepancy"
 	ExamAttemptCorrectionAcknowledgementOperation = "exam.attempt.correction.acknowledge"
 )
 
@@ -237,204 +235,6 @@ func (r *ExamAttemptParticipationRenewalResult) ConsistentWith(
 		r.LeaseExpiresAt.IsZero() ||
 		!r.LeaseExpiresAt.After(r.DatabaseTime) ||
 		r.LeaseExpiresAt.After(r.DatabaseTime.Add(model.AttemptParticipationInitialLease)))
-}
-
-// ExamAttemptFocusLossAccess is the complete hash-only selector for one
-// trusted-client Focus Loss claim. Persistence rechecks the established
-// Attempt/candidate, an Open or Paused Sitting, the exact active unexpired
-// Participation generation, and owning Session-bound open Connection before
-// accepting a new sequence or disabled-policy diagnostic. Established Focus
-// monitoring does not continuously re-poll Class membership; connect/reconnect
-// owns that check. The sole closed-selector exception is an exact retry of the
-// accepted claim whose own FlagAndSuspend transition closed this causal
-// Participation and Connection; that retry must still prove the retained
-// generation, hash, candidate, Session, Connection, and scope.
-type ExamAttemptFocusLossAccess struct {
-	AttemptID                model.ExamAttemptID
-	ParticipationID          model.AttemptParticipationID
-	Generation               int64
-	CandidateUserID          model.UserID
-	SessionID                model.SessionID
-	ConnectionID             model.AttemptConnectionID
-	ContinuityCredentialHash string
-}
-
-// ExamAttemptFocusLossTarget is the bounded preflight projection used to begin
-// one Class-scoped audit. It carries no credential, Session, client source,
-// duration, policy document, evidence, or private state. It may resolve the
-// exact retained policy_suspended causal selector solely so the caller can
-// begin audit for a possible duplicate; RecordFocusLoss decides that only the
-// identical retained claim may pass that exception and otherwise rechecks the
-// complete selector and scope under its transaction locks.
-type ExamAttemptFocusLossTarget struct {
-	ExamID          model.ExamID
-	SittingID       model.ExamSittingID
-	ClassID         model.ClassID
-	CandidateUserID model.UserID
-	AttemptID       model.ExamAttemptID
-	ParticipationID model.AttemptParticipationID
-	Generation      int64
-}
-
-// ExamAttemptFocusLossSignal carries one bounded claim plus server-proposed
-// append identities. The client supplies only sequence,
-// duration, and optional closed source classification; it cannot select an
-// outcome, severity, receipt time, flag state, or guilt finding. Unused
-// proposed identities are harmless. Sequence is the natural idempotency key.
-type ExamAttemptFocusLossSignal struct {
-	Access               ExamAttemptFocusLossAccess
-	SignalID             model.FocusLossSignalID
-	EvidenceID           model.IntegrityEvidenceID
-	FlagID               model.IntegrityFlagID
-	SuspensionID         model.AttemptSuspensionID
-	Sequence             int64
-	DurationMilliseconds int64
-	Source               model.FocusLossSource
-	AuditEventID         model.AuditEventID
-	AuditAt              time.Time
-}
-
-// ExamAttemptFocusLossResult is the safe retained decision for one accepted
-// sequence. Duplicate is true only for an exact same-sequence duration/source
-// repeat; the remaining fields reproduce the prior result so callers can
-// acknowledge it while suppressing transient effects. MissingBefore records a
-// forward gap without inventing observations. DiagnosticCount is the bounded
-// generation aggregate used only while collection is disabled.
-//
-// A qualifying signal enters the receipt-time rolling bucket. A crossing
-// consumes the whole bucket immediately and resets WindowIncidentCount to zero.
-// The first crossing creates the one open Focus Loss Flag for this
-// Attempt/generation; later crossings retain evidence without another Flag.
-// CandidateWarningCreated is possible once per generation only for
-// FlagAndWarn. ManagerNotificationRequired is true only when the Flag is first
-// created. FlagAndSuspend atomically ends Participation and Connection as
-// policy_suspended, suspends the Attempt, and returns the safe episode views.
-type ExamAttemptFocusLossResult struct {
-	ExamID                      model.ExamID
-	SittingID                   model.ExamSittingID
-	ClassID                     model.ClassID
-	CandidateUserID             model.UserID
-	AttemptID                   model.ExamAttemptID
-	ParticipationID             model.AttemptParticipationID
-	Generation                  int64
-	Signal                      *model.FocusLossSignal
-	AcceptedSequence            int64
-	DatabaseTime                time.Time
-	CollectionEnabled           bool
-	Qualified                   bool
-	MissingBefore               int64
-	WindowIncidentCount         int
-	ThresholdCrossed            bool
-	PolicyOutcome               model.IntegrityThresholdOutcome
-	RetainedEvidenceCount       int
-	Overflow                    *model.FocusLossEvidenceOverflow
-	DiagnosticCount             int64
-	Flag                        *model.IntegrityFlag
-	FlagCreated                 bool
-	CandidateWarningCreated     bool
-	ManagerNotificationRequired bool
-	Attempt                     *model.ExamAttempt
-	Participation               *ExamAttemptParticipationView
-	Connection                  *ExamAttemptManagerConnection
-	ConnectionClosed            bool
-	Suspension                  *ExamAttemptSuspensionView
-	Duplicate                   bool
-}
-
-// ConsistentWith reports whether the outcome carries a valid signal, names the
-// resolved target's Exam, Sitting and Class and the reporting candidate,
-// Attempt, Participation and generation, repeats the reported sequence,
-// duration and source, was decided at the instant the signal was received, and
-// carries counts within their bounds. It reads target, which the caller has
-// already checked.
-func (r *ExamAttemptFocusLossResult) ConsistentWith(
-	target *ExamAttemptFocusLossTarget,
-	focusLossAccess ExamAttemptFocusLossAccess,
-	sequence int64,
-	durationMilliseconds int64,
-	source model.FocusLossSource,
-) bool {
-	return !(r == nil ||
-		r.Signal == nil ||
-		r.Signal.Validate() != nil ||
-		r.ExamID != target.ExamID ||
-		r.SittingID != target.SittingID ||
-		r.ClassID != target.ClassID ||
-		r.CandidateUserID != focusLossAccess.CandidateUserID ||
-		r.AttemptID != focusLossAccess.AttemptID ||
-		r.ParticipationID != focusLossAccess.ParticipationID ||
-		r.Generation != focusLossAccess.Generation ||
-		r.Signal.AttemptID != focusLossAccess.AttemptID ||
-		r.Signal.ParticipationID != focusLossAccess.ParticipationID ||
-		r.Signal.Generation != focusLossAccess.Generation ||
-		r.Signal.Sequence != sequence ||
-		r.Signal.DurationMilliseconds != durationMilliseconds ||
-		r.Signal.Source != source ||
-		r.AcceptedSequence != sequence ||
-		r.DatabaseTime.IsZero() ||
-		!r.DatabaseTime.Equal(r.Signal.ReceivedAt) ||
-		r.MissingBefore < 0 ||
-		r.WindowIncidentCount < 0 ||
-		r.RetainedEvidenceCount < 0 ||
-		r.RetainedEvidenceCount > model.FocusLossMaximumEvidenceEpisodes ||
-		r.DiagnosticCount < 0)
-}
-
-// ExamAttemptFocusLossDiscrepancyTarget is the safe scope for one claim that
-// reached the server only after Submission sealing ended integrity collection.
-// It is not authority to reopen the Attempt or mutate its settled/gapped state.
-type ExamAttemptFocusLossDiscrepancyTarget struct {
-	ExamAttemptFocusLossTarget
-	SubmissionID model.SubmissionID
-}
-
-// ExamAttemptFocusLossDiscrepancy carries the exact ended-generation selector,
-// bounded client claim, proposed immutable identities, and a pre-created safe
-// audit attempt. Sequence is the natural idempotency fence.
-type ExamAttemptFocusLossDiscrepancy struct {
-	Access               ExamAttemptFocusLossAccess
-	DiscrepancyID        model.IntegrityDiscrepancyID
-	SignalID             model.FocusLossSignalID
-	Sequence             int64
-	DurationMilliseconds int64
-	Source               model.FocusLossSource
-	AuditEventID         model.AuditEventID
-	AuditAt              time.Time
-}
-
-type ExamAttemptFocusLossDiscrepancyResult struct {
-	Target      ExamAttemptFocusLossDiscrepancyTarget
-	Discrepancy *model.IntegrityDiscrepancy
-	Duplicate   bool
-}
-
-// ConsistentWith reports whether the outcome carries a valid Discrepancy for
-// the resolved target and its Submission, bound to the reporting Attempt,
-// Participation and generation, repeating the reported sequence, duration and
-// source, and using the proposed Discrepancy and signal IDs unless it is a
-// duplicate of an earlier report. It reads target, which the caller has
-// already checked.
-func (r *ExamAttemptFocusLossDiscrepancyResult) ConsistentWith(
-	target *ExamAttemptFocusLossDiscrepancyTarget,
-	selector ExamAttemptFocusLossAccess,
-	sequence int64,
-	durationMilliseconds int64,
-	source model.FocusLossSource,
-	discrepancyID model.IntegrityDiscrepancyID,
-	signalID model.FocusLossSignalID,
-) bool {
-	return !(r == nil ||
-		r.Discrepancy == nil ||
-		r.Discrepancy.Validate() != nil ||
-		r.Target != *target ||
-		r.Discrepancy.SubmissionID != target.SubmissionID ||
-		r.Discrepancy.AttemptID != selector.AttemptID ||
-		r.Discrepancy.ParticipationID != selector.ParticipationID ||
-		r.Discrepancy.Generation != selector.Generation ||
-		r.Discrepancy.Sequence != sequence ||
-		r.Discrepancy.DurationMilliseconds != durationMilliseconds ||
-		r.Discrepancy.Source != source ||
-		(!r.Duplicate && (r.Discrepancy.ID != discrepancyID || r.Discrepancy.SignalID != signalID)))
 }
 
 // ExamAttemptParticipationExpiryDue is a bounded, hash-free candidate from
@@ -782,91 +582,6 @@ type CandidateAttemptAccess struct {
 	DPoPKeyThumbprint        string
 	ConnectionID             model.AttemptConnectionID
 	ContinuityCredentialHash string
-}
-
-type DeliveryOwnerTarget struct {
-	SittingID model.ExamSittingID
-	ClassID   model.ClassID
-}
-
-type BrowserActivitySourceStart struct {
-	AuditEventID     model.AuditEventID
-	AuditAt          time.Time
-	Access           CandidateAttemptAccess
-	ParticipationID  model.AttemptParticipationID
-	Generation       int64
-	SourceSessionID  model.BrowserSourceSessionID
-	PolicyRevisionID model.ExamRevisionID
-	PolicyDigest     string
-	Transition       model.BrowserStartTransition
-}
-
-func (v BrowserActivitySourceStart) Declaration() model.BrowserSourceStart {
-	return model.BrowserSourceStart{
-		ParticipationID:  v.ParticipationID,
-		Generation:       v.Generation,
-		SourceSessionID:  v.SourceSessionID,
-		PolicyRevisionID: v.PolicyRevisionID,
-		PolicyDigest:     v.PolicyDigest,
-		Transition:       v.Transition,
-	}
-}
-
-// BrowserSourceRefusal represents an already committed predecessor closure.
-// Current capabilities are loaded after commit by the application.
-type BrowserSourceRefusal struct {
-	Capabilities *CandidateRuntimeCapabilities
-	Code         string
-	Status       model.BrowserSourceStatus
-	Capacity     *model.DeliveryMetadataCapacity
-}
-
-func (v *BrowserSourceRefusal) Error() string { return "browser source replacement refused" }
-func (v *BrowserSourceRefusal) Unwrap() error {
-	if v.Capacity != nil {
-		return v.Capacity
-	}
-	return nil
-}
-
-type BrowserDeliveryAccess struct {
-	Access          CandidateAttemptAccess
-	SourceSessionID model.BrowserSourceSessionID
-	ParticipationID model.AttemptParticipationID
-}
-
-type BrowserActivityAppend struct {
-	AuditEventID     model.AuditEventID
-	AuditAt          time.Time
-	PolicyRevisionID model.ExamRevisionID
-	PolicyDigest     string
-	Access           CandidateAttemptAccess
-	ParticipationID  model.AttemptParticipationID
-	Generation       int64
-	SourceSessionID  model.BrowserSourceSessionID
-	Events           []model.BrowserActivityEvent
-}
-
-type BrowserDeliveryRefusal struct{ Reason string }
-
-func (v *BrowserDeliveryRefusal) Error() string { return "browser detail delivery refused" }
-
-type BrowserActivityListOptions struct {
-	ExamID          model.ExamID
-	SittingID       model.ExamSittingID
-	AttemptID       model.ExamAttemptID
-	AfterReceivedAt time.Time
-	AfterSourceID   model.BrowserSourceSessionID
-	AfterSequence   int64
-	Limit           int
-}
-
-type BrowserActivityRecord struct {
-	AttemptID       model.ExamAttemptID
-	ParticipationID model.AttemptParticipationID
-	Generation      int64
-	SourceSessionID model.BrowserSourceSessionID
-	Event           model.BrowserActivityEvent
 }
 
 type ExamAttemptCorrectionAcknowledgement struct {
@@ -1453,167 +1168,98 @@ type ExamAttemptInvalidationTarget struct {
 	CandidateUserID model.UserID
 }
 
-// ExamAttemptStore owns admission's deep atomic boundary: authoritative
-// membership/state checks, first Attempt and logical Workspace bootstrap,
-// generation fencing, Connection creation, audit, and idempotent outcome commit
-// occur together. Exact command replays recover the stored outcome only after
-// rechecking current session, Sitting capability, and exact-Class membership;
-// every fresh connection performs the same current eligibility checks.
-type ExamAttemptStore interface {
-	AppendNativeDelivery(context.Context, *NativeDeliveryAppend, *CommandIdempotency) (*model.NativeSecurityAcknowledgement, error)
-	ResolveNativeDeliveryTarget(context.Context, NativeDeliveryAccess) (*NativeDeliveryTarget, error)
-	// Native delivery operations recheck current User/registered-key ownership
-	// before replay. Live owners additionally require exact Connection continuity.
-	// Gap/final declaration revisions, position and metadata charges, semantic
-	// receipts, successful audit and command outcome commit atomically. Status
-	// expires closed owners using their original immutable upload deadline.
-	NativeDeliveryStatus(context.Context, NativeDeliveryAccess) (*model.NativeSecurityStreamStatus, error)
-	NativeDeliveryReceipt(context.Context, NativeDeliveryAccess, int64) (*model.NativeBatchReceipt, error)
-	DeclareNativeDeliveryGaps(context.Context, *NativeDeliveryGapDeclaration, *CommandIdempotency) (*model.DeliveryGapReceipt, error)
-	SealNativeDelivery(context.Context, *NativeDeliveryFinalDeclaration, *CommandIdempotency) (*model.NativeSecurityStreamStatus, error)
-	UpdateNativeDeliverySummary(context.Context, *NativeDeliverySummaryUpdate, *CommandIdempotency) (*model.NativeSecurityStreamStatus, error)
+// ExamAttemptSecurityCoverageUpdate reports security coverage for the active
+// Participation generation over the Candidate's open Connection.
+type ExamAttemptSecurityCoverageUpdate struct {
+	Access                             CandidateAttemptAccess
+	ParticipationID                    model.AttemptParticipationID
+	Generation                         int64
+	DesktopBuild                       model.DesktopBuildTuple
+	DesktopCompatibilityPolicyRevision int64
+	Coverage                           model.SecurityCoverageRenewal
+}
 
-	ResolveSecurityPreflightSitting(context.Context, string, model.UserID, model.SessionID) (model.ExamSittingID, error)
-	RecoverSecurityPolicy(context.Context, SecurityPreflightAccess, model.ExamAttemptID) (*SecurityPolicyRecovery, error)
-	PrepareSecurityPreflight(context.Context, *SecurityPreflightPrepare, *CommandIdempotency) (*SecurityPreflightPrepared, error)
-	ReportSecurityPreflight(context.Context, *SecurityPreflightReport, *CommandIdempotency) (*model.SecurityPreflightResult, error)
+// ExamAttemptStore persists the Attempt aggregate: a Candidate's admission
+// and Connection, the Participation lease, suspension and re-allow,
+// correction acknowledgement, and the Attempt as Exam Managers and the
+// Candidate read it. Each mutation is one atomic operation that commits its
+// audit, and its idempotent outcome where it takes a command, with the change.
+type ExamAttemptStore interface {
+	// Connect admits the Candidate to the Sitting, creating the Attempt and
+	// its Workspace on first admission, and opens a Connection under a new or
+	// continued Participation. A replayed command returns the stored outcome.
 	Connect(context.Context, *ExamAttemptConnect, *CommandIdempotency) (*ExamAttemptConnectResult, error)
-	ListSessionRevocationInvalidationTargets(context.Context, model.UserID, []model.SessionID) ([]ExamAttemptInvalidationTarget, error)
-	// RenewParticipation locks and validates the exact Attempt, active
-	// Participation generation, owning candidate, Session-bound open Connection,
-	// and credential digest. Sequence equal to the current accepted sequence is
-	// an idempotent duplicate; an older sequence conflicts. A greater sequence
-	// sets expiry to the earlier of PostgreSQL decision time plus the fixed
-	// 20-second lease and the locked current Sitting end.
-	// expires_at <= database_now returns the stable expired conflict and never
-	// mutates or revives the generation. Stable conflict constraints are
-	// attempt_participation_credential, attempt_participation_generation,
-	// attempt_participation_sequence, and attempt_participation_expired.
+	// CloseConnection closes the Candidate's open Connection for the given
+	// reason. Closing a Connection that is already closed reports Changed false.
+	CloseConnection(context.Context, *ExamAttemptConnectionClose) (*ExamAttemptConnectionCloseResult, error)
+
+	// RenewParticipation extends the lease of the active Participation
+	// generation for the next renewal sequence. Repeating the current sequence
+	// returns the existing lease; an expired generation is a conflict.
 	RenewParticipation(context.Context, *ExamAttemptParticipationRenewal) (*ExamAttemptParticipationRenewalResult, error)
+	// UpdateSecurityCoverage records the security coverage reported over the
+	// Candidate's open Connection without extending the Participation lease.
 	UpdateSecurityCoverage(context.Context, *ExamAttemptSecurityCoverageUpdate) (model.SecurityCoverageResult, error)
-	// ResolveFocusLossTarget resolves safe audit/effect scope after checking the
-	// established access selector. It also resolves the exact retained
-	// policy_suspended causal selector for duplicate-audit preflight only; it
-	// performs no evaluation or mutation and grants no new-claim authority.
-	ResolveFocusLossTarget(context.Context, ExamAttemptFocusLossAccess) (*ExamAttemptFocusLossTarget, error)
-	// RecordFocusLoss is the single PostgreSQL-time evaluation operation. It
-	// atomically accepts the next sequence, records gap uncertainty, evaluates and
-	// consumes the rolling bucket, bounds evidence/overflow or disabled-policy
-	// diagnostics, creates at most one Flag and warning per generation, applies
-	// the configured suspension fence, and completes the supplied safe audit.
-	// Equal latest sequence is a duplicate only when duration and source match;
-	// changed equal-sequence or lower sequence conflicts as focus_loss_sequence.
-	// Exact duplicates reauthorize and complete their new audit before returning
-	// the retained result. A threshold-crossing FlagAndSuspend duplicate remains
-	// replayable through its exact retained causal selector after that transition
-	// closed the Participation and Connection; it cannot admit any different or
-	// later claim through the closed selector. Stable access conflicts retain the
-	// existing Attempt/Participation/Connection constraint vocabulary.
-	RecordFocusLoss(context.Context, *ExamAttemptFocusLossSignal) (*ExamAttemptFocusLossResult, error)
-	// ResolveEndedFocusLossTarget accepts only the exact candidate, Session,
-	// credential, Participation generation, and Connection retained by a sealed
-	// Submission whose Attempt is submitted and whose Participation/Connection
-	// are terminal. Voluntary sealing records submitted; automatic sealing
-	// records sitting_closed for live records and preserves any earlier terminal
-	// cause. It performs no mutation and exists only to begin the discrepancy
-	// audit.
-	ResolveEndedFocusLossTarget(context.Context, ExamAttemptFocusLossAccess) (*ExamAttemptFocusLossDiscrepancyTarget, error)
-	// RecordEndedFocusLoss retains at most the bounded discrepancy maximum. It
-	// serializes on the sealed Submission, accepts only a sequence above the
-	// submitted high-water and prior discrepancy high-water, records explicit
-	// gaps, completes audit atomically, and never mutates Submission integrity or
-	// a draft/finalized/released Review. Exact same-sequence semantics replay.
-	RecordEndedFocusLoss(context.Context, *ExamAttemptFocusLossDiscrepancy) (*ExamAttemptFocusLossDiscrepancyResult, error)
-	// ResolveParticipationExpiry returns the exact active generation only when
-	// expires_at <= PostgreSQL current time, with the same safe scope projection
-	// produced by the scanner. A late renewal uses it to begin actorless scoped
-	// audit before invoking ExpireParticipation; it never performs the transition.
-	// Exact selector/generation mismatches and a current unexpired lease fail
-	// with stable not-found/conflict errors rather than exposing another record.
+	// ResolveParticipationExpiry returns the named active Participation
+	// generation when its lease has expired, so the caller can begin the audit
+	// for ExpireParticipation. It changes nothing.
 	ResolveParticipationExpiry(
 		context.Context,
 		model.ExamAttemptID,
 		model.AttemptParticipationID,
 		int64,
 	) (*ExamAttemptParticipationExpiryDue, error)
-	DeliveryBudget(context.Context, DeliveryBudgetAccess) (*model.DeliveryBudgetSnapshot, error)
-	StopDeliveryDetails(context.Context, *DeliveryDetailsStop, *CommandIdempotency) (*model.StopDeliveryDetailsResult, error)
-	ListExpiredDeliveries(context.Context, int) ([]DeliveryExpiryDue, error)
-	ExpireDelivery(context.Context, *DeliveryExpiry) (bool, error)
-	// ListExpiredParticipations returns at most limit active generations whose
-	// expiry is at or before PostgreSQL's current time, ordered by
-	// (LeaseExpiresAt, ParticipationID). Limit is 1..200.
+	// ListExpiredParticipations returns up to limit (1..200) active
+	// Participation generations whose lease has expired, oldest expiry first.
 	ListExpiredParticipations(context.Context, int) ([]ExamAttemptParticipationExpiryDue, error)
-	// ExpireParticipation is the single conditional operation shared by late
-	// renewal and the recurring scan. It locks the exact generation and, when
-	// expires_at <= PostgreSQL now, atomically ends it as lease_expired, closes
-	// its open Connection, creates neutral Connection Loss evidence and the one
-	// generation-scoped flag, suspends the Attempt, completes audit, and retains
-	// the outcome. Exact later calls rehydrate that outcome. A generation that
-	// was renewed before the lock conflicts as attempt_participation_not_expired
-	// without partial state; a non-current generation conflicts as
-	// attempt_participation_generation.
+	// ExpireParticipation ends an expired Participation generation, closes its
+	// Connection, records Connection Loss evidence and its Flag, and suspends
+	// the Attempt. A later call for the same generation returns that outcome.
 	ExpireParticipation(context.Context, *ExamAttemptParticipationExpiry) (*ExamAttemptParticipationExpiryResult, error)
-	// ReallowAttempt locks the exact active Suspension and Attempt revision,
-	// rechecks current Exam management authority unless an authorized override
-	// is explicit, closes only that episode, returns the Attempt to active, and
-	// commits audit and the idempotent outcome atomically. It preserves all
-	// evidence and creates no Participation or credential. Exact retries return
-	// the retained result without a second revision change after current
-	// authority is rechecked. Stable conflicts are exam_attempt_revision,
-	// attempt_suspension_active, exam_attempt_state, and exam_sitting_state.
-	ReallowAttempt(context.Context, *ExamAttemptReallow, *CommandIdempotency) (*ExamAttemptReallowResult, error)
-	// SuspendAttempt applies an Exam Manager's kick. It locks the Attempt and
-	// Sitting, rechecks current Exam management authority unless an
-	// authorized override is explicit, requires the expected revision of an
-	// Active Attempt in an Open or Paused Sitting, ends the active Participation
-	// as kicked, closes its open Connection as kicked, closes native delivery,
-	// opens one manual Suspension episode without an Integrity Flag, and
-	// commits audit and the idempotent outcome atomically using PostgreSQL
-	// time. Exact retries return the retained result after current authority
-	// is rechecked. Stable conflicts are exam_attempt_revision,
-	// exam_attempt_state, exam_sitting_state, exam_sitting_deadline_reached
-	// when PostgreSQL time has reached the Sitting's scheduled end, and
-	// attempt_participation_expired when the active generation's lease has
-	// lapsed: that generation is Connection Loss, never a kick, and the caller
-	// records it through ExpireParticipation. The candidate's own Attempt
-	// and a missing manager relationship are not found.
-	SuspendAttempt(context.Context, *ExamAttemptManualSuspension, *CommandIdempotency) (*ExamAttemptManualSuspensionResult, error)
-	CloseConnection(context.Context, *ExamAttemptConnectionClose) (*ExamAttemptConnectionCloseResult, error)
-	Get(context.Context, model.ExamID, model.ExamAttemptID) (*ExamAttemptManagerSnapshot, error)
-	List(context.Context, ExamAttemptManagerListOptions) ([]ExamAttemptManagerSnapshot, error)
-	ListCandidateActivity(context.Context, CandidateExamActivityListOptions) (*CandidateExamActivityPage, error)
-	ListSittingCandidateStatuses(context.Context, SittingCandidateStatusListOptions) (*SittingCandidateStatusPage, error)
-	GetCandidatePresentation(context.Context, CandidateAttemptAccess) (*CandidateExamPresentation, error)
-	ResolveLiveDeliveryTarget(context.Context, CandidateAttemptAccess) (*DeliveryOwnerTarget, error)
-	AppendHistoricalBrowserDelivery(
-		context.Context,
-		*BrowserActivityAppend,
-		*CommandIdempotency,
-	) (*model.BrowserActivityAcknowledgement, error)
-	ResolveBrowserDeliveryTarget(context.Context, BrowserDeliveryAccess) (*DeliveryOwnerTarget, error)
-	BrowserDeliveryReceipts(context.Context, BrowserDeliveryAccess, int64, int) (*model.BrowserReceiptPage, error)
-	DeclareBrowserDeliveryGaps(context.Context, *BrowserDeliveryGapDeclaration, *CommandIdempotency) (*model.BrowserDeliveryGapResult, error)
-	SealBrowserDelivery(context.Context, *BrowserDeliveryFinalDeclaration, *CommandIdempotency) (*model.BrowserSourceStatus, error)
-	UpdateBrowserDeliverySummary(
-		context.Context,
-		*BrowserDeliverySummaryUpdate,
-		*CommandIdempotency,
-	) (*model.BrowserDeliverySummaryResult, error)
 
-	BrowserSourceStatus(context.Context, BrowserDeliveryAccess) (*model.BrowserSourceStatus, error)
-	BrowserSourceList(context.Context, BrowserDeliveryAccess) ([]model.BrowserSourceStatus, error)
-	StartBrowserActivity(context.Context, *BrowserActivitySourceStart) (*model.BrowserSourceStatus, error)
-	AppendBrowserActivity(context.Context, *BrowserActivityAppend) (*model.BrowserActivityAcknowledgement, error)
+	// SuspendAttempt applies an Exam Manager's kick: it ends the active
+	// Participation, closes its Connection, and opens a manual Suspension on
+	// the Attempt at the expected revision.
+	SuspendAttempt(context.Context, *ExamAttemptManualSuspension, *CommandIdempotency) (*ExamAttemptManualSuspensionResult, error)
+	// ReallowAttempt closes the named active Suspension and returns the
+	// Attempt, at the expected revision, to a state the Candidate can reconnect
+	// from. It keeps all evidence and creates no Participation.
+	ReallowAttempt(context.Context, *ExamAttemptReallow, *CommandIdempotency) (*ExamAttemptReallowResult, error)
+
+	// ResolveCorrectionAcknowledgementTarget validates an acknowledgement and
+	// returns the scope its audit is recorded under. It changes nothing.
 	ResolveCorrectionAcknowledgementTarget(
 		context.Context,
 		ExamAttemptCorrectionAcknowledgement,
 	) (*ExamAttemptCorrectionAcknowledgementTarget, error)
+	// AcknowledgeCorrection records that the Candidate acknowledged a live
+	// correction Revision of the Exam.
 	AcknowledgeCorrection(
 		context.Context,
 		*ExamAttemptCorrectionAcknowledgement,
 		*CommandIdempotency,
 	) (*ExamAttemptCorrectionAcknowledgementResult, error)
-	ListBrowserActivity(context.Context, BrowserActivityListOptions) ([]BrowserActivityRecord, error)
+
+	// Get returns an Exam Manager's snapshot of one Attempt of the Exam.
+	Get(context.Context, model.ExamID, model.ExamAttemptID) (*ExamAttemptManagerSnapshot, error)
+	// List returns one page of a Sitting's Attempts for an Exam Manager,
+	// newest first.
+	List(context.Context, ExamAttemptManagerListOptions) ([]ExamAttemptManagerSnapshot, error)
+	// ListSittingCandidateStatuses returns one page of a Sitting's Candidates
+	// with each one's Attempt, presence, suspension and integrity state.
+	ListSittingCandidateStatuses(context.Context, SittingCandidateStatusListOptions) (*SittingCandidateStatusPage, error)
+	// ListSessionRevocationInvalidationTargets returns the Exams and Sittings
+	// of the Candidate's Attempts that were suspended through a Participation
+	// bound to one of the given Sessions.
+	ListSessionRevocationInvalidationTargets(context.Context, model.UserID, []model.SessionID) ([]ExamAttemptInvalidationTarget, error)
+
+	// ListCandidateActivity returns one page of the Candidate's Sittings with
+	// the state of their Attempt in each and what they may do next.
+	ListCandidateActivity(context.Context, CandidateExamActivityListOptions) (*CandidateExamActivityPage, error)
+	// GetCandidatePresentation returns the Exam content, capacity and runtime
+	// capabilities the Candidate sees for their live Attempt.
+	GetCandidatePresentation(context.Context, CandidateAttemptAccess) (*CandidateExamPresentation, error)
+	// ResolveCandidateResource returns the stored file behind an Exam Resource
+	// the Candidate's live Attempt may read.
 	ResolveCandidateResource(context.Context, CandidateAttemptAccess, model.ExamResourceID) (*CandidateResourceContent, error)
 }

@@ -34,6 +34,15 @@ func (examAttemptReallowOutcome) outcomeDocument() {}
 // active Suspension and returns the Attempt to active under an
 // ExamAttemptReallowOperation command. Exact retries return the retained result
 // after rechecking authority.
+//
+// It locks the exact active Suspension and Attempt revision, rechecks current
+// Exam management authority unless an authorized override is explicit, closes
+// only that episode, returns the Attempt to active, and commits audit and the
+// idempotent outcome atomically. It preserves all evidence and creates no
+// Participation or credential. Exact retries return the retained result
+// without a second revision change after current authority is rechecked.
+// Stable conflicts are exam_attempt_revision, attempt_suspension_active,
+// exam_attempt_state, and exam_sitting_state.
 func (s *SQLExamAttemptStore) ReallowAttempt(
 	ctx context.Context,
 	input *store.ExamAttemptReallow,

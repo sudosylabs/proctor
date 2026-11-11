@@ -502,23 +502,23 @@ func (s *examAttemptStore) RenewParticipation(
 	})
 }
 
-func (s *examAttemptStore) ResolveFocusLossTarget(
+func (s *examFocusLossStore) ResolveFocusLossTarget(
 	ctx context.Context,
 	access store.ExamAttemptFocusLossAccess,
 ) (*store.ExamAttemptFocusLossTarget, error) {
 	return retryCall1(ctx, s.layer, func() (*store.ExamAttemptFocusLossTarget, error) {
-		return s.ExamAttemptStore.ResolveFocusLossTarget(ctx, access)
+		return s.ExamFocusLossStore.ResolveFocusLossTarget(ctx, access)
 	})
 }
 
-func (s *examAttemptStore) RecordFocusLoss(
+func (s *examFocusLossStore) RecordFocusLoss(
 	ctx context.Context,
 	input *store.ExamAttemptFocusLossSignal,
 ) (*store.ExamAttemptFocusLossResult, error) {
 	// The sequence makes a later client request replayable, but an in-process
 	// retry would reuse the already-completed Audit Event after an unknown commit.
 	// Let the durable client retry begin a fresh audited decision instead.
-	return s.ExamAttemptStore.RecordFocusLoss(ctx, input)
+	return s.ExamFocusLossStore.RecordFocusLoss(ctx, input)
 }
 
 func (s *examAttemptStore) ResolveParticipationExpiry(
@@ -1144,49 +1144,49 @@ func (s *examAuthoringStore) UpdateDraftNativePolicy(
 	})
 }
 
-func (s *examAttemptStore) PrepareSecurityPreflight(
+func (s *securityPreflightStore) PrepareSecurityPreflight(
 	ctx context.Context,
 	input *store.SecurityPreflightPrepare,
 	command *store.CommandIdempotency,
 ) (*store.SecurityPreflightPrepared, error) {
 	if command == nil {
-		return s.ExamAttemptStore.PrepareSecurityPreflight(ctx, input, command)
+		return s.SecurityPreflightStore.PrepareSecurityPreflight(ctx, input, command)
 	}
 	return retryCall1(ctx, s.layer, func() (*store.SecurityPreflightPrepared, error) {
-		return s.ExamAttemptStore.PrepareSecurityPreflight(ctx, input, command)
+		return s.SecurityPreflightStore.PrepareSecurityPreflight(ctx, input, command)
 	})
 }
-func (s *examAttemptStore) ReportSecurityPreflight(
+func (s *securityPreflightStore) ReportSecurityPreflight(
 	ctx context.Context,
 	input *store.SecurityPreflightReport,
 	command *store.CommandIdempotency,
 ) (*model.SecurityPreflightResult, error) {
 	if command == nil {
-		return s.ExamAttemptStore.ReportSecurityPreflight(ctx, input, command)
+		return s.SecurityPreflightStore.ReportSecurityPreflight(ctx, input, command)
 	}
 	return retryCall1(ctx, s.layer, func() (*model.SecurityPreflightResult, error) {
-		return s.ExamAttemptStore.ReportSecurityPreflight(ctx, input, command)
+		return s.SecurityPreflightStore.ReportSecurityPreflight(ctx, input, command)
 	})
 }
 
-func (s *examAttemptStore) ResolveSecurityPreflightSitting(
+func (s *securityPreflightStore) ResolveSecurityPreflightSitting(
 	ctx context.Context,
 	id string,
 	userID model.UserID,
 	sessionID model.SessionID,
 ) (model.ExamSittingID, error) {
 	return retryCall1(ctx, s.layer, func() (model.ExamSittingID, error) {
-		return s.ExamAttemptStore.ResolveSecurityPreflightSitting(ctx, id, userID, sessionID)
+		return s.SecurityPreflightStore.ResolveSecurityPreflightSitting(ctx, id, userID, sessionID)
 	})
 }
 
-func (s *examAttemptStore) RecoverSecurityPolicy(
+func (s *securityPreflightStore) RecoverSecurityPolicy(
 	ctx context.Context,
 	access store.SecurityPreflightAccess,
 	attemptID model.ExamAttemptID,
 ) (*store.SecurityPolicyRecovery, error) {
 	return retryCall1(ctx, s.layer, func() (*store.SecurityPolicyRecovery, error) {
-		return s.ExamAttemptStore.RecoverSecurityPolicy(ctx, access, attemptID)
+		return s.SecurityPreflightStore.RecoverSecurityPolicy(ctx, access, attemptID)
 	})
 }
 

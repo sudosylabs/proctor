@@ -37,6 +37,16 @@ type timedStores struct {
 	examSittingOnce                sync.Once
 	examAttempt                    store.ExamAttemptStore
 	examAttemptOnce                sync.Once
+	examFocusLoss                  store.ExamFocusLossStore
+	examFocusLossOnce              sync.Once
+	securityPreflight              store.SecurityPreflightStore
+	securityPreflightOnce          sync.Once
+	nativeDelivery                 store.NativeDeliveryStore
+	nativeDeliveryOnce             sync.Once
+	browserDelivery                store.BrowserDeliveryStore
+	browserDeliveryOnce            sync.Once
+	deliveryBudget                 store.DeliveryBudgetStore
+	deliveryBudgetOnce             sync.Once
 	examAttemptWorkspace           store.ExamAttemptWorkspaceStore
 	examAttemptWorkspaceOnce       sync.Once
 	examSubmission                 store.ExamSubmissionStore
@@ -162,6 +172,31 @@ type timedExamSittingStore struct {
 type timedExamAttemptStore struct {
 	layer *Layer
 	next  store.ExamAttemptStore
+}
+
+type timedExamFocusLossStore struct {
+	layer *Layer
+	next  store.ExamFocusLossStore
+}
+
+type timedSecurityPreflightStore struct {
+	layer *Layer
+	next  store.SecurityPreflightStore
+}
+
+type timedNativeDeliveryStore struct {
+	layer *Layer
+	next  store.NativeDeliveryStore
+}
+
+type timedBrowserDeliveryStore struct {
+	layer *Layer
+	next  store.BrowserDeliveryStore
+}
+
+type timedDeliveryBudgetStore struct {
+	layer *Layer
+	next  store.DeliveryBudgetStore
 }
 
 type timedExamAttemptWorkspaceStore struct {
@@ -452,6 +487,56 @@ func (l *Layer) ExamAttempt() store.ExamAttemptStore {
 		}
 	})
 	return l.stores.examAttempt
+}
+
+func (l *Layer) ExamFocusLoss() store.ExamFocusLossStore {
+	l.stores.examFocusLossOnce.Do(func() {
+		next := l.next.ExamFocusLoss()
+		if next != nil {
+			l.stores.examFocusLoss = &timedExamFocusLossStore{layer: l, next: next}
+		}
+	})
+	return l.stores.examFocusLoss
+}
+
+func (l *Layer) SecurityPreflight() store.SecurityPreflightStore {
+	l.stores.securityPreflightOnce.Do(func() {
+		next := l.next.SecurityPreflight()
+		if next != nil {
+			l.stores.securityPreflight = &timedSecurityPreflightStore{layer: l, next: next}
+		}
+	})
+	return l.stores.securityPreflight
+}
+
+func (l *Layer) NativeDelivery() store.NativeDeliveryStore {
+	l.stores.nativeDeliveryOnce.Do(func() {
+		next := l.next.NativeDelivery()
+		if next != nil {
+			l.stores.nativeDelivery = &timedNativeDeliveryStore{layer: l, next: next}
+		}
+	})
+	return l.stores.nativeDelivery
+}
+
+func (l *Layer) BrowserDelivery() store.BrowserDeliveryStore {
+	l.stores.browserDeliveryOnce.Do(func() {
+		next := l.next.BrowserDelivery()
+		if next != nil {
+			l.stores.browserDelivery = &timedBrowserDeliveryStore{layer: l, next: next}
+		}
+	})
+	return l.stores.browserDelivery
+}
+
+func (l *Layer) DeliveryBudget() store.DeliveryBudgetStore {
+	l.stores.deliveryBudgetOnce.Do(func() {
+		next := l.next.DeliveryBudget()
+		if next != nil {
+			l.stores.deliveryBudget = &timedDeliveryBudgetStore{layer: l, next: next}
+		}
+	})
+	return l.stores.deliveryBudget
 }
 
 func (l *Layer) ExamAttemptWorkspace() store.ExamAttemptWorkspaceStore {
@@ -1358,81 +1443,15 @@ func (s *timedExamSittingStore) ReconcileMail(arg0 context.Context, arg1 *store.
 	})
 }
 
-func (s *timedExamAttemptStore) AppendNativeDelivery(arg0 context.Context, arg1 *store.NativeDeliveryAppend, arg2 *store.CommandIdempotency) (*model.NativeSecurityAcknowledgement, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodAppendNativeDelivery), func(callCtx context.Context) (*model.NativeSecurityAcknowledgement, error) {
-		return s.next.AppendNativeDelivery(callCtx, arg1, arg2)
-	})
-}
-
-func (s *timedExamAttemptStore) ResolveNativeDeliveryTarget(arg0 context.Context, arg1 store.NativeDeliveryAccess) (*store.NativeDeliveryTarget, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodResolveNativeDeliveryTarget), func(callCtx context.Context) (*store.NativeDeliveryTarget, error) {
-		return s.next.ResolveNativeDeliveryTarget(callCtx, arg1)
-	})
-}
-
-func (s *timedExamAttemptStore) NativeDeliveryStatus(arg0 context.Context, arg1 store.NativeDeliveryAccess) (*model.NativeSecurityStreamStatus, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodNativeDeliveryStatus), func(callCtx context.Context) (*model.NativeSecurityStreamStatus, error) {
-		return s.next.NativeDeliveryStatus(callCtx, arg1)
-	})
-}
-
-func (s *timedExamAttemptStore) NativeDeliveryReceipt(arg0 context.Context, arg1 store.NativeDeliveryAccess, arg2 int64) (*model.NativeBatchReceipt, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodNativeDeliveryReceipt), func(callCtx context.Context) (*model.NativeBatchReceipt, error) {
-		return s.next.NativeDeliveryReceipt(callCtx, arg1, arg2)
-	})
-}
-
-func (s *timedExamAttemptStore) DeclareNativeDeliveryGaps(arg0 context.Context, arg1 *store.NativeDeliveryGapDeclaration, arg2 *store.CommandIdempotency) (*model.DeliveryGapReceipt, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodDeclareNativeDeliveryGaps), func(callCtx context.Context) (*model.DeliveryGapReceipt, error) {
-		return s.next.DeclareNativeDeliveryGaps(callCtx, arg1, arg2)
-	})
-}
-
-func (s *timedExamAttemptStore) SealNativeDelivery(arg0 context.Context, arg1 *store.NativeDeliveryFinalDeclaration, arg2 *store.CommandIdempotency) (*model.NativeSecurityStreamStatus, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodSealNativeDelivery), func(callCtx context.Context) (*model.NativeSecurityStreamStatus, error) {
-		return s.next.SealNativeDelivery(callCtx, arg1, arg2)
-	})
-}
-
-func (s *timedExamAttemptStore) UpdateNativeDeliverySummary(arg0 context.Context, arg1 *store.NativeDeliverySummaryUpdate, arg2 *store.CommandIdempotency) (*model.NativeSecurityStreamStatus, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodUpdateNativeDeliverySummary), func(callCtx context.Context) (*model.NativeSecurityStreamStatus, error) {
-		return s.next.UpdateNativeDeliverySummary(callCtx, arg1, arg2)
-	})
-}
-
-func (s *timedExamAttemptStore) ResolveSecurityPreflightSitting(arg0 context.Context, arg1 string, arg2 model.UserID, arg3 model.SessionID) (model.ExamSittingID, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodResolveSecurityPreflightSitting), func(callCtx context.Context) (model.ExamSittingID, error) {
-		return s.next.ResolveSecurityPreflightSitting(callCtx, arg1, arg2, arg3)
-	})
-}
-
-func (s *timedExamAttemptStore) RecoverSecurityPolicy(arg0 context.Context, arg1 store.SecurityPreflightAccess, arg2 model.ExamAttemptID) (*store.SecurityPolicyRecovery, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodRecoverSecurityPolicy), func(callCtx context.Context) (*store.SecurityPolicyRecovery, error) {
-		return s.next.RecoverSecurityPolicy(callCtx, arg1, arg2)
-	})
-}
-
-func (s *timedExamAttemptStore) PrepareSecurityPreflight(arg0 context.Context, arg1 *store.SecurityPreflightPrepare, arg2 *store.CommandIdempotency) (*store.SecurityPreflightPrepared, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodPrepareSecurityPreflight), func(callCtx context.Context) (*store.SecurityPreflightPrepared, error) {
-		return s.next.PrepareSecurityPreflight(callCtx, arg1, arg2)
-	})
-}
-
-func (s *timedExamAttemptStore) ReportSecurityPreflight(arg0 context.Context, arg1 *store.SecurityPreflightReport, arg2 *store.CommandIdempotency) (*model.SecurityPreflightResult, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodReportSecurityPreflight), func(callCtx context.Context) (*model.SecurityPreflightResult, error) {
-		return s.next.ReportSecurityPreflight(callCtx, arg1, arg2)
-	})
-}
-
 func (s *timedExamAttemptStore) Connect(arg0 context.Context, arg1 *store.ExamAttemptConnect, arg2 *store.CommandIdempotency) (*store.ExamAttemptConnectResult, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodConnect), func(callCtx context.Context) (*store.ExamAttemptConnectResult, error) {
 		return s.next.Connect(callCtx, arg1, arg2)
 	})
 }
 
-func (s *timedExamAttemptStore) ListSessionRevocationInvalidationTargets(arg0 context.Context, arg1 model.UserID, arg2 []model.SessionID) ([]store.ExamAttemptInvalidationTarget, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodListSessionRevocationInvalidationTargets), func(callCtx context.Context) ([]store.ExamAttemptInvalidationTarget, error) {
-		return s.next.ListSessionRevocationInvalidationTargets(callCtx, arg1, arg2)
+func (s *timedExamAttemptStore) CloseConnection(arg0 context.Context, arg1 *store.ExamAttemptConnectionClose) (*store.ExamAttemptConnectionCloseResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodCloseConnection), func(callCtx context.Context) (*store.ExamAttemptConnectionCloseResult, error) {
+		return s.next.CloseConnection(callCtx, arg1)
 	})
 }
 
@@ -1448,57 +1467,9 @@ func (s *timedExamAttemptStore) UpdateSecurityCoverage(arg0 context.Context, arg
 	})
 }
 
-func (s *timedExamAttemptStore) ResolveFocusLossTarget(arg0 context.Context, arg1 store.ExamAttemptFocusLossAccess) (*store.ExamAttemptFocusLossTarget, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodResolveFocusLossTarget), func(callCtx context.Context) (*store.ExamAttemptFocusLossTarget, error) {
-		return s.next.ResolveFocusLossTarget(callCtx, arg1)
-	})
-}
-
-func (s *timedExamAttemptStore) RecordFocusLoss(arg0 context.Context, arg1 *store.ExamAttemptFocusLossSignal) (*store.ExamAttemptFocusLossResult, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodRecordFocusLoss), func(callCtx context.Context) (*store.ExamAttemptFocusLossResult, error) {
-		return s.next.RecordFocusLoss(callCtx, arg1)
-	})
-}
-
-func (s *timedExamAttemptStore) ResolveEndedFocusLossTarget(arg0 context.Context, arg1 store.ExamAttemptFocusLossAccess) (*store.ExamAttemptFocusLossDiscrepancyTarget, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodResolveEndedFocusLossTarget), func(callCtx context.Context) (*store.ExamAttemptFocusLossDiscrepancyTarget, error) {
-		return s.next.ResolveEndedFocusLossTarget(callCtx, arg1)
-	})
-}
-
-func (s *timedExamAttemptStore) RecordEndedFocusLoss(arg0 context.Context, arg1 *store.ExamAttemptFocusLossDiscrepancy) (*store.ExamAttemptFocusLossDiscrepancyResult, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodRecordEndedFocusLoss), func(callCtx context.Context) (*store.ExamAttemptFocusLossDiscrepancyResult, error) {
-		return s.next.RecordEndedFocusLoss(callCtx, arg1)
-	})
-}
-
 func (s *timedExamAttemptStore) ResolveParticipationExpiry(arg0 context.Context, arg1 model.ExamAttemptID, arg2 model.AttemptParticipationID, arg3 int64) (*store.ExamAttemptParticipationExpiryDue, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodResolveParticipationExpiry), func(callCtx context.Context) (*store.ExamAttemptParticipationExpiryDue, error) {
 		return s.next.ResolveParticipationExpiry(callCtx, arg1, arg2, arg3)
-	})
-}
-
-func (s *timedExamAttemptStore) DeliveryBudget(arg0 context.Context, arg1 store.DeliveryBudgetAccess) (*model.DeliveryBudgetSnapshot, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodDeliveryBudget), func(callCtx context.Context) (*model.DeliveryBudgetSnapshot, error) {
-		return s.next.DeliveryBudget(callCtx, arg1)
-	})
-}
-
-func (s *timedExamAttemptStore) StopDeliveryDetails(arg0 context.Context, arg1 *store.DeliveryDetailsStop, arg2 *store.CommandIdempotency) (*model.StopDeliveryDetailsResult, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodStopDeliveryDetails), func(callCtx context.Context) (*model.StopDeliveryDetailsResult, error) {
-		return s.next.StopDeliveryDetails(callCtx, arg1, arg2)
-	})
-}
-
-func (s *timedExamAttemptStore) ListExpiredDeliveries(arg0 context.Context, arg1 int) ([]store.DeliveryExpiryDue, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodListExpiredDeliveries), func(callCtx context.Context) ([]store.DeliveryExpiryDue, error) {
-		return s.next.ListExpiredDeliveries(callCtx, arg1)
-	})
-}
-
-func (s *timedExamAttemptStore) ExpireDelivery(arg0 context.Context, arg1 *store.DeliveryExpiry) (bool, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodExpireDelivery), func(callCtx context.Context) (bool, error) {
-		return s.next.ExpireDelivery(callCtx, arg1)
 	})
 }
 
@@ -1514,117 +1485,15 @@ func (s *timedExamAttemptStore) ExpireParticipation(arg0 context.Context, arg1 *
 	})
 }
 
-func (s *timedExamAttemptStore) ReallowAttempt(arg0 context.Context, arg1 *store.ExamAttemptReallow, arg2 *store.CommandIdempotency) (*store.ExamAttemptReallowResult, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodReallowAttempt), func(callCtx context.Context) (*store.ExamAttemptReallowResult, error) {
-		return s.next.ReallowAttempt(callCtx, arg1, arg2)
-	})
-}
-
 func (s *timedExamAttemptStore) SuspendAttempt(arg0 context.Context, arg1 *store.ExamAttemptManualSuspension, arg2 *store.CommandIdempotency) (*store.ExamAttemptManualSuspensionResult, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodSuspendAttempt), func(callCtx context.Context) (*store.ExamAttemptManualSuspensionResult, error) {
 		return s.next.SuspendAttempt(callCtx, arg1, arg2)
 	})
 }
 
-func (s *timedExamAttemptStore) CloseConnection(arg0 context.Context, arg1 *store.ExamAttemptConnectionClose) (*store.ExamAttemptConnectionCloseResult, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodCloseConnection), func(callCtx context.Context) (*store.ExamAttemptConnectionCloseResult, error) {
-		return s.next.CloseConnection(callCtx, arg1)
-	})
-}
-
-func (s *timedExamAttemptStore) Get(arg0 context.Context, arg1 model.ExamID, arg2 model.ExamAttemptID) (*store.ExamAttemptManagerSnapshot, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodGet), func(callCtx context.Context) (*store.ExamAttemptManagerSnapshot, error) {
-		return s.next.Get(callCtx, arg1, arg2)
-	})
-}
-
-func (s *timedExamAttemptStore) List(arg0 context.Context, arg1 store.ExamAttemptManagerListOptions) ([]store.ExamAttemptManagerSnapshot, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodList), func(callCtx context.Context) ([]store.ExamAttemptManagerSnapshot, error) {
-		return s.next.List(callCtx, arg1)
-	})
-}
-
-func (s *timedExamAttemptStore) ListCandidateActivity(arg0 context.Context, arg1 store.CandidateExamActivityListOptions) (*store.CandidateExamActivityPage, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodListCandidateActivity), func(callCtx context.Context) (*store.CandidateExamActivityPage, error) {
-		return s.next.ListCandidateActivity(callCtx, arg1)
-	})
-}
-
-func (s *timedExamAttemptStore) ListSittingCandidateStatuses(arg0 context.Context, arg1 store.SittingCandidateStatusListOptions) (*store.SittingCandidateStatusPage, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodListSittingCandidateStatuses), func(callCtx context.Context) (*store.SittingCandidateStatusPage, error) {
-		return s.next.ListSittingCandidateStatuses(callCtx, arg1)
-	})
-}
-
-func (s *timedExamAttemptStore) GetCandidatePresentation(arg0 context.Context, arg1 store.CandidateAttemptAccess) (*store.CandidateExamPresentation, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodGetCandidatePresentation), func(callCtx context.Context) (*store.CandidateExamPresentation, error) {
-		return s.next.GetCandidatePresentation(callCtx, arg1)
-	})
-}
-
-func (s *timedExamAttemptStore) ResolveLiveDeliveryTarget(arg0 context.Context, arg1 store.CandidateAttemptAccess) (*store.DeliveryOwnerTarget, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodResolveLiveDeliveryTarget), func(callCtx context.Context) (*store.DeliveryOwnerTarget, error) {
-		return s.next.ResolveLiveDeliveryTarget(callCtx, arg1)
-	})
-}
-
-func (s *timedExamAttemptStore) AppendHistoricalBrowserDelivery(arg0 context.Context, arg1 *store.BrowserActivityAppend, arg2 *store.CommandIdempotency) (*model.BrowserActivityAcknowledgement, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodAppendHistoricalBrowserDelivery), func(callCtx context.Context) (*model.BrowserActivityAcknowledgement, error) {
-		return s.next.AppendHistoricalBrowserDelivery(callCtx, arg1, arg2)
-	})
-}
-
-func (s *timedExamAttemptStore) ResolveBrowserDeliveryTarget(arg0 context.Context, arg1 store.BrowserDeliveryAccess) (*store.DeliveryOwnerTarget, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodResolveBrowserDeliveryTarget), func(callCtx context.Context) (*store.DeliveryOwnerTarget, error) {
-		return s.next.ResolveBrowserDeliveryTarget(callCtx, arg1)
-	})
-}
-
-func (s *timedExamAttemptStore) BrowserDeliveryReceipts(arg0 context.Context, arg1 store.BrowserDeliveryAccess, arg2 int64, arg3 int) (*model.BrowserReceiptPage, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodBrowserDeliveryReceipts), func(callCtx context.Context) (*model.BrowserReceiptPage, error) {
-		return s.next.BrowserDeliveryReceipts(callCtx, arg1, arg2, arg3)
-	})
-}
-
-func (s *timedExamAttemptStore) DeclareBrowserDeliveryGaps(arg0 context.Context, arg1 *store.BrowserDeliveryGapDeclaration, arg2 *store.CommandIdempotency) (*model.BrowserDeliveryGapResult, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodDeclareBrowserDeliveryGaps), func(callCtx context.Context) (*model.BrowserDeliveryGapResult, error) {
-		return s.next.DeclareBrowserDeliveryGaps(callCtx, arg1, arg2)
-	})
-}
-
-func (s *timedExamAttemptStore) SealBrowserDelivery(arg0 context.Context, arg1 *store.BrowserDeliveryFinalDeclaration, arg2 *store.CommandIdempotency) (*model.BrowserSourceStatus, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodSealBrowserDelivery), func(callCtx context.Context) (*model.BrowserSourceStatus, error) {
-		return s.next.SealBrowserDelivery(callCtx, arg1, arg2)
-	})
-}
-
-func (s *timedExamAttemptStore) UpdateBrowserDeliverySummary(arg0 context.Context, arg1 *store.BrowserDeliverySummaryUpdate, arg2 *store.CommandIdempotency) (*model.BrowserDeliverySummaryResult, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodUpdateBrowserDeliverySummary), func(callCtx context.Context) (*model.BrowserDeliverySummaryResult, error) {
-		return s.next.UpdateBrowserDeliverySummary(callCtx, arg1, arg2)
-	})
-}
-
-func (s *timedExamAttemptStore) BrowserSourceStatus(arg0 context.Context, arg1 store.BrowserDeliveryAccess) (*model.BrowserSourceStatus, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodBrowserSourceStatus), func(callCtx context.Context) (*model.BrowserSourceStatus, error) {
-		return s.next.BrowserSourceStatus(callCtx, arg1)
-	})
-}
-
-func (s *timedExamAttemptStore) BrowserSourceList(arg0 context.Context, arg1 store.BrowserDeliveryAccess) ([]model.BrowserSourceStatus, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodBrowserSourceList), func(callCtx context.Context) ([]model.BrowserSourceStatus, error) {
-		return s.next.BrowserSourceList(callCtx, arg1)
-	})
-}
-
-func (s *timedExamAttemptStore) StartBrowserActivity(arg0 context.Context, arg1 *store.BrowserActivitySourceStart) (*model.BrowserSourceStatus, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodStartBrowserActivity), func(callCtx context.Context) (*model.BrowserSourceStatus, error) {
-		return s.next.StartBrowserActivity(callCtx, arg1)
-	})
-}
-
-func (s *timedExamAttemptStore) AppendBrowserActivity(arg0 context.Context, arg1 *store.BrowserActivityAppend) (*model.BrowserActivityAcknowledgement, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodAppendBrowserActivity), func(callCtx context.Context) (*model.BrowserActivityAcknowledgement, error) {
-		return s.next.AppendBrowserActivity(callCtx, arg1)
+func (s *timedExamAttemptStore) ReallowAttempt(arg0 context.Context, arg1 *store.ExamAttemptReallow, arg2 *store.CommandIdempotency) (*store.ExamAttemptReallowResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodReallowAttempt), func(callCtx context.Context) (*store.ExamAttemptReallowResult, error) {
+		return s.next.ReallowAttempt(callCtx, arg1, arg2)
 	})
 }
 
@@ -1640,15 +1509,231 @@ func (s *timedExamAttemptStore) AcknowledgeCorrection(arg0 context.Context, arg1
 	})
 }
 
-func (s *timedExamAttemptStore) ListBrowserActivity(arg0 context.Context, arg1 store.BrowserActivityListOptions) ([]store.BrowserActivityRecord, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodListBrowserActivity), func(callCtx context.Context) ([]store.BrowserActivityRecord, error) {
-		return s.next.ListBrowserActivity(callCtx, arg1)
+func (s *timedExamAttemptStore) Get(arg0 context.Context, arg1 model.ExamID, arg2 model.ExamAttemptID) (*store.ExamAttemptManagerSnapshot, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodGet), func(callCtx context.Context) (*store.ExamAttemptManagerSnapshot, error) {
+		return s.next.Get(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedExamAttemptStore) List(arg0 context.Context, arg1 store.ExamAttemptManagerListOptions) ([]store.ExamAttemptManagerSnapshot, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodList), func(callCtx context.Context) ([]store.ExamAttemptManagerSnapshot, error) {
+		return s.next.List(callCtx, arg1)
+	})
+}
+
+func (s *timedExamAttemptStore) ListSittingCandidateStatuses(arg0 context.Context, arg1 store.SittingCandidateStatusListOptions) (*store.SittingCandidateStatusPage, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodListSittingCandidateStatuses), func(callCtx context.Context) (*store.SittingCandidateStatusPage, error) {
+		return s.next.ListSittingCandidateStatuses(callCtx, arg1)
+	})
+}
+
+func (s *timedExamAttemptStore) ListSessionRevocationInvalidationTargets(arg0 context.Context, arg1 model.UserID, arg2 []model.SessionID) ([]store.ExamAttemptInvalidationTarget, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodListSessionRevocationInvalidationTargets), func(callCtx context.Context) ([]store.ExamAttemptInvalidationTarget, error) {
+		return s.next.ListSessionRevocationInvalidationTargets(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedExamAttemptStore) ListCandidateActivity(arg0 context.Context, arg1 store.CandidateExamActivityListOptions) (*store.CandidateExamActivityPage, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodListCandidateActivity), func(callCtx context.Context) (*store.CandidateExamActivityPage, error) {
+		return s.next.ListCandidateActivity(callCtx, arg1)
+	})
+}
+
+func (s *timedExamAttemptStore) GetCandidatePresentation(arg0 context.Context, arg1 store.CandidateAttemptAccess) (*store.CandidateExamPresentation, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodGetCandidatePresentation), func(callCtx context.Context) (*store.CandidateExamPresentation, error) {
+		return s.next.GetCandidatePresentation(callCtx, arg1)
 	})
 }
 
 func (s *timedExamAttemptStore) ResolveCandidateResource(arg0 context.Context, arg1 store.CandidateAttemptAccess, arg2 model.ExamResourceID) (*store.CandidateResourceContent, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodResolveCandidateResource), func(callCtx context.Context) (*store.CandidateResourceContent, error) {
 		return s.next.ResolveCandidateResource(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedExamFocusLossStore) ResolveFocusLossTarget(arg0 context.Context, arg1 store.ExamAttemptFocusLossAccess) (*store.ExamAttemptFocusLossTarget, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamFocusLoss, methodResolveFocusLossTarget), func(callCtx context.Context) (*store.ExamAttemptFocusLossTarget, error) {
+		return s.next.ResolveFocusLossTarget(callCtx, arg1)
+	})
+}
+
+func (s *timedExamFocusLossStore) RecordFocusLoss(arg0 context.Context, arg1 *store.ExamAttemptFocusLossSignal) (*store.ExamAttemptFocusLossResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamFocusLoss, methodRecordFocusLoss), func(callCtx context.Context) (*store.ExamAttemptFocusLossResult, error) {
+		return s.next.RecordFocusLoss(callCtx, arg1)
+	})
+}
+
+func (s *timedExamFocusLossStore) ResolveEndedFocusLossTarget(arg0 context.Context, arg1 store.ExamAttemptFocusLossAccess) (*store.ExamAttemptFocusLossDiscrepancyTarget, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamFocusLoss, methodResolveEndedFocusLossTarget), func(callCtx context.Context) (*store.ExamAttemptFocusLossDiscrepancyTarget, error) {
+		return s.next.ResolveEndedFocusLossTarget(callCtx, arg1)
+	})
+}
+
+func (s *timedExamFocusLossStore) RecordEndedFocusLoss(arg0 context.Context, arg1 *store.ExamAttemptFocusLossDiscrepancy) (*store.ExamAttemptFocusLossDiscrepancyResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamFocusLoss, methodRecordEndedFocusLoss), func(callCtx context.Context) (*store.ExamAttemptFocusLossDiscrepancyResult, error) {
+		return s.next.RecordEndedFocusLoss(callCtx, arg1)
+	})
+}
+
+func (s *timedSecurityPreflightStore) PrepareSecurityPreflight(arg0 context.Context, arg1 *store.SecurityPreflightPrepare, arg2 *store.CommandIdempotency) (*store.SecurityPreflightPrepared, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateSecurityPreflight, methodPrepareSecurityPreflight), func(callCtx context.Context) (*store.SecurityPreflightPrepared, error) {
+		return s.next.PrepareSecurityPreflight(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedSecurityPreflightStore) ResolveSecurityPreflightSitting(arg0 context.Context, arg1 string, arg2 model.UserID, arg3 model.SessionID) (model.ExamSittingID, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateSecurityPreflight, methodResolveSecurityPreflightSitting), func(callCtx context.Context) (model.ExamSittingID, error) {
+		return s.next.ResolveSecurityPreflightSitting(callCtx, arg1, arg2, arg3)
+	})
+}
+
+func (s *timedSecurityPreflightStore) ReportSecurityPreflight(arg0 context.Context, arg1 *store.SecurityPreflightReport, arg2 *store.CommandIdempotency) (*model.SecurityPreflightResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateSecurityPreflight, methodReportSecurityPreflight), func(callCtx context.Context) (*model.SecurityPreflightResult, error) {
+		return s.next.ReportSecurityPreflight(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedSecurityPreflightStore) RecoverSecurityPolicy(arg0 context.Context, arg1 store.SecurityPreflightAccess, arg2 model.ExamAttemptID) (*store.SecurityPolicyRecovery, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateSecurityPreflight, methodRecoverSecurityPolicy), func(callCtx context.Context) (*store.SecurityPolicyRecovery, error) {
+		return s.next.RecoverSecurityPolicy(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedNativeDeliveryStore) ResolveNativeDeliveryTarget(arg0 context.Context, arg1 store.NativeDeliveryAccess) (*store.NativeDeliveryTarget, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateNativeDelivery, methodResolveNativeDeliveryTarget), func(callCtx context.Context) (*store.NativeDeliveryTarget, error) {
+		return s.next.ResolveNativeDeliveryTarget(callCtx, arg1)
+	})
+}
+
+func (s *timedNativeDeliveryStore) NativeDeliveryStatus(arg0 context.Context, arg1 store.NativeDeliveryAccess) (*model.NativeSecurityStreamStatus, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateNativeDelivery, methodNativeDeliveryStatus), func(callCtx context.Context) (*model.NativeSecurityStreamStatus, error) {
+		return s.next.NativeDeliveryStatus(callCtx, arg1)
+	})
+}
+
+func (s *timedNativeDeliveryStore) NativeDeliveryReceipt(arg0 context.Context, arg1 store.NativeDeliveryAccess, arg2 int64) (*model.NativeBatchReceipt, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateNativeDelivery, methodNativeDeliveryReceipt), func(callCtx context.Context) (*model.NativeBatchReceipt, error) {
+		return s.next.NativeDeliveryReceipt(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedNativeDeliveryStore) AppendNativeDelivery(arg0 context.Context, arg1 *store.NativeDeliveryAppend, arg2 *store.CommandIdempotency) (*model.NativeSecurityAcknowledgement, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateNativeDelivery, methodAppendNativeDelivery), func(callCtx context.Context) (*model.NativeSecurityAcknowledgement, error) {
+		return s.next.AppendNativeDelivery(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedNativeDeliveryStore) DeclareNativeDeliveryGaps(arg0 context.Context, arg1 *store.NativeDeliveryGapDeclaration, arg2 *store.CommandIdempotency) (*model.DeliveryGapReceipt, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateNativeDelivery, methodDeclareNativeDeliveryGaps), func(callCtx context.Context) (*model.DeliveryGapReceipt, error) {
+		return s.next.DeclareNativeDeliveryGaps(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedNativeDeliveryStore) SealNativeDelivery(arg0 context.Context, arg1 *store.NativeDeliveryFinalDeclaration, arg2 *store.CommandIdempotency) (*model.NativeSecurityStreamStatus, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateNativeDelivery, methodSealNativeDelivery), func(callCtx context.Context) (*model.NativeSecurityStreamStatus, error) {
+		return s.next.SealNativeDelivery(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedNativeDeliveryStore) UpdateNativeDeliverySummary(arg0 context.Context, arg1 *store.NativeDeliverySummaryUpdate, arg2 *store.CommandIdempotency) (*model.NativeSecurityStreamStatus, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateNativeDelivery, methodUpdateNativeDeliverySummary), func(callCtx context.Context) (*model.NativeSecurityStreamStatus, error) {
+		return s.next.UpdateNativeDeliverySummary(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedBrowserDeliveryStore) StartBrowserActivity(arg0 context.Context, arg1 *store.BrowserActivitySourceStart) (*model.BrowserSourceStatus, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateBrowserDelivery, methodStartBrowserActivity), func(callCtx context.Context) (*model.BrowserSourceStatus, error) {
+		return s.next.StartBrowserActivity(callCtx, arg1)
+	})
+}
+
+func (s *timedBrowserDeliveryStore) BrowserSourceStatus(arg0 context.Context, arg1 store.BrowserDeliveryAccess) (*model.BrowserSourceStatus, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateBrowserDelivery, methodBrowserSourceStatus), func(callCtx context.Context) (*model.BrowserSourceStatus, error) {
+		return s.next.BrowserSourceStatus(callCtx, arg1)
+	})
+}
+
+func (s *timedBrowserDeliveryStore) BrowserSourceList(arg0 context.Context, arg1 store.BrowserDeliveryAccess) ([]model.BrowserSourceStatus, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateBrowserDelivery, methodBrowserSourceList), func(callCtx context.Context) ([]model.BrowserSourceStatus, error) {
+		return s.next.BrowserSourceList(callCtx, arg1)
+	})
+}
+
+func (s *timedBrowserDeliveryStore) AppendBrowserActivity(arg0 context.Context, arg1 *store.BrowserActivityAppend) (*model.BrowserActivityAcknowledgement, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateBrowserDelivery, methodAppendBrowserActivity), func(callCtx context.Context) (*model.BrowserActivityAcknowledgement, error) {
+		return s.next.AppendBrowserActivity(callCtx, arg1)
+	})
+}
+
+func (s *timedBrowserDeliveryStore) ListBrowserActivity(arg0 context.Context, arg1 store.BrowserActivityListOptions) ([]store.BrowserActivityRecord, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateBrowserDelivery, methodListBrowserActivity), func(callCtx context.Context) ([]store.BrowserActivityRecord, error) {
+		return s.next.ListBrowserActivity(callCtx, arg1)
+	})
+}
+
+func (s *timedBrowserDeliveryStore) ResolveBrowserDeliveryTarget(arg0 context.Context, arg1 store.BrowserDeliveryAccess) (*store.DeliveryOwnerTarget, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateBrowserDelivery, methodResolveBrowserDeliveryTarget), func(callCtx context.Context) (*store.DeliveryOwnerTarget, error) {
+		return s.next.ResolveBrowserDeliveryTarget(callCtx, arg1)
+	})
+}
+
+func (s *timedBrowserDeliveryStore) BrowserDeliveryReceipts(arg0 context.Context, arg1 store.BrowserDeliveryAccess, arg2 int64, arg3 int) (*model.BrowserReceiptPage, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateBrowserDelivery, methodBrowserDeliveryReceipts), func(callCtx context.Context) (*model.BrowserReceiptPage, error) {
+		return s.next.BrowserDeliveryReceipts(callCtx, arg1, arg2, arg3)
+	})
+}
+
+func (s *timedBrowserDeliveryStore) AppendHistoricalBrowserDelivery(arg0 context.Context, arg1 *store.BrowserActivityAppend, arg2 *store.CommandIdempotency) (*model.BrowserActivityAcknowledgement, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateBrowserDelivery, methodAppendHistoricalBrowserDelivery), func(callCtx context.Context) (*model.BrowserActivityAcknowledgement, error) {
+		return s.next.AppendHistoricalBrowserDelivery(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedBrowserDeliveryStore) DeclareBrowserDeliveryGaps(arg0 context.Context, arg1 *store.BrowserDeliveryGapDeclaration, arg2 *store.CommandIdempotency) (*model.BrowserDeliveryGapResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateBrowserDelivery, methodDeclareBrowserDeliveryGaps), func(callCtx context.Context) (*model.BrowserDeliveryGapResult, error) {
+		return s.next.DeclareBrowserDeliveryGaps(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedBrowserDeliveryStore) SealBrowserDelivery(arg0 context.Context, arg1 *store.BrowserDeliveryFinalDeclaration, arg2 *store.CommandIdempotency) (*model.BrowserSourceStatus, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateBrowserDelivery, methodSealBrowserDelivery), func(callCtx context.Context) (*model.BrowserSourceStatus, error) {
+		return s.next.SealBrowserDelivery(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedBrowserDeliveryStore) UpdateBrowserDeliverySummary(arg0 context.Context, arg1 *store.BrowserDeliverySummaryUpdate, arg2 *store.CommandIdempotency) (*model.BrowserDeliverySummaryResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateBrowserDelivery, methodUpdateBrowserDeliverySummary), func(callCtx context.Context) (*model.BrowserDeliverySummaryResult, error) {
+		return s.next.UpdateBrowserDeliverySummary(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedDeliveryBudgetStore) ResolveLiveDeliveryTarget(arg0 context.Context, arg1 store.CandidateAttemptAccess) (*store.DeliveryOwnerTarget, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateDeliveryBudget, methodResolveLiveDeliveryTarget), func(callCtx context.Context) (*store.DeliveryOwnerTarget, error) {
+		return s.next.ResolveLiveDeliveryTarget(callCtx, arg1)
+	})
+}
+
+func (s *timedDeliveryBudgetStore) DeliveryBudget(arg0 context.Context, arg1 store.DeliveryBudgetAccess) (*model.DeliveryBudgetSnapshot, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateDeliveryBudget, methodDeliveryBudget), func(callCtx context.Context) (*model.DeliveryBudgetSnapshot, error) {
+		return s.next.DeliveryBudget(callCtx, arg1)
+	})
+}
+
+func (s *timedDeliveryBudgetStore) StopDeliveryDetails(arg0 context.Context, arg1 *store.DeliveryDetailsStop, arg2 *store.CommandIdempotency) (*model.StopDeliveryDetailsResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateDeliveryBudget, methodStopDeliveryDetails), func(callCtx context.Context) (*model.StopDeliveryDetailsResult, error) {
+		return s.next.StopDeliveryDetails(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedDeliveryBudgetStore) ListExpiredDeliveries(arg0 context.Context, arg1 int) ([]store.DeliveryExpiryDue, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateDeliveryBudget, methodListExpiredDeliveries), func(callCtx context.Context) ([]store.DeliveryExpiryDue, error) {
+		return s.next.ListExpiredDeliveries(callCtx, arg1)
+	})
+}
+
+func (s *timedDeliveryBudgetStore) ExpireDelivery(arg0 context.Context, arg1 *store.DeliveryExpiry) (bool, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateDeliveryBudget, methodExpireDelivery), func(callCtx context.Context) (bool, error) {
+		return s.next.ExpireDelivery(callCtx, arg1)
 	})
 }
 
@@ -3853,6 +3938,11 @@ var (
 	_ store.ExamRevisionStore               = (*timedExamRevisionStore)(nil)
 	_ store.ExamSittingStore                = (*timedExamSittingStore)(nil)
 	_ store.ExamAttemptStore                = (*timedExamAttemptStore)(nil)
+	_ store.ExamFocusLossStore              = (*timedExamFocusLossStore)(nil)
+	_ store.SecurityPreflightStore          = (*timedSecurityPreflightStore)(nil)
+	_ store.NativeDeliveryStore             = (*timedNativeDeliveryStore)(nil)
+	_ store.BrowserDeliveryStore            = (*timedBrowserDeliveryStore)(nil)
+	_ store.DeliveryBudgetStore             = (*timedDeliveryBudgetStore)(nil)
 	_ store.ExamAttemptWorkspaceStore       = (*timedExamAttemptWorkspaceStore)(nil)
 	_ store.ExamSubmissionStore             = (*timedExamSubmissionStore)(nil)
 	_ store.ExamIntegrityReviewStore        = (*timedExamIntegrityReviewStore)(nil)

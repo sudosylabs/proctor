@@ -28,7 +28,7 @@ func testExamAttemptFocusLoss(t *testing.T, ctx context.Context, ss store.Store,
 	access := store.ExamAttemptFocusLossAccess{AttemptID: connected.Attempt.ID, ParticipationID: connected.Participation.ID,
 		Generation: connected.Participation.Generation, CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID,
 		ConnectionID: connected.Connection.ID, ContinuityCredentialHash: credentialHash}
-	target, err := ss.ExamAttempt().ResolveFocusLossTarget(ctx, access)
+	target, err := ss.ExamFocusLoss().ResolveFocusLossTarget(ctx, access)
 	require.NoError(t, err)
 	require.Equal(t, fixture.examID, target.ExamID)
 	require.Equal(t, fixture.sitting.ID, target.SittingID)
@@ -47,7 +47,7 @@ func testExamAttemptFocusLoss(t *testing.T, ctx context.Context, ss store.Store,
 	require.False(t, second.ThresholdCrossed, "Focus Loss rolling bucket = %#v, %#v", first, second)
 	require.Equal(t, 2, second.WindowIncidentCount, "Focus Loss rolling bucket = %#v, %#v", first, second)
 	crossingInput := newFocusLossInput(t, ctx, ss, fixture, access, 4, 2000, model.FocusLossSourceFullscreenExited)
-	crossed, err := ss.ExamAttempt().RecordFocusLoss(ctx, crossingInput)
+	crossed, err := ss.ExamFocusLoss().RecordFocusLoss(ctx, crossingInput)
 	require.NoError(t, err)
 	require.False(t, crossed.Duplicate)
 	require.True(t, crossed.CollectionEnabled)
@@ -74,7 +74,7 @@ func testExamAttemptFocusLoss(t *testing.T, ctx context.Context, ss store.Store,
 	replay := *crossingInput
 	replay.SignalID, replay.EvidenceID, replay.FlagID, replay.SuspensionID = model.NewFocusLossSignalID(), model.NewIntegrityEvidenceID(), model.NewIntegrityFlagID(), model.NewAttemptSuspensionID()
 	replay.AuditEventID, replay.AuditAt = saveExamAttemptAudit(t, ctx, ss, fixture).ID, model.NowUTC()
-	replayed, err := ss.ExamAttempt().RecordFocusLoss(ctx, &replay)
+	replayed, err := ss.ExamFocusLoss().RecordFocusLoss(ctx, &replay)
 	require.NoError(t, err)
 	require.True(t, replayed.Duplicate, "RecordFocusLoss(duplicate) = %#v, first = %#v", replayed, crossed)
 	require.Equal(t, crossed.Signal.ID, replayed.Signal.ID, "RecordFocusLoss(duplicate) = %#v, first = %#v", replayed, crossed)
@@ -88,12 +88,12 @@ func testExamAttemptFocusLoss(t *testing.T, ctx context.Context, ss store.Store,
 	changed := replay
 	changed.DurationMilliseconds++
 	changed.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
-	_, err = ss.ExamAttempt().RecordFocusLoss(ctx, &changed)
+	_, err = ss.ExamFocusLoss().RecordFocusLoss(ctx, &changed)
 	requireConflictConstraint(t, err, "focus_loss_sequence")
 	stale := replay
 	stale.Sequence = 3
 	stale.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
-	_, err = ss.ExamAttempt().RecordFocusLoss(ctx, &stale)
+	_, err = ss.ExamFocusLoss().RecordFocusLoss(ctx, &stale)
 	requireConflictConstraint(t, err, "focus_loss_sequence")
 
 	recordFocusLoss(t, ctx, ss, fixture, access, 5, 2000, "")
@@ -234,7 +234,7 @@ func testExamAttemptFocusLossPolicies(t *testing.T, ctx context.Context, ss stor
 		connected, access := connectFocusLossFixture(t, ctx, ss, fixture, "focus-suspend")
 		recordFocusLoss(t, ctx, ss, fixture, access, 1, 500, model.FocusLossSourceDocumentHidden)
 		crossingInput := newFocusLossInput(t, ctx, ss, fixture, access, 2, 500, model.FocusLossSourceFullscreenExited)
-		crossed, err := ss.ExamAttempt().RecordFocusLoss(ctx, crossingInput)
+		crossed, err := ss.ExamFocusLoss().RecordFocusLoss(ctx, crossingInput)
 		require.NoError(t, err)
 		require.True(t, crossed.ThresholdCrossed)
 		require.Equal(t, model.IntegrityOutcomeFlagAndSuspend, crossed.PolicyOutcome)
@@ -252,14 +252,14 @@ func testExamAttemptFocusLossPolicies(t *testing.T, ctx context.Context, ss stor
 		require.NotNil(t, crossed.Suspension)
 		require.Equal(t, crossingInput.SuspensionID, crossed.Suspension.ID)
 		require.Equal(t, model.AttemptSuspensionCandidateReasonFocusLossPolicy, crossed.Suspension.CandidateReason)
-		resolved, err := ss.ExamAttempt().ResolveFocusLossTarget(ctx, access)
+		resolved, err := ss.ExamFocusLoss().ResolveFocusLossTarget(ctx, access)
 		require.NoError(t, err)
 		require.Equal(t, connected.Attempt.ID, resolved.AttemptID)
 		require.Equal(t, connected.Participation.Generation, resolved.Generation)
 		replay := *crossingInput
 		replay.SignalID, replay.EvidenceID, replay.FlagID, replay.SuspensionID = model.NewFocusLossSignalID(), model.NewIntegrityEvidenceID(), model.NewIntegrityFlagID(), model.NewAttemptSuspensionID()
 		replay.AuditEventID, replay.AuditAt = saveExamAttemptAudit(t, ctx, ss, fixture).ID, model.NowUTC()
-		replayed, err := ss.ExamAttempt().RecordFocusLoss(ctx, &replay)
+		replayed, err := ss.ExamFocusLoss().RecordFocusLoss(ctx, &replay)
 		require.NoError(t, err)
 		require.True(t, replayed.Duplicate, "Focus Loss self-suspended replay = %#v, first = %#v", replayed, crossed)
 		require.Equal(t, crossed.Signal.ID, replayed.Signal.ID, "Focus Loss self-suspended replay = %#v, first = %#v", replayed, crossed)
@@ -271,12 +271,12 @@ func testExamAttemptFocusLossPolicies(t *testing.T, ctx context.Context, ss stor
 		changed := replay
 		changed.DurationMilliseconds++
 		changed.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
-		_, err = ss.ExamAttempt().RecordFocusLoss(ctx, &changed)
+		_, err = ss.ExamFocusLoss().RecordFocusLoss(ctx, &changed)
 		requireConflictConstraint(t, err, "focus_loss_sequence")
 		later := replay
 		later.Sequence++
 		later.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
-		_, err = ss.ExamAttempt().RecordFocusLoss(ctx, &later)
+		_, err = ss.ExamFocusLoss().RecordFocusLoss(ctx, &later)
 		requireConflictConstraint(t, err, "exam_attempt_state")
 
 		reallow := &store.ExamAttemptReallow{ExamID: fixture.examID, SittingID: fixture.sitting.ID, AttemptID: connected.Attempt.ID,
@@ -303,15 +303,15 @@ func testExamAttemptFocusLossPolicies(t *testing.T, ctx context.Context, ss stor
 
 		wrongCredential := newFocusLossInput(t, ctx, ss, fixture, access, 1, 500, "")
 		wrongCredential.Access.ContinuityCredentialHash = model.HashToken(model.NewCredentialToken())
-		_, err := ss.ExamAttempt().RecordFocusLoss(ctx, wrongCredential)
+		_, err := ss.ExamFocusLoss().RecordFocusLoss(ctx, wrongCredential)
 		requireConflictConstraint(t, err, "attempt_participation_credential")
 		wrongGeneration := newFocusLossInput(t, ctx, ss, fixture, access, 1, 500, "")
 		wrongGeneration.Access.Generation++
-		_, err = ss.ExamAttempt().RecordFocusLoss(ctx, wrongGeneration)
+		_, err = ss.ExamFocusLoss().RecordFocusLoss(ctx, wrongGeneration)
 		requireConflictConstraint(t, err, "attempt_participation_generation")
 		wrongSession := newFocusLossInput(t, ctx, ss, fixture, access, 1, 500, "")
 		wrongSession.Access.SessionID = model.NewSessionID()
-		_, err = ss.ExamAttempt().RecordFocusLoss(ctx, wrongSession)
+		_, err = ss.ExamFocusLoss().RecordFocusLoss(ctx, wrongSession)
 		require.True(t, store.IsNotFound(err), "RecordFocusLoss(foreign Session) error")
 
 		endedAt := model.NowUTC()
@@ -327,7 +327,7 @@ func testExamAttemptFocusLossPolicies(t *testing.T, ctx context.Context, ss stor
 		require.NoError(t, err)
 		require.True(t, closed.Changed)
 		closedInput := newFocusLossInput(t, ctx, ss, fixture, access, 2, 500, "")
-		_, err = ss.ExamAttempt().RecordFocusLoss(ctx, closedInput)
+		_, err = ss.ExamFocusLoss().RecordFocusLoss(ctx, closedInput)
 		requireConflictConstraint(t, err, "attempt_connection_closed")
 
 		closeAt := model.NowUTC()
@@ -339,7 +339,7 @@ func testExamAttemptFocusLossPolicies(t *testing.T, ctx context.Context, ss stor
 			examCommand(fixture.manager.ID, "exam.sitting.close", "focus-close", "focus-close"))
 		require.NoError(t, err)
 		terminalInput := newFocusLossInput(t, ctx, ss, fixture, access, 2, 500, "")
-		_, err = ss.ExamAttempt().RecordFocusLoss(ctx, terminalInput)
+		_, err = ss.ExamFocusLoss().RecordFocusLoss(ctx, terminalInput)
 		requireConflictConstraint(t, err, "exam_sitting_state")
 	})
 
@@ -350,7 +350,7 @@ func testExamAttemptFocusLossPolicies(t *testing.T, ctx context.Context, ss stor
 		connected, access := connectFocusLossFixture(t, ctx, ss, fixture, "focus-expiry-race")
 		input := newFocusLossInput(t, ctx, ss, fixture, access, 1, 500, "")
 		err := probe.FenceRenewalPastDeadline(t, ctx, connected.Participation.ID, func() error {
-			_, recordErr := ss.ExamAttempt().RecordFocusLoss(ctx, input)
+			_, recordErr := ss.ExamFocusLoss().RecordFocusLoss(ctx, input)
 			return recordErr
 		})
 		requireConflictConstraint(t, err, "attempt_participation_expired")
@@ -387,18 +387,18 @@ func testExamAttemptFocusLossPolicies(t *testing.T, ctx context.Context, ss stor
 		connected, access := connectFocusLossFixture(t, ctx, ss, fixture, "focus-audit-rollback")
 		input := newFocusLossInput(t, ctx, ss, fixture, access, 1, 500, model.FocusLossSourceWindowBlur)
 		input.AuditEventID = model.NewAuditEventID()
-		_, err := ss.ExamAttempt().RecordFocusLoss(ctx, input)
+		_, err := ss.ExamFocusLoss().RecordFocusLoss(ctx, input)
 		require.Error(t, err, "RecordFocusLoss with missing audit unexpectedly succeeded")
 		require.Equal(t, FocusLossPersistenceProbe{}, probe.FocusLossPersistence(t, ctx, connected.Attempt.ID, connected.Participation.Generation))
 		input.AuditEventID, input.AuditAt = saveExamAttemptAudit(t, ctx, ss, fixture).ID, model.NowUTC()
-		accepted, err := ss.ExamAttempt().RecordFocusLoss(ctx, input)
+		accepted, err := ss.ExamFocusLoss().RecordFocusLoss(ctx, input)
 		require.NoError(t, err)
 		require.False(t, accepted.Duplicate)
 		require.Equal(t, int64(1), accepted.AcceptedSequence)
 	})
 
 	t.Run("two stores converge the same sequence", func(t *testing.T) {
-		if probe.ConcurrentExamAttempt == nil {
+		if probe.ConcurrentExamFocusLoss == nil {
 			t.Skip("no independent SQL Store supplied")
 		}
 		policy := model.FocusLossPolicy{Enabled: true, MinimumDuration: 500 * time.Millisecond, IncidentCount: 2,
@@ -410,7 +410,7 @@ func testExamAttemptFocusLossPolicies(t *testing.T, ctx context.Context, ss stor
 			newFocusLossInput(t, ctx, ss, fixture, access, 2, 500, model.FocusLossSourceWindowBlur),
 			newFocusLossInput(t, ctx, ss, fixture, access, 2, 500, model.FocusLossSourceWindowBlur),
 		}
-		stores := [2]store.ExamAttemptStore{ss.ExamAttempt(), probe.ConcurrentExamAttempt}
+		stores := [2]store.ExamFocusLossStore{ss.ExamFocusLoss(), probe.ConcurrentExamFocusLoss}
 		results := make(chan *store.ExamAttemptFocusLossResult, 2)
 		errorsFound := make(chan error, 2)
 		start := make(chan struct{})
@@ -472,7 +472,7 @@ func recordFocusLoss(t *testing.T, ctx context.Context, ss store.Store, fixture 
 ) *store.ExamAttemptFocusLossResult {
 	t.Helper()
 	input := newFocusLossInput(t, ctx, ss, fixture, access, sequence, duration, source)
-	result, err := ss.ExamAttempt().RecordFocusLoss(ctx, input)
+	result, err := ss.ExamFocusLoss().RecordFocusLoss(ctx, input)
 	require.NoError(t, err)
 	return result
 }

@@ -49,7 +49,7 @@ func (r browserSourceRefusalRecord) Validate() error {
 // the same declaration returns the original source status or refusal; a
 // different declaration under the same source ID is a conflict, and a refusal
 // is returned as *store.BrowserSourceRefusal.
-func (s *SQLExamAttemptStore) StartBrowserActivity(
+func (s *SQLBrowserDeliveryStore) StartBrowserActivity(
 	ctx context.Context,
 	input *store.BrowserActivitySourceStart,
 ) (*model.BrowserSourceStatus, error) {
@@ -103,7 +103,7 @@ type browserSourcePrior struct {
 
 // startBrowserActivity performs one source start inside the caller's
 // transaction.
-func (s *SQLExamAttemptStore) startBrowserActivity(
+func (s *SQLBrowserDeliveryStore) startBrowserActivity(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	input *store.BrowserActivitySourceStart,
@@ -195,7 +195,7 @@ func (s *SQLExamAttemptStore) startBrowserActivity(
 
 // lockBrowserSourceStart locks the Sitting, Attempt, Candidate guard and the
 // active Participation and checks the declared generation.
-func (s *SQLExamAttemptStore) lockBrowserSourceStart(
+func (s *SQLBrowserDeliveryStore) lockBrowserSourceStart(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	input *store.BrowserActivitySourceStart,
@@ -228,7 +228,7 @@ func (s *SQLExamAttemptStore) lockBrowserSourceStart(
 		return candidateAttemptGuard{}, browserSourceStartParticipation{}, err
 	}
 
-	guard, err := s.lockCandidateGuard(ctx, tx, input.Access)
+	guard, err := lockCandidateGuard(ctx, tx, input.Access)
 	if err != nil {
 		return candidateAttemptGuard{}, browserSourceStartParticipation{}, err
 	}
@@ -967,7 +967,7 @@ func closeParticipationBrowserSources(
 
 // BrowserSourceStatus returns the current delivery status of the source named
 // by access, after verifying the caller's delivery access.
-func (s *SQLExamAttemptStore) BrowserSourceStatus(
+func (s *SQLBrowserDeliveryStore) BrowserSourceStatus(
 	ctx context.Context,
 	access store.BrowserDeliveryAccess,
 ) (*model.BrowserSourceStatus, error) {
@@ -984,7 +984,7 @@ func (s *SQLExamAttemptStore) BrowserSourceStatus(
 
 // BrowserSourceList returns the delivery status of every Browser Activity
 // source of the Participation, in start order.
-func (s *SQLExamAttemptStore) BrowserSourceList(
+func (s *SQLBrowserDeliveryStore) BrowserSourceList(
 	ctx context.Context,
 	access store.BrowserDeliveryAccess,
 ) ([]model.BrowserSourceStatus, error) {
@@ -1059,7 +1059,7 @@ func lockBrowserParticipationOwner(ctx context.Context, tx *sqlxTxWrapper, acces
 
 	return nil
 }
-func (s *SQLExamAttemptStore) lockBrowserDelivery(ctx context.Context, tx *sqlxTxWrapper, access store.BrowserDeliveryAccess) error {
+func (s *SQLBrowserDeliveryStore) lockBrowserDelivery(ctx context.Context, tx *sqlxTxWrapper, access store.BrowserDeliveryAccess) error {
 	if !access.SourceSessionID.IsValid() {
 		return store.NewErrInvalidInput("browser_activity", "source", nil)
 	}
@@ -1144,7 +1144,7 @@ func (s *SQLExamAttemptStore) lockBrowserDelivery(ctx context.Context, tx *sqlxT
 			return err
 		}
 	} else if closure.ClosedAt == nil {
-		if _, err := s.lockCandidateGuard(ctx, tx, access.Access); err != nil {
+		if _, err := lockCandidateGuard(ctx, tx, access.Access); err != nil {
 			return err
 		}
 	}
@@ -1189,24 +1189,6 @@ func closeSittingBrowserSources(ctx context.Context, tx *sqlxTxWrapper, sittingI
 	}
 }
 
-// ResolveLiveDeliveryTarget returns the Sitting and Class that own the
-// Candidate's live Attempt, after locking its Candidate guard.
-func (s *SQLExamAttemptStore) ResolveLiveDeliveryTarget(
-	ctx context.Context,
-	access store.CandidateAttemptAccess,
-) (*store.DeliveryOwnerTarget, error) {
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "resolve Browser source owner", func(
-		ctx context.Context,
-		tx *sqlxTxWrapper,
-	) (*store.DeliveryOwnerTarget, error) {
-		guard, err := s.lockCandidateGuard(ctx, tx, access)
-		if err != nil {
-			return nil, err
-		}
-
-		return &store.DeliveryOwnerTarget{SittingID: model.ExamSittingID(guard.SittingID), ClassID: model.ClassID(guard.ClassID)}, nil
-	})
-}
 func completeBrowserSourceAudit(
 	ctx context.Context,
 	tx *sqlxTxWrapper,

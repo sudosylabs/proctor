@@ -287,6 +287,21 @@ func (s *LifecycleStore) ExamCorrection() store.ExamCorrectionStore {
 func (s *LifecycleStore) ExamAttempt() store.ExamAttemptStore {
 	return lifecycleExamAttemptStore{}
 }
+func (s *LifecycleStore) ExamFocusLoss() store.ExamFocusLossStore {
+	return lifecycleExamFocusLossStore{}
+}
+func (s *LifecycleStore) SecurityPreflight() store.SecurityPreflightStore {
+	return lifecycleSecurityPreflightStore{}
+}
+func (s *LifecycleStore) NativeDelivery() store.NativeDeliveryStore {
+	return lifecycleNativeDeliveryStore{}
+}
+func (s *LifecycleStore) BrowserDelivery() store.BrowserDeliveryStore {
+	return lifecycleBrowserDeliveryStore{}
+}
+func (s *LifecycleStore) DeliveryBudget() store.DeliveryBudgetStore {
+	return lifecycleDeliveryBudgetStore{}
+}
 func (s *LifecycleStore) ExamAttemptWorkspace() store.ExamAttemptWorkspaceStore {
 	return lifecycleExamAttemptWorkspaceStore{}
 }
@@ -433,6 +448,13 @@ type lifecycleExamAuthoringStore struct{ store.ExamAuthoringStore }
 type lifecycleExamResourceStore struct{ store.ExamResourceStore }
 type lifecycleExamCorrectionStore struct{ store.ExamCorrectionStore }
 type lifecycleExamAttemptStore struct{ store.ExamAttemptStore }
+type lifecycleExamFocusLossStore struct{ store.ExamFocusLossStore }
+type lifecycleSecurityPreflightStore struct {
+	store.SecurityPreflightStore
+}
+type lifecycleNativeDeliveryStore struct{ store.NativeDeliveryStore }
+type lifecycleBrowserDeliveryStore struct{ store.BrowserDeliveryStore }
+type lifecycleDeliveryBudgetStore struct{ store.DeliveryBudgetStore }
 type lifecycleExamAttemptWorkspaceStore struct {
 	store.ExamAttemptWorkspaceStore
 }

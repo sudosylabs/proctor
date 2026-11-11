@@ -52,7 +52,7 @@ func (s *SQLExamAttemptWorkspaceStore) ResolveFile(
 		ctx context.Context,
 		tx *sqlxTxWrapper,
 	) (*store.CandidateWorkspaceContent, error) {
-		if _, err := s.attempts.lockCandidateGuard(ctx, tx, access); err != nil {
+		if _, err := lockCandidateGuard(ctx, tx, access); err != nil {
 			return nil, err
 		}
 		return resolveCandidateWorkspaceFile(ctx, tx, access, entryID)
@@ -643,7 +643,7 @@ func (s *SQLExamAttemptWorkspaceStore) ListJournal(
 		ctx context.Context,
 		tx *sqlxTxWrapper,
 	) (*store.CandidateWorkspaceJournalPage, error) {
-		if _, err := s.attempts.lockCandidateGuard(ctx, tx, options.Access); err != nil {
+		if _, err := lockCandidateGuard(ctx, tx, options.Access); err != nil {
 			return nil, err
 		}
 		return listAttemptWorkspaceJournalSnapshot(ctx, tx, options)

@@ -1051,7 +1051,7 @@ func testExamSubmissionIntegrityGap(t *testing.T, ctx context.Context, ss store.
 		require.Equal(t, int64(4), persisted.UnresolvedMissing)
 	}
 	late := newFocusLossInput(t, ctx, ss, fixture, focusAccess, 3, 2000, model.FocusLossSourceDocumentHidden)
-	_, err = ss.ExamAttempt().RecordFocusLoss(ctx, late)
+	_, err = ss.ExamFocusLoss().RecordFocusLoss(ctx, late)
 	require.Error(t, err, "RecordFocusLoss(after Submission) succeeded")
 }
 

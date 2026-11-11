@@ -197,7 +197,7 @@ func (s *SQLExamAttemptStore) resolveCorrectionAcknowledgementTarget(
 	tx *sqlxTxWrapper,
 	input *store.ExamAttemptCorrectionAcknowledgement,
 ) (*store.ExamAttemptCorrectionAcknowledgementTarget, error) {
-	guard, err := s.lockCandidateGuard(ctx, tx, input.Access)
+	guard, err := lockCandidateGuard(ctx, tx, input.Access)
 	if err != nil {
 		return nil, err
 	}

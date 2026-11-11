@@ -136,6 +136,11 @@ type DesktopBuildResolver interface {
 // the Service.
 type Dependencies struct {
 	Persistence         store.ExamAttemptStore
+	FocusLoss           store.ExamFocusLossStore
+	SecurityPreflight   store.SecurityPreflightStore
+	NativeDelivery      store.NativeDeliveryStore
+	BrowserDelivery     store.BrowserDeliveryStore
+	DeliveryBudget      store.DeliveryBudgetStore
 	Workspace           store.ExamAttemptWorkspaceStore
 	Submissions         store.ExamSubmissionStore
 	Sittings            Sittings
@@ -174,9 +179,14 @@ type OperationalRecorder interface {
 // Submission. liveControls and deliveryControls are the per-node admission
 // lanes that rate-limit control commands by User.
 type Service struct {
-	attempts    store.ExamAttemptStore
-	workspaces  store.ExamAttemptWorkspaceStore
-	submissions store.ExamSubmissionStore
+	attempts          store.ExamAttemptStore
+	focusLoss         store.ExamFocusLossStore
+	securityPreflight store.SecurityPreflightStore
+	nativeDelivery    store.NativeDeliveryStore
+	browserDelivery   store.BrowserDeliveryStore
+	deliveryBudget    store.DeliveryBudgetStore
+	workspaces        store.ExamAttemptWorkspaceStore
+	submissions       store.ExamSubmissionStore
 
 	sittings      Sittings
 	managers      ManagerAuthorizer
@@ -212,6 +222,11 @@ type Service struct {
 // Operational is the only optional one.
 func New(deps Dependencies) (*Service, error) {
 	if deps.Persistence == nil ||
+		deps.FocusLoss == nil ||
+		deps.SecurityPreflight == nil ||
+		deps.NativeDelivery == nil ||
+		deps.BrowserDelivery == nil ||
+		deps.DeliveryBudget == nil ||
 		deps.Workspace == nil ||
 		deps.Submissions == nil ||
 		deps.Sittings == nil ||
@@ -242,6 +257,11 @@ func New(deps Dependencies) (*Service, error) {
 
 	return &Service{
 		attempts:             deps.Persistence,
+		focusLoss:            deps.FocusLoss,
+		securityPreflight:    deps.SecurityPreflight,
+		nativeDelivery:       deps.NativeDelivery,
+		browserDelivery:      deps.BrowserDelivery,
+		deliveryBudget:       deps.DeliveryBudget,
 		workspaces:           deps.Workspace,
 		submissions:          deps.Submissions,
 		sittings:             deps.Sittings,

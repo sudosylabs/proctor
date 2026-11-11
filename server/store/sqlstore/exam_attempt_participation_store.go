@@ -38,7 +38,18 @@ type attemptParticipationRenewalRow struct {
 }
 
 // RenewParticipation extends the lease of the Candidate's active Participation
-// generation; see store.ExamAttemptStore for the sequence and expiry contract.
+// generation.
+//
+// It locks and validates the exact Attempt, active Participation generation,
+// owning candidate, Session-bound open Connection, and credential digest.
+// Sequence equal to the current accepted sequence is an idempotent duplicate;
+// an older sequence conflicts. A greater sequence sets expiry to the earlier
+// of PostgreSQL decision time plus the fixed 20-second lease and the locked
+// current Sitting end. expires_at <= database_now returns the stable expired
+// conflict and never mutates or revives the generation. Stable conflict
+// constraints are attempt_participation_credential,
+// attempt_participation_generation, attempt_participation_sequence, and
+// attempt_participation_expired.
 func (s *SQLExamAttemptStore) RenewParticipation(
 	ctx context.Context,
 	input *store.ExamAttemptParticipationRenewal,
@@ -390,6 +401,13 @@ const participationExpiryDueSelect = `SELECT a.exam_id, a.exam_sitting_id, s.cla
 // ResolveParticipationExpiry returns the active Participation generation only
 // when its lease has expired by the database clock. An unexpired or
 // non-matching generation is an attempt_participation_expired conflict.
+//
+// It returns the exact active generation only when expires_at <= PostgreSQL
+// current time, with the same safe scope projection produced by the scanner. A
+// late renewal uses it to begin actorless scoped audit before invoking
+// ExpireParticipation; it never performs the transition. Exact
+// selector/generation mismatches and a current unexpired lease fail with stable
+// not-found/conflict errors rather than exposing another record.
 func (s *SQLExamAttemptStore) ResolveParticipationExpiry(
 	ctx context.Context,
 	attemptID model.ExamAttemptID,
@@ -426,7 +444,8 @@ func (s *SQLExamAttemptStore) ResolveParticipationExpiry(
 
 // ListExpiredParticipations returns up to limit (1..200) active Participation
 // generations whose lease has expired by the database clock, oldest expiry
-// first.
+// first: expiry at or before PostgreSQL's current time, ordered by
+// (LeaseExpiresAt, ParticipationID).
 func (s *SQLExamAttemptStore) ListExpiredParticipations(ctx context.Context, limit int) ([]store.ExamAttemptParticipationExpiryDue, error) {
 	if limit < 1 || limit > 200 {
 		return nil, store.NewErrInvalidInput("attempt_participation", "expiry_limit", limit)
@@ -521,6 +540,16 @@ type participationExpiryLockRow struct {
 // Connection Loss evidence and a Flag, and suspends the Attempt in one
 // transaction. A later call for the same generation returns the retained
 // outcome.
+//
+// It is the single conditional operation shared by late renewal and the
+// recurring scan. It locks the exact generation and, when expires_at <=
+// PostgreSQL now, atomically ends it as lease_expired, closes its open
+// Connection, creates neutral Connection Loss evidence and the one
+// generation-scoped flag, suspends the Attempt, completes audit, and retains
+// the outcome. Exact later calls rehydrate that outcome. A generation that was
+// renewed before the lock conflicts as attempt_participation_not_expired
+// without partial state; a non-current generation conflicts as
+// attempt_participation_generation.
 func (s *SQLExamAttemptStore) ExpireParticipation(
 	ctx context.Context,
 	input *store.ExamAttemptParticipationExpiry,

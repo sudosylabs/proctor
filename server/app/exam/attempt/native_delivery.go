@@ -96,7 +96,7 @@ func (s *Service) NativeDeliveryStatus(
 		return nil, err
 	}
 
-	value, err := s.attempts.NativeDeliveryStatus(ctx, a)
+	value, err := s.nativeDelivery.NativeDeliveryStatus(ctx, a)
 	if err != nil {
 		return nil, s.nativeDeliveryFailure(ctx, a, err)
 	}
@@ -130,7 +130,7 @@ func (s *Service) NativeDeliveryReceipt(
 		return nil, apperror.Invalid("exam.attempt.invalid", "batch_sequence")
 	}
 
-	value, err := s.attempts.NativeDeliveryReceipt(ctx, a, sequence)
+	value, err := s.nativeDelivery.NativeDeliveryReceipt(ctx, a, sequence)
 	if err != nil {
 		return nil, s.nativeDeliveryFailure(ctx, a, err)
 	}
@@ -146,7 +146,7 @@ func (s *Service) beginNativeDeliveryAudit(
 	deliveryAccess store.NativeDeliveryAccess,
 	operation string,
 ) (model.AuditEventID, error) {
-	target, err := s.attempts.ResolveNativeDeliveryTarget(ctx, deliveryAccess)
+	target, err := s.nativeDelivery.ResolveNativeDeliveryTarget(ctx, deliveryAccess)
 	if err != nil {
 		return "", deliveryStoreError(err)
 	}
@@ -201,7 +201,7 @@ func (s *Service) DeclareNativeDeliveryGaps(
 		return nil, err
 	}
 
-	value, err := s.attempts.DeclareNativeDeliveryGaps(
+	value, err := s.nativeDelivery.DeclareNativeDeliveryGaps(
 		ctx,
 		&store.NativeDeliveryGapDeclaration{Access: deliveryAccess, Declaration: command.Declaration, AuditEventID: audit, AuditAt: s.now()},
 		commandIdempotency,
@@ -267,7 +267,7 @@ func (s *Service) SealNativeDelivery(
 		return nil, err
 	}
 
-	value, err := s.attempts.SealNativeDelivery(
+	value, err := s.nativeDelivery.SealNativeDelivery(
 		ctx,
 		&store.NativeDeliveryFinalDeclaration{Access: deliveryAccess, Declaration: command.Declaration, AuditEventID: audit, AuditAt: s.now()},
 		commandIdempotency,
@@ -329,7 +329,7 @@ func (s *Service) UpdateNativeDeliverySummary(
 		return nil, err
 	}
 
-	value, err := s.attempts.UpdateNativeDeliverySummary(
+	value, err := s.nativeDelivery.UpdateNativeDeliverySummary(
 		ctx,
 		&store.NativeDeliverySummaryUpdate{Access: deliveryAccess, Summary: command.Summary, AuditEventID: audit, AuditAt: s.now()},
 		commandIdempotency,
@@ -386,7 +386,7 @@ func (s *Service) AppendNativeDelivery(
 	}
 
 	deliveryAccess.ParticipationID, deliveryAccess.Generation = command.Batch.ParticipationID, command.Batch.Generation
-	target, err := s.attempts.ResolveNativeDeliveryTarget(ctx, deliveryAccess)
+	target, err := s.nativeDelivery.ResolveNativeDeliveryTarget(ctx, deliveryAccess)
 	if err != nil {
 		return nil, s.nativeDeliveryFailure(ctx, deliveryAccess, err)
 	}
@@ -418,7 +418,7 @@ func (s *Service) AppendNativeDelivery(
 		return nil, err
 	}
 
-	value, err := s.attempts.AppendNativeDelivery(
+	value, err := s.nativeDelivery.AppendNativeDelivery(
 		ctx,
 		&store.NativeDeliveryAppend{Access: deliveryAccess, Batch: command.Batch, DesktopBuild: build, AuditEventID: audit, AuditAt: s.now()},
 		commandIdempotency,

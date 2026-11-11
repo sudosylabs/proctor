@@ -19,6 +19,15 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLBrowserDeliveryStore is the PostgreSQL store.BrowserDeliveryStore, which
+// owns Browser Activity sources, their live and historical appends, and their
+// delivery declarations.
+type SQLBrowserDeliveryStore struct{ *SQLStore }
+
+func newSQLBrowserDeliveryStore(sqlStore *SQLStore) store.BrowserDeliveryStore {
+	return &SQLBrowserDeliveryStore{SQLStore: sqlStore}
+}
+
 type browserDeclarationOwner struct {
 	SourceSessionID                                 model.BrowserSourceSessionID
 	ParticipationID                                 string
@@ -28,7 +37,7 @@ type browserDeclarationOwner struct {
 	Now                                             time.Time
 }
 
-func (s *SQLExamAttemptStore) lockBrowserDeclaration(
+func (s *SQLBrowserDeliveryStore) lockBrowserDeclaration(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	access store.BrowserDeliveryAccess,
@@ -135,7 +144,7 @@ func (browserDeclarationOutcome) outcomeDocument() {}
 // DeclareBrowserDeliveryGaps records the source's declared delivery gaps. A
 // refused declaration returns *store.BrowserDeliveryRefusal and exhausted
 // delivery capacity returns its capacity error.
-func (s *SQLExamAttemptStore) DeclareBrowserDeliveryGaps(
+func (s *SQLBrowserDeliveryStore) DeclareBrowserDeliveryGaps(
 	ctx context.Context,
 	input *store.BrowserDeliveryGapDeclaration,
 	command *store.CommandIdempotency,
@@ -170,7 +179,7 @@ func (s *SQLExamAttemptStore) DeclareBrowserDeliveryGaps(
 // SealBrowserDelivery records the source's final delivery declaration and
 // returns the resulting source status, with the same refusal and capacity
 // errors as DeclareBrowserDeliveryGaps.
-func (s *SQLExamAttemptStore) SealBrowserDelivery(
+func (s *SQLBrowserDeliveryStore) SealBrowserDelivery(
 	ctx context.Context,
 	input *store.BrowserDeliveryFinalDeclaration,
 	command *store.CommandIdempotency,
@@ -202,7 +211,7 @@ func (s *SQLExamAttemptStore) SealBrowserDelivery(
 	return result.Status, nil
 }
 
-func (s *SQLExamAttemptStore) declareBrowserDelivery(
+func (s *SQLBrowserDeliveryStore) declareBrowserDelivery(
 	ctx context.Context,
 	access store.BrowserDeliveryAccess,
 	auditID model.AuditEventID,
@@ -287,7 +296,7 @@ func decodeBrowserDeclarationOutcome(raw []byte) (*browserDeclarationOutcome, er
 
 // hydrateBrowserDeclaration checks a replayed declaration outcome against the
 // locked source and attaches the source's current status.
-func (s *SQLExamAttemptStore) hydrateBrowserDeclaration(
+func (s *SQLBrowserDeliveryStore) hydrateBrowserDeclaration(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	request browserDeclarationRequest,
@@ -319,7 +328,7 @@ func (s *SQLExamAttemptStore) hydrateBrowserDeclaration(
 
 // executeBrowserDeclaration performs a first browser declaration inside the
 // idempotent mutation's transaction.
-func (s *SQLExamAttemptStore) executeBrowserDeclaration(
+func (s *SQLBrowserDeliveryStore) executeBrowserDeclaration(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	request browserDeclarationRequest,
@@ -689,7 +698,7 @@ func browserDeliveryRanges(
 
 // ResolveBrowserDeliveryTarget returns the Sitting and Class that own the
 // Browser delivery's Attempt, after verifying the caller's delivery access.
-func (s *SQLExamAttemptStore) ResolveBrowserDeliveryTarget(
+func (s *SQLBrowserDeliveryStore) ResolveBrowserDeliveryTarget(
 	ctx context.Context,
 	access store.BrowserDeliveryAccess,
 ) (*store.DeliveryOwnerTarget, error) {
@@ -724,7 +733,7 @@ func (s *SQLExamAttemptStore) ResolveBrowserDeliveryTarget(
 // BrowserDeliveryReceipts returns up to limit (1..64) stored event receipts of
 // the source from sequence first onward, with NextSequence set when more
 // remain.
-func (s *SQLExamAttemptStore) BrowserDeliveryReceipts(
+func (s *SQLBrowserDeliveryStore) BrowserDeliveryReceipts(
 	ctx context.Context,
 	access store.BrowserDeliveryAccess,
 	first int64,
@@ -789,7 +798,7 @@ func (s *SQLExamAttemptStore) BrowserDeliveryReceipts(
 // under a BrowserDeliverySummaryOperation command. An equal resubmission is a
 // replay; a changed summary within five seconds of the previous one is a
 // conflict unless it is the final one after closure.
-func (s *SQLExamAttemptStore) UpdateBrowserDeliverySummary(
+func (s *SQLBrowserDeliveryStore) UpdateBrowserDeliverySummary(
 	ctx context.Context,
 	input *store.BrowserDeliverySummaryUpdate,
 	command *store.CommandIdempotency,

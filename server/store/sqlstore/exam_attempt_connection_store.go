@@ -48,6 +48,13 @@ func (examAttemptConnectOutcome) outcomeDocument() {}
 // Connect admits the Candidate to the Attempt under command, creating the first
 // Attempt and Workspace when needed. Replays recheck current eligibility and
 // return the stored outcome.
+//
+// Admission is one atomic boundary: authoritative membership and state checks,
+// first Attempt and logical Workspace bootstrap, generation fencing, Connection
+// creation, audit, and the idempotent outcome commit together. An exact command
+// replay recovers the stored outcome only after rechecking the current Session,
+// Sitting capability, and exact-Class membership; every fresh connection
+// performs the same current eligibility checks.
 func (s *SQLExamAttemptStore) Connect(
 	ctx context.Context,
 	input *store.ExamAttemptConnect,
@@ -84,7 +91,7 @@ func (s *SQLExamAttemptStore) Connect(
 				return err
 			}
 
-			guard, lockErr := s.lockExamAttemptEligibility(ctx, tx, input, true)
+			guard, lockErr := lockExamAttemptEligibility(ctx, tx, input, true)
 			if lockErr != nil {
 				return lockErr
 			}
@@ -194,7 +201,7 @@ func (s *SQLExamAttemptStore) connect(
 		return zero, err
 	}
 
-	guard, err := s.lockExamAttemptEligibility(ctx, tx, input, false)
+	guard, err := lockExamAttemptEligibility(ctx, tx, input, false)
 	if err != nil {
 		return zero, err
 	}

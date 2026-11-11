@@ -88,7 +88,7 @@ func testRetentionSubmissionPrivacy(t *testing.T, ss store.Store, probe Retentio
 		blocked.Location = &model.BrowserLocation{Scheme: "https", Host: "outside.example", Path: "/"}
 		_, err := appendBrowserActivityFixture(t, ctx, ss, &store.BrowserActivityAppend{Access: access, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, SourceSessionID: current, Events: []model.BrowserActivityEvent{nav}})
 		require.NoError(t, err)
-		sourceStatus, err := ss.ExamAttempt().BrowserSourceStatus(ctx, store.BrowserDeliveryAccess{Access: access, SourceSessionID: current})
+		sourceStatus, err := ss.BrowserDelivery().BrowserSourceStatus(ctx, store.BrowserDeliveryAccess{Access: access, SourceSessionID: current})
 		require.NoError(t, err)
 		blocked = maximumBrowserEvidenceEvent(t, blocked, current, connected.Participation.ID, connected.Participation.Generation, sourceStatus.PolicyDigest)
 		appendInput.Events = []model.BrowserActivityEvent{blocked}
@@ -125,12 +125,12 @@ func testRetentionSubmissionPrivacy(t *testing.T, ss store.Store, probe Retentio
 		owner := store.BrowserDeliveryAccess{Access: historical, ParticipationID: connected.Participation.ID, SourceSessionID: source}
 		revision := int64(0)
 		if source == first {
-			_, err = ss.ExamAttempt().DeclareBrowserDeliveryGaps(ctx, &store.BrowserDeliveryGapDeclaration{Access: owner, Declaration: model.DeclareDeliveryGaps{DeclarationID: "privacy-loss", AllocatedThroughSequence: 2, Ranges: []model.SequenceRange{{First: 1, Last: 1}}, Reason: "spool_lost"}, AuditEventID: browserDeliveryAuditFixture(t, ctx, ss, owner), AuditAt: model.NowUTC()}, examCommand(f.candidate.ID, store.BrowserDeliveryGapsOperation, "privacy-loss", "privacy-loss"))
+			_, err = ss.BrowserDelivery().DeclareBrowserDeliveryGaps(ctx, &store.BrowserDeliveryGapDeclaration{Access: owner, Declaration: model.DeclareDeliveryGaps{DeclarationID: "privacy-loss", AllocatedThroughSequence: 2, Ranges: []model.SequenceRange{{First: 1, Last: 1}}, Reason: "spool_lost"}, AuditEventID: browserDeliveryAuditFixture(t, ctx, ss, owner), AuditAt: model.NowUTC()}, examCommand(f.candidate.ID, store.BrowserDeliveryGapsOperation, "privacy-loss", "privacy-loss"))
 			require.NoError(t, err)
 			revision = 1
 		}
 		key := "privacy-final-" + string(source)
-		_, err = ss.ExamAttempt().SealBrowserDelivery(ctx, &store.BrowserDeliveryFinalDeclaration{Access: owner, Declaration: model.FinalDeliveryDeclaration{DeclarationID: key, ExpectedDeclarationRevision: revision, FinalSequence: 2}, AuditEventID: browserDeliveryAuditFixture(t, ctx, ss, owner), AuditAt: model.NowUTC()}, examCommand(f.candidate.ID, store.BrowserDeliveryFinalOperation, key, key))
+		_, err = ss.BrowserDelivery().SealBrowserDelivery(ctx, &store.BrowserDeliveryFinalDeclaration{Access: owner, Declaration: model.FinalDeliveryDeclaration{DeclarationID: key, ExpectedDeclarationRevision: revision, FinalSequence: 2}, AuditEventID: browserDeliveryAuditFixture(t, ctx, ss, owner), AuditAt: model.NowUTC()}, examCommand(f.candidate.ID, store.BrowserDeliveryFinalOperation, key, key))
 		require.NoError(t, err)
 	}
 	draft := &store.ExamIntegrityReviewDraftMutation{SubmissionID: subID, ReviewID: model.NewSubmissionReviewID(),
@@ -272,7 +272,7 @@ func testRetentionSubmissionPrivacy(t *testing.T, ss store.Store, probe Retentio
 	nativeInput.Batch.Records[0].Occurrence.RepeatCount = 2
 	nativeInput.AuditEventID = saveExamAttemptAudit(t, ctx, ss, f).ID
 	nativeInput.AuditAt = model.NowUTC()
-	_, err = ss.ExamAttempt().AppendNativeDelivery(ctx, nativeInput, examCommand(f.candidate.ID, store.NativeDeliveryAppendOperation, "retired-native-new", "retired-native-new"))
+	_, err = ss.NativeDelivery().AppendNativeDelivery(ctx, nativeInput, examCommand(f.candidate.ID, store.NativeDeliveryAppendOperation, "retired-native-new", "retired-native-new"))
 	require.ErrorIs(t, err, model.ErrDeliveryExpired)
 
 	after, err := ss.ExamSubmission().Get(ctx, subID)
@@ -317,7 +317,7 @@ func testRetentionSubmissionPrivacy(t *testing.T, ss store.Store, probe Retentio
 	historicalAccess.ConnectionID = ""
 	historicalAccess.ContinuityCredentialHash = ""
 	browserAccess := store.BrowserDeliveryAccess{Access: historicalAccess, SourceSessionID: current, ParticipationID: connected.Participation.ID}
-	_, err = ss.ExamAttempt().BrowserSourceStatus(ctx, browserAccess)
+	_, err = ss.BrowserDelivery().BrowserSourceStatus(ctx, browserAccess)
 	require.NoError(t, err)
 	probe.InspectDelivery(t, ctx, subID, false)
 	policy, err = ss.RetentionPolicy().Get(ctx)
@@ -341,10 +341,10 @@ func testRetentionSubmissionPrivacy(t *testing.T, ss store.Store, probe Retentio
 	probe.ExpireGrace(t, ctx, subID)
 	reconcile(store.RetentionReconciliationResult{Retired: 2})
 	probe.InspectDelivery(t, ctx, subID, true)
-	_, err = ss.ExamAttempt().BrowserSourceStatus(ctx, browserAccess)
+	_, err = ss.BrowserDelivery().BrowserSourceStatus(ctx, browserAccess)
 	require.ErrorIs(t, err, model.ErrDeliveryExpired)
 	nativeAccess := store.NativeDeliveryAccess{Access: historicalAccess, StreamID: connected.Security.DeliveryStreamID, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation}
-	_, err = ss.ExamAttempt().NativeDeliveryStatus(ctx, nativeAccess)
+	_, err = ss.NativeDelivery().NativeDeliveryStatus(ctx, nativeAccess)
 	require.ErrorIs(t, err, model.ErrDeliveryExpired)
 	after, err = ss.ExamSubmission().Get(ctx, subID)
 	require.NoError(t, err)
@@ -370,7 +370,7 @@ func appendRetirementNativeCondition(t *testing.T, ctx context.Context, ss store
 	occurrence := model.NativeOccurrence{Kind: "occurrence", OccurrenceID: model.NewID(), ConditionID: "baseline.capture", DetectorID: "synthetic-baseline", DetectorVersion: 1, CapabilityID: "baseline", Mode: model.NativeClaimEnforce, Status: "opened", FirstObservedAt: at, LastConfirmedAt: at, RepeatCount: 1, Certainty: "complete", SourceRanges: []model.NativeSourceRange{{SourceID: source.SourceID, SourceInstanceID: source.SourceInstanceID, FirstSequence: 0, LastSequence: 1}}}
 	b := model.NativeSecurityBatch{StreamID: connected.Security.DeliveryStreamID, BatchSequence: 1, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, SecuritySessionID: connected.Security.SecuritySessionID, PolicyDigest: connected.Security.Policy.Digest, ApplicationReleaseID: connected.Security.Policy.ApplicationReleaseID, MatrixID: connected.Security.Policy.MatrixID, Records: []model.NativeRecord{{Occurrence: &occurrence}}}
 	input := &store.NativeDeliveryAppend{Access: store.NativeDeliveryAccess{Access: access, StreamID: b.StreamID, ParticipationID: b.ParticipationID, Generation: b.Generation}, Batch: b, DesktopBuild: renewal.DesktopBuild, AuditEventID: saveExamAttemptAudit(t, ctx, ss, f).ID, AuditAt: model.NowUTC()}
-	_, err := ss.ExamAttempt().AppendNativeDelivery(ctx, input, examCommand(f.candidate.ID, store.NativeDeliveryAppendOperation, "retirement-native", "retirement-native"))
+	_, err := ss.NativeDelivery().AppendNativeDelivery(ctx, input, examCommand(f.candidate.ID, store.NativeDeliveryAppendOperation, "retirement-native", "retirement-native"))
 	require.NoError(t, err)
 	return input
 }

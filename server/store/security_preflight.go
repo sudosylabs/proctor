@@ -8,6 +8,7 @@
 package store
 
 import (
+	"context"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -98,11 +99,22 @@ func (r *SecurityPolicyRecovery) ConsistentWith(attemptID model.ExamAttemptID) b
 		r.FrozenAttemptConfiguration.Validate() != nil)
 }
 
-type ExamAttemptSecurityCoverageUpdate struct {
-	Access                             CandidateAttemptAccess
-	ParticipationID                    model.AttemptParticipationID
-	Generation                         int64
-	DesktopBuild                       model.DesktopBuildTuple
-	DesktopCompatibilityPolicyRevision int64
-	Coverage                           model.SecurityCoverageRenewal
+// SecurityPreflightStore persists the security preflight a Candidate's
+// Desktop completes before it connects to a Sitting, and the recovery of the
+// security policy an admitted Attempt runs under.
+type SecurityPreflightStore interface {
+	// PrepareSecurityPreflight issues the preflight challenge for the
+	// Candidate's Desktop build against the Sitting's current policy. A
+	// replayed command returns the original challenge.
+	PrepareSecurityPreflight(context.Context, *SecurityPreflightPrepare, *CommandIdempotency) (*SecurityPreflightPrepared, error)
+	// ResolveSecurityPreflightSitting returns the Sitting of a preflight this
+	// User and Session prepared.
+	ResolveSecurityPreflightSitting(context.Context, string, model.UserID, model.SessionID) (model.ExamSittingID, error)
+	// ReportSecurityPreflight evaluates the Desktop's report against the
+	// prepared challenge and records the result.
+	ReportSecurityPreflight(context.Context, *SecurityPreflightReport, *CommandIdempotency) (*model.SecurityPreflightResult, error)
+	// RecoverSecurityPolicy returns the admitted security policy, frozen
+	// Attempt Configuration and native control state of the Candidate's active
+	// Participation, for a Desktop that lost its Connect response.
+	RecoverSecurityPolicy(context.Context, SecurityPreflightAccess, model.ExamAttemptID) (*SecurityPolicyRecovery, error)
 }

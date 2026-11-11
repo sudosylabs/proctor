@@ -20,6 +20,15 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLExamFocusLossStore is the PostgreSQL store.ExamFocusLossStore, which
+// evaluates live Focus Loss reports and retains reports that arrive after
+// sealing.
+type SQLExamFocusLossStore struct{ *SQLStore }
+
+func newSQLExamFocusLossStore(sqlStore *SQLStore) store.ExamFocusLossStore {
+	return &SQLExamFocusLossStore{SQLStore: sqlStore}
+}
+
 type focusLossAccessRow struct {
 	ExamID                 string         `db:"exam_id"`
 	SittingID              string         `db:"sitting_id"`
@@ -136,10 +145,15 @@ func validateFocusLossSignal(input *store.ExamAttemptFocusLossSignal) error {
 	return nil
 }
 
-// ResolveFocusLossTarget implements store.ExamAttemptStore: it resolves the
+// ResolveFocusLossTarget implements store.ExamFocusLossStore: it resolves the
 // audit scope of a live Focus Loss report without evaluating or mutating
 // anything.
-func (s *SQLExamAttemptStore) ResolveFocusLossTarget(
+//
+// It resolves safe audit and effect scope after checking the established
+// access selector. It also resolves the exact retained policy_suspended causal
+// selector for duplicate-audit preflight only; it grants no new-claim
+// authority.
+func (s *SQLExamFocusLossStore) ResolveFocusLossTarget(
 	ctx context.Context,
 	access store.ExamAttemptFocusLossAccess,
 ) (*store.ExamAttemptFocusLossTarget, error) {
@@ -166,11 +180,25 @@ func (s *SQLExamAttemptStore) ResolveFocusLossTarget(
 	})
 }
 
-// RecordFocusLoss implements store.ExamAttemptStore: it evaluates the next
+// RecordFocusLoss implements store.ExamFocusLossStore: it evaluates the next
 // Focus Loss sequence against the Exam policy using database time and applies
 // any Flag or suspension. Exact duplicates return the retained result; other
 // replays of an accepted sequence conflict.
-func (s *SQLExamAttemptStore) RecordFocusLoss(
+//
+// It is the single PostgreSQL-time evaluation operation. It atomically accepts
+// the next sequence, records gap uncertainty, evaluates and consumes the
+// rolling bucket, bounds evidence/overflow or disabled-policy diagnostics,
+// creates at most one Flag and warning per generation, applies the configured
+// suspension fence, and completes the supplied safe audit. Equal latest
+// sequence is a duplicate only when duration and source match; changed
+// equal-sequence or lower sequence conflicts as focus_loss_sequence. Exact
+// duplicates reauthorize and complete their new audit before returning the
+// retained result. A threshold-crossing FlagAndSuspend duplicate remains
+// replayable through its exact retained causal selector after that transition
+// closed the Participation and Connection; it cannot admit any different or
+// later claim through the closed selector. Stable access conflicts retain the
+// existing Attempt/Participation/Connection constraint vocabulary.
+func (s *SQLExamFocusLossStore) RecordFocusLoss(
 	ctx context.Context,
 	input *store.ExamAttemptFocusLossSignal,
 ) (*store.ExamAttemptFocusLossResult, error) {

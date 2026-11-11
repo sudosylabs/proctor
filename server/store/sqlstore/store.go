@@ -91,6 +91,11 @@ type SQLStoreStores struct {
 	examRevision               store.ExamRevisionStore
 	examSitting                store.ExamSittingStore
 	examAttempt                store.ExamAttemptStore
+	examFocusLoss              store.ExamFocusLossStore
+	securityPreflight          store.SecurityPreflightStore
+	nativeDelivery             store.NativeDeliveryStore
+	browserDelivery            store.BrowserDeliveryStore
+	deliveryBudget             store.DeliveryBudgetStore
 	examAttemptWorkspace       store.ExamAttemptWorkspaceStore
 	examSubmission             store.ExamSubmissionStore
 	examIntegrityReview        store.ExamIntegrityReviewStore
@@ -218,6 +223,11 @@ func New(ctx context.Context, settings Settings) (*SQLStore, error) {
 	sqlStore.stores.examRevision = newSQLExamRevisionStore(sqlStore)
 	sqlStore.stores.examSitting = newSQLExamSittingStore(sqlStore)
 	sqlStore.stores.examAttempt = newSQLExamAttemptStore(sqlStore)
+	sqlStore.stores.examFocusLoss = newSQLExamFocusLossStore(sqlStore)
+	sqlStore.stores.securityPreflight = newSQLSecurityPreflightStore(sqlStore)
+	sqlStore.stores.nativeDelivery = newSQLNativeDeliveryStore(sqlStore)
+	sqlStore.stores.browserDelivery = newSQLBrowserDeliveryStore(sqlStore)
+	sqlStore.stores.deliveryBudget = newSQLDeliveryBudgetStore(sqlStore)
 	sqlStore.stores.examAttemptWorkspace = NewSQLExamAttemptWorkspaceStore(sqlStore)
 	sqlStore.stores.examSubmission = NewSQLExamSubmissionStore(sqlStore)
 	sqlStore.stores.examIntegrityReview = NewSQLExamIntegrityReviewStore(sqlStore)
@@ -310,6 +320,26 @@ func (ss *SQLStore) ExamSitting() store.ExamSittingStore {
 
 func (ss *SQLStore) ExamAttempt() store.ExamAttemptStore {
 	return ss.stores.examAttempt
+}
+
+func (ss *SQLStore) ExamFocusLoss() store.ExamFocusLossStore {
+	return ss.stores.examFocusLoss
+}
+
+func (ss *SQLStore) SecurityPreflight() store.SecurityPreflightStore {
+	return ss.stores.securityPreflight
+}
+
+func (ss *SQLStore) NativeDelivery() store.NativeDeliveryStore {
+	return ss.stores.nativeDelivery
+}
+
+func (ss *SQLStore) BrowserDelivery() store.BrowserDeliveryStore {
+	return ss.stores.browserDelivery
+}
+
+func (ss *SQLStore) DeliveryBudget() store.DeliveryBudgetStore {
+	return ss.stores.deliveryBudget
 }
 
 func (ss *SQLStore) ExamAttemptWorkspace() store.ExamAttemptWorkspaceStore {

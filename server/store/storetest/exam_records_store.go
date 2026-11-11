@@ -125,7 +125,7 @@ func TestExamRecordsStore(t *testing.T, ss store.Store, probes ...ExamRecordsSQL
 	require.True(t, renewed.Completion.IsCurrent())
 	require.True(t, renewed.Completion.CompletedAt.Time.After(first.CompletedAt.Time))
 	late := &store.ExamAttemptFocusLossDiscrepancy{Access: focusAccess, DiscrepancyID: model.NewIntegrityDiscrepancyID(), SignalID: model.NewFocusLossSignalID(), Sequence: 2, DurationMilliseconds: 900, Source: model.FocusLossSourceFullscreenExited, AuditEventID: saveExamAttemptAudit(t, ctx, ss, f).ID, AuditAt: model.NowUTC()}
-	accepted, err := ss.ExamAttempt().RecordEndedFocusLoss(ctx, late)
+	accepted, err := ss.ExamFocusLoss().RecordEndedFocusLoss(ctx, late)
 	require.NoError(t, err)
 	require.False(t, accepted.Duplicate, "fresh late data treated as duplicate")
 	stale, err = records.GetCompletion(ctx, f.examID, f.sitting.ID)
@@ -141,7 +141,7 @@ func TestExamRecordsStore(t *testing.T, ss store.Store, probes ...ExamRecordsSQL
 	duplicate.DiscrepancyID = model.NewIntegrityDiscrepancyID()
 	duplicate.SignalID = model.NewFocusLossSignalID()
 	duplicate.AuditEventID = saveExamAttemptAudit(t, ctx, ss, f).ID
-	accepted, err = ss.ExamAttempt().RecordEndedFocusLoss(ctx, &duplicate)
+	accepted, err = ss.ExamFocusLoss().RecordEndedFocusLoss(ctx, &duplicate)
 	require.NoError(t, err)
 	afterReplay, err := records.GetCompletion(ctx, f.examID, f.sitting.ID)
 	require.NoError(t, err)

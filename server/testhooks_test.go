@@ -74,6 +74,21 @@ func (s *hookStore) ExamAuthoring() store.ExamAuthoringStore {
 func (s *hookStore) ExamAttempt() store.ExamAttemptStore {
 	return hookExamAttemptStore{}
 }
+func (s *hookStore) ExamFocusLoss() store.ExamFocusLossStore {
+	return hookExamFocusLossStore{}
+}
+func (s *hookStore) SecurityPreflight() store.SecurityPreflightStore {
+	return hookSecurityPreflightStore{}
+}
+func (s *hookStore) NativeDelivery() store.NativeDeliveryStore {
+	return hookNativeDeliveryStore{}
+}
+func (s *hookStore) BrowserDelivery() store.BrowserDeliveryStore {
+	return hookBrowserDeliveryStore{}
+}
+func (s *hookStore) DeliveryBudget() store.DeliveryBudgetStore {
+	return hookDeliveryBudgetStore{}
+}
 func (s *hookStore) ExamAttemptWorkspace() store.ExamAttemptWorkspaceStore {
 	return hookExamAttemptWorkspaceStore{}
 }
@@ -187,6 +202,11 @@ func (s *hookStore) Close() error {
 
 type hookExamAuthoringStore struct{ store.ExamAuthoringStore }
 type hookExamAttemptStore struct{ store.ExamAttemptStore }
+type hookExamFocusLossStore struct{ store.ExamFocusLossStore }
+type hookSecurityPreflightStore struct{ store.SecurityPreflightStore }
+type hookNativeDeliveryStore struct{ store.NativeDeliveryStore }
+type hookBrowserDeliveryStore struct{ store.BrowserDeliveryStore }
+type hookDeliveryBudgetStore struct{ store.DeliveryBudgetStore }
 type hookExamAttemptWorkspaceStore struct {
 	store.ExamAttemptWorkspaceStore
 }

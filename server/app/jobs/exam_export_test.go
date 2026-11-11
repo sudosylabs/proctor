@@ -176,7 +176,6 @@ func TestExamExportCleanupProposerUsesFixedHourlyOccurrences(t *testing.T) {
 		require.NotContains(t, string(job.Command), "snapshot")
 	}
 	for _, descriptor := range []job.Descriptor{examExportBuildDescriptor(examExportBuildHandler{}), examExportCleanupDescriptor(examExportCleanupHandler{})} {
-		require.Equal(t, 3, descriptor.MaximumAttempts, "exports allow unbounded retry or concurrent construction")
 		require.Empty(t, descriptor.ExplicitRetryStatuses, "exports allow unbounded retry or concurrent construction")
 		require.Equal(t, 1, descriptor.Concurrency, "exports allow unbounded retry or concurrent construction")
 	}

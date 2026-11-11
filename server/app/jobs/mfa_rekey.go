@@ -293,7 +293,6 @@ func mfaRekeyDescriptor(handler job.Handler) job.Descriptor {
 		"mfa.rekey.secret_unavailable",
 	}
 	descriptor.Timeout = 5 * time.Minute
-	descriptor.MaximumAttempts = 10
 	descriptor.BaseRetryDelay = time.Minute
 	descriptor.MaximumRetryDelay = 30 * time.Minute
 	descriptor.SuccessRetention = 90 * 24 * time.Hour

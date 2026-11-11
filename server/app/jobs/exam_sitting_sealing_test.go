@@ -101,7 +101,6 @@ func TestExamSittingSealingDescriptorIsBoundedCheckpointedAndNonCancelable(t *te
 	require.True(t, descriptor.Checkpoints)
 	require.Len(t, descriptor.ProgressStages, 1)
 	require.Equal(t, "sealing", descriptor.ProgressStages[0])
-	require.Equal(t, 8, descriptor.MaximumAttempts)
 }
 
 func TestExamSittingSealingJobLeavesUnfinishedClosingStateRetryable(t *testing.T) {

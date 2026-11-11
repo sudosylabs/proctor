@@ -26,7 +26,6 @@ type Descriptor struct {
 	PublicErrorCodes      []string
 	Timeout               time.Duration
 	Concurrency           int
-	MaximumAttempts       int
 	LeaseDuration         time.Duration
 	HeartbeatInterval     time.Duration
 	BaseRetryDelay        time.Duration
@@ -51,13 +50,12 @@ const (
 )
 
 // NewDescriptor returns the descriptor of an ordinary Job: one that runs one
-// at a time, is tried five times, and is visible to operators only. A Job
+// at a time and is visible to operators only. A Job
 // that differs sets the fields that differ on the result, so its handler file
 // shows only what is particular to it. The defaults are:
 //
 //	Timeout            10 minutes
 //	Concurrency        1
-//	MaximumAttempts    5
 //	LeaseDuration      1 minute
 //	HeartbeatInterval  15 seconds
 //	BaseRetryDelay     1 second
@@ -73,7 +71,6 @@ func NewDescriptor(jobType model.JobType, handler Handler) Descriptor {
 		Type:              jobType,
 		Timeout:           10 * time.Minute,
 		Concurrency:       1,
-		MaximumAttempts:   5,
 		LeaseDuration:     time.Minute,
 		HeartbeatInterval: 15 * time.Second,
 		BaseRetryDelay:    time.Second,

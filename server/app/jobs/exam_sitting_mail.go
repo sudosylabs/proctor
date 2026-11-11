@@ -160,7 +160,6 @@ func sittingMailExpansionDescriptor(handler sittingMailExpansionHandler) job.Des
 	}
 	descriptor.Timeout = 30 * time.Minute
 	descriptor.Concurrency = 2
-	descriptor.MaximumAttempts = model.MailMaximumAttempts
 	descriptor.BaseRetryDelay = 30 * time.Second
 	descriptor.MaximumRetryDelay = 30 * time.Minute
 	descriptor.SuccessRetention = 90 * 24 * time.Hour

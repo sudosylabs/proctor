@@ -157,7 +157,6 @@ func defaultProfilePictureDescriptor(handler job.Handler) job.Descriptor {
 	descriptor := job.NewDescriptor(model.JobTypeProfilePictureGenerateDefault, handler)
 	descriptor.PublicErrorCodes = []string{"dependency.unavailable", "job.command.invalid", "job.invariant_failed", "user.not_found"}
 	descriptor.Timeout = time.Minute
-	descriptor.MaximumAttempts = 8
 	descriptor.MaximumRetryDelay = 30 * time.Second
 	descriptor.Cancelable = true
 	descriptor.ExplicitRetryStatuses = []model.JobStatus{model.JobStatusFailed}

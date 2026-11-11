@@ -238,7 +238,7 @@ func (h *recoveryCommitHandler) Run(ctx context.Context, execution job.Execution
 func clusteredRecoveryJobDescriptor(handler job.Handler) job.Descriptor {
 	return job.Descriptor{
 		Type: model.JobTypeProfilePictureGenerateDefault, PublicErrorCodes: []string{"dependency.unavailable"}, Timeout: 2 * time.Second, Concurrency: 1,
-		MaximumAttempts: 3, LeaseDuration: 250 * time.Millisecond, HeartbeatInterval: 50 * time.Millisecond,
+		LeaseDuration: 250 * time.Millisecond, HeartbeatInterval: 50 * time.Millisecond,
 		BaseRetryDelay: time.Millisecond, MaximumRetryDelay: 10 * time.Millisecond,
 		Visibility: job.VisibilityOperator, SuccessRetention: 24 * time.Hour, FailureRetention: 48 * time.Hour,
 		Handler: handler,

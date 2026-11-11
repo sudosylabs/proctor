@@ -182,7 +182,6 @@ func onboardingImportDescriptor(kind model.JobType, handler job.Handler, cancela
 		"onboarding_import.file_invalid",
 	}
 	descriptor.Concurrency = 2
-	descriptor.MaximumAttempts = 8
 	descriptor.BaseRetryDelay = 10 * time.Second
 	descriptor.MaximumRetryDelay = 5 * time.Minute
 	descriptor.Cancelable = cancelable

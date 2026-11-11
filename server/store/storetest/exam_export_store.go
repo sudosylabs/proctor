@@ -169,6 +169,7 @@ func TestExamExportStore(t *testing.T, ss store.Store, probe ExamExportSQLProbe)
 	require.NoError(t, err)
 	require.NotNil(t, claim)
 	require.Equal(t, input.JobID, claim.Job.ID)
+	require.Equal(t, model.ExamExportMaximumAttempts, claim.Job.MaximumAttempts, "exports allow unbounded retry")
 	build := store.ExamExportBuild{ExamExportArtifact: store.ExamExportArtifact{ExportID: created.ID, AttemptID: claim.Attempt.ID}, JobID: claim.Job.ID, ClaimToken: token}
 	snapshot, err := peer.BeginBuild(ctx, &build)
 	require.NoError(t, err)

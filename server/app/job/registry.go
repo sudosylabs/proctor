@@ -39,7 +39,6 @@ func NewRegistry(values []Descriptor) (*Registry, error) {
 		if value.Handler == nil ||
 			value.Timeout <= 0 ||
 			value.Concurrency <= 0 ||
-			value.MaximumAttempts <= 0 ||
 			value.LeaseDuration <= 0 ||
 			value.HeartbeatInterval <= 0 ||
 			value.HeartbeatInterval >= value.LeaseDuration ||

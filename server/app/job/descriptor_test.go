@@ -28,7 +28,6 @@ func TestNewDescriptorDefaultsAreAValidOperatorJob(t *testing.T) {
 		Type:              model.JobTypeMailCleanup,
 		Timeout:           10 * time.Minute,
 		Concurrency:       1,
-		MaximumAttempts:   5,
 		LeaseDuration:     time.Minute,
 		HeartbeatInterval: 15 * time.Second,
 		BaseRetryDelay:    time.Second,

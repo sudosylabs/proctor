@@ -122,7 +122,6 @@ func examSittingLifecycleDescriptor(handler job.Handler) job.Descriptor {
 	descriptor.PublicErrorCodes = []string{"dependency.unavailable", "job.command.invalid", "job.invariant_failed"}
 	descriptor.Timeout = time.Minute
 	descriptor.Concurrency = 4
-	descriptor.MaximumAttempts = 8
 	descriptor.MaximumRetryDelay = 30 * time.Second
 	descriptor.ExplicitRetryStatuses = []model.JobStatus{model.JobStatusFailed}
 	return descriptor

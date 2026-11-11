@@ -78,7 +78,6 @@ func examExportBuildDescriptor(handler job.Handler) job.Descriptor {
 	descriptor := job.NewDescriptor(model.JobTypeExamExportBuild, handler)
 	descriptor.PublicErrorCodes = []string{"job.command.invalid", "exam.export.unavailable", "exam.export.expired"}
 	descriptor.Timeout = 30 * time.Minute
-	descriptor.MaximumAttempts = model.ExamExportMaximumAttempts
 	descriptor.BaseRetryDelay = time.Minute
 	descriptor.MaximumRetryDelay = 5 * time.Minute
 	descriptor.SuccessRetention = 7 * 24 * time.Hour
@@ -162,7 +161,6 @@ func (h examExportCleanupHandler) Run(ctx context.Context, e job.Execution) job.
 func examExportCleanupDescriptor(handler job.Handler) job.Descriptor {
 	descriptor := job.NewDescriptor(model.JobTypeExamExportCleanup, handler)
 	descriptor.PublicErrorCodes = []string{"job.command.invalid", "exam.export.unavailable"}
-	descriptor.MaximumAttempts = 3
 	descriptor.BaseRetryDelay = time.Minute
 	descriptor.MaximumRetryDelay = 5 * time.Minute
 	descriptor.SuccessRetention = 7 * 24 * time.Hour

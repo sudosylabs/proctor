@@ -109,7 +109,6 @@ func TestExamSittingLifecycleDescriptorIsBoundedAndNonCancelable(t *testing.T) {
 	require.Equal(t, model.JobTypeExamSittingLifecycle, descriptor.Type)
 	require.False(t, descriptor.Cancelable)
 	require.Equal(t, job.VisibilityOperator, descriptor.Visibility)
-	require.Equal(t, 8, descriptor.MaximumAttempts)
 	require.GreaterOrEqual(t, descriptor.Concurrency, 1)
 }
 

@@ -397,7 +397,6 @@ func newMailDeliveryDescriptor(jobType model.JobType, concurrency int, handler j
 	}
 	descriptor.Timeout = time.Minute
 	descriptor.Concurrency = concurrency
-	descriptor.MaximumAttempts = model.MailMaximumAttempts
 	descriptor.BaseRetryDelay = 30 * time.Second
 	descriptor.MaximumRetryDelay = 30 * time.Minute
 	descriptor.SuccessRetention = 90 * 24 * time.Hour

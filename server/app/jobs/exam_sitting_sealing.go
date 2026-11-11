@@ -339,7 +339,6 @@ func examSittingSealingDescriptor(handler job.Handler) job.Descriptor {
 	descriptor.ProgressStages = []string{"sealing"}
 	descriptor.PublicErrorCodes = []string{"dependency.unavailable", "job.checkpoint.invalid", "job.command.invalid", "job.invariant_failed"}
 	descriptor.Concurrency = 4
-	descriptor.MaximumAttempts = 8
 	descriptor.ExplicitRetryStatuses = []model.JobStatus{model.JobStatusFailed}
 	return descriptor
 }

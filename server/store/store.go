@@ -39,10 +39,13 @@
 // Older names do not all follow this; use it for new ones.
 //
 // Some result types have Consistent predicates (Consistent, ConsistentWith and
-// a few longer forms). They report whether the parts of a result belong
-// together and to the IDs the caller asked for. A use case checks them before
-// trusting the result and reports false as an unavailable Store, never as "not
-// found".
+// a few longer forms). They are part of the contract: they say how the parts of
+// a result belong together and to the IDs the caller asked for, and the
+// conformance suite in storetest asserts them on every real result. The
+// application does not re-check them. It checks only a transition's state,
+// revision and time postconditions, through the narrower predicate declared
+// beside the full one (Reallowed, Sealed, Renewed and the like), and reports
+// false as an unavailable Store, never as "not found".
 //
 // # Adding an operation
 //

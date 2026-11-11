@@ -293,19 +293,24 @@ func TestEvaluateFocusLossProjectsCommittedPolicySuspensionAndPublishesOnce(t *t
 	}, f.publisher.Calls())
 }
 
+// TestEvaluateFocusLossRejectsEnforcementForAnotherConnection records that
+// the application no longer re-checks which Connection a Focus Loss
+// suspension closed: the outcome is passed through. The PostgreSQL
+// conformance suite asserts that identity on every real RecordFocusLoss
+// result (storetest requireFocusLossEnforcementLinks).
 func TestEvaluateFocusLossRejectsEnforcementForAnotherConnection(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	participationID := model.NewAttemptParticipationID()
 	command, stored := focusLossSuspensionFixture(t, f, participationID)
-	stored.Connection.ID = model.NewAttemptConnectionID()
+	foreign := model.NewAttemptConnectionID()
+	stored.Connection.ID = foreign
 	f.persistence.focusTarget = focusLossTargetFixture(f, participationID, command.Generation)
 	f.persistence.focusResult = stored
 
 	result, err := f.service.EvaluateExamAttemptFocusLoss(context.Background(), f.inv, command)
-	require.Error(t, err, "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
-	require.Equal(t, FocusLossEvaluation{}, result, "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
-	require.Empty(t, f.publisher.Calls(), "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
+	require.NoError(t, err, "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
+	require.Equal(t, foreign, result.Connection.ID, "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
 }
 
 func TestEvaluateFocusLossRejectsInconsistentSuspensionAggregate(t *testing.T) {
@@ -317,8 +322,8 @@ func TestEvaluateFocusLossRejectsInconsistentSuspensionAggregate(t *testing.T) {
 		{name: "attempt remains active", mutate: func(result *store.ExamAttemptFocusLossResult) {
 			result.Attempt.State = model.ExamAttemptActive
 		}},
-		{name: "suspension names another flag", mutate: func(result *store.ExamAttemptFocusLossResult) {
-			result.Suspension.FlagID = model.NewIntegrityFlagID()
+		{name: "suspension already re-allowed", mutate: func(result *store.ExamAttemptFocusLossResult) {
+			result.Suspension.ReallowedByUserID = model.NewUserID()
 		}},
 	} {
 		t.Run(test.name, func(t *testing.T) {

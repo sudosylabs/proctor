@@ -9,7 +9,6 @@ package resource
 
 import (
 	"context"
-	"errors"
 	"io"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -66,9 +65,6 @@ func (s *Service) OpenExamResource(
 	record, err := s.resources.Get(ctx, examID, resourceID)
 	if err != nil {
 		return Opened{}, storeErrors.Translate(err)
-	}
-	if !record.Consistent() {
-		return Opened{}, apperror.New("exam.resource.unavailable").Wrap(errors.New("incomplete resource record"))
 	}
 	body, err := s.content.OpenExamResource(ctx, record.Resource.SelectedFileRevisionID, record.Rendition.ID)
 	if err != nil {

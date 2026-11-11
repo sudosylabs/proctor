@@ -38,6 +38,9 @@ type ExamIntegrityReviewAuthorization struct {
 // ConsistentWith reports whether the projection is for the Submission that was
 // asked for and names its Exam, Sitting, Attempt, candidate and owning
 // Academic Unit.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (a *ExamIntegrityReviewAuthorization) ConsistentWith(submissionID model.SubmissionID) bool {
 	return !(a == nil ||
 		a.SubmissionID != submissionID ||
@@ -178,6 +181,9 @@ type ExamIntegrityReviewMutationResult struct {
 // ConsistentWith reports whether the outcome carries a consistent
 // authorization projection and a valid Review for the given Submission, and
 // its Decision, when present, is valid and belongs to that Review.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (r *ExamIntegrityReviewMutationResult) ConsistentWith(submissionID model.SubmissionID) bool {
 	return !(r == nil ||
 		!r.Authorization.ConsistentWith(submissionID) ||

@@ -259,6 +259,12 @@ func TestUpdateScheduleSendsArchivedAndNonScheduledNoOpsToStore(t *testing.T) {
 	})
 }
 
+// TestUpdateRejectsMismatchedStoreOutcome records that the application no
+// longer re-checks which Sitting a schedule update returns: the outcome is
+// passed through. The PostgreSQL conformance suite asserts
+// ExamSittingSnapshot.ConsistentAndValid and the commanded Exam and Sitting
+// identity (requireSittingCommandFor) on every real UpdateSchedule result
+// (storetest TestExamSittingStore).
 func TestUpdateRejectsMismatchedStoreOutcome(t *testing.T) {
 	t.Parallel()
 	fixture := newFixture(t)
@@ -268,12 +274,12 @@ func TestUpdateRejectsMismatchedStoreOutcome(t *testing.T) {
 	start := testNow.Add(2 * time.Hour)
 	fixture.persistence.result = &store.ExamSittingCommandResult{Value: &store.ExamSittingSnapshot{Sitting: foreign}}
 
-	_, err := fixture.service.UpdateExamSittingSchedule(context.Background(), fixture.inv, UpdateScheduleCommand{
+	value, err := fixture.service.UpdateExamSittingSchedule(context.Background(), fixture.inv, UpdateScheduleCommand{
 		ExamID: fixture.examID, SittingID: fixture.sittingID, ExpectedRevision: 1,
 		ScheduledStartAt: &start, IdempotencyKey: "test-key",
 	})
-	assertFaultCode(t, err, "exam.sitting.unavailable")
-	require.Empty(t, fixture.publisher.Calls())
+	require.NoError(t, err)
+	require.Equal(t, foreign.ID, value.Sitting.ID)
 }
 
 func TestReplayedUpdateAndCancellationDoNotPublishEffects(t *testing.T) {

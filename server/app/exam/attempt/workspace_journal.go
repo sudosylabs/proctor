@@ -61,7 +61,7 @@ func (s *Service) ListCandidateExamWorkspaceJournal(
 		return WorkspaceJournalPage{}, storeError(storeErrors, err)
 	}
 
-	if !stored.ConsistentWith(query.AfterCursor) {
+	if !stored.NotBehind(query.AfterCursor) {
 		return WorkspaceJournalPage{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Attempt Workspace journal page"))
 	}
 

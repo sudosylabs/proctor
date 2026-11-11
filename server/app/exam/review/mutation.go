@@ -9,9 +9,7 @@ package review
 
 import (
 	"context"
-	"errors"
 
-	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -63,18 +61,11 @@ func (s *Service) resolveMutationAuthorization(
 	if err != nil {
 		return false, nil, storeErrors.Translate(err)
 	}
-	if !authorization.ConsistentWith(submissionID) {
-		return false, nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("inconsistent Review authorization"))
-	}
 
 	return override, authorization, nil
 }
 
-func projectMutation(stored *store.ExamIntegrityReviewMutationResult, submissionID model.SubmissionID) (Result, error) {
-	if !stored.ConsistentWith(submissionID) {
-		return Result{}, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("inconsistent Review mutation result"))
-	}
-
+func projectMutation(stored *store.ExamIntegrityReviewMutationResult) (Result, error) {
 	review := *stored.Review
 	result := Result{Authorization: stored.Authorization, Review: &review, Replayed: stored.Replayed}
 	if stored.Decision != nil {

@@ -96,15 +96,19 @@ func TestRenewParticipationRejectsInvalidPrincipalAndFieldsBeforeStore(t *testin
 	}
 }
 
+// TestRenewParticipationRejectsInconsistentStoreProjection injects a renewal
+// that did not accept the commanded sequence, a postcondition the
+// application still checks.
 func TestRenewParticipationRejectsInconsistentStoreProjection(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
+	participationID := model.NewAttemptParticipationID()
 	f.persistence.renewResult = &store.ExamAttemptParticipationRenewalResult{SecurityCoverage: renewalCoverageResultFixture(),
-		AttemptID: f.attemptID, ParticipationID: model.NewAttemptParticipationID(), Generation: 1,
-		AcceptedSequence: 1, DatabaseTime: f.at, LeaseExpiresAt: f.at.Add(model.AttemptParticipationInitialLease),
+		AttemptID: f.attemptID, ParticipationID: participationID, Generation: 1,
+		AcceptedSequence: 2, DatabaseTime: f.at, LeaseExpiresAt: f.at.Add(model.AttemptParticipationInitialLease),
 	}
 	_, err := f.service.RenewExamAttemptParticipation(context.Background(), f.inv, RenewParticipationCommand{SecurityCoverage: renewalCoverageFixture(),
-		AttemptID: f.attemptID, ParticipationID: model.NewAttemptParticipationID(), ConnectionID: f.connectionID,
+		AttemptID: f.attemptID, ParticipationID: participationID, ConnectionID: f.connectionID,
 		Generation: 1, Sequence: 1, ContinuityCredential: model.NewCredentialToken(),
 	})
 	var fault *apperror.Error

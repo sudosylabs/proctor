@@ -54,17 +54,9 @@ func validWorkspaceTarget(target *store.ExamAttemptWorkspaceMutationTarget, work
 
 func projectWorkspaceMutation(
 	stored *store.ExamAttemptWorkspaceMutationResult,
-	target *store.ExamAttemptWorkspaceMutationTarget,
 	attemptID model.ExamAttemptID,
-	entryID model.AttemptWorkspaceEntryID,
 	operation model.AttemptWorkspaceMutationKind,
-	expectedKind model.StarterWorkspaceEntryKind,
-	expectedVersion model.WorkspaceContentVersion,
 ) (WorkspaceMutationResult, error) {
-	if !stored.ConsistentWith(target, operation, entryID) {
-		return WorkspaceMutationResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Attempt Workspace mutation result"))
-	}
-
 	if operation == model.AttemptWorkspaceMutationDeleteEntry {
 		if stored.Entry != nil {
 			return WorkspaceMutationResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("deleted Workspace entry remained visible"))
@@ -77,17 +69,6 @@ func projectWorkspaceMutation(
 			Change:          stored.Change,
 			Replayed:        stored.Replayed,
 		}, nil
-	}
-
-	if !validCandidateWorkspaceItem(stored.Entry) ||
-		stored.Entry.EntryID != stored.Change.EntryID ||
-		stored.Entry.Path != stored.Change.NewPath ||
-		(!stored.Replayed && stored.Entry.EntryID != entryID) ||
-		(expectedKind != "" && stored.Entry.Kind != expectedKind) ||
-		(!stored.Replayed &&
-			expectedVersion.IsValid() &&
-			(stored.Entry.ContentVersion != expectedVersion || stored.Change.ContentVersion != expectedVersion)) {
-		return WorkspaceMutationResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Attempt Workspace entry result"))
 	}
 
 	entry := *stored.Entry
@@ -123,8 +104,6 @@ func (s *Service) applyWorkspaceMutation(
 	target *store.ExamAttemptWorkspaceMutationTarget,
 	mutation *store.ExamAttemptWorkspaceMutation,
 	commandIdempotency *store.CommandIdempotency,
-	expectedKind model.StarterWorkspaceEntryKind,
-	expectedVersion model.WorkspaceContentVersion,
 ) (WorkspaceMutationResult, error) {
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
 		Invocation: inv,
@@ -146,23 +125,9 @@ func (s *Service) applyWorkspaceMutation(
 		return WorkspaceMutationResult{}, s.failAudit(ctx, auditID, err)
 	}
 
-	result, err := projectWorkspaceMutation(
-		stored,
-		target,
-		mutation.Access.AttemptID,
-		mutation.EntryID,
-		mutation.Operation,
-		expectedKind,
-		expectedVersion,
-	)
+	result, err := projectWorkspaceMutation(stored, mutation.Access.AttemptID, mutation.Operation)
 	if err != nil {
 		return WorkspaceMutationResult{}, err
-	}
-
-	if result.Change.Recursive != mutation.Recursive {
-		return WorkspaceMutationResult{}, apperror.New("exam.attempt.unavailable").Wrap(
-			errors.New("inconsistent recursive Workspace mutation result"),
-		)
 	}
 
 	if !result.Replayed {
@@ -203,29 +168,4 @@ func validateWorkspacePath(value string) (string, error) {
 		return "", errors.New("Workspace path is not canonical")
 	}
 	return normalized, nil
-}
-
-func validCandidateWorkspaceItem(item *store.CandidateAttemptWorkspaceItem) bool {
-	if item == nil || !item.EntryID.IsValid() {
-		return false
-	}
-
-	path, err := validateWorkspacePath(item.Path)
-	if err != nil || path != item.Path {
-		return false
-	}
-
-	switch item.Kind {
-	case model.StarterWorkspaceEntryDirectory:
-		return item.ContentVersion.IsZero() && item.MediaType == "" && item.SizeBytes == 0 && item.SHA256 == ""
-	case model.StarterWorkspaceEntryFile:
-		return item.ContentVersion.IsValid() &&
-			(model.AttemptWorkspaceContent{
-				MediaType: item.MediaType,
-				SizeBytes: item.SizeBytes,
-				SHA256:    item.SHA256,
-			}).Validate() == nil
-	default:
-		return false
-	}
 }

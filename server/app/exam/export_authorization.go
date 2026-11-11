@@ -35,9 +35,6 @@ func (s *Exports) authorizeExport(
 	if err != nil {
 		return "", "", examExportStoreErrors.Translate(err)
 	}
-	if !examAccess.ConsistentWithOwningUnit(scope.ExamID) {
-		return "", "", apperror.New("exam.export.unavailable").Wrap(err)
-	}
 
 	action, err := manageraccess.SelectAction(
 		ctx,
@@ -86,9 +83,6 @@ func (s *Exports) authorizeSources(
 		examAccess, err := s.exams.Access(ctx, scope.ExamID, inv.Principal().UserID)
 		if err != nil {
 			return examExportStoreErrors.Translate(err)
-		}
-		if !examAccess.ConsistentWith(scope.ExamID, unit) {
-			return apperror.New("exam.export.unavailable").Wrap(errors.New("invalid browser history access projection"))
 		}
 
 		if !examAccess.ActorIsManager {

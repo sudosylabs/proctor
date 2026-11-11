@@ -156,10 +156,7 @@ func (s *Service) ScheduleExamSitting(
 		return store.ExamSittingSnapshot{}, s.failAudit(ctx, auditID, err)
 	}
 
-	value, err := requireScheduledCommandResult(result, command.ExamID, sittingID)
-	if err != nil {
-		return store.ExamSittingSnapshot{}, err
-	}
+	value := *result.Value
 
 	if !result.Replayed {
 		if effectErr := s.publishScheduled(ctx, value.Sitting, at); effectErr != nil {
@@ -217,10 +214,7 @@ func (s *Service) UpdateExamSittingSchedule(
 		return store.ExamSittingSnapshot{}, storeErrors.Translate(err)
 	}
 
-	snapshot, err := requireSnapshot(current)
-	if err != nil {
-		return store.ExamSittingSnapshot{}, err
-	}
+	snapshot := *current
 
 	if snapshot.Sitting.ExamID != command.ExamID || snapshot.Sitting.ID != command.SittingID {
 		return store.ExamSittingSnapshot{}, apperror.New("exam.sitting.unavailable").Wrap(
@@ -321,10 +315,7 @@ func (s *Service) UpdateExamSittingSchedule(
 		return store.ExamSittingSnapshot{}, s.failAudit(ctx, auditID, err)
 	}
 
-	value, err := requireOwnedCommandResult(result, command.ExamID, command.SittingID)
-	if err != nil {
-		return store.ExamSittingSnapshot{}, err
-	}
+	value := *result.Value
 
 	if !result.Replayed {
 		if effectErr := s.publishScheduleUpdated(ctx, value.Sitting, at); effectErr != nil {

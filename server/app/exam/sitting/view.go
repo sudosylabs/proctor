@@ -67,10 +67,7 @@ func (s *Service) GetExamSitting(
 		return store.ExamSittingSnapshot{}, storeErrors.Translate(err)
 	}
 
-	value, err := requireSnapshot(snapshot)
-	if err != nil {
-		return store.ExamSittingSnapshot{}, err
-	}
+	value := *snapshot
 
 	if value.Sitting.ExamID != examID || value.Sitting.ID != sittingID {
 		return store.ExamSittingSnapshot{}, apperror.New("exam.sitting.unavailable").Wrap(

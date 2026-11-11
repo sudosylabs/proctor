@@ -145,9 +145,6 @@ func (a *Authoring) ArchiveExam(
 	if err != nil {
 		return model.Exam{}, examStoreErrors.Translate(err)
 	}
-	if !examAccess.Consistent() {
-		return model.Exam{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no access projection"))
-	}
 
 	action, err := a.actionForAccess(ctx, principal.UserID, examAccess, at, model.ActionExamManage, model.ActionExamManageOverride)
 	if err != nil {

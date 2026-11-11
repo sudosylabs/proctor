@@ -298,12 +298,8 @@ func validateApply(c ApplyCommand) error {
 }
 
 func projectResult(stored *store.ExamCorrectionResult, c ApplyCommand) (Result, error) {
-	if !stored.Consistent() {
-		return Result{}, apperror.New("exam.sitting.correction.unavailable").Wrap(errors.New("missing correction outcome"))
-	}
-
 	s := stored.Sitting.Sitting
-	if !stored.ConsistentWith(c.ExamID, c.SittingID, c.ExpectedCurrentRevisionID, c.ExpectedSittingRevision) {
+	if !stored.Applied(c.ExpectedCurrentRevisionID, c.ExpectedSittingRevision) {
 		return Result{}, apperror.New("exam.sitting.correction.unavailable").Wrap(errors.New("inconsistent correction outcome"))
 	}
 

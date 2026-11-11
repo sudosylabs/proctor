@@ -116,7 +116,7 @@ func (s *Service) RenewExamAttemptParticipation(
 		return ParticipationRenewal{}, storeError(storeErrors, err)
 	}
 
-	if !stored.ConsistentWith(command.AttemptID, command.ParticipationID, principal.UserID, command.Generation, command.Sequence) {
+	if !stored.Renewed(command.Sequence) {
 		return ParticipationRenewal{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Participation renewal outcome"))
 	}
 

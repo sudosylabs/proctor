@@ -89,10 +89,7 @@ func (s *Service) CancelExamSitting(
 		return store.ExamSittingSnapshot{}, storeErrors.Translate(err)
 	}
 
-	snapshot, err := requireSnapshot(current)
-	if err != nil {
-		return store.ExamSittingSnapshot{}, err
-	}
+	snapshot := *current
 
 	fanout, err := s.mail.Prepare(ctx, ScheduleMailRequest{
 		ActorUserID:     inv.Principal().UserID,
@@ -147,10 +144,7 @@ func (s *Service) CancelExamSitting(
 		return store.ExamSittingSnapshot{}, s.failAudit(ctx, auditID, err)
 	}
 
-	value, err := requireOwnedCommandResult(result, command.ExamID, command.SittingID)
-	if err != nil {
-		return store.ExamSittingSnapshot{}, err
-	}
+	value := *result.Value
 
 	if !result.Replayed {
 		if effectErr := s.publishCanceled(ctx, value.Sitting, at); effectErr != nil {
@@ -327,7 +321,7 @@ func (s *Service) ExtendExamSitting(
 		return store.ExamSittingSnapshot{}, s.failAudit(ctx, auditID, err)
 	}
 
-	value, err := requireManagerLifecycleResult(result, command.ExamID, command.SittingID, store.ExamSittingTransitionManagerExtended)
+	value, err := requireManagerLifecycleResult(result, store.ExamSittingTransitionManagerExtended)
 	if err != nil {
 		return store.ExamSittingSnapshot{}, err
 	}
@@ -420,7 +414,7 @@ func (s *Service) runManagerTransition(
 		return store.ExamSittingSnapshot{}, s.failAudit(ctx, auditID, err)
 	}
 
-	value, err := requireManagerLifecycleResult(result, command.ExamID, command.SittingID, transition)
+	value, err := requireManagerLifecycleResult(result, transition)
 	if err != nil {
 		return store.ExamSittingSnapshot{}, err
 	}
@@ -445,42 +439,15 @@ func managerLifecycleAuditValue(
 
 func requireManagerLifecycleResult(
 	result *store.ExamSittingLifecycleResult,
-	examID model.ExamID,
-	sittingID model.ExamSittingID,
 	transition store.ExamSittingLifecycleTransitionCode,
 ) (store.ExamSittingSnapshot, error) {
-	if result == nil || result.Value == nil || !result.Changed || result.Transition != transition {
+	if !result.Changed || result.Transition != transition {
 		return store.ExamSittingSnapshot{}, apperror.New("exam.sitting.unavailable").Wrap(
 			errors.New("Exam Sitting Store returned an invalid manager lifecycle result"),
 		)
 	}
 
-	value, err := requireSnapshot(result.Value)
-	if err != nil || value.Sitting.ExamID != examID || value.Sitting.ID != sittingID {
-		return store.ExamSittingSnapshot{}, apperror.New("exam.sitting.unavailable").Wrap(
-			errors.New("Exam Sitting Store returned a mismatched manager lifecycle result"),
-		)
-	}
-
-	return value, nil
-}
-
-func validLifecycleTransition(value store.ExamSittingLifecycleTransitionCode) bool {
-	switch value {
-	case store.ExamSittingTransitionOpened,
-		store.ExamSittingTransitionManagerPaused,
-		store.ExamSittingTransitionManagerResumed,
-		store.ExamSittingTransitionManagerExtended,
-		store.ExamSittingTransitionManagerClosed,
-		store.ExamSittingTransitionAcademicStructureInvalid,
-		store.ExamSittingTransitionScheduleElapsed,
-		store.ExamSittingTransitionScheduledEndReached,
-		store.ExamSittingTransitionClosedNoAttempts,
-		store.ExamSittingTransitionSealingCompleted:
-		return true
-	default:
-		return false
-	}
+	return *result.Value, nil
 }
 
 func validPrivateReason(reason string) bool {

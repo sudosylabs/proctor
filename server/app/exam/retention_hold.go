@@ -185,7 +185,7 @@ func (r *Records) ReleaseRetentionHold(
 		return nil, r.failMutation(ctx, mutation, err)
 	}
 
-	if !result.ConsistentWithRelease(command.HoldID, command.Scope) {
+	if !result.Released() {
 		return nil, apperror.New("exam.unavailable").Wrap(errors.New("Retention hold release result is incomplete"))
 	}
 

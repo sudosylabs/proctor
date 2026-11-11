@@ -67,9 +67,6 @@ func (a *Authoring) EditExamDraftText(
 	if err != nil {
 		return View{}, examStoreErrors.Translate(err)
 	}
-	if !examAccess.Consistent() {
-		return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no access projection"))
-	}
 
 	action, err := a.actionForAccess(ctx, principal.UserID, examAccess, at, model.ActionExamManage, model.ActionExamManageOverride)
 	if err != nil {
@@ -84,9 +81,6 @@ func (a *Authoring) EditExamDraftText(
 	snapshot, err := a.exams.Get(ctx, command.ExamID, principal.UserID)
 	if err != nil {
 		return View{}, examStoreErrors.Translate(err)
-	}
-	if !snapshot.Consistent() {
-		return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned an incomplete snapshot"))
 	}
 
 	candidate := *snapshot.Draft
@@ -139,10 +133,6 @@ func (a *Authoring) EditExamDraftText(
 		}
 
 		return View{}, mapped
-	}
-
-	if !result.ConsistentWithDraft() {
-		return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no Draft update result"))
 	}
 
 	if !result.Replayed {

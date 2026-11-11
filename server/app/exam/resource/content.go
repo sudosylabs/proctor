@@ -197,9 +197,6 @@ func (s *Service) ReplaceExamResourceContent(
 	if err != nil {
 		return store.ExamResourceRecord{}, storeErrors.Translate(err)
 	}
-	if !current.Consistent() {
-		return store.ExamResourceRecord{}, apperror.New("exam.resource.unavailable").Wrap(errors.New("incomplete resource record"))
-	}
 
 	at := model.TimeUTC(s.now())
 	principal := inv.Principal()

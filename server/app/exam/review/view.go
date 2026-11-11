@@ -175,7 +175,6 @@ func validSnapshot(snapshot *store.ExamSubmissionReviewSnapshot, submissionID mo
 	if snapshot == nil ||
 		snapshot.NativeConditions.Validate() != nil ||
 		snapshot.DeliveryInventoryRevision < 0 ||
-		!snapshot.Authorization.ConsistentWith(submissionID) ||
 		snapshot.Submission == nil ||
 		snapshot.Submission.Validate() != nil ||
 		snapshot.Submission.ID != submissionID ||

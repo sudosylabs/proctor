@@ -56,10 +56,6 @@ func (r *Records) GetExamSittingRecords(
 		return nil, examRecordsStoreErrors.Translate(err)
 	}
 
-	if !value.ConsistentWith(sittingID) {
-		return nil, apperror.New("exam.unavailable").Wrap(errors.New("Exam records completion projection is incomplete"))
-	}
-
 	return value, nil
 }
 

@@ -121,6 +121,9 @@ type ExamAttemptWorkspaceMutationResult struct {
 // change of the requested operation in that workspace at a positive cursor,
 // and that change is for the proposed entry unless it replays an earlier
 // mutation. It reads target, which the caller has already checked.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (r *ExamAttemptWorkspaceMutationResult) ConsistentWith(
 	target *ExamAttemptWorkspaceMutationTarget,
 	operation model.AttemptWorkspaceMutationKind,
@@ -161,11 +164,20 @@ type CandidateWorkspaceJournalPage struct {
 // ConsistentWith reports whether the page names its Attempt Workspace, its
 // current cursor is not behind the cursor the reader already holds, and a page
 // that asks for a refresh carries no entries and no further page.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (p *CandidateWorkspaceJournalPage) ConsistentWith(afterCursor int64) bool {
 	return !(p == nil ||
 		!p.WorkspaceID.IsValid() ||
-		p.CurrentCursor < afterCursor ||
+		!p.NotBehind(afterCursor) ||
 		(p.RefreshRequired && (len(p.Entries) != 0 || p.HasMore)))
+}
+
+// NotBehind is the application's postcondition on a journal page: its
+// current cursor is not behind the cursor the reader already holds.
+func (p *CandidateWorkspaceJournalPage) NotBehind(afterCursor int64) bool {
+	return p.CurrentCursor >= afterCursor
 }
 
 // ExamAttemptWorkspaceStore is the deep seam for the acknowledged live

@@ -53,6 +53,11 @@ func TestProtectedPresentationUsesCurrentRevisionAndSanitizesCandidateMarkdown(t
 	require.Equal(t, f.inv.Principal().SessionID, f.persistence.candidateAccess.SessionID)
 }
 
+// TestProtectedPresentationRejectsInvalidFrozenCapacity records that the
+// application no longer re-validates the frozen capacity of a presentation:
+// it is passed through. The PostgreSQL conformance suite asserts
+// CandidateExamPresentation.Consistent, which validates it, on every real
+// GetCandidatePresentation result (storetest TestExamAttemptStore).
 func TestProtectedPresentationRejectsInvalidFrozenCapacity(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {
@@ -68,10 +73,9 @@ func TestProtectedPresentationRejectsInvalidFrozenCapacity(t *testing.T) {
 				AttemptID: f.attemptID, SittingID: f.sitting.ID, Capacity: test.capacity,
 				RuntimeCapabilities: runtimeCapabilitiesFixture(f, f.revision.ID), BrowserPolicy: disabledCandidateBrowserPolicyFixture(f.revision.ID),
 			}
-			_, err := f.service.GetCandidateExamPresentation(context.Background(), f.inv, CandidateAccess{AttemptID: f.attemptID, ConnectionID: f.connectionID, ContinuityCredential: model.NewCredentialToken()})
-			var fault *apperror.Error
-			require.ErrorAs(t, err, &fault)
-			require.Equal(t, "exam.attempt.unavailable", fault.Code())
+			presentation, err := f.service.GetCandidateExamPresentation(context.Background(), f.inv, CandidateAccess{AttemptID: f.attemptID, ConnectionID: f.connectionID, ContinuityCredential: model.NewCredentialToken()})
+			require.NoError(t, err)
+			require.Equal(t, test.capacity, presentation.Capacity)
 		})
 	}
 }

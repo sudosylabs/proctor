@@ -80,6 +80,9 @@ type ExamExportDownload struct {
 
 // ConsistentWith reports whether the read result carries the valid Examination
 // Export that was asked for, on the given scope, requested by the given User.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (d *ExamExportDownload) ConsistentWith(
 	exportID model.ExamExportID,
 	scope model.RetentionHoldScope,

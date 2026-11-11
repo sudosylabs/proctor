@@ -788,6 +788,8 @@ func testExamAttemptParticipationExpiry(t *testing.T, ctx context.Context, ss st
 	require.Equal(t, second.Flag.ID, first.Flag.ID, "ExpireParticipation(concurrent) = %#v, %#v", first, second)
 	require.Equal(t, second.Suspension.ID, first.Suspension.ID, "ExpireParticipation(concurrent) = %#v, %#v", first, second)
 	require.True(t, first.DatabaseTime.Equal(second.DatabaseTime), "ExpireParticipation(concurrent) = %#v, %#v", first, second)
+	requireExpiryLinks(t, first, *resolved)
+	requireExpiryLinks(t, second, *resolved)
 	expired := first
 	if expired.Replayed {
 		expired = second
@@ -1333,4 +1335,50 @@ func newExamAttemptAudit(fixture examAttemptFixture) *model.AuditEvent {
 	return &model.AuditEvent{ActorID: fixture.candidate.ID, Action: string(model.ActionExamSittingParticipate),
 		Resource: model.Resource{Type: model.ResourceExamSitting, ID: fixture.sitting.ID.String()}, ScopeType: model.RoleScopeClass,
 		ScopeID: fixture.class.ID.String(), Status: model.AuditStatusAttempt, NodeID: "test-node"}
+}
+
+// requireExpiryLinks asserts the scope and link facts of an expiry outcome
+// that the application does not re-check, against the due target it expired:
+// every part is present, names the target's scope, Attempt, Participation and
+// generation, is valid, and the evidence and Suspension link the outcome's
+// Flag.
+func requireExpiryLinks(t *testing.T, result *store.ExamAttemptParticipationExpiryResult, due store.ExamAttemptParticipationExpiryDue) {
+	t.Helper()
+	require.NotNil(t, result)
+	require.NotNil(t, result.Attempt)
+	require.NotNil(t, result.Participation)
+	require.NotNil(t, result.Connection)
+	require.NotNil(t, result.Evidence)
+	require.NotNil(t, result.Flag)
+	require.NotNil(t, result.Suspension)
+	require.Equal(t, due.ExamID, result.ExamID)
+	require.Equal(t, due.SittingID, result.SittingID)
+	require.Equal(t, due.ClassID, result.ClassID)
+	require.Equal(t, due.CandidateUserID, result.CandidateUserID)
+	require.NoError(t, result.Attempt.Validate())
+	require.Equal(t, due.AttemptID, result.Attempt.ID)
+	require.Equal(t, due.ExamID, result.Attempt.ExamID)
+	require.Equal(t, due.SittingID, result.Attempt.SittingID)
+	require.Equal(t, due.CandidateUserID, result.Attempt.CandidateUserID)
+	require.Equal(t, due.ParticipationID, result.Participation.ID)
+	require.Equal(t, due.AttemptID, result.Participation.AttemptID)
+	require.Equal(t, due.Generation, result.Participation.Generation)
+	require.True(t, result.Connection.ID.IsValid())
+	require.False(t, result.Connection.OpenedAt.IsZero())
+	require.True(t, result.Connection.CloseReason.IsValid())
+	require.NoError(t, result.Evidence.Validate())
+	require.NoError(t, result.Flag.Validate())
+	require.Equal(t, due.AttemptID, result.Evidence.AttemptID)
+	require.Equal(t, due.ParticipationID, result.Evidence.ParticipationID)
+	require.Equal(t, due.Generation, result.Evidence.Generation)
+	require.Equal(t, result.Flag.ID, result.Evidence.FlagID)
+	require.Equal(t, due.AttemptID, result.Flag.AttemptID)
+	require.Equal(t, due.Generation, result.Flag.Generation)
+	require.True(t, result.Suspension.ID.IsValid())
+	require.Equal(t, due.AttemptID, result.Suspension.AttemptID)
+	require.Equal(t, due.ParticipationID, result.Suspension.ParticipationID)
+	require.Equal(t, due.Generation, result.Suspension.Generation)
+	require.Equal(t, result.Flag.ID, result.Suspension.FlagID)
+	require.False(t, result.Suspension.StartedAt.IsZero())
+	require.False(t, result.DatabaseTime.IsZero())
 }

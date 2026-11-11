@@ -70,12 +70,6 @@ func (s *Service) EndExamAttemptByManager(
 		return store.ExamSubmissionReceipt{}, storeError(storeErrors, err)
 	}
 
-	if !sitting.ConsistentWithOwningClass(command.SittingID) {
-		return store.ExamSubmissionReceipt{}, apperror.New("exam.attempt.unavailable").Wrap(
-			errors.New("inconsistent manager-ended Sitting projection"),
-		)
-	}
-
 	action := model.ActionExamSittingManage
 	if override {
 		action = model.ActionExamSittingManageOverride
@@ -107,7 +101,7 @@ func (s *Service) EndExamAttemptByManager(
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, err)
 	}
 
-	if !managerSnapshot.ConsistentWith(command.ExamID) {
+	if !managerSnapshot.SuspensionActiveOrAbsent() {
 		return store.ExamSubmissionReceipt{}, s.failAudit(
 			ctx,
 			auditID,
@@ -163,7 +157,7 @@ func (s *Service) EndExamAttemptByManager(
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, storeError(storeErrors, err))
 	}
 
-	result, err := projectManagerEndResult(stored, preparation.Target, command, proposed, receiptCode)
+	result, err := projectManagerEndResult(stored)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, err
 	}
@@ -241,14 +235,8 @@ func validManagerEndReason(reason string) bool {
 		len(reason) <= 4000
 }
 
-func projectManagerEndResult(
-	stored *store.ExamSubmissionManagerEndResult,
-	target store.ExamSubmissionAutomaticSealTarget,
-	command ManagerEndCommand,
-	proposed model.SubmissionID,
-	proposedCode model.SubmissionReceiptCode,
-) (SubmissionResult, error) {
-	if !stored.ConsistentWith(command.AttemptID, command.ExamID, command.SittingID, target, proposed, proposedCode) {
+func projectManagerEndResult(stored *store.ExamSubmissionManagerEndResult) (SubmissionResult, error) {
+	if !stored.Ended() {
 		return SubmissionResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent manager-ended Submission result"))
 	}
 

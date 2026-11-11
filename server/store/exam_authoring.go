@@ -28,6 +28,9 @@ type ExamAuthoringSnapshot struct {
 }
 
 // Consistent reports whether the snapshot carries both the Exam and its Draft.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (s *ExamAuthoringSnapshot) Consistent() bool {
 	return !(s == nil ||
 		s.Exam == nil ||
@@ -43,6 +46,9 @@ type ExamAccessSnapshot struct {
 
 // Consistent reports whether the projection carries its Exam. It is the base
 // check: it does not ask which Exam that is.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (s *ExamAccessSnapshot) Consistent() bool {
 	return !(s == nil ||
 		s.Exam == nil)
@@ -50,6 +56,9 @@ func (s *ExamAccessSnapshot) Consistent() bool {
 
 // ConsistentWith reports whether the projection carries the Exam that was
 // asked for and that Exam belongs to the given Academic Unit.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (s *ExamAccessSnapshot) ConsistentWith(examID model.ExamID, academicUnitID model.AcademicUnitID) bool {
 	return !(s == nil ||
 		s.Exam == nil ||
@@ -61,6 +70,9 @@ func (s *ExamAccessSnapshot) ConsistentWith(examID model.ExamID, academicUnitID 
 // that was asked for and that Exam names an Academic Unit as its owner. Unlike
 // ConsistentWith, the caller has no Academic Unit to compare; this only
 // requires that one is named.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (s *ExamAccessSnapshot) ConsistentWithOwningUnit(examID model.ExamID) bool {
 	return !(s == nil ||
 		s.Exam == nil ||
@@ -72,6 +84,9 @@ func (s *ExamAccessSnapshot) ConsistentWithOwningUnit(examID model.ExamID) bool 
 // was asked for and that Exam passes its own validation. It is the only check
 // here that validates the Exam, and it asks nothing separate about the
 // Academic Unit.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (s *ExamAccessSnapshot) ConsistentAndValidWith(examID model.ExamID) bool {
 	return !(s == nil ||
 		s.Exam == nil ||
@@ -87,6 +102,9 @@ type ExamAuthoringCommandResult struct {
 // ConsistentWithDraft reports whether the command outcome carries an Exam
 // authoring snapshot that includes the updated Draft. It does not require the
 // snapshot's Exam, which a Draft update does not read.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (r *ExamAuthoringCommandResult) ConsistentWithDraft() bool {
 	return !(r == nil ||
 		r.Value == nil ||

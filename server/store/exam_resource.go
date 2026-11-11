@@ -25,6 +25,9 @@ type ExamResourceRecord struct {
 
 // Consistent reports whether the record carries both the Resource and its
 // current rendition.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (r *ExamResourceRecord) Consistent() bool {
 	return !(r == nil ||
 		r.Resource == nil ||

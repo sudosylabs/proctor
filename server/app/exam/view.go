@@ -9,7 +9,6 @@ package exam
 
 import (
 	"context"
-	"errors"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -43,9 +42,6 @@ func (a *Authoring) GetExam(ctx context.Context, inv invocation.Invocation, id m
 	if err != nil {
 		return View{}, examStoreErrors.Translate(err)
 	}
-	if !examAccess.Consistent() {
-		return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no access projection"))
-	}
 
 	action, err := a.actionForAccess(
 		ctx,
@@ -72,9 +68,6 @@ func (a *Authoring) GetExam(ctx context.Context, inv invocation.Invocation, id m
 	if err != nil {
 		return View{}, examStoreErrors.Translate(err)
 	}
-	if !snapshot.Consistent() {
-		return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned an incomplete snapshot"))
-	}
 
 	return projectView(snapshot), nil
 }
@@ -91,9 +84,6 @@ func (a *Authoring) AuthorizeExamView(ctx context.Context, inv invocation.Invoca
 	examAccess, err := a.exams.Access(ctx, examID, principal.UserID)
 	if err != nil {
 		return examStoreErrors.Translate(err)
-	}
-	if !examAccess.Consistent() {
-		return apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no access projection"))
 	}
 
 	action, err := a.actionForAccess(

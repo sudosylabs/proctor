@@ -133,10 +133,6 @@ func (a SittingManagerAuthorizer) resolve(
 		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(err)
 	}
 
-	if !authorization.ConsistentWith(submissionID) {
-		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("Review authorization projection is incomplete"))
-	}
-
 	return authorization, nil
 }
 

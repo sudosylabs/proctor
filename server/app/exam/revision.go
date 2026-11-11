@@ -72,9 +72,6 @@ func (p *Publication) PublishExamRevision(
 	if err != nil {
 		return store.ExamRevisionSummary{}, examStoreErrors.Translate(err)
 	}
-	if !examAccess.Consistent() {
-		return store.ExamRevisionSummary{}, apperror.New("exam.unavailable").Wrap(errors.New("Exam access projection is incomplete"))
-	}
 
 	action, err := manageraccess.SelectAction(
 		ctx,
@@ -214,9 +211,6 @@ func (p *Publication) authorizeView(ctx context.Context, inv invocation.Invocati
 	examAccess, err := p.exams.Access(ctx, examID, principal.UserID)
 	if err != nil {
 		return examStoreErrors.Translate(err)
-	}
-	if !examAccess.Consistent() {
-		return apperror.New("exam.unavailable").Wrap(errors.New("Exam access projection is incomplete"))
 	}
 
 	action, err := manageraccess.SelectAction(

@@ -61,6 +61,9 @@ type ExamRevisionSummary struct {
 
 // ConsistentWith reports whether the summary is the Exam Revision that was
 // asked for, belongs to the given Exam, and carries a title.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (s *ExamRevisionSummary) ConsistentWith(revisionID model.ExamRevisionID, examID model.ExamID) bool {
 	return !(s == nil ||
 		s.ID != revisionID ||

@@ -217,13 +217,12 @@ func (s *Service) terminalMutation(
 		return Result{}, s.failAudit(ctx, auditID, err)
 	}
 
-	result, err := projectMutation(stored, submissionID)
+	result, err := projectMutation(stored)
 	if err != nil {
 		return Result{}, err
 	}
 
-	if result.Review.ID != reviewID ||
-		(kind == terminalRelease && result.Review.ReleaseState != model.SubmissionReviewReleased) ||
+	if (kind == terminalRelease && result.Review.ReleaseState != model.SubmissionReviewReleased) ||
 		(kind == terminalFinalize && result.Review.State != model.SubmissionReviewFinalized) {
 		return Result{}, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("inconsistent terminal Review result"))
 	}

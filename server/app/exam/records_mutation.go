@@ -36,10 +36,6 @@ func (r *Records) authorizeScope(
 		return nil, "", examRecordsStoreErrors.Translate(err)
 	}
 
-	if !resolved.ConsistentWith(scope) {
-		return nil, "", apperror.New("exam.unavailable").Wrap(errors.New("Exam records scope projection is incomplete"))
-	}
-
 	if excludeSelf && principal.UserID == resolved.CandidateUserID {
 		if err = r.authorizer.RecordDenial(ctx, inv, ordinary, scope.Resource(), resolved.AcademicUnitID); err != nil {
 			return nil, "", err
@@ -52,9 +48,6 @@ func (r *Records) authorizeScope(
 		examAccess, accessErr := r.exams.Access(ctx, scope.ExamID, principal.UserID)
 		if accessErr != nil {
 			return nil, "", examRecordsStoreErrors.Translate(accessErr)
-		}
-		if !examAccess.ConsistentWith(scope.ExamID, resolved.AcademicUnitID) {
-			return nil, "", apperror.New("exam.unavailable").Wrap(errors.New("Exam records access projection is incomplete"))
 		}
 
 		action, err = manageraccess.SelectAction(

@@ -267,9 +267,6 @@ func (s *Service) resolveManagedSubmission(
 	if err != nil {
 		return nil, storeError(storeErrors, err)
 	}
-	if !authorization.ConsistentWith(query.SubmissionID) {
-		return nil, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Submission authorization projection"))
-	}
 
 	if authorization.ExamID != query.ExamID ||
 		authorization.SittingID != query.SittingID ||
@@ -388,7 +385,7 @@ func (s *Service) SubmitExamAttempt(
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, err)
 	}
 
-	result, err := projectSubmissionResult(stored, target, sealAccess, submissionID, receiptCode)
+	result, err := projectSubmissionResult(stored)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, err
 	}
@@ -413,14 +410,8 @@ func validSubmissionTarget(target *store.ExamSubmissionSealTarget, sealAccess st
 		!target.SealAt.IsZero()
 }
 
-func projectSubmissionResult(
-	stored *store.ExamSubmissionSealResult,
-	target *store.ExamSubmissionSealTarget,
-	sealAccess store.ExamSubmissionSealAccess,
-	proposedID model.SubmissionID,
-	proposedCode model.SubmissionReceiptCode,
-) (SubmissionResult, error) {
-	if !stored.ConsistentWith(target, sealAccess, proposedID, proposedCode) {
+func projectSubmissionResult(stored *store.ExamSubmissionSealResult) (SubmissionResult, error) {
+	if !stored.Sealed() {
 		return SubmissionResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Submission seal result"))
 	}
 

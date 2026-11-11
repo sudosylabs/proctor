@@ -24,6 +24,9 @@ type ExamSittingSnapshot struct {
 
 // ConsistentAndValid reports whether the snapshot carries a Sitting that
 // passes its own validation. It does not ask which Sitting that is.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (s *ExamSittingSnapshot) ConsistentAndValid() bool {
 	return !(s == nil ||
 		s.Sitting == nil ||
@@ -33,6 +36,9 @@ func (s *ExamSittingSnapshot) ConsistentAndValid() bool {
 // ConsistentAndValidWith reports whether the snapshot carries a Sitting that
 // passes its own validation, is the one asked for, and belongs to the given
 // Exam.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (s *ExamSittingSnapshot) ConsistentAndValidWith(sittingID model.ExamSittingID, examID model.ExamID) bool {
 	return !(s == nil ||
 		s.Sitting == nil ||
@@ -44,6 +50,9 @@ func (s *ExamSittingSnapshot) ConsistentAndValidWith(sittingID model.ExamSitting
 // ConsistentWithOwningClass reports whether the snapshot carries the Sitting
 // that was asked for and that Sitting names the Class it belongs to. It does
 // not validate the Sitting or ask for its Academic Unit.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (s *ExamSittingSnapshot) ConsistentWithOwningClass(sittingID model.ExamSittingID) bool {
 	return !(s == nil ||
 		s.Sitting == nil ||
@@ -54,6 +63,9 @@ func (s *ExamSittingSnapshot) ConsistentWithOwningClass(sittingID model.ExamSitt
 // ConsistentWithOwningUnit reports whether the snapshot carries the Sitting
 // that was asked for and names the Academic Unit that owns it. It does not
 // validate the Sitting or ask for its Class.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (s *ExamSittingSnapshot) ConsistentWithOwningUnit(sittingID model.ExamSittingID) bool {
 	return !(s == nil ||
 		s.Sitting == nil ||

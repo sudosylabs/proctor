@@ -37,6 +37,7 @@ func TestExamSittingStore(t *testing.T, ss store.Store) {
 		AuditEventID: scheduleAudit.ID, AuditAt: model.NowUTC(), Mail: scheduleMail}, command)
 	require.NoError(t, err)
 	require.True(t, created.Value.ConsistentAndValid(), "Schedule returned a result inconsistent with its request")
+	requireSittingCommandFor(t, created, fixture.examID, sitting.ID)
 	require.False(t, created.Replayed)
 	require.NotNil(t, created.Value)
 	require.NotNil(t, created.Value.Sitting)
@@ -209,6 +210,7 @@ func TestExamSittingStore(t *testing.T, ss store.Store) {
 		examCommand(fixture.actor.ID, "exam.sitting.schedule.update", "sitting-update", "sitting-update-command"))
 	require.NoError(t, err)
 	require.True(t, updated.Value.ConsistentAndValid(), "UpdateSchedule returned a result inconsistent with its request")
+	requireSittingCommandFor(t, updated, fixture.examID, sitting.ID)
 	require.Equal(t, int64(2), updated.Value.Sitting.Revision)
 	require.Equal(t, newStart, updated.Value.Sitting.ScheduledStartAt)
 	require.Equal(t, newEnd, updated.Value.Sitting.ScheduledEndAt)
@@ -221,6 +223,7 @@ func TestExamSittingStore(t *testing.T, ss store.Store) {
 		Mail: newExamSittingMailFanout(t, fixture.actor.ID, store.ExamSittingMailCanceled, model.MailTemplateExamSittingCanceled)}, cancelCommand)
 	require.NoError(t, err)
 	require.True(t, canceled.Value.ConsistentAndValid(), "Cancel returned a result inconsistent with its request")
+	requireSittingCommandFor(t, canceled, fixture.examID, sitting.ID)
 	require.Equal(t, model.ExamSittingCanceled, canceled.Value.Sitting.State)
 	require.Equal(t, model.ExamSittingReasonManagerCanceled, canceled.Value.Sitting.ReasonCode)
 	require.Equal(t, int64(3), canceled.Value.Sitting.Revision)
@@ -235,6 +238,7 @@ func TestExamSittingStore(t *testing.T, ss store.Store) {
 		AuditEventID: saveExamSittingAudit(t, ctx, ss, fixture.actor.ID, fixture.examID, fixture.unitID).ID, AuditAt: model.NowUTC(), Mail: scheduleMail}, command)
 	require.NoError(t, err)
 	require.True(t, retry.Value.ConsistentAndValid(), "Schedule replay returned a result inconsistent with its request")
+	requireSittingCommandFor(t, retry, fixture.examID, sitting.ID)
 	require.True(t, retry.Replayed)
 	require.Equal(t, model.ExamSittingScheduled, retry.Value.Sitting.State)
 	require.Equal(t, int64(1), retry.Value.Sitting.Revision)
@@ -1202,6 +1206,7 @@ func TestExamSittingLifecycleStore(t *testing.T, ss store.Store, probe ExamSitti
 		AuditEventID: beforeAudit.ID, AuditAt: model.NowUTC()})
 	require.NoError(t, err)
 	require.True(t, before.Value.ConsistentAndValid(), "AdvanceDue returned a result inconsistent with its request")
+	requireSittingLifecycleFor(t, before, fixture.examID, active.Value.Sitting.ID)
 	require.False(t, before.Changed)
 	require.Equal(t, model.ExamSittingScheduled, before.Value.Sitting.State)
 
@@ -1221,6 +1226,7 @@ func TestExamSittingLifecycleStore(t *testing.T, ss store.Store, probe ExamSitti
 		AuditEventID: openAudit.ID, AuditAt: model.NowUTC()})
 	require.NoError(t, err)
 	require.True(t, opened.Value.ConsistentAndValid(), "AdvanceDue returned a result inconsistent with its request")
+	requireSittingLifecycleFor(t, opened, fixture.examID, active.Value.Sitting.ID)
 	require.True(t, opened.Changed)
 	require.Equal(t, store.ExamSittingTransitionOpened, opened.Transition)
 	require.Equal(t, model.ExamSittingOpen, opened.Value.Sitting.State)
@@ -1237,6 +1243,7 @@ func TestExamSittingLifecycleStore(t *testing.T, ss store.Store, probe ExamSitti
 		examCommand(fixture.actor.ID, "exam.sitting.schedule", "sitting-lifecycle", "sitting-lifecycle-command"))
 	require.NoError(t, err)
 	require.True(t, scheduleReplay.Value.ConsistentAndValid(), "Schedule replay returned a result inconsistent with its request")
+	requireSittingCommandFor(t, scheduleReplay, fixture.examID, replayScheduled.ID)
 	require.True(t, scheduleReplay.Replayed)
 	require.Equal(t, model.ExamSittingScheduled, scheduleReplay.Value.Sitting.State)
 	require.Equal(t, int64(1), scheduleReplay.Value.Sitting.Revision)
@@ -1250,6 +1257,7 @@ func TestExamSittingLifecycleStore(t *testing.T, ss store.Store, probe ExamSitti
 	paused, err := ss.ExamSitting().Pause(ctx, pauseInput, pauseCommand)
 	require.NoError(t, err)
 	require.True(t, paused.Value.ConsistentAndValid(), "Pause returned a result inconsistent with its request")
+	requireSittingLifecycleFor(t, paused, fixture.examID, active.Value.Sitting.ID)
 	require.Equal(t, store.ExamSittingTransitionManagerPaused, paused.Transition)
 	require.Equal(t, model.ExamSittingPaused, paused.Value.Sitting.State)
 	require.Equal(t, int64(3), paused.Value.Sitting.Revision)
@@ -1258,6 +1266,7 @@ func TestExamSittingLifecycleStore(t *testing.T, ss store.Store, probe ExamSitti
 	replayed, err := ss.ExamSitting().Pause(ctx, &replayInput, pauseCommand)
 	require.NoError(t, err)
 	require.True(t, replayed.Value.ConsistentAndValid(), "Pause replay returned a result inconsistent with its request")
+	requireSittingLifecycleFor(t, replayed, fixture.examID, active.Value.Sitting.ID)
 	require.True(t, replayed.Replayed)
 	require.Equal(t, int64(3), replayed.Value.Sitting.Revision)
 
@@ -1268,6 +1277,7 @@ func TestExamSittingLifecycleStore(t *testing.T, ss store.Store, probe ExamSitti
 		examCommand(fixture.actor.ID, "exam.sitting.resume", "sitting-resume", "sitting-resume-command"))
 	require.NoError(t, err)
 	require.True(t, resumed.Value.ConsistentAndValid(), "Resume returned a result inconsistent with its request")
+	requireSittingLifecycleFor(t, resumed, fixture.examID, active.Value.Sitting.ID)
 	require.Equal(t, model.ExamSittingOpen, resumed.Value.Sitting.State)
 	require.Equal(t, int64(4), resumed.Value.Sitting.Revision)
 
@@ -1280,6 +1290,7 @@ func TestExamSittingLifecycleStore(t *testing.T, ss store.Store, probe ExamSitti
 		examCommand(fixture.actor.ID, "exam.sitting.extend", "sitting-extend", "sitting-extend-command"))
 	require.NoError(t, err)
 	require.True(t, extended.Value.ConsistentAndValid(), "Extend returned a result inconsistent with its request")
+	requireSittingLifecycleFor(t, extended, fixture.examID, active.Value.Sitting.ID)
 	require.Equal(t, extendedEnd, extended.Value.Sitting.ScheduledEndAt)
 	require.Equal(t, int64(5), extended.Value.Sitting.Revision)
 	_, equalDeadline := newExamSittingLifecycleJobs(t, active.Value.Sitting.ID, 6, dueStart, extendedEnd)
@@ -1302,6 +1313,7 @@ func TestExamSittingLifecycleStore(t *testing.T, ss store.Store, probe ExamSitti
 	laterReplay, err := ss.ExamSitting().Pause(ctx, &laterReplayInput, pauseCommand)
 	require.NoError(t, err)
 	require.True(t, laterReplay.Value.ConsistentAndValid(), "Pause replay returned a result inconsistent with its request")
+	requireSittingLifecycleFor(t, laterReplay, fixture.examID, active.Value.Sitting.ID)
 	require.True(t, laterReplay.Replayed)
 	require.Equal(t, model.ExamSittingPaused, laterReplay.Value.Sitting.State)
 	require.Equal(t, int64(3), laterReplay.Value.Sitting.Revision)
@@ -1320,6 +1332,7 @@ func TestExamSittingLifecycleStore(t *testing.T, ss store.Store, probe ExamSitti
 		examCommand(fixture.actor.ID, "exam.sitting.close", "sitting-early-close", "sitting-early-close-command"))
 	require.NoError(t, err)
 	require.True(t, closing.Value.ConsistentAndValid(), "EarlyClose returned a result inconsistent with its request")
+	requireSittingLifecycleFor(t, closing, fixture.examID, active.Value.Sitting.ID)
 	require.Equal(t, model.ExamSittingClosing, closing.Value.Sitting.State)
 	require.Equal(t, model.ExamSittingReasonManagerClosed, closing.Value.Sitting.ReasonCode)
 	closingDue, err := ss.ExamSitting().ListLifecycleDue(ctx, store.ExamSittingLifecycleDueOptions{Limit: 201})
@@ -1337,6 +1350,7 @@ func TestExamSittingLifecycleStore(t *testing.T, ss store.Store, probe ExamSitti
 		AuditEventID: closedAudit.ID, AuditAt: model.NowUTC()})
 	require.NoError(t, err)
 	require.True(t, closed.Value.ConsistentAndValid(), "FinishSealing returned a result inconsistent with its request")
+	requireSittingLifecycleFor(t, closed, fixture.examID, active.Value.Sitting.ID)
 	require.True(t, closed.Changed)
 	require.Equal(t, model.ExamSittingClosed, closed.Value.Sitting.State)
 	require.Equal(t, int64(7), closed.Value.Sitting.Revision)
@@ -1805,4 +1819,42 @@ func newExamSittingFinalizeJob(t *testing.T, sittingID model.ExamSittingID, revi
 		model.JobDedupeActive, model.NowUTC(), availableAt, 8)
 	require.NoError(t, err)
 	return job
+}
+
+// requireSittingCommandFor asserts what the application no longer re-checks
+// on a Sitting command result: it carries its snapshot and names the
+// commanded Exam and Sitting.
+func requireSittingCommandFor(t *testing.T, result *store.ExamSittingCommandResult, examID model.ExamID, sittingID model.ExamSittingID) {
+	t.Helper()
+	require.NotNil(t, result)
+	require.NotNil(t, result.Value)
+	require.NotNil(t, result.Value.Sitting)
+	require.Equal(t, examID, result.Value.Sitting.ExamID)
+	require.Equal(t, sittingID, result.Value.Sitting.ID)
+}
+
+// requireSittingLifecycleFor asserts what the application no longer re-checks
+// on a Sitting lifecycle result: it carries its snapshot, names the commanded
+// Exam and Sitting, and a change names a known transition.
+func requireSittingLifecycleFor(t *testing.T, result *store.ExamSittingLifecycleResult, examID model.ExamID, sittingID model.ExamSittingID) {
+	t.Helper()
+	require.NotNil(t, result)
+	require.NotNil(t, result.Value)
+	require.NotNil(t, result.Value.Sitting)
+	require.Equal(t, examID, result.Value.Sitting.ExamID)
+	require.Equal(t, sittingID, result.Value.Sitting.ID)
+	if result.Changed {
+		require.Contains(t, []store.ExamSittingLifecycleTransitionCode{
+			store.ExamSittingTransitionOpened,
+			store.ExamSittingTransitionManagerPaused,
+			store.ExamSittingTransitionManagerResumed,
+			store.ExamSittingTransitionManagerExtended,
+			store.ExamSittingTransitionManagerClosed,
+			store.ExamSittingTransitionAcademicStructureInvalid,
+			store.ExamSittingTransitionScheduleElapsed,
+			store.ExamSittingTransitionScheduledEndReached,
+			store.ExamSittingTransitionClosedNoAttempts,
+			store.ExamSittingTransitionSealingCompleted,
+		}, result.Transition)
+	}
 }

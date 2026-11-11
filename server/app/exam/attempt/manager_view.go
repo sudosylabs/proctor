@@ -45,10 +45,6 @@ func (s *Service) GetExamAttempt(
 		return store.ExamAttemptManagerSnapshot{}, storeError(storeErrors, err)
 	}
 
-	if !sitting.ConsistentWithOwningUnit(sittingID) {
-		return store.ExamAttemptManagerSnapshot{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent managed Attempt Sitting projection"))
-	}
-
 	if sitting.Sitting.ExamID != examID {
 		return store.ExamAttemptManagerSnapshot{}, apperror.New("exam.attempt.not_found")
 	}
@@ -58,7 +54,7 @@ func (s *Service) GetExamAttempt(
 		return store.ExamAttemptManagerSnapshot{}, storeError(storeErrors, err)
 	}
 
-	if !snapshot.ConsistentWith(examID) {
+	if !snapshot.SuspensionActiveOrAbsent() {
 		return store.ExamAttemptManagerSnapshot{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent managed Attempt projection"))
 	}
 
@@ -180,10 +176,6 @@ func (s *Service) ListSittingCandidateStatuses(
 		return SittingCandidateStatusesPage{}, storeError(storeErrors, err)
 	}
 
-	if !stored.ConsistentWith(query.ExamID, query.SittingID) {
-		return SittingCandidateStatusesPage{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("incomplete Sitting candidate-status projection"))
-	}
-
 	page := SittingCandidateStatusesPage{SittingCandidateStatusPage: *stored, HasMore: len(stored.Items) > query.Limit}
 	page.Items = append([]store.SittingCandidateStatusItem(nil), stored.Items[:min(len(stored.Items), query.Limit)]...)
 	for i := range page.Items {
@@ -243,7 +235,7 @@ func (s *Service) ListExamAttempts(
 			break
 		}
 
-		if !row.ConsistentWithExamAndSitting(query.ExamID, query.SittingID) {
+		if !row.SuspensionActiveOrAbsent() {
 			return ManagedAttemptPage{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent managed Attempt page"))
 		}
 

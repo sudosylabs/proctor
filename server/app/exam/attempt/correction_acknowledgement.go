@@ -80,10 +80,6 @@ func (s *Service) AcknowledgeExamAttemptCorrection(
 		return CorrectionAcknowledgementResult{}, storeError(storeErrors, err)
 	}
 
-	if !target.ConsistentWith(selector.AttemptID, selector.CandidateUserID, command.CorrectionRevisionID, command.ExpectedCurrentRevisionID) {
-		return CorrectionAcknowledgementResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent correction acknowledgement target"))
-	}
-
 	resource := model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()}
 	if err = s.auditor.RecordAuthorizationDecision(
 		ctx,
@@ -119,10 +115,6 @@ func (s *Service) AcknowledgeExamAttemptCorrection(
 	stored, err := s.attempts.AcknowledgeCorrection(ctx, &input, commandIdempotency)
 	if err != nil {
 		return CorrectionAcknowledgementResult{}, storeError(storeErrors, err)
-	}
-
-	if !stored.ConsistentWith(selector.AttemptID, command.CorrectionRevisionID, command.ExpectedCurrentRevisionID) {
-		return CorrectionAcknowledgementResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent correction acknowledgement outcome"))
 	}
 
 	// The receipt is immutable; the gates are freshly resolved after commit,

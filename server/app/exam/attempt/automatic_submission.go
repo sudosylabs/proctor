@@ -161,7 +161,7 @@ func (s *Service) SealForSittingClose(
 		return AutomaticSubmissionResult{}, s.failSystemAudit(ctx, auditID, storeError(storeErrors, err))
 	}
 
-	result, err := projectAutomaticSubmissionResult(stored, target, proposed, receiptCode)
+	result, err := projectAutomaticSubmissionResult(stored)
 	if err != nil {
 		return AutomaticSubmissionResult{}, err
 	}
@@ -175,13 +175,8 @@ func (s *Service) SealForSittingClose(
 	return result, nil
 }
 
-func projectAutomaticSubmissionResult(
-	stored *store.ExamSubmissionAutomaticSealResult,
-	target store.ExamSubmissionAutomaticSealTarget,
-	proposed model.SubmissionID,
-	proposedCode model.SubmissionReceiptCode,
-) (AutomaticSubmissionResult, error) {
-	if !stored.ConsistentWith(target, proposed, proposedCode) {
+func projectAutomaticSubmissionResult(stored *store.ExamSubmissionAutomaticSealResult) (AutomaticSubmissionResult, error) {
+	if !stored.Sealed() {
 		return AutomaticSubmissionResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent automatic Submission result"))
 	}
 

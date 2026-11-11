@@ -128,7 +128,7 @@ func (s *Service) CreateCandidateExamWorkspaceDirectory(
 		Operation:       model.AttemptWorkspaceMutationCreateDirectory,
 		EntryID:         entryID,
 		DestinationPath: path,
-	}, commandIdempotency, model.StarterWorkspaceEntryDirectory, "")
+	}, commandIdempotency)
 }
 
 // CreateCandidateExamWorkspaceFile idempotently stages and creates a new file
@@ -228,7 +228,7 @@ func (s *Service) MoveCandidateExamWorkspaceEntry(
 		EntryID:         command.EntryID,
 		ExpectedPath:    expected,
 		DestinationPath: destination,
-	}, commandIdempotency, "", "")
+	}, commandIdempotency)
 }
 
 // DeleteCandidateExamWorkspaceEntry idempotently deletes a Workspace Entry at
@@ -286,7 +286,7 @@ func (s *Service) DeleteCandidateExamWorkspaceEntry(
 		ExpectedContentVersion:  command.ExpectedContentVersion,
 		Recursive:               command.Recursive,
 		ExpectedWorkspaceCursor: command.ExpectedWorkspaceCursor,
-	}, commandIdempotency, "", "")
+	}, commandIdempotency)
 }
 
 func (s *Service) stageWorkspaceFile(
@@ -403,7 +403,7 @@ func (s *Service) stageWorkspaceFile(
 		DestinationPath:        destinationPath,
 		ExpectedContentVersion: expectedVersion,
 		ObjectID:               objectID,
-	}, commandIdempotency, model.StarterWorkspaceEntryFile, version)
+	}, commandIdempotency)
 	if err != nil {
 		if !isAttemptUnavailable(err) {
 			_ = s.workspaces.MarkObjectReclaimable(ctx, objectID)

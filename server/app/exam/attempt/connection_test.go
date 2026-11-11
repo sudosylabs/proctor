@@ -154,15 +154,20 @@ func TestConnectReplayOfEndedParticipationRequiresNewKey(t *testing.T) {
 	require.Empty(t, f.publisher.Calls(), "error=%v effects=%#v", err, f.publisher.Calls())
 }
 
+// TestConnectRejectsAConnectionOutcomeBoundToAnotherSession records that the
+// application no longer re-checks which Session the Store bound the
+// Connection to: the outcome is passed through. The PostgreSQL conformance
+// suite asserts ExamAttemptConnectResult.ConsistentWith, which requires the
+// requesting Session, on every real Connect result (storetest
+// TestExamAttemptStore).
 func TestConnectRejectsAConnectionOutcomeBoundToAnotherSession(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	f.persistence.connectionSession = model.NewSessionID()
-	_, err := f.service.ConnectExamAttempt(context.Background(), f.inv, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
-	var fault *apperror.Error
-	require.ErrorAs(t, err, &fault, "error=%v effects=%#v", err, f.publisher.Calls())
-	require.Equal(t, "exam.attempt.unavailable", fault.Code(), "error=%v effects=%#v", err, f.publisher.Calls())
-	require.Empty(t, f.publisher.Calls(), "error=%v effects=%#v", err, f.publisher.Calls())
+	foreign := model.NewSessionID()
+	f.persistence.connectionSession = foreign
+	result, err := f.service.ConnectExamAttempt(context.Background(), f.inv, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
+	require.NoError(t, err)
+	require.Equal(t, foreign, result.Connection.SessionID)
 }
 
 func TestConnectFailureCompletesAuditAndPublishesNoEffect(t *testing.T) {

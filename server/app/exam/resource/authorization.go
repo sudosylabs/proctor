@@ -9,7 +9,6 @@ package resource
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -37,9 +36,6 @@ func (s *Service) authorizeExam(
 	examAccess, err := s.exams.Access(ctx, examID, principal.UserID)
 	if err != nil {
 		return authorizationDecision{}, storeErrors.Translate(err)
-	}
-	if !examAccess.Consistent() {
-		return authorizationDecision{}, apperror.New("exam.resource.unavailable").Wrap(errors.New("missing access"))
 	}
 
 	var at time.Time

@@ -129,7 +129,7 @@ func (s *Service) SaveExamIntegrityDecision(
 		return Result{}, s.failAudit(ctx, auditID, err)
 	}
 
-	result, err := projectMutation(stored, command.SubmissionID)
+	result, err := projectMutation(stored)
 	if err != nil {
 		return Result{}, err
 	}
@@ -214,7 +214,7 @@ func (s *Service) UpdateExamIntegrityReview(
 		return Result{}, s.failAudit(ctx, auditID, err)
 	}
 
-	result, err := projectMutation(stored, command.SubmissionID)
+	result, err := projectMutation(stored)
 	if err != nil {
 		return Result{}, err
 	}

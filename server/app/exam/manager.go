@@ -339,9 +339,6 @@ func (a *Authoring) authorizeManagement(
 	if err != nil {
 		return nil, "", examStoreErrors.Translate(err)
 	}
-	if !examAccess.Consistent() {
-		return nil, "", apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no access projection"))
-	}
 
 	action, err := a.actionForAccess(ctx, principal.UserID, examAccess, at, model.ActionExamManage, model.ActionExamManageOverride)
 	if err != nil {

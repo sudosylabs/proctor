@@ -127,6 +127,9 @@ type ExamAttemptFocusLossResult struct {
 // duration and source, was decided at the instant the signal was received, and
 // carries counts within their bounds. It reads target, which the caller has
 // already checked.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (r *ExamAttemptFocusLossResult) ConsistentWith(
 	target *ExamAttemptFocusLossTarget,
 	focusLossAccess ExamAttemptFocusLossAccess,
@@ -150,14 +153,20 @@ func (r *ExamAttemptFocusLossResult) ConsistentWith(
 		r.Signal.Sequence != sequence ||
 		r.Signal.DurationMilliseconds != durationMilliseconds ||
 		r.Signal.Source != source ||
-		r.AcceptedSequence != sequence ||
 		r.DatabaseTime.IsZero() ||
-		!r.DatabaseTime.Equal(r.Signal.ReceivedAt) ||
+		!r.Accepted(sequence) ||
 		r.MissingBefore < 0 ||
 		r.WindowIncidentCount < 0 ||
 		r.RetainedEvidenceCount < 0 ||
 		r.RetainedEvidenceCount > model.FocusLossMaximumEvidenceEpisodes ||
 		r.DiagnosticCount < 0)
+}
+
+// Accepted is the application's postcondition on a live Focus Loss report:
+// it accepted the reported sequence and was decided at the instant the
+// signal was received.
+func (r *ExamAttemptFocusLossResult) Accepted(sequence int64) bool {
+	return r.AcceptedSequence == sequence && r.DatabaseTime.Equal(r.Signal.ReceivedAt)
 }
 
 // ExamAttemptFocusLossDiscrepancyTarget is the safe scope for one claim that
@@ -194,6 +203,9 @@ type ExamAttemptFocusLossDiscrepancyResult struct {
 // source, and using the proposed Discrepancy and signal IDs unless it is a
 // duplicate of an earlier report. It reads target, which the caller has
 // already checked.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (r *ExamAttemptFocusLossDiscrepancyResult) ConsistentWith(
 	target *ExamAttemptFocusLossDiscrepancyTarget,
 	selector ExamAttemptFocusLossAccess,

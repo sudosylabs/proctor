@@ -82,6 +82,9 @@ type ExamAttemptConnectResult struct {
 // Workspace, Participation and Connection that all belong to that one Attempt,
 // the Attempt is the candidate's in the Sitting and Class the command named,
 // and the Connection was opened by the given Session.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (r *ExamAttemptConnectResult) ConsistentWith(
 	classID model.ClassID,
 	candidateID model.UserID,
@@ -105,6 +108,13 @@ func (r *ExamAttemptConnectResult) ConsistentWith(
 		r.Connection.AttemptID != r.Attempt.ID ||
 		r.Connection.ParticipationID != r.Participation.ID ||
 		r.Connection.SessionID != sessionID)
+}
+
+// Connected is the application's postcondition on an admission: the
+// Participation it returns is in lifecycle order. The application checks the
+// admitted Attempt, Participation and Connection states itself.
+func (r *ExamAttemptConnectResult) Connected() bool {
+	return r.Participation.LifecycleInOrder()
 }
 
 // ConfigurationConsistent reports whether the admitted security posture,
@@ -144,17 +154,29 @@ type ExamAttemptParticipationView struct {
 // Consistent reports whether the view names its Participation and Attempt, its
 // generation, renewal sequence and instants are in order, and its end instant
 // and end reason are present exactly when the Participation ended.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (v *ExamAttemptParticipationView) Consistent() bool {
-	if v == nil ||
+	return !(v == nil ||
 		!v.ID.IsValid() ||
 		!v.AttemptID.IsValid() ||
 		v.Generation < 1 ||
 		v.RenewalSequence < 0 ||
 		v.StartedAt.IsZero() ||
 		v.UpdatedAt.IsZero() ||
-		v.UpdatedAt.Before(v.StartedAt) ||
 		v.LeaseExpiresAt.IsZero() ||
-		v.LeaseExpiresAt.Before(v.StartedAt) {
+		(v.EndedAt.Valid && v.EndedAt.Time.IsZero()) ||
+		!v.LifecycleInOrder())
+}
+
+// LifecycleInOrder is the application's postcondition on a Participation a
+// transition returns: it was updated and leased no earlier than it started,
+// it is active or ended, and its end instant and end reason are present
+// exactly when it ended, the end falling within its started and updated
+// instants.
+func (v *ExamAttemptParticipationView) LifecycleInOrder() bool {
+	if v.UpdatedAt.Before(v.StartedAt) || v.LeaseExpiresAt.Before(v.StartedAt) {
 		return false
 	}
 
@@ -163,7 +185,6 @@ func (v *ExamAttemptParticipationView) Consistent() bool {
 		return !v.EndedAt.Valid && v.EndReason == ""
 	case model.AttemptParticipationEnded:
 		return v.EndedAt.Valid &&
-			!v.EndedAt.Time.IsZero() &&
 			!v.EndedAt.Time.Before(v.StartedAt) &&
 			!v.EndedAt.Time.After(v.UpdatedAt) &&
 			v.EndReason != ""
@@ -215,6 +236,9 @@ type ExamAttemptParticipationRenewalResult struct {
 // is the given candidate's Attempt, Participation and generation in a named
 // Exam and Sitting, accepted the given sequence, and grants a lease that ends
 // after the decision time and no later than one initial lease from it.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (r *ExamAttemptParticipationRenewalResult) ConsistentWith(
 	attemptID model.ExamAttemptID,
 	participationID model.AttemptParticipationID,
@@ -230,11 +254,18 @@ func (r *ExamAttemptParticipationRenewalResult) ConsistentWith(
 		!r.SittingID.IsValid() ||
 		r.CandidateUserID != candidateID ||
 		r.Generation != generation ||
-		r.AcceptedSequence != sequence ||
 		r.DatabaseTime.IsZero() ||
 		r.LeaseExpiresAt.IsZero() ||
-		!r.LeaseExpiresAt.After(r.DatabaseTime) ||
-		r.LeaseExpiresAt.After(r.DatabaseTime.Add(model.AttemptParticipationInitialLease)))
+		!r.Renewed(sequence))
+}
+
+// Renewed is the application's postcondition on a renewal: it accepted the
+// given sequence and grants a lease that ends after the decision time and no
+// later than one initial lease from it.
+func (r *ExamAttemptParticipationRenewalResult) Renewed(sequence int64) bool {
+	return r.AcceptedSequence == sequence &&
+		r.LeaseExpiresAt.After(r.DatabaseTime) &&
+		!r.LeaseExpiresAt.After(r.DatabaseTime.Add(model.AttemptParticipationInitialLease))
 }
 
 // ExamAttemptParticipationExpiryDue is a bounded, hash-free candidate from
@@ -254,6 +285,9 @@ type ExamAttemptParticipationExpiryDue struct {
 
 // ConsistentWith reports whether the expiry target is the given generation of
 // the given Attempt's Participation.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (d *ExamAttemptParticipationExpiryDue) ConsistentWith(
 	attemptID model.ExamAttemptID,
 	participationID model.AttemptParticipationID,
@@ -307,6 +341,9 @@ type ExamAttemptSuspensionView struct {
 // Attempt that is not suspended has no active Suspension view, so absence is a
 // consistent answer wherever this is asked; a caller that requires a
 // Suspension checks for nil itself.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (v *ExamAttemptSuspensionView) ConsistentActiveOrAbsent(attemptID model.ExamAttemptID) bool {
 	if v == nil {
 		return true
@@ -317,10 +354,18 @@ func (v *ExamAttemptSuspensionView) ConsistentActiveOrAbsent(attemptID model.Exa
 		!v.ParticipationID.IsValid() ||
 		!v.validProvenance() ||
 		v.Generation <= 0 ||
-		v.State != model.AttemptSuspensionActive ||
 		v.StartedAt.IsZero() ||
-		v.EndedAt.Valid ||
-		!v.ReallowedByUserID.IsZero())
+		!v.ActiveOrAbsent())
+}
+
+// ActiveOrAbsent is the application's postcondition on the Suspension a
+// transition or snapshot reports as active: the view is absent, or it is
+// active and has neither ended nor been re-allowed.
+func (v *ExamAttemptSuspensionView) ActiveOrAbsent() bool {
+	return v == nil ||
+		v.State == model.AttemptSuspensionActive &&
+			!v.EndedAt.Valid &&
+			v.ReallowedByUserID.IsZero()
 }
 
 // ConsistentClosedBy reports whether the view is the given Attempt's closed
@@ -328,6 +373,9 @@ func (v *ExamAttemptSuspensionView) ConsistentActiveOrAbsent(attemptID model.Exa
 // provenance of its source, ended no earlier than it started, and was
 // re-allowed by the given actor. Unlike ConsistentActiveOrAbsent, an absent
 // view is not consistent.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (v *ExamAttemptSuspensionView) ConsistentClosedBy(attemptID model.ExamAttemptID, actorID model.UserID) bool {
 	return !(v == nil ||
 		!v.ID.IsValid() ||
@@ -335,11 +383,17 @@ func (v *ExamAttemptSuspensionView) ConsistentClosedBy(attemptID model.ExamAttem
 		!v.ParticipationID.IsValid() ||
 		!v.validProvenance() ||
 		v.Generation <= 0 ||
-		v.State != model.AttemptSuspensionClosed ||
 		v.StartedAt.IsZero() ||
-		!v.EndedAt.Valid ||
-		v.EndedAt.Time.Before(v.StartedAt) ||
-		v.ReallowedByUserID != actorID)
+		v.ReallowedByUserID != actorID ||
+		!v.Closed())
+}
+
+// Closed is the application's postcondition on the Suspension a re-allow
+// closes: it is closed and ended no earlier than it started.
+func (v *ExamAttemptSuspensionView) Closed() bool {
+	return v.State == model.AttemptSuspensionClosed &&
+		v.EndedAt.Valid &&
+		!v.EndedAt.Time.Before(v.StartedAt)
 }
 
 // validProvenance accepts a policy episode that links its Flag or a manual
@@ -427,6 +481,9 @@ type ExamAttemptReallowResult struct {
 // and ready again at the next revision, in the commanded Exam, Sitting and
 // Class for one candidate, and its Suspension is the commanded episode,
 // consistently closed by the acting manager.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (r *ExamAttemptReallowResult) ConsistentWith(
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
@@ -447,11 +504,18 @@ func (r *ExamAttemptReallowResult) ConsistentWith(
 		r.Attempt.ExamID != examID ||
 		r.Attempt.SittingID != sittingID ||
 		r.Attempt.CandidateUserID != r.CandidateUserID ||
-		r.Attempt.State != model.ExamAttemptReady ||
 		r.Attempt.Validate() != nil ||
-		r.Attempt.Revision != expectedAttemptRevision+1 ||
 		r.Suspension.ID != suspensionID ||
-		!r.Suspension.ConsistentClosedBy(attemptID, actorID))
+		!r.Suspension.ConsistentClosedBy(attemptID, actorID) ||
+		!r.Reallowed(expectedAttemptRevision))
+}
+
+// Reallowed is the application's postcondition on a re-allow: the Attempt is
+// ready again at the next revision and its Suspension is closed.
+func (r *ExamAttemptReallowResult) Reallowed(expectedAttemptRevision int64) bool {
+	return r.Attempt.State == model.ExamAttemptReady &&
+		r.Attempt.Revision == expectedAttemptRevision+1 &&
+		r.Suspension.Closed()
 }
 
 // ExamAttemptManualSuspension is one exact, revision-fenced Exam Manager kick
@@ -493,6 +557,9 @@ type ExamAttemptManualSuspensionResult struct {
 // Attempt's active manual episode for that Participation and generation,
 // placed by the acting manager; and a Connection is reported exactly when one
 // was closed, as kicked.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (r *ExamAttemptManualSuspensionResult) ConsistentWith(
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
@@ -513,24 +580,34 @@ func (r *ExamAttemptManualSuspensionResult) ConsistentWith(
 		r.Attempt.ExamID != examID ||
 		r.Attempt.SittingID != sittingID ||
 		r.Attempt.CandidateUserID != r.CandidateUserID ||
-		r.Attempt.State != model.ExamAttemptSuspended ||
 		r.Attempt.Validate() != nil ||
-		r.Attempt.Revision != expectedAttemptRevision+1 ||
 		!r.Participation.Consistent() ||
 		r.Participation.AttemptID != attemptID ||
-		r.Participation.State != model.AttemptParticipationEnded ||
-		r.Participation.EndReason != model.AttemptParticipationEndKicked ||
 		!r.Suspension.ConsistentActiveOrAbsent(attemptID) ||
-		r.Suspension.Source != model.AttemptSuspensionSourceManual ||
 		r.Suspension.ParticipationID != r.Participation.ID ||
 		r.Suspension.Generation != r.Participation.Generation ||
 		r.Suspension.SuspendedByUserID != actorID ||
-		r.ConnectionClosed != (r.Connection != nil) ||
-		(r.Connection != nil &&
-			(!r.Connection.ID.IsValid() ||
-				r.Connection.State != model.AttemptConnectionClosed ||
-				r.Connection.CloseReason != model.AttemptConnectionCloseKicked ||
-				!r.Connection.ClosedAt.Valid)))
+		(r.Connection != nil && !r.Connection.ID.IsValid()) ||
+		!r.Suspended(expectedAttemptRevision))
+}
+
+// Suspended is the application's postcondition on a manual suspension: the
+// Attempt is suspended at the next revision; its Participation ended in
+// order, as kicked; its Suspension is an active manual episode; and a
+// Connection is reported exactly when one was closed, closed as kicked.
+func (r *ExamAttemptManualSuspensionResult) Suspended(expectedAttemptRevision int64) bool {
+	return r.Attempt.State == model.ExamAttemptSuspended &&
+		r.Attempt.Revision == expectedAttemptRevision+1 &&
+		r.Participation.LifecycleInOrder() &&
+		r.Participation.State == model.AttemptParticipationEnded &&
+		r.Participation.EndReason == model.AttemptParticipationEndKicked &&
+		r.Suspension.ActiveOrAbsent() &&
+		r.Suspension.Source == model.AttemptSuspensionSourceManual &&
+		r.ConnectionClosed == (r.Connection != nil) &&
+		(r.Connection == nil ||
+			r.Connection.State == model.AttemptConnectionClosed &&
+				r.Connection.CloseReason == model.AttemptConnectionCloseKicked &&
+				r.Connection.ClosedAt.Valid)
 }
 
 type ExamAttemptConnectionClose struct {
@@ -554,6 +631,9 @@ type ExamAttemptConnectionCloseResult struct {
 // ConsistentWith reports whether the outcome names an Exam and carries the
 // valid Connection that was asked to close, belonging to the given Attempt in
 // the given Sitting.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (r *ExamAttemptConnectionCloseResult) ConsistentWith(
 	attemptID model.ExamAttemptID,
 	sittingID model.ExamSittingID,
@@ -606,6 +686,9 @@ type ExamAttemptCorrectionAcknowledgementTarget struct {
 // ConsistentWith reports whether the target is the given candidate's Attempt,
 // names the correction Revision being acknowledged and the expected current
 // Revision, and names its Sitting and Class.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (t *ExamAttemptCorrectionAcknowledgementTarget) ConsistentWith(
 	attemptID model.ExamAttemptID,
 	candidateID model.UserID,
@@ -634,6 +717,9 @@ type ExamAttemptCorrectionAcknowledgementResult struct {
 // ConsistentWith reports whether the outcome is for the given Attempt, names
 // the acknowledged correction Revision and the expected current Revision, and
 // records when the acknowledgement happened.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (r *ExamAttemptCorrectionAcknowledgementResult) ConsistentWith(
 	attemptID model.ExamAttemptID,
 	correctionRevisionID model.ExamRevisionID,
@@ -678,6 +764,9 @@ type CandidateExamPresentation struct {
 // and runtime capabilities, a browser policy and live corrections that agree
 // with those capabilities, and both the admission and the current Exam
 // Revision.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (p *CandidateExamPresentation) Consistent() bool {
 	return !(p == nil ||
 		p.Capacity.Validate() != nil ||
@@ -813,6 +902,9 @@ func (c CandidateRuntimeCapabilities) Validate() error {
 // enabled exactly when the browser capability is not disabled, names the
 // capability's policy revision and digest when enabled, and carries its own
 // true digest.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (c CandidateRuntimeCapabilities) ConsistentWithBrowserPolicy(policy *CandidateBrowserPolicy) bool {
 	if slices.Contains(c.PendingCorrectionCapabilities, model.CandidateCapabilityBrowser) {
 		return policy == nil
@@ -846,6 +938,9 @@ func (c CandidateRuntimeCapabilities) ConsistentWithBrowserPolicy(policy *Candid
 // are each valid, ascend strictly by revision number, never name the admission
 // Revision, and leave pending exactly the capabilities these capabilities
 // report, with acknowledgement required exactly when any is pending.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (c CandidateRuntimeCapabilities) ConsistentWithLiveCorrections(corrections []model.CandidateLiveCorrection) bool {
 	var previous int64
 	for _, correction := range corrections {
@@ -902,6 +997,9 @@ type CandidateAttemptWorkspacePage struct {
 // Consistent reports whether the page names its Attempt Workspace at a
 // non-negative cursor, and a page that asks for a refresh carries no items and
 // no further page.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (p *CandidateAttemptWorkspacePage) Consistent() bool {
 	return !(p == nil ||
 		!p.WorkspaceID.IsValid() ||
@@ -919,6 +1017,9 @@ type CandidateResourceContent struct {
 
 // ConsistentWith reports whether the selector is for the Resource that was
 // asked for and names the File Revision and rendition to serve.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (c *CandidateResourceContent) ConsistentWith(resourceID model.ExamResourceID) bool {
 	return !(c == nil ||
 		c.Resource.ResourceID != resourceID ||
@@ -958,6 +1059,9 @@ type ExamAttemptManagerSnapshot struct {
 // given Exam, and its active Suspension, when present, is that Attempt's
 // consistent active Suspension. It does not ask which Sitting the Attempt is
 // in.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (s *ExamAttemptManagerSnapshot) ConsistentWith(examID model.ExamID) bool {
 	return !(s == nil ||
 		s.Attempt == nil ||
@@ -969,6 +1073,9 @@ func (s *ExamAttemptManagerSnapshot) ConsistentWith(examID model.ExamID) bool {
 // ConsistentWithExamAndSitting reports everything ConsistentWith does and also
 // that the Attempt is in the given Sitting. A Sitting-scoped listing asks it
 // of each row.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (s *ExamAttemptManagerSnapshot) ConsistentWithExamAndSitting(examID model.ExamID, sittingID model.ExamSittingID) bool {
 	return !(s == nil ||
 		s.Attempt == nil ||
@@ -976,6 +1083,13 @@ func (s *ExamAttemptManagerSnapshot) ConsistentWithExamAndSitting(examID model.E
 		s.Attempt.ExamID != examID ||
 		s.Attempt.SittingID != sittingID ||
 		!s.ActiveSuspension.ConsistentActiveOrAbsent(s.Attempt.ID))
+}
+
+// SuspensionActiveOrAbsent is the application's postcondition on a manager
+// snapshot: its active Suspension, when present, is active and neither ended
+// nor re-allowed.
+func (s *ExamAttemptManagerSnapshot) SuspensionActiveOrAbsent() bool {
+	return s.ActiveSuspension.ActiveOrAbsent()
 }
 
 // ExamAttemptManagerListOptions is Sitting-scoped and keyset bounded. Results
@@ -1150,6 +1264,9 @@ type SittingCandidateStatusPage struct {
 // ConsistentWith reports whether the page is for the given Exam and Sitting,
 // carries the server time it was read at, the Sitting's valid state and
 // revision, and an item list, which may be empty but not absent.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (p *SittingCandidateStatusPage) ConsistentWith(examID model.ExamID, sittingID model.ExamSittingID) bool {
 	return !(p == nil ||
 		p.ExamID != examID ||

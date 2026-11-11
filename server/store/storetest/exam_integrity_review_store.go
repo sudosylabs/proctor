@@ -225,6 +225,7 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 	require.True(t, finalized.ConsistentWith(sealed.Receipt.SubmissionID), "Finalize returned a result inconsistent with its request")
 	require.NotNil(t, finalized)
 	require.NotNil(t, finalized.Review)
+	require.Equal(t, finalizeInput.ReviewID, finalized.Review.ID)
 	require.Equal(t, model.SubmissionReviewFinalized, finalized.Review.State)
 	require.Equal(t, model.SubmissionReviewWithheld, finalized.Review.ReleaseState)
 	require.Equal(t, int64(3), finalized.Review.Revision)
@@ -308,6 +309,7 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 	require.True(t, released.ConsistentWith(sealed.Receipt.SubmissionID), "Release returned a result inconsistent with its request")
 	require.NotNil(t, released)
 	require.NotNil(t, released.Review)
+	require.Equal(t, releaseInput.ReviewID, released.Review.ID)
 	require.Equal(t, model.SubmissionReviewReleased, released.Review.ReleaseState)
 	require.Equal(t, int64(4), released.Review.Revision)
 	require.True(t, released.Review.ReleasedAt.Valid)
@@ -333,6 +335,8 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 	require.True(t, replayedRelease.ConsistentWith(sealed.Receipt.SubmissionID), "Release replay returned a result inconsistent with its request")
 	require.NotNil(t, replayedRelease)
 	require.True(t, replayedRelease.Replayed)
+	require.NotNil(t, replayedRelease.Review)
+	require.Equal(t, replayRelease.ReviewID, replayedRelease.Review.ID)
 	require.Equal(t, released.Review.ID, replayedRelease.Review.ID)
 	revokeIntegrityReviewManager(t, ctx, ss, fixture)
 	revokedReplay := replayRelease
@@ -609,6 +613,7 @@ func testIntegrityReviewGappedFinalization(t *testing.T, ctx context.Context, ss
 	require.NoError(t, err)
 	require.NotNil(t, finalized)
 	require.NotNil(t, finalized.Review)
+	require.Equal(t, finalize.ReviewID, finalized.Review.ID)
 	require.Equal(t, model.SubmissionReviewFinalized, finalized.Review.State)
 }
 

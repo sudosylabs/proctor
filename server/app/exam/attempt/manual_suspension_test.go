@@ -118,13 +118,16 @@ func TestSuspendByManagerConcealsSelfAndValidatesBeforeAuthorization(t *testing.
 	}
 }
 
+// TestSuspendByManagerRejectsInconsistentStoreOutcome injects a kick that did
+// not advance the Attempt to the next revision, a postcondition the
+// application still checks.
 func TestSuspendByManagerRejectsInconsistentStoreOutcome(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	managerID := useManagerCall(f)
 	f.persistence.attempt, _ = managerAttemptFixture(t, f, model.ExamAttemptActive, 3, "")
 	stored := manualSuspensionResultFixture(t, f, managerID, 3, false)
-	stored.Suspension.FlagID = model.NewIntegrityFlagID()
+	stored.Attempt.Revision = 3
 	f.persistence.manualSuspensionResult = stored
 	_, err := f.service.SuspendExamAttempt(context.Background(), f.inv, ManualSuspensionCommand{ExamID: f.sitting.ExamID,
 		SittingID: f.sitting.ID, AttemptID: f.attemptID, ExpectedAttemptRevision: 3, PrivateReason: "kick", IdempotencyKey: "kick-key"})

@@ -9,7 +9,6 @@ package workspace
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -38,9 +37,6 @@ func (s *Service) authorizeExam(
 	examAccess, err := s.exams.Access(ctx, examID, principal.UserID)
 	if err != nil {
 		return authorizationDecision{}, storeErrors.Translate(err)
-	}
-	if !examAccess.Consistent() {
-		return authorizationDecision{}, apperror.New("exam.starter_workspace.unavailable").Wrap(errors.New("Exam access projection is incomplete"))
 	}
 
 	ordinaryAction, overrideAction := model.ActionExamView, model.ActionExamViewOverride

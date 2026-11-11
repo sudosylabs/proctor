@@ -138,7 +138,7 @@ func (s *Service) EvaluateExamAttemptFocusLoss(
 		return FocusLossEvaluation{}, s.failAudit(ctx, auditID, err)
 	}
 
-	result, err := projectFocusLoss(stored, target, selector, command)
+	result, err := projectFocusLoss(stored, command)
 	if err != nil {
 		return FocusLossEvaluation{}, err
 	}
@@ -212,10 +212,6 @@ func (s *Service) evaluateEndedFocusLoss(
 		return FocusLossEvaluation{}, s.failAudit(ctx, auditID, err)
 	}
 
-	if !stored.ConsistentWith(target, selector, command.Sequence, command.DurationMilliseconds, command.Source, discrepancyID, signalID) {
-		return FocusLossEvaluation{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent late Focus Loss outcome"))
-	}
-
 	result := FocusLossEvaluation{
 		ExamID:              target.ExamID,
 		SittingID:           target.SittingID,
@@ -282,17 +278,12 @@ func validFocusLossTarget(target *store.ExamAttemptFocusLossTarget, focusLossAcc
 		target.Generation == focusLossAccess.Generation
 }
 
-func projectFocusLoss(
-	stored *store.ExamAttemptFocusLossResult,
-	target *store.ExamAttemptFocusLossTarget,
-	focusLossAccess store.ExamAttemptFocusLossAccess,
-	command FocusLossCommand,
-) (FocusLossEvaluation, error) {
-	if !stored.ConsistentWith(target, focusLossAccess, command.Sequence, command.DurationMilliseconds, command.Source) {
+func projectFocusLoss(stored *store.ExamAttemptFocusLossResult, command FocusLossCommand) (FocusLossEvaluation, error) {
+	if !stored.Accepted(command.Sequence) {
 		return FocusLossEvaluation{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Focus Loss outcome"))
 	}
 
-	if !validFocusLossEnforcement(stored, focusLossAccess) {
+	if !validFocusLossEnforcement(stored) {
 		return FocusLossEvaluation{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Focus Loss enforcement outcome"))
 	}
 
@@ -341,15 +332,7 @@ func projectFocusLoss(
 	return result, nil
 }
 
-func validFocusLossEnforcement(result *store.ExamAttemptFocusLossResult, focusLossAccess store.ExamAttemptFocusLossAccess) bool {
-	if result.Overflow != nil &&
-		(result.Overflow.Validate() != nil ||
-			result.Overflow.AttemptID != focusLossAccess.AttemptID ||
-			result.Overflow.ParticipationID != focusLossAccess.ParticipationID ||
-			result.Overflow.Generation != focusLossAccess.Generation) {
-		return false
-	}
-
+func validFocusLossEnforcement(result *store.ExamAttemptFocusLossResult) bool {
 	if !result.CollectionEnabled {
 		return !result.Qualified &&
 			!result.ThresholdCrossed &&
@@ -409,35 +392,11 @@ func validFocusLossEnforcement(result *store.ExamAttemptFocusLossResult, focusLo
 		return false
 	}
 
-	if result.Flag != nil &&
-		(result.Flag.Validate() != nil ||
-			result.Flag.AttemptID != focusLossAccess.AttemptID ||
-			result.Flag.Generation != focusLossAccess.Generation ||
-			result.Flag.Kind != model.IntegrityPolicyFocusLoss) {
+	if result.Participation != nil && !result.Participation.LifecycleInOrder() {
 		return false
 	}
 
-	if result.FlagCreated && result.Flag == nil {
-		return false
-	}
-
-	if result.Attempt != nil &&
-		(result.Attempt.Validate() != nil ||
-			result.Attempt.ID != focusLossAccess.AttemptID ||
-			result.Attempt.ExamID != result.ExamID ||
-			result.Attempt.SittingID != result.SittingID ||
-			result.Attempt.CandidateUserID != result.CandidateUserID) {
-		return false
-	}
-
-	if result.Participation != nil &&
-		(!result.Participation.Consistent() ||
-			result.Participation.ID != focusLossAccess.ParticipationID ||
-			result.Participation.Generation != focusLossAccess.Generation) {
-		return false
-	}
-
-	if result.Connection != nil && (result.Connection.ID != focusLossAccess.ConnectionID || !validFocusLossConnection(result.Connection)) {
+	if result.Connection != nil && !validFocusLossConnection(result.Connection) {
 		return false
 	}
 
@@ -449,22 +408,15 @@ func validFocusLossEnforcement(result *store.ExamAttemptFocusLossResult, focusLo
 	}
 
 	if result.Suspension != nil &&
-		(!result.Suspension.ConsistentActiveOrAbsent(focusLossAccess.AttemptID) ||
-			result.Flag == nil ||
-			result.Suspension.ParticipationID != focusLossAccess.ParticipationID ||
-			result.Suspension.Generation != focusLossAccess.Generation ||
-			result.Suspension.FlagID != result.Flag.ID ||
+		(!result.Suspension.ActiveOrAbsent() ||
 			result.Suspension.CandidateReason != model.AttemptSuspensionCandidateReasonFocusLossPolicy) {
 		return false
 	}
 
 	if result.PolicyOutcome == model.IntegrityOutcomeFlagAndSuspend && result.ThresholdCrossed {
-		return result.Attempt != nil &&
-			result.Attempt.State == model.ExamAttemptSuspended &&
-			result.Participation != nil &&
+		return result.Attempt.State == model.ExamAttemptSuspended &&
 			result.Participation.State == model.AttemptParticipationEnded &&
 			result.Participation.EndReason == model.AttemptParticipationEndPolicySuspended &&
-			result.Connection != nil &&
 			result.Connection.State == model.AttemptConnectionClosed &&
 			result.Suspension != nil
 	}
@@ -473,14 +425,11 @@ func validFocusLossEnforcement(result *store.ExamAttemptFocusLossResult, focusLo
 }
 
 func validFocusLossConnection(connection *store.ExamAttemptManagerConnection) bool {
-	if connection == nil || !connection.ID.IsValid() || connection.OpenedAt.IsZero() {
-		return false
-	}
 	switch connection.State {
 	case model.AttemptConnectionOpen:
 		return !connection.ClosedAt.Valid && connection.CloseReason == ""
 	case model.AttemptConnectionClosed:
-		return connection.ClosedAt.Valid && !connection.ClosedAt.Time.Before(connection.OpenedAt) && connection.CloseReason.IsValid()
+		return connection.ClosedAt.Valid && !connection.ClosedAt.Time.Before(connection.OpenedAt)
 	default:
 		return false
 	}

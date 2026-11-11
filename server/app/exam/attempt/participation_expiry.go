@@ -152,9 +152,6 @@ func (s *Service) expireLapsedParticipation(
 		return storeError(storeErrors, err)
 	}
 
-	if !due.ConsistentWith(attemptID, participationID, generation) {
-		return apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent lapsed Participation expiry target"))
-	}
 	if _, err = s.expireParticipation(ctx, *due); err != nil {
 		return err
 	}
@@ -177,13 +174,10 @@ func projectExpiry(
 	stored *store.ExamAttemptParticipationExpiryResult,
 	due store.ExamAttemptParticipationExpiryDue,
 ) (ParticipationExpiry, error) {
-	if !completeExpiryOutcome(stored) ||
-		!expiryScopeMatches(stored, due) ||
-		!expiredAttemptMatches(stored.Attempt, due) ||
-		!expiredParticipationMatches(stored.Participation, due) ||
+	if !expiredAttemptMatches(stored.Attempt) ||
+		!expiredParticipationMatches(stored.Participation) ||
 		!expiryConnectionClosed(stored.Connection, stored.ConnectionClosed) ||
-		!connectionLossRecordsMatch(stored.Evidence, stored.Flag, due) ||
-		!connectionLossSuspensionMatches(stored.Suspension, stored.Flag, due) ||
+		!connectionLossSuspensionMatches(stored.Suspension) ||
 		!expiryDecidedAfterLease(stored.DatabaseTime, due) {
 		return ParticipationExpiry{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Participation expiry outcome"))
 	}
@@ -205,45 +199,15 @@ func projectExpiry(
 	}, nil
 }
 
-// completeExpiryOutcome reports whether the Store returned every part of the
-// expiry aggregate.
-func completeExpiryOutcome(stored *store.ExamAttemptParticipationExpiryResult) bool {
-	return stored != nil &&
-		stored.Attempt != nil &&
-		stored.Participation != nil &&
-		stored.Connection != nil &&
-		stored.Evidence != nil &&
-		stored.Flag != nil &&
-		stored.Suspension != nil
+// expiredAttemptMatches reports whether the Attempt is suspended.
+func expiredAttemptMatches(attempt *model.ExamAttempt) bool {
+	return attempt.State == model.ExamAttemptSuspended
 }
 
-// expiryScopeMatches reports whether the outcome names the scanned target's
-// Exam, Sitting, Class, and candidate.
-func expiryScopeMatches(stored *store.ExamAttemptParticipationExpiryResult, due store.ExamAttemptParticipationExpiryDue) bool {
-	return stored.ExamID == due.ExamID &&
-		stored.SittingID == due.SittingID &&
-		stored.ClassID == due.ClassID &&
-		stored.CandidateUserID == due.CandidateUserID
-}
-
-// expiredAttemptMatches reports whether the Attempt is the target's, valid,
-// and suspended.
-func expiredAttemptMatches(attempt *model.ExamAttempt, due store.ExamAttemptParticipationExpiryDue) bool {
-	return attempt.ID == due.AttemptID &&
-		attempt.ExamID == due.ExamID &&
-		attempt.SittingID == due.SittingID &&
-		attempt.CandidateUserID == due.CandidateUserID &&
-		attempt.State == model.ExamAttemptSuspended &&
-		attempt.Validate() == nil
-}
-
-// expiredParticipationMatches reports whether the target generation ended as
-// lease_expired.
-func expiredParticipationMatches(participation *store.ExamAttemptParticipationView, due store.ExamAttemptParticipationExpiryDue) bool {
-	return participation.Consistent() &&
-		participation.ID == due.ParticipationID &&
-		participation.AttemptID == due.AttemptID &&
-		participation.Generation == due.Generation &&
+// expiredParticipationMatches reports whether the generation ended in order,
+// as lease_expired.
+func expiredParticipationMatches(participation *store.ExamAttemptParticipationView) bool {
+	return participation.LifecycleInOrder() &&
 		participation.State == model.AttemptParticipationEnded &&
 		participation.EndReason == model.AttemptParticipationEndLeaseExpired
 }
@@ -253,48 +217,17 @@ func expiredParticipationMatches(participation *store.ExamAttemptParticipationVi
 // itself closed it.
 func expiryConnectionClosed(connection *store.ExamAttemptManagerConnection, closedByExpiry bool) bool {
 	return connection.State == model.AttemptConnectionClosed &&
-		connection.ID.IsValid() &&
-		!connection.OpenedAt.IsZero() &&
 		connection.ClosedAt.Valid &&
 		!connection.ClosedAt.Time.Before(connection.OpenedAt) &&
-		connection.CloseReason.IsValid() &&
 		closedByExpiry == (connection.CloseReason == model.AttemptConnectionCloseLeaseExpired)
 }
 
-// connectionLossRecordsMatch reports whether the evidence and its Flag are
-// valid, linked, and belong to the target generation.
-func connectionLossRecordsMatch(
-	evidence *model.IntegrityEvidence,
-	flag *model.IntegrityFlag,
-	due store.ExamAttemptParticipationExpiryDue,
-) bool {
-	return evidence.Validate() == nil &&
-		flag.Validate() == nil &&
-		evidence.AttemptID == due.AttemptID &&
-		evidence.ParticipationID == due.ParticipationID &&
-		evidence.Generation == due.Generation &&
-		evidence.FlagID == flag.ID &&
-		flag.AttemptID == due.AttemptID &&
-		flag.Generation == due.Generation
-}
-
-// connectionLossSuspensionMatches reports whether the episode is the target
-// generation's active, unreallowed Connection Loss policy suspension linking
-// flag.
-func connectionLossSuspensionMatches(
-	suspension *store.ExamAttemptSuspensionView,
-	flag *model.IntegrityFlag,
-	due store.ExamAttemptParticipationExpiryDue,
-) bool {
-	return suspension.ID.IsValid() &&
-		suspension.AttemptID == due.AttemptID &&
-		suspension.ParticipationID == due.ParticipationID &&
-		suspension.Generation == due.Generation &&
-		suspension.FlagID == flag.ID &&
-		suspension.State == model.AttemptSuspensionActive &&
+// connectionLossSuspensionMatches reports whether the episode is an active,
+// unreallowed Connection Loss policy suspension.
+func connectionLossSuspensionMatches(suspension *store.ExamAttemptSuspensionView) bool {
+	return suspension.State == model.AttemptSuspensionActive &&
 		suspension.Source == model.AttemptSuspensionSourcePolicy &&
 		suspension.CandidateReason == model.AttemptSuspensionCandidateReasonSecureContinuityLost &&
-		!suspension.StartedAt.IsZero() &&
 		!suspension.EndedAt.Valid &&
 		suspension.ReallowedByUserID.IsZero()
 }
@@ -302,5 +235,5 @@ func connectionLossSuspensionMatches(
 // expiryDecidedAfterLease reports whether PostgreSQL decided the expiry at or
 // after the lease deadline.
 func expiryDecidedAfterLease(databaseTime time.Time, due store.ExamAttemptParticipationExpiryDue) bool {
-	return !databaseTime.IsZero() && !databaseTime.Before(due.LeaseExpiresAt)
+	return !databaseTime.Before(due.LeaseExpiresAt)
 }

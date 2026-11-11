@@ -58,16 +58,9 @@ func (m SubmissionReceiptMail) PrepareSubmissionReceipt(
 		return nil, err
 	}
 
-	if !snapshot.ConsistentAndValidWith(request.SittingID, request.ExamID) {
-		return nil, errors.New("Submission receipt Sitting projection is inconsistent")
-	}
-
 	revision, err := m.Revisions.GetSummary(ctx, request.ExamID, snapshot.Sitting.ExamRevisionID)
 	if err != nil {
 		return nil, err
-	}
-	if !revision.ConsistentWith(snapshot.Sitting.ExamRevisionID, request.ExamID) {
-		return nil, errors.New("Submission receipt Exam revision projection is inconsistent")
 	}
 
 	key := model.MailTemplateExamSubmissionReceived

@@ -53,6 +53,9 @@ type SecurityPreflightPrepared struct {
 // ConsistentWith reports whether the prepared preflight carries a valid
 // challenge and a policy that is valid at the server time and resolved for the
 // given Sitting.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (p *SecurityPreflightPrepared) ConsistentWith(sittingID model.ExamSittingID) bool {
 	return !(p == nil ||
 		p.Challenge.Validate() != nil ||
@@ -84,6 +87,9 @@ type SecurityPolicyRecovery struct {
 // security coverage, bounded and present source, coverage and reset receipt
 // lists, a valid admitted security posture bound to the given Attempt, and a
 // valid frozen Attempt configuration.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (r *SecurityPolicyRecovery) ConsistentWith(attemptID model.ExamAttemptID) bool {
 	return !(r == nil ||
 		r.ServerTime.IsZero() ||

@@ -50,6 +50,7 @@ func testExamAttemptFocusLoss(t *testing.T, ctx context.Context, ss store.Store,
 	crossed, err := ss.ExamFocusLoss().RecordFocusLoss(ctx, crossingInput)
 	require.NoError(t, err)
 	require.True(t, crossed.ConsistentWith(target, access, crossingInput.Sequence, crossingInput.DurationMilliseconds, crossingInput.Source), "RecordFocusLoss returned a result inconsistent with its request")
+	requireFocusLossEnforcementLinks(t, crossed, access)
 	require.False(t, crossed.Duplicate)
 	require.True(t, crossed.CollectionEnabled)
 	require.True(t, crossed.Qualified)
@@ -259,6 +260,7 @@ func testExamAttemptFocusLossPolicies(t *testing.T, ctx context.Context, ss stor
 		require.True(t, crossed.ConsistentWith(resolved, access, crossingInput.Sequence, crossingInput.DurationMilliseconds, crossingInput.Source), "RecordFocusLoss returned a result inconsistent with its request")
 		require.True(t, crossed.Participation.Consistent(), "RecordFocusLoss returned a result inconsistent with its request")
 		require.True(t, crossed.Suspension.ConsistentActiveOrAbsent(access.AttemptID), "RecordFocusLoss returned a result inconsistent with its request")
+		requireFocusLossEnforcementLinks(t, crossed, access)
 		require.Equal(t, connected.Attempt.ID, resolved.AttemptID)
 		require.Equal(t, connected.Participation.Generation, resolved.Generation)
 		replay := *crossingInput
@@ -267,6 +269,7 @@ func testExamAttemptFocusLossPolicies(t *testing.T, ctx context.Context, ss stor
 		replayed, err := ss.ExamFocusLoss().RecordFocusLoss(ctx, &replay)
 		require.NoError(t, err)
 		require.True(t, replayed.ConsistentWith(resolved, access, replay.Sequence, replay.DurationMilliseconds, replay.Source), "RecordFocusLoss replay returned a result inconsistent with its request")
+		requireFocusLossEnforcementLinks(t, replayed, access)
 		require.True(t, replayed.Duplicate, "Focus Loss self-suspended replay = %#v, first = %#v", replayed, crossed)
 		require.Equal(t, crossed.Signal.ID, replayed.Signal.ID, "Focus Loss self-suspended replay = %#v, first = %#v", replayed, crossed)
 		require.NotNil(t, replayed.Suspension, "Focus Loss self-suspended replay = %#v, first = %#v", replayed, crossed)
@@ -486,7 +489,60 @@ func recordFocusLoss(t *testing.T, ctx context.Context, ss store.Store, fixture 
 	result, err := ss.ExamFocusLoss().RecordFocusLoss(ctx, input)
 	require.NoError(t, err)
 	require.True(t, result.ConsistentWith(target, access, sequence, duration, source), "RecordFocusLoss returned a result inconsistent with its request")
+	requireFocusLossEnforcementLinks(t, result, access)
 	return result
+}
+
+// requireFocusLossEnforcementLinks asserts the identity and link facts of a
+// Focus Loss outcome that the application does not re-check: each record the
+// outcome carries is valid, belongs to the reporting Attempt, Participation,
+// generation and Connection, and a suspension links the outcome's Flag.
+func requireFocusLossEnforcementLinks(t *testing.T, result *store.ExamAttemptFocusLossResult, access store.ExamAttemptFocusLossAccess) {
+	t.Helper()
+	if result.Overflow != nil {
+		require.NoError(t, result.Overflow.Validate())
+		require.Equal(t, access.AttemptID, result.Overflow.AttemptID)
+		require.Equal(t, access.ParticipationID, result.Overflow.ParticipationID)
+		require.Equal(t, access.Generation, result.Overflow.Generation)
+	}
+	if result.FlagCreated {
+		require.NotNil(t, result.Flag)
+	}
+	if result.Flag != nil {
+		require.NoError(t, result.Flag.Validate())
+		require.Equal(t, access.AttemptID, result.Flag.AttemptID)
+		require.Equal(t, access.Generation, result.Flag.Generation)
+		require.Equal(t, model.IntegrityPolicyFocusLoss, result.Flag.Kind)
+	}
+	if result.Attempt != nil {
+		require.NoError(t, result.Attempt.Validate())
+		require.Equal(t, access.AttemptID, result.Attempt.ID)
+		require.Equal(t, result.ExamID, result.Attempt.ExamID)
+		require.Equal(t, result.SittingID, result.Attempt.SittingID)
+		require.Equal(t, result.CandidateUserID, result.Attempt.CandidateUserID)
+	}
+	if result.Participation != nil {
+		require.Equal(t, access.ParticipationID, result.Participation.ID)
+		require.Equal(t, access.Generation, result.Participation.Generation)
+	}
+	if result.Connection != nil {
+		require.Equal(t, access.ConnectionID, result.Connection.ID)
+		require.False(t, result.Connection.OpenedAt.IsZero())
+		if result.Connection.State == model.AttemptConnectionClosed {
+			require.True(t, result.Connection.CloseReason.IsValid())
+		}
+	}
+	if result.Suspension != nil {
+		require.NotNil(t, result.Flag)
+		require.Equal(t, access.ParticipationID, result.Suspension.ParticipationID)
+		require.Equal(t, access.Generation, result.Suspension.Generation)
+		require.Equal(t, result.Flag.ID, result.Suspension.FlagID)
+	}
+	if result.ThresholdCrossed && result.PolicyOutcome == model.IntegrityOutcomeFlagAndSuspend {
+		require.NotNil(t, result.Attempt)
+		require.NotNil(t, result.Participation)
+		require.NotNil(t, result.Connection)
+	}
 }
 
 func newFocusLossInput(t *testing.T, ctx context.Context, ss store.Store, fixture examAttemptFixture,

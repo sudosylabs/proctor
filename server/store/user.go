@@ -267,6 +267,9 @@ type CurrentUserContext struct {
 // ConsistentWith reports whether the context is the given User's, carries a
 // username, display name and a known profile picture kind, lists at least two
 // available product areas, and lists at most twenty management scopes.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (c *CurrentUserContext) ConsistentWith(userID model.UserID) bool {
 	return !(c == nil ||
 		c.UserID != userID ||

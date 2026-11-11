@@ -112,10 +112,6 @@ func (s *Exports) getExport(ctx context.Context, inv invocation.Invocation, q Ex
 		return nil, examExportStoreErrors.Translate(err)
 	}
 
-	if !result.ConsistentWith(q.ExportID, q.Scope, inv.Principal().UserID) {
-		return nil, apperror.New("exam.export.unavailable").Wrap(errors.New("invalid export read result"))
-	}
-
 	if err = s.authorizeSources(ctx, inv, q.Scope, action, unit, result.Export.Categories, result.Submissions); err != nil {
 		return nil, err
 	}

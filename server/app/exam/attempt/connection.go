@@ -180,7 +180,7 @@ func (s *Service) ConnectExamAttempt(
 		return ConnectionResult{}, s.failAudit(ctx, auditID, err)
 	}
 
-	result, err := projectConnection(stored, sitting.ClassID, principal.UserID, principal.SessionID, command.SittingID)
+	result, err := projectConnection(stored, sitting.ClassID)
 	if err != nil {
 		return ConnectionResult{}, err
 	}
@@ -287,10 +287,6 @@ func (s *Service) CloseExamAttemptConnection(
 		return ConnectionClosedResult{}, s.failAudit(ctx, auditID, err)
 	}
 
-	if !stored.ConsistentWith(command.AttemptID, command.SittingID, command.ConnectionID) {
-		return ConnectionClosedResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Connection close outcome"))
-	}
-
 	result := ConnectionClosedResult{
 		AttemptID:       stored.AttemptID,
 		ExamID:          stored.ExamID,
@@ -308,14 +304,8 @@ func (s *Service) CloseExamAttemptConnection(
 	return result, nil
 }
 
-func projectConnection(
-	stored *store.ExamAttemptConnectResult,
-	classID model.ClassID,
-	candidateID model.UserID,
-	sessionID model.SessionID,
-	sittingID model.ExamSittingID,
-) (ConnectionResult, error) {
-	if !stored.ConsistentWith(classID, candidateID, sessionID, sittingID) {
+func projectConnection(stored *store.ExamAttemptConnectResult, classID model.ClassID) (ConnectionResult, error) {
+	if !stored.Connected() {
 		return ConnectionResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Exam Attempt connection outcome"))
 	}
 

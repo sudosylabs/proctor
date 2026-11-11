@@ -66,6 +66,9 @@ type ExamCorrectionResourceStage struct {
 // its Resource, file entry, File Revision, upload lease and rendition, was
 // created by the acting User, carries an expiry, and, for a replacement, names
 // the Resource being replaced.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (s *ExamCorrectionResourceStage) ConsistentWith(
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
@@ -178,6 +181,9 @@ type ExamCorrectionResult struct {
 // Consistent reports whether the outcome carries the correction Revision and
 // the corrected Sitting's snapshot. It is the presence check; ConsistentWith
 // compares what they hold against the command.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (r *ExamCorrectionResult) Consistent() bool {
 	return !(r == nil ||
 		r.Revision == nil ||
@@ -191,6 +197,9 @@ func (r *ExamCorrectionResult) Consistent() bool {
 // the next Sitting revision and still open or paused, and the correction took
 // effect at the instant the Revision was published. An outcome without its
 // Revision or Sitting is inconsistent.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
 func (r *ExamCorrectionResult) ConsistentWith(
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
@@ -202,18 +211,26 @@ func (r *ExamCorrectionResult) ConsistentWith(
 		r.Sitting == nil ||
 		r.Sitting.Sitting == nil ||
 		r.Revision.ExamID != examID ||
-		r.Revision.ID == expectedCurrentRevisionID ||
-		r.Revision.Kind != model.ExamRevisionPublicationLiveCorrection ||
 		r.Revision.Number < 1 ||
 		r.PreviousRevisionID != expectedCurrentRevisionID ||
 		r.Sitting.Sitting.ID != sittingID ||
 		r.Sitting.Sitting.ExamID != examID ||
-		r.Sitting.Sitting.ExamRevisionID != r.Revision.ID ||
-		r.Sitting.Sitting.Revision != expectedSittingRevision+1 ||
-		(r.Sitting.Sitting.State != model.ExamSittingOpen && r.Sitting.Sitting.State != model.ExamSittingPaused) ||
 		r.Sitting.Sitting.UpdatedAt.IsZero() ||
 		r.EffectiveAt.IsZero() ||
-		!model.TimeUTC(r.EffectiveAt).Equal(model.TimeUTC(r.Revision.PublishedAt)))
+		!r.Applied(expectedCurrentRevisionID, expectedSittingRevision))
+}
+
+// Applied is the application's postcondition on a live correction: its
+// Revision is a new live-correction Revision, the Sitting is now on it at the
+// next Sitting revision and still open or paused, and the correction took
+// effect at the instant the Revision was published.
+func (r *ExamCorrectionResult) Applied(expectedCurrentRevisionID model.ExamRevisionID, expectedSittingRevision int64) bool {
+	return r.Revision.ID != expectedCurrentRevisionID &&
+		r.Revision.Kind == model.ExamRevisionPublicationLiveCorrection &&
+		r.Sitting.Sitting.ExamRevisionID == r.Revision.ID &&
+		r.Sitting.Sitting.Revision == expectedSittingRevision+1 &&
+		(r.Sitting.Sitting.State == model.ExamSittingOpen || r.Sitting.Sitting.State == model.ExamSittingPaused) &&
+		model.TimeUTC(r.EffectiveAt).Equal(model.TimeUTC(r.Revision.PublishedAt))
 }
 
 // ExamCorrectionStore is the narrow durable core for live correction. Reserve

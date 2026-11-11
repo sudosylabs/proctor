@@ -35,10 +35,7 @@ func (s *Service) AuthorizeSittingView(ctx context.Context, inv invocation.Invoc
 		return storeErrors.Translate(err)
 	}
 
-	value, err := requireSnapshot(snapshot)
-	if err != nil {
-		return err
-	}
+	value := *snapshot
 	if value.Sitting.ID != sittingID {
 		return apperror.New("exam.sitting.unavailable").Wrap(errors.New("Exam Sitting Store returned a mismatched snapshot"))
 	}
@@ -81,10 +78,7 @@ func (s *Service) authorizeBrowserActivityView(
 		return "", storeErrors.Translate(err)
 	}
 
-	value, err := requireSnapshot(snapshot)
-	if err != nil {
-		return "", err
-	}
+	value := *snapshot
 	if value.Sitting.ID != sittingID {
 		return "", apperror.New("exam.sitting.unavailable").Wrap(errors.New("Exam Sitting Store returned a mismatched snapshot"))
 	}
@@ -92,9 +86,6 @@ func (s *Service) authorizeBrowserActivityView(
 	examAccess, err := s.exams.Access(ctx, value.Sitting.ExamID, inv.Principal().UserID)
 	if err != nil {
 		return "", storeErrors.Translate(err)
-	}
-	if !examAccess.ConsistentAndValidWith(value.Sitting.ExamID) {
-		return "", apperror.New("exam.sitting.unavailable").Wrap(errors.New("Exam access projection is incomplete"))
 	}
 
 	resource := model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()}
@@ -238,10 +229,7 @@ func (s *Service) authorizeSittingManage(
 		return false, storeErrors.Translate(err)
 	}
 
-	value, err := requireSnapshot(snapshot)
-	if err != nil {
-		return false, err
-	}
+	value := *snapshot
 	if value.Sitting.ID != sittingID {
 		return false, apperror.New("exam.sitting.unavailable").Wrap(errors.New("Exam Sitting Store returned a mismatched snapshot"))
 	}
@@ -303,9 +291,6 @@ func (s *Service) authorizeManagerAction(
 	examAccess, err := s.exams.Access(ctx, examID, principal.UserID)
 	if err != nil {
 		return authorizationDecision{}, storeErrors.Translate(err)
-	}
-	if !examAccess.ConsistentAndValidWith(examID) {
-		return authorizationDecision{}, apperror.New("exam.sitting.unavailable").Wrap(errors.New("Exam access projection is incomplete"))
 	}
 
 	action, err := manageraccess.SelectAction(ctx, s.academicUnitMembers, principal.UserID, examAccess, at, ordinaryAction, overrideAction)

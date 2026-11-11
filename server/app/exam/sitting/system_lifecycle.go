@@ -135,8 +135,8 @@ func (s *Service) runSystemLifecycle(
 		return store.ExamSittingLifecycleResult{}, storeErrors.Translate(err)
 	}
 
-	snapshot, err := requireSnapshot(current)
-	if err != nil || snapshot.Sitting.ID != sittingID || !snapshot.AcademicUnitID.IsValid() {
+	snapshot := *current
+	if snapshot.Sitting.ID != sittingID || !snapshot.AcademicUnitID.IsValid() {
 		return store.ExamSittingLifecycleResult{}, apperror.New("exam.sitting.unavailable").Wrap(
 			errors.New("Exam Sitting Store returned a mismatched system snapshot"),
 		)
@@ -183,7 +183,7 @@ func (s *Service) runSystemLifecycle(
 		return store.ExamSittingLifecycleResult{}, s.failSystemAudit(ctx, auditID, err)
 	}
 
-	value, err := requireSystemLifecycleResult(result, snapshot.Sitting.ExamID, sittingID)
+	value, err := requireSystemLifecycleResult(result)
 	if err != nil {
 		return store.ExamSittingLifecycleResult{}, err
 	}
@@ -192,25 +192,10 @@ func (s *Service) runSystemLifecycle(
 	return value, nil
 }
 
-func requireSystemLifecycleResult(
-	result *store.ExamSittingLifecycleResult,
-	examID model.ExamID,
-	sittingID model.ExamSittingID,
-) (store.ExamSittingLifecycleResult, error) {
-	if result == nil ||
-		result.Value == nil ||
-		result.Changed != (result.Transition != "") ||
-		result.Replayed ||
-		result.Changed && !validLifecycleTransition(result.Transition) {
+func requireSystemLifecycleResult(result *store.ExamSittingLifecycleResult) (store.ExamSittingLifecycleResult, error) {
+	if result.Changed != (result.Transition != "") || result.Replayed {
 		return store.ExamSittingLifecycleResult{}, apperror.New("exam.sitting.unavailable").Wrap(
 			errors.New("Exam Sitting Store returned an invalid system lifecycle result"),
-		)
-	}
-
-	value, err := requireSnapshot(result.Value)
-	if err != nil || value.Sitting.ExamID != examID || value.Sitting.ID != sittingID {
-		return store.ExamSittingLifecycleResult{}, apperror.New("exam.sitting.unavailable").Wrap(
-			errors.New("Exam Sitting Store returned a mismatched system lifecycle result"),
 		)
 	}
 

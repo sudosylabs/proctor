@@ -148,6 +148,7 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 	created, err := workspace.ApplyMutation(ctx, mutation, command)
 	require.NoError(t, err)
 	require.True(t, created.ConsistentWith(target, mutation.Operation, mutation.EntryID), "ApplyMutation returned a result inconsistent with its request")
+	requireWorkspaceMutationEcho(t, created, mutation, model.StarterWorkspaceEntryFile, ready.ContentVersion)
 	require.NotNil(t, created)
 	require.False(t, created.Replayed)
 	require.Equal(t, fixture.sitting.ID, created.SittingID)
@@ -166,6 +167,7 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 	replayedMutation, err := workspace.ApplyMutation(ctx, &replayMutation, command)
 	require.NoError(t, err)
 	require.True(t, replayedMutation.ConsistentWith(target, replayMutation.Operation, replayMutation.EntryID), "ApplyMutation replay returned a result inconsistent with its request")
+	requireWorkspaceMutationEcho(t, replayedMutation, &replayMutation, model.StarterWorkspaceEntryFile, ready.ContentVersion)
 	require.NotNil(t, replayedMutation, "ApplyMutation(replay) = %#v, first = %#v", replayedMutation, created)
 	require.True(t, replayedMutation.Replayed, "ApplyMutation(replay) = %#v, first = %#v", replayedMutation, created)
 	require.Equal(t, created.Change.Cursor, replayedMutation.Change.Cursor, "ApplyMutation(replay) = %#v, first = %#v", replayedMutation, created)
@@ -210,6 +212,7 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 	replayedAfterReconnect, err := workspace.ApplyMutation(ctx, &replayAfterReconnect, command)
 	require.NoError(t, err)
 	require.True(t, replayedAfterReconnect.ConsistentWith(target, replayAfterReconnect.Operation, replayAfterReconnect.EntryID), "ApplyMutation replay returned a result inconsistent with its request")
+	requireWorkspaceMutationEcho(t, replayedAfterReconnect, &replayAfterReconnect, model.StarterWorkspaceEntryFile, ready.ContentVersion)
 	require.NotNil(t, replayedAfterReconnect)
 	require.True(t, replayedAfterReconnect.Replayed)
 	require.Equal(t, created.Change.Cursor, replayedAfterReconnect.Change.Cursor)
@@ -321,6 +324,8 @@ writesComplete:
 	})
 	require.NoError(t, err)
 	require.True(t, replaced.ConsistentWith(target, model.AttemptWorkspaceMutationReplaceFile, entryID), "ApplyMutation returned a result inconsistent with its request")
+	requireWorkspaceMutationEcho(t, replaced, &store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationReplaceFile, EntryID: entryID},
+		model.StarterWorkspaceEntryFile, replacement.ContentVersion)
 	require.NotNil(t, replaced.Entry)
 	require.Equal(t, entryID, replaced.Entry.EntryID)
 	require.Equal(t, replacement.ContentVersion, replaced.Entry.ContentVersion)
@@ -440,6 +445,8 @@ writesComplete:
 	winnerReplay, err := workspace.ApplyMutation(ctx, &replayWinner, winner.command)
 	require.NoError(t, err)
 	require.True(t, winnerReplay.ConsistentWith(target, replayWinner.Operation, replayWinner.EntryID), "ApplyMutation replay returned a result inconsistent with its request")
+	requireWorkspaceMutationEcho(t, winner.result, winner.input, "", "")
+	requireWorkspaceMutationEcho(t, winnerReplay, &replayWinner, "", "")
 	require.NotNil(t, winnerReplay, "ApplyMutation(race winner replay) = %#v, winner = %#v", winnerReplay, winner.result)
 	require.True(t, winnerReplay.Replayed, "ApplyMutation(race winner replay) = %#v, winner = %#v", winnerReplay, winner.result)
 	require.Equal(t, winner.result.Change.Cursor, winnerReplay.Change.Cursor, "ApplyMutation(race winner replay) = %#v, winner = %#v", winnerReplay, winner.result)
@@ -639,4 +646,56 @@ func journalAccess(access store.ExamAttemptWorkspaceMutationAccess) store.Candid
 		SessionID: access.SessionID, DesktopRegistrationID: access.DesktopRegistrationID,
 		DPoPKeyThumbprint: access.DPoPKeyThumbprint, ConnectionID: access.ConnectionID,
 		ContinuityCredentialHash: access.ContinuityCredentialHash}
+}
+
+// requireWorkspaceMutationEcho asserts what the application no longer
+// re-checks on an Attempt Workspace mutation outcome, with the kind and
+// content version the application expects for the operation: a surviving
+// entry is present and well formed, agrees with the journal change, is the
+// proposed entry unless replayed, has the expected kind and, for a fresh
+// write, the staged content version, and the change repeats the requested
+// recursion.
+func requireWorkspaceMutationEcho(
+	t *testing.T,
+	result *store.ExamAttemptWorkspaceMutationResult,
+	mutation *store.ExamAttemptWorkspaceMutation,
+	expectedKind model.StarterWorkspaceEntryKind,
+	expectedVersion model.WorkspaceContentVersion,
+) {
+	t.Helper()
+	require.NotNil(t, result)
+	require.Equal(t, mutation.Recursive, result.Change.Recursive)
+	if mutation.Operation == model.AttemptWorkspaceMutationDeleteEntry {
+		return
+	}
+	require.NotNil(t, result.Entry)
+	entry := result.Entry
+	require.True(t, entry.EntryID.IsValid())
+	normalized, err := model.NormalizeAttemptWorkspacePath(entry.Path)
+	require.NoError(t, err)
+	require.Equal(t, normalized, entry.Path)
+	switch entry.Kind {
+	case model.StarterWorkspaceEntryDirectory:
+		require.True(t, entry.ContentVersion.IsZero())
+		require.Empty(t, entry.MediaType)
+		require.Zero(t, entry.SizeBytes)
+		require.Empty(t, entry.SHA256)
+	case model.StarterWorkspaceEntryFile:
+		require.True(t, entry.ContentVersion.IsValid())
+		require.NoError(t, model.AttemptWorkspaceContent{MediaType: entry.MediaType, SizeBytes: entry.SizeBytes, SHA256: entry.SHA256}.Validate())
+	default:
+		require.Failf(t, "unknown Workspace entry kind", "kind = %q", entry.Kind)
+	}
+	require.Equal(t, result.Change.EntryID, entry.EntryID)
+	require.Equal(t, result.Change.NewPath, entry.Path)
+	if !result.Replayed {
+		require.Equal(t, mutation.EntryID, entry.EntryID)
+	}
+	if expectedKind != "" {
+		require.Equal(t, expectedKind, entry.Kind)
+	}
+	if !result.Replayed && expectedVersion.IsValid() {
+		require.Equal(t, expectedVersion, entry.ContentVersion)
+		require.Equal(t, expectedVersion, result.Change.ContentVersion)
+	}
 }

@@ -174,7 +174,7 @@ func (s *Service) StageExamSittingCorrectionResourceContent(
 	if stage == nil {
 		return ResourceStage{}, apperror.New("exam.sitting.correction.unavailable").Wrap(errors.New("missing stage outcome"))
 	}
-	if err = validateStage(stage, c, principal.UserID); err != nil {
+	if err = validateStage(stage); err != nil {
 		return ResourceStage{}, err
 	}
 
@@ -204,7 +204,7 @@ func (s *Service) StageExamSittingCorrectionResourceContent(
 		if err != nil {
 			return ResourceStage{}, storeErrors.Translate(err)
 		}
-		if err = validateStage(stage, c, principal.UserID); err != nil {
+		if err = validateStage(stage); err != nil {
 			return ResourceStage{}, err
 		}
 	}
@@ -216,26 +216,9 @@ func (s *Service) StageExamSittingCorrectionResourceContent(
 	return projectStage(stage), nil
 }
 
-func validateStage(stage *store.ExamCorrectionResourceStage, c StageResourceContentCommand, actor model.UserID) error {
-	if !stage.ConsistentWith(c.ExamID, c.SittingID, c.BaseRevisionID, c.Target, c.ResourceID, actor) {
-		return apperror.New("exam.sitting.correction.unavailable").Wrap(errors.New("inconsistent stage outcome"))
-	}
-
-	if stage.State != store.ExamCorrectionResourceStagePending &&
-		stage.State != store.ExamCorrectionResourceStageReady &&
-		stage.State != store.ExamCorrectionResourceStageConsumed {
-		return apperror.New("exam.sitting.correction.unavailable").Wrap(errors.New("invalid stage state"))
-	}
-
+func validateStage(stage *store.ExamCorrectionResourceStage) error {
 	if !stage.RenditionConsistent() {
 		return apperror.New("exam.sitting.correction.unavailable").Wrap(errors.New("incomplete ready stage"))
-	}
-
-	if stage.Rendition != nil &&
-		(model.ExamResourceMediaType(stage.Rendition.MediaType) != c.MediaType ||
-			stage.Rendition.Size != c.Size ||
-			subtle.ConstantTimeCompare([]byte(stage.Rendition.SHA256), []byte(c.ExpectedSHA256)) != 1) {
-		return apperror.New("exam.sitting.correction.unavailable").Wrap(errors.New("stage metadata differs from command"))
 	}
 
 	return nil

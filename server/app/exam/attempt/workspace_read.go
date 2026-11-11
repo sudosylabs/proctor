@@ -81,10 +81,6 @@ func (s *Service) ListCandidateExamWorkspace(
 		return WorkspacePage{}, storeError(storeErrors, err)
 	}
 
-	if !page.Consistent() {
-		return WorkspacePage{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("missing candidate Workspace page"))
-	}
-
 	return WorkspacePage{
 		WorkspaceID:     page.WorkspaceID,
 		Cursor:          page.Cursor,

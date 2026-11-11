@@ -77,6 +77,8 @@ func TestSessionRevocationPublishesAttemptProjectionInvalidations(t *testing.T) 
 }
 
 type sessionRevocationAttemptProjectionFake struct {
+	store.ExamAttemptStore
+
 	candidateID model.UserID
 	sessionIDs  []model.SessionID
 	targets     []store.ExamAttemptInvalidationTarget

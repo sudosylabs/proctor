@@ -23,13 +23,6 @@ import (
 // a store contract, each with the reason it cannot hold the contract itself.
 var storeRestatements = map[string]string{
 	"app/realtime.SittingCandidates": "app/realtime may not import store; the parent passes the Exam Sitting store through this one-method port",
-
-	// These three predate the rule and are not exceptions: each package
-	// already imports store and can hold the contract. Replace the interface
-	// with the contract, then remove its entry.
-	"app/access.academicPeriodScopeReader": "predates the rule; hold store.AcademicPeriodStore",
-	"app/exam/attempt.Sittings":            "predates the rule; hold store.ExamSittingStore",
-	"app.RealtimeService.attempts":         "predates the rule; hold store.ExamAttemptStore",
 }
 
 // TestApplicationInterfacesDoNotRestateStoreContracts keeps one declaration

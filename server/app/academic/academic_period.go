@@ -9,7 +9,6 @@ package academic
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"time"
 
@@ -186,18 +185,7 @@ func (s *Service) CreateAcademicPeriod(
 				return &store.AcademicPeriodCommandResult{Value: period}, createErr
 			}
 
-			idempotentStore, ok := s.academicPeriods.(interface {
-				CreateIdempotently(
-					context.Context,
-					*store.AcademicPeriodCreation,
-					*store.CommandIdempotency,
-				) (*store.AcademicPeriodCommandResult, error)
-			})
-			if !ok {
-				return nil, errors.New("academic period store does not support idempotent creation")
-			}
-
-			return idempotentStore.CreateIdempotently(ctx, input, commandIdempotency)
+			return s.academicPeriods.CreateIdempotently(ctx, input, commandIdempotency)
 		},
 		academicPeriodStoreErrors.Translate,
 	)

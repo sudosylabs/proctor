@@ -32,9 +32,7 @@ type realtimeServiceDependencies struct {
 type RealtimeService struct {
 	deps realtimeServiceDependencies
 
-	attempts interface {
-		ListSessionRevocationInvalidationTargets(context.Context, model.UserID, []model.SessionID) ([]store.ExamAttemptInvalidationTarget, error)
-	}
+	attempts store.ExamAttemptStore
 }
 
 func newRealtimeServiceWithDelivery(deps realtimeServiceDependencies) (*RealtimeService, error) {

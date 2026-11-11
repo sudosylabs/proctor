@@ -20,13 +20,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// Sittings reads the ownership of the Sitting an Attempt use case names.
-type Sittings interface {
-	// Resolve returns stable Sitting ownership metadata. Store remains the
-	// authority for connect-time lifecycle, deadline, and membership checks.
-	Resolve(context.Context, model.ExamSittingID) (*store.ExamSittingSnapshot, error)
-}
-
 // ManagerAuthorizer is the manager authorization the Attempt use cases ask.
 // SittingManagerAuthorizer satisfies it and tests substitute a fake.
 type ManagerAuthorizer interface {
@@ -143,7 +136,7 @@ type Dependencies struct {
 	DeliveryBudget      store.DeliveryBudgetStore
 	Workspace           store.ExamAttemptWorkspaceStore
 	Submissions         store.ExamSubmissionStore
-	Sittings            Sittings
+	Sittings            store.ExamSittingStore
 	Managers            ManagerAuthorizer
 	Auditor             Auditor
 	SystemAuditor       SystemAuditor
@@ -188,7 +181,7 @@ type Service struct {
 	workspaces        store.ExamAttemptWorkspaceStore
 	submissions       store.ExamSubmissionStore
 
-	sittings      Sittings
+	sittings      store.ExamSittingStore
 	managers      ManagerAuthorizer
 	auditor       Auditor
 	systemAuditor SystemAuditor

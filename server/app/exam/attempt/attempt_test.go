@@ -274,7 +274,11 @@ func (f *desktopBuildResolverFake) ResolveAttemptDesktopBuild(context.Context, m
 	return DesktopBuildResolution{Build: f.f.desktopBuild, CompatibilityPolicyRevision: 1}, nil
 }
 
-type sittingFake struct{ f *fixture }
+type sittingFake struct {
+	store.ExamSittingStore
+
+	f *fixture
+}
 
 func (f *sittingFake) Resolve(context.Context, model.ExamSittingID) (*store.ExamSittingSnapshot, error) {
 	f.f.order = append(f.f.order, "sitting")

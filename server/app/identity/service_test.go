@@ -111,6 +111,8 @@ func (a *mutationAttemptAuditorFake) Fail(_ context.Context, id model.AuditEvent
 }
 
 type accessAcademicPeriodStoreFake struct {
+	store.AcademicPeriodStore
+
 	period  *model.AcademicPeriod
 	periods map[string]*model.AcademicPeriod
 	gets    int

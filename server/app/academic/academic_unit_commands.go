@@ -9,7 +9,6 @@ package academic
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"github.com/sudosylabs/proctor/server/app/access"
@@ -136,14 +135,7 @@ func (s *Service) CreateAcademicUnit(
 				return &store.AcademicUnitCommandResult{Value: unit}, createErr
 			}
 
-			idempotentStore, ok := s.academicUnits.(interface {
-				CreateIdempotently(context.Context, *store.AcademicUnitCreation, *store.CommandIdempotency) (*store.AcademicUnitCommandResult, error)
-			})
-			if !ok {
-				return nil, errors.New("academic unit store does not support idempotent creation")
-			}
-
-			return idempotentStore.CreateIdempotently(ctx, input, idempotency)
+			return s.academicUnits.CreateIdempotently(ctx, input, idempotency)
 		},
 		academicUnitStoreErrors.Translate,
 	)

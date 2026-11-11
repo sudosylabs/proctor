@@ -839,7 +839,7 @@ type ScopeResolverDependencies struct {
 	Exams           store.ExamAuthoringStore
 	Sittings        store.ExamSittingStore
 	Submissions     store.ExamSubmissionStore
-	AcademicPeriods academicPeriodScopeReader
+	AcademicPeriods store.AcademicPeriodStore
 	// Programmes and ProgrammeLevels are optional; without them Programme and
 	// Programme Level resources do not resolve.
 	Programmes      store.ProgrammeStore
@@ -850,10 +850,6 @@ type ScopeResolverDependencies struct {
 // Class of a Resource for an authorization decision.
 type ScopeResolver struct {
 	deps ScopeResolverDependencies
-}
-
-type academicPeriodScopeReader interface {
-	Get(context.Context, model.AcademicPeriodID) (*model.AcademicPeriod, error)
 }
 
 // NewScopeResolver validates its dependencies and returns the ScopeResolver.

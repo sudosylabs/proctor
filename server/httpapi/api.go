@@ -13,51 +13,22 @@
 package httpapi
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
-	"slices"
-	"sort"
-	"strconv"
-	"strings"
-	"time"
-
-	"github.com/gorilla/mux"
 
 	"github.com/sudosylabs/proctor/server/app"
-	"github.com/sudosylabs/proctor/server/localization"
-	"github.com/sudosylabs/proctor/server/logging"
-	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 )
-
-type API struct {
-	handler                 http.Handler
-	router                  *mux.Router
-	authenticator           Authenticator
-	logger                  *logging.Logger
-	metrics                 Metrics
-	localizer               Localizer
-	cookies                 browserCookies
-	browserRequests         browserRequestPolicy
-	recentAuthenticationTTL time.Duration
-	routes                  []Route
-	routeMatchers           []routeMatcher
-	webSocket               WebSocketTransport
-	maxBodyBytes            int64
-	transferDeadlines       transferDeadlines
-	middleware              middlewarePolicy
-}
 
 // New constructs the production API over the application. Each resource in
 // productionResources is built from the application service that owns its
 // use cases, and the Identity service authenticates every request.
-func New(application *app.App, settings Settings) (*API, error) {
+func New(application *app.App, settings Settings) (*route.API, error) {
 	if err := requireApplication(application); err != nil {
 		return nil, err
 	}
 
-	cookies, err := newBrowserCookies(settings.PublicURL)
+	cookies, err := route.NewCookies(settings.PublicURL)
 	if err != nil {
 		return nil, fmt.Errorf("configure browser cookies: %w", err)
 	}
@@ -109,10 +80,10 @@ func requireApplication(application *app.App) error {
 	return nil
 }
 
-// newAPI validates the settings and compiles the resources into the sealed
-// route catalog. New passes the production inventory; handler tests pass
-// resources built over their fakes.
-func newAPI(settings Settings, authenticator Authenticator, resources ...apiResource) (*API, error) {
+// newAPI validates the settings and hands the resources to the routing
+// kernel, which compiles them into the sealed route catalog. New passes the
+// production inventory; handler tests pass resources built over their fakes.
+func newAPI(settings Settings, authenticator route.Authenticator, resources ...route.Resource) (*route.API, error) {
 	if settings.Logger == nil {
 		return nil, errors.New("logger is required")
 	}
@@ -139,197 +110,17 @@ func newAPI(settings Settings, authenticator Authenticator, resources ...apiReso
 	if settings.WebSocket == nil {
 		return nil, errors.New("websocket transport is required")
 	}
-	cookies, err := newBrowserCookies(settings.PublicURL)
-	if err != nil {
-		return nil, fmt.Errorf("configure browser cookies: %w", err)
-	}
-	browserRequests, err := newBrowserRequestPolicy(settings.PublicURL)
-	if err != nil {
-		return nil, fmt.Errorf("configure browser request policy: %w", err)
-	}
 
-	api := &API{
-		authenticator:           authenticator,
-		logger:                  settings.Logger,
-		metrics:                 settings.Metrics,
-		localizer:               settings.Localizer,
-		cookies:                 cookies,
-		browserRequests:         browserRequests,
-		recentAuthenticationTTL: settings.RecentAuthenticationTTL,
-		webSocket:               settings.WebSocket,
-		maxBodyBytes:            settings.MaxBodyBytes,
-		transferDeadlines:       newTransferDeadlines(settings.ReadTimeout, settings.WriteTimeout),
-		middleware: middlewarePolicy{
-			trustedProxies: trustedProxies(slices.Clone(settings.TrustedProxies)),
-			tracing:        settings.Tracing,
-		},
-	}
-	if err := api.compileRoutes(model.APIURLSuffix, settings.MaxBodyBytes, resources...); err != nil {
-		return nil, err
-	}
-	return api, nil
-}
-
-func (a *API) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	a.handler.ServeHTTP(writer, a.localize(request))
-}
-
-func (a *API) localize(request *http.Request) *http.Request {
-	if a.localizer == nil {
-		return request
-	}
-	return request.WithContext(withRequestLocalization(
-		request.Context(),
-		a.localizer,
-		localization.PreferredLocale(request.Header.Get("Accept-Language"), a.localizer.SupportedLocales()),
-	))
-}
-
-// NotFoundHandler answers a path that a sibling browser module owns but
-// cannot serve with the API's not_found Problem Details, request correlation,
-// security headers, and request logging.
-func (a *API) NotFoundHandler() http.Handler {
-	handler := withMiddleware(http.HandlerFunc(a.handleNotFound), a.logger, a.middleware)
-	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		handler.ServeHTTP(writer, a.localize(request))
-	})
-}
-
-// MethodNotAllowedHandler answers an unsupported method on a sibling browser
-// module's path with method_not_allowed Problem Details and the given Allow
-// methods.
-func (a *API) MethodNotAllowedHandler(allowed ...string) http.Handler {
-	allow := strings.Join(allowed, ", ")
-	handler := withMiddleware(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		writer.Header().Set("Allow", allow)
-		a.writeMethodNotAllowed(writer, request)
-	}), a.logger, a.middleware)
-	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		handler.ServeHTTP(writer, a.localize(request))
-	})
-}
-
-func (a *API) Routes() []Route {
-	routes := make([]Route, len(a.routes))
-	for index, route := range a.routes {
-		routes[index] = route
-		routes[index].ErrorCodes = append([]string(nil), route.ErrorCodes...)
-	}
-	return routes
-}
-
-func (a *API) serveRoutes(writer http.ResponseWriter, request *http.Request) {
-	match := &mux.RouteMatch{}
-	if !a.router.Match(request, match) {
-		if a.metrics != nil {
-			method := boundedHTTPMethod(request.Method)
-			recorder, observation := beginRequestMetrics(writer, request, a.metrics, "unmatched", method)
-			defer observation.finish(0)
-			writer = recorder
-		}
-		if len(a.allowedMethods(request)) != 0 {
-			a.handleMethodNotAllowed(writer, request)
-			return
-		}
-		a.handleNotFound(writer, request)
-		return
-	}
-	a.router.ServeHTTP(writer, request)
-}
-
-func boundedHTTPMethod(method string) string {
-	switch method {
-	case http.MethodConnect,
-		http.MethodDelete,
-		http.MethodGet,
-		http.MethodHead,
-		http.MethodOptions,
-		http.MethodPatch,
-		http.MethodPost,
-		http.MethodPut,
-		http.MethodTrace:
-		return method
-	default:
-		return "OTHER"
-	}
-}
-
-func (a *API) Close() error {
-	// The HTTP transport borrows the sibling WebSocket transport for upgrade
-	// dispatch. Node Runtime owns and closes that sibling explicitly.
-	return nil
-}
-
-func canonicalIDRoutePattern() string {
-	return "[" + model.IDAlphabet + "]{" + strconv.Itoa(model.IDLength) + "}"
-}
-
-func providerIDRoutePattern() string {
-	return "[a-z0-9][a-z0-9._-]{0,63}"
-}
-
-func sortRoutes(routes []Route) {
-	sort.Slice(routes, func(left, right int) bool {
-		if routes[left].Path == routes[right].Path {
-			return routes[left].Method < routes[right].Method
-		}
-		return routes[left].Path < routes[right].Path
-	})
-}
-
-func (a *API) handleNotFound(writer http.ResponseWriter, request *http.Request) {
-	title, detail := localizedProblemPresentation(request, http.StatusNotFound)
-	WriteProblem(writer, Problem{
-		Type:      problemType(routeNotFoundCode),
-		Title:     title,
-		Status:    http.StatusNotFound,
-		Detail:    detail,
-		Instance:  request.URL.Path,
-		Code:      routeNotFoundCode,
-		RequestID: RequestID(request.Context()),
-	})
-}
-
-func (a *API) handleMethodNotAllowed(writer http.ResponseWriter, request *http.Request) {
-	if methods := a.allowedMethods(request); len(methods) != 0 {
-		writer.Header().Set("Allow", strings.Join(methods, ", "))
-	}
-	a.writeMethodNotAllowed(writer, request)
-}
-
-func (a *API) writeMethodNotAllowed(writer http.ResponseWriter, request *http.Request) {
-	title, detail := localizedNamedProblemPresentation(request, "method_not_allowed")
-	WriteProblem(writer, Problem{
-		Type:      problemType(routeMethodNotAllowedCode),
-		Title:     title,
-		Status:    http.StatusMethodNotAllowed,
-		Detail:    detail,
-		Instance:  request.URL.Path,
-		Code:      routeMethodNotAllowedCode,
-		RequestID: RequestID(request.Context()),
-	})
-}
-
-func (a *API) allowedMethods(request *http.Request) []string {
-	allowed := make(map[string]struct{})
-	for _, matcher := range a.routeMatchers {
-		if matcher.pathRegexp.MatchString(request.URL.Path) {
-			allowed[matcher.route.Method] = struct{}{}
-		}
-	}
-	methods := make([]string, 0, len(allowed))
-	for method := range allowed {
-		methods = append(methods, method)
-	}
-	sort.Strings(methods)
-	return methods
-}
-
-func writeJSON(writer http.ResponseWriter, status int, value any) {
-	writer.Header().Set("Content-Type", "application/json")
-	if writer.Header().Get("Cache-Control") == "" {
-		writer.Header().Set("Cache-Control", "no-store")
-	}
-	writer.WriteHeader(status)
-	_ = json.NewEncoder(writer).Encode(value)
+	return route.New(route.Settings{
+		Logger:                  settings.Logger,
+		Metrics:                 settings.Metrics,
+		Tracing:                 settings.Tracing,
+		Localizer:               settings.Localizer,
+		PublicURL:               settings.PublicURL,
+		MaxBodyBytes:            settings.MaxBodyBytes,
+		ReadTimeout:             settings.ReadTimeout,
+		WriteTimeout:            settings.WriteTimeout,
+		TrustedProxies:          settings.TrustedProxies,
+		RecentAuthenticationTTL: settings.RecentAuthenticationTTL,
+	}, authenticator, resources...)
 }

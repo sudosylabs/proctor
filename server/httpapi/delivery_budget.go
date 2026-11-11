@@ -10,17 +10,18 @@ import (
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-func deliveryBudgetResource(app ExamAttemptApplication) apiResource {
+func deliveryBudgetResource(app ExamAttemptApplication) route.Resource {
 	h := examAttemptHandlers{app: app}
-	return newResource(
+	return route.NewResource(
 		"delivery-budget",
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/exam-attempts/{exam_attempt_id}/delivery-limits",
-			Auth:   AuthSessionRequired,
+			Auth:   route.AuthSessionRequired,
 			Errors: []string{
 				"exam.delivery.control_rate_limited",
 				"request.invalid",
@@ -42,11 +43,11 @@ func deliveryBudgetResource(app ExamAttemptApplication) apiResource {
 			},
 			Handle: h.deliveryBudget,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:       http.MethodPost,
 			Path:         "/exam-attempts/{exam_attempt_id}/delivery-limits/stop-details",
-			Auth:         AuthSessionRequired,
-			Idempotency:  IdempotencyRequired,
+			Auth:         route.AuthSessionRequired,
+			Idempotency:  route.IdempotencyRequired,
 			MaxBodyBytes: 2048,
 			Errors: []string{
 				"audit.unavailable",
@@ -74,60 +75,60 @@ func deliveryBudgetResource(app ExamAttemptApplication) apiResource {
 		},
 	)
 }
-func (h examAttemptHandlers) deliveryBudget(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) deliveryBudget(request route.Request) (route.Result, error) {
 	query, err := browserSourceQuery(request, true)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	value, err := h.app.DeliveryBudget(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		attempt.DeliveryBudgetQuery{Access: query.Access, ParticipationID: query.ParticipationID},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if value == nil || value.Validate() != nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 
-	return jsonResult(http.StatusOK, value).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, value).WithHeaders(noStoreHeaders()), nil
 }
-func (h examAttemptHandlers) stopDeliveryDetails(request operationRequest) (operationResult, error) {
-	attemptID, err := pathID[model.ExamAttemptID](request, "exam_attempt_id")
+func (h examAttemptHandlers) stopDeliveryDetails(request route.Request) (route.Result, error) {
+	attemptID, err := route.PathID[model.ExamAttemptID](request, "exam_attempt_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	headers, err := candidateAttemptAccessHeaders(request.http)
+	headers, err := candidateAttemptAccessHeaders(request.HTTP)
 	if err != nil {
-		return operationResult{}, invalidRequestError(err)
+		return route.Result{}, route.InvalidRequest(err)
 	}
 
 	var body model.StopDeliveryDetails
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 	if body.Validate() != nil {
-		return operationResult{}, invalidRequestError(nil)
+		return route.Result{}, route.InvalidRequest(nil)
 	}
 
-	value, err := h.app.StopDeliveryDetails(request.context, request.invocation(), attempt.StopDeliveryDetailsCommand{
+	value, err := h.app.StopDeliveryDetails(request.Context, request.Invocation(), attempt.StopDeliveryDetailsCommand{
 		Access: attempt.CandidateAccess{
 			AttemptID:            attemptID,
 			ConnectionID:         headers.ConnectionID,
 			ContinuityCredential: headers.ContinuityCredential,
 		},
 		Request:        body,
-		IdempotencyKey: request.idempotencyKey,
+		IdempotencyKey: request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if value == nil || value.Validate(body.Family) != nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 
-	return jsonResult(http.StatusOK, value).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, value).WithHeaders(noStoreHeaders()), nil
 }

@@ -22,6 +22,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -62,7 +63,7 @@ func (a *desktopCompatibilityHTTPApplication) ReplaceDesktopCompatibilityPolicy(
 
 func TestSystemPingReturnsRequestSpecificNoStoreCompatibility(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	now := time.Date(2026, time.August, 28, 10, 11, 12, 345_000_000, time.UTC)
 	applicationFake := &desktopCompatibilityHTTPApplication{
 		evaluation: identity.DesktopCompatibilityResult{
@@ -79,7 +80,7 @@ func TestSystemPingReturnsRequestSpecificNoStoreCompatibility(t *testing.T) {
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{},
+		routetest.Authenticator{},
 		systemResourceWithApplication(
 			systemHTTPHealth{live: true, ready: true},
 			BuildInfo{Version: "server-secret-not-for-ping"},
@@ -116,7 +117,7 @@ func TestSystemPingReturnsRequestSpecificNoStoreCompatibility(t *testing.T) {
 
 func TestSystemPingPublishesMaintenanceAvailabilityAndRetryTime(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	retryAt := time.Date(2026, time.August, 28, 11, 0, 0, 0, time.UTC)
 	serverTime := retryAt.Add(-time.Minute)
 	applicationFake := &desktopCompatibilityHTTPApplication{
@@ -131,7 +132,7 @@ func TestSystemPingPublishesMaintenanceAvailabilityAndRetryTime(t *testing.T) {
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{},
+		routetest.Authenticator{},
 		systemResourceWithApplication(systemHTTPHealth{live: true, ready: true}, BuildInfo{}, applicationFake, func() time.Time { return serverTime }),
 	)
 	response := httptest.NewRecorder()
@@ -152,7 +153,7 @@ func TestSystemPingPublishesMaintenanceAvailabilityAndRetryTime(t *testing.T) {
 
 func TestSystemPingOmitsRetryTimeNotLaterThanItsServerTime(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	serverTime := time.Date(2026, time.August, 28, 11, 0, 0, 0, time.UTC)
 	applicationFake := &desktopCompatibilityHTTPApplication{
 		evaluation: identity.DesktopCompatibilityResult{
@@ -165,7 +166,7 @@ func TestSystemPingOmitsRetryTimeNotLaterThanItsServerTime(t *testing.T) {
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{},
+		routetest.Authenticator{},
 		systemResourceWithApplication(systemHTTPHealth{live: true, ready: true}, BuildInfo{}, applicationFake, func() time.Time { return serverTime }),
 	)
 	response := httptest.NewRecorder()
@@ -183,12 +184,12 @@ func TestSystemPingOmitsRetryTimeNotLaterThanItsServerTime(t *testing.T) {
 
 func TestSystemPingRejectsMalformedSelectorsWithoutEvaluation(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	applicationFake := &desktopCompatibilityHTTPApplication{}
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{},
+		routetest.Authenticator{},
 		systemResourceWithApplication(systemHTTPHealth{live: true, ready: true}, BuildInfo{}, applicationFake, time.Now),
 	)
 	for _, target := range []string{
@@ -207,14 +208,14 @@ func TestSystemPingRejectsMalformedSelectorsWithoutEvaluation(t *testing.T) {
 
 func TestSystemPingFailsClosedInsideSuccessfulResponseWhenUnavailable(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	applicationFake := &desktopCompatibilityHTTPApplication{
 		evaluationErr: apperror.New("desktop_compatibility_policy.unavailable"),
 	}
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{},
+		routetest.Authenticator{},
 		systemResourceWithApplication(systemHTTPHealth{live: true}, BuildInfo{}, applicationFake, time.Now),
 	)
 	response := httptest.NewRecorder()
@@ -232,7 +233,7 @@ func TestSystemPingFailsClosedInsideSuccessfulResponseWhenUnavailable(t *testing
 
 func TestDesktopCompatibilityPolicyHTTPUsesCompleteReplacementAndNoStore(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{
 		UserID:                 model.NewUserID(),
 		SessionID:              model.NewSessionID(),
@@ -249,7 +250,7 @@ func TestDesktopCompatibilityPolicyHTTPUsesCompleteReplacementAndNoStore(t *test
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{principal: principal},
+		routetest.Authenticator{Principal: principal},
 		desktopCompatibilityPolicyResource(applicationFake),
 	)
 	request := httptest.NewRequest(

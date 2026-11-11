@@ -22,6 +22,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/user"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -58,7 +60,7 @@ func (a *userSettingsHTTPApplication) ReadOwnUserSettings(
 
 func TestUserSettingsHTTPReplacesWithoutEchoingSource(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	at := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
@@ -72,7 +74,7 @@ func TestUserSettingsHTTPReplacesWithoutEchoingSource(t *testing.T) {
 	applicationFake := &userSettingsHTTPApplication{replaceResult: user.UserSettingsReplacementResult{
 		Revision: next, FormatVersion: 1, UpdatedAt: at, Changed: true,
 	}}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userSettingsResource(applicationFake))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userSettingsResource(applicationFake))
 	body, err := json.Marshal(map[string]any{
 		"source": source, "format_version": 1, "expected_revision": revision.String(),
 	})
@@ -100,7 +102,7 @@ func TestUserSettingsHTTPReplacesWithoutEchoingSource(t *testing.T) {
 
 func TestUserSettingsHTTPReplacementIsStrictBoundedAndIdempotent(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID: model.PrincipalCredentialID(model.NewSessionCredentialID()), CredentialType: model.CredentialSessionAccess,
@@ -111,8 +113,8 @@ func TestUserSettingsHTTPReplacementIsStrictBoundedAndIdempotent(t *testing.T) {
 	applicationFake := &userSettingsHTTPApplication{replaceResult: user.UserSettingsReplacementResult{
 		Revision: revision, FormatVersion: 1, UpdatedAt: time.Now(),
 	}}
-	newAPI := func() *API {
-		return newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userSettingsResource(applicationFake))
+	newAPI := func() *route.API {
+		return newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userSettingsResource(applicationFake))
 	}
 	for name, configure := range map[string]func(*http.Request){
 		"missing idempotency": func(request *http.Request) {},
@@ -159,7 +161,7 @@ func TestUserSettingsHTTPReplacementIsStrictBoundedAndIdempotent(t *testing.T) {
 
 func TestUserSettingsHTTPReadsExactSelfDocumentWithoutCaching(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	at := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
@@ -176,7 +178,7 @@ func TestUserSettingsHTTPReadsExactSelfDocumentWithoutCaching(t *testing.T) {
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{principal: principal},
+		routetest.Authenticator{Principal: principal},
 		userSettingsResource(applicationFake),
 	)
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/me/settings", nil)
@@ -198,7 +200,7 @@ func TestUserSettingsHTTPReadsExactSelfDocumentWithoutCaching(t *testing.T) {
 
 func TestUserSettingsHTTPReadsUnsupportedFormatAsExactReadOnlySource(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	at := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
@@ -215,7 +217,7 @@ func TestUserSettingsHTTPReadsUnsupportedFormatAsExactReadOnlySource(t *testing.
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{principal: principal},
+		routetest.Authenticator{Principal: principal},
 		userSettingsResource(applicationFake),
 	)
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/me/settings", nil)
@@ -234,12 +236,12 @@ func TestUserSettingsHTTPReadsUnsupportedFormatAsExactReadOnlySource(t *testing.
 
 func TestUserSettingsHTTPRejectsNonSessionAndArbitraryUserPaths(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	applicationFake := &userSettingsHTTPApplication{}
 	patAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{err: apperror.New("authentication.token_invalid")},
+		routetest.Authenticator{Err: apperror.New("authentication.token_invalid")},
 		userSettingsResource(applicationFake),
 	)
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/me/settings", nil)
@@ -254,7 +256,7 @@ func TestUserSettingsHTTPRejectsNonSessionAndArbitraryUserPaths(t *testing.T) {
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now(),
 	}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userSettingsResource(applicationFake))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userSettingsResource(applicationFake))
 	for name, path := range map[string]string{
 		"arbitrary user":   "/api/v1/users/" + model.NewUserID().String() + "/settings",
 		"settings listing": "/api/v1/users/settings",

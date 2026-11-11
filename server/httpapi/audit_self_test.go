@@ -18,13 +18,15 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
 func TestSelfAuditResourceParsesFiltersAndPagesPrivately(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := operatorTestPrincipal()
 	at := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
 	last := administration.SelfAuditEvent{
@@ -47,7 +49,7 @@ func TestSelfAuditResourceParsesFiltersAndPagesPrivately(t *testing.T) {
 	require.True(t, time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC).Equal(audits.selfQuery.Since))
 	require.True(t, time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC).Equal(audits.selfQuery.Until))
 
-	var page listResponse[selfAuditEventResponse]
+	var page route.List[selfAuditEventResponse]
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
 	require.Len(t, page.Items, 1)
 	require.Equal(t, "mfa.reset_by_administrator", page.Items[0].Event)

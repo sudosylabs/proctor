@@ -27,7 +27,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/cluster"
 	"github.com/sudosylabs/proctor/server/config"
-	"github.com/sudosylabs/proctor/server/httpapi"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 	"github.com/sudosylabs/proctor/server/store/sqlstore"
@@ -657,7 +657,7 @@ func TestBrowserCookieAuthenticationIntegration(t *testing.T) {
 	refresh := performBrowserJSONRequest(
 		helper.Handler(), http.MethodPost, "/api/v1/auth/refresh",
 		nil, loginCookies, "",
-		loginCookies[httpapi.BrowserCSRFCookieName].Value,
+		loginCookies[route.BrowserCSRFCookieName].Value,
 	)
 	require.Equal(t, http.StatusOK, refresh.Code, "browser refresh status = %d: %s", refresh.Code, refresh.Body.String())
 	var refreshBody authenticationResponse
@@ -684,7 +684,7 @@ func TestBrowserCookieAuthenticationIntegration(t *testing.T) {
 	logout := performBrowserJSONRequest(
 		helper.Handler(), http.MethodPost, "/api/v1/auth/logout",
 		nil, refreshedCookies, "",
-		refreshedCookies[httpapi.BrowserCSRFCookieName].Value,
+		refreshedCookies[route.BrowserCSRFCookieName].Value,
 	)
 	require.Equal(t, http.StatusNoContent, logout.Code, "browser logout status = %d: %s", logout.Code, logout.Body.String())
 	cleared := cookieMap(logout.Result().Cookies())
@@ -1070,7 +1070,7 @@ func performBrowserJSONRequest(
 		request.Header.Set("Authorization", "Bearer "+bearer)
 	}
 	if csrf != "" {
-		request.Header.Set(httpapi.BrowserCSRFHeader, csrf)
+		request.Header.Set(route.BrowserCSRFHeader, csrf)
 	}
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -1090,11 +1090,11 @@ func assertBrowserCookieContract(
 	cookies map[string]*http.Cookie,
 ) {
 	t.Helper()
-	require.Equal(t, "PROCTOR_ACCESS", httpapi.BrowserAccessCookieName, "browser cookie or CSRF public name changed")
-	require.Equal(t, "PROCTOR_REFRESH", httpapi.BrowserRefreshCookieName, "browser cookie or CSRF public name changed")
-	require.Equal(t, "PROCTOR_CSRF_BINDING", httpapi.BrowserCSRFBindingCookieName, "browser cookie or CSRF public name changed")
-	require.Equal(t, "PROCTOR_CSRF", httpapi.BrowserCSRFCookieName, "browser cookie or CSRF public name changed")
-	require.Equal(t, "X-Proctor-CSRF-Token", httpapi.BrowserCSRFHeader, "browser cookie or CSRF public name changed")
+	require.Equal(t, "PROCTOR_ACCESS", route.BrowserAccessCookieName, "browser cookie or CSRF public name changed")
+	require.Equal(t, "PROCTOR_REFRESH", route.BrowserRefreshCookieName, "browser cookie or CSRF public name changed")
+	require.Equal(t, "PROCTOR_CSRF_BINDING", route.BrowserCSRFBindingCookieName, "browser cookie or CSRF public name changed")
+	require.Equal(t, "PROCTOR_CSRF", route.BrowserCSRFCookieName, "browser cookie or CSRF public name changed")
+	require.Equal(t, "X-Proctor-CSRF-Token", route.BrowserCSRFHeader, "browser cookie or CSRF public name changed")
 	require.Len(t, cookies, 4)
 	access := cookies["PROCTOR_ACCESS"]
 	refresh := cookies["PROCTOR_REFRESH"]
@@ -1133,7 +1133,7 @@ func assertProblemCode(
 ) {
 	t.Helper()
 	require.Equal(t, "application/problem+json", response.Header().Get("Content-Type"))
-	var problem httpapi.Problem
+	var problem route.Problem
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
 	require.Equal(t, want, problem.Code, "problem code")
 }

@@ -27,7 +27,7 @@ import (
 // testSupportPackages exist only for tests to import, so nothing in a
 // production binary reaches them.
 var testSupportPackages = []string{
-	"app/realtime/realtimetest", "config/configtest", "internal/errorflow", "store/storetest", "testlib",
+	"app/realtime/realtimetest", "config/configtest", "httpapi/route/routetest", "internal/errorflow", "store/storetest", "testlib",
 }
 
 // reachableOnlyFromTests names every production function that no server
@@ -52,6 +52,8 @@ var reachableOnlyFromTests = map[string]string{
 	"logging.Buffer.Bytes":                                 "the captured log sink other packages' tests assert through",
 	"logging.Buffer.Reset":                                 "the captured log sink other packages' tests assert through",
 	"logging.Buffer.flushPending":                          "Buffer.Write's line assembly",
+	"httpapi/route.ApplicationErrorStatuses":               "the generated code table the httpapi OpenAPI agreement tests compare against",
+	"httpapi/route.ProblemStatuses":                        "the kernel problem codes the httpapi route error table and OpenAPI tests read",
 	"filecontent.IsNotFound":                               "the root adapter tests classify File Content failures through it",
 	"filecontent.IsConflict":                               "the root adapter tests classify File Content failures through it",
 	"filecontent.IsUnavailable":                            "the root adapter tests classify File Content failures through it",

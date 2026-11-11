@@ -14,7 +14,15 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
+)
+
+// The probes answer a node that is not live or not ready with these problem
+// codes. error_catalog.yaml lists them as problem codes.
+const (
+	healthNotLiveCode  = "health.not_live"
+	healthNotReadyCode = "health.not_ready"
 )
 
 type healthResponse struct {
@@ -33,42 +41,42 @@ func systemResourceWithApplication(
 	buildInfo BuildInfo,
 	app DesktopCompatibilityApplication,
 	now func() time.Time,
-) apiResource {
+) route.Resource {
 	h := systemHandlers{
 		health:    health,
 		buildInfo: buildInfo,
 		app:       app,
 		now:       now,
 	}
-	return newResource(
+	return route.NewResource(
 		"system",
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodGet,
 			Path:        "/health/live",
 			RootMounted: true,
-			Auth:        AuthPublic,
+			Auth:        route.AuthPublic,
 			Errors:      []string{healthNotLiveCode},
 			Handle:      h.liveness,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodGet,
 			Path:        "/health/ready",
 			RootMounted: true,
-			Auth:        AuthPublic,
+			Auth:        route.AuthPublic,
 			Errors:      []string{healthNotReadyCode},
 			Handle:      h.readiness,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/system/ping",
-			Auth:   AuthPublic,
+			Auth:   route.AuthPublic,
 			Errors: []string{"request.invalid", "desktop_compatibility_policy.revision_conflict", "desktop_compatibility_policy.unavailable"},
 			Handle: h.ping,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/system/version",
-			Auth:   AuthPublic,
+			Auth:   route.AuthPublic,
 			Handle: h.version,
 		},
 	)
@@ -89,55 +97,55 @@ type systemPingResponse struct {
 	MaximumRealtimeProtocol int    `json:"maximum_realtime_protocol,omitempty"`
 }
 
-func (h systemHandlers) liveness(request operationRequest) (operationResult, error) {
+func (h systemHandlers) liveness(request route.Request) (route.Result, error) {
 	if !h.health.Live() {
-		title, detail := localizedNamedProblemPresentation(request.http, "not_live")
-		return problemResult(Problem{
-			Type:      problemType(healthNotLiveCode),
+		title, detail := route.ProblemPresentation(request.HTTP, "not_live")
+		return route.ProblemResult(route.Problem{
+			Type:      route.ProblemType(healthNotLiveCode),
 			Title:     title,
 			Status:    http.StatusServiceUnavailable,
 			Detail:    detail,
-			Instance:  request.http.URL.Path,
+			Instance:  request.HTTP.URL.Path,
 			Code:      healthNotLiveCode,
-			RequestID: RequestID(request.context),
+			RequestID: route.RequestID(request.Context),
 		}), nil
 	}
-	return jsonResult(http.StatusOK, healthResponse{Status: "ok"}), nil
+	return route.JSON(http.StatusOK, healthResponse{Status: "ok"}), nil
 }
 
-func (h systemHandlers) readiness(request operationRequest) (operationResult, error) {
+func (h systemHandlers) readiness(request route.Request) (route.Result, error) {
 	if !h.health.Ready() {
-		title, detail := localizedNamedProblemPresentation(request.http, "not_ready")
-		return problemResult(Problem{
-			Type:      problemType(healthNotReadyCode),
+		title, detail := route.ProblemPresentation(request.HTTP, "not_ready")
+		return route.ProblemResult(route.Problem{
+			Type:      route.ProblemType(healthNotReadyCode),
 			Title:     title,
 			Status:    http.StatusServiceUnavailable,
 			Detail:    detail,
-			Instance:  request.http.URL.Path,
+			Instance:  request.HTTP.URL.Path,
 			Code:      healthNotReadyCode,
-			RequestID: RequestID(request.context),
+			RequestID: route.RequestID(request.Context),
 		}), nil
 	}
-	return jsonResult(http.StatusOK, healthResponse{Status: "ok"}), nil
+	return route.JSON(http.StatusOK, healthResponse{Status: "ok"}), nil
 }
 
-func (h systemHandlers) version(operationRequest) (operationResult, error) {
-	return jsonResult(http.StatusOK, h.buildInfo), nil
+func (h systemHandlers) version(route.Request) (route.Result, error) {
+	return route.JSON(http.StatusOK, h.buildInfo), nil
 }
 
-func (h systemHandlers) ping(request operationRequest) (operationResult, error) {
-	query, err := desktopCompatibilityQuery(request.http)
+func (h systemHandlers) ping(request route.Request) (route.Result, error) {
+	query, err := desktopCompatibilityQuery(request.HTTP)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	result, evaluationErr := h.app.EvaluateDesktopCompatibility(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		query,
 	)
 	if apperror.Is(evaluationErr, "request.invalid") {
-		return operationResult{}, evaluationErr
+		return route.Result{}, evaluationErr
 	}
 
 	responseTime := model.TimeUTC(h.now())
@@ -168,7 +176,7 @@ func (h systemHandlers) ping(request operationRequest) (operationResult, error) 
 		response.Reason = string(result.Availability)
 	}
 
-	return jsonResult(http.StatusOK, response).withHeaders(http.Header{
+	return route.JSON(http.StatusOK, response).WithHeaders(http.Header{
 		"Cache-Control": {"no-store"},
 	}), nil
 }

@@ -109,7 +109,7 @@
         ".agents/skills/authorization-audit/references/authorization.md",
         ".agents/skills/server-boundaries/references/application.md",
         ".agents/skills/http-api/references/transport.md",
-        "server/httpapi/handler.go",
+        "server/httpapi/route/authentication.go",
         "server/app/access/session_assurance.go",
         "server/app/access/authorization.go"
       ]
@@ -592,7 +592,7 @@
         ".agents/skills/server-boundaries/references/application.md",
         ".agents/skills/runtime-operations/references/runtime.md",
         "server/httpapi/CONTRACT.md",
-        "server/httpapi/problem.go",
+        "server/httpapi/route/problem.go",
         "server/metrics/module.go"
       ]
     },

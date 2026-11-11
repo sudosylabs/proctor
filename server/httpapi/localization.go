@@ -8,8 +8,7 @@
 package httpapi
 
 import (
-	"net/http"
-
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/localization"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -21,35 +20,19 @@ const (
 
 const localizationOrigin = "httpapi"
 
-var problemPresentationNames = []string{
-	"bad_request",
-	"client_error",
-	"conflict",
-	"content_too_large",
-	"forbidden",
-	"internal",
-	"method_not_allowed",
-	"not_live",
-	"not_found",
-	"not_ready",
-	"service_unavailable",
-	"too_many_requests",
-	"unauthorized",
+// LocalizationDefinitions returns the closed set of messages owned by the
+// HTTP presentation boundary: the routing kernel's Problem Details prose,
+// then the messages resources present.
+func LocalizationDefinitions() []localization.Definition {
+	return append(route.LocalizationDefinitions(), resourceLocalizationDefinitions()...)
 }
 
-// LocalizationDefinitions returns the closed set of messages currently owned
-// by the HTTP presentation boundary.
-func LocalizationDefinitions() []localization.Definition {
-	definitions := make([]localization.Definition, 0, len(problemPresentationNames)*2+len(model.AllSessionRevocationReasons())+
+// resourceLocalizationDefinitions are the messages resources present: Session
+// revocation reasons, Personal Access Token scope titles and descriptions, and
+// the System Administrator Role.
+func resourceLocalizationDefinitions() []localization.Definition {
+	definitions := make([]localization.Definition, 0, len(model.AllSessionRevocationReasons())+
 		len(model.PersonalAccessTokenActions())*2+2)
-	for _, name := range problemPresentationNames {
-		for _, field := range []string{"detail", "title"} {
-			definitions = append(definitions, localization.Definition{
-				ID:     "problem." + name + "." + field,
-				Origin: localizationOrigin,
-			})
-		}
-	}
 	for _, reason := range model.AllSessionRevocationReasons() {
 		definitions = append(definitions, localization.Definition{
 			ID:     sessionRevocationLocalizationID(reason),
@@ -83,19 +66,4 @@ func accessActionTitleLocalizationID(action model.Action) string {
 // an Action offered as a Personal Access Token scope.
 func accessActionDescriptionLocalizationID(action model.Action) string {
 	return "access.action." + string(action) + ".description"
-}
-
-func translatedRequestText(request *http.Request, id, fallback string) string {
-	if request == nil {
-		return fallback
-	}
-	requestLocalization, ok := request.Context().Value(localizationContextKey{}).(requestLocalization)
-	if !ok || requestLocalization.localizer == nil {
-		return fallback
-	}
-	translated, err := requestLocalization.localizer.Translate(requestLocalization.locale, id, nil)
-	if err != nil {
-		return fallback
-	}
-	return translated
 }

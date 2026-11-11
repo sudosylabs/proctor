@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/tools/go/packages"
 
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/internal/errorflow"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -42,9 +43,9 @@ func TestRouteErrorTablesMatchReachableCodes(t *testing.T) {
 	require.NoError(t, err)
 
 	var routes []errorflow.Route
-	for _, resource := range productionResources(completeHTTPApplication(), nil, BuildInfo{}, browserCookies{}, nil) {
-		for _, definition := range resource.routes {
-			template, _, compileErr := definition.routePath().compile(model.APIURLSuffix)
+	for _, resource := range productionResources(completeHTTPApplication(), nil, BuildInfo{}, route.Cookies{}, nil) {
+		for _, definition := range resource.Endpoints {
+			template, _, compileErr := definition.CompilePath(model.APIURLSuffix)
 			require.NoError(t, compileErr)
 			key := definition.Method + " " + routeTemplateKey(template)
 			operation := routeOperationName(definition)
@@ -62,7 +63,7 @@ func TestRouteErrorTablesMatchReachableCodes(t *testing.T) {
 // "<route key> <code>", each with the reason.
 var routeErrorTableExceptions = map[string]string{}
 
-func routeOperationName(definition endpoint) string {
+func routeOperationName(definition route.Endpoint) string {
 	var operation any
 	switch {
 	case definition.Handle != nil:
@@ -78,14 +79,14 @@ func routeOperationName(definition endpoint) string {
 // routeImpliedErrorCodes are the codes the kernel adds, the idempotency codes
 // the route's requirement implies, and the transport's own problem codes
 // (health, say), which no application code mints; a table may name them.
-func routeImpliedErrorCodes(definition endpoint) []string {
-	implied := kernelErrorCodes(definition.Auth, definition.Method)
-	for code := range transportProblemCodes {
+func routeImpliedErrorCodes(definition route.Endpoint) []string {
+	implied := route.KernelErrorCodes(definition.Auth, definition.Method)
+	for code := range route.ProblemStatuses() {
 		implied = append(implied, code)
 	}
-	if effectiveIdempotencyRequirement(definition.Idempotency) != IdempotencyNone {
+	if route.EffectiveIdempotency(definition.Idempotency) != route.IdempotencyNone {
 		implied = append(implied, "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress")
-		if effectiveIdempotencyRequirement(definition.Idempotency) == IdempotencyRequired {
+		if route.EffectiveIdempotency(definition.Idempotency) == route.IdempotencyRequired {
 			implied = append(implied, "idempotency.key_required")
 		}
 	}
@@ -96,8 +97,8 @@ func routeImpliedErrorCodes(definition endpoint) []string {
 // routeInfeasibleErrorCodes are codes a route cannot produce whatever its
 // operation contains: without an idempotency requirement the transport never
 // passes a key, so no idempotency failure can occur.
-func routeInfeasibleErrorCodes(definition endpoint) []string {
-	if effectiveIdempotencyRequirement(definition.Idempotency) != IdempotencyNone {
+func routeInfeasibleErrorCodes(definition route.Endpoint) []string {
+	if route.EffectiveIdempotency(definition.Idempotency) != route.IdempotencyNone {
 		return nil
 	}
 	return []string{"idempotency.conflict", "idempotency.in_progress", "idempotency.key_invalid", "idempotency.key_required"}

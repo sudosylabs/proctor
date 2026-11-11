@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/administration"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -83,15 +84,15 @@ const (
 	selfAuditOrderOldest = "asc"
 )
 
-func (h auditHandlers) listSelf(request operationRequest) (operationResult, error) {
-	page, err := request.pageRequest()
+func (h auditHandlers) listSelf(request route.Request) (route.Result, error) {
+	page, err := request.Page()
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	query, err := selfAuditQueryFromValues(request.http.URL.Query())
+	query, err := selfAuditQueryFromValues(request.HTTP.URL.Query())
 	if err != nil {
-		return operationResult{}, invalidRequestError(err)
+		return route.Result{}, route.InvalidRequest(err)
 	}
 
 	order := selfAuditOrderNewest
@@ -100,41 +101,41 @@ func (h auditHandlers) listSelf(request operationRequest) (operationResult, erro
 	}
 
 	query.Limit = page.Limit
-	cursor, continued, err := decodePageCursor(page, selfAuditCursorSpec())
+	cursor, continued, err := route.DecodePageCursor(page, selfAuditCursorSpec())
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	if continued {
 		if cursor.Order != order {
-			return operationResult{}, invalidRequestError(errAuditQuery("cursor"))
+			return route.Result{}, route.InvalidRequest(errAuditQuery("cursor"))
 		}
 
 		createdAt, _ := model.ParseRFC3339(cursor.CreatedAt)
 		query.BeforeCreatedAt, query.BeforeID = createdAt, model.AuditEventID(cursor.ID)
 	}
 
-	result, err := h.app.ListSelfAuditEvents(request.context, request.invocation(), query)
+	result, err := h.app.ListSelfAuditEvents(request.Context, request.Invocation(), query)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if len(result.Items) > query.Limit || result.Counted == continued {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 
-	envelope, err := newListResponse(
+	envelope, err := route.NewList(
 		result.Items,
 		result.HasMore,
 		selfAuditEventResponseFromApplication,
 		func(last administration.SelfAuditEvent) (string, error) {
-			return encodeOpaqueCursor(
+			return route.EncodeCursor(
 				selfAuditCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String(), Order: order},
 				selfAuditCursorSpec(),
 			)
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	response := selfAuditListResponse{Items: envelope.Items, NextCursor: envelope.NextCursor}
@@ -143,7 +144,7 @@ func (h auditHandlers) listSelf(request operationRequest) (operationResult, erro
 		response.Total, response.TotalIsLowerBound = &total, &lowerBound
 	}
 
-	return jsonResult(http.StatusOK, response).withHeaders(privateNoStoreHeaders()), nil
+	return route.JSON(http.StatusOK, response).WithHeaders(privateNoStoreHeaders()), nil
 }
 
 func selfAuditQueryFromValues(values url.Values) (administration.ListSelfAuditEventsQuery, error) {
@@ -199,12 +200,12 @@ func optionalAuditTime(values url.Values, name string) (time.Time, error) {
 	return at, nil
 }
 
-func selfAuditCursorSpec() opaqueCursorSpec[selfAuditCursor] {
-	return opaqueCursorSpec[selfAuditCursor]{
-		label:                "self_audit",
-		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members:              []string{"created_at", "id", "order"},
-		validate: func(cursor selfAuditCursor) error {
+func selfAuditCursorSpec() route.CursorSpec[selfAuditCursor] {
+	return route.CursorSpec[selfAuditCursor]{
+		Label:                "self_audit",
+		MaximumEncodedLength: route.DefaultMaximumCursorLength,
+		Members:              []string{"created_at", "id", "order"},
+		Validate: func(cursor selfAuditCursor) error {
 			createdAt, err := model.ParseRFC3339(cursor.CreatedAt)
 			if err != nil ||
 				createdAt.IsZero() ||

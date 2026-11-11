@@ -20,6 +20,8 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -68,7 +70,7 @@ func serveRetentionHTTP(api http.Handler, method, path, body, key string) *httpt
 }
 func TestRetentionHTTPControlRequiresInteractiveRecentProofAndIdempotency(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := retentionHTTPPrincipal()
 	previewID := model.NewRetentionPreviewID()
 	body := `{"expected_revision":1,"expected_policy_revision":3,"state":"enabled","preview_id":"` + previewID.String() + `"}`
@@ -94,7 +96,7 @@ func TestRetentionHTTPControlRequiresInteractiveRecentProofAndIdempotency(t *tes
 			p := principal
 			test.alter(&p)
 			application := &retentionHTTPFake{}
-			api := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: p}, retentionResource(application))
+			api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: p}, retentionResource(application))
 			r := serveRetentionHTTP(api, "PUT", "/api/v1/retention/control", body, test.key)
 			require.Equal(t, test.want, r.Code, "status=%d body=%s", r.Code, r.Body.String())
 			if test.want != 200 {
@@ -111,13 +113,13 @@ func TestRetentionHTTPControlRequiresInteractiveRecentProofAndIdempotency(t *tes
 }
 func TestRetentionHTTPRejectsUnknownFieldsAndCrossPurposeCursors(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	application := &retentionHTTPFake{}
-	api := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: retentionHTTPPrincipal()}, retentionResource(application))
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: retentionHTTPPrincipal()}, retentionResource(application))
 	r := serveRetentionHTTP(api, "POST", "/api/v1/retention/previews", `{"expected_revision":1,"delete_now":true}`, "preview")
 	require.Equal(t, 400, r.Code, "unknown destructive parameter reached application")
 	require.Equal(t, 0, application.calls, "unknown destructive parameter reached application")
-	cursor, err := encodeOpaqueCursor(retentionCursor{After: model.NewSubmissionID().String()}, retentionCursorSpec())
+	cursor, err := route.EncodeCursor(retentionCursor{After: model.NewSubmissionID().String()}, retentionCursorSpec())
 	require.NoError(t, err)
 	for _, query := range []string{"?cursor=" + cursor, "?limit=1&limit=2", "?user_id=" + model.NewUserID().String(), "?limit=201"} {
 		r = serveRetentionHTTP(api, "GET", "/api/v1/users/me/retention-notices"+query, "", "")
@@ -127,11 +129,11 @@ func TestRetentionHTTPRejectsUnknownFieldsAndCrossPurposeCursors(t *testing.T) {
 }
 func TestRetentionHTTPNoticeProjectionIsRecipientOnlyAndBounded(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	p := retentionHTTPPrincipal()
 	notice := model.RetentionNotice{RetirementID: model.NewRetentionRetirementID(), RecipientUserID: p.UserID, Scope: model.RetentionHoldScope{ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(), SubmissionID: model.NewSubmissionID()}, ExamTitle: "Algorithms final", SittingStartAt: time.Date(2026, 5, 4, 9, 0, 0, 0, time.UTC), SittingEndAt: time.Date(2026, 5, 4, 11, 0, 0, 0, time.UTC), Category: model.RetentionCategoryWork, State: model.RetentionRetirementGrace, CreatedAt: model.NowUTC(), RetireAfter: model.NowUTC().Add(7 * 24 * time.Hour), DeliveryState: "failed", DeliveryErrorCode: "mail.preparation_unavailable"}
 	application := &retentionHTTPFake{noticePage: &administration.RetentionNoticePage{Items: []model.RetentionNotice{notice}, HasMore: true}}
-	api := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: p}, retentionResource(application))
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: p}, retentionResource(application))
 	r := serveRetentionHTTP(api, "GET", "/api/v1/users/me/retention-notices?limit=1", "", "")
 	var page retentionNoticesResponse
 	require.Equal(t, 200, r.Code, "notice=%d %s", r.Code, r.Body.String())

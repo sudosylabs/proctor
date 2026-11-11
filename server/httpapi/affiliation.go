@@ -13,6 +13,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -37,28 +38,28 @@ type affiliationHandlers struct {
 	app AffiliationApplication
 }
 
-func affiliationResource(app AffiliationApplication) apiResource {
+func affiliationResource(app AffiliationApplication) route.Resource {
 	h := affiliationHandlers{app: app}
-	return newResource(
+	return route.NewResource(
 		"affiliations",
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/users/{user_id}/affiliations",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: academicRelationshipReadErrorCodes(),
 			Handle: h.list,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/users/{user_id}/affiliations",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: academicRelationshipMutationErrorCodes("affiliation.invalid", "affiliation.conflict"),
 			Handle: h.create,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodDelete,
 			Path:   "/affiliations/{affiliation_id}",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: academicRelationshipMutationErrorCodes("affiliation.student_has_active_enrollment", "affiliation.conflict"),
 			Handle: h.end,
 		},
@@ -89,77 +90,77 @@ func academicRelationshipMutationErrorCodes(specific ...string) []string {
 	return append(codes, "administration.unavailable")
 }
 
-func (h affiliationHandlers) list(request operationRequest) (operationResult, error) {
-	userID, err := pathID[model.UserID](request, "user_id")
+func (h affiliationHandlers) list(request route.Request) (route.Result, error) {
+	userID, err := route.PathID[model.UserID](request, "user_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	values, err := h.app.ListAffiliations(request.context, request.invocation(), userID)
+	values, err := h.app.ListAffiliations(request.Context, request.Invocation(), userID)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	response, err := boundedListResult(
+	response, err := route.BoundedList(
 		request,
 		"Affiliation",
 		values,
-		func(value *model.Affiliation) boundedPageKey {
-			return boundedPageKey{At: value.CreatedAt, ID: value.ID.String()}
+		func(value *model.Affiliation) route.BoundedKey {
+			return route.BoundedKey{At: value.CreatedAt, ID: value.ID.String()}
 		},
 		affiliationResponseFromModel,
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, response), nil
+	return route.JSON(http.StatusOK, response), nil
 }
 
-func (h affiliationHandlers) create(request operationRequest) (operationResult, error) {
-	userID, err := pathID[model.UserID](request, "user_id")
+func (h affiliationHandlers) create(request route.Request) (route.Result, error) {
+	userID, err := route.PathID[model.UserID](request, "user_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body createAffiliationRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
-	startAt, err := wireTimeMillis("start_at", body.StartAt)
+	startAt, err := route.WireTimeMillis("start_at", body.StartAt)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	endAt, err := wireTimeMillis("end_at", body.EndAt)
+	endAt, err := route.WireTimeMillis("end_at", body.EndAt)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	saved, err := h.app.CreateAffiliation(request.context, request.invocation(), academic.CreateAffiliationCommand{
+	saved, err := h.app.CreateAffiliation(request.Context, request.Invocation(), academic.CreateAffiliationCommand{
 		UserID:  userID,
 		Kind:    body.Kind,
 		StartAt: startAt,
 		EndAt:   endAt,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusCreated, affiliationResponseFromModel(saved)), nil
+	return route.JSON(http.StatusCreated, affiliationResponseFromModel(saved)), nil
 }
 
-func (h affiliationHandlers) end(request operationRequest) (operationResult, error) {
-	id, err := pathID[model.AffiliationID](request, "affiliation_id")
+func (h affiliationHandlers) end(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.AffiliationID](request, "affiliation_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	ended, err := h.app.EndAffiliation(request.context, request.invocation(), academic.EndAffiliationCommand{ID: id})
+	ended, err := h.app.EndAffiliation(request.Context, request.Invocation(), academic.EndAffiliationCommand{ID: id})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, affiliationResponseFromModel(ended)), nil
+	return route.JSON(http.StatusOK, affiliationResponseFromModel(ended)), nil
 }
 
 func affiliationResponseFromModel(value *model.Affiliation) affiliationResponse {

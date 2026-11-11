@@ -20,6 +20,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -48,9 +50,9 @@ func (a *accountTokenInspectionHTTPApplication) InspectEmailChangeUndo(_ context
 
 func TestAccountTokenInspectionHTTPReadsTheBodyTokenAndIsNotCached(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	application := &accountTokenInspectionHTTPApplication{}
-	api := newFocusedResourceAPI(t, logger, classRouteAuthenticator{}, authenticationResource(nil, application, browserCookies{}))
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, authenticationResource(nil, application, route.Cookies{}))
 	token := model.NewCredentialToken()
 	post := func(path string) *httptest.ResponseRecorder {
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, strings.NewReader(`{"token":"`+token+`"}`))

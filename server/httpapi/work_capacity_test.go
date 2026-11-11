@@ -19,13 +19,15 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 )
 
 func TestLoginCapacityRefusalIsRetryableAndDoesNotIssueCredentials(t *testing.T) {
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	failure := apperror.New("service.busy").Wrap(errors.New("private capacity detail"))
 	fake := &authenticationEntryHTTPApplication{loginError: failure}
-	api := newFocusedResourceAPI(t, logger, classRouteAuthenticator{}, authenticationResource(fake, fake, browserCookies{}))
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, authenticationResource(fake, fake, route.Cookies{}))
 	request := newJSONRequest(http.MethodPost, "/api/v1/auth/login",
 		strings.NewReader(`{"login_id":"student","password":"example-password","client_type":"web"}`))
 	response := httptest.NewRecorder()
@@ -37,8 +39,8 @@ func TestLoginCapacityRefusalIsRetryableAndDoesNotIssueCredentials(t *testing.T)
 	require.Equal(t, "no-store", response.Header().Get("Cache-Control"), "capacity refusal retried internally, issued cookies, or was cacheable")
 	require.Contains(t, response.Body.String(), `"code":"service.busy"`)
 	require.NotContains(t, response.Body.String(), "private capacity detail")
-	require.False(t, applicationErrorRequiresLogging(failure), "capacity refusals must use bounded counters rather than per-request error logging")
-	require.True(t, applicationErrorRequiresLogging(apperror.New("authentication.internal")), "unexpected failures lost their operator diagnostics")
+	require.False(t, route.ErrorIsLogged(failure), "capacity refusals must use bounded counters rather than per-request error logging")
+	require.True(t, route.ErrorIsLogged(apperror.New("authentication.internal")), "unexpected failures lost their operator diagnostics")
 }
 
 func TestOnlyExpensiveWorkRoutesDeclareCapacityRefusal(t *testing.T) {
@@ -62,9 +64,9 @@ func TestOnlyExpensiveWorkRoutesDeclareCapacityRefusal(t *testing.T) {
 		"POST /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/correction-resource-stages": true,
 	}
 	api := newProductionCatalogAPI(t)
-	for _, route := range api.Routes() {
-		key := route.Method + " " + normalizeRuntimeRoutePath(route.Path)
-		assert.Equal(t, expected[key], slices.Contains(route.ErrorCodes, "service.busy"), "%s has incorrect capacity error declaration", key)
+	for _, entry := range api.Routes() {
+		key := entry.Method + " " + normalizeRuntimeRoutePath(entry.Path)
+		assert.Equal(t, expected[key], slices.Contains(entry.ErrorCodes, "service.busy"), "%s has incorrect capacity error declaration", key)
 		delete(expected, key)
 	}
 	require.Empty(t, expected)

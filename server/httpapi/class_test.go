@@ -22,6 +22,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -35,31 +37,10 @@ type classHTTPApplication struct {
 	searchErr      error
 }
 
-type classRouteAuthenticator struct {
-	principal model.Principal
-	err       error
-}
-
-func (a classRouteAuthenticator) AuthenticateAccess(context.Context, string) (*model.Principal, error) {
-	if a.err != nil {
-		return nil, a.err
-	}
-	principal := a.principal
-	return &principal, nil
-}
-
-func (a classRouteAuthenticator) AuthenticateBearer(context.Context, string) (*model.Principal, error) {
-	if a.err != nil {
-		return nil, a.err
-	}
-	principal := a.principal
-	return &principal, nil
-}
-
 func TestClassResourceRunsThroughRoutingKernelWithNarrowDependencies(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{
 		UserID:                 model.NewUserID(),
 		SessionID:              model.NewSessionID(),
@@ -81,7 +62,7 @@ func TestClassResourceRunsThroughRoutingKernelWithNarrowDependencies(t *testing.
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{principal: principal},
+		routetest.Authenticator{Principal: principal},
 		classResource(classes),
 	)
 
@@ -128,7 +109,7 @@ func TestClassResourceRunsThroughRoutingKernelWithNarrowDependencies(t *testing.
 func TestClassResourceFailsClosedForUndeclaredApplicationError(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{
 		UserID:                 model.NewUserID(),
 		SessionID:              model.NewSessionID(),
@@ -142,7 +123,7 @@ func TestClassResourceFailsClosedForUndeclaredApplicationError(t *testing.T) {
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{principal: principal},
+		routetest.Authenticator{Principal: principal},
 		classResource(&classHTTPApplication{searchErr: apperror.New("class.invalid")}),
 	)
 
@@ -155,7 +136,7 @@ func TestClassResourceFailsClosedForUndeclaredApplicationError(t *testing.T) {
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusInternalServerError, response.Code, "status = %d: %s", response.Code, response.Body.String())
-	var problem Problem
+	var problem route.Problem
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
 	require.Equal(t, "server.internal", problem.Code, "problem code")
 }
@@ -163,11 +144,11 @@ func TestClassResourceFailsClosedForUndeclaredApplicationError(t *testing.T) {
 func TestClassResourceFailsClosedForUndeclaredAuthenticationError(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{err: apperror.New("user.conflict")},
+		routetest.Authenticator{Err: apperror.New("user.conflict")},
 		classResource(&classHTTPApplication{}),
 	)
 	request := httptest.NewRequest(
@@ -179,7 +160,7 @@ func TestClassResourceFailsClosedForUndeclaredAuthenticationError(t *testing.T) 
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusInternalServerError, response.Code, "status = %d: %s", response.Code, response.Body.String())
-	var problem Problem
+	var problem route.Problem
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
 	require.Equal(t, "server.internal", problem.Code, "problem code")
 }
@@ -187,21 +168,18 @@ func TestClassResourceFailsClosedForUndeclaredAuthenticationError(t *testing.T) 
 func newFocusedResourceAPI(
 	t *testing.T,
 	logger *logging.Logger,
-	authenticator Authenticator,
-	resources ...apiResource,
-) *API {
+	authenticator route.Authenticator,
+	resources ...route.Resource,
+) *route.API {
 	t.Helper()
-	cookies, err := newBrowserCookies("http://localhost:8065")
+	httpAPI, err := route.New(route.Settings{
+		Logger:                  logger,
+		Localizer:               routetest.NewLocalizer(t),
+		PublicURL:               "http://localhost:8065",
+		MaxBodyBytes:            1 << 20,
+		RecentAuthenticationTTL: time.Minute,
+	}, authenticator, resources...)
 	require.NoError(t, err)
-	httpAPI := &API{
-		authenticator:           authenticator,
-		logger:                  logger,
-		localizer:               newTestLocalizer(t),
-		cookies:                 cookies,
-		browserRequests:         browserRequestPolicy{origin: "http://localhost:8065"},
-		recentAuthenticationTTL: time.Minute,
-	}
-	require.NoError(t, httpAPI.compileRoutes(model.APIURLSuffix, 1<<20, resources...))
 	return httpAPI
 }
 
@@ -217,7 +195,7 @@ func (a *classHTTPApplication) SearchClasses(context.Context, invocation.Invocat
 
 func TestClassSearchMapsMissingAcademicUnit(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
 	classes := &classHTTPApplication{searchErr: apperror.New("resource.not_found").WithField("resource", "academic_unit")}
 	transport := &academicUnitHTTPApplication{principal: principal}
@@ -247,7 +225,7 @@ func (a *classHTTPApplication) ArchiveClass(_ context.Context, _ invocation.Invo
 
 func TestClassHTTPMapsBothParentsFromRouteAndBody(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
 	class := &model.Class{ID: model.ClassID(model.NewID()), ProgrammeLevelID: model.ProgrammeLevelID(model.NewID()), AcademicPeriodID: model.AcademicPeriodID(model.NewID()), Name: "class-a", DisplayName: "Class A"}
 	classes := &classHTTPApplication{result: class}

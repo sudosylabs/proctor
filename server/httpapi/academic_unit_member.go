@@ -13,6 +13,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -63,21 +64,21 @@ type academicUnitMemberHandlers struct {
 	app AcademicUnitMemberApplication
 }
 
-func academicUnitMemberResource(app AcademicUnitMemberApplication) apiResource {
+func academicUnitMemberResource(app AcademicUnitMemberApplication) route.Resource {
 	h := academicUnitMemberHandlers{app: app}
-	return newResource(
+	return route.NewResource(
 		"academic-unit-members",
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/academic-units/{academic_unit_id}/members",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: academicRelationshipReadErrorCodes(),
 			Handle: h.list,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/academic-units/{academic_unit_id}/members",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -92,10 +93,10 @@ func academicUnitMemberResource(app AcademicUnitMemberApplication) apiResource {
 			},
 			Handle: h.create,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodDelete,
 			Path:   "/academic-unit-members/{academic_unit_member_id}",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -112,26 +113,26 @@ func academicUnitMemberResource(app AcademicUnitMemberApplication) apiResource {
 	)
 }
 
-func (h academicUnitMemberHandlers) list(request operationRequest) (operationResult, error) {
-	unitID, err := pathID[model.AcademicUnitID](request, "academic_unit_id")
+func (h academicUnitMemberHandlers) list(request route.Request) (route.Result, error) {
+	unitID, err := route.PathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	scope := model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()}
-	query, after, err := membershipPageQuery(request.http, scope)
+	query, after, err := membershipPageQuery(request.HTTP, scope)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	page, err := h.app.ListAcademicUnitMembersPage(request.context, request.invocation(), academic.ListAcademicUnitMembersPageQuery{
+	page, err := h.app.ListAcademicUnitMembersPage(request.Context, request.Invocation(), academic.ListAcademicUnitMembersPageQuery{
 		AcademicUnitID:      unitID,
 		MembershipPageQuery: query,
 		AfterUserID:         model.UserID(after.AfterUserID),
 		AfterID:             model.AcademicUnitMemberID(after.AfterID),
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	present := func(member *model.AcademicUnitMember) academicUnitMemberListItemResponse {
@@ -149,44 +150,44 @@ func (h academicUnitMemberHandlers) list(request operationRequest) (operationRes
 	)
 }
 
-func (h academicUnitMemberHandlers) create(request operationRequest) (operationResult, error) {
-	unitID, err := pathID[model.AcademicUnitID](request, "academic_unit_id")
+func (h academicUnitMemberHandlers) create(request route.Request) (route.Result, error) {
+	unitID, err := route.PathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body createAcademicUnitMemberRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
-	startAt, err := wireTimeMillis("start_at", body.StartAt)
+	startAt, err := route.WireTimeMillis("start_at", body.StartAt)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	saved, err := h.app.CreateAcademicUnitMember(request.context, request.invocation(), academic.CreateAcademicUnitMemberCommand{
+	saved, err := h.app.CreateAcademicUnitMember(request.Context, request.Invocation(), academic.CreateAcademicUnitMemberCommand{
 		AcademicUnitID: unitID,
 		UserID:         model.UserID(body.UserID),
 		StartAt:        startAt,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusCreated, academicUnitMemberResponseFromModel(saved)), nil
+	return route.JSON(http.StatusCreated, academicUnitMemberResponseFromModel(saved)), nil
 }
 
-func (h academicUnitMemberHandlers) end(request operationRequest) (operationResult, error) {
-	id, err := pathID[model.AcademicUnitMemberID](request, "academic_unit_member_id")
+func (h academicUnitMemberHandlers) end(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.AcademicUnitMemberID](request, "academic_unit_member_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	ended, err := h.app.EndAcademicUnitMember(request.context, request.invocation(), academic.EndAcademicUnitMemberCommand{ID: id})
+	ended, err := h.app.EndAcademicUnitMember(request.Context, request.Invocation(), academic.EndAcademicUnitMemberCommand{ID: id})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, academicUnitMemberResponseFromModel(ended)), nil
+	return route.JSON(http.StatusOK, academicUnitMemberResponseFromModel(ended)), nil
 }
 
 func academicUnitMemberResponseFromModel(member *model.AcademicUnitMember) academicUnitMemberResponse {

@@ -19,6 +19,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -55,8 +56,8 @@ func roleResponseFromModel(request *http.Request, role *model.Role) roleResponse
 
 	displayName, description := role.DisplayName, role.Description
 	if role.BuiltIn && role.Name == model.SystemAdministratorRoleName {
-		displayName = translatedRequestText(request, systemAdministratorRoleNameID, displayName)
-		description = translatedRequestText(request, systemAdministratorRoleDescriptionID, description)
+		displayName = route.Translate(request, systemAdministratorRoleNameID, displayName)
+		description = route.Translate(request, systemAdministratorRoleDescriptionID, description)
 	}
 
 	return roleResponse{
@@ -76,14 +77,14 @@ type roleHandlers struct {
 	app RoleApplication
 }
 
-func roleResource(app RoleApplication) apiResource {
+func roleResource(app RoleApplication) route.Resource {
 	h := roleHandlers{app: app}
-	return newResource(
+	return route.NewResource(
 		"roles",
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/roles",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -94,10 +95,10 @@ func roleResource(app RoleApplication) apiResource {
 			},
 			Handle: h.list,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/roles",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -112,17 +113,17 @@ func roleResource(app RoleApplication) apiResource {
 			},
 			Handle: h.create,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/roles/{role_id}",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: operatorReadErrorCodes("request.invalid", "resource.not_found", "administration.unavailable"),
 			Handle: h.get,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPatch,
 			Path:   "/roles/{role_id}",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: operatorMutationErrorCodes(
 				"request.invalid",
 				"resource.not_found",
@@ -134,10 +135,10 @@ func roleResource(app RoleApplication) apiResource {
 			),
 			Handle: h.patch,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodDelete,
 			Path:   "/roles/{role_id}",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: operatorMutationErrorCodes(
 				"request.invalid",
 				"resource.not_found",
@@ -164,54 +165,56 @@ func operatorMutationErrorCodes(specific ...string) []string {
 	return append(codes, specific...)
 }
 
-func (h roleHandlers) list(request operationRequest) (operationResult, error) {
+func (h roleHandlers) list(request route.Request) (route.Result, error) {
 	roles, err := h.app.ListRoles(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	response, err := boundedListResult(
+	response, err := route.BoundedList(
 		request,
 		"Role",
 		roles,
-		func(role *model.Role) boundedPageKey { return boundedPageKey{Name: role.Name, ID: role.ID.String()} },
-		func(role *model.Role) roleResponse { return roleResponseFromModel(request.http, role) },
+		func(role *model.Role) route.BoundedKey {
+			return route.BoundedKey{Name: role.Name, ID: role.ID.String()}
+		},
+		func(role *model.Role) roleResponse { return roleResponseFromModel(request.HTTP, role) },
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, response), nil
+	return route.JSON(http.StatusOK, response), nil
 }
 
-func (h roleHandlers) get(request operationRequest) (operationResult, error) {
-	roleID, err := pathID[model.RoleID](request, "role_id")
+func (h roleHandlers) get(request route.Request) (route.Result, error) {
+	roleID, err := route.PathID[model.RoleID](request, "role_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	role, err := h.app.GetRole(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		roleID,
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, roleResponseFromModel(request.http, role)), nil
+	return route.JSON(http.StatusOK, roleResponseFromModel(request.HTTP, role)), nil
 }
 
-func (h roleHandlers) create(request operationRequest) (operationResult, error) {
+func (h roleHandlers) create(request route.Request) (route.Result, error) {
 	var input createRoleRequest
-	if err := request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
 	}
 
 	saved, err := h.app.CreateRole(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		administration.CreateRoleCommand{
 			Name:        input.Name,
 			DisplayName: input.DisplayName,
@@ -220,26 +223,26 @@ func (h roleHandlers) create(request operationRequest) (operationResult, error) 
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusCreated, roleResponseFromModel(request.http, saved)), nil
+	return route.JSON(http.StatusCreated, roleResponseFromModel(request.HTTP, saved)), nil
 }
 
-func (h roleHandlers) patch(request operationRequest) (operationResult, error) {
-	roleID, err := pathID[model.RoleID](request, "role_id")
+func (h roleHandlers) patch(request route.Request) (route.Result, error) {
+	roleID, err := route.PathID[model.RoleID](request, "role_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var input updateRoleRequest
-	if err = request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
 	}
 
 	updated, err := h.app.UpdateRole(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		administration.UpdateRoleCommand{
 			ID:          roleID,
 			DisplayName: input.DisplayName,
@@ -248,25 +251,25 @@ func (h roleHandlers) patch(request operationRequest) (operationResult, error) {
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, roleResponseFromModel(request.http, updated)), nil
+	return route.JSON(http.StatusOK, roleResponseFromModel(request.HTTP, updated)), nil
 }
 
-func (h roleHandlers) archive(request operationRequest) (operationResult, error) {
-	roleID, err := pathID[model.RoleID](request, "role_id")
+func (h roleHandlers) archive(request route.Request) (route.Result, error) {
+	roleID, err := route.PathID[model.RoleID](request, "role_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if err := h.app.ArchiveRole(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		administration.ArchiveRoleCommand{ID: roleID},
 	); err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return noContentResult(), nil
+	return route.NoContent(), nil
 }
 
 // RoleApplication is the application port its handlers call; it reads and changes Roles.

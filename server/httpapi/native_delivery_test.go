@@ -23,6 +23,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -44,7 +45,7 @@ func (f *nativeDeliveryHTTPFake) UpdateNativeDeliverySummary(context.Context, in
 
 func TestNativeDeliveryHTTPPreservesOptionalHistoricalFences(t *testing.T) {
 	f := &nativeDeliveryHTTPFake{examAttemptHTTPFake: newExamAttemptHTTPFake(t)}
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	api := newFocusedResourceAPI(t, logger, f, nativeDeliveryResource(f))
 	path := "/api/v1/exam-attempts/" + f.attempt.ID.String() + "/security-streams/" + model.NewID()
 	for _, live := range []bool{true, false} {
@@ -78,7 +79,7 @@ func TestNativeDeliveryHTTPPreservesOptionalHistoricalFences(t *testing.T) {
 
 func TestNativeDeliverySummaryStrictBodyAndRetryDelay(t *testing.T) {
 	f := &nativeDeliveryHTTPFake{examAttemptHTTPFake: newExamAttemptHTTPFake(t)}
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	api := newFocusedResourceAPI(t, logger, f, nativeDeliveryResource(f))
 	path := "/api/v1/exam-attempts/" + f.attempt.ID.String() + "/security-streams/" + model.NewID() + "/summary"
 	for _, body := range []string{
@@ -118,7 +119,7 @@ func (f *nativeDeliveryHTTPFake) AppendNativeDelivery(_ context.Context, _ invoc
 
 func TestNativeDeliveryAppendClosedBodyAndBounds(t *testing.T) {
 	f := &nativeDeliveryHTTPFake{examAttemptHTTPFake: newExamAttemptHTTPFake(t)}
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	api := newFocusedResourceAPI(t, logger, f, nativeDeliveryResource(f))
 	path := "/api/v1/exam-attempts/" + f.attempt.ID.String() + "/security-batches"
 	batch := model.NativeSecurityBatch{StreamID: model.NewID(), BatchSequence: 1, ParticipationID: model.NewAttemptParticipationID(), Generation: 1, SecuritySessionID: model.NewID(), PolicyDigest: model.SHA256Fingerprint([]byte("synthetic-policy")), ApplicationReleaseID: "synthetic-release", MatrixID: "synthetic-matrix", Records: []model.NativeRecord{{Gap: &model.NativeSourceGap{Kind: "source_gap", SourceID: model.NativeSourceCapture, SourceInstanceID: model.NewID(), Reason: "source_loss", OccurredAt: time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC)}}}}

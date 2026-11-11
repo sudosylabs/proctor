@@ -29,7 +29,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/sudosylabs/proctor/server/config"
-	"github.com/sudosylabs/proctor/server/httpapi"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 	"github.com/sudosylabs/proctor/server/testlib"
@@ -172,7 +172,7 @@ func TestOIDCExternalAuthenticationIntegration(t *testing.T) {
 	require.Equal(t, "S256", authorizationURL.Query().Get("code_challenge_method"))
 	var bindingCookie *http.Cookie
 	for _, cookie := range begin.Result().Cookies() {
-		if cookie.Name == httpapi.BrowserExternalLoginCookieName {
+		if cookie.Name == route.BrowserExternalLoginCookieName {
 			bindingCookie = cookie
 		}
 	}
@@ -249,7 +249,7 @@ func TestOIDCExternalAuthenticationIntegration(t *testing.T) {
 	transactionMutex.Unlock()
 	var invitationBinding *http.Cookie
 	for _, cookie := range invitationBegin.Result().Cookies() {
-		if cookie.Name == httpapi.BrowserExternalLoginCookieName {
+		if cookie.Name == route.BrowserExternalLoginCookieName {
 			invitationBinding = cookie
 		}
 	}
@@ -312,7 +312,7 @@ func TestOIDCExternalAuthenticationIntegration(t *testing.T) {
 	require.Equal(t, http.StatusSeeOther, deniedBegin.Code, "denied-flow begin status=%d location=%q error", deniedBegin.Code, deniedBegin.Header().Get("Location"))
 	var deniedBindingCookie *http.Cookie
 	for _, cookie := range deniedBegin.Result().Cookies() {
-		if cookie.Name == httpapi.BrowserExternalLoginCookieName {
+		if cookie.Name == route.BrowserExternalLoginCookieName {
 			deniedBindingCookie = cookie
 		}
 	}
@@ -358,7 +358,7 @@ func TestOIDCExternalAuthenticationIntegration(t *testing.T) {
 		transactionMutex.Unlock()
 		var repeatBinding *http.Cookie
 		for _, cookie := range begin.Result().Cookies() {
-			if cookie.Name == httpapi.BrowserExternalLoginCookieName {
+			if cookie.Name == route.BrowserExternalLoginCookieName {
 				repeatBinding = cookie
 			}
 		}

@@ -23,6 +23,7 @@ import (
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/filecontent"
 	"github.com/sudosylabs/proctor/server/httpapi"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/localization"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
@@ -363,12 +364,12 @@ func httpAPISettings(
 	webSocketHub *websocket.Hub,
 	localizer *localization.Localizer,
 ) (httpapi.Settings, error) {
-	var httpMetrics httpapi.Metrics
+	var httpMetrics route.Metrics
 	if capabilities.metrics.Enabled() {
 		httpMetrics = capabilities.metrics
 	}
 
-	var httpTracer httpapi.Tracing
+	var httpTracer route.Tracing
 	if capabilities.tracing.Enabled() {
 		httpTracer = httpTracing{tracing: capabilities.tracing}
 	}
@@ -398,7 +399,7 @@ func httpAPISettings(
 
 // composeRootTransport constructs the hosted webapp and wraps it with the HTTP API in the root transport.
 func composeRootTransport(
-	httpAPI *httpapi.API,
+	httpAPI *route.API,
 	buildInfo httpapi.BuildInfo,
 	snapshot config.Config,
 	overrideWebappFiles fs.FS,

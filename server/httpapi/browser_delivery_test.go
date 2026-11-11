@@ -17,6 +17,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -34,7 +35,7 @@ func TestBrowserDeliveryHTTPDecodesExpandedUnicodeNavigation(t *testing.T) {
 	request := httptest.NewRequest("POST", "/", bytes.NewReader(raw))
 	request.Header.Set("Content-Type", "application/json")
 	var decoded model.BrowserActivityBatch
-	require.NoError(t, (operationRequest{http: request}).decodeJSON(&decoded))
+	require.NoError(t, (route.Request{HTTP: request}).DecodeJSON(&decoded))
 	require.Len(t, decoded.Events, 1, "HTTP decoding changed serialized navigation")
 	require.Equal(t, location.Path, decoded.Events[0].Location.Path, "HTTP decoding changed serialized navigation")
 }

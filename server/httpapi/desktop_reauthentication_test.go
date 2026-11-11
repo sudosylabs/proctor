@@ -19,6 +19,8 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -45,13 +47,13 @@ func (a *desktopReauthenticationHTTPApplication) CompleteDesktopReauthentication
 
 func TestDesktopReauthenticationHTTPScopesItsBindingAndReturnsRecency(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	applicationFake := &desktopReauthenticationHTTPApplication{}
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now()}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal},
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal},
 		desktopReauthenticationResource(applicationFake, testDesktopAuthorizationCookies(t)))
 
 	bind := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/auth/desktop/reauthentications/bind",
@@ -62,7 +64,7 @@ func TestDesktopReauthenticationHTTPScopesItsBindingAndReturnsRecency(t *testing
 	require.Equal(t, http.StatusNoContent, response.Code, response.Body.String())
 	cookies := response.Result().Cookies()
 	require.Len(t, cookies, 1)
-	require.Equal(t, BrowserDesktopReauthenticationCookieName, cookies[0].Name)
+	require.Equal(t, route.BrowserDesktopReauthenticationCookieName, cookies[0].Name)
 	require.Equal(t, "/api/v1/auth/desktop/reauthentications", cookies[0].Path, "binding escaped its route family")
 	require.True(t, cookies[0].HttpOnly, "binding is readable by page script")
 	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
@@ -78,7 +80,7 @@ func TestDesktopReauthenticationHTTPScopesItsBindingAndReturnsRecency(t *testing
 	password = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/auth/desktop/reauthentications/authenticate/password",
 		strings.NewReader(`{"password":"synthetic-local-password"}`))
 	password.Header.Set("Content-Type", "application/json")
-	password.AddCookie(&http.Cookie{Name: BrowserDesktopReauthenticationCookieName, Value: "reauthentication-binding", HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
+	password.AddCookie(&http.Cookie{Name: route.BrowserDesktopReauthenticationCookieName, Value: "reauthentication-binding", HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
 	response = httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, password)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())

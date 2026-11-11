@@ -15,6 +15,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -62,29 +63,29 @@ type externalAuthenticationEntryApplication interface {
 
 type externalAuthenticationHandlers struct {
 	app     externalAuthenticationEntryApplication
-	cookies browserCookies
+	cookies route.Cookies
 }
 
 func externalAuthenticationResource(
 	app externalAuthenticationEntryApplication,
-	cookies browserCookies,
-) apiResource {
+	cookies route.Cookies,
+) route.Resource {
 	h := externalAuthenticationHandlers{app: app, cookies: cookies}
-	return newResource(
+	return route.NewResource(
 		"external-authentication",
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/auth/providers",
-			Auth:   AuthPublic,
+			Auth:   route.AuthPublic,
 			Errors: []string{"authentication.internal", "request.invalid"},
 			Handle: h.listProviders,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:       http.MethodGet,
 			Path:         "/auth/providers/{provider_id:provider}/login",
-			Auth:         AuthPublic,
+			Auth:         route.AuthPublic,
 			ProtocolName: "external-authentication-login-redirect",
-			ProtocolKind: RouteProtocolRedirect,
+			ProtocolKind: route.ProtocolRedirect,
 			Errors: []string{
 				"request.invalid",
 				"authentication.external.request.invalid",
@@ -100,12 +101,12 @@ func externalAuthenticationResource(
 			},
 			Protocol: h.begin,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:       http.MethodPost,
 			Path:         "/auth/providers/{provider_id:provider}/login",
-			Auth:         AuthPublic,
+			Auth:         route.AuthPublic,
 			ProtocolName: "external-authentication-login-post-redirect",
-			ProtocolKind: RouteProtocolRedirect,
+			ProtocolKind: route.ProtocolRedirect,
 			Errors: []string{
 				"request.invalid",
 				"authentication.external.request.invalid",
@@ -121,12 +122,12 @@ func externalAuthenticationResource(
 			},
 			Protocol: h.beginFromBody,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:       http.MethodGet,
 			Path:         "/auth/providers/{provider_id:provider}/callback",
-			Auth:         AuthPublic,
+			Auth:         route.AuthPublic,
 			ProtocolName: "external-authentication-callback-redirect",
-			ProtocolKind: RouteProtocolRedirect,
+			ProtocolKind: route.ProtocolRedirect,
 			Errors: []string{
 				"request.invalid",
 				"authentication.external.invalid",
@@ -153,23 +154,23 @@ func externalAuthenticationResource(
 	)
 }
 
-func (h externalAuthenticationHandlers) beginFromBody(request operationRequest) (protocolResult, error) {
-	providerID, appErr := pathProviderID(request, "provider_id")
+func (h externalAuthenticationHandlers) beginFromBody(request route.Request) (route.ProtocolResult, error) {
+	providerID, appErr := route.PathProviderID(request, "provider_id")
 	if appErr != nil {
-		return protocolResult{}, appErr
+		return route.ProtocolResult{}, appErr
 	}
 
 	var body externalAuthenticationStartRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return protocolResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.ProtocolResult{}, err
 	}
 	if !model.IsValidCredentialToken(body.InvitationClaim) {
-		return protocolResult{}, invalidRequestError(errors.New("must be a valid Invitation claim"))
+		return route.ProtocolResult{}, route.InvalidRequest(errors.New("must be a valid Invitation claim"))
 	}
 
 	start, err := h.app.BeginExternalAuthentication(
-		request.context,
-		invocation.New(model.Principal{}, request.metadata),
+		request.Context,
+		invocation.New(model.Principal{}, request.Metadata),
 		identity.BeginExternalAuthenticationCommand{
 			ProviderID:      providerID,
 			InvitationClaim: body.InvitationClaim,
@@ -177,129 +178,129 @@ func (h externalAuthenticationHandlers) beginFromBody(request operationRequest) 
 			ClientType:      model.SessionClientWeb,
 			DeviceID:        body.DeviceID,
 			DeviceName:      body.DeviceName,
-			Source:          request.metadata.IPAddress,
+			Source:          request.Metadata.IPAddress,
 		},
 	)
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
 
-	headers := captureResponseHeaders(func(writer http.ResponseWriter) {
-		h.cookies.attachExternalLoginBinding(writer, start.Binding, start.ExpiresAt)
+	headers := route.CaptureHeaders(func(writer http.ResponseWriter) {
+		h.cookies.AttachExternalLoginBinding(writer, start.Binding, start.ExpiresAt)
 	})
 	headers.Set("Cache-Control", "no-store")
-	return redirectProtocolResult(start.RedirectURL).withHeaders(headers), nil
+	return route.Redirect(start.RedirectURL).WithHeaders(headers), nil
 }
 
-func (h externalAuthenticationHandlers) listProviders(request operationRequest) (operationResult, error) {
-	providers, err := h.app.ExternalAuthenticationProviders(request.context, request.invocation())
+func (h externalAuthenticationHandlers) listProviders(request route.Request) (route.Result, error) {
+	providers, err := h.app.ExternalAuthenticationProviders(request.Context, request.Invocation())
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	response, err := boundedListResult(
+	response, err := route.BoundedList(
 		request,
 		"authentication provider",
 		providers,
-		func(provider model.ExternalAuthenticationProvider) boundedPageKey {
-			return boundedPageKey{Name: provider.ID, ID: provider.ID}
+		func(provider model.ExternalAuthenticationProvider) route.BoundedKey {
+			return route.BoundedKey{Name: provider.ID, ID: provider.ID}
 		},
 		func(provider model.ExternalAuthenticationProvider) externalAuthenticationProviderResponse {
 			return externalAuthenticationProviderResponse{ID: provider.ID, DisplayName: provider.DisplayName, Type: provider.Type}
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, response), nil
+	return route.JSON(http.StatusOK, response), nil
 }
 
 func (h externalAuthenticationHandlers) begin(
-	request operationRequest,
-) (protocolResult, error) {
-	providerID, appErr := pathProviderID(request, "provider_id")
+	request route.Request,
+) (route.ProtocolResult, error) {
+	providerID, appErr := route.PathProviderID(request, "provider_id")
 	if appErr != nil {
-		return protocolResult{}, appErr
+		return route.ProtocolResult{}, appErr
 	}
 
 	clientType := model.SessionClientWeb
-	if requested := request.queryValue("client_type"); requested != "" {
+	if requested := request.QueryValue("client_type"); requested != "" {
 		clientType = model.SessionClientType(requested)
 	}
 
 	start, err := h.app.BeginExternalAuthentication(
-		request.context,
-		invocation.New(model.Principal{}, request.metadata),
+		request.Context,
+		invocation.New(model.Principal{}, request.Metadata),
 		identity.BeginExternalAuthenticationCommand{
 			ProviderID: providerID,
-			ReturnTo:   request.queryValue("return_to"),
+			ReturnTo:   request.QueryValue("return_to"),
 			ClientType: clientType,
-			DeviceID:   request.queryValue("device_id"),
-			DeviceName: request.queryValue("device_name"),
-			Source:     request.metadata.IPAddress,
+			DeviceID:   request.QueryValue("device_id"),
+			DeviceName: request.QueryValue("device_name"),
+			Source:     request.Metadata.IPAddress,
 		},
 	)
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
 
-	headers := captureResponseHeaders(func(writer http.ResponseWriter) {
-		h.cookies.attachExternalLoginBinding(writer, start.Binding, start.ExpiresAt)
+	headers := route.CaptureHeaders(func(writer http.ResponseWriter) {
+		h.cookies.AttachExternalLoginBinding(writer, start.Binding, start.ExpiresAt)
 	})
 	headers.Set("Cache-Control", "no-store")
-	return redirectProtocolResult(start.RedirectURL).withHeaders(headers), nil
+	return route.Redirect(start.RedirectURL).WithHeaders(headers), nil
 }
 
 func (h externalAuthenticationHandlers) complete(
-	request operationRequest,
-) (protocolResult, error) {
-	clearBinding := captureResponseHeaders(h.cookies.clearExternalLoginBinding)
-	providerID, appErr := pathProviderID(request, "provider_id")
+	request route.Request,
+) (route.ProtocolResult, error) {
+	clearBinding := route.CaptureHeaders(h.cookies.ClearExternalLoginBinding)
+	providerID, appErr := route.PathProviderID(request, "provider_id")
 	if appErr != nil {
-		return protocolResult{}, errorWithHeaders(appErr, clearBinding)
+		return route.ProtocolResult{}, route.ErrorWithHeaders(appErr, clearBinding)
 	}
 
-	binding, cookieErr := singleCookieValue(
-		request.http,
-		BrowserExternalLoginCookieName,
+	binding, cookieErr := route.CookieValue(
+		request.HTTP,
+		route.BrowserExternalLoginCookieName,
 	)
 	if cookieErr != nil || binding == "" {
-		return protocolResult{}, errorWithHeaders(invalidExternalCallbackError(), clearBinding)
+		return route.ProtocolResult{}, route.ErrorWithHeaders(invalidExternalCallbackError(), clearBinding)
 	}
 
-	callback, appErr := externalAuthenticationCallbackFromRequest(request.http)
+	callback, appErr := externalAuthenticationCallbackFromRequest(request.HTTP)
 	if appErr != nil {
-		return protocolResult{}, errorWithHeaders(appErr, clearBinding)
+		return route.ProtocolResult{}, route.ErrorWithHeaders(appErr, clearBinding)
 	}
 
 	completion, err := h.app.CompleteExternalAuthentication(
-		request.context,
-		invocation.New(model.Principal{}, request.metadata),
+		request.Context,
+		invocation.New(model.Principal{}, request.Metadata),
 		identity.CompleteExternalAuthenticationCommand{
 			ProviderID: providerID,
 			Binding:    binding,
 			Callback:   callback,
-			Source:     request.metadata.IPAddress,
+			Source:     request.Metadata.IPAddress,
 		},
 	)
 	if err != nil {
-		return protocolResult{}, errorWithHeaders(err, clearBinding)
+		return route.ProtocolResult{}, route.ErrorWithHeaders(err, clearBinding)
 	}
 
 	if completion.Restart != nil {
-		headers := captureResponseHeaders(func(writer http.ResponseWriter) {
-			h.cookies.attachExternalLoginBinding(writer, completion.Restart.Binding, completion.Restart.ExpiresAt)
+		headers := route.CaptureHeaders(func(writer http.ResponseWriter) {
+			h.cookies.AttachExternalLoginBinding(writer, completion.Restart.Binding, completion.Restart.ExpiresAt)
 		})
 		headers.Set("Cache-Control", "no-store")
-		return redirectProtocolResult(completion.Restart.RedirectURL).withHeaders(headers), nil
+		return route.Redirect(completion.Restart.RedirectURL).WithHeaders(headers), nil
 	}
 
-	headers := combineResponseHeaders(clearBinding, captureResponseHeaders(func(writer http.ResponseWriter) {
-		h.cookies.attach(writer, completion.Tokens)
+	headers := route.CombineHeaders(clearBinding, route.CaptureHeaders(func(writer http.ResponseWriter) {
+		h.cookies.Attach(writer, completion.Tokens)
 	}))
 	headers.Set("Cache-Control", "no-store")
-	return redirectProtocolResult(completion.ReturnTo).withHeaders(headers), nil
+	return route.Redirect(completion.ReturnTo).WithHeaders(headers), nil
 }
 
 func externalAuthenticationCallbackFromRequest(

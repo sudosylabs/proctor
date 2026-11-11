@@ -27,6 +27,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/app/user"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -208,7 +210,7 @@ func (a *userProfileHTTPApplication) GetProfilePicture(_ context.Context, _ invo
 
 func TestCurrentUserContextHTTPReturnsClosedNoStoreDTO(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	userID := model.NewUserID()
 	profiles := &userProfileHTTPApplication{contextResult: &user.CurrentUserContextView{
 		UserID: userID, Username: "student", DisplayName: "Student",
@@ -224,7 +226,7 @@ func TestCurrentUserContextHTTPReturnsClosedNoStoreDTO(t *testing.T) {
 	session := model.Principal{UserID: userID, SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now()}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: session}, userProfileResource(profiles, profiles, profiles))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: session}, userProfileResource(profiles, profiles, profiles))
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/me/context", nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
@@ -244,12 +246,12 @@ func TestCurrentUserContextHTTPReturnsClosedNoStoreDTO(t *testing.T) {
 
 func TestUserProfileHTTPUsesAllowlistedDTOAndRouteID(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
 	userID := model.NewID()
 	account := &model.User{ID: model.UserID(userID), CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100), Revision: 7, Username: "student", Email: "student@example.edu", DisplayName: "Student", Locale: "en", Timezone: "UTC", ProfilePictureChangedAt: model.OptionalTimeFromMillis(500)}
 	profiles := &userProfileHTTPApplication{result: account}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userProfileResource(profiles, profiles, profiles))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userProfileResource(profiles, profiles, profiles))
 	request := httptest.NewRequest(http.MethodPatch, "/api/v1/users/"+userID, strings.NewReader(`{"display_name":"Updated"}`))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
@@ -305,10 +307,10 @@ func TestUserProfileHTTPUsesAllowlistedDTOAndRouteID(t *testing.T) {
 
 func TestGenericUserProfilePatchRejectsEmailSecurityFields(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
 	profiles := &userProfileHTTPApplication{result: &model.User{ID: model.NewUserID()}}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userProfileResource(profiles, profiles, profiles))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userProfileResource(profiles, profiles, profiles))
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodPatch, "/api/v1/users/"+model.NewID(), strings.NewReader(`{"email":"redirect@example.edu","email_verified":true}`))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
@@ -320,7 +322,7 @@ func TestGenericUserProfilePatchRejectsEmailSecurityFields(t *testing.T) {
 
 func TestEmailMutationResponsesUseNarrowAccountStateProjection(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	now := time.Now()
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
@@ -331,7 +333,7 @@ func TestEmailMutationResponsesUseNarrowAccountStateProjection(t *testing.T) {
 		Revision: 9, Username: "private-user", Email: "private@example.edu", EmailVerified: false,
 		DisplayName: "Private User", Locale: "fr", Timezone: "Europe/Paris",
 		LastLoginAt: model.OptionalTimeFrom(now.Add(-time.Minute)), LastActivityAt: model.OptionalTimeFrom(now)}}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userProfileResource(profiles, profiles, profiles))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userProfileResource(profiles, profiles, profiles))
 
 	for _, test := range []struct {
 		name, method, path, body string
@@ -364,7 +366,7 @@ func TestEmailMutationResponsesUseNarrowAccountStateProjection(t *testing.T) {
 
 func TestUserSearchTransportPreservesIncludeDisabledRequestForApplicationAuthorization(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
@@ -372,7 +374,7 @@ func TestUserSearchTransportPreservesIncludeDisabledRequestForApplicationAuthori
 		ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now(),
 	}
 	profiles := &userProfileHTTPApplication{}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userProfileResource(profiles, profiles, profiles))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userProfileResource(profiles, profiles, profiles))
 	for _, test := range []struct {
 		name            string
 		query           string
@@ -394,7 +396,7 @@ func TestUserSearchTransportPreservesIncludeDisabledRequestForApplicationAuthori
 
 func TestUserSearchTransportReadsAffiliationAndUnitFilters(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
@@ -402,7 +404,7 @@ func TestUserSearchTransportReadsAffiliationAndUnitFilters(t *testing.T) {
 		ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now(),
 	}
 	profiles := &userProfileHTTPApplication{}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userProfileResource(profiles, profiles, profiles))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userProfileResource(profiles, profiles, profiles))
 	serve := func(query string) *httptest.ResponseRecorder {
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users"+query, nil)
 		request.Header.Set("Authorization", "Bearer credential")
@@ -432,7 +434,7 @@ func TestUserSearchTransportReadsAffiliationAndUnitFilters(t *testing.T) {
 
 func TestUserSearchTransportPresentsEachUsersSummary(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
@@ -451,7 +453,7 @@ func TestUserSearchTransportPresentsEachUsersSummary(t *testing.T) {
 		}}}},
 		{User: plain, Memberships: store.UserDirectorySummary{UserID: plain.ID}},
 	}}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userProfileResource(profiles, profiles, profiles))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userProfileResource(profiles, profiles, profiles))
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users", nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
@@ -534,7 +536,7 @@ func TestProfilePictureIfMatchRequiresOneCanonicalStrongETag(t *testing.T) {
 
 func TestLoginResponseDoesNotExposeUserRevision(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	application := &loginRevisionHTTPApplication{user: &model.User{
 		ID: model.NewUserID(), Revision: 7, Username: "student",
 	}}
@@ -548,8 +550,8 @@ func TestLoginResponseDoesNotExposeUserRevision(t *testing.T) {
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{},
-		authenticationResource(nil, application, browserCookies{}),
+		routetest.Authenticator{},
+		authenticationResource(nil, application, route.Cookies{}),
 	)
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
@@ -563,11 +565,11 @@ func TestLoginResponseDoesNotExposeUserRevision(t *testing.T) {
 
 func TestAccountDisableUsesApplicationCommandAndAllowlistedResponse(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
 	userID := model.NewID()
 	accounts := &accountStateHTTPApplication{result: &model.User{ID: model.UserID(userID), Revision: 4, Username: "student", DisabledAt: model.OptionalTimeFromMillis(500)}}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userAdministrationResource(accounts, &sessionAdministrationHTTPApplication{}))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userAdministrationResource(accounts, &sessionAdministrationHTTPApplication{}))
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/users/"+userID+"/disable", nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
@@ -584,12 +586,12 @@ func TestAccountDisableUsesApplicationCommandAndAllowlistedResponse(t *testing.T
 
 func TestAccountDisableReadsAnOptionalReasonBody(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
 	userID := model.NewID()
 	serve := func(path, body string) (*httptest.ResponseRecorder, *accountStateHTTPApplication) {
 		accounts := &accountStateHTTPApplication{result: &model.User{ID: model.UserID(userID), Username: "student", DisabledAt: model.OptionalTimeFromMillis(500)}}
-		httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userAdministrationResource(accounts, &sessionAdministrationHTTPApplication{}))
+		httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userAdministrationResource(accounts, &sessionAdministrationHTTPApplication{}))
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/users/"+userID+path, strings.NewReader(body))
 		request.Header.Set("Authorization", "Bearer credential")
 		if body != "" {

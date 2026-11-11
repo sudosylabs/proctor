@@ -20,6 +20,8 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -73,7 +75,7 @@ func (as *accountSecurityHTTPApplication) CreatePersonalAccessToken(
 func TestAccountSecurityResourcesRunThroughFocusedKernel(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	now := time.Now()
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
@@ -88,12 +90,12 @@ func TestAccountSecurityResourcesRunThroughFocusedKernel(t *testing.T) {
 		{ID: principal.SessionID, UserID: principal.UserID, CreatedAt: now},
 		{ID: otherSessionID, UserID: principal.UserID, CreatedAt: now.Add(-time.Minute)},
 	}}
-	cookies, err := newBrowserCookies("http://localhost:8065")
+	cookies, err := route.NewCookies("http://localhost:8065")
 	require.NoError(t, err)
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{principal: principal},
+		routetest.Authenticator{Principal: principal},
 		sessionResource(applicationStub, cookies),
 		mfaResource(applicationStub),
 		personalAccessTokenResource(applicationStub),
@@ -173,7 +175,7 @@ func TestAccountSecurityResourcesRunThroughFocusedKernel(t *testing.T) {
 	weakAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{principal: weakPrincipal},
+		routetest.Authenticator{Principal: weakPrincipal},
 		mfaResource(applicationStub),
 	)
 	weakRequest := httptest.NewRequest(http.MethodPost, "/api/v1/users/me/mfa/disable", nil)
@@ -189,7 +191,7 @@ func TestAccountSecurityResourcesRunThroughFocusedKernel(t *testing.T) {
 	staleAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{principal: stalePrincipal},
+		routetest.Authenticator{Principal: stalePrincipal},
 		personalAccessTokenResource(applicationStub),
 	)
 	staleRequest := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/users/me/tokens", strings.NewReader(`{"description":"editor","scopes":[],"expires_at":"1970-01-01T00:00:00.123Z"}`))

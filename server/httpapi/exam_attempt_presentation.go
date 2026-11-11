@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -122,20 +123,20 @@ type acknowledgeExamCorrectionResponse struct {
 	AcknowledgedAt       string                               `json:"acknowledged_at"`
 }
 
-func (h examAttemptHandlers) acknowledgeCorrection(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) acknowledgeCorrection(request route.Request) (route.Result, error) {
 	access, err := candidateAccess(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	correctionRevisionID, err := pathID[model.ExamRevisionID](request, "exam_revision_id")
+	correctionRevisionID, err := route.PathID[model.ExamRevisionID](request, "exam_revision_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body acknowledgeExamCorrectionRequest
 	if err = decodeCandidateWorkspaceJSON(request, &body); err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	mutationAccess, err := candidateWorkspaceMutationAccess(access, candidateWorkspaceMutationAccessRequest{
@@ -143,45 +144,45 @@ func (h examAttemptHandlers) acknowledgeCorrection(request operationRequest) (op
 		Generation:      body.Generation,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	currentRevisionID, err := model.ParseExamRevisionID(body.ExpectedCurrentRevisionID)
 	if err != nil {
-		return operationResult{}, invalidRequestError(err)
+		return route.Result{}, route.InvalidRequest(err)
 	}
 
-	result, err := h.app.AcknowledgeExamAttemptCorrection(request.context, request.invocation(), attempt.AcknowledgeCorrectionCommand{
+	result, err := h.app.AcknowledgeExamAttemptCorrection(request.Context, request.Invocation(), attempt.AcknowledgeCorrectionCommand{
 		Access:                    mutationAccess,
 		CorrectionRevisionID:      correctionRevisionID,
 		ExpectedCurrentRevisionID: currentRevisionID,
-		IdempotencyKey:            request.idempotencyKey,
+		IdempotencyKey:            request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if !result.AcknowledgedAt.Valid {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 
-	return jsonResult(http.StatusOK, acknowledgeExamCorrectionResponse{
+	return route.JSON(http.StatusOK, acknowledgeExamCorrectionResponse{
 		RevisionID:           result.CorrectionRevisionID.String(),
 		CurrentRevisionID:    result.CurrentRevisionID.String(),
 		RuntimeCapabilities:  candidateRuntimeCapabilitiesFromStore(result.RuntimeCapabilities),
 		AcknowledgementState: string(model.CorrectionAcknowledgementAcknowledged),
 		AcknowledgedAt:       model.FormatRFC3339(result.AcknowledgedAt.Time),
-	}).withHeaders(noStoreHeaders()), nil
+	}).WithHeaders(noStoreHeaders()), nil
 }
 
-func (h examAttemptHandlers) presentation(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) presentation(request route.Request) (route.Result, error) {
 	access, err := candidateAccess(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	view, err := h.app.GetCandidateExamPresentation(request.context, request.invocation(), access)
+	view, err := h.app.GetCandidateExamPresentation(request.Context, request.Invocation(), access)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	response := candidateExamPresentationResponse{
@@ -207,7 +208,7 @@ func (h examAttemptHandlers) presentation(request operationRequest) (operationRe
 		})
 	}
 
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
 func candidateLiveCorrectionsFromModel(values []model.CandidateLiveCorrection) []candidateLiveCorrectionResponse {
@@ -295,24 +296,24 @@ func candidateRuntimeCapabilitiesFromStore(value store.CandidateRuntimeCapabilit
 	}
 }
 
-func (h examAttemptHandlers) openResource(request operationRequest) (protocolResult, error) {
+func (h examAttemptHandlers) openResource(request route.Request) (route.ProtocolResult, error) {
 	access, err := candidateAccess(request)
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
 
-	resourceID, err := pathID[model.ExamResourceID](request, "exam_resource_id")
+	resourceID, err := route.PathID[model.ExamResourceID](request, "exam_resource_id")
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
 
 	opened, err := h.app.OpenCandidateExamResource(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		attempt.OpenResourceQuery{Access: access, ResourceID: resourceID},
 	)
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
 
 	return candidateAttemptContentResult(request, opened, `"`+opened.SHA256+`"`, nil)

@@ -13,6 +13,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/user"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -43,14 +44,14 @@ type userSettingsHandlers struct {
 	app UserSettingsApplication
 }
 
-func userSettingsResource(app UserSettingsApplication) apiResource {
+func userSettingsResource(app UserSettingsApplication) route.Resource {
 	h := userSettingsHandlers{app: app}
 	path := "/users/me/settings"
-	replace := endpoint{
+	replace := route.Endpoint{
 		Method:       http.MethodPut,
 		Path:         path,
-		Auth:         AuthSessionRequired,
-		Idempotency:  IdempotencyRequired,
+		Auth:         route.AuthSessionRequired,
+		Idempotency:  route.IdempotencyRequired,
 		MaxBodyBytes: userSettingsReplacementBodyMaxBytes,
 		Errors: userSettingsSessionMutationCodes(
 			"request.invalid",
@@ -66,12 +67,12 @@ func userSettingsResource(app UserSettingsApplication) apiResource {
 		),
 		Handle: h.replace,
 	}
-	return newResource(
+	return route.NewResource(
 		"user-settings",
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   path,
-			Auth:   AuthSessionRequired,
+			Auth:   route.AuthSessionRequired,
 			Errors: userSettingsSessionCodes("user_settings.unavailable"),
 			Handle: h.read,
 		},
@@ -87,51 +88,51 @@ func userSettingsSessionMutationCodes(extra ...string) []string {
 	return userSettingsSessionCodes(extra...)
 }
 
-func (h userSettingsHandlers) read(request operationRequest) (operationResult, error) {
-	view, err := h.app.ReadOwnUserSettings(request.context, request.invocation())
+func (h userSettingsHandlers) read(request route.Request) (route.Result, error) {
+	view, err := h.app.ReadOwnUserSettings(request.Context, request.Invocation())
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, userSettingsResponse{
+	return route.JSON(http.StatusOK, userSettingsResponse{
 		Source:        view.Source,
 		FormatVersion: view.FormatVersion,
 		Revision:      view.Revision.String(),
 		Writable:      view.Writable,
 		UpdatedAt:     model.FormatRFC3339(view.UpdatedAt),
-	}).withHeaders(http.Header{"Cache-Control": []string{"private, no-store"}}), nil
+	}).WithHeaders(http.Header{"Cache-Control": []string{"private, no-store"}}), nil
 }
 
-func (h userSettingsHandlers) replace(request operationRequest) (operationResult, error) {
+func (h userSettingsHandlers) replace(request route.Request) (route.Result, error) {
 	var input userSettingsReplaceRequest
-	if err := request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
 	}
 
 	expectedRevision, err := model.ParseUserSettingsRevision(input.ExpectedRevision)
 	if err != nil {
-		return operationResult{}, invalidRequestError(err)
+		return route.Result{}, route.InvalidRequest(err)
 	}
 
 	result, err := h.app.ReplaceOwnUserSettings(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		user.ReplaceOwnUserSettingsCommand{
 			Source:           input.Source,
 			FormatVersion:    input.FormatVersion,
 			ExpectedRevision: expectedRevision,
-			IdempotencyKey:   request.idempotencyKey,
+			IdempotencyKey:   request.IdempotencyKey,
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, userSettingsReplacementResponse{
+	return route.JSON(http.StatusOK, userSettingsReplacementResponse{
 		Revision:      result.Revision.String(),
 		FormatVersion: result.FormatVersion,
 		UpdatedAt:     model.FormatRFC3339(result.UpdatedAt),
 		Changed:       result.Changed,
-	}).withHeaders(http.Header{"Cache-Control": []string{"private, no-store"}}), nil
+	}).WithHeaders(http.Header{"Cache-Control": []string{"private, no-store"}}), nil
 }
 
 // UserSettingsApplication is the application port its handlers call; it reads and replaces the caller's own settings document.

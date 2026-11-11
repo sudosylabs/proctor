@@ -18,6 +18,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -100,12 +101,12 @@ type onboardingImportCursor struct {
 	ID        string `json:"id"`
 }
 
-func onboardingImportCursorSpec() opaqueCursorSpec[onboardingImportCursor] {
-	return opaqueCursorSpec[onboardingImportCursor]{
-		label:                "onboarding import",
-		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members:              []string{"created_at", "id"},
-		validate: func(cursor onboardingImportCursor) error {
+func onboardingImportCursorSpec() route.CursorSpec[onboardingImportCursor] {
+	return route.CursorSpec[onboardingImportCursor]{
+		Label:                "onboarding import",
+		MaximumEncodedLength: route.DefaultMaximumCursorLength,
+		Members:              []string{"created_at", "id"},
+		Validate: func(cursor onboardingImportCursor) error {
 			createdAt, err := model.ParseRFC3339(cursor.CreatedAt)
 			if err != nil || createdAt.IsZero() || !model.OnboardingImportID(cursor.ID).IsValid() {
 				return errors.New("invalid onboarding import keyset")
@@ -127,17 +128,17 @@ type onboardingImportRowResponse struct {
 	ResourceID   string `json:"resource_id,omitempty"`
 }
 
-func onboardingImportResource(app OnboardingImportApplication) apiResource {
+func onboardingImportResource(app OnboardingImportApplication) route.Resource {
 	h := onboardingImportHandlers{app: app}
-	return newResource("onboarding-imports",
-		endpoint{
+	return route.NewResource("onboarding-imports",
+		route.Endpoint{
 			Method:       http.MethodPost,
 			Path:         "/onboarding-imports",
-			Auth:         AuthPrincipalRequired,
-			Idempotency:  IdempotencyNone,
+			Auth:         route.AuthPrincipalRequired,
+			Idempotency:  route.IdempotencyNone,
 			MaxBodyBytes: store.OnboardingImportMaximumBytes,
 			ProtocolName: "onboarding-import-csv",
-			ProtocolKind: RouteProtocolStreamingUpload,
+			ProtocolKind: route.ProtocolStreamingUpload,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -157,10 +158,10 @@ func onboardingImportResource(app OnboardingImportApplication) apiResource {
 			},
 			Protocol: h.upload,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/onboarding-imports",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -172,10 +173,10 @@ func onboardingImportResource(app OnboardingImportApplication) apiResource {
 			},
 			Handle: h.list,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/onboarding-imports/{onboarding_import_id}",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -187,11 +188,11 @@ func onboardingImportResource(app OnboardingImportApplication) apiResource {
 			},
 			Handle: h.get,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPost,
 			Path:        "/onboarding-imports/{onboarding_import_id}/commit",
-			Auth:        AuthPrincipalRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -212,10 +213,10 @@ func onboardingImportResource(app OnboardingImportApplication) apiResource {
 			},
 			Handle: h.commit,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/onboarding-imports/{onboarding_import_id}/cancel",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -232,12 +233,12 @@ func onboardingImportResource(app OnboardingImportApplication) apiResource {
 			},
 			Handle: h.cancel,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:       http.MethodGet,
 			Path:         "/onboarding-imports/{onboarding_import_id}/report",
-			Auth:         AuthPrincipalRequired,
+			Auth:         route.AuthPrincipalRequired,
 			ProtocolName: "onboarding-import-report",
-			ProtocolKind: RouteProtocolBinaryDownload,
+			ProtocolKind: route.ProtocolBinaryDownload,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -253,56 +254,56 @@ func onboardingImportResource(app OnboardingImportApplication) apiResource {
 	)
 }
 
-func (h onboardingImportHandlers) upload(request operationRequest) (protocolResult, error) {
-	query := request.http.URL.Query()
+func (h onboardingImportHandlers) upload(request route.Request) (route.ProtocolResult, error) {
+	query := request.HTTP.URL.Query()
 	command := onboarding.UploadOnboardingImportCommand{
 		Mode:      model.OnboardingImportMode(query.Get("mode")),
 		ScopeType: model.RoleScopeType(query.Get("scope_type")),
 		ScopeID:   query.Get("scope_id"),
 		RoleID:    model.RoleID(query.Get("role_id")),
-		Body:      request.http.Body,
+		Body:      request.HTTP.Body,
 	}
 	if names, given := query["file_name"]; given {
 		if len(names) != 1 {
-			return protocolResult{}, apperror.Invalid("request.invalid", "file_name")
+			return route.ProtocolResult{}, apperror.Invalid("request.invalid", "file_name")
 		}
 
 		command.FileName = &names[0]
 	}
 
-	view, err := h.app.UploadOnboardingImport(request.context, request.invocation(), command)
+	view, err := h.app.UploadOnboardingImport(request.Context, request.Invocation(), command)
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
 
-	return streamingUploadProtocolResult(http.StatusAccepted, onboardingImportResponseFromView(view, nil)).withHeaders(noStoreHeaders()), nil
+	return route.StreamingUpload(http.StatusAccepted, onboardingImportResponseFromView(view, nil)).WithHeaders(noStoreHeaders()), nil
 }
 
-func (h onboardingImportHandlers) list(request operationRequest) (operationResult, error) {
-	page, err := request.pageRequest()
+func (h onboardingImportHandlers) list(request route.Request) (route.Result, error) {
+	page, err := request.Page()
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	values := request.http.URL.Query()
+	values := request.HTTP.URL.Query()
 	for key := range values {
 		if key != "state" && key != "limit" && key != "cursor" {
-			return operationResult{}, invalidRequestError(errors.New("unknown onboarding import query parameter"))
+			return route.Result{}, route.InvalidRequest(errors.New("unknown onboarding import query parameter"))
 		}
 	}
 
 	query := onboarding.ListOnboardingImportsQuery{Limit: page.Limit}
 	for _, raw := range values["state"] {
 		if raw == "" {
-			return operationResult{}, invalidRequestError(errors.New("state must be non-empty"))
+			return route.Result{}, route.InvalidRequest(errors.New("state must be non-empty"))
 		}
 
 		query.States = append(query.States, model.OnboardingImportState(raw))
 	}
 
-	cursor, continued, err := decodePageCursor(page, onboardingImportCursorSpec())
+	cursor, continued, err := route.DecodePageCursor(page, onboardingImportCursorSpec())
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	if continued {
@@ -310,91 +311,91 @@ func (h onboardingImportHandlers) list(request operationRequest) (operationResul
 		query.BeforeID = model.OnboardingImportID(cursor.ID)
 	}
 
-	result, err := h.app.ListOnboardingImports(request.context, request.invocation(), query)
+	result, err := h.app.ListOnboardingImports(request.Context, request.Invocation(), query)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if len(result.Items) > query.Limit {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 
-	response, err := newListResponse(result.Items, result.HasMore, func(view onboarding.OnboardingImportView) onboardingImportResponse {
+	response, err := route.NewList(result.Items, result.HasMore, func(view onboarding.OnboardingImportView) onboardingImportResponse {
 		return onboardingImportResponseFromView(view, nil)
 	}, func(last onboarding.OnboardingImportView) (string, error) {
-		return encodeOpaqueCursor(
+		return route.EncodeCursor(
 			onboardingImportCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String()},
 			onboardingImportCursorSpec(),
 		)
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
-func (h onboardingImportHandlers) get(request operationRequest) (operationResult, error) {
-	id, err := pathID[model.OnboardingImportID](request, "onboarding_import_id")
+func (h onboardingImportHandlers) get(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.OnboardingImportID](request, "onboarding_import_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	view, rows, err := h.app.GetOnboardingImport(request.context, request.invocation(), id)
+	view, rows, err := h.app.GetOnboardingImport(request.Context, request.Invocation(), id)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, onboardingImportResponseFromView(view, rows)).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, onboardingImportResponseFromView(view, rows)).WithHeaders(noStoreHeaders()), nil
 }
 
-func (h onboardingImportHandlers) commit(request operationRequest) (operationResult, error) {
-	id, err := pathID[model.OnboardingImportID](request, "onboarding_import_id")
+func (h onboardingImportHandlers) commit(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.OnboardingImportID](request, "onboarding_import_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body onboardingImportCommitRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, invalidRequestError(err)
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, route.InvalidRequest(err)
 	}
 
-	view, err := h.app.CommitOnboardingImport(request.context, request.invocation(), onboarding.CommitOnboardingImportCommand{
+	view, err := h.app.CommitOnboardingImport(request.Context, request.Invocation(), onboarding.CommitOnboardingImportCommand{
 		ID:               id,
 		ExpectedRevision: body.ExpectedRevision,
 		PreviewDigest:    body.PreviewDigest,
 		Policy:           model.OnboardingImportCommitPolicy(body.Policy),
-		IdempotencyKey:   request.idempotencyKey,
+		IdempotencyKey:   request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusAccepted, onboardingImportResponseFromView(view, nil)).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusAccepted, onboardingImportResponseFromView(view, nil)).WithHeaders(noStoreHeaders()), nil
 }
 
-func (h onboardingImportHandlers) cancel(request operationRequest) (operationResult, error) {
-	id, err := pathID[model.OnboardingImportID](request, "onboarding_import_id")
+func (h onboardingImportHandlers) cancel(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.OnboardingImportID](request, "onboarding_import_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	view, err := h.app.CancelOnboardingImport(request.context, request.invocation(), id)
+	view, err := h.app.CancelOnboardingImport(request.Context, request.Invocation(), id)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, onboardingImportResponseFromView(view, nil)).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, onboardingImportResponseFromView(view, nil)).WithHeaders(noStoreHeaders()), nil
 }
 
-func (h onboardingImportHandlers) report(request operationRequest) (protocolResult, error) {
-	id, err := pathID[model.OnboardingImportID](request, "onboarding_import_id")
+func (h onboardingImportHandlers) report(request route.Request) (route.ProtocolResult, error) {
+	id, err := route.PathID[model.OnboardingImportID](request, "onboarding_import_id")
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
 	var body bytes.Buffer
-	if err = h.app.OnboardingImportReport(request.context, request.invocation(), id, &body); err != nil {
-		return protocolResult{}, err
+	if err = h.app.OnboardingImportReport(request.Context, request.Invocation(), id, &body); err != nil {
+		return route.ProtocolResult{}, err
 	}
 	headers := noStoreHeaders()
 	headers.Set("Content-Type", "text/csv; charset=utf-8")
 	headers.Set("X-Content-Type-Options", "nosniff")
-	return binaryDownloadProtocolResult(io.NopCloser(bytes.NewReader(body.Bytes())), int64(body.Len())).withHeaders(headers), nil
+	return route.BinaryDownload(io.NopCloser(bytes.NewReader(body.Bytes())), int64(body.Len())).WithHeaders(headers), nil
 }
 
 func onboardingImportResponseFromView(

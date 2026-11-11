@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -31,7 +32,7 @@ type browserActivityCursorWire struct {
 }
 
 func encodeBrowserActivityCursor(cursor browserActivityCursor) (string, error) {
-	return encodeOpaqueCursor(browserActivityCursorWire{
+	return route.EncodeCursor(browserActivityCursorWire{
 		ReceivedAt:      model.FormatRFC3339(cursor.ReceivedAt),
 		SourceSessionID: string(cursor.SourceSessionID),
 		Sequence:        cursor.Sequence,
@@ -39,7 +40,7 @@ func encodeBrowserActivityCursor(cursor browserActivityCursor) (string, error) {
 }
 
 func decodeBrowserActivityCursor(raw string) (browserActivityCursor, error) {
-	wire, err := decodeOpaqueCursor(raw, browserActivityCursorSpec())
+	wire, err := route.DecodeCursor(raw, browserActivityCursorSpec())
 	if err != nil {
 		return browserActivityCursor{}, err
 	}
@@ -52,12 +53,12 @@ func decodeBrowserActivityCursor(raw string) (browserActivityCursor, error) {
 	}, nil
 }
 
-func browserActivityCursorSpec() opaqueCursorSpec[browserActivityCursorWire] {
-	return opaqueCursorSpec[browserActivityCursorWire]{
-		label:                "Browser Activity",
-		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members:              []string{"received_at", "source_session_id", "sequence"},
-		validate: func(cursor browserActivityCursorWire) error {
+func browserActivityCursorSpec() route.CursorSpec[browserActivityCursorWire] {
+	return route.CursorSpec[browserActivityCursorWire]{
+		Label:                "Browser Activity",
+		MaximumEncodedLength: route.DefaultMaximumCursorLength,
+		Members:              []string{"received_at", "source_session_id", "sequence"},
+		Validate: func(cursor browserActivityCursorWire) error {
 			receivedAt, err := model.ParseRFC3339(cursor.ReceivedAt)
 			if err != nil || receivedAt.IsZero() || !model.BrowserSourceSessionID(cursor.SourceSessionID).IsValid() || cursor.Sequence < 1 {
 				return errors.New("invalid Browser Activity keyset")
@@ -83,11 +84,11 @@ func encodeExamAttemptManagerCursor(cursor examAttemptManagerCursor) (string, er
 		CreatedAt: model.FormatRFC3339(cursor.CreatedAt),
 		ID:        cursor.ID.String(),
 	}
-	return encodeOpaqueCursor(wire, examAttemptManagerCursorSpec())
+	return route.EncodeCursor(wire, examAttemptManagerCursorSpec())
 }
 
 func decodeExamAttemptManagerCursor(raw string) (examAttemptManagerCursor, error) {
-	wire, err := decodeOpaqueCursor(raw, examAttemptManagerCursorSpec())
+	wire, err := route.DecodeCursor(raw, examAttemptManagerCursorSpec())
 	if err != nil {
 		return examAttemptManagerCursor{}, err
 	}
@@ -96,12 +97,12 @@ func decodeExamAttemptManagerCursor(raw string) (examAttemptManagerCursor, error
 	return examAttemptManagerCursor{CreatedAt: model.TimeUTC(createdAt), ID: id}, nil
 }
 
-func examAttemptManagerCursorSpec() opaqueCursorSpec[examAttemptManagerCursorWire] {
-	return opaqueCursorSpec[examAttemptManagerCursorWire]{
-		label:                "Exam Attempt",
-		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members:              []string{"created_at", "id"},
-		validate: func(cursor examAttemptManagerCursorWire) error {
+func examAttemptManagerCursorSpec() route.CursorSpec[examAttemptManagerCursorWire] {
+	return route.CursorSpec[examAttemptManagerCursorWire]{
+		Label:                "Exam Attempt",
+		MaximumEncodedLength: route.DefaultMaximumCursorLength,
+		Members:              []string{"created_at", "id"},
+		Validate: func(cursor examAttemptManagerCursorWire) error {
 			createdAt, err := model.ParseRFC3339(cursor.CreatedAt)
 			if err != nil || createdAt.IsZero() || !model.ExamAttemptID(cursor.ID).IsValid() {
 				return errors.New("invalid Exam Attempt keyset")
@@ -339,34 +340,34 @@ type endExamAttemptByManagerRequest struct {
 	Reason                  string `json:"reason"`
 }
 
-func (h examAttemptHandlers) endByManager(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) endByManager(request route.Request) (route.Result, error) {
 	examID, sittingID, attemptID, err := managedExamAttemptIDs(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body endExamAttemptByManagerRequest
 	if err = decodeCandidateWorkspaceJSON(request, &body); err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if body.ExpectedAttemptRevision < 1 {
-		return operationResult{}, invalidRequestError(errors.New("must be positive"))
+		return route.Result{}, route.InvalidRequest(errors.New("must be positive"))
 	}
 
 	receipt, err := h.app.EndExamAttemptByManager(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		attempt.ManagerEndCommand{
 			ExamID:                  examID,
 			SittingID:               sittingID,
 			AttemptID:               attemptID,
 			ExpectedAttemptRevision: body.ExpectedAttemptRevision,
 			PrivateReason:           body.Reason,
-			IdempotencyKey:          request.idempotencyKey,
+			IdempotencyKey:          request.IdempotencyKey,
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	response := examSubmissionReceiptResponse{
@@ -380,36 +381,36 @@ func (h examAttemptHandlers) endByManager(request operationRequest) (operationRe
 		ManifestDigest:  receipt.ManifestDigest,
 		SubmittedAt:     model.FormatRFC3339(receipt.SubmittedAt),
 	}
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
-func (h examAttemptHandlers) listCandidateStatuses(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) listCandidateStatuses(request route.Request) (route.Result, error) {
 	examID, sittingID, err := managedExamAttemptScope(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	query := attempt.SittingCandidateStatusesQuery{ExamID: examID, SittingID: sittingID, Limit: 50}
-	values := request.http.URL.Query()
+	values := request.HTTP.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
 		query.Limit, err = strconv.Atoi(raw)
 		if err != nil || query.Limit < 1 || query.Limit > 200 {
-			return operationResult{}, invalidRequestError(errors.New("must be between 1 and 200"))
+			return route.Result{}, route.InvalidRequest(errors.New("must be between 1 and 200"))
 		}
 	}
 
 	if raw := values.Get("cursor"); raw != "" {
-		cursor, decodeErr := decodeOpaqueCursor(raw, sittingCandidateStatusCursorSpec())
+		cursor, decodeErr := route.DecodeCursor(raw, sittingCandidateStatusCursorSpec())
 		if decodeErr != nil {
-			return operationResult{}, invalidRequestError(decodeErr)
+			return route.Result{}, route.InvalidRequest(decodeErr)
 		}
 
 		query.AfterCandidateUserID = model.UserID(cursor.CandidateUserID)
 	}
 
-	page, err := h.app.ListSittingCandidateStatuses(request.context, request.invocation(), query)
+	page, err := h.app.ListSittingCandidateStatuses(request.Context, request.Invocation(), query)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	response := sittingCandidateStatusListResponse{
@@ -470,26 +471,26 @@ func (h examAttemptHandlers) listCandidateStatuses(request operationRequest) (op
 
 	if page.HasMore {
 		if len(page.Items) == 0 {
-			return operationResult{}, errUnpresentableResult
+			return route.Result{}, route.ErrUnpresentable
 		}
 
-		response.NextCursor, err = encodeOpaqueCursor(sittingCandidateStatusCursor{
+		response.NextCursor, err = route.EncodeCursor(sittingCandidateStatusCursor{
 			Kind:            sittingCandidateStatusCursorKind,
 			CandidateUserID: page.Items[len(page.Items)-1].Candidate.UserID.String(),
 		}, sittingCandidateStatusCursorSpec())
 		if err != nil {
-			return operationResult{}, unpresentableResult(err)
+			return route.Result{}, route.Unpresentable(err)
 		}
 	}
 
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
-func sittingCandidateStatusCursorSpec() opaqueCursorSpec[sittingCandidateStatusCursor] {
-	return opaqueCursorSpec[sittingCandidateStatusCursor]{label: "Sitting candidate status",
-		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members:              []string{"kind", "candidate_user_id"},
-		validate: func(cursor sittingCandidateStatusCursor) error {
+func sittingCandidateStatusCursorSpec() route.CursorSpec[sittingCandidateStatusCursor] {
+	return route.CursorSpec[sittingCandidateStatusCursor]{Label: "Sitting candidate status",
+		MaximumEncodedLength: route.DefaultMaximumCursorLength,
+		Members:              []string{"kind", "candidate_user_id"},
+		Validate: func(cursor sittingCandidateStatusCursor) error {
 			if cursor.Kind != sittingCandidateStatusCursorKind || !model.UserID(cursor.CandidateUserID).IsValid() {
 				return errors.New("invalid Sitting candidate-status keyset")
 			}
@@ -497,33 +498,33 @@ func sittingCandidateStatusCursorSpec() opaqueCursorSpec[sittingCandidateStatusC
 		}}
 }
 
-func (h examAttemptHandlers) reallow(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) reallow(request route.Request) (route.Result, error) {
 	examID, sittingID, attemptID, err := managedExamAttemptIDs(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body reallowExamAttemptRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
 	suspensionID, err := model.ParseAttemptSuspensionID(body.SuspensionID)
 	if err != nil {
-		return operationResult{}, invalidRequestError(err)
+		return route.Result{}, route.InvalidRequest(err)
 	}
 
-	result, err := h.app.ReallowExamAttempt(request.context, request.invocation(), attempt.ReallowCommand{
+	result, err := h.app.ReallowExamAttempt(request.Context, request.Invocation(), attempt.ReallowCommand{
 		ExamID:                  examID,
 		SittingID:               sittingID,
 		AttemptID:               attemptID,
 		SuspensionID:            suspensionID,
 		ExpectedAttemptRevision: body.ExpectedAttemptRevision,
 		PrivateReason:           body.Reason,
-		IdempotencyKey:          request.idempotencyKey,
+		IdempotencyKey:          request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	response := examAttemptReallowResponse{
@@ -536,33 +537,33 @@ func (h examAttemptHandlers) reallow(request operationRequest) (operationResult,
 		CandidateReason:   string(result.Suspension.CandidateReason),
 		ReallowedByUserID: result.Suspension.ReallowedByUserID.String(),
 	}
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
-func (h examAttemptHandlers) suspend(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) suspend(request route.Request) (route.Result, error) {
 	examID, sittingID, attemptID, err := managedExamAttemptIDs(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body suspendExamAttemptRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 	if body.ExpectedAttemptRevision < 1 {
-		return operationResult{}, invalidRequestError(errors.New("expected_revision must be positive"))
+		return route.Result{}, route.InvalidRequest(errors.New("expected_revision must be positive"))
 	}
 
-	result, err := h.app.SuspendExamAttempt(request.context, request.invocation(), attempt.ManualSuspensionCommand{
+	result, err := h.app.SuspendExamAttempt(request.Context, request.Invocation(), attempt.ManualSuspensionCommand{
 		ExamID:                  examID,
 		SittingID:               sittingID,
 		AttemptID:               attemptID,
 		ExpectedAttemptRevision: body.ExpectedAttemptRevision,
 		PrivateReason:           body.Reason,
-		IdempotencyKey:          request.idempotencyKey,
+		IdempotencyKey:          request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	response := examAttemptSuspendResponse{
@@ -577,40 +578,40 @@ func (h examAttemptHandlers) suspend(request operationRequest) (operationResult,
 		SuspendedByUserID: result.Suspension.SuspendedByUserID.String(),
 		ConnectionClosed:  result.ConnectionClosed,
 	}
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
-func (h examAttemptHandlers) getManaged(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) getManaged(request route.Request) (route.Result, error) {
 	examID, sittingID, attemptID, err := managedExamAttemptIDs(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	view, err := h.app.GetExamAttempt(request.context, request.invocation(), examID, sittingID, attemptID)
+	view, err := h.app.GetExamAttempt(request.Context, request.Invocation(), examID, sittingID, attemptID)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	response, err := examAttemptManagerResponseFromView(view)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
-func (h examAttemptHandlers) listManaged(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) listManaged(request route.Request) (route.Result, error) {
 	examID, sittingID, err := managedExamAttemptScope(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	query := attempt.ListManagedAttemptsQuery{ExamID: examID, SittingID: sittingID, Limit: 50}
-	values := request.http.URL.Query()
+	values := request.HTTP.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
 		query.Limit, err = strconv.Atoi(raw)
 		if err != nil || query.Limit < 1 || query.Limit > 200 {
-			return operationResult{}, invalidRequestError(errors.New("must be between 1 and 200"))
+			return route.Result{}, route.InvalidRequest(errors.New("must be between 1 and 200"))
 		}
 	}
 
@@ -620,11 +621,11 @@ func (h examAttemptHandlers) listManaged(request operationRequest) (operationRes
 		switch state {
 		case model.ExamAttemptReady, model.ExamAttemptActive, model.ExamAttemptSuspended, model.ExamAttemptSubmitted:
 		default:
-			return operationResult{}, invalidRequestError(errors.New("is not supported"))
+			return route.Result{}, route.InvalidRequest(errors.New("is not supported"))
 		}
 
 		if _, duplicate := seenStates[state]; duplicate {
-			return operationResult{}, invalidRequestError(errors.New("must not contain duplicates"))
+			return route.Result{}, route.InvalidRequest(errors.New("must not contain duplicates"))
 		}
 
 		seenStates[state] = struct{}{}
@@ -634,22 +635,22 @@ func (h examAttemptHandlers) listManaged(request operationRequest) (operationRes
 	if raw := values.Get("cursor"); raw != "" {
 		cursor, decodeErr := decodeExamAttemptManagerCursor(raw)
 		if decodeErr != nil {
-			return operationResult{}, invalidRequestError(decodeErr)
+			return route.Result{}, route.InvalidRequest(decodeErr)
 		}
 
 		query.BeforeCreatedAt, query.BeforeAttemptID = cursor.CreatedAt, cursor.ID
 	}
 
-	page, err := h.app.ListExamAttempts(request.context, request.invocation(), query)
+	page, err := h.app.ListExamAttempts(request.Context, request.Invocation(), query)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	response := examAttemptManagerListResponse{Items: make([]examAttemptManagerResponse, 0, len(page.Items))}
 	for _, item := range page.Items {
 		mapped, mapErr := examAttemptManagerResponseFromView(item)
 		if mapErr != nil {
-			return operationResult{}, mapErr
+			return route.Result{}, mapErr
 		}
 
 		response.Items = append(response.Items, mapped)
@@ -657,46 +658,46 @@ func (h examAttemptHandlers) listManaged(request operationRequest) (operationRes
 
 	if page.HasMore {
 		if len(page.Items) == 0 || page.Items[len(page.Items)-1].Attempt == nil {
-			return operationResult{}, errors.New("Exam Attempt application returned an invalid page")
+			return route.Result{}, errors.New("Exam Attempt application returned an invalid page")
 		}
 
 		last := page.Items[len(page.Items)-1].Attempt
 		response.NextCursor, err = encodeExamAttemptManagerCursor(examAttemptManagerCursor{CreatedAt: last.CreatedAt, ID: last.ID})
 		if err != nil {
-			return operationResult{}, unpresentableResult(err)
+			return route.Result{}, route.Unpresentable(err)
 		}
 	}
 
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
-func (h examAttemptHandlers) listBrowserActivity(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) listBrowserActivity(request route.Request) (route.Result, error) {
 	examID, sittingID, attemptID, err := managedExamAttemptIDs(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	query := attempt.BrowserActivityPageQuery{ExamID: examID, SittingID: sittingID, AttemptID: attemptID, Limit: 50}
-	values := request.http.URL.Query()
+	values := request.HTTP.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
 		query.Limit, err = strconv.Atoi(raw)
 		if err != nil || query.Limit < 1 || query.Limit > 200 {
-			return operationResult{}, invalidRequestError(errors.New("must be between 1 and 200"))
+			return route.Result{}, route.InvalidRequest(errors.New("must be between 1 and 200"))
 		}
 	}
 
 	if raw := values.Get("cursor"); raw != "" {
 		cursor, decodeErr := decodeBrowserActivityCursor(raw)
 		if decodeErr != nil {
-			return operationResult{}, invalidRequestError(decodeErr)
+			return route.Result{}, route.InvalidRequest(decodeErr)
 		}
 
 		query.AfterReceivedAt, query.AfterSourceID, query.AfterSequence = cursor.ReceivedAt, cursor.SourceSessionID, cursor.Sequence
 	}
 
-	page, err := h.app.ListExamAttemptBrowserActivity(request.context, request.invocation(), query)
+	page, err := h.app.ListExamAttemptBrowserActivity(request.Context, request.Invocation(), query)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	response := browserActivityListResponse{Items: make([]browserActivityItemResponse, 0, len(page.Items))}
@@ -728,7 +729,7 @@ func (h examAttemptHandlers) listBrowserActivity(request operationRequest) (oper
 
 	if page.HasMore {
 		if len(page.Items) == 0 {
-			return operationResult{}, errors.New("Browser Activity application returned an invalid page")
+			return route.Result{}, errors.New("Browser Activity application returned an invalid page")
 		}
 
 		last := page.Items[len(page.Items)-1]
@@ -738,31 +739,31 @@ func (h examAttemptHandlers) listBrowserActivity(request operationRequest) (oper
 			Sequence:        last.Event.Sequence,
 		})
 		if err != nil {
-			return operationResult{}, unpresentableResult(err)
+			return route.Result{}, route.Unpresentable(err)
 		}
 	}
 
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
-func managedExamAttemptScope(request operationRequest) (model.ExamID, model.ExamSittingID, error) {
-	examID, err := pathID[model.ExamID](request, "exam_id")
+func managedExamAttemptScope(request route.Request) (model.ExamID, model.ExamSittingID, error) {
+	examID, err := route.PathID[model.ExamID](request, "exam_id")
 	if err != nil {
 		return "", "", err
 	}
-	sittingID, err := pathID[model.ExamSittingID](request, "exam_sitting_id")
+	sittingID, err := route.PathID[model.ExamSittingID](request, "exam_sitting_id")
 	if err != nil {
 		return "", "", err
 	}
 	return examID, sittingID, nil
 }
 
-func managedExamAttemptIDs(request operationRequest) (model.ExamID, model.ExamSittingID, model.ExamAttemptID, error) {
+func managedExamAttemptIDs(request route.Request) (model.ExamID, model.ExamSittingID, model.ExamAttemptID, error) {
 	examID, sittingID, err := managedExamAttemptScope(request)
 	if err != nil {
 		return "", "", "", err
 	}
-	attemptID, err := pathID[model.ExamAttemptID](request, "exam_attempt_id")
+	attemptID, err := route.PathID[model.ExamAttemptID](request, "exam_attempt_id")
 	if err != nil {
 		return "", "", "", err
 	}

@@ -22,6 +22,8 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/localization"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -96,7 +98,7 @@ func TestPersonalAccessTokenScopeEnumMatchesEligibleActions(t *testing.T) {
 func TestGrantablePersonalAccessTokenScopesRouteLocalizesCopy(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	now := time.Now()
 	unitID := model.NewAcademicUnitID()
 	application := &grantableScopesHTTPApplication{catalogue: &identity.PersonalAccessTokenGrantableScopes{
@@ -114,11 +116,11 @@ func TestGrantablePersonalAccessTokenScopesRouteLocalizesCopy(t *testing.T) {
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		AuthenticatedAt: now, ClientType: model.SessionClientWeb,
 	}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, personalAccessTokenResource(application))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, personalAccessTokenResource(application))
 
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/me/tokens/grantable-scopes", nil)
 	request.Header.Set("Authorization", "Bearer credential")
-	request = request.WithContext(withRequestLocalization(request.Context(), repositoryLocalizer(t), "en"))
+	request = request.WithContext(route.WithLocalization(request.Context(), repositoryLocalizer(t), "en"))
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())

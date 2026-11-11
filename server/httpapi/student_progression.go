@@ -19,6 +19,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -62,13 +63,13 @@ type studentProgressionCommitRequest struct {
 	PreviewDigest    string `json:"preview_digest"`
 }
 
-func studentProgressionResource(app StudentProgressionApplication) apiResource {
+func studentProgressionResource(app StudentProgressionApplication) route.Resource {
 	h := studentProgressionHandlers{app: app}
-	return newResource("student-progressions",
-		endpoint{
+	return route.NewResource("student-progressions",
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/student-progressions",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -89,10 +90,10 @@ func studentProgressionResource(app StudentProgressionApplication) apiResource {
 			},
 			Handle: h.dryRun,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/student-progressions",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -105,10 +106,10 @@ func studentProgressionResource(app StudentProgressionApplication) apiResource {
 			},
 			Handle: h.list,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/student-progressions/{student_progression_id}",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -122,11 +123,11 @@ func studentProgressionResource(app StudentProgressionApplication) apiResource {
 			},
 			Handle: h.get,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPost,
 			Path:        "/student-progressions/{student_progression_id}/commit",
-			Auth:        AuthPrincipalRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -146,10 +147,10 @@ func studentProgressionResource(app StudentProgressionApplication) apiResource {
 			},
 			Handle: h.commit,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/student-progressions/{student_progression_id}/cancel",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -165,12 +166,12 @@ func studentProgressionResource(app StudentProgressionApplication) apiResource {
 			},
 			Handle: h.cancel,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:       http.MethodGet,
 			Path:         "/student-progressions/{student_progression_id}/report",
-			Auth:         AuthPrincipalRequired,
+			Auth:         route.AuthPrincipalRequired,
 			ProtocolName: "student-progression-report",
-			ProtocolKind: RouteProtocolBinaryDownload,
+			ProtocolKind: route.ProtocolBinaryDownload,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -185,18 +186,18 @@ func studentProgressionResource(app StudentProgressionApplication) apiResource {
 	)
 }
 
-func (h studentProgressionHandlers) dryRun(request operationRequest) (operationResult, error) {
+func (h studentProgressionHandlers) dryRun(request route.Request) (route.Result, error) {
 	var body studentProgressionDryRunRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, invalidRequestError(err)
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, route.InvalidRequest(err)
 	}
 
 	effectiveAt, err := model.ParseRFC3339(body.EffectiveAt)
 	if err != nil || effectiveAt.IsZero() {
-		return operationResult{}, invalidRequestError(err)
+		return route.Result{}, route.InvalidRequest(err)
 	}
 
-	view, err := h.app.DryRunStudentProgression(request.context, request.invocation(), onboarding.DryRunStudentProgressionCommand{
+	view, err := h.app.DryRunStudentProgression(request.Context, request.Invocation(), onboarding.DryRunStudentProgressionCommand{
 		SourcePeriodID:      model.AcademicPeriodID(body.SourcePeriodID),
 		SourceClassID:       model.ClassID(body.SourceClassID),
 		DestinationPeriodID: model.AcademicPeriodID(body.DestinationPeriodID),
@@ -204,10 +205,10 @@ func (h studentProgressionHandlers) dryRun(request operationRequest) (operationR
 		EffectiveAt:         model.MillisFromTime(effectiveAt),
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusAccepted, onboardingImportResponseFromView(view, nil)).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusAccepted, onboardingImportResponseFromView(view, nil)).WithHeaders(noStoreHeaders()), nil
 }
 
 // studentProgressionCursor is the keyset of the last listed progression:
@@ -217,12 +218,12 @@ type studentProgressionCursor struct {
 	ID        string `json:"id"`
 }
 
-func studentProgressionCursorSpec() opaqueCursorSpec[studentProgressionCursor] {
-	return opaqueCursorSpec[studentProgressionCursor]{
-		label:                "student progression",
-		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members:              []string{"created_at", "id"},
-		validate: func(cursor studentProgressionCursor) error {
+func studentProgressionCursorSpec() route.CursorSpec[studentProgressionCursor] {
+	return route.CursorSpec[studentProgressionCursor]{
+		Label:                "student progression",
+		MaximumEncodedLength: route.DefaultMaximumCursorLength,
+		Members:              []string{"created_at", "id"},
+		Validate: func(cursor studentProgressionCursor) error {
 			createdAt, err := model.ParseRFC3339(cursor.CreatedAt)
 			if err != nil || createdAt.IsZero() || !model.OnboardingImportID(cursor.ID).IsValid() {
 				return errors.New("invalid student progression keyset")
@@ -237,23 +238,23 @@ func studentProgressionCursorSpec() opaqueCursorSpec[studentProgressionCursor] {
 // the progression listing; state repeats.
 var studentProgressionListFilters = []string{"source_period_id", "source_class_id", "destination_period_id", "destination_class_id"}
 
-func (h studentProgressionHandlers) list(request operationRequest) (operationResult, error) {
-	page, err := request.pageRequest()
+func (h studentProgressionHandlers) list(request route.Request) (route.Result, error) {
+	page, err := request.Page()
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	values := request.http.URL.Query()
+	values := request.HTTP.URL.Query()
 	for key := range values {
 		if key != "state" && key != "limit" && key != "cursor" && !slices.Contains(studentProgressionListFilters, key) {
-			return operationResult{}, invalidRequestError(errors.New("unknown student progression query parameter"))
+			return route.Result{}, route.InvalidRequest(errors.New("unknown student progression query parameter"))
 		}
 	}
 
 	query := onboarding.ListStudentProgressionsQuery{Limit: page.Limit}
 	for _, raw := range values["state"] {
 		if raw == "" {
-			return operationResult{}, apperror.Invalid("request.invalid", "state")
+			return route.Result{}, apperror.Invalid("request.invalid", "state")
 		}
 
 		query.States = append(query.States, model.OnboardingImportState(raw))
@@ -266,7 +267,7 @@ func (h studentProgressionHandlers) list(request operationRequest) (operationRes
 			continue
 		}
 		if len(raw) != 1 || raw[0] == "" {
-			return operationResult{}, apperror.Invalid("request.invalid", key)
+			return route.Result{}, apperror.Invalid("request.invalid", key)
 		}
 
 		filters[key] = raw[0]
@@ -276,9 +277,9 @@ func (h studentProgressionHandlers) list(request operationRequest) (operationRes
 	query.DestinationPeriodID, query.DestinationClassID =
 		model.AcademicPeriodID(filters["destination_period_id"]),
 		model.ClassID(filters["destination_class_id"])
-	cursor, continued, err := decodePageCursor(page, studentProgressionCursorSpec())
+	cursor, continued, err := route.DecodePageCursor(page, studentProgressionCursorSpec())
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	if continued {
@@ -286,93 +287,93 @@ func (h studentProgressionHandlers) list(request operationRequest) (operationRes
 		query.BeforeID = model.OnboardingImportID(cursor.ID)
 	}
 
-	result, err := h.app.ListStudentProgressions(request.context, request.invocation(), query)
+	result, err := h.app.ListStudentProgressions(request.Context, request.Invocation(), query)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if len(result.Items) > query.Limit {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 
-	envelope, err := newListResponse(result.Items, result.HasMore, func(view onboarding.OnboardingImportView) onboardingImportResponse {
+	envelope, err := route.NewList(result.Items, result.HasMore, func(view onboarding.OnboardingImportView) onboardingImportResponse {
 		return onboardingImportResponseFromView(view, nil)
 	}, func(last onboarding.OnboardingImportView) (string, error) {
-		return encodeOpaqueCursor(
+		return route.EncodeCursor(
 			studentProgressionCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String()},
 			studentProgressionCursorSpec(),
 		)
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	response, err := withPageTotal(envelope, result.Total, continued)
+	response, err := route.WithPageTotal(envelope, result.Total, continued)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
-func (h studentProgressionHandlers) get(request operationRequest) (operationResult, error) {
-	id, err := pathID[model.OnboardingImportID](request, "student_progression_id")
+func (h studentProgressionHandlers) get(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.OnboardingImportID](request, "student_progression_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	view, rows, err := h.app.GetStudentProgression(request.context, request.invocation(), id)
+	view, rows, err := h.app.GetStudentProgression(request.Context, request.Invocation(), id)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, onboardingImportResponseFromView(view, rows)).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, onboardingImportResponseFromView(view, rows)).WithHeaders(noStoreHeaders()), nil
 }
 
-func (h studentProgressionHandlers) commit(request operationRequest) (operationResult, error) {
-	id, err := pathID[model.OnboardingImportID](request, "student_progression_id")
+func (h studentProgressionHandlers) commit(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.OnboardingImportID](request, "student_progression_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body studentProgressionCommitRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, invalidRequestError(err)
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, route.InvalidRequest(err)
 	}
 
-	view, err := h.app.CommitStudentProgression(request.context, request.invocation(), onboarding.CommitStudentProgressionCommand{
+	view, err := h.app.CommitStudentProgression(request.Context, request.Invocation(), onboarding.CommitStudentProgressionCommand{
 		ID:               id,
 		ExpectedRevision: body.ExpectedRevision,
 		PreviewDigest:    body.PreviewDigest,
-		IdempotencyKey:   request.idempotencyKey,
+		IdempotencyKey:   request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusAccepted, onboardingImportResponseFromView(view, nil)).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusAccepted, onboardingImportResponseFromView(view, nil)).WithHeaders(noStoreHeaders()), nil
 }
 
-func (h studentProgressionHandlers) cancel(request operationRequest) (operationResult, error) {
-	id, err := pathID[model.OnboardingImportID](request, "student_progression_id")
+func (h studentProgressionHandlers) cancel(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.OnboardingImportID](request, "student_progression_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	view, err := h.app.CancelStudentProgression(request.context, request.invocation(), id)
+	view, err := h.app.CancelStudentProgression(request.Context, request.Invocation(), id)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, onboardingImportResponseFromView(view, nil)).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, onboardingImportResponseFromView(view, nil)).WithHeaders(noStoreHeaders()), nil
 }
 
-func (h studentProgressionHandlers) report(request operationRequest) (protocolResult, error) {
-	id, err := pathID[model.OnboardingImportID](request, "student_progression_id")
+func (h studentProgressionHandlers) report(request route.Request) (route.ProtocolResult, error) {
+	id, err := route.PathID[model.OnboardingImportID](request, "student_progression_id")
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
 	var body bytes.Buffer
-	if err = h.app.StudentProgressionReport(request.context, request.invocation(), id, &body); err != nil {
-		return protocolResult{}, err
+	if err = h.app.StudentProgressionReport(request.Context, request.Invocation(), id, &body); err != nil {
+		return route.ProtocolResult{}, err
 	}
 	headers := noStoreHeaders()
 	headers.Set("Content-Type", "text/csv; charset=utf-8")
 	headers.Set("X-Content-Type-Options", "nosniff")
-	return binaryDownloadProtocolResult(io.NopCloser(bytes.NewReader(body.Bytes())), int64(body.Len())).withHeaders(headers), nil
+	return route.BinaryDownload(io.NopCloser(bytes.NewReader(body.Bytes())), int64(body.Len())).WithHeaders(headers), nil
 }

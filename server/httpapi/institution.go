@@ -13,6 +13,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -67,31 +68,31 @@ func (r examCapacityPolicyRequest) model() model.ExamCapacityPolicy {
 }
 
 type updateInstitutionRequest struct {
-	Name         Optional[string]                    `json:"name"`
-	DisplayName  Optional[string]                    `json:"display_name"`
-	Description  Optional[string]                    `json:"description"`
-	ExamCapacity Optional[examCapacityPolicyRequest] `json:"exam_capacity"`
+	Name         route.Optional[string]                    `json:"name"`
+	DisplayName  route.Optional[string]                    `json:"display_name"`
+	Description  route.Optional[string]                    `json:"description"`
+	ExamCapacity route.Optional[examCapacityPolicyRequest] `json:"exam_capacity"`
 }
 
 type institutionHandlers struct {
 	app InstitutionApplication
 }
 
-func institutionResource(app InstitutionApplication) apiResource {
+func institutionResource(app InstitutionApplication) route.Resource {
 	h := institutionHandlers{app: app}
-	return newResource(
+	return route.NewResource(
 		"institution",
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/institution",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: academicReadErrorCodes("resource.not_found"),
 			Handle: h.get,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPatch,
 			Path:   "/institution",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: academicMutationErrorCodes(
 				"request.invalid",
 				"resource.not_found",
@@ -124,21 +125,21 @@ func academicMutationErrorCodes(specific ...string) []string {
 	return append(codes, "administration.unavailable")
 }
 
-func (h institutionHandlers) get(request operationRequest) (operationResult, error) {
+func (h institutionHandlers) get(request route.Request) (route.Result, error) {
 	institution, err := h.app.GetInstitution(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, institutionResponseFromModel(institution)), nil
+	return route.JSON(http.StatusOK, institutionResponseFromModel(institution)), nil
 }
 
-func (h institutionHandlers) patch(request operationRequest) (operationResult, error) {
+func (h institutionHandlers) patch(request route.Request) (route.Result, error) {
 	var body updateInstitutionRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
 	var capacity *model.ExamCapacityPolicy
@@ -148,8 +149,8 @@ func (h institutionHandlers) patch(request operationRequest) (operationResult, e
 	}
 
 	institution, err := h.app.UpdateInstitution(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		academic.UpdateInstitutionCommand{
 			Name:         body.Name.ValuePointer(),
 			DisplayName:  body.DisplayName.ValuePointer(),
@@ -158,10 +159,10 @@ func (h institutionHandlers) patch(request operationRequest) (operationResult, e
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, institutionResponseFromModel(institution)), nil
+	return route.JSON(http.StatusOK, institutionResponseFromModel(institution)), nil
 }
 
 func institutionResponseFromModel(institution *model.Institution) institutionResponse {

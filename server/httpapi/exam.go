@@ -18,6 +18,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -29,9 +30,9 @@ type createExamRequest struct {
 }
 
 type editExamDraftTextRequest struct {
-	ExpectedDraftRevision int64            `json:"expected_revision"`
-	Title                 Optional[string] `json:"title"`
-	InstructionsMarkdown  Optional[string] `json:"instructions_markdown"`
+	ExpectedDraftRevision int64                  `json:"expected_revision"`
+	Title                 route.Optional[string] `json:"title"`
+	InstructionsMarkdown  route.Optional[string] `json:"instructions_markdown"`
 }
 
 type configureExamDraftNativePolicyRequest struct {
@@ -370,7 +371,7 @@ type examFocusPolicyResponse struct {
 
 type examHandlers struct{ app ExamApplication }
 
-func examResource(app ExamApplication) apiResource {
+func examResource(app ExamApplication) route.Resource {
 	h := examHandlers{app: app}
 	collection := "/exams"
 	member := "/exams/{exam_id}"
@@ -382,12 +383,12 @@ func examResource(app ExamApplication) apiResource {
 	managers := "/exams/{exam_id}/managers"
 	manager := "/exams/{exam_id}/managers/{user_id}"
 	owner := "/exams/{exam_id}/owner"
-	return newResource(
+	return route.NewResource(
 		"exams",
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   collection,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -399,11 +400,11 @@ func examResource(app ExamApplication) apiResource {
 			},
 			Handle: h.list,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPost,
 			Path:        collection,
-			Auth:        AuthPrincipalRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -421,10 +422,10 @@ func examResource(app ExamApplication) apiResource {
 			},
 			Handle: h.create,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   member,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -435,11 +436,11 @@ func examResource(app ExamApplication) apiResource {
 			},
 			Handle: h.get,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPatch,
 			Path:        draft,
-			Auth:        AuthPrincipalRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -458,11 +459,11 @@ func examResource(app ExamApplication) apiResource {
 			},
 			Handle: h.editDraftText,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPut,
 			Path:        focusLossPolicy,
-			Auth:        AuthPrincipalRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -481,11 +482,11 @@ func examResource(app ExamApplication) apiResource {
 			},
 			Handle: h.configureDraftFocusLoss,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPut,
 			Path:        nativePolicy,
-			Auth:        AuthPrincipalRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -504,11 +505,11 @@ func examResource(app ExamApplication) apiResource {
 			},
 			Handle: h.configureDraftNativePolicy,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPut,
 			Path:        browserPolicy,
-			Auth:        AuthPrincipalRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -527,11 +528,11 @@ func examResource(app ExamApplication) apiResource {
 			},
 			Handle: h.configureDraftBrowserPolicy,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPost,
 			Path:        archive,
-			Auth:        AuthPrincipalRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -549,10 +550,10 @@ func examResource(app ExamApplication) apiResource {
 			},
 			Handle: h.archive,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   managers,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -563,11 +564,11 @@ func examResource(app ExamApplication) apiResource {
 			},
 			Handle: h.listManagers,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPost,
 			Path:        managers,
-			Auth:        AuthPrincipalRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -588,11 +589,11 @@ func examResource(app ExamApplication) apiResource {
 			},
 			Handle: h.addManager,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodDelete,
 			Path:        manager,
-			Auth:        AuthPrincipalRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -612,11 +613,11 @@ func examResource(app ExamApplication) apiResource {
 			},
 			Handle: h.removeManager,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPut,
 			Path:        owner,
-			Auth:        AuthPrincipalRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -641,15 +642,15 @@ func examResource(app ExamApplication) apiResource {
 	)
 }
 
-func (h examHandlers) list(request operationRequest) (operationResult, error) {
-	query, err := examListQuery(request.http)
+func (h examHandlers) list(request route.Request) (route.Result, error) {
+	query, err := examListQuery(request.HTTP)
 	if err != nil {
-		return operationResult{}, invalidRequestError(err)
+		return route.Result{}, route.InvalidRequest(err)
 	}
 
-	page, err := h.app.ListExams(request.context, request.invocation(), query)
+	page, err := h.app.ListExams(request.Context, request.Invocation(), query)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	response := examListResponse{Items: make([]examSummaryResponse, 0, len(page.Items))}
@@ -658,7 +659,7 @@ func (h examHandlers) list(request operationRequest) (operationResult, error) {
 	}
 
 	if page.HasMore && len(page.Items) == 0 {
-		return operationResult{}, unpresentableResult(errors.New("exam page made no progress"))
+		return route.Result{}, route.Unpresentable(errors.New("exam page made no progress"))
 	}
 
 	if page.HasMore {
@@ -668,114 +669,114 @@ func (h examHandlers) list(request operationRequest) (operationResult, error) {
 			ExamID:    last.ID.String(),
 		})
 		if err != nil {
-			return operationResult{}, unpresentableResult(err)
+			return route.Result{}, route.Unpresentable(err)
 		}
 	}
 
-	return jsonResult(http.StatusOK, response), nil
+	return route.JSON(http.StatusOK, response), nil
 }
 
-func (h examHandlers) create(request operationRequest) (operationResult, error) {
+func (h examHandlers) create(request route.Request) (route.Result, error) {
 	var body createExamRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
 	unitID, err := model.ParseAcademicUnitID(body.AcademicUnitID)
 	if err != nil {
-		return operationResult{}, invalidRequestError(err)
+		return route.Result{}, route.InvalidRequest(err)
 	}
 
-	view, err := h.app.CreateExam(request.context, request.invocation(), exam.CreateCommand{
+	view, err := h.app.CreateExam(request.Context, request.Invocation(), exam.CreateCommand{
 		AcademicUnitID:       unitID,
 		Title:                body.Title,
 		InstructionsMarkdown: body.InstructionsMarkdown,
-		IdempotencyKey:       request.idempotencyKey,
+		IdempotencyKey:       request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusCreated, examResponseFromView(view)), nil
+	return route.JSON(http.StatusCreated, examResponseFromView(view)), nil
 }
 
-func (h examHandlers) get(request operationRequest) (operationResult, error) {
-	examID, err := pathID[model.ExamID](request, "exam_id")
+func (h examHandlers) get(request route.Request) (route.Result, error) {
+	examID, err := route.PathID[model.ExamID](request, "exam_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	view, err := h.app.GetExam(request.context, request.invocation(), examID)
+	view, err := h.app.GetExam(request.Context, request.Invocation(), examID)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, examResponseFromView(view)), nil
+	return route.JSON(http.StatusOK, examResponseFromView(view)), nil
 }
 
-func (h examHandlers) editDraftText(request operationRequest) (operationResult, error) {
-	examID, err := pathID[model.ExamID](request, "exam_id")
+func (h examHandlers) editDraftText(request route.Request) (route.Result, error) {
+	examID, err := route.PathID[model.ExamID](request, "exam_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body editExamDraftTextRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
 	title := body.Title.ValuePointer()
 	instructions := body.InstructionsMarkdown.ValuePointer()
 	if title == nil && instructions == nil {
-		return operationResult{}, invalidRequestError(errors.New("at least one authored field is required"))
+		return route.Result{}, route.InvalidRequest(errors.New("at least one authored field is required"))
 	}
 	if body.ExpectedDraftRevision < 1 {
-		return operationResult{}, invalidRequestError(errors.New("must be positive"))
+		return route.Result{}, route.InvalidRequest(errors.New("must be positive"))
 	}
 
-	view, err := h.app.EditExamDraftText(request.context, request.invocation(), exam.EditDraftTextCommand{
+	view, err := h.app.EditExamDraftText(request.Context, request.Invocation(), exam.EditDraftTextCommand{
 		ExamID:                examID,
 		ExpectedDraftRevision: body.ExpectedDraftRevision,
 		Title:                 title,
 		InstructionsMarkdown:  instructions,
-		IdempotencyKey:        request.idempotencyKey,
+		IdempotencyKey:        request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, examResponseFromView(view)), nil
+	return route.JSON(http.StatusOK, examResponseFromView(view)), nil
 }
 
-func (h examHandlers) configureDraftFocusLoss(request operationRequest) (operationResult, error) {
-	examID, err := pathID[model.ExamID](request, "exam_id")
+func (h examHandlers) configureDraftFocusLoss(request route.Request) (route.Result, error) {
+	examID, err := route.PathID[model.ExamID](request, "exam_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body configureExamDraftFocusLossRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 	if body.ExpectedDraftRevision < 1 {
-		return operationResult{}, invalidRequestError(errors.New("must be positive"))
+		return route.Result{}, route.InvalidRequest(errors.New("must be positive"))
 	}
 	if body.MinimumDurationMilliseconds < 500 || body.MinimumDurationMilliseconds > 300_000 {
-		return operationResult{}, invalidRequestError(errors.New("must be between 500 and 300000"))
+		return route.Result{}, route.InvalidRequest(errors.New("must be between 500 and 300000"))
 	}
 	if body.IncidentCount < 1 || body.IncidentCount > 100 {
-		return operationResult{}, invalidRequestError(errors.New("must be between 1 and 100"))
+		return route.Result{}, route.InvalidRequest(errors.New("must be between 1 and 100"))
 	}
 	if body.WindowMilliseconds < 10_000 || body.WindowMilliseconds > 14_400_000 || body.WindowMilliseconds < body.MinimumDurationMilliseconds {
-		return operationResult{}, invalidRequestError(errors.New("must be between 10000 and 14400000 and at least minimum_duration_milliseconds"))
+		return route.Result{}, route.InvalidRequest(errors.New("must be between 10000 and 14400000 and at least minimum_duration_milliseconds"))
 	}
 
 	outcome := model.IntegrityThresholdOutcome(body.Outcome)
 	switch outcome {
 	case model.IntegrityOutcomeFlag, model.IntegrityOutcomeFlagAndWarn, model.IntegrityOutcomeFlagAndSuspend:
 	default:
-		return operationResult{}, invalidRequestError(errors.New("is not supported"))
+		return route.Result{}, route.InvalidRequest(errors.New("is not supported"))
 	}
 
-	view, err := h.app.ConfigureExamDraftFocusLoss(request.context, request.invocation(), exam.ConfigureDraftFocusLossCommand{
+	view, err := h.app.ConfigureExamDraftFocusLoss(request.Context, request.Invocation(), exam.ConfigureDraftFocusLossCommand{
 		ExamID:                examID,
 		ExpectedDraftRevision: body.ExpectedDraftRevision,
 		Enabled:               body.Enabled,
@@ -783,131 +784,131 @@ func (h examHandlers) configureDraftFocusLoss(request operationRequest) (operati
 		IncidentCount:         body.IncidentCount,
 		Window:                time.Duration(body.WindowMilliseconds) * time.Millisecond,
 		Outcome:               outcome,
-		IdempotencyKey:        request.idempotencyKey,
+		IdempotencyKey:        request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, examResponseFromView(view)), nil
+	return route.JSON(http.StatusOK, examResponseFromView(view)), nil
 }
 
-func (h examHandlers) configureDraftBrowserPolicy(request operationRequest) (operationResult, error) {
-	examID, err := pathID[model.ExamID](request, "exam_id")
+func (h examHandlers) configureDraftBrowserPolicy(request route.Request) (route.Result, error) {
+	examID, err := route.PathID[model.ExamID](request, "exam_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body configureExamDraftBrowserPolicyRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 	if body.ExpectedDraftRevision < 1 {
-		return operationResult{}, invalidRequestError(errors.New("must be positive"))
+		return route.Result{}, route.InvalidRequest(errors.New("must be positive"))
 	}
 
 	policy, err := body.BrowserPolicy.model()
 	if err != nil {
-		return operationResult{}, invalidRequestError(err)
+		return route.Result{}, route.InvalidRequest(err)
 	}
 
-	view, err := h.app.ConfigureExamDraftBrowserPolicy(request.context, request.invocation(), exam.ConfigureDraftBrowserPolicyCommand{
+	view, err := h.app.ConfigureExamDraftBrowserPolicy(request.Context, request.Invocation(), exam.ConfigureDraftBrowserPolicyCommand{
 		ExamID:                examID,
 		ExpectedDraftRevision: body.ExpectedDraftRevision,
 		Policy:                policy,
-		IdempotencyKey:        request.idempotencyKey,
+		IdempotencyKey:        request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, examResponseFromView(view)), nil
+	return route.JSON(http.StatusOK, examResponseFromView(view)), nil
 }
 
-func (h examHandlers) configureDraftNativePolicy(request operationRequest) (operationResult, error) {
-	examID, err := pathID[model.ExamID](request, "exam_id")
+func (h examHandlers) configureDraftNativePolicy(request route.Request) (route.Result, error) {
+	examID, err := route.PathID[model.ExamID](request, "exam_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body configureExamDraftNativePolicyRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 	if body.ExpectedDraftRevision < 1 {
-		return operationResult{}, invalidRequestError(errors.New("must be positive"))
+		return route.Result{}, route.InvalidRequest(errors.New("must be positive"))
 	}
 	if err := body.Native.Validate(); err != nil {
-		return operationResult{}, invalidRequestError(err)
+		return route.Result{}, route.InvalidRequest(err)
 	}
 
-	view, err := h.app.ConfigureExamDraftNativePolicy(request.context, request.invocation(), exam.ConfigureDraftNativePolicyCommand{
+	view, err := h.app.ConfigureExamDraftNativePolicy(request.Context, request.Invocation(), exam.ConfigureDraftNativePolicyCommand{
 		ExamID:                examID,
 		ExpectedDraftRevision: body.ExpectedDraftRevision,
 		NativePolicy:          body.Native,
-		IdempotencyKey:        request.idempotencyKey,
+		IdempotencyKey:        request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, examResponseFromView(view)), nil
+	return route.JSON(http.StatusOK, examResponseFromView(view)), nil
 }
 
-func (h examHandlers) archive(request operationRequest) (operationResult, error) {
-	examID, err := pathID[model.ExamID](request, "exam_id")
+func (h examHandlers) archive(request route.Request) (route.Result, error) {
+	examID, err := route.PathID[model.ExamID](request, "exam_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body archiveExamRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 	if body.ExpectedExamRevision < 1 {
-		return operationResult{}, invalidRequestError(errors.New("must be positive"))
+		return route.Result{}, route.InvalidRequest(errors.New("must be positive"))
 	}
 
-	archived, err := h.app.ArchiveExam(request.context, request.invocation(), exam.ArchiveCommand{
+	archived, err := h.app.ArchiveExam(request.Context, request.Invocation(), exam.ArchiveCommand{
 		ExamID:               examID,
 		ExpectedExamRevision: body.ExpectedExamRevision,
-		IdempotencyKey:       request.idempotencyKey,
+		IdempotencyKey:       request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, examIdentityResponseFromModel(archived)), nil
+	return route.JSON(http.StatusOK, examIdentityResponseFromModel(archived)), nil
 }
 
-func (h examHandlers) listManagers(request operationRequest) (operationResult, error) {
+func (h examHandlers) listManagers(request route.Request) (route.Result, error) {
 	examID, err := examIDFromRequest(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	query := exam.ListManagersQuery{ExamID: examID, Limit: 50}
-	values := request.http.URL.Query()
+	values := request.HTTP.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
 		query.Limit, err = strconv.Atoi(raw)
 		if err != nil || query.Limit < 1 || query.Limit > 200 {
-			return operationResult{}, invalidRequestError(errors.New("must be between 1 and 200"))
+			return route.Result{}, route.InvalidRequest(errors.New("must be between 1 and 200"))
 		}
 	}
 
 	if raw := values.Get("cursor"); raw != "" {
 		cursor, decodeErr := decodeExamManagerCursor(raw)
 		if decodeErr != nil {
-			return operationResult{}, invalidRequestError(decodeErr)
+			return route.Result{}, route.InvalidRequest(decodeErr)
 		}
 
 		query.BeforeGrantedAt, _ = model.ParseRFC3339(cursor.GrantedAt)
 		query.BeforeUserID = model.UserID(cursor.UserID)
 	}
 
-	page, err := h.app.ListExamManagers(request.context, request.invocation(), query)
+	page, err := h.app.ListExamManagers(request.Context, request.Invocation(), query)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	response := examManagerListResponse{Items: make([]examManagerResponse, 0, len(page.Items))}
@@ -916,7 +917,7 @@ func (h examHandlers) listManagers(request operationRequest) (operationResult, e
 	}
 
 	if page.HasMore && len(page.Items) == 0 {
-		return operationResult{}, unpresentableResult(errors.New("exam manager page made no progress"))
+		return route.Result{}, route.Unpresentable(errors.New("exam manager page made no progress"))
 	}
 
 	if page.HasMore {
@@ -926,105 +927,105 @@ func (h examHandlers) listManagers(request operationRequest) (operationResult, e
 			UserID:    last.UserID.String(),
 		})
 		if err != nil {
-			return operationResult{}, unpresentableResult(err)
+			return route.Result{}, route.Unpresentable(err)
 		}
 	}
 
-	return jsonResult(http.StatusOK, response), nil
+	return route.JSON(http.StatusOK, response), nil
 }
 
-func (h examHandlers) addManager(request operationRequest) (operationResult, error) {
+func (h examHandlers) addManager(request route.Request) (route.Result, error) {
 	examID, err := examIDFromRequest(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body addExamManagerRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
 	userID, err := parseExamManagerRequest(body.UserID, body.ExpectedExamRevision)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	change, err := h.app.AddExamManager(request.context, request.invocation(), exam.ManagerChangeCommand{
+	change, err := h.app.AddExamManager(request.Context, request.Invocation(), exam.ManagerChangeCommand{
 		ExamID:               examID,
 		UserID:               userID,
 		ExpectedExamRevision: body.ExpectedExamRevision,
-		IdempotencyKey:       request.idempotencyKey,
+		IdempotencyKey:       request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusCreated, examManagerChangeResponseFromApplication(change, true)), nil
+	return route.JSON(http.StatusCreated, examManagerChangeResponseFromApplication(change, true)), nil
 }
 
-func (h examHandlers) removeManager(request operationRequest) (operationResult, error) {
+func (h examHandlers) removeManager(request route.Request) (route.Result, error) {
 	examID, err := examIDFromRequest(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	userID, err := pathID[model.UserID](request, "user_id")
+	userID, err := route.PathID[model.UserID](request, "user_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body removeExamManagerRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 	if body.ExpectedExamRevision < 1 {
-		return operationResult{}, invalidRequestError(errors.New("must be positive"))
+		return route.Result{}, route.InvalidRequest(errors.New("must be positive"))
 	}
 
-	change, err := h.app.RemoveExamManager(request.context, request.invocation(), exam.ManagerChangeCommand{
+	change, err := h.app.RemoveExamManager(request.Context, request.Invocation(), exam.ManagerChangeCommand{
 		ExamID:               examID,
 		UserID:               userID,
 		ExpectedExamRevision: body.ExpectedExamRevision,
-		IdempotencyKey:       request.idempotencyKey,
+		IdempotencyKey:       request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, examManagerChangeResponseFromApplication(change, false)), nil
+	return route.JSON(http.StatusOK, examManagerChangeResponseFromApplication(change, false)), nil
 }
 
-func (h examHandlers) transferOwner(request operationRequest) (operationResult, error) {
+func (h examHandlers) transferOwner(request route.Request) (route.Result, error) {
 	examID, err := examIDFromRequest(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body transferExamOwnershipRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
 	userID, err := parseExamManagerRequest(body.UserID, body.ExpectedExamRevision)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	change, err := h.app.TransferExamOwnership(request.context, request.invocation(), exam.ManagerChangeCommand{
+	change, err := h.app.TransferExamOwnership(request.Context, request.Invocation(), exam.ManagerChangeCommand{
 		ExamID:               examID,
 		UserID:               userID,
 		ExpectedExamRevision: body.ExpectedExamRevision,
-		IdempotencyKey:       request.idempotencyKey,
+		IdempotencyKey:       request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, examManagerChangeResponseFromApplication(change, true)), nil
+	return route.JSON(http.StatusOK, examManagerChangeResponseFromApplication(change, true)), nil
 }
 
-func examIDFromRequest(request operationRequest) (model.ExamID, error) {
-	examID, err := pathID[model.ExamID](request, "exam_id")
+func examIDFromRequest(request route.Request) (model.ExamID, error) {
+	examID, err := route.PathID[model.ExamID](request, "exam_id")
 	if err != nil {
 		return "", err
 	}
@@ -1034,28 +1035,28 @@ func examIDFromRequest(request operationRequest) (model.ExamID, error) {
 func parseExamManagerRequest(rawUserID string, revision int64) (model.UserID, error) {
 	userID, err := model.ParseUserID(rawUserID)
 	if err != nil {
-		return "", invalidRequestError(err)
+		return "", route.InvalidRequest(err)
 	}
 	if revision < 1 {
-		return "", invalidRequestError(errors.New("must be positive"))
+		return "", route.InvalidRequest(errors.New("must be positive"))
 	}
 	return userID, nil
 }
 
 func encodeExamManagerCursor(cursor examManagerCursor) (string, error) {
-	return encodeOpaqueCursor(cursor, examManagerCursorSpec())
+	return route.EncodeCursor(cursor, examManagerCursorSpec())
 }
 
 func decodeExamManagerCursor(raw string) (examManagerCursor, error) {
-	return decodeOpaqueCursor(raw, examManagerCursorSpec())
+	return route.DecodeCursor(raw, examManagerCursorSpec())
 }
 
-func examManagerCursorSpec() opaqueCursorSpec[examManagerCursor] {
-	return opaqueCursorSpec[examManagerCursor]{
-		label:                "Exam Manager",
-		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members:              []string{"granted_at", "user_id"},
-		validate: func(cursor examManagerCursor) error {
+func examManagerCursorSpec() route.CursorSpec[examManagerCursor] {
+	return route.CursorSpec[examManagerCursor]{
+		Label:                "Exam Manager",
+		MaximumEncodedLength: route.DefaultMaximumCursorLength,
+		Members:              []string{"granted_at", "user_id"},
+		Validate: func(cursor examManagerCursor) error {
 			grantedAt, err := model.ParseRFC3339(cursor.GrantedAt)
 			if err != nil || grantedAt.IsZero() || !model.UserID(cursor.UserID).IsValid() {
 				return errors.New("invalid Exam Manager keyset")
@@ -1172,19 +1173,19 @@ func examListQuery(request *http.Request) (exam.ListQuery, error) {
 }
 
 func encodeExamCatalogCursor(cursor examCatalogCursor) (string, error) {
-	return encodeOpaqueCursor(cursor, examCatalogCursorSpec())
+	return route.EncodeCursor(cursor, examCatalogCursorSpec())
 }
 
 func decodeExamCatalogCursor(raw string) (examCatalogCursor, error) {
-	return decodeOpaqueCursor(raw, examCatalogCursorSpec())
+	return route.DecodeCursor(raw, examCatalogCursorSpec())
 }
 
-func examCatalogCursorSpec() opaqueCursorSpec[examCatalogCursor] {
-	return opaqueCursorSpec[examCatalogCursor]{
-		label:                "Exam catalog",
-		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members:              []string{"updated_at", "exam_id"},
-		validate: func(cursor examCatalogCursor) error {
+func examCatalogCursorSpec() route.CursorSpec[examCatalogCursor] {
+	return route.CursorSpec[examCatalogCursor]{
+		Label:                "Exam catalog",
+		MaximumEncodedLength: route.DefaultMaximumCursorLength,
+		Members:              []string{"updated_at", "exam_id"},
+		Validate: func(cursor examCatalogCursor) error {
 			updatedAt, err := model.ParseRFC3339(cursor.UpdatedAt)
 			if err != nil || updatedAt.IsZero() || !model.ExamID(cursor.ExamID).IsValid() {
 				return errors.New("invalid Exam catalog keyset")

@@ -16,6 +16,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -26,14 +27,14 @@ func (unavailableDesktopCompatibilityApplication) EvaluateDesktopCompatibility(
 	invocation.Invocation,
 	identity.DesktopCompatibilityQuery,
 ) (identity.DesktopCompatibilityResult, error) {
-	return identity.DesktopCompatibilityResult{}, errUnpresentableResult
+	return identity.DesktopCompatibilityResult{}, route.ErrUnpresentable
 }
 
 func (unavailableDesktopCompatibilityApplication) GetDesktopCompatibilityPolicy(
 	context.Context,
 	invocation.Invocation,
 ) (*model.DesktopCompatibilityPolicy, error) {
-	return nil, errUnpresentableResult
+	return nil, route.ErrUnpresentable
 }
 
 func (unavailableDesktopCompatibilityApplication) ReplaceDesktopCompatibilityPolicy(
@@ -41,16 +42,16 @@ func (unavailableDesktopCompatibilityApplication) ReplaceDesktopCompatibilityPol
 	invocation.Invocation,
 	identity.ReplaceDesktopCompatibilityPolicyCommand,
 ) (*model.DesktopCompatibilityPolicy, error) {
-	return nil, errUnpresentableResult
+	return nil, route.ErrUnpresentable
 }
 
 type desktopCompatibilityPolicyRequest struct {
-	ExpectedRevision       int64              `json:"expected_revision"`
-	MinimumDesktopRelease  Optional[string]   `json:"minimum_desktop_release"`
-	RevokedDesktopBuildIDs Optional[[]string] `json:"revoked_desktop_build_ids"`
-	AdministratorMessage   Optional[string]   `json:"administrator_message"`
-	Availability           Optional[string]   `json:"availability"`
-	RetryAt                Optional[string]   `json:"retry_at"`
+	ExpectedRevision       int64                    `json:"expected_revision"`
+	MinimumDesktopRelease  route.Optional[string]   `json:"minimum_desktop_release"`
+	RevokedDesktopBuildIDs route.Optional[[]string] `json:"revoked_desktop_build_ids"`
+	AdministratorMessage   route.Optional[string]   `json:"administrator_message"`
+	Availability           route.Optional[string]   `json:"availability"`
+	RetryAt                route.Optional[string]   `json:"retry_at"`
 }
 
 type desktopCompatibilityPolicyResponse struct {
@@ -68,13 +69,13 @@ type desktopCompatibilityPolicyHandlers struct {
 	app DesktopCompatibilityApplication
 }
 
-func desktopCompatibilityPolicyResource(app DesktopCompatibilityApplication) apiResource {
+func desktopCompatibilityPolicyResource(app DesktopCompatibilityApplication) route.Resource {
 	h := desktopCompatibilityPolicyHandlers{app: app}
-	replace := endpoint{
+	replace := route.Endpoint{
 		Method:      http.MethodPut,
 		Path:        "/desktop-compatibility-policy",
-		Auth:        AuthStrongRecentSessionRequired,
-		Idempotency: IdempotencyRequired,
+		Auth:        route.AuthStrongRecentSessionRequired,
+		Idempotency: route.IdempotencyRequired,
 		Errors: []string{
 			"authorization.denied",
 			"authorization.request.invalid",
@@ -92,12 +93,12 @@ func desktopCompatibilityPolicyResource(app DesktopCompatibilityApplication) api
 		},
 		Handle: h.replace,
 	}
-	return newResource(
+	return route.NewResource(
 		"desktop-compatibility-policy",
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/desktop-compatibility-policy",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -113,48 +114,48 @@ func desktopCompatibilityPolicyResource(app DesktopCompatibilityApplication) api
 }
 
 func (h desktopCompatibilityPolicyHandlers) get(
-	request operationRequest,
-) (operationResult, error) {
+	request route.Request,
+) (route.Result, error) {
 	policy, err := h.app.GetDesktopCompatibilityPolicy(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(
+	return route.JSON(
 		http.StatusOK,
 		desktopCompatibilityPolicyResponseFromModel(policy),
-	).withHeaders(privateNoStoreHeaders()), nil
+	).WithHeaders(privateNoStoreHeaders()), nil
 }
 
 func (h desktopCompatibilityPolicyHandlers) replace(
-	request operationRequest,
-) (operationResult, error) {
+	request route.Request,
+) (route.Result, error) {
 	var body desktopCompatibilityPolicyRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 	settings, err := requiredDesktopCompatibilityPolicySettings(body)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	policy, err := h.app.ReplaceDesktopCompatibilityPolicy(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		identity.ReplaceDesktopCompatibilityPolicyCommand{
 			ExpectedRevision: body.ExpectedRevision,
 			Settings:         settings,
-			IdempotencyKey:   request.idempotencyKey,
+			IdempotencyKey:   request.IdempotencyKey,
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(
+	return route.JSON(
 		http.StatusOK,
 		desktopCompatibilityPolicyResponseFromModel(policy),
-	).withHeaders(privateNoStoreHeaders()), nil
+	).WithHeaders(privateNoStoreHeaders()), nil
 }
 
 func requiredDesktopCompatibilityPolicySettings(

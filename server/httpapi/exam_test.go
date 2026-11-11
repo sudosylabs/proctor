@@ -23,13 +23,14 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
 func TestExamHTTPCreateAndGetUseApplicationFacade(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	view := testExamHTTPView(t, principal.UserID)
 	fake := &examHTTPApplication{principal: principal, view: view}
@@ -60,7 +61,7 @@ func TestExamHTTPCreateAndGetUseApplicationFacade(t *testing.T) {
 
 func TestExamHTTPListUsesBoundedCatalogQueryAndSummary(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	unitID, examID := model.NewAcademicUnitID(), model.NewExamID()
 	fake := &examHTTPApplication{principal: principal, catalog: exam.CatalogPage{Items: []store.ExamSummary{{
@@ -120,7 +121,7 @@ func TestExamCatalogCursorRoundTripsAndRejectsInvalidInput(t *testing.T) {
 
 func TestExamManagerHTTPListAndMutationsUseStrictBoundedContracts(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	view := testExamHTTPView(t, principal.UserID)
 	target := model.NewUserID()
@@ -193,7 +194,7 @@ func TestExamManagerCursorIsUnversionedAndStrict(t *testing.T) {
 
 func TestExamHTTPArchiveUsesRequiredIdempotentApplicationCommand(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	view := testExamHTTPView(t, principal.UserID)
 	archived := view.Exam
@@ -214,7 +215,7 @@ func TestExamHTTPArchiveUsesRequiredIdempotentApplicationCommand(t *testing.T) {
 
 func TestExamHTTPCreateRequiresIdempotencyKey(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	fake := &examHTTPApplication{principal: principal, view: testExamHTTPView(t, principal.UserID)}
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examResource(fake))
@@ -229,7 +230,7 @@ func TestExamHTTPCreateRequiresIdempotencyKey(t *testing.T) {
 
 func TestExamHTTPPatchDraftPreservesOmittedAndExplicitEmptyFields(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	view := testExamHTTPView(t, principal.UserID)
 	fake := &examHTTPApplication{principal: principal, view: view}
@@ -251,7 +252,7 @@ func TestExamHTTPPatchDraftPreservesOmittedAndExplicitEmptyFields(t *testing.T) 
 
 func TestExamHTTPPatchDraftTreatsNullAsUnchangedAndRequiresAValue(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	view := testExamHTTPView(t, principal.UserID)
 	fake := &examHTTPApplication{principal: principal, view: view}
@@ -268,7 +269,7 @@ func TestExamHTTPPatchDraftTreatsNullAsUnchangedAndRequiresAValue(t *testing.T) 
 
 func TestExamHTTPPatchDraftRequiresIdempotencyKey(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	view := testExamHTTPView(t, principal.UserID)
 	fake := &examHTTPApplication{principal: principal, view: view}
@@ -284,7 +285,7 @@ func TestExamHTTPPatchDraftRequiresIdempotencyKey(t *testing.T) {
 
 func TestExamHTTPConfigureDraftFocusLossUsesTypedApplicationCommand(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	view := testExamHTTPView(t, principal.UserID)
 	fake := &examHTTPApplication{principal: principal, view: view}
@@ -319,7 +320,7 @@ func TestExamHTTPConfigureDraftFocusLossRequiresExplicitEnabledAndRejectsRawPoli
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			logger, _ := newTestLogger(t)
+			logger, _ := routetest.NewLogger(t)
 			fake := &examHTTPApplication{principal: principal, view: view}
 			httpAPI := newFocusedResourceAPI(t, logger, fake, examResource(fake))
 			request := httptest.NewRequest(http.MethodPut, "/api/v1/exams/"+view.Exam.ID.String()+"/draft/policies/focus-loss", bytes.NewReader([]byte(body)))

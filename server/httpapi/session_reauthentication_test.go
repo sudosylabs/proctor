@@ -19,6 +19,8 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -37,10 +39,10 @@ func (f *sessionReauthenticationHTTPFake) ReauthenticatePassword(_ context.Conte
 
 func TestPasswordReauthenticationHTTPRejectsIdentitySelectionAndProtectsResponse(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now().Add(-time.Hour)}
 	fake := &sessionReauthenticationHTTPFake{}
-	api := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, sessionReauthenticationResource(fake, browserCookies{}))
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, sessionReauthenticationResource(fake, route.Cookies{}))
 	for _, test := range []struct {
 		body   string
 		status int

@@ -15,6 +15,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -34,17 +35,17 @@ type AccessPolicyApplication interface {
 }
 
 type accessPolicySettingsRequest struct {
-	ExpectedRevision                 int64                                            `json:"expected_revision"`
-	RevokeExistingSessions           Optional[bool]                                   `json:"revoke_existing_sessions"`
-	LocalLoginEnabled                Optional[bool]                                   `json:"local_login_enabled"`
-	PublicRegistrationEnabled        Optional[bool]                                   `json:"public_registration_enabled"`
-	InvitationAdmissionEnabled       Optional[bool]                                   `json:"invitation_admission_enabled"`
-	InvitationLocalCredentialEnabled Optional[bool]                                   `json:"invitation_local_credential_enabled"`
-	DesktopAuthorizationEnabled      Optional[bool]                                   `json:"desktop_authorization_enabled"`
-	ProviderAdmissions               Optional[map[string]model.ProviderAdmissionMode] `json:"provider_admissions"`
-	RoleHolderMFARequired            Optional[bool]                                   `json:"role_holder_mfa_required"`
-	SessionIdleMinutes               Optional[int]                                    `json:"session_idle_minutes"`
-	SessionAbsoluteMinutes           Optional[int]                                    `json:"session_absolute_minutes"`
+	ExpectedRevision                 int64                                                  `json:"expected_revision"`
+	RevokeExistingSessions           route.Optional[bool]                                   `json:"revoke_existing_sessions"`
+	LocalLoginEnabled                route.Optional[bool]                                   `json:"local_login_enabled"`
+	PublicRegistrationEnabled        route.Optional[bool]                                   `json:"public_registration_enabled"`
+	InvitationAdmissionEnabled       route.Optional[bool]                                   `json:"invitation_admission_enabled"`
+	InvitationLocalCredentialEnabled route.Optional[bool]                                   `json:"invitation_local_credential_enabled"`
+	DesktopAuthorizationEnabled      route.Optional[bool]                                   `json:"desktop_authorization_enabled"`
+	ProviderAdmissions               route.Optional[map[string]model.ProviderAdmissionMode] `json:"provider_admissions"`
+	RoleHolderMFARequired            route.Optional[bool]                                   `json:"role_holder_mfa_required"`
+	SessionIdleMinutes               route.Optional[int]                                    `json:"session_idle_minutes"`
+	SessionAbsoluteMinutes           route.Optional[int]                                    `json:"session_absolute_minutes"`
 }
 
 type accessPolicyResponse struct {
@@ -126,13 +127,13 @@ type publicAccessDiscoveryResponse struct {
 
 type accessPolicyHandlers struct{ app AccessPolicyApplication }
 
-func accessPolicyResource(app AccessPolicyApplication) apiResource {
+func accessPolicyResource(app AccessPolicyApplication) route.Resource {
 	h := accessPolicyHandlers{app: app}
-	replace := endpoint{
+	replace := route.Endpoint{
 		Method:      http.MethodPut,
 		Path:        "/access-policy",
-		Auth:        AuthStrongRecentSessionRequired,
-		Idempotency: IdempotencyRequired,
+		Auth:        route.AuthStrongRecentSessionRequired,
+		Idempotency: route.IdempotencyRequired,
 		Errors: []string{
 			"authorization.denied",
 			"authorization.request.invalid",
@@ -151,18 +152,18 @@ func accessPolicyResource(app AccessPolicyApplication) apiResource {
 		},
 		Handle: h.replace,
 	}
-	return newResource("access-policy",
-		endpoint{
+	return route.NewResource("access-policy",
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/discovery",
-			Auth:   AuthPublic,
+			Auth:   route.AuthPublic,
 			Errors: []string{"access_policy.unavailable", "access_policy.blocked", "access_policy.revision_conflict"},
 			Handle: h.discover,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/access-policy",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -174,10 +175,10 @@ func accessPolicyResource(app AccessPolicyApplication) apiResource {
 			},
 			Handle: h.get,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/access-policy/preflight",
-			Auth:   AuthStrongRecentSessionRequired,
+			Auth:   route.AuthStrongRecentSessionRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -195,32 +196,32 @@ func accessPolicyResource(app AccessPolicyApplication) apiResource {
 	)
 }
 
-func (h accessPolicyHandlers) get(request operationRequest) (operationResult, error) {
-	view, err := h.app.GetAccessPolicy(request.context, request.invocation())
+func (h accessPolicyHandlers) get(request route.Request) (route.Result, error) {
+	view, err := h.app.GetAccessPolicy(request.Context, request.Invocation())
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, accessPolicyResponseFromView(view)), nil
+	return route.JSON(http.StatusOK, accessPolicyResponseFromView(view)), nil
 }
 
-func (h accessPolicyHandlers) preflight(request operationRequest) (operationResult, error) {
+func (h accessPolicyHandlers) preflight(request route.Request) (route.Result, error) {
 	var body accessPolicySettingsRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
 	settings, revokeExistingSessions, err := requiredAccessPolicySettings(body)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	result, err := h.app.PreflightAccessPolicy(request.context, request.invocation(), administration.PreflightAccessPolicyCommand{
+	result, err := h.app.PreflightAccessPolicy(request.Context, request.Invocation(), administration.PreflightAccessPolicyCommand{
 		ExpectedRevision:       body.ExpectedRevision,
 		Settings:               settings,
 		RevokeExistingSessions: revokeExistingSessions,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	response := accessPolicyPreflightResponse{
@@ -232,35 +233,35 @@ func (h accessPolicyHandlers) preflight(request operationRequest) (operationResu
 		response.Blockers = append(response.Blockers, accessPolicyBlockerResponse{Code: string(blocker.Code), ProviderID: blocker.ProviderID})
 	}
 
-	return jsonResult(http.StatusOK, response), nil
+	return route.JSON(http.StatusOK, response), nil
 }
 
-func (h accessPolicyHandlers) replace(request operationRequest) (operationResult, error) {
+func (h accessPolicyHandlers) replace(request route.Request) (route.Result, error) {
 	var body accessPolicySettingsRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
 	settings, revokeExistingSessions, err := requiredAccessPolicySettings(body)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	view, err := h.app.ReplaceAccessPolicy(request.context, request.invocation(), administration.ReplaceAccessPolicyCommand{
+	view, err := h.app.ReplaceAccessPolicy(request.Context, request.Invocation(), administration.ReplaceAccessPolicyCommand{
 		ExpectedRevision:       body.ExpectedRevision,
 		Settings:               settings,
 		RevokeExistingSessions: revokeExistingSessions,
-		IdempotencyKey:         request.idempotencyKey,
+		IdempotencyKey:         request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, accessPolicyResponseFromView(view)), nil
+	return route.JSON(http.StatusOK, accessPolicyResponseFromView(view)), nil
 }
 
 func requiredAccessPolicySettings(body accessPolicySettingsRequest) (model.AccessPolicySettings, bool, error) {
-	requiredBoolean := func(field string, value Optional[bool]) (bool, error) {
+	requiredBoolean := func(field string, value route.Optional[bool]) (bool, error) {
 		candidate := value.ValuePointer()
 		if candidate == nil {
 			return false, apperror.New("request.invalid").WithField("field", field)
@@ -310,7 +311,7 @@ func requiredAccessPolicySettings(body accessPolicySettingsRequest) (model.Acces
 
 	// A Session length is required but may be null, which keeps the
 	// deployment default; a length below one minute is malformed.
-	requiredMinutes := func(field string, value Optional[int]) (int, error) {
+	requiredMinutes := func(field string, value route.Optional[int]) (int, error) {
 		if !value.IsSet() {
 			return 0, apperror.New("request.invalid").WithField("field", field)
 		}
@@ -348,12 +349,12 @@ func requiredAccessPolicySettings(body accessPolicySettingsRequest) (model.Acces
 	}, revoke, nil
 }
 
-func (h accessPolicyHandlers) discover(request operationRequest) (operationResult, error) {
-	discovery, err := h.app.DiscoverAccess(request.context, request.invocation())
+func (h accessPolicyHandlers) discover(request route.Request) (route.Result, error) {
+	discovery, err := h.app.DiscoverAccess(request.Context, request.Invocation())
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, publicAccessDiscoveryResponseFromView(discovery)), nil
+	return route.JSON(http.StatusOK, publicAccessDiscoveryResponseFromView(discovery)), nil
 }
 
 func accessPolicyResponseFromView(view administration.AccessPolicyView) accessPolicyResponse {

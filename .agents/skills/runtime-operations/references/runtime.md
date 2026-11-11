@@ -322,7 +322,7 @@ recipients, and error text are forbidden labels.
 The `tracing` module owns the optional OpenTelemetry tracer provider and its
 OTLP/HTTP exporter; it never installs a global provider. It is built with the
 metrics module, hands composition-built adapters to three consumer-owned ports
-(`httpapi.Tracing`, `timerlayer.Tracer`, `job.Tracer`), and closes after every
+(`route.Tracing`, `timerlayer.Tracer`, `job.Tracer`), and closes after every
 span producer and before `platform.Service`, flushing within
 `Tracing.ShutdownTimeout` or what remains of the shared shutdown budget,
 whichever ends first. Request spans are renamed to the sealed route

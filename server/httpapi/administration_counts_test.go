@@ -18,7 +18,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -36,7 +36,7 @@ func (a *administrationCountsHTTPApplication) AdministrationCounts(context.Conte
 
 func TestAdministrationCountsOmitsCountsTheCallerMayNotList(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	application := &administrationCountsHTTPApplication{counts: administration.CountsResult{
 		PendingInvitations:   &administration.Count{Count: 12},
 		FailedMailDeliveries: &administration.Count{Count: administration.MaximumCount, IsLowerBound: true},
@@ -61,7 +61,7 @@ func TestAdministrationCountsOmitsCountsTheCallerMayNotList(t *testing.T) {
 
 func TestAdministrationCountsRequiresAnInteractiveSession(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	application := &administrationCountsHTTPApplication{}
 	token := operatorTestPrincipal()
 	token.CredentialType, token.SessionID = model.CredentialPersonalAccessToken, ""
@@ -75,10 +75,10 @@ func TestAdministrationCountsRequiresAnInteractiveSession(t *testing.T) {
 
 func TestUserDirectoryReportsItsTotalOnTheFirstPageOnly(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	first := &model.User{ID: model.NewUserID(), Username: "alpha", CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100)}
 	profiles := &userProfileHTTPApplication{values: []*model.User{first}, searchHasMore: true, searchTotal: store.MaximumListCount}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: operatorTestPrincipal()}, userProfileResource(profiles, profiles, profiles))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: operatorTestPrincipal()}, userProfileResource(profiles, profiles, profiles))
 
 	response := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/users?limit=1", "", true)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
@@ -92,24 +92,4 @@ func TestUserDirectoryReportsItsTotalOnTheFirstPageOnly(t *testing.T) {
 	require.Equal(t, http.StatusOK, next.Code, next.Body.String())
 	require.Equal(t, first.ID, profiles.searchQuery.AfterID)
 	require.NotContains(t, next.Body.String(), "total", "a later page repeats no count")
-}
-
-func TestPageTotalMembersRefuseAMismatchedPage(t *testing.T) {
-	t.Parallel()
-	for name, test := range map[string]struct {
-		total     paging.Total
-		continued bool
-	}{
-		"a continued page counted":    {total: paging.Total{Counted: true, Total: 1}, continued: true},
-		"a first page left uncounted": {total: paging.Total{}, continued: false},
-	} {
-		t.Run(name, func(t *testing.T) {
-			_, _, err := pageTotalMembers(test.total, test.continued)
-			require.ErrorIs(t, err, errUnpresentableResult)
-		})
-	}
-	total, lowerBound, err := pageTotalMembers(paging.Total{}, true)
-	require.NoError(t, err)
-	require.Nil(t, total)
-	require.Nil(t, lowerBound)
 }

@@ -22,6 +22,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -70,7 +72,7 @@ func (a *institutionHTTPApplication) UpdateInstitution(
 func TestInstitutionHTTPMapsDTOsWithoutPermissionPreflight(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	institution := &model.Institution{
 		ID: model.InstitutionID(model.NewID()), CreatedAt: model.TimeFromMillis(10), UpdatedAt: model.TimeFromMillis(20),
 		Name: "northbridge", DisplayName: "Northbridge University",
@@ -118,7 +120,7 @@ func TestInstitutionHTTPMapsDTOsWithoutPermissionPreflight(t *testing.T) {
 func TestInstitutionResourceRejectsUnknownPatchFields(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fakeApplication := &institutionHTTPApplication{
 		principal: model.Principal{
 			UserID: model.NewUserID(), SessionID: model.NewSessionID(),
@@ -142,7 +144,7 @@ func TestInstitutionResourceRejectsUnknownPatchFields(t *testing.T) {
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusBadRequest, response.Code, "status = %d: %s", response.Code, response.Body.String())
-	var problem Problem
+	var problem route.Problem
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
 	require.Equal(t, "request.invalid", problem.Code, "problem code")
 }

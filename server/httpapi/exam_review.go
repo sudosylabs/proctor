@@ -20,6 +20,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/exam/review"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -51,23 +52,23 @@ type examIntegrityReviewIDCursor struct {
 }
 
 func encodeExamIntegrityReviewCursor(kind, id string) (string, error) {
-	return encodeOpaqueCursor(examIntegrityReviewIDCursor{Kind: kind, ID: id}, examIntegrityReviewCursorSpec(kind))
+	return route.EncodeCursor(examIntegrityReviewIDCursor{Kind: kind, ID: id}, examIntegrityReviewCursorSpec(kind))
 }
 
 func decodeExamIntegrityReviewCursor(raw, kind string) (string, error) {
-	wire, err := decodeOpaqueCursor(raw, examIntegrityReviewCursorSpec(kind))
+	wire, err := route.DecodeCursor(raw, examIntegrityReviewCursorSpec(kind))
 	if err != nil {
 		return "", err
 	}
 	return wire.ID, nil
 }
 
-func examIntegrityReviewCursorSpec(kind string) opaqueCursorSpec[examIntegrityReviewIDCursor] {
-	return opaqueCursorSpec[examIntegrityReviewIDCursor]{
-		label:                "Integrity Review",
-		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members:              []string{"kind", "id"},
-		validate: func(cursor examIntegrityReviewIDCursor) error {
+func examIntegrityReviewCursorSpec(kind string) route.CursorSpec[examIntegrityReviewIDCursor] {
+	return route.CursorSpec[examIntegrityReviewIDCursor]{
+		Label:                "Integrity Review",
+		MaximumEncodedLength: route.DefaultMaximumCursorLength,
+		Members:              []string{"kind", "id"},
+		Validate: func(cursor examIntegrityReviewIDCursor) error {
 			if cursor.Kind != kind || !model.IsValidOpaqueID(cursor.ID) {
 				return errors.New("invalid Integrity Review keyset")
 			}
@@ -343,7 +344,7 @@ type studentExamResultResponse struct {
 	ReleasedAt             string `json:"released_at"`
 }
 
-func examIntegrityReviewResource(app ExamIntegrityReviewApplication) apiResource {
+func examIntegrityReviewResource(app ExamIntegrityReviewApplication) route.Resource {
 	h := examIntegrityReviewHandlers{app: app}
 	flags := "/submissions/{submission_id}/integrity-flags"
 	discrepancies := "/submissions/{submission_id}/integrity-discrepancies"
@@ -359,11 +360,11 @@ func examIntegrityReviewResource(app ExamIntegrityReviewApplication) apiResource
 		"exam.integrity_review.invalid",
 		"exam.integrity_review.unavailable",
 	)
-	return newResource("exam-integrity-reviews",
-		endpoint{
+	return route.NewResource("exam-integrity-reviews",
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   flags,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -376,10 +377,10 @@ func examIntegrityReviewResource(app ExamIntegrityReviewApplication) apiResource
 			},
 			Handle: h.listFlags,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   evidence,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -392,10 +393,10 @@ func examIntegrityReviewResource(app ExamIntegrityReviewApplication) apiResource
 			},
 			Handle: h.listEvidence,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/submissions/{submission_id}/native-conditions",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -408,10 +409,10 @@ func examIntegrityReviewResource(app ExamIntegrityReviewApplication) apiResource
 			},
 			Handle: h.listNativeConditions,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   discrepancies,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -424,10 +425,10 @@ func examIntegrityReviewResource(app ExamIntegrityReviewApplication) apiResource
 			},
 			Handle: h.listDiscrepancies,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   reviewPath,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -440,11 +441,11 @@ func examIntegrityReviewResource(app ExamIntegrityReviewApplication) apiResource
 			},
 			Handle: h.get,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPut,
 			Path:        reviewPath,
-			Auth:        AuthPrincipalRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -466,11 +467,11 @@ func examIntegrityReviewResource(app ExamIntegrityReviewApplication) apiResource
 			},
 			Handle: h.update,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPut,
 			Path:        decision,
-			Auth:        AuthPrincipalRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -492,11 +493,11 @@ func examIntegrityReviewResource(app ExamIntegrityReviewApplication) apiResource
 			},
 			Handle: h.saveDecision,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPost,
 			Path:        finalize,
-			Auth:        AuthPrincipalRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -518,11 +519,11 @@ func examIntegrityReviewResource(app ExamIntegrityReviewApplication) apiResource
 			},
 			Handle: h.finalize,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPost,
 			Path:        release,
-			Auth:        AuthPrincipalRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -544,36 +545,36 @@ func examIntegrityReviewResource(app ExamIntegrityReviewApplication) apiResource
 			},
 			Handle: h.release,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   candidateResult,
-			Auth:   AuthSessionRequired,
+			Auth:   route.AuthSessionRequired,
 			Errors: studentErrors,
 			Handle: h.studentResult,
 		},
 	)
 }
 
-func (h examIntegrityReviewHandlers) get(request operationRequest) (operationResult, error) {
+func (h examIntegrityReviewHandlers) get(request route.Request) (route.Result, error) {
 	submissionID, err := reviewSubmissionID(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	snapshot, err := h.app.GetExamIntegrityReview(request.context, request.invocation(), submissionID)
+	snapshot, err := h.app.GetExamIntegrityReview(request.Context, request.Invocation(), submissionID)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	response, err := examIntegrityReviewSnapshotResponse(snapshot)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
-func (h examIntegrityReviewHandlers) listFlags(request operationRequest) (operationResult, error) {
+func (h examIntegrityReviewHandlers) listFlags(request route.Request) (route.Result, error) {
 	submissionID, err := reviewSubmissionID(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	query := review.ListFlagsQuery{SubmissionID: submissionID, Limit: 50}
@@ -581,12 +582,12 @@ func (h examIntegrityReviewHandlers) listFlags(request operationRequest) (operat
 		query.AfterFlagID, err = model.ParseIntegrityFlagID(id)
 		return err
 	}); err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	page, err := h.app.ListExamIntegrityFlags(request.context, request.invocation(), query)
+	page, err := h.app.ListExamIntegrityFlags(request.Context, request.Invocation(), query)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	response := examIntegrityFlagListResponse{Items: make([]examIntegrityFlagResponse, 0, len(page.Items))}
@@ -607,27 +608,27 @@ func (h examIntegrityReviewHandlers) listFlags(request operationRequest) (operat
 
 	if page.HasMore {
 		if len(page.Items) == 0 {
-			return operationResult{}, errors.New("Integrity Review application returned an invalid Flag page")
+			return route.Result{}, errors.New("Integrity Review application returned an invalid Flag page")
 		}
 
 		response.NextCursor, err = encodeExamIntegrityReviewCursor("flag", page.Items[len(page.Items)-1].Flag.ID.String())
 		if err != nil {
-			return operationResult{}, unpresentableResult(err)
+			return route.Result{}, route.Unpresentable(err)
 		}
 	}
 
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
-func (h examIntegrityReviewHandlers) listEvidence(request operationRequest) (operationResult, error) {
+func (h examIntegrityReviewHandlers) listEvidence(request route.Request) (route.Result, error) {
 	submissionID, err := reviewSubmissionID(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	flagID, err := reviewFlagID(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	query := review.ListEvidenceQuery{SubmissionID: submissionID, FlagID: flagID, Limit: 50}
@@ -635,12 +636,12 @@ func (h examIntegrityReviewHandlers) listEvidence(request operationRequest) (ope
 		query.AfterEvidenceID, err = model.ParseIntegrityEvidenceID(id)
 		return err
 	}); err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	page, err := h.app.ListExamIntegrityEvidence(request.context, request.invocation(), query)
+	page, err := h.app.ListExamIntegrityEvidence(request.Context, request.Invocation(), query)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	response := examIntegrityEvidenceListResponse{Items: make([]examIntegrityEvidenceResponse, 0, len(page.Items))}
@@ -665,22 +666,22 @@ func (h examIntegrityReviewHandlers) listEvidence(request operationRequest) (ope
 
 	if page.HasMore {
 		if len(page.Items) == 0 {
-			return operationResult{}, errors.New("Integrity Review application returned an invalid Evidence page")
+			return route.Result{}, errors.New("Integrity Review application returned an invalid Evidence page")
 		}
 
 		response.NextCursor, err = encodeExamIntegrityReviewCursor("evidence", page.Items[len(page.Items)-1].ID.String())
 		if err != nil {
-			return operationResult{}, unpresentableResult(err)
+			return route.Result{}, route.Unpresentable(err)
 		}
 	}
 
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
-func (h examIntegrityReviewHandlers) listDiscrepancies(request operationRequest) (operationResult, error) {
+func (h examIntegrityReviewHandlers) listDiscrepancies(request route.Request) (route.Result, error) {
 	submissionID, err := reviewSubmissionID(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	query := review.ListDiscrepanciesQuery{SubmissionID: submissionID, Limit: 50}
@@ -688,12 +689,12 @@ func (h examIntegrityReviewHandlers) listDiscrepancies(request operationRequest)
 		query.AfterDiscrepancyID, err = model.ParseIntegrityDiscrepancyID(id)
 		return err
 	}); err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	page, err := h.app.ListExamIntegrityDiscrepancies(request.context, request.invocation(), query)
+	page, err := h.app.ListExamIntegrityDiscrepancies(request.Context, request.Invocation(), query)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	response := examIntegrityDiscrepancyListResponse{Items: make([]examIntegrityDiscrepancyResponse, 0, len(page.Items))}
@@ -725,42 +726,42 @@ func (h examIntegrityReviewHandlers) listDiscrepancies(request operationRequest)
 
 	if page.HasMore {
 		if len(page.Items) == 0 {
-			return operationResult{}, errors.New("Integrity Review application returned an invalid Discrepancy page")
+			return route.Result{}, errors.New("Integrity Review application returned an invalid Discrepancy page")
 		}
 
 		response.NextCursor, err = encodeExamIntegrityReviewCursor("discrepancy", page.Items[len(page.Items)-1].ID.String())
 		if err != nil {
-			return operationResult{}, unpresentableResult(err)
+			return route.Result{}, route.Unpresentable(err)
 		}
 	}
 
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
-func (h examIntegrityReviewHandlers) saveDecision(request operationRequest) (operationResult, error) {
+func (h examIntegrityReviewHandlers) saveDecision(request route.Request) (route.Result, error) {
 	submissionID, err := reviewSubmissionID(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	flagID, err := reviewFlagID(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body saveExamIntegrityDecisionRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
 	reviewID, err := optionalSubmissionReviewID(body.ReviewID)
 	if err != nil {
-		return operationResult{}, invalidRequestError(err)
+		return route.Result{}, route.InvalidRequest(err)
 	}
 
 	result, err := h.app.SaveExamIntegrityDecision(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		review.SaveDecisionCommand{
 			SubmissionID:             submissionID,
 			ReviewID:                 reviewID,
@@ -769,46 +770,46 @@ func (h examIntegrityReviewHandlers) saveDecision(request operationRequest) (ope
 			ExpectedDecisionRevision: body.ExpectedDecisionRevision,
 			Outcome:                  model.IntegrityReviewOutcome(body.Outcome),
 			PrivateRationale:         body.PrivateRationale,
-			IdempotencyKey:           request.idempotencyKey,
+			IdempotencyKey:           request.IdempotencyKey,
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	return reviewMutationResult(result)
 }
 
-func (h examIntegrityReviewHandlers) update(request operationRequest) (operationResult, error) {
+func (h examIntegrityReviewHandlers) update(request route.Request) (route.Result, error) {
 	submissionID, err := reviewSubmissionID(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body updateExamIntegrityReviewRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
 	reviewID, err := optionalSubmissionReviewID(body.ReviewID)
 	if err != nil {
-		return operationResult{}, invalidRequestError(err)
+		return route.Result{}, route.InvalidRequest(err)
 	}
 
 	result, err := h.app.UpdateExamIntegrityReview(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		review.UpdateDraftCommand{
 			SubmissionID:           submissionID,
 			ReviewID:               reviewID,
 			ExpectedReviewRevision: body.ExpectedReviewRevision,
 			ManagerNotes:           body.ManagerNotes,
 			StudentRemarksMarkdown: body.StudentRemarksMarkdown,
-			IdempotencyKey:         request.idempotencyKey,
+			IdempotencyKey:         request.IdempotencyKey,
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	return reviewMutationResult(result)
@@ -821,65 +822,65 @@ const (
 	integrityReviewRelease
 )
 
-func (h examIntegrityReviewHandlers) finalize(request operationRequest) (operationResult, error) {
+func (h examIntegrityReviewHandlers) finalize(request route.Request) (route.Result, error) {
 	return h.terminal(request, integrityReviewFinalize)
 }
 
-func (h examIntegrityReviewHandlers) release(request operationRequest) (operationResult, error) {
+func (h examIntegrityReviewHandlers) release(request route.Request) (route.Result, error) {
 	return h.terminal(request, integrityReviewRelease)
 }
 
-func (h examIntegrityReviewHandlers) terminal(request operationRequest,
+func (h examIntegrityReviewHandlers) terminal(request route.Request,
 	operation integrityReviewTerminalOperation,
-) (operationResult, error) {
+) (route.Result, error) {
 	if operation != integrityReviewFinalize && operation != integrityReviewRelease {
-		return operationResult{}, invalidRequestError(errors.New("unsupported Review terminal operation"))
+		return route.Result{}, route.InvalidRequest(errors.New("unsupported Review terminal operation"))
 	}
 
 	submissionID, err := reviewSubmissionID(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body terminalExamIntegrityReviewRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
 	reviewID, err := model.ParseSubmissionReviewID(body.ReviewID)
 	if err != nil {
-		return operationResult{}, invalidRequestError(err)
+		return route.Result{}, route.InvalidRequest(err)
 	}
 
 	command := review.TerminalCommand{
 		SubmissionID:           submissionID,
 		ReviewID:               reviewID,
 		ExpectedReviewRevision: body.ExpectedReviewRevision,
-		IdempotencyKey:         request.idempotencyKey,
+		IdempotencyKey:         request.IdempotencyKey,
 	}
 	var result review.Result
 	if operation == integrityReviewRelease {
-		result, err = h.app.ReleaseStudentExamResult(request.context, request.invocation(), command)
+		result, err = h.app.ReleaseStudentExamResult(request.Context, request.Invocation(), command)
 	} else {
-		result, err = h.app.FinalizeExamIntegrityReview(request.context, request.invocation(), command)
+		result, err = h.app.FinalizeExamIntegrityReview(request.Context, request.Invocation(), command)
 	}
 
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	return reviewMutationResult(result)
 }
 
-func (h examIntegrityReviewHandlers) studentResult(request operationRequest) (operationResult, error) {
-	attemptID, err := pathID[model.ExamAttemptID](request, "exam_attempt_id")
+func (h examIntegrityReviewHandlers) studentResult(request route.Request) (route.Result, error) {
+	attemptID, err := route.PathID[model.ExamAttemptID](request, "exam_attempt_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	result, err := h.app.GetStudentExamResult(request.context, request.invocation(), attemptID)
+	result, err := h.app.GetStudentExamResult(request.Context, request.Invocation(), attemptID)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	response := studentExamResultResponse{
@@ -889,12 +890,12 @@ func (h examIntegrityReviewHandlers) studentResult(request operationRequest) (op
 		StudentRemarksMarkdown: result.StudentRemarksMarkdown,
 		ReleasedAt:             model.FormatRFC3339(result.ReleasedAt),
 	}
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
-func reviewMutationResult(result review.Result) (operationResult, error) {
+func reviewMutationResult(result review.Result) (route.Result, error) {
 	if result.Review == nil {
-		return operationResult{}, errors.New("Integrity Review application returned an empty Review")
+		return route.Result{}, errors.New("Integrity Review application returned an empty Review")
 	}
 
 	response := examIntegrityReviewMutationResponse{
@@ -908,7 +909,7 @@ func reviewMutationResult(result review.Result) (operationResult, error) {
 		response.Decision = &decision
 	}
 
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
 func examIntegrityReviewSnapshotResponse(snapshot *store.ExamSubmissionReviewSnapshot) (examIntegrityReviewResponse, error) {
@@ -985,16 +986,16 @@ func examIntegrityReviewDecisionDTO(decision model.IntegrityReviewDecision) exam
 	}
 }
 
-func reviewSubmissionID(request operationRequest) (model.SubmissionID, error) {
-	id, err := pathID[model.SubmissionID](request, "submission_id")
+func reviewSubmissionID(request route.Request) (model.SubmissionID, error) {
+	id, err := route.PathID[model.SubmissionID](request, "submission_id")
 	if err != nil {
 		return "", err
 	}
 	return id, nil
 }
 
-func reviewFlagID(request operationRequest) (model.IntegrityFlagID, error) {
-	id, err := pathID[model.IntegrityFlagID](request, "integrity_flag_id")
+func reviewFlagID(request route.Request) (model.IntegrityFlagID, error) {
+	id, err := route.PathID[model.IntegrityFlagID](request, "integrity_flag_id")
 	if err != nil {
 		return "", err
 	}
@@ -1008,22 +1009,22 @@ func optionalSubmissionReviewID(raw string) (model.SubmissionReviewID, error) {
 	return model.ParseSubmissionReviewID(raw)
 }
 
-func applyReviewPageQuery(request operationRequest, kind string, limit *int, setCursor func(string) error) error {
-	values := request.http.URL.Query()
+func applyReviewPageQuery(request route.Request, kind string, limit *int, setCursor func(string) error) error {
+	values := request.HTTP.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
 		parsed, err := strconv.Atoi(raw)
 		if err != nil || parsed < 1 || parsed > 200 {
-			return invalidRequestError(errors.New("must be between 1 and 200"))
+			return route.InvalidRequest(errors.New("must be between 1 and 200"))
 		}
 		*limit = parsed
 	}
 	if raw := values.Get("cursor"); raw != "" {
 		id, err := decodeExamIntegrityReviewCursor(raw, kind)
 		if err != nil {
-			return invalidRequestError(err)
+			return route.InvalidRequest(err)
 		}
 		if err = setCursor(id); err != nil {
-			return invalidRequestError(err)
+			return route.InvalidRequest(err)
 		}
 	}
 	return nil
@@ -1034,10 +1035,10 @@ type nativeConditionListResponse struct {
 	NextCursor string                          `json:"next_cursor,omitempty"`
 }
 
-func (h examIntegrityReviewHandlers) listNativeConditions(request operationRequest) (operationResult, error) {
+func (h examIntegrityReviewHandlers) listNativeConditions(request route.Request) (route.Result, error) {
 	submissionID, err := reviewSubmissionID(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	query := store.NativeConditionListOptions{SubmissionID: submissionID, Limit: 50}
@@ -1047,30 +1048,30 @@ func (h examIntegrityReviewHandlers) listNativeConditions(request operationReque
 		&query.Limit,
 		func(id string) error { query.AfterID, err = model.ParseIntegrityEvidenceID(id); return err },
 	); err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	page, err := h.app.ListNativeConditions(request.context, request.invocation(), query)
+	page, err := h.app.ListNativeConditions(request.Context, request.Invocation(), query)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if page == nil || page.Items == nil || len(page.Items) > query.Limit || page.HasMore && len(page.Items) != query.Limit {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 
 	response := nativeConditionListResponse{Items: page.Items}
 	for _, value := range response.Items {
 		if value.Validate() != nil {
-			return operationResult{}, errUnpresentableResult
+			return route.Result{}, route.ErrUnpresentable
 		}
 	}
 
 	if page.HasMore {
 		response.NextCursor, err = encodeExamIntegrityReviewCursor("native_condition", page.Items[len(page.Items)-1].ID.String())
 		if err != nil {
-			return operationResult{}, err
+			return route.Result{}, err
 		}
 	}
 
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }

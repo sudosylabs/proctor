@@ -29,6 +29,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -672,7 +674,7 @@ func TestCandidateWorkspaceJournalAndAllHTTPMutationsMapExactProtectedCommands(t
 	require.Equal(t, http.StatusOK, journalResponse.Code, "paged journal")
 	var journal candidateWorkspaceJournalResponse
 	require.NoError(t, json.Unmarshal(journalResponse.Body.Bytes(), &journal))
-	next, err := decodeOpaqueCursor(journal.NextCursor, candidateWorkspaceJournalCursorSpec())
+	next, err := route.DecodeCursor(journal.NextCursor, candidateWorkspaceJournalCursorSpec())
 	require.NoError(t, err, "next_cursor")
 	require.Equal(t, fake.journalPage.Entries[len(fake.journalPage.Entries)-1].Cursor, next.After, "continuation after the last change")
 	journalResponse = httptest.NewRecorder()
@@ -973,9 +975,9 @@ func candidateTestRuntimeCapabilities(t *testing.T, at time.Time, record *model.
 		Departure: store.CandidateDepartureCapability{Allowed: false, Reason: "attempt_in_progress"}}
 }
 
-func newExamAttemptFocusedAPI(t *testing.T, fake *examAttemptHTTPFake) *API {
+func newExamAttemptFocusedAPI(t *testing.T, fake *examAttemptHTTPFake) *route.API {
 	t.Helper()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	return newFocusedResourceAPI(t, logger, fake, examAttemptResource(fake))
 }
 

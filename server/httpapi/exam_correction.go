@@ -18,6 +18,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/exam/correction"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -58,8 +59,8 @@ type examSittingCorrectionStageResponse struct {
 type applyExamSittingCorrectionRequest struct {
 	ExpectedSittingRevision   int64                                  `json:"expected_revision"`
 	ExpectedCurrentRevisionID string                                 `json:"expected_current_revision_id"`
-	InstructionsMarkdown      Optional[string]                       `json:"instructions_markdown"`
-	BrowserPolicy             Optional[browserPolicyDocument]        `json:"browser_policy"`
+	InstructionsMarkdown      route.Optional[string]                 `json:"instructions_markdown"`
+	BrowserPolicy             route.Optional[browserPolicyDocument]  `json:"browser_policy"`
 	AffectedCapabilities      []model.CandidateCapability            `json:"affected_capabilities"`
 	CandidateSummary          string                                 `json:"candidate_summary"`
 	AcknowledgementRequired   bool                                   `json:"acknowledgement_required"`
@@ -154,20 +155,20 @@ func decodeDuplicateFreeExamCorrectionObject(encoded []byte, target any) error {
 	return nil
 }
 
-func examSittingCorrectionResource(app ExamSittingCorrectionApplication) apiResource {
+func examSittingCorrectionResource(app ExamSittingCorrectionApplication) route.Resource {
 	h := examSittingCorrectionHandlers{app: app}
 	stages := "/exams/{exam_id}/sittings/{exam_sitting_id}/correction-resource-stages"
 	corrections := "/exams/{exam_id}/sittings/{exam_sitting_id}/corrections"
-	return newResource(
+	return route.NewResource(
 		"exam-sitting-corrections",
-		endpoint{
+		route.Endpoint{
 			Method:       http.MethodPost,
 			Path:         stages,
-			Auth:         AuthPrincipalRequired,
-			Idempotency:  IdempotencyRequired,
+			Auth:         route.AuthPrincipalRequired,
+			Idempotency:  route.IdempotencyRequired,
 			MaxBodyBytes: examSittingCorrectionUploadBodyLimit,
 			ProtocolName: "exam-sitting-correction-resource-stage",
-			ProtocolKind: RouteProtocolStreamingUpload,
+			ProtocolKind: route.ProtocolStreamingUpload,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -191,11 +192,11 @@ func examSittingCorrectionResource(app ExamSittingCorrectionApplication) apiReso
 			},
 			Protocol: h.stage,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPost,
 			Path:        corrections,
-			Auth:        AuthPrincipalRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -223,24 +224,24 @@ func examSittingCorrectionResource(app ExamSittingCorrectionApplication) apiReso
 	)
 }
 
-func (h examSittingCorrectionHandlers) stage(request operationRequest) (protocolResult, error) {
+func (h examSittingCorrectionHandlers) stage(request route.Request) (route.ProtocolResult, error) {
 	examID, sittingID, err := examSittingCorrectionIDs(request)
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
 
 	var metadata examSittingCorrectionStageMetadata
-	content, err := decodeExamResourceMultipart(request.http, &metadata)
+	content, err := decodeExamResourceMultipart(request.HTTP, &metadata)
 	if err != nil {
-		return protocolResult{}, invalidRequestError(err)
+		return route.ProtocolResult{}, route.InvalidRequest(err)
 	}
 	if metadata.Size == nil {
-		return protocolResult{}, invalidRequestError(errors.New("size is required"))
+		return route.ProtocolResult{}, route.InvalidRequest(errors.New("size is required"))
 	}
 
 	baseRevisionID, err := model.ParseExamRevisionID(metadata.BaseRevisionID)
 	if err != nil {
-		return protocolResult{}, invalidRequestError(err)
+		return route.ProtocolResult{}, route.InvalidRequest(err)
 	}
 
 	target := store.ExamCorrectionResourceStageTarget(metadata.TargetKind)
@@ -248,24 +249,24 @@ func (h examSittingCorrectionHandlers) stage(request operationRequest) (protocol
 	switch target {
 	case store.ExamCorrectionResourceAddition:
 		if metadata.ReplacesResourceID != "" {
-			return protocolResult{}, invalidRequestError(errors.New("must be omitted for an addition"))
+			return route.ProtocolResult{}, route.InvalidRequest(errors.New("must be omitted for an addition"))
 		}
 	case store.ExamCorrectionResourceReplacement:
 		if metadata.ReplacesResourceID == "" {
-			return protocolResult{}, invalidRequestError(errors.New("is required for a replacement"))
+			return route.ProtocolResult{}, route.InvalidRequest(errors.New("is required for a replacement"))
 		}
 
 		resourceID, err = model.ParseExamResourceID(metadata.ReplacesResourceID)
 		if err != nil {
-			return protocolResult{}, invalidRequestError(err)
+			return route.ProtocolResult{}, route.InvalidRequest(err)
 		}
 	default:
-		return protocolResult{}, invalidRequestError(errors.New("must be addition or replacement"))
+		return route.ProtocolResult{}, route.InvalidRequest(errors.New("must be addition or replacement"))
 	}
 
 	result, err := h.app.StageExamSittingCorrectionResourceContent(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		correction.StageResourceContentCommand{
 			ExamID:         examID,
 			SittingID:      sittingID,
@@ -276,11 +277,11 @@ func (h examSittingCorrectionHandlers) stage(request operationRequest) (protocol
 			Body:           content,
 			Size:           *metadata.Size,
 			ExpectedSHA256: metadata.SHA256,
-			IdempotencyKey: request.idempotencyKey,
+			IdempotencyKey: request.IdempotencyKey,
 		},
 	)
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
 
 	response := examSittingCorrectionStageResponse{
@@ -291,26 +292,26 @@ func (h examSittingCorrectionHandlers) stage(request operationRequest) (protocol
 		SHA256:     result.SHA256,
 		ExpiresAt:  model.FormatRFC3339(result.ExpiresAt),
 	}
-	return streamingUploadProtocolResult(http.StatusCreated, response), nil
+	return route.StreamingUpload(http.StatusCreated, response), nil
 }
 
-func (h examSittingCorrectionHandlers) apply(request operationRequest) (operationResult, error) {
+func (h examSittingCorrectionHandlers) apply(request route.Request) (route.Result, error) {
 	examID, sittingID, err := examSittingCorrectionIDs(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body applyExamSittingCorrectionRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 	if body.ExpectedSittingRevision < 1 || !validExamSittingCorrectionReason(body.Reason) {
-		return operationResult{}, invalidRequestError(errors.New("expected revision and reason are invalid"))
+		return route.Result{}, route.InvalidRequest(errors.New("expected revision and reason are invalid"))
 	}
 
 	currentRevisionID, err := model.ParseExamRevisionID(body.ExpectedCurrentRevisionID)
 	if err != nil {
-		return operationResult{}, invalidRequestError(err)
+		return route.Result{}, route.InvalidRequest(err)
 	}
 
 	manifest := make([]correction.ResourceManifestItem, len(body.Resources))
@@ -319,10 +320,10 @@ func (h examSittingCorrectionHandlers) apply(request operationRequest) (operatio
 	for index, item := range body.Resources {
 		resourceID, parseErr := model.ParseExamResourceID(item.ResourceID)
 		if parseErr != nil {
-			return operationResult{}, invalidRequestError(parseErr)
+			return route.Result{}, route.InvalidRequest(parseErr)
 		}
 		if _, exists := resourceIDs[resourceID]; exists {
-			return operationResult{}, invalidRequestError(errors.New("resource_id values must be unique"))
+			return route.Result{}, route.InvalidRequest(errors.New("resource_id values must be unique"))
 		}
 
 		resourceIDs[resourceID] = struct{}{}
@@ -330,10 +331,10 @@ func (h examSittingCorrectionHandlers) apply(request operationRequest) (operatio
 		if item.StageID != "" {
 			stageID, parseErr = model.ParseExamCorrectionResourceStageID(item.StageID)
 			if parseErr != nil {
-				return operationResult{}, invalidRequestError(parseErr)
+				return route.Result{}, route.InvalidRequest(parseErr)
 			}
 			if _, exists := stageIDs[stageID]; exists {
-				return operationResult{}, invalidRequestError(errors.New("stage_id values must be unique"))
+				return route.Result{}, route.InvalidRequest(errors.New("stage_id values must be unique"))
 			}
 
 			stageIDs[stageID] = struct{}{}
@@ -356,11 +357,11 @@ func (h examSittingCorrectionHandlers) apply(request operationRequest) (operatio
 	if document := body.BrowserPolicy.ValuePointer(); document != nil {
 		browserPolicy.Policy, err = document.model()
 		if err != nil {
-			return operationResult{}, invalidRequestError(err)
+			return route.Result{}, route.InvalidRequest(err)
 		}
 	}
 
-	result, err := h.app.ApplyExamSittingCorrection(request.context, request.invocation(), correction.ApplyCommand{
+	result, err := h.app.ApplyExamSittingCorrection(request.Context, request.Invocation(), correction.ApplyCommand{
 		ExamID:                    examID,
 		SittingID:                 sittingID,
 		ExpectedSittingRevision:   body.ExpectedSittingRevision,
@@ -372,10 +373,10 @@ func (h examSittingCorrectionHandlers) apply(request operationRequest) (operatio
 		AcknowledgementRequired:   body.AcknowledgementRequired,
 		AffectedCapabilities:      body.AffectedCapabilities,
 		PrivateReason:             body.Reason,
-		IdempotencyKey:            request.idempotencyKey,
+		IdempotencyKey:            request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	response := examSittingCorrectionResponse{
@@ -389,15 +390,15 @@ func (h examSittingCorrectionHandlers) apply(request operationRequest) (operatio
 		SittingState:         string(result.SittingState),
 		EffectiveAt:          model.FormatRFC3339(result.EffectiveAt),
 	}
-	return jsonResult(http.StatusCreated, response), nil
+	return route.JSON(http.StatusCreated, response), nil
 }
 
-func examSittingCorrectionIDs(request operationRequest) (model.ExamID, model.ExamSittingID, error) {
+func examSittingCorrectionIDs(request route.Request) (model.ExamID, model.ExamSittingID, error) {
 	examID, err := examResourceExamID(request)
 	if err != nil {
 		return "", "", err
 	}
-	sittingID, err := pathID[model.ExamSittingID](request, "exam_sitting_id")
+	sittingID, err := route.PathID[model.ExamSittingID](request, "exam_sitting_id")
 	if err != nil {
 		return "", "", err
 	}

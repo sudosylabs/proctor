@@ -21,6 +21,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -53,7 +55,7 @@ func (a *programmeHTTPApplication) ArchiveProgramme(_ context.Context, _ invocat
 
 func TestProgrammeHTTPMapsDTOWithoutPermissionPreflight(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password",
@@ -63,7 +65,7 @@ func TestProgrammeHTTPMapsDTOWithoutPermissionPreflight(t *testing.T) {
 	programme := &model.Programme{ID: model.ProgrammeID(model.NewID()), AcademicUnitID: model.AcademicUnitID(model.NewID()), Name: "computer-science", DisplayName: "Computer Science"}
 	programmes := &programmeHTTPApplication{result: programme}
 	httpAPI := newFocusedResourceAPI(
-		t, logger, classRouteAuthenticator{principal: principal}, programmeResource(programmes),
+		t, logger, routetest.Authenticator{Principal: principal}, programmeResource(programmes),
 	)
 
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/academic-units/"+programme.AcademicUnitID.String()+"/programmes", strings.NewReader(`{"name":"computer-science","display_name":"Computer Science"}`))
@@ -83,7 +85,7 @@ func TestProgrammeHTTPMapsDTOWithoutPermissionPreflight(t *testing.T) {
 func TestProgrammeResourceRejectsInvalidQueryLimit(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID:           model.PrincipalCredentialID(model.NewID()),
@@ -95,7 +97,7 @@ func TestProgrammeResourceRejectsInvalidQueryLimit(t *testing.T) {
 	}
 	programmes := &programmeHTTPApplication{}
 	httpAPI := newFocusedResourceAPI(
-		t, logger, classRouteAuthenticator{principal: principal}, programmeResource(programmes),
+		t, logger, routetest.Authenticator{Principal: principal}, programmeResource(programmes),
 	)
 	request := httptest.NewRequest(
 		http.MethodGet,
@@ -106,7 +108,7 @@ func TestProgrammeResourceRejectsInvalidQueryLimit(t *testing.T) {
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusBadRequest, response.Code, "status = %d: %s", response.Code, response.Body.String())
-	var problem Problem
+	var problem route.Problem
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
 	require.Equal(t, "request.invalid", problem.Code, "problem code")
 }

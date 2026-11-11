@@ -22,6 +22,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -143,7 +145,7 @@ func TestAcademicUnitResponsePreservesExistingWireShape(t *testing.T) {
 func TestAcademicUnitCollectionEnvelopeHasNonNullItemsForNoResults(t *testing.T) {
 	t.Parallel()
 
-	response, err := newListResponse([]*model.AcademicUnit(nil), false, academicUnitResponseFromModel, nil)
+	response, err := route.NewList([]*model.AcademicUnit(nil), false, academicUnitResponseFromModel, nil)
 	require.NoError(t, err)
 	encoded, err := json.Marshal(response)
 	require.NoError(t, err)
@@ -153,7 +155,7 @@ func TestAcademicUnitCollectionEnvelopeHasNonNullItemsForNoResults(t *testing.T)
 func TestAcademicUnitHTTPReadMapsDTOWithoutPermissionPreflight(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	unit := &model.AcademicUnit{
 		ID: model.AcademicUnitID(model.NewID()), CreatedAt: model.TimeFromMillis(10), UpdatedAt: model.TimeFromMillis(20),
 		InstitutionID: model.InstitutionID(model.NewID()), Name: "computing", DisplayName: "Computing",
@@ -189,7 +191,7 @@ func TestAcademicUnitHTTPReadMapsDTOWithoutPermissionPreflight(t *testing.T) {
 func TestAcademicUnitHTTPErrorUsesProblemDetailsContract(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	unit := &model.AcademicUnit{ID: model.AcademicUnitID(model.NewID())}
 	fakeApplication := &academicUnitHTTPApplication{
 		principal: model.Principal{
@@ -213,7 +215,7 @@ func TestAcademicUnitHTTPErrorUsesProblemDetailsContract(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, response.Code, "status = %d: %s", response.Code, response.Body.String())
 	require.Equal(t, "application/problem+json", response.Header().Get("Content-Type"))
 	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
-	var problem Problem
+	var problem route.Problem
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
 	require.Equal(t, "resource.not_found", problem.Code)
 	require.Equal(t, http.StatusNotFound, problem.Status)
@@ -239,7 +241,7 @@ func TestAcademicUnitHTTPCreateMapsCommandWithoutPermissionPreflight(t *testing.
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			logger, _ := newTestLogger(t)
+			logger, _ := routetest.NewLogger(t)
 			created := &model.AcademicUnit{
 				ID: model.AcademicUnitID(model.NewID()), CreatedAt: model.TimeFromMillis(10), UpdatedAt: model.TimeFromMillis(10),
 				InstitutionID: model.InstitutionID(model.NewID()), ParentID: model.AcademicUnitID(tt.wantParentID),
@@ -305,7 +307,7 @@ func TestAcademicUnitHTTPMutationsMapCommandsWithoutPermissionPreflight(t *testi
 		},
 		unit: unit,
 	}
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	settings := validHTTPSettings(t)
 	settings.Logger = logger
 	httpAPI, err := newAPI(settings, fakeApplication, academicUnitResource(fakeApplication), institutionResource(fakeApplication))

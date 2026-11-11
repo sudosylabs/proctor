@@ -14,6 +14,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -36,61 +37,61 @@ type createClassRequest struct {
 	Description      string `json:"description"`
 }
 type updateClassRequest struct {
-	ExpectedRevision Optional[int64]  `json:"expected_revision"`
-	ProgrammeLevelID Optional[string] `json:"programme_level_id"`
-	AcademicPeriodID Optional[string] `json:"academic_period_id"`
-	Name             Optional[string] `json:"name"`
-	DisplayName      Optional[string] `json:"display_name"`
-	Description      Optional[string] `json:"description"`
+	ExpectedRevision route.Optional[int64]  `json:"expected_revision"`
+	ProgrammeLevelID route.Optional[string] `json:"programme_level_id"`
+	AcademicPeriodID route.Optional[string] `json:"academic_period_id"`
+	Name             route.Optional[string] `json:"name"`
+	DisplayName      route.Optional[string] `json:"display_name"`
+	Description      route.Optional[string] `json:"description"`
 }
 
 type classHandlers struct {
 	app ClassApplication
 }
 
-func classResource(app ClassApplication) apiResource {
+func classResource(app ClassApplication) route.Resource {
 	h := classHandlers{app: app}
-	return newResource(
+	return route.NewResource(
 		"classes",
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/academic-units/{academic_unit_id}/classes",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: classReadErrorCodes(),
 			Handle: h.search,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/programme-levels/{programme_level_id}/classes",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: classReadErrorCodes(),
 			Handle: h.list,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/programme-levels/{programme_level_id}/classes",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: classMutationErrorCodes("class.invalid", "class.conflict"),
 			Handle: h.create,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/classes/{class_id}",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: classReadErrorCodes(),
 			Handle: h.get,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPatch,
 			Path:   "/classes/{class_id}",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: classMutationErrorCodes("class.invalid", "class.conflict"),
 			Handle: h.patch,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodDelete,
 			Path:   "/classes/{class_id}",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: classMutationErrorCodes("class.conflict"),
 			Handle: h.archive,
 		},
@@ -121,66 +122,66 @@ func classMutationErrorCodes(specific ...string) []string {
 	return append(codes, "administration.unavailable")
 }
 
-func (h classHandlers) search(request operationRequest) (operationResult, error) {
-	academicUnitID, err := pathID[model.AcademicUnitID](request, "academic_unit_id")
+func (h classHandlers) search(request route.Request) (route.Result, error) {
+	academicUnitID, err := route.PathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	pageQuery, err := request.academicNamePageQuery()
+	pageQuery, err := academicNamePageQuery(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	page, err := h.app.SearchClasses(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		academic.SearchClassesQuery{
 			AcademicUnitID: academicUnitID,
-			Query:          request.http.URL.Query().Get("q"),
+			Query:          request.HTTP.URL.Query().Get("q"),
 			NameQuery:      pageQuery,
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	return academicNameListResult(page, classResponseFromModel, func(class *model.Class) (string, string) {
 		return class.Name, class.ID.String()
 	})
 }
 
-func (h classHandlers) list(request operationRequest) (operationResult, error) {
-	programmeLevelID, err := pathID[model.ProgrammeLevelID](request, "programme_level_id")
+func (h classHandlers) list(request route.Request) (route.Result, error) {
+	programmeLevelID, err := route.PathID[model.ProgrammeLevelID](request, "programme_level_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	pageQuery, err := request.academicNamePageQuery()
+	pageQuery, err := academicNamePageQuery(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	page, err := h.app.ListClasses(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		academic.ListClassesQuery{ProgrammeLevelID: programmeLevelID, NameQuery: pageQuery},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	return academicNameListResult(page, classResponseFromModel, func(class *model.Class) (string, string) {
 		return class.Name, class.ID.String()
 	})
 }
 
-func (h classHandlers) create(request operationRequest) (operationResult, error) {
-	programmeLevelID, err := pathID[model.ProgrammeLevelID](request, "programme_level_id")
+func (h classHandlers) create(request route.Request) (route.Result, error) {
+	programmeLevelID, err := route.PathID[model.ProgrammeLevelID](request, "programme_level_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	var body createClassRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 	class, err := h.app.CreateClass(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		academic.CreateClassCommand{
 			ProgrammeLevelID: programmeLevelID,
 			AcademicPeriodID: model.AcademicPeriodID(body.AcademicPeriodID),
@@ -190,74 +191,74 @@ func (h classHandlers) create(request operationRequest) (operationResult, error)
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusCreated, classResponseFromModel(class)), nil
+	return route.JSON(http.StatusCreated, classResponseFromModel(class)), nil
 }
 
-func (h classHandlers) get(request operationRequest) (operationResult, error) {
-	id, err := pathID[model.ClassID](request, "class_id")
+func (h classHandlers) get(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.ClassID](request, "class_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	class, err := h.app.GetClass(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		id,
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, classResponseFromModel(class)), nil
+	return route.JSON(http.StatusOK, classResponseFromModel(class)), nil
 }
 
-func (h classHandlers) patch(request operationRequest) (operationResult, error) {
-	id, err := pathID[model.ClassID](request, "class_id")
+func (h classHandlers) patch(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.ClassID](request, "class_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	var body updateClassRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 	if err := validateAcademicRevision(body.ExpectedRevision); err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	class, err := h.app.UpdateClass(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		academic.UpdateClassCommand{ExpectedRevision: body.ExpectedRevision.ValuePointer(),
 			ID:               id,
-			ProgrammeLevelID: optionalIdentifier[model.ProgrammeLevelID](body.ProgrammeLevelID.ValuePointer()),
-			AcademicPeriodID: optionalIdentifier[model.AcademicPeriodID](body.AcademicPeriodID.ValuePointer()),
+			ProgrammeLevelID: route.OptionalID[model.ProgrammeLevelID](body.ProgrammeLevelID.ValuePointer()),
+			AcademicPeriodID: route.OptionalID[model.AcademicPeriodID](body.AcademicPeriodID.ValuePointer()),
 			Name:             body.Name.ValuePointer(),
 			DisplayName:      body.DisplayName.ValuePointer(),
 			Description:      body.Description.ValuePointer(),
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, classResponseFromModel(class)), nil
+	return route.JSON(http.StatusOK, classResponseFromModel(class)), nil
 }
 
-func (h classHandlers) archive(request operationRequest) (operationResult, error) {
-	id, err := pathID[model.ClassID](request, "class_id")
+func (h classHandlers) archive(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.ClassID](request, "class_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	expectedRevision, err := request.academicRevision()
+	expectedRevision, err := academicRevision(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if err := h.app.ArchiveClass(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		academic.ArchiveClassCommand{ExpectedRevision: expectedRevision, ID: id},
 	); err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return noContentResult(), nil
+	return route.NoContent(), nil
 }
 
 func classResponseFromModel(class *model.Class) classResponse {

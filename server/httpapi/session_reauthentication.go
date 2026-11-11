@@ -13,6 +13,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -27,7 +28,7 @@ type SessionReauthentication interface {
 
 type sessionReauthenticationHandlers struct {
 	app     SessionReauthentication
-	cookies browserCookies
+	cookies route.Cookies
 }
 
 type passwordReauthenticationRequest struct {
@@ -42,13 +43,13 @@ type externalReauthenticationResponse struct {
 	RedirectURL string `json:"redirect_url"`
 }
 
-func sessionReauthenticationResource(app SessionReauthentication, cookies browserCookies) apiResource {
+func sessionReauthenticationResource(app SessionReauthentication, cookies route.Cookies) route.Resource {
 	h := sessionReauthenticationHandlers{app: app, cookies: cookies}
-	return newResource("session-reauthentication",
-		endpoint{
+	return route.NewResource("session-reauthentication",
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/auth/reauthenticate/external",
-			Auth:   AuthMFARecoverySessionRequired,
+			Auth:   route.AuthMFARecoverySessionRequired,
 			Errors: []string{
 				"request.invalid",
 				"authentication.reauthentication_method_required",
@@ -65,10 +66,10 @@ func sessionReauthenticationResource(app SessionReauthentication, cookies browse
 			},
 			Handle: h.external,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/auth/reauthenticate/password",
-			Auth:   AuthMFARecoverySessionRequired,
+			Auth:   route.AuthMFARecoverySessionRequired,
 			Errors: personalAccessTokenSessionMutationCodes(
 				"service.busy",
 				"request.invalid",
@@ -84,43 +85,43 @@ func sessionReauthenticationResource(app SessionReauthentication, cookies browse
 	)
 }
 
-func (h sessionReauthenticationHandlers) password(request operationRequest) (operationResult, error) {
+func (h sessionReauthenticationHandlers) password(request route.Request) (route.Result, error) {
 	var input passwordReauthenticationRequest
-	if err := request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
 	}
 
-	session, err := h.app.ReauthenticatePassword(request.context, request.invocation(), identity.ReauthenticatePasswordCommand{
+	session, err := h.app.ReauthenticatePassword(request.Context, request.Invocation(), identity.ReauthenticatePasswordCommand{
 		Password: input.Password,
-		Source:   request.metadata.IPAddress,
+		Source:   request.Metadata.IPAddress,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, sessionResponseFromModel(request.http, session)).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, sessionResponseFromModel(request.HTTP, session)).WithHeaders(noStoreHeaders()), nil
 }
 
-func (h sessionReauthenticationHandlers) external(request operationRequest) (operationResult, error) {
+func (h sessionReauthenticationHandlers) external(request route.Request) (route.Result, error) {
 	var input externalReauthenticationRequest
-	if err := request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
 	}
 
 	start, err := h.app.BeginExternalReauthentication(
-		request.context,
-		request.invocation(),
-		identity.BeginExternalReauthenticationCommand{Task: input.Task, Source: request.metadata.IPAddress},
+		request.Context,
+		request.Invocation(),
+		identity.BeginExternalReauthenticationCommand{Task: input.Task, Source: request.Metadata.IPAddress},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	headers := captureResponseHeaders(func(writer http.ResponseWriter) {
-		h.cookies.attachExternalLoginBinding(writer, start.Binding, start.ExpiresAt)
+	headers := route.CaptureHeaders(func(writer http.ResponseWriter) {
+		h.cookies.AttachExternalLoginBinding(writer, start.Binding, start.ExpiresAt)
 	})
-	return jsonResult(
+	return route.JSON(
 		http.StatusOK,
 		externalReauthenticationResponse{RedirectURL: start.RedirectURL},
-	).withHeaders(combineResponseHeaders(headers, noStoreHeaders())), nil
+	).WithHeaders(route.CombineHeaders(headers, noStoreHeaders())), nil
 }

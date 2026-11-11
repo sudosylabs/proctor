@@ -9,7 +9,6 @@ package httpapi_test
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,8 +17,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/httpapi"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/testlib"
 )
 
@@ -45,7 +44,7 @@ func TestHealthVersionAndCommonHeaders(t *testing.T) {
 	liveness := performRequest(helper.Handler(), http.MethodGet, "/health/live", "desktop-client-1")
 	require.Equal(t, http.StatusOK, liveness.Code, "liveness status = %d: %s", liveness.Code, liveness.Body.String())
 	// A client-supplied request ID never becomes server correlation.
-	requestID := liveness.Header().Get(httpapi.RequestIDHeader)
+	requestID := liveness.Header().Get(route.RequestIDHeader)
 	assert.NotEmpty(t, requestID)
 	assert.NotEqual(t, "desktop-client-1", requestID, "client request ID became server correlation")
 	assert.Equal(t, "nosniff", liveness.Header().Get("X-Content-Type-Options"), "security headers were not applied")
@@ -114,7 +113,7 @@ func TestRoutingFailuresUseProblemDetails(t *testing.T) {
 			assert.Equal(t, test.code, problem.Code)
 			assert.NotEmpty(t, problem.RequestID)
 			assert.NotEqual(t, "compatibility-request", problem.RequestID, "client request ID became server correlation")
-			assert.Equal(t, response.Header().Get(httpapi.RequestIDHeader), problem.RequestID)
+			assert.Equal(t, response.Header().Get(route.RequestIDHeader), problem.RequestID)
 		})
 	}
 }
@@ -185,7 +184,7 @@ func TestAuthenticationBoundaryRejectsMissingAmbiguousAndURLCredentials(t *testi
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			request := httptest.NewRequest(test.method, test.path, nil)
-			request.Header.Set(httpapi.RequestIDHeader, "compatibility-request")
+			request.Header.Set(route.RequestIDHeader, "compatibility-request")
 			if test.configure != nil {
 				test.configure(request)
 			}
@@ -202,7 +201,7 @@ func TestAuthenticationBoundaryRejectsMissingAmbiguousAndURLCredentials(t *testi
 			require.Equal(t, request.URL.Path, problem.Instance)
 			require.NotEmpty(t, problem.RequestID)
 			require.NotEqual(t, "compatibility-request", problem.RequestID)
-			require.Equal(t, response.Header().Get(httpapi.RequestIDHeader), problem.RequestID)
+			require.Equal(t, response.Header().Get(route.RequestIDHeader), problem.RequestID)
 		})
 	}
 }
@@ -225,37 +224,16 @@ func TestAuthenticationRequestsUseStrictJSON(t *testing.T) {
 		response := httptest.NewRecorder()
 		helper.Handler().ServeHTTP(response, request)
 		require.Equal(t, http.StatusBadRequest, response.Code, "body %q: status = %d, response = %s", body, response.Code, response.Body.String())
-		var problem httpapi.Problem
+		var problem route.Problem
 		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
 		require.Equal(t, "request.invalid", problem.Code)
 	}
 }
 
-func TestWriteErrorMapsApplicationErrorsWithoutLeakingCauses(t *testing.T) {
-	t.Parallel()
-
-	handler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		httpapi.WriteError(
-			writer,
-			request,
-			apperror.New("request.invalid").
-				WithField("field", "email").
-				Wrap(errors.New("sensitive internal cause")),
-		)
-	})
-	response := performRequest(handler, http.MethodGet, "/users", "")
-	require.Equal(t, http.StatusBadRequest, response.Code, "status")
-	require.NotContains(t, response.Body.String(), "sensitive", "internal cause leaked to client")
-	var problem httpapi.Problem
-	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
-	require.Equal(t, "request.invalid", problem.Code)
-	require.Equal(t, "email", problem.Fields["field"])
-}
-
 func performRequest(handler http.Handler, method, path, requestID string) *httptest.ResponseRecorder {
 	request := httptest.NewRequest(method, path, nil)
 	if requestID != "" {
-		request.Header.Set(httpapi.RequestIDHeader, requestID)
+		request.Header.Set(route.RequestIDHeader, requestID)
 	}
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)

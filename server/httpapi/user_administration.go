@@ -17,6 +17,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -28,42 +29,42 @@ type userAdministrationHandlers struct {
 func userAdministrationResource(
 	accounts AccountStateApplication,
 	sessions SessionAdministrationApplication,
-) apiResource {
+) route.Resource {
 	h := userAdministrationHandlers{accounts: accounts, sessions: sessions}
-	return newResource(
+	return route.NewResource(
 		"user-administration",
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/users/{user_id}/disable",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: userAdministrationMutationCodes("user.invalid", "user.conflict", "user.last_system_admin"),
 			Handle: h.disable,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/users/{user_id}/enable",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: userAdministrationMutationCodes("user.invalid", "user.conflict", "user.last_system_admin"),
 			Handle: h.enable,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/users/{user_id}/sessions",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: userAdministrationReadCodes("session.not_found"),
 			Handle: h.listSessions,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/users/{user_id}/sessions/revoke-all",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: userAdministrationMutationCodes("session.not_found"),
 			Handle: h.revokeAllSessions,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodDelete,
 			Path:   "/users/{user_id}/sessions/{session_id}",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: userAdministrationMutationCodes("session.not_found"),
 			Handle: h.revokeSession,
 		},
@@ -102,12 +103,12 @@ type disableUserRequest struct {
 	Reason string `json:"reason,omitempty"`
 }
 
-func (h userAdministrationHandlers) disable(request operationRequest) (operationResult, error) {
+func (h userAdministrationHandlers) disable(request route.Request) (route.Result, error) {
 	var reason *string
-	if request.http.ContentLength != 0 || request.http.Header.Get("Content-Type") != "" {
+	if request.HTTP.ContentLength != 0 || request.HTTP.Header.Get("Content-Type") != "" {
 		var body disableUserRequest
-		if err := request.decodeJSON(&body); err != nil {
-			return operationResult{}, err
+		if err := request.DecodeJSON(&body); err != nil {
+			return route.Result{}, err
 		}
 		if body.Reason != "" {
 			reason = &body.Reason
@@ -116,61 +117,61 @@ func (h userAdministrationHandlers) disable(request operationRequest) (operation
 	return h.setEnabled(request, false, reason)
 }
 
-func (h userAdministrationHandlers) enable(request operationRequest) (operationResult, error) {
+func (h userAdministrationHandlers) enable(request route.Request) (route.Result, error) {
 	return h.setEnabled(request, true, nil)
 }
 
-func (h userAdministrationHandlers) setEnabled(request operationRequest, enabled bool, reason *string) (operationResult, error) {
-	userID, err := pathID[model.UserID](request, "user_id")
+func (h userAdministrationHandlers) setEnabled(request route.Request, enabled bool, reason *string) (route.Result, error) {
+	userID, err := route.PathID[model.UserID](request, "user_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	user, err := h.accounts.SetUserEnabled(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		identity.SetUserEnabledCommand{ID: userID, Enabled: enabled, Reason: reason},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, userProfileResponseFromModel(user)), nil
+	return route.JSON(http.StatusOK, userProfileResponseFromModel(user)), nil
 }
 
-func (h userAdministrationHandlers) revokeAllSessions(request operationRequest) (operationResult, error) {
-	userID, err := pathID[model.UserID](request, "user_id")
+func (h userAdministrationHandlers) revokeAllSessions(request route.Request) (route.Result, error) {
+	userID, err := route.PathID[model.UserID](request, "user_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	err = h.sessions.RevokeUserSessions(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		identity.RevokeUserSessionsCommand{UserID: userID},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return noContentResult(), nil
+	return route.NoContent(), nil
 }
 
-func (h userAdministrationHandlers) listSessions(request operationRequest) (operationResult, error) {
-	userID, err := pathID[model.UserID](request, "user_id")
+func (h userAdministrationHandlers) listSessions(request route.Request) (route.Result, error) {
+	userID, err := route.PathID[model.UserID](request, "user_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	includeRevoked, err := strconv.ParseBool(
-		defaultQuery(request.http, "include_revoked", "false"),
+		defaultQuery(request.HTTP, "include_revoked", "false"),
 	)
 	if err != nil {
-		return operationResult{}, apperror.New("request.invalid").WithField("field", "include_revoked")
+		return route.Result{}, apperror.New("request.invalid").WithField("field", "include_revoked")
 	}
 
 	query := identity.ListUserSessionsQuery{UserID: userID, IncludeRevoked: includeRevoked, Limit: defaultSessionPageSize}
-	values := request.http.URL.Query()
+	values := request.HTTP.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
 		limit, parseErr := strconv.Atoi(raw)
 		if parseErr != nil || limit < 1 || limit > maximumSessionPageSize {
-			return operationResult{}, apperror.Invalid("request.invalid", "limit")
+			return route.Result{}, apperror.Invalid("request.invalid", "limit")
 		}
 
 		query.Limit = limit
@@ -179,36 +180,36 @@ func (h userAdministrationHandlers) listSessions(request operationRequest) (oper
 	if raw := values.Get("cursor"); raw != "" {
 		cursor, decodeErr := decodeSessionCursor(raw)
 		if decodeErr != nil {
-			return operationResult{}, apperror.Invalid("request.invalid", "cursor")
+			return route.Result{}, apperror.Invalid("request.invalid", "cursor")
 		}
 
 		query.BeforeCreatedAt, _ = model.ParseRFC3339(cursor.CreatedAt)
 		query.BeforeID = model.SessionID(cursor.ID)
 	}
 
-	page, listErr := h.sessions.ListUserSessions(request.context, request.invocation(), query)
+	page, listErr := h.sessions.ListUserSessions(request.Context, request.Invocation(), query)
 	if listErr != nil {
-		return operationResult{}, listErr
+		return route.Result{}, listErr
 	}
 
-	response := sessionAdministrationListResponse{Items: sessionResponsesFromModels(request.http, page.Items)}
+	response := sessionAdministrationListResponse{Items: sessionResponsesFromModels(request.HTTP, page.Items)}
 	if page.HasMore && len(page.Items) == 0 {
-		return operationResult{}, unpresentableResult(errors.New("session page made no progress"))
+		return route.Result{}, route.Unpresentable(errors.New("session page made no progress"))
 	}
 
 	if page.HasMore {
 		last := page.Items[len(page.Items)-1]
 		var err error
-		response.NextCursor, err = encodeOpaqueCursor(sessionCursor{
+		response.NextCursor, err = route.EncodeCursor(sessionCursor{
 			CreatedAt: model.FormatRFC3339(last.CreatedAt),
 			ID:        last.ID.String(),
 		}, sessionCursorSpec())
 		if err != nil {
-			return operationResult{}, unpresentableResult(err)
+			return route.Result{}, route.Unpresentable(err)
 		}
 	}
 
-	return jsonResult(http.StatusOK, response), nil
+	return route.JSON(http.StatusOK, response), nil
 }
 
 const (
@@ -229,15 +230,15 @@ type sessionCursor struct {
 }
 
 func decodeSessionCursor(raw string) (sessionCursor, error) {
-	return decodeOpaqueCursor(raw, sessionCursorSpec())
+	return route.DecodeCursor(raw, sessionCursorSpec())
 }
 
-func sessionCursorSpec() opaqueCursorSpec[sessionCursor] {
-	return opaqueCursorSpec[sessionCursor]{
-		label:                "session",
-		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members:              []string{"created_at", "id"},
-		validate: func(cursor sessionCursor) error {
+func sessionCursorSpec() route.CursorSpec[sessionCursor] {
+	return route.CursorSpec[sessionCursor]{
+		Label:                "session",
+		MaximumEncodedLength: route.DefaultMaximumCursorLength,
+		Members:              []string{"created_at", "id"},
+		Validate: func(cursor sessionCursor) error {
 			createdAt, err := model.ParseRFC3339(cursor.CreatedAt)
 			if err != nil || createdAt.IsZero() || !model.SessionID(cursor.ID).IsValid() {
 				return errors.New("invalid session keyset")
@@ -248,24 +249,24 @@ func sessionCursorSpec() opaqueCursorSpec[sessionCursor] {
 	}
 }
 
-func (h userAdministrationHandlers) revokeSession(request operationRequest) (operationResult, error) {
-	userID, err := pathID[model.UserID](request, "user_id")
+func (h userAdministrationHandlers) revokeSession(request route.Request) (route.Result, error) {
+	userID, err := route.PathID[model.UserID](request, "user_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	sessionID, err := pathID[model.SessionID](request, "session_id")
+	sessionID, err := route.PathID[model.SessionID](request, "session_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	err = h.sessions.RevokeUserSession(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		identity.RevokeUserSessionCommand{UserID: userID, SessionID: sessionID},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return noContentResult(), nil
+	return route.NoContent(), nil
 }
 
 func defaultQuery(r *http.Request, key, fallback string) string {

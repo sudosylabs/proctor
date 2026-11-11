@@ -20,12 +20,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 func assertHTTPProblem(t *testing.T, response *httptest.ResponseRecorder, status int, code string) {
 	t.Helper()
-	var problem Problem
+	var problem route.Problem
 	err := json.Unmarshal(response.Body.Bytes(), &problem)
 	require.NoError(t, err, "decode problem response: %v; body=%s", err, response.Body.String())
 	require.Equal(t, status, response.Code, "problem response = %d/%q; want %d/%q; body=%s", response.Code, problem.Code, status, code, response.Body.String())
@@ -192,7 +193,7 @@ func TestResourceCursorContracts(t *testing.T) {
 
 			maximum := test.maximumRawLength
 			if maximum == 0 {
-				maximum = defaultOpaqueCursorMaximumEncodedLength
+				maximum = route.DefaultMaximumCursorLength
 			}
 			_, err = test.decode(strings.Repeat("A", maximum+1))
 			assert.Error(t, err, "decode accepted overlong cursor")

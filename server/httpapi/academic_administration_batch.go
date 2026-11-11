@@ -13,6 +13,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -60,14 +61,14 @@ type academicAdministrationBatchHandlers struct {
 	app AcademicAdministrationBatchApplication
 }
 
-func academicAdministrationBatchResource(app AcademicAdministrationBatchApplication) apiResource {
+func academicAdministrationBatchResource(app AcademicAdministrationBatchApplication) route.Resource {
 	h := academicAdministrationBatchHandlers{app: app}
-	return newResource("academic-administration-batches",
-		endpoint{
+	return route.NewResource("academic-administration-batches",
+		route.Endpoint{
 			Method:      http.MethodPost,
 			Path:        "/academic-administration-batches",
-			Auth:        AuthPrincipalRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -87,22 +88,22 @@ func academicAdministrationBatchResource(app AcademicAdministrationBatchApplicat
 	)
 }
 
-func (h academicAdministrationBatchHandlers) run(request operationRequest) (operationResult, error) {
+func (h academicAdministrationBatchHandlers) run(request route.Request) (route.Result, error) {
 	var body academicAdministrationBatchRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, invalidRequestError(err)
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, route.InvalidRequest(err)
 	}
 
 	items := make([]onboarding.AcademicAdministrationBatchItemCommand, 0, len(body.Items))
 	for _, item := range body.Items {
-		startAt, err := wireTimeMillis("start_at", item.StartAt)
+		startAt, err := route.WireTimeMillis("start_at", item.StartAt)
 		if err != nil {
-			return operationResult{}, err
+			return route.Result{}, err
 		}
 
-		endAt, err := wireTimeMillis("end_at", item.EndAt)
+		endAt, err := route.WireTimeMillis("end_at", item.EndAt)
 		if err != nil {
-			return operationResult{}, err
+			return route.Result{}, err
 		}
 
 		items = append(items, onboarding.AcademicAdministrationBatchItemCommand{
@@ -117,18 +118,18 @@ func (h academicAdministrationBatchHandlers) run(request operationRequest) (oper
 	}
 
 	result, err := h.app.RunAcademicAdministrationBatch(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		onboarding.RunAcademicAdministrationBatchCommand{
 			Operation:      onboarding.AcademicAdministrationBatchOperation(body.Operation),
 			ScopeType:      model.RoleScopeType(body.ScopeType),
 			ScopeID:        body.ScopeID,
-			IdempotencyKey: request.idempotencyKey,
+			IdempotencyKey: request.IdempotencyKey,
 			Items:          items,
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	response := academicAdministrationBatchResponse{
@@ -147,5 +148,5 @@ func (h academicAdministrationBatchHandlers) run(request operationRequest) (oper
 		})
 	}
 
-	return jsonResult(http.StatusOK, response), nil
+	return route.JSON(http.StatusOK, response), nil
 }

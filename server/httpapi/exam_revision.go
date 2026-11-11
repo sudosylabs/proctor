@@ -15,6 +15,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -61,17 +62,17 @@ type examRevisionCursor struct {
 
 type examRevisionHandlers struct{ app ExamRevisionApplication }
 
-func examRevisionResource(app ExamRevisionApplication) apiResource {
+func examRevisionResource(app ExamRevisionApplication) route.Resource {
 	h := examRevisionHandlers{app: app}
 	collection := "/exams/{exam_id}/revisions"
 	member := "/exams/{exam_id}/revisions/{exam_revision_id}"
-	return newResource(
+	return route.NewResource(
 		"exam-revisions",
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPost,
 			Path:        collection,
-			Auth:        AuthPrincipalRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -92,10 +93,10 @@ func examRevisionResource(app ExamRevisionApplication) apiResource {
 			},
 			Handle: h.publish,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   collection,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -106,10 +107,10 @@ func examRevisionResource(app ExamRevisionApplication) apiResource {
 			},
 			Handle: h.list,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   member,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -123,74 +124,74 @@ func examRevisionResource(app ExamRevisionApplication) apiResource {
 	)
 }
 
-func (h examRevisionHandlers) publish(request operationRequest) (operationResult, error) {
+func (h examRevisionHandlers) publish(request route.Request) (route.Result, error) {
 	examID, err := examRevisionExamID(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body publishExamRevisionRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 	if body.ExpectedDraftRevision < 1 {
-		return operationResult{}, invalidRequestError(errors.New("must be positive"))
+		return route.Result{}, route.InvalidRequest(errors.New("must be positive"))
 	}
 
-	summary, err := h.app.PublishExamRevision(request.context, request.invocation(), exam.PublishRevisionCommand{
+	summary, err := h.app.PublishExamRevision(request.Context, request.Invocation(), exam.PublishRevisionCommand{
 		ExamID:                examID,
 		ExpectedDraftRevision: body.ExpectedDraftRevision,
-		IdempotencyKey:        request.idempotencyKey,
+		IdempotencyKey:        request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusCreated, examRevisionResponseFromSummary(summary)), nil
+	return route.JSON(http.StatusCreated, examRevisionResponseFromSummary(summary)), nil
 }
 
-func (h examRevisionHandlers) get(request operationRequest) (operationResult, error) {
+func (h examRevisionHandlers) get(request route.Request) (route.Result, error) {
 	examID, revisionID, err := examRevisionIDs(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	summary, err := h.app.GetExamRevision(request.context, request.invocation(), examID, revisionID)
+	summary, err := h.app.GetExamRevision(request.Context, request.Invocation(), examID, revisionID)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, examRevisionResponseFromSummary(summary)), nil
+	return route.JSON(http.StatusOK, examRevisionResponseFromSummary(summary)), nil
 }
 
-func (h examRevisionHandlers) list(request operationRequest) (operationResult, error) {
+func (h examRevisionHandlers) list(request route.Request) (route.Result, error) {
 	examID, err := examRevisionExamID(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	query := exam.ListRevisionsQuery{ExamID: examID, Limit: 50}
-	values := request.http.URL.Query()
+	values := request.HTTP.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
 		query.Limit, err = strconv.Atoi(raw)
 		if err != nil || query.Limit < 1 || query.Limit > 200 {
-			return operationResult{}, invalidRequestError(errors.New("must be between 1 and 200"))
+			return route.Result{}, route.InvalidRequest(errors.New("must be between 1 and 200"))
 		}
 	}
 
 	if raw := values.Get("cursor"); raw != "" {
 		cursor, decodeErr := decodeExamRevisionCursor(raw)
 		if decodeErr != nil {
-			return operationResult{}, invalidRequestError(decodeErr)
+			return route.Result{}, route.InvalidRequest(decodeErr)
 		}
 
 		query.BeforeNumber = cursor.Number
 		query.BeforeRevisionID = model.ExamRevisionID(cursor.RevisionID)
 	}
 
-	page, err := h.app.ListExamRevisions(request.context, request.invocation(), query)
+	page, err := h.app.ListExamRevisions(request.Context, request.Invocation(), query)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	response := examRevisionListResponse{Items: make([]examRevisionResponse, 0, len(page.Items))}
@@ -199,34 +200,34 @@ func (h examRevisionHandlers) list(request operationRequest) (operationResult, e
 	}
 
 	if page.HasMore && len(page.Items) == 0 {
-		return operationResult{}, unpresentableResult(errors.New("revision page made no progress"))
+		return route.Result{}, route.Unpresentable(errors.New("revision page made no progress"))
 	}
 
 	if page.HasMore {
 		last := page.Items[len(page.Items)-1]
 		response.NextCursor, err = encodeExamRevisionCursor(examRevisionCursor{Number: last.Number, RevisionID: last.ID.String()})
 		if err != nil {
-			return operationResult{}, unpresentableResult(err)
+			return route.Result{}, route.Unpresentable(err)
 		}
 	}
 
-	return jsonResult(http.StatusOK, response), nil
+	return route.JSON(http.StatusOK, response), nil
 }
 
-func examRevisionExamID(request operationRequest) (model.ExamID, error) {
-	id, err := pathID[model.ExamID](request, "exam_id")
+func examRevisionExamID(request route.Request) (model.ExamID, error) {
+	id, err := route.PathID[model.ExamID](request, "exam_id")
 	if err != nil {
 		return "", err
 	}
 	return id, nil
 }
 
-func examRevisionIDs(request operationRequest) (model.ExamID, model.ExamRevisionID, error) {
+func examRevisionIDs(request route.Request) (model.ExamID, model.ExamRevisionID, error) {
 	examID, err := examRevisionExamID(request)
 	if err != nil {
 		return "", "", err
 	}
-	revisionID, err := pathID[model.ExamRevisionID](request, "exam_revision_id")
+	revisionID, err := route.PathID[model.ExamRevisionID](request, "exam_revision_id")
 	if err != nil {
 		return "", "", err
 	}
@@ -256,19 +257,19 @@ func examRevisionResponseFromSummary(summary store.ExamRevisionSummary) examRevi
 }
 
 func encodeExamRevisionCursor(cursor examRevisionCursor) (string, error) {
-	return encodeOpaqueCursor(cursor, examRevisionCursorSpec())
+	return route.EncodeCursor(cursor, examRevisionCursorSpec())
 }
 
 func decodeExamRevisionCursor(raw string) (examRevisionCursor, error) {
-	return decodeOpaqueCursor(raw, examRevisionCursorSpec())
+	return route.DecodeCursor(raw, examRevisionCursorSpec())
 }
 
-func examRevisionCursorSpec() opaqueCursorSpec[examRevisionCursor] {
-	return opaqueCursorSpec[examRevisionCursor]{
-		label:                "Exam Revision",
-		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members:              []string{"number", "revision_id"},
-		validate: func(cursor examRevisionCursor) error {
+func examRevisionCursorSpec() route.CursorSpec[examRevisionCursor] {
+	return route.CursorSpec[examRevisionCursor]{
+		Label:                "Exam Revision",
+		MaximumEncodedLength: route.DefaultMaximumCursorLength,
+		Members:              []string{"number", "revision_id"},
+		Validate: func(cursor examRevisionCursor) error {
 			if cursor.Number < 1 || !model.ExamRevisionID(cursor.RevisionID).IsValid() {
 				return errors.New("invalid Exam Revision keyset")
 			}

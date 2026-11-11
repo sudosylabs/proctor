@@ -14,6 +14,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -39,17 +40,17 @@ type ExamRecordsApplication interface {
 
 type examRecordsHandlers struct{ app ExamRecordsApplication }
 
-func examRecordsResource(app ExamRecordsApplication) apiResource {
+func examRecordsResource(app ExamRecordsApplication) route.Resource {
 	h := examRecordsHandlers{app: app}
 	completion := "/exams/{exam_id}/sittings/{exam_sitting_id}/records-completion"
 	waiver := "/exams/{exam_id}/sittings/{exam_sitting_id}/submissions/{submission_id}/review-waiver"
 	holds := "/exams/{exam_id}/retention-holds"
 	release := "/exams/{exam_id}/retention-holds/{retention_hold_id}/release"
-	completeRoute := endpoint{
+	completeRoute := route.Endpoint{
 		Method:      http.MethodPost,
 		Path:        completion,
-		Auth:        AuthSessionRequired,
-		Idempotency: IdempotencyRequired,
+		Auth:        route.AuthSessionRequired,
+		Idempotency: route.IdempotencyRequired,
 		Errors: []string{
 			"authorization.request.invalid",
 			"authorization.unavailable",
@@ -66,11 +67,11 @@ func examRecordsResource(app ExamRecordsApplication) apiResource {
 		},
 		Handle: h.complete,
 	}
-	waiveRoute := endpoint{
+	waiveRoute := route.Endpoint{
 		Method:      http.MethodPost,
 		Path:        waiver,
-		Auth:        AuthSessionRequired,
-		Idempotency: IdempotencyRequired,
+		Auth:        route.AuthSessionRequired,
+		Idempotency: route.IdempotencyRequired,
 		Errors: []string{
 			"authorization.request.invalid",
 			"authorization.unavailable",
@@ -87,11 +88,11 @@ func examRecordsResource(app ExamRecordsApplication) apiResource {
 		},
 		Handle: h.waive,
 	}
-	createRoute := endpoint{
+	createRoute := route.Endpoint{
 		Method:      http.MethodPost,
 		Path:        holds,
-		Auth:        AuthSessionRequired,
-		Idempotency: IdempotencyRequired,
+		Auth:        route.AuthSessionRequired,
+		Idempotency: route.IdempotencyRequired,
 		Errors: []string{
 			"authorization.request.invalid",
 			"authorization.unavailable",
@@ -108,11 +109,11 @@ func examRecordsResource(app ExamRecordsApplication) apiResource {
 		},
 		Handle: h.createHold,
 	}
-	releaseRoute := endpoint{
+	releaseRoute := route.Endpoint{
 		Method:      http.MethodPost,
 		Path:        release,
-		Auth:        AuthStrongRecentSessionRequired,
-		Idempotency: IdempotencyRequired,
+		Auth:        route.AuthStrongRecentSessionRequired,
+		Idempotency: route.IdempotencyRequired,
 		Errors: []string{
 			"authorization.request.invalid",
 			"authorization.unavailable",
@@ -129,12 +130,12 @@ func examRecordsResource(app ExamRecordsApplication) apiResource {
 		},
 		Handle: h.releaseHold,
 	}
-	return newResource(
+	return route.NewResource(
 		"exam-records",
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   completion,
-			Auth:   AuthSessionRequired,
+			Auth:   route.AuthSessionRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -146,10 +147,10 @@ func examRecordsResource(app ExamRecordsApplication) apiResource {
 			Handle: h.getCompletion,
 		},
 		completeRoute,
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   waiver,
-			Auth:   AuthSessionRequired,
+			Auth:   route.AuthSessionRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -161,10 +162,10 @@ func examRecordsResource(app ExamRecordsApplication) apiResource {
 			Handle: h.getWaiver,
 		},
 		waiveRoute,
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   holds,
-			Auth:   AuthSessionRequired,
+			Auth:   route.AuthSessionRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -181,29 +182,29 @@ func examRecordsResource(app ExamRecordsApplication) apiResource {
 }
 
 type completeExamRecordsRequest struct {
-	ExpectedRevision             Optional[int64] `json:"expected_revision"`
-	AcknowledgedEvidenceRevision Optional[int64] `json:"acknowledged_evidence_revision"`
+	ExpectedRevision             route.Optional[int64] `json:"expected_revision"`
+	AcknowledgedEvidenceRevision route.Optional[int64] `json:"acknowledged_evidence_revision"`
 }
 type waiveSubmissionReviewRequest struct {
-	ExpectedDeliveryInventoryRevision Optional[int64] `json:"expected_delivery_inventory_revision,omitempty"`
-	ExpectedRevision                  Optional[int64] `json:"expected_revision"`
-	ExpectedReviewRevision            Optional[int64] `json:"expected_review_revision"`
-	ExpectedDiscrepancyCount          Optional[int64] `json:"expected_discrepancy_count"`
-	ReasonCode                        string          `json:"reason_code"`
-	PrivateReason                     string          `json:"private_reason"`
+	ExpectedDeliveryInventoryRevision route.Optional[int64] `json:"expected_delivery_inventory_revision,omitempty"`
+	ExpectedRevision                  route.Optional[int64] `json:"expected_revision"`
+	ExpectedReviewRevision            route.Optional[int64] `json:"expected_review_revision"`
+	ExpectedDiscrepancyCount          route.Optional[int64] `json:"expected_discrepancy_count"`
+	ReasonCode                        string                `json:"reason_code"`
+	PrivateReason                     string                `json:"private_reason"`
 }
 type createRetentionHoldRequest struct {
-	SittingID     Optional[string] `json:"exam_sitting_id"`
-	SubmissionID  Optional[string] `json:"submission_id"`
-	ReasonCode    string           `json:"reason_code"`
-	PrivateReason string           `json:"private_reason"`
+	SittingID     route.Optional[string] `json:"exam_sitting_id"`
+	SubmissionID  route.Optional[string] `json:"submission_id"`
+	ReasonCode    string                 `json:"reason_code"`
+	PrivateReason string                 `json:"private_reason"`
 }
 type releaseRetentionHoldRequest struct {
-	SittingID        Optional[string] `json:"exam_sitting_id"`
-	SubmissionID     Optional[string] `json:"submission_id"`
-	ExpectedRevision Optional[int64]  `json:"expected_revision"`
-	ReasonCode       string           `json:"reason_code"`
-	PrivateReason    string           `json:"private_reason"`
+	SittingID        route.Optional[string] `json:"exam_sitting_id"`
+	SubmissionID     route.Optional[string] `json:"submission_id"`
+	ExpectedRevision route.Optional[int64]  `json:"expected_revision"`
+	ReasonCode       string                 `json:"reason_code"`
+	PrivateReason    string                 `json:"private_reason"`
 }
 
 func (b *completeExamRecordsRequest) UnmarshalJSON(data []byte) error {
@@ -296,117 +297,117 @@ type retentionHoldPageResponse struct {
 	NextCursor string                  `json:"next_cursor,omitempty"`
 }
 
-func (h examRecordsHandlers) getCompletion(request operationRequest) (operationResult, error) {
+func (h examRecordsHandlers) getCompletion(request route.Request) (route.Result, error) {
 	examID, sittingID, err := examSittingIDs(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	value, err := h.app.GetExamSittingRecords(request.context, request.invocation(), examID, sittingID)
+	value, err := h.app.GetExamSittingRecords(request.Context, request.Invocation(), examID, sittingID)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if value == nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 
-	return jsonResult(http.StatusOK, examRecordsSnapshotResponse{
+	return route.JSON(http.StatusOK, examRecordsSnapshotResponse{
 		Completion:      recordsCompletionResponse(value.Completion),
 		SittingState:    string(value.SittingState),
 		SubmissionCount: value.SubmissionCount,
 		PendingReviews:  value.PendingReviews,
-	}).withHeaders(privateNoStoreHeaders()), nil
+	}).WithHeaders(privateNoStoreHeaders()), nil
 }
-func (h examRecordsHandlers) complete(request operationRequest) (operationResult, error) {
+func (h examRecordsHandlers) complete(request route.Request) (route.Result, error) {
 	examID, sittingID, err := examSittingIDs(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body completeExamRecordsRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
 	revision, err := requiredRecordsInteger("expected_revision", body.ExpectedRevision, 1)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	evidence, err := requiredRecordsInteger("acknowledged_evidence_revision", body.AcknowledgedEvidenceRevision, 0)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	value, err := h.app.CompleteExamSittingRecords(request.context, request.invocation(), exam.CompleteRecordsCommand{
+	value, err := h.app.CompleteExamSittingRecords(request.Context, request.Invocation(), exam.CompleteRecordsCommand{
 		Scope:                        model.RetentionHoldScope{ExamID: examID, SittingID: sittingID},
 		ExpectedRevision:             revision,
 		AcknowledgedEvidenceRevision: evidence,
-		IdempotencyKey:               request.idempotencyKey,
+		IdempotencyKey:               request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if value == nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 
-	return jsonResult(http.StatusOK, recordsCompletionResponse(*value)).withHeaders(privateNoStoreHeaders()), nil
+	return route.JSON(http.StatusOK, recordsCompletionResponse(*value)).WithHeaders(privateNoStoreHeaders()), nil
 }
-func (h examRecordsHandlers) getWaiver(request operationRequest) (operationResult, error) {
+func (h examRecordsHandlers) getWaiver(request route.Request) (route.Result, error) {
 	scope, err := recordsSubmissionScope(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	value, err := h.app.GetSubmissionReviewWaiver(request.context, request.invocation(), scope)
+	value, err := h.app.GetSubmissionReviewWaiver(request.Context, request.Invocation(), scope)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(
+	return route.JSON(
 		http.StatusOK,
 		submissionReviewWaiverEnvelope{Waiver: recordsWaiverResponse(value)},
-	).withHeaders(privateNoStoreHeaders()), nil
+	).WithHeaders(privateNoStoreHeaders()), nil
 }
-func (h examRecordsHandlers) waive(request operationRequest) (operationResult, error) {
+func (h examRecordsHandlers) waive(request route.Request) (route.Result, error) {
 	scope, err := recordsSubmissionScope(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body waiveSubmissionReviewRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
 	revision, err := requiredRecordsInteger("expected_revision", body.ExpectedRevision, 0)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	reviewRevision, err := requiredRecordsInteger("expected_review_revision", body.ExpectedReviewRevision, 0)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	discrepancies, err := requiredRecordsInteger("expected_discrepancy_count", body.ExpectedDiscrepancyCount, 0)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if err = model.ValidateRecordsReason(body.ReasonCode, body.PrivateReason); err != nil {
-		return operationResult{}, invalidRequestError(err)
+		return route.Result{}, route.InvalidRequest(err)
 	}
 
 	var deliveryRevision int64
 	if body.ExpectedDeliveryInventoryRevision.IsSet() {
 		deliveryRevision, err = requiredRecordsInteger("expected_delivery_inventory_revision", body.ExpectedDeliveryInventoryRevision, 0)
 		if err != nil {
-			return operationResult{}, err
+			return route.Result{}, err
 		}
 	}
 
-	value, err := h.app.WaiveSubmissionReview(request.context, request.invocation(), exam.WaiveReviewCommand{
+	value, err := h.app.WaiveSubmissionReview(request.Context, request.Invocation(), exam.WaiveReviewCommand{
 		Scope:                             scope,
 		ExpectedRevision:                  revision,
 		ExpectedDeliveryInventoryRevision: deliveryRevision,
@@ -414,117 +415,117 @@ func (h examRecordsHandlers) waive(request operationRequest) (operationResult, e
 		ExpectedDiscrepancyCount:          discrepancies,
 		ReasonCode:                        body.ReasonCode,
 		PrivateReason:                     body.PrivateReason,
-		IdempotencyKey:                    request.idempotencyKey,
+		IdempotencyKey:                    request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if value == nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 
-	return jsonResult(
+	return route.JSON(
 		http.StatusOK,
 		submissionReviewWaiverEnvelope{Waiver: recordsWaiverResponse(value)},
-	).withHeaders(privateNoStoreHeaders()), nil
+	).WithHeaders(privateNoStoreHeaders()), nil
 }
-func (h examRecordsHandlers) createHold(request operationRequest) (operationResult, error) {
+func (h examRecordsHandlers) createHold(request route.Request) (route.Result, error) {
 	examID, err := examSittingExamID(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body createRetentionHoldRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
 	scope, err := recordsOptionalScope(examID, body.SittingID, body.SubmissionID)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if err = model.ValidateRecordsReason(body.ReasonCode, body.PrivateReason); err != nil {
-		return operationResult{}, invalidRequestError(err)
+		return route.Result{}, route.InvalidRequest(err)
 	}
 
-	value, err := h.app.CreateRetentionHold(request.context, request.invocation(), exam.CreateRetentionHoldCommand{
+	value, err := h.app.CreateRetentionHold(request.Context, request.Invocation(), exam.CreateRetentionHoldCommand{
 		Scope:          scope,
 		ReasonCode:     body.ReasonCode,
 		PrivateReason:  body.PrivateReason,
-		IdempotencyKey: request.idempotencyKey,
+		IdempotencyKey: request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if value == nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 
-	return jsonResult(http.StatusCreated, recordsHoldResponse(*value)).withHeaders(privateNoStoreHeaders()), nil
+	return route.JSON(http.StatusCreated, recordsHoldResponse(*value)).WithHeaders(privateNoStoreHeaders()), nil
 }
-func (h examRecordsHandlers) releaseHold(request operationRequest) (operationResult, error) {
+func (h examRecordsHandlers) releaseHold(request route.Request) (route.Result, error) {
 	examID, err := examSittingExamID(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	holdID, err := pathID[model.RetentionHoldID](request, "retention_hold_id")
+	holdID, err := route.PathID[model.RetentionHoldID](request, "retention_hold_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body releaseRetentionHoldRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
 	scope, err := recordsOptionalScope(examID, body.SittingID, body.SubmissionID)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	revision, err := requiredRecordsInteger("expected_revision", body.ExpectedRevision, 1)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if err = model.ValidateRecordsReason(body.ReasonCode, body.PrivateReason); err != nil {
-		return operationResult{}, invalidRequestError(err)
+		return route.Result{}, route.InvalidRequest(err)
 	}
 
-	value, err := h.app.ReleaseRetentionHold(request.context, request.invocation(), exam.ReleaseRetentionHoldCommand{
+	value, err := h.app.ReleaseRetentionHold(request.Context, request.Invocation(), exam.ReleaseRetentionHoldCommand{
 		Scope:            scope,
 		HoldID:           holdID,
 		ExpectedRevision: revision,
 		ReasonCode:       body.ReasonCode,
 		PrivateReason:    body.PrivateReason,
-		IdempotencyKey:   request.idempotencyKey,
+		IdempotencyKey:   request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if value == nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 
-	return jsonResult(http.StatusOK, recordsHoldResponse(*value)).withHeaders(privateNoStoreHeaders()), nil
+	return route.JSON(http.StatusOK, recordsHoldResponse(*value)).WithHeaders(privateNoStoreHeaders()), nil
 }
 
-func (h examRecordsHandlers) listHolds(request operationRequest) (operationResult, error) {
+func (h examRecordsHandlers) listHolds(request route.Request) (route.Result, error) {
 	examID, err := examSittingExamID(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	values := request.http.URL.Query()
+	values := request.HTTP.URL.Query()
 	for key, items := range values {
 		if len(items) != 1 {
-			return operationResult{}, invalidRequestError(nil)
+			return route.Result{}, route.InvalidRequest(nil)
 		}
 
 		switch key {
 		case "exam_sitting_id", "submission_id", "include_released", "limit", "cursor":
 		default:
-			return operationResult{}, invalidRequestError(nil)
+			return route.Result{}, route.InvalidRequest(nil)
 		}
 	}
 
@@ -534,39 +535,39 @@ func (h examRecordsHandlers) listHolds(request operationRequest) (operationResul
 		SubmissionID: model.SubmissionID(values.Get("submission_id")),
 	}
 	if err = scope.Validate(); err != nil {
-		return operationResult{}, invalidRequestError(err)
+		return route.Result{}, route.InvalidRequest(err)
 	}
 
 	includeReleased := false
 	if raw, exists := values["include_released"]; exists {
 		if raw[0] != "true" && raw[0] != "false" {
-			return operationResult{}, invalidRequestError(nil)
+			return route.Result{}, route.InvalidRequest(nil)
 		}
 
 		includeReleased = raw[0] == "true"
 	}
 
-	limit, err := request.queryLimit()
+	limit, err := request.QueryLimit()
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	query := store.ExamRecordsHoldListOptions{Scope: scope, Limit: limit, IncludeReleased: includeReleased}
 	if raw := values.Get("cursor"); raw != "" {
-		cursor, decodeErr := decodeOpaqueCursor(raw, recordsHoldCursorSpec(scope, includeReleased))
+		cursor, decodeErr := route.DecodeCursor(raw, recordsHoldCursorSpec(scope, includeReleased))
 		if decodeErr != nil {
-			return operationResult{}, invalidRequestError(decodeErr)
+			return route.Result{}, route.InvalidRequest(decodeErr)
 		}
 
 		query.After = model.RetentionHoldID(cursor.AfterID)
 	}
 
-	page, err := h.app.ListRetentionHolds(request.context, request.invocation(), query)
+	page, err := h.app.ListRetentionHolds(request.Context, request.Invocation(), query)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if page == nil || len(page.Holds) > limit || page.HasMore && len(page.Holds) == 0 {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 
 	response := retentionHoldPageResponse{Items: make([]retentionHoldResponse, 0, len(page.Holds))}
@@ -575,7 +576,7 @@ func (h examRecordsHandlers) listHolds(request operationRequest) (operationResul
 	}
 
 	if page.HasMore {
-		response.NextCursor, err = encodeOpaqueCursor(
+		response.NextCursor, err = route.EncodeCursor(
 			recordsHoldCursor{
 				ExamID:          scope.ExamID.String(),
 				SittingID:       scope.SittingID.String(),
@@ -586,49 +587,49 @@ func (h examRecordsHandlers) listHolds(request operationRequest) (operationResul
 			recordsHoldCursorSpec(scope, includeReleased),
 		)
 		if err != nil {
-			return operationResult{}, unpresentableResult(err)
+			return route.Result{}, route.Unpresentable(err)
 		}
 	}
 
-	return jsonResult(http.StatusOK, response).withHeaders(privateNoStoreHeaders()), nil
+	return route.JSON(http.StatusOK, response).WithHeaders(privateNoStoreHeaders()), nil
 }
 
-func requiredRecordsInteger(field string, value Optional[int64], minimum int64) (int64, error) {
+func requiredRecordsInteger(field string, value route.Optional[int64], minimum int64) (int64, error) {
 	p := value.ValuePointer()
 	if p == nil || *p < minimum {
-		return 0, invalidRequestError(nil)
+		return 0, route.InvalidRequest(nil)
 	}
 	return *p, nil
 }
-func recordsSubmissionScope(request operationRequest) (model.RetentionHoldScope, error) {
+func recordsSubmissionScope(request route.Request) (model.RetentionHoldScope, error) {
 	examID, sittingID, err := examSittingIDs(request)
 	if err != nil {
 		return model.RetentionHoldScope{}, err
 	}
-	id, err := pathID[model.SubmissionID](request, "submission_id")
+	id, err := route.PathID[model.SubmissionID](request, "submission_id")
 	if err != nil {
 		return model.RetentionHoldScope{}, err
 	}
 	return model.RetentionHoldScope{ExamID: examID, SittingID: sittingID, SubmissionID: id}, nil
 }
-func recordsOptionalScope(examID model.ExamID, sitting, submission Optional[string]) (model.RetentionHoldScope, error) {
+func recordsOptionalScope(examID model.ExamID, sitting, submission route.Optional[string]) (model.RetentionHoldScope, error) {
 	scope := model.RetentionHoldScope{ExamID: examID}
 	if sitting.IsSet() {
 		if p := sitting.ValuePointer(); p == nil || *p == "" {
-			return scope, invalidRequestError(nil)
+			return scope, route.InvalidRequest(nil)
 		} else {
 			scope.SittingID = model.ExamSittingID(*p)
 		}
 	}
 	if submission.IsSet() {
 		if p := submission.ValuePointer(); p == nil || *p == "" {
-			return scope, invalidRequestError(nil)
+			return scope, route.InvalidRequest(nil)
 		} else {
 			scope.SubmissionID = model.SubmissionID(*p)
 		}
 	}
 	if err := scope.Validate(); err != nil {
-		return scope, invalidRequestError(err)
+		return scope, route.InvalidRequest(err)
 	}
 	return scope, nil
 }
@@ -700,12 +701,12 @@ type recordsHoldCursor struct {
 	AfterID         string `json:"after_id"`
 }
 
-func recordsHoldCursorSpec(scope model.RetentionHoldScope, includeReleased bool) opaqueCursorSpec[recordsHoldCursor] {
-	return opaqueCursorSpec[recordsHoldCursor]{
-		label:                "retention holds",
-		maximumEncodedLength: 512,
-		members:              []string{"exam_id", "exam_sitting_id", "submission_id", "include_released", "after_id"},
-		validate: func(c recordsHoldCursor) error {
+func recordsHoldCursorSpec(scope model.RetentionHoldScope, includeReleased bool) route.CursorSpec[recordsHoldCursor] {
+	return route.CursorSpec[recordsHoldCursor]{
+		Label:                "retention holds",
+		MaximumEncodedLength: 512,
+		Members:              []string{"exam_id", "exam_sitting_id", "submission_id", "include_released", "after_id"},
+		Validate: func(c recordsHoldCursor) error {
 			if scope.Validate() != nil ||
 				c.ExamID != scope.ExamID.String() ||
 				c.SittingID != scope.SittingID.String() ||

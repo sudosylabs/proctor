@@ -20,6 +20,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -43,7 +44,7 @@ func (a *retentionPolicyHTTPApplication) ReplaceRetentionPolicy(_ context.Contex
 
 func TestRetentionPolicyHTTPRequiresCompleteSettingsAndNeverEnablesDeletion(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
@@ -52,7 +53,7 @@ func TestRetentionPolicyHTTPRequiresCompleteSettingsAndNeverEnablesDeletion(t *t
 	}
 	policy := model.NewInitialRetentionPolicy(model.NewInstitutionID(), time.Now())
 	application := &retentionPolicyHTTPApplication{policy: policy}
-	api := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, retentionPolicyResource(application))
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, retentionPolicyResource(application))
 	serve := func(method, body string) *httptest.ResponseRecorder {
 		request := httptest.NewRequest(method, "/api/v1/retention-policy", strings.NewReader(body))
 		request.Header.Set("Authorization", "Bearer session")

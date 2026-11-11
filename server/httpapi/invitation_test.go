@@ -23,6 +23,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -121,13 +122,13 @@ func (a *invitationHTTPApplication) ListInvitations(_ context.Context, _ invocat
 
 func TestInvitationAdministrationRejectsNoProgressPage(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	applicationFake := &invitationHTTPApplication{listMore: true, listEmpty: true}
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now(), MFACompletedAt: model.OptionalTimeFrom(time.Now())}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, invitationResource(applicationFake))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, invitationResource(applicationFake))
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/invitations", nil)
 	request.Header.Set("Authorization", "Bearer session")
 	response := httptest.NewRecorder()
@@ -136,13 +137,13 @@ func TestInvitationAdministrationRejectsNoProgressPage(t *testing.T) {
 }
 
 func TestInvitationAdministrationHTTPIsBoundedSafeAndRevisionFenced(t *testing.T) {
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	applicationFake := &invitationHTTPApplication{listMore: true}
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now(), MFACompletedAt: model.OptionalTimeFrom(time.Now())}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, invitationResource(applicationFake))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, invitationResource(applicationFake))
 
 	list := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/invitations?purpose=student_class&state=pending&email=student%40example.edu&limit=25&created_after=2023-11-14T22:13:20Z&created_before=2030-03-17T17:46:40Z", nil)
 	list.Header.Set("Authorization", "Bearer session")
@@ -212,13 +213,13 @@ func TestInvitationAdministrationHTTPIsBoundedSafeAndRevisionFenced(t *testing.T
 }
 
 func TestInvitationBatchHTTPIsStrictBoundedAndIdempotent(t *testing.T) {
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	applicationFake := &invitationHTTPApplication{}
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now(), MFACompletedAt: model.OptionalTimeFrom(time.Now())}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, invitationResource(applicationFake))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, invitationResource(applicationFake))
 	classID := model.NewClassID().String()
 	body, _ := json.Marshal(map[string]any{"operation": "student_class.create", "scope_type": "class", "scope_id": classID,
 		"items": []map[string]any{{"key": "row-1", "email": "first@example.edu"}, {"key": "row-2", "email": "second@example.edu"}, {"key": "row-3", "email": "third@example.edu"}}})
@@ -255,8 +256,8 @@ func TestInvitationBatchHTTPIsStrictBoundedAndIdempotent(t *testing.T) {
 }
 
 func TestInvitationAdministrationHTTPRejectsMalformedCursor(t *testing.T) {
-	logger, logs := newTestLogger(t)
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
+	logger, logs := routetest.NewLogger(t)
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}}, invitationResource(&invitationHTTPApplication{}))
@@ -298,7 +299,7 @@ func (a *invitationHTTPApplication) administrationView() onboarding.InvitationAd
 func TestInvitationAcceptanceHTTPReturnsOnlyRecordIDsForFreshAndReplay(t *testing.T) {
 	for _, replayed := range []bool{false, true} {
 		t.Run(map[bool]string{false: "fresh", true: "replay"}[replayed], func(t *testing.T) {
-			logger, _ := newTestLogger(t)
+			logger, _ := routetest.NewLogger(t)
 			userID := model.NewUserID()
 			invitationID := model.NewInvitationID()
 			affiliationID := model.NewAffiliationID()
@@ -310,7 +311,7 @@ func TestInvitationAcceptanceHTTPReturnsOnlyRecordIDsForFreshAndReplay(t *testin
 				ClassMember: &model.ClassMember{ID: classMemberID},
 				Replayed:    replayed,
 			}}
-			httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{}, invitationResource(applicationFake))
+			httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, invitationResource(applicationFake))
 			body, _ := json.Marshal(map[string]string{"claim": model.NewCredentialToken(), "password": "correct horse battery staple", "username": "student"})
 			request := newJSONRequest(http.MethodPost, "/api/v1/invitations/student-class/accept", bytes.NewReader(body))
 			response := httptest.NewRecorder()
@@ -348,13 +349,13 @@ func TestInvitationAcceptanceOpenAPIExposesOnlyRecordIDs(t *testing.T) {
 }
 
 func TestInvitationHTTPKeepsClaimOutOfIssueResponseAndAcceptsPublicly(t *testing.T) {
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	applicationFake := &invitationHTTPApplication{}
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, invitationResource(applicationFake))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, invitationResource(applicationFake))
 	classID := model.NewClassID().String()
 	body, _ := json.Marshal(map[string]any{"email": "student@example.edu", "start_at": "2027-01-15T08:00:00Z",
 		"end_at": "2027-05-11T01:46:40.5Z", "suggested_username": "student-one"})
@@ -379,12 +380,12 @@ func TestInvitationHTTPKeepsClaimOutOfIssueResponseAndAcceptsPublicly(t *testing
 }
 
 func TestTeacherInvitationHTTPFreezesRoleAndReturnsRelationshipIDs(t *testing.T) {
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	applicationFake := &invitationHTTPApplication{}
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, invitationResource(applicationFake))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, invitationResource(applicationFake))
 	unitID, roleID := model.NewAcademicUnitID().String(), model.NewRoleID().String()
 	body, _ := json.Marshal(map[string]string{"email": "teacher@example.edu", "role_id": roleID})
 	request := newJSONRequest(http.MethodPost, "/api/v1/academic-units/"+unitID+"/invitations/teacher", bytes.NewReader(body))
@@ -407,13 +408,13 @@ func TestTeacherInvitationHTTPFreezesRoleAndReturnsRelationshipIDs(t *testing.T)
 }
 
 func TestScopedRoleInvitationHTTPRequiresAuthenticatedExistingUserAndInstitutionAssurance(t *testing.T) {
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	applicationFake := &invitationHTTPApplication{}
 	now := time.Now()
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: now, MFACompletedAt: model.OptionalTimeFrom(now)}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, invitationResource(applicationFake))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, invitationResource(applicationFake))
 	unitID, institutionID, roleID := model.NewAcademicUnitID().String(), model.NewInstitutionID().String(), model.NewRoleID().String()
 	body, _ := json.Marshal(map[string]string{"email": "existing@example.edu", "role_id": roleID})
 	for _, target := range []struct {
@@ -461,7 +462,7 @@ func TestScopedRoleInvitationHTTPRequiresAuthenticatedExistingUserAndInstitution
 	pat := principal
 	pat.CredentialType, pat.SessionID = model.CredentialPersonalAccessToken, ""
 	pat.CredentialID = model.PrincipalCredentialID(model.NewPersonalAccessTokenID())
-	patAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: pat}, invitationResource(applicationFake))
+	patAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: pat}, invitationResource(applicationFake))
 	request := newJSONRequest(http.MethodPost, "/api/v1/institutions/"+institutionID+"/invitations/role", bytes.NewReader(body))
 	request.Header.Set("Authorization", "Bearer pat")
 	response := httptest.NewRecorder()

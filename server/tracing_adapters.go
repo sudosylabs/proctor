@@ -11,7 +11,7 @@ import (
 	"context"
 
 	"github.com/sudosylabs/proctor/server/app/job"
-	"github.com/sudosylabs/proctor/server/httpapi"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store/timerlayer"
 	"github.com/sudosylabs/proctor/server/tracing"
@@ -20,9 +20,9 @@ import (
 // httpTracing adapts the tracing module to the HTTP transport's port.
 type httpTracing struct{ tracing *tracing.Module }
 
-var _ httpapi.Tracing = httpTracing{}
+var _ route.Tracing = httpTracing{}
 
-func (t httpTracing) StartRequest(ctx context.Context, request httpapi.TracedRequest) (context.Context, httpapi.RequestSpan) {
+func (t httpTracing) StartRequest(ctx context.Context, request route.TracedRequest) (context.Context, route.RequestSpan) {
 	return t.tracing.StartHTTPRequest(ctx, request.Header, request.Method, request.ContinueParent, request.RequestID)
 }
 

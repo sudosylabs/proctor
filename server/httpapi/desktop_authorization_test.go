@@ -21,6 +21,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -66,9 +68,9 @@ func (a *desktopAuthorizationHTTPApplication) StartDesktopAuthorization(_ contex
 
 func TestDesktopAuthorizationHTTPExposesBoundedAttemptFailures(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	applicationFake := &desktopAuthorizationHTTPApplication{startErr: apperror.New("authentication.rate_limited")}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{}, desktopAuthorizationResource(applicationFake, testDesktopAuthorizationCookies(t)))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, desktopAuthorizationResource(applicationFake, testDesktopAuthorizationCookies(t)))
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/desktop/authorizations", strings.NewReader(
 		`{"callback_url":"http://127.0.0.1:49152/random","state":"state","code_challenge":"challenge"}`))
 	request.Header.Set("Content-Type", "application/json")
@@ -97,13 +99,13 @@ func (a *desktopAuthorizationHTTPApplication) ExchangeDesktopAuthorization(_ con
 
 func TestDesktopAuthorizationHTTPMapsPublicClientProtocolAndDisablesCaching(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	applicationFake := &desktopAuthorizationHTTPApplication{}
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now()}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, desktopAuthorizationResource(applicationFake, testDesktopAuthorizationCookies(t)))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, desktopAuthorizationResource(applicationFake, testDesktopAuthorizationCookies(t)))
 
 	tests := []struct {
 		path, body, authorization string
@@ -119,7 +121,7 @@ func TestDesktopAuthorizationHTTPMapsPublicClientProtocolAndDisablesCaching(t *t
 			request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, test.path, strings.NewReader(test.body))
 			request.Header.Set("Content-Type", "application/json")
 			if strings.Contains(test.path, "/authorizations/") {
-				request.AddCookie(&http.Cookie{Name: BrowserDesktopAuthorizationCookieName, Value: "binding", Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode})
+				request.AddCookie(&http.Cookie{Name: route.BrowserDesktopAuthorizationCookieName, Value: "binding", Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode})
 			}
 			if test.authorization != "" {
 				request.Header.Set("Authorization", test.authorization)
@@ -139,8 +141,8 @@ func TestDesktopAuthorizationHTTPMapsPublicClientProtocolAndDisablesCaching(t *t
 
 func TestDesktopAuthorizationHTTPExchangesFragmentProofForScopedCookies(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{},
+	logger, _ := routetest.NewLogger(t)
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{},
 		desktopAuthorizationResource(&desktopAuthorizationHTTPApplication{}, testDesktopAuthorizationCookies(t)))
 
 	bindRequest := httptest.NewRequest(http.MethodPost, "/api/v1/auth/desktop/authorizations/bind", strings.NewReader(
@@ -150,7 +152,7 @@ func TestDesktopAuthorizationHTTPExchangesFragmentProofForScopedCookies(t *testi
 	httpAPI.ServeHTTP(bindResponse, bindRequest)
 	require.Equal(t, http.StatusNoContent, bindResponse.Code, "bind = %d cache=%q body=%s", bindResponse.Code, bindResponse.Header().Get("Cache-Control"), bindResponse.Body.String())
 	require.Equal(t, "no-store", bindResponse.Header().Get("Cache-Control"), "bind = %d cache=%q body=%s", bindResponse.Code, bindResponse.Header().Get("Cache-Control"), bindResponse.Body.String())
-	bindingCookie := responseCookie(t, bindResponse.Result().Cookies(), BrowserDesktopAuthorizationCookieName)
+	bindingCookie := responseCookie(t, bindResponse.Result().Cookies(), route.BrowserDesktopAuthorizationCookieName)
 	require.Equal(t, "binding", bindingCookie.Value)
 	require.Equal(t, "/api/v1/auth/desktop/authorizations", bindingCookie.Path)
 	require.True(t, bindingCookie.HttpOnly)
@@ -165,7 +167,7 @@ func TestDesktopAuthorizationHTTPExchangesFragmentProofForScopedCookies(t *testi
 	require.Equal(t, http.StatusSeeOther, providerResponse.Code, "provider start = %d location=%q cache=%q body=%s", providerResponse.Code, providerResponse.Header().Get("Location"), providerResponse.Header().Get("Cache-Control"), providerResponse.Body.String())
 	require.Equal(t, "https://identity.example/login", providerResponse.Header().Get("Location"), "provider start = %d location=%q cache=%q body=%s", providerResponse.Code, providerResponse.Header().Get("Location"), providerResponse.Header().Get("Cache-Control"), providerResponse.Body.String())
 	require.Equal(t, "no-store", providerResponse.Header().Get("Cache-Control"), "provider start = %d location=%q cache=%q body=%s", providerResponse.Code, providerResponse.Header().Get("Location"), providerResponse.Header().Get("Cache-Control"), providerResponse.Body.String())
-	externalCookie := responseCookie(t, providerResponse.Result().Cookies(), BrowserExternalLoginCookieName)
+	externalCookie := responseCookie(t, providerResponse.Result().Cookies(), route.BrowserExternalLoginCookieName)
 	require.Equal(t, "external-binding", externalCookie.Value)
 	require.Equal(t, "/api/v1/auth/providers/", externalCookie.Path)
 	require.True(t, externalCookie.HttpOnly)
@@ -184,9 +186,9 @@ func responseCookie(t *testing.T, cookies []*http.Cookie, name string) *http.Coo
 	return nil
 }
 
-func testDesktopAuthorizationCookies(t *testing.T) browserCookies {
+func testDesktopAuthorizationCookies(t *testing.T) route.Cookies {
 	t.Helper()
-	cookies, err := newBrowserCookies("https://proctor.example.edu")
+	cookies, err := route.NewCookies("https://proctor.example.edu")
 	require.NoError(t, err)
 	return cookies
 }

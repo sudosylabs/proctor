@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -59,7 +60,7 @@ var openAPIDTOs = map[string]reflect.Type{
 	"AttemptConfigurationCandidate":                  reflect.TypeOf(model.AttemptConfigurationCandidate{}),
 	"AttemptConfigurationPresentation":               reflect.TypeOf(model.AttemptConfigurationPresentation{}),
 	"AuditEventResponse":                             reflect.TypeOf(auditEventResponse{}),
-	"AuditListResponse":                              reflect.TypeOf(countedListResponse[auditEventResponse]{}),
+	"AuditListResponse":                              reflect.TypeOf(route.CountedList[auditEventResponse]{}),
 	"AuthenticationMethodResponse":                   reflect.TypeOf(authenticationMethodResponse{}),
 	"AuthenticationProviderMethodResponse":           reflect.TypeOf(authenticationProviderMethodResponse{}),
 	"AuthenticationResponse":                         reflect.TypeOf(authenticationResponse{}),
@@ -80,7 +81,7 @@ var openAPIDTOs = map[string]reflect.Type{
 	"BrowserInvitationStartResponse":                 reflect.TypeOf(browserInvitationStartResponse{}),
 	"BrowserPolicy":                                  reflect.TypeOf(browserPolicyDocument{}),
 	"BrowserPolicyRule":                              reflect.TypeOf(browserPolicyRuleDocument{}),
-	"BrowserReceiptPage":                             reflect.TypeOf(listResponse[model.BrowserEventReceipt]{}),
+	"BrowserReceiptPage":                             reflect.TypeOf(route.List[model.BrowserEventReceipt]{}),
 	"BrowserSourceStatus":                            reflect.TypeOf(model.BrowserSourceStatus{}),
 	"BuildInfoResponse":                              reflect.TypeOf(BuildInfo{}),
 	"CancelExamSittingRequest":                       reflect.TypeOf(cancelExamSittingRequest{}),
@@ -193,7 +194,7 @@ var openAPIDTOs = map[string]reflect.Type{
 	"ExamRecordsCompletionResponse":                  reflect.TypeOf(examRecordsCompletionResponse{}),
 	"ExamRecordsSnapshotResponse":                    reflect.TypeOf(examRecordsSnapshotResponse{}),
 	"ExamResourceContentReplacementMetadata":         reflect.TypeOf(examResourceContentReplacementMetadata{}),
-	"ExamResourceListResponse":                       reflect.TypeOf(listResponse[examResourceResponse]{}),
+	"ExamResourceListResponse":                       reflect.TypeOf(route.List[examResourceResponse]{}),
 	"ExamResourceResponse":                           reflect.TypeOf(examResourceResponse{}),
 	"ExamResourceUploadMetadata":                     reflect.TypeOf(examResourceUploadMetadata{}),
 	"ExamResponse":                                   reflect.TypeOf(examResponse{}),
@@ -213,7 +214,7 @@ var openAPIDTOs = map[string]reflect.Type{
 	"ExamStarterWorkspaceFileReplacementMetadata":    reflect.TypeOf(examStarterWorkspaceFileReplacementMetadata{}),
 	"ExamStarterWorkspaceFileUploadMetadata":         reflect.TypeOf(examStarterWorkspaceFileUploadMetadata{}),
 	"ExamStarterWorkspaceListItemResponse":           reflect.TypeOf(examStarterWorkspaceListItemResponse{}),
-	"ExamStarterWorkspaceListResponse":               reflect.TypeOf(listResponse[examStarterWorkspaceListItemResponse]{}),
+	"ExamStarterWorkspaceListResponse":               reflect.TypeOf(route.List[examStarterWorkspaceListItemResponse]{}),
 	"ExamSubmissionManagerResponse":                  reflect.TypeOf(examSubmissionManagerResponse{}),
 	"ExamSubmissionManifestItemResponse":             reflect.TypeOf(examSubmissionManifestItemResponse{}),
 	"ExamSubmissionManifestResponse":                 reflect.TypeOf(examSubmissionManifestResponse{}),
@@ -286,7 +287,7 @@ var openAPIDTOs = map[string]reflect.Type{
 	"NativeSourceGap":                                reflect.TypeOf(model.NativeSourceGap{}),
 	"NativeSourceReset":                              reflect.TypeOf(model.NativeSourceReset{}),
 	"OnboardingImportCommitRequest":                  reflect.TypeOf(onboardingImportCommitRequest{}),
-	"OnboardingImportListResponse":                   reflect.TypeOf(listResponse[onboardingImportResponse]{}),
+	"OnboardingImportListResponse":                   reflect.TypeOf(route.List[onboardingImportResponse]{}),
 	"OnboardingImportResponse":                       reflect.TypeOf(onboardingImportResponse{}),
 	"OnboardingImportRowResponse":                    reflect.TypeOf(onboardingImportRowResponse{}),
 	"PasswordReauthenticationRequest":                reflect.TypeOf(passwordReauthenticationRequest{}),
@@ -298,7 +299,7 @@ var openAPIDTOs = map[string]reflect.Type{
 	"PersonalAccessTokenGrantableScopesResponse":     reflect.TypeOf(personalAccessTokenGrantableScopesResponse{}),
 	"PersonalAccessTokenResponse":                    reflect.TypeOf(personalAccessTokenResponse{}),
 	"PrepareSecurityPreflightRequest":                reflect.TypeOf(prepareSecurityPreflightRequest{}),
-	"ProblemDetails":                                 reflect.TypeOf(Problem{}),
+	"ProblemDetails":                                 reflect.TypeOf(route.Problem{}),
 	"ProgrammeLevelResponse":                         reflect.TypeOf(programmeLevelResponse{}),
 	"ProgrammeResponse":                              reflect.TypeOf(programmeResponse{}),
 	"ProviderConnectionResponse":                     reflect.TypeOf(providerConnectionResponse{}),
@@ -359,7 +360,7 @@ var openAPIDTOs = map[string]reflect.Type{
 	"StopDeliveryDetailsResult":                      reflect.TypeOf(model.StopDeliveryDetailsResult{}),
 	"StudentExamResultResponse":                      reflect.TypeOf(studentExamResultResponse{}),
 	"StudentProgressionCommitRequest":                reflect.TypeOf(studentProgressionCommitRequest{}),
-	"StudentProgressionListResponse":                 reflect.TypeOf(countedListResponse[onboardingImportResponse]{}),
+	"StudentProgressionListResponse":                 reflect.TypeOf(route.CountedList[onboardingImportResponse]{}),
 	"StudentProgressionDryRunRequest":                reflect.TypeOf(studentProgressionDryRunRequest{}),
 	"SubmissionReviewWaiverEnvelope":                 reflect.TypeOf(submissionReviewWaiverEnvelope{}),
 	"SubmissionReviewWaiverResponse":                 reflect.TypeOf(submissionReviewWaiverResponse{}),
@@ -380,7 +381,7 @@ var openAPIDTOs = map[string]reflect.Type{
 	"UpdateRoleRequest":                              reflect.TypeOf(updateRoleRequest{}),
 	"UpdateUserProfileRequest":                       reflect.TypeOf(updateUserProfileRequest{}),
 	"UserEmailStateResponse":                         reflect.TypeOf(userEmailStateResponse{}),
-	"UserProfileListResponse":                        reflect.TypeOf(countedListResponse[userDirectoryEntryResponse]{}),
+	"UserProfileListResponse":                        reflect.TypeOf(route.CountedList[userDirectoryEntryResponse]{}),
 	"UserDirectoryEntryResponse":                     reflect.TypeOf(userDirectoryEntryResponse{}),
 	"UserDirectorySummary":                           reflect.TypeOf(userDirectorySummaryResponse{}),
 	"UserDirectoryAffiliation":                       reflect.TypeOf(userDirectoryAffiliationResponse{}),
@@ -628,7 +629,7 @@ func appendOpenAPISchemaRefs(names []string, value any) []string {
 }
 
 // evaluateOpenAPIBodyRegistration requires a body component to be a
-// registered DTO or the shared list envelope of one (listResponse[T]), whose
+// registered DTO or the shared list envelope of one (route.List[T]), whose
 // cursor is the NextCursor component or a plain string.
 func evaluateOpenAPIBodyRegistration(
 	violations []openAPIAgreementViolation,

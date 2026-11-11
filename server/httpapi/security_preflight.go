@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -146,30 +147,30 @@ type securityPolicyResponse struct {
 	BrowserActivityDisclosure  model.BrowserActivityDisclosure   `json:"browser_activity_disclosure"`
 }
 
-func (h examAttemptHandlers) prepareSecurityPreflight(request operationRequest) (operationResult, error) {
-	sittingID, err := pathID[model.ExamSittingID](request, "exam_sitting_id")
+func (h examAttemptHandlers) prepareSecurityPreflight(request route.Request) (route.Result, error) {
+	sittingID, err := route.PathID[model.ExamSittingID](request, "exam_sitting_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body prepareSecurityPreflightRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
-	prepared, err := h.app.PrepareExamSecurityPreflight(request.context, request.invocation(), attempt.PrepareSecurityPreflightCommand{
+	prepared, err := h.app.PrepareExamSecurityPreflight(request.Context, request.Invocation(), attempt.PrepareSecurityPreflightCommand{
 		SittingID:                        sittingID,
 		AttemptID:                        model.ExamAttemptID(body.AttemptID),
 		NativeRegistryDigest:             body.NativeRegistryDigest,
 		SourceManifestDigest:             body.SourceManifestDigest,
 		ConfigurationManifestFingerprint: body.ConfigurationManifestFingerprint,
-		IdempotencyKey:                   request.idempotencyKey,
+		IdempotencyKey:                   request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if prepared == nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 
 	result := securityPolicyResponse{
@@ -184,45 +185,45 @@ func (h examAttemptHandlers) prepareSecurityPreflight(request operationRequest) 
 	}
 	encoded, err := json.Marshal(result)
 	if err != nil || len(encoded) > model.SecurityPolicyResponseMaxBytes {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 
-	return jsonResult(http.StatusOK, result), nil
+	return route.JSON(http.StatusOK, result), nil
 }
-func (h examAttemptHandlers) reportSecurityPreflight(request operationRequest) (operationResult, error) {
-	id, err := opaquePathID(request, "security_preflight_id")
+func (h examAttemptHandlers) reportSecurityPreflight(request route.Request) (route.Result, error) {
+	id, err := route.OpaquePathID(request, "security_preflight_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var report model.SecurityPreflightReport
-	if err = request.decodeJSON(&report); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&report); err != nil {
+		return route.Result{}, err
 	}
 
-	result, err := h.app.ReportExamSecurityPreflight(request.context, request.invocation(), attempt.ReportSecurityPreflightCommand{
+	result, err := h.app.ReportExamSecurityPreflight(request.Context, request.Invocation(), attempt.ReportSecurityPreflightCommand{
 		PreflightID:    id,
 		Report:         report,
-		IdempotencyKey: request.idempotencyKey,
+		IdempotencyKey: request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if result == nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 
-	return jsonResult(http.StatusOK, result), nil
+	return route.JSON(http.StatusOK, result), nil
 }
 
-func securityPreflightResource(app ExamAttemptApplication) apiResource {
+func securityPreflightResource(app ExamAttemptApplication) route.Resource {
 	h := examAttemptHandlers{app: app}
-	return newResource(
+	return route.NewResource(
 		"security-preflights",
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/exam-attempts/{exam_attempt_id}/security-policy",
-			Auth:   AuthSessionRequired,
+			Auth:   route.AuthSessionRequired,
 			Errors: []string{
 				"exam.delivery.control_rate_limited",
 				"request.invalid",
@@ -250,11 +251,11 @@ func securityPreflightResource(app ExamAttemptApplication) apiResource {
 			},
 			Handle: h.recoverSecurityPolicy,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPost,
 			Path:        "/exam-sittings/{exam_sitting_id}/security-preflights",
-			Auth:        AuthSessionRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthSessionRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"audit.unavailable",
 				"exam.delivery.control_rate_limited",
@@ -285,11 +286,11 @@ func securityPreflightResource(app ExamAttemptApplication) apiResource {
 			},
 			Handle: h.prepareSecurityPreflight,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPost,
 			Path:        "/security-preflights/{security_preflight_id}/report",
-			Auth:        AuthSessionRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthSessionRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"audit.unavailable",
 				"exam.delivery.control_rate_limited",
@@ -323,18 +324,18 @@ func securityPreflightResource(app ExamAttemptApplication) apiResource {
 	)
 }
 
-func (h examAttemptHandlers) recoverSecurityPolicy(request operationRequest) (operationResult, error) {
-	attemptID, err := pathID[model.ExamAttemptID](request, "exam_attempt_id")
+func (h examAttemptHandlers) recoverSecurityPolicy(request route.Request) (route.Result, error) {
+	attemptID, err := route.PathID[model.ExamAttemptID](request, "exam_attempt_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	recovered, err := h.app.RecoverExamSecurityPolicy(request.context, request.invocation(), attemptID)
+	recovered, err := h.app.RecoverExamSecurityPolicy(request.Context, request.Invocation(), attemptID)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if recovered == nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 
 	result := securityPolicyRecoveryResponse{
@@ -348,8 +349,8 @@ func (h examAttemptHandlers) recoverSecurityPolicy(request operationRequest) (op
 	}
 	encoded, err := json.Marshal(result)
 	if err != nil || len(encoded) > model.SecurityPolicyResponseMaxBytes {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 
-	return jsonResult(http.StatusOK, result), nil
+	return route.JSON(http.StatusOK, result), nil
 }

@@ -12,18 +12,19 @@ import (
 	"strconv"
 
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-func nativeDeliveryResource(app ExamAttemptApplication) apiResource {
+func nativeDeliveryResource(app ExamAttemptApplication) route.Resource {
 	h := examAttemptHandlers{app: app}
-	return newResource(
+	return route.NewResource(
 		"native-delivery",
-		endpoint{
+		route.Endpoint{
 			Method:       http.MethodPost,
 			Path:         "/exam-attempts/{exam_attempt_id}/security-batches",
-			Auth:         AuthSessionRequired,
-			Idempotency:  IdempotencyRequired,
+			Auth:         route.AuthSessionRequired,
+			Idempotency:  route.IdempotencyRequired,
 			MaxBodyBytes: 262144,
 			Errors: []string{
 				"audit.unavailable",
@@ -52,10 +53,10 @@ func nativeDeliveryResource(app ExamAttemptApplication) apiResource {
 			},
 			Handle: h.appendNativeDelivery,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/exam-attempts/{exam_attempt_id}/security-streams/{stream_id}",
-			Auth:   AuthSessionRequired,
+			Auth:   route.AuthSessionRequired,
 			Errors: []string{
 				"exam.delivery.control_rate_limited",
 				"request.invalid",
@@ -77,10 +78,10 @@ func nativeDeliveryResource(app ExamAttemptApplication) apiResource {
 			},
 			Handle: h.nativeDeliveryStatus,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/exam-attempts/{exam_attempt_id}/security-streams/{stream_id}/receipts/{batch_sequence:sequence}",
-			Auth:   AuthSessionRequired,
+			Auth:   route.AuthSessionRequired,
 			Errors: []string{
 				"exam.delivery.control_rate_limited",
 				"request.invalid",
@@ -102,11 +103,11 @@ func nativeDeliveryResource(app ExamAttemptApplication) apiResource {
 			},
 			Handle: h.nativeDeliveryReceipt,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:       http.MethodPost,
 			Path:         "/exam-attempts/{exam_attempt_id}/security-streams/{stream_id}/gaps",
-			Auth:         AuthSessionRequired,
-			Idempotency:  IdempotencyRequired,
+			Auth:         route.AuthSessionRequired,
+			Idempotency:  route.IdempotencyRequired,
 			MaxBodyBytes: 8192,
 			Errors: []string{
 				"audit.unavailable",
@@ -132,11 +133,11 @@ func nativeDeliveryResource(app ExamAttemptApplication) apiResource {
 			},
 			Handle: h.declareNativeDeliveryGaps,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:       http.MethodPost,
 			Path:         "/exam-attempts/{exam_attempt_id}/security-streams/{stream_id}/seal",
-			Auth:         AuthSessionRequired,
-			Idempotency:  IdempotencyRequired,
+			Auth:         route.AuthSessionRequired,
+			Idempotency:  route.IdempotencyRequired,
 			MaxBodyBytes: 2048,
 			Errors: []string{
 				"audit.unavailable",
@@ -162,11 +163,11 @@ func nativeDeliveryResource(app ExamAttemptApplication) apiResource {
 			},
 			Handle: h.sealNativeDelivery,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:       http.MethodPost,
 			Path:         "/exam-attempts/{exam_attempt_id}/security-streams/{stream_id}/summary",
-			Auth:         AuthSessionRequired,
-			Idempotency:  IdempotencyRequired,
+			Auth:         route.AuthSessionRequired,
+			Idempotency:  route.IdempotencyRequired,
 			MaxBodyBytes: 2048,
 			Errors: []string{
 				"audit.unavailable",
@@ -198,24 +199,24 @@ func nativeDeliveryResource(app ExamAttemptApplication) apiResource {
 // nativeDeliveryQuery builds the query for one delivery stream. streamID names
 // a delivery stream, Participation, or source session chosen by the Store, so
 // it stays an untyped opaque identifier.
-func nativeDeliveryQuery(request operationRequest, streamID string) (attempt.NativeDeliveryQuery, error) {
-	attemptID, err := pathID[model.ExamAttemptID](request, "exam_attempt_id")
+func nativeDeliveryQuery(request route.Request, streamID string) (attempt.NativeDeliveryQuery, error) {
+	attemptID, err := route.PathID[model.ExamAttemptID](request, "exam_attempt_id")
 	if err != nil {
 		return attempt.NativeDeliveryQuery{}, err
 	}
 
 	if !model.IsValidOpaqueID(streamID) {
-		return attempt.NativeDeliveryQuery{}, invalidRequestError(nil)
+		return attempt.NativeDeliveryQuery{}, route.InvalidRequest(nil)
 	}
 
 	query := attempt.NativeDeliveryQuery{Access: attempt.CandidateAccess{AttemptID: attemptID}, StreamID: streamID}
 	// Omission does not select historical authority. The Store decides from the
 	// recorded source closure, and rejects omission for a live source.
-	if len(request.http.Header.Values(candidateAttemptCredentialHeader)) > 0 ||
-		len(request.http.Header.Values(candidateAttemptConnectionHeader)) > 0 {
-		headers, err := candidateAttemptAccessHeaders(request.http)
+	if len(request.HTTP.Header.Values(candidateAttemptCredentialHeader)) > 0 ||
+		len(request.HTTP.Header.Values(candidateAttemptConnectionHeader)) > 0 {
+		headers, err := candidateAttemptAccessHeaders(request.HTTP)
 		if err != nil {
-			return query, invalidRequestError(err)
+			return query, route.InvalidRequest(err)
 		}
 
 		query.Access.ConnectionID = headers.ConnectionID
@@ -224,136 +225,136 @@ func nativeDeliveryQuery(request operationRequest, streamID string) (attempt.Nat
 
 	return query, nil
 }
-func (h examAttemptHandlers) nativeDeliveryStatus(request operationRequest) (operationResult, error) {
-	query, err := nativeDeliveryQuery(request, request.params["stream_id"])
+func (h examAttemptHandlers) nativeDeliveryStatus(request route.Request) (route.Result, error) {
+	query, err := nativeDeliveryQuery(request, request.Params["stream_id"])
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	value, err := h.app.NativeDeliveryStatus(request.context, request.invocation(), query)
+	value, err := h.app.NativeDeliveryStatus(request.Context, request.Invocation(), query)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	return nativeDeliveryStatusResult(value)
 }
-func (h examAttemptHandlers) nativeDeliveryReceipt(request operationRequest) (operationResult, error) {
-	query, err := nativeDeliveryQuery(request, request.params["stream_id"])
+func (h examAttemptHandlers) nativeDeliveryReceipt(request route.Request) (route.Result, error) {
+	query, err := nativeDeliveryQuery(request, request.Params["stream_id"])
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	sequence, err := strconv.ParseInt(request.params["batch_sequence"], 10, 64)
+	sequence, err := strconv.ParseInt(request.Params["batch_sequence"], 10, 64)
 	if err != nil || sequence < 1 || sequence > model.NativeParticipationPositionLimit {
-		return operationResult{}, invalidRequestError(err)
+		return route.Result{}, route.InvalidRequest(err)
 	}
-	value, err := h.app.NativeDeliveryReceipt(request.context, request.invocation(), query, sequence)
+	value, err := h.app.NativeDeliveryReceipt(request.Context, request.Invocation(), query, sequence)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if value == nil || value.Validate() != nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
-	return jsonResult(http.StatusOK, value).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, value).WithHeaders(noStoreHeaders()), nil
 }
-func (h examAttemptHandlers) declareNativeDeliveryGaps(request operationRequest) (operationResult, error) {
-	query, err := nativeDeliveryQuery(request, request.params["stream_id"])
+func (h examAttemptHandlers) declareNativeDeliveryGaps(request route.Request) (route.Result, error) {
+	query, err := nativeDeliveryQuery(request, request.Params["stream_id"])
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body model.DeclareDeliveryGaps
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
-	value, err := h.app.DeclareNativeDeliveryGaps(request.context, request.invocation(), attempt.NativeDeliveryGapsCommand{
+	value, err := h.app.DeclareNativeDeliveryGaps(request.Context, request.Invocation(), attempt.NativeDeliveryGapsCommand{
 		Query:          query,
 		Declaration:    body,
-		IdempotencyKey: request.idempotencyKey,
+		IdempotencyKey: request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, value).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, value).WithHeaders(noStoreHeaders()), nil
 }
-func (h examAttemptHandlers) sealNativeDelivery(request operationRequest) (operationResult, error) {
-	query, err := nativeDeliveryQuery(request, request.params["stream_id"])
+func (h examAttemptHandlers) sealNativeDelivery(request route.Request) (route.Result, error) {
+	query, err := nativeDeliveryQuery(request, request.Params["stream_id"])
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body model.FinalDeliveryDeclaration
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
-	value, err := h.app.SealNativeDelivery(request.context, request.invocation(), attempt.NativeDeliveryFinalCommand{
+	value, err := h.app.SealNativeDelivery(request.Context, request.Invocation(), attempt.NativeDeliveryFinalCommand{
 		Query:          query,
 		Declaration:    body,
-		IdempotencyKey: request.idempotencyKey,
+		IdempotencyKey: request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	return nativeDeliveryStatusResult(value)
 }
-func (h examAttemptHandlers) updateNativeDeliverySummary(request operationRequest) (operationResult, error) {
-	query, err := nativeDeliveryQuery(request, request.params["stream_id"])
+func (h examAttemptHandlers) updateNativeDeliverySummary(request route.Request) (route.Result, error) {
+	query, err := nativeDeliveryQuery(request, request.Params["stream_id"])
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body model.UnretainedDeliverySummary
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
-	value, err := h.app.UpdateNativeDeliverySummary(request.context, request.invocation(), attempt.NativeDeliverySummaryCommand{
+	value, err := h.app.UpdateNativeDeliverySummary(request.Context, request.Invocation(), attempt.NativeDeliverySummaryCommand{
 		Query:          query,
 		Summary:        body,
-		IdempotencyKey: request.idempotencyKey,
+		IdempotencyKey: request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	return nativeDeliveryStatusResult(value)
 }
-func nativeDeliveryStatusResult(value *model.NativeSecurityStreamStatus) (operationResult, error) {
+func nativeDeliveryStatusResult(value *model.NativeSecurityStreamStatus) (route.Result, error) {
 	if value == nil || value.Validate() != nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
-	return jsonResult(http.StatusOK, value).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, value).WithHeaders(noStoreHeaders()), nil
 }
 
-func (h examAttemptHandlers) appendNativeDelivery(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) appendNativeDelivery(request route.Request) (route.Result, error) {
 	var body model.NativeSecurityBatch
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
 	// The stream selector is in the closed batch envelope on this operation.
 	query, err := nativeDeliveryQuery(request, body.StreamID)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	value, err := h.app.AppendNativeDelivery(request.context, request.invocation(), attempt.NativeDeliveryAppendCommand{
+	value, err := h.app.AppendNativeDelivery(request.Context, request.Invocation(), attempt.NativeDeliveryAppendCommand{
 		Query:          query,
 		Batch:          body,
-		IdempotencyKey: request.idempotencyKey,
+		IdempotencyKey: request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if value == nil || value.Receipt.Validate() != nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 
-	return jsonResult(
+	return route.JSON(
 		http.StatusOK,
 		nativeDeliveryAcknowledgementResponse{Receipt: value.Receipt, NativeDeliveryProgress: value.NativeDeliveryProgress},
-	).withHeaders(noStoreHeaders()), nil
+	).WithHeaders(noStoreHeaders()), nil
 }
 
 // nativeDeliveryAcknowledgementResponse acknowledges one native security batch

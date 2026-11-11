@@ -17,6 +17,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -57,7 +58,7 @@ type jobResponse struct {
 }
 
 // jobListResponse is the collection envelope; the first page also carries the
-// total (see countedListResponse).
+// total (see route.CountedList).
 type jobListResponse struct {
 	Items             []jobResponse `json:"items"`
 	NextCursor        string        `json:"next_cursor,omitempty"`
@@ -90,14 +91,14 @@ type jobHandlers struct {
 	app JobOperationsApplication
 }
 
-func jobResource(application JobOperationsApplication) apiResource {
+func jobResource(application JobOperationsApplication) route.Resource {
 	h := jobHandlers{app: application}
-	return newResource(
+	return route.NewResource(
 		"jobs",
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/jobs",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -109,10 +110,10 @@ func jobResource(application JobOperationsApplication) apiResource {
 			},
 			Handle: h.list,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/jobs/{job_id}",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -123,10 +124,10 @@ func jobResource(application JobOperationsApplication) apiResource {
 			},
 			Handle: h.get,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/jobs/{job_id}/attempts",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -138,10 +139,10 @@ func jobResource(application JobOperationsApplication) apiResource {
 			},
 			Handle: h.listAttempts,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/jobs/{job_id}/cancel",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -155,10 +156,10 @@ func jobResource(application JobOperationsApplication) apiResource {
 			},
 			Handle: h.cancel,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/jobs/{job_id}/retry",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -175,64 +176,64 @@ func jobResource(application JobOperationsApplication) apiResource {
 	)
 }
 
-func (h jobHandlers) list(request operationRequest) (operationResult, error) {
-	query, err := listJobsQuery(request.http)
+func (h jobHandlers) list(request route.Request) (route.Result, error) {
+	query, err := listJobsQuery(request.HTTP)
 	if err != nil {
-		return operationResult{}, apperror.Invalid("request.invalid", "query")
+		return route.Result{}, apperror.Invalid("request.invalid", "query")
 	}
-	page, appErr := h.app.ListJobs(request.context, request.invocation(), query)
+	page, appErr := h.app.ListJobs(request.Context, request.Invocation(), query)
 	if appErr != nil {
-		return operationResult{}, appErr
+		return route.Result{}, appErr
 	}
 	response := jobListResponse{Items: make([]jobResponse, 0, len(page.Items))}
 	for _, item := range page.Items {
 		response.Items = append(response.Items, jobResponseFromApplication(item))
 	}
 	if page.HasMore && len(page.Items) == 0 {
-		return operationResult{}, unpresentableResult(errors.New("job page made no progress"))
+		return route.Result{}, route.Unpresentable(errors.New("job page made no progress"))
 	}
 	if page.HasMore {
 		last := page.Items[len(page.Items)-1]
 		response.NextCursor, err = encodeJobCursor(jobCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String()})
 		if err != nil {
-			return operationResult{}, unpresentableResult(err)
+			return route.Result{}, route.Unpresentable(err)
 		}
 	}
 	total := paging.Total{Counted: page.Counted, Total: page.Total, TotalIsLowerBound: page.TotalIsLowerBound}
-	if response.Total, response.TotalIsLowerBound, err = pageTotalMembers(total, !query.BeforeID.IsZero()); err != nil {
-		return operationResult{}, err
+	if response.Total, response.TotalIsLowerBound, err = route.PageTotal(total, !query.BeforeID.IsZero()); err != nil {
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, response), nil
+	return route.JSON(http.StatusOK, response), nil
 }
-func (h jobHandlers) get(request operationRequest) (operationResult, error) {
-	jobID, err := pathID[model.JobID](request, "job_id")
+func (h jobHandlers) get(request route.Request) (route.Result, error) {
+	jobID, err := route.PathID[model.JobID](request, "job_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	view, err := h.app.GetJob(request.context, request.invocation(), jobID)
+	view, err := h.app.GetJob(request.Context, request.Invocation(), jobID)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, jobResponseFromApplication(view)), nil
+	return route.JSON(http.StatusOK, jobResponseFromApplication(view)), nil
 }
-func (h jobHandlers) listAttempts(request operationRequest) (operationResult, error) {
-	jobID, err := pathID[model.JobID](request, "job_id")
+func (h jobHandlers) listAttempts(request route.Request) (route.Result, error) {
+	jobID, err := route.PathID[model.JobID](request, "job_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	limit, before, err := attemptPagination(request.http)
+	limit, before, err := attemptPagination(request.HTTP)
 	if err != nil {
-		return operationResult{}, apperror.Invalid("request.invalid", "query")
+		return route.Result{}, apperror.Invalid("request.invalid", "query")
 	}
 
-	page, appErr := h.app.ListJobAttempts(request.context, request.invocation(), job.AttemptListQuery{
+	page, appErr := h.app.ListJobAttempts(request.Context, request.Invocation(), job.AttemptListQuery{
 		JobID:        jobID,
 		BeforeNumber: before,
 		Limit:        limit,
 	})
 	if appErr != nil {
-		return operationResult{}, appErr
+		return route.Result{}, appErr
 	}
 
 	response := jobAttemptListResponse{Items: make([]jobAttemptResponse, 0, len(page.Items))}
@@ -241,39 +242,39 @@ func (h jobHandlers) listAttempts(request operationRequest) (operationResult, er
 	}
 
 	if page.HasMore && len(page.Items) == 0 {
-		return operationResult{}, unpresentableResult(errors.New("job attempt page made no progress"))
+		return route.Result{}, route.Unpresentable(errors.New("job attempt page made no progress"))
 	}
 
 	if page.HasMore {
 		response.NextCursor, err = encodeJobAttemptCursor(page.Items[len(page.Items)-1].Number)
 		if err != nil {
-			return operationResult{}, unpresentableResult(err)
+			return route.Result{}, route.Unpresentable(err)
 		}
 	}
 
-	return jsonResult(http.StatusOK, response), nil
+	return route.JSON(http.StatusOK, response), nil
 }
-func (h jobHandlers) cancel(request operationRequest) (operationResult, error) {
-	jobID, err := pathID[model.JobID](request, "job_id")
+func (h jobHandlers) cancel(request route.Request) (route.Result, error) {
+	jobID, err := route.PathID[model.JobID](request, "job_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	view, err := h.app.CancelJob(request.context, request.invocation(), job.CancelCommand{ID: jobID})
+	view, err := h.app.CancelJob(request.Context, request.Invocation(), job.CancelCommand{ID: jobID})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, jobResponseFromApplication(view)), nil
+	return route.JSON(http.StatusOK, jobResponseFromApplication(view)), nil
 }
-func (h jobHandlers) retry(request operationRequest) (operationResult, error) {
-	jobID, err := pathID[model.JobID](request, "job_id")
+func (h jobHandlers) retry(request route.Request) (route.Result, error) {
+	jobID, err := route.PathID[model.JobID](request, "job_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	view, err := h.app.RetryJob(request.context, request.invocation(), job.RetryCommand{ID: jobID})
+	view, err := h.app.RetryJob(request.Context, request.Invocation(), job.RetryCommand{ID: jobID})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, jobResponseFromApplication(view)), nil
+	return route.JSON(http.StatusOK, jobResponseFromApplication(view)), nil
 }
 func listJobsQuery(r *http.Request) (job.ListQuery, error) {
 	limit := defaultJobPageSize
@@ -317,24 +318,24 @@ func attemptPagination(r *http.Request) (int, int, error) {
 	return limit, before, nil
 }
 func encodeJobAttemptCursor(number int) (string, error) {
-	return encodeOpaqueCursor(jobAttemptCursor{Number: number}, jobAttemptCursorSpec())
+	return route.EncodeCursor(jobAttemptCursor{Number: number}, jobAttemptCursorSpec())
 }
 func decodeJobAttemptCursor(raw string) (int, error) {
-	cursor, err := decodeOpaqueCursor(raw, jobAttemptCursorSpec())
+	cursor, err := route.DecodeCursor(raw, jobAttemptCursorSpec())
 	return cursor.Number, err
 }
 func encodeJobCursor(cursor jobCursor) (string, error) {
-	return encodeOpaqueCursor(cursor, jobCursorSpec())
+	return route.EncodeCursor(cursor, jobCursorSpec())
 }
 func decodeJobCursor(raw string) (jobCursor, error) {
-	return decodeOpaqueCursor(raw, jobCursorSpec())
+	return route.DecodeCursor(raw, jobCursorSpec())
 }
-func jobCursorSpec() opaqueCursorSpec[jobCursor] {
-	return opaqueCursorSpec[jobCursor]{
-		label:                "job",
-		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members:              []string{"created_at", "id"},
-		validate: func(cursor jobCursor) error {
+func jobCursorSpec() route.CursorSpec[jobCursor] {
+	return route.CursorSpec[jobCursor]{
+		Label:                "job",
+		MaximumEncodedLength: route.DefaultMaximumCursorLength,
+		Members:              []string{"created_at", "id"},
+		Validate: func(cursor jobCursor) error {
 			createdAt, err := model.ParseRFC3339(cursor.CreatedAt)
 			if err != nil || createdAt.IsZero() || !model.JobID(cursor.ID).IsValid() {
 				return errors.New("invalid job keyset")
@@ -344,12 +345,12 @@ func jobCursorSpec() opaqueCursorSpec[jobCursor] {
 		},
 	}
 }
-func jobAttemptCursorSpec() opaqueCursorSpec[jobAttemptCursor] {
-	return opaqueCursorSpec[jobAttemptCursor]{
-		label:                "job attempt",
-		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members:              []string{"number"},
-		validate: func(cursor jobAttemptCursor) error {
+func jobAttemptCursorSpec() route.CursorSpec[jobAttemptCursor] {
+	return route.CursorSpec[jobAttemptCursor]{
+		Label:                "job attempt",
+		MaximumEncodedLength: route.DefaultMaximumCursorLength,
+		Members:              []string{"number"},
+		Validate: func(cursor jobAttemptCursor) error {
 			if cursor.Number <= 0 {
 				return errors.New("invalid job attempt keyset")
 			}

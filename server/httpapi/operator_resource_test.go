@@ -24,6 +24,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -38,7 +40,7 @@ func operatorTestPrincipal() model.Principal {
 	}
 }
 
-func serveOperatorRequest(api *API, method, path, body string, authenticated bool) *httptest.ResponseRecorder {
+func serveOperatorRequest(api *route.API, method, path, body string, authenticated bool) *httptest.ResponseRecorder {
 	request := httptest.NewRequest(method, path, strings.NewReader(body))
 	if body != "" {
 		request.Header.Set("Content-Type", "application/json")
@@ -75,7 +77,7 @@ func (*focusedRoleApplication) ArchiveRole(context.Context, invocation.Invocatio
 
 func TestRoleResourceUsesKernelAuthenticationAndTypedOperation(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := operatorTestPrincipal()
 	role := &model.Role{ID: model.NewRoleID(), Name: "teacher", DisplayName: "Teacher", Permissions: []string{}}
 	roles := &focusedRoleApplication{roles: []*model.Role{role}}
@@ -106,7 +108,7 @@ func (f *focusedRoleBindingApplication) EndRoleBinding(_ context.Context, _ invo
 
 func TestRoleBindingResourceOwnsPathCommandAndAuthentication(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := operatorTestPrincipal()
 	bindingID := model.NewRoleBindingID()
 	bindings := &focusedRoleBindingApplication{binding: &model.RoleBinding{ID: bindingID}}
@@ -158,7 +160,7 @@ func (f *focusedAuditApplication) ListAuditEvents(_ context.Context, _ invocatio
 
 func TestAuditResourcePreservesOpaqueCursorAndSafeErrors(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := operatorTestPrincipal()
 	last := &model.AuditEvent{ID: model.NewAuditEventID(), CreatedAt: model.TimeFromMillis(100), Action: "role.list", Resource: model.Resource{Type: model.ResourceInstitution, ID: model.NewID()}, Status: model.AuditStatusSuccess}
 	audits := &focusedAuditApplication{events: []*model.AuditEvent{last}}
@@ -166,7 +168,7 @@ func TestAuditResourcePreservesOpaqueCursorAndSafeErrors(t *testing.T) {
 
 	final := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/audits?limit=1", "", true)
 	require.Equal(t, http.StatusOK, final.Code, final.Body.String())
-	var finalPage listResponse[auditEventResponse]
+	var finalPage route.List[auditEventResponse]
 	require.NoError(t, json.Unmarshal(final.Body.Bytes(), &finalPage))
 	require.Empty(t, finalPage.NextCursor, "an exactly full final page has no continuation")
 	audits.hasMore = true
@@ -174,7 +176,7 @@ func TestAuditResourcePreservesOpaqueCursorAndSafeErrors(t *testing.T) {
 	response := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/audits?limit=1", "", true)
 	require.Equal(t, http.StatusOK, response.Code, "list status/query = %d/%#v: %s", response.Code, audits.query, response.Body.String())
 	require.Equal(t, 1, audits.query.Limit, "list status/query = %d/%#v: %s", response.Code, audits.query, response.Body.String())
-	var page listResponse[auditEventResponse]
+	var page route.List[auditEventResponse]
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
 	require.NotEmpty(t, page.NextCursor, "a page with more events did not return an opaque cursor")
 	audits.events, audits.hasMore = nil, false
@@ -187,7 +189,7 @@ func TestAuditResourcePreservesOpaqueCursorAndSafeErrors(t *testing.T) {
 
 	audits.err = apperror.New("audit.unavailable")
 	errorResponse := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/audits", "", true)
-	var problem Problem
+	var problem route.Problem
 	require.NoError(t, json.Unmarshal(errorResponse.Body.Bytes(), &problem))
 	require.Equal(t, http.StatusServiceUnavailable, errorResponse.Code, "unsafe audit error response = %d: %s", errorResponse.Code, errorResponse.Body.String())
 	require.Equal(t, "audit.unavailable", problem.Code, "unsafe audit error response = %d: %s", errorResponse.Code, errorResponse.Body.String())
@@ -224,7 +226,7 @@ func (f *focusedJobApplication) RetryJob(_ context.Context, _ invocation.Invocat
 
 func TestJobResourcePreservesPrivateProjectionAndBoundedControls(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := operatorTestPrincipal()
 	now := time.Now()
 	jobID := model.NewJobID()

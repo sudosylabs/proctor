@@ -18,6 +18,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -64,20 +65,6 @@ func TestWireTimestampsAreRFC3339UTCStrings(t *testing.T) {
 	}
 }
 
-func TestWireTimestampRequestsAcceptAnyRFC3339OffsetAndRejectOtherSpellings(t *testing.T) {
-	t.Parallel()
-	millis, err := wireTimeMillis("start_at", "2026-08-01T10:30:00.123456+02:00")
-	require.NoError(t, err, "offset instant")
-	require.Equal(t, time.Date(2026, 8, 1, 8, 30, 0, 123_000_000, time.UTC).UnixMilli(), millis, "offset instant")
-	millis, err = wireTimeMillis("end_at", "")
-	require.NoError(t, err, "absent instant")
-	require.Equal(t, int64(0), millis, "absent instant")
-	for _, invalid := range []string{"1786000000000", "2026-08-01", "2026-08-01 08:30:00Z", "0001-01-01T00:00:00Z"} {
-		_, err := wireTimeMillis("start_at", invalid)
-		require.Error(t, err, "%q was accepted as a wire timestamp", invalid)
-	}
-}
-
 func TestCreateRequestsRejectServerOwnedFields(t *testing.T) {
 	t.Parallel()
 	targets := []any{
@@ -90,7 +77,7 @@ func TestCreateRequestsRejectServerOwnedFields(t *testing.T) {
 			request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader("{"+member+"}"))
 			request.Header.Set("Content-Type", "application/json")
 			fresh := reflect.New(reflect.TypeOf(target).Elem()).Interface()
-			require.Error(t, decodeRequestJSON(request, fresh), "%T accepted server-owned member %s", target, member)
+			require.Error(t, route.DecodeJSON(request, fresh), "%T accepted server-owned member %s", target, member)
 		}
 	}
 }
@@ -119,7 +106,7 @@ func TestCreateRequestsRejectRouteOwnedParentFields(t *testing.T) {
 					strings.NewReader(`{"`+member+`":"route-owned"}`))
 				request.Header.Set("Content-Type", "application/json")
 				fresh := reflect.New(reflect.TypeOf(test.target).Elem()).Interface()
-				require.Error(t, decodeRequestJSON(request, fresh), "%T accepted route-owned member %s", test.target, member)
+				require.Error(t, route.DecodeJSON(request, fresh), "%T accepted route-owned member %s", test.target, member)
 			}
 		})
 	}

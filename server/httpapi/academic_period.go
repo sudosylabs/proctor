@@ -14,6 +14,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -43,36 +44,36 @@ type createAcademicPeriodRequest struct {
 }
 
 type updateAcademicPeriodRequest struct {
-	ExpectedRevision Optional[int64]  `json:"expected_revision"`
-	Name             Optional[string] `json:"name"`
-	DisplayName      Optional[string] `json:"display_name"`
-	Description      Optional[string] `json:"description"`
-	StartAt          Optional[string] `json:"start_at"`
-	EndAt            Optional[string] `json:"end_at"`
+	ExpectedRevision route.Optional[int64]  `json:"expected_revision"`
+	Name             route.Optional[string] `json:"name"`
+	DisplayName      route.Optional[string] `json:"display_name"`
+	Description      route.Optional[string] `json:"description"`
+	StartAt          route.Optional[string] `json:"start_at"`
+	EndAt            route.Optional[string] `json:"end_at"`
 }
 
 type academicPeriodHandlers struct {
 	app AcademicPeriodApplication
 }
 
-func academicPeriodResource(app AcademicPeriodApplication) apiResource {
+func academicPeriodResource(app AcademicPeriodApplication) route.Resource {
 	h := academicPeriodHandlers{app: app}
 	collection := "/academic-periods"
 	member := "/academic-periods/{academic_period_id}"
-	return newResource(
+	return route.NewResource(
 		"academic-periods",
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   collection,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: academicReadErrorCodes("request.invalid", "resource.not_found"),
 			Handle: h.list,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPost,
 			Path:        collection,
-			Auth:        AuthPrincipalRequired,
-			Idempotency: IdempotencyOptional,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyOptional,
 			Errors: academicMutationErrorCodes(
 				"request.invalid",
 				"resource.not_found",
@@ -84,17 +85,17 @@ func academicPeriodResource(app AcademicPeriodApplication) apiResource {
 			),
 			Handle: h.create,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   member,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: academicReadErrorCodes("request.invalid", "resource.not_found"),
 			Handle: h.get,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPatch,
 			Path:   member,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: academicMutationErrorCodes(
 				"request.invalid",
 				"resource.not_found",
@@ -103,10 +104,10 @@ func academicPeriodResource(app AcademicPeriodApplication) apiResource {
 			),
 			Handle: h.patch,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodDelete,
 			Path:   member,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: academicMutationErrorCodes(
 				"request.invalid", "resource.not_found", "academic_period.conflict",
 			),
@@ -115,64 +116,64 @@ func academicPeriodResource(app AcademicPeriodApplication) apiResource {
 	)
 }
 
-func (h academicPeriodHandlers) list(request operationRequest) (operationResult, error) {
-	requested, err := request.pageRequest()
+func (h academicPeriodHandlers) list(request route.Request) (route.Result, error) {
+	requested, err := request.Page()
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	cursor, present, err := decodePageCursor(requested, academicPeriodCursorSpec())
+	cursor, present, err := route.DecodePageCursor(requested, academicPeriodCursorSpec())
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	query := academic.ListAcademicPeriodsQuery{Query: request.http.URL.Query().Get("q"), Limit: requested.Limit}
+	query := academic.ListAcademicPeriodsQuery{Query: request.HTTP.URL.Query().Get("q"), Limit: requested.Limit}
 	if present {
 		query.AfterStartAt, query.AfterName, query.AfterID = academicPeriodCursorStart(cursor), cursor.Name, model.AcademicPeriodID(cursor.ID)
 	}
 
-	page, err := h.app.ListAcademicPeriods(request.context, request.invocation(), query)
+	page, err := h.app.ListAcademicPeriods(request.Context, request.Invocation(), query)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	response, err := newListResponse(
+	response, err := route.NewList(
 		page.Items,
 		page.HasMore,
 		academicPeriodResponseFromModel,
 		func(last *model.AcademicPeriod) (string, error) {
-			return encodeOpaqueCursor(
+			return route.EncodeCursor(
 				academicPeriodCursor{StartAt: model.FormatRFC3339(last.StartsAt), Name: last.Name, ID: last.ID.String()},
 				academicPeriodCursorSpec(),
 			)
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, response), nil
+	return route.JSON(http.StatusOK, response), nil
 }
 
-func (h academicPeriodHandlers) create(request operationRequest) (operationResult, error) {
+func (h academicPeriodHandlers) create(request route.Request) (route.Result, error) {
 	var body createAcademicPeriodRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
-	startAt, err := wireTimeMillis("start_at", body.StartAt)
+	startAt, err := route.WireTimeMillis("start_at", body.StartAt)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	endAt, err := wireTimeMillis("end_at", body.EndAt)
+	endAt, err := route.WireTimeMillis("end_at", body.EndAt)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	period, err := h.app.CreateAcademicPeriod(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		academic.CreateAcademicPeriodCommand{
 			OwnerType:      body.OwnerType,
 			OwnerID:        body.OwnerID,
@@ -181,57 +182,57 @@ func (h academicPeriodHandlers) create(request operationRequest) (operationResul
 			Description:    body.Description,
 			StartAt:        startAt,
 			EndAt:          endAt,
-			IdempotencyKey: request.idempotencyKey,
+			IdempotencyKey: request.IdempotencyKey,
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusCreated, academicPeriodResponseFromModel(period)), nil
+	return route.JSON(http.StatusCreated, academicPeriodResponseFromModel(period)), nil
 }
 
-func (h academicPeriodHandlers) get(request operationRequest) (operationResult, error) {
-	id, err := pathID[model.AcademicPeriodID](request, "academic_period_id")
+func (h academicPeriodHandlers) get(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.AcademicPeriodID](request, "academic_period_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	period, err := h.app.GetAcademicPeriod(
-		request.context, request.invocation(), id,
+		request.Context, request.Invocation(), id,
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, academicPeriodResponseFromModel(period)), nil
+	return route.JSON(http.StatusOK, academicPeriodResponseFromModel(period)), nil
 }
 
-func (h academicPeriodHandlers) patch(request operationRequest) (operationResult, error) {
-	id, err := pathID[model.AcademicPeriodID](request, "academic_period_id")
+func (h academicPeriodHandlers) patch(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.AcademicPeriodID](request, "academic_period_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body updateAcademicPeriodRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 	if err := validateAcademicRevision(body.ExpectedRevision); err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	startAt, err := optionalWireTimeMillis("start_at", body.StartAt)
+	startAt, err := route.OptionalWireTimeMillis("start_at", body.StartAt)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	endAt, err := optionalWireTimeMillis("end_at", body.EndAt)
+	endAt, err := route.OptionalWireTimeMillis("end_at", body.EndAt)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	period, err := h.app.UpdateAcademicPeriod(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		academic.UpdateAcademicPeriodCommand{
 			ExpectedRevision: body.ExpectedRevision.ValuePointer(),
 			ID:               id,
@@ -243,27 +244,27 @@ func (h academicPeriodHandlers) patch(request operationRequest) (operationResult
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, academicPeriodResponseFromModel(period)), nil
+	return route.JSON(http.StatusOK, academicPeriodResponseFromModel(period)), nil
 }
 
-func (h academicPeriodHandlers) archive(request operationRequest) (operationResult, error) {
-	id, err := pathID[model.AcademicPeriodID](request, "academic_period_id")
+func (h academicPeriodHandlers) archive(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.AcademicPeriodID](request, "academic_period_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	expectedRevision, err := request.academicRevision()
+	expectedRevision, err := academicRevision(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if err := h.app.ArchiveAcademicPeriod(
-		request.context, request.invocation(), academic.ArchiveAcademicPeriodCommand{ExpectedRevision: expectedRevision, ID: id},
+		request.Context, request.Invocation(), academic.ArchiveAcademicPeriodCommand{ExpectedRevision: expectedRevision, ID: id},
 	); err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return noContentResult(), nil
+	return route.NoContent(), nil
 }
 
 func academicPeriodResponseFromModel(period *model.AcademicPeriod) academicPeriodResponse {

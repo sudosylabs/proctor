@@ -14,6 +14,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -28,15 +29,15 @@ type RetentionPolicyApplication interface {
 }
 
 type retentionPolicyRequest struct {
-	ExpectedRevision                 int64          `json:"expected_revision"`
-	SubmissionRetentionDays          Optional[int]  `json:"submission_retention_days"`
-	IntegrityRetentionDays           Optional[int]  `json:"integrity_retention_days"`
-	BrowserActivityRetentionDays     Optional[int]  `json:"browser_activity_retention_days"`
-	SecurityOperationalRetentionDays Optional[int]  `json:"security_operational_retention_days"`
-	AuditRetentionDays               Optional[int]  `json:"audit_retention_days"`
-	ExportRetentionDays              Optional[int]  `json:"export_retention_days"`
-	DeletionGraceDays                Optional[int]  `json:"deletion_grace_days"`
-	CandidateNotices                 Optional[bool] `json:"candidate_notices"`
+	ExpectedRevision                 int64                `json:"expected_revision"`
+	SubmissionRetentionDays          route.Optional[int]  `json:"submission_retention_days"`
+	IntegrityRetentionDays           route.Optional[int]  `json:"integrity_retention_days"`
+	BrowserActivityRetentionDays     route.Optional[int]  `json:"browser_activity_retention_days"`
+	SecurityOperationalRetentionDays route.Optional[int]  `json:"security_operational_retention_days"`
+	AuditRetentionDays               route.Optional[int]  `json:"audit_retention_days"`
+	ExportRetentionDays              route.Optional[int]  `json:"export_retention_days"`
+	DeletionGraceDays                route.Optional[int]  `json:"deletion_grace_days"`
+	CandidateNotices                 route.Optional[bool] `json:"candidate_notices"`
 }
 
 type retentionPolicyResponse struct {
@@ -58,13 +59,13 @@ type retentionPolicyHandlers struct {
 	app RetentionPolicyApplication
 }
 
-func retentionPolicyResource(app RetentionPolicyApplication) apiResource {
+func retentionPolicyResource(app RetentionPolicyApplication) route.Resource {
 	h := retentionPolicyHandlers{app: app}
-	replace := endpoint{
+	replace := route.Endpoint{
 		Method:      http.MethodPut,
 		Path:        "/retention-policy",
-		Auth:        AuthStrongRecentSessionRequired,
-		Idempotency: IdempotencyRequired,
+		Auth:        route.AuthStrongRecentSessionRequired,
+		Idempotency: route.IdempotencyRequired,
 		Errors: []string{
 			"authorization.denied",
 			"authorization.request.invalid",
@@ -82,12 +83,12 @@ func retentionPolicyResource(app RetentionPolicyApplication) apiResource {
 		},
 		Handle: h.replace,
 	}
-	return newResource(
+	return route.NewResource(
 		"retention-policy",
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/retention-policy",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -103,48 +104,48 @@ func retentionPolicyResource(app RetentionPolicyApplication) apiResource {
 }
 
 func (h retentionPolicyHandlers) get(
-	request operationRequest,
-) (operationResult, error) {
+	request route.Request,
+) (route.Result, error) {
 	policy, err := h.app.GetRetentionPolicy(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(
+	return route.JSON(
 		http.StatusOK,
 		retentionPolicyResponseFromModel(policy),
-	).withHeaders(privateNoStoreHeaders()), nil
+	).WithHeaders(privateNoStoreHeaders()), nil
 }
 
 func (h retentionPolicyHandlers) replace(
-	request operationRequest,
-) (operationResult, error) {
+	request route.Request,
+) (route.Result, error) {
 	var body retentionPolicyRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 	settings, err := requiredRetentionPolicySettings(body)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	policy, err := h.app.ReplaceRetentionPolicy(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		administration.ReplaceRetentionPolicyCommand{
 			ExpectedRevision: body.ExpectedRevision,
 			Settings:         settings,
-			IdempotencyKey:   request.idempotencyKey,
+			IdempotencyKey:   request.IdempotencyKey,
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(
+	return route.JSON(
 		http.StatusOK,
 		retentionPolicyResponseFromModel(policy),
-	).withHeaders(privateNoStoreHeaders()), nil
+	).WithHeaders(privateNoStoreHeaders()), nil
 }
 
 func requiredRetentionPolicySettings(body retentionPolicyRequest) (model.RetentionPolicySettings, error) {
@@ -157,7 +158,7 @@ func requiredRetentionPolicySettings(body retentionPolicyRequest) (model.Retenti
 	}
 	fields := []struct {
 		name        string
-		source      Optional[int]
+		source      route.Optional[int]
 		destination *int
 	}{
 		{"submission_retention_days", body.SubmissionRetentionDays, &settings.SubmissionRetentionDays},

@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/onboarding"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -57,6 +58,7 @@ func TestMailTemplateKeyEnumMatchesTheCatalogue(t *testing.T) {
 
 func TestErrorCodeEnumMatchesTheCatalogue(t *testing.T) {
 	t.Parallel()
+	applicationErrorMappings, transportProblemCodes := route.ApplicationErrorStatuses(), route.ProblemStatuses()
 	codes := make([]string, 0, len(applicationErrorMappings)+len(transportProblemCodes))
 	seen := map[string]bool{}
 	for code := range applicationErrorMappings {

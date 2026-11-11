@@ -30,8 +30,8 @@ func newErrorsCommand() *cobra.Command {
 		Use:   "errors",
 		Short: "Generate and verify the public error code catalog",
 	}
-	command.PersistentFlags().StringVar(&options.catalog, "catalog", "httpapi/error_catalog.yaml", "human-authored error code catalog")
-	command.PersistentFlags().StringVar(&options.mapping, "mapping", "httpapi/error_mapping.go", "generated HTTP status mapping")
+	command.PersistentFlags().StringVar(&options.catalog, "catalog", "httpapi/route/error_catalog.yaml", "human-authored error code catalog")
+	command.PersistentFlags().StringVar(&options.mapping, "mapping", "httpapi/route/error_mapping.go", "generated HTTP status mapping")
 	command.PersistentFlags().StringVar(&options.module, "module", ".", "server module directory scanned for minted codes")
 	command.AddCommand(newErrorsGenerateCommand(options), newErrorsCheckCommand(options))
 	return command

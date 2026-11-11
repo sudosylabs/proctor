@@ -14,6 +14,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -123,17 +124,17 @@ type desktopAuthorizationContextResponse struct {
 
 type desktopAuthorizationHandlers struct {
 	app     DesktopAuthorization
-	cookies browserCookies
+	cookies route.Cookies
 }
 
-func desktopAuthorizationResource(app DesktopAuthorization, cookies browserCookies) apiResource {
+func desktopAuthorizationResource(app DesktopAuthorization, cookies route.Cookies) route.Resource {
 	h := desktopAuthorizationHandlers{app: app, cookies: cookies}
 	base := "/auth/desktop/authorizations"
-	return newResource("desktop_authorization",
-		endpoint{
+	return route.NewResource("desktop_authorization",
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   base,
-			Auth:   AuthPublic,
+			Auth:   route.AuthPublic,
 			Errors: []string{
 				"request.invalid",
 				"authentication.rate_limited",
@@ -146,10 +147,10 @@ func desktopAuthorizationResource(app DesktopAuthorization, cookies browserCooki
 			},
 			Handle: h.start,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/auth/desktop/authorizations/bind",
-			Auth:   AuthPublic,
+			Auth:   route.AuthPublic,
 			Errors: []string{
 				"request.invalid",
 				"authentication.desktop_authorization.invalid",
@@ -158,10 +159,10 @@ func desktopAuthorizationResource(app DesktopAuthorization, cookies browserCooki
 			},
 			Handle: h.bind,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/auth/desktop/authorizations/context",
-			Auth:   AuthPublic,
+			Auth:   route.AuthPublic,
 			Errors: []string{
 				"authentication.desktop_authorization.invalid",
 				"authentication.desktop_authorization.rejected",
@@ -170,10 +171,10 @@ func desktopAuthorizationResource(app DesktopAuthorization, cookies browserCooki
 			},
 			Handle: h.context,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/auth/desktop/authorizations/authenticate/session",
-			Auth:   AuthSessionRequired,
+			Auth:   route.AuthSessionRequired,
 			Errors: []string{
 				"authentication.desktop_authorization.invalid",
 				"authentication.mfa.enrollment_required",
@@ -183,10 +184,10 @@ func desktopAuthorizationResource(app DesktopAuthorization, cookies browserCooki
 			},
 			Handle: h.authenticateSession,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/auth/desktop/authorizations/authenticate/password",
-			Auth:   AuthPublic,
+			Auth:   route.AuthPublic,
 			Errors: []string{
 				"request.invalid",
 				"authentication.mfa.enrollment_required",
@@ -205,12 +206,12 @@ func desktopAuthorizationResource(app DesktopAuthorization, cookies browserCooki
 			},
 			Handle: h.authenticateLocal,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:       http.MethodGet,
 			Path:         "/auth/desktop/authorizations/authenticate/providers/{provider_id:provider}/login",
-			Auth:         AuthPublic,
+			Auth:         route.AuthPublic,
 			ProtocolName: "desktop-authorization-external-login",
-			ProtocolKind: RouteProtocolRedirect,
+			ProtocolKind: route.ProtocolRedirect,
 			Errors: []string{
 				"request.invalid",
 				"authentication.desktop_authorization.invalid",
@@ -228,10 +229,10 @@ func desktopAuthorizationResource(app DesktopAuthorization, cookies browserCooki
 			},
 			Protocol: h.authenticateExternal,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/auth/desktop/authorizations/account/reset",
-			Auth:   AuthPublic,
+			Auth:   route.AuthPublic,
 			Errors: []string{
 				"request.invalid",
 				"authentication.desktop_authorization.invalid",
@@ -241,10 +242,10 @@ func desktopAuthorizationResource(app DesktopAuthorization, cookies browserCooki
 			},
 			Handle: h.resetAccount,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/auth/desktop/authorizations/approve",
-			Auth:   AuthPublic,
+			Auth:   route.AuthPublic,
 			Errors: []string{
 				"request.invalid",
 				"authentication.desktop_authorization.invalid",
@@ -255,10 +256,10 @@ func desktopAuthorizationResource(app DesktopAuthorization, cookies browserCooki
 			},
 			Handle: h.approve,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/auth/desktop/authorizations/cancel",
-			Auth:   AuthPublic,
+			Auth:   route.AuthPublic,
 			Errors: []string{
 				"request.invalid",
 				"authentication.desktop_authorization.invalid",
@@ -268,10 +269,10 @@ func desktopAuthorizationResource(app DesktopAuthorization, cookies browserCooki
 			},
 			Handle: h.cancel,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/auth/desktop/token",
-			Auth:   AuthPublic,
+			Auth:   route.AuthPublic,
 			Errors: []string{
 				"request.invalid",
 				"authentication.mfa.enrollment_required",
@@ -294,46 +295,46 @@ func desktopAuthorizationResource(app DesktopAuthorization, cookies browserCooki
 	)
 }
 
-func (h desktopAuthorizationHandlers) authenticateExternal(request operationRequest) (protocolResult, error) {
-	binding, err := h.binding(request.http)
+func (h desktopAuthorizationHandlers) authenticateExternal(request route.Request) (route.ProtocolResult, error) {
+	binding, err := h.binding(request.HTTP)
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
 
-	provider, err := pathProviderID(request, "provider_id")
+	provider, err := route.PathProviderID(request, "provider_id")
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
 
-	state := request.http.URL.Query().Get("state")
+	state := request.HTTP.URL.Query().Get("state")
 	start, err := h.app.BeginDesktopExternalAuthentication(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		identity.BeginDesktopExternalAuthenticationCommand{
 			ProviderID: provider,
 			Binding:    binding,
 			State:      state,
-			Source:     request.metadata.IPAddress,
+			Source:     request.Metadata.IPAddress,
 		},
 	)
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
 
-	headers := captureResponseHeaders(func(writer http.ResponseWriter) {
-		h.cookies.attachExternalLoginBinding(writer, start.Binding, start.ExpiresAt)
+	headers := route.CaptureHeaders(func(writer http.ResponseWriter) {
+		h.cookies.AttachExternalLoginBinding(writer, start.Binding, start.ExpiresAt)
 	})
 	headers.Set("Cache-Control", "no-store")
-	return redirectProtocolResult(start.RedirectURL).withHeaders(headers), nil
+	return route.Redirect(start.RedirectURL).WithHeaders(headers), nil
 }
 
-func (h desktopAuthorizationHandlers) start(request operationRequest) (operationResult, error) {
+func (h desktopAuthorizationHandlers) start(request route.Request) (route.Result, error) {
 	var input desktopAuthorizationStartRequest
-	if err := request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
 	}
 
-	result, err := h.app.StartDesktopAuthorization(request.context, request.invocation(), identity.StartDesktopAuthorizationCommand{
+	result, err := h.app.StartDesktopAuthorization(request.Context, request.Invocation(), identity.StartDesktopAuthorizationCommand{
 		CallbackURL:      input.CallbackURL,
 		State:            input.State,
 		CodeChallenge:    input.CodeChallenge,
@@ -345,176 +346,176 @@ func (h desktopAuthorizationHandlers) start(request operationRequest) (operation
 		Platform:         input.Platform,
 		Architecture:     input.Architecture,
 		RealtimeProtocol: input.RealtimeProtocol,
-		Source:           request.metadata.IPAddress,
+		Source:           request.Metadata.IPAddress,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	headers := http.Header{"Cache-Control": {"no-store"}, "DPoP-Nonce": {result.DPoPNonce}}
-	return jsonResult(
+	return route.JSON(
 		http.StatusCreated,
-		desktopAuthorizationStartResponse{AuthorizationURL: result.AuthorizationURL, ExpiresAt: wireTimeFromMillis(result.ExpiresAt)},
-	).withHeaders(headers), nil
+		desktopAuthorizationStartResponse{AuthorizationURL: result.AuthorizationURL, ExpiresAt: route.WireTimeFromMillis(result.ExpiresAt)},
+	).WithHeaders(headers), nil
 }
 
-func (h desktopAuthorizationHandlers) bind(request operationRequest) (operationResult, error) {
+func (h desktopAuthorizationHandlers) bind(request route.Request) (route.Result, error) {
 	var input desktopAuthorizationProofRequest
-	if err := request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
 	}
 
-	result, err := h.app.BindDesktopAuthorization(request.context, request.invocation(), identity.BindDesktopAuthorizationCommand{
+	result, err := h.app.BindDesktopAuthorization(request.Context, request.Invocation(), identity.BindDesktopAuthorizationCommand{
 		Handle:       input.Handle,
 		BrowserProof: input.BrowserProof,
 		State:        input.State,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	headers := captureResponseHeaders(func(writer http.ResponseWriter) {
-		h.cookies.attachDesktopAuthorizationBinding(writer, result.Binding, result.ExpiresAt)
+	headers := route.CaptureHeaders(func(writer http.ResponseWriter) {
+		h.cookies.AttachDesktopAuthorizationBinding(writer, result.Binding, result.ExpiresAt)
 	})
 	headers.Set("Cache-Control", "no-store")
-	return noContentResult().withHeaders(headers), nil
+	return route.NoContent().WithHeaders(headers), nil
 }
 
-func (h desktopAuthorizationHandlers) context(request operationRequest) (operationResult, error) {
-	binding, err := h.binding(request.http)
+func (h desktopAuthorizationHandlers) context(request route.Request) (route.Result, error) {
+	binding, err := h.binding(request.HTTP)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	result, err := h.app.DesktopAuthorizationContext(request.context, request.invocation(), binding)
+	result, err := h.app.DesktopAuthorizationContext(request.Context, request.Invocation(), binding)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(
+	return route.JSON(
 		http.StatusOK,
 		desktopAuthorizationContextResponseFromApplication(result),
-	).withHeaders(http.Header{"Cache-Control": {"no-store"}}), nil
+	).WithHeaders(http.Header{"Cache-Control": {"no-store"}}), nil
 }
 
-func (h desktopAuthorizationHandlers) authenticateSession(request operationRequest) (operationResult, error) {
-	binding, err := h.binding(request.http)
+func (h desktopAuthorizationHandlers) authenticateSession(request route.Request) (route.Result, error) {
+	binding, err := h.binding(request.HTTP)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	result, err := h.app.AuthenticateDesktopAuthorizationSession(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		identity.AuthenticateDesktopAuthorizationCommand{Binding: binding},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(
+	return route.JSON(
 		http.StatusOK,
 		desktopAuthorizationContextResponseFromApplication(result),
-	).withHeaders(http.Header{"Cache-Control": {"no-store"}}), nil
+	).WithHeaders(http.Header{"Cache-Control": {"no-store"}}), nil
 }
 
-func (h desktopAuthorizationHandlers) authenticateLocal(request operationRequest) (operationResult, error) {
-	binding, err := h.binding(request.http)
+func (h desktopAuthorizationHandlers) authenticateLocal(request route.Request) (route.Result, error) {
+	binding, err := h.binding(request.HTTP)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var input desktopAuthorizationLocalAuthenticationRequest
-	if err = request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
 	}
 
 	result, err := h.app.AuthenticateDesktopAuthorizationLocally(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		identity.AuthenticateDesktopAuthorizationLocallyCommand{
 			Binding:  binding,
 			LoginID:  input.LoginID,
 			Password: input.Password,
 			MFACode:  input.MFACode,
-			Source:   request.metadata.IPAddress,
+			Source:   request.Metadata.IPAddress,
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(
+	return route.JSON(
 		http.StatusOK,
 		desktopAuthorizationContextResponseFromApplication(result),
-	).withHeaders(http.Header{"Cache-Control": {"no-store"}}), nil
+	).WithHeaders(http.Header{"Cache-Control": {"no-store"}}), nil
 }
 
-func (h desktopAuthorizationHandlers) resetAccount(request operationRequest) (operationResult, error) {
-	binding, err := h.binding(request.http)
+func (h desktopAuthorizationHandlers) resetAccount(request route.Request) (route.Result, error) {
+	binding, err := h.binding(request.HTTP)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	if err = h.app.ResetDesktopAuthorizationAccount(request.context, request.invocation(), binding); err != nil {
-		return operationResult{}, err
+	if err = h.app.ResetDesktopAuthorizationAccount(request.Context, request.Invocation(), binding); err != nil {
+		return route.Result{}, err
 	}
-	return noContentResult().withHeaders(http.Header{"Cache-Control": {"no-store"}}), nil
+	return route.NoContent().WithHeaders(http.Header{"Cache-Control": {"no-store"}}), nil
 }
 
-func (h desktopAuthorizationHandlers) approve(request operationRequest) (operationResult, error) {
-	binding, err := h.binding(request.http)
+func (h desktopAuthorizationHandlers) approve(request route.Request) (route.Result, error) {
+	binding, err := h.binding(request.HTTP)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var input desktopAuthorizationStateRequest
-	if err = request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
 	}
 
 	result, err := h.app.ApproveDesktopAuthorization(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		identity.ApproveDesktopAuthorizationCommand{Binding: binding, State: input.State},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	headers := captureResponseHeaders(h.cookies.clearDesktopAuthorizationBinding)
+	headers := route.CaptureHeaders(h.cookies.ClearDesktopAuthorizationBinding)
 	headers.Set("Cache-Control", "no-store")
-	return jsonResult(
+	return route.JSON(
 		http.StatusOK,
-		desktopAuthorizationApprovalResponse{RedirectURL: result.RedirectURL, ExpiresAt: wireTimeFromMillis(result.ExpiresAt)},
-	).withHeaders(headers), nil
+		desktopAuthorizationApprovalResponse{RedirectURL: result.RedirectURL, ExpiresAt: route.WireTimeFromMillis(result.ExpiresAt)},
+	).WithHeaders(headers), nil
 }
 
-func (h desktopAuthorizationHandlers) cancel(request operationRequest) (operationResult, error) {
-	binding, err := h.binding(request.http)
+func (h desktopAuthorizationHandlers) cancel(request route.Request) (route.Result, error) {
+	binding, err := h.binding(request.HTTP)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var input desktopAuthorizationStateRequest
-	if err := request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
 	}
 
 	if err := h.app.CancelDesktopAuthorization(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		identity.ApproveDesktopAuthorizationCommand{Binding: binding, State: input.State},
 	); err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	headers := captureResponseHeaders(h.cookies.clearDesktopAuthorizationBinding)
+	headers := route.CaptureHeaders(h.cookies.ClearDesktopAuthorizationBinding)
 	headers.Set("Cache-Control", "no-store")
-	return noContentResult().withHeaders(headers), nil
+	return route.NoContent().WithHeaders(headers), nil
 }
 
 func (h desktopAuthorizationHandlers) binding(request *http.Request) (string, error) {
-	binding, err := singleCookieValue(request, BrowserDesktopAuthorizationCookieName)
+	binding, err := route.CookieValue(request, route.BrowserDesktopAuthorizationCookieName)
 	if err != nil || binding == "" {
 		return "", apperror.New("authentication.desktop_authorization.invalid")
 	}
@@ -533,8 +534,8 @@ func desktopAuthorizationContextResponseFromApplication(
 		LocalLoginEnabled: value.LocalLoginEnabled,
 		ExternalProviders: externalAuthenticationProviderResponses(value.ExternalProviders),
 		DeviceName:        value.DeviceName,
-		RequestedAt:       wireTimeFromMillis(value.RequestedAt),
-		ExpiresAt:         wireTimeFromMillis(value.ExpiresAt),
+		RequestedAt:       route.WireTimeFromMillis(value.RequestedAt),
+		ExpiresAt:         route.WireTimeFromMillis(value.ExpiresAt),
 	}
 	if value.Account != nil {
 		result.Account = &desktopAuthorizationAccountResponse{
@@ -548,25 +549,25 @@ func desktopAuthorizationContextResponseFromApplication(
 	return result
 }
 
-func (h desktopAuthorizationHandlers) exchange(request operationRequest) (operationResult, error) {
+func (h desktopAuthorizationHandlers) exchange(request route.Request) (route.Result, error) {
 	var input desktopAuthorizationExchangeRequest
-	if err := request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
 	}
 
-	proof, proofErr := requestDPoPProof(request.http)
+	proof, proofErr := route.DPoPProof(request.HTTP)
 	if proofErr != nil {
-		return operationResult{}, proofErr
+		return route.Result{}, proofErr
 	}
 
 	result, err := h.app.ExchangeDesktopAuthorization(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		identity.ExchangeDesktopAuthorizationCommand{
 			Code:             input.Code,
 			State:            input.State,
 			CodeVerifier:     input.CodeVerifier,
-			Source:           request.metadata.IPAddress,
+			Source:           request.Metadata.IPAddress,
 			DPoPProof:        proof,
 			PublicJWK:        input.PublicJWK,
 			DesktopRelease:   input.DesktopRelease,
@@ -585,7 +586,7 @@ func (h desktopAuthorizationHandlers) exchange(request operationRequest) (operat
 			headers.Set("WWW-Authenticate", `DPoP error="invalid_dpop_proof"`)
 		}
 
-		return operationResult{}, errorWithHeaders(err, headers)
+		return route.Result{}, route.ErrorWithHeaders(err, headers)
 	}
 
 	headers := http.Header{"Cache-Control": {"no-store"}}
@@ -593,11 +594,11 @@ func (h desktopAuthorizationHandlers) exchange(request operationRequest) (operat
 		headers.Set("DPoP-Nonce", result.DPoPNonce)
 	}
 
-	return jsonResult(
+	return route.JSON(
 		http.StatusOK,
 		authenticationResponse{
-			Session: sessionResponseFromModel(request.http, result.Session),
+			Session: sessionResponseFromModel(request.HTTP, result.Session),
 			Tokens:  authenticationTokensResponseFromModel(result.Tokens),
 		},
-	).withHeaders(headers), nil
+	).WithHeaders(headers), nil
 }

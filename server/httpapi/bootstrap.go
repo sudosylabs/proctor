@@ -14,6 +14,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -144,21 +145,21 @@ type bootstrapHandlers struct {
 	app BootstrapApplication
 }
 
-func bootstrapResource(app BootstrapApplication) apiResource {
+func bootstrapResource(app BootstrapApplication) route.Resource {
 	h := bootstrapHandlers{app: app}
-	return newResource(
+	return route.NewResource(
 		"bootstrap",
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/bootstrap",
-			Auth:   AuthPublic,
+			Auth:   route.AuthPublic,
 			Errors: []string{"installation.unavailable"},
 			Handle: h.status,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/bootstrap",
-			Auth:   AuthPublic,
+			Auth:   route.AuthPublic,
 			Errors: []string{
 				"request.invalid",
 				"installation.already_initialized",
@@ -177,26 +178,26 @@ func bootstrapResource(app BootstrapApplication) apiResource {
 	)
 }
 
-func (h bootstrapHandlers) status(request operationRequest) (operationResult, error) {
-	status, err := h.app.GetInstallationStatus(request.context, request.invocation())
+func (h bootstrapHandlers) status(request route.Request) (route.Result, error) {
+	status, err := h.app.GetInstallationStatus(request.Context, request.Invocation())
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, installationStatusResponse{Initialized: status.Initialized}), nil
+	return route.JSON(http.StatusOK, installationStatusResponse{Initialized: status.Initialized}), nil
 }
 
-func (h bootstrapHandlers) install(request operationRequest) (operationResult, error) {
+func (h bootstrapHandlers) install(request route.Request) (route.Result, error) {
 	var input bootstrapRequest
-	if err := request.decodeJSON(&input); err != nil {
-		return operationResult{}, apperror.New("request.invalid").WithField("field", "body").Wrap(err)
+	if err := request.DecodeJSON(&input); err != nil {
+		return route.Result{}, apperror.New("request.invalid").WithField("field", "body").Wrap(err)
 	}
 	if input.Institution == nil || input.Administrator == nil {
-		return operationResult{}, apperror.New("request.invalid").WithField("field", "bootstrap")
+		return route.Result{}, apperror.New("request.invalid").WithField("field", "bootstrap")
 	}
 
 	result, err := h.app.BootstrapInstallation(
-		request.context,
-		invocation.New(model.Principal{}, request.metadata),
+		request.Context,
+		invocation.New(model.Principal{}, request.Metadata),
 		identity.BootstrapInstallationCommand{
 			InstitutionName:          input.Institution.Name,
 			InstitutionDisplayName:   input.Institution.DisplayName,
@@ -210,14 +211,14 @@ func (h bootstrapHandlers) install(request operationRequest) (operationResult, e
 			AdministratorTimezone:    input.Administrator.Timezone,
 			Password:                 input.Password,
 			BootstrapSecret:          input.BootstrapSecret,
-			Source:                   request.metadata.IPAddress,
+			Source:                   request.Metadata.IPAddress,
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusCreated, installationBootstrapResponseFromModel(request.http, result)), nil
+	return route.JSON(http.StatusCreated, installationBootstrapResponseFromModel(request.HTTP, result)), nil
 }
 
 // BootstrapApplication is the application port its handlers call; it reports and performs installation bootstrap.

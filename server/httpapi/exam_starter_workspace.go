@@ -14,6 +14,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/exam/workspace"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -89,18 +90,18 @@ type examStarterWorkspaceListItemResponse struct {
 	UpdatedAt      string `json:"updated_at"`
 }
 
-func examStarterWorkspaceResource(app ExamStarterWorkspaceApplication) apiResource {
+func examStarterWorkspaceResource(app ExamStarterWorkspaceApplication) route.Resource {
 	h := examStarterWorkspaceHandlers{app: app}
 	collection := "/exams/{exam_id}/draft/starter-workspace"
 	directories := "/exams/{exam_id}/draft/starter-workspace/directories"
 	files := "/exams/{exam_id}/draft/starter-workspace/files"
 	entry := "/exams/{exam_id}/draft/starter-workspace/entries/{starter_workspace_entry_id}"
 	fileContent := "/exams/{exam_id}/draft/starter-workspace/files/{starter_workspace_entry_id}/content"
-	return newResource("exam-starter-workspace",
-		endpoint{
+	return route.NewResource("exam-starter-workspace",
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   collection,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -111,11 +112,11 @@ func examStarterWorkspaceResource(app ExamStarterWorkspaceApplication) apiResour
 			},
 			Handle: h.list,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPost,
 			Path:        directories,
-			Auth:        AuthPrincipalRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -137,14 +138,14 @@ func examStarterWorkspaceResource(app ExamStarterWorkspaceApplication) apiResour
 			},
 			Handle: h.createDirectory,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:       http.MethodPost,
 			Path:         files,
-			Auth:         AuthPrincipalRequired,
-			Idempotency:  IdempotencyRequired,
+			Auth:         route.AuthPrincipalRequired,
+			Idempotency:  route.IdempotencyRequired,
 			MaxBodyBytes: examStarterWorkspaceUploadBodyLimit,
 			ProtocolName: "exam-starter-workspace-file-upload",
-			ProtocolKind: RouteProtocolStreamingUpload,
+			ProtocolKind: route.ProtocolStreamingUpload,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -169,11 +170,11 @@ func examStarterWorkspaceResource(app ExamStarterWorkspaceApplication) apiResour
 			},
 			Protocol: h.createFile,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPatch,
 			Path:        entry,
-			Auth:        AuthPrincipalRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -196,14 +197,14 @@ func examStarterWorkspaceResource(app ExamStarterWorkspaceApplication) apiResour
 			},
 			Handle: h.moveEntry,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:       http.MethodPut,
 			Path:         fileContent,
-			Auth:         AuthPrincipalRequired,
-			Idempotency:  IdempotencyRequired,
+			Auth:         route.AuthPrincipalRequired,
+			Idempotency:  route.IdempotencyRequired,
 			MaxBodyBytes: examStarterWorkspaceUploadBodyLimit,
 			ProtocolName: "exam-starter-workspace-file-replacement",
-			ProtocolKind: RouteProtocolStreamingUpload,
+			ProtocolKind: route.ProtocolStreamingUpload,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -227,11 +228,11 @@ func examStarterWorkspaceResource(app ExamStarterWorkspaceApplication) apiResour
 			},
 			Protocol: h.replaceFile,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodDelete,
 			Path:        entry,
-			Auth:        AuthPrincipalRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -251,12 +252,12 @@ func examStarterWorkspaceResource(app ExamStarterWorkspaceApplication) apiResour
 			},
 			Handle: h.removeEntry,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:       http.MethodGet,
 			Path:         fileContent,
-			Auth:         AuthPrincipalRequired,
+			Auth:         route.AuthPrincipalRequired,
 			ProtocolName: "exam-starter-workspace-protected-content",
-			ProtocolKind: RouteProtocolBinaryDownload,
+			ProtocolKind: route.ProtocolBinaryDownload,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -270,75 +271,75 @@ func examStarterWorkspaceResource(app ExamStarterWorkspaceApplication) apiResour
 	)
 }
 
-func (h examStarterWorkspaceHandlers) list(request operationRequest) (operationResult, error) {
+func (h examStarterWorkspaceHandlers) list(request route.Request) (route.Result, error) {
 	examID, err := examStarterWorkspaceExamID(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	items, err := h.app.ListExamStarterWorkspace(request.context, request.invocation(), examID)
+	items, err := h.app.ListExamStarterWorkspace(request.Context, request.Invocation(), examID)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	// The Exam Capacity Policy bounds the Starter Workspace, so the complete
 	// set is paged in canonical path order.
-	response, err := boundedListResult(
+	response, err := route.BoundedList(
 		request,
 		"Starter Workspace",
 		items,
-		func(item store.ExamStarterWorkspaceItem) boundedPageKey {
-			return boundedPageKey{Name: item.Entry.Path, ID: item.Entry.ID.String()}
+		func(item store.ExamStarterWorkspaceItem) route.BoundedKey {
+			return route.BoundedKey{Name: item.Entry.Path, ID: item.Entry.ID.String()}
 		},
 		examStarterWorkspaceListItem,
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, response), nil
+	return route.JSON(http.StatusOK, response), nil
 }
 
-func (h examStarterWorkspaceHandlers) createDirectory(request operationRequest) (operationResult, error) {
+func (h examStarterWorkspaceHandlers) createDirectory(request route.Request) (route.Result, error) {
 	examID, err := examStarterWorkspaceExamID(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body createExamStarterWorkspaceDirectoryRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
-	result, err := h.app.CreateExamStarterWorkspaceDirectory(request.context, request.invocation(), workspace.CreateDirectoryCommand{
+	result, err := h.app.CreateExamStarterWorkspaceDirectory(request.Context, request.Invocation(), workspace.CreateDirectoryCommand{
 		ExamID:                examID,
 		ExpectedDraftRevision: body.ExpectedDraftRevision,
 		Path:                  body.Path,
-		IdempotencyKey:        request.idempotencyKey,
+		IdempotencyKey:        request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusCreated, examStarterWorkspaceResultResponse(result)), nil
+	return route.JSON(http.StatusCreated, examStarterWorkspaceResultResponse(result)), nil
 }
 
-func (h examStarterWorkspaceHandlers) createFile(request operationRequest) (protocolResult, error) {
+func (h examStarterWorkspaceHandlers) createFile(request route.Request) (route.ProtocolResult, error) {
 	examID, err := examStarterWorkspaceExamID(request)
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
 
 	var metadata examStarterWorkspaceFileUploadMetadata
-	content, err := decodeExamResourceMultipart(request.http, &metadata)
+	content, err := decodeExamResourceMultipart(request.HTTP, &metadata)
 	if err != nil {
-		return protocolResult{}, invalidRequestError(err)
+		return route.ProtocolResult{}, route.InvalidRequest(err)
 	}
 	if metadata.Size == nil {
-		return protocolResult{}, invalidRequestError(errors.New("metadata size is required"))
+		return route.ProtocolResult{}, route.InvalidRequest(errors.New("metadata size is required"))
 	}
 
-	result, err := h.app.CreateExamStarterWorkspaceFile(request.context, request.invocation(), workspace.CreateFileCommand{
+	result, err := h.app.CreateExamStarterWorkspaceFile(request.Context, request.Invocation(), workspace.CreateFileCommand{
 		ExamID:                examID,
 		ExpectedDraftRevision: metadata.ExpectedDraftRevision,
 		Path:                  metadata.Path,
@@ -346,61 +347,61 @@ func (h examStarterWorkspaceHandlers) createFile(request operationRequest) (prot
 		ExpectedSHA256:        metadata.SHA256,
 		Body:                  content,
 		Size:                  *metadata.Size,
-		IdempotencyKey:        request.idempotencyKey,
+		IdempotencyKey:        request.IdempotencyKey,
 	})
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
 
-	return streamingUploadProtocolResult(http.StatusCreated, examStarterWorkspaceResultResponse(result)), nil
+	return route.StreamingUpload(http.StatusCreated, examStarterWorkspaceResultResponse(result)), nil
 }
 
-func (h examStarterWorkspaceHandlers) moveEntry(request operationRequest) (operationResult, error) {
+func (h examStarterWorkspaceHandlers) moveEntry(request route.Request) (route.Result, error) {
 	examID, entryID, err := examStarterWorkspaceIDs(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body moveExamStarterWorkspaceEntryRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
-	result, err := h.app.MoveExamStarterWorkspaceEntry(request.context, request.invocation(), workspace.MoveEntryCommand{
+	result, err := h.app.MoveExamStarterWorkspaceEntry(request.Context, request.Invocation(), workspace.MoveEntryCommand{
 		ExamID:                examID,
 		EntryID:               entryID,
 		ExpectedDraftRevision: body.ExpectedDraftRevision,
 		Path:                  body.Path,
-		IdempotencyKey:        request.idempotencyKey,
+		IdempotencyKey:        request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, examStarterWorkspaceResultResponse(result)), nil
+	return route.JSON(http.StatusOK, examStarterWorkspaceResultResponse(result)), nil
 }
 
-func (h examStarterWorkspaceHandlers) replaceFile(request operationRequest) (protocolResult, error) {
+func (h examStarterWorkspaceHandlers) replaceFile(request route.Request) (route.ProtocolResult, error) {
 	examID, entryID, err := examStarterWorkspaceIDs(request)
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
 
 	var metadata examStarterWorkspaceFileReplacementMetadata
-	content, err := decodeExamResourceMultipart(request.http, &metadata)
+	content, err := decodeExamResourceMultipart(request.HTTP, &metadata)
 	if err != nil {
-		return protocolResult{}, invalidRequestError(err)
+		return route.ProtocolResult{}, route.InvalidRequest(err)
 	}
 	if metadata.Size == nil {
-		return protocolResult{}, invalidRequestError(errors.New("metadata size is required"))
+		return route.ProtocolResult{}, route.InvalidRequest(errors.New("metadata size is required"))
 	}
 
 	expectedContentVersion, err := model.ParseWorkspaceContentVersion(metadata.ExpectedContentVersion)
 	if err != nil {
-		return protocolResult{}, invalidRequestError(err)
+		return route.ProtocolResult{}, route.InvalidRequest(err)
 	}
 
-	result, err := h.app.ReplaceExamStarterWorkspaceFile(request.context, request.invocation(), workspace.ReplaceFileCommand{
+	result, err := h.app.ReplaceExamStarterWorkspaceFile(request.Context, request.Invocation(), workspace.ReplaceFileCommand{
 		ExamID:                 examID,
 		EntryID:                entryID,
 		ExpectedDraftRevision:  metadata.ExpectedDraftRevision,
@@ -409,79 +410,79 @@ func (h examStarterWorkspaceHandlers) replaceFile(request operationRequest) (pro
 		ExpectedSHA256:         metadata.SHA256,
 		Body:                   content,
 		Size:                   *metadata.Size,
-		IdempotencyKey:         request.idempotencyKey,
+		IdempotencyKey:         request.IdempotencyKey,
 	})
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
 
-	return streamingUploadProtocolResult(http.StatusOK, examStarterWorkspaceResultResponse(result)), nil
+	return route.StreamingUpload(http.StatusOK, examStarterWorkspaceResultResponse(result)), nil
 }
 
-func (h examStarterWorkspaceHandlers) removeEntry(request operationRequest) (operationResult, error) {
+func (h examStarterWorkspaceHandlers) removeEntry(request route.Request) (route.Result, error) {
 	examID, entryID, err := examStarterWorkspaceIDs(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body removeExamStarterWorkspaceEntryRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
-	_, err = h.app.RemoveExamStarterWorkspaceEntry(request.context, request.invocation(), workspace.RemoveEntryCommand{
+	_, err = h.app.RemoveExamStarterWorkspaceEntry(request.Context, request.Invocation(), workspace.RemoveEntryCommand{
 		ExamID:                examID,
 		EntryID:               entryID,
 		ExpectedDraftRevision: body.ExpectedDraftRevision,
 		Recursive:             body.Recursive,
-		IdempotencyKey:        request.idempotencyKey,
+		IdempotencyKey:        request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return noContentResult(), nil
+	return route.NoContent(), nil
 }
 
-func (h examStarterWorkspaceHandlers) openFile(request operationRequest) (protocolResult, error) {
+func (h examStarterWorkspaceHandlers) openFile(request route.Request) (route.ProtocolResult, error) {
 	examID, entryID, err := examStarterWorkspaceIDs(request)
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
 
-	opened, err := h.app.OpenExamStarterWorkspaceFile(request.context, request.invocation(), examID, entryID)
+	opened, err := h.app.OpenExamStarterWorkspaceFile(request.Context, request.Invocation(), examID, entryID)
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
 	if opened.Body == nil {
-		return protocolResult{}, errors.New("Starter Workspace application returned incomplete content")
+		return route.ProtocolResult{}, errors.New("Starter Workspace application returned incomplete content")
 	}
 
 	etag := `"` + opened.SHA256 + `"`
 	headers := http.Header{"Content-Type": {opened.MediaType}, "Cache-Control": {"private, no-store"}, "ETag": {etag}}
 	untrustedWorkspaceContentHeaders(headers)
-	if request.http.Header.Get("If-None-Match") == etag {
+	if request.HTTP.Header.Get("If-None-Match") == etag {
 		_ = opened.Body.Close()
-		return notModifiedProtocolResult(opened.SizeBytes).withHeaders(headers), nil
+		return route.NotModified(opened.SizeBytes).WithHeaders(headers), nil
 	}
 
-	return binaryDownloadProtocolResult(opened.Body, opened.SizeBytes).withHeaders(headers), nil
+	return route.BinaryDownload(opened.Body, opened.SizeBytes).WithHeaders(headers), nil
 }
 
-func examStarterWorkspaceExamID(request operationRequest) (model.ExamID, error) {
-	examID, err := pathID[model.ExamID](request, "exam_id")
+func examStarterWorkspaceExamID(request route.Request) (model.ExamID, error) {
+	examID, err := route.PathID[model.ExamID](request, "exam_id")
 	if err != nil {
 		return "", err
 	}
 	return examID, nil
 }
 
-func examStarterWorkspaceIDs(request operationRequest) (model.ExamID, model.StarterWorkspaceEntryID, error) {
+func examStarterWorkspaceIDs(request route.Request) (model.ExamID, model.StarterWorkspaceEntryID, error) {
 	examID, err := examStarterWorkspaceExamID(request)
 	if err != nil {
 		return "", "", err
 	}
-	entryID, err := pathID[model.StarterWorkspaceEntryID](request, "starter_workspace_entry_id")
+	entryID, err := route.PathID[model.StarterWorkspaceEntryID](request, "starter_workspace_entry_id")
 	if err != nil {
 		return "", "", err
 	}

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -38,12 +39,12 @@ type retentionNoticeCursor struct {
 	After string `json:"after_retirement_id"`
 }
 
-func retentionNoticeCursorSpec() opaqueCursorSpec[retentionNoticeCursor] {
-	return opaqueCursorSpec[retentionNoticeCursor]{
-		label:                "retention-notices",
-		maximumEncodedLength: 256,
-		members:              []string{"after_retirement_id"},
-		validate: func(c retentionNoticeCursor) error {
+func retentionNoticeCursorSpec() route.CursorSpec[retentionNoticeCursor] {
+	return route.CursorSpec[retentionNoticeCursor]{
+		Label:                "retention-notices",
+		MaximumEncodedLength: 256,
+		Members:              []string{"after_retirement_id"},
+		Validate: func(c retentionNoticeCursor) error {
 			if !model.RetentionRetirementID(c.After).IsValid() {
 				return errors.New("invalid retention notice cursor")
 			}
@@ -51,42 +52,42 @@ func retentionNoticeCursorSpec() opaqueCursorSpec[retentionNoticeCursor] {
 		},
 	}
 }
-func (h retentionHandlers) notices(request operationRequest) (operationResult, error) {
-	values := request.http.URL.Query()
+func (h retentionHandlers) notices(request route.Request) (route.Result, error) {
+	values := request.HTTP.URL.Query()
 	for key, items := range values {
 		if len(items) != 1 || (key != "limit" && key != "cursor") {
-			return operationResult{}, invalidRequestError(nil)
+			return route.Result{}, route.InvalidRequest(nil)
 		}
 	}
 
-	limit, err := request.queryLimit()
+	limit, err := request.QueryLimit()
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var after model.RetentionRetirementID
 	if raw := values.Get("cursor"); raw != "" {
-		cursor, err := decodeOpaqueCursor(raw, retentionNoticeCursorSpec())
-		if err != nil {
-			return operationResult{}, invalidRequestError(err)
+		cursor, cursorErr := route.DecodeCursor(raw, retentionNoticeCursorSpec())
+		if cursorErr != nil {
+			return route.Result{}, route.InvalidRequest(cursorErr)
 		}
 
 		after = model.RetentionRetirementID(cursor.After)
 	}
 
-	page, err := h.app.ListRetentionNotices(request.context, request.invocation(), after, limit)
+	page, err := h.app.ListRetentionNotices(request.Context, request.Invocation(), after, limit)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if page == nil || len(page.Items) > limit || (page.HasMore && len(page.Items) == 0) {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 
 	response := retentionNoticesResponse{Items: make([]retentionNoticeResponse, 0, len(page.Items))}
 	previous := after
 	for _, n := range page.Items {
-		if !n.RetirementID.IsValid() || n.RetirementID <= previous || n.RecipientUserID != request.invocation().Principal().UserID {
-			return operationResult{}, errUnpresentableResult
+		if !n.RetirementID.IsValid() || n.RetirementID <= previous || n.RecipientUserID != request.Invocation().Principal().UserID {
+			return route.Result{}, route.ErrUnpresentable
 		}
 
 		response.Items = append(response.Items, retentionNoticeResponse{
@@ -109,11 +110,11 @@ func (h retentionHandlers) notices(request operationRequest) (operationResult, e
 	}
 
 	if page.HasMore {
-		response.NextCursor, err = encodeOpaqueCursor(retentionNoticeCursor{After: previous.String()}, retentionNoticeCursorSpec())
+		response.NextCursor, err = route.EncodeCursor(retentionNoticeCursor{After: previous.String()}, retentionNoticeCursorSpec())
 		if err != nil {
-			return operationResult{}, errUnpresentableResult
+			return route.Result{}, route.ErrUnpresentable
 		}
 	}
 
-	return jsonResult(http.StatusOK, response).withHeaders(privateNoStoreHeaders()), nil
+	return route.JSON(http.StatusOK, response).WithHeaders(privateNoStoreHeaders()), nil
 }

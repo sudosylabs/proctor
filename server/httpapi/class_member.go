@@ -13,6 +13,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -43,21 +44,21 @@ type classMemberHandlers struct {
 	app ClassMemberApplication
 }
 
-func classMemberResource(app ClassMemberApplication) apiResource {
+func classMemberResource(app ClassMemberApplication) route.Resource {
 	h := classMemberHandlers{app: app}
-	return newResource(
+	return route.NewResource(
 		"class-members",
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/classes/{class_id}/members",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: academicRelationshipReadErrorCodes(),
 			Handle: h.list,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/classes/{class_id}/members",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: academicRelationshipMutationErrorCodes(
 				"class_member.invalid",
 				"class_member.student_affiliation_required",
@@ -66,36 +67,36 @@ func classMemberResource(app ClassMemberApplication) apiResource {
 			),
 			Handle: h.enroll,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodDelete,
 			Path:   "/class-members/{class_member_id}",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: academicRelationshipMutationErrorCodes("class.enrollment_conflict", "mail.unavailable"),
 			Handle: h.end,
 		},
 	)
 }
 
-func (h classMemberHandlers) list(request operationRequest) (operationResult, error) {
-	classID, err := pathID[model.ClassID](request, "class_id")
+func (h classMemberHandlers) list(request route.Request) (route.Result, error) {
+	classID, err := route.PathID[model.ClassID](request, "class_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	scope := model.Resource{Type: model.ResourceClass, ID: classID.String()}
-	query, after, err := membershipPageQuery(request.http, scope)
+	query, after, err := membershipPageQuery(request.HTTP, scope)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	page, err := h.app.ListClassMembersPage(request.context, request.invocation(), academic.ListClassMembersPageQuery{
+	page, err := h.app.ListClassMembersPage(request.Context, request.Invocation(), academic.ListClassMembersPageQuery{
 		ClassID:             classID,
 		MembershipPageQuery: query,
 		AfterUserID:         model.UserID(after.AfterUserID),
 		AfterID:             model.ClassMemberID(after.AfterID),
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	return membershipListResult(
@@ -108,50 +109,50 @@ func (h classMemberHandlers) list(request operationRequest) (operationResult, er
 	)
 }
 
-func (h classMemberHandlers) enroll(request operationRequest) (operationResult, error) {
-	classID, err := pathID[model.ClassID](request, "class_id")
+func (h classMemberHandlers) enroll(request route.Request) (route.Result, error) {
+	classID, err := route.PathID[model.ClassID](request, "class_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body enrollClassMemberRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
-	startAt, err := wireTimeMillis("start_at", body.StartAt)
+	startAt, err := route.WireTimeMillis("start_at", body.StartAt)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	endAt, err := wireTimeMillis("end_at", body.EndAt)
+	endAt, err := route.WireTimeMillis("end_at", body.EndAt)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	enrollment, err := h.app.EnrollClassMember(request.context, request.invocation(), academic.EnrollClassMemberCommand{
+	enrollment, err := h.app.EnrollClassMember(request.Context, request.Invocation(), academic.EnrollClassMemberCommand{
 		ClassID: classID,
 		UserID:  model.UserID(body.UserID),
 		StartAt: startAt,
 		EndAt:   endAt,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusCreated, classEnrollmentResponseFromModel(enrollment)), nil
+	return route.JSON(http.StatusCreated, classEnrollmentResponseFromModel(enrollment)), nil
 }
 
-func (h classMemberHandlers) end(request operationRequest) (operationResult, error) {
-	id, err := pathID[model.ClassMemberID](request, "class_member_id")
+func (h classMemberHandlers) end(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.ClassMemberID](request, "class_member_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	ended, err := h.app.EndClassMember(request.context, request.invocation(), academic.EndClassMemberCommand{ID: id})
+	ended, err := h.app.EndClassMember(request.Context, request.Invocation(), academic.EndClassMemberCommand{ID: id})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, classMemberResponseFromModel(ended)), nil
+	return route.JSON(http.StatusOK, classMemberResponseFromModel(ended)), nil
 }
 
 func classMemberResponseFromModel(member *model.ClassMember) classMemberResponse {

@@ -75,7 +75,8 @@ Top-level directories:
 | `config/` | The `config.json` schema, its defaults, validation and `PROCTOR_` environment overrides. `config.example.json` shows every field. |
 | `desktoprelease/` | Verifies the signed Proctor Desktop release artifacts this build trusts. |
 | `filecontent/` | Reads and writes the bytes of managed files (profile pictures, Exam Resources, Workspaces, exports) through `packages/vfs`. |
-| `httpapi/` | The REST API. One file per resource declares its routes, request and response types and errors. |
+| `httpapi/` | The REST API resources. One file per resource declares its routes, request and response types and errors. |
+| `httpapi/route/` | The routing kernel the resources are written against: how an endpoint is declared, compiled, authenticated and dispatched, Problem Details, and the public error catalog. Its package comment is the guide to adding an endpoint. |
 | `i18n/` | Translation data (`en.json`). No code. |
 | `identityprovider/` | Limits shared by external sign-in configuration and identity policy. |
 | `internal/` | Helpers private to this module: Let's Encrypt (`autocert`), certificate reload (`tlscert`), the OpenAPI compiler (`openapidoc`), the error catalog and the error-code analysis the tests use (`errorcatalog`, `errorflow`), `canonicaljson`, `weborigin`. |
@@ -119,8 +120,9 @@ file per entity or flow:
 Creating a Class, `POST /api/v1/programme-levels/{programme_level_id}/classes`:
 
 1. **Route.** `httpapi/class.go`: `classResource` declares the route as an
-   `endpoint{...}` literal. `Auth: AuthPrincipalRequired` means the caller
-   must be signed in; `Errors` lists what the route may return.
+   `route.Endpoint{...}` literal. `Auth: route.AuthPrincipalRequired` means
+   the caller must be signed in; `Errors` lists what the route may return.
+   `httpapi/route` checks the credential before the handler runs.
 2. **Handler.** `classHandlers.create` in the same file decodes the body into
    `createClassRequest` and calls the application with an
    `academic.CreateClassCommand`.
@@ -133,8 +135,8 @@ Creating a Class, `POST /api/v1/programme-levels/{programme_level_id}/classes`:
 5. **SQL.** `SQLClassStore.Create` in `store/sqlstore/class_store.go` inserts
    the row and completes the audit event in one transaction.
 6. **Back out.** A Store error becomes an application error through
-   `classStoreErrors`; `httpapi` turns its code into a Problem Details
-   response using `httpapi/error_catalog.yaml`.
+   `classStoreErrors`; `httpapi/route` turns its code into a Problem Details
+   response using `httpapi/route/error_catalog.yaml`.
 
 Creating a Class publishes nothing. A use case that does, such as
 `CreateAcademicUnit` in `app/academic/academic_unit_commands.go`, calls a
@@ -156,9 +158,9 @@ A typical change touches these places, in this order:
 3. **Regenerate**: `make -C server generate`.
 4. **Use case**: a method on the area's `Service` in `app/<area>/<entity>.go`
    that authorizes, audits and calls the Store. New error codes go in
-   `httpapi/error_catalog.yaml`.
-5. **Route and OpenAPI**: an `endpoint{...}` in `httpapi/<resource>.go` (a new
-   resource is also listed in `httpapi/resource_catalog.go`), and the YAML
+   `httpapi/route/error_catalog.yaml`.
+5. **Route and OpenAPI**: a `route.Endpoint{...}` in `httpapi/<resource>.go`
+   (a new resource is also listed in `httpapi/resources.go`), and the YAML
    under `openapi/fragments/`. Then `make -C server openapi-build`.
 6. **Tests**: `app/<area>/<entity>_test.go`, `httpapi/<resource>_test.go` and
    the contract's suite in `store/storetest/`. Run `make -C server check`.

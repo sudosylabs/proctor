@@ -146,6 +146,31 @@ var (
 
 // dependencyRules is ordered from the most specific package boundary to the
 // broadest. The first matching rule owns a production package.
+// transportApplicationImports are the inward packages a transport may name:
+// the application surface, the area packages whose command, query and result
+// types it maps, and the domain and presentation leaves.
+var transportApplicationImports = []pathPattern{
+	exact(serverModule + "/logging"),
+	exact(serverModule + "/app"),
+	exact(serverModule + "/app/academic"),
+	exact(serverModule + "/app/administration"),
+	exact(serverModule + "/app/apperror"),
+	exact(serverModule + "/app/identity"),
+	exact(serverModule + "/app/invocation"),
+	exact(serverModule + "/app/job"),
+	exact(serverModule + "/app/mail"),
+	exact(serverModule + "/app/onboarding"),
+	exact(serverModule + "/app/paging"),
+	exact(serverModule + "/app/realtime"),
+	exact(serverModule + "/app/search"),
+	exact(serverModule + "/app/user"),
+	subtree(serverModule + "/app/exam"),
+	exact(serverModule + "/model"),
+	exact(serverModule + "/store"),
+	exact(serverModule + "/localization"),
+	exact(serverModule + "/internal/weborigin"),
+}
+
 var dependencyRules = []dependencyRule{
 	{
 		name: "reusable modules",
@@ -640,34 +665,39 @@ var dependencyRules = []dependencyRule{
 		sources: []pathPattern{exact(serverModule + "/webui")},
 	},
 	{
-		name: "HTTP and WebSocket transports",
-		sources: []pathPattern{
-			subtree(serverModule + "/httpapi"),
-			subtree(serverModule + "/websocket"),
-		},
+		// The routing kernel serves every resource and knows none. It reaches
+		// the application only for the error, invocation and paging leaves,
+		// the DPoP nonce challenge app/identity declares, and the delivery
+		// recovery predicate app/exam/attempt declares.
+		name:           "HTTP routing kernel",
+		sources:        []pathPattern{exact(serverModule + "/httpapi/route")},
 		deniedStandard: standardInfrastructureExceptHTTP,
 		project: only(
 			exact(serverModule+"/logging"),
-			exact(serverModule+"/app"),
-			exact(serverModule+"/app/academic"),
-			exact(serverModule+"/app/administration"),
 			exact(serverModule+"/app/apperror"),
-			exact(serverModule+"/app/identity"),
 			exact(serverModule+"/app/invocation"),
-			exact(serverModule+"/app/job"),
-			exact(serverModule+"/app/mail"),
-			exact(serverModule+"/app/onboarding"),
 			exact(serverModule+"/app/paging"),
-			exact(serverModule+"/app/realtime"),
-			exact(serverModule+"/app/search"),
-			exact(serverModule+"/app/user"),
-			subtree(serverModule+"/app/exam"),
+			exact(serverModule+"/app/identity"),
+			exact(serverModule+"/app/exam/attempt"),
 			exact(serverModule+"/model"),
-			exact(serverModule+"/store"),
 			exact(serverModule+"/localization"),
 			exact(serverModule+"/internal/weborigin"),
 		),
 		thirdParty: only(descendants("github.com/gorilla")),
+	},
+	{
+		name:           "HTTP resources",
+		sources:        []pathPattern{subtree(serverModule + "/httpapi")},
+		deniedStandard: standardInfrastructureExceptHTTP,
+		project:        only(append([]pathPattern{exact(serverModule + "/httpapi/route")}, transportApplicationImports...)...),
+		thirdParty:     only(descendants("github.com/gorilla")),
+	},
+	{
+		name:           "WebSocket transport",
+		sources:        []pathPattern{subtree(serverModule + "/websocket")},
+		deniedStandard: standardInfrastructureExceptHTTP,
+		project:        only(transportApplicationImports...),
+		thirdParty:     only(descendants("github.com/gorilla")),
 	},
 	{
 		name:    "cluster contracts",
@@ -878,6 +908,9 @@ func TestDependencyRulePrecedence(t *testing.T) {
 		{packagePath: serverModule + "/cmd/proctor-healthcheck", wantRule: "healthcheck executable"},
 		{packagePath: serverModule + "/operator", wantRule: "offline operator commands"},
 		{packagePath: serverModule + "/cmd/ptool/commands", wantRule: "ptool commands"},
+		{packagePath: serverModule + "/httpapi/route", wantRule: "HTTP routing kernel"},
+		{packagePath: serverModule + "/httpapi", wantRule: "HTTP resources"},
+		{packagePath: serverModule + "/websocket", wantRule: "WebSocket transport"},
 	}
 
 	for _, tt := range tests {
@@ -1076,6 +1109,7 @@ func exemptProductionHelper(packagePath string) bool {
 	return packageOrBelow(packagePath, serverModule+"/testlib") ||
 		packageOrBelow(packagePath, serverModule+"/store/storetest") ||
 		packageOrBelow(packagePath, serverModule+"/app/realtime/realtimetest") ||
+		packageOrBelow(packagePath, serverModule+"/httpapi/route/routetest") ||
 		packageOrBelow(packagePath, serverModule+"/config/configtest")
 }
 

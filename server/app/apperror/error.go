@@ -13,7 +13,7 @@
 // StoreTable turns typed Store errors into codes, and Concealment reports a
 // resource the caller may not see as resource.not_found, so areas do not write
 // their own translation. The package knows nothing about HTTP: httpapi maps
-// each code to a status from httpapi/error_catalog.yaml.
+// each code to a status from httpapi/route/error_catalog.yaml.
 package apperror
 
 import (

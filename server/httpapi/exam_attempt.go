@@ -15,6 +15,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -169,7 +170,7 @@ type ExamAttemptApplication interface {
 // browser delivery and delivery budget resources in their own files.
 type examAttemptHandlers struct{ app ExamAttemptApplication }
 
-func examAttemptResource(app ExamAttemptApplication) apiResource {
+func examAttemptResource(app ExamAttemptApplication) route.Resource {
 	h := examAttemptHandlers{app: app}
 	managerCollection := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts"
 	managerMember := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}"
@@ -191,11 +192,11 @@ func examAttemptResource(app ExamAttemptApplication) apiResource {
 	managerSubmissionContent := managerSubmission + "/files/{attempt_workspace_entry_id}/content"
 	reallow := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/reallow"
 	suspend := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/suspend"
-	return newResource("exam-attempts",
-		endpoint{
+	return route.NewResource("exam-attempts",
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   managerCollection,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -209,10 +210,10 @@ func examAttemptResource(app ExamAttemptApplication) apiResource {
 			},
 			Handle: h.listManaged,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   candidateStatuses,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -226,10 +227,10 @@ func examAttemptResource(app ExamAttemptApplication) apiResource {
 			},
 			Handle: h.listCandidateStatuses,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   managerMember,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -244,10 +245,10 @@ func examAttemptResource(app ExamAttemptApplication) apiResource {
 			},
 			Handle: h.getManaged,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   managerBrowserActivity,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -263,11 +264,11 @@ func examAttemptResource(app ExamAttemptApplication) apiResource {
 			},
 			Handle: h.listBrowserActivity,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPost,
 			Path:        managerEnd,
-			Auth:        AuthPrincipalRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -291,11 +292,11 @@ func examAttemptResource(app ExamAttemptApplication) apiResource {
 			},
 			Handle: h.endByManager,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPost,
 			Path:        reallow,
-			Auth:        AuthPrincipalRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -319,11 +320,11 @@ func examAttemptResource(app ExamAttemptApplication) apiResource {
 			},
 			Handle: h.reallow,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPost,
 			Path:        suspend,
-			Auth:        AuthPrincipalRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -347,10 +348,10 @@ func examAttemptResource(app ExamAttemptApplication) apiResource {
 			},
 			Handle: h.suspend,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   presentation,
-			Auth:   AuthSessionRequired,
+			Auth:   route.AuthSessionRequired,
 			Errors: []string{
 				"request.invalid",
 				"resource.not_found",
@@ -363,10 +364,10 @@ func examAttemptResource(app ExamAttemptApplication) apiResource {
 			},
 			Handle: h.presentation,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   workspace,
-			Auth:   AuthSessionRequired,
+			Auth:   route.AuthSessionRequired,
 			Errors: []string{
 				"request.invalid",
 				"resource.not_found",
@@ -379,10 +380,10 @@ func examAttemptResource(app ExamAttemptApplication) apiResource {
 			},
 			Handle: h.workspace,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   workspaceChanges,
-			Auth:   AuthSessionRequired,
+			Auth:   route.AuthSessionRequired,
 			Errors: []string{
 				"request.invalid",
 				"resource.not_found",
@@ -395,11 +396,11 @@ func examAttemptResource(app ExamAttemptApplication) apiResource {
 			},
 			Handle: h.workspaceChanges,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPost,
 			Path:        workspaceDirectories,
-			Auth:        AuthSessionRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthSessionRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"audit.unavailable",
 				"request.invalid",
@@ -422,14 +423,14 @@ func examAttemptResource(app ExamAttemptApplication) apiResource {
 			},
 			Handle: h.createWorkspaceDirectory,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:       http.MethodPost,
 			Path:         workspaceFiles,
-			Auth:         AuthSessionRequired,
-			Idempotency:  IdempotencyRequired,
+			Auth:         route.AuthSessionRequired,
+			Idempotency:  route.IdempotencyRequired,
 			MaxBodyBytes: model.AttemptWorkspaceMaximumRequestBytes,
 			ProtocolName: "candidate-exam-workspace-file-upload",
-			ProtocolKind: RouteProtocolStreamingUpload,
+			ProtocolKind: route.ProtocolStreamingUpload,
 			Errors: []string{
 				"audit.unavailable",
 				"request.invalid",
@@ -454,11 +455,11 @@ func examAttemptResource(app ExamAttemptApplication) apiResource {
 			},
 			Protocol: h.createWorkspaceFile,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPatch,
 			Path:        workspaceEntry,
-			Auth:        AuthSessionRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthSessionRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"audit.unavailable",
 				"request.invalid",
@@ -480,14 +481,14 @@ func examAttemptResource(app ExamAttemptApplication) apiResource {
 			},
 			Handle: h.moveWorkspaceEntry,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:       http.MethodPut,
 			Path:         workspaceContent,
-			Auth:         AuthSessionRequired,
-			Idempotency:  IdempotencyRequired,
+			Auth:         route.AuthSessionRequired,
+			Idempotency:  route.IdempotencyRequired,
 			MaxBodyBytes: model.AttemptWorkspaceMaximumRequestBytes,
 			ProtocolName: "candidate-exam-workspace-file-replacement",
-			ProtocolKind: RouteProtocolStreamingUpload,
+			ProtocolKind: route.ProtocolStreamingUpload,
 			Errors: []string{
 				"audit.unavailable",
 				"request.invalid",
@@ -512,11 +513,11 @@ func examAttemptResource(app ExamAttemptApplication) apiResource {
 			},
 			Protocol: h.replaceWorkspaceFile,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodDelete,
 			Path:        workspaceEntry,
-			Auth:        AuthSessionRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthSessionRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"audit.unavailable",
 				"request.invalid",
@@ -541,12 +542,12 @@ func examAttemptResource(app ExamAttemptApplication) apiResource {
 			},
 			Handle: h.deleteWorkspaceEntry,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:       http.MethodGet,
 			Path:         resourceContent,
-			Auth:         AuthSessionRequired,
+			Auth:         route.AuthSessionRequired,
 			ProtocolName: "candidate-exam-resource-content",
-			ProtocolKind: RouteProtocolBinaryDownload,
+			ProtocolKind: route.ProtocolBinaryDownload,
 			Errors: []string{
 				"request.invalid",
 				"resource.not_found",
@@ -559,12 +560,12 @@ func examAttemptResource(app ExamAttemptApplication) apiResource {
 			},
 			Protocol: h.openResource,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:       http.MethodGet,
 			Path:         workspaceContent,
-			Auth:         AuthSessionRequired,
+			Auth:         route.AuthSessionRequired,
 			ProtocolName: "candidate-exam-workspace-content",
-			ProtocolKind: RouteProtocolBinaryDownload,
+			ProtocolKind: route.ProtocolBinaryDownload,
 			Errors: []string{
 				"request.invalid",
 				"resource.not_found",
@@ -577,11 +578,11 @@ func examAttemptResource(app ExamAttemptApplication) apiResource {
 			},
 			Protocol: h.openWorkspaceFile,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPost,
 			Path:        candidateSubmissions,
-			Auth:        AuthSessionRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthSessionRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"audit.unavailable",
 				"request.invalid",
@@ -607,11 +608,11 @@ func examAttemptResource(app ExamAttemptApplication) apiResource {
 			},
 			Handle: h.submit,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:      http.MethodPut,
 			Path:        correctionAcknowledgement,
-			Auth:        AuthSessionRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthSessionRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"request.invalid",
 				"resource.not_found",
@@ -632,10 +633,10 @@ func examAttemptResource(app ExamAttemptApplication) apiResource {
 			},
 			Handle: h.acknowledgeCorrection,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   managerSubmission,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -649,10 +650,10 @@ func examAttemptResource(app ExamAttemptApplication) apiResource {
 			},
 			Handle: h.getSubmission,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   managerSubmissionManifest,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -666,12 +667,12 @@ func examAttemptResource(app ExamAttemptApplication) apiResource {
 			},
 			Handle: h.listSubmissionManifest,
 		},
-		endpoint{
+		route.Endpoint{
 			Method:       http.MethodGet,
 			Path:         managerSubmissionContent,
-			Auth:         AuthPrincipalRequired,
+			Auth:         route.AuthPrincipalRequired,
 			ProtocolName: "exam-submission-file-content",
-			ProtocolKind: RouteProtocolBinaryDownload,
+			ProtocolKind: route.ProtocolBinaryDownload,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -689,13 +690,13 @@ func examAttemptResource(app ExamAttemptApplication) apiResource {
 }
 
 func candidateAttemptContentResult(
-	request operationRequest,
+	request route.Request,
 	opened attempt.OpenedContent,
 	etag string,
 	untrusted func(http.Header),
-) (protocolResult, error) {
+) (route.ProtocolResult, error) {
 	if opened.Body == nil || opened.SizeBytes < 0 || strings.TrimSpace(opened.MediaType) == "" || etag == `""` {
-		return protocolResult{}, errors.New("Exam Attempt application returned incomplete content")
+		return route.ProtocolResult{}, errors.New("Exam Attempt application returned incomplete content")
 	}
 
 	headers := privateNoStoreHeaders()
@@ -705,23 +706,23 @@ func candidateAttemptContentResult(
 	}
 
 	headers.Set("ETag", etag)
-	if etagMatches(request.http.Header.Get("If-None-Match"), etag) {
+	if etagMatches(request.HTTP.Header.Get("If-None-Match"), etag) {
 		_ = opened.Body.Close()
-		return notModifiedProtocolResult(opened.SizeBytes).withHeaders(headers), nil
+		return route.NotModified(opened.SizeBytes).WithHeaders(headers), nil
 	}
 
-	return binaryDownloadProtocolResult(opened.Body, opened.SizeBytes).withHeaders(headers), nil
+	return route.BinaryDownload(opened.Body, opened.SizeBytes).WithHeaders(headers), nil
 }
 
-func candidateAccess(request operationRequest) (attempt.CandidateAccess, error) {
-	attemptID, err := pathID[model.ExamAttemptID](request, "exam_attempt_id")
+func candidateAccess(request route.Request) (attempt.CandidateAccess, error) {
+	attemptID, err := route.PathID[model.ExamAttemptID](request, "exam_attempt_id")
 	if err != nil {
 		return attempt.CandidateAccess{}, err
 	}
 
-	headers, err := candidateAttemptAccessHeaders(request.http)
+	headers, err := candidateAttemptAccessHeaders(request.HTTP)
 	if err != nil {
-		return attempt.CandidateAccess{}, invalidRequestError(err)
+		return attempt.CandidateAccess{}, route.InvalidRequest(err)
 	}
 
 	return attempt.CandidateAccess{

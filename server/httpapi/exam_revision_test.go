@@ -22,13 +22,14 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
 func TestExamRevisionHTTPPublishUsesStrictIdempotentCommandAndSafeSummary(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamRevisionHTTPFake()
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examRevisionResource(fake))
 
@@ -56,7 +57,7 @@ func TestExamRevisionHTTPPublishUsesStrictIdempotentCommandAndSafeSummary(t *tes
 
 func TestExamRevisionHTTPGetAndListUseExactIdentityAndVersionedTupleCursor(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamRevisionHTTPFake()
 	older := fake.summary
 	older.ID = model.NewExamRevisionID()
@@ -127,7 +128,7 @@ func TestExamRevisionHTTPCursorAndPublishBodyAreStrict(t *testing.T) {
 		})
 	}
 
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamRevisionHTTPFake()
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examRevisionResource(fake))
 	for name, body := range map[string]string{

@@ -21,6 +21,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -89,14 +90,14 @@ type auditHandlers struct {
 	app AuditListingApplication
 }
 
-func auditResource(app AuditListingApplication) apiResource {
+func auditResource(app AuditListingApplication) route.Resource {
 	h := auditHandlers{app: app}
-	return newResource(
+	return route.NewResource(
 		"audits",
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/audits",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -108,40 +109,40 @@ func auditResource(app AuditListingApplication) apiResource {
 			},
 			Handle: h.list,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/users/me/audits",
-			Auth:   AuthSessionRequired,
+			Auth:   route.AuthSessionRequired,
 			Errors: []string{"audit.query.invalid", "audit.unavailable", "request.invalid"},
 			Handle: h.listSelf,
 		},
 	)
 }
 
-func (h auditHandlers) list(request operationRequest) (operationResult, error) {
-	query, err := auditQueryFromRequest(request.http)
+func (h auditHandlers) list(request route.Request) (route.Result, error) {
+	query, err := auditQueryFromRequest(request.HTTP)
 	if err != nil {
-		return operationResult{}, apperror.Invalid("request.invalid", "query")
+		return route.Result{}, apperror.Invalid("request.invalid", "query")
 	}
 	page, listErr := h.app.ListAuditEvents(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		query,
 	)
 	if listErr != nil {
-		return operationResult{}, listErr
+		return route.Result{}, listErr
 	}
-	envelope, err := newListResponse(page.Items, page.HasMore, auditEventResponseFromModel, func(last *model.AuditEvent) (string, error) {
+	envelope, err := route.NewList(page.Items, page.HasMore, auditEventResponseFromModel, func(last *model.AuditEvent) (string, error) {
 		return encodeAuditCursor(auditCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String()})
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	response, err := withPageTotal(envelope, page.Total, !query.BeforeID.IsZero())
+	response, err := route.WithPageTotal(envelope, page.Total, !query.BeforeID.IsZero())
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, response), nil
+	return route.JSON(http.StatusOK, response), nil
 }
 
 func auditQueryFromRequest(request *http.Request) (administration.ListAuditEventsQuery, error) {
@@ -209,19 +210,19 @@ func (e auditQueryError) Error() string { return string(e) }
 func errAuditQuery(field string) error { return auditQueryError(field) }
 
 func encodeAuditCursor(cursor auditCursor) (string, error) {
-	return encodeOpaqueCursor(cursor, auditCursorSpec())
+	return route.EncodeCursor(cursor, auditCursorSpec())
 }
 
 func decodeAuditCursor(raw string) (auditCursor, error) {
-	return decodeOpaqueCursor(raw, auditCursorSpec())
+	return route.DecodeCursor(raw, auditCursorSpec())
 }
 
-func auditCursorSpec() opaqueCursorSpec[auditCursor] {
-	return opaqueCursorSpec[auditCursor]{
-		label:                "audit",
-		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members:              []string{"created_at", "id"},
-		validate: func(cursor auditCursor) error {
+func auditCursorSpec() route.CursorSpec[auditCursor] {
+	return route.CursorSpec[auditCursor]{
+		Label:                "audit",
+		MaximumEncodedLength: route.DefaultMaximumCursorLength,
+		Members:              []string{"created_at", "id"},
+		Validate: func(cursor auditCursor) error {
 			createdAt, err := model.ParseRFC3339(cursor.CreatedAt)
 			if err != nil || createdAt.IsZero() || !model.AuditEventID(cursor.ID).IsValid() {
 				return errors.New("invalid audit keyset")

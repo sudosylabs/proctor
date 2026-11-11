@@ -15,6 +15,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -37,7 +38,7 @@ type RetentionApplication interface {
 
 type retentionHandlers struct{ app RetentionApplication }
 
-func retentionResource(app RetentionApplication) apiResource {
+func retentionResource(app RetentionApplication) route.Resource {
 	h := retentionHandlers{app: app}
 	mutationErrors := operatorMutationErrorCodes(
 		"request.invalid",
@@ -52,28 +53,28 @@ func retentionResource(app RetentionApplication) apiResource {
 		"idempotency.conflict",
 		"idempotency.in_progress",
 	)
-	preview := endpoint{
+	preview := route.Endpoint{
 		Method:      http.MethodPost,
 		Path:        "/retention/previews",
-		Auth:        AuthSessionRequired,
-		Idempotency: IdempotencyRequired,
+		Auth:        route.AuthSessionRequired,
+		Idempotency: route.IdempotencyRequired,
 		Errors:      mutationErrors,
 		Handle:      h.preview,
 	}
-	control := endpoint{
+	control := route.Endpoint{
 		Method:      http.MethodPut,
 		Path:        "/retention/control",
-		Auth:        AuthStrongRecentSessionRequired,
-		Idempotency: IdempotencyRequired,
+		Auth:        route.AuthStrongRecentSessionRequired,
+		Idempotency: route.IdempotencyRequired,
 		Errors:      mutationErrors,
 		Handle:      h.changeControl,
 	}
-	return newResource(
+	return route.NewResource(
 		"retention",
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/retention/control",
-			Auth:   AuthSessionRequired,
+			Auth:   route.AuthSessionRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -88,10 +89,10 @@ func retentionResource(app RetentionApplication) apiResource {
 		},
 		control,
 		preview,
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/retention/previews/{retention_preview_id}",
-			Auth:   AuthSessionRequired,
+			Auth:   route.AuthSessionRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -105,10 +106,10 @@ func retentionResource(app RetentionApplication) apiResource {
 			},
 			Handle: h.getPreview,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/retention/records",
-			Auth:   AuthSessionRequired,
+			Auth:   route.AuthSessionRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -122,10 +123,10 @@ func retentionResource(app RetentionApplication) apiResource {
 			},
 			Handle: h.records,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/users/me/retention-notices",
-			Auth:   AuthSessionRequired,
+			Auth:   route.AuthSessionRequired,
 			Errors: []string{
 				"authorization.denied",
 				"request.invalid",
@@ -226,89 +227,89 @@ type retentionRecordsResponse struct {
 	NextCursor     string                    `json:"next_cursor,omitempty"`
 }
 
-func (h retentionHandlers) getControl(request operationRequest) (operationResult, error) {
-	c, err := h.app.GetRetentionControl(request.context, request.invocation())
+func (h retentionHandlers) getControl(request route.Request) (route.Result, error) {
+	c, err := h.app.GetRetentionControl(request.Context, request.Invocation())
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, retentionControlDTO(c)).withHeaders(privateNoStoreHeaders()), nil
+	return route.JSON(http.StatusOK, retentionControlDTO(c)).WithHeaders(privateNoStoreHeaders()), nil
 }
-func (h retentionHandlers) changeControl(request operationRequest) (operationResult, error) {
+func (h retentionHandlers) changeControl(request route.Request) (route.Result, error) {
 	var body retentionControlRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
-	c, err := h.app.ChangeRetentionControl(request.context, request.invocation(), administration.ChangeRetentionControlCommand{
+	c, err := h.app.ChangeRetentionControl(request.Context, request.Invocation(), administration.ChangeRetentionControlCommand{
 		ExpectedRevision:       body.ExpectedRevision,
 		ExpectedPolicyRevision: body.ExpectedPolicyRevision,
 		PreviewID:              model.RetentionPreviewID(body.PreviewID),
 		State:                  model.RetentionControlState(body.State),
-		IdempotencyKey:         request.idempotencyKey,
+		IdempotencyKey:         request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, retentionControlDTO(c)).withHeaders(privateNoStoreHeaders()), nil
+	return route.JSON(http.StatusOK, retentionControlDTO(c)).WithHeaders(privateNoStoreHeaders()), nil
 }
-func (h retentionHandlers) preview(request operationRequest) (operationResult, error) {
+func (h retentionHandlers) preview(request route.Request) (route.Result, error) {
 	var body retentionPreviewRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
 	p, err := h.app.CreateRetentionPreview(
-		request.context,
-		request.invocation(),
-		administration.CreateRetentionPreviewCommand{ExpectedPolicyRevision: body.ExpectedPolicyRevision, IdempotencyKey: request.idempotencyKey},
+		request.Context,
+		request.Invocation(),
+		administration.CreateRetentionPreviewCommand{ExpectedPolicyRevision: body.ExpectedPolicyRevision, IdempotencyKey: request.IdempotencyKey},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusCreated, retentionPreviewDTO(p)).withHeaders(privateNoStoreHeaders()), nil
+	return route.JSON(http.StatusCreated, retentionPreviewDTO(p)).WithHeaders(privateNoStoreHeaders()), nil
 }
-func (h retentionHandlers) getPreview(request operationRequest) (operationResult, error) {
-	id, err := model.ParseRetentionPreviewID(request.params["retention_preview_id"])
+func (h retentionHandlers) getPreview(request route.Request) (route.Result, error) {
+	id, err := model.ParseRetentionPreviewID(request.Params["retention_preview_id"])
 	if err != nil {
-		return operationResult{}, invalidRequestError(err)
+		return route.Result{}, route.InvalidRequest(err)
 	}
-	p, err := h.app.GetRetentionPreview(request.context, request.invocation(), id)
+	p, err := h.app.GetRetentionPreview(request.Context, request.Invocation(), id)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, retentionPreviewDTO(p)).withHeaders(privateNoStoreHeaders()), nil
+	return route.JSON(http.StatusOK, retentionPreviewDTO(p)).WithHeaders(privateNoStoreHeaders()), nil
 }
-func (h retentionHandlers) records(request operationRequest) (operationResult, error) {
-	values := request.http.URL.Query()
+func (h retentionHandlers) records(request route.Request) (route.Result, error) {
+	values := request.HTTP.URL.Query()
 	for key, items := range values {
 		if len(items) != 1 || (key != "limit" && key != "cursor") {
-			return operationResult{}, invalidRequestError(nil)
+			return route.Result{}, route.InvalidRequest(nil)
 		}
 	}
 
-	limit, err := request.queryLimit()
+	limit, err := request.QueryLimit()
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var after model.SubmissionID
 	if raw := values.Get("cursor"); raw != "" {
-		cursor, err := decodeOpaqueCursor(raw, retentionCursorSpec())
-		if err != nil {
-			return operationResult{}, invalidRequestError(err)
+		cursor, cursorErr := route.DecodeCursor(raw, retentionCursorSpec())
+		if cursorErr != nil {
+			return route.Result{}, route.InvalidRequest(cursorErr)
 		}
 
 		after = model.SubmissionID(cursor.After)
 	}
 
-	page, err := h.app.ListRetentionRecords(request.context, request.invocation(), after, limit)
+	page, err := h.app.ListRetentionRecords(request.Context, request.Invocation(), after, limit)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if page == nil || len(page.Items) > limit*2 || (page.HasMore && len(page.Items) == 0) {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 
 	response := retentionRecordsResponse{
@@ -353,28 +354,28 @@ func (h retentionHandlers) records(request operationRequest) (operationResult, e
 	}
 
 	if page.HasMore {
-		response.NextCursor, err = encodeOpaqueCursor(
+		response.NextCursor, err = route.EncodeCursor(
 			retentionCursor{After: page.Items[len(page.Items)-1].Record.Scope.SubmissionID.String()},
 			retentionCursorSpec(),
 		)
 		if err != nil {
-			return operationResult{}, unpresentableResult(err)
+			return route.Result{}, route.Unpresentable(err)
 		}
 	}
 
-	return jsonResult(http.StatusOK, response).withHeaders(privateNoStoreHeaders()), nil
+	return route.JSON(http.StatusOK, response).WithHeaders(privateNoStoreHeaders()), nil
 }
 
 type retentionCursor struct {
 	After string `json:"after_submission_id"`
 }
 
-func retentionCursorSpec() opaqueCursorSpec[retentionCursor] {
-	return opaqueCursorSpec[retentionCursor]{
-		label:                "retention",
-		maximumEncodedLength: 256,
-		members:              []string{"after_submission_id"},
-		validate: func(c retentionCursor) error {
+func retentionCursorSpec() route.CursorSpec[retentionCursor] {
+	return route.CursorSpec[retentionCursor]{
+		Label:                "retention",
+		MaximumEncodedLength: 256,
+		Members:              []string{"after_submission_id"},
+		Validate: func(c retentionCursor) error {
 			if !model.SubmissionID(c.After).IsValid() {
 				return errors.New("invalid retention cursor")
 			}

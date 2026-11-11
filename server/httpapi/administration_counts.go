@@ -13,6 +13,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 )
 
 // AdministrationCountsApplication summarizes the administration work waiting
@@ -38,14 +39,14 @@ type administrationCountsHandlers struct {
 	app AdministrationCountsApplication
 }
 
-func administrationCountsResource(application AdministrationCountsApplication) apiResource {
+func administrationCountsResource(application AdministrationCountsApplication) route.Resource {
 	h := administrationCountsHandlers{app: application}
-	return newResource(
+	return route.NewResource(
 		"administration-counts",
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/administration/counts",
-			Auth:   AuthSessionRequired,
+			Auth:   route.AuthSessionRequired,
 			Errors: []string{
 				"administration.unavailable",
 				"authorization.denied",
@@ -64,20 +65,20 @@ func administrationCountsResource(application AdministrationCountsApplication) a
 	)
 }
 
-func (h administrationCountsHandlers) get(request operationRequest) (operationResult, error) {
+func (h administrationCountsHandlers) get(request route.Request) (route.Result, error) {
 	if h.app == nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
-	counts, err := h.app.AdministrationCounts(request.context, request.invocation())
+	counts, err := h.app.AdministrationCounts(request.Context, request.Invocation())
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	var response administrationCountsResponse
 	response.PendingInvitations, response.PendingInvitationsIsLowerBound = administrationCountMembers(counts.PendingInvitations)
 	response.FailedJobs, response.FailedJobsIsLowerBound = administrationCountMembers(counts.FailedJobs)
 	response.FailedMailDeliveries, response.FailedMailDeliveriesIsLowerBound = administrationCountMembers(counts.FailedMailDeliveries)
 	response.OpenOnboardingImports, response.OpenOnboardingImportsIsLowerBound = administrationCountMembers(counts.OpenOnboardingImports)
-	return jsonResult(http.StatusOK, response).withHeaders(privateNoStoreHeaders()), nil
+	return route.JSON(http.StatusOK, response).WithHeaders(privateNoStoreHeaders()), nil
 }
 
 func administrationCountMembers(count *administration.Count) (*int, *bool) {

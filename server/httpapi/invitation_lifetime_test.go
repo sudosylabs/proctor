@@ -16,6 +16,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -42,7 +43,7 @@ func TestInvitationRoutesCarryTheChosenLifetime(t *testing.T) {
 			members: `"expected_revision":2,"purpose":"student_class","email":"new@example.edu","class_id":"` + model.NewClassID().String() + `"`,
 			days:    func(a *invitationHTTPApplication) *int { return a.replace.ExpiresInDays }},
 	}
-	for name, route := range routes {
+	for name, target := range routes {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			for lifetime, test := range map[string]struct {
@@ -59,10 +60,10 @@ func TestInvitationRoutesCarryTheChosenLifetime(t *testing.T) {
 			} {
 				t.Run(lifetime, func(t *testing.T) {
 					applicationFake := &invitationHTTPApplication{}
-					response := serveInvitationLifetimeRequest(t, applicationFake, route.path, "{"+route.members+test.member+"}")
+					response := serveInvitationLifetimeRequest(t, applicationFake, target.path, "{"+target.members+test.member+"}")
 					require.Equal(t, test.code, response.Code, response.Body.String())
 					if test.code == http.StatusCreated {
-						require.Equal(t, test.want, route.days(applicationFake))
+						require.Equal(t, test.want, target.days(applicationFake))
 					}
 				})
 			}
@@ -74,12 +75,12 @@ func invitationLifetimeDays(days int) *int { return &days }
 
 func serveInvitationLifetimeRequest(t *testing.T, applicationFake *invitationHTTPApplication, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now(), MFACompletedAt: model.OptionalTimeFrom(time.Now())}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, invitationResource(applicationFake))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, invitationResource(applicationFake))
 	request := newJSONRequest(http.MethodPost, path, strings.NewReader(body))
 	request.Header.Set("Authorization", "Bearer session")
 	response := httptest.NewRecorder()

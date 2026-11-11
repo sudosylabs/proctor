@@ -7,9 +7,13 @@
 
 package httpapi
 
-import "time"
+import (
+	"time"
 
-func systemResource(health Health, buildInfo BuildInfo) apiResource {
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+)
+
+func systemResource(health Health, buildInfo BuildInfo) route.Resource {
 	return systemResourceWithApplication(
 		health,
 		buildInfo,

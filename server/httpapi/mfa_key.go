@@ -13,6 +13,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -78,13 +79,13 @@ type mfaKeyStateResponse struct {
 
 type mfaKeyHandlers struct{ app MFAKeyApplication }
 
-func mfaKeyResource(app MFAKeyApplication) apiResource {
+func mfaKeyResource(app MFAKeyApplication) route.Resource {
 	h := mfaKeyHandlers{app: app}
-	return newResource("mfa-keys",
-		endpoint{
+	return route.NewResource("mfa-keys",
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/mfa/keys",
-			Auth:   AuthStrongRecentSessionRequired,
+			Auth:   route.AuthStrongRecentSessionRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -94,10 +95,10 @@ func mfaKeyResource(app MFAKeyApplication) apiResource {
 			},
 			Handle: h.getKeyState,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/mfa/rekey",
-			Auth:   AuthStrongRecentSessionRequired,
+			Auth:   route.AuthStrongRecentSessionRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -111,20 +112,20 @@ func mfaKeyResource(app MFAKeyApplication) apiResource {
 			},
 			Handle: h.startRekey,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/mfa/rekey/{job_id}",
-			Auth:   AuthStrongRecentSessionRequired,
+			Auth:   route.AuthStrongRecentSessionRequired,
 			Errors: operatorReadErrorCodes("request.invalid", "resource.not_found", "authentication.mfa.unavailable"),
 			Handle: h.getRekeyStatus,
 		},
 	)
 }
 
-func (h mfaKeyHandlers) getKeyState(request operationRequest) (operationResult, error) {
-	view, err := h.app.GetMFAKeyState(request.context, request.invocation())
+func (h mfaKeyHandlers) getKeyState(request route.Request) (route.Result, error) {
+	view, err := h.app.GetMFAKeyState(request.Context, request.Invocation())
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	response := mfaKeyStateResponse{
@@ -141,25 +142,25 @@ func (h mfaKeyHandlers) getKeyState(request operationRequest) (operationResult, 
 		})
 	}
 
-	return jsonResult(http.StatusOK, response), nil
+	return route.JSON(http.StatusOK, response), nil
 }
 
-func (h mfaKeyHandlers) startRekey(request operationRequest) (operationResult, error) {
+func (h mfaKeyHandlers) startRekey(request route.Request) (route.Result, error) {
 	var body mfaRekeyRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
 	view, err := h.app.StartMFARekey(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		identity.StartMFARekeyCommand{RetiringKeyID: body.RetiringKeyID},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusAccepted, mfaRekeyResponse{
+	return route.JSON(http.StatusAccepted, mfaRekeyResponse{
 		JobID:         view.JobID.String(),
 		PrimaryKeyID:  view.PrimaryKeyID,
 		RetiringKeyID: view.RetiringKeyID,
@@ -167,15 +168,15 @@ func (h mfaKeyHandlers) startRekey(request operationRequest) (operationResult, e
 	}), nil
 }
 
-func (h mfaKeyHandlers) getRekeyStatus(request operationRequest) (operationResult, error) {
-	jobID, err := pathID[model.JobID](request, "job_id")
+func (h mfaKeyHandlers) getRekeyStatus(request route.Request) (route.Result, error) {
+	jobID, err := route.PathID[model.JobID](request, "job_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	view, err := h.app.GetMFARekeyStatus(request.context, request.invocation(), jobID)
+	view, err := h.app.GetMFARekeyStatus(request.Context, request.Invocation(), jobID)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	response := mfaRekeyStatusResponse{
@@ -206,5 +207,5 @@ func (h mfaKeyHandlers) getRekeyStatus(request operationRequest) (operationResul
 		}
 	}
 
-	return jsonResult(http.StatusOK, response), nil
+	return route.JSON(http.StatusOK, response), nil
 }

@@ -15,6 +15,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -31,8 +32,8 @@ type examExportsHandlers struct {
 	submission bool
 }
 
-func examExportsResource(app ExamExportsApplication) apiResource {
-	var routes []endpoint
+func examExportsResource(app ExamExportsApplication) route.Resource {
+	var routes []route.Endpoint
 	for _, submission := range []bool{false, true} {
 		h := examExportsHandlers{app: app, submission: submission}
 		base := "/exams/{exam_id}/sittings/{exam_sitting_id}"
@@ -43,11 +44,11 @@ func examExportsResource(app ExamExportsApplication) apiResource {
 		collection := base + "/exports"
 		member := base + "/exports/{exam_export_id}"
 		content := base + "/exports/{exam_export_id}/content"
-		create := endpoint{
+		create := route.Endpoint{
 			Method:      http.MethodPost,
 			Path:        collection,
-			Auth:        AuthSessionRequired,
-			Idempotency: IdempotencyRequired,
+			Auth:        route.AuthSessionRequired,
+			Idempotency: route.IdempotencyRequired,
 			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -78,10 +79,10 @@ func examExportsResource(app ExamExportsApplication) apiResource {
 		routes = append(
 			routes,
 			create,
-			endpoint{
+			route.Endpoint{
 				Method: http.MethodGet,
 				Path:   member,
-				Auth:   AuthSessionRequired,
+				Auth:   route.AuthSessionRequired,
 				Errors: []string{
 					"authorization.request.invalid",
 					"authorization.unavailable",
@@ -95,12 +96,12 @@ func examExportsResource(app ExamExportsApplication) apiResource {
 				},
 				Handle: h.get,
 			},
-			endpoint{
+			route.Endpoint{
 				Method:       http.MethodGet,
 				Path:         content,
-				Auth:         AuthSessionRequired,
+				Auth:         route.AuthSessionRequired,
 				ProtocolName: protocol,
-				ProtocolKind: RouteProtocolBinaryDownload,
+				ProtocolKind: route.ProtocolBinaryDownload,
 				Errors: []string{
 					"authorization.request.invalid",
 					"authorization.unavailable",
@@ -119,7 +120,7 @@ func examExportsResource(app ExamExportsApplication) apiResource {
 		)
 	}
 
-	return newResource("exam-exports", routes...)
+	return route.NewResource("exam-exports", routes...)
 }
 
 type createExamExportRequest struct {
@@ -180,7 +181,7 @@ func exportResponse(e *model.ExamExport) examExportResponse {
 	return r
 }
 
-func (h examExportsHandlers) scope(request operationRequest) (model.RetentionHoldScope, error) {
+func (h examExportsHandlers) scope(request route.Request) (model.RetentionHoldScope, error) {
 	if h.submission {
 		return recordsSubmissionScope(request)
 	}
@@ -188,27 +189,27 @@ func (h examExportsHandlers) scope(request operationRequest) (model.RetentionHol
 	return model.RetentionHoldScope{ExamID: examID, SittingID: sittingID}, err
 }
 
-func (h examExportsHandlers) query(request operationRequest) (exam.ExportQuery, error) {
+func (h examExportsHandlers) query(request route.Request) (exam.ExportQuery, error) {
 	scope, err := h.scope(request)
 	if err != nil {
 		return exam.ExportQuery{}, err
 	}
-	id, err := pathID[model.ExamExportID](request, "exam_export_id")
+	id, err := route.PathID[model.ExamExportID](request, "exam_export_id")
 	if err != nil {
 		return exam.ExportQuery{}, err
 	}
 	return exam.ExportQuery{Scope: scope, ExportID: id}, nil
 }
 
-func (h examExportsHandlers) create(request operationRequest) (operationResult, error) {
+func (h examExportsHandlers) create(request route.Request) (route.Result, error) {
 	scope, err := h.scope(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body createExamExportRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
 	categories := slices.Clone(body.Categories)
@@ -216,51 +217,51 @@ func (h examExportsHandlers) create(request operationRequest) (operationResult, 
 		categories[0], categories[1] = categories[1], categories[0]
 	}
 	if !model.ValidExamExportCategories(categories) {
-		return operationResult{}, invalidRequestError(errors.New("select distinct work and/or integrity categories"))
+		return route.Result{}, route.InvalidRequest(errors.New("select distinct work and/or integrity categories"))
 	}
 
-	value, err := h.app.CreateExamExport(request.context, request.invocation(), exam.CreateExportCommand{
+	value, err := h.app.CreateExamExport(request.Context, request.Invocation(), exam.CreateExportCommand{
 		Scope:          scope,
 		Categories:     categories,
-		IdempotencyKey: request.idempotencyKey,
+		IdempotencyKey: request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if value.Validate() != nil || value.Scope != scope {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 
-	return jsonResult(http.StatusAccepted, exportResponse(value)).withHeaders(privateNoStoreHeaders()), nil
+	return route.JSON(http.StatusAccepted, exportResponse(value)).WithHeaders(privateNoStoreHeaders()), nil
 }
 
-func (h examExportsHandlers) get(request operationRequest) (operationResult, error) {
+func (h examExportsHandlers) get(request route.Request) (route.Result, error) {
 	query, err := h.query(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	value, err := h.app.GetExamExport(request.context, request.invocation(), query)
+	value, err := h.app.GetExamExport(request.Context, request.Invocation(), query)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if value.Validate() != nil || value.ID != query.ExportID || value.Scope != query.Scope {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
-	return jsonResult(http.StatusOK, exportResponse(value)).withHeaders(privateNoStoreHeaders()), nil
+	return route.JSON(http.StatusOK, exportResponse(value)).WithHeaders(privateNoStoreHeaders()), nil
 }
 
-func (h examExportsHandlers) open(request operationRequest) (protocolResult, error) {
+func (h examExportsHandlers) open(request route.Request) (route.ProtocolResult, error) {
 	query, err := h.query(request)
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
 
-	opened, err := h.app.OpenExamExport(request.context, request.invocation(), query)
+	opened, err := h.app.OpenExamExport(request.Context, request.Invocation(), query)
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
 	if opened == nil {
-		return protocolResult{}, errUnpresentableResult
+		return route.ProtocolResult{}, route.ErrUnpresentable
 	}
 
 	if opened.Export.Validate() != nil ||
@@ -271,12 +272,12 @@ func (h examExportsHandlers) open(request operationRequest) (protocolResult, err
 		if opened.Body != nil {
 			_ = opened.Body.Close()
 		}
-		return protocolResult{}, errUnpresentableResult
+		return route.ProtocolResult{}, route.ErrUnpresentable
 	}
 
 	headers := privateNoStoreHeaders()
 	headers.Set("Content-Type", "application/zip")
 	headers.Set("Content-Disposition", `attachment; filename="exam-export-`+query.ExportID.String()+`.zip"`)
 	headers.Set("ETag", `"`+opened.Export.ArchiveSHA256+`"`)
-	return binaryDownloadProtocolResult(opened.Body, opened.Export.ArchiveSizeBytes).withHeaders(headers), nil
+	return route.BinaryDownload(opened.Body, opened.Export.ArchiveSizeBytes).WithHeaders(headers), nil
 }

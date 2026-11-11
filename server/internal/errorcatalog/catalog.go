@@ -245,7 +245,7 @@ func (c *Catalog) RenderHTTPMapping() []byte {
 func (c *Catalog) renderHTTPMapping() []byte {
 	var out bytes.Buffer
 	out.WriteString(header)
-	out.WriteString("package httpapi\n\nimport \"net/http\"\n\n")
+	out.WriteString("package route\n\nimport \"net/http\"\n\n")
 	out.WriteString("// applicationErrorMappings is the exhaustive HTTP status table for public\n")
 	out.WriteString("// application and kernel error codes, generated from error_catalog.yaml.\n")
 	out.WriteString("var applicationErrorMappings = map[string]applicationErrorMapping{\n")

@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -22,14 +23,14 @@ type resetUserMFARequest struct {
 	VerificationReference string `json:"verification_reference"`
 }
 
-func mfaAdministrationResource(app *identity.Service) apiResource {
+func mfaAdministrationResource(app *identity.Service) route.Resource {
 	h := mfaAdministrationHandlers{app: app}
-	return newResource(
+	return route.NewResource(
 		"mfa-administration",
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/users/{user_id}/mfa/reset",
-			Auth:   AuthStrongRecentSessionRequired,
+			Auth:   route.AuthStrongRecentSessionRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -49,25 +50,25 @@ func mfaAdministrationResource(app *identity.Service) apiResource {
 		},
 	)
 }
-func (h mfaAdministrationHandlers) reset(request operationRequest) (operationResult, error) {
-	userID, err := pathID[model.UserID](request, "user_id")
+func (h mfaAdministrationHandlers) reset(request route.Request) (route.Result, error) {
+	userID, err := route.PathID[model.UserID](request, "user_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body resetUserMFARequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
-	if err := h.app.ResetUserMFA(request.context, request.invocation(), identity.ResetUserMFACommand{
+	if err := h.app.ResetUserMFA(request.Context, request.Invocation(), identity.ResetUserMFACommand{
 		UserID:                userID,
 		IdentityVerified:      body.IdentityVerified,
 		Reason:                body.Reason,
 		VerificationReference: body.VerificationReference,
 	}); err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return noContentResult().withHeaders(noStoreHeaders()), nil
+	return route.NoContent().WithHeaders(noStoreHeaders()), nil
 }

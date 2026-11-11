@@ -14,6 +14,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -36,78 +37,78 @@ type createProgrammeRequest struct {
 }
 
 type updateProgrammeRequest struct {
-	ExpectedRevision Optional[int64]  `json:"expected_revision"`
-	Name             Optional[string] `json:"name"`
-	DisplayName      Optional[string] `json:"display_name"`
-	Description      Optional[string] `json:"description"`
+	ExpectedRevision route.Optional[int64]  `json:"expected_revision"`
+	Name             route.Optional[string] `json:"name"`
+	DisplayName      route.Optional[string] `json:"display_name"`
+	Description      route.Optional[string] `json:"description"`
 }
 
 type programmeHandlers struct {
 	app ProgrammeApplication
 }
 
-func programmeResource(app ProgrammeApplication) apiResource {
+func programmeResource(app ProgrammeApplication) route.Resource {
 	h := programmeHandlers{app: app}
 	collection := "/academic-units/{academic_unit_id}/programmes"
 	member := "/programmes/{programme_id}"
-	return newResource(
+	return route.NewResource(
 		"programmes",
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   collection,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: academicReadErrorCodes("request.invalid", "resource.not_found"),
 			Handle: h.list,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   collection,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: academicMutationErrorCodes("request.invalid", "resource.not_found", "programme.invalid", "programme.conflict"),
 			Handle: h.create,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   member,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: academicReadErrorCodes("request.invalid", "resource.not_found"),
 			Handle: h.get,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPatch,
 			Path:   member,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: academicMutationErrorCodes("request.invalid", "resource.not_found", "programme.invalid", "programme.conflict"),
 			Handle: h.patch,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodDelete,
 			Path:   member,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: academicMutationErrorCodes("request.invalid", "resource.not_found", "programme.conflict"),
 			Handle: h.archive,
 		},
 	)
 }
 
-func (h programmeHandlers) list(request operationRequest) (operationResult, error) {
-	unitID, err := pathID[model.AcademicUnitID](request, "academic_unit_id")
+func (h programmeHandlers) list(request route.Request) (route.Result, error) {
+	unitID, err := route.PathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	pageQuery, err := request.academicNamePageQuery()
+	pageQuery, err := academicNamePageQuery(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	page, err := h.app.ListProgrammes(
-		request.context,
-		request.invocation(),
-		academic.ListProgrammesQuery{AcademicUnitID: unitID, Query: request.http.URL.Query().Get("q"), NameQuery: pageQuery},
+		request.Context,
+		request.Invocation(),
+		academic.ListProgrammesQuery{AcademicUnitID: unitID, Query: request.HTTP.URL.Query().Get("q"), NameQuery: pageQuery},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	return academicNameListResult(page, programmeResponseFromModel, func(programme *model.Programme) (string, string) {
@@ -115,64 +116,64 @@ func (h programmeHandlers) list(request operationRequest) (operationResult, erro
 	})
 }
 
-func (h programmeHandlers) create(request operationRequest) (operationResult, error) {
-	unitID, err := pathID[model.AcademicUnitID](request, "academic_unit_id")
+func (h programmeHandlers) create(request route.Request) (route.Result, error) {
+	unitID, err := route.PathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body createProgrammeRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
 	saved, err := h.app.CreateProgramme(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		academic.CreateProgrammeCommand{AcademicUnitID: unitID, Name: body.Name, DisplayName: body.DisplayName, Description: body.Description},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusCreated, programmeResponseFromModel(saved)), nil
+	return route.JSON(http.StatusCreated, programmeResponseFromModel(saved)), nil
 }
 
-func (h programmeHandlers) get(request operationRequest) (operationResult, error) {
-	id, err := pathID[model.ProgrammeID](request, "programme_id")
+func (h programmeHandlers) get(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.ProgrammeID](request, "programme_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	programme, err := h.app.GetProgramme(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		id,
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, programmeResponseFromModel(programme)), nil
+	return route.JSON(http.StatusOK, programmeResponseFromModel(programme)), nil
 }
 
-func (h programmeHandlers) patch(request operationRequest) (operationResult, error) {
-	id, err := pathID[model.ProgrammeID](request, "programme_id")
+func (h programmeHandlers) patch(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.ProgrammeID](request, "programme_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	var body updateProgrammeRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 	if err := validateAcademicRevision(body.ExpectedRevision); err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	programme, err := h.app.UpdateProgramme(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		academic.UpdateProgrammeCommand{
 			ExpectedRevision: body.ExpectedRevision.ValuePointer(),
 			ID:               id,
@@ -182,33 +183,33 @@ func (h programmeHandlers) patch(request operationRequest) (operationResult, err
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, programmeResponseFromModel(programme)), nil
+	return route.JSON(http.StatusOK, programmeResponseFromModel(programme)), nil
 }
 
-func (h programmeHandlers) archive(request operationRequest) (operationResult, error) {
-	id, err := pathID[model.ProgrammeID](request, "programme_id")
+func (h programmeHandlers) archive(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.ProgrammeID](request, "programme_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	expectedRevision, err := request.academicRevision()
+	expectedRevision, err := academicRevision(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	err = h.app.ArchiveProgramme(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		academic.ArchiveProgrammeCommand{ExpectedRevision: expectedRevision, ID: id},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return noContentResult(), nil
+	return route.NoContent(), nil
 }
 
 func programmeResponseFromModel(programme *model.Programme) programmeResponse {

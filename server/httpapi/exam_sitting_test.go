@@ -25,13 +25,14 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
 func TestExamSittingHTTPScheduleUsesStrictIdempotentCommandAndSafeResponse(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamSittingHTTPFake(t)
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
 	body := `{"exam_revision_id":"` + fake.sitting.ExamRevisionID.String() + `","class_id":"` + fake.sitting.ClassID.String() + `","scheduled_start_at":"2026-08-15T12:30:00+02:00","scheduled_end_at":"2026-08-15T14:30:00+02:00"}`
@@ -78,7 +79,7 @@ func TestExamSittingHTTPMutationBodiesAreClosedDuplicateFreeAndPresenceAware(t *
 		}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			logger, _ := newTestLogger(t)
+			logger, _ := routetest.NewLogger(t)
 			fake := newExamSittingHTTPFake(t)
 			httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
 			request := newJSONRequest(http.MethodPost, examSittingCollectionPath(fake.sitting.ExamID), strings.NewReader(test.body(fake)))
@@ -91,7 +92,7 @@ func TestExamSittingHTTPMutationBodiesAreClosedDuplicateFreeAndPresenceAware(t *
 		})
 	}
 
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamSittingHTTPFake(t)
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
 	path := examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID)
@@ -123,7 +124,7 @@ func TestExamSittingHTTPMutationBodiesAreClosedDuplicateFreeAndPresenceAware(t *
 
 func TestExamSittingHTTPCancelKeepsPrivateReasonOutOfResponse(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamSittingHTTPFake(t)
 	canceled := *fake.sitting
 	canceled.State = model.ExamSittingCanceled
@@ -177,7 +178,7 @@ func TestExamSittingHTTPLifecycleCommandsAreStrictIdempotentAndKeepReasonsPrivat
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			logger, _ := newTestLogger(t)
+			logger, _ := routetest.NewLogger(t)
 			fake := newExamSittingHTTPFake(t)
 			httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
 			request := newJSONRequest(http.MethodPost, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID)+test.suffix, strings.NewReader(test.body))
@@ -205,7 +206,7 @@ func TestExamSittingHTTPLifecycleBodiesRejectUnknownDuplicateAndInvalidValues(t 
 		name, body := name, body
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			logger, _ := newTestLogger(t)
+			logger, _ := routetest.NewLogger(t)
 			fake := newExamSittingHTTPFake(t)
 			httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
 			request := newJSONRequest(http.MethodPost, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID)+"/pause", strings.NewReader(body))
@@ -221,7 +222,7 @@ func TestExamSittingHTTPLifecycleBodiesRejectUnknownDuplicateAndInvalidValues(t 
 
 func TestExamSittingHTTPListNormalizesFiltersAndUsesVersionedDescendingTupleCursor(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamSittingHTTPFake(t)
 	older := *fake.sitting
 	older.ID = model.NewExamSittingID()
@@ -267,7 +268,7 @@ func TestExamSittingHTTPListNormalizesFiltersAndUsesVersionedDescendingTupleCurs
 
 func TestExamSittingHTTPListRejectsPartialOverlapAndMalformedCursor(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamSittingHTTPFake(t)
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
 	unsupported, _ := json.Marshal(map[string]any{"version": 2, "start_at": fake.sitting.ScheduledStartAt.Format(time.RFC3339Nano), "id": fake.sitting.ID.String()})
@@ -291,7 +292,7 @@ func TestExamSittingHTTPListRejectsPartialOverlapAndMalformedCursor(t *testing.T
 
 func TestExamSittingHTTPGetUsesBothExactIdentities(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamSittingHTTPFake(t)
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
 	request := httptest.NewRequest(http.MethodGet, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID), nil)
@@ -305,7 +306,7 @@ func TestExamSittingHTTPGetUsesBothExactIdentities(t *testing.T) {
 
 func TestExamSittingHTTPListsNoShowsWithOpaqueUserCursor(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamSittingHTTPFake(t)
 	first, second := model.NewUserID(), model.NewUserID()
 	fake.noShowPage = sitting.NoShowPage{Items: []store.ExamSittingNoShow{

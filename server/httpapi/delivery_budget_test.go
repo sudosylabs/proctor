@@ -19,6 +19,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -48,7 +49,7 @@ func testHTTPDeliveryBudget(part model.AttemptParticipationID) *model.DeliveryBu
 }
 func TestDeliveryBudgetHTTPRequiresOwnedSelectorAndLiveStopFences(t *testing.T) {
 	f := &deliveryBudgetHTTPFake{examAttemptHTTPFake: newExamAttemptHTTPFake(t)}
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	api := newFocusedResourceAPI(t, logger, f, deliveryBudgetResource(f))
 	base := "/api/v1/exam-attempts/" + f.attempt.ID.String() + "/delivery-limits"
 	request := f.candidateRequest(http.MethodGet, base+"?participation_id="+f.participation.ID.String())

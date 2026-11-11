@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -149,7 +150,7 @@ func presenceAwareType(goType reflect.Type) bool {
 }
 
 func isOptionalType(goType reflect.Type) bool {
-	return goType.PkgPath() == reflect.TypeOf(Optional[string]{}).PkgPath() &&
+	return goType.PkgPath() == reflect.TypeOf(route.Optional[string]{}).PkgPath() &&
 		strings.HasPrefix(goType.Name(), "Optional[")
 }
 
@@ -679,7 +680,7 @@ func evaluateWireTimestampAgreement(
 	for goType.Kind() == reflect.Pointer {
 		goType = goType.Elem()
 	}
-	if goType.PkgPath() == reflect.TypeOf(Optional[string]{}).PkgPath() && strings.HasPrefix(goType.Name(), "Optional[") {
+	if goType.PkgPath() == reflect.TypeOf(route.Optional[string]{}).PkgPath() && strings.HasPrefix(goType.Name(), "Optional[") {
 		goType = goType.Field(0).Type
 	}
 	if goType != reflect.TypeOf(time.Time{}) && goType.Kind() != reflect.String {

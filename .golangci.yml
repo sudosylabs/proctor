@@ -141,6 +141,13 @@ linters:
       - linters:
           - revive
         text: "exported type \\w+(Command|Query) should have comment"
+      # The browser credential cookies are Secure when the public URL is
+      # HTTPS and HttpOnly except the CSRF token a client must read, so both
+      # attributes are variables gosec cannot see through.
+      - linters:
+          - gosec
+        path: "^httpapi/route/cookies\\.go$"
+        text: "G124"
       # A line may run long only where breaking it would change its text:
       # a comment, or one long string literal. Tests, conformance suites,
       # seed fixtures and generated code are not held to the limit.

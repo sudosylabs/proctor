@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -24,12 +25,12 @@ type academicNameCursor struct {
 	ID   string `json:"id"`
 }
 
-func academicNameCursorSpec() opaqueCursorSpec[academicNameCursor] {
-	return opaqueCursorSpec[academicNameCursor]{
-		label:                "academic",
-		maximumEncodedLength: 1024,
-		members:              []string{"name", "id"},
-		validate: func(cursor academicNameCursor) error {
+func academicNameCursorSpec() route.CursorSpec[academicNameCursor] {
+	return route.CursorSpec[academicNameCursor]{
+		Label:                "academic",
+		MaximumEncodedLength: 1024,
+		Members:              []string{"name", "id"},
+		Validate: func(cursor academicNameCursor) error {
 			if cursor.Name == "" || len(cursor.Name) > 256 || !utf8.ValidString(cursor.Name) || !model.IsValidOpaqueID(cursor.ID) {
 				return errors.New("invalid academic keyset")
 			}
@@ -40,12 +41,12 @@ func academicNameCursorSpec() opaqueCursorSpec[academicNameCursor] {
 
 // academicNamePageQuery parses the page parameters of a name-ordered
 // academic listing.
-func (r operationRequest) academicNamePageQuery() (paging.NameQuery, error) {
-	page, err := r.pageRequest()
+func academicNamePageQuery(request route.Request) (paging.NameQuery, error) {
+	page, err := request.Page()
 	if err != nil {
 		return paging.NameQuery{}, err
 	}
-	cursor, present, err := decodePageCursor(page, academicNameCursorSpec())
+	cursor, present, err := route.DecodePageCursor(page, academicNameCursorSpec())
 	if err != nil {
 		return paging.NameQuery{}, err
 	}
@@ -57,15 +58,15 @@ func (r operationRequest) academicNamePageQuery() (paging.NameQuery, error) {
 }
 
 // academicNameListResult presents one name-ordered page.
-func academicNameListResult[I, T any](page paging.Page[I], present func(I) T, key func(I) (string, string)) (operationResult, error) {
-	response, err := newListResponse(page.Items, page.HasMore, present, func(last I) (string, error) {
+func academicNameListResult[I, T any](page paging.Page[I], present func(I) T, key func(I) (string, string)) (route.Result, error) {
+	response, err := route.NewList(page.Items, page.HasMore, present, func(last I) (string, error) {
 		name, id := key(last)
-		return encodeOpaqueCursor(academicNameCursor{Name: name, ID: id}, academicNameCursorSpec())
+		return route.EncodeCursor(academicNameCursor{Name: name, ID: id}, academicNameCursorSpec())
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, response), nil
+	return route.JSON(http.StatusOK, response), nil
 }
 
 // academicPeriodCursor continues the Academic Period listing ordered by start,
@@ -76,12 +77,12 @@ type academicPeriodCursor struct {
 	ID      string `json:"id"`
 }
 
-func academicPeriodCursorSpec() opaqueCursorSpec[academicPeriodCursor] {
-	return opaqueCursorSpec[academicPeriodCursor]{
-		label:                "academic period",
-		maximumEncodedLength: 1024,
-		members:              []string{"start_at", "name", "id"},
-		validate: func(cursor academicPeriodCursor) error {
+func academicPeriodCursorSpec() route.CursorSpec[academicPeriodCursor] {
+	return route.CursorSpec[academicPeriodCursor]{
+		Label:                "academic period",
+		MaximumEncodedLength: 1024,
+		Members:              []string{"start_at", "name", "id"},
+		Validate: func(cursor academicPeriodCursor) error {
 			startAt, err := model.ParseRFC3339(cursor.StartAt)
 			if err != nil ||
 				startAt.IsZero() ||

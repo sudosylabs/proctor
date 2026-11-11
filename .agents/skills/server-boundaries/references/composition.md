@@ -17,7 +17,7 @@ other. A wrapper that only measures a port is not an adapter: it lives in
 `metrics` as `metrics.WrapCache`, `WrapMailer`, `WrapVFS` or `WrapCluster`,
 and the root applies it while acquiring infrastructure, before Platform
 accepts ownership. A metrics or tracing recorder that needs an application
-type (`job.Recorder`, `mail.DeliveryRecorder`, `httpapi.Tracing`) stays in the
+type (`job.Recorder`, `mail.DeliveryRecorder`, `route.Tracing`) stays in the
 root, because `metrics` and `tracing` may not import application packages.
 
 Offline host commands that only open the configuration or the database live

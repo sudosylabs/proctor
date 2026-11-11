@@ -21,6 +21,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -128,7 +129,7 @@ func TestOnboardingImportUploadForwardsTheFileNameAndReturnsIt(t *testing.T) {
 	require.Nil(t, fake.uploadCommand)
 }
 
-func onboardingImportListAPI(t *testing.T, fake *recordingOnboardingImportApplication) *API {
+func onboardingImportListAPI(t *testing.T, fake *recordingOnboardingImportApplication) *route.API {
 	t.Helper()
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),

@@ -26,13 +26,14 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/correction"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
 func TestExamSittingCorrectionHTTPStagesResourceContentAndReturnsOnlySafeAuthoritativeMetadata(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamSittingCorrectionHTTPFake()
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingCorrectionResource(fake))
 	raw := []byte("corrected reference")
@@ -81,7 +82,7 @@ func TestExamSittingCorrectionHTTPStageMetadataIsStrictAndExplicitZeroIsValid(t 
 		name, metadata := name, metadata
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			logger, _ := newTestLogger(t)
+			logger, _ := routetest.NewLogger(t)
 			fake := newExamSittingCorrectionHTTPFake()
 			metadata = strings.ReplaceAll(metadata, "BASE", fake.baseRevisionID.String())
 			metadata = strings.ReplaceAll(metadata, "RESOURCE", model.NewExamResourceID().String())
@@ -99,7 +100,7 @@ func TestExamSittingCorrectionHTTPStageMetadataIsStrictAndExplicitZeroIsValid(t 
 		})
 	}
 
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamSittingCorrectionHTTPFake()
 	fake.stageResult.Size = 0
 	fake.stageResult.SHA256 = fmt.Sprintf("%x", sha256.Sum256(nil))
@@ -120,7 +121,7 @@ func TestExamSittingCorrectionHTTPStageMetadataIsStrictAndExplicitZeroIsValid(t 
 
 func TestExamSittingCorrectionHTTPAppliesCompleteOrderedManifestAndKeepsReasonPrivate(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamSittingCorrectionHTTPFake()
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingCorrectionResource(fake))
 	first, second := model.NewExamResourceID(), model.NewExamResourceID()
@@ -162,7 +163,7 @@ func TestExamSittingCorrectionHTTPAppliesCompleteOrderedManifestAndKeepsReasonPr
 
 func TestExamSittingCorrectionHTTPRejectsPaddedPrivateReasonBeforeApplication(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamSittingCorrectionHTTPFake()
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingCorrectionResource(fake))
 	body := fmt.Sprintf(`{"expected_revision":7,"expected_current_revision_id":"%s","candidate_summary":"A correction was made.","affected_capabilities":["browser","submission","workspace"],"acknowledgement_required":false,"reason":" padded ","resources":[]}`, fake.baseRevisionID)
@@ -178,7 +179,7 @@ func TestExamSittingCorrectionHTTPRejectsPaddedPrivateReasonBeforeApplication(t 
 
 func TestExamSittingCorrectionHTTPOmittedInstructionsPreservesCurrentValue(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamSittingCorrectionHTTPFake()
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingCorrectionResource(fake))
 	body := fmt.Sprintf(`{"expected_revision":7,"expected_current_revision_id":"%s","candidate_summary":"The resource list was corrected.","affected_capabilities":["browser","submission","workspace"],"acknowledgement_required":false,"reason":"Resource-only correction","resources":[]}`, fake.baseRevisionID)

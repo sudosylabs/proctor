@@ -25,9 +25,10 @@ import (
 // wireTransportPackages own the HTTP and realtime wire shapes. Every struct
 // with a json tag declared in them is a transport DTO.
 var wireTransportPackages = map[string]bool{
-	serverModule + "/httpapi":      true,
-	serverModule + "/websocket":    true,
-	serverModule + "/app/realtime": true,
+	serverModule + "/httpapi":       true,
+	serverModule + "/httpapi/route": true,
+	serverModule + "/websocket":     true,
+	serverModule + "/app/realtime":  true,
 }
 
 // wireSnakeCase is the member grammar: lowercase snake_case words, so an
@@ -291,7 +292,7 @@ func conformingInstantName(name string) bool {
 }
 
 // wireTimestampValue strips pointers and single-argument generic wrappers
-// such as httpapi.Optional[T], which encode as their value.
+// such as route.Optional[T], which encode as their value.
 func wireTimestampValue(goType types.Type) types.Type {
 	for {
 		goType = types.Unalias(goType)

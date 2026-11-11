@@ -22,6 +22,8 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/exam/review"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -235,9 +237,9 @@ func newExamIntegrityReviewHTTPFake(t *testing.T) *examIntegrityReviewHTTPFake {
 		evidencePage: store.ExamIntegrityEvidencePage{Items: []model.IntegrityEvidence{*evidence}}}
 }
 
-func newExamIntegrityReviewFocusedAPI(t *testing.T, fake *examIntegrityReviewHTTPFake) *API {
+func newExamIntegrityReviewFocusedAPI(t *testing.T, fake *examIntegrityReviewHTTPFake) *route.API {
 	t.Helper()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	return newFocusedResourceAPI(t, logger, fake, examIntegrityReviewResource(fake))
 }
 

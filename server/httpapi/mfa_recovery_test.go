@@ -19,6 +19,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -31,9 +32,9 @@ func (recoveryMFAHTTPFake) SetupMFA(context.Context, invocation.Invocation, iden
 	return &identity.MFASetup{Secret: "once-only", ProvisioningURI: "otpauth://totp/Proctor", ExpiresAt: time.Now().Add(time.Minute)}, nil
 }
 func TestMFARestrictedSessionOnlyReachesExplicitRecoveryRoutes(t *testing.T) {
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "oidc", AuthenticationProviderID: "campus", ExternalIdentityID: model.NewExternalIdentityID(), AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now(), AuthenticationGeneration: 1, MFARecoveryRequired: true}
-	api := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, mfaResource(recoveryMFAHTTPFake{}))
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, mfaResource(recoveryMFAHTTPFake{}))
 	for _, test := range []struct {
 		path, method string
 		status       int
@@ -74,9 +75,9 @@ func (enrollmentMFAHTTPFake) ChallengeMFA(context.Context, invocation.Invocation
 // routes and also reaches the second-factor challenge, which can satisfy the
 // policy for a User who already has a second factor; nothing else.
 func TestMFAEnrollmentSessionReachesRecoveryRoutesAndChallenge(t *testing.T) {
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "oidc", AuthenticationProviderID: "campus", ExternalIdentityID: model.NewExternalIdentityID(), AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now(), MFAEnrollmentRequired: true}
-	api := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, mfaResource(enrollmentMFAHTTPFake{}))
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, mfaResource(enrollmentMFAHTTPFake{}))
 	for _, test := range []struct {
 		path, method string
 		status       int
@@ -98,40 +99,6 @@ func TestMFAEnrollmentSessionReachesRecoveryRoutesAndChallenge(t *testing.T) {
 	}
 }
 
-func TestRestrictedPrincipalAssuranceByRoute(t *testing.T) {
-	// Stored instants carry microseconds; Linux clocks also report nanoseconds.
-	now := model.TimeUTC(time.Now())
-	base := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
-		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
-		ClientType: model.SessionClientWeb, AuthenticatedAt: now}
-	enrollment, recovery := base, base
-	enrollment.MFAEnrollmentRequired = true
-	recovery.MFARecoveryRequired, recovery.AuthenticationGeneration = true, 1
-	for _, test := range []struct {
-		name        string
-		principal   model.Principal
-		requirement AuthRequirement
-		admitted    bool
-	}{
-		{"ordinary session reaches the challenge", base, AuthMFAEnrollmentSessionRequired, true},
-		{"enrollment reaches the challenge", enrollment, AuthMFAEnrollmentSessionRequired, true},
-		{"enrollment reaches recovery routes", enrollment, AuthMFARecoverySessionRequired, true},
-		{"enrollment is refused ordinary routes", enrollment, AuthSessionRequired, false},
-		{"enrollment is refused principal routes", enrollment, AuthPrincipalRequired, false},
-		{"recovery is refused the challenge", recovery, AuthMFAEnrollmentSessionRequired, false},
-		{"recovery reaches recovery routes", recovery, AuthRecentMFARecoverySessionRequired, true},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			err := requirePrincipalAssurance(test.principal, test.requirement, now, time.Hour)
-			if test.admitted {
-				require.NoError(t, err)
-				return
-			}
-			require.Equal(t, "authentication.token_invalid", applicationErrorCode(err))
-		})
-	}
-}
-
 type statusMFAHTTPFake struct {
 	MFA
 	status *identity.MFAStatus
@@ -142,10 +109,10 @@ func (f statusMFAHTTPFake) GetMFAStatus(context.Context, invocation.Invocation) 
 }
 
 func TestMFAStatusResponseMapsPasswordRecoveryAndRecentWindow(t *testing.T) {
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor, ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now()}
 	read := func(status *identity.MFAStatus) string {
-		api := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, mfaResource(statusMFAHTTPFake{status: status}))
+		api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, mfaResource(statusMFAHTTPFake{status: status}))
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/me/mfa", nil)
 		request.Header.Set("Authorization", "Bearer status")
 		response := httptest.NewRecorder()

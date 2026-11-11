@@ -19,6 +19,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/search"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -37,7 +38,7 @@ func (a *searchHTTPApplication) Search(_ context.Context, _ invocation.Invocatio
 
 func TestSearchResourcePresentsTypedItemsWithoutEmail(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password",
@@ -50,7 +51,7 @@ func TestSearchResourcePresentsTypedItemsWithoutEmail(t *testing.T) {
 	application := &searchHTTPApplication{result: search.Result{
 		Exams: []store.ExamSummary{examSummary}, Classes: []*model.Class{class}, Users: []*model.User{user},
 	}}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, searchResource(application))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, searchResource(application))
 	serve := func(target string) *httptest.ResponseRecorder {
 		request := httptest.NewRequestWithContext(context.Background(), http.MethodGet, target, nil)
 		request.Header.Set("Authorization", "Bearer credential")

@@ -26,13 +26,14 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/workspace"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
 func TestExamStarterWorkspaceHTTPFileUploadUsesMetadataFirstStreaming(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamStarterWorkspaceHTTPFake(testExamHTTPPrincipal())
 	api := newFocusedResourceAPI(t, logger, fake, examStarterWorkspaceResource(fake))
 	raw := []byte("package main\n")
@@ -56,7 +57,7 @@ func TestExamStarterWorkspaceHTTPFileUploadUsesMetadataFirstStreaming(t *testing
 
 func TestExamStarterWorkspaceHTTPFileUploadRequiresSizeButAcceptsExplicitZero(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamStarterWorkspaceHTTPFake(testExamHTTPPrincipal())
 	api := newFocusedResourceAPI(t, logger, fake, examStarterWorkspaceResource(fake))
 	path := "/api/v1/exams/" + fake.examID.String() + "/draft/starter-workspace/files"
@@ -84,7 +85,7 @@ func TestExamStarterWorkspaceHTTPFileUploadRequiresSizeButAcceptsExplicitZero(t 
 
 func TestExamStarterWorkspaceHTTPFileReplacementRequiresSize(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamStarterWorkspaceHTTPFake(testExamHTTPPrincipal())
 	api := newFocusedResourceAPI(t, logger, fake, examStarterWorkspaceResource(fake))
 	path := "/api/v1/exams/" + fake.examID.String() + "/draft/starter-workspace/files/" + fake.entry.ID.String() + "/content"
@@ -101,7 +102,7 @@ func TestExamStarterWorkspaceHTTPFileReplacementRequiresSize(t *testing.T) {
 
 func TestExamStarterWorkspaceHTTPFileReplacementRequiresAndCarriesExpectedContentVersion(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamStarterWorkspaceHTTPFake(testExamHTTPPrincipal())
 	api := newFocusedResourceAPI(t, logger, fake, examStarterWorkspaceResource(fake))
 	path := "/api/v1/exams/" + fake.examID.String() + "/draft/starter-workspace/files/" + fake.entry.ID.String() + "/content"
@@ -130,7 +131,7 @@ func TestExamStarterWorkspaceHTTPFileReplacementRequiresAndCarriesExpectedConten
 
 func TestExamStarterWorkspaceHTTPDirectoryAndMoveUseStrictJSON(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamStarterWorkspaceHTTPFake(testExamHTTPPrincipal())
 	api := newFocusedResourceAPI(t, logger, fake, examStarterWorkspaceResource(fake))
 	base := "/api/v1/exams/" + fake.examID.String() + "/draft/starter-workspace"
@@ -154,7 +155,7 @@ func TestExamStarterWorkspaceHTTPDirectoryAndMoveUseStrictJSON(t *testing.T) {
 
 func TestExamStarterWorkspaceHTTPContentIsInlinePrivateAndConditional(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamStarterWorkspaceHTTPFake(testExamHTTPPrincipal())
 	api := newFocusedResourceAPI(t, logger, fake, examStarterWorkspaceResource(fake))
 	path := "/api/v1/exams/" + fake.examID.String() + "/draft/starter-workspace/files/" + fake.entry.ID.String() + "/content"
@@ -182,7 +183,7 @@ func TestExamStarterWorkspaceHTTPContentIsInlinePrivateAndConditional(t *testing
 
 func TestExamStarterWorkspaceHTTPRemoveReturnsNoContent(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamStarterWorkspaceHTTPFake(testExamHTTPPrincipal())
 	api := newFocusedResourceAPI(t, logger, fake, examStarterWorkspaceResource(fake))
 	path := "/api/v1/exams/" + fake.examID.String() + "/draft/starter-workspace/entries/" + fake.entry.ID.String()

@@ -18,6 +18,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -95,7 +96,7 @@ type mailDeliveryResponse struct {
 }
 
 // mailDeliveryListResponse is the collection envelope; the first page also
-// carries the total (see countedListResponse).
+// carries the total (see route.CountedList).
 type mailDeliveryListResponse struct {
 	Items             []mailDeliveryResponse `json:"items"`
 	NextCursor        string                 `json:"next_cursor,omitempty"`
@@ -136,20 +137,20 @@ type mailDeliveryCursor struct {
 
 type mailHandlers struct{ app MailApplication }
 
-func mailResource(application MailApplication) apiResource {
+func mailResource(application MailApplication) route.Resource {
 	h := mailHandlers{app: application}
-	return newResource("mail",
-		endpoint{
+	return route.NewResource("mail",
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/mail/keys",
-			Auth:   AuthStrongRecentSessionRequired,
+			Auth:   route.AuthStrongRecentSessionRequired,
 			Errors: []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "mail.unavailable", "resource.not_found"},
 			Handle: h.getKeyState,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/mail/rekey",
-			Auth:   AuthStrongRecentSessionRequired,
+			Auth:   route.AuthStrongRecentSessionRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -163,17 +164,17 @@ func mailResource(application MailApplication) apiResource {
 			},
 			Handle: h.startRekey,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/mail/rekey/{job_id}",
-			Auth:   AuthStrongRecentSessionRequired,
+			Auth:   route.AuthStrongRecentSessionRequired,
 			Errors: operatorReadErrorCodes("request.invalid", "resource.not_found", "mail.unavailable"),
 			Handle: h.getRekeyStatus,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/mail/test",
-			Auth:   AuthRecentSessionRequired,
+			Auth:   route.AuthRecentSessionRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -189,17 +190,17 @@ func mailResource(application MailApplication) apiResource {
 			},
 			Handle: h.sendTest,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/mail/metrics",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "mail.unavailable", "resource.not_found"},
 			Handle: h.getMetrics,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/mail/deliveries",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -211,37 +212,37 @@ func mailResource(application MailApplication) apiResource {
 			},
 			Handle: h.listDeliveries,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/mail/deliveries/{mail_delivery_id}",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: operatorReadErrorCodes("request.invalid", "resource.not_found", "mail.unavailable"),
 			Handle: h.getDelivery,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/mail/deliveries/{mail_delivery_id}/cancel",
-			Auth:   AuthRecentSessionRequired,
+			Auth:   route.AuthRecentSessionRequired,
 			Errors: operatorMutationErrorCodes("request.invalid", "resource.not_found", "mail.conflict", "mail.unavailable"),
 			Handle: h.cancelDelivery,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/mail/deliveries/{mail_delivery_id}/retry",
-			Auth:   AuthRecentSessionRequired,
+			Auth:   route.AuthRecentSessionRequired,
 			Errors: operatorMutationErrorCodes("request.invalid", "resource.not_found", "mail.conflict", "mail.unavailable"),
 			Handle: h.retryDelivery,
 		},
 	)
 }
 
-func (h mailHandlers) getKeyState(request operationRequest) (operationResult, error) {
+func (h mailHandlers) getKeyState(request route.Request) (route.Result, error) {
 	if h.app == nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
-	view, appErr := h.app.GetMailKeyState(request.context, request.invocation())
+	view, appErr := h.app.GetMailKeyState(request.Context, request.Invocation())
 	if appErr != nil {
-		return operationResult{}, appErr
+		return route.Result{}, appErr
 	}
 	response := mailKeyStateResponse{PrimaryKeyID: view.PrimaryKeyID,
 		RequiredPrimaryKeyID: view.RequiredPrimaryKeyID,
@@ -250,25 +251,25 @@ func (h mailHandlers) getKeyState(request operationRequest) (operationResult, er
 		response.Active = append(response.Active, mailPayloadKeyUsageResponse{KeyID: usage.KeyID,
 			ActiveReferences: usage.ActiveReferences})
 	}
-	return jsonResult(http.StatusOK, response), nil
+	return route.JSON(http.StatusOK, response), nil
 }
 
-func (h mailHandlers) startRekey(request operationRequest) (operationResult, error) {
+func (h mailHandlers) startRekey(request route.Request) (route.Result, error) {
 	if h.app == nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 
 	var body mailRekeyRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 
-	view, appErr := h.app.StartMailRekey(request.context, request.invocation(), body.RetiringKeyID)
+	view, appErr := h.app.StartMailRekey(request.Context, request.Invocation(), body.RetiringKeyID)
 	if appErr != nil {
-		return operationResult{}, appErr
+		return route.Result{}, appErr
 	}
 
-	return jsonResult(http.StatusAccepted, mailRekeyResponse{
+	return route.JSON(http.StatusAccepted, mailRekeyResponse{
 		JobID:         view.JobID.String(),
 		PrimaryKeyID:  view.PrimaryKeyID,
 		RetiringKeyID: view.RetiringKeyID,
@@ -276,19 +277,19 @@ func (h mailHandlers) startRekey(request operationRequest) (operationResult, err
 	}), nil
 }
 
-func (h mailHandlers) getRekeyStatus(request operationRequest) (operationResult, error) {
+func (h mailHandlers) getRekeyStatus(request route.Request) (route.Result, error) {
 	if h.app == nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 
-	raw, err := pathID[model.JobID](request, "job_id")
+	raw, err := route.PathID[model.JobID](request, "job_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	view, appErr := h.app.GetMailRekeyStatus(request.context, request.invocation(), raw)
+	view, appErr := h.app.GetMailRekeyStatus(request.Context, request.Invocation(), raw)
 	if appErr != nil {
-		return operationResult{}, appErr
+		return route.Result{}, appErr
 	}
 
 	response := mailRekeyStatusResponse{
@@ -319,17 +320,17 @@ func (h mailHandlers) getRekeyStatus(request operationRequest) (operationResult,
 		}
 	}
 
-	return jsonResult(http.StatusOK, response), nil
+	return route.JSON(http.StatusOK, response), nil
 }
 
-func (h mailHandlers) getMetrics(request operationRequest) (operationResult, error) {
+func (h mailHandlers) getMetrics(request route.Request) (route.Result, error) {
 	if h.app == nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 
-	snapshot, appErr := h.app.GetMailMetrics(request.context, request.invocation())
+	snapshot, appErr := h.app.GetMailMetrics(request.Context, request.Invocation())
 	if appErr != nil {
-		return operationResult{}, appErr
+		return route.Result{}, appErr
 	}
 
 	response := mailMetricsResponse{
@@ -361,54 +362,54 @@ func (h mailHandlers) getMetrics(request operationRequest) (operationResult, err
 		})
 	}
 
-	return jsonResult(http.StatusOK, response), nil
+	return route.JSON(http.StatusOK, response), nil
 }
 
-func (h mailHandlers) sendTest(request operationRequest) (operationResult, error) {
+func (h mailHandlers) sendTest(request route.Request) (route.Result, error) {
 	if h.app == nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
-	if request.http.Body != nil {
-		content, err := io.ReadAll(io.LimitReader(request.http.Body, 1))
+	if request.HTTP.Body != nil {
+		content, err := io.ReadAll(io.LimitReader(request.HTTP.Body, 1))
 		if err != nil || len(content) != 0 {
-			return operationResult{}, apperror.New("request.invalid")
+			return route.Result{}, apperror.New("request.invalid")
 		}
 	}
-	view, appErr := h.app.SendTestMail(request.context, request.invocation())
+	view, appErr := h.app.SendTestMail(request.Context, request.Invocation())
 	if appErr != nil {
-		return operationResult{}, appErr
+		return route.Result{}, appErr
 	}
-	return jsonResult(http.StatusAccepted, mailResponse(view)), nil
+	return route.JSON(http.StatusAccepted, mailResponse(view)), nil
 }
 
-func (h mailHandlers) getDelivery(request operationRequest) (operationResult, error) {
+func (h mailHandlers) getDelivery(request route.Request) (route.Result, error) {
 	if h.app == nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
-	raw, err := pathID[model.MailDeliveryID](request, "mail_delivery_id")
+	raw, err := route.PathID[model.MailDeliveryID](request, "mail_delivery_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	view, appErr := h.app.GetMailDelivery(request.context, request.invocation(), raw)
+	view, appErr := h.app.GetMailDelivery(request.Context, request.Invocation(), raw)
 	if appErr != nil {
-		return operationResult{}, appErr
+		return route.Result{}, appErr
 	}
-	return jsonResult(http.StatusOK, mailResponse(view)), nil
+	return route.JSON(http.StatusOK, mailResponse(view)), nil
 }
 
-func (h mailHandlers) listDeliveries(request operationRequest) (operationResult, error) {
+func (h mailHandlers) listDeliveries(request route.Request) (route.Result, error) {
 	if h.app == nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 
-	query, err := listMailDeliveriesQuery(request.http)
+	query, err := listMailDeliveriesQuery(request.HTTP)
 	if err != nil {
-		return operationResult{}, apperror.Invalid("request.invalid", "query")
+		return route.Result{}, apperror.Invalid("request.invalid", "query")
 	}
 
-	page, appErr := h.app.ListMailDeliveries(request.context, request.invocation(), query)
+	page, appErr := h.app.ListMailDeliveries(request.Context, request.Invocation(), query)
 	if appErr != nil {
-		return operationResult{}, appErr
+		return route.Result{}, appErr
 	}
 
 	response := mailDeliveryListResponse{Items: make([]mailDeliveryResponse, 0, len(page.Items))}
@@ -417,7 +418,7 @@ func (h mailHandlers) listDeliveries(request operationRequest) (operationResult,
 	}
 
 	if page.HasMore && len(page.Items) == 0 {
-		return operationResult{}, unpresentableResult(errors.New("mail delivery page made no progress"))
+		return route.Result{}, route.Unpresentable(errors.New("mail delivery page made no progress"))
 	}
 
 	if page.HasMore {
@@ -427,53 +428,53 @@ func (h mailHandlers) listDeliveries(request operationRequest) (operationResult,
 			ID:        last.ID.String(),
 		})
 		if err != nil {
-			return operationResult{}, unpresentableResult(err)
+			return route.Result{}, route.Unpresentable(err)
 		}
 	}
 
-	if response.Total, response.TotalIsLowerBound, err = pageTotalMembers(page.Total, !query.BeforeID.IsZero()); err != nil {
-		return operationResult{}, err
+	if response.Total, response.TotalIsLowerBound, err = route.PageTotal(page.Total, !query.BeforeID.IsZero()); err != nil {
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, response), nil
+	return route.JSON(http.StatusOK, response), nil
 }
 
-func (h mailHandlers) cancelDelivery(request operationRequest) (operationResult, error) {
+func (h mailHandlers) cancelDelivery(request route.Request) (route.Result, error) {
 	if h.app == nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 	return h.mutateDelivery(request, h.app.CancelMailDelivery)
 }
 
-func (h mailHandlers) retryDelivery(request operationRequest) (operationResult, error) {
+func (h mailHandlers) retryDelivery(request route.Request) (route.Result, error) {
 	if h.app == nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
 	return h.mutateDelivery(request, h.app.RetryMailDelivery)
 }
 
 func (h mailHandlers) mutateDelivery(
-	request operationRequest,
+	request route.Request,
 	mutate func(context.Context, invocation.Invocation, model.MailDeliveryID) (mail.DeliveryView, error),
-) (operationResult, error) {
+) (route.Result, error) {
 	if h.app == nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
-	if err := requireEmptyMailBody(request.http); err != nil {
-		return operationResult{}, err
+	if err := requireEmptyMailBody(request.HTTP); err != nil {
+		return route.Result{}, err
 	}
 
-	raw, err := pathID[model.MailDeliveryID](request, "mail_delivery_id")
+	raw, err := route.PathID[model.MailDeliveryID](request, "mail_delivery_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	view, appErr := mutate(request.context, request.invocation(), model.MailDeliveryID(raw))
+	view, appErr := mutate(request.Context, request.Invocation(), raw)
 	if appErr != nil {
-		return operationResult{}, appErr
+		return route.Result{}, appErr
 	}
 
-	return jsonResult(http.StatusOK, mailResponse(view)), nil
+	return route.JSON(http.StatusOK, mailResponse(view)), nil
 }
 
 func requireEmptyMailBody(request *http.Request) error {
@@ -569,19 +570,19 @@ func parseMailFilterTime(raw string) (time.Time, error) {
 }
 
 func encodeMailDeliveryCursor(cursor mailDeliveryCursor) (string, error) {
-	return encodeOpaqueCursor(cursor, mailDeliveryCursorSpec())
+	return route.EncodeCursor(cursor, mailDeliveryCursorSpec())
 }
 
 func decodeMailDeliveryCursor(raw string) (mailDeliveryCursor, error) {
-	return decodeOpaqueCursor(raw, mailDeliveryCursorSpec())
+	return route.DecodeCursor(raw, mailDeliveryCursorSpec())
 }
 
-func mailDeliveryCursorSpec() opaqueCursorSpec[mailDeliveryCursor] {
-	return opaqueCursorSpec[mailDeliveryCursor]{
-		label:                "mail delivery",
-		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members:              []string{"created_at", "id"},
-		validate: func(cursor mailDeliveryCursor) error {
+func mailDeliveryCursorSpec() route.CursorSpec[mailDeliveryCursor] {
+	return route.CursorSpec[mailDeliveryCursor]{
+		Label:                "mail delivery",
+		MaximumEncodedLength: route.DefaultMaximumCursorLength,
+		Members:              []string{"created_at", "id"},
+		Validate: func(cursor mailDeliveryCursor) error {
 			parsed, err := model.ParseRFC3339(cursor.CreatedAt)
 			if err != nil || parsed.IsZero() || !model.MailDeliveryID(cursor.ID).IsValid() {
 				return errors.New("invalid mail delivery keyset")

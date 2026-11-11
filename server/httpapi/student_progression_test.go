@@ -22,6 +22,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -59,7 +61,7 @@ func (f *studentProgressionApplicationFake) StudentProgressionReport(context.Con
 }
 
 func TestStudentProgressionHTTPRequiresRFC3339AndForwardsExactTargets(t *testing.T) {
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	at := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
 	sourcePeriodID, sourceClassID := model.NewAcademicPeriodID(), model.NewClassID()
 	destinationPeriodID, destinationClassID := model.NewAcademicPeriodID(), model.NewClassID()
@@ -70,7 +72,7 @@ func TestStudentProgressionHTTPRequiresRFC3339AndForwardsExactTargets(t *testing
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: at}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, studentProgressionResource(fake))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, studentProgressionResource(fake))
 	body := `{"source_period_id":"` + sourcePeriodID.String() + `","source_class_id":"` + sourceClassID.String() + `","destination_period_id":"` + destinationPeriodID.String() + `","destination_class_id":"` + destinationClassID.String() + `","effective_at":"` + at.Format(time.RFC3339Nano) + `"}`
 	request := newJSONRequest(http.MethodPost, "/api/v1/student-progressions", strings.NewReader(body))
 	request.Header.Set("Authorization", "Bearer session")
@@ -197,7 +199,7 @@ func TestStudentProgressionReadNamesBothClasses(t *testing.T) {
 	require.Contains(t, response.Body.String(), `"destination_class_name":"Year 2 Blue"`)
 }
 
-func studentProgressionListAPI(t *testing.T, fake *studentProgressionApplicationFake) *API {
+func studentProgressionListAPI(t *testing.T, fake *studentProgressionApplicationFake) *route.API {
 	t.Helper()
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),

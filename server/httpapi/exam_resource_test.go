@@ -27,13 +27,14 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/resource"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
 func TestExamResourceHTTPUploadUsesStrictMetadataFirstStreamingContract(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	fake := newExamResourceHTTPFake(principal)
 	api := newFocusedResourceAPI(t, logger, fake, examResourceResource(fake))
@@ -59,7 +60,7 @@ func TestExamResourceHTTPUploadUsesStrictMetadataFirstStreamingContract(t *testi
 
 func TestExamResourceHTTPRejectsTrailingMultipartPartBeforeApplicationCommit(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	fake := newExamResourceHTTPFake(principal)
 	api := newFocusedResourceAPI(t, logger, fake, examResourceResource(fake))
@@ -88,7 +89,7 @@ func TestExamResourceHTTPRejectsDuplicateOrMissingMultipartMetadata(t *testing.T
 		{name: "missing size", metadata: `{"expected_revision":1,"display_name":"Reference","media_type":"text/plain","sha256":"` + checksum + `"}`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			logger, _ := newTestLogger(t)
+			logger, _ := routetest.NewLogger(t)
 			principal := testExamHTTPPrincipal()
 			fake := newExamResourceHTTPFake(principal)
 			api := newFocusedResourceAPI(t, logger, fake, examResourceResource(fake))
@@ -107,7 +108,7 @@ func TestExamResourceHTTPRejectsDuplicateOrMissingMultipartMetadata(t *testing.T
 
 func TestExamResourceHTTPAcceptsExplicitZeroSizeText(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	fake := newExamResourceHTTPFake(principal)
 	api := newFocusedResourceAPI(t, logger, fake, examResourceResource(fake))
@@ -127,7 +128,7 @@ func TestExamResourceHTTPAcceptsExplicitZeroSizeText(t *testing.T) {
 
 func TestExamResourceHTTPMetadataPatchIsPresenceAware(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	fake := newExamResourceHTTPFake(principal)
 	api := newFocusedResourceAPI(t, logger, fake, examResourceResource(fake))
@@ -153,7 +154,7 @@ func TestExamResourceHTTPMetadataPatchIsPresenceAware(t *testing.T) {
 
 func TestExamResourceHTTPRemoveReturnsNoContent(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	fake := newExamResourceHTTPFake(principal)
 	api := newFocusedResourceAPI(t, logger, fake, examResourceResource(fake))
@@ -171,7 +172,7 @@ func TestExamResourceHTTPRemoveReturnsNoContent(t *testing.T) {
 
 func TestExamResourceHTTPProtectedContentIsInlinePrivateAndConditional(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	fake := newExamResourceHTTPFake(principal)
 	api := newFocusedResourceAPI(t, logger, fake, examResourceResource(fake))

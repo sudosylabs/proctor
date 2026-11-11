@@ -50,7 +50,8 @@ Use this as an orientation map, not as a complete package inventory.
 | `server/app/realtime` | Transport-neutral events and peer propagation semantics | Owning WebSocket connection state or retrying transient publication |
 | `server/store` | Bounded Store contracts and named aggregate operations | Exposing raw transaction callbacks or SQL rows |
 | `server/store/sqlstore` | PostgreSQL implementation, locks, constraints, and migrations | Re-deciding application policy inside SQL code |
-| `server/httpapi` | Sealed route catalog, DTOs, credential requirements, Problem Details | Reaching directly into Store or SQL |
+| `server/httpapi` | HTTP resources: the routes, DTOs, credential requirements and error tables of each API area | Reaching directly into Store or SQL |
+| `server/httpapi/route` | Routing kernel: endpoint declaration, the sealed route catalog, credential checks, Problem Details | Knowing an API area or importing a resource |
 | `server/websocket` | Connection protocol, sequencing, replay, liveness, and backpressure | Treating a socket as durable authority |
 | `server/platform` | Infrastructure lifecycle and health | Passing it into the application as a locator |
 | module-root `server` | Adapter selection, wiring, readiness, serving, and shutdown | Adding a second constructor path in a command or test |
@@ -71,8 +72,8 @@ word leads you through each step.
 `POST /api/v1/programme-levels/{programme_level_id}/classes`
 
 1. **Route.** `httpapi/class.go` declares the route in `classResource` as an
-   `endpoint` literal. Its `Auth: AuthPrincipalRequired` field says the route
-   needs a signed-in principal, and its `Errors` field lists the errors it
+   `route.Endpoint` literal. Its `Auth: route.AuthPrincipalRequired` field
+   says the route needs a signed-in principal, and its `Errors` field lists the errors it
    may return. `classHandlers.create` decodes
    the body into `createClassRequest` and builds an
    `academic.CreateClassCommand`.
@@ -90,17 +91,17 @@ word leads you through each step.
    passes through the generated timing and retry layers
    (`store/timerlayer`, `store/retrylayer`), which add no behavior.
 5. **Errors.** A typed Store error becomes an application error through the
-   service's `apperror.StoreTable`. `httpapi` turns it into a Problem Details
-   response with the status that `httpapi/error_catalog.yaml` assigns to its
-   code.
+   service's `apperror.StoreTable`. `httpapi/route` turns it into a Problem
+   Details response with the status that `httpapi/route/error_catalog.yaml`
+   assigns to its code.
 
 ### Submit an Attempt
 
 `POST /api/v1/exam-attempts/{exam_attempt_id}/submissions`
 
-1. **Route.** `httpapi/exam_attempt.go` declares the route as an `endpoint`
-   literal with `Auth: AuthSessionRequired` and
-   `Idempotency: IdempotencyRequired`, so it requires a Session and an
+1. **Route.** `httpapi/exam_attempt.go` declares the route as a
+   `route.Endpoint` literal with `Auth: route.AuthSessionRequired` and
+   `Idempotency: route.IdempotencyRequired`, so it requires a Session and an
    idempotency key.
    The handler is `examAttemptHandlers.submit` in
    `httpapi/exam_attempt_submission.go`.

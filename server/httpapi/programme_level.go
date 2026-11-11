@@ -14,6 +14,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -36,33 +37,33 @@ type createProgrammeLevelRequest struct {
 }
 
 type updateProgrammeLevelRequest struct {
-	ExpectedRevision Optional[int64]  `json:"expected_revision"`
-	Name             Optional[string] `json:"name"`
-	DisplayName      Optional[string] `json:"display_name"`
-	Description      Optional[string] `json:"description"`
+	ExpectedRevision route.Optional[int64]  `json:"expected_revision"`
+	Name             route.Optional[string] `json:"name"`
+	DisplayName      route.Optional[string] `json:"display_name"`
+	Description      route.Optional[string] `json:"description"`
 }
 
 type programmeLevelHandlers struct {
 	app ProgrammeLevelApplication
 }
 
-func programmeLevelResource(app ProgrammeLevelApplication) apiResource {
+func programmeLevelResource(app ProgrammeLevelApplication) route.Resource {
 	h := programmeLevelHandlers{app: app}
 	collection := "/programmes/{programme_id}/levels"
 	member := "/programme-levels/{programme_level_id}"
-	return newResource(
+	return route.NewResource(
 		"programme-levels",
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   collection,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: academicReadErrorCodes("request.invalid", "resource.not_found"),
 			Handle: h.list,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   collection,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: academicMutationErrorCodes(
 				"request.invalid",
 				"resource.not_found",
@@ -71,17 +72,17 @@ func programmeLevelResource(app ProgrammeLevelApplication) apiResource {
 			),
 			Handle: h.create,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   member,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: academicReadErrorCodes("request.invalid", "resource.not_found"),
 			Handle: h.get,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodPatch,
 			Path:   member,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: academicMutationErrorCodes(
 				"request.invalid",
 				"resource.not_found",
@@ -90,10 +91,10 @@ func programmeLevelResource(app ProgrammeLevelApplication) apiResource {
 			),
 			Handle: h.patch,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodDelete,
 			Path:   member,
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: academicMutationErrorCodes(
 				"request.invalid", "resource.not_found", "programme_level.conflict",
 			),
@@ -102,44 +103,44 @@ func programmeLevelResource(app ProgrammeLevelApplication) apiResource {
 	)
 }
 
-func (h programmeLevelHandlers) list(request operationRequest) (operationResult, error) {
-	programmeID, err := pathID[model.ProgrammeID](request, "programme_id")
+func (h programmeLevelHandlers) list(request route.Request) (route.Result, error) {
+	programmeID, err := route.PathID[model.ProgrammeID](request, "programme_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	pageQuery, err := request.academicNamePageQuery()
+	pageQuery, err := academicNamePageQuery(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	page, err := h.app.ListProgrammeLevels(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		academic.ListProgrammeLevelsQuery{
 			ProgrammeID: programmeID,
-			Query:       request.http.URL.Query().Get("q"),
+			Query:       request.HTTP.URL.Query().Get("q"),
 			NameQuery:   pageQuery,
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	return academicNameListResult(page, programmeLevelResponseFromModel, func(level *model.ProgrammeLevel) (string, string) {
 		return level.Name, level.ID.String()
 	})
 }
 
-func (h programmeLevelHandlers) create(request operationRequest) (operationResult, error) {
-	programmeID, err := pathID[model.ProgrammeID](request, "programme_id")
+func (h programmeLevelHandlers) create(request route.Request) (route.Result, error) {
+	programmeID, err := route.PathID[model.ProgrammeID](request, "programme_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	var body createProgrammeLevelRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 	saved, err := h.app.CreateProgrammeLevel(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		academic.CreateProgrammeLevelCommand{
 			ProgrammeID: programmeID,
 			Name:        body.Name,
@@ -148,40 +149,40 @@ func (h programmeLevelHandlers) create(request operationRequest) (operationResul
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusCreated, programmeLevelResponseFromModel(saved)), nil
+	return route.JSON(http.StatusCreated, programmeLevelResponseFromModel(saved)), nil
 }
 
-func (h programmeLevelHandlers) get(request operationRequest) (operationResult, error) {
-	id, err := pathID[model.ProgrammeLevelID](request, "programme_level_id")
+func (h programmeLevelHandlers) get(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.ProgrammeLevelID](request, "programme_level_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	level, err := h.app.GetProgrammeLevel(
-		request.context, request.invocation(), id,
+		request.Context, request.Invocation(), id,
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, programmeLevelResponseFromModel(level)), nil
+	return route.JSON(http.StatusOK, programmeLevelResponseFromModel(level)), nil
 }
 
-func (h programmeLevelHandlers) patch(request operationRequest) (operationResult, error) {
-	id, err := pathID[model.ProgrammeLevelID](request, "programme_level_id")
+func (h programmeLevelHandlers) patch(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.ProgrammeLevelID](request, "programme_level_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	var body updateProgrammeLevelRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 	if err := validateAcademicRevision(body.ExpectedRevision); err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	level, err := h.app.UpdateProgrammeLevel(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		academic.UpdateProgrammeLevelCommand{ExpectedRevision: body.ExpectedRevision.ValuePointer(),
 			ID:          id,
 			Name:        body.Name.ValuePointer(),
@@ -190,27 +191,27 @@ func (h programmeLevelHandlers) patch(request operationRequest) (operationResult
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, programmeLevelResponseFromModel(level)), nil
+	return route.JSON(http.StatusOK, programmeLevelResponseFromModel(level)), nil
 }
 
-func (h programmeLevelHandlers) archive(request operationRequest) (operationResult, error) {
-	id, err := pathID[model.ProgrammeLevelID](request, "programme_level_id")
+func (h programmeLevelHandlers) archive(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.ProgrammeLevelID](request, "programme_level_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	expectedRevision, err := request.academicRevision()
+	expectedRevision, err := academicRevision(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	err = h.app.ArchiveProgrammeLevel(
-		request.context, request.invocation(), academic.ArchiveProgrammeLevelCommand{ExpectedRevision: expectedRevision, ID: id},
+		request.Context, request.Invocation(), academic.ArchiveProgrammeLevelCommand{ExpectedRevision: expectedRevision, ID: id},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return noContentResult(), nil
+	return route.NoContent(), nil
 }
 
 func programmeLevelResponseFromModel(level *model.ProgrammeLevel) programmeLevelResponse {

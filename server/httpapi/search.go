@@ -16,6 +16,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/search"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 )
 
 // searchResponse is one bounded page per requested type. Search never
@@ -72,14 +73,14 @@ type searchHandlers struct {
 	app SearchApplication
 }
 
-func searchResource(application SearchApplication) apiResource {
+func searchResource(application SearchApplication) route.Resource {
 	h := searchHandlers{app: application}
-	return newResource(
+	return route.NewResource(
 		"search",
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   "/search",
-			Auth:   AuthPrincipalRequired,
+			Auth:   route.AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
@@ -99,32 +100,32 @@ func searchResource(application SearchApplication) apiResource {
 // find decodes the search parameters. q, limit and cursor take one value;
 // types repeats. Search answers one bounded page per type, so any cursor is
 // rejected rather than silently ignored.
-func (h searchHandlers) find(request operationRequest) (operationResult, error) {
-	values := request.http.URL.Query()
+func (h searchHandlers) find(request route.Request) (route.Result, error) {
+	values := request.HTTP.URL.Query()
 	for _, name := range []string{"q", "limit", "cursor"} {
 		if entries, present := values[name]; present && len(entries) != 1 {
-			return operationResult{}, invalidRequestError(errors.New(name + " must be one value"))
+			return route.Result{}, route.InvalidRequest(errors.New(name + " must be one value"))
 		}
 	}
 	if _, present := values["cursor"]; present {
-		return operationResult{}, invalidRequestError(errors.New("search does not continue; cursor is not accepted"))
+		return route.Result{}, route.InvalidRequest(errors.New("search does not continue; cursor is not accepted"))
 	}
 	query := search.Query{Query: values.Get("q")}
 	if raw, present := values["limit"]; present {
 		limit, err := strconv.Atoi(raw[0])
 		if err != nil || limit < 1 {
-			return operationResult{}, invalidRequestError(errors.New("limit must be a positive integer"))
+			return route.Result{}, route.InvalidRequest(errors.New("limit must be a positive integer"))
 		}
 		query.Limit = limit
 	}
 	for _, raw := range values["types"] {
 		query.Types = append(query.Types, search.Type(raw))
 	}
-	result, err := h.app.Search(request.context, request.invocation(), query)
+	result, err := h.app.Search(request.Context, request.Invocation(), query)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, searchResponseFromResult(result)), nil
+	return route.JSON(http.StatusOK, searchResponseFromResult(result)), nil
 }
 
 func searchResponseFromResult(result search.Result) searchResponse {

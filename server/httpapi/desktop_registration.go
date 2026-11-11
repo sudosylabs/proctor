@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -32,16 +33,16 @@ type desktopRegistrationHandlers struct {
 	app *identity.Service
 }
 
-func desktopRegistrationResource(app *identity.Service) apiResource {
+func desktopRegistrationResource(app *identity.Service) route.Resource {
 	h := desktopRegistrationHandlers{app: app}
 	collection := "/users/me/desktop-registrations"
 	item := "/users/me/desktop-registrations/{desktop_registration_id}"
-	return newResource(
+	return route.NewResource(
 		"desktop-registrations",
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodGet,
 			Path:   collection,
-			Auth:   AuthSessionRequired,
+			Auth:   route.AuthSessionRequired,
 			Errors: []string{
 				"desktop_registration.unavailable",
 				"authentication.reauthentication_required",
@@ -50,10 +51,10 @@ func desktopRegistrationResource(app *identity.Service) apiResource {
 			},
 			Handle: h.list,
 		},
-		endpoint{
+		route.Endpoint{
 			Method: http.MethodDelete,
 			Path:   item,
-			Auth:   AuthStrongRecentSessionRequired,
+			Auth:   route.AuthStrongRecentSessionRequired,
 			Errors: []string{
 				"desktop_registration.unavailable",
 				"request.invalid",
@@ -66,46 +67,46 @@ func desktopRegistrationResource(app *identity.Service) apiResource {
 	)
 }
 
-func (h desktopRegistrationHandlers) list(request operationRequest) (operationResult, error) {
-	registrations, err := h.app.ListDesktopRegistrations(request.context, request.invocation())
+func (h desktopRegistrationHandlers) list(request route.Request) (route.Result, error) {
+	registrations, err := h.app.ListDesktopRegistrations(request.Context, request.Invocation())
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	principal, _ := Principal(request.context)
-	response, err := boundedListResult(
+	principal, _ := route.Principal(request.Context)
+	response, err := route.BoundedList(
 		request,
 		"Desktop Registration",
 		registrations,
-		func(registration *model.DesktopRegistration) boundedPageKey {
-			return boundedPageKey{At: registration.CreatedAt, ID: registration.ID.String()}
+		func(registration *model.DesktopRegistration) route.BoundedKey {
+			return route.BoundedKey{At: registration.CreatedAt, ID: registration.ID.String()}
 		},
 		func(registration *model.DesktopRegistration) desktopRegistrationResponse {
 			return desktopRegistrationResponseFromModel(registration, principal.DesktopRegistrationID == registration.ID)
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return jsonResult(http.StatusOK, response).withHeaders(privateNoStoreHeaders()), nil
+	return route.JSON(http.StatusOK, response).WithHeaders(privateNoStoreHeaders()), nil
 }
 
-func (h desktopRegistrationHandlers) revoke(request operationRequest) (operationResult, error) {
-	registrationID, err := pathID[model.DesktopRegistrationID](request, "desktop_registration_id")
+func (h desktopRegistrationHandlers) revoke(request route.Request) (route.Result, error) {
+	registrationID, err := route.PathID[model.DesktopRegistrationID](request, "desktop_registration_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
 	if err = h.app.RevokeDesktopRegistration(
-		request.context,
-		request.invocation(),
+		request.Context,
+		request.Invocation(),
 		identity.RevokeDesktopRegistrationCommand{RegistrationID: registrationID},
 	); err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 
-	return noContentResult().withHeaders(privateNoStoreHeaders()), nil
+	return route.NoContent().WithHeaders(privateNoStoreHeaders()), nil
 }
 
 func desktopRegistrationResponseFromModel(

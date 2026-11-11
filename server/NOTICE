@@ -401,8 +401,11 @@ Corresponding Proctor paths:
 - server/app/mfa.go
 - server/app/mfa_integration_test.go
 - server/httpapi/authentication.go
-- server/httpapi/cookies.go
-- server/httpapi/handler.go
+- server/httpapi/route/credentials.go
+- server/httpapi/route/request.go
+- server/httpapi/route/errors.go
+- server/httpapi/route/cookies.go
+- server/httpapi/route/authentication.go
 - server/httpapi/session.go
 - server/httpapi/personal_access_token.go
 - server/httpapi/mfa.go
@@ -582,10 +585,14 @@ Corresponding Proctor paths:
 - server/httpapi/role_binding.go
 - server/httpapi/system.go
 - server/httpapi/api.go
-- server/httpapi/handler.go
+- server/httpapi/route/api.go
+- server/httpapi/route/authentication.go
 - server/httpapi/authentication.go
-- server/httpapi/middleware.go
-- server/httpapi/params.go
+- server/httpapi/route/credentials.go
+- server/httpapi/route/request.go
+- server/httpapi/route/errors.go
+- server/httpapi/route/middleware.go
+- server/httpapi/route/params.go
 - server/httpapi/institution.go
 - server/httpapi/programme.go
 - server/httpapi/academic_period.go
@@ -708,7 +715,7 @@ Corresponding Proctor paths:
 - server/server.go
 - server/websocket/
 - server/httpapi/websocket.go
-- server/httpapi/middleware.go
+- server/httpapi/route/middleware.go
 
 Modifications:
 

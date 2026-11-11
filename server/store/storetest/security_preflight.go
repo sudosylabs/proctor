@@ -80,6 +80,7 @@ func TestSecurityPreflightStore(t *testing.T, ss store.Store, probes ...Security
 	command := examCommand(fixture.candidate.ID, store.SecurityPreflightPrepareOperation, "preflight-prepare", "preflight-prepare")
 	prepared, err := ss.SecurityPreflight().PrepareSecurityPreflight(ctx, input, command)
 	require.NoError(t, err)
+	require.True(t, prepared.ConsistentWith(fixture.sitting.ID), "PrepareSecurityPreflight returned a result inconsistent with its request")
 	require.False(t, prepared.Replayed)
 	require.Nil(t, prepared.FrozenAttemptConfiguration)
 	require.Equal(t, input.PreflightID, prepared.Challenge.PreflightID)
@@ -91,6 +92,7 @@ func TestSecurityPreflightStore(t *testing.T, ss store.Store, probes ...Security
 	replay.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
 	repeated, err := ss.SecurityPreflight().PrepareSecurityPreflight(ctx, &replay, command)
 	require.NoError(t, err)
+	require.True(t, repeated.ConsistentWith(fixture.sitting.ID), "PrepareSecurityPreflight replay returned a result inconsistent with its request")
 	require.True(t, repeated.Replayed, "replay replaced or extended the challenge")
 	require.Equal(t, prepared.Challenge, repeated.Challenge, "replay replaced or extended the challenge")
 	report := &store.SecurityPreflightReport{Access: access, PreflightID: input.PreflightID, Report: syntheticPreflightReport(prepared, build.NativeAgreement), AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
@@ -220,6 +222,7 @@ func TestSecureConnectStore(t *testing.T, ss store.Store, probes ...SecureConnec
 	prepare := &store.SecurityPreflightPrepare{Access: access, PreflightID: model.NewID(), Challenge: model.NewCredentialToken(), NativeRegistryDigest: access.DesktopBuild.NativeAgreement.RegistryDigest(), SourceManifestDigest: access.DesktopBuild.NativeAgreement.SourceManifestDigest(), ConfigurationManifestFingerprint: input.ConfigurationManifestFingerprint, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
 	prepared, err := ss.SecurityPreflight().PrepareSecurityPreflight(ctx, prepare, examCommand(input.CandidateUserID, store.SecurityPreflightPrepareOperation, "secure-prepare", "secure-prepare"))
 	require.NoError(t, err)
+	require.True(t, prepared.ConsistentWith(input.SittingID), "PrepareSecurityPreflight returned a result inconsistent with its request")
 	report := &store.SecurityPreflightReport{Access: access, PreflightID: prepare.PreflightID, Report: syntheticPreflightReport(prepared, access.DesktopBuild.NativeAgreement), AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
 	if len(probes) > 0 && probes[0].CorruptPrepared != nil {
 		for _, field := range []string{"challenge", "categories", "sources", "requirements"} {
@@ -263,6 +266,7 @@ func TestSecureConnectStore(t *testing.T, ss store.Store, probes ...SecureConnec
 	}
 	connected, err := ss.ExamAttempt().Connect(ctx, input, command)
 	require.NoError(t, err)
+	require.True(t, connected.ConsistentWith(fixture.class.ID, input.CandidateUserID, input.SessionID, input.SittingID), "Connect returned a result inconsistent with its request")
 	receipt := connected.Security
 	require.NoError(t, receipt.Validate())
 	require.Equal(t, connected.Attempt.ID, receipt.Policy.Scope.AttemptID)
@@ -273,6 +277,7 @@ func TestSecureConnectStore(t *testing.T, ss store.Store, probes ...SecureConnec
 	requireSuccessfulAudit(t, ctx, ss, input.AuditEventID)
 	recovered, err := ss.SecurityPreflight().RecoverSecurityPolicy(ctx, access, connected.Attempt.ID)
 	require.NoError(t, err)
+	require.True(t, recovered.ConsistentWith(connected.Attempt.ID), "RecoverSecurityPolicy returned a result inconsistent with its request")
 	require.Equal(t, receipt.DeliveryStreamID, recovered.Security.DeliveryStreamID, "recovery changed immutable admission provenance")
 	require.Equal(t, connected.Configuration.Digest, recovered.FrozenAttemptConfiguration.Digest, "recovery changed immutable admission provenance")
 	for _, mutate := range []func(*store.SecurityPreflightAccess){func(a *store.SecurityPreflightAccess) { a.CandidateUserID = model.NewUserID() }, func(a *store.SecurityPreflightAccess) { a.SessionID = model.NewSessionID() }, func(a *store.SecurityPreflightAccess) { a.DPoPKeyThumbprint = strings.Repeat("B", 42) + "A" }} {
@@ -357,9 +362,13 @@ func prepareConnectSecurityFixture(t *testing.T, ctx context.Context, ss store.S
 	}
 	sitting, err := ss.ExamSitting().Resolve(ctx, input.SittingID)
 	require.NoError(t, err)
+	require.True(t, sitting.ConsistentWithOwningClass(input.SittingID), "Resolve returned a result inconsistent with its request")
 	access := store.SecurityPreflightAccess{SittingID: input.SittingID, CandidateUserID: input.CandidateUserID, SessionID: input.SessionID, DesktopRegistrationID: input.DesktopRegistrationID, DPoPKeyThumbprint: input.DPoPKeyThumbprint, DesktopBuild: input.DesktopBuild, DesktopCompatibilityPolicyRevision: input.DesktopCompatibilityPolicyRevision}
 	attempts, err := ss.ExamAttempt().List(ctx, store.ExamAttemptManagerListOptions{ExamID: sitting.Sitting.ExamID, SittingID: input.SittingID, ExcludeCandidateUserID: model.NewUserID(), Limit: 100})
 	require.NoError(t, err)
+	for _, row := range attempts {
+		require.True(t, row.ConsistentWithExamAndSitting(sitting.Sitting.ExamID, input.SittingID), "List returned a row inconsistent with its request")
+	}
 	var attemptID model.ExamAttemptID
 	generation := int64(1)
 	for _, snapshot := range attempts {
@@ -373,6 +382,7 @@ func prepareConnectSecurityFixture(t *testing.T, ctx context.Context, ss store.S
 		if snapshot.Attempt.State == model.ExamAttemptActive {
 			recovered, recoverErr := ss.SecurityPreflight().RecoverSecurityPolicy(ctx, access, attemptID)
 			if recoverErr == nil {
+				require.True(t, recovered.ConsistentWith(attemptID), "RecoverSecurityPolicy returned a result inconsistent with its request")
 				input.Security = model.ConnectSecurity{Kind: "resume", ParticipationID: recovered.Security.ParticipationID, Generation: recovered.Security.Generation, PolicyDigest: recovered.Security.Policy.Digest}
 			}
 			return
@@ -402,6 +412,7 @@ func prepareConnectSecurityFixture(t *testing.T, ctx context.Context, ss store.S
 		}
 		require.NoError(t, err)
 	}
+	require.True(t, prepared.ConsistentWith(input.SittingID), "PrepareSecurityPreflight returned a result inconsistent with its request")
 	report := syntheticPreflightReport(prepared, access.DesktopBuild.NativeAgreement)
 	report.SecuritySessionID = prepared.Challenge.PreflightID
 	report.ReportedAt = prepared.Challenge.IssuedAt
@@ -424,6 +435,7 @@ func prepareParticipationRenewalCoverage(t *testing.T, ctx context.Context, ss s
 	input.DesktopBuild = connect.DesktopBuild
 	recovery, err := ss.SecurityPreflight().RecoverSecurityPolicy(ctx, store.SecurityPreflightAccess{CandidateUserID: input.CandidateUserID, SessionID: input.SessionID, DesktopRegistrationID: input.DesktopRegistrationID, DPoPKeyThumbprint: input.DPoPKeyThumbprint, DesktopBuild: input.DesktopBuild, DesktopCompatibilityPolicyRevision: input.DesktopCompatibilityPolicyRevision}, input.AttemptID)
 	require.NoError(t, err)
+	require.True(t, recovery.ConsistentWith(input.AttemptID), "RecoverSecurityPolicy returned a result inconsistent with its request")
 	input.SecurityCoverage = model.SecurityCoverageRenewal{ControlSequence: 1, PolicyDigest: recovery.Security.Policy.Digest, SecuritySessionID: recovery.Security.SecuritySessionID, StreamID: recovery.Security.DeliveryStreamID, Posture: "compliant", Sources: recovery.CurrentSources, Coverage: recovery.CurrentCoverage, SourceResets: []model.NativeSourceReset{}, DeliveryWatermarks: []model.DeliveryWatermark{}}
 }
 
@@ -519,6 +531,7 @@ func testProcessedSecurityControl(t *testing.T, ctx context.Context, ss store.St
 	require.True(t, result.SecurityInteractionAllowed)
 	recovery, err := ss.SecurityPreflight().RecoverSecurityPolicy(ctx, store.SecurityPreflightAccess{CandidateUserID: connect.CandidateUserID, SessionID: connect.SessionID, DesktopRegistrationID: connect.DesktopRegistrationID, DPoPKeyThumbprint: connect.DPoPKeyThumbprint, DesktopBuild: connect.DesktopBuild, DesktopCompatibilityPolicyRevision: connect.DesktopCompatibilityPolicyRevision}, connected.Attempt.ID)
 	require.NoError(t, err)
+	require.True(t, recovery.ConsistentWith(connected.Attempt.ID), "RecoverSecurityPolicy returned a result inconsistent with its request")
 	require.Equal(t, last, recovery.SecurityCoverage.ProcessedControlSequence, "fresh recovery lost control boundary or accepted reset receipt")
 	require.True(t, recovery.SecurityCoverage.SecurityInteractionAllowed, "fresh recovery lost control boundary or accepted reset receipt")
 	require.Len(t, recovery.SourceResetReceipts, 1, "fresh recovery lost control boundary or accepted reset receipt")

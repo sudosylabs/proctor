@@ -94,6 +94,7 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 	require.NoError(t, err)
 	authoringBefore, err := ss.ExamAuthoring().Get(ctx, fixture.examID, fixture.actor.ID)
 	require.NoError(t, err)
+	require.True(t, authoringBefore.Consistent(), "Get returned a result inconsistent with its request")
 
 	at := model.NowUTC()
 	entry, err := model.NewFileEntryForPurpose(model.NewFileEntryID(), model.FilePurposeExamResource, model.FileIndexingNone, at)
@@ -121,6 +122,8 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 	ready, err := ss.ExamCorrection().MarkResourceStageReady(ctx, &store.ExamCorrectionResourceStageReadiness{StageID: stage.ID,
 		ActorUserID: fixture.actor.ID, Rendition: rendition, ReadyAt: at.Add(time.Second)})
 	require.NoError(t, err)
+	require.True(t, ready.ConsistentWith(fixture.examID, sitting.ID, fixture.revisionID, store.ExamCorrectionResourceAddition, reservation.ResourceID, fixture.actor.ID),
+		"MarkResourceStageReady returned a result inconsistent with its request")
 	require.Equal(t, store.ExamCorrectionResourceStageReady, ready.State)
 	require.NotNil(t, ready.Rendition)
 	require.Equal(t, rendition.ID, ready.Rendition.ID)
@@ -129,6 +132,8 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 	readyReplay, err := ss.ExamCorrection().MarkResourceStageReady(ctx, &store.ExamCorrectionResourceStageReadiness{StageID: stage.ID,
 		ActorUserID: fixture.actor.ID, Rendition: rendition, ReadyAt: at.Add(2 * time.Second)})
 	require.NoError(t, err)
+	require.True(t, readyReplay.ConsistentWith(fixture.examID, sitting.ID, fixture.revisionID, store.ExamCorrectionResourceAddition, reservation.ResourceID, fixture.actor.ID),
+		"MarkResourceStageReady replay returned a result inconsistent with its request")
 	require.Equal(t, store.ExamCorrectionResourceStageReady, readyReplay.State)
 	require.NotNil(t, readyReplay.Rendition)
 	require.Equal(t, *rendition, *readyReplay.Rendition)
@@ -151,6 +156,8 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 	applyCommand := examCommand(fixture.actor.ID, "exam.correction.apply", "correction-apply", "correction-apply-command")
 	result, err := ss.ExamCorrection().Apply(ctx, application, applyCommand)
 	require.NoError(t, err)
+	require.True(t, result.Consistent(), "Apply returned a result inconsistent with its request")
+	require.True(t, result.ConsistentWith(fixture.examID, sitting.ID, fixture.revisionID, live.Sitting.Revision), "Apply returned a result inconsistent with its request")
 	require.False(t, result.Replayed)
 	require.NotNil(t, result.Revision)
 	require.Equal(t, model.ExamRevisionPublicationLiveCorrection, result.Revision.Kind)
@@ -204,6 +211,8 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 	requireConflictConstraint(t, err, "exam_correction_resource_stage")
 	afterFailed, err := ss.ExamSitting().Get(ctx, fixture.examID, sitting.ID)
 	require.NoError(t, err)
+	require.True(t, afterFailed.ConsistentAndValid(), "Get returned a result inconsistent with its request")
+	require.True(t, afterFailed.ConsistentAndValidWith(sitting.ID, fixture.examID), "Get returned a result inconsistent with its request")
 	require.Equal(t, result.Revision.ID, afterFailed.Sitting.ExamRevisionID)
 	require.Equal(t, result.Sitting.Sitting.Revision, afterFailed.Sitting.Revision)
 
@@ -222,6 +231,8 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 	secondResult, err := ss.ExamCorrection().Apply(ctx, secondApply,
 		examCommand(fixture.actor.ID, "exam.correction.apply", "correction-second", "correction-second-command"))
 	require.NoError(t, err)
+	require.True(t, secondResult.Consistent(), "Apply returned a result inconsistent with its request")
+	require.True(t, secondResult.ConsistentWith(fixture.examID, sitting.ID, result.Revision.ID, result.Sitting.Sitting.Revision), "Apply returned a result inconsistent with its request")
 	secondSnapshot, err := ss.ExamRevision().GetSnapshot(ctx, fixture.examID, secondResult.Revision.ID)
 	require.NoError(t, err)
 	require.Len(t, secondSnapshot.Resources, 2)
@@ -276,6 +287,8 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 	removed, err := ss.ExamCorrection().Apply(ctx, removeApply,
 		examCommand(fixture.actor.ID, "exam.correction.apply", "correction-remove", "correction-remove-command"))
 	require.NoError(t, err)
+	require.True(t, removed.Consistent(), "Apply returned a result inconsistent with its request")
+	require.True(t, removed.ConsistentWith(fixture.examID, sitting.ID, secondResult.Revision.ID, secondResult.Sitting.Sitting.Revision), "Apply returned a result inconsistent with its request")
 	removedSnapshot, err := ss.ExamRevision().GetSnapshot(ctx, fixture.examID, removed.Revision.ID)
 	require.NoError(t, err)
 	require.Len(t, removedSnapshot.Resources, 1)
@@ -291,11 +304,14 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 	// Draft/default selection is outside live correction and remains unchanged.
 	authoringAfter, err := ss.ExamAuthoring().Get(ctx, fixture.examID, fixture.actor.ID)
 	require.NoError(t, err)
+	require.True(t, authoringAfter.Consistent(), "Get returned a result inconsistent with its request")
 	require.Equal(t, authoringBefore.Exam.DefaultRevisionID, authoringAfter.Exam.DefaultRevisionID, "live correction changed default/Draft: before=%#v after=%#v", authoringBefore, authoringAfter)
 	require.Equal(t, authoringBefore.Draft.BaseRevisionID, authoringAfter.Draft.BaseRevisionID, "live correction changed default/Draft: before=%#v after=%#v", authoringBefore, authoringAfter)
 	require.Equal(t, authoringBefore.Draft.Revision, authoringAfter.Draft.Revision, "live correction changed default/Draft: before=%#v after=%#v", authoringBefore, authoringAfter)
 	scheduledAfter, err := ss.ExamSitting().Get(ctx, fixture.examID, scheduledOnly.ID)
 	require.NoError(t, err)
+	require.True(t, scheduledAfter.ConsistentAndValid(), "Get returned a result inconsistent with its request")
+	require.True(t, scheduledAfter.ConsistentAndValidWith(scheduledOnly.ID, fixture.examID), "Get returned a result inconsistent with its request")
 	require.Equal(t, model.ExamSittingScheduled, scheduledAfter.Sitting.State)
 	require.Equal(t, fixture.revisionID, scheduledAfter.Sitting.ExamRevisionID)
 	require.Equal(t, int64(1), scheduledAfter.Sitting.Revision)
@@ -370,6 +386,8 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 	if winner == nil {
 		winner = results[1]
 	}
+	require.True(t, winner.Consistent(), "Apply returned a result inconsistent with its request")
+	require.True(t, winner.ConsistentWith(fixture.examID, sitting.ID, current.Sitting.ExamRevisionID, current.Sitting.Revision), "Apply returned a result inconsistent with its request")
 	winnerSnapshot, err := ss.ExamRevision().GetSnapshot(ctx, fixture.examID, winner.Revision.ID)
 	require.NoError(t, err)
 
@@ -490,6 +508,8 @@ func reserveReadyCorrectionStage(t *testing.T, ctx context.Context, ss store.Sto
 	stage, err = ss.ExamCorrection().MarkResourceStageReady(ctx, &store.ExamCorrectionResourceStageReadiness{StageID: stage.ID,
 		ActorUserID: fixture.actor.ID, Rendition: rendition, ReadyAt: at})
 	require.NoError(t, err)
+	require.True(t, stage.ConsistentWith(fixture.examID, sittingID, baseRevisionID, target, resourceID, fixture.actor.ID),
+		"MarkResourceStageReady returned a result inconsistent with its request")
 	return stage, command
 }
 

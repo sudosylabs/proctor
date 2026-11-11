@@ -147,6 +147,7 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 		"workspace-create-file", "workspace-create-file")
 	created, err := workspace.ApplyMutation(ctx, mutation, command)
 	require.NoError(t, err)
+	require.True(t, created.ConsistentWith(target, mutation.Operation, mutation.EntryID), "ApplyMutation returned a result inconsistent with its request")
 	require.NotNil(t, created)
 	require.False(t, created.Replayed)
 	require.Equal(t, fixture.sitting.ID, created.SittingID)
@@ -164,6 +165,7 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 	replayMutation.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
 	replayedMutation, err := workspace.ApplyMutation(ctx, &replayMutation, command)
 	require.NoError(t, err)
+	require.True(t, replayedMutation.ConsistentWith(target, replayMutation.Operation, replayMutation.EntryID), "ApplyMutation replay returned a result inconsistent with its request")
 	require.NotNil(t, replayedMutation, "ApplyMutation(replay) = %#v, first = %#v", replayedMutation, created)
 	require.True(t, replayedMutation.Replayed, "ApplyMutation(replay) = %#v, first = %#v", replayedMutation, created)
 	require.Equal(t, created.Change.Cursor, replayedMutation.Change.Cursor, "ApplyMutation(replay) = %#v, first = %#v", replayedMutation, created)
@@ -176,6 +178,7 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 		Reason: model.AttemptConnectionCloseTransport, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC(),
 	})
 	require.NoError(t, err)
+	require.True(t, closed.ConsistentWith(access.AttemptID, fixture.sitting.ID, access.ConnectionID), "CloseConnection returned a result inconsistent with its request")
 	require.NotNil(t, closed)
 	require.True(t, closed.Changed)
 	_, err = workspace.List(ctx, store.CandidateWorkspaceListOptions{Access: journalAccess(access), ExpectedCursor: -1, Limit: 200})
@@ -193,6 +196,7 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 	reconnected, err := ss.ExamAttempt().Connect(ctx, reconnect,
 		examCommand(fixture.candidate.ID, store.ExamAttemptConnectOperation, "workspace-reconnect", "workspace-reconnect"))
 	require.NoError(t, err)
+	require.True(t, reconnected.ConsistentWith(fixture.class.ID, fixture.candidate.ID, fixture.session.ID, fixture.sitting.ID), "Connect returned a result inconsistent with its request")
 	require.NotNil(t, reconnected)
 	require.Equal(t, connected.Attempt.ID, reconnected.Attempt.ID)
 	require.Equal(t, connected.Workspace.ID, reconnected.Workspace.ID)
@@ -205,6 +209,7 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 	replayAfterReconnect.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
 	replayedAfterReconnect, err := workspace.ApplyMutation(ctx, &replayAfterReconnect, command)
 	require.NoError(t, err)
+	require.True(t, replayedAfterReconnect.ConsistentWith(target, replayAfterReconnect.Operation, replayAfterReconnect.EntryID), "ApplyMutation replay returned a result inconsistent with its request")
 	require.NotNil(t, replayedAfterReconnect)
 	require.True(t, replayedAfterReconnect.Replayed)
 	require.Equal(t, created.Change.Cursor, replayedAfterReconnect.Change.Cursor)
@@ -215,6 +220,7 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 			DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint, ConnectionID: access.ConnectionID, ContinuityCredentialHash: access.ContinuityCredentialHash},
 		AfterCursor: 0, Limit: model.AttemptWorkspaceJournalReadMaximum})
 	require.NoError(t, err)
+	require.True(t, journal.ConsistentWith(0), "ListJournal returned a result inconsistent with its request")
 	require.NotNil(t, journal)
 	require.Equal(t, connected.Workspace.ID, journal.WorkspaceID)
 	require.Equal(t, int64(1), journal.CurrentCursor)
@@ -229,6 +235,7 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 		DesktopRegistrationID: fixture.session.DesktopRegistrationID, DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint,
 		ConnectionID: access.ConnectionID, ContinuityCredentialHash: access.ContinuityCredentialHash}, ExpectedCursor: -1, Limit: 200})
 	require.NoError(t, err)
+	require.True(t, manifest.Consistent(), "List returned a result inconsistent with its request")
 	require.NotNil(t, manifest)
 	require.Equal(t, connected.Workspace.ID, manifest.WorkspaceID)
 	require.Equal(t, int64(1), manifest.Cursor)
@@ -281,6 +288,7 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 writesComplete:
 	journal, err = workspace.ListJournal(ctx, store.CandidateWorkspaceJournalOptions{Access: journalAccess(access), AfterCursor: 0, Limit: 1})
 	require.NoError(t, err)
+	require.True(t, journal.ConsistentWith(0), "ListJournal returned a result inconsistent with its request")
 	require.NotNil(t, journal)
 	require.True(t, journal.HasMore)
 	require.Len(t, journal.Entries, 1)
@@ -312,6 +320,7 @@ writesComplete:
 		input.EntryID, input.ExpectedPath, input.ExpectedContentVersion, input.ObjectID = entryID, mutation.DestinationPath, ready.ContentVersion, replacement.ID
 	})
 	require.NoError(t, err)
+	require.True(t, replaced.ConsistentWith(target, model.AttemptWorkspaceMutationReplaceFile, entryID), "ApplyMutation returned a result inconsistent with its request")
 	require.NotNil(t, replaced.Entry)
 	require.Equal(t, entryID, replaced.Entry.EntryID)
 	require.Equal(t, replacement.ContentVersion, replaced.Entry.ContentVersion)
@@ -430,6 +439,7 @@ writesComplete:
 	replayWinner.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
 	winnerReplay, err := workspace.ApplyMutation(ctx, &replayWinner, winner.command)
 	require.NoError(t, err)
+	require.True(t, winnerReplay.ConsistentWith(target, replayWinner.Operation, replayWinner.EntryID), "ApplyMutation replay returned a result inconsistent with its request")
 	require.NotNil(t, winnerReplay, "ApplyMutation(race winner replay) = %#v, winner = %#v", winnerReplay, winner.result)
 	require.True(t, winnerReplay.Replayed, "ApplyMutation(race winner replay) = %#v, winner = %#v", winnerReplay, winner.result)
 	require.Equal(t, winner.result.Change.Cursor, winnerReplay.Change.Cursor, "ApplyMutation(race winner replay) = %#v, winner = %#v", winnerReplay, winner.result)
@@ -504,6 +514,7 @@ writesComplete:
 		probes[0].MakeJournalGap(t, ctx, connected.Workspace.ID)
 		journal, err = workspace.ListJournal(ctx, store.CandidateWorkspaceJournalOptions{Access: journalAccess(access), AfterCursor: 0, Limit: 200})
 		require.NoError(t, err)
+		require.True(t, journal.ConsistentWith(0), "ListJournal returned a result inconsistent with its request")
 		require.NotNil(t, journal)
 		require.True(t, journal.RefreshRequired)
 		require.Empty(t, journal.Entries)

@@ -126,6 +126,7 @@ func TestExamExportRetention(t *testing.T, ss store.Store, dates RetentionSQLPro
 	access := input.ExamExportAccess
 	ready, err := ss.ExamExport().Get(ctx, &access)
 	require.NoError(t, err)
+	require.True(t, ready.ConsistentWith(access.ExportID, access.Scope, access.Principal.UserID), "Get returned a result inconsistent with its request")
 	require.Equal(t, model.ExamExportReady, ready.Export.State, "independent archive disappeared with its source")
 	input.ExportID, input.JobID = model.NewExamExportID(), model.NewJobID()
 	input.ExamRecordsMutation = recordsMutation(t, ctx, ss, f.unitID, scope, principal, model.ActionExamRecordsExport)

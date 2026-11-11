@@ -50,6 +50,7 @@ func testUserStoreCurrentContext(t *testing.T, ss store.Store) {
 			}
 			got, err := ss.User().GetCurrentContext(ctx, user.ID, 2)
 			require.NoError(t, err)
+			require.True(t, got.ConsistentWith(user.ID), "GetCurrentContext returned a result inconsistent with its request")
 			wantAreas := []store.CurrentUserProductArea{store.CurrentUserProductAreaAccount}
 			if test.administration {
 				wantAreas = append(wantAreas, store.CurrentUserProductAreaAdministration)

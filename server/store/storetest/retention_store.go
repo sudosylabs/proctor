@@ -124,6 +124,7 @@ func TestRetentionStore(t *testing.T, ss store.Store, probe RetentionSQLProbe) {
 	require.Len(t, notices, 2, "manager/operator notices")
 	revision, err := ss.ExamRevision().GetSummary(ctx, f.sitting.ExamID, f.sitting.ExamRevisionID)
 	require.NoError(t, err)
+	require.True(t, revision.ConsistentWith(f.sitting.ExamRevisionID, f.sitting.ExamID), "GetSummary returned a result inconsistent with its request")
 	for _, n := range notices {
 		require.Equal(t, revision.Title, n.ExamTitle, "notice exam title")
 		require.True(t, f.sitting.ScheduledStartAt.Equal(n.SittingStartAt), "notice sitting start = %s", n.SittingStartAt)

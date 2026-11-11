@@ -157,6 +157,7 @@ func TestExamSubmissionStore(t *testing.T, ss store.Store, submissions store.Exa
 	command := examCommand(fixture.candidate.ID, store.ExamSubmissionSealOperation, "submission-seal", "submission-seal")
 	sealed, err := submissions.Seal(ctx, input, command)
 	require.NoError(t, err)
+	require.True(t, sealed.ConsistentWith(target, access, input.SubmissionID, input.ReceiptCode), "Seal returned a result inconsistent with its request")
 	require.NotNil(t, sealed)
 	require.False(t, sealed.Replayed)
 	require.Equal(t, input.SubmissionID, sealed.Receipt.SubmissionID)
@@ -191,6 +192,7 @@ func TestExamSubmissionStore(t *testing.T, ss store.Store, submissions store.Exa
 
 	authorization, err := submissions.Resolve(ctx, sealed.Receipt.SubmissionID)
 	require.NoError(t, err)
+	require.True(t, authorization.ConsistentWith(sealed.Receipt.SubmissionID), "Resolve returned a result inconsistent with its request")
 	require.NotNil(t, authorization)
 	require.Equal(t, sealed.Receipt.SubmissionID, authorization.SubmissionID)
 	require.Equal(t, fixture.examID, authorization.ExamID)
@@ -278,6 +280,7 @@ func TestExamSubmissionStore(t *testing.T, ss store.Store, submissions store.Exa
 	require.True(t, store.IsNotFound(err), "candidate Workspace read after Submission error")
 	manager, err := ss.ExamAttempt().Get(ctx, fixture.examID, connected.Attempt.ID)
 	require.NoError(t, err)
+	require.True(t, manager.ConsistentWith(fixture.examID), "Get returned a result inconsistent with its request")
 	require.Equal(t, model.ExamAttemptSubmitted, manager.Attempt.State)
 	require.NotNil(t, manager.LatestParticipation)
 	require.Equal(t, model.AttemptParticipationEnded, manager.LatestParticipation.State)
@@ -290,6 +293,7 @@ func TestExamSubmissionStore(t *testing.T, ss store.Store, submissions store.Exa
 	replay.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
 	replayed, err := submissions.Seal(ctx, &replay, command)
 	require.NoError(t, err)
+	require.True(t, replayed.ConsistentWith(target, access, replay.SubmissionID, replay.ReceiptCode), "Seal replay returned a result inconsistent with its request")
 	require.NotNil(t, replayed, "Seal(exact replay) = %#v, first = %#v", replayed, sealed)
 	require.True(t, replayed.Replayed, "Seal(exact replay) = %#v, first = %#v", replayed, sealed)
 	require.Equal(t, sealed.Receipt, replayed.Receipt, "Seal(exact replay) = %#v, first = %#v", replayed, sealed)
@@ -366,6 +370,7 @@ func testExamCorrectionAcknowledgement(t *testing.T, ctx context.Context, ss sto
 			AuditEventID: firstAudit.ID, AuditAt: model.NowUTC(),
 		}, examCommand(fixture.manager.ID, "exam.correction.apply", "correction-acknowledgement-first", "correction-acknowledgement-first"))
 		require.NoError(t, err)
+		require.True(t, first.ConsistentWith(fixture.examID, fixture.sitting.ID, fixture.revisionID, fixture.sitting.Revision), "Apply returned a result inconsistent with its request")
 		secondInstructions := "Second corrected instructions"
 		secondAudit := saveExamSittingAudit(t, ctx, ss, fixture.manager.ID, fixture.examID, fixture.unitID)
 		second, err := ss.ExamCorrection().Apply(ctx, &store.ExamCorrectionApplication{
@@ -377,6 +382,7 @@ func testExamCorrectionAcknowledgement(t *testing.T, ctx context.Context, ss sto
 			AuditEventID: secondAudit.ID, AuditAt: model.NowUTC(),
 		}, examCommand(fixture.manager.ID, "exam.correction.apply", "correction-acknowledgement-second", "correction-acknowledgement-second"))
 		require.NoError(t, err)
+		require.True(t, second.ConsistentWith(fixture.examID, fixture.sitting.ID, first.Revision.ID, first.Sitting.Sitting.Revision), "Apply returned a result inconsistent with its request")
 
 		candidateAccess := store.CandidateAttemptAccess{
 			AttemptID: connected.Attempt.ID, CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID,
@@ -385,6 +391,7 @@ func testExamCorrectionAcknowledgement(t *testing.T, ctx context.Context, ss sto
 		}
 		presentation, err := ss.ExamAttempt().GetCandidatePresentation(ctx, candidateAccess)
 		require.NoError(t, err)
+		require.True(t, presentation.Consistent(), "GetCandidatePresentation returned a result inconsistent with its request")
 		require.True(t, presentation.RuntimeCapabilities.ExamRevision.AcknowledgementRequired)
 		require.Len(t, presentation.LiveCorrections, 2)
 		require.Equal(t, first.Revision.ID, presentation.LiveCorrections[0].RevisionID)
@@ -434,6 +441,8 @@ func testExamCorrectionAcknowledgement(t *testing.T, ctx context.Context, ss sto
 		}
 		target, err := ss.ExamAttempt().ResolveCorrectionAcknowledgementTarget(ctx, *firstInputs[0])
 		require.NoError(t, err)
+		require.True(t, target.ConsistentWith(connected.Attempt.ID, fixture.candidate.ID, first.Revision.ID, second.Revision.ID),
+			"ResolveCorrectionAcknowledgementTarget returned a result inconsistent with its request")
 		require.NotNil(t, target)
 		require.Equal(t, connected.Attempt.ID, target.AttemptID)
 		require.Equal(t, first.Revision.ID, target.CorrectionRevisionID)
@@ -481,10 +490,13 @@ func testExamCorrectionAcknowledgement(t *testing.T, ctx context.Context, ss sto
 		require.Equal(t, acknowledged.AcknowledgedAt, duplicateAcknowledgement.AcknowledgedAt, "concurrent AcknowledgeCorrection() fresh")
 		require.Equal(t, acknowledged.MutationAuditEventID, duplicateAcknowledgement.MutationAuditEventID, "concurrent AcknowledgeCorrection() fresh")
 		requireSuccessfulAudit(t, ctx, ss, acknowledged.MutationAuditEventID)
+		require.True(t, acknowledged.ConsistentWith(connected.Attempt.ID, first.Revision.ID, second.Revision.ID), "AcknowledgeCorrection returned a result inconsistent with its request")
+		require.True(t, duplicateAcknowledgement.ConsistentWith(connected.Attempt.ID, first.Revision.ID, second.Revision.ID), "AcknowledgeCorrection returned a result inconsistent with its request")
 
 		replayInput := newAcknowledgement(first.Revision.ID, second.Revision.ID)
 		replayed, err := ss.ExamAttempt().AcknowledgeCorrection(ctx, replayInput, firstCommands[winnerIndex])
 		require.NoError(t, err)
+		require.True(t, replayed.ConsistentWith(connected.Attempt.ID, first.Revision.ID, second.Revision.ID), "AcknowledgeCorrection returned a result inconsistent with its request")
 		require.NotNil(t, replayed, "AcknowledgeCorrection(exact replay) = %#v, first=%#v", replayed, acknowledged)
 		require.True(t, replayed.Replayed, "AcknowledgeCorrection(exact replay) = %#v, first=%#v", replayed, acknowledged)
 		require.False(t, replayed.Duplicate, "AcknowledgeCorrection(exact replay) = %#v, first=%#v", replayed, acknowledged)
@@ -502,6 +514,7 @@ func testExamCorrectionAcknowledgement(t *testing.T, ctx context.Context, ss sto
 			examCommand(fixture.candidate.ID, store.ExamAttemptCorrectionAcknowledgementOperation,
 				"correction-acknowledgement-alternate-key", "correction-acknowledgement-first-ack"))
 		require.NoError(t, err)
+		require.True(t, duplicate.ConsistentWith(connected.Attempt.ID, first.Revision.ID, second.Revision.ID), "AcknowledgeCorrection returned a result inconsistent with its request")
 		require.NotNil(t, duplicate)
 		require.True(t, duplicate.Duplicate)
 		require.False(t, duplicate.Replayed)
@@ -512,11 +525,13 @@ func testExamCorrectionAcknowledgement(t *testing.T, ctx context.Context, ss sto
 			examCommand(fixture.candidate.ID, store.ExamAttemptCorrectionAcknowledgementOperation,
 				"correction-acknowledgement-second-ack", "correction-acknowledgement-second-ack"))
 		require.NoError(t, err)
+		require.True(t, secondAcknowledged.ConsistentWith(connected.Attempt.ID, second.Revision.ID, second.Revision.ID), "AcknowledgeCorrection returned a result inconsistent with its request")
 		require.NotNil(t, secondAcknowledged)
 		require.False(t, secondAcknowledged.Duplicate)
 		require.False(t, secondAcknowledged.Replayed)
 		presentation, err = ss.ExamAttempt().GetCandidatePresentation(ctx, candidateAccess)
 		require.NoError(t, err)
+		require.True(t, presentation.Consistent(), "GetCandidatePresentation returned a result inconsistent with its request")
 		require.False(t, presentation.RuntimeCapabilities.ExamRevision.AcknowledgementRequired)
 		require.Equal(t, model.CorrectionAcknowledgementAcknowledged, presentation.LiveCorrections[0].AcknowledgementState)
 		require.Equal(t, model.CorrectionAcknowledgementAcknowledged, presentation.LiveCorrections[1].AcknowledgementState)
@@ -547,9 +562,11 @@ func testExamCorrectionAcknowledgement(t *testing.T, ctx context.Context, ss sto
 		}, examCommand(fixture.manager.ID, "exam.correction.apply",
 			"correction-acknowledgement-third", "correction-acknowledgement-third"))
 		require.NoError(t, err)
+		require.True(t, third.ConsistentWith(fixture.examID, fixture.sitting.ID, second.Revision.ID, resumed.Value.Sitting.Revision), "Apply returned a result inconsistent with its request")
 		afterCorrectionReplay := newAcknowledgement(first.Revision.ID, second.Revision.ID)
 		replayed, err = ss.ExamAttempt().AcknowledgeCorrection(ctx, afterCorrectionReplay, firstCommands[winnerIndex])
 		require.NoError(t, err)
+		require.True(t, replayed.ConsistentWith(connected.Attempt.ID, first.Revision.ID, second.Revision.ID), "AcknowledgeCorrection returned a result inconsistent with its request")
 		require.NotNil(t, replayed)
 		require.True(t, replayed.Replayed)
 		require.False(t, replayed.Duplicate)
@@ -560,6 +577,7 @@ func testExamCorrectionAcknowledgement(t *testing.T, ctx context.Context, ss sto
 			examCommand(fixture.candidate.ID, store.ExamAttemptCorrectionAcknowledgementOperation,
 				"correction-acknowledgement-after-later-correction", "correction-acknowledgement-first-ack"))
 		require.NoError(t, err)
+		require.True(t, duplicate.ConsistentWith(connected.Attempt.ID, first.Revision.ID, second.Revision.ID), "AcknowledgeCorrection returned a result inconsistent with its request")
 		require.NotNil(t, duplicate)
 		require.True(t, duplicate.Duplicate)
 		require.False(t, duplicate.Replayed)
@@ -612,6 +630,8 @@ func testManagerEndedExamSubmission(t *testing.T, ctx context.Context, ss store.
 		command := examCommand(fixture.manager.ID, store.ExamSubmissionManagerEndOperation, "manager-end-once", "manager-end-once")
 		ended, err := submissions.EndByManager(ctx, input, command)
 		require.NoError(t, err)
+		require.True(t, ended.ConsistentWith(connected.Attempt.ID, fixture.examID, fixture.sitting.ID, preparation.Target, input.SubmissionID, input.ReceiptCode),
+			"EndByManager returned a result inconsistent with its request")
 		require.NotNil(t, ended)
 		require.False(t, ended.Replayed)
 		require.True(t, ended.ConnectionClosed)
@@ -634,6 +654,7 @@ func testManagerEndedExamSubmission(t *testing.T, ctx context.Context, ss store.
 		require.Equal(t, int64(1), discrepancies.Items[0].UnresolvedCount)
 		managed, err := ss.ExamAttempt().Get(ctx, fixture.examID, connected.Attempt.ID)
 		require.NoError(t, err)
+		require.True(t, managed.ConsistentWith(fixture.examID), "Get returned a result inconsistent with its request")
 		require.Equal(t, model.ExamAttemptSubmitted, managed.Attempt.State)
 		require.NotNil(t, managed.LatestParticipation)
 		require.Equal(t, model.AttemptParticipationEndManagerEnded, managed.LatestParticipation.EndReason)
@@ -650,6 +671,8 @@ func testManagerEndedExamSubmission(t *testing.T, ctx context.Context, ss store.
 				fixture.examID, fixture.unitID).ID, AuditAt: replayPreparation.SealAt}
 		replayed, err := submissions.EndByManager(ctx, replay, command)
 		require.NoError(t, err)
+		require.True(t, replayed.ConsistentWith(connected.Attempt.ID, fixture.examID, fixture.sitting.ID, replayPreparation.Target, replay.SubmissionID, replay.ReceiptCode),
+			"EndByManager replay returned a result inconsistent with its request")
 		require.NotNil(t, replayed)
 		require.True(t, replayed.Replayed)
 		require.False(t, replayed.ConnectionClosed)
@@ -772,6 +795,8 @@ func testAutomaticExamSubmissionSealing(t *testing.T, ctx context.Context, ss st
 		attachAutomaticSubmissionReceipt(t, suspendedFixture.candidate, suspendedInput)
 		suspendedResult, err := submissions.SealForSittingClose(ctx, suspendedInput)
 		require.NoError(t, err)
+		require.True(t, suspendedResult.ConsistentWith(suspendedTarget, suspendedInput.SubmissionID, suspendedInput.ReceiptCode),
+			"SealForSittingClose returned a result inconsistent with its request")
 		require.False(t, suspendedResult.Replayed)
 		require.False(t, suspendedResult.ConnectionClosed)
 		automaticReceipts, listErr := ss.Mail().ListDeliveries(ctx, store.MailDeliveryListOptions{
@@ -902,6 +927,8 @@ func raceAutomaticExamSubmissionSeal(t *testing.T, ctx context.Context, ss store
 	}
 	values := make([]*store.ExamSubmissionAutomaticSealResult, 0, 2)
 	for indexed := range results {
+		require.True(t, indexed.result.ConsistentWith(target, inputs[indexed.index].SubmissionID, inputs[indexed.index].ReceiptCode),
+			"SealForSittingClose returned a result inconsistent with its request")
 		if indexed.result != nil && !indexed.result.Replayed {
 			require.True(t, indexed.result.Receipt.SubmittedAt.Equal(inputs[indexed.index].Notice.Occurrence.CreatedAt), "automatic seal time=%s, receipt occurrence", indexed.result.Receipt.SubmittedAt)
 		}

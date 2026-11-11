@@ -49,6 +49,7 @@ func testExamAttemptFocusLoss(t *testing.T, ctx context.Context, ss store.Store,
 	crossingInput := newFocusLossInput(t, ctx, ss, fixture, access, 4, 2000, model.FocusLossSourceFullscreenExited)
 	crossed, err := ss.ExamFocusLoss().RecordFocusLoss(ctx, crossingInput)
 	require.NoError(t, err)
+	require.True(t, crossed.ConsistentWith(target, access, crossingInput.Sequence, crossingInput.DurationMilliseconds, crossingInput.Source), "RecordFocusLoss returned a result inconsistent with its request")
 	require.False(t, crossed.Duplicate)
 	require.True(t, crossed.CollectionEnabled)
 	require.True(t, crossed.Qualified)
@@ -76,6 +77,7 @@ func testExamAttemptFocusLoss(t *testing.T, ctx context.Context, ss store.Store,
 	replay.AuditEventID, replay.AuditAt = saveExamAttemptAudit(t, ctx, ss, fixture).ID, model.NowUTC()
 	replayed, err := ss.ExamFocusLoss().RecordFocusLoss(ctx, &replay)
 	require.NoError(t, err)
+	require.True(t, replayed.ConsistentWith(target, access, replay.Sequence, replay.DurationMilliseconds, replay.Source), "RecordFocusLoss replay returned a result inconsistent with its request")
 	require.True(t, replayed.Duplicate, "RecordFocusLoss(duplicate) = %#v, first = %#v", replayed, crossed)
 	require.Equal(t, crossed.Signal.ID, replayed.Signal.ID, "RecordFocusLoss(duplicate) = %#v, first = %#v", replayed, crossed)
 	require.True(t, replayed.DatabaseTime.Equal(crossed.DatabaseTime), "RecordFocusLoss(duplicate) = %#v, first = %#v", replayed, crossed)
@@ -254,6 +256,9 @@ func testExamAttemptFocusLossPolicies(t *testing.T, ctx context.Context, ss stor
 		require.Equal(t, model.AttemptSuspensionCandidateReasonFocusLossPolicy, crossed.Suspension.CandidateReason)
 		resolved, err := ss.ExamFocusLoss().ResolveFocusLossTarget(ctx, access)
 		require.NoError(t, err)
+		require.True(t, crossed.ConsistentWith(resolved, access, crossingInput.Sequence, crossingInput.DurationMilliseconds, crossingInput.Source), "RecordFocusLoss returned a result inconsistent with its request")
+		require.True(t, crossed.Participation.Consistent(), "RecordFocusLoss returned a result inconsistent with its request")
+		require.True(t, crossed.Suspension.ConsistentActiveOrAbsent(access.AttemptID), "RecordFocusLoss returned a result inconsistent with its request")
 		require.Equal(t, connected.Attempt.ID, resolved.AttemptID)
 		require.Equal(t, connected.Participation.Generation, resolved.Generation)
 		replay := *crossingInput
@@ -261,6 +266,7 @@ func testExamAttemptFocusLossPolicies(t *testing.T, ctx context.Context, ss stor
 		replay.AuditEventID, replay.AuditAt = saveExamAttemptAudit(t, ctx, ss, fixture).ID, model.NowUTC()
 		replayed, err := ss.ExamFocusLoss().RecordFocusLoss(ctx, &replay)
 		require.NoError(t, err)
+		require.True(t, replayed.ConsistentWith(resolved, access, replay.Sequence, replay.DurationMilliseconds, replay.Source), "RecordFocusLoss replay returned a result inconsistent with its request")
 		require.True(t, replayed.Duplicate, "Focus Loss self-suspended replay = %#v, first = %#v", replayed, crossed)
 		require.Equal(t, crossed.Signal.ID, replayed.Signal.ID, "Focus Loss self-suspended replay = %#v, first = %#v", replayed, crossed)
 		require.NotNil(t, replayed.Suspension, "Focus Loss self-suspended replay = %#v, first = %#v", replayed, crossed)
@@ -286,6 +292,8 @@ func testExamAttemptFocusLossPolicies(t *testing.T, ctx context.Context, ss stor
 		reallowed, err := ss.ExamAttempt().ReallowAttempt(ctx, reallow,
 			examCommand(fixture.manager.ID, store.ExamAttemptReallowOperation, "focus-reallow", "focus-reallow"))
 		require.NoError(t, err)
+		require.True(t, reallowed.ConsistentWith(fixture.examID, fixture.sitting.ID, fixture.class.ID, connected.Attempt.ID, crossed.Attempt.Revision, crossed.Suspension.ID, fixture.manager.ID),
+			"ReallowAttempt returned a result inconsistent with its request")
 		require.True(t, reallowed.FocusLossWindowReset)
 		require.Equal(t, model.ExamAttemptReady, reallowed.Attempt.State)
 		require.Equal(t, int64(3), reallowed.Attempt.Revision)
@@ -462,6 +470,7 @@ func connectFocusLossFixture(t *testing.T, ctx context.Context, ss store.Store, 
 	prepareExamAttemptConnect(t, ctx, ss, input)
 	connected, err := ss.ExamAttempt().Connect(ctx, input, examCommand(fixture.candidate.ID, store.ExamAttemptConnectOperation, key, key))
 	require.NoError(t, err)
+	require.True(t, connected.ConsistentWith(fixture.class.ID, fixture.candidate.ID, fixture.session.ID, fixture.sitting.ID), "Connect returned a result inconsistent with its request")
 	return connected, store.ExamAttemptFocusLossAccess{AttemptID: connected.Attempt.ID, ParticipationID: connected.Participation.ID,
 		Generation: connected.Participation.Generation, CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID,
 		ConnectionID: connected.Connection.ID, ContinuityCredentialHash: credentialHash}
@@ -471,9 +480,12 @@ func recordFocusLoss(t *testing.T, ctx context.Context, ss store.Store, fixture 
 	access store.ExamAttemptFocusLossAccess, sequence, duration int64, source model.FocusLossSource,
 ) *store.ExamAttemptFocusLossResult {
 	t.Helper()
+	target, err := ss.ExamFocusLoss().ResolveFocusLossTarget(ctx, access)
+	require.NoError(t, err)
 	input := newFocusLossInput(t, ctx, ss, fixture, access, sequence, duration, source)
 	result, err := ss.ExamFocusLoss().RecordFocusLoss(ctx, input)
 	require.NoError(t, err)
+	require.True(t, result.ConsistentWith(target, access, sequence, duration, source), "RecordFocusLoss returned a result inconsistent with its request")
 	return result
 }
 

@@ -108,6 +108,9 @@ func testExamManagersAndOwnership(t *testing.T, ss store.Store) {
 
 	current, err := ss.ExamAuthoring().Access(ctx, examID, later.ID)
 	require.NoError(t, err)
+	require.True(t, current.Consistent(), "Access returned a result inconsistent with its request")
+	require.True(t, current.ConsistentWith(examID, unit.ID), "Access returned a result inconsistent with its request")
+	require.True(t, current.ConsistentAndValidWith(examID), "Access returned a result inconsistent with its request")
 	require.True(t, current.ActorIsManager)
 	require.Equal(t, target.ID, current.Exam.OwnerUserID)
 	require.Equal(t, int64(5), current.Exam.Revision)

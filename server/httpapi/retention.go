@@ -19,6 +19,9 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
+// RetentionApplication is the application port its handlers call; it lists the
+// caller's retention notices and reads, previews and changes the retention
+// control.
 type RetentionApplication interface {
 	ListRetentionNotices(context.Context, invocation.Invocation, model.RetentionRetirementID, int) (*administration.RetentionNoticePage, error)
 	GetRetentionControl(context.Context, invocation.Invocation) (*model.RetentionControl, error)

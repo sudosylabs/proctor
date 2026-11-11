@@ -47,7 +47,9 @@ func (j DesktopPublicJWK) Validate() error {
 	if err != nil {
 		return invalidModelError("DesktopPublicJWK.Validate", "desktop_public_jwk", "", "desktop public JWK y coordinate is invalid", "")
 	}
-	if !elliptic.P256().IsOnCurve(x, y) {
+	point := append([]byte{4}, x.FillBytes(make([]byte, 32))...)
+	point = append(point, y.FillBytes(make([]byte, 32))...)
+	if _, err = ecdsa.ParseUncompressedPublicKey(elliptic.P256(), point); err != nil {
 		return invalidModelError("DesktopPublicJWK.Validate", "desktop_public_jwk", "", "desktop public JWK point is not on P-256", "")
 	}
 	return nil

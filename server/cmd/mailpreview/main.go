@@ -171,9 +171,11 @@ func run(args []string, stderr io.Writer) error {
 		}
 
 		base := string(key)
+		//nolint:gosec // G306: a developer preview of fixture mail, not a secret.
 		if err := os.WriteFile(filepath.Join(*output, base+".html"), []byte(message.HTML), 0o644); err != nil {
 			return fmt.Errorf("write HTML preview %q: %w", key, err)
 		}
+		//nolint:gosec // G306: a developer preview of fixture mail, not a secret.
 		if err := os.WriteFile(filepath.Join(*output, base+".txt"), []byte(message.Text), 0o644); err != nil {
 			return fmt.Errorf("write text preview %q: %w", key, err)
 		}
@@ -188,6 +190,7 @@ func run(args []string, stderr io.Writer) error {
 	}
 
 	index.WriteString("</ul>\n</body></html>\n")
+	//nolint:gosec // G306: a developer preview index of fixture mail, not a secret.
 	if err := os.WriteFile(filepath.Join(*output, "index.html"), []byte(index.String()), 0o644); err != nil {
 		return fmt.Errorf("write preview index: %w", err)
 	}

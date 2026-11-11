@@ -24,6 +24,8 @@ import (
 
 const maximumProfilePictureBytes int64 = 5 << 20
 
+// ErrInvalidProfilePicture is returned by the image normalizer for input that
+// is not an acceptable image; the service maps it to profile_picture.invalid.
 var ErrInvalidProfilePicture = errors.New("invalid profile picture")
 
 // ErrDefaultProfilePictureUserNotFound reports that the User whose default
@@ -60,6 +62,8 @@ type DefaultProfilePictureGenerationFiles interface {
 
 type profilePictureWorkCapacity interface{ WorkCapacityExceeded() }
 
+// RenderedProfilePicture is a generated default picture. The caller owns Body
+// and must close it.
 type RenderedProfilePicture struct {
 	Body      io.ReadCloser
 	MediaType string
@@ -83,6 +87,9 @@ type RemoveProfilePictureCommand struct {
 	UserID         model.UserID
 	ExpectedSHA256 string
 }
+
+// ProfilePictureContent is a profile picture to serve. ETag is the quoted
+// SHA-256 of the bytes; the caller owns Body and must close it.
 type ProfilePictureContent struct {
 	Body      io.ReadCloser
 	MediaType string

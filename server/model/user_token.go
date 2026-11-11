@@ -22,7 +22,7 @@ type UserTokenPurpose string
 
 const (
 	UserTokenPasswordReset     UserTokenPurpose = "password_reset"
-	UserTokenEmailVerification UserTokenPurpose = "email_verification"
+	UserTokenEmailVerification UserTokenPurpose = "email_verification" //nolint:gosec // G101: a token purpose name, not a credential.
 	// UserTokenEmailChangeUndo is sent to the previous address when an
 	// account's email changes; its Target is that previous address, which
 	// redeeming the token restores.

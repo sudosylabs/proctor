@@ -21,13 +21,20 @@ type StartBrowserInvitationCommand struct {
 	Source string
 }
 
+// BrowserInvitationRequirement says what the browser must present before it
+// can accept an Invitation.
 type BrowserInvitationRequirement string
 
+// Student Class and teacher Academic Unit Invitations may create the account
+// that accepts them; role Invitations require an existing signed-in Session.
 const (
 	BrowserInvitationRequirementAccount BrowserInvitationRequirement = "account"
 	BrowserInvitationRequirementSession BrowserInvitationRequirement = "session"
 )
 
+// BrowserInvitationStart is what a browser receives after presenting a valid
+// claim for a pending Invitation: a transaction handle and proof to continue
+// with, and the only Invitation facts it may show.
 type BrowserInvitationStart struct {
 	Handle       string
 	BrowserProof string

@@ -500,7 +500,7 @@ func (h examAttemptHandlers) appendHistoricalBrowserDelivery(request route.Reque
 		MissingRangesTruncated: value.MissingRangesTruncated,
 	}
 	for _, r := range value.MissingRanges {
-		progress.MissingRanges = append(progress.MissingRanges, model.SequenceRange{First: r.First, Last: r.Last})
+		progress.MissingRanges = append(progress.MissingRanges, model.SequenceRange(r))
 	}
 
 	if progress.Validate() != nil {

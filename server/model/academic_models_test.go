@@ -232,7 +232,7 @@ func TestAcademicModelValidationReturnsPreciseTranslationIDs(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			require.Error(t, test.err, "validation returned nil")
-			validation, ok := test.err.(*ValidationError)
+			validation, ok := test.err.(*ValidationError) //nolint:errorlint // The test pins that validation returns the ValidationError itself, unwrapped.
 			require.True(t, ok, "error type = %T", test.err)
 			require.Equal(t, test.code, validation.Code, "error code")
 			require.NotEmpty(t, validation.SafeFields()["field"])

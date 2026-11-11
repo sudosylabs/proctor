@@ -388,7 +388,7 @@ func TestAuthenticationAttemptAccountingPreservesSequentialPartialFailure(t *tes
 	t.Parallel()
 
 	for _, failAt := range []int{1, 2} {
-		t.Run(string(rune('0'+failAt)), func(t *testing.T) {
+		t.Run(string(rune('0'+failAt)), func(t *testing.T) { //nolint:gosec // G115: failAt ranges over 1 and 2.
 			t.Parallel()
 			cache := &faultingAuthenticationAttemptCache{
 				expiringAuthenticationAttemptCache: newExpiringAuthenticationAttemptCache(time.Now),

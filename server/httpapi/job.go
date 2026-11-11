@@ -23,6 +23,8 @@ import (
 
 const defaultJobPageSize = 50
 
+// JobOperationsApplication is the application port its handlers call; it lists
+// Jobs and their attempts for operators and cancels or retries a Job.
 type JobOperationsApplication interface {
 	ListJobs(context.Context, invocation.Invocation, job.ListQuery) (job.Page, error)
 	GetJob(context.Context, invocation.Invocation, model.JobID) (job.View, error)

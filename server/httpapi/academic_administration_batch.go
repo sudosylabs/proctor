@@ -17,6 +17,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
+// AcademicAdministrationBatchApplication is the application port its handler
+// calls; it runs one batch of academic administration rows.
 type AcademicAdministrationBatchApplication interface {
 	RunAcademicAdministrationBatch(
 		context.Context,

@@ -25,6 +25,9 @@ import (
 
 const examSittingCorrectionUploadBodyLimit = model.ExamResourceMaximumBytes + 64*1024
 
+// ExamSittingCorrectionApplication is the application port its handlers call;
+// it stages corrected resource content and applies a correction to a live
+// Sitting.
 type ExamSittingCorrectionApplication interface {
 	StageExamSittingCorrectionResourceContent(
 		context.Context,

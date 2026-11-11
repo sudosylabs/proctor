@@ -27,6 +27,9 @@ import (
 const examResourceUploadBodyLimit = model.ExamResourceMaximumBytes + 64*1024
 const examResourceMetadataLimit = 32 * 1024
 
+// ExamResourceApplication is the application port its handlers call; it
+// creates, replaces, edits, orders, removes and opens a Draft's Exam
+// Resources.
 type ExamResourceApplication interface {
 	CreateExamResource(context.Context, invocation.Invocation, resource.CreateCommand) (store.ExamResourceRecord, error)
 	ReplaceExamResourceContent(context.Context, invocation.Invocation, resource.ReplaceContentCommand) (store.ExamResourceRecord, error)
@@ -536,6 +539,7 @@ func decodeExamResourceMultipart[T any](request *http.Request, target *T) (io.Re
 	}
 
 	var trailing any
+	//nolint:errorlint // Decoder EOF is an exact sentinel for clean end of input; anything else is trailing data.
 	if err = decoder.Decode(&trailing); err != io.EOF {
 		return nil, errors.New("metadata is invalid")
 	}

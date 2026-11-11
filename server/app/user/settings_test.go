@@ -500,8 +500,8 @@ func TestUserSettingsConcurrentWritersPublishOnlyTheCommittedWinner(t *testing.T
 		go func(index int) {
 			<-start
 			_, replaceErr := service.ReplaceOwnUserSettings(context.Background(), invocation.New(principal, model.RequestMetadata{}), ReplaceOwnUserSettingsCommand{
-				Source: "{\"editor.fontSize\": " + string(rune('1'+index)) + "}\n", FormatVersion: 1,
-				ExpectedRevision: current.Revision, IdempotencyKey: "racing-writer-" + string(rune('a'+index)),
+				Source: "{\"editor.fontSize\": " + string(rune('1'+index)) + "}\n", FormatVersion: 1, //nolint:gosec // G115: index ranges over 0 and 1.
+				ExpectedRevision: current.Revision, IdempotencyKey: "racing-writer-" + string(rune('a'+index)), //nolint:gosec // G115: index ranges over 0 and 1.
 			})
 			errorsByWriter <- replaceErr
 		}(index)

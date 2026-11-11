@@ -329,7 +329,7 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 	if err == nil {
 		return cert, nil
 	}
-	if err != ErrCacheMiss {
+	if !errors.Is(err, ErrCacheMiss) {
 		return nil, err
 	}
 
@@ -338,7 +338,9 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 	if err != nil {
 		return nil, err
 	}
-	m.cachePut(ctx, ck, cert)
+	// Best effort, as upstream: the certificate is already held in memory and
+	// a failed cache write only costs a reissue after a restart.
+	_ = m.cachePut(ctx, ck, cert)
 	return cert, nil
 }
 
@@ -445,7 +447,8 @@ func (m *Manager) HTTPHandler(fallback http.Handler) http.Handler {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
-		w.Write(data)
+		// The status line is already sent; a failed write leaves nothing to report.
+		_, _ = w.Write(data) //nolint:gosec // G705: the key authorization this manager stored for the token, not request input.
 	})
 }
 
@@ -455,7 +458,7 @@ func handleHTTPRedirect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	target := "https://" + stripPort(r.Host) + r.URL.RequestURI()
-	http.Redirect(w, r, target, http.StatusFound)
+	http.Redirect(w, r, target, http.StatusFound) //nolint:gosec // G710: upgrades the request to HTTPS on the host the client itself addressed.
 }
 
 func stripPort(hostport string) string {
@@ -746,7 +749,8 @@ AuthorizeOrderLoop:
 		// after we're done.
 		defer func(urls []string) {
 			m.runBackground(func(ctx context.Context) {
-				m.deactivatePendingAuthz(ctx, urls)
+				// deactivatePendingAuthz retains its error for Close to report.
+				_ = m.deactivatePendingAuthz(ctx, urls)
 			})
 		}(o.AuthzURLs)
 
@@ -903,7 +907,8 @@ func (m *Manager) putCertToken(ctx context.Context, name string, cert *tls.Certi
 		m.certTokens = make(map[string]*tls.Certificate)
 	}
 	m.certTokens[name] = cert
-	m.cachePut(ctx, certKey{domain: name, isToken: true}, cert)
+	// Best effort, as upstream: the in-memory token answers this node's challenge.
+	_ = m.cachePut(ctx, certKey{domain: name, isToken: true}, cert)
 }
 
 // deleteCertToken removes the token certificate with the specified name
@@ -948,7 +953,8 @@ func (m *Manager) putHTTPToken(ctx context.Context, tokenPath, val string) {
 	b := []byte(val)
 	m.httpTokens[tokenPath] = b
 	if m.Cache != nil {
-		m.Cache.Put(ctx, httpTokenCacheKey(tokenPath), b)
+		// Best effort, as upstream: the in-memory token answers this node's challenge.
+		_ = m.Cache.Put(ctx, httpTokenCacheKey(tokenPath), b)
 	}
 }
 
@@ -1065,11 +1071,11 @@ func (m *Manager) Close() error {
 	m.stopRenew()
 	// Synchronize with a possible runBackground Add before waiting.
 	m.backgroundMu.Lock()
-	m.backgroundMu.Unlock()
+	m.backgroundMu.Unlock() //nolint:staticcheck // SA2001: a barrier that waits out an in-flight runBackground Add before Wait.
 	m.background.Wait()
 	// Synchronize with a possible beginOperation Add before waiting.
 	m.operationMu.Lock()
-	m.operationMu.Unlock()
+	m.operationMu.Unlock() //nolint:staticcheck // SA2001: a barrier that waits out an in-flight beginOperation Add before Wait.
 	m.operations.Wait()
 	return m.retainedCleanupError()
 }
@@ -1107,7 +1113,7 @@ func (m *Manager) randomInt63n(maximum int64) int64 {
 	m.randMu.Lock()
 	defer m.randMu.Unlock()
 	if m.rand == nil {
-		m.rand = mathrand.New(mathrand.NewSource(time.Now().UnixNano()))
+		m.rand = mathrand.New(mathrand.NewSource(time.Now().UnixNano())) //nolint:gosec // G404: renewal and retry jitter, not a secret.
 	}
 	return m.rand.Int63n(maximum)
 }
@@ -1142,10 +1148,10 @@ func (m *Manager) accountKey(ctx context.Context) (crypto.Signer, error) {
 	}
 
 	data, err := m.Cache.Get(ctx, keyName)
-	if err == ErrCacheMiss {
+	if errors.Is(err, ErrCacheMiss) {
 		data, err = m.Cache.Get(ctx, legacyKeyName)
 	}
-	if err == ErrCacheMiss {
+	if errors.Is(err, ErrCacheMiss) {
 		key, genKeyErr := genKey()
 		if genKeyErr != nil {
 			return nil, genKeyErr
@@ -1207,11 +1213,11 @@ func (m *Manager) acmeClient(ctx context.Context) (*acme.Client, error) {
 // isAccountAlreadyExist reports whether the err, as returned from acme.Client.Register,
 // indicates the account has already been registered.
 func isAccountAlreadyExist(err error) bool {
-	if err == acme.ErrAccountAlreadyExists {
+	if errors.Is(err, acme.ErrAccountAlreadyExists) {
 		return true
 	}
-	ae, ok := err.(*acme.Error)
-	return ok && ae.StatusCode == http.StatusConflict
+	var ae *acme.Error
+	return errors.As(err, &ae) && ae.StatusCode == http.StatusConflict
 }
 
 func (m *Manager) hostPolicy() HostPolicy {
@@ -1345,7 +1351,7 @@ func validCert(ck certKey, der [][]byte, key crypto.Signer, now time.Time) (leaf
 		if !ok {
 			return nil, errors.New("acme/autocert: private key type does not match public key type")
 		}
-		if pub.X.Cmp(prv.X) != 0 || pub.Y.Cmp(prv.Y) != 0 {
+		if !pub.Equal(prv.Public()) {
 			return nil, errors.New("acme/autocert: private key does not match public key")
 		}
 		if ck.isRSA && !ck.isToken {

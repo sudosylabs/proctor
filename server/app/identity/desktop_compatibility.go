@@ -28,6 +28,9 @@ import (
 // declared Desktop build against this server and Institution policy.
 type DesktopCompatibilityState string
 
+// The compatibility states. UpdateRequired means the Desktop is too old,
+// ServerIncompatible that it is newer than this server supports, and
+// UnsupportedTarget that no build exists for its platform and architecture.
 const (
 	DesktopCompatibilityCompatible         DesktopCompatibilityState = "compatible"
 	DesktopCompatibilityUpdateRequired     DesktopCompatibilityState = "update_required"

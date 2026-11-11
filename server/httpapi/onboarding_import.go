@@ -23,6 +23,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// OnboardingImportApplication is the application port its handlers call; it
+// uploads, commits, cancels and reports onboarding imports.
 type OnboardingImportApplication interface {
 	UploadOnboardingImport(
 		context.Context,

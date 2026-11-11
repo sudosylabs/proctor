@@ -19,10 +19,14 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// FanoutBundleSealingPurpose binds a sealed Sitting bundle to its mail
+// occurrence, so a bundle copied onto another fan-out fails to open.
 const (
 	FanoutBundleSealingPurpose = "mail.fanout_bundle"
 )
 
+// SittingScheduleDetails are the Sitting facts a schedule message shows.
+// Prepare fills a zero StartsAt and EndsAt from the Sitting itself.
 type SittingScheduleDetails struct {
 	ExamTitle             string
 	ClassDisplayName      string
@@ -33,6 +37,9 @@ type SittingScheduleDetails struct {
 
 func (SittingScheduleDetails) mailPresentation() {}
 
+// SittingRenderer is a Renderer that also reports its default and supported
+// locales, so a bundle can be frozen in every locale before recipients are
+// known.
 type SittingRenderer interface {
 	Renderer
 	SittingLocales() (string, []string)
@@ -59,6 +66,8 @@ type SittingComposerDependencies struct {
 	Institution func() string
 }
 
+// SittingComposer prepares the fan-out for a Sitting schedule change and later
+// expands its sealed bundle into per-recipient deliveries.
 type SittingComposer struct {
 	deps SittingComposerDependencies
 }

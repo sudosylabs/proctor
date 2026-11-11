@@ -21,7 +21,7 @@ func TestPackageTargetCreatesBinaryWebappAndConfigurationExamples(t *testing.T) 
 
 	output := filepath.Join(t.TempDir(), "proctor-release")
 	webapp := createPackageTestWebapp(t)
-	command := exec.CommandContext(t.Context(), "make", "package", "PACKAGE_DIR="+output, "WEBAPP_DIST_DIR="+webapp)
+	command := exec.CommandContext(t.Context(), "make", "package", "PACKAGE_DIR="+output, "WEBAPP_DIST_DIR="+webapp) //nolint:gosec // G204: make with paths under the test's own TempDir.
 	result, err := command.CombinedOutput()
 	require.NoError(t, err, "make package: %v\n%s", err, result)
 	for _, path := range []string{
@@ -62,7 +62,7 @@ func TestPackageTargetRejectsAnExistingOutputDirectory(t *testing.T) {
 	active := filepath.Join(output, "config", "config.json")
 	require.NoError(t, os.MkdirAll(filepath.Dir(active), 0o700))
 	require.NoError(t, os.WriteFile(active, []byte(`{"Secret":"operator-owned"}`), 0o600))
-	command := exec.CommandContext(t.Context(), "make", "package", "PACKAGE_DIR="+output)
+	command := exec.CommandContext(t.Context(), "make", "package", "PACKAGE_DIR="+output) //nolint:gosec // G204: make with a path under the test's own TempDir.
 	result, err := command.CombinedOutput()
 	require.Error(t, err, "make package reused an existing output directory:\n%s", result)
 	data, err := os.ReadFile(active)

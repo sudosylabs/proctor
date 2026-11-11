@@ -930,5 +930,5 @@ func errorContainsOnly(err, target error) bool {
 	if wrapped, ok := err.(interface{ Unwrap() error }); ok {
 		return errorContainsOnly(wrapped.Unwrap(), target)
 	}
-	return err == target
+	return err == target //nolint:errorlint // The wrap tree is walked above, so each leaf must be the target itself.
 }

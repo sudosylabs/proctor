@@ -228,7 +228,7 @@ func (s *Authorizer) AuthorizeUserSearch(
 	return visibility, nil
 }
 
-// authorizeClassSearch returns the caller's class.view authority across every
+// AuthorizeClassSearch returns the caller's class.view authority across every
 // scope as a persistence-ready Class visibility and records the collection
 // decision at the Institution, as the other list authorizations do.
 func (s *Authorizer) AuthorizeClassSearch(

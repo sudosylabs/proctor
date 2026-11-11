@@ -612,7 +612,7 @@ func IntegrityReviewInventoryDigest(
 		hash.Write([]byte(item.FlagID.String()))
 		hash.Write([]byte(item.DecisionID.String()))
 		var revision [8]byte
-		binary.BigEndian.PutUint64(revision[:], uint64(item.DecisionRevision))
+		binary.BigEndian.PutUint64(revision[:], uint64(item.DecisionRevision)) //nolint:gosec // G115: DecisionRevision is checked to be at least 1 above.
 		hash.Write(revision[:])
 	}
 
@@ -634,7 +634,7 @@ type reviewInventoryWriter interface{ Write([]byte) (int, error) }
 
 func writeReviewInventoryCount(writer reviewInventoryWriter, count int) {
 	var encoded [4]byte
-	binary.BigEndian.PutUint32(encoded[:], uint32(count))
+	binary.BigEndian.PutUint32(encoded[:], uint32(count)) //nolint:gosec // G115: every count is a slice length capped by the SubmissionReviewMaximum* limits.
 	_, _ = writer.Write(encoded[:])
 }
 
@@ -658,7 +658,7 @@ func IntegrityReviewDeliveryDigest(base string, browser BrowserSubmissionSettlem
 		deliveryRevision,
 	} {
 		var raw [8]byte
-		binary.BigEndian.PutUint64(raw[:], uint64(v))
+		binary.BigEndian.PutUint64(raw[:], uint64(v)) //nolint:gosec // G115: Validate and securitySafeInt bound every value to a non-negative safe integer.
 		h.Write(raw[:])
 	}
 

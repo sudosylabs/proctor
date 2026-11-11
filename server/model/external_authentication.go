@@ -364,7 +364,7 @@ func IsSafeRelativeURL(value string) bool {
 
 	parsed, err := url.ParseRequestURI(value)
 	return err == nil &&
-		parsed.IsAbs() == false &&
+		!parsed.IsAbs() &&
 		parsed.Host == "" &&
 		parsed.Fragment == ""
 }

@@ -378,6 +378,7 @@ func authenticatedData(binding Binding, envelope Envelope) []byte {
 	var aad bytes.Buffer
 	aad.WriteString("proctor:secretseal")
 	aad.WriteByte(0)
+	//nolint:gosec // G115: both callers pass EnvelopeVersion1 (Seal sets it, Open rejects any other).
 	_ = binary.Write(&aad, binary.BigEndian, uint16(envelope.Version))
 	writeAADPart(&aad, envelope.Algorithm)
 	writeAADPart(&aad, envelope.KeyID)
@@ -387,6 +388,7 @@ func authenticatedData(binding Binding, envelope Envelope) []byte {
 }
 
 func writeAADPart(target *bytes.Buffer, value string) {
+	//nolint:gosec // G115: every part is a fixed algorithm, a fixed-length key ID or a Binding capped at 256 bytes.
 	_ = binary.Write(target, binary.BigEndian, uint32(len(value)))
 	target.WriteString(value)
 }

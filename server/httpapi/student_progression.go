@@ -23,6 +23,9 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
+// StudentProgressionApplication is the application port its handlers call; it
+// dry-runs, commits, cancels and reports bulk student progression between
+// Classes.
 type StudentProgressionApplication interface {
 	DryRunStudentProgression(
 		context.Context,

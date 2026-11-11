@@ -138,7 +138,7 @@ func TestIdentityAndSystemOpenAPIDocument(t *testing.T) {
 	require.NoError(t, json.Unmarshal(document.Paths["/api/v1/websocket"]["get"], &websocket))
 	_, exists := websocket.Responses["101"]
 	assert.True(t, exists, "GET /api/v1/websocket has no 101 response")
-	for name, item := range map[string]string{
+	for name, item := range map[string]string{ //nolint:gosec // G101: OpenAPI schema names and references, not credentials.
 		"SessionListResponse":                        "#/components/schemas/CurrentUserSessionResponse",
 		"PersonalAccessTokenListResponse":            "#/components/schemas/PersonalAccessTokenResponse",
 		"ExternalAuthenticationProviderListResponse": "#/components/schemas/ExternalAuthenticationProviderResponse",

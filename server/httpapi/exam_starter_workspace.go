@@ -21,6 +21,9 @@ import (
 
 const examStarterWorkspaceUploadBodyLimit = model.StarterWorkspaceMaximumFileBytes + 64*1024
 
+// ExamStarterWorkspaceApplication is the application port its handlers call;
+// it lists, opens and edits the files and directories of an Exam's Starter
+// Workspace.
 type ExamStarterWorkspaceApplication interface {
 	ListExamStarterWorkspace(context.Context, invocation.Invocation, model.ExamID) ([]store.ExamStarterWorkspaceItem, error)
 	OpenExamStarterWorkspaceFile(

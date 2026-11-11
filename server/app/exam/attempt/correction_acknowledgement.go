@@ -25,6 +25,9 @@ type AcknowledgeCorrectionCommand struct {
 	IdempotencyKey            string
 }
 
+// CorrectionAcknowledgementResult reports the acknowledged correction, the
+// Attempt's current Exam Revision, and the runtime capabilities the candidate
+// may now use.
 type CorrectionAcknowledgementResult struct {
 	CorrectionRevisionID model.ExamRevisionID
 	CurrentRevisionID    model.ExamRevisionID

@@ -264,7 +264,7 @@ func canonicalBrowserPath(value string) (string, error) {
 			return "", invalidModelError("canonicalBrowserPath", "browser_url", "", "malformed percent encoding", "")
 		}
 
-		decoded := byte(high<<4 | low)
+		decoded := byte(high<<4 | low) //nolint:gosec // G115: high and low are hex digits checked non-negative above, so the value is at most 0xff.
 		if decoded == '/' || decoded == '\\' {
 			return "", invalidModelError("canonicalBrowserPath", "browser_url", "", "encoded path separator is forbidden", "")
 		}
@@ -368,6 +368,7 @@ func canonicalBrowserIPv4(host string) (string, error) {
 		address += number << (8 * (3 - index))
 	}
 
+	//nolint:gosec // G115: each conversion deliberately keeps one octet.
 	return net.IPv4(byte(address>>24), byte(address>>16), byte(address>>8), byte(address)).String(), nil
 }
 

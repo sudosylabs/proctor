@@ -18,6 +18,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// AdministratorMFAResetResult reports the recovery generation the reset
+// started; ReenrollmentRequired is always true after a successful reset.
 type AdministratorMFAResetResult struct {
 	RecoveryGeneration   int64
 	ReenrollmentRequired bool

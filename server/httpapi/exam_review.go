@@ -25,6 +25,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// ExamIntegrityReviewApplication is the application port its handlers call; it
+// runs Integrity Review from Flags and evidence to finalization and releases
+// results to students.
 type ExamIntegrityReviewApplication interface {
 	ListNativeConditions(context.Context, invocation.Invocation, store.NativeConditionListOptions) (*store.NativeConditionPage, error)
 	GetExamIntegrityReview(context.Context, invocation.Invocation, model.SubmissionID) (*store.ExamSubmissionReviewSnapshot, error)

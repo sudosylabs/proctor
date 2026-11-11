@@ -21,6 +21,9 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
+// InvitationApplication is the application port its handlers call; it issues
+// and accepts Invitations of each purpose and lists, resends, revokes,
+// replaces and batches them.
 type InvitationApplication interface {
 	IssueStudentClassInvitation(
 		context.Context,

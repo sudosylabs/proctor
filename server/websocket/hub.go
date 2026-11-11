@@ -798,5 +798,5 @@ func (h *Hub) shardForUser(userID string) *shard {
 	var hash maphash.Hash
 	hash.SetSeed(h.hashSeed)
 	_, _ = hash.WriteString(userID)
-	return h.shards[int(hash.Sum64()%uint64(len(h.shards)))]
+	return h.shards[int(hash.Sum64()%uint64(len(h.shards)))] //nolint:gosec // G115: the remainder is below len(h.shards), so it fits an int.
 }

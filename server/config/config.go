@@ -79,7 +79,7 @@ func Default() Config {
 			ExportTimeout:   Duration{Duration: 10 * time.Second},
 			ShutdownTimeout: Duration{Duration: 5 * time.Second},
 		},
-		Database: Database{
+		Database: Database{ //nolint:gosec // G101: the development database the compose stack defines; deployments configure their own.
 			DataSource:            "postgres://proctor:proctor@127.0.0.1:15432/proctor?sslmode=disable",
 			MaxOpenConnections:    50,
 			MaxIdleConnections:    10,

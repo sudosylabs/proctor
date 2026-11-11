@@ -47,6 +47,9 @@ func candidateAttemptAccessHeaders(request *http.Request) (candidateAttemptHeade
 	return candidateAttemptHeaderAccess{ConnectionID: connectionID, ContinuityCredential: credentials[0]}, nil
 }
 
+// ExamAttemptApplication is the application port the Attempt handlers call:
+// the candidate's Workspace and Submission, browser and native evidence
+// delivery, security preflight, and manager actions on Attempts.
 type ExamAttemptApplication interface {
 	BrowserSourceStatus(context.Context, invocation.Invocation, attempt.BrowserSourceQuery) (*model.BrowserSourceStatus, error)
 	BrowserDeliveryReceipts(context.Context, invocation.Invocation, attempt.BrowserSourceQuery, int64, int) (*model.BrowserReceiptPage, error)

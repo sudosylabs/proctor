@@ -17,6 +17,9 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
+// SessionReauthentication is the application port its handlers call; it
+// refreshes a Session's recent authentication by password or through an
+// external provider.
 type SessionReauthentication interface {
 	ReauthenticatePassword(context.Context, invocation.Invocation, identity.ReauthenticatePasswordCommand) (*model.Session, error)
 	BeginExternalReauthentication(

@@ -20,6 +20,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// ExamRevisionApplication is the application port its handlers call; it
+// publishes Exam Revisions and reads their summaries, never authored content.
 type ExamRevisionApplication interface {
 	PublishExamRevision(context.Context, invocation.Invocation, exam.PublishRevisionCommand) (store.ExamRevisionSummary, error)
 	GetExamRevision(context.Context, invocation.Invocation, model.ExamID, model.ExamRevisionID) (store.ExamRevisionSummary, error)

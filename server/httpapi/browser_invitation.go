@@ -16,6 +16,9 @@ import (
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 )
 
+// BrowserInvitationApplication is the application port its handlers call; it
+// starts a browser Invitation from its claim and accepts it with a new account
+// or the current Session.
 type BrowserInvitationApplication interface {
 	StartBrowserInvitation(
 		context.Context,

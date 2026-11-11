@@ -29,7 +29,6 @@ type academicUnitMemberHTTPApplication struct {
 	pageQuery     academic.ListAcademicUnitMembersPageQuery
 	pageResult    *academic.AcademicUnitMemberPage
 	result        *model.AcademicUnitMember
-	values        []*model.AcademicUnitMember
 	createCommand academic.CreateAcademicUnitMemberCommand
 	endCommand    academic.EndAcademicUnitMemberCommand
 }

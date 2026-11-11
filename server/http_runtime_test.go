@@ -103,7 +103,7 @@ func TestHTTPRuntimeServesStaticTLSWithoutNetwork(t *testing.T) {
 	client := tls.Client(clientConnection, &tls.Config{
 		MinVersion:         tls.VersionTLS12,
 		ServerName:         "proctor.example.edu",
-		InsecureSkipVerify: true, // The generated certificate is trusted only by this test.
+		InsecureSkipVerify: true, //nolint:gosec // G402: the generated certificate is trusted only by this test.
 	})
 	require.NoError(t, client.HandshakeContext(t.Context()))
 	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://proctor.example.edu/health/ready", nil)
@@ -220,8 +220,8 @@ func TestHTTPRuntimeGracefulShutdownDrainsForwardingRequests(t *testing.T) {
 	requestStarted := make(chan struct{})
 	releaseRequest := make(chan struct{})
 	runtime := &standardHTTPRuntime{
-		primary: &http.Server{Handler: http.NotFoundHandler()},
-		forwarding: &http.Server{Handler: http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		primary: &http.Server{Handler: http.NotFoundHandler()}, //nolint:gosec // G112: a test server on an in-memory pipe listener.
+		forwarding: &http.Server{Handler: http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) { //nolint:gosec // G112: a test server on an in-memory pipe listener.
 			close(requestStarted)
 			<-releaseRequest
 			writer.WriteHeader(http.StatusPermanentRedirect)

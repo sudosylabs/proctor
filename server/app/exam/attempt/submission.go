@@ -27,6 +27,9 @@ type SubmitCommand struct {
 	IdempotencyKey            string
 }
 
+// SubmissionResult is a sealed Submission's receipt and provenance together
+// with the Attempt identity it was sealed from. Replayed is true when an exact
+// retry returned the stored result.
 type SubmissionResult struct {
 	Receipt         store.ExamSubmissionReceipt
 	Provenance      model.ExamSubmissionProvenance
@@ -47,6 +50,8 @@ type GetSubmissionQuery struct {
 	SubmissionID model.SubmissionID
 }
 
+// ManagedSubmission is a Submission returned to a caller with Submission view,
+// with the authorization projection that granted it.
 type ManagedSubmission struct {
 	Authorization store.ExamSubmissionAuthorization
 	Submission    model.ExamSubmission
@@ -58,6 +63,8 @@ type ListSubmissionManifestQuery struct {
 	Limit        int
 }
 
+// SubmissionManifestPage is one page of a sealed Submission's manifest. The
+// cursor and digest describe the whole manifest, not just this page.
 type SubmissionManifestPage struct {
 	SubmissionID    model.SubmissionID
 	WorkspaceCursor int64

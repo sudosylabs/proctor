@@ -19,6 +19,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// ExamRecordsApplication is the application port its handlers call; it
+// completes a Sitting's records, waives Submission reviews and places or
+// releases retention holds.
 type ExamRecordsApplication interface {
 	GetExamSittingRecords(
 		context.Context,

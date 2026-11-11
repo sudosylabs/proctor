@@ -96,7 +96,7 @@ func (v NativeConditionInventory) Append(record []byte) (NativeConditionInventor
 		return v, ErrNativeDeliveryInvalid
 	}
 	raw := append([]byte("proctor.native_conditions.append\x00"), []byte(v.Digest)...)
-	raw = binary.BigEndian.AppendUint64(raw, uint64(v.Records+1))
+	raw = binary.BigEndian.AppendUint64(raw, uint64(v.Records+1)) //nolint:gosec // G115: Validate bounds Records to 0..DeliveryAttemptRecordLimit.
 	raw = append(raw, record...)
 	return NativeConditionInventory{Records: v.Records + 1, Digest: SHA256Fingerprint(raw)}, nil
 }
@@ -109,6 +109,6 @@ func IntegrityReviewNativeDigest(base string, inventory NativeConditionInventory
 	}
 	raw := append([]byte("proctor.review.native_conditions\x00"), []byte(base)...)
 	raw = append(raw, []byte(inventory.Digest)...)
-	raw = binary.BigEndian.AppendUint64(raw, uint64(inventory.Records))
+	raw = binary.BigEndian.AppendUint64(raw, uint64(inventory.Records)) //nolint:gosec // G115: Validate bounds Records to 0..DeliveryAttemptRecordLimit.
 	return strings.TrimPrefix(SHA256Fingerprint(raw), "sha256:"), nil
 }

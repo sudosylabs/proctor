@@ -192,7 +192,6 @@ func writeArchiveEntry(writer *tar.Writer, source, name, prefix string, modified
 	header.AccessTime = time.Time{}
 	header.ChangeTime = time.Time{}
 	header.PAXRecords = nil
-	header.Xattrs = nil
 	header.Format = tar.FormatPAX
 	if info.IsDir() {
 		header.Name += "/"

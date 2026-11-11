@@ -26,19 +26,27 @@ type Authorizer interface {
 	AuthorizeExamList(context.Context, invocation.Invocation) (store.ExamListVisibility, error)
 }
 
+// Auditor opens the audit attempt for an authoring mutation and fails it when
+// the mutation does not commit; the Store completes successful audits in the
+// mutation's own transaction.
 type Auditor interface {
 	Begin(context.Context, access.Mutation) (model.AuditEventID, error)
 	Fail(context.Context, model.AuditEventID, string) error
 }
 
+// ManagerMailRelationship is the relationship an Exam Manager notice tells its
+// recipient they now have to the Exam.
 type ManagerMailRelationship string
 
+// The relationships a manager notice can announce.
 const (
 	ManagerMailRelationshipManager         ManagerMailRelationship = "manager"
 	ManagerMailRelationshipOwner           ManagerMailRelationship = "owner"
 	ManagerMailRelationshipNoLongerManager ManagerMailRelationship = "no_longer_manager"
 )
 
+// ManagerMailPreparation is one manager notice to freeze. TemplateKey and
+// Relationship must agree, or PrepareManagerMail rejects it.
 type ManagerMailPreparation struct {
 	Recipient    *model.User
 	OccurrenceID model.MailOccurrenceID
@@ -48,6 +56,8 @@ type ManagerMailPreparation struct {
 	ActionAt     time.Time
 }
 
+// ManagerMailPreparer freezes a manager notice so Authoring can commit it in
+// the same transaction as the manager change.
 type ManagerMailPreparer interface {
 	PrepareManagerMail(ManagerMailPreparation) (*store.ExamManagerMail, error)
 }

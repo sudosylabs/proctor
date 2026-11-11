@@ -318,7 +318,7 @@ func TestIdentityModelsTypedLifecycle(t *testing.T) {
 	require.True(t, user.IsActive(), "new user should be active")
 	require.False(t, user.IsArchived(), "new user should be active")
 
-	credential := &PasswordCredential{
+	credential := &PasswordCredential{ //nolint:gosec // G101: a fixture Argon2id encoding of no real password.
 		UserID: userID, PasswordHash: "$argon2id$v=19$m=65536,t=3,p=4$c2FsdA$aGFzaA",
 	}
 	credential.PrepareCreate(NewPasswordCredentialID(), at)

@@ -655,8 +655,6 @@ type personalAccessTokenAuditorFake struct {
 	resource   model.Resource
 	parameters map[string]any
 	prior      map[string]any
-	status     model.AuditStatus
-	errorCode  string
 	result     map[string]any
 }
 

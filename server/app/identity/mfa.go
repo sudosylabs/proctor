@@ -18,7 +18,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha1"
+	"crypto/sha1" //nolint:gosec // G505: RFC 6238 TOTP uses HMAC-SHA1, the algorithm authenticator apps implement.
 	"encoding/base32"
 	"encoding/binary"
 	"encoding/json"
@@ -294,7 +294,7 @@ func computeTOTP(secret string, timeStep int64) (string, error) {
 		return "", err
 	}
 	var counter [8]byte
-	binary.BigEndian.PutUint64(counter[:], uint64(timeStep))
+	binary.BigEndian.PutUint64(counter[:], uint64(timeStep)) //nolint:gosec // G115: a step is Unix seconds / 30 and is never negative after 1970.
 	mac := hmac.New(sha1.New, key)
 	if _, err := mac.Write(counter[:]); err != nil {
 		return "", err

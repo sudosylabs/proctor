@@ -18,6 +18,9 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
+// DesktopAuthorization is the application port its handlers call; it runs the
+// browser-mediated flow that authorizes a Desktop and exchanges the result for
+// a Desktop Session.
 type DesktopAuthorization interface {
 	StartDesktopAuthorization(
 		context.Context,

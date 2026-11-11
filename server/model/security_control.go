@@ -211,7 +211,7 @@ func ResolveNativeSourceContinuity(
 	}
 
 	for i, head := range heads {
-		if head.SourceID != current[i].SourceID {
+		if head.SourceID != current[i].SourceID { //nolint:gosec // G602: len(heads) == len(current) is checked above.
 			return NativeContinuityDecision{}, ErrSecurityControlInvalid
 		}
 	}

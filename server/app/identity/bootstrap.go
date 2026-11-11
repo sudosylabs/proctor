@@ -55,6 +55,8 @@ type AdministratorRecoveryCommand struct {
 	Password         string
 }
 
+// AdministratorRecoveryResult reports which of the requested recovery changes
+// took effect.
 type AdministratorRecoveryResult struct {
 	LocalLoginEnabled bool
 	PasswordRotated   bool
@@ -300,6 +302,7 @@ func digestBootstrapSecret(secret string) [sha256.Size]byte {
 }
 
 func fingerprintBootstrapCommand(command BootstrapInstallationCommand) ([sha256.Size]byte, error) {
+	//nolint:gosec // G117: the password enters only the HMAC-keyed fingerprint below, never storage or a log.
 	payload, err := json.Marshal(struct {
 		InstitutionName, InstitutionDisplayName, InstitutionDescription   string
 		AdministratorUsername, AdministratorEmail                         string

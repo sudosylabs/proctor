@@ -83,7 +83,7 @@ type cacheAdapter struct {
 func (c *cacheAdapter) Get(ctx context.Context, key string) ([]byte, error) {
 	value, err := c.backend.Store.Get(ctx, key)
 	if errors.Is(err, cache.ErrNotFound) {
-		return nil, fmt.Errorf("%w: %v", ErrCacheMiss, err)
+		return nil, fmt.Errorf("%w: %w", ErrCacheMiss, err)
 	}
 	return value, err
 }
@@ -111,7 +111,7 @@ func (c *cacheAdapter) Set(
 		Condition: packageCondition,
 	})
 	if errors.Is(err, cache.ErrNotStored) {
-		return fmt.Errorf("%w: %v", ErrCacheNotStored, err)
+		return fmt.Errorf("%w: %w", ErrCacheNotStored, err)
 	}
 	return err
 }

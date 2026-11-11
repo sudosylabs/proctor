@@ -690,7 +690,7 @@ func TestRootComposesTimerOutsideRetry(t *testing.T) {
 		MaxAttempts:    3,
 		InitialBackoff: time.Nanosecond,
 		MaxBackoff:     time.Nanosecond,
-		IsTransient:    func(err error) bool { return err == transientErr },
+		IsTransient:    func(err error) bool { return errors.Is(err, transientErr) },
 	}
 	var observations atomic.Int64
 	overrides.StoreMetrics = timerlayer.RecorderFunc(func(

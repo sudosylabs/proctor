@@ -68,7 +68,6 @@ func (af *authenticationEntryHTTPApplication) Logout(
 }
 
 type externalAuthenticationEntryHTTPApplication struct {
-	externalAuthenticationEntryApplication
 	providers       []model.ExternalAuthenticationProvider
 	providersError  error
 	beginCommand    identity.BeginExternalAuthenticationCommand

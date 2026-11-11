@@ -234,7 +234,7 @@ func jpegWithEXIFOrientation(t *testing.T, jpegBytes []byte, orientation uint16)
 	binary.LittleEndian.PutUint16(payload[18:20], 3)
 	binary.LittleEndian.PutUint32(payload[20:24], 1)
 	binary.LittleEndian.PutUint16(payload[24:26], orientation)
-	segment := []byte{0xff, 0xe1, 0, byte(len(payload) + 2)}
+	segment := []byte{0xff, 0xe1, 0, byte(len(payload) + 2)} //nolint:gosec // G115: the payload is a fixed 32 bytes.
 	segment = append(segment, payload...)
 	result := append([]byte(nil), jpegBytes[:2]...)
 	result = append(result, segment...)

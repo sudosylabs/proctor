@@ -56,6 +56,8 @@ func NewHealth(deps HealthDependencies) (*Health, error) {
 	return &Health{deps: deps, now: time.Now}, nil
 }
 
+// Live always reports true: a process that can answer is alive. Dependency
+// health belongs to Ready.
 func (h *Health) Live() bool {
 	return true
 }

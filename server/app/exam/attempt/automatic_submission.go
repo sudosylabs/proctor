@@ -17,6 +17,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// AutomaticSubmissionResult is the receipt of a Submission sealed at Sitting
+// close. ConnectionClosed reports that sealing also closed the candidate's
+// live Attempt Connection.
 type AutomaticSubmissionResult struct {
 	SubmissionResult
 	ConnectionClosed bool

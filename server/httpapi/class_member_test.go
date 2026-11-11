@@ -29,7 +29,6 @@ type classMemberHTTPApplication struct {
 	pageResult    *academic.ClassMemberPage
 	result        *model.ClassEnrollment
 	ended         *model.ClassMember
-	values        []*model.ClassMember
 	enrollCommand academic.EnrollClassMemberCommand
 	endCommand    academic.EndClassMemberCommand
 }

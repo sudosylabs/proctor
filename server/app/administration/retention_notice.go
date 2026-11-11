@@ -15,6 +15,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
+// RetentionNoticePage is one page of the caller's own retention notices;
+// HasMore says another page follows the last item.
 type RetentionNoticePage struct {
 	Items   []model.RetentionNotice
 	HasMore bool

@@ -19,6 +19,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// WorkspaceMutationAccess is CandidateAccess fenced to one Participation
+// generation, so a superseded Participation cannot change the Workspace.
 type WorkspaceMutationAccess struct {
 	CandidateAccess
 	ParticipationID model.AttemptParticipationID
@@ -71,6 +73,9 @@ type DeleteWorkspaceEntryCommand struct {
 	IdempotencyKey          string
 }
 
+// WorkspaceMutationResult is the entry a Workspace mutation produced and the
+// journal change it recorded. Replayed is true when an exact retry returned
+// the stored result.
 type WorkspaceMutationResult struct {
 	AttemptID       model.ExamAttemptID
 	SittingID       model.ExamSittingID

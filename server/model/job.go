@@ -44,7 +44,7 @@ const (
 	JobTypeExamSittingLifecycleRecovery  JobType = "exam_sitting.lifecycle_recovery"
 	JobTypeExamSittingSealing            JobType = "exam_sitting.sealing"
 	JobTypeMailDeliver                   JobType = "mail.deliver"
-	JobTypeMailDeliverCredential         JobType = "mail.deliver_credential"
+	JobTypeMailDeliverCredential         JobType = "mail.deliver_credential" //nolint:gosec // G101: a Job type name, not a credential.
 	JobTypeMailCleanup                   JobType = "mail.cleanup"
 	JobTypeMailRekey                     JobType = "mail.rekey"
 	JobTypeMFARekey                      JobType = "mfa.rekey"

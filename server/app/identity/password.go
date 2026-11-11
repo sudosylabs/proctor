@@ -30,6 +30,8 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
+// ErrPasswordMismatch is returned by Verify for a wrong password and also for
+// an unparsable stored encoding, so callers cannot tell the two apart.
 var ErrPasswordMismatch = errors.New("password does not match")
 
 var dummyHashes = struct {
@@ -73,6 +75,15 @@ func NewPasswordHasher(deps PasswordHasherDependencies) (*PasswordHasher, error)
 	}
 	if settings.HistoryCount < 0 || settings.HistoryCount > store.MaximumPasswordHistory {
 		return nil, errors.New("password history count is out of range")
+	}
+	// The bounds parseArgon2id accepts, so every hash this hasher makes is one
+	// it can verify, and no setting wraps when narrowed to Argon2's widths.
+	if settings.ArgonMemoryKiB < 19*1024 || settings.ArgonMemoryKiB > 1024*1024 ||
+		settings.ArgonIterations < 1 || settings.ArgonIterations > 20 ||
+		settings.ArgonParallelism < 1 || settings.ArgonParallelism > 64 ||
+		settings.ArgonSaltBytes < 16 || settings.ArgonSaltBytes > 64 ||
+		settings.ArgonKeyBytes < 16 || settings.ArgonKeyBytes > 64 {
+		return nil, errors.New("Argon2id parameters are out of range")
 	}
 
 	hasher := &PasswordHasher{
@@ -178,7 +189,7 @@ func (h *PasswordHasher) Verify(ctx context.Context, encoded, password string) e
 		parameters.iterations,
 		parameters.memoryKiB,
 		parameters.parallelism,
-		uint32(len(expected)),
+		uint32(len(expected)), //nolint:gosec // G115: parseArgon2id bounds the key to 16..64 bytes.
 	)
 	if err := ctx.Err(); err != nil {
 		return err
@@ -262,8 +273,8 @@ func (h *PasswordHasher) NeedsRehash(encoded string) bool {
 	return parameters.memoryKiB != h.parameters.memoryKiB ||
 		parameters.iterations != h.parameters.iterations ||
 		parameters.parallelism != h.parameters.parallelism ||
-		uint32(len(salt)) != h.parameters.saltBytes ||
-		uint32(len(key)) != h.parameters.keyBytes
+		uint32(len(salt)) != h.parameters.saltBytes || //nolint:gosec // G115: parseArgon2id bounds the salt to 16..64 bytes.
+		uint32(len(key)) != h.parameters.keyBytes //nolint:gosec // G115: parseArgon2id bounds the key to 16..64 bytes.
 }
 
 // maximumPasswordLength is the configured maximum password length in bytes.
@@ -307,8 +318,8 @@ func parseArgon2id(encoded string) (passwordParameters, []byte, []byte, error) {
 	if err != nil || len(key) < 16 || len(key) > 64 {
 		return passwordParameters{}, nil, nil, errors.New("invalid Argon2id key")
 	}
-	parameters.saltBytes = uint32(len(salt))
-	parameters.keyBytes = uint32(len(key))
+	parameters.saltBytes = uint32(len(salt)) //nolint:gosec // G115: the salt is checked to 16..64 bytes above.
+	parameters.keyBytes = uint32(len(key))   //nolint:gosec // G115: the key is checked to 16..64 bytes above.
 	return parameters, salt, key, nil
 }
 
@@ -330,9 +341,9 @@ func parseArgon2Parameters(value string) (passwordParameters, error) {
 		return passwordParameters{}, err
 	}
 	return passwordParameters{
-		memoryKiB:   uint32(memory),
-		iterations:  uint32(iterations),
-		parallelism: uint8(parallelism),
+		memoryKiB:   uint32(memory),     //nolint:gosec // G115: parseBoundedParameter caps m at 1048576.
+		iterations:  uint32(iterations), //nolint:gosec // G115: parseBoundedParameter caps t at 20.
+		parallelism: uint8(parallelism), //nolint:gosec // G115: parseBoundedParameter caps p at 64.
 	}, nil
 }
 

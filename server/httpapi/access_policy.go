@@ -19,6 +19,9 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
+// AccessPolicyApplication is the application port its handlers call; it reads,
+// preflights and replaces the Access Policy and answers public access
+// discovery.
 type AccessPolicyApplication interface {
 	GetAccessPolicy(context.Context, invocation.Invocation) (administration.AccessPolicyView, error)
 	PreflightAccessPolicy(

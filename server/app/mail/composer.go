@@ -23,17 +23,26 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// DeliverySealingPurpose binds a delivery's sealed payload to its delivery ID,
+// so a payload copied onto another delivery fails to open. Mail rekeying
+// reseals under the same purpose.
 const (
 	DeliverySealingPurpose = "mail.delivery"
 )
 
+// FrozenContent is a rendered message as it will be sent. Its digest is stored
+// on the delivery, so a later template change cannot alter what was frozen.
 type FrozenContent struct{ Subject, Text, HTML string }
 
+// Address is a display name and bare address. ValidateAddress rejects one that
+// could inject a header.
 type Address struct {
 	Name    string
 	Address string
 }
 
+// Outbound is one message handed to a Sender, opened from a delivery's sealed
+// payload at send time.
 type Outbound struct {
 	From         Address
 	EnvelopeFrom string
@@ -46,8 +55,13 @@ type Outbound struct {
 	Date         time.Time
 }
 
+// TransportOutcome classifies a failed Send. Only TransportPermanent fails the
+// delivery at once; every other outcome retries until attempts or the
+// deadline run out.
 type TransportOutcome string
 
+// The TransportOutcome values. A Sender returns TransportUnknown with a nil
+// error, when there is nothing to classify.
 const (
 	TransportUnknown             TransportOutcome = "unknown"
 	TransportTemporary           TransportOutcome = "temporary"
@@ -55,12 +69,16 @@ const (
 	TransportAcceptanceUncertain TransportOutcome = "acceptance_uncertain"
 )
 
+// Sender is the outbound transport. When Enabled reports false, composers
+// still record each delivery but suppress it instead of queuing it.
 type Sender interface {
 	Enabled() bool
 	From() Address
 	Send(context.Context, Outbound) (TransportOutcome, error)
 }
 
+// PersonalAccessTokenDetails are the facts a personal access token notice may
+// show: the token's description and expiry, never its secret.
 type PersonalAccessTokenDetails struct {
 	Description        string
 	ExpiresAt          time.Time
@@ -69,12 +87,15 @@ type PersonalAccessTokenDetails struct {
 	AcademicUnitScoped bool
 }
 
+// ExamManagerDetails tell an Exam Manager which Exam and relationship changed.
 type ExamManagerDetails struct {
 	Title        string
 	Relationship string
 	ActionAt     time.Time
 }
 
+// ClassTransitionDetails name the Classes and dates of an enrollment change;
+// PreviousClassDisplayName is set only for a transfer.
 type ClassTransitionDetails struct {
 	PreviousClassDisplayName string
 	ClassDisplayName         string
@@ -82,6 +103,8 @@ type ClassTransitionDetails struct {
 	EndsAt                   time.Time
 }
 
+// SubmissionReceiptDetails carry the receipt a candidate can quote to prove
+// what was sealed and when.
 type SubmissionReceiptDetails struct {
 	ExamTitle    string
 	SittingID    model.ExamSittingID
@@ -90,6 +113,7 @@ type SubmissionReceiptDetails struct {
 	SealedAt     time.Time
 }
 
+// ResultReleaseDetails announce a released result without containing it.
 type ResultReleaseDetails struct {
 	ExamTitle  string
 	ReleasedAt time.Time
@@ -118,6 +142,8 @@ func (ResultReleaseDetails) mailPresentation()       {}
 func (EmailChangeDetails) mailPresentation()         {}
 func (RetentionDetails) mailPresentation()           {}
 
+// RenderRequest holds everything a template may show. Composers build it from
+// frozen recipient facts, so rendering reads no mutable account state.
 type RenderRequest struct {
 	Key          model.MailTemplateKey
 	Locale       string
@@ -138,6 +164,7 @@ type RenderRequest struct {
 	Deadline time.Time
 }
 
+// Renderer turns a RenderRequest into FrozenContent in the requested locale.
 type Renderer interface {
 	Render(RenderRequest) (FrozenContent, error)
 }
@@ -171,8 +198,10 @@ type NoticePreparation struct {
 	At        time.Time
 }
 
+// MFANoticeKind selects the template PrepareMFANotice uses.
 type MFANoticeKind string
 
+// The MFA changes that send a notice.
 const (
 	MFANoticeReset                    MFANoticeKind = "reset"
 	MFANoticeEnabled                  MFANoticeKind = "enabled"
@@ -180,6 +209,9 @@ const (
 	MFANoticeRecoveryCodesRegenerated MFANoticeKind = "recovery_codes_regenerated"
 )
 
+// PersonalAccessTokenPreparation is the input of
+// PreparePersonalAccessTokenSecurityNotice. TemplateKey must be a personal
+// access token template.
 type PersonalAccessTokenPreparation struct {
 	Recipient          *model.User
 	TemplateKey        model.MailTemplateKey
@@ -190,6 +222,8 @@ type PersonalAccessTokenPreparation struct {
 	AcademicUnitScoped bool
 }
 
+// ClassTransitionPreparation is the input of PrepareClassTransition.
+// TemplateKey and Details must agree, so a transfer names its previous Class.
 type ClassTransitionPreparation struct {
 	Recipient    *model.User
 	OccurrenceID model.MailOccurrenceID
@@ -198,6 +232,9 @@ type ClassTransitionPreparation struct {
 	ActionAt     time.Time
 }
 
+// SubmissionReceiptPreparation is the input of PrepareSubmissionReceiptMail.
+// TemplateKey says whether the candidate, a manager or the deadline sealed the
+// Submission.
 type SubmissionReceiptPreparation struct {
 	Recipient    *model.User
 	OccurrenceID model.MailOccurrenceID
@@ -206,6 +243,8 @@ type SubmissionReceiptPreparation struct {
 	ActionAt     time.Time
 }
 
+// ResultReleasePreparation is the input of PrepareResultReleaseMail;
+// ReleasedAt must equal Details.ReleasedAt.
 type ResultReleasePreparation struct {
 	Recipient    *model.User
 	OccurrenceID model.MailOccurrenceID
@@ -234,6 +273,9 @@ type ComposerDependencies struct {
 	Institution func() string
 }
 
+// Composer freezes one-recipient mail: it renders, seals and records each
+// message with its delivery Job, so the Store commits it with the action that
+// caused it.
 type Composer struct {
 	deps ComposerDependencies
 }
@@ -246,6 +288,8 @@ func NewComposer(deps ComposerDependencies) (*Composer, error) {
 	return &Composer{deps: deps}, nil
 }
 
+// Enabled reports whether prepared mail will be queued for sending rather than
+// recorded as suppressed. A nil Composer is disabled.
 func (p *Composer) Enabled() bool {
 	return p != nil && p.deps.Sender != nil && p.deps.Sender.Enabled() && p.deps.Sealer != nil
 }
@@ -283,14 +327,20 @@ func (p *Composer) prepareDirect(request directPreparation) (*store.PreparedMail
 	)
 }
 
+// PrepareEmailVerification freezes the verify-email message carrying the
+// single-use link in request.ActionURL. It fails for an inactive recipient.
 func (p *Composer) PrepareEmailVerification(request AccountTokenPreparation) (*store.PreparedMail, error) {
 	return p.prepareAccountToken(request, model.MailTemplateIdentityVerifyEmail)
 }
 
+// PreparePasswordReset freezes the password-reset message carrying the
+// single-use link in request.ActionURL. It fails for an inactive recipient.
 func (p *Composer) PreparePasswordReset(request AccountTokenPreparation) (*store.PreparedMail, error) {
 	return p.prepareAccountToken(request, model.MailTemplateIdentityPasswordReset)
 }
 
+// PrepareEmailChangeVerification freezes the message to an account's new
+// address that confirms the change through request.ActionURL.
 func (p *Composer) PrepareEmailChangeVerification(request AccountTokenPreparation) (*store.PreparedMail, error) {
 	return p.prepareAccountToken(request, model.MailTemplateIdentityEmailChangeVerifyNew)
 }
@@ -306,6 +356,8 @@ func (p *Composer) prepareAccountToken(request AccountTokenPreparation, key mode
 	})
 }
 
+// PreparePasswordChanged freezes the notice that an account's password
+// changed. It carries no link.
 func (p *Composer) PreparePasswordChanged(request NoticePreparation) (*store.PreparedMail, error) {
 	return p.prepareNotice(request, model.MailTemplateIdentityPasswordChanged)
 }
@@ -328,10 +380,14 @@ func (p *Composer) PrepareEmailChangeWarning(request AccountTokenPreparation) (*
 	})
 }
 
+// PrepareEmailVerifiedByAdministrator freezes the notice that an administrator
+// marked the account's address verified.
 func (p *Composer) PrepareEmailVerifiedByAdministrator(request NoticePreparation) (*store.PreparedMail, error) {
 	return p.prepareNotice(request, model.MailTemplateIdentityEmailVerifiedByAdmin)
 }
 
+// PrepareAccountStateChanged freezes the enabled or disabled notice that
+// matches enabled. The recipient must still be active when it is prepared.
 func (p *Composer) PrepareAccountStateChanged(request NoticePreparation, enabled bool) (*store.PreparedMail, error) {
 	key := model.MailTemplateIdentityAccountDisabled
 	if enabled {
@@ -340,10 +396,14 @@ func (p *Composer) PrepareAccountStateChanged(request NoticePreparation, enabled
 	return p.prepareNotice(request, key)
 }
 
+// PrepareSessionsRevokedByAdministrator freezes the notice that an
+// administrator signed the account out everywhere.
 func (p *Composer) PrepareSessionsRevokedByAdministrator(request NoticePreparation) (*store.PreparedMail, error) {
 	return p.prepareNotice(request, model.MailTemplateIdentitySessionsRevokedByAdmin)
 }
 
+// PrepareMFANotice freezes the MFA notice for kind and fails for a kind it
+// does not know.
 func (p *Composer) PrepareMFANotice(request NoticePreparation, kind MFANoticeKind) (*store.PreparedMail, error) {
 	var key model.MailTemplateKey
 	switch kind {
@@ -361,10 +421,14 @@ func (p *Composer) PrepareMFANotice(request NoticePreparation, kind MFANoticeKin
 	return p.prepareNotice(request, key)
 }
 
+// PrepareInvitationAccepted freezes the notice to an account that it accepted
+// an Invitation.
 func (p *Composer) PrepareInvitationAccepted(request NoticePreparation) (*store.PreparedMail, error) {
 	return p.prepareNotice(request, model.MailTemplateAccessInvitationAccepted)
 }
 
+// PrepareOperatorTest freezes the operator's test message, delivered through
+// the same queue as real mail.
 func (p *Composer) PrepareOperatorTest(request NoticePreparation) (*store.PreparedMail, error) {
 	return p.prepareNotice(request, model.MailTemplateSystemTest)
 }
@@ -406,6 +470,9 @@ func (p *Composer) prepareNotice(request NoticePreparation, key model.MailTempla
 	})
 }
 
+// PrepareInvitation freezes a pending Invitation's first message to its target
+// address, with actionURL as the claim link; the Invitation ID is its
+// occurrence. Unlike the notices, it fails when sending is disabled.
 func (p *Composer) PrepareInvitation(invitation *model.Invitation, actionURL string) (*store.PreparedMail, error) {
 	if !p.Enabled() || invitation == nil || invitation.Validate() != nil || invitation.State != model.InvitationPending {
 		return nil, errors.New("invitation mail input is invalid")
@@ -516,6 +583,8 @@ func (p *Composer) PrepareInvitationRevocation(
 	)
 }
 
+// InvitationTemplateKey maps an Invitation purpose to its template and fails
+// for a purpose that has none.
 func InvitationTemplateKey(purpose model.InvitationPurpose) (model.MailTemplateKey, error) {
 	switch purpose {
 	case model.InvitationPurposeStudentClass:
@@ -531,6 +600,9 @@ func InvitationTemplateKey(purpose model.InvitationPurpose) (model.MailTemplateK
 	}
 }
 
+// PreparePersonalAccessTokenSecurityNotice freezes the notice of a personal
+// access token change for an active recipient. The message never contains the
+// token.
 func (p *Composer) PreparePersonalAccessTokenSecurityNotice(request PersonalAccessTokenPreparation) (*store.PreparedMail, error) {
 	if request.Recipient == nil ||
 		request.Recipient.Validate() != nil ||
@@ -573,6 +645,8 @@ func isPATTemplate(key model.MailTemplateKey) bool {
 	return ok && definition.presentation == presentationPersonalAccessToken
 }
 
+// PrepareClassTransition freezes an enrollment, transfer or end notice. An
+// inactive recipient gets a suppressed delivery rather than an error.
 func (p *Composer) PrepareClassTransition(request ClassTransitionPreparation) (*store.PreparedMail, error) {
 	if request.Recipient == nil ||
 		request.Recipient.Validate() != nil ||
@@ -635,6 +709,9 @@ func validClassTransition(key model.MailTemplateKey, value ClassTransitionDetail
 	}
 }
 
+// PrepareRelationshipTransition freezes an Academic Unit membership or Role
+// Binding notice. An inactive recipient gets a suppressed delivery rather than
+// an error.
 func (p *Composer) PrepareRelationshipTransition(request RelationshipTransitionPreparation) (*store.PreparedMail, error) {
 	if request.Recipient == nil ||
 		request.Recipient.Validate() != nil ||
@@ -748,6 +825,8 @@ func validManagerMeaning(key model.MailTemplateKey, relationship exam.ManagerMai
 	}
 }
 
+// PrepareSubmissionReceiptMail freezes the receipt of a sealed Submission. An
+// inactive recipient gets a suppressed delivery rather than an error.
 func (p *Composer) PrepareSubmissionReceiptMail(request SubmissionReceiptPreparation) (*store.PreparedMail, error) {
 	if request.Recipient == nil ||
 		request.Recipient.Validate() != nil ||
@@ -801,6 +880,8 @@ func (p *Composer) PrepareSubmissionReceiptMail(request SubmissionReceiptPrepara
 	)
 }
 
+// PrepareResultReleaseMail freezes the notice that a result was released. An
+// inactive recipient gets a suppressed delivery rather than an error.
 func (p *Composer) PrepareResultReleaseMail(request ResultReleasePreparation) (*store.PreparedMail, error) {
 	if request.Recipient == nil ||
 		request.Recipient.Validate() != nil ||
@@ -1057,6 +1138,8 @@ func (p *Composer) prepareSuppressedRecipient(
 	return &store.PreparedMail{Occurrence: occurrence, Delivery: delivery, Job: job}, nil
 }
 
+// ValidateAddress rejects an empty address, a NUL or line break anywhere in
+// the name or address, and an address that does not parse back to itself.
 func ValidateAddress(address Address) error {
 	if address.Address == "" || strings.ContainsAny(address.Name+address.Address, "\x00\r\n") {
 		return errors.New("mail address is invalid")
@@ -1068,6 +1151,9 @@ func ValidateAddress(address Address) error {
 	return nil
 }
 
+// StableMessageID derives the Message-ID from the delivery ID, so every retry
+// of one delivery reuses it. The domain comes from from, or localhost when
+// from does not parse.
 func StableMessageID(id model.MailDeliveryID, from string) string {
 	domain := "localhost"
 	if parsed, err := mail.ParseAddress(from); err == nil {
@@ -1078,6 +1164,9 @@ func StableMessageID(id model.MailDeliveryID, from string) string {
 	return "<mail." + id.String() + "@" + strings.ToLower(domain) + ">"
 }
 
+// MaskAddress keeps the first character of the local part and the whole
+// domain, as in "j***@example.edu". An address without a local part becomes
+// "***".
 func MaskAddress(address string) string {
 	at := strings.LastIndexByte(address, '@')
 	if at < 1 {
@@ -1091,6 +1180,8 @@ func MaskAddress(address string) string {
 	return prefix + address[at:]
 }
 
+// Digest is the SHA-256 of subject, text and HTML separated by NUL bytes,
+// stored as a delivery's template digest.
 func Digest(subject, text, html string) string {
 	hash := sha256.New()
 	_, _ = hash.Write([]byte(subject))

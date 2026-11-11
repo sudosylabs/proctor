@@ -580,7 +580,9 @@ func EndExamAttemptByManager(
 func computeExamSubmissionManifestDigest(manifest ExamSubmissionManifest) string {
 	digest := sha256.New()
 	writeSubmissionDigestFrame(digest, []byte(examSubmissionManifestDigestDomain))
+	//nolint:gosec // G115: a signed-to-uint64 reinterpretation is injective, so the digest frame stays unambiguous.
 	writeSubmissionDigestUint64(digest, uint64(manifest.SchemaVersion))
+	//nolint:gosec // G115: a signed-to-uint64 reinterpretation is injective, so the digest frame stays unambiguous.
 	writeSubmissionDigestUint64(digest, uint64(manifest.WorkspaceCursor))
 	writeSubmissionDigestUint64(digest, uint64(len(manifest.Entries)))
 	for _, entry := range manifest.Entries {
@@ -589,6 +591,7 @@ func computeExamSubmissionManifestDigest(manifest ExamSubmissionManifest) string
 		writeSubmissionDigestFrame(digest, []byte(entry.Path))
 		writeSubmissionDigestFrame(digest, []byte(entry.ContentVersion))
 		writeSubmissionDigestFrame(digest, []byte(entry.MediaType))
+		//nolint:gosec // G115: a signed-to-uint64 reinterpretation is injective, so the digest frame stays unambiguous.
 		writeSubmissionDigestUint64(digest, uint64(entry.SizeBytes))
 		writeSubmissionDigestFrame(digest, []byte(entry.SHA256))
 		writeSubmissionDigestFrame(digest, []byte(entry.StorageOrigin))

@@ -10,7 +10,6 @@ package apperror_test
 import (
 	"errors"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -36,10 +35,8 @@ func TestErrorCarriesStableCodeSafeFieldsAndCause(t *testing.T) {
 	require.Equal(t, "name", err.Fields()["field"], "Fields() exposed mutable state")
 	require.ErrorIs(t, err, cause, "Error does not preserve its wrapped cause")
 	require.Contains(t, err.Error(), "academic_unit.invalid", "Error()")
-	if strings.Contains(err.Error(), "private database detail") == false {
-		// Operator-facing Error() may include the cause; public mapping must not.
-		// Presence is allowed; the contract is that transports never serialize Error().
-	}
+	// Operator-facing Error() may include the cause; public mapping must not.
+	// Presence is allowed; the contract is that transports never serialize Error().
 }
 
 func TestErrorRejectsEmptyCode(t *testing.T) {

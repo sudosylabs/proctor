@@ -140,6 +140,9 @@ type InvitationView struct {
 	NoOp             bool
 }
 
+// InvitationAcceptanceView is the outcome of accepting an Invitation: the
+// account and the one membership or binding its purpose grants. Replayed is
+// true when an exact retry returned the stored outcome.
 type InvitationAcceptanceView struct {
 	Invitation         InvitationView
 	User               *model.User
@@ -150,6 +153,8 @@ type InvitationAcceptanceView struct {
 	Replayed           bool
 }
 
+// InvitationDeliveryView is the state of an Invitation's latest mail delivery
+// for operators; it shows the recipient only masked.
 type InvitationDeliveryView struct {
 	TemplateKey       model.MailTemplateKey
 	State             model.MailDeliveryState
@@ -237,10 +242,16 @@ type ReplaceInvitationCommand struct {
 	ExpiresInDays *int
 }
 
+// MaximumInvitationBatchItems bounds the rows of one RunInvitationBatch call,
+// which authorizes the whole batch once at its scope.
 const MaximumInvitationBatchItems = 200
 
+// InvitationBatchOperation is the single operation every row of a batch runs;
+// it also fixes the scope type the batch must name.
 type InvitationBatchOperation string
 
+// The batch operations: create an Invitation of one purpose, or resend or
+// revoke existing Invitations.
 const (
 	InvitationBatchStudentClassCreate        InvitationBatchOperation = "student_class.create"
 	InvitationBatchTeacherAcademicUnitCreate InvitationBatchOperation = "teacher_academic_unit.create"
@@ -287,14 +298,19 @@ type RunInvitationBatchCommand struct {
 	onboardingImportRowNumber int
 }
 
+// InvitationBatchItemStatus is the outcome of one batch row.
 type InvitationBatchItemStatus string
 
+// A row is NoOp when it changed nothing, including an exact replay; a Failed
+// row carries an ErrorCode and does not stop the rest of the batch.
 const (
 	InvitationBatchItemSucceeded InvitationBatchItemStatus = "succeeded"
 	InvitationBatchItemNoOp      InvitationBatchItemStatus = "no_op"
 	InvitationBatchItemFailed    InvitationBatchItemStatus = "failed"
 )
 
+// InvitationBatchItemResult is the outcome of the row at Index in the
+// command's Items.
 type InvitationBatchItemResult struct {
 	Index        int
 	Status       InvitationBatchItemStatus
@@ -302,6 +318,8 @@ type InvitationBatchItemResult struct {
 	ErrorCode    string
 }
 
+// InvitationBatchResult lists every row's outcome in input order with the
+// totals of each status.
 type InvitationBatchResult struct {
 	Operation InvitationBatchOperation
 	Items     []InvitationBatchItemResult

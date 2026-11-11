@@ -19,6 +19,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
+// ExamExportsApplication is the application port its handlers call; it
+// requests an Exam export and reads or downloads it.
 type ExamExportsApplication interface {
 	CreateExamExport(context.Context, invocation.Invocation, exam.CreateExportCommand) (*model.ExamExport, error)
 	GetExamExport(context.Context, invocation.Invocation, exam.ExportQuery) (*model.ExamExport, error)

@@ -26,6 +26,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// ExamSittingApplication is the application port its handlers call; it
+// schedules Sittings and pauses, resumes, extends, closes or cancels them.
 type ExamSittingApplication interface {
 	ScheduleExamSitting(context.Context, invocation.Invocation, sitting.ScheduleCommand) (store.ExamSittingSnapshot, error)
 	GetExamSitting(context.Context, invocation.Invocation, model.ExamID, model.ExamSittingID) (store.ExamSittingSnapshot, error)

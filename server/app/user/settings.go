@@ -82,11 +82,7 @@ func (s *Service) ReplaceOwnUserSettings(
 	if len(diagnostics) != 0 {
 		public := make([]UserSettingsDiagnostic, len(diagnostics))
 		for index, diagnostic := range diagnostics {
-			public[index] = UserSettingsDiagnostic{
-				Code:   diagnostic.Code,
-				Line:   diagnostic.Line,
-				Column: diagnostic.Column,
-			}
+			public[index] = UserSettingsDiagnostic(diagnostic)
 		}
 
 		encoded, _ := json.Marshal(public)

@@ -234,7 +234,7 @@ func validBrowserActivityAcknowledgement(
 		MissingRangesTruncated: value.MissingRangesTruncated,
 	}
 	for _, missing := range value.MissingRanges {
-		progress.MissingRanges = append(progress.MissingRanges, model.SequenceRange{First: missing.First, Last: missing.Last})
+		progress.MissingRanges = append(progress.MissingRanges, model.SequenceRange(missing))
 	}
 
 	if progress.Validate() != nil || len(value.Receipts) != len(events) {
@@ -265,6 +265,8 @@ type BrowserActivityPageQuery struct {
 	Limit           int
 }
 
+// BrowserActivityPage is one page of an Attempt's Browser Activity in cursor
+// order; HasMore says another page follows the last item.
 type BrowserActivityPage struct {
 	Items   []store.BrowserActivityRecord
 	HasMore bool

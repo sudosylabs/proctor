@@ -96,6 +96,8 @@ func (*area) CreateThing(context.Context, invocation.Invocation, string) error {
 
 func (*area) ArchiveThing(context.Context, string) error { return nil }
 
+func (*area) Attach(string) error { return nil }
+
 type App struct {
 	*service
 	Area *area
@@ -104,6 +106,8 @@ type App struct {
 	})
 	require.Equal(t, []string{
 		"fixture/app.App.Area.ArchiveThing takes (context.Context, string); a use case takes (context.Context, invocation.Invocation or invocation.System, ...)",
+		// App.Attach is exempt; a method of the same name on another service is not.
+		"fixture/app.App.Area.Attach takes (string); a use case takes (context.Context, invocation.Invocation or invocation.System, ...)",
 		"fixture/app.App.CountThings takes (invocation.Invocation); a use case takes (context.Context, invocation.Invocation or invocation.System, ...)",
 		"fixture/app.App.ListThings takes (context.Context, string); a use case takes (context.Context, invocation.Invocation or invocation.System, ...)",
 	}, useCaseInvocationViolations(loaded, "fixture", map[string]string{"App.Attach": "composition hook"}))

@@ -11,7 +11,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
@@ -174,11 +173,6 @@ func validateActiveMailPayloadKeys(ctx context.Context, persistence store.MailSt
 	return nil
 }
 
-// historyCleanupRecurrencePosition is the place of the Job history cleanup
-// recurrence in the schedule: third, after default profile picture
-// reconciliation and the file purge.
-const historyCleanupRecurrencePosition = 2
-
 type applicationJobDefinitions struct {
 	descriptors   []job.Descriptor
 	recurrences   []job.Recurrence
@@ -258,11 +252,11 @@ func buildApplicationJobDefinitions(
 	descriptors, recurrences := job.SplitRegistrations(registrations)
 
 	// Job history cleanup keeps each Job type for the retention its
-	// descriptor declares, so it is built after the rest. Its recurrence
-	// stays where it has always been scheduled, after the file purge.
+	// descriptor declares, so it is built after the rest. The engine runs
+	// each recurrence on its own, so their order carries no meaning.
 	historyCleanup := jobs.NewJobHistoryCleanup(jobStore, jobStore, now, descriptors)
 	descriptors = append(descriptors, historyCleanup.Descriptor)
-	recurrences = slices.Insert(recurrences, historyCleanupRecurrencePosition, *historyCleanup.Recurrence)
+	recurrences = append(recurrences, *historyCleanup.Recurrence)
 
 	periodicTasks := []job.PeriodicTask{jobs.NewExamAttemptExpiryTask(exams.attempts)}
 	periodicTasks = append(periodicTasks, identity.MaintenanceTasks(deps.Store)...)

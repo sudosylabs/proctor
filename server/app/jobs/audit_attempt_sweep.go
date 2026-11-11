@@ -107,8 +107,8 @@ func auditAttemptSweepDescriptor(handler job.Handler) job.Descriptor {
 	return descriptor
 }
 
-// NewAuditAttemptSweep registers the completion of abandoned audit attempts,
-// proposed hourly.
+// NewAuditAttemptSweep registers the Job that fails audit attempts left
+// abandoned, proposed hourly.
 func NewAuditAttemptSweep(audits store.AuditStore, jobs store.JobStore, now func() time.Time) job.Registration {
 	return job.Registration{
 		Descriptor: auditAttemptSweepDescriptor(auditAttemptSweepHandler{audits: audits}),

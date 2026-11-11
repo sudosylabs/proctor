@@ -18,6 +18,16 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
+func TestMailTelemetryLeavesOutAnAbsentRecorder(t *testing.T) {
+	t.Parallel()
+
+	recorder, reader := newMailTelemetry(nil, nil)
+	require.Equal(t, mail.DeliveryRecorder(reader.(*operationalMailTelemetry)), recorder)
+	require.NotPanics(t, func() {
+		recorder.RecordMailDelivery(context.Background(), mail.DeliveryMetric{TemplateKey: model.MailTemplateSystemTest})
+	})
+}
+
 func TestProductionMailTelemetryRetainsBoundedSafeMetrics(t *testing.T) {
 	t.Parallel()
 	recorder, reader := newMailTelemetry(nil)

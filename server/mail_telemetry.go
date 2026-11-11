@@ -56,11 +56,19 @@ func newMailTelemetry(log *logging.Logger, first ...mail.DeliveryRecorder) (mail
 		queues:       make(map[mailDeliveryMetricKey]mail.QueueMetric),
 		queueBuckets: make(map[mailDeliveryMetricKey]string),
 	}
-	if len(first) == 0 {
+	// A recorder that is absent, such as metrics that are switched off, is
+	// left out.
+	recorders := make(mailDeliveryRecorders, 0, len(first)+1)
+	for _, recorder := range first {
+		if recorder != nil {
+			recorders = append(recorders, recorder)
+		}
+	}
+	if len(recorders) == 0 {
 		return operational, operational
 	}
 
-	return append(mailDeliveryRecorders(first), operational), operational
+	return append(recorders, operational), operational
 }
 
 func (r *operationalMailTelemetry) RecordMailDelivery(ctx context.Context, metric mail.DeliveryMetric) {

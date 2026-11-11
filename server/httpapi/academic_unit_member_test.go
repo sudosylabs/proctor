@@ -47,7 +47,7 @@ func TestAcademicUnitMemberHistoryQueryIncludesEndedMemberships(t *testing.T) {
 func TestAcademicUnitMemberHistoryQueryRejectsInvalidBoolean(t *testing.T) {
 	t.Parallel()
 
-	request := httptest.NewRequest("GET", "/api/v1/academic-units/unit/members?history=invalid", nil)
+	request := httptest.NewRequestWithContext(t.Context(), "GET", "/api/v1/academic-units/unit/members?history=invalid", nil)
 	_, _, err := membershipPageQuery(request, model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewID()})
 	require.Error(t, err, "invalid history query was accepted")
 }
@@ -93,7 +93,7 @@ func TestAcademicUnitMemberResourceRunsThroughRoutingKernel(t *testing.T) {
 	_, exposed := body["revision"]
 	require.False(t, exposed, "persistence revision leaked into DTO: %#v", body)
 
-	list := httptest.NewRequest(http.MethodGet, "/api/v1/academic-units/"+unitID+"/members?history=true", nil)
+	list := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+unitID+"/members?history=true", nil)
 	list.Header.Set("Authorization", "Bearer credential")
 	listed := httptest.NewRecorder()
 	httpAPI.ServeHTTP(listed, list)

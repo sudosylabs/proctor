@@ -43,7 +43,7 @@ func TestAdministrationCountsOmitsCountsTheCallerMayNotList(t *testing.T) {
 	}}
 	httpAPI := newFocusedResourceAPI(t, logger, &academicUnitHTTPApplication{principal: operatorTestPrincipal()}, administrationCountsResource(application))
 
-	response := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/administration/counts", "", true)
+	response := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/administration/counts", "", true)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	require.Equal(t, "private, no-store", response.Header().Get("Cache-Control"))
 	var body map[string]any
@@ -54,7 +54,7 @@ func TestAdministrationCountsOmitsCountsTheCallerMayNotList(t *testing.T) {
 	}, body, "a count the caller may not list is omitted with its flag")
 
 	application.counts = administration.CountsResult{}
-	empty := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/administration/counts", "", true)
+	empty := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/administration/counts", "", true)
 	require.Equal(t, http.StatusOK, empty.Code, empty.Body.String())
 	require.JSONEq(t, `{}`, empty.Body.String())
 }
@@ -68,7 +68,7 @@ func TestAdministrationCountsRequiresAnInteractiveSession(t *testing.T) {
 	token.CredentialScopes = []string{string(model.ActionJobView)}
 	httpAPI := newFocusedResourceAPI(t, logger, &academicUnitHTTPApplication{principal: token}, administrationCountsResource(application))
 
-	response := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/administration/counts", "", true)
+	response := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/administration/counts", "", true)
 	require.Equal(t, http.StatusUnauthorized, response.Code, response.Body.String())
 	require.Zero(t, application.calls, "a Personal Access Token never reaches the summary")
 }
@@ -80,7 +80,7 @@ func TestUserDirectoryReportsItsTotalOnTheFirstPageOnly(t *testing.T) {
 	profiles := &userProfileHTTPApplication{values: []*model.User{first}, searchHasMore: true, searchTotal: store.MaximumListCount}
 	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: operatorTestPrincipal()}, userProfileResource(profiles, profiles, profiles))
 
-	response := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/users?limit=1", "", true)
+	response := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/users?limit=1", "", true)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	var page map[string]any
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
@@ -88,7 +88,7 @@ func TestUserDirectoryReportsItsTotalOnTheFirstPageOnly(t *testing.T) {
 	require.Equal(t, true, page["total_is_lower_bound"])
 
 	profiles.searchHasMore = false
-	next := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/users?limit=1&cursor="+url.QueryEscape(page["next_cursor"].(string)), "", true)
+	next := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/users?limit=1&cursor="+url.QueryEscape(page["next_cursor"].(string)), "", true)
 	require.Equal(t, http.StatusOK, next.Code, next.Body.String())
 	require.Equal(t, first.ID, profiles.searchQuery.AfterID)
 	require.NotContains(t, next.Body.String(), "total", "a later page repeats no count")

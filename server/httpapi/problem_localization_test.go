@@ -36,7 +36,7 @@ func (problemTestLocalizer) Translate(_ string, id string, _ any) (string, error
 
 func TestSessionAndBuiltInRolePresentationLocalizesWithoutChangingIdentifiers(t *testing.T) {
 	t.Parallel()
-	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	request = request.WithContext(route.WithLocalization(context.Background(), problemTestLocalizer{}, "fr"))
 
 	session := sessionResponseFromModel(request, &model.Session{

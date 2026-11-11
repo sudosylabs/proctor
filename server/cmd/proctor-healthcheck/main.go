@@ -9,6 +9,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -69,7 +70,12 @@ func checkReadiness(url string, timeout time.Duration, serverName, caFile string
 			return http.ErrUseLastResponse
 		},
 	}
-	response, err := client.Get(url)
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("request readiness: %w", err)
+	}
+
+	response, err := client.Do(request)
 	if err != nil {
 		return fmt.Errorf("request readiness: %w", err)
 	}

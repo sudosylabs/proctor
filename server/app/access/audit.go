@@ -240,7 +240,7 @@ func (s *Auditor) BeginAuthentication(
 	}
 
 	event := &model.AuditEvent{
-		ActorID: model.UserID(userID),
+		ActorID: userID,
 		Action:  string(model.ActionAuthenticationExternalLogin),
 		Resource: model.Resource{
 			Type: model.ResourceUser,

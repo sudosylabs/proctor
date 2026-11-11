@@ -95,7 +95,7 @@ func (s *Delivery) AuthenticationCacheInvalidated(
 // InvalidateAuthorization closes the affected local connections before
 // best-effort peer propagation. An empty user ID targets every connection.
 func (s *Delivery) InvalidateAuthorization(ctx context.Context, userID model.UserID) {
-	if userID != "" && !model.UserID(userID).IsValid() {
+	if userID != "" && !userID.IsValid() {
 		s.reportSecurityFailure(ctx, "refusing invalid authorization invalidation", "invalid security propagation")
 		return
 	}

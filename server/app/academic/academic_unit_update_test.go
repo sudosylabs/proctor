@@ -81,7 +81,7 @@ func TestAcademicUnitUpdateReparentAuthorizesBothScopesBeforeCommit(t *testing.T
 		Name: "computing", DisplayName: "Computing", Revision: 1,
 	}
 	updated := *current
-	updated.ParentID = model.AcademicUnitID(newParentID)
+	updated.ParentID = newParentID
 	updated.DisplayName = "Applied Computing"
 	persistence := &academicUnitMutationStore{
 		events: &events, current: current, updated: &updated,

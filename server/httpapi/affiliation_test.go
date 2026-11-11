@@ -116,7 +116,7 @@ func TestAffiliationResourceRejectsInvalidBodyAndIdentifier(t *testing.T) {
 	httpAPI.ServeHTTP(bodyResponse, invalidBody)
 	require.Equal(t, http.StatusBadRequest, bodyResponse.Code, "body status = %d: %s", bodyResponse.Code, bodyResponse.Body.String())
 
-	invalidID := httptest.NewRequest(http.MethodGet, "/api/v1/users/not-a-canonical-id/affiliations", nil)
+	invalidID := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/not-a-canonical-id/affiliations", nil)
 	invalidID.Header.Set("Authorization", "Bearer credential")
 	idResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(idResponse, invalidID)

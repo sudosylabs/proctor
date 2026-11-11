@@ -172,7 +172,7 @@ func TestAcademicUnitHTTPReadMapsDTOWithoutPermissionPreflight(t *testing.T) {
 	}
 	httpAPI := newFocusedResourceAPI(t, logger, application, academicUnitResource(application))
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet, "/api/v1/academic-units/"+unit.ID.String(), nil,
 	)
 	request.Header.Set("Authorization", "Bearer test-credential")
@@ -208,7 +208,7 @@ func TestAcademicUnitHTTPErrorUsesProblemDetailsContract(t *testing.T) {
 	}
 	httpAPI := newFocusedResourceAPI(t, logger, fakeApplication, academicUnitResource(fakeApplication))
 
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/academic-units/"+unit.ID.String(), nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+unit.ID.String(), nil)
 	request.Header.Set("Authorization", "Bearer test-credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -263,7 +263,7 @@ func TestAcademicUnitHTTPCreateMapsCommandWithoutPermissionPreflight(t *testing.
 			require.NoError(t, err)
 			t.Cleanup(func() { _ = httpAPI.Close() })
 
-			request := httptest.NewRequest(
+			request := httptest.NewRequestWithContext(t.Context(),
 				http.MethodPost, tt.path,
 				strings.NewReader(`{
 					"name":"computing",
@@ -316,7 +316,7 @@ func TestAcademicUnitHTTPMutationsMapCommandsWithoutPermissionPreflight(t *testi
 
 	parentID := model.NewID()
 	name := "engineering"
-	patchRequest := httptest.NewRequest(
+	patchRequest := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPatch, "/api/v1/academic-units/"+unit.ID.String(),
 		strings.NewReader(`{"parent_id":"`+parentID+`","name":"`+name+`"}`),
 	)
@@ -331,7 +331,7 @@ func TestAcademicUnitHTTPMutationsMapCommandsWithoutPermissionPreflight(t *testi
 	require.NotNil(t, fakeApplication.updateCommand.Name)
 	require.Equal(t, name, *fakeApplication.updateCommand.Name)
 
-	archiveRequest := httptest.NewRequest(
+	archiveRequest := httptest.NewRequestWithContext(t.Context(),
 		http.MethodDelete, "/api/v1/academic-units/"+unit.ID.String(), nil,
 	)
 	archiveRequest.Header.Set("Authorization", "Bearer test-credential")

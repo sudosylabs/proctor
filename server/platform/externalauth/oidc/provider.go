@@ -225,31 +225,31 @@ func (p *Provider) Complete(
 	}
 
 	if idToken.AccessTokenHash != "" {
-		if err := idToken.VerifyAccessToken(token.AccessToken); err != nil {
+		if verifyErr := idToken.VerifyAccessToken(token.AccessToken); verifyErr != nil {
 			return nil, externalauth.InvalidResponse(
 				"verify OIDC access token",
-				err,
+				verifyErr,
 			)
 		}
 	}
 
 	claims := make(map[string]json.RawMessage)
-	if err := idToken.Claims(&claims); err != nil {
+	if claimsErr := idToken.Claims(&claims); claimsErr != nil {
 		return nil, externalauth.InvalidResponse(
 			"decode OIDC ID token claims",
-			err,
+			claimsErr,
 		)
 	}
 
 	if p.settings.UseUserInfo {
-		userInfo, err := discovered.UserInfo(
+		userInfo, userInfoErr := discovered.UserInfo(
 			providerContext,
 			oauth2.StaticTokenSource(token),
 		)
-		if err != nil {
+		if userInfoErr != nil {
 			return nil, externalauth.Unavailable(
 				"retrieve OIDC user information",
-				err,
+				userInfoErr,
 			)
 		}
 
@@ -264,10 +264,10 @@ func (p *Provider) Complete(
 		}
 
 		userInfoClaims := make(map[string]json.RawMessage)
-		if err := userInfo.Claims(&userInfoClaims); err != nil {
+		if claimsErr := userInfo.Claims(&userInfoClaims); claimsErr != nil {
 			return nil, externalauth.InvalidResponse(
 				"decode OIDC user information",
-				err,
+				claimsErr,
 			)
 		}
 

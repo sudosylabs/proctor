@@ -242,7 +242,7 @@ func TestExamSittingHTTPListNormalizesFiltersAndUsesVersionedDescendingTupleCurs
 	query.Set("starts_before", "2026-08-15T18:00:00+02:00")
 	query.Set("limit", "2")
 	query.Set("cursor", cursor)
-	request := httptest.NewRequest(http.MethodGet, examSittingCollectionPath(fake.sitting.ExamID)+"?"+query.Encode(), nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, examSittingCollectionPath(fake.sitting.ExamID)+"?"+query.Encode(), nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -281,7 +281,7 @@ func TestExamSittingHTTPListRejectsPartialOverlapAndMalformedCursor(t *testing.T
 		"cursor version":          "cursor=" + url.QueryEscape(base64.RawURLEncoding.EncodeToString(unsupported)),
 	} {
 		t.Run(name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodGet, examSittingCollectionPath(fake.sitting.ExamID)+"?"+query, nil)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, examSittingCollectionPath(fake.sitting.ExamID)+"?"+query, nil)
 			request.Header.Set("Authorization", "Bearer credential")
 			response := httptest.NewRecorder()
 			httpAPI.ServeHTTP(response, request)
@@ -295,7 +295,7 @@ func TestExamSittingHTTPGetUsesBothExactIdentities(t *testing.T) {
 	logger, _ := routetest.NewLogger(t)
 	fake := newExamSittingHTTPFake(t)
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
-	request := httptest.NewRequest(http.MethodGet, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID), nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID), nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -312,7 +312,7 @@ func TestExamSittingHTTPListsNoShowsWithOpaqueUserCursor(t *testing.T) {
 	fake.noShowPage = sitting.NoShowPage{Items: []store.ExamSittingNoShow{
 		{CandidateUserID: first}, {CandidateUserID: second}}, HasMore: true}
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
-	request := httptest.NewRequest(http.MethodGet, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID)+"/no-shows?limit=2", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID)+"/no-shows?limit=2", nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -332,13 +332,13 @@ func TestExamSittingHTTPListsNoShowsWithOpaqueUserCursor(t *testing.T) {
 	require.Equal(t, second, decoded, "cursor")
 	require.NotContains(t, body.NextCursor, second.String(), "cursor")
 	fake.noShowPage = sitting.NoShowPage{}
-	secondRequest := httptest.NewRequest(http.MethodGet, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID)+"/no-shows?cursor="+url.QueryEscape(body.NextCursor), nil)
+	secondRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID)+"/no-shows?cursor="+url.QueryEscape(body.NextCursor), nil)
 	secondRequest.Header.Set("Authorization", "Bearer credential")
 	secondResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(secondResponse, secondRequest)
 	require.Equal(t, http.StatusOK, secondResponse.Code, "no-show cursor forwarding = %d query=%#v body=%s", secondResponse.Code, fake.noShows, secondResponse.Body.String())
 	require.Equal(t, second, fake.noShows.AfterCandidateUserID, "no-show cursor forwarding = %d query=%#v body=%s", secondResponse.Code, fake.noShows, secondResponse.Body.String())
-	malformedRequest := httptest.NewRequest(http.MethodGet, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID)+"/no-shows?cursor=not-a-cursor", nil)
+	malformedRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID)+"/no-shows?cursor=not-a-cursor", nil)
 	malformedRequest.Header.Set("Authorization", "Bearer credential")
 	malformedResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(malformedResponse, malformedRequest)

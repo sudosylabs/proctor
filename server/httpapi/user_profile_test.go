@@ -228,7 +228,7 @@ func TestCurrentUserContextHTTPReturnsClosedNoStoreDTO(t *testing.T) {
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now()}
 	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: session}, userProfileResource(profiles, profiles, profiles))
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/me/context", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/me/context", nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -253,7 +253,7 @@ func TestUserProfileHTTPUsesAllowlistedDTOAndRouteID(t *testing.T) {
 	account := &model.User{ID: model.UserID(userID), CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100), Revision: 7, Username: "student", Email: "student@example.edu", DisplayName: "Student", Locale: "en", Timezone: "UTC", ProfilePictureChangedAt: model.OptionalTimeFromMillis(500)}
 	profiles := &userProfileHTTPApplication{result: account}
 	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userProfileResource(profiles, profiles, profiles))
-	request := httptest.NewRequest(http.MethodPatch, "/api/v1/users/"+userID, strings.NewReader(`{"display_name":"Updated"}`))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPatch, "/api/v1/users/"+userID, strings.NewReader(`{"display_name":"Updated"}`))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
@@ -272,7 +272,7 @@ func TestUserProfileHTTPUsesAllowlistedDTOAndRouteID(t *testing.T) {
 	newer := *account
 	newer.Revision++
 	require.NotEqual(t, userProfileResponseFromModel(&newer).ProfilePictureURL, userProfileResponseFromModel(account).ProfilePictureURL)
-	uploadRequest := httptest.NewRequest(http.MethodPut, "/api/v1/users/"+userID+"/profile-picture", strings.NewReader("image"))
+	uploadRequest := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/users/"+userID+"/profile-picture", strings.NewReader("image"))
 	uploadRequest.Header.Set("Authorization", "Bearer credential")
 	uploadRequest.Header.Set("Content-Type", "image/png")
 	uploadRequest.Header.Set("If-Match", `"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"`)
@@ -285,7 +285,7 @@ func TestUserProfileHTTPUsesAllowlistedDTOAndRouteID(t *testing.T) {
 	require.Equal(t, int64(5), profiles.uploadCommand.Size, "upload command = %#v body", profiles.uploadCommand)
 	require.Equal(t, strings.Repeat("a", 64), profiles.uploadCommand.ExpectedSHA256, "upload command = %#v body", profiles.uploadCommand)
 	require.Equal(t, "image", string(uploaded), "upload command = %#v body", profiles.uploadCommand)
-	deleteRequest := httptest.NewRequest(http.MethodDelete, "/api/v1/users/"+userID+"/profile-picture", nil)
+	deleteRequest := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/api/v1/users/"+userID+"/profile-picture", nil)
 	deleteRequest.Header.Set("Authorization", "Bearer credential")
 	deleteRequest.Header.Set("If-Match", `"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"`)
 	deleteResponse := httptest.NewRecorder()
@@ -294,7 +294,7 @@ func TestUserProfileHTTPUsesAllowlistedDTOAndRouteID(t *testing.T) {
 	require.Equal(t, model.UserID(userID), profiles.removeCommand.UserID, "delete response/command = %d / %#v", deleteResponse.Code, profiles.removeCommand)
 	require.Equal(t, strings.Repeat("b", 64), profiles.removeCommand.ExpectedSHA256, "delete response/command = %d / %#v", deleteResponse.Code, profiles.removeCommand)
 	profiles.pictureContent = &user.ProfilePictureContent{Body: io.NopCloser(strings.NewReader("webp")), MediaType: "image/webp", Size: 4, ETag: `"checksum"`}
-	pictureRequest := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+userID+"/profile-picture?size=128", nil)
+	pictureRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/"+userID+"/profile-picture?size=128", nil)
 	pictureRequest.Header.Set("Authorization", "Bearer credential")
 	pictureRequest.Header.Set("If-None-Match", `"different", W/"checksum"`)
 	pictureResponse := httptest.NewRecorder()
@@ -345,7 +345,7 @@ func TestEmailMutationResponsesUseNarrowAccountStateProjection(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			profiles.result.EmailVerified = test.verified
-			request := httptest.NewRequest(test.method, test.path, strings.NewReader(test.body))
+			request := httptest.NewRequestWithContext(t.Context(), test.method, test.path, strings.NewReader(test.body))
 			request.Header.Set("Authorization", "Bearer credential")
 			if test.body != "" {
 				request.Header.Set("Content-Type", "application/json")
@@ -385,7 +385,7 @@ func TestUserSearchTransportPreservesIncludeDisabledRequestForApplicationAuthori
 		{name: "explicit", query: "?limit=10&include_disabled=true", includeDisabled: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodGet, "/api/v1/users"+test.query, nil)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users"+test.query, nil)
 			request.Header.Set("Authorization", "Bearer credential")
 			response := httptest.NewRecorder()
 			httpAPI.ServeHTTP(response, request)
@@ -541,7 +541,7 @@ func TestLoginResponseDoesNotExposeUserRevision(t *testing.T) {
 	application := &loginRevisionHTTPApplication{user: &model.User{
 		ID: model.NewUserID(), Revision: 7, Username: "student",
 	}}
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPost,
 		"/api/v1/auth/login",
 		strings.NewReader(`{"login_id":"student","password":"password","client_type":"cli"}`),
@@ -571,7 +571,7 @@ func TestAccountDisableUsesApplicationCommandAndAllowlistedResponse(t *testing.T
 	userID := model.NewID()
 	accounts := &accountStateHTTPApplication{result: &model.User{ID: model.UserID(userID), Revision: 4, Username: "student", DisabledAt: model.OptionalTimeFromMillis(500)}}
 	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userAdministrationResource(accounts, &sessionAdministrationHTTPApplication{}))
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/users/"+userID+"/disable", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/users/"+userID+"/disable", nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)

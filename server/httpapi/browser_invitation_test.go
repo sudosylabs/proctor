@@ -57,7 +57,7 @@ func TestBrowserInvitationHTTPKeepsSecondProofInHttpOnlyCookie(t *testing.T) {
 	require.NoError(t, err)
 	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, browserInvitationResource(applicationFake, cookies))
 
-	start := httptest.NewRequest(http.MethodPost, "/api/v1/auth/browser/invitations", strings.NewReader(`{"claim":"`+model.NewCredentialToken()+`"}`))
+	start := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/auth/browser/invitations", strings.NewReader(`{"claim":"`+model.NewCredentialToken()+`"}`))
 	start.Header.Set("Content-Type", "application/json")
 	started := httptest.NewRecorder()
 	httpAPI.ServeHTTP(started, start)
@@ -73,7 +73,7 @@ func TestBrowserInvitationHTTPKeepsSecondProofInHttpOnlyCookie(t *testing.T) {
 	require.Contains(t, started.Body.String(), `"email":"student.one@example.edu"`)
 	require.Contains(t, started.Body.String(), `"class_display_name":"Biology 101"`)
 
-	accept := httptest.NewRequest(http.MethodPost, "/api/v1/auth/browser/invitations/accept", strings.NewReader(`{"handle":"`+model.NewCredentialToken()+`","password":"correct horse battery staple","username":"student"}`))
+	accept := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/auth/browser/invitations/accept", strings.NewReader(`{"handle":"`+model.NewCredentialToken()+`","password":"correct horse battery staple","username":"student"}`))
 	accept.Header.Set("Content-Type", "application/json")
 	accept.AddCookie(proofCookies[0])
 	accepted := httptest.NewRecorder()
@@ -102,7 +102,7 @@ func TestBrowserInvitationSessionAcceptanceUsesAuthenticatedPrincipal(t *testing
 		ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now(),
 	}
 	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, browserInvitationResource(applicationFake, cookies))
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/browser/invitations/accept-session", strings.NewReader(`{"handle":"`+model.NewCredentialToken()+`"}`))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/auth/browser/invitations/accept-session", strings.NewReader(`{"handle":"`+model.NewCredentialToken()+`"}`))
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Authorization", "Bearer access")
 	request.AddCookie(&http.Cookie{Name: route.BrowserInvitationProofCookieName, Value: model.NewCredentialToken()})

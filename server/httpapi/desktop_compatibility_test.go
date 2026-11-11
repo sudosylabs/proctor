@@ -88,7 +88,7 @@ func TestSystemPingReturnsRequestSpecificNoStoreCompatibility(t *testing.T) {
 			func() time.Time { return now },
 		),
 	)
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
 		"/api/v1/system/ping?desktop_release=1.4.0&desktop_build_id=darwin-42&platform=darwin&architecture=arm64&realtime_protocol=2",
 		nil,
@@ -136,7 +136,7 @@ func TestSystemPingPublishesMaintenanceAvailabilityAndRetryTime(t *testing.T) {
 		systemResourceWithApplication(systemHTTPHealth{live: true, ready: true}, BuildInfo{}, applicationFake, func() time.Time { return serverTime }),
 	)
 	response := httptest.NewRecorder()
-	httpAPI.ServeHTTP(response, httptest.NewRequest(
+	httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
 		"/api/v1/system/ping?desktop_release=1.0.0&desktop_build_id=build&platform=darwin&architecture=arm64&realtime_protocol=1",
 		nil,
@@ -170,7 +170,7 @@ func TestSystemPingOmitsRetryTimeNotLaterThanItsServerTime(t *testing.T) {
 		systemResourceWithApplication(systemHTTPHealth{live: true, ready: true}, BuildInfo{}, applicationFake, func() time.Time { return serverTime }),
 	)
 	response := httptest.NewRecorder()
-	httpAPI.ServeHTTP(response, httptest.NewRequest(
+	httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
 		"/api/v1/system/ping?desktop_release=1.0.0&desktop_build_id=build&platform=darwin&architecture=arm64&realtime_protocol=1",
 		nil,
@@ -199,7 +199,7 @@ func TestSystemPingRejectsMalformedSelectorsWithoutEvaluation(t *testing.T) {
 		"/api/v1/system/ping?desktop_release=1.0.0&desktop_release=1.1.0&desktop_build_id=build&platform=darwin&architecture=arm64&realtime_protocol=1",
 	} {
 		response := httptest.NewRecorder()
-		httpAPI.ServeHTTP(response, httptest.NewRequest(http.MethodGet, target, nil))
+		httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, target, nil))
 		require.Equal(t, http.StatusBadRequest, response.Code, "%s", target)
 		require.Contains(t, response.Body.String(), `"code":"request.invalid"`, "%s", target)
 	}
@@ -219,7 +219,7 @@ func TestSystemPingFailsClosedInsideSuccessfulResponseWhenUnavailable(t *testing
 		systemResourceWithApplication(systemHTTPHealth{live: true}, BuildInfo{}, applicationFake, time.Now),
 	)
 	response := httptest.NewRecorder()
-	httpAPI.ServeHTTP(response, httptest.NewRequest(
+	httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
 		"/api/v1/system/ping?desktop_release=1.0.0&desktop_build_id=build&platform=darwin&architecture=arm64&realtime_protocol=1",
 		nil,
@@ -253,7 +253,7 @@ func TestDesktopCompatibilityPolicyHTTPUsesCompleteReplacementAndNoStore(t *test
 		routetest.Authenticator{Principal: principal},
 		desktopCompatibilityPolicyResource(applicationFake),
 	)
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPut,
 		"/api/v1/desktop-compatibility-policy",
 		strings.NewReader(`{"expected_revision":1,"minimum_desktop_release":"1.2.0","revoked_desktop_build_ids":["build-7"],"administrator_message":"Update before the exam.","availability":"ready"}`),
@@ -278,7 +278,7 @@ func TestDesktopCompatibilityPolicyHTTPUsesCompleteReplacementAndNoStore(t *test
 		`{"expected_revision":1,"minimum_desktop_release":"","revoked_desktop_build_ids":[]}`,
 		`{"expected_revision":1,"minimum_desktop_release":"","revoked_desktop_build_ids":[],"administrator_message":"","availability":"ready","retry_at":null}`,
 	} {
-		invalid := httptest.NewRequest(http.MethodPut, "/api/v1/desktop-compatibility-policy", strings.NewReader(invalidBody))
+		invalid := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/desktop-compatibility-policy", strings.NewReader(invalidBody))
 		invalid.Header.Set("Authorization", "Bearer session")
 		invalid.Header.Set("Content-Type", "application/json")
 		invalid.Header.Set("Idempotency-Key", "desktop-policy-invalid")

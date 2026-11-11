@@ -353,11 +353,11 @@ func (t *Transport) memberlistConfig(ctx context.Context) (*hashimemberlist.Conf
 	if err != nil {
 		return nil, nil, err
 	}
-	bindPortNumber, err := net.LookupPort("tcp", bindPort)
+	bindPortNumber, err := (&net.Resolver{}).LookupPort(ctx, "tcp", bindPort)
 	if err != nil {
 		return nil, nil, fmt.Errorf("bind port: %w", err)
 	}
-	advertisePortNumber, err := net.LookupPort("tcp", advertisePort)
+	advertisePortNumber, err := (&net.Resolver{}).LookupPort(ctx, "tcp", advertisePort)
 	if err != nil {
 		return nil, nil, fmt.Errorf("advertise port: %w", err)
 	}

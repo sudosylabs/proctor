@@ -99,8 +99,8 @@ func TestControlWorkerAndIdentityStorageBounds(t *testing.T) {
 		release()
 	}
 	for len(allowance.users) < controlUsers {
-		release, err := allowance.enter(context.Background(), model.NewUserID(), at)
-		require.NoError(t, err)
+		release, enterErr := allowance.enter(context.Background(), model.NewUserID(), at)
+		require.NoError(t, enterErr)
 		release()
 	}
 	release, err := allowance.enter(context.Background(), model.NewUserID(), at)

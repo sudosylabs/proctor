@@ -463,7 +463,7 @@ func (s *Service) GetProfilePicture(
 		return nil, StoreErrors.Translate(err)
 	}
 
-	rendition, err := s.files.GetProfilePictureRendition(ctx, model.UserID(id), fmt.Sprintf("profile_%d", query.Size))
+	rendition, err := s.files.GetProfilePictureRendition(ctx, id, fmt.Sprintf("profile_%d", query.Size))
 	if err != nil {
 		if store.IsNotFound(err) && user.CustomProfilePictureFileID.IsZero() && user.DefaultProfilePictureFileID.IsZero() {
 			rendered, renderErr := s.fallback.RenderDefaultProfilePicture(ctx, user.DefaultProfilePictureSeed, query.Size)

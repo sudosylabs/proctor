@@ -65,12 +65,12 @@ func Compile(source fs.FS) ([]byte, error) {
 	}
 	owners := fragmentOwners{paths: make(map[string]string), components: make(map[string]string)}
 	for _, name := range fragmentNames {
-		fragment, err := decodeYAMLFile(source, name)
-		if err != nil {
-			return nil, err
+		fragment, decodeErr := decodeYAMLFile(source, name)
+		if decodeErr != nil {
+			return nil, decodeErr
 		}
-		if err := mergeFragment(document, fragment, name, owners); err != nil {
-			return nil, err
+		if mergeErr := mergeFragment(document, fragment, name, owners); mergeErr != nil {
+			return nil, mergeErr
 		}
 	}
 
@@ -243,7 +243,7 @@ func validate(encoded []byte) error {
 			if !ok || strings.TrimSpace(auth) == "" {
 				return fmt.Errorf("%s x-proctor-auth is required", location)
 			}
-			if _, ok := operation.Extensions["x-proctor-error-codes"].([]any); !ok {
+			if _, isList := operation.Extensions["x-proctor-error-codes"].([]any); !isList {
 				return fmt.Errorf("%s x-proctor-error-codes must be an array", location)
 			}
 			idempotency, ok := operation.Extensions["x-proctor-idempotency"].(string)

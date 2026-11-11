@@ -108,8 +108,8 @@ func TestPasswordHasherSharesCapacityAndRetainsCanceledWorkUntilReturn(t *testin
 			go func() {
 				switch operation {
 				case "hash":
-					_, err := hasher.Hash(ctx, "correct horse battery staple")
-					done <- err
+					_, hashErr := hasher.Hash(ctx, "correct horse battery staple")
+					done <- hashErr
 				case "verify":
 					done <- hasher.Verify(ctx, hasher.dummyHash, "proctor-dummy-password-never-used")
 				case "verify mismatch":
@@ -135,8 +135,8 @@ func TestPasswordHasherSharesCapacityAndRetainsCanceledWorkUntilReturn(t *testin
 			checkBusy()
 			cancel()
 			select {
-			case err := <-done:
-				require.FailNow(t, fmt.Sprintf("canceled password work returned before synchronous work finished: %v", err))
+			case doneErr := <-done:
+				require.FailNow(t, fmt.Sprintf("canceled password work returned before synchronous work finished: %v", doneErr))
 			default:
 			}
 			checkBusy()

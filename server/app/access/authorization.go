@@ -421,7 +421,7 @@ func (s *Authorizer) AuthorizeAccountStateManage(
 		return apperror.New("authorization.request.invalid")
 	}
 
-	user, err := s.deps.Resolver.deps.Users.Get(ctx, model.UserID(userID))
+	user, err := s.deps.Resolver.deps.Users.Get(ctx, userID)
 	if err != nil {
 		return ResourceError("user", err)
 	}

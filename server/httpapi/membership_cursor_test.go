@@ -88,7 +88,7 @@ func TestMembershipCursorScopeAndFilterBinding(t *testing.T) {
 	encoded, err := route.EncodeCursor(cursor, membershipPageCursorSpec())
 	require.NoError(t, err)
 	request := func(suffix string) string { return "/members?cursor=" + url.QueryEscape(encoded) + suffix }
-	query, after, err := membershipPageQuery(httptest.NewRequest("GET", request(""), nil), scope)
+	query, after, err := membershipPageQuery(httptest.NewRequestWithContext(t.Context(), "GET", request(""), nil), scope)
 	require.NoError(t, err, "continuation = %#v %#v", query, after)
 	require.NotNil(t, query.ActiveAt, "continuation = %#v %#v", query, after)
 	require.Equal(t, instant, *query.ActiveAt, "continuation = %#v %#v", query, after)
@@ -104,7 +104,7 @@ func TestMembershipCursorScopeAndFilterBinding(t *testing.T) {
 	instant = 0
 	encoded, err = route.EncodeCursor(cursor, membershipPageCursorSpec())
 	require.NoError(t, err)
-	query, _, err = membershipPageQuery(httptest.NewRequest("GET", request(""), nil), scope)
+	query, _, err = membershipPageQuery(httptest.NewRequestWithContext(t.Context(), "GET", request(""), nil), scope)
 	require.NoError(t, err, "history continuation = %#v", query)
 	require.NotNil(t, query.History, "history continuation = %#v", query)
 	require.True(t, *query.History, "history continuation = %#v", query)

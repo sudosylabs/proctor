@@ -37,7 +37,7 @@ func TestSelfAuditResourceParsesFiltersAndPagesPrivately(t *testing.T) {
 	audits := &focusedAuditApplication{self: []administration.SelfAuditEvent{last}, hasMore: true, selfTotal: 248}
 	httpAPI := newFocusedResourceAPI(t, logger, &academicUnitHTTPApplication{principal: principal}, auditResource(audits))
 
-	response := serveOperatorRequest(httpAPI, http.MethodGet,
+	response := serveOperatorRequest(t, httpAPI, http.MethodGet,
 		"/api/v1/users/me/audits?limit=1&event=mfa.reset_by_administrator&event=password.changed&status=success&relation=subject"+
 			"&created_after=2026-07-01T00:00:00Z&created_before=2026-09-01T00:00:00Z", "", true)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
@@ -66,39 +66,39 @@ func TestSelfAuditResourceParsesFiltersAndPagesPrivately(t *testing.T) {
 	require.Equal(t, false, raw["total_is_lower_bound"])
 
 	audits.self, audits.hasMore = nil, false
-	second := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/users/me/audits?cursor="+url.QueryEscape(page.NextCursor), "", true)
+	second := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/users/me/audits?cursor="+url.QueryEscape(page.NextCursor), "", true)
 	require.Equal(t, http.StatusOK, second.Code, second.Body.String())
 	require.True(t, at.Equal(audits.selfQuery.BeforeCreatedAt))
 	require.Equal(t, last.ID, audits.selfQuery.BeforeID)
 	require.NotContains(t, second.Body.String(), "total", "a later page repeats no count")
-	crossed := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/users/me/audits?order=asc&cursor="+url.QueryEscape(page.NextCursor), "", true)
+	crossed := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/users/me/audits?order=asc&cursor="+url.QueryEscape(page.NextCursor), "", true)
 	assertHTTPProblem(t, crossed, http.StatusBadRequest, "request.invalid")
 
 	audits.self, audits.hasMore, audits.selfTotal = []administration.SelfAuditEvent{last}, true, store.MaximumAuditSelfCount
-	oldest := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/users/me/audits?order=asc&limit=1", "", true)
+	oldest := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/users/me/audits?order=asc&limit=1", "", true)
 	require.Equal(t, http.StatusOK, oldest.Code, oldest.Body.String())
 	require.True(t, audits.selfQuery.Ascending)
 	var capped map[string]any
 	require.NoError(t, json.Unmarshal(oldest.Body.Bytes(), &capped))
 	require.Equal(t, true, capped["total_is_lower_bound"])
 	audits.self, audits.hasMore = nil, false
-	oldestNext := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/users/me/audits?order=asc&cursor="+url.QueryEscape(capped["next_cursor"].(string)), "", true)
+	oldestNext := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/users/me/audits?order=asc&cursor="+url.QueryEscape(capped["next_cursor"].(string)), "", true)
 	require.Equal(t, http.StatusOK, oldestNext.Code, oldestNext.Body.String())
 	require.True(t, audits.selfQuery.Ascending)
 
 	calls := audits.selfCalls
 	for _, query := range []string{"created_after=yesterday", "created_before=2026-09-01", "since=2026-07-01T00:00:00Z", "status=success&status=fail", "order=oldest", "order=asc&order=desc", "actor_id=" + model.NewID()} {
-		invalid := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/users/me/audits?"+query, "", true)
+		invalid := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/users/me/audits?"+query, "", true)
 		assertHTTPProblem(t, invalid, http.StatusBadRequest, "request.invalid")
 	}
 	require.Equal(t, calls, audits.selfCalls, "a malformed filter reached the application")
 
 	audits.err = apperror.New("audit.query.invalid")
-	refused := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/users/me/audits?event=mfa.activate&status=attempt&relation=observer", "", true)
+	refused := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/users/me/audits?event=mfa.activate&status=attempt&relation=observer", "", true)
 	assertHTTPProblem(t, refused, http.StatusBadRequest, "audit.query.invalid")
 	require.Equal(t, []model.AuditSelfEvent{"mfa.activate"}, audits.selfQuery.Events, "the application decides the closed vocabulary")
 	require.Equal(t, model.AuditStatusAttempt, audits.selfQuery.Status)
 	require.Equal(t, store.AuditSelfRelation("observer"), audits.selfQuery.Relation)
-	malformed := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/users/me/audits?cursor=not-a-cursor", "", true)
+	malformed := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/users/me/audits?cursor=not-a-cursor", "", true)
 	assertHTTPProblem(t, malformed, http.StatusBadRequest, "request.invalid")
 }

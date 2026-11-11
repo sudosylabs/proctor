@@ -110,11 +110,11 @@ func New(files fs.FS, options Options) (http.Handler, error) {
 	var manifest buildManifest
 	decoder := json.NewDecoder(bytes.NewReader(manifestData))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&manifest); err != nil {
-		return nil, fmt.Errorf("decode webapp build manifest: %w", err)
+	if decodeErr := decoder.Decode(&manifest); decodeErr != nil {
+		return nil, fmt.Errorf("decode webapp build manifest: %w", decodeErr)
 	}
-	if err := requireJSONEOF(decoder); err != nil {
-		return nil, fmt.Errorf("decode webapp build manifest: %w", err)
+	if requireErr := requireJSONEOF(decoder); requireErr != nil {
+		return nil, fmt.Errorf("decode webapp build manifest: %w", requireErr)
 	}
 
 	if manifest.Version != options.BuildVersion || manifest.Commit != options.BuildCommit {

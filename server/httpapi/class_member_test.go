@@ -80,7 +80,7 @@ func TestClassMemberResourceForwardsHistoryAndEndsMembership(t *testing.T) {
 	members := &classMemberHTTPApplication{ended: member}
 	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, classMemberResource(members))
 
-	list := httptest.NewRequest(http.MethodGet, "/api/v1/classes/"+classID+"/members?history=true", nil)
+	list := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/classes/"+classID+"/members?history=true", nil)
 	list.Header.Set("Authorization", "Bearer credential")
 	listed := httptest.NewRecorder()
 	httpAPI.ServeHTTP(listed, list)
@@ -90,7 +90,7 @@ func TestClassMemberResourceForwardsHistoryAndEndsMembership(t *testing.T) {
 	require.True(t, *members.pageQuery.History, "history listing")
 	require.JSONEq(t, `{"items":[]}`, listed.Body.String(), "empty collection envelope")
 
-	end := httptest.NewRequest(http.MethodDelete, "/api/v1/class-members/"+member.ID.String(), nil)
+	end := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/api/v1/class-members/"+member.ID.String(), nil)
 	end.Header.Set("Authorization", "Bearer credential")
 	ended := httptest.NewRecorder()
 	httpAPI.ServeHTTP(ended, end)
@@ -101,7 +101,7 @@ func TestClassMemberResourceForwardsHistoryAndEndsMembership(t *testing.T) {
 
 func TestClassMemberHistoryQueryIsForwarded(t *testing.T) {
 	t.Parallel()
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/classes/class/members?history=true", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/classes/class/members?history=true", nil)
 	query, _, err := membershipPageQuery(request, model.Resource{Type: model.ResourceClass, ID: model.NewID()})
 	require.NoError(t, err)
 	require.NotNil(t, query.History)

@@ -298,8 +298,8 @@ func (i *ownedInfrastructure) decoratePersistenceWithRetryAndTiming(
 	}
 
 	i.resources.Persistence = retriedPersistence
-	if err := checkAcquisitionContext(ctx, "decorate persistence with retry"); err != nil {
-		return err
+	if checkErr := checkAcquisitionContext(ctx, "decorate persistence with retry"); checkErr != nil {
+		return checkErr
 	}
 
 	storeMetrics := overrides.StoreMetrics

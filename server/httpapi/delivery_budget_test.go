@@ -52,7 +52,7 @@ func TestDeliveryBudgetHTTPRequiresOwnedSelectorAndLiveStopFences(t *testing.T) 
 	logger, _ := routetest.NewLogger(t)
 	api := newFocusedResourceAPI(t, logger, f, deliveryBudgetResource(f))
 	base := "/api/v1/exam-attempts/" + f.attempt.ID.String() + "/delivery-limits"
-	request := f.candidateRequest(http.MethodGet, base+"?participation_id="+f.participation.ID.String())
+	request := f.candidateRequest(t, http.MethodGet, base+"?participation_id="+f.participation.ID.String())
 	request.Header.Del(candidateAttemptCredentialHeader)
 	request.Header.Del(candidateAttemptConnectionHeader)
 	response := httptest.NewRecorder()
@@ -62,7 +62,7 @@ func TestDeliveryBudgetHTTPRequiresOwnedSelectorAndLiveStopFences(t *testing.T) 
 	require.Equal(t, f.participation.ID, f.query.ParticipationID, "budget=%d %s", response.Code, response.Body.String())
 	for _, bad := range []string{"", "?participation_id=invalid", "?participation_id=" + f.participation.ID.String() + "&participation_id=" + f.participation.ID.String()} {
 		before := f.calls
-		request = f.candidateRequest(http.MethodGet, base+bad)
+		request = f.candidateRequest(t, http.MethodGet, base+bad)
 		response = httptest.NewRecorder()
 		api.ServeHTTP(response, request)
 		require.Equal(t, 400, response.Code, "invalid budget selector reached application")
@@ -78,7 +78,7 @@ func TestDeliveryBudgetHTTPRequiresOwnedSelectorAndLiveStopFences(t *testing.T) 
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			before := f.calls
-			request := f.candidateRequest(http.MethodPost, base+"/stop-details")
+			request := f.candidateRequest(t, http.MethodPost, base+"/stop-details")
 			request.Body = io.NopCloser(strings.NewReader(test.body))
 			request.Header.Set("Content-Type", "application/json")
 			if test.key {

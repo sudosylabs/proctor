@@ -60,11 +60,11 @@ func TestExamExportArchiveIsStandaloneAndVerifiable(t *testing.T) {
 			require.NoError(t, err)
 			members := map[string][]byte{}
 			for _, f := range archive.File {
-				r, err := f.Open()
-				require.NoError(t, err)
-				b, err := io.ReadAll(r)
+				r, openErr := f.Open()
+				require.NoError(t, openErr)
+				b, openErr := io.ReadAll(r)
 				_ = r.Close()
-				require.NoError(t, err)
+				require.NoError(t, openErr)
 				_, exists := members[f.Name]
 				require.False(t, exists, "duplicate ZIP member")
 				members[f.Name] = b

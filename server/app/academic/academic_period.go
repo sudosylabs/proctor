@@ -137,8 +137,8 @@ func (s *Service) CreateAcademicPeriod(
 		EndsAt:      model.TimeFromMillis(command.EndAt),
 	}
 	candidate.PrepareCreate(periodID, s.now())
-	if err := candidate.Validate(); err != nil {
-		return nil, apperror.DomainInvalid("academic_period.invalid", err)
+	if validateErr := candidate.Validate(); validateErr != nil {
+		return nil, apperror.DomainInvalid("academic_period.invalid", validateErr)
 	}
 	if err = s.authorizer.AuthorizeAcademicPeriodOwner(ctx, inv, model.ActionAcademicPeriodManage, candidate); err != nil {
 		return nil, err
@@ -283,8 +283,8 @@ func (s *Service) ArchiveAcademicPeriod(ctx context.Context, inv invocation.Invo
 	if err != nil {
 		return err
 	}
-	if err := checkAcademicRevision(command.ExpectedRevision, current.Revision, "academic_period.conflict"); err != nil {
-		return err
+	if checkErr := checkAcademicRevision(command.ExpectedRevision, current.Revision, "academic_period.conflict"); checkErr != nil {
+		return checkErr
 	}
 
 	_, err = access.RunAudited(

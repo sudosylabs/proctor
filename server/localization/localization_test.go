@@ -173,8 +173,8 @@ func TestLocalizerUsesCLDRPluralForms(t *testing.T) {
 	}}
 	require.NoError(t, localizer.ValidateDefinitions(definitions))
 	for count, want := range map[int]string{1: "1 item", 2: "2 items"} {
-		got, err := localizer.TranslateRequest("en", Request{ID: "items", PluralCount: count})
-		require.NoError(t, err)
+		got, translateErr := localizer.TranslateRequest("en", Request{ID: "items", PluralCount: count})
+		require.NoError(t, translateErr)
 		require.Equal(t, want, got, "count %d", count)
 	}
 	_, err = localizer.Resolve("en", "items", nil)

@@ -44,7 +44,7 @@ func TestRoleHTTPCreateUsesApplicationCommandWithoutPreflight(t *testing.T) {
 		"name": "teacher", "display_name": "Teacher",
 		"permissions": []string{string(model.ActionClassView)},
 	})
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/roles", bytes.NewReader(body))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/roles", bytes.NewReader(body))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()

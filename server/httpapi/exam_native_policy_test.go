@@ -31,7 +31,7 @@ func TestExamNativePolicyHTTPStrictBoundary(t *testing.T) {
 			logger, _ := routetest.NewLogger(t)
 			fake := &examHTTPApplication{principal: principal, view: view}
 			api := newFocusedResourceAPI(t, logger, fake, examResource(fake))
-			request := httptest.NewRequest(http.MethodPut, "/api/v1/exams/"+view.Exam.ID.String()+"/draft/policies/native", bytes.NewBufferString(body))
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/exams/"+view.Exam.ID.String()+"/draft/policies/native", bytes.NewBufferString(body))
 			request.Header.Set("Authorization", "Bearer credential")
 			request.Header.Set("Content-Type", "application/json")
 			request.Header.Set("Idempotency-Key", "native-policy-key")

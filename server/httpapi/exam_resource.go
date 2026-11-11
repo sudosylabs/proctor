@@ -562,9 +562,9 @@ func rejectDuplicateTopLevelJSONMembers(raw []byte) error {
 
 	seen := make(map[string]struct{})
 	for decoder.More() {
-		name, err := decoder.Token()
-		if err != nil {
-			return err
+		name, tokenErr := decoder.Token()
+		if tokenErr != nil {
+			return tokenErr
 		}
 
 		member, ok := name.(string)
@@ -577,8 +577,8 @@ func rejectDuplicateTopLevelJSONMembers(raw []byte) error {
 
 		seen[member] = struct{}{}
 		var value json.RawMessage
-		if err = decoder.Decode(&value); err != nil {
-			return err
+		if tokenErr = decoder.Decode(&value); tokenErr != nil {
+			return tokenErr
 		}
 	}
 

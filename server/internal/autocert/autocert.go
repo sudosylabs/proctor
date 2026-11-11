@@ -69,8 +69,8 @@ type HostPolicy func(ctx context.Context, host string) error
 func HostWhitelist(hosts ...string) HostPolicy {
 	whitelist := make(map[string]bool, len(hosts))
 	for _, h := range hosts {
-		if h, err := idna.Lookup.ToASCII(h); err == nil {
-			whitelist[h] = true
+		if ascii, err := idna.Lookup.ToASCII(h); err == nil {
+			whitelist[ascii] = true
 		}
 	}
 	return func(_ context.Context, host string) error {
@@ -309,7 +309,7 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 		if cert := m.certTokens[name]; cert != nil {
 			return cert, nil
 		}
-		if cert, err := m.cacheGet(ctx, certKey{domain: name, isToken: true}); err == nil {
+		if cert, cacheGetErr := m.cacheGet(ctx, certKey{domain: name, isToken: true}); cacheGetErr == nil {
 			return cert, nil
 		}
 		// TODO: cache error results?
@@ -317,8 +317,8 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 	}
 
 	// regular domain
-	if err := m.hostPolicy()(ctx, name); err != nil {
-		return nil, err
+	if hostPolicyErr := m.hostPolicy()(ctx, name); hostPolicyErr != nil {
+		return nil, hostPolicyErr
 	}
 
 	ck := certKey{
@@ -639,7 +639,7 @@ func (m *Manager) createCert(ctx context.Context, ck certKey) (*tls.Certificate,
 			if !ok {
 				return
 			}
-			if _, err := validCert(ck, s.cert, s.key, m.now()); err == nil {
+			if _, validCertErr := validCert(ck, s.cert, s.key, m.now()); validCertErr == nil {
 				return
 			}
 			delete(m.state, ck)
@@ -763,9 +763,9 @@ AuthorizeOrderLoop:
 
 		// Satisfy all pending authorizations.
 		for _, zurl := range o.AuthzURLs {
-			z, err := client.GetAuthorization(ctx, zurl)
-			if err != nil {
-				return nil, err
+			z, getErr := client.GetAuthorization(ctx, zurl)
+			if getErr != nil {
+				return nil, getErr
 			}
 			if z.Status != acme.StatusPending {
 				// We are interested only in pending authorizations.
@@ -781,17 +781,17 @@ AuthorizeOrderLoop:
 				return nil, fmt.Errorf("acme/autocert: unable to satisfy %q for domain %q: no viable challenge type found", z.URI, domain)
 			}
 			// Respond to the challenge and wait for validation result.
-			cleanup, err := m.fulfill(ctx, client, chal, domain)
-			if err != nil {
+			cleanup, getErr := m.fulfill(ctx, client, chal, domain)
+			if getErr != nil {
 				continue AuthorizeOrderLoop
 			}
 			defer func() {
 				resultErr = errors.Join(resultErr, cleanup())
 			}()
-			if _, err := client.Accept(ctx, chal); err != nil {
+			if _, acceptErr := client.Accept(ctx, chal); acceptErr != nil {
 				continue AuthorizeOrderLoop
 			}
-			if _, err := client.WaitAuthorization(ctx, z.URI); err != nil {
+			if _, waitErr := client.WaitAuthorization(ctx, z.URI); waitErr != nil {
 				continue AuthorizeOrderLoop
 			}
 		}
@@ -1146,16 +1146,16 @@ func (m *Manager) accountKey(ctx context.Context) (crypto.Signer, error) {
 		data, err = m.Cache.Get(ctx, legacyKeyName)
 	}
 	if err == ErrCacheMiss {
-		key, err := genKey()
-		if err != nil {
-			return nil, err
+		key, genKeyErr := genKey()
+		if genKeyErr != nil {
+			return nil, genKeyErr
 		}
 		var buf bytes.Buffer
-		if err := encodeECDSAKey(&buf, key); err != nil {
-			return nil, err
+		if encodeErr := encodeECDSAKey(&buf, key); encodeErr != nil {
+			return nil, encodeErr
 		}
-		if err := m.Cache.Put(ctx, keyName, buf.Bytes()); err != nil {
-			return nil, err
+		if putErr := m.Cache.Put(ctx, keyName, buf.Bytes()); putErr != nil {
+			return nil, putErr
 		}
 		return key, nil
 	}

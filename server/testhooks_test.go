@@ -728,7 +728,7 @@ func TestNewForTestingServesTheProvidedBuildInfo(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = runtime.Server.Close() })
 
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/system/version", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/system/version", nil)
 	response := httptest.NewRecorder()
 	runtime.Handler.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, "version status")

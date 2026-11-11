@@ -54,7 +54,7 @@ func (f *academicAdministrationBatchCommandsFake) CreateAffiliation(_ context.Co
 }
 func (f *academicAdministrationBatchCommandsFake) EndAffiliation(_ context.Context, _ invocation.Invocation, command academic.EndAffiliationCommand) (*model.Affiliation, error) {
 	f.operations = append(f.operations, AcademicAdministrationAffiliationEnd)
-	return &model.Affiliation{ID: model.AffiliationID(command.ID)}, nil
+	return &model.Affiliation{ID: command.ID}, nil
 }
 func (f *academicAdministrationBatchCommandsFake) CreateAcademicUnitMember(_ context.Context, _ invocation.Invocation, command academic.CreateAcademicUnitMemberCommand) (*model.AcademicUnitMember, error) {
 	f.operations = append(f.operations, AcademicAdministrationAcademicUnitMemberAdd)
@@ -62,7 +62,7 @@ func (f *academicAdministrationBatchCommandsFake) CreateAcademicUnitMember(_ con
 }
 func (f *academicAdministrationBatchCommandsFake) EndAcademicUnitMember(_ context.Context, _ invocation.Invocation, command academic.EndAcademicUnitMemberCommand) (*model.AcademicUnitMember, error) {
 	f.operations = append(f.operations, AcademicAdministrationAcademicUnitMemberEnd)
-	return &model.AcademicUnitMember{ID: model.AcademicUnitMemberID(command.ID)}, nil
+	return &model.AcademicUnitMember{ID: command.ID}, nil
 }
 func (f *academicAdministrationBatchCommandsFake) EnrollClassMember(_ context.Context, _ invocation.Invocation, command academic.EnrollClassMemberCommand) (*model.ClassEnrollment, error) {
 	f.enrollments = append(f.enrollments, command)
@@ -144,7 +144,7 @@ func TestAcademicAdministrationBatchPreservesDistinctEffectiveHistories(t *testi
 }
 func (f *academicAdministrationBatchCommandsFake) EndClassMember(_ context.Context, _ invocation.Invocation, command academic.EndClassMemberCommand) (*model.ClassMember, error) {
 	f.operations = append(f.operations, AcademicAdministrationClassEnd)
-	return &model.ClassMember{ID: model.ClassMemberID(command.ID)}, nil
+	return &model.ClassMember{ID: command.ID}, nil
 }
 func (f *academicAdministrationBatchCommandsFake) CreateRoleBinding(_ context.Context, _ invocation.Invocation, command administration.CreateRoleBindingCommand) (*model.RoleBinding, error) {
 	f.operations = append(f.operations, AcademicAdministrationRoleBindingCreate)
@@ -152,7 +152,7 @@ func (f *academicAdministrationBatchCommandsFake) CreateRoleBinding(_ context.Co
 }
 func (f *academicAdministrationBatchCommandsFake) EndRoleBinding(_ context.Context, _ invocation.Invocation, command administration.EndRoleBindingCommand) (*model.RoleBinding, error) {
 	f.operations = append(f.operations, AcademicAdministrationRoleBindingEnd)
-	return &model.RoleBinding{ID: model.RoleBindingID(command.ID)}, nil
+	return &model.RoleBinding{ID: command.ID}, nil
 }
 func (f *academicAdministrationBatchCommandsFake) SetUserEnabled(_ context.Context, _ invocation.Invocation, command identity.SetUserEnabledCommand) (*model.User, error) {
 	f.disabled = append(f.disabled, command)
@@ -161,7 +161,7 @@ func (f *academicAdministrationBatchCommandsFake) SetUserEnabled(_ context.Conte
 	} else {
 		f.operations = append(f.operations, AcademicAdministrationUserDisable)
 	}
-	return &model.User{ID: model.UserID(command.ID)}, nil
+	return &model.User{ID: command.ID}, nil
 }
 func (*academicAdministrationBatchCommandsFake) ValidatePrincipal(context.Context, model.Principal) error {
 	return nil

@@ -97,7 +97,7 @@ func TestAccessPolicyHTTPRetriesLostResponseAndRejectsConflictingKeyReuse(t *tes
 	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, accessPolicyResource(application))
 	body := `{"expected_revision":1,"revoke_existing_sessions":true,"local_login_enabled":true,"public_registration_enabled":false,"invitation_admission_enabled":true,"invitation_local_credential_enabled":true,"desktop_authorization_enabled":false,"provider_admissions":{},"role_holder_mfa_required":false,"session_idle_minutes":null,"session_absolute_minutes":null}`
 	do := func(candidate string) *httptest.ResponseRecorder {
-		request := httptest.NewRequest(http.MethodPut, "/api/v1/access-policy", strings.NewReader(candidate))
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/access-policy", strings.NewReader(candidate))
 		request.Header.Set("Authorization", "Bearer session")
 		request.Header.Set("Content-Type", "application/json")
 		request.Header.Set("Idempotency-Key", "lost-response")
@@ -219,7 +219,7 @@ func TestAccessPolicyHTTPRequiresExplicitSessionRevocationChoice(t *testing.T) {
 		`{"expected_revision":1,"local_login_enabled":true,"public_registration_enabled":false,"invitation_admission_enabled":true,"invitation_local_credential_enabled":true,"desktop_authorization_enabled":false,"provider_admissions":{},"role_holder_mfa_required":false,"session_idle_minutes":null,"session_absolute_minutes":null}`,
 		`{"expected_revision":1,"revoke_existing_sessions":null,"local_login_enabled":true,"public_registration_enabled":false,"invitation_admission_enabled":true,"invitation_local_credential_enabled":true,"desktop_authorization_enabled":false,"provider_admissions":{},"role_holder_mfa_required":false,"session_idle_minutes":null,"session_absolute_minutes":null}`,
 	} {
-		request := httptest.NewRequest(http.MethodPut, "/api/v1/access-policy", strings.NewReader(candidate))
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/access-policy", strings.NewReader(candidate))
 		request.Header.Set("Authorization", "Bearer session")
 		request.Header.Set("Content-Type", "application/json")
 		request.Header.Set("Idempotency-Key", "explicit-choice")
@@ -269,7 +269,7 @@ func TestAccessPolicyHTTPRequiresEveryCompleteReplacementSetting(t *testing.T) {
 				mutation.apply(body)
 				encoded, err := json.Marshal(body)
 				require.NoError(t, err)
-				request := httptest.NewRequest(http.MethodPut, "/api/v1/access-policy", strings.NewReader(string(encoded)))
+				request := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/access-policy", strings.NewReader(string(encoded)))
 				request.Header.Set("Authorization", "Bearer session")
 				request.Header.Set("Content-Type", "application/json")
 				request.Header.Set("Idempotency-Key", "complete-replacement-"+field+"-"+mutation.name)

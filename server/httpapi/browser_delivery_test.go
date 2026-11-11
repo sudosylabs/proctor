@@ -32,7 +32,7 @@ func TestBrowserDeliveryHTTPDecodesExpandedUnicodeNavigation(t *testing.T) {
 	require.NoError(t, err)
 	require.Greater(t, len(raw), 32*1024, "invalid expanded fixture size")
 	require.Less(t, len(raw), model.BrowserActivityAppendMaximumBytes, "invalid expanded fixture size")
-	request := httptest.NewRequest("POST", "/", bytes.NewReader(raw))
+	request := httptest.NewRequestWithContext(t.Context(), "POST", "/", bytes.NewReader(raw))
 	request.Header.Set("Content-Type", "application/json")
 	var decoded model.BrowserActivityBatch
 	require.NoError(t, (route.Request{HTTP: request}).DecodeJSON(&decoded))

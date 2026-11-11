@@ -177,8 +177,8 @@ func (h programmeLevelHandlers) patch(request route.Request) (route.Result, erro
 	if err = request.DecodeJSON(&body); err != nil {
 		return route.Result{}, err
 	}
-	if err := validateAcademicRevision(body.ExpectedRevision); err != nil {
-		return route.Result{}, err
+	if validateErr := validateAcademicRevision(body.ExpectedRevision); validateErr != nil {
+		return route.Result{}, validateErr
 	}
 	level, err := h.app.UpdateProgrammeLevel(
 		request.Context,

@@ -64,7 +64,7 @@ func TestProgrammeLevelHTTPPreservesMissingProgrammeProblemField(t *testing.T) {
 	httpAPI := newFocusedResourceAPI(
 		t, logger, routetest.Authenticator{Principal: principal}, programmeLevelResource(levels),
 	)
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/programmes/"+programmeID+"/levels", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/programmes/"+programmeID+"/levels", nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -96,7 +96,7 @@ func TestProgrammeLevelHTTPMapsDTOWithoutPermissionPreflight(t *testing.T) {
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
 	require.Equal(t, level.ID.String(), body.ID)
 	require.Equal(t, level.ProgrammeID.String(), body.ProgrammeID)
-	invalid := httptest.NewRequest(http.MethodPost, "/api/v1/programmes/"+level.ProgrammeID.String()+"/levels", strings.NewReader(`{"name":"year-1","display_name":"Year 1","unknown":true}`))
+	invalid := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/programmes/"+level.ProgrammeID.String()+"/levels", strings.NewReader(`{"name":"year-1","display_name":"Year 1","unknown":true}`))
 	invalid.Header.Set("Authorization", "Bearer credential")
 	invalid.Header.Set("Content-Type", "application/json")
 	invalidResponse := httptest.NewRecorder()

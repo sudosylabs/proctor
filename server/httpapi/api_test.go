@@ -41,7 +41,7 @@ func TestHealthVersionAndCommonHeaders(t *testing.T) {
 	}
 	helper := testlib.Setup(t, testlib.WithBuildInfo(buildInfo))
 
-	liveness := performRequest(helper.Handler(), http.MethodGet, "/health/live", "desktop-client-1")
+	liveness := performRequest(t, helper.Handler(), http.MethodGet, "/health/live", "desktop-client-1")
 	require.Equal(t, http.StatusOK, liveness.Code, "liveness status = %d: %s", liveness.Code, liveness.Body.String())
 	// A client-supplied request ID never becomes server correlation.
 	requestID := liveness.Header().Get(route.RequestIDHeader)
@@ -54,10 +54,10 @@ func TestHealthVersionAndCommonHeaders(t *testing.T) {
 	require.NoError(t, json.Unmarshal(liveness.Body.Bytes(), &health))
 	require.Equal(t, "ok", health["status"])
 
-	readiness := performRequest(helper.Handler(), http.MethodGet, "/health/ready", "")
+	readiness := performRequest(t, helper.Handler(), http.MethodGet, "/health/ready", "")
 	require.Equal(t, http.StatusServiceUnavailable, readiness.Code, "not-ready status")
 
-	version := performRequest(helper.Handler(), http.MethodGet, "/api/v1/system/version", "")
+	version := performRequest(t, helper.Handler(), http.MethodGet, "/api/v1/system/version", "")
 	var got httpapi.BuildInfo
 	require.NoError(t, json.Unmarshal(version.Body.Bytes(), &got))
 	require.Equal(t, buildInfo, got, "build info")
@@ -92,7 +92,7 @@ func TestRoutingFailuresUseProblemDetails(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.title, func(t *testing.T) {
-			response := performRequest(
+			response := performRequest(t,
 				helper.Handler(),
 				test.method,
 				test.path,
@@ -183,7 +183,7 @@ func TestAuthenticationBoundaryRejectsMissingAmbiguousAndURLCredentials(t *testi
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			request := httptest.NewRequest(test.method, test.path, nil)
+			request := httptest.NewRequestWithContext(t.Context(), test.method, test.path, nil)
 			request.Header.Set(route.RequestIDHeader, "compatibility-request")
 			if test.configure != nil {
 				test.configure(request)
@@ -215,7 +215,7 @@ func TestAuthenticationRequestsUseStrictJSON(t *testing.T) {
 		`{"login_id":"user@example.com"} {"password":"password"}`,
 	}
 	for _, body := range tests {
-		request := httptest.NewRequest(
+		request := httptest.NewRequestWithContext(t.Context(),
 			http.MethodPost,
 			"/api/v1/auth/login",
 			strings.NewReader(body),
@@ -230,8 +230,8 @@ func TestAuthenticationRequestsUseStrictJSON(t *testing.T) {
 	}
 }
 
-func performRequest(handler http.Handler, method, path, requestID string) *httptest.ResponseRecorder {
-	request := httptest.NewRequest(method, path, nil)
+func performRequest(t *testing.T, handler http.Handler, method, path, requestID string) *httptest.ResponseRecorder {
+	request := httptest.NewRequestWithContext(t.Context(), method, path, nil)
 	if requestID != "" {
 		request.Header.Set(route.RequestIDHeader, requestID)
 	}

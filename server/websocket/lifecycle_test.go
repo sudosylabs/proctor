@@ -109,7 +109,7 @@ func TestHubAcceptRequiresStart(t *testing.T) {
 
 	hub := newTestHub(t)
 	t.Cleanup(func() { _ = hub.Close(context.Background()) })
-	request := httptest.NewRequest(http.MethodGet, "https://proctor.example/api/v1/websocket", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "https://proctor.example/api/v1/websocket", nil)
 	request.Header.Set("Origin", "https://proctor.example")
 	recorder := httptest.NewRecorder()
 	err := hub.Accept(

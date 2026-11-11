@@ -101,7 +101,7 @@ func TestAccountSecurityResourcesRunThroughFocusedKernel(t *testing.T) {
 		personalAccessTokenResource(applicationStub),
 	)
 
-	statusRequest := httptest.NewRequest(http.MethodGet, "/api/v1/users/me/mfa", nil)
+	statusRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/me/mfa", nil)
 	statusRequest.Header.Set("Authorization", "Bearer credential")
 	statusResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(statusResponse, statusRequest)
@@ -137,7 +137,7 @@ func TestAccountSecurityResourcesRunThroughFocusedKernel(t *testing.T) {
 	require.Empty(t, revokeOthersResponse.Header().Values("Set-Cookie"), "revoke others must leave cookies in place")
 	require.Equal(t, 1, applicationStub.revokeOthers)
 
-	createRequest := httptest.NewRequest(
+	createRequest := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPost,
 		"/api/v1/users/me/tokens",
 		strings.NewReader(`{"description":"editor","scopes":["user.profile_picture.manage"],"expires_at":"1970-01-01T00:00:00.123Z"}`),
@@ -154,7 +154,7 @@ func TestAccountSecurityResourcesRunThroughFocusedKernel(t *testing.T) {
 	require.NoError(t, json.Unmarshal(createResponse.Body.Bytes(), &created))
 	require.Equal(t, "one-time-secret", created["credential"])
 
-	invalidRequest := httptest.NewRequest(
+	invalidRequest := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPost,
 		"/api/v1/users/me/tokens",
 		strings.NewReader(`{"description":"editor","scopes":[],"expires_at":"1970-01-01T00:00:00.123Z","unknown":true}`),
@@ -166,7 +166,7 @@ func TestAccountSecurityResourcesRunThroughFocusedKernel(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, invalidResponse.Code, "strict decode status = %d: %s", invalidResponse.Code, invalidResponse.Body.String())
 
 	missingCredential := httptest.NewRecorder()
-	httpAPI.ServeHTTP(missingCredential, httptest.NewRequest(http.MethodGet, "/api/v1/users/me/sessions", nil))
+	httpAPI.ServeHTTP(missingCredential, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/me/sessions", nil))
 	require.Equal(t, http.StatusUnauthorized, missingCredential.Code, "missing credential status = %d: %s", missingCredential.Code, missingCredential.Body.String())
 
 	weakPrincipal := principal
@@ -178,7 +178,7 @@ func TestAccountSecurityResourcesRunThroughFocusedKernel(t *testing.T) {
 		routetest.Authenticator{Principal: weakPrincipal},
 		mfaResource(applicationStub),
 	)
-	weakRequest := httptest.NewRequest(http.MethodPost, "/api/v1/users/me/mfa/disable", nil)
+	weakRequest := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/users/me/mfa/disable", nil)
 	weakRequest.Header.Set("Authorization", "Bearer credential")
 	weakResponse := httptest.NewRecorder()
 	weakAPI.ServeHTTP(weakResponse, weakRequest)

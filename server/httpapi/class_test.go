@@ -66,7 +66,7 @@ func TestClassResourceRunsThroughRoutingKernelWithNarrowDependencies(t *testing.
 		classResource(classes),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPost,
 		"/api/v1/programme-levels/"+class.ProgrammeLevelID.String()+"/classes",
 		strings.NewReader(`{"academic_period_id":"`+class.AcademicPeriodID.String()+`","name":"class-a","display_name":"Class A"}`),
@@ -82,7 +82,7 @@ func TestClassResourceRunsThroughRoutingKernelWithNarrowDependencies(t *testing.
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
 	require.Equal(t, class.ID.String(), body.ID)
 
-	invalid := httptest.NewRequest(
+	invalid := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPost,
 		"/api/v1/programme-levels/"+class.ProgrammeLevelID.String()+"/classes",
 		strings.NewReader(`{"academic_period_id":"`+class.AcademicPeriodID.String()+`","name":"class-a","display_name":"Class A","unknown":true}`),
@@ -93,7 +93,7 @@ func TestClassResourceRunsThroughRoutingKernelWithNarrowDependencies(t *testing.
 	httpAPI.ServeHTTP(invalidResponse, invalid)
 	require.Equal(t, http.StatusBadRequest, invalidResponse.Code, "invalid status = %d: %s", invalidResponse.Code, invalidResponse.Body.String())
 
-	archive := httptest.NewRequest(
+	archive := httptest.NewRequestWithContext(t.Context(),
 		http.MethodDelete,
 		"/api/v1/classes/"+class.ID.String(),
 		nil,
@@ -127,7 +127,7 @@ func TestClassResourceFailsClosedForUndeclaredApplicationError(t *testing.T) {
 		classResource(&classHTTPApplication{searchErr: apperror.New("class.invalid")}),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
 		"/api/v1/academic-units/"+model.NewID()+"/classes",
 		nil,
@@ -151,7 +151,7 @@ func TestClassResourceFailsClosedForUndeclaredAuthenticationError(t *testing.T) 
 		routetest.Authenticator{Err: apperror.New("user.conflict")},
 		classResource(&classHTTPApplication{}),
 	)
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
 		"/api/v1/classes/"+model.NewID(),
 		nil,

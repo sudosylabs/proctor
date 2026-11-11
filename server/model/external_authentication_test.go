@@ -25,7 +25,7 @@ func TestSafeRelativeURL(t *testing.T) {
 		{"https://evil.example", false},
 		{"//evil.example/path", false},
 		{"/path#fragment", false},
-		{"/path\\other", false},
+		{"/path\\" + "other", false},
 		{"relative", false},
 	}
 	for _, test := range tests {

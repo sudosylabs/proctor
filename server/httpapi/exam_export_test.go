@@ -76,7 +76,7 @@ func TestExamExportsHTTPExplicitCategoriesAndExactScope(t *testing.T) {
 			logger, _ := routetest.NewLogger(t)
 			api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: p}, examExportsResource(fake))
 			send := func(body, key string) *httptest.ResponseRecorder {
-				r := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+				r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, strings.NewReader(body))
 				r.Header.Set("Authorization", "Bearer session")
 				r.Header.Set("Content-Type", "application/json")
 				if key != "" {
@@ -122,7 +122,7 @@ func TestExamExportHTTPDownloadHasFixedPrivateAttachment(t *testing.T) {
 	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: p}, examExportsResource(fake))
 	path := "/api/v1/exams/" + scope.ExamID.String() + "/sittings/" + scope.SittingID.String() + "/submissions/" + scope.SubmissionID.String() + "/exports/" + e.ID.String() + "/content"
 	send := func() *httptest.ResponseRecorder {
-		r := httptest.NewRequest(http.MethodGet, path, nil)
+		r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 		r.Header.Set("Authorization", "Bearer session")
 		w := httptest.NewRecorder()
 		api.ServeHTTP(w, r)
@@ -152,7 +152,7 @@ func TestExamExportsHTTPForbidsPATBeforeUseCase(t *testing.T) {
 	logger, _ := routetest.NewLogger(t)
 	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: p}, examExportsResource(fake))
 	path := "/api/v1/exams/" + model.NewExamID().String() + "/sittings/" + model.NewExamSittingID().String() + "/exports/" + model.NewExamExportID().String()
-	r := httptest.NewRequest(http.MethodGet, path, nil)
+	r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 	r.Header.Set("Authorization", "Bearer pat")
 	w := httptest.NewRecorder()
 	api.ServeHTTP(w, r)

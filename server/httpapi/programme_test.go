@@ -99,7 +99,7 @@ func TestProgrammeResourceRejectsInvalidQueryLimit(t *testing.T) {
 	httpAPI := newFocusedResourceAPI(
 		t, logger, routetest.Authenticator{Principal: principal}, programmeResource(programmes),
 	)
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
 		"/api/v1/academic-units/"+model.NewID()+"/programmes?limit=invalid",
 		nil,

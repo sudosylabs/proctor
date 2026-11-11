@@ -156,8 +156,8 @@ func TestContentWorkCancellationDoesNotReleaseRunningReader(t *testing.T) {
 	done, outcome := make(chan struct{}), make(chan error, 1)
 	go func() {
 		defer close(done)
-		_, err := content.StoreExamResource(ctx, model.NewFileRevisionID(), model.ExamResourceMediaText, body, 5, time.Unix(1, 0))
-		outcome <- err
+		_, storeErr := content.StoreExamResource(ctx, model.NewFileRevisionID(), model.ExamResourceMediaText, body, 5, time.Unix(1, 0))
+		outcome <- storeErr
 	}()
 	t.Cleanup(func() { releaseOnce.Do(func() { close(release) }); awaitContentWork(t, done) })
 	awaitContentWork(t, entered)

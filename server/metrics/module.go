@@ -887,7 +887,7 @@ func (m *Module) Start(ctx context.Context) error {
 		return errors.New("metrics module is already started")
 	}
 
-	listener, err := net.Listen("tcp", m.settings.ListenAddress)
+	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", m.settings.ListenAddress)
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", m.settings.ListenAddress, err)
 	}

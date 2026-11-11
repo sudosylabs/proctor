@@ -45,7 +45,7 @@ func TestPlatformDoesNotExposeInfrastructureLookup(t *testing.T) {
 				continue
 			}
 			receiver := function.Recv.List[0].Type
-			if pointer, ok := receiver.(*ast.StarExpr); ok {
+			if pointer, isPointer := receiver.(*ast.StarExpr); isPointer {
 				receiver = pointer.X
 			}
 			identifier, ok := receiver.(*ast.Ident)

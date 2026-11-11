@@ -586,10 +586,10 @@ type personalAccessTokenUserStoreFake struct{ store.UserStore }
 
 func (*personalAccessTokenUserStoreFake) Get(_ context.Context, id model.UserID) (*model.User, error) {
 	user := &model.User{
-		ID: model.UserID(id), Username: "operator", Email: "operator@example.test",
+		ID: id, Username: "operator", Email: "operator@example.test",
 		EmailVerified: true, DisplayName: "Operator", Locale: model.DefaultLocale,
 	}
-	user.PrepareCreate(model.UserID(id), time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC))
+	user.PrepareCreate(id, time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC))
 	return user, nil
 }
 

@@ -79,7 +79,7 @@ func TestUserSettingsHTTPReplacesWithoutEchoingSource(t *testing.T) {
 		"source": source, "format_version": 1, "expected_revision": revision.String(),
 	})
 	require.NoError(t, err)
-	request := httptest.NewRequest(http.MethodPut, "/api/v1/users/me/settings", bytes.NewReader(body))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/users/me/settings", bytes.NewReader(body))
 	request.Header.Set("Authorization", "Bearer session-credential")
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "settings-save-1")
@@ -133,7 +133,7 @@ func TestUserSettingsHTTPReplacementIsStrictBoundedAndIdempotent(t *testing.T) {
 			if name == "trailing value" {
 				body += `{}`
 			}
-			request := httptest.NewRequest(http.MethodPut, "/api/v1/users/me/settings", bytes.NewBufferString(body))
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/users/me/settings", bytes.NewBufferString(body))
 			request.Header.Set("Authorization", "Bearer session-credential")
 			request.Header.Set("Content-Type", "application/json")
 			configure(request)
@@ -149,7 +149,7 @@ func TestUserSettingsHTTPReplacementIsStrictBoundedAndIdempotent(t *testing.T) {
 		Source: maxSource, FormatVersion: 1, ExpectedRevision: revision.String(),
 	})
 	require.NoError(t, err)
-	request := httptest.NewRequest(http.MethodPut, "/api/v1/users/me/settings", bytes.NewReader(body))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/users/me/settings", bytes.NewReader(body))
 	request.Header.Set("Authorization", "Bearer session-credential")
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "maximum-save")
@@ -181,7 +181,7 @@ func TestUserSettingsHTTPReadsExactSelfDocumentWithoutCaching(t *testing.T) {
 		routetest.Authenticator{Principal: principal},
 		userSettingsResource(applicationFake),
 	)
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/me/settings", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/me/settings", nil)
 	request.Header.Set("Authorization", "Bearer session-credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -220,7 +220,7 @@ func TestUserSettingsHTTPReadsUnsupportedFormatAsExactReadOnlySource(t *testing.
 		routetest.Authenticator{Principal: principal},
 		userSettingsResource(applicationFake),
 	)
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/me/settings", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/me/settings", nil)
 	request.Header.Set("Authorization", "Bearer session-credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -244,7 +244,7 @@ func TestUserSettingsHTTPRejectsNonSessionAndArbitraryUserPaths(t *testing.T) {
 		routetest.Authenticator{Err: apperror.New("authentication.token_invalid")},
 		userSettingsResource(applicationFake),
 	)
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/me/settings", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/me/settings", nil)
 	request.Header.Set("Authorization", "Bearer personal-access-token")
 	response := httptest.NewRecorder()
 	patAPI.ServeHTTP(response, request)
@@ -262,7 +262,7 @@ func TestUserSettingsHTTPRejectsNonSessionAndArbitraryUserPaths(t *testing.T) {
 		"settings listing": "/api/v1/users/settings",
 	} {
 		t.Run(name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodGet, path, nil)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 			request.Header.Set("Authorization", "Bearer credential")
 			response := httptest.NewRecorder()
 			httpAPI.ServeHTTP(response, request)
@@ -270,7 +270,7 @@ func TestUserSettingsHTTPRejectsNonSessionAndArbitraryUserPaths(t *testing.T) {
 		})
 	}
 	for _, method := range []string{http.MethodPatch, http.MethodDelete} {
-		request := httptest.NewRequest(method, "/api/v1/users/me/settings", nil)
+		request := httptest.NewRequestWithContext(t.Context(), method, "/api/v1/users/me/settings", nil)
 		request.Header.Set("Authorization", "Bearer session-credential")
 		response := httptest.NewRecorder()
 		httpAPI.ServeHTTP(response, request)

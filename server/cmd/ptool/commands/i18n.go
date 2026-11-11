@@ -89,8 +89,8 @@ func newI18nCheckCommand(options *i18nOptions) *cobra.Command {
 			// Browser source owns and exactly validates the webapp namespace in
 			// webapp/scripts/generate-i18n.mjs. Server consumers retain exact
 			// ownership of every other catalog entry.
-			if err := localizer.ValidateDefinitionsWithDelegatedPrefixes(definitions, "webapp."); err != nil {
-				return err
+			if validateErr := localizer.ValidateDefinitionsWithDelegatedPrefixes(definitions, "webapp."); validateErr != nil {
+				return validateErr
 			}
 
 			_, err = fmt.Fprintf(
@@ -214,16 +214,16 @@ func formatCatalog(name string, check bool) (bool, error) {
 	decoder := json.NewDecoder(bytes.NewReader(input))
 	decoder.DisallowUnknownFields()
 	var entries []catalogEntry
-	if err := decoder.Decode(&entries); err != nil {
-		return false, fmt.Errorf("decode catalog %q: %w", name, err)
+	if decodeErr := decoder.Decode(&entries); decodeErr != nil {
+		return false, fmt.Errorf("decode catalog %q: %w", name, decodeErr)
 	}
 
 	var trailing any
-	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
-		if err == nil {
-			err = errors.New("multiple JSON values")
+	if decodeErr := decoder.Decode(&trailing); !errors.Is(decodeErr, io.EOF) {
+		if decodeErr == nil {
+			decodeErr = errors.New("multiple JSON values")
 		}
-		return false, fmt.Errorf("decode catalog %q: %w", name, err)
+		return false, fmt.Errorf("decode catalog %q: %w", name, decodeErr)
 	}
 
 	sort.Slice(entries, func(i, j int) bool { return entries[i].ID < entries[j].ID })

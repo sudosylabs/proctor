@@ -21,7 +21,7 @@ func TestGeneratedEntityIDsAreFresh(t *testing.T) {
 	t.Parallel()
 
 	generatedPath := filepath.Join(t.TempDir(), "id_gen.go")
-	command := exec.Command("go", "run", "./internal/idgen", "-source", "id.go", "-output", generatedPath)
+	command := exec.CommandContext(t.Context(), "go", "run", "./internal/idgen", "-source", "id.go", "-output", generatedPath)
 	output, err := command.CombinedOutput()
 	require.NoError(t, err, "regenerate typed IDs: %v\n%s", err, output)
 	want, err := os.ReadFile("id_gen.go")

@@ -1495,7 +1495,7 @@ func (e Event) ValidateForPublish() error {
 		return fmt.Errorf("invalid realtime event %q", e.Name)
 	}
 
-	if e.UserID != "" && !model.UserID(e.UserID).IsValid() {
+	if e.UserID != "" && !e.UserID.IsValid() {
 		return errors.New("realtime event user ID is invalid")
 	}
 

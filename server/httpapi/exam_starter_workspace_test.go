@@ -39,7 +39,7 @@ func TestExamStarterWorkspaceHTTPFileUploadUsesMetadataFirstStreaming(t *testing
 	raw := []byte("package main\n")
 	checksum := fmt.Sprintf("%x", sha256.Sum256(raw))
 	body, contentType := examResourceMultipart(t, `{"expected_revision":1,"path":"cmd/main.go","media_type":"text/x-go","size":13,"sha256":"`+checksum+`"}`, raw, false)
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/exams/"+fake.examID.String()+"/draft/starter-workspace/files", body)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams/"+fake.examID.String()+"/draft/starter-workspace/files", body)
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", contentType)
 	request.Header.Set("Idempotency-Key", "workspace-file")
@@ -63,7 +63,7 @@ func TestExamStarterWorkspaceHTTPFileUploadRequiresSizeButAcceptsExplicitZero(t 
 	path := "/api/v1/exams/" + fake.examID.String() + "/draft/starter-workspace/files"
 
 	omittedBody, omittedType := examResourceMultipart(t, `{"expected_revision":1,"path":"empty.txt","media_type":"text/plain","sha256":"`+fmt.Sprintf("%x", sha256.Sum256(nil))+`"}`, nil, false)
-	omitted := httptest.NewRequest(http.MethodPost, path, omittedBody)
+	omitted := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, omittedBody)
 	omitted.Header.Set("Authorization", "Bearer credential")
 	omitted.Header.Set("Content-Type", omittedType)
 	omitted.Header.Set("Idempotency-Key", "workspace-file-omitted-size")
@@ -73,7 +73,7 @@ func TestExamStarterWorkspaceHTTPFileUploadRequiresSizeButAcceptsExplicitZero(t 
 	require.False(t, fake.createFile.ExamID.IsValid(), "omitted size status=%d command=%#v body=%s", omittedResponse.Code, fake.createFile, omittedResponse.Body.String())
 
 	explicitBody, explicitType := examResourceMultipart(t, `{"expected_revision":1,"path":"empty.txt","media_type":"text/plain","size":0,"sha256":"`+fmt.Sprintf("%x", sha256.Sum256(nil))+`"}`, nil, false)
-	explicit := httptest.NewRequest(http.MethodPost, path, explicitBody)
+	explicit := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, explicitBody)
 	explicit.Header.Set("Authorization", "Bearer credential")
 	explicit.Header.Set("Content-Type", explicitType)
 	explicit.Header.Set("Idempotency-Key", "workspace-file-empty")
@@ -90,7 +90,7 @@ func TestExamStarterWorkspaceHTTPFileReplacementRequiresSize(t *testing.T) {
 	api := newFocusedResourceAPI(t, logger, fake, examStarterWorkspaceResource(fake))
 	path := "/api/v1/exams/" + fake.examID.String() + "/draft/starter-workspace/files/" + fake.entry.ID.String() + "/content"
 	body, contentType := examResourceMultipart(t, `{"expected_revision":1,"expected_content_version":"`+fake.object.ContentVersion.String()+`","media_type":"text/plain","sha256":"`+fmt.Sprintf("%x", sha256.Sum256(nil))+`"}`, nil, false)
-	request := httptest.NewRequest(http.MethodPut, path, body)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPut, path, body)
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", contentType)
 	request.Header.Set("Idempotency-Key", "workspace-replace-omitted-size")
@@ -109,7 +109,7 @@ func TestExamStarterWorkspaceHTTPFileReplacementRequiresAndCarriesExpectedConten
 	checksum := fmt.Sprintf("%x", sha256.Sum256(nil))
 
 	omittedBody, omittedType := examResourceMultipart(t, `{"expected_revision":1,"media_type":"text/plain","size":0,"sha256":"`+checksum+`"}`, nil, false)
-	omitted := httptest.NewRequest(http.MethodPut, path, omittedBody)
+	omitted := httptest.NewRequestWithContext(t.Context(), http.MethodPut, path, omittedBody)
 	omitted.Header.Set("Authorization", "Bearer credential")
 	omitted.Header.Set("Content-Type", omittedType)
 	omitted.Header.Set("Idempotency-Key", "workspace-replace-no-version")
@@ -119,7 +119,7 @@ func TestExamStarterWorkspaceHTTPFileReplacementRequiresAndCarriesExpectedConten
 	require.False(t, fake.replaceFile.EntryID.IsValid(), "omitted status=%d command=%#v body=%s", omittedResponse.Code, fake.replaceFile, omittedResponse.Body.String())
 
 	explicitBody, explicitType := examResourceMultipart(t, `{"expected_revision":1,"expected_content_version":"`+fake.object.ContentVersion.String()+`","media_type":"text/plain","size":0,"sha256":"`+checksum+`"}`, nil, false)
-	explicit := httptest.NewRequest(http.MethodPut, path, explicitBody)
+	explicit := httptest.NewRequestWithContext(t.Context(), http.MethodPut, path, explicitBody)
 	explicit.Header.Set("Authorization", "Bearer credential")
 	explicit.Header.Set("Content-Type", explicitType)
 	explicit.Header.Set("Idempotency-Key", "workspace-replace-version")
@@ -159,7 +159,7 @@ func TestExamStarterWorkspaceHTTPContentIsInlinePrivateAndConditional(t *testing
 	fake := newExamStarterWorkspaceHTTPFake(testExamHTTPPrincipal())
 	api := newFocusedResourceAPI(t, logger, fake, examStarterWorkspaceResource(fake))
 	path := "/api/v1/exams/" + fake.examID.String() + "/draft/starter-workspace/files/" + fake.entry.ID.String() + "/content"
-	request := httptest.NewRequest(http.MethodGet, path, nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	api.ServeHTTP(response, request)
@@ -172,7 +172,7 @@ func TestExamStarterWorkspaceHTTPContentIsInlinePrivateAndConditional(t *testing
 	require.Equal(t, etag, response.Header().Get("ETag"), "response=%d headers=%v body", response.Code, response.Header())
 	require.Len(t, response.Header().Values("X-Content-Type-Options"), 1, "response=%d headers=%v body", response.Code, response.Header())
 	require.Equal(t, "nosniff", response.Header().Get("X-Content-Type-Options"), "response=%d headers=%v body", response.Code, response.Header())
-	conditional := httptest.NewRequest(http.MethodGet, path, nil)
+	conditional := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 	conditional.Header.Set("Authorization", "Bearer credential")
 	conditional.Header.Set("If-None-Match", etag)
 	notModified := httptest.NewRecorder()

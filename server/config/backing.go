@@ -114,23 +114,23 @@ func (s *FileStore) Save(ctx context.Context, data []byte) (resultErr error) {
 		}
 	}()
 
-	if err := temporary.Chmod(0o600); err != nil {
-		return fmt.Errorf("secure temporary configuration: %w", err)
+	if chmodErr := temporary.Chmod(0o600); chmodErr != nil {
+		return fmt.Errorf("secure temporary configuration: %w", chmodErr)
 	}
-	if _, err := temporary.Write(data); err != nil {
-		return fmt.Errorf("write temporary configuration: %w", err)
+	if _, writeErr := temporary.Write(data); writeErr != nil {
+		return fmt.Errorf("write temporary configuration: %w", writeErr)
 	}
-	if err := temporary.Sync(); err != nil {
-		return fmt.Errorf("sync temporary configuration: %w", err)
+	if syncErr := temporary.Sync(); syncErr != nil {
+		return fmt.Errorf("sync temporary configuration: %w", syncErr)
 	}
-	if err := temporary.Close(); err != nil {
-		return fmt.Errorf("close temporary configuration: %w", err)
+	if closeErr := temporary.Close(); closeErr != nil {
+		return fmt.Errorf("close temporary configuration: %w", closeErr)
 	}
-	if err := ctx.Err(); err != nil {
-		return err
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
 	}
-	if err := os.Rename(temporaryPath, s.path); err != nil {
-		return fmt.Errorf("replace configuration %q: %w", s.path, err)
+	if renameErr := os.Rename(temporaryPath, s.path); renameErr != nil {
+		return fmt.Errorf("replace configuration %q: %w", s.path, renameErr)
 	}
 
 	directoryHandle, err := os.Open(directory)

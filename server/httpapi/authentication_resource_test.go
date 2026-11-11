@@ -107,7 +107,7 @@ func TestExternalAuthenticationCallbackReturnsValidatedRedirectAndCookies(t *tes
 		},
 	}
 	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, externalAuthenticationResource(externalAuthentication, cookies))
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/auth/providers/oidc/callback?code=accepted", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/auth/providers/oidc/callback?code=accepted", nil)
 	request.AddCookie(&http.Cookie{Name: route.BrowserExternalLoginCookieName, Value: "binding"})
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -140,7 +140,7 @@ func TestExternalAuthenticationLoginDefaultsToWebAndNeverCreatesDesktopSessionsD
 		ExpiresAt: time.Now().Add(time.Minute).UnixMilli(),
 	}}
 	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, externalAuthenticationResource(applicationFake, cookies))
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/auth/providers/campus/login", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/auth/providers/campus/login", nil)
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusSeeOther, response.Code, "login redirect = %d %s", response.Code, response.Body.String())
@@ -228,7 +228,7 @@ func TestAuthenticationResourceRunsPublicAndSessionEntriesThroughKernel(t *testi
 	require.Nil(t, loginBody.Tokens)
 	require.NotNil(t, loginBody.Session)
 
-	logoutRequest := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	logoutRequest := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/auth/logout", nil)
 	logoutRequest.Header.Set("Authorization", "Bearer access")
 	logoutResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(logoutResponse, logoutRequest)
@@ -248,7 +248,7 @@ func TestExternalAuthenticationProviderListFailsClosedWhenPolicyIsUnavailable(t 
 	}
 	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, externalAuthenticationResource(applicationFake, cookies))
 	response := httptest.NewRecorder()
-	httpAPI.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/auth/providers", nil))
+	httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/auth/providers", nil))
 	require.Equal(t, http.StatusInternalServerError, response.Code, "provider-list failure")
 	require.NotContains(t, response.Body.String(), "configured-but-unknown", "provider-list failure")
 }
@@ -266,7 +266,7 @@ func TestAuthenticationResourceKernelRejectsMissingCredentialAndInvalidJSON(t *t
 	)
 
 	refresh := httptest.NewRecorder()
-	httpAPI.ServeHTTP(refresh, httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", nil))
+	httpAPI.ServeHTTP(refresh, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/auth/refresh", nil))
 	require.Equal(t, http.StatusUnauthorized, refresh.Code, "missing refresh credential")
 	require.Contains(t, refresh.Body.String(), `"code":"authentication.required"`, "missing refresh credential")
 
@@ -363,14 +363,14 @@ func TestExternalAuthenticationRedirectIsNamedKernelProtocolOperation(t *testing
 	)
 
 	providers := httptest.NewRecorder()
-	httpAPI.ServeHTTP(providers, httptest.NewRequest(http.MethodGet, "/api/v1/auth/providers", nil))
+	httpAPI.ServeHTTP(providers, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/auth/providers", nil))
 	require.Equal(t, http.StatusOK, providers.Code, "providers response")
 	require.Contains(t, providers.Body.String(), `"id":"oidc"`, "providers response")
 
 	begin := httptest.NewRecorder()
 	httpAPI.ServeHTTP(
 		begin,
-		httptest.NewRequest(
+		httptest.NewRequestWithContext(t.Context(),
 			http.MethodGet,
 			"/api/v1/auth/providers/oidc/login?return_to=%2Fexams&client_type=desktop&device_id=device-a",
 			nil,

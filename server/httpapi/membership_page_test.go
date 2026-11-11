@@ -33,7 +33,7 @@ func TestAcademicUnitMemberHTTPPagingUsesTheCollectionEnvelope(t *testing.T) {
 	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicUnitMemberResource(service))
 	path := "/api/v1/academic-units/" + scopeID.String() + "/members"
 	call := func(target string) *httptest.ResponseRecorder {
-		request := httptest.NewRequest(http.MethodGet, target, nil)
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, target, nil)
 		request.Header.Set("Authorization", "Bearer credential")
 		response := httptest.NewRecorder()
 		api.ServeHTTP(response, request)
@@ -75,7 +75,7 @@ func TestClassMemberHTTPPagingUsesTheCollectionEnvelope(t *testing.T) {
 	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, classMemberResource(service))
 	path := "/api/v1/classes/" + scopeID.String() + "/members"
 	call := func(target string) *httptest.ResponseRecorder {
-		request := httptest.NewRequest(http.MethodGet, target, nil)
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, target, nil)
 		request.Header.Set("Authorization", "Bearer credential")
 		response := httptest.NewRecorder()
 		api.ServeHTTP(response, request)

@@ -56,7 +56,7 @@ func TestRepositoryDocumentationIsPortable(t *testing.T) {
 func documentationRepositoryRoot(t *testing.T) (string, bool) {
 	t.Helper()
 
-	command := exec.Command("git", "rev-parse", "--show-toplevel")
+	command := exec.CommandContext(t.Context(), "git", "rev-parse", "--show-toplevel")
 	output, err := command.Output()
 	if err != nil {
 		return "", false
@@ -72,7 +72,7 @@ func documentationRepositoryRoot(t *testing.T) (string, bool) {
 func documentationCandidates(t *testing.T, root string) map[string]struct{} {
 	t.Helper()
 
-	command := exec.Command(
+	command := exec.CommandContext(t.Context(),
 		"git", "-C", root, "ls-files", "--cached", "--others",
 		"--exclude-standard", "-z",
 	)

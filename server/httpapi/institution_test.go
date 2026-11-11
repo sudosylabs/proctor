@@ -89,7 +89,7 @@ func TestInstitutionHTTPMapsDTOsWithoutPermissionPreflight(t *testing.T) {
 	}
 	httpAPI := newFocusedResourceAPI(t, logger, fakeApplication, institutionResource(fakeApplication))
 
-	getRequest := httptest.NewRequest(http.MethodGet, "/api/v1/institution", nil)
+	getRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/institution", nil)
 	getRequest.Header.Set("Authorization", "Bearer test-credential")
 	getResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(getResponse, getRequest)
@@ -100,7 +100,7 @@ func TestInstitutionHTTPMapsDTOsWithoutPermissionPreflight(t *testing.T) {
 	require.Equal(t, institution.Name, got.Name)
 	require.Equal(t, examCapacityPolicyResponseFromModel(model.DefaultExamCapacityPolicy()), got.ExamCapacity)
 
-	patchRequest := httptest.NewRequest(
+	patchRequest := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPatch, "/api/v1/institution",
 		strings.NewReader(`{"display_name":"Northbridge","exam_capacity":{"resource_maximum_count":25,"resource_maximum_bytes":20971520,"workspace_maximum_entries":750,"workspace_maximum_file_bytes":20971520,"workspace_maximum_total_bytes":104857600}}`),
 	)
@@ -135,7 +135,7 @@ func TestInstitutionResourceRejectsUnknownPatchFields(t *testing.T) {
 	httpAPI := newFocusedResourceAPI(
 		t, logger, fakeApplication, institutionResource(fakeApplication),
 	)
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPatch, "/api/v1/institution",
 		strings.NewReader(`{"display_name":"Northbridge","unknown":true}`),
 	)

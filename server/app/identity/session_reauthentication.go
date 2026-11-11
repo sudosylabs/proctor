@@ -99,9 +99,9 @@ func (s *Service) ReauthenticatePassword(
 		At:         s.now(),
 	}, func(ctx context.Context, reference access.MutationReference) (*store.SessionReauthenticationResult, error) {
 		auditID := reference.ID
-		credentialID, err := model.ParseSessionCredentialID(principal.CredentialID.String())
-		if err != nil {
-			return nil, err
+		credentialID, parseErr := model.ParseSessionCredentialID(principal.CredentialID.String())
+		if parseErr != nil {
+			return nil, parseErr
 		}
 
 		return s.sessions.ReauthenticatePassword(ctx, &store.SessionPasswordReauthentication{

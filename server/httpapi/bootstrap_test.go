@@ -38,7 +38,7 @@ func TestSystemResourceReturnsTypedUnhealthyProblemThroughKernel(t *testing.T) {
 	logger, _ := routetest.NewLogger(t)
 	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, systemResource(systemHTTPHealth{}, BuildInfo{Version: "test"}))
 	response := httptest.NewRecorder()
-	httpAPI.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/health/live", nil))
+	httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health/live", nil))
 	require.Equal(t, http.StatusServiceUnavailable, response.Code, "liveness status = %d: %s", response.Code, response.Body.String())
 	var problem route.Problem
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
@@ -61,7 +61,7 @@ func TestSystemResourceReturnsHealthyStatusAndVersionThroughKernel(t *testing.T)
 		"/api/v1/system/version": `"version":"test-version"`,
 	} {
 		response := httptest.NewRecorder()
-		httpAPI.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil))
 		require.Equal(t, http.StatusOK, response.Code, "%s response = %d %s", path, response.Code, response.Body.String())
 		require.True(t, bytes.Contains(response.Body.Bytes(), []byte(body)), "%s response = %d %s", path, response.Code, response.Body.String())
 	}
@@ -94,7 +94,7 @@ func TestBootstrapStatusExposesOnlyInitializedFlag(t *testing.T) {
 		bootstrapResource(&bootstrapHTTPApplication{status: &model.InstallationStatus{Initialized: true}}),
 	)
 	response := httptest.NewRecorder()
-	httpAPI.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/bootstrap", nil))
+	httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/bootstrap", nil))
 	require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
 	var body map[string]any
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))

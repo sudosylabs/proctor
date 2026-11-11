@@ -41,7 +41,7 @@ func TestAdminSessionListUsesApplicationQueryAndOmitsCredentials(t *testing.T) {
 		}},
 	}
 	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userAdministrationResource(&accountStateHTTPApplication{}, sessions))
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+userID+"/sessions?include_revoked=true", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/"+userID+"/sessions?include_revoked=true", nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -121,7 +121,7 @@ func TestAdminSessionRevokeUsesApplicationCommand(t *testing.T) {
 	sessionID := model.NewID()
 	sessions := &sessionAdministrationHTTPApplication{}
 	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userAdministrationResource(&accountStateHTTPApplication{}, sessions))
-	request := httptest.NewRequest(http.MethodDelete, "/api/v1/users/"+userID+"/sessions/"+sessionID, nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/api/v1/users/"+userID+"/sessions/"+sessionID, nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)

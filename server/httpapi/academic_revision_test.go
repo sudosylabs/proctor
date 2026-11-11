@@ -31,7 +31,7 @@ func TestAcademicRevisionHTTPContract(t *testing.T) {
 			module, path, revision := academicRevisionHTTPFixture(kind, principal)
 			api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, module)
 			call := func(method, suffix, body string) *httptest.ResponseRecorder {
-				request := httptest.NewRequest(method, path+suffix, strings.NewReader(body))
+				request := httptest.NewRequestWithContext(t.Context(), method, path+suffix, strings.NewReader(body))
 				request.Header.Set("Authorization", "Bearer credential")
 				if body != "" {
 					request.Header.Set("Content-Type", "application/json")

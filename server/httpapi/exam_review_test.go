@@ -34,7 +34,7 @@ func TestIntegrityReviewHTTPMapsStrictDecisionAndPrivateManagerProjection(t *tes
 	httpAPI := newExamIntegrityReviewFocusedAPI(t, fake)
 	path := "/api/v1/submissions/" + fake.submission.ID.String() + "/review/decisions/" + fake.flag.ID.String()
 	body := `{"expected_review_revision":2,"expected_revision":1,"outcome":"inconclusive","private_rationale":"Manager-only rationale."}`
-	request := httptest.NewRequest(http.MethodPut, path, strings.NewReader(body))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPut, path, strings.NewReader(body))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "decision-once")
@@ -51,7 +51,7 @@ func TestIntegrityReviewHTTPMapsStrictDecisionAndPrivateManagerProjection(t *tes
 	require.Equal(t, "decision-once", fake.decision.IdempotencyKey, "response=%d headers=%v command=%#v body=%s", response.Code, response.Header(), fake.decision, response.Body.String())
 	require.Contains(t, response.Body.String(), `"private_rationale":"Manager-only rationale."`)
 
-	duplicate := httptest.NewRequest(http.MethodPut, path,
+	duplicate := httptest.NewRequestWithContext(t.Context(), http.MethodPut, path,
 		strings.NewReader(`{"expected_review_revision":2,"expected_review_revision":3,"expected_revision":1,"outcome":"confirmed","private_rationale":"x"}`))
 	duplicate.Header.Set("Authorization", "Bearer credential")
 	duplicate.Header.Set("Content-Type", "application/json")
@@ -68,7 +68,7 @@ func TestIntegrityReviewHTTPUsesBoundedOpaqueEvidenceCursor(t *testing.T) {
 	fake.evidencePage.HasMore = true
 	httpAPI := newExamIntegrityReviewFocusedAPI(t, fake)
 	path := "/api/v1/submissions/" + fake.submission.ID.String() + "/integrity-flags/" + fake.flag.ID.String() + "/evidence?limit=1"
-	request := httptest.NewRequest(http.MethodGet, path, nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -127,14 +127,14 @@ func TestIntegrityReviewEndpointsForwardExactCursorsAndMapMalformedCursors(t *te
 		t.Run(test.name, func(t *testing.T) {
 			cursor, err := encodeExamIntegrityReviewCursor(test.kind, test.id)
 			require.NoError(t, err)
-			request := httptest.NewRequest(http.MethodGet, test.path+"?cursor="+url.QueryEscape(cursor), nil)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, test.path+"?cursor="+url.QueryEscape(cursor), nil)
 			request.Header.Set("Authorization", "Bearer credential")
 			response := httptest.NewRecorder()
 			httpAPI.ServeHTTP(response, request)
 			require.Equal(t, http.StatusOK, response.Code, "cursor response = %d: %s", response.Code, response.Body.String())
 			test.assert(t)
 
-			malformed := httptest.NewRequest(http.MethodGet, test.path+"?cursor=not-a-cursor", nil)
+			malformed := httptest.NewRequestWithContext(t.Context(), http.MethodGet, test.path+"?cursor=not-a-cursor", nil)
 			malformed.Header.Set("Authorization", "Bearer credential")
 			malformedResponse := httptest.NewRecorder()
 			httpAPI.ServeHTTP(malformedResponse, malformed)
@@ -148,7 +148,7 @@ func TestStudentResultHTTPExposesOnlyReleasedSanitizedProjection(t *testing.T) {
 	fake := newExamIntegrityReviewHTTPFake(t)
 	httpAPI := newExamIntegrityReviewFocusedAPI(t, fake)
 	path := "/api/v1/exam-attempts/" + fake.attemptID.String() + "/result"
-	request := httptest.NewRequest(http.MethodGet, path, nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -166,7 +166,7 @@ func TestIntegrityReviewHTTPListsBoundedLateDiscrepanciesWithoutConnectionSelect
 	fake := newExamIntegrityReviewHTTPFake(t)
 	httpAPI := newExamIntegrityReviewFocusedAPI(t, fake)
 	path := "/api/v1/submissions/" + fake.submission.ID.String() + "/integrity-discrepancies?limit=1"
-	request := httptest.NewRequest(http.MethodGet, path, nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)

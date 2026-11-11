@@ -62,7 +62,7 @@ func (a *invitationHTTPApplication) RunInvitationBatch(_ context.Context, _ invo
 func (a *invitationHTTPApplication) IssueAcademicUnitRoleInvitation(_ context.Context, _ invocation.Invocation, command onboarding.IssueAcademicUnitRoleInvitationCommand) (onboarding.InvitationView, error) {
 	a.unitRoleIssue = command
 	return onboarding.InvitationView{ID: model.NewInvitationID(), Purpose: model.InvitationPurposeAcademicUnitRole,
-		State: model.InvitationPending, AcademicUnitID: model.AcademicUnitID(command.AcademicUnitID), RoleID: model.RoleID(command.RoleID)}, nil
+		State: model.InvitationPending, AcademicUnitID: command.AcademicUnitID, RoleID: command.RoleID}, nil
 }
 func (a *invitationHTTPApplication) AcceptAcademicUnitRoleInvitation(_ context.Context, _ invocation.Invocation, command onboarding.AcceptAcademicUnitRoleInvitationCommand) (*onboarding.InvitationAcceptanceView, error) {
 	a.unitRoleAccept = command
@@ -72,7 +72,7 @@ func (a *invitationHTTPApplication) AcceptAcademicUnitRoleInvitation(_ context.C
 func (a *invitationHTTPApplication) IssueInstitutionRoleInvitation(_ context.Context, _ invocation.Invocation, command onboarding.IssueInstitutionRoleInvitationCommand) (onboarding.InvitationView, error) {
 	a.institutionRoleIssue = command
 	return onboarding.InvitationView{ID: model.NewInvitationID(), Purpose: model.InvitationPurposeInstitutionRole,
-		State: model.InvitationPending, RoleID: model.RoleID(command.RoleID)}, nil
+		State: model.InvitationPending, RoleID: command.RoleID}, nil
 }
 func (a *invitationHTTPApplication) AcceptInstitutionRoleInvitation(_ context.Context, _ invocation.Invocation, command onboarding.AcceptInstitutionRoleInvitationCommand) (*onboarding.InvitationAcceptanceView, error) {
 	a.institutionRoleAccept = command
@@ -83,7 +83,7 @@ func (a *invitationHTTPApplication) AcceptInstitutionRoleInvitation(_ context.Co
 func (a *invitationHTTPApplication) IssueTeacherAcademicUnitInvitation(_ context.Context, _ invocation.Invocation, command onboarding.IssueTeacherAcademicUnitInvitationCommand) (onboarding.InvitationView, error) {
 	a.teacherIssue = command
 	return onboarding.InvitationView{ID: model.NewInvitationID(), Purpose: model.InvitationPurposeTeacherAcademicUnit,
-		State: model.InvitationPending, AcademicUnitID: model.AcademicUnitID(command.AcademicUnitID), RoleID: model.RoleID(command.RoleID),
+		State: model.InvitationPending, AcademicUnitID: command.AcademicUnitID, RoleID: command.RoleID,
 		RoleActions: []string{string(model.ActionAcademicUnitView)}}, nil
 }
 func (a *invitationHTTPApplication) AcceptTeacherAcademicUnitInvitation(_ context.Context, _ invocation.Invocation, command onboarding.AcceptTeacherAcademicUnitInvitationCommand) (*onboarding.InvitationAcceptanceView, error) {
@@ -99,7 +99,7 @@ func (a *invitationHTTPApplication) AcceptTeacherAcademicUnitInvitation(_ contex
 func (a *invitationHTTPApplication) IssueStudentClassInvitation(_ context.Context, _ invocation.Invocation, command onboarding.IssueStudentClassInvitationCommand) (onboarding.InvitationView, error) {
 	a.issue = command
 	return onboarding.InvitationView{ID: model.NewInvitationID(), Purpose: model.InvitationPurposeStudentClass,
-		State: model.InvitationPending, ClassID: model.ClassID(command.ClassID), AcademicPeriodID: model.NewAcademicPeriodID()}, nil
+		State: model.InvitationPending, ClassID: command.ClassID, AcademicPeriodID: model.NewAcademicPeriodID()}, nil
 }
 func (a *invitationHTTPApplication) AcceptStudentClassInvitation(_ context.Context, _ invocation.Invocation, command onboarding.AcceptStudentClassInvitationCommand) (*onboarding.InvitationAcceptanceView, error) {
 	a.accept = command
@@ -129,7 +129,7 @@ func TestInvitationAdministrationRejectsNoProgressPage(t *testing.T) {
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now(), MFACompletedAt: model.OptionalTimeFrom(time.Now())}
 	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, invitationResource(applicationFake))
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/invitations", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/invitations", nil)
 	request.Header.Set("Authorization", "Bearer session")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -168,7 +168,7 @@ func TestInvitationAdministrationHTTPIsBoundedSafeAndRevisionFenced(t *testing.T
 	require.NotEmpty(t, cursor)
 	decodedCursor, err := decodeInvitationCursor(cursor)
 	require.NoError(t, err)
-	secondPage := httptest.NewRequest(http.MethodGet, "/api/v1/invitations?limit=25&cursor="+url.QueryEscape(cursor), nil)
+	secondPage := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/invitations?limit=25&cursor="+url.QueryEscape(cursor), nil)
 	secondPage.Header.Set("Authorization", "Bearer session")
 	secondPageResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(secondPageResponse, secondPage)
@@ -177,7 +177,7 @@ func TestInvitationAdministrationHTTPIsBoundedSafeAndRevisionFenced(t *testing.T
 	require.Equal(t, decodedCursor.ID, applicationFake.list.BeforeID.String(), "second Invitation page = %d %s query=%#v", secondPageResponse.Code, secondPageResponse.Body.String(), applicationFake.list)
 
 	id := model.NewInvitationID().String()
-	detail := httptest.NewRequest(http.MethodGet, "/api/v1/invitations/"+id, nil)
+	detail := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/invitations/"+id, nil)
 	detail.Header.Set("Authorization", "Bearer session")
 	detailResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(detailResponse, detail)
@@ -261,7 +261,7 @@ func TestInvitationAdministrationHTTPRejectsMalformedCursor(t *testing.T) {
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}}, invitationResource(&invitationHTTPApplication{}))
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/invitations?cursor=not-a-cursor", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/invitations?cursor=not-a-cursor", nil)
 	request.Header.Set("Authorization", "Bearer pat")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)

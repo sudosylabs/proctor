@@ -57,8 +57,8 @@ func (f *retentionHTTPFake) ListRetentionRecords(context.Context, invocation.Inv
 func retentionHTTPPrincipal() model.Principal {
 	return model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor, AuthenticatedAt: model.NowUTC(), MFACompletedAt: model.OptionalTimeFrom(model.NowUTC()), ClientType: model.SessionClientWeb}
 }
-func serveRetentionHTTP(api http.Handler, method, path, body, key string) *httptest.ResponseRecorder {
-	request := httptest.NewRequest(method, path, strings.NewReader(body))
+func serveRetentionHTTP(t *testing.T, api http.Handler, method, path, body, key string) *httptest.ResponseRecorder {
+	request := httptest.NewRequestWithContext(t.Context(), method, path, strings.NewReader(body))
 	request.Header.Set("Authorization", "Bearer session")
 	request.Header.Set("Content-Type", "application/json")
 	if key != "" {
@@ -97,7 +97,7 @@ func TestRetentionHTTPControlRequiresInteractiveRecentProofAndIdempotency(t *tes
 			test.alter(&p)
 			application := &retentionHTTPFake{}
 			api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: p}, retentionResource(application))
-			r := serveRetentionHTTP(api, "PUT", "/api/v1/retention/control", body, test.key)
+			r := serveRetentionHTTP(t, api, "PUT", "/api/v1/retention/control", body, test.key)
 			require.Equal(t, test.want, r.Code, "status=%d body=%s", r.Code, r.Body.String())
 			if test.want != 200 {
 				require.Equal(t, 0, application.calls, "blocked control reached application")
@@ -116,13 +116,13 @@ func TestRetentionHTTPRejectsUnknownFieldsAndCrossPurposeCursors(t *testing.T) {
 	logger, _ := routetest.NewLogger(t)
 	application := &retentionHTTPFake{}
 	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: retentionHTTPPrincipal()}, retentionResource(application))
-	r := serveRetentionHTTP(api, "POST", "/api/v1/retention/previews", `{"expected_revision":1,"delete_now":true}`, "preview")
+	r := serveRetentionHTTP(t, api, "POST", "/api/v1/retention/previews", `{"expected_revision":1,"delete_now":true}`, "preview")
 	require.Equal(t, 400, r.Code, "unknown destructive parameter reached application")
 	require.Equal(t, 0, application.calls, "unknown destructive parameter reached application")
 	cursor, err := route.EncodeCursor(retentionCursor{After: model.NewSubmissionID().String()}, retentionCursorSpec())
 	require.NoError(t, err)
 	for _, query := range []string{"?cursor=" + cursor, "?limit=1&limit=2", "?user_id=" + model.NewUserID().String(), "?limit=201"} {
-		r = serveRetentionHTTP(api, "GET", "/api/v1/users/me/retention-notices"+query, "", "")
+		r = serveRetentionHTTP(t, api, "GET", "/api/v1/users/me/retention-notices"+query, "", "")
 		require.Equal(t, 400, r.Code, "bad query admitted: %s", query)
 		require.Equal(t, 0, application.calls, "bad query admitted: %s", query)
 	}
@@ -134,7 +134,7 @@ func TestRetentionHTTPNoticeProjectionIsRecipientOnlyAndBounded(t *testing.T) {
 	notice := model.RetentionNotice{RetirementID: model.NewRetentionRetirementID(), RecipientUserID: p.UserID, Scope: model.RetentionHoldScope{ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(), SubmissionID: model.NewSubmissionID()}, ExamTitle: "Algorithms final", SittingStartAt: time.Date(2026, 5, 4, 9, 0, 0, 0, time.UTC), SittingEndAt: time.Date(2026, 5, 4, 11, 0, 0, 0, time.UTC), Category: model.RetentionCategoryWork, State: model.RetentionRetirementGrace, CreatedAt: model.NowUTC(), RetireAfter: model.NowUTC().Add(7 * 24 * time.Hour), DeliveryState: "failed", DeliveryErrorCode: "mail.preparation_unavailable"}
 	application := &retentionHTTPFake{noticePage: &administration.RetentionNoticePage{Items: []model.RetentionNotice{notice}, HasMore: true}}
 	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: p}, retentionResource(application))
-	r := serveRetentionHTTP(api, "GET", "/api/v1/users/me/retention-notices?limit=1", "", "")
+	r := serveRetentionHTTP(t, api, "GET", "/api/v1/users/me/retention-notices?limit=1", "", "")
 	var page retentionNoticesResponse
 	require.Equal(t, 200, r.Code, "notice=%d %s", r.Code, r.Body.String())
 	require.NoError(t, json.Unmarshal(r.Body.Bytes(), &page), "notice=%d %s", r.Code, r.Body.String())
@@ -146,12 +146,12 @@ func TestRetentionHTTPNoticeProjectionIsRecipientOnlyAndBounded(t *testing.T) {
 	require.Equal(t, "2026-05-04T09:00:00Z", page.Items[0].SittingStartAt)
 	require.Equal(t, "2026-05-04T11:00:00Z", page.Items[0].SittingEndAt)
 	application.noticePage = &administration.RetentionNoticePage{Items: []model.RetentionNotice{}}
-	r = serveRetentionHTTP(api, "GET", "/api/v1/users/me/retention-notices?limit=1&cursor="+page.NextCursor, "", "")
+	r = serveRetentionHTTP(t, api, "GET", "/api/v1/users/me/retention-notices?limit=1&cursor="+page.NextCursor, "", "")
 	require.Equal(t, 200, r.Code, "cursor did not roundtrip")
 	require.Equal(t, notice.RetirementID, application.after, "cursor did not roundtrip")
 	notice.RecipientUserID = model.NewUserID()
 	application.noticePage = &administration.RetentionNoticePage{Items: []model.RetentionNotice{notice}}
-	r = serveRetentionHTTP(api, "GET", "/api/v1/users/me/retention-notices", "", "")
+	r = serveRetentionHTTP(t, api, "GET", "/api/v1/users/me/retention-notices", "", "")
 	require.Equal(t, 500, r.Code, "wrong recipient response exposed")
 }
 
@@ -178,7 +178,7 @@ func TestRetentionHTTPRecordsPresentsFullPageOfSubmissions(t *testing.T) {
 	}
 	application := &retentionHTTPFake{recordPage: page}
 	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: retentionHTTPPrincipal()}, retentionResource(application))
-	r := serveRetentionHTTP(api, "GET", "/api/v1/retention/records?limit=10", "", "")
+	r := serveRetentionHTTP(t, api, "GET", "/api/v1/retention/records?limit=10", "", "")
 	require.Equal(t, 200, r.Code, "records=%d %s", r.Code, r.Body.String())
 	var response retentionRecordsResponse
 	require.NoError(t, json.Unmarshal(r.Body.Bytes(), &response))

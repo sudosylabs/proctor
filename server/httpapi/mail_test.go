@@ -99,11 +99,11 @@ func TestMailResourceRejectsCallerSuppliedContentAndProjectsNoSecrets(t *testing
 	id := model.NewMailDeliveryID()
 	fake := &recordingMailAPI{view: mail.DeliveryView{ID: id, OccurrenceID: model.NewMailOccurrenceID(), TargetUserID: model.NewUserID(), TemplateKey: model.MailTemplateSystemTest, TemplateDigest: strings.Repeat("a", 64), MaskedRecipient: "o***@example.test", State: model.MailDeliveryQueued, CreatedAt: at, UpdatedAt: at, MessageDate: at, Deadline: at.Add(time.Hour), MessageID: "<mail." + id.String() + "@example.test>"}}
 	h := mailHandlers{app: fake}
-	request, _ := http.NewRequest(http.MethodPost, "/api/v1/mail/test", bytes.NewBufferString(`{"recipient":"attacker@example.test","body":"chosen"}`))
+	request, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/mail/test", bytes.NewBufferString(`{"recipient":"attacker@example.test","body":"chosen"}`))
 	_, err := h.sendTest(route.Request{HTTP: request})
 	require.True(t, apperror.Is(err, "request.invalid"), "caller content accepted: %v sends", err)
 	require.Equal(t, 0, fake.sends, "caller content accepted: %v sends", err)
-	request, _ = http.NewRequest(http.MethodPost, "/api/v1/mail/test", nil)
+	request, _ = http.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/mail/test", nil)
 	result, err := h.sendTest(route.Request{HTTP: request})
 	require.NoError(t, err, "empty test = %#v", result)
 	require.Equal(t, http.StatusAccepted, result.Status(), "empty test = %#v", result)
@@ -138,11 +138,11 @@ func TestMailDeliveryListCursorFiltersAndMutationBodiesAreBounded(t *testing.T) 
 	require.NoError(t, err, "cursor=%#v err", decoded)
 	require.Equal(t, id.String(), decoded.ID, "cursor=%#v err", decoded)
 	require.Equal(t, at.Format(time.RFC3339Nano), decoded.CreatedAt, "cursor=%#v err", decoded)
-	request, _ = http.NewRequest(http.MethodGet, "/api/v1/mail/deliveries?state=not-a-state", nil)
+	request, _ = http.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/mail/deliveries?state=not-a-state", nil)
 	_, err = h.listDeliveries(route.Request{HTTP: request})
 	require.True(t, apperror.Is(err, "request.invalid"), "invalid filter err=%v lists", err)
 	require.Equal(t, 1, fake.lists, "invalid filter err=%v lists", err)
-	request, _ = http.NewRequest(http.MethodPost, "/api/v1/mail/deliveries/"+id.String()+"/retry", bytes.NewBufferString(`{"body":"forbidden"}`))
+	request, _ = http.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/mail/deliveries/"+id.String()+"/retry", bytes.NewBufferString(`{"body":"forbidden"}`))
 	_, err = h.retryDelivery(route.Request{HTTP: request, Params: route.Params{"mail_delivery_id": id.String()}})
 	require.True(t, apperror.Is(err, "request.invalid"), "retry body err=%v ids", err)
 	require.Empty(t, fake.ids, "retry body err=%v ids", err)
@@ -157,7 +157,7 @@ func TestMailDeliveryEndpointForwardsExactCursorAndMapsMalformedCursor(t *testin
 	httpAPI := newFocusedResourceAPI(t, logger, &academicUnitHTTPApplication{principal: operatorTestPrincipal()}, mailResource(fake))
 	cursor, err := encodeMailDeliveryCursor(mailDeliveryCursor{CreatedAt: at.Format(time.RFC3339Nano), ID: id.String()})
 	require.NoError(t, err)
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/mail/deliveries?cursor="+url.QueryEscape(cursor), nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/mail/deliveries?cursor="+url.QueryEscape(cursor), nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -165,7 +165,7 @@ func TestMailDeliveryEndpointForwardsExactCursorAndMapsMalformedCursor(t *testin
 	require.True(t, fake.listQuery.BeforeCreatedAt.Equal(at), "cursor forwarding = %d query=%#v body=%s", response.Code, fake.listQuery, response.Body.String())
 	require.Equal(t, id, fake.listQuery.BeforeID, "cursor forwarding = %d query=%#v body=%s", response.Code, fake.listQuery, response.Body.String())
 
-	malformed := httptest.NewRequest(http.MethodGet, "/api/v1/mail/deliveries?cursor=not-a-cursor", nil)
+	malformed := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/mail/deliveries?cursor=not-a-cursor", nil)
 	malformed.Header.Set("Authorization", "Bearer credential")
 	malformedResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(malformedResponse, malformed)
@@ -185,7 +185,7 @@ func TestMailRekeyAcceptsOnlyAKeyIdentityAndProjectsSafeOperation(t *testing.T) 
 	t.Parallel()
 	fake := &recordingMailAPI{}
 	h := mailHandlers{app: fake}
-	request, _ := http.NewRequest(http.MethodPost, "/api/v1/mail/rekey",
+	request, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/mail/rekey",
 		bytes.NewBufferString(`{"retiring_key_id":"11111111111111111111111111111111"}`))
 	request.Header.Set("Content-Type", "application/json")
 	result, err := h.startRekey(route.Request{HTTP: request})
@@ -199,7 +199,7 @@ func TestMailRekeyAcceptsOnlyAKeyIdentityAndProjectsSafeOperation(t *testing.T) 
 	require.Equal(t, "22222222222222222222222222222222", response.PrimaryKeyID)
 	require.Equal(t, fake.rekeys[0], response.RetiringKeyID)
 	require.Equal(t, "1970-01-01T00:01:40Z", response.CreatedAt)
-	invalid, _ := http.NewRequest(http.MethodPost, "/api/v1/mail/rekey",
+	invalid, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/mail/rekey",
 		bytes.NewBufferString(`{"retiring_key_id":"11111111111111111111111111111111","encryption_key":"secret"}`))
 	invalid.Header.Set("Content-Type", "application/json")
 	_, err = h.startRekey(route.Request{HTTP: invalid})

@@ -187,8 +187,8 @@ func (r SecurityPreflightReport) Validate() error {
 		}
 	}
 
-	if err := ValidateNativeCoverageSnapshot(r.Sources, r.Coverage); err != nil {
-		return err
+	if validateErr := ValidateNativeCoverageSnapshot(r.Sources, r.Coverage); validateErr != nil {
+		return validateErr
 	}
 
 	document, err := encodeCanonicalExamDocument(r)

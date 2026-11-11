@@ -58,8 +58,8 @@ func (s *Service) ListAuditEvents(
 
 	if query.Limit < 1 ||
 		query.Limit > 200 ||
-		(query.ActorID != "" && !model.UserID(query.ActorID).IsValid()) ||
-		(query.BeforeID != "" && !model.AuditEventID(query.BeforeID).IsValid()) ||
+		(query.ActorID != "" && !query.ActorID.IsValid()) ||
+		(query.BeforeID != "" && !query.BeforeID.IsValid()) ||
 		(query.Resource != nil && query.Resource.Validate() != nil) ||
 		(!query.Since.IsZero() && !query.Until.IsZero() && !query.Since.Before(query.Until)) {
 		return paging.Counted[*model.AuditEvent]{}, apperror.New("audit.query.invalid")

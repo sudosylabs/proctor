@@ -297,9 +297,9 @@ func rejectDuplicateJSONObjectMembers(data []byte, label string) error {
 	}
 	seen := make(map[string]struct{})
 	for decoder.More() {
-		keyToken, err := decoder.Token()
-		if err != nil {
-			return err
+		keyToken, tokenErr := decoder.Token()
+		if tokenErr != nil {
+			return tokenErr
 		}
 		key, ok := keyToken.(string)
 		if !ok {
@@ -310,8 +310,8 @@ func rejectDuplicateJSONObjectMembers(data []byte, label string) error {
 		}
 		seen[key] = struct{}{}
 		var value json.RawMessage
-		if err := decoder.Decode(&value); err != nil {
-			return err
+		if decodeErr := decoder.Decode(&value); decodeErr != nil {
+			return decodeErr
 		}
 	}
 	_, err = decoder.Token()
@@ -838,8 +838,8 @@ func (h examHandlers) configureDraftNativePolicy(request route.Request) (route.R
 	if body.ExpectedDraftRevision < 1 {
 		return route.Result{}, route.InvalidRequest(errors.New("must be positive"))
 	}
-	if err := body.Native.Validate(); err != nil {
-		return route.Result{}, route.InvalidRequest(err)
+	if validateErr := body.Native.Validate(); validateErr != nil {
+		return route.Result{}, route.InvalidRequest(validateErr)
 	}
 
 	view, err := h.app.ConfigureExamDraftNativePolicy(request.Context, request.Invocation(), exam.ConfigureDraftNativePolicyCommand{

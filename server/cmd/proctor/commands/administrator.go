@@ -87,7 +87,6 @@ func newAdministratorCommand(
 				EnableLocalLogin: enableLocalLogin,
 				Password:         password,
 			})
-			password = ""
 			if err != nil {
 				return err
 			}

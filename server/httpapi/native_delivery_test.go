@@ -51,7 +51,7 @@ func TestNativeDeliveryHTTPPreservesOptionalHistoricalFences(t *testing.T) {
 	api := newFocusedResourceAPI(t, logger, f, nativeDeliveryResource(f))
 	path := "/api/v1/exam-attempts/" + f.attempt.ID.String() + "/security-streams/" + model.NewID()
 	for _, live := range []bool{true, false} {
-		request := f.candidateRequest(http.MethodGet, path)
+		request := f.candidateRequest(t, http.MethodGet, path)
 		if !live {
 			request.Header.Del(candidateAttemptCredentialHeader)
 			request.Header.Del(candidateAttemptConnectionHeader)
@@ -71,7 +71,7 @@ func TestNativeDeliveryHTTPPreservesOptionalHistoricalFences(t *testing.T) {
 		require.NotContains(t, response.Body.String(), f.credential, "response exposed continuity credential")
 	}
 	before := f.calls
-	request := f.candidateRequest(http.MethodGet, path)
+	request := f.candidateRequest(t, http.MethodGet, path)
 	request.Header.Add(candidateAttemptCredentialHeader, f.credential)
 	response := httptest.NewRecorder()
 	api.ServeHTTP(response, request)
@@ -88,7 +88,7 @@ func TestNativeDeliverySummaryStrictBodyAndRetryDelay(t *testing.T) {
 		`{"summary_sequence":1,"unretained_record_count":0,"count_complete":false,"raw_content":"forbidden"}`,
 		`{"summary_sequence":1,"unretained_record_count":0,"count_complete":false,"first_unretained_at":null}`,
 	} {
-		request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, strings.NewReader(body))
 		request.Header.Set("Authorization", "Bearer credential")
 		request.Header.Set("Content-Type", "application/json")
 		request.Header.Set("Idempotency-Key", "summary-once")
@@ -129,7 +129,7 @@ func TestNativeDeliveryAppendClosedBodyAndBounds(t *testing.T) {
 	require.NoError(t, err)
 	for _, body := range [][]byte{raw, bytes.Replace(raw, []byte(`"kind":"source_gap"`), []byte(`"raw_inventory":"forbidden","kind":"source_gap"`), 1), append(bytes.Repeat([]byte(" "), 256*1024), raw...)} {
 		before := f.calls
-		request := f.candidateRequest(http.MethodPost, path)
+		request := f.candidateRequest(t, http.MethodPost, path)
 		request.Body = io.NopCloser(bytes.NewReader(body))
 		request.ContentLength = int64(len(body))
 		request.Header.Set("Content-Type", "application/json")

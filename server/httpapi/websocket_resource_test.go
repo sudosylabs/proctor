@@ -79,7 +79,7 @@ func TestWebSocketResourceMapsDeclaredAndRejectsUndeclaredTransportFailures(t *t
 			transport := &focusedWebSocketTransport{acceptErr: apperror.New(apperror.Code(test.code))}
 			httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, webSocketResource(transport))
 
-			request := httptest.NewRequest(http.MethodGet, "/api/v1/websocket", nil)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/websocket", nil)
 			request.Header.Set("Authorization", "Bearer credential")
 			response := httptest.NewRecorder()
 			httpAPI.ServeHTTP(response, request)
@@ -118,7 +118,7 @@ func TestWebSocketResourceRunsNamedUpgradeThroughRoutingKernel(t *testing.T) {
 	require.Equal(t, route.ProtocolUpgrade, routes[0].ProtocolKind)
 
 	connectionID := model.NewID()
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
 		"/api/v1/websocket?connection_id="+connectionID+"&sequence_number=7",
 		nil,
@@ -152,11 +152,11 @@ func TestWebSocketResourceRejectsMissingCredentialAndInvalidResume(t *testing.T)
 	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, webSocketResource(transport))
 
 	missing := httptest.NewRecorder()
-	httpAPI.ServeHTTP(missing, httptest.NewRequest(http.MethodGet, "/api/v1/websocket", nil))
+	httpAPI.ServeHTTP(missing, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/websocket", nil))
 	require.Equal(t, http.StatusUnauthorized, missing.Code, "missing credential = %d/%d: %s", missing.Code, transport.acceptCalls, missing.Body.String())
 	require.Equal(t, 0, transport.acceptCalls, "missing credential = %d/%d: %s", missing.Code, transport.acceptCalls, missing.Body.String())
 
-	invalidRequest := httptest.NewRequest(http.MethodGet, "/api/v1/websocket?connection_id=invalid&sequence_number=7", nil)
+	invalidRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/websocket?connection_id=invalid&sequence_number=7", nil)
 	invalidRequest.Header.Set("Authorization", "Bearer credential")
 	invalid := httptest.NewRecorder()
 	httpAPI.ServeHTTP(invalid, invalidRequest)

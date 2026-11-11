@@ -326,8 +326,8 @@ func (s *Service) ArchiveClass(ctx context.Context, inv invocation.Invocation, c
 	if err != nil {
 		return classStoreErrors.Translate(err)
 	}
-	if err := checkAcademicRevision(command.ExpectedRevision, current.Revision, "class.conflict"); err != nil {
-		return err
+	if checkErr := checkAcademicRevision(command.ExpectedRevision, current.Revision, "class.conflict"); checkErr != nil {
+		return checkErr
 	}
 
 	at := s.now()

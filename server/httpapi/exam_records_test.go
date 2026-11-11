@@ -65,7 +65,7 @@ func TestExamRecordsHTTPRequiresExplicitAcknowledgementAndIdempotency(t *testing
 	examID, sittingID := model.NewExamID(), model.NewExamSittingID()
 	path := "/api/v1/exams/" + examID.String() + "/sittings/" + sittingID.String() + "/records-completion"
 	serve := func(body, key string) *httptest.ResponseRecorder {
-		request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, strings.NewReader(body))
 		request.Header.Set("Authorization", "Bearer session")
 		request.Header.Set("Content-Type", "application/json")
 		if key != "" {
@@ -103,7 +103,7 @@ func TestExamRecordsHTTPHoldScopeAndPartialRetirementDisclosure(t *testing.T) {
 	examID := model.NewExamID()
 	path := "/api/v1/exams/" + examID.String() + "/retention-holds"
 	serve := func(body string) *httptest.ResponseRecorder {
-		request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, strings.NewReader(body))
 		request.Header.Set("Authorization", "Bearer session")
 		request.Header.Set("Content-Type", "application/json")
 		request.Header.Set("Idempotency-Key", "hold-key")
@@ -136,7 +136,7 @@ func TestExamRecordsHTTPCursorBindsScopeAndReleaseFilter(t *testing.T) {
 	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: recordsHTTPPrincipal()}, examRecordsResource(application))
 	path := "/api/v1/exams/" + examID.String() + "/retention-holds?exam_sitting_id=" + sittingID.String() + "&limit=1"
 	serve := func(path string) *httptest.ResponseRecorder {
-		request := httptest.NewRequest(http.MethodGet, path, nil)
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 		request.Header.Set("Authorization", "Bearer session")
 		response := httptest.NewRecorder()
 		api.ServeHTTP(response, request)
@@ -164,7 +164,7 @@ func TestExamRecordsHTTPReleaseRequiresStrongRecentSession(t *testing.T) {
 	logger, _ := routetest.NewLogger(t)
 	application := &recordsHTTPApplication{}
 	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: recordsHTTPPrincipal()}, examRecordsResource(application))
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/exams/"+model.NewExamID().String()+"/retention-holds/"+model.NewRetentionHoldID().String()+"/release", strings.NewReader(`{"expected_revision":1,"reason_code":"case_closed","private_reason":"Resolved."}`))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams/"+model.NewExamID().String()+"/retention-holds/"+model.NewRetentionHoldID().String()+"/release", strings.NewReader(`{"expected_revision":1,"reason_code":"case_closed","private_reason":"Resolved."}`))
 	request.Header.Set("Authorization", "Bearer session")
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "release-key")

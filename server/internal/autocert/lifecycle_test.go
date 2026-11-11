@@ -126,8 +126,8 @@ func TestManagerCloseCancelsAndWaitsForInFlightCertificateIssuance(t *testing.T)
 	})
 	serverHandshake := make(chan error, 1)
 	clientHandshake := make(chan error, 1)
-	go func() { serverHandshake <- serverTLS.Handshake() }()
-	go func() { clientHandshake <- clientTLS.Handshake() }()
+	go func() { serverHandshake <- serverTLS.HandshakeContext(t.Context()) }()
+	go func() { clientHandshake <- clientTLS.HandshakeContext(t.Context()) }()
 	<-cache.started
 
 	closed := make(chan error, 1)

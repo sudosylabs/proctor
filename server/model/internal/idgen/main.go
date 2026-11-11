@@ -29,8 +29,8 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
-	if err := validateDeclarations(declared, entityIDs); err != nil {
-		fatal(err)
+	if validateErr := validateDeclarations(declared, entityIDs); validateErr != nil {
+		fatal(validateErr)
 	}
 	generated, err := render(entityIDs)
 	if err != nil {

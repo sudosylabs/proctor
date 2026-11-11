@@ -71,7 +71,7 @@ func TestDesktopAuthorizationHTTPExposesBoundedAttemptFailures(t *testing.T) {
 	logger, _ := routetest.NewLogger(t)
 	applicationFake := &desktopAuthorizationHTTPApplication{startErr: apperror.New("authentication.rate_limited")}
 	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, desktopAuthorizationResource(applicationFake, testDesktopAuthorizationCookies(t)))
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/desktop/authorizations", strings.NewReader(
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/auth/desktop/authorizations", strings.NewReader(
 		`{"callback_url":"http://127.0.0.1:49152/random","state":"state","code_challenge":"challenge"}`))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
@@ -145,7 +145,7 @@ func TestDesktopAuthorizationHTTPExchangesFragmentProofForScopedCookies(t *testi
 	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{},
 		desktopAuthorizationResource(&desktopAuthorizationHTTPApplication{}, testDesktopAuthorizationCookies(t)))
 
-	bindRequest := httptest.NewRequest(http.MethodPost, "/api/v1/auth/desktop/authorizations/bind", strings.NewReader(
+	bindRequest := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/auth/desktop/authorizations/bind", strings.NewReader(
 		`{"handle":"handle","browser_proof":"proof","state":"state"}`))
 	bindRequest.Header.Set("Content-Type", "application/json")
 	bindResponse := httptest.NewRecorder()
@@ -159,7 +159,7 @@ func TestDesktopAuthorizationHTTPExchangesFragmentProofForScopedCookies(t *testi
 	require.True(t, bindingCookie.Secure)
 	require.Equal(t, http.SameSiteLaxMode, bindingCookie.SameSite)
 
-	providerRequest := httptest.NewRequest(http.MethodGet,
+	providerRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet,
 		"/api/v1/auth/desktop/authorizations/authenticate/providers/provider/login?state=state", nil)
 	providerRequest.AddCookie(bindingCookie)
 	providerResponse := httptest.NewRecorder()

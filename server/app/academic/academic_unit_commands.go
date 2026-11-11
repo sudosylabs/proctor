@@ -95,15 +95,15 @@ func (s *Service) CreateAcademicUnit(
 
 	parentUnitID := parentID
 	candidate := &model.AcademicUnit{
-		InstitutionID: model.InstitutionID(institutionID),
-		ParentID:      model.AcademicUnitID(parentUnitID),
+		InstitutionID: institutionID,
+		ParentID:      parentUnitID,
 		Name:          command.Name,
 		DisplayName:   command.DisplayName,
 		Description:   command.Description,
 	}
 	candidate.PrepareCreate(unitID, s.now())
-	if err := candidate.Validate(); err != nil {
-		return nil, apperror.DomainInvalid("academic_unit.invalid", err)
+	if validateErr := candidate.Validate(); validateErr != nil {
+		return nil, apperror.DomainInvalid("academic_unit.invalid", validateErr)
 	}
 
 	idempotency, err := idempotency.Prepare(inv, "academic_unit.create", command.IdempotencyKey, struct {
@@ -178,8 +178,8 @@ func (s *Service) UpdateAcademicUnit(
 	if err != nil {
 		return nil, academicUnitStoreErrors.Translate(err)
 	}
-	if err := checkAcademicRevision(command.ExpectedRevision, current.Revision, "academic_unit.conflict"); err != nil {
-		return nil, err
+	if checkErr := checkAcademicRevision(command.ExpectedRevision, current.Revision, "academic_unit.conflict"); checkErr != nil {
+		return nil, checkErr
 	}
 
 	candidate := *current
@@ -208,8 +208,8 @@ func (s *Service) UpdateAcademicUnit(
 	}
 
 	candidate.PrepareUpdate(s.now())
-	if err := candidate.Validate(); err != nil {
-		return nil, apperror.DomainInvalid("academic_unit.invalid", err)
+	if validateErr := candidate.Validate(); validateErr != nil {
+		return nil, apperror.DomainInvalid("academic_unit.invalid", validateErr)
 	}
 
 	if command.ParentID != nil && candidate.ParentID != current.ParentID {
@@ -283,8 +283,8 @@ func (s *Service) ArchiveAcademicUnit(
 	if err != nil {
 		return academicUnitStoreErrors.Translate(err)
 	}
-	if err := checkAcademicRevision(command.ExpectedRevision, current.Revision, "academic_unit.conflict"); err != nil {
-		return err
+	if checkErr := checkAcademicRevision(command.ExpectedRevision, current.Revision, "academic_unit.conflict"); checkErr != nil {
+		return checkErr
 	}
 
 	archived, err := access.RunAudited(

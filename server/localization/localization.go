@@ -140,7 +140,7 @@ func New(source fs.FS, defaultLocale string) (*Localizer, error) {
 		messages := make(map[string]message, len(entries))
 		previous := ""
 		for index, entry := range entries {
-			if !keyPattern.MatchString(string(entry.ID)) {
+			if !keyPattern.MatchString(entry.ID) {
 				return nil, fmt.Errorf("i18n catalog %q entry %d has invalid id %q", file.Name(), index, entry.ID)
 			}
 			if index > 0 && previous >= entry.ID {
@@ -307,7 +307,7 @@ func validateMessageText(key, value string) (string, error) {
 		return "", errors.New("translation uses unsupported template syntax")
 	}
 
-	_, err := template.New(string(key)).Option("missingkey=error").Parse(value)
+	_, err := template.New(key).Option("missingkey=error").Parse(value)
 	if err != nil {
 		return "", fmt.Errorf("parse translation: %w", err)
 	}

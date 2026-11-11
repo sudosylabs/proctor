@@ -216,8 +216,8 @@ func (h academicPeriodHandlers) patch(request route.Request) (route.Result, erro
 	if err = request.DecodeJSON(&body); err != nil {
 		return route.Result{}, err
 	}
-	if err := validateAcademicRevision(body.ExpectedRevision); err != nil {
-		return route.Result{}, err
+	if validateErr := validateAcademicRevision(body.ExpectedRevision); validateErr != nil {
+		return route.Result{}, validateErr
 	}
 
 	startAt, err := route.OptionalWireTimeMillis("start_at", body.StartAt)

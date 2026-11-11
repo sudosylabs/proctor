@@ -40,8 +40,8 @@ func operatorTestPrincipal() model.Principal {
 	}
 }
 
-func serveOperatorRequest(api *route.API, method, path, body string, authenticated bool) *httptest.ResponseRecorder {
-	request := httptest.NewRequest(method, path, strings.NewReader(body))
+func serveOperatorRequest(t *testing.T, api *route.API, method, path, body string, authenticated bool) *httptest.ResponseRecorder {
+	request := httptest.NewRequestWithContext(t.Context(), method, path, strings.NewReader(body))
 	if body != "" {
 		request.Header.Set("Content-Type", "application/json")
 	}
@@ -83,9 +83,9 @@ func TestRoleResourceUsesKernelAuthenticationAndTypedOperation(t *testing.T) {
 	roles := &focusedRoleApplication{roles: []*model.Role{role}}
 	httpAPI := newFocusedResourceAPI(t, logger, &academicUnitHTTPApplication{principal: principal}, roleResource(roles))
 
-	unauthenticated := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/roles", "", false)
+	unauthenticated := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/roles", "", false)
 	require.Equal(t, http.StatusUnauthorized, unauthenticated.Code, "unauthenticated status = %d: %s", unauthenticated.Code, unauthenticated.Body.String())
-	authenticated := serveOperatorRequest(httpAPI, http.MethodPost, "/api/v1/roles", `{"name":"teacher","display_name":"Teacher","permissions":[]}`, true)
+	authenticated := serveOperatorRequest(t, httpAPI, http.MethodPost, "/api/v1/roles", `{"name":"teacher","display_name":"Teacher","permissions":[]}`, true)
 	require.Equal(t, http.StatusCreated, authenticated.Code, "create status/command = %d/%#v: %s", authenticated.Code, roles.create, authenticated.Body.String())
 	require.Equal(t, "teacher", roles.create.Name, "create status/command = %d/%#v: %s", authenticated.Code, roles.create, authenticated.Body.String())
 }
@@ -115,14 +115,14 @@ func TestRoleBindingResourceOwnsPathCommandAndAuthentication(t *testing.T) {
 	httpAPI := newFocusedResourceAPI(t, logger, &academicUnitHTTPApplication{principal: principal}, roleBindingResource(bindings))
 	path := "/api/v1/role-bindings/" + bindingID.String()
 
-	unauthenticated := serveOperatorRequest(httpAPI, http.MethodDelete, path, "", false)
+	unauthenticated := serveOperatorRequest(t, httpAPI, http.MethodDelete, path, "", false)
 	require.Equal(t, http.StatusUnauthorized, unauthenticated.Code, "unauthenticated status = %d: %s", unauthenticated.Code, unauthenticated.Body.String())
-	weakAssurance := serveOperatorRequest(httpAPI, http.MethodDelete, path, "", true)
+	weakAssurance := serveOperatorRequest(t, httpAPI, http.MethodDelete, path, "", true)
 	require.Equal(t, http.StatusForbidden, weakAssurance.Code, "weak-assurance status")
 	require.Contains(t, weakAssurance.Body.String(), "authentication.strong_required", "weak-assurance status")
 	principal.AuthenticationStrength = model.AuthenticationMultiFactor
 	httpAPI = newFocusedResourceAPI(t, logger, &academicUnitHTTPApplication{principal: principal}, roleBindingResource(bindings))
-	ended := serveOperatorRequest(httpAPI, http.MethodDelete, path, "", true)
+	ended := serveOperatorRequest(t, httpAPI, http.MethodDelete, path, "", true)
 	require.Equal(t, http.StatusOK, ended.Code, "end status/command = %d/%#v: %s", ended.Code, bindings.end, ended.Body.String())
 	require.Equal(t, bindingID, bindings.end.ID, "end status/command = %d/%#v: %s", ended.Code, bindings.end, ended.Body.String())
 }
@@ -166,29 +166,29 @@ func TestAuditResourcePreservesOpaqueCursorAndSafeErrors(t *testing.T) {
 	audits := &focusedAuditApplication{events: []*model.AuditEvent{last}}
 	httpAPI := newFocusedResourceAPI(t, logger, &academicUnitHTTPApplication{principal: principal}, auditResource(audits))
 
-	final := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/audits?limit=1", "", true)
+	final := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/audits?limit=1", "", true)
 	require.Equal(t, http.StatusOK, final.Code, final.Body.String())
 	var finalPage route.List[auditEventResponse]
 	require.NoError(t, json.Unmarshal(final.Body.Bytes(), &finalPage))
 	require.Empty(t, finalPage.NextCursor, "an exactly full final page has no continuation")
 	audits.hasMore = true
 
-	response := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/audits?limit=1", "", true)
+	response := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/audits?limit=1", "", true)
 	require.Equal(t, http.StatusOK, response.Code, "list status/query = %d/%#v: %s", response.Code, audits.query, response.Body.String())
 	require.Equal(t, 1, audits.query.Limit, "list status/query = %d/%#v: %s", response.Code, audits.query, response.Body.String())
 	var page route.List[auditEventResponse]
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
 	require.NotEmpty(t, page.NextCursor, "a page with more events did not return an opaque cursor")
 	audits.events, audits.hasMore = nil, false
-	second := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/audits?limit=1&cursor="+url.QueryEscape(page.NextCursor), "", true)
+	second := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/audits?limit=1&cursor="+url.QueryEscape(page.NextCursor), "", true)
 	require.Equal(t, http.StatusOK, second.Code, "second page status/query = %d/%#v: %s", second.Code, audits.query, second.Body.String())
 	require.True(t, last.CreatedAt.Equal(audits.query.BeforeCreatedAt), "second page status/query = %d/%#v: %s", second.Code, audits.query, second.Body.String())
 	require.Equal(t, last.ID, audits.query.BeforeID, "second page status/query = %d/%#v: %s", second.Code, audits.query, second.Body.String())
-	malformed := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/audits?cursor=not-a-cursor", "", true)
+	malformed := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/audits?cursor=not-a-cursor", "", true)
 	assertHTTPProblem(t, malformed, http.StatusBadRequest, "request.invalid")
 
 	audits.err = apperror.New("audit.unavailable")
-	errorResponse := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/audits", "", true)
+	errorResponse := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/audits", "", true)
 	var problem route.Problem
 	require.NoError(t, json.Unmarshal(errorResponse.Body.Bytes(), &problem))
 	require.Equal(t, http.StatusServiceUnavailable, errorResponse.Code, "unsafe audit error response = %d: %s", errorResponse.Code, errorResponse.Body.String())
@@ -236,7 +236,7 @@ func TestJobResourcePreservesPrivateProjectionAndBoundedControls(t *testing.T) {
 	}}
 	httpAPI := newFocusedResourceAPI(t, logger, &academicUnitHTTPApplication{principal: principal}, jobResource(jobs))
 
-	list := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/jobs?limit=1", "", true)
+	list := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/jobs?limit=1", "", true)
 	require.Equal(t, http.StatusOK, list.Code, "list status/query = %d/%#v: %s", list.Code, jobs.listQuery, list.Body.String())
 	require.Equal(t, 1, jobs.listQuery.Limit, "list status/query = %d/%#v: %s", list.Code, jobs.listQuery, list.Body.String())
 	for _, private := range []string{"command", "checkpoint", "claim_owner", "claim_token", "internal_error"} {
@@ -244,27 +244,27 @@ func TestJobResourcePreservesPrivateProjectionAndBoundedControls(t *testing.T) {
 	}
 	cursor, err := encodeJobCursor(jobCursor{CreatedAt: model.FormatRFC3339(now), ID: jobID.String()})
 	require.NoError(t, err)
-	page := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/jobs?cursor="+url.QueryEscape(cursor), "", true)
+	page := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/jobs?cursor="+url.QueryEscape(cursor), "", true)
 	require.Equal(t, http.StatusOK, page.Code, "job cursor forwarding = %d query=%#v body=%s", page.Code, jobs.listQuery, page.Body.String())
 	require.True(t, jobs.listQuery.BeforeCreatedAt.Equal(model.TimeUTC(now)), "job cursor forwarding = %d query=%#v body=%s", page.Code, jobs.listQuery, page.Body.String())
 	require.Equal(t, jobID, jobs.listQuery.BeforeID, "job cursor forwarding = %d query=%#v body=%s", page.Code, jobs.listQuery, page.Body.String())
-	malformed := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/jobs?cursor=not-a-cursor", "", true)
+	malformed := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/jobs?cursor=not-a-cursor", "", true)
 	assertHTTPProblem(t, malformed, http.StatusBadRequest, "request.invalid")
 
 	attemptCursor, err := encodeJobAttemptCursor(7)
 	require.NoError(t, err)
-	attempts := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/jobs/"+jobID.String()+"/attempts?cursor="+url.QueryEscape(attemptCursor), "", true)
+	attempts := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/jobs/"+jobID.String()+"/attempts?cursor="+url.QueryEscape(attemptCursor), "", true)
 	require.Equal(t, http.StatusOK, attempts.Code, "job attempt cursor forwarding = %d query=%#v body=%s", attempts.Code, jobs.attemptQuery, attempts.Body.String())
 	require.Equal(t, jobID, jobs.attemptQuery.JobID, "job attempt cursor forwarding = %d query=%#v body=%s", attempts.Code, jobs.attemptQuery, attempts.Body.String())
 	require.Equal(t, 7, jobs.attemptQuery.BeforeNumber, "job attempt cursor forwarding = %d query=%#v body=%s", attempts.Code, jobs.attemptQuery, attempts.Body.String())
-	malformedAttempts := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/jobs/"+jobID.String()+"/attempts?cursor=not-a-cursor", "", true)
+	malformedAttempts := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/jobs/"+jobID.String()+"/attempts?cursor=not-a-cursor", "", true)
 	assertHTTPProblem(t, malformedAttempts, http.StatusBadRequest, "request.invalid")
 	for _, action := range []string{"cancel", "retry"} {
-		response := serveOperatorRequest(httpAPI, http.MethodPost, "/api/v1/jobs/"+jobID.String()+"/"+action, "", true)
+		response := serveOperatorRequest(t, httpAPI, http.MethodPost, "/api/v1/jobs/"+jobID.String()+"/"+action, "", true)
 		require.Equal(t, http.StatusOK, response.Code, "%s status = %d: %s", action, response.Code, response.Body.String())
 	}
 	require.Equal(t, jobID, jobs.cancel, "control commands = %#v/%#v", jobs.cancel, jobs.retry)
 	require.Equal(t, jobID, jobs.retry, "control commands = %#v/%#v", jobs.cancel, jobs.retry)
-	create := serveOperatorRequest(httpAPI, http.MethodPost, "/api/v1/jobs", `{}`, true)
+	create := serveOperatorRequest(t, httpAPI, http.MethodPost, "/api/v1/jobs", `{}`, true)
 	require.Equal(t, http.StatusMethodNotAllowed, create.Code, "generic job create status = %d: %s", create.Code, create.Body.String())
 }

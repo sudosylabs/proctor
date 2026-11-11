@@ -60,7 +60,6 @@ func TestDisabledMailerIsExplicitlyUnavailable(t *testing.T) {
 	t.Parallel()
 
 	settings := config.Default().Mail
-	settings.Enabled = false
 	mailer := NewDisabledMailer(mail.Address{
 		Name:    settings.FromName,
 		Address: settings.FromAddress,
@@ -76,7 +75,6 @@ func TestLocalVFSAdapterIsUsableAndHealthy(t *testing.T) {
 	t.Parallel()
 
 	settings := config.Default().VFS
-	settings.Backend = "local"
 	settings.Local.Root = t.TempDir()
 	filesystem, err := local.New(settings.Local.Root)
 	require.NoError(t, err)

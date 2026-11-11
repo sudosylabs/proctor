@@ -98,7 +98,7 @@ func TestAcademicPeriodResourceRejectsInvalidQueryLimit(t *testing.T) {
 	httpAPI := newFocusedResourceAPI(
 		t, logger, routetest.Authenticator{Principal: principal}, academicPeriodResource(periods),
 	)
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet, "/api/v1/academic-periods?limit=0", nil,
 	)
 	request.Header.Set("Authorization", "Bearer credential")

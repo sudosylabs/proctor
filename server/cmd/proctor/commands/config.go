@@ -34,8 +34,8 @@ func newConfigCommand(validate configValidateExecutor, show configShowExecutor, 
 			if err != nil {
 				return err
 			}
-			if err := validate(command.Context(), path); err != nil {
-				return err
+			if validateErr := validate(command.Context(), path); validateErr != nil {
+				return validateErr
 			}
 			_, err = fmt.Fprintln(command.OutOrStdout(), text.value("cli.config.validate.success", "configuration is valid", nil))
 			return err

@@ -206,8 +206,8 @@ func TestExamResourceContentStopsAtFirstByteBeyondDeclaredSize(t *testing.T) {
 	const inputSize = 64 << 10
 	for _, declared := range []int64{0, 5, examResourceCopyBuffer} {
 		body := &boundedExamResourceReader{remaining: inputSize, maximumRequest: examResourceCopyBuffer}
-		rendition, err := content.StoreExamResource(context.Background(), model.NewFileRevisionID(), model.ExamResourceMediaText, body, declared, time.Unix(1, 0))
-		require.ErrorIs(t, err, ErrInvalidExamResourceContent, "declared=%d: rendition=%#v error", declared, rendition)
+		rendition, storeErr := content.StoreExamResource(context.Background(), model.NewFileRevisionID(), model.ExamResourceMediaText, body, declared, time.Unix(1, 0))
+		require.ErrorIs(t, storeErr, ErrInvalidExamResourceContent, "declared=%d: rendition=%#v error", declared, rendition)
 		require.Equal(t, model.FileRendition{}, rendition, "declared=%d: rendition=%#v error", declared, rendition)
 		consumed := inputSize - body.remaining
 		require.Equal(t, declared+1, consumed, "declared=%d: consumed", declared)

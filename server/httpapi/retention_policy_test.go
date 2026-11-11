@@ -55,7 +55,7 @@ func TestRetentionPolicyHTTPRequiresCompleteSettingsAndNeverEnablesDeletion(t *t
 	application := &retentionPolicyHTTPApplication{policy: policy}
 	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, retentionPolicyResource(application))
 	serve := func(method, body string) *httptest.ResponseRecorder {
-		request := httptest.NewRequest(method, "/api/v1/retention-policy", strings.NewReader(body))
+		request := httptest.NewRequestWithContext(t.Context(), method, "/api/v1/retention-policy", strings.NewReader(body))
 		request.Header.Set("Authorization", "Bearer session")
 		request.Header.Set("Content-Type", "application/json")
 		if method == http.MethodPut {
@@ -105,9 +105,9 @@ func TestRetentionPolicyHTTPRequiresCompleteSettingsAndNeverEnablesDeletion(t *t
 				encoded, err := json.Marshal(body)
 				require.NoError(t, err)
 				before := application.calls
-				response := serve(http.MethodPut, string(encoded))
-				require.Equal(t, http.StatusBadRequest, response.Code, "invalid settings reached application: %d %s", response.Code, response.Body.String())
-				require.Equal(t, before, application.calls, "invalid settings reached application: %d %s", response.Code, response.Body.String())
+				invalidResponse := serve(http.MethodPut, string(encoded))
+				require.Equal(t, http.StatusBadRequest, invalidResponse.Code, "invalid settings reached application: %d %s", invalidResponse.Code, invalidResponse.Body.String())
+				require.Equal(t, before, application.calls, "invalid settings reached application: %d %s", invalidResponse.Code, invalidResponse.Body.String())
 			})
 		}
 	}

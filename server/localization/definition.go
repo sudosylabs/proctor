@@ -118,33 +118,45 @@ func (l *Localizer) validateDefinitions(definitions []Definition, delegated []st
 	if l == nil {
 		return errors.New("localizer is nil")
 	}
+
 	merged, err := MergeDefinitions(definitions)
 	if err != nil {
 		return err
 	}
+
 	english := l.catalogs[EnglishLocale]
 	declared := make(map[string]Definition, len(merged))
 	for _, definition := range merged {
 		if prefix := matchingPrefix(definition.ID, delegated); prefix != "" {
 			return fmt.Errorf("localization id %q from %q belongs to delegated prefix %q", definition.ID, definition.Origin, prefix)
 		}
+
 		declared[definition.ID] = definition
 		message, exists := english[definition.ID]
 		if !exists {
 			return fmt.Errorf("declared localization id %q from %q is missing from en.json", definition.ID, definition.Origin)
 		}
+
 		if message.placeholders != strings.Join(definition.Variables, ",") {
-			return fmt.Errorf("localization id %q declares variables %q but en.json uses %q", definition.ID, strings.Join(definition.Variables, ","), message.placeholders)
+			return fmt.Errorf(
+				"localization id %q declares variables %q but en.json uses %q",
+				definition.ID,
+				strings.Join(definition.Variables, ","),
+				message.placeholders,
+			)
 		}
+
 		if message.plural != (definition.PluralVariable != "") {
 			return fmt.Errorf("localization id %q plural declaration does not match en.json", definition.ID)
 		}
 	}
+
 	for id := range english {
 		if _, exists := declared[id]; !exists && matchingPrefix(id, delegated) == "" {
 			return fmt.Errorf("en.json contains orphan localization id %q", id)
 		}
 	}
+
 	return nil
 }
 

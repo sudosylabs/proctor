@@ -65,7 +65,9 @@ type Settings struct {
 func (s Settings) String() string {
 	return fmt.Sprintf(
 		"secretseal.Settings{EncryptionKey:%s, DecryptionKeys:%d, MaximumPlaintext:%d}",
-		redacted(s.EncryptionKey), len(s.DecryptionKeys), s.MaximumPlaintext,
+		redacted(s.EncryptionKey),
+		len(s.DecryptionKeys),
+		s.MaximumPlaintext,
 	)
 }
 
@@ -114,7 +116,9 @@ type Envelope struct {
 func (e Envelope) String() string {
 	return fmt.Sprintf(
 		"secretseal.Envelope{Version:%d, Algorithm:%q, KeyID:%q, Ciphertext:[redacted]}",
-		e.Version, e.Algorithm, e.KeyID,
+		e.Version,
+		e.Algorithm,
+		e.KeyID,
 	)
 }
 
@@ -128,7 +132,9 @@ func (e Envelope) LogValue() slog.Value { return slog.StringValue(e.String()) }
 // retaining only non-secret format and key-selection metadata.
 func (e Envelope) Auditable() map[string]any {
 	return map[string]any{
-		"version": e.Version, "algorithm": e.Algorithm, "key_id": e.KeyID,
+		"version":   e.Version,
+		"algorithm": e.Algorithm,
+		"key_id":    e.KeyID,
 	}
 }
 
@@ -143,7 +149,7 @@ type Sealer struct {
 // supplied non-secret key identifier. It does not validate ciphertext and is
 // intended for startup reconciliation of persisted envelope metadata.
 func (s *Sealer) HasKey(keyID string) bool {
-	if s == nil || !validKeyID(keyID) {
+	if s == nil || !ValidKeyID(keyID) {
 		return false
 	}
 	_, ok := s.keys[keyID]
@@ -161,10 +167,12 @@ func (s *Sealer) PrimaryKeyID() string {
 
 // New constructs an immutable key ring.
 func New(settings Settings) (*Sealer, error) {
-	if settings.MaximumPlaintext < 1 || settings.MaximumPlaintext > MaximumPlaintextBytes ||
+	if settings.MaximumPlaintext < 1 ||
+		settings.MaximumPlaintext > MaximumPlaintextBytes ||
 		len(settings.DecryptionKeys) > MaximumFallbackKeys {
 		return nil, ErrInvalidSettings
 	}
+
 	encodedKeys := make([]string, 0, 1+len(settings.DecryptionKeys))
 	encodedKeys = append(encodedKeys, settings.EncryptionKey)
 	encodedKeys = append(encodedKeys, settings.DecryptionKeys...)
@@ -179,19 +187,23 @@ func New(settings Settings) (*Sealer, error) {
 		if _, duplicate := seenMaterial[key]; duplicate {
 			return nil, ErrInvalidSettings
 		}
+
 		seenMaterial[key] = struct{}{}
 		keyID := keyIdentity(key)
 		if existing, collision := keys[keyID]; collision &&
 			subtle.ConstantTimeCompare(existing[:], key[:]) != 1 {
 			return nil, ErrInvalidSettings
 		}
+
 		keys[keyID] = key
 		if index == 0 {
 			primaryKeyID = keyID
 		}
 	}
+
 	return &Sealer{
-		keys: keys, primaryKeyID: primaryKeyID,
+		keys:             keys,
+		primaryKeyID:     primaryKeyID,
 		maximumPlaintext: settings.MaximumPlaintext,
 	}, nil
 }
@@ -204,22 +216,27 @@ func (s *Sealer) Seal(binding Binding, plaintext []byte) (Envelope, error) {
 	if len(plaintext) > s.maximumPlaintext {
 		return Envelope{}, ErrPlaintextTooLarge
 	}
+
 	key, ok := s.keys[s.primaryKeyID]
 	if !ok {
 		return Envelope{}, ErrInvalidSettings
 	}
+
 	aead, err := newAEAD(key)
 	if err != nil {
 		return Envelope{}, ErrInvalidSettings
 	}
+
 	nonce := make([]byte, aead.NonceSize())
 	if _, err := rand.Read(nonce); err != nil {
 		return Envelope{}, errors.New("generate secret sealing nonce")
 	}
+
 	envelope := Envelope{
-		Version: EnvelopeVersion1, Algorithm: AlgorithmAES256GCM,
-		KeyID: s.primaryKeyID,
-		Nonce: base64.RawURLEncoding.EncodeToString(nonce),
+		Version:   EnvelopeVersion1,
+		Algorithm: AlgorithmAES256GCM,
+		KeyID:     s.primaryKeyID,
+		Nonce:     base64.RawURLEncoding.EncodeToString(nonce),
 	}
 	ciphertext := aead.Seal(nil, nonce, plaintext, authenticatedData(binding, envelope))
 	envelope.Ciphertext = base64.RawURLEncoding.EncodeToString(ciphertext)
@@ -229,22 +246,29 @@ func (s *Sealer) Seal(binding Binding, plaintext []byte) (Envelope, error) {
 // Open authenticates the envelope and Binding before returning a fresh
 // plaintext slice. All caller-controlled envelope failures use one safe error.
 func (s *Sealer) Open(binding Binding, envelope Envelope) ([]byte, error) {
-	if s == nil || !validBinding(binding) || envelope.Version != EnvelopeVersion1 ||
-		envelope.Algorithm != AlgorithmAES256GCM || !validKeyID(envelope.KeyID) {
+	if s == nil ||
+		!validBinding(binding) ||
+		envelope.Version != EnvelopeVersion1 ||
+		envelope.Algorithm != AlgorithmAES256GCM ||
+		!ValidKeyID(envelope.KeyID) {
 		return nil, ErrInvalidEnvelope
 	}
+
 	key, ok := s.keys[envelope.KeyID]
 	if !ok {
 		return nil, ErrInvalidEnvelope
 	}
+
 	aead, err := newAEAD(key)
 	if err != nil {
 		return nil, ErrInvalidEnvelope
 	}
+
 	nonce, ok := decodeRawURL(envelope.Nonce, aead.NonceSize())
 	if !ok {
 		return nil, ErrInvalidEnvelope
 	}
+
 	maximumCiphertext := s.maximumPlaintext + aead.Overhead()
 	ciphertext, ok := decodeRawURLBounded(
 		envelope.Ciphertext, aead.Overhead(), maximumCiphertext,
@@ -252,10 +276,12 @@ func (s *Sealer) Open(binding Binding, envelope Envelope) ([]byte, error) {
 	if !ok {
 		return nil, ErrInvalidEnvelope
 	}
+
 	plaintext, err := aead.Open(nil, nonce, ciphertext, authenticatedData(binding, envelope))
 	if err != nil || len(plaintext) > s.maximumPlaintext {
 		return nil, ErrInvalidEnvelope
 	}
+
 	return plaintext, nil
 }
 
@@ -286,11 +312,14 @@ func decodeKey(encoded string) ([32]byte, bool) {
 	if len(encoded) != base64.StdEncoding.EncodedLen(len(key)) {
 		return key, false
 	}
+
 	decoded, err := base64.StdEncoding.Strict().DecodeString(encoded)
-	if err != nil || len(decoded) != len(key) ||
+	if err != nil ||
+		len(decoded) != len(key) ||
 		base64.StdEncoding.EncodeToString(decoded) != encoded {
 		return key, false
 	}
+
 	copy(key[:], decoded)
 	return key, true
 }
@@ -300,7 +329,9 @@ func keyIdentity(key [32]byte) string {
 	return hex.EncodeToString(digest[:keyIDBytes])
 }
 
-func validKeyID(keyID string) bool {
+// ValidKeyID reports whether keyID is a key ring key identifier: exactly 32
+// lowercase hexadecimal characters. Mail and MFA rekey commands share it.
+func ValidKeyID(keyID string) bool {
 	if len(keyID) != keyIDBytes*2 {
 		return false
 	}
@@ -309,27 +340,37 @@ func validKeyID(keyID string) bool {
 }
 
 func validBinding(binding Binding) bool {
-	if len(binding.Purpose) < 1 || len(binding.Purpose) > maximumPurposeBytes ||
-		len(binding.Owner) < 1 || len(binding.Owner) > maximumOwnerBytes {
+	if len(binding.Purpose) < 1 ||
+		len(binding.Purpose) > maximumPurposeBytes ||
+		len(binding.Owner) < 1 ||
+		len(binding.Owner) > maximumOwnerBytes {
 		return false
 	}
+
 	for index, character := range []byte(binding.Purpose) {
 		if (character >= 'a' && character <= 'z') ||
 			(index > 0 && character >= '0' && character <= '9') ||
 			(index > 0 && (character == '.' || character == '_' || character == '-')) {
 			continue
 		}
+
 		return false
 	}
+
 	for _, character := range []byte(binding.Owner) {
 		if (character >= 'a' && character <= 'z') ||
 			(character >= 'A' && character <= 'Z') ||
 			(character >= '0' && character <= '9') ||
-			character == '.' || character == '_' || character == ':' || character == '-' {
+			character == '.' ||
+			character == '_' ||
+			character == ':' ||
+			character == '-' {
 			continue
 		}
+
 		return false
 	}
+
 	return true
 }
 
@@ -337,6 +378,7 @@ func authenticatedData(binding Binding, envelope Envelope) []byte {
 	var aad bytes.Buffer
 	aad.WriteString("proctor:secretseal")
 	aad.WriteByte(0)
+	//nolint:gosec // G115: both callers pass EnvelopeVersion1 (Seal sets it, Open rejects any other).
 	_ = binary.Write(&aad, binary.BigEndian, uint16(envelope.Version))
 	writeAADPart(&aad, envelope.Algorithm)
 	writeAADPart(&aad, envelope.KeyID)
@@ -346,6 +388,7 @@ func authenticatedData(binding Binding, envelope Envelope) []byte {
 }
 
 func writeAADPart(target *bytes.Buffer, value string) {
+	//nolint:gosec // G115: every part is a fixed algorithm, a fixed-length key ID or a Binding capped at 256 bytes.
 	_ = binary.Write(target, binary.BigEndian, uint32(len(value)))
 	target.WriteString(value)
 }
@@ -359,11 +402,15 @@ func decodeRawURLBounded(encoded string, minimumBytes, maximumBytes int) ([]byte
 	if encoded == "" || len(encoded) > base64.RawURLEncoding.EncodedLen(maximumBytes) {
 		return nil, false
 	}
+
 	decoded, err := base64.RawURLEncoding.Strict().DecodeString(encoded)
-	if err != nil || len(decoded) < minimumBytes || len(decoded) > maximumBytes ||
+	if err != nil ||
+		len(decoded) < minimumBytes ||
+		len(decoded) > maximumBytes ||
 		base64.RawURLEncoding.EncodeToString(decoded) != encoded {
 		return nil, false
 	}
+
 	return decoded, true
 }
 

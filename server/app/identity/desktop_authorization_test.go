@@ -1,0 +1,691 @@
+// ---------------------------------------------------------------------------------------------
+// Copyright (c) 2026 Sudosy Labs. All rights reserved.
+// Licensed under the GNU Affero General Public License, version 3 only.
+// See LICENSE in the server module root for license information.
+// SPDX-License-Identifier: AGPL-3.0-only
+// ---------------------------------------------------------------------------------------------
+
+package identity
+
+import (
+	"context"
+	"errors"
+	"net/url"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
+	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
+)
+
+func TestDesktopAuthorizationStartPinsPublicClientRequest(t *testing.T) {
+	t.Parallel()
+
+	at := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
+	handle := model.NewCredentialToken()
+	proof := model.NewCredentialToken()
+	generated := []string{handle, proof}
+	next := 0
+	persistence := &desktopAuthorizationStoreFake{createExpiresAt: at.Add(5 * time.Minute)}
+	institution := &model.Institution{ID: model.NewInstitutionID()}
+	service := newTestDesktopAuthorizationService(t, persistence, func() time.Time { return at })
+	service.institutions = desktopAuthorizationInstitutionStoreFake{institution: institution}
+	service.newCredential = func() string { value := generated[next]; next++; return value }
+	state := model.NewCredentialToken()
+	challenge := model.NewCredentialToken()
+	callback := "http://127.0.0.1:49152/" + model.NewCredentialToken()
+	command := StartDesktopAuthorizationCommand{
+		CallbackURL: callback, State: state, CodeChallenge: challenge,
+		DeviceID: "desktop-1", DeviceName: "Exam laptop",
+	}
+	setTestDesktopAuthorizationBuild(t, &command)
+	result, err := service.StartDesktopAuthorization(context.Background(), invocation.Invocation{}, command)
+	require.NoError(t, err)
+	require.NotNil(t, persistence.created)
+	require.Equal(t, institution.ID, persistence.created.InstitutionID)
+	require.Equal(t, "https://proctor.example.edu", persistence.created.Issuer)
+	require.Equal(t, model.HashToken(handle), persistence.created.HandleHash)
+	require.Equal(t, model.HashToken(proof), persistence.created.BrowserProofHash)
+	require.Equal(t, model.HashToken(state), persistence.created.StateHash)
+	require.Equal(t, callback, persistence.created.CallbackURL)
+	require.Equal(t, challenge, persistence.created.CodeChallenge)
+	require.Equal(t, 5*time.Minute, persistence.created.Lifetime)
+	authorizationURL, err := url.Parse(result.AuthorizationURL)
+	require.NoError(t, err)
+	require.Equal(t, "https", authorizationURL.Scheme)
+	require.Equal(t, "proctor.example.edu", authorizationURL.Host)
+	require.Equal(t, "/authorize/desktop", authorizationURL.Path)
+	require.Equal(t, handle, authorizationURL.Query().Get("request"))
+	require.Equal(t, state, authorizationURL.Query().Get("state"))
+	require.Equal(t, "proof="+proof, authorizationURL.Fragment)
+	require.Equal(t, at.Add(5*time.Minute).UnixMilli(), result.ExpiresAt)
+	for _, raw := range []string{handle, proof, state} {
+		require.NotEqual(t, raw, persistence.created.HandleHash, "raw public-client secret was persisted")
+		require.NotEqual(t, raw, persistence.created.BrowserProofHash, "raw public-client secret was persisted")
+		require.NotEqual(t, raw, persistence.created.StateHash, "raw public-client secret was persisted")
+	}
+}
+
+func TestDesktopAuthorizationStartRejectsMaintenanceBeforePersistence(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
+	persistence := &desktopAuthorizationStoreFake{}
+	service := newTestDesktopAuthorizationService(t, persistence, func() time.Time { return at })
+	// The cataloged build is compatible, but the Institution policy has the
+	// Desktop in maintenance.
+	service.desktopCompatibilityPolicies.(*desktopCompatibilityPolicyStoreFake).policy.Availability = model.DesktopAvailabilityMaintenance
+	command := StartDesktopAuthorizationCommand{
+		CallbackURL:   "http://127.0.0.1:49152/" + model.NewCredentialToken(),
+		State:         model.NewCredentialToken(),
+		CodeChallenge: model.NewCredentialToken(),
+	}
+	setTestDesktopAuthorizationBuild(t, &command)
+	result, err := service.StartDesktopAuthorization(context.Background(), invocation.Invocation{}, command)
+	require.Nil(t, result, "Start() = %#v, %v; persisted", result, err)
+	require.True(t, apperror.Is(err, "authentication.desktop_authorization.unavailable"), "Start() = %#v, %v; persisted", result, err)
+	require.Nil(t, persistence.created, "Start() = %#v, %v; persisted", result, err)
+}
+
+func TestDesktopAuthorizationStartRejectsEqualGeneratedProofsBeforeStore(t *testing.T) {
+	t.Parallel()
+	persistence := &desktopAuthorizationStoreFake{}
+	credential := model.NewCredentialToken()
+	service := newTestDesktopAuthorizationService(t, persistence, time.Now)
+	service.newCredential = func() string { return credential }
+	command := StartDesktopAuthorizationCommand{
+		CallbackURL: "http://127.0.0.1:49152/" + model.NewCredentialToken(), State: model.NewCredentialToken(),
+		CodeChallenge: model.NewCredentialToken(),
+	}
+	setTestDesktopAuthorizationBuild(t, &command)
+	_, err := service.StartDesktopAuthorization(context.Background(), invocation.Invocation{}, command)
+	require.True(t, apperror.Is(err, "authentication.desktop_authorization.unavailable"), "Start() error=%v persisted", err)
+	require.Nil(t, persistence.created, "Start() error=%v persisted", err)
+}
+
+func TestDesktopAuthorizationLoopbackHTTPIssuerRequiresExplicitDevelopmentPolicy(t *testing.T) {
+	t.Parallel()
+
+	dependencies := func(policy DesktopAuthorizationPolicy) error {
+		service := newTestDesktopAuthorizationService(t, &desktopAuthorizationStoreFake{}, time.Now)
+		service.desktopPolicy = policy
+		return service.requireDesktopAuthorization()
+	}
+	require.Error(t, dependencies(DesktopAuthorizationPolicy{Issuer: "http://localhost:8065"}), "loopback HTTP issuer accepted without explicit development policy")
+	require.NoError(t, dependencies(DesktopAuthorizationPolicy{Issuer: "http://localhost:8065", AllowLoopbackHTTPDevelopment: true}))
+	require.Error(t, dependencies(DesktopAuthorizationPolicy{Issuer: "http://192.0.2.1:8065", AllowLoopbackHTTPDevelopment: true}), "non-loopback HTTP issuer accepted in development policy")
+}
+
+func TestDesktopAuthorizationApprovalAndExchangeArePurposeBound(t *testing.T) {
+	t.Parallel()
+
+	at := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
+	code, access, refresh := model.NewCredentialToken(), model.NewCredentialToken(), model.NewCredentialToken()
+	generated := []string{code, access, refresh}
+	persistence := &desktopAuthorizationStoreFake{}
+	institution := &model.Institution{ID: model.NewInstitutionID()}
+	service := newTestDesktopAuthorizationService(t, persistence, func() time.Time { return at })
+	service.institutions = desktopAuthorizationInstitutionStoreFake{institution: institution}
+	service.capabilities = &accessPolicyCapabilitiesFake{snapshot: AccessPolicyCapabilitySnapshot{Providers: []AccessPolicyProviderCapability{{Descriptor: model.ExternalAuthenticationProvider{ID: "campus"}}}}}
+	service.newCredential = func() string { value := generated[0]; generated = generated[1:]; return value }
+	binding, state := model.NewCredentialToken(), model.NewCredentialToken()
+	callback := "http://[::1]:49152/" + model.NewCredentialToken()
+	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
+		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
+		AuthenticationMethod: "oidc", AuthenticationProviderID: "campus",
+		ExternalIdentityID:     model.NewExternalIdentityID(),
+		AuthenticationStrength: model.AuthenticationMultiFactor, ClientType: model.SessionClientWeb,
+		AuthenticatedAt: at.Add(-time.Minute), MFACompletedAt: model.OptionalTimeFrom(at)}
+	persistence.issueResult = &store.DesktopAuthorizationCodeIssued{CallbackURL: callback, CodeExpiresAt: at.Add(time.Minute)}
+	persistence.contextUserID = principal.UserID
+	approved, err := service.ApproveDesktopAuthorization(context.Background(), invocation.New(principal, model.RequestMetadata{}),
+		ApproveDesktopAuthorizationCommand{Binding: binding, State: state})
+	require.NoError(t, err)
+	redirect, _ := url.Parse(approved.RedirectURL)
+	require.Equal(t, "http", redirect.Scheme, "approval = %#v input", approved)
+	require.Equal(t, "[::1]:49152", redirect.Host, "approval = %#v input", approved)
+	require.Equal(t, code, redirect.Query().Get("code"), "approval = %#v input", approved)
+	require.Equal(t, state, redirect.Query().Get("state"), "approval = %#v input", approved)
+	require.NotNil(t, persistence.issued, "approval = %#v input", approved)
+	require.Equal(t, model.HashToken(binding), persistence.issued.BindingHash, "approval = %#v input", approved)
+	require.Equal(t, time.Minute, persistence.issued.CodeLifetime, "approval = %#v input", approved)
+	exchangeCommand := testDesktopAuthorizationExchangeCommand(
+		t, service, at, code, state, "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk", "",
+	)
+	session, registration := testDesktopAuthorizationExchangeResult(t, exchangeCommand, principal.UserID, at)
+	persistence.exchangeResult = &store.DesktopAuthorizationExchangeResult{
+		Session: session, Registration: registration,
+		AccessExpiresAt: at.Add(5 * time.Minute), RefreshExpiresAt: at.Add(time.Hour),
+	}
+	exchanged, err := service.ExchangeDesktopAuthorization(context.Background(), invocation.New(model.Principal{}, model.RequestMetadata{}),
+		exchangeCommand)
+	require.NoError(t, err)
+	require.NotNil(t, persistence.exchanged, "exchange = %#v input", exchanged)
+	require.Equal(t, "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM", persistence.exchanged.CodeChallenge, "exchange = %#v input", exchanged)
+	require.Equal(t, 5*time.Minute, persistence.exchanged.AccessLifetime, "exchange = %#v input", exchanged)
+	require.Equal(t, time.Hour, persistence.exchanged.RefreshLifetime, "exchange = %#v input", exchanged)
+	require.Equal(t, 30*time.Minute, persistence.exchanged.IdleLifetime, "exchange = %#v input", exchanged)
+	require.Equal(t, 2*time.Hour, persistence.exchanged.AbsoluteLifetime, "exchange = %#v input", exchanged)
+	require.Equal(t, int64(1), persistence.exchanged.DesktopCompatibilityPolicyRevision, "exchange = %#v input", exchanged)
+	require.Equal(t, access, exchanged.Tokens.AccessToken, "exchange = %#v input", exchanged)
+	require.Equal(t, refresh, exchanged.Tokens.RefreshToken, "exchange = %#v input", exchanged)
+}
+
+func TestDesktopAuthorizationTerminalStoreRejectionCompletesFailureAudit(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
+	auditor := &securityAuditorFake{}
+	persistence := &desktopAuthorizationStoreFake{issueErr: store.NewErrNotFound("browser_authentication_transaction", "")}
+	service := newTestDesktopAuthorizationService(t, persistence, func() time.Time { return at })
+	service.securityAudit = auditor
+	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
+		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
+		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
+		ClientType: model.SessionClientWeb, AuthenticatedAt: at}
+	persistence.contextUserID = principal.UserID
+	_, err := service.ApproveDesktopAuthorization(context.Background(), invocation.New(principal, model.RequestMetadata{}),
+		ApproveDesktopAuthorizationCommand{Binding: model.NewCredentialToken(), State: model.NewCredentialToken()})
+	failure := auditor.lastFailure()
+	require.True(t, apperror.Is(err, "authentication.desktop_authorization.rejected"), "Approve() error=%v failure audit=%#v", err, failure)
+	require.NotNil(t, failure, "Approve() error=%v failure audit=%#v", err, failure)
+	require.Equal(t, "authentication.desktop_authorization.rejected", failure.errorCode, "Approve() error=%v failure audit=%#v", err, failure)
+	require.NotEmpty(t, failure.id, "Approve() error=%v failure audit=%#v", err, failure)
+	require.Equal(t, persistence.issued.AuditEventID, failure.id, "the failure completes the issue attempt")
+	persistence.issueErr = nil
+	persistence.exchangeErr = errors.New("database unavailable")
+	exchangeCommand := testDesktopAuthorizationExchangeCommand(
+		t, service, at, model.NewCredentialToken(), model.NewCredentialToken(), model.NewCredentialToken(), "",
+	)
+	_, err = service.ExchangeDesktopAuthorization(context.Background(), invocation.Invocation{}, exchangeCommand)
+	require.True(t, apperror.Is(err, "authentication.desktop_authorization.unavailable"), "Exchange() error=%v failure audit", err)
+	require.Equal(t, "authentication.desktop_authorization.unavailable", auditor.lastFailure().errorCode, "Exchange() error=%v failure audit", err)
+	require.Equal(t, persistence.exchanged.AuditEventID, auditor.lastFailure().id, "the failure completes the exchange attempt")
+}
+
+func TestDesktopAuthorizationCrossAccountApprovalIsAudited(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
+	auditor := &securityAuditorFake{}
+	persistence := &desktopAuthorizationStoreFake{}
+	service := newTestDesktopAuthorizationService(t, persistence, func() time.Time { return at })
+	service.securityAudit = auditor
+	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
+		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
+		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
+		ClientType: model.SessionClientWeb, AuthenticatedAt: at}
+	persistence.contextUserID = model.NewUserID()
+	_, err := service.ApproveDesktopAuthorization(context.Background(), invocation.New(principal, model.RequestMetadata{}),
+		ApproveDesktopAuthorizationCommand{Binding: model.NewCredentialToken(), State: model.NewCredentialToken()})
+	require.True(t, apperror.Is(err, "authentication.desktop_authorization.rejected"), "Approve() error = %v", err)
+	// The only issue event is the refusal itself: the approving browser
+	// Session's account acted on the handoff's account and failed.
+	issues := auditor.withOperation("issue_code")
+	require.Len(t, issues, 1, "a refused approval issues no code")
+	rejection := issues[0]
+	require.Equal(t, persistence.contextUserID, rejection.target, "the refused approval names the handoff's account")
+	require.Equal(t, principal.UserID, rejection.actor, "the refused approval names the approving account")
+	require.Equal(t, principal.SessionID, rejection.sessionID, "the refused approval names the approving Session")
+	require.Equal(t, model.ActionAuthenticationDesktopAuthorization, rejection.action)
+	require.Equal(t, model.RoleScopeInstitution, rejection.scopeType)
+	require.Equal(t, model.AuditStatusFail, rejection.status)
+	require.Equal(t, "authentication.desktop_authorization.rejected", rejection.errorCode)
+	require.Nil(t, persistence.issued, "a refused approval issues no code")
+}
+
+func TestDesktopAuthorizationMalformedStoreFactsFailClosed(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
+	for name, institution := range map[string]*model.Institution{
+		"nil Institution":              nil,
+		"invalid Institution identity": {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			service := newTestDesktopAuthorizationService(t, &desktopAuthorizationStoreFake{}, func() time.Time { return at })
+			service.institutions = desktopAuthorizationInstitutionStoreFake{institution: institution}
+			command := StartDesktopAuthorizationCommand{
+				CallbackURL: "http://127.0.0.1:49152/" + model.NewCredentialToken(), State: model.NewCredentialToken(),
+				CodeChallenge: model.NewCredentialToken(),
+			}
+			setTestDesktopAuthorizationBuild(t, &command)
+			_, err := service.StartDesktopAuthorization(context.Background(), invocation.Invocation{}, command)
+			require.True(t, apperror.Is(err, "authentication.desktop_authorization.unavailable"), "Start error = %v", err)
+		})
+	}
+	newService := func(persistence *desktopAuthorizationStoreFake, audit *securityAuditorFake) *Service {
+		service := newTestDesktopAuthorizationService(t, persistence, func() time.Time { return at })
+		service.securityAudit = audit
+		return service
+	}
+
+	t.Run("creation identity", func(t *testing.T) {
+		persistence := &desktopAuthorizationStoreFake{createResult: &store.DesktopAuthorizationCreated{
+			ID: model.NewBrowserAuthenticationTransactionID(), ExpiresAt: at.Add(time.Minute),
+		}}
+		service := newService(persistence, &securityAuditorFake{})
+		command := StartDesktopAuthorizationCommand{
+			CallbackURL: "http://127.0.0.1:49152/" + model.NewCredentialToken(), State: model.NewCredentialToken(),
+			CodeChallenge: model.NewCredentialToken(),
+		}
+		setTestDesktopAuthorizationBuild(t, &command)
+		_, err := service.StartDesktopAuthorization(context.Background(), invocation.Invocation{}, command)
+		require.True(t, apperror.Is(err, "authentication.desktop_authorization.unavailable"), "Start error = %v", err)
+	})
+
+	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
+		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
+		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
+		ClientType: model.SessionClientWeb, AuthenticatedAt: at}
+	t.Run("issued callback", func(t *testing.T) {
+		auditor := &securityAuditorFake{}
+		service := newService(&desktopAuthorizationStoreFake{issueResult: &store.DesktopAuthorizationCodeIssued{
+			CallbackURL: "https://not-loopback.example/", CodeExpiresAt: at.Add(time.Minute),
+		}, contextUserID: principal.UserID}, auditor)
+		_, err := service.ApproveDesktopAuthorization(context.Background(), invocation.New(principal, model.RequestMetadata{}),
+			ApproveDesktopAuthorizationCommand{Binding: model.NewCredentialToken(), State: model.NewCredentialToken()})
+		require.True(t, apperror.Is(err, "authentication.desktop_authorization.unavailable"), "Approve error/audit = %v", err)
+		require.Equal(t, "authentication.desktop_authorization.unavailable", auditor.lastFailure().errorCode, "Approve error/audit = %v", err)
+	})
+
+	t.Run("exchange expiries", func(t *testing.T) {
+		auditor := &securityAuditorFake{}
+		persistence := &desktopAuthorizationStoreFake{}
+		service := newService(persistence, auditor)
+		exchangeCommand := testDesktopAuthorizationExchangeCommand(
+			t, service, at, model.NewCredentialToken(), model.NewCredentialToken(),
+			"dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk", "",
+		)
+		session, registration := testDesktopAuthorizationExchangeResult(t, exchangeCommand, model.NewUserID(), at)
+		persistence.exchangeResult = &store.DesktopAuthorizationExchangeResult{
+			Session: session, Registration: registration,
+			AccessExpiresAt:  at.Add(testDesktopSessionPolicy().AccessTTL + time.Second),
+			RefreshExpiresAt: at.Add(time.Hour),
+		}
+		_, err := service.ExchangeDesktopAuthorization(context.Background(), invocation.Invocation{}, exchangeCommand)
+		require.True(t, apperror.Is(err, "authentication.desktop_authorization.unavailable"), "Exchange error/audit = %v", err)
+		require.Equal(t, "authentication.desktop_authorization.unavailable", auditor.lastFailure().errorCode, "Exchange error/audit = %v", err)
+	})
+}
+
+func TestDesktopAuthorizationPublicAttemptLimitsPrecedePersistenceAndAudit(t *testing.T) {
+	t.Parallel()
+
+	at := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
+	persistence := &desktopAuthorizationStoreFake{}
+	auditor := &securityAuditorFake{}
+	// Every attempt the cache counts is already over its limit.
+	cache := &desktopAttemptCacheFake{count: 1 << 20}
+	service := newTestDesktopAuthorizationService(t, persistence, func() time.Time { return at })
+	service.securityAudit = auditor
+	service.attempts = mustAuthenticationAttemptAccounting(t, cache)
+	state := model.NewCredentialToken()
+	command := StartDesktopAuthorizationCommand{
+		CallbackURL: "http://127.0.0.1:49152/" + model.NewCredentialToken(), State: state,
+		CodeChallenge: model.NewCredentialToken(), Source: "192.0.2.10:5000",
+	}
+	setTestDesktopAuthorizationBuild(t, &command)
+	_, err := service.StartDesktopAuthorization(context.Background(), invocation.Invocation{}, command)
+	require.True(t, apperror.Is(err, "authentication.rate_limited"), "Start() error=%v persisted=%#v audits=%d", err, persistence.created, len(auditor.events))
+	require.Nil(t, persistence.created, "Start() error=%v persisted=%#v audits=%d", err, persistence.created, len(auditor.events))
+	require.Empty(t, auditor.withOperation("exchange"), "Start() error=%v persisted=%#v audits=%d", err, persistence.created, len(auditor.events))
+	require.Empty(t, auditor.withOperation("issue_code"), "Start() error=%v persisted=%#v audits=%d", err, persistence.created, len(auditor.events))
+	// The start is counted under its own qualifier, for the hashed state and
+	// the request source.
+	require.Equal(t, desktopAuthorizationAttemptKeys(t, desktopAuthorizationAttemptStart, model.HashToken(state), "192.0.2.10:5000"), cache.keys)
+	cache.keys = nil
+
+	code := model.NewCredentialToken()
+	exchangeCommand := testDesktopAuthorizationExchangeCommand(
+		t, service, at, code, model.NewCredentialToken(), model.NewCredentialToken(), "192.0.2.10:5001",
+	)
+	_, err = service.ExchangeDesktopAuthorization(context.Background(), invocation.Invocation{}, exchangeCommand)
+	require.True(t, apperror.Is(err, "authentication.rate_limited"), "Exchange() error=%v persisted=%#v exchange audits", err, persistence.exchanged)
+	require.Nil(t, persistence.exchanged, "Exchange() error=%v persisted=%#v exchange audits", err, persistence.exchanged)
+	require.Empty(t, auditor.withOperation("exchange"), "Exchange() error=%v persisted=%#v exchange audits", err, persistence.exchanged)
+	require.Equal(t, desktopAuthorizationAttemptKeys(t, desktopAuthorizationAttemptExchange, model.HashToken(code), "192.0.2.10:5001"), cache.keys)
+}
+
+func TestDesktopAuthorizationAttemptAccountingSeparatesStartAndExchange(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
+	accounting, err := NewAttemptAccounting(AttemptAccountingDependencies{Cache: newExpiringAuthenticationAttemptCache(func() time.Time { return now })})
+	require.NoError(t, err)
+	limiter := &Service{attempts: accounting, loginRateLimit: LoginRateLimitPolicy{
+		Window: time.Minute, MaximumAttempts: 1, MaximumSourceAttempts: 2,
+	}}
+	identity := model.HashToken(model.NewCredentialToken())
+	err = limiter.checkDesktopAuthorizationAttempt(context.Background(), desktopAuthorizationAttemptStart, identity, "192.0.2.20:1")
+	require.NoError(t, err)
+	err = limiter.checkDesktopAuthorizationAttempt(context.Background(), desktopAuthorizationAttemptStart, identity, "192.0.2.20:1")
+	require.True(t, apperror.Is(err, "authentication.rate_limited"), "repeated start error = %v", err)
+	err = limiter.checkDesktopAuthorizationAttempt(context.Background(), desktopAuthorizationAttemptExchange, identity, "192.0.2.20:1")
+	require.NoError(t, err)
+}
+
+func testDesktopSessionPolicy() SessionPolicy {
+	return SessionPolicy{AccessTTL: 5 * time.Minute, RefreshTTL: time.Hour, IdleTTL: 30 * time.Minute,
+		AbsoluteTTL: 2 * time.Hour, MaximumPerUser: 10}
+}
+
+type desktopAuthorizationStoreFake struct {
+	store.BrowserAuthenticationStore
+	authenticated   *store.DesktopAuthorizationAuthentication
+	created         *store.DesktopAuthorizationCreation
+	createExpiresAt time.Time
+	createResult    *store.DesktopAuthorizationCreated
+	createNil       bool
+	issued          *store.DesktopAuthorizationCodeIssue
+	issueResult     *store.DesktopAuthorizationCodeIssued
+	exchanged       *store.DesktopAuthorizationExchange
+	exchangeResult  *store.DesktopAuthorizationExchangeResult
+	issueErr        error
+	exchangeErr     error
+	contextResult   *store.DesktopAuthorizationContext
+	contextErr      error
+	contextNil      bool
+	contextBinding  string
+	contextCalls    int
+	authorizationID model.BrowserAuthenticationTransactionID
+	contextUserID   model.UserID
+	exchangeUserID  model.UserID
+}
+
+func (s *desktopAuthorizationStoreFake) CreateDesktopAuthorization(
+	_ context.Context,
+	transaction *store.DesktopAuthorizationCreation,
+) (*store.DesktopAuthorizationCreated, error) {
+	cloned := *transaction
+	s.created = &cloned
+	if s.createNil {
+		return nil, nil
+	}
+	if s.createResult != nil {
+		return s.createResult, nil
+	}
+	expiresAt := s.createExpiresAt
+	if expiresAt.IsZero() {
+		expiresAt = time.Now().Add(cloned.Lifetime)
+	}
+	return &store.DesktopAuthorizationCreated{ID: cloned.ID, ExpiresAt: expiresAt}, nil
+}
+
+func (s *desktopAuthorizationStoreFake) BindDesktopAuthorization(context.Context, *store.DesktopAuthorizationBinding) (*store.DesktopAuthorizationBound, error) {
+	return &store.DesktopAuthorizationBound{ExpiresAt: time.Now().Add(time.Minute)}, nil
+}
+
+func (s *desktopAuthorizationStoreFake) GetDesktopAuthorizationContext(_ context.Context, binding string) (*store.DesktopAuthorizationContext, error) {
+	s.contextBinding = binding
+	s.contextCalls++
+	if s.contextErr != nil || s.contextNil {
+		return nil, s.contextErr
+	}
+	if s.contextResult != nil {
+		return s.contextResult, nil
+	}
+	userID := s.contextUserID
+	if !userID.IsValid() {
+		userID = model.NewUserID()
+	}
+	return &store.DesktopAuthorizationContext{ID: model.NewBrowserAuthenticationTransactionID(),
+		State: model.BrowserAuthenticationStateAuthenticated, UserID: userID, CreatedAt: time.Now().Add(-time.Minute), ExpiresAt: time.Now().Add(time.Minute)}, nil
+}
+
+func (s *desktopAuthorizationStoreFake) AuthenticateDesktopAuthorization(_ context.Context, input *store.DesktopAuthorizationAuthentication) (*store.DesktopAuthorizationAuthenticationResult, error) {
+	s.authenticated = input
+	return &store.DesktopAuthorizationAuthenticationResult{}, nil
+}
+
+func (s *desktopAuthorizationStoreFake) ResetDesktopAuthorizationAccount(context.Context, *store.DesktopAuthorizationAccountReset) error {
+	return nil
+}
+
+func (s *desktopAuthorizationStoreFake) IssueCode(_ context.Context, input *store.DesktopAuthorizationCodeIssue) (*store.DesktopAuthorizationCodeIssued, error) {
+	s.issued = input
+	return s.issueResult, s.issueErr
+}
+
+func (s *desktopAuthorizationStoreFake) Cancel(context.Context, *store.DesktopAuthorizationCancellation) error {
+	return nil
+}
+
+func (s *desktopAuthorizationStoreFake) ResolveDesktopAuthorizationExchange(context.Context,
+	*store.DesktopAuthorizationExchangeProof,
+) (*store.DesktopAuthorizationExchangeTarget, error) {
+	if s.authorizationID.IsZero() {
+		s.authorizationID = model.NewBrowserAuthenticationTransactionID()
+	}
+	if !s.exchangeUserID.IsValid() {
+		s.exchangeUserID = model.NewUserID()
+	}
+	return &store.DesktopAuthorizationExchangeTarget{ID: s.authorizationID, UserID: s.exchangeUserID}, nil
+}
+
+func (s *desktopAuthorizationStoreFake) Exchange(_ context.Context, input *store.DesktopAuthorizationExchange) (*store.DesktopAuthorizationExchangeResult, error) {
+	s.exchanged = input
+	return s.exchangeResult, s.exchangeErr
+}
+
+type desktopAuthorizationInstitutionStoreFake struct {
+	store.InstitutionStore
+	institution *model.Institution
+}
+
+func (s desktopAuthorizationInstitutionStoreFake) GetSingleton(context.Context) (*model.Institution, error) {
+	return s.institution, nil
+}
+
+// desktopAttemptCacheFake records every attempt counter key it is asked to
+// count and answers each with count.
+type desktopAttemptCacheFake struct {
+	keys  []string
+	count int64
+}
+
+func (c *desktopAttemptCacheFake) Add(_ context.Context, key string, _ int64, _ time.Duration) (int64, error) {
+	c.keys = append(c.keys, key)
+	return c.count, nil
+}
+
+func (c *desktopAttemptCacheFake) Delete(context.Context, string) error { return nil }
+
+// desktopAuthorizationAttemptKeys are the identity and source counter keys
+// one Desktop attempt of operation is counted under.
+func desktopAuthorizationAttemptKeys(t *testing.T, operation desktopAuthorizationAttemptOperation, identity, source string) []string {
+	t.Helper()
+	qualifier, valid := operation.qualifier()
+	require.True(t, valid)
+	intent := authenticationAttemptIntent{purpose: authenticationAttemptPurposeDesktopAuthorization, qualifier: qualifier}
+	purpose, valid := intent.purpose.keySegment()
+	require.True(t, valid)
+	keys := []string{}
+	for _, limit := range []AttemptLimit{
+		{dimension: authenticationAttemptDimensionIdentity, identity: identity},
+		{dimension: authenticationAttemptDimensionSource, source: source},
+	} {
+		dimension, _ := limit.dimension.keySegment()
+		keys = append(keys, "authentication/attempts/"+purpose+"/"+dimension+"/"+digestAuthenticationAttempt(intent, limit))
+	}
+	return keys
+}
+
+type desktopAuthorizationUserStoreStub struct{ store.UserStore }
+
+type desktopAuthorizationSessionStoreStub struct {
+	store.SessionStore
+	revokedID     string
+	revokedUserID string
+	reason        model.SessionRevocationReason
+}
+
+func (s *desktopAuthorizationSessionStoreStub) Withdraw(_ context.Context, input *store.SessionWithdrawal) ([]string, error) {
+	sessionID := input.ID
+	userID := input.UserID
+	reason := input.Reason
+	s.revokedID, s.revokedUserID, s.reason = sessionID.String(), userID.String(), reason
+	return []string{model.HashToken("revoked-access")}, nil
+}
+
+// newTestDesktopAuthorizationService is a Service with only the Desktop
+// authorization collaborators: transactions persist the handoff and now is
+// every clock, DPoP's included.
+func newTestDesktopAuthorizationService(t *testing.T, transactions store.BrowserAuthenticationStore, now func() time.Time) *Service {
+	t.Helper()
+	security, err := newDPoPSecurity(dpopSecurityDependencies{Cache: newDPoPCacheFake(), Policy: dpopPolicy{
+		Origin: "https://proctor.example.edu", NonceLifetime: 5 * time.Minute, ProofLifetime: 5 * time.Minute,
+		ClockSkew: time.Minute, NewNonce: model.NewCredentialToken, Now: now,
+	}})
+	require.NoError(t, err)
+	service := &Service{
+		users: desktopAuthorizationUserStoreStub{}, sessions: &desktopAuthorizationSessionStoreStub{},
+		publisher: &realtimetest.Publisher{}, securityAudit: &securityAuditorFake{}, dpop: security,
+		attempts:       mustAuthenticationAttemptAccounting(t, newAuthenticationCacheFake()),
+		loginRateLimit: LoginRateLimitPolicy{Window: time.Minute, MaximumAttempts: 20, MaximumSourceAttempts: 100},
+		sessionPolicy:  testDesktopSessionPolicy(), newCredential: model.NewCredentialToken, now: now,
+	}
+	setTestDesktopAuthorization(t, service, transactions)
+	return service
+}
+
+// setTestDesktopAuthorization gives service the Desktop authorization
+// collaborators: an Access Policy that admits every method, a ready
+// compatibility policy and a catalog holding the test Desktop build.
+func setTestDesktopAuthorization(t *testing.T, service *Service, transactions store.BrowserAuthenticationStore) {
+	t.Helper()
+	institutionID := model.NewInstitutionID()
+	catalog, err := newDesktopBuildCatalog([]model.DesktopBuildTuple{
+		testDesktopBuildTuple("0.1.0", "test-build", model.DesktopPlatformDarwin, model.DesktopArchitectureARM64, 1),
+	})
+	require.NoError(t, err)
+	service.browserAuthentications = transactions
+	service.institutions = desktopAuthorizationInstitutionStoreFake{institution: &model.Institution{ID: institutionID}}
+	service.desktopCompatibilityPolicies = &desktopCompatibilityPolicyStoreFake{
+		policy: model.NewInitialDesktopCompatibilityPolicy(institutionID, service.now()),
+	}
+	service.desktopBuilds = catalog
+	service.accessPolicy = authenticationAccessPolicyFake{local: true, desktop: true}
+	service.capabilities = &accessPolicyCapabilitiesFake{}
+	service.desktopPolicy = DesktopAuthorizationPolicy{Issuer: "https://proctor.example.edu"}
+	service.recentAuthenticationTTL = 15 * time.Minute
+	require.NoError(t, service.requireDesktopAuthorization())
+}
+
+func setTestDesktopAuthorizationBuild(t *testing.T, command *StartDesktopAuthorizationCommand) {
+	t.Helper()
+	_, command.PublicJWK = testDPoPKey(t)
+	command.DesktopRelease = "0.1.0"
+	command.DesktopBuildID = "test-build"
+	command.Platform = model.DesktopPlatformDarwin
+	command.Architecture = model.DesktopArchitectureARM64
+	command.RealtimeProtocol = 1
+}
+
+func testDesktopAuthorizationExchangeCommand(
+	t *testing.T,
+	service *Service,
+	at time.Time,
+	code string,
+	state string,
+	verifier string,
+	source string,
+) ExchangeDesktopAuthorizationCommand {
+	t.Helper()
+	privateKey, publicJWK := testDPoPKey(t)
+	thumbprint, err := publicJWK.Thumbprint()
+	require.NoError(t, err)
+	authorizationID, err := service.browserAuthentications.ResolveDesktopAuthorizationExchange(context.Background(),
+		&store.DesktopAuthorizationExchangeProof{CodeHash: model.HashToken(code)})
+	require.NoError(t, err)
+	binding := dpopBinding{
+		Kind: dpopBindingAuthorization, AuthorizationID: authorizationID.ID,
+		KeyThumbprint: thumbprint, Origin: service.dpop.deps.Policy.Origin,
+	}
+	nonce, err := service.dpop.IssueNonce(context.Background(), binding)
+	require.NoError(t, err)
+	proof := signDPoPProof(t, privateKey, publicJWK, map[string]any{
+		"jti": model.NewCredentialToken(), "htm": "POST",
+		"htu": service.dpop.deps.Policy.Origin + "/api/v1/auth/desktop/token",
+		"iat": at.Unix(), "nonce": nonce,
+	})
+	return ExchangeDesktopAuthorizationCommand{
+		Code: code, State: state, CodeVerifier: verifier, Source: source,
+		DPoPProof: proof, PublicJWK: publicJWK,
+		DesktopRelease: "0.1.0", DesktopBuildID: "test-build",
+		Platform: model.DesktopPlatformDarwin, Architecture: model.DesktopArchitectureARM64,
+		RealtimeProtocol: 1,
+	}
+}
+
+func testDesktopAuthorizationExchangeResult(
+	t *testing.T,
+	command ExchangeDesktopAuthorizationCommand,
+	userID model.UserID,
+	at time.Time,
+) (*model.Session, *model.DesktopRegistration) {
+	t.Helper()
+	thumbprint, err := command.PublicJWK.Thumbprint()
+	require.NoError(t, err)
+	registrationID := model.NewDesktopRegistrationID()
+	registration := &model.DesktopRegistration{
+		UserID: userID, InstitutionID: model.NewInstitutionID(), PublicJWK: command.PublicJWK,
+		KeyThumbprint: thumbprint, DisplayName: "Exam laptop",
+		DesktopRelease: command.DesktopRelease, DesktopBuildID: command.DesktopBuildID,
+		Platform: command.Platform, Architecture: command.Architecture,
+		RealtimeProtocol: command.RealtimeProtocol,
+	}
+	registration.PrepareCreate(registrationID, at)
+	session := &model.Session{
+		UserID: userID, ClientType: model.SessionClientDesktop,
+		DesktopRegistrationID: registrationID, DPoPKeyThumbprint: thumbprint,
+		DesktopRelease: command.DesktopRelease, DesktopBuildID: command.DesktopBuildID,
+		DesktopPlatform: command.Platform, DesktopArchitecture: command.Architecture,
+		DesktopRealtimeProtocol: command.RealtimeProtocol,
+		AuthenticationMethod:    "password", AuthenticationStrength: model.AuthenticationSingleFactor,
+		AuthenticatedAt: at, LastActivityAt: at,
+		IdleExpiresAt: at.Add(30 * time.Minute), ExpiresAt: at.Add(2 * time.Hour),
+	}
+	session.PrepareCreate(model.NewSessionID(), at)
+	return session, registration
+}
+
+type desktopAuthorizationContextUserStoreFake struct {
+	store.UserStore
+	user *model.User
+}
+
+func (s desktopAuthorizationContextUserStoreFake) Get(context.Context, model.UserID) (*model.User, error) {
+	return s.user, nil
+}
+
+func TestDesktopAuthorizationContextNamesTheAuthenticatedAccountAndRequestTime(t *testing.T) {
+	t.Parallel()
+	requestedAt := time.Date(2026, 8, 18, 11, 58, 0, 0, time.UTC)
+	user := &model.User{ID: model.NewUserID(), Username: "ada", DisplayName: "Ada Okafor", Email: "ada@example.edu"}
+	newService := func(current *store.DesktopAuthorizationContext) *Service {
+		service := newTestDesktopAuthorizationService(t, &desktopAuthorizationStoreFake{contextResult: current}, time.Now)
+		service.users = desktopAuthorizationContextUserStoreFake{user: user}
+		return service
+	}
+	authenticated := &store.DesktopAuthorizationContext{ID: model.NewBrowserAuthenticationTransactionID(), State: model.BrowserAuthenticationStateAuthenticated,
+		UserID: user.ID, DeviceName: "Lab Mac", CreatedAt: requestedAt, ExpiresAt: requestedAt.Add(5 * time.Minute)}
+	result, err := newService(authenticated).DesktopAuthorizationContext(context.Background(), invocation.Invocation{}, model.NewCredentialToken())
+	require.NoError(t, err)
+	require.Equal(t, requestedAt.UnixMilli(), result.RequestedAt)
+	require.NotNil(t, result.Account)
+	require.Equal(t, "ada@example.edu", result.Account.Email)
+	require.Equal(t, "Ada Okafor", result.Account.DisplayName)
+
+	bound := *authenticated
+	bound.State, bound.UserID = model.BrowserAuthenticationStateBound, ""
+	result, err = newService(&bound).DesktopAuthorizationContext(context.Background(), invocation.Invocation{}, model.NewCredentialToken())
+	require.NoError(t, err)
+	require.Nil(t, result.Account, "an unauthenticated request named an account")
+	require.Equal(t, requestedAt.UnixMilli(), result.RequestedAt)
+
+	missingRequest := *authenticated
+	missingRequest.CreatedAt = time.Time{}
+	_, err = newService(&missingRequest).DesktopAuthorizationContext(context.Background(), invocation.Invocation{}, model.NewCredentialToken())
+	require.True(t, apperror.Is(err, "authentication.desktop_authorization.unavailable"), "context error = %v", err)
+}

@@ -9,6 +9,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -46,6 +47,7 @@ func checkReadiness(url string, timeout time.Duration, serverName, caFile string
 	if timeout <= 0 {
 		return errors.New("readiness timeout must be positive")
 	}
+
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
 	transport.TLSClientConfig = &tls.Config{
@@ -57,8 +59,10 @@ func checkReadiness(url string, timeout time.Duration, serverName, caFile string
 		if err != nil {
 			return err
 		}
+
 		transport.TLSClientConfig.RootCAs = roots
 	}
+
 	client := &http.Client{
 		Timeout:   timeout,
 		Transport: transport,
@@ -66,14 +70,21 @@ func checkReadiness(url string, timeout time.Duration, serverName, caFile string
 			return http.ErrUseLastResponse
 		},
 	}
-	response, err := client.Get(url)
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("request readiness: %w", err)
 	}
+
+	response, err := client.Do(request)
+	if err != nil {
+		return fmt.Errorf("request readiness: %w", err)
+	}
+
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		return fmt.Errorf("readiness returned %s", response.Status)
 	}
+
 	return nil
 }
 

@@ -5,14 +5,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package cluster owns Proctor's inter-node transport contracts: wire messages,
-// handler registration, and the best-effort delivery API.
+// Package cluster defines how Proctor nodes send each other messages: the
+// Message envelope, the Transport interface with its handler registration, and
+// the DiscoveryStore through which nodes find each other. It contains no
+// network code and imports only the standard library. The two implementations
+// are cluster/local (one node, no peers) and cluster/memberlist (several nodes).
 //
-// Delivery is transient and non-durable. Handlers must be idempotent; security
-// and business correctness recover from PostgreSQL, cache TTLs, and client
-// resynchronization rather than assuming every peer receives every message.
-//
-// Concrete transports live in sibling packages such as cluster/local. This
-// package imports only the Go standard library so the contract stays free of
-// platform and adapter dependencies.
+// Delivery is best effort and nothing is stored: a message may be lost or
+// arrive twice. Handlers must therefore be idempotent, and anything that
+// matters is read again from PostgreSQL. GUARANTEES.md states exactly what a
+// caller may rely on. Start with transport.go.
 package cluster

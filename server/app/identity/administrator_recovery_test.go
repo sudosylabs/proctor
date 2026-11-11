@@ -1,0 +1,109 @@
+// ---------------------------------------------------------------------------------------------
+// Copyright (c) 2026 Sudosy Labs. All rights reserved.
+// Licensed under the GNU Affero General Public License, version 3 only.
+// See LICENSE in the server module root for license information.
+// SPDX-License-Identifier: AGPL-3.0-only
+// ---------------------------------------------------------------------------------------------
+
+package identity
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
+)
+
+func TestAdministratorRecoveryHashesPrivatePasswordBeforeNamedAggregate(t *testing.T) {
+	t.Parallel()
+	events := []string{}
+	persistence := &installationStoreFake{events: &events, recoveryResult: &store.AdministratorRecoveryResult{RecordID: model.NewAdministratorRecoveryRecordID(), PasswordRotated: true}}
+	hasher := &passwordHasherFake{events: &events, hash: "encoded-private-password"}
+	service := bootstrapTestService(&Service{installations: persistence, hasher: hasher, attempts: bootstrapAttemptAccounting(t, &bootstrapAttemptCacheFake{}), nodeID: "node-recovery", now: time.Now}, bootstrapRateLimitPolicy(10), bootstrapProtection())
+	institutionID, userID := model.NewInstitutionID(), model.NewUserID()
+
+	result, err := service.RecoverAdministratorAccess(context.Background(), invocation.Task("host-operator-test"), AdministratorRecoveryCommand{
+		InstitutionID: institutionID, UserID: userID, Password: "private-password",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result, "result/input")
+	require.True(t, result.PasswordRotated, "result/input")
+	require.NotNil(t, persistence.recoveryInput, "result/input")
+	require.Equal(t, institutionID, persistence.recoveryInput.InstitutionID)
+	require.Equal(t, userID, persistence.recoveryInput.UserID)
+	require.Equal(t, "encoded-private-password", persistence.recoveryInput.RotatePasswordHash)
+	require.False(t, persistence.recoveryInput.EnableLocalLogin)
+	require.Len(t, events, 2)
+	require.Equal(t, "hash-password", events[0])
+	require.Equal(t, "recover-administrator", events[1])
+}
+
+func TestAdministratorRecoveryPasswordWorkFailuresStopBeforeAggregate(t *testing.T) {
+	testPasswordHashFailures(t, "administrator_recovery.unavailable", func(t *testing.T, ctx context.Context, hasher passwordHashFunc) error {
+		events := []string{}
+		persistence := &installationStoreFake{events: &events}
+		service := bootstrapTestService(&Service{installations: persistence, hasher: accountTokenHasherFake{hashFunc: hasher}, attempts: bootstrapAttemptAccounting(t, &bootstrapAttemptCacheFake{}), nodeID: "node-recovery", now: time.Now}, bootstrapRateLimitPolicy(10), bootstrapProtection())
+		result, err := service.RecoverAdministratorAccess(ctx, invocation.Task("host-operator-test"), AdministratorRecoveryCommand{
+			InstitutionID: model.NewInstitutionID(), UserID: model.NewUserID(),
+			Password: "correct horse battery staple",
+		})
+		require.Nil(t, result, "failed password work reached offline administrator recovery")
+		require.Nil(t, persistence.recoveryInput, "failed password work reached offline administrator recovery")
+		require.Empty(t, events, "failed password work reached offline administrator recovery")
+		return err
+	})
+}
+
+func TestAdministratorRecoveryRejectsInvalidCommandBeforeHashing(t *testing.T) {
+	t.Parallel()
+	events := []string{}
+	service := bootstrapTestService(&Service{installations: &installationStoreFake{events: &events}, hasher: &passwordHasherFake{events: &events}, attempts: bootstrapAttemptAccounting(t, &bootstrapAttemptCacheFake{}), nodeID: "node-recovery", now: time.Now}, bootstrapRateLimitPolicy(10), bootstrapProtection())
+
+	for name, command := range map[string]AdministratorRecoveryCommand{
+		"missing action":      {InstitutionID: model.NewInstitutionID(), UserID: model.NewUserID()},
+		"invalid institution": {InstitutionID: "wrong", UserID: model.NewUserID(), EnableLocalLogin: true},
+		"invalid user":        {InstitutionID: model.NewInstitutionID(), UserID: "wrong", EnableLocalLogin: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := service.RecoverAdministratorAccess(context.Background(), invocation.Task("host-operator-test"), command)
+			require.Error(t, err, "RecoverAdministratorAccess() error = nil")
+		})
+	}
+	require.Empty(t, events)
+}
+
+func TestAdministratorRecoveryStartupReconciliationFailsClosed(t *testing.T) {
+	t.Parallel()
+	events := []string{}
+	persistenceErr := errors.New("database unavailable")
+	persistence := &installationStoreFake{events: &events, recoveryReconcileErr: persistenceErr}
+	service := bootstrapTestService(&Service{installations: persistence, hasher: &passwordHasherFake{events: &events}, attempts: bootstrapAttemptAccounting(t, &bootstrapAttemptCacheFake{}), nodeID: "node-recovery", now: time.Now}, bootstrapRateLimitPolicy(10), bootstrapProtection())
+
+	err := service.ReconcileAdministratorRecovery(context.Background(), invocation.Task("startup-reconciliation-test"))
+	require.ErrorIs(t, err, persistenceErr, "ReconcileAdministratorRecovery()")
+	require.NotNil(t, persistence.recoveryReconcileInput)
+	require.Equal(t, "node-recovery", persistence.recoveryReconcileInput.NodeID)
+}
+
+func TestHostOperatorUseCasesRequireTheirSystemIdentity(t *testing.T) {
+	t.Parallel()
+	events := []string{}
+	persistence := &installationStoreFake{events: &events}
+	service := bootstrapTestService(&Service{installations: persistence, hasher: &passwordHasherFake{events: &events}, attempts: bootstrapAttemptAccounting(t, &bootstrapAttemptCacheFake{}), nodeID: "node-recovery", now: time.Now}, bootstrapRateLimitPolicy(10), bootstrapProtection())
+	command := AdministratorRecoveryCommand{InstitutionID: model.NewInstitutionID(), UserID: model.NewUserID(), Password: "private-password"}
+
+	_, err := service.RecoverAdministratorAccess(context.Background(), invocation.System{}, command)
+	require.Equal(t, "administrator_recovery.invalid", apperror.CodeOf(err, ""), "recovery without its host-operator task")
+	_, err = service.ResetAdministratorMFA(context.Background(), invocation.System{}, command.InstitutionID, command.UserID)
+	require.Equal(t, "administrator_recovery.invalid", apperror.CodeOf(err, ""), "MFA reset without its host-operator task")
+	require.Error(t, service.ReconcileAdministratorRecovery(context.Background(), invocation.System{}), "recovery reconciliation without its startup task")
+	require.Error(t, service.ReconcileSystemAdministratorRole(context.Background(), invocation.System{}), "Role reconciliation without its startup task")
+	require.Empty(t, events, "a rejected actorless call reached the hasher or the Store")
+}

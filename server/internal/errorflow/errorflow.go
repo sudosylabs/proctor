@@ -22,7 +22,7 @@
 //     Concealment.Present whose result is returned. A Definite code that is
 //     not declared would reach the client as an internal error.
 //
-// The apperror API is modelled rather than analyzed: Concealment.Conceal and
+// The apperror API is modeled rather than analyzed: Concealment.Conceal and
 // Present (also when deferred), StoreTable.Translate, and the *Error
 // decorators. A Code parameter passed to New is substituted with the
 // constant each caller passes.
@@ -124,8 +124,14 @@ type tableCodes map[string][]string
 func Analyze(loaded []*packages.Package, config Config) (*Analysis, error) {
 	program, _ := ssautil.AllPackages(loaded, ssa.InstantiateGenerics)
 	program.Build()
-	analysis := &Analysis{program: program, config: config, possible: map[*ssa.Function]codeSet{},
-		definite: map[*ssa.Function]codeSet{}, byName: map[string]*ssa.Function{}, tables: map[*types.Var]tableCodes{}}
+	analysis := &Analysis{
+		program:  program,
+		config:   config,
+		possible: map[*ssa.Function]codeSet{},
+		definite: map[*ssa.Function]codeSet{},
+		byName:   map[string]*ssa.Function{},
+		tables:   map[*types.Var]tableCodes{},
+	}
 	packages.Visit(loaded, nil, func(pkg *packages.Package) {
 		if analysis.inModule(pkg.PkgPath) {
 			analysis.collectTables(pkg)
@@ -139,13 +145,16 @@ func Analyze(loaded []*packages.Package, config Config) (*Analysis, error) {
 			functions[function] = true
 			analysis.byName[function.String()] = function
 		}
+
 		if functions[function] || function.Synthetic != "" {
 			propagated[function] = true
 		}
 	}
+
 	if len(functions) == 0 {
 		return nil, fmt.Errorf("errorflow: no function of %s was loaded", config.Module)
 	}
+
 	graph := vta.CallGraph(propagated, cha.CallGraph(program))
 	graph.DeleteSyntheticNodes()
 	analysis.computePossible(functions, graph)
@@ -153,6 +162,7 @@ func Analyze(loaded []*packages.Package, config Config) (*Analysis, error) {
 	for function := range functions {
 		analysis.possible[function].union(analysis.definite[function])
 	}
+
 	return analysis, nil
 }
 
@@ -250,6 +260,7 @@ func (a *Analysis) resolveTableBases() {
 			byName[variable.Pkg().Path()+"."+variable.Name()] = variable
 		}
 	}
+
 	// Expand references to other tables into plain codes, transitively.
 	for changed := true; changed; {
 		changed = false
@@ -261,6 +272,7 @@ func (a *Analysis) resolveTableBases() {
 						expanded = append(expanded, value)
 						continue
 					}
+
 					changed = true
 					for referencedField, referencedValues := range a.tables[byName[strings.TrimPrefix(value, referenceMarker)]] {
 						if referencedField != withBaseField {
@@ -268,10 +280,12 @@ func (a *Analysis) resolveTableBases() {
 						}
 					}
 				}
+
 				codes[field] = expanded
 			}
 		}
 	}
+
 	for range len(a.tables) {
 		changed := false
 		for _, codes := range a.tables {
@@ -279,16 +293,20 @@ func (a *Analysis) resolveTableBases() {
 			if len(bases) == 0 {
 				continue
 			}
+
 			base := a.tables[byName[bases[0]]]
 			if len(base[withBaseField]) > 0 {
 				continue
 			}
+
 			delete(codes, withBaseField)
 			for field, values := range base {
 				codes[field] = append(codes[field], values...)
 			}
+
 			changed = true
 		}
+
 		if !changed {
 			return
 		}
@@ -343,11 +361,13 @@ func (a *Analysis) initializerCodes(info *types.Info, expression ast.Expr) table
 			}
 		}
 	}
+
 	literal, _ := ast.Unparen(expression).(*ast.CompositeLit)
 	if literal == nil {
 		codes[""] = append(codes[""], a.expressionCodes(info, expression)...)
 		return codes
 	}
+
 	for _, element := range literal.Elts {
 		field := ""
 		valueExpression := element
@@ -355,10 +375,13 @@ func (a *Analysis) initializerCodes(info *types.Info, expression ast.Expr) table
 			if key, ok := keyed.Key.(*ast.Ident); ok {
 				field = key.Name
 			}
+
 			valueExpression = keyed.Value
 		}
+
 		codes[field] = append(codes[field], a.expressionCodes(info, valueExpression)...)
 	}
+
 	return codes
 }
 
@@ -475,6 +498,7 @@ func (a *Analysis) computePossible(functions map[*ssa.Function]bool, graph *call
 		local[function] = a.localPossible(function)
 		a.possible[function] = codeSet{}
 	}
+
 	for changed := true; changed; {
 		changed = false
 		for function := range functions {
@@ -487,6 +511,7 @@ func (a *Analysis) computePossible(functions map[*ssa.Function]bool, graph *call
 					}
 				}
 			}
+
 			// A function value handed to code outside the analysis (a
 			// sync.Once, an errgroup, a sort callback) may still run.
 			for _, referenced := range referencedFunctions(function) {
@@ -494,6 +519,7 @@ func (a *Analysis) computePossible(functions map[*ssa.Function]bool, graph *call
 					next.union(a.possible[referenced])
 				}
 			}
+
 			a.applyDeferredPresentation(function, next)
 			if !next.equal(a.possible[function]) {
 				a.possible[function] = next
@@ -524,6 +550,7 @@ func (a *Analysis) localPossible(function *ssa.Function) codeSet {
 			if binary, ok := instruction.(*ssa.BinOp); ok && (binary.Op == token.EQL || binary.Op == token.NEQ) {
 				continue
 			}
+
 			if call, ok := instruction.(ssa.CallInstruction); ok {
 				switch a.apperrorCallee(call.Common()) {
 				case "Is":
@@ -538,6 +565,7 @@ func (a *Analysis) localPossible(function *ssa.Function) codeSet {
 					codes.add("administration.unavailable")
 				}
 			}
+
 			for _, operand := range instruction.Operands(nil) {
 				switch value := (*operand).(type) {
 				case *ssa.Const:
@@ -550,6 +578,7 @@ func (a *Analysis) localPossible(function *ssa.Function) codeSet {
 							if field == withBaseField {
 								continue
 							}
+
 							for _, code := range fieldCodes {
 								codes.add(code)
 							}
@@ -559,6 +588,7 @@ func (a *Analysis) localPossible(function *ssa.Function) codeSet {
 			}
 		}
 	}
+
 	return codes
 }
 
@@ -593,11 +623,13 @@ func (a *Analysis) summarize(function *ssa.Function, functions map[*ssa.Function
 			if len(codes) == 0 || value == nil {
 				return
 			}
+
 			current := carried[value]
 			if current == nil {
 				current = codeSet{}
 				carried[value] = current
 			}
+
 			if current.union(codes) {
 				changed = true
 			}
@@ -631,6 +663,7 @@ func (a *Analysis) summarize(function *ssa.Function, functions map[*ssa.Function
 			}
 		}
 	}
+
 	result := codeSet{}
 	for _, block := range function.Blocks {
 		if ret, ok := block.Instrs[len(block.Instrs)-1].(*ssa.Return); ok {
@@ -639,13 +672,19 @@ func (a *Analysis) summarize(function *ssa.Function, functions map[*ssa.Function
 			}
 		}
 	}
+
 	a.applyDeferredPresentation(function, result)
 	return result
 }
 
 // callCodes returns the codes a call's result carries.
-func (a *Analysis) callCodes(function *ssa.Function, common *ssa.CallCommon, site ssa.CallInstruction,
-	get func(ssa.Value) codeSet, functions map[*ssa.Function]bool, graph *callgraph.Graph,
+func (a *Analysis) callCodes(
+	function *ssa.Function,
+	common *ssa.CallCommon,
+	site ssa.CallInstruction,
+	get func(ssa.Value) codeSet,
+	functions map[*ssa.Function]bool,
+	graph *callgraph.Graph,
 ) codeSet {
 	switch a.apperrorCallee(common) {
 	case "New", "Invalid":
@@ -658,6 +697,7 @@ func (a *Analysis) callCodes(function *ssa.Function, common *ssa.CallCommon, sit
 		for _, code := range a.receiverField(common.Args[0], "Unavailable") {
 			codes.add(code)
 		}
+
 		return codes
 	case "Concealment.Present", "Concealment.Conceal":
 		codes := codeSet{}
@@ -671,15 +711,18 @@ func (a *Analysis) callCodes(function *ssa.Function, common *ssa.CallCommon, sit
 		// application error.
 		return nil
 	}
+
 	codes := codeSet{}
 	node := graph.Nodes[function]
 	if node == nil {
 		return codes
 	}
+
 	for _, edge := range node.Out {
 		if edge.Site != site || !functions[edge.Callee.Func] {
 			continue
 		}
+
 		for code := range a.definite[edge.Callee.Func] {
 			if strings.HasPrefix(code, paramMarker) {
 				index, _ := strconv.Atoi(strings.TrimPrefix(code, paramMarker))
@@ -691,11 +734,14 @@ func (a *Analysis) callCodes(function *ssa.Function, common *ssa.CallCommon, sit
 				if index >= 0 && index < len(common.Args) {
 					codes.union(a.argumentCodes(function, common.Args[index]))
 				}
+
 				continue
 			}
+
 			codes.add(code)
 		}
 	}
+
 	return codes
 }
 
@@ -773,20 +819,24 @@ func (a *Analysis) applyDeferredPresentation(function *ssa.Function, codes codeS
 			if !ok {
 				continue
 			}
+
 			closure, ok := deferred.Call.Value.(*ssa.MakeClosure)
 			if !ok {
 				continue
 			}
+
 			body, ok := closure.Fn.(*ssa.Function)
 			if !ok {
 				continue
 			}
+
 			for _, innerBlock := range body.Blocks {
 				for _, inner := range innerBlock.Instrs {
 					call, ok := inner.(*ssa.Call)
 					if !ok {
 						continue
 					}
+
 					switch a.apperrorCallee(call.Common()) {
 					case "Concealment.Present":
 						a.present(codes, call.Common().Args[0], false)
@@ -826,14 +876,17 @@ func CheckRoutes(analysis *Analysis, routes []Route, exceptions map[string]strin
 		for _, code := range route.Declared {
 			declared.add(code)
 		}
+
 		implied := codeSet{}
 		for _, code := range route.Implied {
 			implied.add(code)
 		}
+
 		infeasible := codeSet{}
 		for _, code := range route.Infeasible {
 			infeasible.add(code)
 		}
+
 		for _, code := range declared.sorted() {
 			if _, ok := implied[code]; ok {
 				continue
@@ -841,13 +894,16 @@ func CheckRoutes(analysis *Analysis, routes []Route, exceptions map[string]strin
 			if _, ok := possible[code]; ok {
 				continue
 			}
+
 			key := route.Key + " " + code
 			if _, ok := exceptions[key]; ok {
 				used[key] = true
 				continue
 			}
+
 			problems = append(problems, fmt.Sprintf("%s declares %q, which nothing reachable can return", route.Key, code))
 		}
+
 		for _, code := range definite.sorted() {
 			// A server fault is a 500 whether or not the route names its
 			// specific *.internal code.
@@ -863,19 +919,23 @@ func CheckRoutes(analysis *Analysis, routes []Route, exceptions map[string]strin
 			if _, ok := infeasible[code]; ok {
 				continue
 			}
+
 			key := route.Key + " " + code
 			if _, ok := exceptions[key]; ok {
 				used[key] = true
 				continue
 			}
+
 			problems = append(problems, fmt.Sprintf("%s can return %q but does not declare it", route.Key, code))
 		}
 	}
+
 	for key := range exceptions {
 		if !used[key] {
 			problems = append(problems, fmt.Sprintf("exception %q no longer suppresses anything; remove it", key))
 		}
 	}
+
 	sort.Strings(problems)
 	return problems
 }

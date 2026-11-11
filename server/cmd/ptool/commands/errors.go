@@ -30,8 +30,8 @@ func newErrorsCommand() *cobra.Command {
 		Use:   "errors",
 		Short: "Generate and verify the public error code catalog",
 	}
-	command.PersistentFlags().StringVar(&options.catalog, "catalog", "httpapi/error_catalog.yaml", "human-authored error code catalog")
-	command.PersistentFlags().StringVar(&options.mapping, "mapping", "httpapi/error_mapping.go", "generated HTTP status mapping")
+	command.PersistentFlags().StringVar(&options.catalog, "catalog", "httpapi/route/error_catalog.yaml", "human-authored error code catalog")
+	command.PersistentFlags().StringVar(&options.mapping, "mapping", "httpapi/route/error_mapping.go", "generated HTTP status mapping")
 	command.PersistentFlags().StringVar(&options.module, "module", ".", "server module directory scanned for minted codes")
 	command.AddCommand(newErrorsGenerateCommand(options), newErrorsCheckCommand(options))
 	return command
@@ -66,6 +66,7 @@ func newErrorsCheckCommand(options *errorCatalogOptions) *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			current, err := os.ReadFile(filepath.Clean(options.mapping))
 			if err != nil {
 				return fmt.Errorf("read generated error mapping %s: %w", options.mapping, err)
@@ -73,6 +74,7 @@ func newErrorsCheckCommand(options *errorCatalogOptions) *cobra.Command {
 			if !bytes.Equal(current, catalog.RenderHTTPMapping()) {
 				return fmt.Errorf("generated error mapping %s is stale; run `go run ./cmd/ptool errors generate`", options.mapping)
 			}
+
 			mints, err := scanMintedErrorCodes(command.Context(), options.module)
 			if err != nil {
 				return err
@@ -83,6 +85,7 @@ func newErrorsCheckCommand(options *errorCatalogOptions) *cobra.Command {
 			if err = verifyStoreTableConstraints(options.module); err != nil {
 				return err
 			}
+
 			_, err = fmt.Fprintf(command.OutOrStdout(), "verified %d catalog codes against %d minted constants\n", len(catalog.Entries), len(mints))
 			return err
 		},

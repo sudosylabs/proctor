@@ -38,11 +38,13 @@ func (d *delegate) NotifyMsg(message []byte) {
 		d.observeMessage("unknown", "invalid_size", len(message))
 		return
 	}
+
 	var envelope wireEnvelope
 	if err := json.Unmarshal(message, &envelope); err != nil {
 		d.observeMessage("unknown", "invalid_envelope", len(message))
 		return
 	}
+
 	if envelope.Version != wireProtocolVersion ||
 		envelope.Message == nil ||
 		envelope.Source == "" ||
@@ -50,14 +52,17 @@ func (d *delegate) NotifyMsg(message []byte) {
 		d.observeMessage("unknown", "rejected", len(message))
 		return
 	}
+
 	if envelope.Target != "" && envelope.Target != d.transport.cfg.NodeID {
 		d.observeMessage("unknown", "wrong_target", len(message))
 		return
 	}
+
 	if err := envelope.Message.Validate(); err != nil {
 		d.observeMessage("unknown", "invalid_message", len(message))
 		return
 	}
+
 	// Best-effort dispatch: handler failures are logged and not retried by the
 	// transport.
 	err := d.transport.dispatchLocal(context.Background(), envelope.Message.Clone())
@@ -65,6 +70,7 @@ func (d *delegate) NotifyMsg(message []byte) {
 	if err != nil {
 		result = "error"
 	}
+
 	d.observeMessage(d.transport.metricEvent(envelope.Message.Event), result, len(message))
 }
 

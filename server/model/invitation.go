@@ -174,20 +174,28 @@ type ScopedRoleInvitationInput struct {
 func NewStudentClassInvitation(input StudentClassInvitationInput) (*Invitation, error) {
 	issuedAt := TimeUTC(input.IssuedAt)
 	invitation := &Invitation{
-		ID: input.ID, CreatedAt: issuedAt, UpdatedAt: issuedAt, Revision: 1,
-		Purpose: InvitationPurposeStudentClass, State: InvitationPending,
-		TargetEmail: normalizeInvitationEmail(input.TargetEmail),
-		ClassID:     input.ClassID, AcademicPeriodID: input.AcademicPeriodID,
+		ID:               input.ID,
+		CreatedAt:        issuedAt,
+		UpdatedAt:        issuedAt,
+		Revision:         1,
+		Purpose:          InvitationPurposeStudentClass,
+		State:            InvitationPending,
+		TargetEmail:      normalizeInvitationEmail(input.TargetEmail),
+		ClassID:          input.ClassID,
+		AcademicPeriodID: input.AcademicPeriodID,
 		IntendedStartsAt: TimeUTC(input.IntendedStartsAt),
 		IntendedEndsAt:   normalizeOptionalInvitationTime(input.IntendedEndsAt),
 		Suggestions:      normalizeInvitationSuggestions(input.Suggestions),
-		InviterUserID:    input.InviterUserID, ScopeType: input.ScopeType,
-		ScopeID: input.ScopeID, ClaimHash: input.ClaimHash,
-		ExpiresAt: issuedAt.Add(invitationLifetimeOrDefault(input.Lifetime)),
+		InviterUserID:    input.InviterUserID,
+		ScopeType:        input.ScopeType,
+		ScopeID:          input.ScopeID,
+		ClaimHash:        input.ClaimHash,
+		ExpiresAt:        issuedAt.Add(invitationLifetimeOrDefault(input.Lifetime)),
 	}
 	if err := invitation.Validate(); err != nil {
 		return nil, err
 	}
+
 	return invitation, nil
 }
 
@@ -197,20 +205,29 @@ func NewStudentClassInvitation(input StudentClassInvitationInput) (*Invitation, 
 func NewTeacherAcademicUnitInvitation(input TeacherAcademicUnitInvitationInput) (*Invitation, error) {
 	issuedAt := TimeUTC(input.IssuedAt)
 	invitation := &Invitation{
-		ID: input.ID, CreatedAt: issuedAt, UpdatedAt: issuedAt, Revision: 1,
-		Purpose: InvitationPurposeTeacherAcademicUnit, State: InvitationPending,
-		TargetEmail: normalizeInvitationEmail(input.TargetEmail), AcademicUnitID: input.AcademicUnitID,
-		RoleID: input.RoleID, RoleActions: canonicalInvitationRoleActions(input.RoleActions),
+		ID:               input.ID,
+		CreatedAt:        issuedAt,
+		UpdatedAt:        issuedAt,
+		Revision:         1,
+		Purpose:          InvitationPurposeTeacherAcademicUnit,
+		State:            InvitationPending,
+		TargetEmail:      normalizeInvitationEmail(input.TargetEmail),
+		AcademicUnitID:   input.AcademicUnitID,
+		RoleID:           input.RoleID,
+		RoleActions:      canonicalInvitationRoleActions(input.RoleActions),
 		IntendedStartsAt: TimeUTC(input.IntendedStartsAt),
 		IntendedEndsAt:   normalizeOptionalInvitationTime(input.IntendedEndsAt),
 		Suggestions:      normalizeInvitationSuggestions(input.Suggestions),
-		InviterUserID:    input.InviterUserID, ScopeType: input.ScopeType,
-		ScopeID: input.ScopeID, ClaimHash: input.ClaimHash,
-		ExpiresAt: issuedAt.Add(invitationLifetimeOrDefault(input.Lifetime)),
+		InviterUserID:    input.InviterUserID,
+		ScopeType:        input.ScopeType,
+		ScopeID:          input.ScopeID,
+		ClaimHash:        input.ClaimHash,
+		ExpiresAt:        issuedAt.Add(invitationLifetimeOrDefault(input.Lifetime)),
 	}
 	if err := invitation.Validate(); err != nil {
 		return nil, err
 	}
+
 	return invitation, nil
 }
 
@@ -220,18 +237,28 @@ func NewTeacherAcademicUnitInvitation(input TeacherAcademicUnitInvitationInput) 
 func NewScopedRoleInvitation(input ScopedRoleInvitationInput) (*Invitation, error) {
 	issuedAt := TimeUTC(input.IssuedAt)
 	invitation := &Invitation{
-		ID: input.ID, CreatedAt: issuedAt, UpdatedAt: issuedAt, Revision: 1,
-		Purpose: input.Purpose, State: InvitationPending,
-		TargetEmail: normalizeInvitationEmail(input.TargetEmail), AcademicUnitID: input.AcademicUnitID,
-		RoleID: input.RoleID, RoleActions: canonicalInvitationRoleActions(input.RoleActions),
+		ID:               input.ID,
+		CreatedAt:        issuedAt,
+		UpdatedAt:        issuedAt,
+		Revision:         1,
+		Purpose:          input.Purpose,
+		State:            InvitationPending,
+		TargetEmail:      normalizeInvitationEmail(input.TargetEmail),
+		AcademicUnitID:   input.AcademicUnitID,
+		RoleID:           input.RoleID,
+		RoleActions:      canonicalInvitationRoleActions(input.RoleActions),
 		IntendedStartsAt: TimeUTC(input.IntendedStartsAt),
 		IntendedEndsAt:   normalizeOptionalInvitationTime(input.IntendedEndsAt),
-		InviterUserID:    input.InviterUserID, ScopeType: input.ScopeType, ScopeID: input.ScopeID,
-		ClaimHash: input.ClaimHash, ExpiresAt: issuedAt.Add(invitationLifetimeOrDefault(input.Lifetime)),
+		InviterUserID:    input.InviterUserID,
+		ScopeType:        input.ScopeType,
+		ScopeID:          input.ScopeID,
+		ClaimHash:        input.ClaimHash,
+		ExpiresAt:        issuedAt.Add(invitationLifetimeOrDefault(input.Lifetime)),
 	}
 	if err := invitation.Validate(); err != nil {
 		return nil, err
 	}
+
 	return invitation, nil
 }
 
@@ -251,6 +278,7 @@ func (i *Invitation) Validate() error {
 	if !i.ID.IsValid() {
 		return invalidModelError(where, "invitation", "id", "must be a valid identifier", "")
 	}
+
 	details := "id=" + i.ID.String()
 	if i.CreatedAt.IsZero() || i.UpdatedAt.IsZero() || i.UpdatedAt.Before(i.CreatedAt) {
 		return invalidModelError(where, "invitation", "timestamps", "must be ordered and set", details)
@@ -285,6 +313,7 @@ func (i *Invitation) Validate() error {
 	if err := i.validatePackage(details); err != nil {
 		return err
 	}
+
 	return i.validateAcceptance(details)
 }
 
@@ -298,52 +327,66 @@ func (i *Invitation) validatePackage(details string) error {
 		if i.ScopeType != RoleScopeClass || i.ScopeID != i.ClassID.String() {
 			return invalidModelError(where, "invitation", "scope", "must identify the exact invited Class", details)
 		}
+
 		if i.IntendedStartsAt.IsZero() ||
 			(i.IntendedEndsAt.Valid && !i.IntendedEndsAt.Time.After(i.IntendedStartsAt)) {
 			return invalidModelError(where, "invitation", "effective_bounds", "must form a valid half-open interval", details)
 		}
+
 		if i.AcademicUnitID.IsValid() || i.RoleID.IsValid() || len(i.RoleActions) != 0 {
 			return invalidModelError(where, "invitation", "student_class", "must not contain a teacher package", details)
 		}
 	}
+
 	if i.Purpose == InvitationPurposeTeacherAcademicUnit {
-		if !i.AcademicUnitID.IsValid() || !i.RoleID.IsValid() ||
-			i.ScopeType != RoleScopeAcademicUnit || i.ScopeID != i.AcademicUnitID.String() {
+		if !i.AcademicUnitID.IsValid() ||
+			!i.RoleID.IsValid() ||
+			i.ScopeType != RoleScopeAcademicUnit ||
+			i.ScopeID != i.AcademicUnitID.String() {
 			return invalidModelError(where, "invitation", "teacher_academic_unit", "must identify the exact Academic Unit and Role", details)
 		}
+
 		if len(i.RoleActions) == 0 || !slices.IsSorted(i.RoleActions) {
 			return invalidModelError(where, "invitation", "role_actions", "must be a nonempty canonical action snapshot", details)
 		}
+
 		for index, action := range i.RoleActions {
 			if !IsGrantableAction(action) || (index > 0 && i.RoleActions[index-1] == action) {
 				return invalidModelError(where, "invitation", "role_actions", "must contain unique grantable actions", details)
 			}
 		}
+
 		if i.IntendedStartsAt.IsZero() ||
 			(i.IntendedEndsAt.Valid && !i.IntendedEndsAt.Time.After(i.IntendedStartsAt)) {
 			return invalidModelError(where, "invitation", "effective_bounds", "must form a valid half-open interval", details)
 		}
+
 		if i.ClassID.IsValid() || i.AcademicPeriodID.IsValid() {
 			return invalidModelError(where, "invitation", "teacher_academic_unit", "must not contain a student package", details)
 		}
 	}
+
 	if i.Purpose == InvitationPurposeAcademicUnitRole || i.Purpose == InvitationPurposeInstitutionRole {
 		if !i.RoleID.IsValid() || len(i.RoleActions) == 0 || !slices.IsSorted(i.RoleActions) {
 			return invalidModelError(where, "invitation", "scoped_role", "must identify a Role with a nonempty canonical action snapshot", details)
 		}
+
 		for index, action := range i.RoleActions {
 			if !IsGrantableAction(action) || (index > 0 && i.RoleActions[index-1] == action) {
 				return invalidModelError(where, "invitation", "role_actions", "must contain unique grantable actions", details)
 			}
 		}
+
 		if i.IntendedStartsAt.IsZero() ||
 			(i.IntendedEndsAt.Valid && !i.IntendedEndsAt.Time.After(i.IntendedStartsAt)) {
 			return invalidModelError(where, "invitation", "effective_bounds", "must form a valid half-open interval", details)
 		}
+
 		if i.ClassID.IsValid() || i.AcademicPeriodID.IsValid() || !invitationScopedRoleTargetIsValid(i) {
 			return invalidModelError(where, "invitation", "scoped_role", "must identify its exact authorization scope", details)
 		}
 	}
+
 	return nil
 }
 
@@ -351,42 +394,67 @@ func (i *Invitation) validatePackage(details string) error {
 func (i *Invitation) validateAcceptance(details string) error {
 	const where = "Invitation.Validate"
 	if i.State == InvitationAccepted {
-		if !i.AcceptedAt.Valid || !i.AcceptedUserID.IsValid() ||
-			i.AcceptedAt.Time.Before(i.CreatedAt) || !i.AcceptedAt.Time.Before(i.ExpiresAt) {
+		if !i.AcceptedAt.Valid ||
+			!i.AcceptedUserID.IsValid() ||
+			i.AcceptedAt.Time.Before(i.CreatedAt) ||
+			!i.AcceptedAt.Time.Before(i.ExpiresAt) {
 			return invalidModelError(where, "invitation", "acceptance", "must identify a User within the invitation lifetime", details)
 		}
+
 		switch i.Purpose {
 		case InvitationPurposeStudentClass:
-			if !i.AcceptedAffiliationID.IsValid() || !i.AcceptedClassMemberID.IsValid() || i.AcceptedAcademicUnitMemberID.IsValid() || i.AcceptedRoleBindingID.IsValid() {
+			if !i.AcceptedAffiliationID.IsValid() ||
+				!i.AcceptedClassMemberID.IsValid() ||
+				i.AcceptedAcademicUnitMemberID.IsValid() ||
+				i.AcceptedRoleBindingID.IsValid() {
 				return invalidModelError(where, "invitation", "acceptance", "must identify the accepted Class package", details)
 			}
 		case InvitationPurposeTeacherAcademicUnit:
-			if !i.AcceptedAffiliationID.IsValid() || i.AcceptedClassMemberID.IsValid() || !i.AcceptedAcademicUnitMemberID.IsValid() || !i.AcceptedRoleBindingID.IsValid() {
+			if !i.AcceptedAffiliationID.IsValid() ||
+				i.AcceptedClassMemberID.IsValid() ||
+				!i.AcceptedAcademicUnitMemberID.IsValid() ||
+				!i.AcceptedRoleBindingID.IsValid() {
 				return invalidModelError(where, "invitation", "acceptance", "must identify the accepted Academic Unit package", details)
 			}
 		case InvitationPurposeAcademicUnitRole, InvitationPurposeInstitutionRole:
-			if i.AcceptedAffiliationID.IsValid() || i.AcceptedClassMemberID.IsValid() || i.AcceptedAcademicUnitMemberID.IsValid() || !i.AcceptedRoleBindingID.IsValid() {
+			if i.AcceptedAffiliationID.IsValid() ||
+				i.AcceptedClassMemberID.IsValid() ||
+				i.AcceptedAcademicUnitMemberID.IsValid() ||
+				!i.AcceptedRoleBindingID.IsValid() {
 				return invalidModelError(where, "invitation", "acceptance", "must identify only the accepted Role Binding", details)
 			}
 		}
-	} else if i.AcceptedAt.Valid || !i.AcceptedUserID.IsZero() || !i.AcceptedAffiliationID.IsZero() ||
-		!i.AcceptedClassMemberID.IsZero() || !i.AcceptedAcademicUnitMemberID.IsZero() || !i.AcceptedRoleBindingID.IsZero() {
+	} else if i.AcceptedAt.Valid ||
+		!i.AcceptedUserID.IsZero() ||
+		!i.AcceptedAffiliationID.IsZero() ||
+		!i.AcceptedClassMemberID.IsZero() ||
+		!i.AcceptedAcademicUnitMemberID.IsZero() ||
+		!i.AcceptedRoleBindingID.IsZero() {
 		return invalidModelError(where, "invitation", "acceptance", "must be empty outside accepted state", details)
 	}
+
 	return nil
 }
 
 // Accept applies the sole successful claim transition. Store transactions
 // remain responsible for authoritative policy and relationship rechecks.
 func (i *Invitation) Accept(userID UserID, affiliationID AffiliationID, classMemberID ClassMemberID, at time.Time) error {
-	if i == nil || i.Purpose != InvitationPurposeStudentClass || i.State != InvitationPending || !userID.IsValid() || !affiliationID.IsValid() || !classMemberID.IsValid() {
+	if i == nil ||
+		i.Purpose != InvitationPurposeStudentClass ||
+		i.State != InvitationPending ||
+		!userID.IsValid() ||
+		!affiliationID.IsValid() ||
+		!classMemberID.IsValid() {
 		return invalidModelError("Invitation.Accept", "invitation", "", "invitation cannot be accepted", "")
 	}
+
 	at = TimeUTC(at)
-	if at.Before(i.CreatedAt) || !at.Before(i.ExpiresAt) ||
+	if at.Before(i.CreatedAt) ||
+		!at.Before(i.ExpiresAt) ||
 		(i.IntendedEndsAt.Valid && !at.Before(i.IntendedEndsAt.Time)) {
 		return invalidModelError("Invitation.Accept", "invitation", "", "invitation cannot be accepted at this time", "")
 	}
+
 	i.State = InvitationAccepted
 	i.AcceptedAt = OptionalTimeFrom(at)
 	i.AcceptedUserID = userID
@@ -397,22 +465,49 @@ func (i *Invitation) Accept(userID UserID, affiliationID AffiliationID, classMem
 	if err := i.Validate(); err != nil {
 		return err
 	}
+
 	return nil
 }
 
 // AcceptTeacherAcademicUnit records the exact immutable outcome of applying a
 // teacher package. Replay reads these retained identities rather than mutable
 // latest relationship rows.
-func (i *Invitation) AcceptTeacherAcademicUnit(userID UserID, affiliationID AffiliationID, memberID AcademicUnitMemberID, bindingID RoleBindingID, at time.Time) error {
-	if i == nil || i.Purpose != InvitationPurposeTeacherAcademicUnit || i.State != InvitationPending ||
-		!userID.IsValid() || !affiliationID.IsValid() || !memberID.IsValid() || !bindingID.IsValid() {
-		return invalidModelError("Invitation.AcceptTeacherAcademicUnit", "invitation", "", "teacher academic unit invitation cannot be accepted", "")
+func (i *Invitation) AcceptTeacherAcademicUnit(
+	userID UserID,
+	affiliationID AffiliationID,
+	memberID AcademicUnitMemberID,
+	bindingID RoleBindingID,
+	at time.Time,
+) error {
+	if i == nil ||
+		i.Purpose != InvitationPurposeTeacherAcademicUnit ||
+		i.State != InvitationPending ||
+		!userID.IsValid() ||
+		!affiliationID.IsValid() ||
+		!memberID.IsValid() ||
+		!bindingID.IsValid() {
+		return invalidModelError(
+			"Invitation.AcceptTeacherAcademicUnit",
+			"invitation",
+			"",
+			"teacher academic unit invitation cannot be accepted",
+			"",
+		)
 	}
+
 	at = TimeUTC(at)
-	if at.Before(i.CreatedAt) || !at.Before(i.ExpiresAt) ||
+	if at.Before(i.CreatedAt) ||
+		!at.Before(i.ExpiresAt) ||
 		(i.IntendedEndsAt.Valid && !at.Before(i.IntendedEndsAt.Time)) {
-		return invalidModelError("Invitation.AcceptTeacherAcademicUnit", "invitation", "", "teacher academic unit invitation cannot be accepted at this time", "")
+		return invalidModelError(
+			"Invitation.AcceptTeacherAcademicUnit",
+			"invitation",
+			"",
+			"teacher academic unit invitation cannot be accepted at this time",
+			"",
+		)
 	}
+
 	i.State = InvitationAccepted
 	i.AcceptedAt = OptionalTimeFrom(at)
 	i.AcceptedUserID = userID
@@ -427,15 +522,21 @@ func (i *Invitation) AcceptTeacherAcademicUnit(userID UserID, affiliationID Affi
 // AcceptScopedRole records the exact existing User and compatible Role Binding
 // selected by the authoritative acceptance transaction.
 func (i *Invitation) AcceptScopedRole(userID UserID, bindingID RoleBindingID, at time.Time) error {
-	if i == nil || (i.Purpose != InvitationPurposeAcademicUnitRole && i.Purpose != InvitationPurposeInstitutionRole) ||
-		i.State != InvitationPending || !userID.IsValid() || !bindingID.IsValid() {
+	if i == nil ||
+		(i.Purpose != InvitationPurposeAcademicUnitRole && i.Purpose != InvitationPurposeInstitutionRole) ||
+		i.State != InvitationPending ||
+		!userID.IsValid() ||
+		!bindingID.IsValid() {
 		return invalidModelError("Invitation.AcceptScopedRole", "invitation", "", "scoped Role invitation cannot be accepted", "")
 	}
+
 	at = TimeUTC(at)
-	if at.Before(i.CreatedAt) || !at.Before(i.ExpiresAt) ||
+	if at.Before(i.CreatedAt) ||
+		!at.Before(i.ExpiresAt) ||
 		(i.IntendedEndsAt.Valid && !at.Before(i.IntendedEndsAt.Time)) {
 		return invalidModelError("Invitation.AcceptScopedRole", "invitation", "", "scoped Role invitation cannot be accepted at this time", "")
 	}
+
 	i.State = InvitationAccepted
 	i.AcceptedAt = OptionalTimeFrom(at)
 	i.AcceptedUserID = userID
@@ -449,9 +550,12 @@ func invitationScopedRoleTargetIsValid(invitation *Invitation) bool {
 	if invitation == nil {
 		return false
 	}
+
 	switch invitation.Purpose {
 	case InvitationPurposeAcademicUnitRole:
-		return invitation.AcademicUnitID.IsValid() && invitation.ScopeType == RoleScopeAcademicUnit && invitation.ScopeID == invitation.AcademicUnitID.String()
+		return invitation.AcademicUnitID.IsValid() &&
+			invitation.ScopeType == RoleScopeAcademicUnit &&
+			invitation.ScopeID == invitation.AcademicUnitID.String()
 	case InvitationPurposeInstitutionRole:
 		return invitation.AcademicUnitID.IsZero() && invitation.ScopeType == RoleScopeInstitution && IsValidOpaqueID(invitation.ScopeID)
 	default:
@@ -483,11 +587,14 @@ func (i *Invitation) Resend(claimHash string, at time.Time) error {
 	if i == nil || i.State != InvitationPending || !IsValidTokenHash(claimHash) || claimHash == i.ClaimHash {
 		return invalidModelError("Invitation.Resend", "invitation", "", "invitation cannot be resent", "")
 	}
+
 	at = TimeUTC(at)
-	if at.Before(i.CreatedAt) || !at.Before(i.ExpiresAt) ||
+	if at.Before(i.CreatedAt) ||
+		!at.Before(i.ExpiresAt) ||
 		(i.IntendedEndsAt.Valid && !at.Before(i.IntendedEndsAt.Time)) {
 		return invalidModelError("Invitation.Resend", "invitation", "", "invitation cannot be resent at this time", "")
 	}
+
 	i.ClaimHash = claimHash
 	i.UpdatedAt = at
 	i.Revision++
@@ -511,13 +618,20 @@ func (i *Invitation) Supersede(at time.Time) error {
 // immutable recipient and grant package. Identity, claim, lifecycle,
 // timestamps, and inviter provenance are deliberately excluded.
 func (i *Invitation) HasSamePackage(other *Invitation) bool {
-	return i != nil && other != nil &&
-		i.Purpose == other.Purpose && i.TargetEmail == other.TargetEmail &&
-		i.ClassID == other.ClassID && i.AcademicPeriodID == other.AcademicPeriodID &&
-		i.AcademicUnitID == other.AcademicUnitID && i.RoleID == other.RoleID &&
+	return i != nil &&
+		other != nil &&
+		i.Purpose == other.Purpose &&
+		i.TargetEmail == other.TargetEmail &&
+		i.ClassID == other.ClassID &&
+		i.AcademicPeriodID == other.AcademicPeriodID &&
+		i.AcademicUnitID == other.AcademicUnitID &&
+		i.RoleID == other.RoleID &&
 		slices.Equal(i.RoleActions, other.RoleActions) &&
-		i.IntendedStartsAt.Equal(other.IntendedStartsAt) && sameInvitationOptionalTime(i.IntendedEndsAt, other.IntendedEndsAt) &&
-		i.Suggestions == other.Suggestions && i.ScopeType == other.ScopeType && i.ScopeID == other.ScopeID
+		i.IntendedStartsAt.Equal(other.IntendedStartsAt) &&
+		sameInvitationOptionalTime(i.IntendedEndsAt, other.IntendedEndsAt) &&
+		i.Suggestions == other.Suggestions &&
+		i.ScopeType == other.ScopeType &&
+		i.ScopeID == other.ScopeID
 }
 
 func sameInvitationOptionalTime(first, second OptionalTime) bool {
@@ -526,13 +640,28 @@ func sameInvitationOptionalTime(first, second OptionalTime) bool {
 
 func (i *Invitation) terminalizeAdministratively(state InvitationState, at time.Time) error {
 	if i == nil || i.State != InvitationPending || (state != InvitationRevoked && state != InvitationSuperseded) {
-		return invalidModelError("Invitation.terminalizeAdministratively", "invitation", "", "invitation cannot be terminalized administratively", "")
+		return invalidModelError(
+			"Invitation.terminalizeAdministratively",
+			"invitation",
+			"",
+			"invitation cannot be terminalized administratively",
+			"",
+		)
 	}
+
 	at = TimeUTC(at)
-	if at.Before(i.CreatedAt) || !at.Before(i.ExpiresAt) ||
+	if at.Before(i.CreatedAt) ||
+		!at.Before(i.ExpiresAt) ||
 		(i.IntendedEndsAt.Valid && !at.Before(i.IntendedEndsAt.Time)) {
-		return invalidModelError("Invitation.terminalizeAdministratively", "invitation", "", "invitation cannot be terminalized administratively at this time", "")
+		return invalidModelError(
+			"Invitation.terminalizeAdministratively",
+			"invitation",
+			"",
+			"invitation cannot be terminalized administratively at this time",
+			"",
+		)
 	}
+
 	i.State = state
 	i.UpdatedAt = at
 	i.Revision++
@@ -562,15 +691,24 @@ func (i *Invitation) Auditable() map[string]any {
 		return map[string]any{}
 	}
 	return map[string]any{
-		"id": i.ID.String(), "purpose": i.Purpose, "state": i.State,
-		"class_id": i.ClassID.String(), "academic_period_id": i.AcademicPeriodID.String(),
-		"academic_unit_id": i.AcademicUnitID.String(), "role_id": i.RoleID.String(),
-		"role_actions":    append([]string(nil), i.RoleActions...),
-		"inviter_user_id": i.InviterUserID.String(), "scope_type": i.ScopeType,
-		"scope_id": i.ScopeID, "created_at": MillisFromTime(i.CreatedAt),
-		"updated_at": MillisFromTime(i.UpdatedAt), "expires_at": MillisFromTime(i.ExpiresAt),
-		"accepted_at": i.AcceptedAt.Millis(), "accepted_user_id": i.AcceptedUserID.String(),
-		"accepted_affiliation_id": i.AcceptedAffiliationID.String(), "accepted_class_member_id": i.AcceptedClassMemberID.String(),
+		"id":                               i.ID.String(),
+		"purpose":                          i.Purpose,
+		"state":                            i.State,
+		"class_id":                         i.ClassID.String(),
+		"academic_period_id":               i.AcademicPeriodID.String(),
+		"academic_unit_id":                 i.AcademicUnitID.String(),
+		"role_id":                          i.RoleID.String(),
+		"role_actions":                     append([]string(nil), i.RoleActions...),
+		"inviter_user_id":                  i.InviterUserID.String(),
+		"scope_type":                       i.ScopeType,
+		"scope_id":                         i.ScopeID,
+		"created_at":                       MillisFromTime(i.CreatedAt),
+		"updated_at":                       MillisFromTime(i.UpdatedAt),
+		"expires_at":                       MillisFromTime(i.ExpiresAt),
+		"accepted_at":                      i.AcceptedAt.Millis(),
+		"accepted_user_id":                 i.AcceptedUserID.String(),
+		"accepted_affiliation_id":          i.AcceptedAffiliationID.String(),
+		"accepted_class_member_id":         i.AcceptedClassMemberID.String(),
 		"accepted_academic_unit_member_id": i.AcceptedAcademicUnitMemberID.String(),
 		"accepted_role_binding_id":         i.AcceptedRoleBindingID.String(),
 	}
@@ -584,8 +722,10 @@ func canonicalInvitationRoleActions(actions []string) []string {
 
 func (p InvitationPurpose) IsValid() bool {
 	switch p {
-	case InvitationPurposeStudentClass, InvitationPurposeTeacherAcademicUnit,
-		InvitationPurposeAcademicUnitRole, InvitationPurposeInstitutionRole:
+	case InvitationPurposeStudentClass,
+		InvitationPurposeTeacherAcademicUnit,
+		InvitationPurposeAcademicUnitRole,
+		InvitationPurposeInstitutionRole:
 		return true
 	default:
 		return false

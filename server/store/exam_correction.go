@@ -61,6 +61,51 @@ type ExamCorrectionResourceStage struct {
 	Rendition       *model.FileRendition
 }
 
+// ConsistentWith reports whether the stage is identified, belongs to the
+// commanded Exam, Sitting and base Revision with the commanded target, names
+// its Resource, file entry, File Revision, upload lease and rendition, was
+// created by the acting User, carries an expiry, and, for a replacement, names
+// the Resource being replaced.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (s *ExamCorrectionResourceStage) ConsistentWith(
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	baseRevisionID model.ExamRevisionID,
+	target ExamCorrectionResourceStageTarget,
+	resourceID model.ExamResourceID,
+	actor model.UserID,
+) bool {
+	return !(s == nil ||
+		!s.ID.IsValid() ||
+		s.ExamID != examID ||
+		s.SittingID != sittingID ||
+		s.BaseRevisionID != baseRevisionID ||
+		s.Target != target ||
+		!s.ResourceID.IsValid() ||
+		!s.FileEntryID.IsValid() ||
+		!s.FileRevisionID.IsValid() ||
+		!s.UploadLeaseID.IsValid() ||
+		!s.RenditionID.IsValid() ||
+		s.CreatedByUserID != actor ||
+		s.ExpiresAt.IsZero() ||
+		(target == ExamCorrectionResourceReplacement && s.ResourceID != resourceID))
+}
+
+// RenditionConsistent reports whether a stage that has left pending carries
+// the valid rendition it names, for the File Revision it names. A pending
+// stage has no rendition yet and is consistent. ConsistentWith asks about the
+// stage's identity; this asks only about its rendition.
+func (s *ExamCorrectionResourceStage) RenditionConsistent() bool {
+	return !(s == nil ||
+		(s.State != ExamCorrectionResourceStagePending &&
+			(s.Rendition == nil ||
+				s.Rendition.ID != s.RenditionID ||
+				s.Rendition.RevisionID != s.FileRevisionID ||
+				s.Rendition.Validate() != nil)))
+}
+
 // ExamCorrectionResourceStageReservation preallocates every opaque identity
 // before a VFS write. Addition carries a pristine File Entry; replacement
 // names the stable File Entry pinned by the base Revision. Revision and Lease
@@ -131,6 +176,61 @@ type ExamCorrectionResult struct {
 	PreviousRevisionID model.ExamRevisionID
 	EffectiveAt        time.Time
 	Replayed           bool
+}
+
+// Consistent reports whether the outcome carries the correction Revision and
+// the corrected Sitting's snapshot. It is the presence check; ConsistentWith
+// compares what they hold against the command.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (r *ExamCorrectionResult) Consistent() bool {
+	return !(r == nil ||
+		r.Revision == nil ||
+		r.Sitting == nil ||
+		r.Sitting.Sitting == nil)
+}
+
+// ConsistentWith reports whether the outcome's Revision is a new, numbered
+// live-correction Revision of the commanded Exam that follows the expected
+// current Revision, its Sitting is the commanded one, now on that Revision at
+// the next Sitting revision and still open or paused, and the correction took
+// effect at the instant the Revision was published. An outcome without its
+// Revision or Sitting is inconsistent.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (r *ExamCorrectionResult) ConsistentWith(
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	expectedCurrentRevisionID model.ExamRevisionID,
+	expectedSittingRevision int64,
+) bool {
+	return !(r == nil ||
+		r.Revision == nil ||
+		r.Sitting == nil ||
+		r.Sitting.Sitting == nil ||
+		r.Revision.ExamID != examID ||
+		r.Revision.Number < 1 ||
+		r.PreviousRevisionID != expectedCurrentRevisionID ||
+		r.Sitting.Sitting.ID != sittingID ||
+		r.Sitting.Sitting.ExamID != examID ||
+		r.Sitting.Sitting.UpdatedAt.IsZero() ||
+		r.EffectiveAt.IsZero() ||
+		!r.Applied(expectedCurrentRevisionID, expectedSittingRevision))
+}
+
+// Applied is the application's postcondition on a live correction: its
+// Revision is a new live-correction Revision, the Sitting is now on it at the
+// next Sitting revision and still open or paused, and the correction took
+// effect at the instant the Revision was published.
+func (r *ExamCorrectionResult) Applied(expectedCurrentRevisionID model.ExamRevisionID, expectedSittingRevision int64) bool {
+	return r.Revision.ID != expectedCurrentRevisionID &&
+		r.Revision.Kind == model.ExamRevisionPublicationLiveCorrection &&
+		r.Sitting.Sitting.ExamRevisionID == r.Revision.ID &&
+		r.Sitting.Sitting.Revision == expectedSittingRevision+1 &&
+		(r.Sitting.Sitting.State == model.ExamSittingOpen || r.Sitting.Sitting.State == model.ExamSittingPaused) &&
+		model.TimeUTC(r.EffectiveAt).Equal(model.TimeUTC(r.Revision.PublishedAt))
 }
 
 // ExamCorrectionStore is the narrow durable core for live correction. Reserve

@@ -14,12 +14,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 )
 
 func TestBrowserRouteProblemHandlersWriteProblemDetails(t *testing.T) {
 	t.Parallel()
-	api, err := New(validHTTPOptions(t))
-	require.NoError(t, err)
+	api := newProductionCatalogAPI(t)
 	tests := []struct {
 		name    string
 		handler http.Handler
@@ -37,7 +38,7 @@ func TestBrowserRouteProblemHandlersWriteProblemDetails(t *testing.T) {
 			t.Parallel()
 			response := httptest.NewRecorder()
 			test.handler.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), test.method, test.path, nil))
-			var problem Problem
+			var problem route.Problem
 			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem), "decode %q", response.Body.String())
 			require.Equal(t, test.status, response.Code, "response = %d %#v headers=%v", response.Code, problem, response.Header())
 			require.Equal(t, test.status, problem.Status, "response = %d %#v headers=%v", response.Code, problem, response.Header())
@@ -45,7 +46,7 @@ func TestBrowserRouteProblemHandlersWriteProblemDetails(t *testing.T) {
 			require.NotEmpty(t, problem.Title, "response = %d %#v headers=%v", response.Code, problem, response.Header())
 			require.Equal(t, test.path, problem.Instance, "response = %d %#v headers=%v", response.Code, problem, response.Header())
 			require.NotEmpty(t, problem.RequestID, "response = %d %#v headers=%v", response.Code, problem, response.Header())
-			require.Equal(t, response.Header().Get(RequestIDHeader), problem.RequestID, "response = %d %#v headers=%v", response.Code, problem, response.Header())
+			require.Equal(t, response.Header().Get(route.RequestIDHeader), problem.RequestID, "response = %d %#v headers=%v", response.Code, problem, response.Header())
 			require.Equal(t, "application/problem+json", response.Header().Get("Content-Type"), "response = %d %#v headers=%v", response.Code, problem, response.Header())
 			require.Equal(t, test.allow, response.Header().Get("Allow"), "response = %d %#v headers=%v", response.Code, problem, response.Header())
 		})

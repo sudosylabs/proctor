@@ -49,12 +49,19 @@ var mailCatalog = func() map[model.MailTemplateKey]definition {
 			panic("mail catalog contains a template without occurrence meaning")
 		}
 		lifetime := directMailLifetime
-		if kind == model.MailOccurrenceSecurityNotice || key == model.MailTemplateSystemTest ||
-			key == model.MailTemplateAccessInvitationAccepted || key == model.MailTemplateAccessInvitationRevoked {
+		if kind == model.MailOccurrenceSecurityNotice ||
+			key == model.MailTemplateSystemTest ||
+			key == model.MailTemplateAccessInvitationAccepted ||
+			key == model.MailTemplateAccessInvitationRevoked {
 			lifetime = securityNoticeLifetime
 		}
-		result[key] = definition{key: key, kind: kind, jobType: model.JobTypeMailDeliver,
-			defaultLifetime: lifetime, presentation: presentationBase}
+		result[key] = definition{
+			key:             key,
+			kind:            kind,
+			jobType:         model.JobTypeMailDeliver,
+			defaultLifetime: lifetime,
+			presentation:    presentationBase,
+		}
 	}
 	setDefinitionGroup(result, []model.MailTemplateKey{
 		model.MailTemplateIdentityVerifyEmail,
@@ -100,7 +107,9 @@ var mailCatalog = func() map[model.MailTemplateKey]definition {
 	return result
 }()
 
-func setDefinitionGroup(catalog map[model.MailTemplateKey]definition, keys []model.MailTemplateKey,
+func setDefinitionGroup(
+	catalog map[model.MailTemplateKey]definition,
+	keys []model.MailTemplateKey,
 	update func(definition) definition,
 ) {
 	for _, key := range keys {
@@ -108,7 +117,9 @@ func setDefinitionGroup(catalog map[model.MailTemplateKey]definition, keys []mod
 	}
 }
 
-func setPresentation(catalog map[model.MailTemplateKey]definition, presentation presentationKind,
+func setPresentation(
+	catalog map[model.MailTemplateKey]definition,
+	presentation presentationKind,
 	keys []model.MailTemplateKey,
 ) {
 	setDefinitionGroup(catalog, keys, func(value definition) definition {

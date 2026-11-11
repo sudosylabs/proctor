@@ -19,6 +19,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLDesktopCompatibilityPolicyStore implements
+// store.DesktopCompatibilityPolicyStore on the singleton
+// desktop_compatibility_policies row, fenced by its revision.
 type SQLDesktopCompatibilityPolicyStore struct {
 	*SQLStore
 }
@@ -82,6 +85,7 @@ func (s SQLDesktopCompatibilityPolicyStore) Replace(
 	if err := validateDesktopCompatibilityPolicyReplacement(input, command); err != nil {
 		return nil, err
 	}
+
 	mutation, err := runIdempotentMutation(
 		ctx,
 		s.SQLStore,
@@ -100,7 +104,8 @@ func (s SQLDesktopCompatibilityPolicyStore) Replace(
 					return nil, store.NewErrInvalidInput("desktop_compatibility_policy", "outcome", nil)
 				}
 				return encodeOutcome(desktopCompatibilityPolicyReplacementDocument{
-					Policy: desktopCompatibilityPolicyDocument(*outcome.Policy), Changed: outcome.Changed,
+					Policy:  desktopCompatibilityPolicyDocument(*outcome.Policy),
+					Changed: outcome.Changed,
 				})
 			},
 			decode: decodeDesktopCompatibilityPolicyReplacementOutcome,
@@ -124,6 +129,7 @@ func (s SQLDesktopCompatibilityPolicyStore) Replace(
 	if err != nil {
 		return nil, err
 	}
+
 	return &store.DesktopCompatibilityPolicyReplacementResult{
 		Policy:   mutation.Value.Policy,
 		Changed:  mutation.Value.Changed,
@@ -142,10 +148,12 @@ func replaceDesktopCompatibilityPolicy(
 	if err := lockSystemAdministratorAuthenticationPaths(ctx, tx); err != nil {
 		return desktopCompatibilityPolicyReplacementOutcome{}, err
 	}
+
 	current, err := getDesktopCompatibilityPolicy(ctx, tx, "FOR UPDATE")
 	if err != nil {
 		return desktopCompatibilityPolicyReplacementOutcome{}, err
 	}
+
 	// Read wall time after serialization; transaction-start time can
 	// precede a binding revocation committed while this edit waited.
 	var databaseNow time.Time
@@ -155,6 +163,7 @@ func replaceDesktopCompatibilityPolicy(
 			err,
 		)
 	}
+
 	administrator, err := isActiveSystemAdministrator(
 		ctx,
 		tx,
@@ -164,6 +173,7 @@ func replaceDesktopCompatibilityPolicy(
 	if err != nil {
 		return desktopCompatibilityPolicyReplacementOutcome{}, err
 	}
+
 	if !administrator {
 		return desktopCompatibilityPolicyReplacementOutcome{}, store.NewErrConflict(
 			"desktop_compatibility_policy",
@@ -171,10 +181,12 @@ func replaceDesktopCompatibilityPolicy(
 			nil,
 		)
 	}
+
 	if current.Revision != input.ExpectedRevision {
 		return desktopCompatibilityPolicyReplacementOutcome{},
 			&store.ErrDesktopCompatibilityPolicyRevisionConflict{CurrentRevision: current.Revision}
 	}
+
 	candidate := current.Clone()
 	// The recorded change never precedes a policy lifecycle stamped
 	// by a leading node clock; PostgreSQL time decided authority.
@@ -186,12 +198,14 @@ func replaceDesktopCompatibilityPolicy(
 			nil,
 		).Wrap(err)
 	}
+
 	changed := candidate.Revision != current.Revision
 	if changed {
 		if err = updateDesktopCompatibilityPolicy(ctx, tx, candidate, current.Revision); err != nil {
 			return desktopCompatibilityPolicyReplacementOutcome{}, err
 		}
 	}
+
 	outcome := desktopCompatibilityPolicyReplacementOutcome{
 		Policy:  candidate,
 		Changed: changed,
@@ -206,6 +220,7 @@ func replaceDesktopCompatibilityPolicy(
 	); err != nil {
 		return desktopCompatibilityPolicyReplacementOutcome{}, err
 	}
+
 	return outcome, nil
 }
 
@@ -225,11 +240,14 @@ func updateDesktopCompatibilityPolicy(
 			nil,
 		).Wrap(encodeErr)
 	}
-	result, updateErr := tx.Exec(ctx, `
+
+	result, updateErr := tx.Exec(
+		ctx,
+		`
 		UPDATE desktop_compatibility_policies
-		   SET revision=?, minimum_desktop_release=?, revoked_desktop_build_ids=?::jsonb,
-		       administrator_message=?, availability=?, retry_at=?, updated_at=?
-		 WHERE singleton=1 AND revision=?`,
+		   SET revision = ?, minimum_desktop_release = ?, revoked_desktop_build_ids = ?::jsonb,
+		       administrator_message = ?, availability = ?, retry_at = ?, updated_at = ?
+		 WHERE singleton = 1 AND revision = ?`,
 		candidate.Revision,
 		candidate.MinimumDesktopRelease,
 		encodedBuildIDs,
@@ -249,6 +267,7 @@ func updateDesktopCompatibilityPolicy(
 			),
 		)
 	}
+
 	return requireDesktopCompatibilityPolicyRevisionAffected(result)
 }
 
@@ -274,7 +293,7 @@ func getDesktopCompatibilityPolicy(
 ) (*model.DesktopCompatibilityPolicy, error) {
 	query := `SELECT institution_id, revision, minimum_desktop_release,
 		revoked_desktop_build_ids, administrator_message, availability, retry_at, created_at, updated_at
-		FROM desktop_compatibility_policies WHERE singleton=1`
+		FROM desktop_compatibility_policies WHERE singleton = 1`
 	if lock != "" {
 		query += " " + lock
 	}
@@ -333,11 +352,17 @@ func validateDesktopCompatibilityPolicyReplacement(
 	input *store.DesktopCompatibilityPolicyReplacement,
 	command *store.CommandIdempotency,
 ) error {
-	if input == nil || !input.ActorID.IsValid() || input.ExpectedRevision < 1 ||
-		input.Settings.Validate() != nil || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() ||
-		command == nil || command.UserID != input.ActorID ||
+	if input == nil ||
+		!input.ActorID.IsValid() ||
+		input.ExpectedRevision < 1 ||
+		input.Settings.Validate() != nil ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() ||
+		command == nil ||
+		command.UserID != input.ActorID ||
 		command.Operation != "desktop_compatibility_policy.replace" ||
-		command.Retention <= 0 || command.Wait <= 0 {
+		command.Retention <= 0 ||
+		command.Wait <= 0 {
 		return store.NewErrInvalidInput("desktop_compatibility_policy", "replacement", nil)
 	}
 	return nil
@@ -381,10 +406,12 @@ func completeDesktopCompatibilityPolicyAudit(
 		data["idempotency_replayed"] = true
 		data["original_audit_event_id"] = originalAuditID
 	}
+
 	encoded, err := model.EncodeAuditData(data)
 	if err != nil {
 		return store.NewErrInvalidInput("desktop_compatibility_policy", "audit", nil).Wrap(err)
 	}
+
 	if _, err := completeAuditEvent(
 		ctx,
 		tx,
@@ -396,6 +423,7 @@ func completeDesktopCompatibilityPolicyAudit(
 	); err != nil {
 		return fmt.Errorf("complete desktop compatibility policy audit: %w", err)
 	}
+
 	return nil
 }
 

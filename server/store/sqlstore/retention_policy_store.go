@@ -18,6 +18,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLRetentionPolicyStore implements store.RetentionPolicyStore on
+// retention_policies and retention_controls; it never deletes records.
 type SQLRetentionPolicyStore struct {
 	*SQLStore
 }
@@ -74,26 +76,39 @@ type retentionPolicyDocument struct {
 func newRetentionPolicyDocument(policy *model.RetentionPolicy) retentionPolicyDocument {
 	settings := policy.RetentionPolicySettings
 	return retentionPolicyDocument{
-		InstitutionID: policy.InstitutionID, Revision: policy.Revision,
-		SubmissionRetentionDays: settings.SubmissionRetentionDays, IntegrityRetentionDays: settings.IntegrityRetentionDays,
+		InstitutionID:                    policy.InstitutionID,
+		Revision:                         policy.Revision,
+		SubmissionRetentionDays:          settings.SubmissionRetentionDays,
+		IntegrityRetentionDays:           settings.IntegrityRetentionDays,
 		BrowserActivityRetentionDays:     settings.BrowserActivityRetentionDays,
 		SecurityOperationalRetentionDays: settings.SecurityOperationalRetentionDays,
-		AuditRetentionDays:               settings.AuditRetentionDays, ExportRetentionDays: settings.ExportRetentionDays,
-		DeletionGraceDays: settings.DeletionGraceDays, CandidateNotices: settings.CandidateNotices,
-		AutomaticDeletionEnabled: policy.AutomaticDeletionEnabled, CreatedAt: policy.CreatedAt, UpdatedAt: policy.UpdatedAt,
+		AuditRetentionDays:               settings.AuditRetentionDays,
+		ExportRetentionDays:              settings.ExportRetentionDays,
+		DeletionGraceDays:                settings.DeletionGraceDays,
+		CandidateNotices:                 settings.CandidateNotices,
+		AutomaticDeletionEnabled:         policy.AutomaticDeletionEnabled,
+		CreatedAt:                        policy.CreatedAt,
+		UpdatedAt:                        policy.UpdatedAt,
 	}
 }
 
 func (d retentionPolicyDocument) model() *model.RetentionPolicy {
 	return &model.RetentionPolicy{
-		InstitutionID: d.InstitutionID, Revision: d.Revision,
+		InstitutionID: d.InstitutionID,
+		Revision:      d.Revision,
 		RetentionPolicySettings: model.RetentionPolicySettings{
-			SubmissionRetentionDays: d.SubmissionRetentionDays, IntegrityRetentionDays: d.IntegrityRetentionDays,
-			BrowserActivityRetentionDays: d.BrowserActivityRetentionDays, SecurityOperationalRetentionDays: d.SecurityOperationalRetentionDays,
-			AuditRetentionDays: d.AuditRetentionDays, ExportRetentionDays: d.ExportRetentionDays,
-			DeletionGraceDays: d.DeletionGraceDays, CandidateNotices: d.CandidateNotices,
+			SubmissionRetentionDays:          d.SubmissionRetentionDays,
+			IntegrityRetentionDays:           d.IntegrityRetentionDays,
+			BrowserActivityRetentionDays:     d.BrowserActivityRetentionDays,
+			SecurityOperationalRetentionDays: d.SecurityOperationalRetentionDays,
+			AuditRetentionDays:               d.AuditRetentionDays,
+			ExportRetentionDays:              d.ExportRetentionDays,
+			DeletionGraceDays:                d.DeletionGraceDays,
+			CandidateNotices:                 d.CandidateNotices,
 		},
-		AutomaticDeletionEnabled: d.AutomaticDeletionEnabled, CreatedAt: d.CreatedAt, UpdatedAt: d.UpdatedAt,
+		AutomaticDeletionEnabled: d.AutomaticDeletionEnabled,
+		CreatedAt:                d.CreatedAt,
+		UpdatedAt:                d.UpdatedAt,
 	}
 }
 
@@ -115,6 +130,7 @@ func (s SQLRetentionPolicyStore) Replace(
 	if err := validateRetentionPolicyReplacement(input, command); err != nil {
 		return nil, err
 	}
+
 	mutation, err := runIdempotentMutation(
 		ctx,
 		s.SQLStore,
@@ -133,11 +149,16 @@ func (s SQLRetentionPolicyStore) Replace(
 					return nil, store.NewErrInvalidInput("retention_policy", "outcome", nil)
 				}
 				return encodeOutcome(retentionPolicyReplacementDocument{
-					Policy: newRetentionPolicyDocument(outcome.Policy), Changed: outcome.Changed,
+					Policy:  newRetentionPolicyDocument(outcome.Policy),
+					Changed: outcome.Changed,
 				})
 			},
 			decode: decodeRetentionPolicyReplacementOutcome,
-			hydrateReplay: func(ctx context.Context, tx *sqlxTxWrapper, outcome retentionPolicyReplacementOutcome) (retentionPolicyReplacementOutcome, error) {
+			hydrateReplay: func(
+				ctx context.Context,
+				tx *sqlxTxWrapper,
+				outcome retentionPolicyReplacementOutcome,
+			) (retentionPolicyReplacementOutcome, error) {
 				_, _, err := lockRetentionAuthority(ctx, tx, input.RetentionMutation, model.ActionRetentionPolicyManage)
 				return outcome, err
 			},
@@ -161,6 +182,7 @@ func (s SQLRetentionPolicyStore) Replace(
 	if err != nil {
 		return nil, err
 	}
+
 	return &store.RetentionPolicyReplacementResult{
 		Policy:   mutation.Value.Policy,
 		Changed:  mutation.Value.Changed,
@@ -179,10 +201,12 @@ func replaceRetentionPolicy(
 	if err != nil {
 		return retentionPolicyReplacementOutcome{}, err
 	}
+
 	if current.Revision != input.ExpectedRevision {
 		return retentionPolicyReplacementOutcome{},
 			&store.ErrRetentionPolicyRevisionConflict{CurrentRevision: current.Revision}
 	}
+
 	candidate := current.Clone()
 	// Bootstrap can carry a host clock slightly ahead of PostgreSQL.
 	// Keep metadata monotonic without extending authorization validity.
@@ -190,6 +214,7 @@ func replaceRetentionPolicy(
 	if mutationAt.Before(current.UpdatedAt) {
 		mutationAt = current.UpdatedAt
 	}
+
 	if err = candidate.Replace(input.ExpectedRevision, input.Settings, mutationAt); err != nil {
 		return retentionPolicyReplacementOutcome{}, store.NewErrInvalidInput(
 			"retention_policy",
@@ -197,13 +222,16 @@ func replaceRetentionPolicy(
 			nil,
 		).Wrap(err)
 	}
+
 	changed := candidate.Revision != current.Revision
 	if changed {
 		if err = recordRetentionPolicyChange(ctx, tx, input, current, candidate, mutationAt); err != nil {
 			return retentionPolicyReplacementOutcome{}, err
 		}
+
 		candidate.AutomaticDeletionEnabled = false
 	}
+
 	outcome := retentionPolicyReplacementOutcome{
 		Policy:  candidate,
 		Changed: changed,
@@ -218,6 +246,7 @@ func replaceRetentionPolicy(
 	); err != nil {
 		return retentionPolicyReplacementOutcome{}, err
 	}
+
 	return outcome, nil
 }
 
@@ -231,14 +260,28 @@ func recordRetentionPolicyChange(
 	current, candidate *model.RetentionPolicy,
 	mutationAt time.Time,
 ) error {
-	result, updateErr := tx.Exec(ctx, `
-                        UPDATE retention_policies
-                           SET revision=?, submission_retention_days=?, integrity_retention_days=?,browser_activity_retention_days=?,security_operational_retention_days=?,
-                               audit_retention_days=?, export_retention_days=?, deletion_grace_days=?, candidate_notices=?, updated_at=?
-                         WHERE institution_id=? AND revision=?`,
-		candidate.Revision, candidate.SubmissionRetentionDays, candidate.IntegrityRetentionDays, candidate.BrowserActivityRetentionDays, candidate.SecurityOperationalRetentionDays,
-		candidate.AuditRetentionDays, candidate.ExportRetentionDays, candidate.DeletionGraceDays,
-		candidate.CandidateNotices, candidate.UpdatedAt, current.InstitutionID.String(), current.Revision,
+	result, updateErr := tx.Exec(
+		ctx,
+		`
+		UPDATE retention_policies
+		SET revision = ?, submission_retention_days = ?, integrity_retention_days = ?,
+			browser_activity_retention_days = ?, security_operational_retention_days = ?,
+			audit_retention_days = ?, export_retention_days = ?, deletion_grace_days = ?,
+			candidate_notices = ?, updated_at = ?
+		WHERE institution_id = ?
+			AND revision = ?`,
+		candidate.Revision,
+		candidate.SubmissionRetentionDays,
+		candidate.IntegrityRetentionDays,
+		candidate.BrowserActivityRetentionDays,
+		candidate.SecurityOperationalRetentionDays,
+		candidate.AuditRetentionDays,
+		candidate.ExportRetentionDays,
+		candidate.DeletionGraceDays,
+		candidate.CandidateNotices,
+		candidate.UpdatedAt,
+		current.InstitutionID.String(),
+		current.Revision,
 	)
 	if updateErr != nil {
 		return fmt.Errorf(
@@ -250,18 +293,27 @@ func recordRetentionPolicyChange(
 			),
 		)
 	}
+
 	if err := requireRetentionPolicyRevisionAffected(result); err != nil {
 		return err
 	}
+
 	// A new configuration revision cannot inherit deletion approval.
-	if _, err := tx.Exec(ctx, `UPDATE retention_controls SET state='paused',revision=revision+1,
-		changed_by_user_id=?,updated_at=GREATEST(updated_at,?) WHERE institution_id=? AND state='enabled'`,
-		input.Principal.UserID.String(), mutationAt, current.InstitutionID.String()); err != nil {
+	if _, err := tx.Exec(
+		ctx,
+		`UPDATE retention_controls SET state = 'paused', revision = revision+1,
+		changed_by_user_id = ?, updated_at = GREATEST(updated_at, ?) WHERE institution_id = ? AND state = 'enabled'`,
+		input.Principal.UserID.String(),
+		mutationAt,
+		current.InstitutionID.String(),
+	); err != nil {
 		return err
 	}
+
 	if err := cancelInstitutionRetirements(ctx, tx, current.InstitutionID, mutationAt, "policy_changed"); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -285,12 +337,20 @@ func getRetentionPolicy(
 	executor sqlxExecutor,
 	lock string,
 ) (*model.RetentionPolicy, error) {
-	query := `SELECT p.institution_id, p.revision, p.submission_retention_days, p.integrity_retention_days,p.browser_activity_retention_days,p.security_operational_retention_days,
-  p.audit_retention_days, p.export_retention_days, p.deletion_grace_days, p.candidate_notices, p.created_at, p.updated_at,
-  EXISTS(SELECT 1 FROM retention_controls c WHERE c.institution_id=p.institution_id AND c.state='enabled'
-    AND c.approved_policy_revision=p.revision AND p.deletion_grace_days>0) AS automatic_deletion_enabled
-  FROM retention_policies p JOIN institutions i ON i.id=p.institution_id
-  WHERE i.archived_at IS NULL`
+	query := `SELECT p.institution_id, p.revision, p.submission_retention_days, p.integrity_retention_days,
+			p.browser_activity_retention_days, p.security_operational_retention_days, p.audit_retention_days,
+			p.export_retention_days, p.deletion_grace_days, p.candidate_notices, p.created_at, p.updated_at,
+			EXISTS(
+				SELECT 1
+				FROM retention_controls c
+				WHERE c.institution_id = p.institution_id
+					AND c.state = 'enabled'
+					AND c.approved_policy_revision = p.revision
+					AND p.deletion_grace_days > 0
+			) AS automatic_deletion_enabled
+		FROM retention_policies p
+		JOIN institutions i ON i.id = p.institution_id
+		WHERE i.archived_at IS NULL`
 	if lock != "" {
 		query += " " + lock
 	}
@@ -307,13 +367,20 @@ func (r retentionPolicyRow) model() (*model.RetentionPolicy, error) {
 		return nil, invalidPersistedState("retention_policy", "institution_id", err)
 	}
 	policy := &model.RetentionPolicy{
-		InstitutionID: institutionID, Revision: r.Revision,
+		InstitutionID: institutionID,
+		Revision:      r.Revision,
 		RetentionPolicySettings: model.RetentionPolicySettings{
-			SubmissionRetentionDays: r.SubmissionRetentionDays, IntegrityRetentionDays: r.IntegrityRetentionDays, BrowserActivityRetentionDays: r.BrowserActivityRetentionDays, SecurityOperationalRetentionDays: r.SecurityOperationalRetentionDays,
-			AuditRetentionDays: r.AuditRetentionDays, ExportRetentionDays: r.ExportRetentionDays,
-			DeletionGraceDays: r.DeletionGraceDays, CandidateNotices: r.CandidateNotices,
+			SubmissionRetentionDays:          r.SubmissionRetentionDays,
+			IntegrityRetentionDays:           r.IntegrityRetentionDays,
+			BrowserActivityRetentionDays:     r.BrowserActivityRetentionDays,
+			SecurityOperationalRetentionDays: r.SecurityOperationalRetentionDays,
+			AuditRetentionDays:               r.AuditRetentionDays,
+			ExportRetentionDays:              r.ExportRetentionDays,
+			DeletionGraceDays:                r.DeletionGraceDays,
+			CandidateNotices:                 r.CandidateNotices,
 		},
-		CreatedAt: model.TimeUTC(r.CreatedAt), UpdatedAt: model.TimeUTC(r.UpdatedAt),
+		CreatedAt:                model.TimeUTC(r.CreatedAt),
+		UpdatedAt:                model.TimeUTC(r.UpdatedAt),
 		AutomaticDeletionEnabled: r.AutomaticDeletionEnabled,
 	}
 	if err := policy.Validate(); err != nil {
@@ -326,9 +393,13 @@ func validateRetentionPolicyReplacement(
 	input *store.RetentionPolicyReplacement,
 	command *store.CommandIdempotency,
 ) error {
-	if input == nil || !validRetentionMutation(input.RetentionMutation, command, "retention_policy.replace") ||
-		input.ExpectedRevision < 1 || input.Settings.Validate() != nil || input.RecentAuthenticationTTL <= 0 ||
-		command.Retention <= 0 || command.Wait <= 0 {
+	if input == nil ||
+		!validRetentionMutation(input.RetentionMutation, command, "retention_policy.replace") ||
+		input.ExpectedRevision < 1 ||
+		input.Settings.Validate() != nil ||
+		input.RecentAuthenticationTTL <= 0 ||
+		command.Retention <= 0 ||
+		command.Wait <= 0 {
 		return store.NewErrInvalidInput("retention_policy", "replacement", nil)
 	}
 	return nil
@@ -390,12 +461,19 @@ func insertInitialRetentionPolicy(ctx context.Context, executor sqlxExecutor, po
 		return store.NewErrInvalidInput("retention_policy", "initial", nil)
 	}
 	_, err := executor.Exec(ctx, `INSERT INTO retention_policies (
-        institution_id, revision, submission_retention_days, integrity_retention_days,browser_activity_retention_days,security_operational_retention_days,
-        audit_retention_days, export_retention_days, deletion_grace_days, created_at, updated_at
-    ) VALUES (?, 1, 0, 0, 0, 0, 0, 0, 0, ?, ?)`, policy.InstitutionID.String(), policy.CreatedAt, policy.UpdatedAt)
+			institution_id, revision, submission_retention_days, integrity_retention_days,
+			browser_activity_retention_days, security_operational_retention_days, audit_retention_days,
+			export_retention_days, deletion_grace_days, created_at, updated_at
+		)
+		VALUES (?, 1, 0, 0, 0, 0, 0, 0, 0, ?, ?)`, policy.InstitutionID.String(), policy.CreatedAt, policy.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("save initial retention policy: %w", translateError("retention_policy", policy.InstitutionID.String(), err))
 	}
-	_, err = executor.Exec(ctx, `INSERT INTO retention_controls(institution_id,revision,state,updated_at) VALUES (?,1,'disabled',?)`, policy.InstitutionID.String(), policy.UpdatedAt)
+	_, err = executor.Exec(
+		ctx,
+		`INSERT INTO retention_controls(institution_id, revision, state, updated_at) VALUES (?, 1, 'disabled', ?)`,
+		policy.InstitutionID.String(),
+		policy.UpdatedAt,
+	)
 	return err
 }

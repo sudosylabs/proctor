@@ -115,15 +115,15 @@ func TestRoleBindingStore(t *testing.T, ss store.Store) {
 		start := model.GetMillis()
 		bindings := make([]*model.RoleBinding, 0, 4)
 		for _, scope := range []struct {
-			type_ model.RoleScopeType
-			id    string
+			kind model.RoleScopeType
+			id   string
 		}{
 			{model.RoleScopeInstitution, institution.ID.String()},
 			{model.RoleScopeAcademicUnit, child.ID.String()},
 			{model.RoleScopeAcademicUnit, sibling.ID.String()},
 			{model.RoleScopeClass, class.ID.String()},
 		} {
-			saved, saveErr := SaveRoleBinding(ctx, ss, &model.RoleBinding{UserID: user.ID, RoleID: role.ID, ScopeType: scope.type_, ScopeID: scope.id, StartsAt: model.TimeFromMillis(start)})
+			saved, saveErr := SaveRoleBinding(ctx, ss, &model.RoleBinding{UserID: user.ID, RoleID: role.ID, ScopeType: scope.kind, ScopeID: scope.id, StartsAt: model.TimeFromMillis(start)})
 			require.NoError(t, saveErr)
 			bindings = append(bindings, saved)
 		}

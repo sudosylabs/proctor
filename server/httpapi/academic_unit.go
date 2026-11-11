@@ -8,9 +8,13 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -34,183 +38,276 @@ type createAcademicUnitRequest struct {
 }
 
 type updateAcademicUnitRequest struct {
-	ExpectedRevision Optional[int64] `json:"expected_revision"`
-	ParentID         *string         `json:"parent_id"`
-	Name             *string         `json:"name"`
-	DisplayName      *string         `json:"display_name"`
-	Description      *string         `json:"description"`
+	ExpectedRevision route.Optional[int64] `json:"expected_revision"`
+	ParentID         *string               `json:"parent_id"`
+	Name             *string               `json:"name"`
+	DisplayName      *string               `json:"display_name"`
+	Description      *string               `json:"description"`
 }
 
-type academicUnitResourceModule struct {
-	academicUnits AcademicUnitApplication
+type academicUnitHandlers struct {
+	app AcademicUnitApplication
 }
 
-func academicUnitResource(academicUnits AcademicUnitApplication) apiResource {
-	module := academicUnitResourceModule{academicUnits: academicUnits}
-	collection := apiPath(literal("academic-units"))
-	member := apiPath(literal("academic-units"), canonicalID("academic_unit_id"))
-	children := apiPath(literal("academic-units"), canonicalID("academic_unit_id"), literal("children"))
-	return newResource(
+func academicUnitResource(app AcademicUnitApplication) route.Resource {
+	h := academicUnitHandlers{app: app}
+	collection := "/academic-units"
+	member := "/academic-units/{academic_unit_id}"
+	children := "/academic-units/{academic_unit_id}/children"
+	return route.NewResource(
 		"academic-units",
-		principalRoute(http.MethodGet, collection, []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "request.invalid", "administration.unavailable", "resource.not_found"}, module.listRoot),
-		idempotentPrincipalRoute(IdempotencyOptional, http.MethodPost, collection, []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "academic_unit.invalid", "academic_unit.conflict", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress", "administration.unavailable", "resource.not_found"}, module.createRoot),
-		principalRoute(http.MethodGet, member, []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "resource.not_found", "administration.unavailable", "request.invalid"}, module.get),
-		principalRoute(http.MethodPatch, member, academicMutationErrorCodes("request.invalid", "resource.not_found", "academic_unit.invalid", "academic_unit.conflict"), module.patch),
-		principalRoute(http.MethodDelete, member, academicMutationErrorCodes("request.invalid", "resource.not_found", "academic_unit.conflict"), module.archive),
-		principalRoute(http.MethodGet, children, []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "resource.not_found", "administration.unavailable", "request.invalid"}, module.listChildren),
-		principalRoute(http.MethodPost, children, academicMutationErrorCodes("request.invalid", "resource.not_found", "academic_unit.invalid", "academic_unit.conflict"), module.createChild),
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   collection,
+			Auth:   route.AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"request.invalid",
+				"administration.unavailable",
+				"resource.not_found",
+			},
+			Handle: h.listRoot,
+		},
+		route.Endpoint{
+			Method:      http.MethodPost,
+			Path:        collection,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyOptional,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"academic_unit.invalid",
+				"academic_unit.conflict",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+				"administration.unavailable",
+				"resource.not_found",
+			},
+			Handle: h.createRoot,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   member,
+			Auth:   route.AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"resource.not_found",
+				"administration.unavailable",
+				"request.invalid",
+			},
+			Handle: h.get,
+		},
+		route.Endpoint{
+			Method: http.MethodPatch,
+			Path:   member,
+			Auth:   route.AuthPrincipalRequired,
+			Errors: academicMutationErrorCodes("request.invalid", "resource.not_found", "academic_unit.invalid", "academic_unit.conflict"),
+			Handle: h.patch,
+		},
+		route.Endpoint{
+			Method: http.MethodDelete,
+			Path:   member,
+			Auth:   route.AuthPrincipalRequired,
+			Errors: academicMutationErrorCodes("request.invalid", "resource.not_found", "academic_unit.conflict"),
+			Handle: h.archive,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   children,
+			Auth:   route.AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"resource.not_found",
+				"administration.unavailable",
+				"request.invalid",
+			},
+			Handle: h.listChildren,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   children,
+			Auth:   route.AuthPrincipalRequired,
+			Errors: academicMutationErrorCodes("request.invalid", "resource.not_found", "academic_unit.invalid", "academic_unit.conflict"),
+			Handle: h.createChild,
+		},
 	)
 }
 
-func (m academicUnitResourceModule) listRoot(request operationRequest) (operationResult, error) {
-	pageQuery, err := request.academicNamePageQuery()
+func (h academicUnitHandlers) listRoot(request route.Request) (route.Result, error) {
+	pageQuery, err := academicNamePageQuery(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	var page app.Page[*model.AcademicUnit]
-	if query := request.request.URL.Query().Get("q"); query != "" {
-		page, err = m.academicUnits.SearchAcademicUnits(
-			request.context,
-			request.invocation(),
-			app.SearchAcademicUnitsQuery{Query: query, NamePageQuery: pageQuery},
+	var page paging.Page[*model.AcademicUnit]
+	if query := request.HTTP.URL.Query().Get("q"); query != "" {
+		page, err = h.app.SearchAcademicUnits(
+			request.Context,
+			request.Invocation(),
+			academic.SearchAcademicUnitsQuery{Query: query, NameQuery: pageQuery},
 		)
 	} else {
-		page, err = m.academicUnits.ListAcademicUnits(
-			request.context, request.invocation(), app.ListAcademicUnitsQuery{NamePageQuery: pageQuery},
+		page, err = h.app.ListAcademicUnits(
+			request.Context, request.Invocation(), academic.ListAcademicUnitsQuery{NameQuery: pageQuery},
 		)
 	}
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	return academicNameListResult(page, academicUnitResponseFromModel, func(unit *model.AcademicUnit) (string, string) {
 		return unit.Name, unit.ID.String()
 	})
 }
 
-func (m academicUnitResourceModule) createRoot(request operationRequest) (operationResult, error) {
+func (h academicUnitHandlers) createRoot(request route.Request) (route.Result, error) {
 	var body createAcademicUnitRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
-	saved, err := m.academicUnits.CreateAcademicUnit(
-		request.context,
-		request.invocation(),
-		app.CreateAcademicUnitCommand{
-			Name: body.Name, DisplayName: body.DisplayName,
-			Description: body.Description, IdempotencyKey: request.idempotencyKey,
+
+	saved, err := h.app.CreateAcademicUnit(
+		request.Context,
+		request.Invocation(),
+		academic.CreateAcademicUnitCommand{
+			Name:           body.Name,
+			DisplayName:    body.DisplayName,
+			Description:    body.Description,
+			IdempotencyKey: request.IdempotencyKey,
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusCreated, academicUnitResponseFromModel(saved)), nil
+
+	return route.JSON(http.StatusCreated, academicUnitResponseFromModel(saved)), nil
 }
 
-func (m academicUnitResourceModule) get(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireAcademicUnitID()
+func (h academicUnitHandlers) get(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	unit, err := m.academicUnits.GetAcademicUnit(
-		request.context,
-		request.invocation(),
-		app.GetAcademicUnitQuery{ID: id},
+	unit, err := h.app.GetAcademicUnit(
+		request.Context,
+		request.Invocation(),
+		id,
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, academicUnitResponseFromModel(unit)), nil
+	return route.JSON(http.StatusOK, academicUnitResponseFromModel(unit)), nil
 }
 
-func (m academicUnitResourceModule) patch(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireAcademicUnitID()
+func (h academicUnitHandlers) patch(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	var body updateAcademicUnitRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
-	if err := validateAcademicRevision(body.ExpectedRevision); err != nil {
-		return operationResult{}, err
+	if validateErr := validateAcademicRevision(body.ExpectedRevision); validateErr != nil {
+		return route.Result{}, validateErr
 	}
-	unit, err := m.academicUnits.UpdateAcademicUnit(
-		request.context,
-		request.invocation(),
-		app.UpdateAcademicUnitCommand{ExpectedRevision: body.ExpectedRevision.ValuePointer(),
-			ID: id, ParentID: optionalIdentifier[model.AcademicUnitID](body.ParentID), Name: body.Name,
-			DisplayName: body.DisplayName, Description: body.Description,
+
+	unit, err := h.app.UpdateAcademicUnit(
+		request.Context,
+		request.Invocation(),
+		academic.UpdateAcademicUnitCommand{
+			ExpectedRevision: body.ExpectedRevision.ValuePointer(),
+			ID:               id,
+			ParentID:         route.OptionalID[model.AcademicUnitID](body.ParentID),
+			Name:             body.Name,
+			DisplayName:      body.DisplayName,
+			Description:      body.Description,
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, academicUnitResponseFromModel(unit)), nil
+
+	return route.JSON(http.StatusOK, academicUnitResponseFromModel(unit)), nil
 }
 
-func (m academicUnitResourceModule) archive(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireAcademicUnitID()
+func (h academicUnitHandlers) archive(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	expectedRevision, err := request.academicRevision()
+	expectedRevision, err := academicRevision(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	err = m.academicUnits.ArchiveAcademicUnit(
-		request.context,
-		request.invocation(),
-		app.ArchiveAcademicUnitCommand{ExpectedRevision: expectedRevision, ID: id},
+	err = h.app.ArchiveAcademicUnit(
+		request.Context,
+		request.Invocation(),
+		academic.ArchiveAcademicUnitCommand{ExpectedRevision: expectedRevision, ID: id},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return noContentResult(), nil
+	return route.NoContent(), nil
 }
 
-func (m academicUnitResourceModule) listChildren(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireAcademicUnitID()
+func (h academicUnitHandlers) listChildren(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	pageQuery, err := request.academicNamePageQuery()
+	pageQuery, err := academicNamePageQuery(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	page, err := m.academicUnits.ListAcademicUnits(
-		request.context,
-		request.invocation(),
-		app.ListAcademicUnitsQuery{ParentID: id, NamePageQuery: pageQuery},
+	page, err := h.app.ListAcademicUnits(
+		request.Context,
+		request.Invocation(),
+		academic.ListAcademicUnitsQuery{ParentID: id, NameQuery: pageQuery},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	return academicNameListResult(page, academicUnitResponseFromModel, func(unit *model.AcademicUnit) (string, string) {
 		return unit.Name, unit.ID.String()
 	})
 }
 
-func (m academicUnitResourceModule) createChild(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireAcademicUnitID()
+func (h academicUnitHandlers) createChild(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	var body createAcademicUnitRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
-	saved, err := m.academicUnits.CreateAcademicUnit(
-		request.context,
-		request.invocation(),
-		app.CreateAcademicUnitCommand{
-			ParentID: id, Name: body.Name, DisplayName: body.DisplayName,
+
+	saved, err := h.app.CreateAcademicUnit(
+		request.Context,
+		request.Invocation(),
+		academic.CreateAcademicUnitCommand{
+			ParentID:    id,
+			Name:        body.Name,
+			DisplayName: body.DisplayName,
 			Description: body.Description,
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusCreated, academicUnitResponseFromModel(saved)), nil
+
+	return route.JSON(http.StatusCreated, academicUnitResponseFromModel(saved)), nil
 }
 
 func academicUnitResponseFromModel(unit *model.AcademicUnit) academicUnitResponse {
@@ -218,7 +315,8 @@ func academicUnitResponseFromModel(unit *model.AcademicUnit) academicUnitRespons
 		return academicUnitResponse{}
 	}
 	return academicUnitResponse{
-		Revision: unit.Revision, ID: unit.ID.String(),
+		Revision:      unit.Revision,
+		ID:            unit.ID.String(),
 		CreatedAt:     model.FormatRFC3339(unit.CreatedAt),
 		UpdatedAt:     model.FormatRFC3339(unit.UpdatedAt),
 		ArchivedAt:    unit.ArchivedAt.FormatRFC3339(),
@@ -228,4 +326,14 @@ func academicUnitResponseFromModel(unit *model.AcademicUnit) academicUnitRespons
 		DisplayName:   unit.DisplayName,
 		Description:   unit.Description,
 	}
+}
+
+// AcademicUnitApplication is the application port its handlers call; it reads and changes Academic Units.
+type AcademicUnitApplication interface {
+	GetAcademicUnit(context.Context, invocation.Invocation, model.AcademicUnitID) (*model.AcademicUnit, error)
+	ListAcademicUnits(context.Context, invocation.Invocation, academic.ListAcademicUnitsQuery) (paging.Page[*model.AcademicUnit], error)
+	SearchAcademicUnits(context.Context, invocation.Invocation, academic.SearchAcademicUnitsQuery) (paging.Page[*model.AcademicUnit], error)
+	CreateAcademicUnit(context.Context, invocation.Invocation, academic.CreateAcademicUnitCommand) (*model.AcademicUnit, error)
+	UpdateAcademicUnit(context.Context, invocation.Invocation, academic.UpdateAcademicUnitCommand) (*model.AcademicUnit, error)
+	ArchiveAcademicUnit(context.Context, invocation.Invocation, academic.ArchiveAcademicUnitCommand) error
 }

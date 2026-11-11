@@ -24,22 +24,47 @@ import (
 // revokes Sessions and personal access tokens, and enqueues the security Notice
 // mail. It refuses to remove the last System Administrator authentication path.
 func (s SQLMFAStore) Reset(ctx context.Context, input *store.MFAAssistedReset) (*store.MFAResetResult, error) {
-	if input == nil || input.Principal.Validate() != nil || input.Principal.CredentialType != model.CredentialSessionAccess || input.UserID == input.Principal.UserID || !input.UserID.IsValid() || !input.IdentityVerified || strings.TrimSpace(input.Reason) == "" || utf8.RuneCountInString(input.Reason) > 512 || strings.TrimSpace(input.VerificationReference) == "" || utf8.RuneCountInString(input.VerificationReference) > 128 || input.RecentAuthenticationTTL <= 0 || !input.AuditEventID.IsValid() {
+	if input == nil ||
+		input.Principal.Validate() != nil ||
+		input.Principal.CredentialType != model.CredentialSessionAccess ||
+		input.UserID == input.Principal.UserID ||
+		!input.UserID.IsValid() ||
+		!input.IdentityVerified ||
+		strings.TrimSpace(input.Reason) == "" ||
+		utf8.RuneCountInString(input.Reason) > 512 ||
+		strings.TrimSpace(input.VerificationReference) == "" ||
+		utf8.RuneCountInString(input.VerificationReference) > 128 ||
+		input.RecentAuthenticationTTL <= 0 ||
+		!input.AuditEventID.IsValid() {
 		return nil, store.NewErrInvalidInput("user_mfa_recovery", "reset", nil)
 	}
-	payloadKeyID, err := validateSecurityNoticeMail(input.UserID, input.Notice.Occurrence, input.Notice.Delivery, input.Notice.Job, model.MailTemplateIdentityMFAReset, input.NoticeAt)
+
+	payloadKeyID, err := validateSecurityNoticeMail(
+		input.UserID,
+		input.Notice.Occurrence,
+		input.Notice.Delivery,
+		input.Notice.Job,
+		model.MailTemplateIdentityMFAReset,
+		input.NoticeAt,
+	)
 	if err != nil {
 		return nil, err
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "administrator MFA reset", func(ctx context.Context, tx *sqlxTxWrapper) (*store.MFAResetResult, error) {
+
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "administrator MFA reset", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.MFAResetResult, error) {
 		if payloadKeyID != "" {
 			if err := requireMailPayloadPrimary(ctx, tx, payloadKeyID); err != nil {
 				return nil, err
 			}
 		}
+
 		if err := lockSystemAdministratorAuthenticationPaths(ctx, tx); err != nil {
 			return nil, err
 		}
+
 		ids := []string{input.Principal.UserID.String(), input.UserID.String()}
 		sort.Strings(ids)
 		for _, id := range ids {
@@ -47,16 +72,19 @@ func (s SQLMFAStore) Reset(ctx context.Context, input *store.MFAAssistedReset) (
 				return nil, err
 			}
 		}
+
 		if err := lockMFAUser(ctx, tx, input.UserID.String()); err != nil {
 			return nil, err
 		}
 		if err := lockPersonalAccessTokensForUser(ctx, tx, input.UserID.String()); err != nil {
 			return nil, err
 		}
+
 		_, at, err := currentMFASession(ctx, tx, input.Principal, false, input.RecentAuthenticationTTL, true)
 		if err != nil {
 			return nil, err
 		}
+
 		administrator, err := isActiveSystemAdministrator(ctx, tx, input.Principal.UserID.String(), at)
 		if err != nil {
 			return nil, err
@@ -64,24 +92,35 @@ func (s SQLMFAStore) Reset(ctx context.Context, input *store.MFAAssistedReset) (
 		if !administrator {
 			return nil, store.NewErrConflict("authorization", "authority", nil)
 		}
+
 		policy, err := getAccessPolicy(ctx, tx, "FOR SHARE")
 		if err != nil {
 			return nil, err
 		}
-		usable, err := hasUsableSystemAdministratorAuthenticationPath(ctx, tx, policy.Settings(), input.Capabilities, at, systemAdministratorAuthenticationPathScope{ExcludedUserID: input.UserID.String()})
+
+		usable, err := hasUsableSystemAdministratorAuthenticationPath(
+			ctx,
+			tx,
+			policy.Settings(),
+			input.Capabilities,
+			at,
+			systemAdministratorAuthenticationPathScope{ExcludedUserID: input.UserID.String()},
+		)
 		if err != nil {
 			return nil, err
 		}
 		if !usable {
 			return nil, store.NewErrConflict("user_mfa_recovery", "last_administrator_path", nil)
 		}
+
 		result, err := resetMFAUserAccess(ctx, tx, input.UserID, at)
 		if err != nil {
 			return nil, err
 		}
-		if err := insertSecurityNoticeMail(ctx, tx, input.Notice.Occurrence, input.Notice.Delivery, input.Notice.Job, payloadKeyID); err != nil {
-			return nil, err
+		if insertErr := insertSecurityNoticeMail(ctx, tx, input.Notice.Occurrence, input.Notice.Delivery, input.Notice.Job, payloadKeyID); insertErr != nil {
+			return nil, insertErr
 		}
+
 		encoded, err := model.EncodeAuditData(result.Recovery.Auditable())
 		if err != nil {
 			return nil, err
@@ -89,6 +128,7 @@ func (s SQLMFAStore) Reset(ctx context.Context, input *store.MFAAssistedReset) (
 		if _, err := completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", encoded, at); err != nil {
 			return nil, err
 		}
+
 		return result, nil
 	})
 }
@@ -102,63 +142,172 @@ func resetMFAUserAccess(ctx context.Context, tx *sqlxTxWrapper, userID model.Use
 	if err != nil {
 		return nil, err
 	}
+
 	at = model.TimeUTC(at)
 	if prior.ResetAt.Valid && !at.After(prior.ResetAt.Time) {
 		return nil, store.NewErrConflict("user_mfa_recovery", "reset_time", nil)
 	}
+
 	for _, table := range []string{"mfa_credentials", "mfa_recovery_codes"} {
-		if _, err := tx.Exec(ctx, `UPDATE `+table+` SET updated_at=GREATEST(updated_at,?),archived_at=? WHERE user_id=? AND archived_at IS NULL`, at, at, userID.String()); err != nil {
-			return nil, fmt.Errorf("retire reset MFA material: %w", err)
+		if _, execErr := tx.Exec(
+			ctx,
+			`UPDATE `+table+` SET updated_at = GREATEST(updated_at, ?), archived_at = ?
+			WHERE user_id = ?
+				AND archived_at IS NULL`,
+			at,
+			at,
+			userID.String(),
+		); execErr != nil {
+			return nil, fmt.Errorf("retire reset MFA material: %w", execErr)
 		}
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO user_mfa_recovery(user_id,generation,reset_at,reenrollment_required,updated_at) VALUES(?,1,?,true,?) ON CONFLICT(user_id) DO UPDATE SET generation=user_mfa_recovery.generation+1,reset_at=EXCLUDED.reset_at,reenrollment_required=true,updated_at=EXCLUDED.updated_at`, userID.String(), at, at); err != nil {
-		return nil, err
+
+	if _, execErr := tx.Exec(
+		ctx,
+		`INSERT INTO user_mfa_recovery(user_id, generation, reset_at, reenrollment_required,
+			updated_at)
+		VALUES(?, 1, ?, true, ?)
+		ON CONFLICT(user_id) DO UPDATE
+		SET generation = user_mfa_recovery.generation+1, reset_at = EXCLUDED.reset_at,
+			reenrollment_required = true, updated_at = EXCLUDED.updated_at`,
+		userID.String(),
+		at,
+		at,
+	); execErr != nil {
+		return nil, execErr
 	}
+
 	rows, hashes, err := revokeAllUserSessionsAt(ctx, tx, userID.String(), at, model.SessionRevocationMFAReset)
 	if err != nil {
 		return nil, err
 	}
+
 	sessions := make([]*model.Session, 0, len(rows))
 	for _, row := range rows {
-		session, err := row.model()
-		if err != nil {
-			return nil, err
+		session, modelErr := row.model()
+		if modelErr != nil {
+			return nil, modelErr
 		}
+
 		// Revocation SQL clamps PostgreSQL time to the node-clock creation.
 		session.RevokedAt = model.OptionalTimeFrom(latestTime(session.CreatedAt, at))
 		session.RevocationReason = model.SessionRevocationMFAReset
 		if session.UpdatedAt.Before(at) {
 			session.UpdatedAt = at
 		}
+
 		sessions = append(sessions, session)
 	}
-	if _, err := tx.Exec(ctx, `UPDATE personal_access_tokens SET updated_at=GREATEST(updated_at,?),revoked_at=? WHERE user_id=? AND revoked_at IS NULL`, at, at, userID.String()); err != nil {
-		return nil, err
+
+	if _, execErr := tx.Exec(
+		ctx,
+		`UPDATE personal_access_tokens
+		SET updated_at = GREATEST(updated_at, ?), revoked_at = ?
+		WHERE user_id = ?
+			AND revoked_at IS NULL`,
+		at,
+		at,
+		userID.String(),
+	); execErr != nil {
+		return nil, execErr
 	}
+
 	preparations := []personalAccessTokenPreparationRow{}
-	if err := tx.Select(ctx, &preparations, `SELECT `+personalAccessTokenPreparationColumns+` FROM personal_access_token_mutation_preparations WHERE user_id=? ORDER BY id FOR UPDATE`, userID.String()); err != nil {
-		return nil, err
+	if selectErr := tx.Select(
+		ctx,
+		&preparations,
+		`SELECT `+personalAccessTokenPreparationColumns+` FROM personal_access_token_mutation_preparations
+		WHERE user_id = ?
+		ORDER BY id
+		FOR UPDATE`,
+		userID.String(),
+	); selectErr != nil {
+		return nil, selectErr
 	}
+
 	for i := range preparations {
-		if err := terminalizePersonalAccessTokenPreparation(ctx, tx, &preparations[i], model.AuditStatusFail, "authentication.mfa.reenrollment_required", nil); err != nil {
-			return nil, err
+		if terminalizeErr := terminalizePersonalAccessTokenPreparation(
+			ctx,
+			tx,
+			&preparations[i],
+			model.AuditStatusFail,
+			"authentication.mfa.reenrollment_required",
+			nil,
+		); terminalizeErr != nil {
+			return nil, terminalizeErr
 		}
 	}
-	if _, err = tx.Exec(ctx, `UPDATE user_tokens SET updated_at=GREATEST(updated_at,?),archived_at=GREATEST(created_at,?) WHERE user_id=? AND archived_at IS NULL AND consumed_at IS NULL`, at, at, userID.String()); err != nil {
+
+	if _, err = tx.Exec(
+		ctx,
+		`UPDATE user_tokens
+		SET updated_at = GREATEST(updated_at, ?), archived_at = GREATEST(created_at, ?)
+		WHERE user_id = ?
+			AND archived_at IS NULL
+			AND consumed_at IS NULL`,
+		at,
+		at,
+		userID.String(),
+	); err != nil {
 		return nil, err
 	}
-	if _, err := tx.Exec(ctx, `UPDATE audit_events a SET updated_at=GREATEST(a.updated_at,?),status='fail',error_code='authentication.mfa.reenrollment_required' FROM external_login_states s WHERE s.target_user_id=? AND s.audit_event_id=a.id AND a.status='attempt'`, at, userID.String()); err != nil {
+
+	if _, execErr := tx.Exec(
+		ctx,
+		`UPDATE audit_events a
+		SET updated_at = GREATEST(a.updated_at, ?), status = 'fail',
+			error_code = 'authentication.mfa.reenrollment_required'
+		FROM external_login_states s
+		WHERE s.target_user_id = ?
+			AND s.audit_event_id = a.id
+			AND a.status = 'attempt'`,
+		at,
+		userID.String(),
+	); execErr != nil {
+		return nil, execErr
+	}
+
+	if _, execErr := tx.Exec(
+		ctx,
+		`UPDATE external_login_states
+		SET updated_at = GREATEST(updated_at, ?),
+			consumed_at = LEAST(GREATEST(created_at, ?), expires_at-interval '1 microsecond')
+		WHERE target_user_id = ?
+			AND consumed_at IS NULL`,
+		at,
+		at,
+		userID.String(),
+	); execErr != nil {
+		return nil, execErr
+	}
+
+	if _, err = tx.Exec(
+		ctx,
+		`UPDATE browser_authentication_transactions
+		SET state = 'canceled', updated_at = ?, canceled_at = ?, handle_hash = NULL,
+			browser_proof_hash = NULL, state_hash = NULL, callback_url = NULL,
+			code_challenge = NULL, proposed_public_jwk = NULL, proposed_key_thumbprint = NULL,
+			desktop_release = NULL, desktop_build_id = NULL, desktop_platform = NULL,
+			desktop_architecture = NULL, desktop_realtime_protocol = NULL, user_id = NULL,
+			authentication_method = NULL, authentication_provider_id = NULL,
+			external_identity_id = NULL, password_credential_id = NULL,
+			password_credential_revision = NULL, authentication_strength = NULL,
+			authenticated_at = NULL, mfa_completed_at = NULL, code_hash = NULL,
+			code_expires_at = NULL
+		WHERE user_id = ?
+			AND purpose = 'desktop_authorization'
+			AND state IN ('authenticated', 'code_issued')`,
+		at,
+		at,
+		userID.String(),
+	); err != nil {
 		return nil, err
 	}
-	if _, err := tx.Exec(ctx, `UPDATE external_login_states SET updated_at=GREATEST(updated_at,?),consumed_at=LEAST(GREATEST(created_at,?),expires_at-interval '1 microsecond') WHERE target_user_id=? AND consumed_at IS NULL`, at, at, userID.String()); err != nil {
-		return nil, err
-	}
-	if _, err = tx.Exec(ctx, `UPDATE browser_authentication_transactions SET state='canceled',updated_at=?,canceled_at=?,handle_hash=NULL,browser_proof_hash=NULL,state_hash=NULL,callback_url=NULL,code_challenge=NULL,proposed_public_jwk=NULL,proposed_key_thumbprint=NULL,desktop_release=NULL,desktop_build_id=NULL,desktop_platform=NULL,desktop_architecture=NULL,desktop_realtime_protocol=NULL,user_id=NULL,authentication_method=NULL,authentication_provider_id=NULL,external_identity_id=NULL,password_credential_id=NULL,password_credential_revision=NULL,authentication_strength=NULL,authenticated_at=NULL,mfa_completed_at=NULL,code_hash=NULL,code_expires_at=NULL WHERE user_id=? AND purpose='desktop_authorization' AND state IN ('authenticated','code_issued')`, at, at, userID.String()); err != nil {
-		return nil, err
-	}
+
 	recovery, err := getMFARecoveryState(ctx, tx, userID)
 	if err != nil {
 		return nil, err
 	}
+
 	return &store.MFAResetResult{Recovery: recovery, Sessions: sessions, AccessTokenHashes: hashes}, nil
 }

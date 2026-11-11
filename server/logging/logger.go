@@ -78,6 +78,7 @@ func (l *Logger) Configure(cfg Config) error {
 	if l == nil || l.core == nil {
 		return errors.New("logger is nil")
 	}
+
 	l.core.mu.RLock()
 	closed, locked := l.core.closed, l.core.locked
 	l.core.mu.RUnlock()
@@ -87,10 +88,12 @@ func (l *Logger) Configure(cfg Config) error {
 	if locked {
 		return ErrConfigurationLocked
 	}
+
 	configured, err := buildBackend(cfg, &l.core.diagnostics)
 	if err != nil {
 		return err
 	}
+
 	l.core.mu.Lock()
 	if l.core.closed || l.core.locked {
 		closed, locked = l.core.closed, l.core.locked
@@ -103,6 +106,7 @@ func (l *Logger) Configure(cfg Config) error {
 			return ErrConfigurationLocked
 		}
 	}
+
 	previous := l.core.backend
 	l.core.backend = configured
 	l.core.mu.Unlock()
@@ -111,6 +115,7 @@ func (l *Logger) Configure(cfg Config) error {
 			l.core.diagnostics.report(shutdownErr)
 		}
 	}
+
 	return nil
 }
 

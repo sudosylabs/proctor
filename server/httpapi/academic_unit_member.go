@@ -8,9 +8,12 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -57,88 +60,134 @@ type createAcademicUnitMemberRequest struct {
 	StartAt string `json:"start_at"`
 }
 
-type academicUnitMemberResourceModule struct {
-	members AcademicUnitMemberApplication
+type academicUnitMemberHandlers struct {
+	app AcademicUnitMemberApplication
 }
 
-func academicUnitMemberResource(members AcademicUnitMemberApplication) apiResource {
-	module := academicUnitMemberResourceModule{members: members}
-	return newResource(
+func academicUnitMemberResource(app AcademicUnitMemberApplication) route.Resource {
+	h := academicUnitMemberHandlers{app: app}
+	return route.NewResource(
 		"academic-unit-members",
-		principalRoute(
-			http.MethodGet,
-			apiPath(literal("academic-units"), canonicalID("academic_unit_id"), literal("members")),
-			academicRelationshipReadErrorCodes(),
-			module.list,
-		),
-		principalRoute(
-			http.MethodPost,
-			apiPath(literal("academic-units"), canonicalID("academic_unit_id"), literal("members")),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "academic_unit_member.invalid", "academic_unit_member.conflict", "administration.unavailable", "mail.unavailable"},
-			module.create,
-		),
-		principalRoute(
-			http.MethodDelete,
-			apiPath(literal("academic-unit-members"), canonicalID("academic_unit_member_id")),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "academic_unit_member.conflict", "administration.unavailable", "mail.unavailable"},
-			module.end,
-		),
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/academic-units/{academic_unit_id}/members",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: academicRelationshipReadErrorCodes(),
+			Handle: h.list,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/academic-units/{academic_unit_id}/members",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"academic_unit_member.invalid",
+				"academic_unit_member.conflict",
+				"administration.unavailable",
+				"mail.unavailable",
+			},
+			Handle: h.create,
+		},
+		route.Endpoint{
+			Method: http.MethodDelete,
+			Path:   "/academic-unit-members/{academic_unit_member_id}",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"academic_unit_member.conflict",
+				"administration.unavailable",
+				"mail.unavailable",
+			},
+			Handle: h.end,
+		},
 	)
 }
 
-func (m academicUnitMemberResourceModule) list(request operationRequest) (operationResult, error) {
-	unitID, err := request.params.RequireAcademicUnitID()
+func (h academicUnitMemberHandlers) list(request route.Request) (route.Result, error) {
+	unitID, err := route.PathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	scope := model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()}
-	query, after, err := membershipPageQuery(request.request, scope)
+	query, after, err := membershipPageQuery(request.HTTP, scope)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	page, err := m.members.ListAcademicUnitMembersPage(request.context, request.invocation(), app.ListAcademicUnitMembersPageQuery{AcademicUnitID: unitID, MembershipPageQuery: query, AfterUserID: model.UserID(after.AfterUserID), AfterID: model.AcademicUnitMemberID(after.AfterID)})
+
+	page, err := h.app.ListAcademicUnitMembersPage(request.Context, request.Invocation(), academic.ListAcademicUnitMembersPageQuery{
+		AcademicUnitID:      unitID,
+		MembershipPageQuery: query,
+		AfterUserID:         model.UserID(after.AfterUserID),
+		AfterID:             model.AcademicUnitMemberID(after.AfterID),
+	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	present := func(member *model.AcademicUnitMember) academicUnitMemberListItemResponse {
 		return academicUnitMemberListItemResponseFromPage(page, member)
 	}
-	return membershipListResult(scope, page.ActiveAt, page.Members, page.HasMore, present,
+	return membershipListResult(
+		scope,
+		page.ActiveAt,
+		page.Members,
+		page.HasMore,
+		present,
 		func(member *model.AcademicUnitMember) (string, string) {
 			return member.UserID.String(), member.ID.String()
-		})
+		},
+	)
 }
 
-func (m academicUnitMemberResourceModule) create(request operationRequest) (operationResult, error) {
-	unitID, err := request.params.RequireAcademicUnitID()
+func (h academicUnitMemberHandlers) create(request route.Request) (route.Result, error) {
+	unitID, err := route.PathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	var body createAcademicUnitMemberRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
-	startAt, err := wireTimeMillis("start_at", body.StartAt)
+
+	startAt, err := route.WireTimeMillis("start_at", body.StartAt)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	saved, err := m.members.CreateAcademicUnitMember(request.context, request.invocation(), app.CreateAcademicUnitMemberCommand{AcademicUnitID: unitID, UserID: model.UserID(body.UserID), StartAt: startAt})
+
+	saved, err := h.app.CreateAcademicUnitMember(request.Context, request.Invocation(), academic.CreateAcademicUnitMemberCommand{
+		AcademicUnitID: unitID,
+		UserID:         model.UserID(body.UserID),
+		StartAt:        startAt,
+	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusCreated, academicUnitMemberResponseFromModel(saved)), nil
+
+	return route.JSON(http.StatusCreated, academicUnitMemberResponseFromModel(saved)), nil
 }
 
-func (m academicUnitMemberResourceModule) end(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireAcademicUnitMemberID()
+func (h academicUnitMemberHandlers) end(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.AcademicUnitMemberID](request, "academic_unit_member_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	ended, err := m.members.EndAcademicUnitMember(request.context, request.invocation(), app.EndAcademicUnitMemberCommand{ID: id})
+	ended, err := h.app.EndAcademicUnitMember(request.Context, request.Invocation(), academic.EndAcademicUnitMemberCommand{ID: id})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, academicUnitMemberResponseFromModel(ended)), nil
+	return route.JSON(http.StatusOK, academicUnitMemberResponseFromModel(ended)), nil
 }
 
 func academicUnitMemberResponseFromModel(member *model.AcademicUnitMember) academicUnitMemberResponse {
@@ -157,21 +206,46 @@ func academicUnitMemberResponseFromModel(member *model.AcademicUnitMember) acade
 	}
 }
 
-func academicUnitMemberListItemResponseFromPage(page *app.AcademicUnitMemberPage, member *model.AcademicUnitMember) academicUnitMemberListItemResponse {
+func academicUnitMemberListItemResponseFromPage(
+	page *academic.AcademicUnitMemberPage,
+	member *model.AcademicUnitMember,
+) academicUnitMemberListItemResponse {
 	identity := page.Users[member.UserID]
 	item := academicUnitMemberListItemResponse{
 		academicUnitMemberResponse: academicUnitMemberResponseFromModel(member),
-		User:                       academicUnitMemberUserResponse{DisplayName: identity.DisplayName, Username: identity.Username, Email: identity.Email},
+		User: academicUnitMemberUserResponse{
+			DisplayName: identity.DisplayName,
+			Username:    identity.Username,
+			Email:       identity.Email,
+		},
 	}
 	if page.RolesHere == nil {
 		return item
 	}
+
 	roles := page.RolesHere[member.UserID]
 	item.academicUnitMemberRolesHereResponse = &academicUnitMemberRolesHereResponse{
-		RolesHere: make([]academicUnitMemberRoleResponse, 0, len(roles.Bindings)), RolesHereMore: roles.More,
+		RolesHere:     make([]academicUnitMemberRoleResponse, 0, len(roles.Bindings)),
+		RolesHereMore: roles.More,
 	}
 	for _, binding := range roles.Bindings {
 		item.RolesHere = append(item.RolesHere, academicUnitMemberRoleResponse{RoleID: binding.RoleID.String(), DisplayName: binding.DisplayName})
 	}
+
 	return item
+}
+
+// AcademicUnitMemberApplication is the application port its handlers call; it lists, adds and ends Academic Unit memberships.
+type AcademicUnitMemberApplication interface {
+	ListAcademicUnitMembersPage(
+		context.Context,
+		invocation.Invocation,
+		academic.ListAcademicUnitMembersPageQuery,
+	) (*academic.AcademicUnitMemberPage, error)
+	CreateAcademicUnitMember(
+		context.Context,
+		invocation.Invocation,
+		academic.CreateAcademicUnitMemberCommand,
+	) (*model.AcademicUnitMember, error)
+	EndAcademicUnitMember(context.Context, invocation.Invocation, academic.EndAcademicUnitMemberCommand) (*model.AcademicUnitMember, error)
 }

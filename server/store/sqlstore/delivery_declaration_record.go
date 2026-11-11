@@ -31,6 +31,7 @@ func decodeDeliveryDeclarationRecord(raw []byte) (deliveryDeclarationRecord, err
 	if json.Unmarshal(raw, &record) != nil || record.Receipt.Validate() != nil {
 		return invalid()
 	}
+
 	var canonical []byte
 	var err error
 	var id string
@@ -44,9 +45,14 @@ func decodeDeliveryDeclarationRecord(raw []byte) (deliveryDeclarationRecord, err
 	default:
 		return invalid()
 	}
-	if err != nil || record.RequestDigest != model.SHA256Fingerprint(canonical) || record.Receipt.RequestDigest != record.RequestDigest || record.Receipt.DeclarationID != id {
+
+	if err != nil ||
+		record.RequestDigest != model.SHA256Fingerprint(canonical) ||
+		record.Receipt.RequestDigest != record.RequestDigest ||
+		record.Receipt.DeclarationID != id {
 		return invalid()
 	}
+
 	return record, nil
 }
 

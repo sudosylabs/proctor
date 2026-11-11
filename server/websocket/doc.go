@@ -8,27 +8,24 @@
 //
 // This package implementation is adapted from Mattermost's WebSocket runtime.
 // See server/NOTICE for exact provenance.
+
+// Package websocket is the transport for Proctor's realtime connection: the one
+// authenticated WebSocket a signed-in client keeps open to receive events and,
+// during an Exam, to keep its Attempt connected.
 //
-// Package websocket is the sibling transport module for Proctor's
-// authenticated WebSocket protocol.
+// Hub accepts upgrades, enforces connection limits and delivers the events the
+// application publishes to the connections that should receive them; it is the
+// realtime.Sink. Each connection numbers the events it sends and is closed when
+// it cannot keep up. A client that reconnects to the same node within the
+// replay retention, naming its previous connection and the last sequence it
+// received, is sent the events it missed, provided they are still in that
+// connection's bounded history. Otherwise it gets a new connection and a
+// resync event telling it to fetch current state again. The candidate actions
+// that arrive over the socket (connect, renew, Focus Loss, browser activity)
+// are decoded in exam_attempt.go and handed to app/exam/attempt.
 //
-// Hub owns lifecycle, upgrade admission, connection limits, sharding,
-// publication selection, and the bounded replay catalog. Each accepted socket
-// is handed to a private connection runtime that owns its pumps, liveness,
-// outbound queue, sequencing, subscriptions, backpressure, and close-once
-// behavior. The runtime also owns strict authenticated Exam Attempt connect,
-// renewal, and Focus Loss claim actions; a policy suspension removes the
-// durable Attempt binding before another protected action can run. A committed
-// Submission can likewise remove one exact durable Attempt binding and its
-// candidate subscription while leaving the generic socket open. After every
-// pump has stopped, the runtime returns one immutable snapshot; Hub alone
-// decides whether that snapshot is eligible for local replay. Wire DTOs and
-// validation remain separate protocol contracts.
-// Hub shutdown stops admission and drains those runtimes under the configured
-// server shutdown deadline before the root disposes their shared dependencies.
-//
-// The package deliberately does not own HTTP route registration, application
-// authorization policy, durable state, cross-node replay, or infrastructure
-// selection. Composition mounts Hub on the HTTP transport and attaches it as
-// the application Realtime sink.
+// Nothing here is durable, and nothing here decides who may see what:
+// subscriptions are authorized by the application. The HTTP route that upgrades
+// a request is declared in httpapi. Start with hub.go, then protocol.go for the
+// wire types and connection.go for the life of one connection.
 package websocket

@@ -30,6 +30,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/internal/weborigin"
 	"github.com/sudosylabs/proctor/server/localization"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -75,7 +76,8 @@ const (
 // drains connections when the hub was started.
 type Hub struct {
 	application  Application
-	logger       Logger
+	attempts     ExamAttemptApplication
+	logger       *logging.Logger
 	localizer    Localizer
 	publicOrigin string
 	nodeID       string
@@ -125,11 +127,6 @@ type shard struct {
 	budgets map[string]*sharedFrameBudget
 }
 
-// Logger reports operational transport failures without depending on logging.
-type Logger interface {
-	WarnContext(ctx context.Context, message string, err error)
-}
-
 // Localizer is the narrow presentation port used after the HTTP handshake.
 type Localizer interface {
 	Translate(locale, id string, args any) (string, error)
@@ -147,7 +144,8 @@ type Application interface {
 // connections and background work within the shutdown budget it is handed.
 func NewHub(
 	application Application,
-	logger Logger,
+	attempts ExamAttemptApplication,
+	logger *logging.Logger,
 	publicURL string,
 	nodeID string,
 	localizer Localizer,
@@ -158,13 +156,16 @@ func NewHub(
 	if logger == nil {
 		return nil, errors.New("WebSocket logger is required")
 	}
+
 	publicOrigin, err := weborigin.FromPublicURL(publicURL)
 	if err != nil {
 		return nil, errors.New("WebSocket public URL is invalid")
 	}
+
 	shardCount := max(runtime.NumCPU(), 1)
 	hub := &Hub{
 		application:  application,
+		attempts:     attempts,
 		logger:       logger,
 		localizer:    localizer,
 		publicOrigin: publicOrigin,
@@ -180,6 +181,7 @@ func NewHub(
 			budgets: make(map[string]*sharedFrameBudget),
 		}
 	}
+
 	return hub, nil
 }
 
@@ -238,12 +240,14 @@ func (h *Hub) Accept(
 		}
 		return apperror.New("websocket.unavailable")
 	}
+
 	if !h.OriginAllowed(request.Header.Get("Origin"), allowMissingOrigin) {
 		if h.recorder != nil {
 			h.recorder.ConnectionOpened("origin_invalid")
 		}
 		return apperror.New("websocket.origin.invalid")
 	}
+
 	// A handshake refused before the connection is hijacked leaves the
 	// response uncommitted, so the HTTP transport answers it with Problem
 	// Details instead of the upgrader's plain-text error.
@@ -264,20 +268,24 @@ func (h *Hub) Accept(
 		if h.recorder != nil {
 			h.recorder.ConnectionOpened("upgrade_error")
 		}
-		h.logger.WarnContext(request.Context(), "WebSocket upgrade failed", err)
+
+		h.logger.WarnContext(request.Context(), "WebSocket upgrade failed", logging.Err(err))
 		switch {
 		case refusedStatus >= http.StatusBadRequest && refusedStatus < http.StatusInternalServerError:
 			return apperror.New("request.invalid").Wrap(err)
 		case refusedStatus != 0:
 			return apperror.New("websocket.unavailable").Wrap(err)
 		}
+
 		return nil
 	}
+
 	runtimeSocket := newGorillaConnectionSocket(socket)
 	locale := ""
 	if h.localizer != nil {
 		locale = localization.PreferredLocale(request.Header.Get("Accept-Language"), h.localizer.SupportedLocales())
 	}
+
 	connection, resumed := h.register(
 		runtimeSocket,
 		principal,
@@ -290,6 +298,7 @@ func (h *Hub) Accept(
 		if h.recorder != nil {
 			h.recorder.ConnectionOpened("rejected")
 		}
+
 		_ = runtimeSocket.WriteControl(
 			websocketCloseMessage,
 			websocket.FormatCloseMessage(CloseLimit, localizedCloseReason(h.localizer, locale, websocketCloseMessages["connection_limit"])),
@@ -298,15 +307,18 @@ func (h *Hub) Accept(
 		_ = runtimeSocket.Close()
 		return nil
 	}
+
 	if h.recorder != nil {
 		h.recorder.ConnectionOpened("success")
 	}
+
 	connection.enqueueHello(resumed, connectionID != "" && !resumed)
 	connection.run(request.Context())
 	h.unregister(connection)
 	if h.recorder != nil {
 		h.recorder.ConnectionClosed("closed")
 	}
+
 	return nil
 }
 
@@ -341,6 +353,7 @@ func (h *Hub) register(
 	resume := takeReplayResumeLocked(shard, principal, requestedID, requestedSequence)
 	connection := newConnectionRuntime(
 		h.application,
+		h.attempts,
 		h.logger,
 		h.localizer,
 		locale,
@@ -452,6 +465,7 @@ func (h *Hub) unregister(connection *connectionRuntime) {
 	if !exists || current != connection {
 		return
 	}
+
 	delete(shard.conns, connectionID)
 	if budget := connection.inbound.shared; budget != nil {
 		budget.holders--
@@ -459,10 +473,12 @@ func (h *Hub) unregister(connection *connectionRuntime) {
 			budget.releasedAt = time.Now()
 		}
 	}
+
 	snapshot := connection.finalSnapshot()
 	if h.recorder != nil {
 		h.recorder.AddWebSocketSubscriptions(-len(snapshot.subscriptions))
 	}
+
 	h.mu.RLock()
 	started := h.state == hubStarted
 	h.mu.RUnlock()
@@ -479,7 +495,7 @@ func (h *Hub) unregister(connection *connectionRuntime) {
 }
 
 // PublishLocal implements realtime.Sink using transport-neutral events.
-func (h *Hub) PublishLocal(_ context.Context, event realtime.RealtimeEvent) {
+func (h *Hub) PublishLocal(_ context.Context, event realtime.Event) {
 	h.publishWire(eventFromRealtime(event))
 }
 
@@ -513,12 +529,14 @@ func (h *Hub) publishWire(event *Event) {
 		}
 		return
 	}
+
 	var shards []*shard
 	if event.UserID != "" {
 		shards = []*shard{h.shardForUser(event.UserID)}
 	} else {
 		shards = h.shards
 	}
+
 	var connections []*connectionRuntime
 	for _, shard := range shards {
 		shard.mu.RLock()
@@ -526,21 +544,27 @@ func (h *Hub) publishWire(event *Event) {
 			if event.UserID != "" && !connection.belongsToUser(event.UserID) {
 				continue
 			}
-			if event.Action != "" && !connection.hasSubscription(
-				Subscription{Action: event.Action, Resource: event.Resource},
-			) {
+
+			if event.Action != "" &&
+				!connection.hasSubscription(
+					Subscription{Action: event.Action, Resource: event.Resource},
+				) {
 				continue
 			}
+
 			if connection.acquire() {
 				connections = append(connections, connection)
 			}
 		}
+
 		shard.mu.RUnlock()
 	}
+
 	for _, connection := range connections {
 		connection.enqueueEvent(event)
 		connection.release()
 	}
+
 	if h.recorder != nil {
 		// Event names are application payload data rather than a closed wire
 		// registry. Keep the metric series bounded while retaining publication
@@ -571,7 +595,7 @@ func (h *Hub) CloseAll(reason realtime.ConnectionCloseReason) {
 	h.closeMatching(code, text, func(*connectionRuntime) bool { return true })
 }
 
-func eventFromRealtime(event realtime.RealtimeEvent) *Event {
+func eventFromRealtime(event realtime.Event) *Event {
 	return &Event{
 		ID:       event.ID,
 		Event:    event.Name,
@@ -638,6 +662,7 @@ func (h *Hub) shutdown(ctx context.Context) error {
 		if bounded && !time.Now().Before(deadline) {
 			return context.DeadlineExceeded
 		}
+
 		return nil
 	}
 	h.mu.Lock()
@@ -662,33 +687,45 @@ func (h *Hub) shutdown(ctx context.Context) error {
 					connections = append(connections, connection)
 				}
 			}
+
 			shard.replay = make(map[string]*replayState)
 			shard.mu.Unlock()
 		}
+
 		for _, connection := range connections {
 			connection.beginShutdown(deadline)
 		}
+
 		// Every close frame shares the same short deadline. A slow peer cannot
 		// spend another full write budget for each connection in the Hub.
 		controlDeadline := time.Now().Add(shutdownControlWait)
 		if bounded {
 			controlDeadline = minTime(deadline, controlDeadline)
 		}
+
 		for _, connection := range connections {
-			connection.closeWithDeadline(CloseServer, localizedCloseReason(connection.localizer, connection.locale, websocketCloseMessages["server_shutdown"]), false, controlDeadline)
+			connection.closeWithDeadline(
+				CloseServer,
+				localizedCloseReason(connection.localizer, connection.locale, websocketCloseMessages["server_shutdown"]),
+				false,
+				controlDeadline,
+			)
 			connection.closeTransport()
 			connection.release()
 		}
+
 		abort := func(err error) error {
 			for _, connection := range connections {
 				connection.cancelFinalization()
 				connection.closeTransport()
 			}
+
 			return fmt.Errorf("WebSocket shutdown: %w", err)
 		}
 		if err := shutdownError(); err != nil {
 			return abort(err)
 		}
+
 		for _, connection := range connections {
 			select {
 			case <-connection.runDone:
@@ -696,14 +733,17 @@ func (h *Hub) shutdown(ctx context.Context) error {
 				return abort(ctx.Err())
 			}
 		}
+
 		select {
 		case <-done:
 		case <-ctx.Done():
 			return abort(ctx.Err())
 		}
+
 		if err := shutdownError(); err != nil {
 			return abort(err)
 		}
+
 		return nil
 	default:
 		h.mu.Unlock()
@@ -758,5 +798,5 @@ func (h *Hub) shardForUser(userID string) *shard {
 	var hash maphash.Hash
 	hash.SetSeed(h.hashSeed)
 	_, _ = hash.WriteString(userID)
-	return h.shards[int(hash.Sum64()%uint64(len(h.shards)))]
+	return h.shards[int(hash.Sum64()%uint64(len(h.shards)))] //nolint:gosec // G115: the remainder is below len(h.shards), so it fits an int.
 }

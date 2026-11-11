@@ -19,32 +19,33 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/onboarding"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type academicAdministrationBatchHTTPApplication struct {
-	command app.RunAcademicAdministrationBatchCommand
+	command onboarding.RunAcademicAdministrationBatchCommand
 }
 
-func (a *academicAdministrationBatchHTTPApplication) RunAcademicAdministrationBatch(_ context.Context, _ invocation.Invocation, command app.RunAcademicAdministrationBatchCommand) (app.AcademicAdministrationBatchResult, error) {
+func (a *academicAdministrationBatchHTTPApplication) RunAcademicAdministrationBatch(_ context.Context, _ invocation.Invocation, command onboarding.RunAcademicAdministrationBatchCommand) (onboarding.AcademicAdministrationBatchResult, error) {
 	a.command = command
-	return app.AcademicAdministrationBatchResult{Operation: command.Operation, Succeeded: 1, NoOp: 1, Failed: 1,
-		Items: []app.AcademicAdministrationBatchItemResult{{Index: 0, Status: app.InvitationBatchItemSucceeded, ResourceID: model.NewClassMemberID().String()},
-			{Index: 1, Status: app.InvitationBatchItemNoOp, ResourceID: model.NewClassMemberID().String()},
-			{Index: 2, Status: app.InvitationBatchItemFailed, ErrorCode: "class.enrollment_conflict"}}}, nil
+	return onboarding.AcademicAdministrationBatchResult{Operation: command.Operation, Succeeded: 1, NoOp: 1, Failed: 1,
+		Items: []onboarding.AcademicAdministrationBatchItemResult{{Index: 0, Status: onboarding.InvitationBatchItemSucceeded, ResourceID: model.NewClassMemberID().String()},
+			{Index: 1, Status: onboarding.InvitationBatchItemNoOp, ResourceID: model.NewClassMemberID().String()},
+			{Index: 2, Status: onboarding.InvitationBatchItemFailed, ErrorCode: "class.enrollment_conflict"}}}, nil
 }
 
 func TestAcademicAdministrationBatchHTTPIsStrictBoundedAndSafe(t *testing.T) {
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	applicationFake := &academicAdministrationBatchHTTPApplication{}
 	now := time.Now()
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: now, MFACompletedAt: model.OptionalTimeFrom(now)}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, academicAdministrationBatchResource(applicationFake))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicAdministrationBatchResource(applicationFake))
 	classID := model.NewClassID().String()
 	userID := model.NewUserID().String()
 	previousID := model.NewClassMemberID().String()
@@ -57,7 +58,7 @@ func TestAcademicAdministrationBatchHTTPIsStrictBoundedAndSafe(t *testing.T) {
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, "academic administration batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.command)
 	require.Equal(t, "no-store", response.Header().Get("Cache-Control"), "academic administration batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.command)
-	require.Equal(t, app.AcademicAdministrationClassTransfer, applicationFake.command.Operation, "academic administration batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.command)
+	require.Equal(t, onboarding.AcademicAdministrationClassTransfer, applicationFake.command.Operation, "academic administration batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.command)
 	require.Equal(t, classID, applicationFake.command.ScopeID, "academic administration batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.command)
 	require.Equal(t, "batch-key", applicationFake.command.IdempotencyKey, "academic administration batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.command)
 	require.Len(t, applicationFake.command.Items, 1, "academic administration batch = %d %s command=%#v", response.Code, response.Body.String(), applicationFake.command)

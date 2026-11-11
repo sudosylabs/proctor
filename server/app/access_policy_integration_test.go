@@ -24,7 +24,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/cluster"
 	"github.com/sudosylabs/proctor/server/config"
@@ -65,22 +67,22 @@ func TestAccessPolicyTwoNodePostgreSQLFenceAndSafeRevisionFanout(t *testing.T) {
 		"password":         "correct horse battery staple",
 	}, "")
 	require.Equal(t, http.StatusCreated, bootstrap.Code, "bootstrap = %d: %s", bootstrap.Code, bootstrap.Body.String())
-	login, err := primary.App.Login(context.Background(), invocation.Invocation{}, app.LoginCommand{
+	login, err := primary.App.Identity.Login(context.Background(), invocation.Invocation{}, identity.LoginCommand{
 		LoginID: "policy-admin", Password: "correct horse battery staple", ClientType: model.SessionClientCLI,
 		DeviceID: "policy-cli", Source: "127.0.0.1:1",
 	})
 	require.NoError(t, err, "login: %v; logs=%s", err, primary.Logs.String())
 	strengthenRoleAdministratorSession(t, primary.Handler(), login.Tokens.AccessToken)
-	principal, err := primary.App.AuthenticateAccess(context.Background(), login.Tokens.AccessToken)
+	principal, err := primary.App.Identity.AuthenticateAccess(context.Background(), login.Tokens.AccessToken)
 	require.NoError(t, err)
-	invocation := invocation.New(*principal, model.RequestMetadata{RequestID: "access-policy-two-node"})
-	current, err := primary.App.GetAccessPolicy(context.Background(), invocation)
+	inv := invocation.New(*principal, model.RequestMetadata{RequestID: "access-policy-two-node"})
+	current, err := primary.App.Administration.GetAccessPolicy(context.Background(), inv)
 	require.NoError(t, err, "initial policy = %#v", current)
 	require.NotNil(t, current.Policy, "initial policy = %#v", current)
 	require.Equal(t, int64(1), current.Policy.Revision, "initial policy = %#v", current)
 
 	type outcome struct {
-		view app.AccessPolicyView
+		view administration.AccessPolicyView
 		err  error
 	}
 	outcomes := make(chan outcome, 2)
@@ -105,7 +107,7 @@ func TestAccessPolicyTwoNodePostgreSQLFenceAndSafeRevisionFanout(t *testing.T) {
 			settings model.AccessPolicySettings
 			key      string
 		}) {
-			view, replaceErr := candidate.app.ReplaceAccessPolicy(context.Background(), invocation, app.ReplaceAccessPolicyCommand{
+			view, replaceErr := candidate.app.Administration.ReplaceAccessPolicy(context.Background(), inv, administration.ReplaceAccessPolicyCommand{
 				ExpectedRevision: 1, Settings: candidate.settings, IdempotencyKey: candidate.key,
 			})
 			outcomes <- outcome{view: view, err: replaceErr}
@@ -128,9 +130,9 @@ func TestAccessPolicyTwoNodePostgreSQLFenceAndSafeRevisionFanout(t *testing.T) {
 	require.Equal(t, 1, successes, "outcomes success/conflict")
 	require.Equal(t, 1, conflicts, "outcomes success/conflict")
 
-	primaryDiscovery, err := primary.App.DiscoverAccess(context.Background(), invocation)
+	primaryDiscovery, err := primary.App.Administration.DiscoverAccess(context.Background(), inv)
 	require.NoError(t, err)
-	secondaryDiscovery, err := secondary.App.DiscoverAccess(context.Background(), invocation)
+	secondaryDiscovery, err := secondary.App.Administration.DiscoverAccess(context.Background(), inv)
 	require.NoError(t, err)
 	require.Equal(t, int64(2), primaryDiscovery.PolicyRevision, "discovery diverged: primary=%#v secondary=%#v", primaryDiscovery, secondaryDiscovery)
 	require.Equal(t, int64(2), secondaryDiscovery.PolicyRevision, "discovery diverged: primary=%#v secondary=%#v", primaryDiscovery, secondaryDiscovery)
@@ -146,7 +148,7 @@ func TestAccessPolicyTwoNodePostgreSQLFenceAndSafeRevisionFanout(t *testing.T) {
 
 	// Exercise lost-response replay through the real HTTP, application, and
 	// PostgreSQL graph after the authoritative revision has advanced.
-	authoritative, err := primary.App.GetAccessPolicy(context.Background(), invocation)
+	authoritative, err := primary.App.Administration.GetAccessPolicy(context.Background(), inv)
 	require.NoError(t, err, "authoritative policy = %#v", authoritative)
 	require.NotNil(t, authoritative.Policy, "authoritative policy = %#v", authoritative)
 	settings := authoritative.Policy.Settings()
@@ -236,7 +238,7 @@ func TestAccessPolicyTwoNodePostgreSQLFenceAndSafeRevisionFanout(t *testing.T) {
 		StartsAt: model.TimeFromMillis(model.GetMillis() - 100),
 	})
 	require.NoError(t, err)
-	beforeDisable, err := primary.App.GetAccessPolicy(context.Background(), invocation)
+	beforeDisable, err := primary.App.Administration.GetAccessPolicy(context.Background(), inv)
 	require.NoError(t, err)
 	disableLocal := beforeDisable.Policy.Settings()
 	disableLocal.LocalLoginEnabled = false
@@ -244,26 +246,26 @@ func TestAccessPolicyTwoNodePostgreSQLFenceAndSafeRevisionFanout(t *testing.T) {
 	disableLocal.PublicRegistrationEnabled = false
 	disableLocal.InvitationLocalCredentialEnabled = false
 	disableLocal.ProviderAdmissions = map[string]model.ProviderAdmissionMode{"campus": model.ProviderAdmissionLinkedOnly}
-	_, err = primary.App.ReplaceAccessPolicy(context.Background(), invocation, app.ReplaceAccessPolicyCommand{
+	_, err = primary.App.Administration.ReplaceAccessPolicy(context.Background(), inv, administration.ReplaceAccessPolicyCommand{
 		ExpectedRevision: beforeDisable.Policy.Revision, Settings: disableLocal,
 		IdempotencyKey: "access-policy-application-lockout",
 	})
 	require.NoError(t, err)
 	removedProviderStore := openAdditionalUserSettingsStore(t, dataSource)
 	removedProviderNode := testlib.Setup(t, testlib.WithConfig(baseConfig), testlib.WithStore(removedProviderStore))
-	_, err = removedProviderNode.App.EndRoleBinding(context.Background(), invocation, app.EndRoleBindingCommand{
+	_, err = removedProviderNode.App.Administration.EndRoleBinding(context.Background(), inv, administration.EndRoleBindingCommand{
 		ID: removedProviderBinding.ID,
 	})
 	require.True(t, apperror.Is(err, "role_binding.last_system_admin"), "removed-provider node counted unavailable external administrator: %v", err)
-	_, err = primary.App.EndRoleBinding(context.Background(), invocation, app.EndRoleBindingCommand{
+	_, err = primary.App.Administration.EndRoleBinding(context.Background(), inv, administration.EndRoleBindingCommand{
 		ID: removedProviderBinding.ID,
 	})
 	require.NoError(t, err)
-	_, err = primary.App.SetUserEnabled(context.Background(), invocation, app.SetUserEnabledCommand{
+	_, err = primary.App.Identity.SetUserEnabled(context.Background(), inv, identity.SetUserEnabledCommand{
 		ID: externalAdmin.ID, Enabled: false,
 	})
 	require.True(t, apperror.Is(err, "user.last_system_admin"), "disable only policy-usable administrator error = %v", err)
-	_, err = primary.App.EndRoleBinding(context.Background(), invocation, app.EndRoleBindingCommand{
+	_, err = primary.App.Administration.EndRoleBinding(context.Background(), inv, administration.EndRoleBindingCommand{
 		ID: externalBinding.ID,
 	})
 	require.True(t, apperror.Is(err, "role_binding.last_system_admin"), "end only policy-usable administrator binding error = %v", err)

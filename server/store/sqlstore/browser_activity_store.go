@@ -21,34 +21,51 @@ import (
 // ordered by receipt time, source, and sequence, continuing after the optional
 // keyset cursor. Limit must be 1..201, and the cursor fields must be set
 // together.
-func (s *SQLExamAttemptStore) ListBrowserActivity(ctx context.Context, options store.BrowserActivityListOptions) ([]store.BrowserActivityRecord, error) {
-	if !options.ExamID.IsValid() || !options.SittingID.IsValid() || !options.AttemptID.IsValid() || options.Limit < 1 || options.Limit > 201 ||
+func (s *SQLBrowserDeliveryStore) ListBrowserActivity(
+	ctx context.Context,
+	options store.BrowserActivityListOptions,
+) ([]store.BrowserActivityRecord, error) {
+	if !options.ExamID.IsValid() ||
+		!options.SittingID.IsValid() ||
+		!options.AttemptID.IsValid() ||
+		options.Limit < 1 ||
+		options.Limit > 201 ||
 		(options.AfterReceivedAt.IsZero() != !options.AfterSourceID.IsValid()) ||
 		(!options.AfterReceivedAt.IsZero() && options.AfterSequence < 1) {
 		return nil, store.NewErrInvalidInput("browser_activity", "list", nil)
 	}
-	query := `SELECT e.source_session_id::text,e.sequence,e.exam_attempt_id,e.participation_id,e.generation,e.policy_revision_id,e.kind,
-		e.client_occurred_at,e.location_scheme,e.location_host,e.location_port,e.location_path,e.matched_rule_id,e.block_reason,e.redirect_from_sequence,e.received_at
-		FROM browser_activity_events e WHERE e.exam_id=? AND e.exam_sitting_id=? AND e.exam_attempt_id=?`
+
+	query := `SELECT e.source_session_id::text, e.sequence, e.exam_attempt_id, e.participation_id,
+			e.generation, e.policy_revision_id, e.kind, e.client_occurred_at, e.location_scheme,
+			e.location_host, e.location_port, e.location_path, e.matched_rule_id, e.block_reason,
+			e.redirect_from_sequence, e.received_at
+		FROM browser_activity_events e
+		WHERE e.exam_id = ?
+			AND e.exam_sitting_id = ?
+			AND e.exam_attempt_id = ?`
 	args := []any{options.ExamID.String(), options.SittingID.String(), options.AttemptID.String()}
 	if !options.AfterReceivedAt.IsZero() {
-		query += ` AND (e.received_at,e.source_session_id,e.sequence)>(?,?::uuid,?)`
+		query += ` AND (e.received_at, e.source_session_id, e.sequence) > (?, ?::uuid, ?)`
 		args = append(args, model.TimeUTC(options.AfterReceivedAt), string(options.AfterSourceID), options.AfterSequence)
 	}
-	query += ` ORDER BY e.received_at,e.source_session_id,e.sequence LIMIT ?`
+
+	query += ` ORDER BY e.received_at, e.source_session_id, e.sequence LIMIT ?`
 	args = append(args, options.Limit)
 	var rows []browserActivityRecordRow
 	if err := s.GetMaster().Select(ctx, &rows, query, args...); err != nil {
 		return nil, fmt.Errorf("list Browser Activity: %w", err)
 	}
+
 	result := make([]store.BrowserActivityRecord, len(rows))
 	for index, row := range rows {
 		record, err := row.record()
 		if err != nil {
 			return nil, err
 		}
+
 		result[index] = record
 	}
+
 	return result, nil
 }
 
@@ -76,36 +93,59 @@ func (row browserActivityRecordRow) record() (store.BrowserActivityRecord, error
 	if err != nil {
 		return store.BrowserActivityRecord{}, invalidPersistedState("browser_activity", "exam_attempt_id", err)
 	}
+
 	participationID, err := model.ParseAttemptParticipationID(row.ParticipationID)
 	if err != nil {
 		return store.BrowserActivityRecord{}, invalidPersistedState("browser_activity", "participation_id", err)
 	}
+
 	revisionID, err := model.ParseExamRevisionID(row.PolicyRevision)
 	if err != nil {
 		return store.BrowserActivityRecord{}, invalidPersistedState("browser_activity", "policy_revision_id", err)
 	}
-	event := model.BrowserActivityEvent{Sequence: row.Sequence, Kind: model.BrowserActivityKind(row.Kind), PolicyRevisionID: revisionID,
-		ClientOccurredAt: model.TimeUTC(row.ClientOccurred), ReceivedAt: model.TimeUTC(row.ReceivedAt)}
-	if row.LocationScheme.Valid {
-		event.Location = &model.BrowserLocation{Scheme: row.LocationScheme.String, Host: row.LocationHost.String, Port: row.LocationPort.String, Path: row.LocationPath.String}
+
+	event := model.BrowserActivityEvent{
+		Sequence:         row.Sequence,
+		Kind:             model.BrowserActivityKind(row.Kind),
+		PolicyRevisionID: revisionID,
+		ClientOccurredAt: model.TimeUTC(row.ClientOccurred),
+		ReceivedAt:       model.TimeUTC(row.ReceivedAt),
 	}
+	if row.LocationScheme.Valid {
+		event.Location = &model.BrowserLocation{
+			Scheme: row.LocationScheme.String,
+			Host:   row.LocationHost.String,
+			Port:   row.LocationPort.String,
+			Path:   row.LocationPath.String,
+		}
+	}
+
 	if row.MatchedRuleID.Valid {
 		value := row.MatchedRuleID.String
 		event.MatchedRuleID = &value
 	}
+
 	if row.BlockReason.Valid {
 		value := model.BrowserActivityBlockReason(row.BlockReason.String)
 		event.BlockReason = &value
 	}
+
 	if row.RedirectFromSequence.Valid {
 		sequence := row.RedirectFromSequence.Int64
 		event.RedirectFromSequence = &sequence
 	}
+
 	client := event
 	client.ReceivedAt = time.Time{}
 	if err = client.ValidateClientRecord(); err != nil {
 		return store.BrowserActivityRecord{}, invalidPersistedState("browser_activity", "event", err)
 	}
-	return store.BrowserActivityRecord{AttemptID: attemptID, ParticipationID: participationID, Generation: row.Generation,
-		SourceSessionID: model.BrowserSourceSessionID(row.SourceSessionID), Event: event}, nil
+
+	return store.BrowserActivityRecord{
+		AttemptID:       attemptID,
+		ParticipationID: participationID,
+		Generation:      row.Generation,
+		SourceSessionID: model.BrowserSourceSessionID(row.SourceSessionID),
+		Event:           event,
+	}, nil
 }

@@ -14,10 +14,13 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 	"time"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -62,38 +65,126 @@ type mfaStatusResponse struct {
 	RecentlyAuthenticatedUntil  string `json:"recently_authenticated_until,omitempty"`
 }
 
-type mfaResourceModule struct {
-	mfa MFA
+type mfaHandlers struct {
+	app MFA
 }
 
-func mfaResource(mfa MFA) apiResource {
-	module := mfaResourceModule{mfa: mfa}
-	base := apiPath(literal("users"), literal("me"), literal("mfa"))
-	return newResource(
+func mfaResource(app MFA) route.Resource {
+	h := mfaHandlers{app: app}
+	base := "/users/me/mfa"
+	return route.NewResource(
 		"multi-factor-authentication",
-		mfaRecoverySessionRoute(http.MethodGet, base, []string{"authentication.mfa.unavailable", "authentication.reauthentication_required", "authentication.session_required"}, module.status),
-		recentMFARecoverySessionRoute(http.MethodPost, appendRoutePath(base, literal("setup")), []string{"authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.session_required"}, module.setup),
-		recentMFARecoverySessionRoute(http.MethodPost, appendRoutePath(base, literal("activate")), []string{"request.invalid", "authentication.mfa.code_invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.session_required"}, module.activate),
-		mfaEnrollmentSessionRoute(http.MethodPost, appendRoutePath(base, literal("challenge")), []string{"request.invalid", "authentication.mfa.code_invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.reauthentication_required", "authentication.session_required"}, module.challenge),
-		strongRecentSessionRoute(http.MethodPost, appendRoutePath(base, literal("recovery-codes"), literal("regenerate")), []string{"authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.session_required"}, module.regenerateRecoveryCodes),
-		strongRecentSessionRoute(http.MethodPost, appendRoutePath(base, literal("disable")), []string{"mfa.required_by_policy", "authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "audit.unavailable", "authentication.session_required"}, module.disable),
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   base,
+			Auth:   route.AuthMFARecoverySessionRequired,
+			Errors: []string{"authentication.mfa.unavailable", "authentication.reauthentication_required", "authentication.session_required"},
+			Handle: h.status,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/me/mfa/setup",
+			Auth:   route.AuthRecentMFARecoverySessionRequired,
+			Errors: []string{
+				"authentication.mfa.disabled",
+				"authentication.mfa.not_found",
+				"authentication.mfa.conflict",
+				"authentication.mfa.unavailable",
+				"authentication.internal",
+				"audit.unavailable",
+				"authentication.session_required",
+			},
+			Handle: h.setup,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/me/mfa/activate",
+			Auth:   route.AuthRecentMFARecoverySessionRequired,
+			Errors: []string{
+				"request.invalid",
+				"authentication.mfa.code_invalid",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"authentication.mfa.disabled",
+				"authentication.mfa.not_found",
+				"authentication.mfa.conflict",
+				"authentication.mfa.unavailable",
+				"authentication.internal",
+				"audit.unavailable",
+				"authentication.session_required",
+			},
+			Handle: h.activate,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/me/mfa/challenge",
+			Auth:   route.AuthMFAEnrollmentSessionRequired,
+			Errors: []string{
+				"request.invalid",
+				"authentication.mfa.code_invalid",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"authentication.mfa.disabled",
+				"authentication.mfa.not_found",
+				"authentication.mfa.conflict",
+				"authentication.mfa.unavailable",
+				"authentication.internal",
+				"audit.unavailable",
+				"authentication.reauthentication_required",
+				"authentication.session_required",
+			},
+			Handle: h.challenge,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/me/mfa/recovery-codes/regenerate",
+			Auth:   route.AuthStrongRecentSessionRequired,
+			Errors: []string{
+				"authentication.mfa.disabled",
+				"authentication.mfa.not_found",
+				"authentication.mfa.conflict",
+				"authentication.mfa.unavailable",
+				"authentication.internal",
+				"audit.unavailable",
+				"authentication.session_required",
+			},
+			Handle: h.regenerateRecoveryCodes,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/me/mfa/disable",
+			Auth:   route.AuthStrongRecentSessionRequired,
+			Errors: []string{
+				"mfa.required_by_policy",
+				"authentication.mfa.disabled",
+				"authentication.mfa.not_found",
+				"authentication.mfa.conflict",
+				"authentication.mfa.unavailable",
+				"audit.unavailable",
+				"authentication.session_required",
+			},
+			Handle: h.disable,
+		},
 	)
 }
 
-func (m mfaResourceModule) status(request operationRequest) (operationResult, error) {
-	status, err := m.mfa.GetMFAStatus(
-		request.context,
-		request.invocation(),
-		app.GetMFAStatusQuery{},
+func (h mfaHandlers) status(request route.Request) (route.Result, error) {
+	status, err := h.app.GetMFAStatus(
+		request.Context,
+		request.Invocation(),
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, mfaStatusResponse{
-		ServiceEnabled: status.ServiceEnabled, MFARecoveryRequired: status.MFARecoveryRequired,
-		MFAEnrollmentRequired: status.MFAEnrollmentRequired,
-		AuthenticationMethod:  status.AuthenticationMethod, AuthenticationProviderID: status.AuthenticationProviderID,
-		AuthenticationStrength: string(status.AuthenticationStrength), RecentlyAuthenticated: status.RecentlyAuthenticated,
+
+	return route.JSON(http.StatusOK, mfaStatusResponse{
+		ServiceEnabled:              status.ServiceEnabled,
+		MFARecoveryRequired:         status.MFARecoveryRequired,
+		MFAEnrollmentRequired:       status.MFAEnrollmentRequired,
+		AuthenticationMethod:        status.AuthenticationMethod,
+		AuthenticationProviderID:    status.AuthenticationProviderID,
+		AuthenticationStrength:      string(status.AuthenticationStrength),
+		RecentlyAuthenticated:       status.RecentlyAuthenticated,
 		Enabled:                     status.Enabled,
 		Pending:                     status.Pending,
 		PendingExpiresAt:            status.PendingExpiresAt.FormatRFC3339(),
@@ -105,88 +196,96 @@ func (m mfaResourceModule) status(request operationRequest) (operationResult, er
 		PasswordChangedAt:           status.PasswordChangedAt.FormatRFC3339(),
 		RecentAuthenticationMinutes: max(1, int(status.RecentAuthenticationTTL/time.Minute)),
 		RecentlyAuthenticatedUntil:  status.RecentlyAuthenticatedUntil.FormatRFC3339(),
-	}).withHeaders(noStoreHeaders()), nil
+	}).WithHeaders(noStoreHeaders()), nil
 }
 
-func (m mfaResourceModule) setup(request operationRequest) (operationResult, error) {
-	setup, err := m.mfa.SetupMFA(
-		request.context,
-		request.invocation(),
-		app.SetupMFACommand{},
+func (h mfaHandlers) setup(request route.Request) (route.Result, error) {
+	setup, err := h.app.SetupMFA(
+		request.Context,
+		request.Invocation(),
+		identity.SetupMFACommand{},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusCreated, mfaSetupResponse{
+	return route.JSON(http.StatusCreated, mfaSetupResponse{
 		Secret:          setup.Secret,
 		ProvisioningURI: setup.ProvisioningURI,
 		ExpiresAt:       model.FormatRFC3339(setup.ExpiresAt),
-	}).withHeaders(noStoreHeaders()), nil
+	}).WithHeaders(noStoreHeaders()), nil
 }
 
-func (m mfaResourceModule) activate(request operationRequest) (operationResult, error) {
+func (h mfaHandlers) activate(request route.Request) (route.Result, error) {
 	code, err := mfaCode(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	activation, err := m.mfa.ActivateMFA(
-		request.context,
-		request.invocation(),
-		app.ActivateMFACommand{Code: code},
+	activation, err := h.app.ActivateMFA(
+		request.Context,
+		request.Invocation(),
+		identity.ActivateMFACommand{Code: code},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, mfaActivationResponse{
+	return route.JSON(http.StatusOK, mfaActivationResponse{
 		RecoveryCodes: activation.RecoveryCodes,
-	}).withHeaders(noStoreHeaders()), nil
+	}).WithHeaders(noStoreHeaders()), nil
 }
 
-func (m mfaResourceModule) challenge(request operationRequest) (operationResult, error) {
+func (h mfaHandlers) challenge(request route.Request) (route.Result, error) {
 	code, err := mfaCode(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	session, err := m.mfa.ChallengeMFA(
-		request.context,
-		request.invocation(),
-		app.ChallengeMFACommand{Code: code},
+	session, err := h.app.ChallengeMFA(
+		request.Context,
+		request.Invocation(),
+		identity.ChallengeMFACommand{Code: code},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, sessionResponseFromModel(request.request, session)).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, sessionResponseFromModel(request.HTTP, session)).WithHeaders(noStoreHeaders()), nil
 }
 
-func (m mfaResourceModule) regenerateRecoveryCodes(request operationRequest) (operationResult, error) {
-	codes, err := m.mfa.RegenerateMFARecoveryCodes(
-		request.context,
-		request.invocation(),
-		app.RegenerateMFARecoveryCodesCommand{},
+func (h mfaHandlers) regenerateRecoveryCodes(request route.Request) (route.Result, error) {
+	codes, err := h.app.RegenerateMFARecoveryCodes(
+		request.Context,
+		request.Invocation(),
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, mfaRecoveryCodesResponse{
+	return route.JSON(http.StatusOK, mfaRecoveryCodesResponse{
 		RecoveryCodes: codes,
-	}).withHeaders(noStoreHeaders()), nil
+	}).WithHeaders(noStoreHeaders()), nil
 }
 
-func (m mfaResourceModule) disable(request operationRequest) (operationResult, error) {
-	if err := m.mfa.DisableMFA(
-		request.context,
-		request.invocation(),
-		app.DisableMFACommand{},
+func (h mfaHandlers) disable(request route.Request) (route.Result, error) {
+	if err := h.app.DisableMFA(
+		request.Context,
+		request.Invocation(),
 	); err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return noContentResult(), nil
+	return route.NoContent(), nil
 }
 
-func mfaCode(request operationRequest) (string, error) {
+func mfaCode(request route.Request) (string, error) {
 	var input mfaCodeRequest
-	if err := request.decodeJSON(&input); err != nil {
+	if err := request.DecodeJSON(&input); err != nil {
 		return "", err
 	}
 	return input.Code, nil
+}
+
+// MFA is the application port its handlers call; it manages the caller's multi-factor authentication.
+type MFA interface {
+	GetMFAStatus(context.Context, invocation.Invocation) (*identity.MFAStatus, error)
+	SetupMFA(context.Context, invocation.Invocation, identity.SetupMFACommand) (*identity.MFASetup, error)
+	ActivateMFA(context.Context, invocation.Invocation, identity.ActivateMFACommand) (*identity.MFAActivation, error)
+	ChallengeMFA(context.Context, invocation.Invocation, identity.ChallengeMFACommand) (*model.Session, error)
+	RegenerateMFARecoveryCodes(context.Context, invocation.Invocation) ([]string, error)
+	DisableMFA(context.Context, invocation.Invocation) error
 }

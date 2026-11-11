@@ -29,6 +29,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -37,7 +39,7 @@ func TestCandidateExamPresentationRequiresBoundHeadersAndNeverEchoesSecrets(t *t
 	t.Parallel()
 	fake := newExamAttemptHTTPFake(t)
 	httpAPI := newExamAttemptFocusedAPI(t, fake)
-	request := fake.candidateRequest(http.MethodGet, "/api/v1/exam-attempts/"+fake.attempt.ID.String()+"/presentation")
+	request := fake.candidateRequest(t, http.MethodGet, "/api/v1/exam-attempts/"+fake.attempt.ID.String()+"/presentation")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, "status/cache = %d/%q: %s", response.Code, response.Header().Get("Cache-Control"), response.Body.String())
@@ -73,7 +75,7 @@ func TestCandidateExamHTTPRejectsMissingOrDuplicateProtectionHeadersBeforeApplic
 			request.Header.Add(candidateAttemptConnectionHeader, fake.connection.ID.String())
 		},
 	} {
-		request := fake.candidateRequest(http.MethodGet, "/api/v1/exam-attempts/"+fake.attempt.ID.String()+"/presentation")
+		request := fake.candidateRequest(t, http.MethodGet, "/api/v1/exam-attempts/"+fake.attempt.ID.String()+"/presentation")
 		mutate(request)
 		response := httptest.NewRecorder()
 		httpAPI.ServeHTTP(response, request)
@@ -88,7 +90,7 @@ func TestCandidateExamWorkspaceUsesBoundedOpaqueCursor(t *testing.T) {
 	fake := newExamAttemptHTTPFake(t)
 	fake.workspacePage.HasMore = true
 	httpAPI := newExamAttemptFocusedAPI(t, fake)
-	request := fake.candidateRequest(http.MethodGet, "/api/v1/exam-attempts/"+fake.attempt.ID.String()+"/workspace?limit=1")
+	request := fake.candidateRequest(t, http.MethodGet, "/api/v1/exam-attempts/"+fake.attempt.ID.String()+"/workspace?limit=1")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, "status/query/cache = %d/%#v/%q: %s", response.Code, fake.workspaceQuery, response.Header().Get("Cache-Control"), response.Body.String())
@@ -105,13 +107,13 @@ func TestCandidateExamWorkspaceUsesBoundedOpaqueCursor(t *testing.T) {
 	require.Equal(t, fake.workspacePage.Items[0].EntryID, cursor.ID, "Workspace cursor = %#v", cursor)
 	require.Equal(t, int64(-1), fake.workspaceQuery.ExpectedCursor, "Workspace cursor = %#v", cursor)
 	fake.workspacePage.HasMore = false
-	second := fake.candidateRequest(http.MethodGet, "/api/v1/exam-attempts/"+fake.attempt.ID.String()+"/workspace?cursor="+url.QueryEscape(page.NextCursor))
+	second := fake.candidateRequest(t, http.MethodGet, "/api/v1/exam-attempts/"+fake.attempt.ID.String()+"/workspace?cursor="+url.QueryEscape(page.NextCursor))
 	secondResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(secondResponse, second)
 	require.Equal(t, http.StatusOK, secondResponse.Code, "Workspace cursor forwarding = %d query=%#v body=%s", secondResponse.Code, fake.workspaceQuery, secondResponse.Body.String())
 	require.Equal(t, cursor.ExpectedCursor, fake.workspaceQuery.ExpectedCursor, "Workspace cursor forwarding = %d query=%#v body=%s", secondResponse.Code, fake.workspaceQuery, secondResponse.Body.String())
 	require.Equal(t, cursor.ID, fake.workspaceQuery.AfterEntryID, "Workspace cursor forwarding = %d query=%#v body=%s", secondResponse.Code, fake.workspaceQuery, secondResponse.Body.String())
-	malformed := fake.candidateRequest(http.MethodGet, "/api/v1/exam-attempts/"+fake.attempt.ID.String()+"/workspace?cursor=not-a-cursor")
+	malformed := fake.candidateRequest(t, http.MethodGet, "/api/v1/exam-attempts/"+fake.attempt.ID.String()+"/workspace?cursor=not-a-cursor")
 	malformedResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(malformedResponse, malformed)
 	assertHTTPProblem(t, malformedResponse, http.StatusBadRequest, "request.invalid")
@@ -125,7 +127,7 @@ func TestCandidateSubmitExamAttemptUsesStrictCausalSelectorsAndReturnsSafeReceip
 	body := `{"participation_id":"` + fake.participation.ID.String() + `","generation":1,"expected_current_revision_id":"` +
 		fake.submissionReceipt.ExamRevisionID.String() + `","expected_workspace_cursor":4,"final_focus_loss_sequence":0}`
 	path := "/api/v1/exam-attempts/" + fake.attempt.ID.String() + "/submissions"
-	request := fake.candidateRequest(http.MethodPost, path)
+	request := fake.candidateRequest(t, http.MethodPost, path)
 	request.Body = io.NopCloser(strings.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "submit-once")
@@ -160,7 +162,7 @@ func TestCandidateAcknowledgesExactCorrectionWithBoundSessionFences(t *testing.T
 	currentRevisionID := model.NewExamRevisionID()
 	path := "/api/v1/exam-attempts/" + fake.attempt.ID.String() + "/corrections/" + correctionID.String() + "/acknowledgement"
 	body := `{"participation_id":"` + fake.participation.ID.String() + `","generation":1,"expected_current_revision_id":"` + currentRevisionID.String() + `"}`
-	request := fake.candidateRequest(http.MethodPut, path)
+	request := fake.candidateRequest(t, http.MethodPut, path)
 	request.Body = io.NopCloser(strings.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "acknowledge-correction-once")
@@ -187,7 +189,7 @@ func TestCandidateAcknowledgesExactCorrectionWithBoundSessionFences(t *testing.T
 
 	invalidFake := newExamAttemptHTTPFake(t)
 	invalidAPI := newExamAttemptFocusedAPI(t, invalidFake)
-	invalid := invalidFake.candidateRequest(http.MethodPut, "/api/v1/exam-attempts/"+invalidFake.attempt.ID.String()+
+	invalid := invalidFake.candidateRequest(t, http.MethodPut, "/api/v1/exam-attempts/"+invalidFake.attempt.ID.String()+
 		"/corrections/"+model.NewExamRevisionID().String()+"/acknowledgement")
 	invalid.Body = io.NopCloser(strings.NewReader(`{"participation_id":"` + invalidFake.participation.ID.String() +
 		`","generation":1,"expected_current_revision_id":"` + model.NewExamRevisionID().String() + `","accepted":true}`))
@@ -223,7 +225,7 @@ func TestCandidateExamContentIsInlinePrivateNoStoreAndConditional(t *testing.T) 
 	fake := newExamAttemptHTTPFake(t)
 	httpAPI := newExamAttemptFocusedAPI(t, fake)
 	path := "/api/v1/exam-attempts/" + fake.attempt.ID.String() + "/resources/" + fake.resourceID.String() + "/content"
-	request := fake.candidateRequest(http.MethodGet, path)
+	request := fake.candidateRequest(t, http.MethodGet, path)
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	wantETag := `"` + fake.content.SHA256 + `"`
@@ -233,7 +235,7 @@ func TestCandidateExamContentIsInlinePrivateNoStoreAndConditional(t *testing.T) 
 	require.Equal(t, "private, no-store", response.Header().Get("Cache-Control"), "content response = %d %#v", response.Code, response.Header())
 	require.Equal(t, wantETag, response.Header().Get("ETag"), "content response = %d %#v", response.Code, response.Header())
 
-	request = fake.candidateRequest(http.MethodGet, path)
+	request = fake.candidateRequest(t, http.MethodGet, path)
 	request.Header.Set("If-None-Match", wantETag)
 	response = httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -248,7 +250,7 @@ func TestCandidateWorkspaceContentUsesContentVersionETagAndExactEntry(t *testing
 	httpAPI := newExamAttemptFocusedAPI(t, fake)
 	entryID := fake.workspacePage.Items[0].EntryID
 	path := "/api/v1/exam-attempts/" + fake.attempt.ID.String() + "/workspace/files/" + entryID.String() + "/content"
-	request := fake.candidateRequest(http.MethodGet, path)
+	request := fake.candidateRequest(t, http.MethodGet, path)
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, "Workspace content = %d query=%#v headers=%#v body=%s", response.Code, fake.workspaceOpen, response.Header(), response.Body.String())
@@ -264,7 +266,7 @@ func TestManagedExamAttemptListIsBoundedSafeAndOpaque(t *testing.T) {
 	fake.managerPage.HasMore = true
 	httpAPI := newExamAttemptFocusedAPI(t, fake)
 	path := "/api/v1/exams/" + fake.attempt.ExamID.String() + "/sittings/" + fake.attempt.SittingID.String() + "/attempts?limit=1&state=active"
-	request := httptest.NewRequest(http.MethodGet, path, nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -282,21 +284,21 @@ func TestManagedExamAttemptListIsBoundedSafeAndOpaque(t *testing.T) {
 	cursor, err := decodeExamAttemptManagerCursor(page.NextCursor)
 	require.NoError(t, err)
 	fake.managerPage.HasMore = false
-	second := httptest.NewRequest(http.MethodGet, path+"&cursor="+url.QueryEscape(page.NextCursor), nil)
+	second := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path+"&cursor="+url.QueryEscape(page.NextCursor), nil)
 	second.Header.Set("Authorization", "Bearer credential")
 	secondResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(secondResponse, second)
 	require.Equal(t, http.StatusOK, secondResponse.Code, "manager cursor forwarding = %d query=%#v body=%s", secondResponse.Code, fake.managerList, secondResponse.Body.String())
 	require.True(t, fake.managerList.BeforeCreatedAt.Equal(cursor.CreatedAt), "manager cursor forwarding = %d query=%#v body=%s", secondResponse.Code, fake.managerList, secondResponse.Body.String())
 	require.Equal(t, cursor.ID, fake.managerList.BeforeAttemptID, "manager cursor forwarding = %d query=%#v body=%s", secondResponse.Code, fake.managerList, secondResponse.Body.String())
-	malformed := httptest.NewRequest(http.MethodGet, path+"&cursor=not-a-cursor", nil)
+	malformed := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path+"&cursor=not-a-cursor", nil)
 	malformed.Header.Set("Authorization", "Bearer credential")
 	malformedResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(malformedResponse, malformed)
 	assertHTTPProblem(t, malformedResponse, http.StatusBadRequest, "request.invalid")
 
 	member := "/api/v1/exams/" + fake.attempt.ExamID.String() + "/sittings/" + fake.attempt.SittingID.String() + "/attempts/" + fake.attempt.ID.String()
-	request = httptest.NewRequest(http.MethodGet, member, nil)
+	request = httptest.NewRequestWithContext(t.Context(), http.MethodGet, member, nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response = httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -314,7 +316,7 @@ func TestManagedBrowserActivityIsNestedMinimizedNoStoreAndKeysetPaginated(t *tes
 	httpAPI := newExamAttemptFocusedAPI(t, fake)
 	path := "/api/v1/exams/" + fake.attempt.ExamID.String() + "/sittings/" + fake.attempt.SittingID.String() +
 		"/attempts/" + fake.attempt.ID.String() + "/browser-activity?limit=1"
-	request := httptest.NewRequest(http.MethodGet, path, nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -332,7 +334,7 @@ func TestManagedBrowserActivityIsNestedMinimizedNoStoreAndKeysetPaginated(t *tes
 	cursor, err := decodeBrowserActivityCursor(page.NextCursor)
 	require.NoError(t, err)
 	fake.browserActivityPage.HasMore = false
-	second := httptest.NewRequest(http.MethodGet, path+"&cursor="+url.QueryEscape(page.NextCursor), nil)
+	second := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path+"&cursor="+url.QueryEscape(page.NextCursor), nil)
 	second.Header.Set("Authorization", "Bearer credential")
 	secondResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(secondResponse, second)
@@ -351,7 +353,7 @@ func TestManagerSubmissionReadManifestAndFileArePurposeSpecificAndProtected(t *t
 	base := "/api/v1/exams/" + fake.attempt.ExamID.String() + "/sittings/" + fake.attempt.SittingID.String() +
 		"/attempts/" + fake.attempt.ID.String() + "/submissions/" + fake.submissionView.Submission.ID.String()
 	for _, path := range []string{base, base + "/manifest?limit=1"} {
-		request := httptest.NewRequest(http.MethodGet, path, nil)
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 		request.Header.Set("Authorization", "Bearer credential")
 		response := httptest.NewRecorder()
 		httpAPI.ServeHTTP(response, request)
@@ -368,20 +370,20 @@ func TestManagerSubmissionReadManifestAndFileArePurposeSpecificAndProtected(t *t
 	cursor, err := encodeSubmissionManifestCursor(submissionManifestCursor{EntryID: entry.EntryID})
 	require.NoError(t, err)
 	fake.submissionManifest.HasMore = false
-	cursorRequest := httptest.NewRequest(http.MethodGet, base+"/manifest?cursor="+url.QueryEscape(cursor), nil)
+	cursorRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, base+"/manifest?cursor="+url.QueryEscape(cursor), nil)
 	cursorRequest.Header.Set("Authorization", "Bearer credential")
 	cursorResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(cursorResponse, cursorRequest)
 	require.Equal(t, http.StatusOK, cursorResponse.Code, "manifest cursor forwarding = %d query=%#v body=%s", cursorResponse.Code, fake.submissionManifestQuery, cursorResponse.Body.String())
 	require.Equal(t, entry.EntryID, fake.submissionManifestQuery.AfterEntryID, "manifest cursor forwarding = %d query=%#v body=%s", cursorResponse.Code, fake.submissionManifestQuery, cursorResponse.Body.String())
-	malformed := httptest.NewRequest(http.MethodGet, base+"/manifest?cursor=not-a-cursor", nil)
+	malformed := httptest.NewRequestWithContext(t.Context(), http.MethodGet, base+"/manifest?cursor=not-a-cursor", nil)
 	malformed.Header.Set("Authorization", "Bearer credential")
 	malformedResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(malformedResponse, malformed)
 	assertHTTPProblem(t, malformedResponse, http.StatusBadRequest, "request.invalid")
 
 	contentPath := base + "/files/" + entry.EntryID.String() + "/content"
-	request := httptest.NewRequest(http.MethodGet, contentPath, nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, contentPath, nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -415,7 +417,7 @@ func TestManagerSubmissionIntegrityRetirementOmitsFormerCounters(t *testing.T) {
 			httpAPI := newExamAttemptFocusedAPI(t, fake)
 			path := "/api/v1/exams/" + fake.attempt.ExamID.String() + "/sittings/" + fake.attempt.SittingID.String() +
 				"/attempts/" + fake.attempt.ID.String() + "/submissions/" + submission.ID.String()
-			request := httptest.NewRequest(http.MethodGet, path, nil)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 			request.Header.Set("Authorization", "Bearer credential")
 			response := httptest.NewRecorder()
 			httpAPI.ServeHTTP(response, request)
@@ -441,7 +443,7 @@ func TestCandidateAttemptHeadersRequireOneCanonicalSensitiveCredentialAndConnect
 	t.Parallel()
 	credential := model.NewCredentialToken()
 	connectionID := model.NewAttemptConnectionID()
-	valid := httptest.NewRequest(http.MethodGet, "/", nil)
+	valid := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	valid.Header.Set(candidateAttemptCredentialHeader, credential)
 	valid.Header.Set(candidateAttemptConnectionHeader, connectionID.String())
 	access, err := candidateAttemptAccessHeaders(valid)
@@ -482,7 +484,7 @@ func TestCandidateAttemptHeadersRequireOneCanonicalSensitiveCredentialAndConnect
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			request := httptest.NewRequest(http.MethodGet, "/", nil)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 			test.set(request.Header)
 			_, headerErr := candidateAttemptAccessHeaders(request)
 			require.Error(t, headerErr, "invalid candidate Attempt headers were accepted")
@@ -631,7 +633,7 @@ func TestManagerAttemptRefetchExposesPrivateFreeActiveSuspensionIdentity(t *test
 	fake.managerPage.Items[0].ActiveSuspension = suspension
 	httpAPI := newExamAttemptFocusedAPI(t, fake)
 	path := "/api/v1/exams/" + fake.attempt.ExamID.String() + "/sittings/" + fake.attempt.SittingID.String() + "/attempts/" + fake.attempt.ID.String()
-	request := httptest.NewRequest(http.MethodGet, path, nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -648,7 +650,7 @@ func TestCandidateWorkspaceJournalAndAllHTTPMutationsMapExactProtectedCommands(t
 	base := "/api/v1/exam-attempts/" + fake.attempt.ID.String() + "/workspace"
 	participationID := fake.participation.ID.String()
 
-	journalRequest := fake.candidateRequest(http.MethodGet, base+"/changes?workspace_cursor=3&limit=20")
+	journalRequest := fake.candidateRequest(t, http.MethodGet, base+"/changes?workspace_cursor=3&limit=20")
 	journalResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(journalResponse, journalRequest)
 	require.Equal(t, http.StatusOK, journalResponse.Code, "journal=%d %s query=%#v", journalResponse.Code, journalResponse.Body.String(), fake.journalQuery)
@@ -662,25 +664,25 @@ func TestCandidateWorkspaceJournalAndAllHTTPMutationsMapExactProtectedCommands(t
 	fake.journalPage.Entries[0].NewPath, fake.journalPage.Entries[0].ContentVersion = "", ""
 	fake.journalPage.Entries[0].Recursive = true
 	journalResponse = httptest.NewRecorder()
-	httpAPI.ServeHTTP(journalResponse, fake.candidateRequest(http.MethodGet, base+"/changes?workspace_cursor=3&limit=20"))
+	httpAPI.ServeHTTP(journalResponse, fake.candidateRequest(t, http.MethodGet, base+"/changes?workspace_cursor=3&limit=20"))
 	require.Equal(t, http.StatusOK, journalResponse.Code, "recursive journal")
 	require.Contains(t, journalResponse.Body.String(), `"recursive":true`, "recursive journal")
 	require.Contains(t, journalResponse.Body.String(), `"old_path":"src"`, "recursive journal")
 	fake.journalPage.HasMore = true
 	journalResponse = httptest.NewRecorder()
-	httpAPI.ServeHTTP(journalResponse, fake.candidateRequest(http.MethodGet, base+"/changes?workspace_cursor=3&limit=1"))
+	httpAPI.ServeHTTP(journalResponse, fake.candidateRequest(t, http.MethodGet, base+"/changes?workspace_cursor=3&limit=1"))
 	require.Equal(t, http.StatusOK, journalResponse.Code, "paged journal")
 	var journal candidateWorkspaceJournalResponse
 	require.NoError(t, json.Unmarshal(journalResponse.Body.Bytes(), &journal))
-	next, err := decodeOpaqueCursor(journal.NextCursor, candidateWorkspaceJournalCursorSpec())
+	next, err := route.DecodeCursor(journal.NextCursor, candidateWorkspaceJournalCursorSpec())
 	require.NoError(t, err, "next_cursor")
 	require.Equal(t, fake.journalPage.Entries[len(fake.journalPage.Entries)-1].Cursor, next.After, "continuation after the last change")
 	journalResponse = httptest.NewRecorder()
-	httpAPI.ServeHTTP(journalResponse, fake.candidateRequest(http.MethodGet, base+"/changes?cursor="+journal.NextCursor))
+	httpAPI.ServeHTTP(journalResponse, fake.candidateRequest(t, http.MethodGet, base+"/changes?cursor="+journal.NextCursor))
 	require.Equal(t, http.StatusOK, journalResponse.Code, "continued journal")
 	require.Equal(t, next.After, fake.journalQuery.AfterCursor, "continued journal")
 	journalResponse = httptest.NewRecorder()
-	httpAPI.ServeHTTP(journalResponse, fake.candidateRequest(http.MethodGet, base+"/changes?workspace_cursor=3&cursor="+journal.NextCursor))
+	httpAPI.ServeHTTP(journalResponse, fake.candidateRequest(t, http.MethodGet, base+"/changes?workspace_cursor=3&cursor="+journal.NextCursor))
 	require.Equal(t, http.StatusBadRequest, journalResponse.Code, "a continuation cannot restart at another Workspace Cursor")
 	fake.journalPage.HasMore = false
 
@@ -864,26 +866,30 @@ type examAttemptHTTPFake struct {
 	presentationCalls         int
 	workspaceQuery            attempt.WorkspaceQuery
 	managerList               attempt.ListManagedAttemptsQuery
-	managerGet                attempt.GetManagedAttemptQuery
-	workspaceOpen             attempt.OpenWorkspaceFileQuery
-	reallow                   attempt.ReallowCommand
-	suspend                   attempt.ManualSuspensionCommand
-	journalQuery              attempt.WorkspaceJournalQuery
-	journalPage               attempt.WorkspaceJournalPage
-	workspaceDirectory        attempt.CreateWorkspaceDirectoryCommand
-	workspaceFile             attempt.CreateWorkspaceFileCommand
-	workspaceReplace          attempt.ReplaceWorkspaceFileCommand
-	workspaceMove             attempt.MoveWorkspaceEntryCommand
-	workspaceDelete           attempt.DeleteWorkspaceEntryCommand
-	workspaceMutation         attempt.WorkspaceMutationResult
-	submit                    attempt.SubmitCommand
-	submissionReceipt         store.ExamSubmissionReceipt
-	submissionView            attempt.ManagedSubmission
-	submissionManifest        attempt.SubmissionManifestPage
-	submissionGet             attempt.GetSubmissionQuery
-	submissionManifestQuery   attempt.ListSubmissionManifestQuery
-	submissionOpen            attempt.OpenSubmissionFileQuery
-	uploaded                  []byte
+	managerGet                struct {
+		ExamID    model.ExamID
+		SittingID model.ExamSittingID
+		AttemptID model.ExamAttemptID
+	}
+	workspaceOpen           attempt.OpenWorkspaceFileQuery
+	reallow                 attempt.ReallowCommand
+	suspend                 attempt.ManualSuspensionCommand
+	journalQuery            attempt.WorkspaceJournalQuery
+	journalPage             attempt.WorkspaceJournalPage
+	workspaceDirectory      attempt.CreateWorkspaceDirectoryCommand
+	workspaceFile           attempt.CreateWorkspaceFileCommand
+	workspaceReplace        attempt.ReplaceWorkspaceFileCommand
+	workspaceMove           attempt.MoveWorkspaceEntryCommand
+	workspaceDelete         attempt.DeleteWorkspaceEntryCommand
+	workspaceMutation       attempt.WorkspaceMutationResult
+	submit                  attempt.SubmitCommand
+	submissionReceipt       store.ExamSubmissionReceipt
+	submissionView          attempt.ManagedSubmission
+	submissionManifest      attempt.SubmissionManifestPage
+	submissionGet           attempt.GetSubmissionQuery
+	submissionManifestQuery attempt.ListSubmissionManifestQuery
+	submissionOpen          attempt.OpenSubmissionFileQuery
+	uploaded                []byte
 }
 
 func newExamAttemptHTTPFake(t *testing.T) *examAttemptHTTPFake {
@@ -953,7 +959,7 @@ func newExamAttemptHTTPFake(t *testing.T) *examAttemptHTTPFake {
 	return fake
 }
 
-func candidateTestRuntimeCapabilities(t *testing.T, at time.Time, attempt *model.ExamAttempt) store.CandidateRuntimeCapabilities {
+func candidateTestRuntimeCapabilities(t *testing.T, at time.Time, record *model.ExamAttempt) store.CandidateRuntimeCapabilities {
 	t.Helper()
 	manifest := model.CurrentAttemptConfigurationManifestFingerprint()
 	configuration, err := (model.AttemptConfigurationCandidate{ManifestFingerprint: manifest, RegistryFingerprint: "fnv1a64:" + strings.Repeat("b", 16), UserSettingsRevision: model.NewUserSettingsRevision(), DesktopBuild: "test-build", DesktopTarget: "darwin-arm64", Presentation: model.AttemptConfigurationPresentation{ColorTheme: "dark", ZoomPercent: 100, EditorFontSizePX: 14, EditorLineHeightPX: 22, ScreenReaderMode: "auto", AnnouncementMode: "auto", CursorStyle: "line", CursorBlinking: "blink"}, ApprovedCommands: []string{}, ApprovedKeybindings: []string{}}).Freeze(model.NewID())
@@ -964,19 +970,19 @@ func candidateTestRuntimeCapabilities(t *testing.T, at time.Time, attempt *model
 			ApprovedCommands: append([]string{}, configuration.ApprovedCommands...), ApprovedKeybindings: append([]string{}, configuration.ApprovedKeybindings...), Digest: configuration.Digest},
 		FocusLossCollectionEnabled: true, WorkspaceMutationAllowed: true, SubmissionAllowed: true,
 		Browser: store.CandidateBrowserCapability{State: store.CandidateBrowserDisabled},
-		ExamRevision: store.CandidateExamRevisionCapability{AdmissionRevisionID: attempt.AdmissionRevisionID,
+		ExamRevision: store.CandidateExamRevisionCapability{AdmissionRevisionID: record.AdmissionRevisionID,
 			CurrentRevisionID: model.NewExamRevisionID()},
 		Departure: store.CandidateDepartureCapability{Allowed: false, Reason: "attempt_in_progress"}}
 }
 
-func newExamAttemptFocusedAPI(t *testing.T, fake *examAttemptHTTPFake) *API {
+func newExamAttemptFocusedAPI(t *testing.T, fake *examAttemptHTTPFake) *route.API {
 	t.Helper()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	return newFocusedResourceAPI(t, logger, fake, examAttemptResource(fake))
 }
 
-func (f *examAttemptHTTPFake) candidateRequest(method, path string) *http.Request {
-	request := httptest.NewRequest(method, path, nil)
+func (f *examAttemptHTTPFake) candidateRequest(t *testing.T, method, path string) *http.Request {
+	request := httptest.NewRequestWithContext(t.Context(), method, path, nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set(candidateAttemptCredentialHeader, f.credential)
 	request.Header.Set(candidateAttemptConnectionHeader, f.connection.ID.String())
@@ -993,8 +999,14 @@ func (f *examAttemptHTTPFake) AuthenticateBearer(context.Context, string) (*mode
 	return &principal, nil
 }
 
-func (f *examAttemptHTTPFake) GetExamAttempt(_ context.Context, _ invocation.Invocation, query attempt.GetManagedAttemptQuery) (store.ExamAttemptManagerSnapshot, error) {
-	f.managerGet = query
+func (f *examAttemptHTTPFake) GetExamAttempt(
+	_ context.Context,
+	_ invocation.Invocation,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+) (store.ExamAttemptManagerSnapshot, error) {
+	f.managerGet.ExamID, f.managerGet.SittingID, f.managerGet.AttemptID = examID, sittingID, attemptID
 	return f.managerPage.Items[0], nil
 }
 
@@ -1033,7 +1045,7 @@ func (f *examAttemptHTTPFake) AcknowledgeExamAttemptCorrection(_ context.Context
 		CurrentRevisionID: command.ExpectedCurrentRevisionID, RuntimeCapabilities: capabilities, AcknowledgedAt: model.OptionalTimeFrom(f.attempt.UpdatedAt.Add(time.Minute))}, nil
 }
 
-func (f *examAttemptHTTPFake) ReallowExamAttempt(_ context.Context, invocation invocation.Invocation, command attempt.ReallowCommand) (attempt.ReallowResult, error) {
+func (f *examAttemptHTTPFake) ReallowExamAttempt(_ context.Context, inv invocation.Invocation, command attempt.ReallowCommand) (attempt.ReallowResult, error) {
 	f.reallow = command
 	examAttempt := *f.attempt
 	examAttempt.State, examAttempt.UpdatedAt, examAttempt.Revision = model.ExamAttemptActive, examAttempt.UpdatedAt.Add(time.Minute), command.ExpectedAttemptRevision+1
@@ -1043,10 +1055,10 @@ func (f *examAttemptHTTPFake) ReallowExamAttempt(_ context.Context, invocation i
 			ParticipationID: model.NewAttemptParticipationID(), FlagID: model.NewIntegrityFlagID(), Generation: 1,
 			State: model.AttemptSuspensionClosed, Source: model.AttemptSuspensionSourcePolicy,
 			CandidateReason: model.AttemptSuspensionCandidateReasonSecureContinuityLost, StartedAt: examAttempt.CreatedAt,
-			EndedAt: model.OptionalTimeFrom(examAttempt.UpdatedAt), ReallowedByUserID: invocation.Principal().UserID}}, nil
+			EndedAt: model.OptionalTimeFrom(examAttempt.UpdatedAt), ReallowedByUserID: inv.Principal().UserID}}, nil
 }
 
-func (f *examAttemptHTTPFake) SuspendExamAttempt(_ context.Context, invocation invocation.Invocation, command attempt.ManualSuspensionCommand) (attempt.ManualSuspensionResult, error) {
+func (f *examAttemptHTTPFake) SuspendExamAttempt(_ context.Context, inv invocation.Invocation, command attempt.ManualSuspensionCommand) (attempt.ManualSuspensionResult, error) {
 	f.suspend = command
 	examAttempt := *f.attempt
 	examAttempt.State, examAttempt.UpdatedAt, examAttempt.Revision = model.ExamAttemptSuspended, examAttempt.UpdatedAt.Add(time.Minute), command.ExpectedAttemptRevision+1
@@ -1055,7 +1067,7 @@ func (f *examAttemptHTTPFake) SuspendExamAttempt(_ context.Context, invocation i
 		Suspension: store.ExamAttemptSuspensionView{ID: model.NewAttemptSuspensionID(), AttemptID: examAttempt.ID,
 			ParticipationID: model.NewAttemptParticipationID(), Generation: 1, State: model.AttemptSuspensionActive,
 			Source: model.AttemptSuspensionSourceManual, CandidateReason: model.AttemptSuspensionCandidateReasonManagerSuspended,
-			StartedAt: examAttempt.UpdatedAt, SuspendedByUserID: invocation.Principal().UserID}}, nil
+			StartedAt: examAttempt.UpdatedAt, SuspendedByUserID: inv.Principal().UserID}}, nil
 }
 
 func (f *examAttemptHTTPFake) GetCandidateExamPresentation(_ context.Context, _ invocation.Invocation, access attempt.CandidateAccess) (attempt.Presentation, error) {

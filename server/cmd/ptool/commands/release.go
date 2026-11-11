@@ -71,10 +71,10 @@ func writeDeterministicArchive(source, output, prefix string, modifiedAt time.Ti
 	if err != nil {
 		return err
 	}
-	if _, err := os.Stat(output); err == nil {
+	if _, statErr := os.Stat(output); statErr == nil {
 		return fmt.Errorf("archive output %q already exists", output)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("inspect archive output %q: %w", output, err)
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		return fmt.Errorf("inspect archive output %q: %w", output, statErr)
 	}
 	info, err := os.Stat(source)
 	if err != nil {
@@ -85,7 +85,7 @@ func writeDeterministicArchive(source, output, prefix string, modifiedAt time.Ti
 	}
 
 	entries := make([]string, 0)
-	if err := filepath.WalkDir(source, func(name string, entry os.DirEntry, walkErr error) error {
+	if walkDirErr := filepath.WalkDir(source, func(name string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -97,13 +97,13 @@ func writeDeterministicArchive(source, output, prefix string, modifiedAt time.Ti
 			return nil
 		}
 		return fmt.Errorf("archive source contains unsupported file %q", name)
-	}); err != nil {
-		return fmt.Errorf("walk archive source %q: %w", source, err)
+	}); walkDirErr != nil {
+		return fmt.Errorf("walk archive source %q: %w", source, walkDirErr)
 	}
 	sort.Strings(entries)
 
-	if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
-		return fmt.Errorf("create archive output directory: %w", err)
+	if mkdirAllErr := os.MkdirAll(filepath.Dir(output), 0o755); mkdirAllErr != nil {
+		return fmt.Errorf("create archive output directory: %w", mkdirAllErr)
 	}
 	temporary, err := os.CreateTemp(filepath.Dir(output), ".proctor-release-*.tar.gz")
 	if err != nil {
@@ -116,8 +116,8 @@ func writeDeterministicArchive(source, output, prefix string, modifiedAt time.Ti
 			_ = os.Remove(temporaryName)
 		}
 	}()
-	if err := temporary.Chmod(0o644); err != nil {
-		return fmt.Errorf("set archive permissions: %w", err)
+	if chmodErr := temporary.Chmod(0o644); chmodErr != nil {
+		return fmt.Errorf("set archive permissions: %w", chmodErr)
 	}
 
 	gzipWriter, err := gzip.NewWriterLevel(temporary, gzip.BestCompression)
@@ -167,18 +167,22 @@ func writeArchiveEntry(writer *tar.Writer, source, name, prefix string, modified
 	if err != nil {
 		return fmt.Errorf("inspect archive entry %q: %w", name, err)
 	}
+
 	relative, err := filepath.Rel(source, name)
 	if err != nil {
 		return fmt.Errorf("resolve archive entry %q: %w", name, err)
 	}
+
 	archiveName := prefix
 	if relative != "." {
 		archiveName = path.Join(prefix, filepath.ToSlash(relative))
 	}
+
 	header, err := tar.FileInfoHeader(info, "")
 	if err != nil {
 		return fmt.Errorf("create archive header for %q: %w", name, err)
 	}
+
 	header.Name = archiveName
 	header.Uid = 0
 	header.Gid = 0
@@ -188,7 +192,6 @@ func writeArchiveEntry(writer *tar.Writer, source, name, prefix string, modified
 	header.AccessTime = time.Time{}
 	header.ChangeTime = time.Time{}
 	header.PAXRecords = nil
-	header.Xattrs = nil
 	header.Format = tar.FormatPAX
 	if info.IsDir() {
 		header.Name += "/"
@@ -198,19 +201,23 @@ func writeArchiveEntry(writer *tar.Writer, source, name, prefix string, modified
 	} else {
 		header.Mode = 0o644
 	}
-	if err := writer.WriteHeader(header); err != nil {
-		return fmt.Errorf("write archive header for %q: %w", name, err)
+
+	if writeHeaderErr := writer.WriteHeader(header); writeHeaderErr != nil {
+		return fmt.Errorf("write archive header for %q: %w", name, writeHeaderErr)
 	}
 	if info.IsDir() {
 		return nil
 	}
+
 	file, err := os.Open(name)
 	if err != nil {
 		return fmt.Errorf("open archive entry %q: %w", name, err)
 	}
+
 	defer file.Close()
 	if _, err := io.Copy(writer, file); err != nil {
 		return fmt.Errorf("write archive entry %q: %w", name, err)
 	}
+
 	return nil
 }

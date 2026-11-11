@@ -3,11 +3,11 @@
 Use cases are direct methods with typed commands or queries and typed results:
 
 ~~~go
-CreateAcademicUnit(ctx, invocation, command) (*model.AcademicUnit, error)
-GetAcademicUnit(ctx, invocation, query) (*model.AcademicUnit, error)
+CreateAcademicUnit(ctx, inv, command) (*model.AcademicUnit, error)
+GetAcademicUnit(ctx, inv, query) (*model.AcademicUnit, error)
 ~~~
 
-A use case takes `(ctx, invocation, command)` with an `XCommand` for a
+A use case takes `(ctx, inv, command)` with an `XCommand` for a
 mutation or an `XQuery` for a read, passed by value, and returns a domain model
 or an `XResult`. Ports to infrastructure or another module that are not use
 cases name their argument for that port, such as a renderer `RenderRequest`.
@@ -17,7 +17,7 @@ cases name their argument for that port, such as a renderer `RenderRequest`.
 The `app/invocation` leaf owns that one call type so the parent and every Exam
 child module share it without a parent import, and transports import it
 directly. Every use case and consumer-owned port takes
-`invocation invocation.Invocation`, and no module declares a local call type,
+`inv invocation.Invocation`, and no module declares a local call type,
 alias, or conversion between call types.
 Actorless work carries `invocation.System` in the same position, which names
 either the durable Job execution (`invocation.Job`) or a non-durable runtime
@@ -32,7 +32,19 @@ are listed there with their reasons.
 
 Each actor-sensitive use case authorizes immediately before expensive work or mutation. HTTP and WebSocket establish credential and assurance requirements but do not preflight resource permissions or issue decision receipts.
 
-Domain models own local invariants and transitions. Application services own use-case policy, authorization, multi-aggregate coordination, transaction intent, audit, and external effects. Focused service implementations are normally unexported behind `app.App` and consumer-owned interfaces.
+Domain models own local invariants and transitions. Application services own use-case policy, authorization, multi-aggregate coordination, transaction intent, audit, and external effects.
+
+Each domain area is one package under `app/`: `app/access`, `app/academic`,
+`app/identity`, `app/user`, `app/administration`, `app/onboarding`, and
+`app/exam` with its children. An area package
+exports a `Service` (or a few, when one would be too wide) whose exported
+methods are the area's use cases, together with that area's effects and
+adapters. A contributor looking for a feature opens the area directory; nothing
+about one flow lives in the parent package. A service that spans areas has a
+package too: `app/search` (`search.Service`), the administration counts in
+`app/administration` (`administration.Counts`), the operator Job service in
+`app/job` (`job.Operations`) and the operator mail service in `app/mail`
+(`mail.Operations`).
 
 Background jobs call application use cases with a system/service invocation. They do not manipulate stores directly.
 
@@ -52,18 +64,35 @@ The `app/job` child module owns the generic durable execution engine: immutable
 descriptor validation, claiming, leases, fenced transitions, checkpoints,
 work budgets, retry, cancellation observation, and bounded lifecycle. Domain
 Job handlers remain beside their owning use cases and cross that seam through
-strict typed documents and safe outcomes. The engine depends only on the
-domain Job records and `store.JobStore`; it never imports its parent package or
-selects infrastructure.
+strict typed documents (`model.DecodeStrictJobDocument`) and safe outcomes.
+The engine depends only on the domain Job records and `store.JobStore`. The
+same package holds `job.Operations`, the operator Job service built on the
+engine, which adds `app/access`, `app/apperror` and `app/invocation`. The
+package never imports its parent, an area package, `app/jobs` or
+`app/mail`, and never selects infrastructure.
 
 The `app/realtime` child module owns transport-neutral realtime events and
 connection-close reasons, local-first delivery, peer propagation codecs,
 loop prevention, attachment synchronization, and propagation of session
 revocation and authentication or authorization invalidation. It is inert after
 construction: it owns no goroutine, queue, retry loop, or infrastructure
-lifecycle. The parent application retains use-case effect timing, Principal
-validation, WebSocket subscription authorization, and translation between
-delivery failures and public application errors.
+lifecycle. It declares `realtime.Publisher`, the one port through which an
+application area delivers post-commit effects. An area service holds a
+Publisher, builds its own events in private `publish<Subject><Change>` methods
+(`effects.go` in the area package) and calls them from the use case after
+commit; a failed publication is passed to `Publisher.Report` and the use case
+still succeeds. Area tests pass `realtimetest.Publisher` and assert its
+recorded calls whole. Two publications several Exam areas owe, the Sitting
+board invalidation and the Exam activity invalidation of a Sitting's
+candidates, are functions of this module that take the Publisher and, for the
+second, a narrow candidate reader the Exam Sitting Store satisfies.
+`realtime.Service` implements the Publisher: it translates delivery failures
+into public application errors and adds the Attempt and current-user
+invalidations a Session revocation or authorization change owes, reading the
+affected Attempts through the module's `SessionAttemptTargets` port, which the
+parent adapts from the Exam Attempt Store. The parent application retains
+Principal validation and WebSocket subscription authorization
+(`RealtimeAdmission`).
 
 The `app/mail` child module owns all server-specific mail composition:
 the complete template-definition registry, semantic preparation operations,
@@ -71,13 +100,25 @@ closed typed presentation requests, safe render inputs, disabled/ineligible
 suppression, shared frozen-payload mechanics, stable Message-ID construction,
 and locale-indexed Sitting fan-out bundles. It receives rendering and sending
 capabilities at construction and returns validated `MailOccurrence`,
-`MailDelivery`, and Job records; it does not send during a business mutation or
-persist anything itself. Parent use cases retain authorization, audit,
-idempotency, recipient lookup, and named transaction coordination through
-narrow consumer-owned preparation ports. Production code in the parent uses
-the child package's owned contracts directly rather than redeclaring aliases;
-the child never imports the parent application, transports, platform, SQL, or
-deployment configuration.
+`MailDelivery`, and Job records; composition does not send during a business
+mutation or persist anything itself. The same package holds what an operator
+and the delivery Jobs share: `mail.Operations` (delivery listing, cancel,
+retry, metrics, test mail and payload-key rotation), the telemetry contracts
+the module root implements (`mail.DeliveryRecorder`, `mail.MetricsReader`),
+`mail.Health`, the `mail.MaintenanceMonitor` periodic task, the delivery
+relevance policy (`mail.DeliveryIsRelevant`) and the rekey Job's documents.
+The use case that sends a mail retains authorization,
+audit, idempotency, recipient lookup, and named transaction coordination, and
+its area prepares the mail: `sitting.ScheduleMail`,
+`attempt.SubmissionReceiptMail` and `review.ResultReleaseMail` read what the
+notice shows and call the composer, each behind the small preparer interface
+its area's tests fake. Consumers use the child package's owned contracts
+directly rather than redeclaring aliases; the child never imports the parent
+application, an area that sends mail, `app/jobs`, transports, platform,
+SQL, or deployment configuration. `mail.Operations` reaches the identity
+area's test-mail rate limit through a port
+(`identity.AttemptAccounting.AccountMailTest`), and the session assurance guard
+it shares with the areas is `access.RequireStrongRecentSession`.
 
 The examination capability is a cohesive `app/exam` boundary.
 It owns authoring and publication policy, manager relationships, Sitting and
@@ -94,24 +135,24 @@ module owns the one shared candidate-facing sanitizer used by protected Exam
 presentation and released Review remarks; it contains no authorization or
 transport policy. `app/exam/attempt`
 consumes separate bounded Store contracts for the Attempt lifecycle and mutable
-Workspace aggregate and narrow audit, content, and realtime ports. None imports
+Workspace aggregate, narrow audit and content ports, and the shared
+`realtime.Publisher`. None imports
 the parent application package or selects SQL, VFS, WebSocket, Jobs, or other
 infrastructure.
 
-Every application service, parent or child, is constructed the same way:
-`New(Dependencies) (*Service, error)` in a child package, `NewX(XDependencies)
-(*X, error)` for each service of the root `app/exam` package, and
-`newX(xDependencies)` for the parent's unexported services. The constructor
-validates every collaborator once and the service keeps them in a single
-`deps` field, beside any state it derives; no service takes positional
-collaborators. A type is a service when it holds a collaborator: an
-interface, a function, or a pointer to a type with methods.
-`TestServicesTakeOneDependencies` enforces the shape; only `app.New`, which
-distributes its Dependencies to the services it embeds, keeps no `deps`. `app.App` embeds each Exam
-service by its concrete type, through a parent alias such as
-`examSittingService` that gives the embedded field a distinct name. A parent
-adapter or Job runner names a narrow port only where its test substitutes a
-fake.
+A service is a struct whose fields are its collaborators: the `store`
+contracts it calls, the area's `Authorizer` and `Auditor` (satisfied in
+production by `*access.Authorizer` and `*access.Auditor`), and whatever else it
+needs. Its constructor takes one `Dependencies` (or `<X>Dependencies`) struct
+declared beside it rather than positional collaborators; review holds new
+constructors to this.
+A service generates identifiers with one `NewID func() string` (or calls
+`model.NewID` directly) and reads time from one `Now func() time.Time`.
+
+`app.App` holds one named field per service (`Academic`, `Identity`,
+`ExamAuthoring`, `Sittings`, `Attempts`, ...), so every call site names the
+owner of the use case it calls: `app.Academic.CreateClass(...)`,
+`app.Attempts.SubmitExamAttempt(...)`.
 
 Each Exam use case is the exported method on its owning service, named as the
 public use case (`ScheduleExamSitting`), with the command, query, and result
@@ -166,8 +207,8 @@ empty architectural placeholder. Its `doc.go` must define the Exam, Draft,
 Revision, Sitting, Attempt, Participation, Resource, Starter Workspace,
 Workspace, Submission, Integrity, and Review vocabulary; state what the
 package owns and excludes; and state its allowed inward dependencies. The
-parent `app.App` embeds its services as the public surface and `app.New`
-remains the sole application constructor. Detailed examination boundaries are in
+parent `app.App` exposes its services as named fields and `app.New` remains
+the sole application constructor. Detailed examination boundaries are in
 [the `exam-lifecycle` reference](../../exam-lifecycle/references/examinations.md).
 
 Realtime receives its required authentication invalidator and diagnostics at
@@ -182,10 +223,11 @@ admission, principal revalidation and subscription authorization, is one
 focused service that composes the authentication, Exam, Sitting, and Access
 Control decisions.
 
-Operator Job use cases depend on the engine rather than a separate Job Store
-and descriptor catalog. They retain Principal authorization, resource
-resolution, durable audit ordering, and application-error translation; the
-engine owns safe projections and descriptor-governed persistence mechanics.
+Operator Job use cases (`job.Operations`) depend on the engine rather than a
+separate Job Store and descriptor catalog. They retain Principal
+authorization, resource resolution, durable audit ordering, and
+application-error translation; the engine owns safe projections and
+descriptor-governed persistence mechanics.
 
 Atomic store operations are explicit named aggregate operations such as bootstrap, enrollment transfer, or password-reset consumption. The application decides policy; the adapter owns locking, constraints, concurrency checks, and commit/rollback. Raw SQL transactions and generic `WithTransaction(func(Store))` callbacks do not cross into `app`.
 
@@ -205,28 +247,32 @@ time, proof destruction, and atomic terminal transitions.
 Interfaces normally live beside their consumer and expose only what it needs. Broad aggregates may exist at composition but are not daily dependencies. Prefer concrete types during construction and narrow interfaces at consumption.
 
 An interface exists only where something substitutes behind it: a second
-production implementation, a fake that the consumer's tests pass in, a
-type-assertion or `errors.As` capability probe, or a consumer-owned port across
-a module or dependency boundary that the consumer cannot name concretely, such
-as a child-module port the parent implements, a transport port the application
-implements, or a File Content capability. Otherwise the consumer holds the
-concrete type. A local port that would repeat a Store contract or a child
-module's owned contract uses that contract directly, and identical ports in
-one package are declared once. Each port carries only the methods its
-consumer calls or must pass on.
+production implementation, a fake the consumer's tests pass in, a
+type-assertion or `errors.As` capability probe, or a port across a module
+boundary that the consumer cannot name concretely, such as a File Content
+capability. Otherwise the consumer holds the concrete type. An area package
+declares each such collaborator once (typically `Authorizer` and `Auditor`),
+not once per service; realtime effects go through the shared
+`realtime.Publisher`, which no area redeclares. A service never redeclares a Store contract: it holds `store.ClassStore`
+(or the root `store.Store`) directly. A test fakes a Store contract by
+embedding it and overriding only the methods the test exercises:
 
-An adapter translates one concrete service, Store, or infrastructure value at
-one seam. It never holds, embeds, or delegates to another adapter: when two
-ports need the same translation, one adapter satisfies both, and port method
-names converge so that it can. A type is an adapter by shape, not by name:
-a struct that implements a port and whose methods mostly forward, in a few
-statements, to one field it holds. Holding a port counts as holding an
-adapter when every other production implementation of that port is one, so a
-decorator over an adapter is a chain too. Supply a backend's lifecycle as
-values to the one adapter (as `platform.CacheBackend` does) rather than as a
-second adapter beneath it. Authorization ports share the single
-`Authorize(ctx, Invocation, Action, Resource)` shape that the Access Control
-service satisfies directly.
+~~~go
+type classStoreFake struct {
+    store.ClassStore
+    created *store.ClassCreation
+}
+~~~
+
+Calling a method the fake does not override panics, which tells the test author
+exactly what to add.
+
+An adapter exists only where two packages genuinely disagree on a type and
+neither may import the other, such as the module root's translation of
+`platform.Cache` into the authentication cache port. An adapter translates one
+value at one seam and never wraps another adapter. Authorization uses the
+single `Authorize(ctx, Invocation, Action, Resource)` shape of
+`*access.Authorizer`.
 
 Persistence is the exception: the bounded root `store.Store` and complete per-model or aggregate contracts live together in `store` for shared conformance testing.
 
@@ -241,63 +287,97 @@ in the architecture test's `reachableOnlyFromTests` list, which
 `TestProductionFunctionsAreReachable` checks by rapid type analysis from every
 `main` package.
 
-Migrations are by vertical slice. A package or capability is introduced only when working code has a stable responsibility to inhabit it; bulk moves are prohibited.
+Migrations are by vertical slice. A package or capability is introduced only when working code has a stable responsibility to inhabit it. An area moves into its package as one complete commit series (code, tests, transports and documentation together), never half in the parent and half in the child.
 
 ## One application surface
 
-Every use case is declared once, as an exported method on the focused service
-that owns its policy, under its public use-case name (`CreateClass`, not
-`Create`). `app.App` embeds each such service, so the App method set is the
-union of their exported methods and the transports' consumer-owned ports are
-satisfied through promotion. App declares no use-case method of its own:
-neither a forwarder nor a wrapper that adds logic around a service call.
+Every use case is declared once, as an exported method on the area service that
+owns its policy, under its public use-case name (`CreateClass`, not `Create`).
+`app.App` exposes the area services as named fields and declares no use case of
+its own. Transports call `app.Academic.CreateClass` and so on.
+`httpapi.New(application, settings)` builds each resource from the area
+services it serves, usually one. An `httpapi` consumer interface lists the
+methods a resource calls and is there for the resource's tests to fake; a
+resource no test fakes takes the concrete service. The WebSocket hub receives WebSocket
+admission (`app.RealtimeAdmission`) and the Attempt service (`app.Attempts`)
+as its typed dependencies.
 
-Work a wrapper used to add belongs in the owning service method: operational
+Work a wrapper would add belongs in the owning service method: operational
 outcome recording, error concealment, input normalization, defensive copies,
-and result narrowing. A service whose construction is optional, such as Mail
-or Job operations when the graph has no Job Store, answers its own
-unavailability with a nil-receiver guard. A use case that needs several
-services lives on the service that owns its policy and receives the others as
+and result narrowing. A service whose construction is optional, such as
+`mail.Operations` or `job.Operations` when the graph has no Job Store, answers
+its own
+unavailability with a nil-receiver guard. A use case that needs several areas
+lives on the service that owns its policy and receives the others as
 collaborators; it never reads another service's fields.
 
-Every exported method of an embedded service joins the public surface. A
-service therefore exports only its use cases and the methods that a
-child-module port requires; ports inside `app` use unexported methods. Two
-embedded services never export the same name, because Go silently drops an
-ambiguous promoted method. App keeps a named field only for a runtime handle
-that composition borrows, such as the Job engine, or a collaborator whose
-methods must not join the surface.
-
-This shape was chosen over inlining every service into App methods. The
-transports already consume narrow ports that `*app.App` satisfies, and the
-Exam children are separate services. Embedding removes the doubled
-declaration while keeping those ports, each service's focused dependency set,
-and the fakes its unit tests use.
-
-`app.App` is not a persistence locator. Focused services receive exact Store
-contracts during composition. App retains neither the root Store nor a Store
-accessor; architecture tests reject restoring either that locator or
+`app.App` is not a persistence locator. Area services hold the Store contracts
+they use. App itself has no Store field or accessor; architecture tests reject
 production `App.Store()` traversal.
 
-`app.New` remains the sole application constructor and exposes its fail-fast
-order directly: validate shared dependencies, construct shared mechanics,
-construct Identity, construct access and Academic Structure, construct
-Examination authoring, construct profile and file behavior, construct optional
-Jobs, then construct administration and bootstrap behavior before assembling
-the facade. Private same-package recipes
-retain the projection and wiring knowledge for those cohesive slices. Their
-result values exist only during construction and are not runtime locators or
-alternate application interfaces.
+`app.New` in `app/new.go` remains the sole application constructor. It reads
+top to bottom: validate the dependencies, build the shared mechanics (password
+hashing, attempt accounting, cache invalidation, realtime publication, audit
+and mail composition) and `access`, then each area in dependency order, then
+the optional Job runtime and the services that span areas (search and the
+administration counts), and return one `App` literal that names every field.
+Its local variables carry each built service to the next step; an area too
+large to build inline has a helper in `new_<area>.go` named for what it
+builds (`newExamServices`, `newJobRuntime`). Identity is built before
+onboarding and the Job runtime, so it receives an Invitation acceptor and a
+Job wake (which onboarding also receives) that `New` connects once those
+exist.
 
-Readable ordered construction and selective child modules are useful
-structural patterns, but another project's platform-service taxonomy is not a
-package template. A child package is introduced only after the responsibility
-is stable, can obey inward dependencies without a parent-package cycle, and
-passes the deletion test. Concrete focused implementations remain unexported
-unless a real cross-package consumer requires their type.
+Another project's package taxonomy is not a template. An area or child package
+is introduced only after the responsibility is stable, can obey inward
+dependencies without a cycle, and passes the deletion test.
 
-Internal interfaces are sized around one cohesive consumer need or an existing
-atomic contract, not mechanically around every method and not as broad getter
-aggregates. Test fakes remain beside their consuming focused service; Store
-conformance and the real composition graph provide shared persistence and
-wiring evidence.
+Test fakes remain beside the tests that use them; Store conformance and the
+real composition graph provide shared persistence and wiring evidence.
+
+## Migration status
+
+The move to area packages (plan of 2026-11-10) is complete. Every area lives
+in its package, and `App` names every service in its own field and embeds
+nothing; `TestApplicationSurfaceIsNamedServices` keeps it that way. The parent
+package assembles: it holds `App`, `New` and `Dependencies`. The services that
+span areas are in child packages (`search.Service`, `administration.Counts`,
+`job.Operations`, `mail.Operations`), each named on `App` like an area
+service. `RealtimeAdmission` is the one service still declared in the parent,
+because it composes the identity, Exam and Access Control services that
+`app/realtime` may not import; the realtime Publisher is `realtime.Service`,
+whose one Store read the parent adapts in `realtime_attempt_targets.go`.
+Readiness (`health.go`), the operational event seam
+(`operational_metrics.go`) and build information (`version.go`) stay beside
+it.
+
+Every area service is flat: `academic.Service`, `user.Service`,
+`administration.Service`, `onboarding.Service` and `identity.Service` are each
+one struct whose fields are the Store contracts it calls and one of each
+collaborator, built by one `New`. Identity is the one area with two audit
+collaborators: `auditor`, the `access.MutationAuditor` for ordinary audited
+mutations, and `securityAudit`, the subset of `*access.Auditor` for the
+sign-in, Desktop and MFA audit protocols that the mutation runner does not
+cover. No area service embeds another implementation. A new concern adds its
+methods and fields to its area's `Service`; it does not add an embedded
+implementation.
+
+The parent wires; a rule lives in `app/access` or in the area a reader opens
+for it. Collection visibility is a named `access.Authorizer` helper
+(`AuthorizeExamList`). The Attempt and Integrity review areas declare the
+`SittingManagerAuthorizer` that composes their Submission authorization from
+the Sitting service, and the three areas share `access.ManagerAuthorization`
+rather than translating one another's result. Actorless audit attempts begin
+through `access.SystemAuditAdapter`. Periodic runtime tasks are built beside
+what they run: `jobs.NewExamAttemptExpiryTask`,
+`jobs.NewSittingMailReconciliationTask`, `identity.MaintenanceTasks`.
+
+`mail.InstitutionAuthorization` and `job.InstitutionAuthorization` give
+`mail.Operations` and `job.Operations` their own unavailable code when the
+Institution cannot be read. The mail delivery and cleanup Jobs record
+`mail.DeliveryMetric` values straight into the `mail.DeliveryRecorder` the
+module root implements and set `mail.Health` directly, with no forwarding
+type between them. `identity.DeploymentCapabilities` reports durable mail from
+that `mail.Health`. One seam stays in the parent because one side of it is a
+parent type: `operationalRecorderAdapter` turns an area's outcome into the
+parent's `OperationalEvent`.

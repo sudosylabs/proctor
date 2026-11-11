@@ -19,15 +19,27 @@ import (
 // Recency counts primary proof only; an MFA completion never refreshes it. The
 // caller must hold the Session lock, verify its current credential, and read at
 // after acquiring the mutation's potentially waiting locks.
-func requireStrongRecentSessionAt(ctx context.Context, executor sqlxExecutor, sessionID model.SessionID, at time.Time, ttl time.Duration) error {
+func requireStrongRecentSessionAt(
+	ctx context.Context,
+	executor sqlxExecutor,
+	sessionID model.SessionID,
+	at time.Time,
+	ttl time.Duration,
+) error {
 	if ttl <= 0 {
 		return store.NewErrConflict("authorization", "assurance", nil)
 	}
 	var strong bool
-	err := executor.Get(ctx, &strong, `SELECT authentication_strength='multi_factor' AND
-		GREATEST(authenticated_at,reauthenticated_at)<=? AND
-		GREATEST(authenticated_at,reauthenticated_at)>=? FROM sessions WHERE id=?`,
-		at, at.Add(-ttl), sessionID.String())
+	err := executor.Get(
+		ctx,
+		&strong,
+		`SELECT authentication_strength = 'multi_factor' AND
+		GREATEST(authenticated_at, reauthenticated_at) <= ? AND
+		GREATEST(authenticated_at, reauthenticated_at) >= ? FROM sessions WHERE id = ?`,
+		at,
+		at.Add(-ttl),
+		sessionID.String(),
+	)
 	if err != nil {
 		return err
 	}

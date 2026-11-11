@@ -31,8 +31,15 @@ func (o AcademicPeriodOwner) Validate() error {
 	institution := o.InstitutionID.IsValid()
 	unit := o.AcademicUnitID.IsValid()
 	if institution == unit {
-		return invalidModelError("AcademicPeriodOwner.Validate", "academic_period_owner", "", "academic period owner must contain exactly one institution or academic unit", "")
+		return invalidModelError(
+			"AcademicPeriodOwner.Validate",
+			"academic_period_owner",
+			"",
+			"academic period owner must contain exactly one institution or academic unit",
+			"",
+		)
 	}
+
 	return nil
 }
 
@@ -158,6 +165,7 @@ func (ap *AcademicPeriod) Validate() error {
 	if !ap.ID.IsValid() {
 		return invalidModelError(where, "academic_period", "id", "must be a valid identifier", "")
 	}
+
 	details := "id=" + ap.ID.String()
 	if ap.CreatedAt.IsZero() {
 		return invalidModelError(where, "academic_period", "created_at", "must be set", details)
@@ -183,6 +191,7 @@ func (ap *AcademicPeriod) Validate() error {
 	if ap.ArchivedAt.Valid && ap.ArchivedAt.Time.Before(ap.CreatedAt) {
 		return invalidModelError(where, "academic_period", "archived_at", "must not precede created_at", details)
 	}
+
 	return validateNamed(where, "academic_period", ap.ID.String(), ap.Name, ap.DisplayName, ap.Description)
 }
 

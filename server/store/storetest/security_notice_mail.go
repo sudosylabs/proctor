@@ -23,7 +23,7 @@ func userDisabledStateChangeWithNotice(t *testing.T, input *store.UserDisabledSt
 	if input.Disabled {
 		key = model.MailTemplateIdentityAccountDisabled
 	}
-	input.Occurrence, input.Delivery, input.DeliveryJob = securityNoticeMailFixture(t, model.UserID(input.ID), key, input.ChangedAt)
+	input.Occurrence, input.Delivery, input.DeliveryJob = securityNoticeMailFixture(t, input.ID, key, input.ChangedAt)
 	return input
 }
 
@@ -38,13 +38,13 @@ func UserDisabledStateChangeWithNotice(t *testing.T, input *store.UserDisabledSt
 
 func sessionRevocationWithNotice(t *testing.T, input *store.SessionRevocation) *store.SessionRevocation {
 	t.Helper()
-	input.Occurrence, input.Delivery, input.DeliveryJob = securityNoticeMailFixture(t, model.UserID(input.UserID), model.MailTemplateIdentitySessionsRevokedByAdmin, input.RevokedAt)
+	input.Occurrence, input.Delivery, input.DeliveryJob = securityNoticeMailFixture(t, input.UserID, model.MailTemplateIdentitySessionsRevokedByAdmin, input.RevokedAt)
 	return input
 }
 
 func userSessionsRevocationWithNotice(t *testing.T, input *store.UserSessionsRevocation) *store.UserSessionsRevocation {
 	t.Helper()
-	input.Occurrence, input.Delivery, input.DeliveryJob = securityNoticeMailFixture(t, model.UserID(input.UserID), model.MailTemplateIdentitySessionsRevokedByAdmin, input.RevokedAt)
+	input.Occurrence, input.Delivery, input.DeliveryJob = securityNoticeMailFixture(t, input.UserID, model.MailTemplateIdentitySessionsRevokedByAdmin, input.RevokedAt)
 	return input
 }
 

@@ -20,7 +20,7 @@ import (
 )
 
 type expiryDeliveryStoreFake struct {
-	store.ExamAttemptStore
+	store.DeliveryBudgetStore
 	due     []store.DeliveryExpiryDue
 	calls   int
 	auditID string
@@ -38,8 +38,8 @@ func (f *expiryDeliveryStoreFake) ExpireDelivery(_ context.Context, input *store
 func TestDeliveryExpiryScanAuditsBeforeCommitAndRejectsUnboundedWork(t *testing.T) {
 	f := newFixture(t)
 	due := expiryDueFixture(f)
-	persistence := &expiryDeliveryStoreFake{ExamAttemptStore: f.persistence, due: []store.DeliveryExpiryDue{{Family: "native", SourceID: model.NewID(), AttemptID: due.AttemptID, ParticipationID: due.ParticipationID, SittingID: due.SittingID, ClassID: due.ClassID}}}
-	f.service.deps.Persistence = persistence
+	persistence := &expiryDeliveryStoreFake{DeliveryBudgetStore: f.persistence, due: []store.DeliveryExpiryDue{{Family: "native", SourceID: model.NewID(), AttemptID: due.AttemptID, ParticipationID: due.ParticipationID, SittingID: due.SittingID, ClassID: due.ClassID}}}
+	f.service.deliveryBudget = persistence
 	result, err := f.service.ScanExpiredDeliveries(context.Background(), expiryScanSystem, 1)
 	require.NoError(t, err, "scan=%#v calls=%d order=%v", result, persistence.calls, f.order)
 	require.Equal(t, 1, result.Completed, "scan=%#v calls=%d order=%v", result, persistence.calls, f.order)

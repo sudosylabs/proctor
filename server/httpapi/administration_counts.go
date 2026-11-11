@@ -11,14 +11,15 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 )
 
-// AdministrationCountsApplication summarises the administration work waiting
+// AdministrationCountsApplication summarizes the administration work waiting
 // on the caller for navigation badges.
 type AdministrationCountsApplication interface {
-	AdministrationCounts(context.Context, invocation.Invocation) (app.AdministrationCounts, error)
+	AdministrationCounts(context.Context, invocation.Invocation) (administration.CountsResult, error)
 }
 
 // administrationCountsResponse carries each count the caller may see with its
@@ -34,38 +35,53 @@ type administrationCountsResponse struct {
 	OpenOnboardingImportsIsLowerBound *bool `json:"open_onboarding_imports_is_lower_bound,omitempty"`
 }
 
-type administrationCountsResourceModule struct {
-	application AdministrationCountsApplication
+type administrationCountsHandlers struct {
+	app AdministrationCountsApplication
 }
 
-func administrationCountsResource(application AdministrationCountsApplication) apiResource {
-	module := administrationCountsResourceModule{application: application}
-	return newResource(
+func administrationCountsResource(application AdministrationCountsApplication) route.Resource {
+	h := administrationCountsHandlers{app: application}
+	return route.NewResource(
 		"administration-counts",
-		sessionRoute(http.MethodGet, apiPath(literal("administration"), literal("counts")), []string{
-			"administration.unavailable", "authorization.denied", "authorization.request.invalid", "authorization.unavailable", "invitation.unavailable", "job.query.invalid",
-			"job.unavailable", "mail.unavailable", "onboarding_import.unavailable", "request.invalid", "resource.not_found",
-		}, module.get),
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/administration/counts",
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{
+				"administration.unavailable",
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"invitation.unavailable",
+				"job.query.invalid",
+				"job.unavailable",
+				"mail.unavailable",
+				"onboarding_import.unavailable",
+				"request.invalid",
+				"resource.not_found",
+			},
+			Handle: h.get,
+		},
 	)
 }
 
-func (m administrationCountsResourceModule) get(request operationRequest) (operationResult, error) {
-	if m.application == nil {
-		return operationResult{}, errUnpresentableResult
+func (h administrationCountsHandlers) get(request route.Request) (route.Result, error) {
+	if h.app == nil {
+		return route.Result{}, route.ErrUnpresentable
 	}
-	counts, err := m.application.AdministrationCounts(request.context, request.invocation())
+	counts, err := h.app.AdministrationCounts(request.Context, request.Invocation())
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	var response administrationCountsResponse
 	response.PendingInvitations, response.PendingInvitationsIsLowerBound = administrationCountMembers(counts.PendingInvitations)
 	response.FailedJobs, response.FailedJobsIsLowerBound = administrationCountMembers(counts.FailedJobs)
 	response.FailedMailDeliveries, response.FailedMailDeliveriesIsLowerBound = administrationCountMembers(counts.FailedMailDeliveries)
 	response.OpenOnboardingImports, response.OpenOnboardingImportsIsLowerBound = administrationCountMembers(counts.OpenOnboardingImports)
-	return jsonResult(http.StatusOK, response).withHeaders(privateNoStoreHeaders()), nil
+	return route.JSON(http.StatusOK, response).WithHeaders(privateNoStoreHeaders()), nil
 }
 
-func administrationCountMembers(count *app.AdministrationCount) (*int, *bool) {
+func administrationCountMembers(count *administration.Count) (*int, *bool) {
 	if count == nil {
 		return nil, nil
 	}

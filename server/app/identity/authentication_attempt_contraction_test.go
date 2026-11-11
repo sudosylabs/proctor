@@ -1,0 +1,146 @@
+// ---------------------------------------------------------------------------------------------
+// Copyright (c) 2026 Sudosy Labs. All rights reserved.
+// Licensed under the GNU Affero General Public License, version 3 only.
+// See LICENSE in the server module root for license information.
+// SPDX-License-Identifier: AGPL-3.0-only
+// ---------------------------------------------------------------------------------------------
+
+package identity
+
+import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"os"
+	"path/filepath"
+	"reflect"
+	"slices"
+	"strconv"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestAuthenticationAttemptAccountingHasOneProductionOwner(t *testing.T) {
+	t.Parallel()
+
+	accountingType := reflect.TypeOf((*AttemptAccounting)(nil))
+	local, ok := reflect.TypeOf(Service{}).FieldByName("attempts")
+	require.True(t, ok, "local login does not retain the shared private attempt accounting")
+	require.Equal(t, accountingType, local.Type, "local login does not retain the shared private attempt accounting")
+	// External authentication and installation bootstrap account their
+	// attempts through that same field: the Service holds no other.
+	held := 0
+	serviceType := reflect.TypeOf(Service{})
+	for index := 0; index < serviceType.NumField(); index++ {
+		if serviceType.Field(index).Type == accountingType {
+			held++
+		}
+	}
+	require.Equal(t, 1, held, "external authentication and installation bootstrap do not retain the shared private attempt accounting")
+
+	// The parent app package builds the one shared instance and hands it to
+	// this package, to the onboarding area's Invitation and registration
+	// flows, and to its own mail flows.
+	constructorCalls := 0
+	for _, directory := range []string{".", ".."} {
+		for name, file := range parseProductionGoFiles(t, directory) {
+			ast.Inspect(file, func(node ast.Node) bool {
+				call, ok := node.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				selector, ok := call.Fun.(*ast.SelectorExpr)
+				if ok && selector.Sel.Name == "NewAttemptAccounting" {
+					constructorCalls++
+					assert.Equal(t, "../new.go", filepath.Join(directory, name))
+				}
+				identifier, ok := call.Fun.(*ast.Ident)
+				if ok && identifier.Name == "NewAttemptAccounting" {
+					constructorCalls++
+					assert.Fail(t, "identity constructs its own attempt accounting", name)
+				}
+				return true
+			})
+		}
+	}
+	require.Equal(t, 1, constructorCalls, "production constructor calls")
+}
+
+func TestMigratedAuthenticationFlowsDoNotReclaimAttemptMechanics(t *testing.T) {
+	t.Parallel()
+
+	// The files are discovered, not listed: every production file of the
+	// package is a flow file unless it is named here as an owner of the
+	// mechanics, so a file split or a new flow is covered without an edit.
+	mechanicsOwners := map[string]struct{}{
+		"authentication_attempt.go": {},
+	}
+	files := parseProductionGoFiles(t, ".")
+	for owner := range mechanicsOwners {
+		require.Contains(t, files, owner, "attempt-mechanics owner %s is no longer a production source", owner)
+	}
+	require.Greater(t, len(files), len(mechanicsOwners), "no authentication flow source was discovered")
+
+	names := make([]string, 0, len(files))
+	for name := range files {
+		if _, owner := mechanicsOwners[name]; !owner {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+
+	for _, name := range names {
+		file := files[name]
+		forbiddenNamespaces := []string{
+			"authentication/attempts/",
+			"authentication/login/",
+			"authentication/recovery/",
+			"authentication/external/",
+			"authentication/bootstrap/",
+		}
+		ast.Inspect(file, func(node ast.Node) bool {
+			switch candidate := node.(type) {
+			case *ast.CallExpr:
+				selector, ok := candidate.Fun.(*ast.SelectorExpr)
+				if ok &&
+					selector.Sel.Name == "Add" {
+					assert.NotEqual(t, 4, len(candidate.Args), "%s performs four-argument counter Add outside authentication_attempt.go", name)
+				}
+			case *ast.BasicLit:
+				if candidate.Kind != token.STRING {
+					return true
+				}
+				value, err := strconv.Unquote(candidate.Value)
+				if err != nil {
+					return true
+				}
+				for _, prefix := range forbiddenNamespaces {
+					assert.False(t, strings.HasPrefix(value, prefix), "%s constructs attempt-accounting key namespace %q", name, prefix)
+				}
+			}
+			return true
+		})
+	}
+}
+
+func parseProductionGoFiles(t *testing.T, directory string) map[string]*ast.File {
+	t.Helper()
+
+	entries, err := os.ReadDir(directory)
+	require.NoError(t, err)
+	files := make(map[string]*ast.File)
+	fileSet := token.NewFileSet()
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || filepath.Ext(name) != ".go" || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		file, parseErr := parser.ParseFile(fileSet, filepath.Join(directory, name), nil, 0)
+		require.NoError(t, parseErr, "parse production source %s", name)
+		files[name] = file
+	}
+	return files
+}

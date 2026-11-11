@@ -18,6 +18,16 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// OpenedContent is an open stream of protected bytes with the metadata a
+// transport needs to serve it. The caller closes Body.
+type OpenedContent struct {
+	Body           io.ReadCloser
+	MediaType      string
+	SizeBytes      int64
+	SHA256         string
+	ContentVersion model.WorkspaceContentVersion
+}
+
 // WorkspaceQuery selects one page of the candidate's Attempt Workspace
 // manifest at ExpectedCursor, after AfterEntryID; ExpectedCursor -1 starts at
 // the current cursor.
@@ -43,29 +53,41 @@ type WorkspacePage struct {
 // Workspace manifest. ExpectedCursor -1 starts a first page at the current
 // cursor; RefreshRequired reports that the workspace changed since that
 // cursor.
-func (s *Service) ListCandidateExamWorkspace(ctx context.Context, invocation invocation.Invocation, query WorkspaceQuery) (_ WorkspacePage, resultErr error) {
+func (s *Service) ListCandidateExamWorkspace(
+	ctx context.Context,
+	inv invocation.Invocation,
+	query WorkspaceQuery,
+) (_ WorkspacePage, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	selector, err := candidateSelector(invocation, query.Access)
+	selector, err := candidateSelector(inv, query.Access)
 	if err != nil {
 		return WorkspacePage{}, err
 	}
-	if query.Limit < 1 || query.Limit > model.AttemptWorkspaceJournalReadMaximum || query.ExpectedCursor < -1 ||
+
+	if query.Limit < 1 ||
+		query.Limit > model.AttemptWorkspaceJournalReadMaximum ||
+		query.ExpectedCursor < -1 ||
 		(query.ExpectedCursor == -1 && !query.AfterEntryID.IsZero()) {
 		return WorkspacePage{}, apperror.Invalid("exam.attempt.invalid", "workspace_list")
 	}
-	page, err := s.deps.Workspace.List(ctx, store.CandidateWorkspaceListOptions{
-		Access: selector, ExpectedCursor: query.ExpectedCursor, AfterEntryID: query.AfterEntryID, Limit: query.Limit,
+
+	page, err := s.workspaces.List(ctx, store.CandidateWorkspaceListOptions{
+		Access:         selector,
+		ExpectedCursor: query.ExpectedCursor,
+		AfterEntryID:   query.AfterEntryID,
+		Limit:          query.Limit,
 	})
 	if err != nil {
 		return WorkspacePage{}, storeError(storeErrors, err)
 	}
-	if page == nil || !page.WorkspaceID.IsValid() || page.Cursor < 0 ||
-		(page.RefreshRequired && (len(page.Items) != 0 || page.HasMore)) {
-		return WorkspacePage{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("missing candidate Workspace page"))
-	}
-	return WorkspacePage{WorkspaceID: page.WorkspaceID, Cursor: page.Cursor,
-		Items:   append([]store.CandidateAttemptWorkspaceItem(nil), page.Items...),
-		HasMore: page.HasMore, RefreshRequired: page.RefreshRequired}, nil
+
+	return WorkspacePage{
+		WorkspaceID:     page.WorkspaceID,
+		Cursor:          page.Cursor,
+		Items:           append([]store.CandidateAttemptWorkspaceItem(nil), page.Items...),
+		HasMore:         page.HasMore,
+		RefreshRequired: page.RefreshRequired,
+	}, nil
 }
 
 // OpenWorkspaceFileQuery names one Workspace file through the candidate's
@@ -78,40 +100,55 @@ type OpenWorkspaceFileQuery struct {
 // OpenCandidateExamWorkspaceFile opens the current content of one file in the
 // candidate's Attempt Workspace, whether it is still the Starter Workspace
 // copy or Attempt-written content.
-func (s *Service) OpenCandidateExamWorkspaceFile(ctx context.Context, invocation invocation.Invocation, query OpenWorkspaceFileQuery) (_ OpenedContent, resultErr error) {
+func (s *Service) OpenCandidateExamWorkspaceFile(
+	ctx context.Context,
+	inv invocation.Invocation,
+	query OpenWorkspaceFileQuery,
+) (_ OpenedContent, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	selector, err := candidateSelector(invocation, query.Access)
+	selector, err := candidateSelector(inv, query.Access)
 	if err != nil {
 		return OpenedContent{}, err
 	}
 	if !query.EntryID.IsValid() {
 		return OpenedContent{}, apperror.Invalid("exam.attempt.invalid", "attempt_workspace_entry_id")
 	}
-	resolved, err := s.deps.Workspace.ResolveFile(ctx, selector, query.EntryID)
+
+	resolved, err := s.workspaces.ResolveFile(ctx, selector, query.EntryID)
 	if err != nil {
 		return OpenedContent{}, storeError(storeErrors, err)
 	}
 	if resolved == nil || resolved.Entry.EntryID != query.EntryID || resolved.ContentVersion.IsZero() {
 		return OpenedContent{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("incomplete candidate Workspace selector"))
 	}
+
 	var body io.ReadCloser
 	switch resolved.StorageOrigin {
 	case model.AttemptWorkspaceStorageStarter:
 		if !resolved.StarterObjectID.IsValid() || !resolved.AttemptObjectID.IsValid() {
 			return OpenedContent{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent starter Workspace selector"))
 		}
-		body, err = s.deps.Content.OpenStarterWorkspaceObject(ctx, resolved.StarterObjectID)
+
+		body, err = s.content.OpenStarterWorkspaceObject(ctx, resolved.StarterObjectID)
 	case model.AttemptWorkspaceStorageAttempt:
 		if !resolved.AttemptObjectID.IsValid() || resolved.StarterObjectID.IsValid() {
 			return OpenedContent{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent attempt-origin Workspace selector"))
 		}
-		body, err = s.deps.Content.OpenAttemptWorkspaceObject(ctx, resolved.AttemptObjectID)
+
+		body, err = s.content.OpenAttemptWorkspaceObject(ctx, resolved.AttemptObjectID)
 	default:
 		return OpenedContent{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("invalid candidate Workspace storage origin"))
 	}
+
 	if err != nil {
 		return OpenedContent{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
-	return OpenedContent{Body: body, MediaType: resolved.Entry.MediaType, SizeBytes: resolved.Entry.SizeBytes,
-		SHA256: resolved.Entry.SHA256, ContentVersion: resolved.ContentVersion}, nil
+
+	return OpenedContent{
+		Body:           body,
+		MediaType:      resolved.Entry.MediaType,
+		SizeBytes:      resolved.Entry.SizeBytes,
+		SHA256:         resolved.Entry.SHA256,
+		ContentVersion: resolved.ContentVersion,
+	}, nil
 }

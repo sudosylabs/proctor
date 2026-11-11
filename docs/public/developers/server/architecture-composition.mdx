@@ -46,18 +46,83 @@ Use this as an orientation map, not as a complete package inventory.
 | --- | --- | --- |
 | `server/model` | Cohesive domain values, records, constructors, and local transitions | Adding transport or SQL fields to a domain type |
 | `server/app` | Use-case policy, current authorization, audit intent, coordination, and effect timing | Retaining the root Store or configuration as a service locator |
-| `server/app/job` | Generic durable Job execution mechanics | Importing the parent application or a concrete handler catalog |
+| `server/app/job` | Generic durable Job execution mechanics and the operator Job service | Importing the parent application or a concrete handler catalog |
 | `server/app/realtime` | Transport-neutral events and peer propagation semantics | Owning WebSocket connection state or retrying transient publication |
 | `server/store` | Bounded Store contracts and named aggregate operations | Exposing raw transaction callbacks or SQL rows |
 | `server/store/sqlstore` | PostgreSQL implementation, locks, constraints, and migrations | Re-deciding application policy inside SQL code |
-| `server/httpapi` | Sealed route catalog, DTOs, credential requirements, Problem Details | Reaching directly into Store or SQL |
+| `server/httpapi` | HTTP resources: the routes, DTOs, credential requirements and error tables of each API area | Reaching directly into Store or SQL |
+| `server/httpapi/route` | Routing kernel: endpoint declaration, the sealed route catalog, credential checks, Problem Details | Knowing an API area or importing a resource |
 | `server/websocket` | Connection protocol, sequencing, replay, liveness, and backpressure | Treating a socket as durable authority |
 | `server/platform` | Infrastructure lifecycle and health | Passing it into the application as a locator |
 | module-root `server` | Adapter selection, wiring, readiness, serving, and shutdown | Adding a second constructor path in a command or test |
+| `server/operator` | Offline host commands that read or migrate an installation without starting it | Importing the application or the module root to reach a use case |
 
 Selective child packages exist only where a responsibility has substantial
 structure and can still point inward without importing its parent. Do not
 repeat the existing child layout for visual symmetry.
+
+## Follow One Request
+
+The quickest way to learn the server is to follow a single request from the
+route to SQL. Files are named after their entity in every layer, so the same
+word leads you through each step.
+
+### Create a Class
+
+`POST /api/v1/programme-levels/{programme_level_id}/classes`
+
+1. **Route.** `httpapi/class.go` declares the route in `classResource` as an
+   `route.Endpoint` literal. Its `Auth: route.AuthPrincipalRequired` field
+   says the route needs a signed-in principal, and its `Errors` field lists the errors it
+   may return. `classHandlers.create` decodes
+   the body into `createClassRequest` and builds an
+   `academic.CreateClassCommand`.
+2. **Use case.** `app/academic/class.go`, `academic.Service.CreateClass`,
+   takes the request through these steps:
+   1. validates the Programme Level ID;
+   2. authorizes `model.ActionClassManage` against that Programme Level;
+   3. builds a `model.Class` and calls `Validate`;
+   4. records the mutation through `access.RunAudited` (`app/access/mutation_attempt.go`).
+3. **Store contract.** `store.ClassStore.Create`, declared in
+   `store/academic.go`, takes a `store.ClassCreation` that carries the Class
+   and its audit event, so both commit together.
+4. **SQL.** `store/sqlstore/class_store.go`, `SQLClassStore.Create`, inserts
+   the row and completes the audit event in one transaction. On the way it
+   passes through the generated timing and retry layers
+   (`store/timerlayer`, `store/retrylayer`), which add no behavior.
+5. **Errors.** A typed Store error becomes an application error through the
+   service's `apperror.StoreTable`. `httpapi/route` turns it into a Problem
+   Details response with the status that `httpapi/route/error_catalog.yaml`
+   assigns to its code.
+
+### Submit an Attempt
+
+`POST /api/v1/exam-attempts/{exam_attempt_id}/submissions`
+
+1. **Route.** `httpapi/exam_attempt.go` declares the route as a
+   `route.Endpoint` literal with `Auth: route.AuthSessionRequired` and
+   `Idempotency: route.IdempotencyRequired`, so it requires a Session and an
+   idempotency key.
+   The handler is `examAttemptHandlers.submit` in
+   `httpapi/exam_attempt_submission.go`.
+2. **Use case.** `app/exam/attempt/submission.go`, `SubmitExamAttempt`,
+   takes the request through these steps:
+   1. resolves the candidate's current Workspace;
+   2. prepares idempotency;
+   3. checks the seal target;
+   4. begins the audit record;
+   5. prepares the submission receipt mail.
+3. **Store contract.** `store.ExamSubmissionStore.Seal` freezes the
+   Submission. It writes the prepared mail and the Job that delivers it in
+   the same transaction (`store/sqlstore/exam_submission_store.go`).
+4. **After commit.** The service calls `publishAttemptSubmitted`
+   (`app/exam/attempt/effects.go`), which builds the realtime events and
+   publishes them through its `realtime.Publisher`, then unbinds the Attempt
+   connection. Effects run only after the Submission is durable, and their
+   failures never undo it.
+5. **Background.** When a Sitting closes, the `exam_sitting.sealing` Job in
+   `app/jobs/exam_sitting_sealing.go` seals the remaining Attempts
+   through `attempt.Service.SealForSittingClose`.
 
 ## Follow `server.New`
 
@@ -75,29 +140,45 @@ important ownership transfers are:
 5. Translate configuration into small immutable policies or narrow dynamic
    providers.
 6. Call the sole `app.New` constructor.
-7. Construct HTTP and WebSocket transports from narrow application
-   capabilities.
+7. Construct the WebSocket hub from the services it needs, then call
+   `httpapi.New(application, settings)`, which builds each HTTP resource from
+   the application service that owns its use cases.
 8. Attach local sinks and cluster fan-out once, then discard temporary wiring
    projections.
 
 Construction must unwind every acquired owner if a later step fails. A newly
 constructed server has no listener, worker, or maintenance goroutine running.
 
+The module-root package is about building and running one node. Start with
+`server.go`, `infrastructure.go`, `composition.go`,
+`application_dependencies.go`, and `shutdown.go`. Most of the other files hold
+one adapter each and are named for the two sides they join, such as
+`authentication_cache.go` or `mail_sender.go`. A wrapper that only measures a
+port, such as `metrics.WrapCache`, lives in `server/metrics` instead.
+
 ## Follow `app.New`
 
-`app.New` constructs focused services in an explicit dependency order and
-assembles the `app.App` facade. The facade is a collection of use cases, not a
-persistence accessor. Focused services receive the exact Store and behavioral
-ports they consume; they do not ask `App` or a dependencies object for another
-service at runtime.
+[`app.New`](https://github.com/sudosylabs/Proctor/blob/main/server/app/new.go)
+reads top to bottom: it validates its dependencies, builds the shared
+mechanics and Access Control, builds each area in dependency order, then the
+optional Job runtime and the services that span areas, and returns the
+`app.App` value. Larger areas are built by helpers beside it, such as
+`newExamServices` in `new_exam.go` and `newJobRuntime` in `new_jobs.go`. `App`
+is a collection of use cases, not a persistence accessor.
+
+Each domain area is one package (`app/academic`, `app/user`, `app/identity`,
+`app/exam`, ...). `App` names every service in its own field and embeds
+nothing, so a call reads `app.Academic.CreateClass(...)` or
+`app.Search.Search(...)`.
 
 When adding a dependency:
 
-- put the interface beside its consumer unless it is part of the deliberate
-  grouped Store family;
+- hold the concrete type, or the `store` contract you call; add an interface
+  only when something real substitutes behind it;
+- in tests, fake a Store contract by embedding it and overriding the methods
+  the test uses;
 - validate required dependencies in the constructor;
-- keep constructors inert;
-- project only the methods the consumer needs; and
+- keep constructors inert; and
 - update the architecture policy when a new production import is intentional.
 
 The need to reach through `App`, `platform.Service`, `config.Config`, or a root

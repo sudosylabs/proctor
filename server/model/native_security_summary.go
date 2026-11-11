@@ -23,17 +23,26 @@ type NativeSourceHealthSummary struct {
 }
 
 func (s NativeSecuritySummary) Validate() error {
-	if s.RetainedConditionRecords < 0 || s.RetainedConditionRecords > DeliveryAttemptRecordLimit || s.Sources == nil || len(s.Sources) > 11 || !s.LiveCoverageAvailable && len(s.Sources) > 0 {
+	if s.RetainedConditionRecords < 0 ||
+		s.RetainedConditionRecords > DeliveryAttemptRecordLimit ||
+		s.Sources == nil ||
+		len(s.Sources) > 11 ||
+		!s.LiveCoverageAvailable && len(s.Sources) > 0 {
 		return ErrNativeDeliveryInvalid
 	}
+
 	previous := -1
 	for _, source := range s.Sources {
 		order := slices.Index(NativeSources(), source.SourceID)
-		if order <= previous || !slices.Contains([]string{"starting", "healthy", "degraded", "failed", "recovering", "stopped"}, source.Health) || !slices.Contains([]string{"denied", "granted", "not_determined", "restricted", "unavailable"}, source.Permission) {
+		if order <= previous ||
+			!slices.Contains([]string{"starting", "healthy", "degraded", "failed", "recovering", "stopped"}, source.Health) ||
+			!slices.Contains([]string{"denied", "granted", "not_determined", "restricted", "unavailable"}, source.Permission) {
 			return ErrNativeDeliveryInvalid
 		}
+
 		previous = order
 	}
+
 	return nil
 }
 func (s NativeSecuritySummary) Clone() NativeSecuritySummary {

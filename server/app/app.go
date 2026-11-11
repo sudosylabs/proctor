@@ -8,9 +8,8 @@
 package app
 
 import (
-	"errors"
-	"time"
-
+	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/exam/correction"
@@ -18,197 +17,96 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/review"
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/exam/workspace"
+	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/search"
 
 	"github.com/sudosylabs/proctor/server/app/job"
+	"github.com/sudosylabs/proctor/server/app/onboarding"
+	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/app/user"
 )
 
-// Exam services live in child modules whose types share names such as
-// Service; these aliases give each embedded field a distinct name.
-type (
-	examAuthoringService        = exam.Authoring
-	examPublicationService      = exam.Publication
-	examRecordsService          = exam.Records
-	examExportsService          = exam.Exports
-	examSittingService          = sitting.Service
-	examAttemptService          = attempt.Service
-	examReviewService           = review.Service
-	examResourceService         = resource.Service
-	examCorrectionService       = correction.Service
-	examStarterWorkspaceService = workspace.Service
-)
-
-// App is the long-lived application surface. It embeds each focused service
-// that owns public use cases, so its method set is their exported methods and
-// it declares no use case of its own. Construction receives only the explicit
+// App is the long-lived application surface. It names each focused service
+// that owns public use cases in its own field and embeds nothing, so it
+// declares no use case of its own. Construction receives only the explicit
 // Dependencies bundle; infrastructure getters and platform location are not
 // part of the public surface.
 type App struct {
-	*authenticationService
-	*desktopAuthorizationService
-	*desktopReauthenticationService
-	*desktopRegistrationService
-	*browserInvitationService
-	*selfSessionService
-	*externalAuthenticationService
-	*authenticationMethodService
-	*mfaApplicationService
-	*accountTokenService
-	*publicRegistrationService
-	*personalAccessTokenAdministrationService
-	*accessPolicyService
-	*retentionPolicyService
-	*desktopCompatibilityService
-	*academicUnitQueryService
-	*academicUnitCommandService
-	*institutionService
-	*programmeService
-	*programmeLevelService
-	*academicPeriodService
-	*classService
-	*affiliationService
-	*academicUnitMemberService
-	*classMemberService
-	*invitationService
-	*onboardingImportService
-	*examAuthoringService
-	*examPublicationService
-	*examSittingService
-	*examRecordsService
-	*examExportsService
-	*examAttemptService
-	*examReviewService
-	*examResourceService
-	*examCorrectionService
-	*examStarterWorkspaceService
-	*userProfileService
-	*userSettingsService
-	*profilePictureService
-	*accountStateService
-	*sessionAdministrationService
-	*roleService
-	*roleBindingService
-	*auditListingService
-	*bootstrapService
-	*academicAdministrationBatchService
-	*searchService
-	*administrationCountsService
-	*realtimeService
-	*realtimeAdmissionService
-	jobs *job.Engine
-	*jobOperationsService
-	*mailService
-	*mfaKeyService
+	// Identity holds sign-in, Session, MFA, token, Desktop authorization,
+	// account recovery, account state and bootstrap use cases.
+	Identity *identity.Service
+	// Onboarding brings people in: Invitations, browser Invitation handoff,
+	// public registration, academic administration batches, onboarding
+	// imports and Student Progression.
+	Onboarding *onboarding.Service
+	// Administration holds the institution administrator's access and
+	// retention controls: Roles, Role Bindings, the Access Policy and access
+	// discovery, retention, and the audit listings.
+	Administration *administration.Service
+	// Academic holds the Institution, Academic Unit, Programme, Academic
+	// Period, Class, membership and Affiliation use cases.
+	Academic *academic.Service
+	// ExamAuthoring holds the Exam catalog: creating, listing and archiving
+	// Exams, editing their Draft, and managing Exam Managers.
+	ExamAuthoring *exam.Authoring
+	// ExamPublication publishes immutable Exam Revisions and lists them.
+	ExamPublication *exam.Publication
+	// ExamRecords completes a Sitting's records, waives Submission reviews
+	// and manages retention holds.
+	ExamRecords *exam.Records
+	// ExamExports builds and serves Exam exports.
+	ExamExports *exam.Exports
+	// Sittings schedules Exam Sittings and moves them through their
+	// lifecycle.
+	Sittings *sitting.Service
+	// Attempts holds the candidate side, from joining a Sitting to sealing a
+	// Submission, plus manager inspection of Attempts.
+	Attempts *attempt.Service
+	// Reviews holds post-Submission Integrity review and result release; it
+	// does not grade.
+	Reviews *review.Service
+	// Resources manages the Exam Resources of an Exam Draft.
+	Resources *resource.Service
+	// Corrections changes an Open or Paused Sitting's instructions, browser
+	// policy or Resources by publishing a new Exam Revision.
+	Corrections *correction.Service
+	// StarterWorkspaces manages the Starter Workspace of an Exam Draft.
+	StarterWorkspaces *workspace.Service
+	// Users holds the User directory, profile, settings and profile-picture
+	// use cases.
+	Users *user.Service
+	// Search finds Exams, Classes and Users within the caller's own list
+	// visibility for each type.
+	Search *search.Service
+	// Counts summarizes the administration work waiting on the caller:
+	// pending Invitations, failed Jobs and mail deliveries, and open
+	// onboarding imports.
+	Counts *administration.Counts
+	// Realtime delivers committed events locally and to peers, unbinds
+	// Attempt Connections, propagates Session revocation and authentication
+	// or authorization invalidation, and receives the WebSocket sink and
+	// cluster fan-out that composition attaches.
+	Realtime *realtime.Service
+	// RealtimeAdmission revalidates a WebSocket connection's principal and
+	// authorizes each of its subscriptions.
+	RealtimeAdmission *RealtimeAdmission
+	// Jobs lists, inspects, cancels and retries Jobs and lists their attempts
+	// for operators; it is nil when the graph has no Job store.
+	Jobs *job.Operations
+	// Mail holds the operator mail controls: deliveries, metrics, test mail
+	// and payload-key rotation; it is nil when the graph has no Job or mail
+	// store.
+	Mail *mail.Operations
+
+	jobEngine *job.Engine
 }
 
-// Jobs returns the root-owned durable Job runtime, or nil for lifecycle-only
+// JobEngine returns the root-owned durable Job runtime, or nil for lifecycle-only
 // test graphs that intentionally provide no Job store.
-func (a *App) Jobs() *job.Engine {
+func (a *App) JobEngine() *job.Engine {
 	if a == nil {
 		return nil
 	}
-	return a.jobs
-}
-
-// New constructs the application graph from explicit dependencies. Only the
-// module-root composition package should call this. The ordered recipe remains
-// visible here while private construction modules retain each cohesive slice's
-// projection and wiring knowledge.
-func New(deps Dependencies) (*App, error) {
-	if deps.OperationalRecorder == nil {
-		deps.OperationalRecorder = nopOperationalRecorder{}
-	}
-	if err := validateApplicationDependencies(deps); err != nil {
-		return nil, err
-	}
-	foundation, err := constructApplicationFoundation(deps)
-	if err != nil {
-		return nil, err
-	}
-	access, err := constructAccessAndAcademics(deps, foundation)
-	if err != nil {
-		return nil, err
-	}
-	identity, err := constructIdentity(deps, foundation, access.authorization, access.capabilities, access.desktopCompatibility)
-	if err != nil {
-		return nil, err
-	}
-	examinations, err := constructExaminations(deps, foundation, access)
-	if err != nil {
-		return nil, err
-	}
-	profiles, err := constructProfilesAndFiles(deps, foundation, access)
-	if err != nil {
-		return nil, err
-	}
-	administration := constructAdministration(deps, foundation, access, identity)
-	identity.onboardingImports, err = constructOnboardingImports(deps, identity, administration, access, foundation)
-	if err != nil {
-		return nil, err
-	}
-	jobs, err := constructJobs(deps, foundation, access, identity, examinations, profiles)
-	if err != nil {
-		return nil, err
-	}
-	administration.search = newSearchService(searchServiceDependencies{
-		Exams: examinations.authoring, Users: profiles.userProfiles,
-		ClassAuthorization: access.authorization, Classes: deps.Store.Class(),
-	})
-	administration.counts = newAdministrationCountsService(administrationCountsDependencies(identity, jobs))
-	return assembleApplication(deps, foundation, identity, access, examinations, profiles, jobs, administration), nil
-}
-
-// administrationCountsDependencies projects the summary's counters from the
-// services that exist; a reduced lifecycle test graph may lack some, and
-// their counts are then left out.
-func administrationCountsDependencies(identity identityConstruction, jobs jobConstruction) administrationCountsServiceDependencies {
-	var deps administrationCountsServiceDependencies
-	if identity.invitations != nil {
-		deps.Invitations = identity.invitations
-	}
-	if identity.onboardingImports != nil {
-		deps.Imports = identity.onboardingImports
-	}
-	if jobs.operations != nil {
-		deps.Jobs = jobs.operations
-	}
-	if jobs.mail != nil {
-		deps.Mail = jobs.mail
-	}
-	return deps
-}
-
-// ErrAuthenticationCacheMiss and ErrAuthenticationCacheNotStored are the
-// transport-neutral sentinels authentication uses for disposable cache
-// outcomes. Composition adapters translate infrastructure cache errors into
-// these values so authentication never imports platform.
-var (
-	ErrAuthenticationCacheMiss      = errors.New("authentication cache: key not found")
-	ErrAuthenticationCacheNotStored = errors.New("authentication cache: conditional write not applied")
-)
-
-// constructOnboardingImports projects the onboarding import stores. A
-// deliberately reduced lifecycle test catalog omits whole capability
-// families and so constructs no onboarding imports; production catalogs
-// project every target store together.
-func constructOnboardingImports(deps Dependencies, identity identityConstruction, administration administrationConstruction,
-	access accessAcademicConstruction, foundation applicationFoundation,
-) (*onboardingImportService, error) {
-	if deps.Store == nil {
-		return nil, errors.New("onboarding import store catalog is required")
-	}
-	catalog := deps.Store
-	if catalog.OnboardingImport() == nil {
-		return nil, errors.New("onboarding import persistence is required")
-	}
-	if deps.FileContent == nil {
-		return nil, errors.New("onboarding import file content is required")
-	}
-	if catalog.PersonalAccessToken() == nil || catalog.User() == nil {
-		return nil, errors.New("onboarding import credential stores are required")
-	}
-	if catalog.Institution() == nil || catalog.AcademicUnit() == nil || catalog.Programme() == nil || catalog.ProgrammeLevel() == nil ||
-		catalog.AcademicPeriod() == nil || catalog.Class() == nil || catalog.Role() == nil {
-		return nil, nil
-	}
-	return newOnboardingImportService(onboardingImportServiceDependencies{Imports: catalog.OnboardingImport(), Content: deps.FileContent, Invitations: identity.invitations, AdministrationBatches: administration.academicAdministrationBatches, Authentication: identity.authentication, Authorization: invitationAuthorizationAdapter{authorization: access.authorization}, Audit: mutationAuditAdapter{audit: foundation.audit}, Tokens: catalog.PersonalAccessToken(), Users: catalog.User(), Institutions: catalog.Institution(), Units: catalog.AcademicUnit(), Programmes: catalog.Programme(), Levels: catalog.ProgrammeLevel(), Periods: catalog.AcademicPeriod(), Classes: catalog.Class(), Roles: catalog.Role(), Affiliations: catalog.Affiliation(), UnitMembers: catalog.AcademicUnitMember(), ClassMembers: catalog.ClassMember(), RoleBindings: catalog.RoleBinding(), Now: time.Now})
+	return a.jobEngine
 }

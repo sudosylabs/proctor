@@ -18,6 +18,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLExamAuthoringStore implements store.ExamAuthoringStore over exams,
+// exam_drafts and exam_managers, locking the Exam and its Draft rows before any
+// change.
 type SQLExamAuthoringStore struct {
 	*SQLStore
 	catalogReader examCatalogReader
@@ -90,27 +93,57 @@ func newExamAuthoringOutcome(snapshot *store.ExamAuthoringSnapshot) (examAuthori
 	if err != nil {
 		return examAuthoringOutcome{}, err
 	}
+
 	return examAuthoringOutcome{
-		ID: row.ID, AcademicUnitID: row.AcademicUnitID, CreatorUserID: row.CreatorUserID, OwnerUserID: row.OwnerUserID,
-		DefaultRevisionID: outcomeString(row.DefaultRevisionID), CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
-		ArchivedAt: OptionalTimeFromNullTime(row.ArchivedAt), ExamRevision: row.ExamRevision, DraftTitle: row.DraftTitle,
-		InstructionsMarkdown: row.InstructionsMarkdown, Policy: json.RawMessage(row.Policy),
-		BrowserPolicy: json.RawMessage(row.BrowserPolicy), BaseRevisionID: outcomeString(row.BaseRevisionID),
-		DraftUpdatedAt: row.DraftUpdatedAt, DraftRevision: row.DraftRevision, ManagerCount: row.ManagerCount,
-		ActorIsManager: row.ActorIsManager, OwnerIsManager: row.OwnerIsManager, examCapacityPolicyRow: row.examCapacityPolicyRow,
-		ResourceCount: row.ResourceCount, HasStarterWorkspace: row.HasStarterWorkspace,
+		ID:                    row.ID,
+		AcademicUnitID:        row.AcademicUnitID,
+		CreatorUserID:         row.CreatorUserID,
+		OwnerUserID:           row.OwnerUserID,
+		DefaultRevisionID:     outcomeString(row.DefaultRevisionID),
+		CreatedAt:             row.CreatedAt,
+		UpdatedAt:             row.UpdatedAt,
+		ArchivedAt:            OptionalTimeFromNullTime(row.ArchivedAt),
+		ExamRevision:          row.ExamRevision,
+		DraftTitle:            row.DraftTitle,
+		InstructionsMarkdown:  row.InstructionsMarkdown,
+		Policy:                json.RawMessage(row.Policy),
+		BrowserPolicy:         json.RawMessage(row.BrowserPolicy),
+		BaseRevisionID:        outcomeString(row.BaseRevisionID),
+		DraftUpdatedAt:        row.DraftUpdatedAt,
+		DraftRevision:         row.DraftRevision,
+		ManagerCount:          row.ManagerCount,
+		ActorIsManager:        row.ActorIsManager,
+		OwnerIsManager:        row.OwnerIsManager,
+		examCapacityPolicyRow: row.examCapacityPolicyRow,
+		ResourceCount:         row.ResourceCount,
+		HasStarterWorkspace:   row.HasStarterWorkspace,
 	}, nil
 }
 
 func (o examAuthoringOutcome) model() (*store.ExamAuthoringSnapshot, error) {
 	return examAuthoringRow{
-		ID: o.ID, AcademicUnitID: o.AcademicUnitID, CreatorUserID: o.CreatorUserID, OwnerUserID: o.OwnerUserID,
-		DefaultRevisionID: outcomeNullString(o.DefaultRevisionID), CreatedAt: o.CreatedAt, UpdatedAt: o.UpdatedAt,
-		ArchivedAt: NullTimeFromOptional(o.ArchivedAt), ExamRevision: o.ExamRevision, DraftTitle: o.DraftTitle,
-		InstructionsMarkdown: o.InstructionsMarkdown, Policy: jsonValue(o.Policy), BrowserPolicy: jsonValue(o.BrowserPolicy),
-		BaseRevisionID: outcomeNullString(o.BaseRevisionID), DraftUpdatedAt: o.DraftUpdatedAt, DraftRevision: o.DraftRevision,
-		ManagerCount: o.ManagerCount, ActorIsManager: o.ActorIsManager, OwnerIsManager: o.OwnerIsManager,
-		examCapacityPolicyRow: o.examCapacityPolicyRow, ResourceCount: o.ResourceCount, HasStarterWorkspace: o.HasStarterWorkspace,
+		ID:                    o.ID,
+		AcademicUnitID:        o.AcademicUnitID,
+		CreatorUserID:         o.CreatorUserID,
+		OwnerUserID:           o.OwnerUserID,
+		DefaultRevisionID:     outcomeNullString(o.DefaultRevisionID),
+		CreatedAt:             o.CreatedAt,
+		UpdatedAt:             o.UpdatedAt,
+		ArchivedAt:            NullTimeFromOptional(o.ArchivedAt),
+		ExamRevision:          o.ExamRevision,
+		DraftTitle:            o.DraftTitle,
+		InstructionsMarkdown:  o.InstructionsMarkdown,
+		Policy:                jsonValue(o.Policy),
+		BrowserPolicy:         jsonValue(o.BrowserPolicy),
+		BaseRevisionID:        outcomeNullString(o.BaseRevisionID),
+		DraftUpdatedAt:        o.DraftUpdatedAt,
+		DraftRevision:         o.DraftRevision,
+		ManagerCount:          o.ManagerCount,
+		ActorIsManager:        o.ActorIsManager,
+		OwnerIsManager:        o.OwnerIsManager,
+		examCapacityPolicyRow: o.examCapacityPolicyRow,
+		ResourceCount:         o.ResourceCount,
+		HasStarterWorkspace:   o.HasStarterWorkspace,
 	}.model()
 }
 
@@ -131,7 +164,11 @@ func newSQLExamAuthoringStore(sqlStore *SQLStore) store.ExamAuthoringStore {
 	return &SQLExamAuthoringStore{SQLStore: sqlStore}
 }
 
-func (s SQLExamAuthoringStore) Create(ctx context.Context, input *store.ExamAuthoringCreation, command *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
+func (s SQLExamAuthoringStore) Create(
+	ctx context.Context,
+	input *store.ExamAuthoringCreation,
+	command *store.CommandIdempotency,
+) (*store.ExamAuthoringCommandResult, error) {
 	prepared, auditData, err := prepareExamAuthoringCreation(input)
 	if err != nil || command == nil {
 		if err != nil {
@@ -139,8 +176,10 @@ func (s SQLExamAuthoringStore) Create(ctx context.Context, input *store.ExamAuth
 		}
 		return nil, store.NewErrInvalidInput("exam", "idempotency", nil)
 	}
+
 	result, err := runIdempotentMutation(ctx, s.SQLStore, "exam creation", idempotentMutation[*store.ExamAuthoringSnapshot]{
-		command: command, auditEventID: prepared.AuditEventID,
+		command:      command,
+		auditEventID: prepared.AuditEventID,
 		execute: func(ctx context.Context, tx *sqlxTxWrapper) (*store.ExamAuthoringSnapshot, error) {
 			return createExamAuthoring(ctx, tx, prepared, auditData)
 		},
@@ -150,27 +189,34 @@ func (s SQLExamAuthoringStore) Create(ctx context.Context, input *store.ExamAuth
 			if decodeErr := decodeOutcome(data, &outcome); decodeErr != nil {
 				return nil, decodeErr
 			}
+
 			return outcome.model()
 		},
 		completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, snapshot *store.ExamAuthoringSnapshot, originalAuditID string) error {
 			data := snapshot.Exam.Auditable()
 			data["idempotency_replayed"] = true
 			data["original_audit_event_id"] = originalAuditID
-			encoded, err := model.EncodeAuditData(data)
-			if err != nil {
-				return err
+			encoded, encodeErr := model.EncodeAuditData(data)
+			if encodeErr != nil {
+				return encodeErr
 			}
-			_, err = completeAuditEvent(ctx, tx, prepared.AuditEventID, model.AuditStatusSuccess, "", encoded, prepared.AuditAt)
-			return err
+
+			_, encodeErr = completeAuditEvent(ctx, tx, prepared.AuditEventID, model.AuditStatusSuccess, "", encoded, prepared.AuditAt)
+			return encodeErr
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	return &store.ExamAuthoringCommandResult{Value: result.Value, Replayed: result.Replayed}, nil
 }
 
-func (s SQLExamAuthoringStore) UpdateDraftText(ctx context.Context, input *store.ExamDraftTextUpdate, command *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
+func (s SQLExamAuthoringStore) UpdateDraftText(
+	ctx context.Context,
+	input *store.ExamDraftTextUpdate,
+	command *store.CommandIdempotency,
+) (*store.ExamAuthoringCommandResult, error) {
 	prepared, err := prepareExamDraftTextUpdate(input)
 	if err != nil || command == nil {
 		if err != nil {
@@ -178,8 +224,10 @@ func (s SQLExamAuthoringStore) UpdateDraftText(ctx context.Context, input *store
 		}
 		return nil, store.NewErrInvalidInput("exam_draft", "idempotency", nil)
 	}
+
 	result, err := runIdempotentMutation(ctx, s.SQLStore, "exam Draft text update", idempotentMutation[*store.ExamAuthoringSnapshot]{
-		command: command, auditEventID: prepared.AuditEventID,
+		command:      command,
+		auditEventID: prepared.AuditEventID,
 		execute: func(ctx context.Context, tx *sqlxTxWrapper) (*store.ExamAuthoringSnapshot, error) {
 			return updateExamDraftText(ctx, tx, prepared)
 		},
@@ -189,27 +237,36 @@ func (s SQLExamAuthoringStore) UpdateDraftText(ctx context.Context, input *store
 			if decodeErr := decodeOutcome(data, &outcome); decodeErr != nil {
 				return nil, decodeErr
 			}
+
 			return outcome.model()
 		},
 		completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, snapshot *store.ExamAuthoringSnapshot, originalAuditID string) error {
-			encoded, err := model.EncodeAuditData(map[string]any{
-				"exam_id": snapshot.Exam.ID.String(), "draft_revision": snapshot.Draft.Revision,
-				"idempotency_replayed": true, "original_audit_event_id": originalAuditID,
+			encoded, encodeErr := model.EncodeAuditData(map[string]any{
+				"exam_id":                 snapshot.Exam.ID.String(),
+				"draft_revision":          snapshot.Draft.Revision,
+				"idempotency_replayed":    true,
+				"original_audit_event_id": originalAuditID,
 			})
-			if err != nil {
-				return err
+			if encodeErr != nil {
+				return encodeErr
 			}
-			_, err = completeAuditEvent(ctx, tx, prepared.AuditEventID, model.AuditStatusSuccess, "", encoded, prepared.AuditAt)
-			return err
+
+			_, encodeErr = completeAuditEvent(ctx, tx, prepared.AuditEventID, model.AuditStatusSuccess, "", encoded, prepared.AuditAt)
+			return encodeErr
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	return &store.ExamAuthoringCommandResult{Value: result.Value, Replayed: result.Replayed}, nil
 }
 
-func (s SQLExamAuthoringStore) UpdateDraftFocusLoss(ctx context.Context, input *store.ExamDraftFocusLossUpdate, command *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
+func (s SQLExamAuthoringStore) UpdateDraftFocusLoss(
+	ctx context.Context,
+	input *store.ExamDraftFocusLossUpdate,
+	command *store.CommandIdempotency,
+) (*store.ExamAuthoringCommandResult, error) {
 	prepared, err := prepareExamDraftFocusLossUpdate(input)
 	if err != nil || command == nil {
 		if err != nil {
@@ -217,8 +274,10 @@ func (s SQLExamAuthoringStore) UpdateDraftFocusLoss(ctx context.Context, input *
 		}
 		return nil, store.NewErrInvalidInput("exam_draft", "idempotency", nil)
 	}
+
 	result, err := runIdempotentMutation(ctx, s.SQLStore, "exam Draft Focus Loss update", idempotentMutation[*store.ExamAuthoringSnapshot]{
-		command: command, auditEventID: prepared.AuditEventID,
+		command:      command,
+		auditEventID: prepared.AuditEventID,
 		execute: func(ctx context.Context, tx *sqlxTxWrapper) (*store.ExamAuthoringSnapshot, error) {
 			return updateExamDraftFocusLoss(ctx, tx, prepared)
 		},
@@ -228,16 +287,20 @@ func (s SQLExamAuthoringStore) UpdateDraftFocusLoss(ctx context.Context, input *
 			if decodeErr := decodeOutcome(data, &outcome); decodeErr != nil {
 				return nil, decodeErr
 			}
+
 			return outcome.model()
 		},
 		completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, snapshot *store.ExamAuthoringSnapshot, originalAuditID string) error {
 			encoded, encodeErr := model.EncodeAuditData(map[string]any{
-				"exam_id": snapshot.Exam.ID.String(), "draft_revision": snapshot.Draft.Revision,
-				"idempotency_replayed": true, "original_audit_event_id": originalAuditID,
+				"exam_id":                 snapshot.Exam.ID.String(),
+				"draft_revision":          snapshot.Draft.Revision,
+				"idempotency_replayed":    true,
+				"original_audit_event_id": originalAuditID,
 			})
 			if encodeErr != nil {
 				return encodeErr
 			}
+
 			_, completeErr := completeAuditEvent(ctx, tx, prepared.AuditEventID, model.AuditStatusSuccess, "", encoded, prepared.AuditAt)
 			return completeErr
 		},
@@ -245,10 +308,15 @@ func (s SQLExamAuthoringStore) UpdateDraftFocusLoss(ctx context.Context, input *
 	if err != nil {
 		return nil, err
 	}
+
 	return &store.ExamAuthoringCommandResult{Value: result.Value, Replayed: result.Replayed}, nil
 }
 
-func (s SQLExamAuthoringStore) UpdateDraftBrowserPolicy(ctx context.Context, input *store.ExamDraftBrowserPolicyUpdate, command *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
+func (s SQLExamAuthoringStore) UpdateDraftBrowserPolicy(
+	ctx context.Context,
+	input *store.ExamDraftBrowserPolicyUpdate,
+	command *store.CommandIdempotency,
+) (*store.ExamAuthoringCommandResult, error) {
 	prepared, err := prepareExamDraftBrowserPolicyUpdate(input)
 	if err != nil || command == nil {
 		if err != nil {
@@ -256,8 +324,10 @@ func (s SQLExamAuthoringStore) UpdateDraftBrowserPolicy(ctx context.Context, inp
 		}
 		return nil, store.NewErrInvalidInput("exam_draft", "idempotency", nil)
 	}
+
 	result, err := runIdempotentMutation(ctx, s.SQLStore, "exam Draft Browser Policy update", idempotentMutation[*store.ExamAuthoringSnapshot]{
-		command: command, auditEventID: prepared.AuditEventID,
+		command:      command,
+		auditEventID: prepared.AuditEventID,
 		execute: func(ctx context.Context, tx *sqlxTxWrapper) (*store.ExamAuthoringSnapshot, error) {
 			return updateExamDraftBrowserPolicy(ctx, tx, prepared)
 		},
@@ -267,16 +337,20 @@ func (s SQLExamAuthoringStore) UpdateDraftBrowserPolicy(ctx context.Context, inp
 			if decodeErr := decodeOutcome(data, &outcome); decodeErr != nil {
 				return nil, decodeErr
 			}
+
 			return outcome.model()
 		},
 		completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, snapshot *store.ExamAuthoringSnapshot, originalAuditID string) error {
 			encoded, encodeErr := model.EncodeAuditData(map[string]any{
-				"exam_id": snapshot.Exam.ID.String(), "draft_revision": snapshot.Draft.Revision,
-				"idempotency_replayed": true, "original_audit_event_id": originalAuditID,
+				"exam_id":                 snapshot.Exam.ID.String(),
+				"draft_revision":          snapshot.Draft.Revision,
+				"idempotency_replayed":    true,
+				"original_audit_event_id": originalAuditID,
 			})
 			if encodeErr != nil {
 				return encodeErr
 			}
+
 			_, completeErr := completeAuditEvent(ctx, tx, prepared.AuditEventID, model.AuditStatusSuccess, "", encoded, prepared.AuditAt)
 			return completeErr
 		},
@@ -284,6 +358,7 @@ func (s SQLExamAuthoringStore) UpdateDraftBrowserPolicy(ctx context.Context, inp
 	if err != nil {
 		return nil, err
 	}
+
 	return &store.ExamAuthoringCommandResult{Value: result.Value, Replayed: result.Replayed}, nil
 }
 
@@ -328,32 +403,58 @@ func (s SQLExamAuthoringStore) getAccess(ctx context.Context, examID model.ExamI
 	return &store.ExamAccessSnapshot{Exam: exam, ActorIsManager: row.ActorIsManager}, nil
 }
 
-const examAccessSelect = `SELECT
-	e.id, e.academic_unit_id, e.creator_user_id, e.owner_user_id, e.default_revision_id,
-	e.created_at, e.updated_at, e.archived_at, e.revision,
-	EXISTS (SELECT 1 FROM exam_managers actor_manager WHERE actor_manager.exam_id = e.id AND actor_manager.user_id = ?) AS actor_is_manager
-FROM exams e WHERE e.id = ?`
+const examAccessSelect = `SELECT e.id, e.academic_unit_id, e.creator_user_id, e.owner_user_id,
+		e.default_revision_id, e.created_at, e.updated_at, e.archived_at, e.revision,
+		` + actorExamManagerExistsSQL + ` AS actor_is_manager
+	FROM exams e
+	WHERE e.id = ?`
 
-const examAuthoringSelect = `SELECT
-	e.id, e.academic_unit_id, e.creator_user_id, e.owner_user_id, e.default_revision_id,
-	e.created_at, e.updated_at, e.archived_at, e.revision AS exam_revision,
-	d.title AS draft_title, d.instructions_markdown, d.policy, d.base_revision_id,
-	d.browser_policy,
-	d.updated_at AS draft_updated_at, d.revision AS draft_revision,
-	(SELECT COUNT(*) FROM exam_managers count_managers WHERE count_managers.exam_id = e.id) AS manager_count,
-	EXISTS (SELECT 1 FROM exam_managers actor_manager WHERE actor_manager.exam_id = e.id AND actor_manager.user_id = ?) AS actor_is_manager,
-	EXISTS (SELECT 1 FROM exam_managers owner_manager WHERE owner_manager.exam_id = e.id AND owner_manager.user_id = e.owner_user_id) AS owner_is_manager,
-	i.exam_resource_max_count, i.exam_resource_max_bytes, i.exam_workspace_max_entries,
-	i.exam_workspace_max_file_bytes, i.exam_workspace_max_total_bytes,
-	(SELECT COUNT(*) FROM exam_resources resource WHERE resource.exam_id = e.id AND resource.archived_at IS NULL) AS resource_count,
-	EXISTS (SELECT 1 FROM exam_starter_workspace_entries entry WHERE entry.exam_id = e.id AND entry.archived_at IS NULL) AS has_starter_workspace
-FROM exams e JOIN exam_drafts d ON d.exam_id = e.id
-JOIN institutions i ON i.singleton=TRUE AND i.archived_at IS NULL`
+const examAuthoringSelect = `SELECT e.id, e.academic_unit_id, e.creator_user_id, e.owner_user_id,
+		e.default_revision_id, e.created_at, e.updated_at, e.archived_at,
+		e.revision AS exam_revision, d.title AS draft_title, d.instructions_markdown, d.policy,
+		d.base_revision_id, d.browser_policy, d.updated_at AS draft_updated_at,
+		d.revision AS draft_revision,
+		(
+			SELECT COUNT(*)
+			FROM exam_managers count_managers
+			WHERE count_managers.exam_id = e.id
+		) AS manager_count,
+		` + actorExamManagerExistsSQL + ` AS actor_is_manager,
+		EXISTS (
+			SELECT 1
+			FROM exam_managers owner_manager
+			WHERE owner_manager.exam_id = e.id
+				AND owner_manager.user_id = e.owner_user_id
+		) AS owner_is_manager,
+		i.exam_resource_max_count, i.exam_resource_max_bytes, i.exam_workspace_max_entries,
+		i.exam_workspace_max_file_bytes, i.exam_workspace_max_total_bytes,
+		(
+			SELECT COUNT(*)
+			FROM exam_resources resource
+			WHERE resource.exam_id = e.id
+				AND resource.archived_at IS NULL
+		) AS resource_count,
+		EXISTS (
+			SELECT 1
+			FROM exam_starter_workspace_entries entry
+			WHERE entry.exam_id = e.id
+				AND entry.archived_at IS NULL
+		) AS has_starter_workspace
+	FROM exams e
+	JOIN exam_drafts d ON d.exam_id = e.id
+	JOIN institutions i ON i.singleton = TRUE
+		AND i.archived_at IS NULL`
 
 func prepareExamAuthoringCreation(input *store.ExamAuthoringCreation) (*store.ExamAuthoringCreation, json.RawMessage, error) {
-	if input == nil || input.Exam == nil || input.Draft == nil || input.Manager == nil || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+	if input == nil ||
+		input.Exam == nil ||
+		input.Draft == nil ||
+		input.Manager == nil ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() {
 		return nil, nil, store.NewErrInvalidInput("exam", "creation", nil)
 	}
+
 	exam := *input.Exam
 	draft := *input.Draft
 	manager := *input.Manager
@@ -366,22 +467,41 @@ func prepareExamAuthoringCreation(input *store.ExamAuthoringCreation) (*store.Ex
 	if err := manager.Validate(); err != nil {
 		return nil, nil, store.NewErrInvalidInput("exam", "manager", nil).Wrap(err)
 	}
-	if draft.ExamID != exam.ID || manager.ExamID != exam.ID || manager.UserID != exam.OwnerUserID || manager.UserID != exam.CreatorUserID || manager.GrantedByUserID != exam.CreatorUserID {
+
+	if draft.ExamID != exam.ID ||
+		manager.ExamID != exam.ID ||
+		manager.UserID != exam.OwnerUserID ||
+		manager.UserID != exam.CreatorUserID ||
+		manager.GrantedByUserID != exam.CreatorUserID {
 		return nil, nil, store.NewErrInvalidInput("exam", "aggregate", nil)
 	}
+
 	auditData, err := model.EncodeAuditData(exam.Auditable())
 	if err != nil {
 		return nil, nil, err
 	}
-	return &store.ExamAuthoringCreation{Exam: &exam, Draft: &draft, Manager: &manager, AuditEventID: input.AuditEventID, AuditAt: input.AuditAt}, auditData, nil
+
+	return &store.ExamAuthoringCreation{
+		Exam:         &exam,
+		Draft:        &draft,
+		Manager:      &manager,
+		AuditEventID: input.AuditEventID,
+		AuditAt:      input.AuditAt,
+	}, auditData, nil
 }
 
 func prepareExamDraftTextUpdate(input *store.ExamDraftTextUpdate) (*store.ExamDraftTextUpdate, error) {
-	if input == nil || !input.ExamID.IsValid() || !input.ActorUserID.IsValid() || input.ExpectedRevision < 1 ||
-		input.Title == nil && input.InstructionsMarkdown == nil || input.UpdatedAt.IsZero() ||
-		!input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+	if input == nil ||
+		!input.ExamID.IsValid() ||
+		!input.ActorUserID.IsValid() ||
+		input.ExpectedRevision < 1 ||
+		input.Title == nil && input.InstructionsMarkdown == nil ||
+		input.UpdatedAt.IsZero() ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("exam_draft", "text_update", nil)
 	}
+
 	prepared := *input
 	prepared.Title = cloneSQLStringPointer(input.Title)
 	prepared.InstructionsMarkdown = cloneSQLStringPointer(input.InstructionsMarkdown)
@@ -389,28 +509,42 @@ func prepareExamDraftTextUpdate(input *store.ExamDraftTextUpdate) (*store.ExamDr
 }
 
 func prepareExamDraftFocusLossUpdate(input *store.ExamDraftFocusLossUpdate) (*store.ExamDraftFocusLossUpdate, error) {
-	if input == nil || !input.ExamID.IsValid() || !input.ActorUserID.IsValid() || input.ExpectedRevision < 1 ||
-		input.UpdatedAt.IsZero() || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+	if input == nil ||
+		!input.ExamID.IsValid() ||
+		!input.ActorUserID.IsValid() ||
+		input.ExpectedRevision < 1 ||
+		input.UpdatedAt.IsZero() ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("exam_draft", "focus_loss_update", nil)
 	}
+
 	policy := model.DefaultExamPolicySet()
 	policy.FocusLoss = input.FocusLoss
 	if err := policy.Validate(); err != nil {
 		return nil, store.NewErrInvalidInput("exam_draft", "focus_loss", nil).Wrap(err)
 	}
+
 	prepared := *input
 	return &prepared, nil
 }
 
 func prepareExamDraftBrowserPolicyUpdate(input *store.ExamDraftBrowserPolicyUpdate) (*store.ExamDraftBrowserPolicyUpdate, error) {
-	if input == nil || !input.ExamID.IsValid() || !input.ActorUserID.IsValid() || input.ExpectedRevision < 1 ||
-		input.UpdatedAt.IsZero() || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+	if input == nil ||
+		!input.ExamID.IsValid() ||
+		!input.ActorUserID.IsValid() ||
+		input.ExpectedRevision < 1 ||
+		input.UpdatedAt.IsZero() ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("exam_draft", "browser_policy_update", nil)
 	}
+
 	canonical, err := model.NewBrowserPolicy(input.Policy.Enabled, input.Policy.StartRuleID, input.Policy.Rules)
 	if err != nil {
 		return nil, store.NewErrInvalidInput("exam_draft", "browser_policy", nil).Wrap(err)
 	}
+
 	prepared := *input
 	prepared.Policy = canonical
 	return &prepared, nil
@@ -422,6 +556,7 @@ func updateExamDraftText(ctx context.Context, tx *sqlxTxWrapper, input *store.Ex
 	if err := tx.Get(ctx, &row, query, input.ActorUserID.String(), input.ExamID.String()); err != nil {
 		return nil, translateError("exam", input.ExamID.String(), err)
 	}
+
 	snapshot, err := row.model()
 	if err != nil {
 		return nil, err
@@ -435,6 +570,7 @@ func updateExamDraftText(ctx context.Context, tx *sqlxTxWrapper, input *store.Ex
 	if snapshot.Draft.Revision != input.ExpectedRevision {
 		return nil, store.NewErrConflict("exam_draft", "exam_draft_revision", nil)
 	}
+
 	candidate := *snapshot.Draft
 	changed, err := candidate.ApplyTextPatch(input.Title, input.InstructionsMarkdown, model.TimeUTC(input.UpdatedAt))
 	if err != nil {
@@ -443,25 +579,37 @@ func updateExamDraftText(ctx context.Context, tx *sqlxTxWrapper, input *store.Ex
 	if !changed {
 		return nil, store.NewErrConflict("exam_draft", "exam_draft_no_changes", nil)
 	}
-	result, err := tx.Exec(ctx, `UPDATE exam_drafts
+
+	result, err := tx.Exec(
+		ctx,
+		`UPDATE exam_drafts
 		SET title = ?, instructions_markdown = ?, updated_at = ?, revision = ?
-		WHERE exam_id = ? AND revision = ?`,
-		candidate.Title, candidate.InstructionsMarkdown, candidate.UpdatedAt, candidate.Revision,
-		input.ExamID.String(), input.ExpectedRevision)
+		WHERE exam_id = ?
+			AND revision = ?`,
+		candidate.Title,
+		candidate.InstructionsMarkdown,
+		candidate.UpdatedAt,
+		candidate.Revision,
+		input.ExamID.String(),
+		input.ExpectedRevision,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("update exam Draft text: %w", translateError("exam_draft", input.ExamID.String(), err))
 	}
-	if affected, err := result.RowsAffected(); err != nil {
-		return nil, fmt.Errorf("inspect exam Draft text update: %w", err)
+
+	if affected, rowsAffectedErr := result.RowsAffected(); rowsAffectedErr != nil {
+		return nil, fmt.Errorf("inspect exam Draft text update: %w", rowsAffectedErr)
 	} else if affected != 1 {
 		return nil, store.NewErrConflict("exam_draft", "exam_draft_revision", nil)
 	}
+
 	row.DraftTitle = candidate.Title
 	row.InstructionsMarkdown = candidate.InstructionsMarkdown
 	row.DraftUpdatedAt = candidate.UpdatedAt
 	row.DraftRevision = candidate.Revision
 	auditData, err := model.EncodeAuditData(map[string]any{
-		"exam_id": input.ExamID.String(), "draft_revision": candidate.Revision,
+		"exam_id":        input.ExamID.String(),
+		"draft_revision": candidate.Revision,
 	})
 	if err != nil {
 		return nil, err
@@ -469,15 +617,21 @@ func updateExamDraftText(ctx context.Context, tx *sqlxTxWrapper, input *store.Ex
 	if _, err := completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", auditData, input.AuditAt); err != nil {
 		return nil, fmt.Errorf("complete exam Draft text audit: %w", err)
 	}
+
 	return row.model()
 }
 
-func updateExamDraftFocusLoss(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamDraftFocusLossUpdate) (*store.ExamAuthoringSnapshot, error) {
+func updateExamDraftFocusLoss(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.ExamDraftFocusLossUpdate,
+) (*store.ExamAuthoringSnapshot, error) {
 	var row examAuthoringRow
 	query := examAuthoringSelect + ` WHERE e.id = ? FOR UPDATE OF e, d`
 	if err := tx.Get(ctx, &row, query, input.ActorUserID.String(), input.ExamID.String()); err != nil {
 		return nil, translateError("exam", input.ExamID.String(), err)
 	}
+
 	snapshot, err := row.model()
 	if err != nil {
 		return nil, err
@@ -491,6 +645,7 @@ func updateExamDraftFocusLoss(ctx context.Context, tx *sqlxTxWrapper, input *sto
 	if snapshot.Draft.Revision != input.ExpectedRevision {
 		return nil, store.NewErrConflict("exam_draft", "exam_draft_revision", nil)
 	}
+
 	candidate := *snapshot.Draft
 	changed, err := candidate.ApplyFocusLossPolicy(input.FocusLoss, model.TimeUTC(input.UpdatedAt))
 	if err != nil {
@@ -499,20 +654,34 @@ func updateExamDraftFocusLoss(ctx context.Context, tx *sqlxTxWrapper, input *sto
 	if !changed {
 		return nil, store.NewErrConflict("exam_draft", "exam_draft_no_changes", nil)
 	}
+
 	policy, err := model.EncodeExamPolicySet(candidate.Policy)
 	if err != nil {
 		return nil, err
 	}
-	result, err := tx.Exec(ctx, `UPDATE exam_drafts SET policy = ?::jsonb, updated_at = ?, revision = ? WHERE exam_id = ? AND revision = ?`,
-		string(policy), candidate.UpdatedAt, candidate.Revision, input.ExamID.String(), input.ExpectedRevision)
+
+	result, err := tx.Exec(
+		ctx,
+		`UPDATE exam_drafts
+		SET policy = ?::jsonb, updated_at = ?, revision = ?
+		WHERE exam_id = ?
+			AND revision = ?`,
+		string(policy),
+		candidate.UpdatedAt,
+		candidate.Revision,
+		input.ExamID.String(),
+		input.ExpectedRevision,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("update exam Draft Focus Loss: %w", translateError("exam_draft", input.ExamID.String(), err))
 	}
+
 	if affected, rowsErr := result.RowsAffected(); rowsErr != nil {
 		return nil, fmt.Errorf("inspect exam Draft Focus Loss update: %w", rowsErr)
 	} else if affected != 1 {
 		return nil, store.NewErrConflict("exam_draft", "exam_draft_revision", nil)
 	}
+
 	row.Policy = jsonValue(policy)
 	row.DraftUpdatedAt = candidate.UpdatedAt
 	row.DraftRevision = candidate.Revision
@@ -523,15 +692,21 @@ func updateExamDraftFocusLoss(ctx context.Context, tx *sqlxTxWrapper, input *sto
 	if _, err := completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", auditData, input.AuditAt); err != nil {
 		return nil, fmt.Errorf("complete exam Draft Focus Loss audit: %w", err)
 	}
+
 	return row.model()
 }
 
-func updateExamDraftBrowserPolicy(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamDraftBrowserPolicyUpdate) (*store.ExamAuthoringSnapshot, error) {
+func updateExamDraftBrowserPolicy(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.ExamDraftBrowserPolicyUpdate,
+) (*store.ExamAuthoringSnapshot, error) {
 	var row examAuthoringRow
 	query := examAuthoringSelect + ` WHERE e.id = ? FOR UPDATE OF e, d`
 	if err := tx.Get(ctx, &row, query, input.ActorUserID.String(), input.ExamID.String()); err != nil {
 		return nil, translateError("exam", input.ExamID.String(), err)
 	}
+
 	snapshot, err := row.model()
 	if err != nil {
 		return nil, err
@@ -545,10 +720,12 @@ func updateExamDraftBrowserPolicy(ctx context.Context, tx *sqlxTxWrapper, input 
 	if snapshot.Draft.Revision != input.ExpectedRevision {
 		return nil, store.NewErrConflict("exam_draft", "exam_draft_revision", nil)
 	}
+
 	candidate := *snapshot.Draft
-	if err := input.Policy.ValidateInstitutionOrigin(input.InstitutionOrigin); err != nil {
-		return nil, store.NewErrInvalidInput("exam_draft", "browser_policy", nil).Wrap(err)
+	if validateErr := input.Policy.ValidateInstitutionOrigin(input.InstitutionOrigin); validateErr != nil {
+		return nil, store.NewErrInvalidInput("exam_draft", "browser_policy", nil).Wrap(validateErr)
 	}
+
 	changed, err := candidate.ApplyBrowserPolicy(input.Policy, model.TimeUTC(input.UpdatedAt))
 	if err != nil {
 		return nil, store.NewErrInvalidInput("exam_draft", "browser_policy", nil).Wrap(err)
@@ -556,30 +733,48 @@ func updateExamDraftBrowserPolicy(ctx context.Context, tx *sqlxTxWrapper, input 
 	if !changed {
 		return nil, store.NewErrConflict("exam_draft", "exam_draft_no_changes", nil)
 	}
+
 	policy, err := model.EncodeBrowserPolicy(candidate.BrowserPolicy)
 	if err != nil {
 		return nil, err
 	}
-	result, err := tx.Exec(ctx, `UPDATE exam_drafts SET browser_policy=?::jsonb,updated_at=?,revision=? WHERE exam_id=? AND revision=?`,
-		string(policy), candidate.UpdatedAt, candidate.Revision, input.ExamID.String(), input.ExpectedRevision)
+
+	result, err := tx.Exec(
+		ctx,
+		`UPDATE exam_drafts
+		SET browser_policy = ?::jsonb, updated_at = ?, revision = ?
+		WHERE exam_id = ?
+			AND revision = ?`,
+		string(policy),
+		candidate.UpdatedAt,
+		candidate.Revision,
+		input.ExamID.String(),
+		input.ExpectedRevision,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("update exam Draft Browser Policy: %w", translateError("exam_draft", input.ExamID.String(), err))
 	}
+
 	if affected, rowsErr := result.RowsAffected(); rowsErr != nil {
 		return nil, fmt.Errorf("inspect exam Draft Browser Policy update: %w", rowsErr)
 	} else if affected != 1 {
 		return nil, store.NewErrConflict("exam_draft", "exam_draft_revision", nil)
 	}
+
 	row.BrowserPolicy = jsonValue(policy)
 	row.DraftUpdatedAt, row.DraftRevision = candidate.UpdatedAt, candidate.Revision
-	auditData, err := model.EncodeAuditData(map[string]any{"exam_id": input.ExamID.String(), "draft_revision": candidate.Revision,
-		"browser_policy_enabled": candidate.BrowserPolicy.Enabled})
+	auditData, err := model.EncodeAuditData(map[string]any{
+		"exam_id":                input.ExamID.String(),
+		"draft_revision":         candidate.Revision,
+		"browser_policy_enabled": candidate.BrowserPolicy.Enabled,
+	})
 	if err != nil {
 		return nil, err
 	}
 	if _, err = completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", auditData, input.AuditAt); err != nil {
 		return nil, fmt.Errorf("complete exam Draft Browser Policy audit: %w", err)
 	}
+
 	return row.model()
 }
 
@@ -591,47 +786,80 @@ func cloneSQLStringPointer(value *string) *string {
 	return &cloned
 }
 
-func createExamAuthoring(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamAuthoringCreation, auditData json.RawMessage) (*store.ExamAuthoringSnapshot, error) {
+func createExamAuthoring(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.ExamAuthoringCreation,
+	auditData json.RawMessage,
+) (*store.ExamAuthoringSnapshot, error) {
 	policy, err := model.EncodeExamPolicySet(input.Draft.Policy)
 	if err != nil {
 		return nil, err
 	}
+
 	capacity, err := currentExamCapacityPolicy(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
-	row, err := newExamAuthoringRow(&store.ExamAuthoringSnapshot{Exam: input.Exam, Draft: input.Draft,
-		OwnerUserID: input.Exam.OwnerUserID, ManagerCount: 1, ActorIsManager: true, Capacity: capacity}, true)
+
+	row, err := newExamAuthoringRow(&store.ExamAuthoringSnapshot{
+		Exam:           input.Exam,
+		Draft:          input.Draft,
+		OwnerUserID:    input.Exam.OwnerUserID,
+		ManagerCount:   1,
+		ActorIsManager: true,
+		Capacity:       capacity,
+	}, true)
 	if err != nil {
 		return nil, err
 	}
+
 	row.Policy = jsonValue(policy)
 	browserPolicy := input.Draft.BrowserPolicy
 	browserPolicyBytes, err := model.EncodeBrowserPolicy(browserPolicy)
 	if err != nil {
 		return nil, err
 	}
+
 	row.BrowserPolicy = jsonValue(browserPolicyBytes)
 	if _, err := tx.NamedExec(ctx, `INSERT INTO exams (
-		id, academic_unit_id, creator_user_id, owner_user_id, default_revision_id,
-		created_at, updated_at, archived_at, revision
-	) VALUES (:id, :academic_unit_id, :creator_user_id, :owner_user_id, :default_revision_id,
-		:created_at, :updated_at, :archived_at, :exam_revision)`, &row); err != nil {
+			id, academic_unit_id, creator_user_id, owner_user_id, default_revision_id, created_at,
+				updated_at, archived_at, revision
+		)
+		VALUES (
+			:id, :academic_unit_id, :creator_user_id, :owner_user_id, :default_revision_id,
+				:created_at, :updated_at, :archived_at, :exam_revision
+		)`, &row); err != nil {
 		return nil, fmt.Errorf("create exam: %w", translateError("exam", input.Exam.ID.String(), err))
 	}
+
 	if _, err := tx.NamedExec(ctx, `INSERT INTO exam_drafts (
-		exam_id, title, instructions_markdown, policy, browser_policy, base_revision_id, updated_at, revision
-	) VALUES (:id, :draft_title, :instructions_markdown, :policy, :browser_policy, :base_revision_id,
-		:draft_updated_at, :draft_revision)`, &row); err != nil {
+			exam_id, title, instructions_markdown, policy, browser_policy, base_revision_id,
+				updated_at, revision
+		)
+		VALUES (
+			:id, :draft_title, :instructions_markdown, :policy, :browser_policy, :base_revision_id,
+				:draft_updated_at, :draft_revision
+		)`, &row); err != nil {
 		return nil, fmt.Errorf("create exam draft: %w", translateError("exam_draft", input.Exam.ID.String(), err))
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO exam_managers (exam_id, user_id, granted_by_user_id, granted_at) VALUES (?, ?, ?, ?)`,
-		input.Manager.ExamID.String(), input.Manager.UserID.String(), input.Manager.GrantedByUserID.String(), input.Manager.GrantedAt); err != nil {
+
+	if _, err := tx.Exec(
+		ctx,
+		`INSERT INTO exam_managers (exam_id, user_id, granted_by_user_id, granted_at)
+		VALUES (?, ?, ?, ?)`,
+		input.Manager.ExamID.String(),
+		input.Manager.UserID.String(),
+		input.Manager.GrantedByUserID.String(),
+		input.Manager.GrantedAt,
+	); err != nil {
 		return nil, fmt.Errorf("create exam manager: %w", translateError("exam_manager", input.Manager.UserID.String(), err))
 	}
+
 	if _, err := completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", auditData, input.AuditAt); err != nil {
 		return nil, fmt.Errorf("complete exam creation audit: %w", err)
 	}
+
 	return row.model()
 }
 
@@ -639,34 +867,52 @@ func newExamAuthoringRow(snapshot *store.ExamAuthoringSnapshot, actorIsManager b
 	if snapshot == nil || snapshot.Exam == nil || snapshot.Draft == nil {
 		return examAuthoringRow{}, store.NewErrInvalidInput("exam", "snapshot", nil)
 	}
+
 	policy, err := model.EncodeExamPolicySet(snapshot.Draft.Policy)
 	if err != nil {
 		return examAuthoringRow{}, err
 	}
+
 	browserPolicy := snapshot.Draft.BrowserPolicy
 	browserPolicyBytes, err := model.EncodeBrowserPolicy(browserPolicy)
 	if err != nil {
 		return examAuthoringRow{}, err
 	}
+
 	capacity := snapshot.Capacity
 	if err := capacity.Validate(); err != nil {
 		return examAuthoringRow{}, store.NewErrInvalidInput("exam", "capacity", nil).Wrap(err)
 	}
+
 	return examAuthoringRow{
-		ID: snapshot.Exam.ID.String(), AcademicUnitID: snapshot.Exam.AcademicUnitID.String(),
-		CreatorUserID: snapshot.Exam.CreatorUserID.String(), OwnerUserID: snapshot.Exam.OwnerUserID.String(),
-		DefaultRevisionID: nullableString(snapshot.Exam.DefaultRevisionID.String()), CreatedAt: snapshot.Exam.CreatedAt,
-		UpdatedAt: snapshot.Exam.UpdatedAt, ArchivedAt: NullTimeFromOptional(snapshot.Exam.ArchivedAt), ExamRevision: snapshot.Exam.Revision,
-		DraftTitle: snapshot.Draft.Title, InstructionsMarkdown: snapshot.Draft.InstructionsMarkdown,
-		Policy: jsonValue(policy), BaseRevisionID: nullableString(snapshot.Draft.BaseRevisionID.String()),
-		BrowserPolicy:  jsonValue(browserPolicyBytes),
-		DraftUpdatedAt: snapshot.Draft.UpdatedAt, DraftRevision: snapshot.Draft.Revision,
-		ManagerCount: snapshot.ManagerCount, ActorIsManager: actorIsManager,
-		OwnerIsManager: true,
-		examCapacityPolicyRow: examCapacityPolicyRow{ResourceMaximumCount: capacity.ResourceMaximumCount,
-			ResourceMaximumBytes: capacity.ResourceMaximumBytes, WorkspaceMaximumEntries: capacity.WorkspaceMaximumEntries,
-			WorkspaceMaximumFileBytes: capacity.WorkspaceMaximumFileBytes, WorkspaceMaximumTotalBytes: capacity.WorkspaceMaximumTotalBytes},
-		ResourceCount: snapshot.ResourceCount, HasStarterWorkspace: snapshot.HasStarterWorkspace,
+		ID:                   snapshot.Exam.ID.String(),
+		AcademicUnitID:       snapshot.Exam.AcademicUnitID.String(),
+		CreatorUserID:        snapshot.Exam.CreatorUserID.String(),
+		OwnerUserID:          snapshot.Exam.OwnerUserID.String(),
+		DefaultRevisionID:    nullableString(snapshot.Exam.DefaultRevisionID.String()),
+		CreatedAt:            snapshot.Exam.CreatedAt,
+		UpdatedAt:            snapshot.Exam.UpdatedAt,
+		ArchivedAt:           NullTimeFromOptional(snapshot.Exam.ArchivedAt),
+		ExamRevision:         snapshot.Exam.Revision,
+		DraftTitle:           snapshot.Draft.Title,
+		InstructionsMarkdown: snapshot.Draft.InstructionsMarkdown,
+		Policy:               jsonValue(policy),
+		BaseRevisionID:       nullableString(snapshot.Draft.BaseRevisionID.String()),
+		BrowserPolicy:        jsonValue(browserPolicyBytes),
+		DraftUpdatedAt:       snapshot.Draft.UpdatedAt,
+		DraftRevision:        snapshot.Draft.Revision,
+		ManagerCount:         snapshot.ManagerCount,
+		ActorIsManager:       actorIsManager,
+		OwnerIsManager:       true,
+		examCapacityPolicyRow: examCapacityPolicyRow{
+			ResourceMaximumCount:       capacity.ResourceMaximumCount,
+			ResourceMaximumBytes:       capacity.ResourceMaximumBytes,
+			WorkspaceMaximumEntries:    capacity.WorkspaceMaximumEntries,
+			WorkspaceMaximumFileBytes:  capacity.WorkspaceMaximumFileBytes,
+			WorkspaceMaximumTotalBytes: capacity.WorkspaceMaximumTotalBytes,
+		},
+		ResourceCount:       snapshot.ResourceCount,
+		HasStarterWorkspace: snapshot.HasStarterWorkspace,
 	}, nil
 }
 
@@ -675,41 +921,73 @@ func (r examAuthoringRow) model() (*store.ExamAuthoringSnapshot, error) {
 	if err != nil {
 		return nil, err
 	}
-	baseRevisionID, err := parseNullablePersistedID[model.ExamRevisionID]("exam_draft", "base_revision_id", r.BaseRevisionID, model.ParseExamRevisionID)
+
+	baseRevisionID, err := parseNullablePersistedID[model.ExamRevisionID](
+		"exam_draft",
+		"base_revision_id",
+		r.BaseRevisionID,
+		model.ParseExamRevisionID,
+	)
 	if err != nil {
 		return nil, err
 	}
+
 	policy, err := model.DecodeExamPolicySet([]byte(r.Policy))
 	if err != nil {
 		return nil, invalidPersistedState("exam_draft", "policy", err)
 	}
+
 	browserPolicy, err := model.ParseBrowserPolicyDocument([]byte(r.BrowserPolicy))
 	if err != nil {
 		return nil, invalidPersistedState("exam_draft", "browser_policy", err)
 	}
-	draft := &model.ExamDraft{ExamID: exam.ID, Title: r.DraftTitle, InstructionsMarkdown: r.InstructionsMarkdown,
-		Policy: policy, BrowserPolicy: browserPolicy, BaseRevisionID: baseRevisionID, UpdatedAt: r.DraftUpdatedAt, Revision: r.DraftRevision}
-	if err := validatePersistedModel("exam_draft", draft); err != nil {
-		return nil, err
+
+	draft := &model.ExamDraft{
+		ExamID:               exam.ID,
+		Title:                r.DraftTitle,
+		InstructionsMarkdown: r.InstructionsMarkdown,
+		Policy:               policy,
+		BrowserPolicy:        browserPolicy,
+		BaseRevisionID:       baseRevisionID,
+		UpdatedAt:            r.DraftUpdatedAt,
+		Revision:             r.DraftRevision,
+	}
+	if validateErr := validatePersistedModel("exam_draft", draft); validateErr != nil {
+		return nil, validateErr
 	}
 	if r.ManagerCount < 1 || !r.OwnerIsManager || r.ResourceCount < 0 {
 		return nil, invalidPersistedState("exam", "aggregate", fmt.Errorf("invalid aggregate counts"))
 	}
+
 	capacity, err := r.examCapacityPolicyRow.policy()
 	if err != nil {
 		return nil, err
 	}
-	return &store.ExamAuthoringSnapshot{Exam: exam, Draft: draft, OwnerUserID: exam.OwnerUserID, ManagerCount: r.ManagerCount,
-		ActorIsManager: r.ActorIsManager, Capacity: capacity,
-		ResourceCount: r.ResourceCount, HasStarterWorkspace: r.HasStarterWorkspace}, nil
+
+	return &store.ExamAuthoringSnapshot{
+		Exam:                exam,
+		Draft:               draft,
+		OwnerUserID:         exam.OwnerUserID,
+		ManagerCount:        r.ManagerCount,
+		ActorIsManager:      r.ActorIsManager,
+		Capacity:            capacity,
+		ResourceCount:       r.ResourceCount,
+		HasStarterWorkspace: r.HasStarterWorkspace,
+	}, nil
 }
 
 func (r examAuthoringRow) accessRow() examAccessRow {
 	return examAccessRow{
-		ID: r.ID, AcademicUnitID: r.AcademicUnitID, CreatorUserID: r.CreatorUserID,
-		OwnerUserID: r.OwnerUserID, DefaultRevisionID: r.DefaultRevisionID,
-		CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt, ArchivedAt: r.ArchivedAt,
-		Revision: r.ExamRevision, ActorIsManager: r.ActorIsManager,
+		ID:                r.ID,
+		AcademicUnitID:    r.AcademicUnitID,
+		CreatorUserID:     r.CreatorUserID,
+		OwnerUserID:       r.OwnerUserID,
+		DefaultRevisionID: r.DefaultRevisionID,
+		CreatedAt:         r.CreatedAt,
+		UpdatedAt:         r.UpdatedAt,
+		ArchivedAt:        r.ArchivedAt,
+		Revision:          r.ExamRevision,
+		ActorIsManager:    r.ActorIsManager,
 	}
 }
 
@@ -718,36 +996,57 @@ func (r examAccessRow) model() (*model.Exam, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	unitID, err := parsePersistedID[model.AcademicUnitID]("exam", "academic_unit_id", r.AcademicUnitID, model.ParseAcademicUnitID)
 	if err != nil {
 		return nil, err
 	}
+
 	creatorID, err := parsePersistedID[model.UserID]("exam", "creator_user_id", r.CreatorUserID, model.ParseUserID)
 	if err != nil {
 		return nil, err
 	}
+
 	ownerID, err := parsePersistedID[model.UserID]("exam", "owner_user_id", r.OwnerUserID, model.ParseUserID)
 	if err != nil {
 		return nil, err
 	}
-	defaultRevisionID, err := parseNullablePersistedID[model.ExamRevisionID]("exam", "default_revision_id", r.DefaultRevisionID, model.ParseExamRevisionID)
+
+	defaultRevisionID, err := parseNullablePersistedID[model.ExamRevisionID](
+		"exam",
+		"default_revision_id",
+		r.DefaultRevisionID,
+		model.ParseExamRevisionID,
+	)
 	if err != nil {
 		return nil, err
 	}
+
 	exam := &model.Exam{
-		ID: examID, AcademicUnitID: unitID, CreatorUserID: creatorID, OwnerUserID: ownerID,
-		DefaultRevisionID: defaultRevisionID, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
-		ArchivedAt: OptionalTimeFromNullTime(r.ArchivedAt), Revision: r.Revision,
+		ID:                examID,
+		AcademicUnitID:    unitID,
+		CreatorUserID:     creatorID,
+		OwnerUserID:       ownerID,
+		DefaultRevisionID: defaultRevisionID,
+		CreatedAt:         r.CreatedAt,
+		UpdatedAt:         r.UpdatedAt,
+		ArchivedAt:        OptionalTimeFromNullTime(r.ArchivedAt),
+		Revision:          r.Revision,
 	}
 	if err := validatePersistedModel("exam", exam); err != nil {
 		return nil, err
 	}
+
 	return exam, nil
 }
 
 var _ store.ExamAuthoringStore = (*SQLExamAuthoringStore)(nil)
 
-func (s SQLExamAuthoringStore) UpdateDraftNativePolicy(ctx context.Context, input *store.ExamDraftNativePolicyUpdate, command *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
+func (s SQLExamAuthoringStore) UpdateDraftNativePolicy(
+	ctx context.Context,
+	input *store.ExamDraftNativePolicyUpdate,
+	command *store.CommandIdempotency,
+) (*store.ExamAuthoringCommandResult, error) {
 	prepared, err := prepareExamDraftNativePolicyUpdate(input)
 	if err != nil || command == nil {
 		if err != nil {
@@ -755,8 +1054,10 @@ func (s SQLExamAuthoringStore) UpdateDraftNativePolicy(ctx context.Context, inpu
 		}
 		return nil, store.NewErrInvalidInput("exam_draft", "idempotency", nil)
 	}
+
 	result, err := runIdempotentMutation(ctx, s.SQLStore, "exam Draft native policy update", idempotentMutation[*store.ExamAuthoringSnapshot]{
-		command: command, auditEventID: prepared.AuditEventID,
+		command:      command,
+		auditEventID: prepared.AuditEventID,
 		execute: func(ctx context.Context, tx *sqlxTxWrapper) (*store.ExamAuthoringSnapshot, error) {
 			return updateExamDraftNativePolicy(ctx, tx, prepared)
 		},
@@ -766,16 +1067,20 @@ func (s SQLExamAuthoringStore) UpdateDraftNativePolicy(ctx context.Context, inpu
 			if decodeErr := decodeOutcome(data, &outcome); decodeErr != nil {
 				return nil, decodeErr
 			}
+
 			return outcome.model()
 		},
 		completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, snapshot *store.ExamAuthoringSnapshot, originalAuditID string) error {
 			encoded, encodeErr := model.EncodeAuditData(map[string]any{
-				"exam_id": snapshot.Exam.ID.String(), "draft_revision": snapshot.Draft.Revision,
-				"idempotency_replayed": true, "original_audit_event_id": originalAuditID,
+				"exam_id":                 snapshot.Exam.ID.String(),
+				"draft_revision":          snapshot.Draft.Revision,
+				"idempotency_replayed":    true,
+				"original_audit_event_id": originalAuditID,
 			})
 			if encodeErr != nil {
 				return encodeErr
 			}
+
 			_, completeErr := completeAuditEvent(ctx, tx, prepared.AuditEventID, model.AuditStatusSuccess, "", encoded, prepared.AuditAt)
 			return completeErr
 		},
@@ -783,30 +1088,43 @@ func (s SQLExamAuthoringStore) UpdateDraftNativePolicy(ctx context.Context, inpu
 	if err != nil {
 		return nil, err
 	}
+
 	return &store.ExamAuthoringCommandResult{Value: result.Value, Replayed: result.Replayed}, nil
 }
 
 func prepareExamDraftNativePolicyUpdate(input *store.ExamDraftNativePolicyUpdate) (*store.ExamDraftNativePolicyUpdate, error) {
-	if input == nil || !input.ExamID.IsValid() || !input.ActorUserID.IsValid() || input.ExpectedRevision < 1 ||
-		input.UpdatedAt.IsZero() || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+	if input == nil ||
+		!input.ExamID.IsValid() ||
+		!input.ActorUserID.IsValid() ||
+		input.ExpectedRevision < 1 ||
+		input.UpdatedAt.IsZero() ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("exam_draft", "native_policy_update", nil)
 	}
+
 	policy := model.DefaultExamPolicySet()
 	policy.Native = input.NativePolicy
 	if err := policy.Validate(); err != nil {
 		return nil, store.NewErrInvalidInput("exam_draft", "native_policy", nil).Wrap(err)
 	}
+
 	prepared := *input
 	prepared.NativePolicy = input.NativePolicy.Clone()
 	return &prepared, nil
 }
 
-func updateExamDraftNativePolicy(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamDraftNativePolicyUpdate) (*store.ExamAuthoringSnapshot, error) {
+func updateExamDraftNativePolicy(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.ExamDraftNativePolicyUpdate,
+) (*store.ExamAuthoringSnapshot, error) {
 	var row examAuthoringRow
 	query := examAuthoringSelect + ` WHERE e.id = ? FOR UPDATE OF e, d`
 	if err := tx.Get(ctx, &row, query, input.ActorUserID.String(), input.ExamID.String()); err != nil {
 		return nil, translateError("exam", input.ExamID.String(), err)
 	}
+
 	snapshot, err := row.model()
 	if err != nil {
 		return nil, err
@@ -820,6 +1138,7 @@ func updateExamDraftNativePolicy(ctx context.Context, tx *sqlxTxWrapper, input *
 	if snapshot.Draft.Revision != input.ExpectedRevision {
 		return nil, store.NewErrConflict("exam_draft", "exam_draft_revision", nil)
 	}
+
 	candidate := *snapshot.Draft
 	changed, err := candidate.ApplyNativePolicy(input.NativePolicy, model.TimeUTC(input.UpdatedAt))
 	if err != nil {
@@ -828,20 +1147,34 @@ func updateExamDraftNativePolicy(ctx context.Context, tx *sqlxTxWrapper, input *
 	if !changed {
 		return nil, store.NewErrConflict("exam_draft", "exam_draft_no_changes", nil)
 	}
+
 	policy, err := model.EncodeExamPolicySet(candidate.Policy)
 	if err != nil {
 		return nil, err
 	}
-	result, err := tx.Exec(ctx, `UPDATE exam_drafts SET policy = ?::jsonb, updated_at = ?, revision = ? WHERE exam_id = ? AND revision = ?`,
-		string(policy), candidate.UpdatedAt, candidate.Revision, input.ExamID.String(), input.ExpectedRevision)
+
+	result, err := tx.Exec(
+		ctx,
+		`UPDATE exam_drafts
+		SET policy = ?::jsonb, updated_at = ?, revision = ?
+		WHERE exam_id = ?
+			AND revision = ?`,
+		string(policy),
+		candidate.UpdatedAt,
+		candidate.Revision,
+		input.ExamID.String(),
+		input.ExpectedRevision,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("update exam Draft native policy: %w", translateError("exam_draft", input.ExamID.String(), err))
 	}
+
 	if affected, rowsErr := result.RowsAffected(); rowsErr != nil {
 		return nil, fmt.Errorf("inspect exam Draft native policy update: %w", rowsErr)
 	} else if affected != 1 {
 		return nil, store.NewErrConflict("exam_draft", "exam_draft_revision", nil)
 	}
+
 	row.Policy = jsonValue(policy)
 	row.DraftUpdatedAt = candidate.UpdatedAt
 	row.DraftRevision = candidate.Revision
@@ -852,5 +1185,6 @@ func updateExamDraftNativePolicy(ctx context.Context, tx *sqlxTxWrapper, input *
 	if _, err := completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", auditData, input.AuditAt); err != nil {
 		return nil, fmt.Errorf("complete exam Draft native policy audit: %w", err)
 	}
+
 	return row.model()
 }

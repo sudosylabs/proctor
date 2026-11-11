@@ -33,6 +33,8 @@ import (
 
 const minimumPostgresVersion = 140000
 
+// Settings configure the PostgreSQL connection pool and its timeouts; New
+// rejects a pool smaller than the two connections a locked migration needs.
 type Settings struct {
 	DataSource            string
 	MaxOpenConnections    int
@@ -47,6 +49,8 @@ type Settings struct {
 	ReadOnly bool
 }
 
+// SettingsFromConfig copies the database configuration into Settings. ReadOnly
+// is never set from configuration; operator commands set it themselves.
 func SettingsFromConfig(cfg config.Database) Settings {
 	return Settings{
 		DataSource:            cfg.DataSource,
@@ -69,8 +73,10 @@ func (s Settings) validate() error {
 	if s.MaxIdleConnections < 0 || s.MaxIdleConnections > s.MaxOpenConnections {
 		return errors.New("database max idle connections must be between zero and max open connections")
 	}
-	if s.ConnectionMaxLifetime <= 0 || s.ConnectionMaxIdleTime <= 0 ||
-		s.QueryTimeout <= 0 || s.MigrationTimeout <= 0 {
+	if s.ConnectionMaxLifetime <= 0 ||
+		s.ConnectionMaxIdleTime <= 0 ||
+		s.QueryTimeout <= 0 ||
+		s.MigrationTimeout <= 0 {
 		return errors.New("database timeouts and connection lifetimes must be greater than zero")
 	}
 	return nil
@@ -89,6 +95,11 @@ type SQLStoreStores struct {
 	examRevision               store.ExamRevisionStore
 	examSitting                store.ExamSittingStore
 	examAttempt                store.ExamAttemptStore
+	examFocusLoss              store.ExamFocusLossStore
+	securityPreflight          store.SecurityPreflightStore
+	nativeDelivery             store.NativeDeliveryStore
+	browserDelivery            store.BrowserDeliveryStore
+	deliveryBudget             store.DeliveryBudgetStore
 	examAttemptWorkspace       store.ExamAttemptWorkspaceStore
 	examSubmission             store.ExamSubmissionStore
 	examIntegrityReview        store.ExamIntegrityReviewStore
@@ -172,6 +183,8 @@ func sessionConnector(dataSource string, readOnly bool) (*pq.Connector, error) {
 	return pq.NewConnectorConfig(cfg)
 }
 
+// New opens the pool and verifies the server is at least PostgreSQL 14. It
+// validates settings first and applies no migration.
 func New(ctx context.Context, settings Settings) (*SQLStore, error) {
 	if err := settings.validate(); err != nil {
 		return nil, err
@@ -216,6 +229,11 @@ func New(ctx context.Context, settings Settings) (*SQLStore, error) {
 	sqlStore.stores.examRevision = newSQLExamRevisionStore(sqlStore)
 	sqlStore.stores.examSitting = newSQLExamSittingStore(sqlStore)
 	sqlStore.stores.examAttempt = newSQLExamAttemptStore(sqlStore)
+	sqlStore.stores.examFocusLoss = newSQLExamFocusLossStore(sqlStore)
+	sqlStore.stores.securityPreflight = newSQLSecurityPreflightStore(sqlStore)
+	sqlStore.stores.nativeDelivery = newSQLNativeDeliveryStore(sqlStore)
+	sqlStore.stores.browserDelivery = newSQLBrowserDeliveryStore(sqlStore)
+	sqlStore.stores.deliveryBudget = newSQLDeliveryBudgetStore(sqlStore)
 	sqlStore.stores.examAttemptWorkspace = NewSQLExamAttemptWorkspaceStore(sqlStore)
 	sqlStore.stores.examSubmission = NewSQLExamSubmissionStore(sqlStore)
 	sqlStore.stores.examIntegrityReview = NewSQLExamIntegrityReviewStore(sqlStore)
@@ -308,6 +326,26 @@ func (ss *SQLStore) ExamSitting() store.ExamSittingStore {
 
 func (ss *SQLStore) ExamAttempt() store.ExamAttemptStore {
 	return ss.stores.examAttempt
+}
+
+func (ss *SQLStore) ExamFocusLoss() store.ExamFocusLossStore {
+	return ss.stores.examFocusLoss
+}
+
+func (ss *SQLStore) SecurityPreflight() store.SecurityPreflightStore {
+	return ss.stores.securityPreflight
+}
+
+func (ss *SQLStore) NativeDelivery() store.NativeDeliveryStore {
+	return ss.stores.nativeDelivery
+}
+
+func (ss *SQLStore) BrowserDelivery() store.BrowserDeliveryStore {
+	return ss.stores.browserDelivery
+}
+
+func (ss *SQLStore) DeliveryBudget() store.DeliveryBudgetStore {
+	return ss.stores.deliveryBudget
 }
 
 func (ss *SQLStore) ExamAttemptWorkspace() store.ExamAttemptWorkspaceStore {

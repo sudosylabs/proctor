@@ -11,64 +11,60 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-type webSocketModule struct {
+type webSocketHandlers struct {
 	transport WebSocketTransport
 }
 
-const (
-	webSocketResourceName = "websocket"
-	webSocketProtocolName = "websocket-upgrade"
-	webSocketPathLiteral  = "websocket"
-)
-
-func webSocketResource(transport WebSocketTransport) apiResource {
-	module := webSocketModule{transport: transport}
-	return newResource(webSocketResourceName,
-		upgradeRoute(
-			webSocketProtocolName,
-			AuthSessionRequired,
-			http.MethodGet,
-			apiPath(literal(webSocketPathLiteral)),
-			[]string{
+func webSocketResource(transport WebSocketTransport) route.Resource {
+	h := webSocketHandlers{transport: transport}
+	return route.NewResource(route.WebSocketResourceName,
+		route.Endpoint{
+			Method:       http.MethodGet,
+			Path:         "/" + route.WebSocketPath,
+			Auth:         route.AuthSessionRequired,
+			ProtocolName: route.WebSocketProtocolName,
+			ProtocolKind: route.ProtocolUpgrade,
+			Errors: []string{
 				"request.invalid",
 				"websocket.origin.invalid",
 				"websocket.unavailable",
 			},
-			module.connect,
-		),
+			Upgrade: h.connect,
+		},
 	)
 }
 
-func (m webSocketModule) connect(writer http.ResponseWriter, request operationRequest) error {
-	connectionID, sequence, err := parseWebSocketResume(request.params)
+func (h webSocketHandlers) connect(writer http.ResponseWriter, request route.Request) error {
+	connectionID, sequence, err := parseWebSocketResume(request.QueryValue("connection_id"), request.QueryValue("sequence_number"))
 	if err != nil {
 		return err
 	}
-	allowMissingOrigin := credentialSourceFromContext(request.context) == credentialSourceBearer
-	return m.transport.Accept(
+	allowMissingOrigin := route.CredentialSourceOf(request.Context) == route.CredentialBearer
+	return h.transport.Accept(
 		writer,
-		request.request,
-		request.principal,
-		request.metadata,
+		request.HTTP,
+		request.Principal,
+		request.Metadata,
 		connectionID,
 		sequence,
 		allowMissingOrigin,
 	)
 }
 
-func parseWebSocketResume(params Params) (string, int64, error) {
-	if params.ConnectionID == "" && params.SequenceNumber == "" {
+func parseWebSocketResume(connectionID, sequenceNumber string) (string, int64, error) {
+	if connectionID == "" && sequenceNumber == "" {
 		return "", 0, nil
 	}
-	if !model.IsValidOpaqueID(params.ConnectionID) || params.SequenceNumber == "" {
-		return "", 0, invalidRequestError(nil)
+	if !model.IsValidOpaqueID(connectionID) || sequenceNumber == "" {
+		return "", 0, route.InvalidRequest(nil)
 	}
-	sequence, err := strconv.ParseInt(params.SequenceNumber, 10, 64)
+	sequence, err := strconv.ParseInt(sequenceNumber, 10, 64)
 	if err != nil || sequence < 0 {
-		return "", 0, invalidRequestError(err)
+		return "", 0, route.InvalidRequest(err)
 	}
-	return params.ConnectionID, sequence, nil
+	return connectionID, sequence, nil
 }

@@ -88,6 +88,10 @@ func TestParseRejectsInvalidCatalogs(t *testing.T) {
 		"unknown field":            "codes:\n  - {code: widget.invalid, description: x, owner: app}\n",
 		"problem transport":        "codes:\n  - {code: server.internal, description: x, problem: true, transport: true}\n",
 		"transport fallback":       "codes:\n  - {code: request.invalid, description: x, transport: true, websocket_fallback: true}\n",
+		"retry on a 409":           "codes:\n  - {code: widget.conflict, description: x, retry_after: 1}\n",
+		"negative retry":           "codes:\n  - {code: widget.rate_limited, description: x, retry_after: -1}\n",
+		"unknown extension":        "codes:\n  - {code: widget.invalid, description: x, extension: widget}\n",
+		"problem extension":        "codes:\n  - {code: server.internal, description: x, problem: true, extension: delivery}\n",
 		"empty":                    "codes: []\n",
 	}
 	for name, source := range tests {
@@ -160,4 +164,26 @@ func TestRenderHTTPMappingIsDeterministicFormattedGo(t *testing.T) {
 		assert.True(t, bytes.Contains(rendered, []byte(want)), "rendered mapping lacks %q:\n%s", want, rendered)
 	}
 	assert.False(t, bytes.Contains(rendered, []byte(`"server.internal":          {status`)), "kernel problem code rendered as an application error mapping")
+}
+
+func TestRenderHTTPMappingCarriesRetryAfterAndExtension(t *testing.T) {
+	t.Parallel()
+
+	catalog, err := errorcatalog.Parse([]byte(vocabulary + `codes:
+  - code: widget.busy_rate_limited
+    description: "Too many widget requests."
+    retry_after: 2
+    extension: delivery
+  - code: widget.capacity
+    description: "Widget capacity exhausted."
+    extension: delivery_metadata_capacity
+`))
+	require.NoError(t, err)
+	rendered := catalog.RenderHTTPMapping()
+	for _, want := range []string{
+		`"widget.busy_rate_limited": {status: http.StatusTooManyRequests, retryAfter: 2, extension: problemExtensionDelivery}`,
+		`"widget.capacity":          {status: http.StatusConflict, extension: problemExtensionDeliveryMetadataCapacity}`,
+	} {
+		assert.True(t, bytes.Contains(rendered, []byte(want)), "rendered mapping lacks %q:\n%s", want, rendered)
+	}
 }

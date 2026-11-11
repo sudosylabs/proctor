@@ -20,6 +20,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLUserSettingsStore implements store.UserSettingsStore on
+// user_settings_documents, one revision-fenced document per user.
 type SQLUserSettingsStore struct {
 	*SQLStore
 	documentsQuery sq.SelectBuilder
@@ -57,12 +59,14 @@ func (s SQLUserSettingsStore) Get(ctx context.Context, userID model.UserID) (*mo
 	if !userID.IsValid() {
 		return nil, store.NewErrInvalidInput("user_settings_document", "user_id", nil)
 	}
+
 	query, arguments, err := s.documentsQuery.
 		Where(sq.Eq{"user_settings_documents.user_id": userID.String()}).
 		ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("build user settings query: %w", err)
 	}
+
 	var row userSettingsDocumentRow
 	if err := s.GetMaster().Get(ctx, &row, query, arguments...); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -75,6 +79,7 @@ func (s SQLUserSettingsStore) Get(ctx context.Context, userID model.UserID) (*mo
 			); existsErr != nil {
 				return nil, fmt.Errorf("check user settings owner: %w", existsErr)
 			}
+
 			if userExists {
 				return nil, invalidPersistedState(
 					"user_settings_document",
@@ -82,10 +87,13 @@ func (s SQLUserSettingsStore) Get(ctx context.Context, userID model.UserID) (*mo
 					errors.New("required user settings row is missing"),
 				)
 			}
+
 			return nil, store.NewErrNotFound("user_settings_document", userID.String()).Wrap(err)
 		}
+
 		return nil, fmt.Errorf("get user settings document: %w", err)
 	}
+
 	return row.model()
 }
 
@@ -97,6 +105,7 @@ func (s SQLUserSettingsStore) Replace(
 	if err := validateUserSettingsReplacement(input, command); err != nil {
 		return nil, err
 	}
+
 	mutation, err := runIdempotentMutation(ctx, s.SQLStore, "user settings replacement", idempotentMutation[userSettingsReplacementOutcome]{
 		command: command,
 		execute: func(ctx context.Context, tx *sqlxTxWrapper) (userSettingsReplacementOutcome, error) {
@@ -108,13 +117,21 @@ func (s SQLUserSettingsStore) Replace(
 					if existsErr := tx.Get(ctx, &userExists, "SELECT EXISTS (SELECT 1 FROM users WHERE id = ?)", input.UserID.String()); existsErr != nil {
 						return userSettingsReplacementOutcome{}, fmt.Errorf("check user settings owner: %w", existsErr)
 					}
+
 					if userExists {
-						return userSettingsReplacementOutcome{}, invalidPersistedState("user_settings_document", "value", errors.New("required user settings row is missing"))
+						return userSettingsReplacementOutcome{}, invalidPersistedState(
+							"user_settings_document",
+							"value",
+							errors.New("required user settings row is missing"),
+						)
 					}
+
 					return userSettingsReplacementOutcome{}, store.NewErrNotFound("user_settings_document", input.UserID.String()).Wrap(err)
 				}
+
 				return userSettingsReplacementOutcome{}, fmt.Errorf("lock user settings document: %w", err)
 			}
+
 			current, err := row.model()
 			if err != nil {
 				return userSettingsReplacementOutcome{}, err
@@ -122,38 +139,58 @@ func (s SQLUserSettingsStore) Replace(
 			if current.Revision != input.ExpectedRevision {
 				return userSettingsReplacementOutcome{}, &store.ErrUserSettingsRevisionConflict{CurrentRevision: current.Revision}
 			}
+
 			if current.Source == input.Source && current.FormatVersion == input.FormatVersion {
 				return userSettingsReplacementOutcome{Result: store.UserSettingsReplacementResult{
-					Revision: current.Revision, FormatVersion: current.FormatVersion,
-					UpdatedAt: current.UpdatedAt,
+					Revision:      current.Revision,
+					FormatVersion: current.FormatVersion,
+					UpdatedAt:     current.UpdatedAt,
 				}}, nil
 			}
+
 			if !input.UpdatedAt.After(current.UpdatedAt) {
 				return userSettingsReplacementOutcome{}, store.NewErrInvalidInput("user_settings_document", "updated_at", nil)
 			}
-			if err := validateUserSettingsReplacementAudit(input); err != nil {
-				return userSettingsReplacementOutcome{}, err
+			if validateErr := validateUserSettingsReplacementAudit(input); validateErr != nil {
+				return userSettingsReplacementOutcome{}, validateErr
 			}
-			result, err := tx.Exec(ctx, `UPDATE user_settings_documents
+
+			result, err := tx.Exec(
+				ctx,
+				`UPDATE user_settings_documents
 			SET source = ?, format_version = ?, revision = ?, updated_at = ?
-			WHERE user_id = ? AND revision = ?`,
-				input.Source, input.FormatVersion, input.NextRevision.String(), model.TimeUTC(input.UpdatedAt),
-				input.UserID.String(), input.ExpectedRevision.String())
+			WHERE user_id = ?
+				AND revision = ?`,
+				input.Source,
+				input.FormatVersion,
+				input.NextRevision.String(),
+				model.TimeUTC(input.UpdatedAt),
+				input.UserID.String(),
+				input.ExpectedRevision.String(),
+			)
 			if err != nil {
-				return userSettingsReplacementOutcome{}, fmt.Errorf("replace user settings document: %w", translateError("user_settings_document", input.UserID.String(), err))
+				return userSettingsReplacementOutcome{}, fmt.Errorf(
+					"replace user settings document: %w",
+					translateError("user_settings_document", input.UserID.String(), err),
+				)
 			}
-			if affected, err := result.RowsAffected(); err != nil {
-				return userSettingsReplacementOutcome{}, fmt.Errorf("inspect user settings replacement: %w", err)
+
+			if affected, rowsAffectedErr := result.RowsAffected(); rowsAffectedErr != nil {
+				return userSettingsReplacementOutcome{}, fmt.Errorf("inspect user settings replacement: %w", rowsAffectedErr)
 			} else if affected != 1 {
 				return userSettingsReplacementOutcome{}, &store.ErrUserSettingsRevisionConflict{CurrentRevision: current.Revision}
 			}
+
 			audit, err := insertAuditEvent(ctx, tx, input.AuditEvent)
 			if err != nil {
 				return userSettingsReplacementOutcome{}, err
 			}
+
 			return userSettingsReplacementOutcome{Result: store.UserSettingsReplacementResult{
-				Revision: input.NextRevision, FormatVersion: input.FormatVersion,
-				UpdatedAt: model.TimeUTC(input.UpdatedAt), Changed: true,
+				Revision:      input.NextRevision,
+				FormatVersion: input.FormatVersion,
+				UpdatedAt:     model.TimeUTC(input.UpdatedAt),
+				Changed:       true,
 			}, AuditEventID: audit.ID.String()}, nil
 		},
 		encode: encodeUserSettingsReplacementOutcome,
@@ -165,6 +202,7 @@ func (s SQLUserSettingsStore) Replace(
 	if err != nil {
 		return nil, err
 	}
+
 	result := mutation.Value.Result
 	result.Replayed = mutation.Replayed
 	return &result, nil
@@ -190,8 +228,10 @@ func (userSettingsReplacementDocument) outcomeDocument() {}
 
 func encodeUserSettingsReplacementOutcome(outcome userSettingsReplacementOutcome) ([]byte, error) {
 	return encodeOutcome(userSettingsReplacementDocument{
-		Revision: outcome.Result.Revision, FormatVersion: outcome.Result.FormatVersion,
-		UpdatedAt: outcome.Result.UpdatedAt, Changed: outcome.Result.Changed,
+		Revision:      outcome.Result.Revision,
+		FormatVersion: outcome.Result.FormatVersion,
+		UpdatedAt:     outcome.Result.UpdatedAt,
+		Changed:       outcome.Result.Changed,
 	})
 }
 
@@ -199,10 +239,15 @@ func decodeUserSettingsReplacementOutcome(encoded []byte) (userSettingsReplaceme
 	var document userSettingsReplacementDocument
 	err := decodeOutcome(encoded, &document)
 	result := store.UserSettingsReplacementResult{
-		Revision: document.Revision, FormatVersion: document.FormatVersion, UpdatedAt: document.UpdatedAt, Changed: document.Changed,
+		Revision:      document.Revision,
+		FormatVersion: document.FormatVersion,
+		UpdatedAt:     document.UpdatedAt,
+		Changed:       document.Changed,
 	}
-	if err != nil || !result.Revision.IsValid() ||
-		result.FormatVersion <= 0 || result.UpdatedAt.IsZero() {
+	if err != nil ||
+		!result.Revision.IsValid() ||
+		result.FormatVersion <= 0 ||
+		result.UpdatedAt.IsZero() {
 		return userSettingsReplacementOutcome{}, invalidPersistedState(
 			"command_outcome", "outcome", errors.New("invalid user settings outcome"),
 		)
@@ -211,16 +256,27 @@ func decodeUserSettingsReplacementOutcome(encoded []byte) (userSettingsReplaceme
 }
 
 func validateUserSettingsReplacement(input *store.UserSettingsReplacement, command *store.CommandIdempotency) error {
-	if input == nil || !input.UserID.IsValid() || input.FormatVersion <= 0 ||
-		!input.ExpectedRevision.IsValid() || !input.NextRevision.IsValid() ||
-		input.ExpectedRevision == input.NextRevision || input.UpdatedAt.IsZero() ||
-		command == nil || command.UserID != input.UserID || command.Operation != "user_settings.replace" ||
-		command.Retention <= 0 || command.Wait <= 0 {
+	if input == nil ||
+		!input.UserID.IsValid() ||
+		input.FormatVersion <= 0 ||
+		!input.ExpectedRevision.IsValid() ||
+		!input.NextRevision.IsValid() ||
+		input.ExpectedRevision == input.NextRevision ||
+		input.UpdatedAt.IsZero() ||
+		command == nil ||
+		command.UserID != input.UserID ||
+		command.Operation != "user_settings.replace" ||
+		command.Retention <= 0 ||
+		command.Wait <= 0 {
 		return store.NewErrInvalidInput("user_settings_document", "replacement", nil)
 	}
 	candidate := &model.UserSettingsDocument{
-		UserID: input.UserID, Source: input.Source, FormatVersion: input.FormatVersion,
-		Revision: input.NextRevision, CreatedAt: input.UpdatedAt, UpdatedAt: input.UpdatedAt,
+		UserID:        input.UserID,
+		Source:        input.Source,
+		FormatVersion: input.FormatVersion,
+		Revision:      input.NextRevision,
+		CreatedAt:     input.UpdatedAt,
+		UpdatedAt:     input.UpdatedAt,
 	}
 	if err := candidate.Validate(); err != nil {
 		return store.NewErrInvalidInput("user_settings_document", "replacement", nil).Wrap(err)
@@ -229,8 +285,10 @@ func validateUserSettingsReplacement(input *store.UserSettingsReplacement, comma
 }
 
 func validateUserSettingsReplacementAudit(input *store.UserSettingsReplacement) error {
-	if input.AuditEvent == nil || !input.AuditEvent.ID.IsZero() ||
-		input.AuditEvent.ActorID != input.UserID || input.AuditEvent.Action != string(model.ActionUserSettingsReplace) ||
+	if input.AuditEvent == nil ||
+		!input.AuditEvent.ID.IsZero() ||
+		input.AuditEvent.ActorID != input.UserID ||
+		input.AuditEvent.Action != string(model.ActionUserSettingsReplace) ||
 		input.AuditEvent.Resource != (model.Resource{Type: model.ResourceUser, ID: input.UserID.String()}) ||
 		input.AuditEvent.Status != model.AuditStatusSuccess {
 		return store.NewErrInvalidInput("user_settings_document", "audit_event", nil)
@@ -250,7 +308,8 @@ func insertUserSettingsDocument(ctx context.Context, executor sqlxExecutor, docu
 	if _, err := executor.NamedExec(ctx, `
 		INSERT INTO user_settings_documents (
 			user_id, source, format_version, revision, created_at, updated_at
-		) VALUES (
+		)
+		VALUES (
 			:user_id, :source, :format_version, :revision, :created_at, :updated_at
 		)`, &row); err != nil {
 		return fmt.Errorf("create user settings document: %w", translateError("user_settings_document", candidate.UserID.String(), err))
@@ -265,9 +324,11 @@ func validateInitialUserSettingsDocument(user *model.User, document *model.UserS
 	if err := document.Validate(); err != nil {
 		return store.NewErrInvalidInput("user_settings_document", "value", nil).Wrap(err)
 	}
-	if document.UserID != user.ID || document.FormatVersion != model.UserSettingsFormatVersion1 ||
+	if document.UserID != user.ID ||
+		document.FormatVersion != model.UserSettingsFormatVersion1 ||
 		document.Source != model.UserSettingsInitialSource ||
-		!document.CreatedAt.Equal(user.CreatedAt) || !document.UpdatedAt.Equal(user.CreatedAt) {
+		!document.CreatedAt.Equal(user.CreatedAt) ||
+		!document.UpdatedAt.Equal(user.CreatedAt) {
 		return store.NewErrInvalidInput("user_settings_document", "creation", nil)
 	}
 	return nil

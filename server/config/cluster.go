@@ -48,17 +48,21 @@ func validateCluster(cluster Cluster, add func(string, string)) {
 		if !validHostPort(cluster.Memberlist.AdvertiseAddress) {
 			add("cluster.memberlist.advertise_address", "must be a host:port TCP address")
 		}
+
 		validateMemberlistKeyring(cluster.Memberlist, add)
 		if cluster.Memberlist.DiscoveryTTL.Duration < 3*time.Second {
 			add("cluster.memberlist.discovery_ttl", "must be at least 3s")
 		}
+
 		if cluster.Memberlist.DiscoveryHeartbeat.Duration <= 0 ||
 			cluster.Memberlist.DiscoveryHeartbeat.Duration*2 >= cluster.Memberlist.DiscoveryTTL.Duration {
 			add("cluster.memberlist.discovery_heartbeat", "must be greater than zero and less than half the discovery TTL")
 		}
+
 		if len(cluster.Memberlist.SeedAddresses) > 32 {
 			add("cluster.memberlist.seed_addresses", "must contain at most 32 entries")
 		}
+
 		for index, address := range cluster.Memberlist.SeedAddresses {
 			if !validHostPort(address) {
 				add(
@@ -67,6 +71,7 @@ func validateCluster(cluster Cluster, add func(string, string)) {
 				)
 			}
 		}
+
 		if !cluster.Memberlist.AllowPublicBind {
 			if isPublicClusterBind(cluster.Memberlist.BindAddress) {
 				add("cluster.memberlist.bind_address", "public-interface binding is rejected by default")
@@ -75,15 +80,19 @@ func validateCluster(cluster Cluster, add func(string, string)) {
 	default:
 		add("cluster.backend", "must be local or memberlist")
 	}
+
 	if len(cluster.NodeID) == 0 || len(cluster.NodeID) > 128 {
 		add("cluster.node_id", "must contain between 1 and 128 characters")
 		return
 	}
+
 	for _, character := range cluster.NodeID {
 		if (character < 'a' || character > 'z') &&
 			(character < 'A' || character > 'Z') &&
 			(character < '0' || character > '9') &&
-			character != '.' && character != '_' && character != '-' {
+			character != '.' &&
+			character != '_' &&
+			character != '-' {
 			add("cluster.node_id", "contains an invalid character")
 			return
 		}

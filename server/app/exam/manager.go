@@ -12,6 +12,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/manageraccess"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
@@ -42,68 +43,96 @@ type ManagerPage struct {
 	HasMore bool
 }
 
-type AddManagerCommand struct {
+// ManagerChangeCommand names the user whose relationship to one Exam changes:
+// added as an Exam Manager, removed as one, or made its owner.
+type ManagerChangeCommand struct {
 	ExamID               model.ExamID
 	UserID               model.UserID
 	ExpectedExamRevision int64
 	IdempotencyKey       string
 }
 
-type RemoveManagerCommand = AddManagerCommand
-type TransferOwnerCommand = AddManagerCommand
-
 // ListExamManagers returns one page of an Exam's Exam Managers to a caller
 // authorized to manage the Exam.
-func (a *Authoring) ListExamManagers(ctx context.Context, invocation invocation.Invocation, query ListManagersQuery) (_ ManagerPage, resultErr error) {
+func (a *Authoring) ListExamManagers(
+	ctx context.Context,
+	inv invocation.Invocation,
+	query ListManagersQuery,
+) (_ ManagerPage, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	if !query.ExamID.IsValid() || query.Limit < 1 || query.Limit > 200 ||
+	if !query.ExamID.IsValid() ||
+		query.Limit < 1 ||
+		query.Limit > 200 ||
 		(query.BeforeGrantedAt.IsZero() != query.BeforeUserID.IsZero()) {
 		return ManagerPage{}, apperror.Invalid("exam.invalid", "manager_list")
 	}
-	if _, _, err := a.authorizeManagement(ctx, invocation, query.ExamID, model.TimeUTC(a.deps.Now())); err != nil {
+
+	if _, _, err := a.authorizeManagement(ctx, inv, query.ExamID, model.TimeUTC(a.now())); err != nil {
 		return ManagerPage{}, err
 	}
-	items, err := a.deps.Persistence.ListManagers(ctx, store.ExamManagerListOptions{
-		ExamID: query.ExamID, BeforeGrantedAt: query.BeforeGrantedAt, BeforeUserID: query.BeforeUserID, Limit: query.Limit + 1,
+
+	items, err := a.exams.ListManagers(ctx, store.ExamManagerListOptions{
+		ExamID:          query.ExamID,
+		BeforeGrantedAt: query.BeforeGrantedAt,
+		BeforeUserID:    query.BeforeUserID,
+		Limit:           query.Limit + 1,
 	})
 	if err != nil {
 		return ManagerPage{}, examStoreErrors.Translate(err)
 	}
+
 	page := ManagerPage{HasMore: len(items) > query.Limit}
 	items = items[:min(len(items), query.Limit)]
 	page.Items = make([]ManagerSummary, 0, len(items))
 	for _, item := range items {
 		page.Items = append(page.Items, ManagerSummary{
-			Manager: item.Manager, IsCreator: item.IsCreator, IsOwner: item.IsOwner,
+			Manager:   item.Manager,
+			IsCreator: item.IsCreator,
+			IsOwner:   item.IsOwner,
 		})
 	}
+
 	return page, nil
 }
 
 // AddExamManager idempotently grants Exam Manager membership to an eligible
 // user, fenced by ExpectedExamRevision, and notifies that user by mail.
-func (a *Authoring) AddExamManager(ctx context.Context, invocation invocation.Invocation, command AddManagerCommand) (_ store.ExamManagerCommandResult, resultErr error) {
+func (a *Authoring) AddExamManager(
+	ctx context.Context,
+	inv invocation.Invocation,
+	command ManagerChangeCommand,
+) (_ store.ExamManagerCommandResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	return a.changeManager(ctx, invocation, command, managerAddition, a.deps.Persistence.AddManager)
+	return a.changeManager(ctx, inv, command, managerAddition, a.exams.AddManager)
 }
 
 // RemoveExamManager idempotently revokes a user's Exam Manager membership,
 // fenced by ExpectedExamRevision, and notifies that user by mail.
-func (a *Authoring) RemoveExamManager(ctx context.Context, invocation invocation.Invocation, command RemoveManagerCommand) (_ store.ExamManagerCommandResult, resultErr error) {
+func (a *Authoring) RemoveExamManager(
+	ctx context.Context,
+	inv invocation.Invocation,
+	command ManagerChangeCommand,
+) (_ store.ExamManagerCommandResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	return a.changeManager(ctx, invocation, command, managerRemoval, a.deps.Persistence.RemoveManager)
+	return a.changeManager(ctx, inv, command, managerRemoval, a.exams.RemoveManager)
 }
 
 // TransferExamOwnership idempotently makes an eligible user the Exam's owner,
 // fenced by ExpectedExamRevision.
-func (a *Authoring) TransferExamOwnership(ctx context.Context, invocation invocation.Invocation, command TransferOwnerCommand) (_ store.ExamManagerCommandResult, resultErr error) {
+func (a *Authoring) TransferExamOwnership(
+	ctx context.Context,
+	inv invocation.Invocation,
+	command ManagerChangeCommand,
+) (_ store.ExamManagerCommandResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	return a.changeManager(ctx, invocation, command, ownershipTransfer, a.deps.Persistence.TransferOwner)
+	return a.changeManager(ctx, inv, command, ownershipTransfer, a.exams.TransferOwner)
 }
 
 type managerMutation func(context.Context, *store.ExamManagerMutation, *store.CommandIdempotency) (*store.ExamManagerCommandResult, error)
 
-type managerEffect func(context.Context, Effects, model.ExamID, model.UserID, int64, time.Time) error
+// managerEffect announces one committed Exam Manager transition: the Exam,
+// the User it concerns, the Exam revision and the instant of the change.
+type managerEffect func(*Authoring, context.Context, model.ExamID, model.UserID, int64, time.Time) error
 
 type managerTransition struct {
 	operation            string
@@ -116,28 +145,43 @@ type managerTransition struct {
 }
 
 var (
-	managerAddition = managerTransition{operation: "add_manager", idempotencyOperation: idempotencyOperationAddManager, eligibilityRequired: true,
-		templateKey: model.MailTemplateExamManagerAdded, relationship: ManagerMailRelationshipManager,
-		publish: func(ctx context.Context, effects Effects, examID model.ExamID, userID model.UserID, revision int64, changedAt time.Time) error {
-			return effects.ManagerChanged(ctx, examID, userID, true, revision, changedAt)
-		}}
-	managerRemoval = managerTransition{operation: "remove_manager", idempotencyOperation: idempotencyOperationRemoveManager,
-		templateKey: model.MailTemplateExamManagerRemoved, relationship: ManagerMailRelationshipNoLongerManager,
-		publish: func(ctx context.Context, effects Effects, examID model.ExamID, userID model.UserID, revision int64, changedAt time.Time) error {
-			return effects.ManagerChanged(ctx, examID, userID, false, revision, changedAt)
-		}}
-	ownershipTransfer = managerTransition{operation: "transfer_owner", idempotencyOperation: idempotencyOperationTransferOwner, eligibilityRequired: true, ownershipTransfer: true,
-		publish: func(ctx context.Context, effects Effects, examID model.ExamID, userID model.UserID, revision int64, changedAt time.Time) error {
-			return effects.OwnerTransferred(ctx, examID, userID, revision, changedAt)
-		}}
+	managerAddition = managerTransition{
+		operation:            "add_manager",
+		idempotencyOperation: idempotencyOperationAddManager,
+		eligibilityRequired:  true,
+		templateKey:          model.MailTemplateExamManagerAdded,
+		relationship:         ManagerMailRelationshipManager,
+		publish:              (*Authoring).publishManagerAdded,
+	}
+	managerRemoval = managerTransition{
+		operation:            "remove_manager",
+		idempotencyOperation: idempotencyOperationRemoveManager,
+		templateKey:          model.MailTemplateExamManagerRemoved,
+		relationship:         ManagerMailRelationshipNoLongerManager,
+		publish:              (*Authoring).publishManagerRemoved,
+	}
+	ownershipTransfer = managerTransition{
+		operation:            "transfer_owner",
+		idempotencyOperation: idempotencyOperationTransferOwner,
+		eligibilityRequired:  true,
+		ownershipTransfer:    true,
+		publish:              (*Authoring).publishOwnerTransferred,
+	}
 )
 
-func (a *Authoring) changeManager(ctx context.Context, invocation invocation.Invocation, command AddManagerCommand, transition managerTransition, mutate managerMutation) (store.ExamManagerCommandResult, error) {
-	principal := invocation.Principal()
+func (a *Authoring) changeManager(
+	ctx context.Context,
+	inv invocation.Invocation,
+	command ManagerChangeCommand,
+	transition managerTransition,
+	mutate managerMutation,
+) (store.ExamManagerCommandResult, error) {
+	principal := inv.Principal()
 	if principal.Validate() != nil || !command.ExamID.IsValid() || !command.UserID.IsValid() || command.ExpectedExamRevision < 1 {
 		return store.ExamManagerCommandResult{}, apperror.Invalid("exam.invalid", "manager_command")
 	}
-	idempotency, err := idempotency.Require(invocation, transition.idempotencyOperation, command.IdempotencyKey, struct {
+
+	commandIdempotency, err := idempotency.Require(inv, transition.idempotencyOperation, command.IdempotencyKey, struct {
 		ExamID               string `json:"exam_id"`
 		UserID               string `json:"user_id"`
 		ExpectedExamRevision int64  `json:"expected_exam_revision"`
@@ -145,73 +189,107 @@ func (a *Authoring) changeManager(ctx context.Context, invocation invocation.Inv
 	if err != nil {
 		return store.ExamManagerCommandResult{}, err
 	}
-	decisionAt := model.TimeUTC(a.deps.Now())
-	access, action, err := a.authorizeManagement(ctx, invocation, command.ExamID, decisionAt)
+
+	decisionAt := model.TimeUTC(a.now())
+	examAccess, action, err := a.authorizeManagement(ctx, inv, command.ExamID, decisionAt)
 	if err != nil {
 		return store.ExamManagerCommandResult{}, err
 	}
+
 	eligible := false
 	if transition.eligibilityRequired {
-		eligible, err = a.isEligibleManager(ctx, command.UserID, access.Exam.AcademicUnitID, decisionAt)
+		eligible, err = a.isEligibleManager(ctx, command.UserID, examAccess.Exam.AcademicUnitID, decisionAt)
 		if err != nil {
 			return store.ExamManagerCommandResult{}, err
 		}
 	}
-	snapshot, err := a.deps.Persistence.Get(ctx, command.ExamID, principal.UserID)
+
+	snapshot, err := a.exams.Get(ctx, command.ExamID, principal.UserID)
 	if err != nil {
 		return store.ExamManagerCommandResult{}, examStoreErrors.Translate(err)
 	}
 	if snapshot == nil || snapshot.Draft == nil {
 		return store.ExamManagerCommandResult{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no mail identity"))
 	}
+
 	resource := model.Resource{Type: model.ResourceExam, ID: command.ExamID.String()}
 	auditData := map[string]any{
-		"exam_id": command.ExamID.String(), "user_id": command.UserID.String(),
-		"expected_exam_revision": command.ExpectedExamRevision, "exam_revision": command.ExpectedExamRevision + 1,
+		"exam_id":                command.ExamID.String(),
+		"user_id":                command.UserID.String(),
+		"expected_exam_revision": command.ExpectedExamRevision,
+		"exam_revision":          command.ExpectedExamRevision + 1,
 	}
 	if transition.eligibilityRequired {
 		auditData["target_eligible"] = eligible
 	}
-	auditID, err := a.deps.Auditor.BeginAtScope(ctx, invocation, action, resource, model.RoleScopeAcademicUnit, access.Exam.AcademicUnitID.String(), transition.operation, auditData, nil)
+
+	auditID, err := a.auditor.Begin(ctx, access.Mutation{
+		Invocation: inv,
+		Action:     action,
+		Resource:   resource,
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    examAccess.Exam.AcademicUnitID.String(),
+		Operation:  transition.operation,
+		Value:      auditData,
+	})
 	if err != nil {
 		return store.ExamManagerCommandResult{}, err
 	}
+
 	// Mail and mutation records retain their existing millisecond contract;
 	// current membership decisions above use the full domain precision.
 	at := model.TimeUTC(decisionAt)
-	notices, err := a.prepareManagerNotices(ctx, access.Exam.OwnerUserID, command.UserID, snapshot.Draft.Title, at, transition)
+	notices, err := a.prepareManagerNotices(ctx, examAccess.Exam.OwnerUserID, command.UserID, snapshot.Draft.Title, at, transition)
 	if err != nil {
 		mapped := apperror.New("exam.unavailable").Wrap(err)
-		if auditErr := a.deps.Auditor.Fail(ctx, auditID, apperror.CodeOf(mapped, "exam.unavailable")); auditErr != nil {
+		if auditErr := a.auditor.Fail(ctx, auditID, apperror.CodeOf(mapped, "exam.unavailable")); auditErr != nil {
 			return store.ExamManagerCommandResult{}, errors.Join(mapped, auditErr)
 		}
+
 		return store.ExamManagerCommandResult{}, mapped
 	}
+
 	result, err := mutate(ctx, &store.ExamManagerMutation{
-		ExamID: command.ExamID, ActorUserID: principal.UserID, TargetUserID: command.UserID,
-		ManagerOverride: action == model.ActionExamManageOverride, ExpectedRevision: command.ExpectedExamRevision,
-		ChangedAt: at, AuditEventID: auditID, AuditAt: at, Notices: notices,
-	}, idempotency)
+		ExamID:           command.ExamID,
+		ActorUserID:      principal.UserID,
+		TargetUserID:     command.UserID,
+		ManagerOverride:  action == model.ActionExamManageOverride,
+		ExpectedRevision: command.ExpectedExamRevision,
+		ChangedAt:        at,
+		AuditEventID:     auditID,
+		AuditAt:          at,
+		Notices:          notices,
+	}, commandIdempotency)
 	if err != nil {
 		mapped := examStoreErrors.Translate(err)
-		if auditErr := a.deps.Auditor.Fail(ctx, auditID, apperror.CodeOf(mapped, "exam.unavailable")); auditErr != nil {
+		if auditErr := a.auditor.Fail(ctx, auditID, apperror.CodeOf(mapped, "exam.unavailable")); auditErr != nil {
 			return store.ExamManagerCommandResult{}, errors.Join(mapped, auditErr)
 		}
+
 		return store.ExamManagerCommandResult{}, mapped
 	}
+
 	if result == nil || result.Exam == nil || result.Manager == nil {
 		return store.ExamManagerCommandResult{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no manager result"))
 	}
+
 	if !result.Replayed {
-		effectErr := transition.publish(ctx, a.deps.Effects, result.Exam.ID, command.UserID, result.Exam.Revision, at)
+		effectErr := transition.publish(a, ctx, result.Exam.ID, command.UserID, result.Exam.Revision, at)
 		if effectErr != nil {
-			a.deps.EffectFailures.Report(ctx, transition.operation, effectErr)
+			a.publisher.Report(ctx, transition.operation, effectErr)
 		}
 	}
+
 	return *result, nil
 }
 
-func (a *Authoring) prepareManagerNotices(ctx context.Context, ownerID, targetID model.UserID, title string, at time.Time, transition managerTransition) ([]store.ExamManagerMail, error) {
+func (a *Authoring) prepareManagerNotices(
+	ctx context.Context,
+	ownerID, targetID model.UserID,
+	title string,
+	at time.Time,
+	transition managerTransition,
+) ([]store.ExamManagerMail, error) {
 	type recipientNotice struct {
 		userID       model.UserID
 		key          model.MailTemplateKey
@@ -224,45 +302,57 @@ func (a *Authoring) prepareManagerNotices(ctx context.Context, ownerID, targetID
 			{userID: targetID, key: model.MailTemplateExamOwnershipTransferredToYou, relationship: ManagerMailRelationshipOwner},
 		}
 	}
+
 	notices := make([]store.ExamManagerMail, 0, len(requests))
 	for _, request := range requests {
-		recipient, err := a.deps.Users.Get(ctx, request.userID)
+		recipient, err := a.users.Get(ctx, request.userID)
 		if err != nil || recipient == nil {
 			return nil, errors.Join(errors.New("resolve Exam Manager mail recipient"), err)
 		}
-		prepared, err := a.deps.Mail.PrepareManagerMail(ManagerMailPreparation{
-			Recipient: recipient, OccurrenceID: model.NewMailOccurrenceID(), TemplateKey: request.key,
-			ExamTitle: title, Relationship: request.relationship, ActionAt: at,
+
+		prepared, err := a.mail.PrepareManagerMail(ManagerMailPreparation{
+			Recipient:    recipient,
+			OccurrenceID: model.NewMailOccurrenceID(),
+			TemplateKey:  request.key,
+			ExamTitle:    title,
+			Relationship: request.relationship,
+			ActionAt:     at,
 		})
 		if err != nil || prepared == nil {
 			return nil, errors.Join(errors.New("prepare Exam Manager mail"), err)
 		}
+
 		notices = append(notices, *prepared)
 	}
+
 	return notices, nil
 }
 
-func (a *Authoring) authorizeManagement(ctx context.Context, invocation invocation.Invocation, examID model.ExamID, at time.Time) (*store.ExamAccessSnapshot, model.Action, error) {
-	principal := invocation.Principal()
-	access, err := a.deps.Persistence.Access(ctx, examID, principal.UserID)
+func (a *Authoring) authorizeManagement(
+	ctx context.Context,
+	inv invocation.Invocation,
+	examID model.ExamID,
+	at time.Time,
+) (*store.ExamAccessSnapshot, model.Action, error) {
+	principal := inv.Principal()
+	examAccess, err := a.exams.Access(ctx, examID, principal.UserID)
 	if err != nil {
 		return nil, "", examStoreErrors.Translate(err)
 	}
-	if access == nil || access.Exam == nil {
-		return nil, "", apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no access projection"))
-	}
-	action, err := a.actionForAccess(ctx, principal.UserID, access, at, model.ActionExamManage, model.ActionExamManageOverride)
+
+	action, err := a.actionForAccess(ctx, principal.UserID, examAccess, at, model.ActionExamManage, model.ActionExamManageOverride)
 	if err != nil {
 		return nil, "", err
 	}
-	if err := a.deps.Authorizer.Authorize(ctx, invocation, action, model.Resource{Type: model.ResourceExam, ID: examID.String()}); err != nil {
+	if err := a.authorizer.Authorize(ctx, inv, action, model.Resource{Type: model.ResourceExam, ID: examID.String()}); err != nil {
 		return nil, "", err
 	}
-	return access, action, nil
+
+	return examAccess, action, nil
 }
 
 func (a *Authoring) isEligibleManager(ctx context.Context, userID model.UserID, unitID model.AcademicUnitID, at time.Time) (bool, error) {
-	user, err := a.deps.Users.Get(ctx, userID)
+	user, err := a.users.Get(ctx, userID)
 	if err != nil {
 		if store.IsNotFound(err) {
 			return false, nil
@@ -272,7 +362,7 @@ func (a *Authoring) isEligibleManager(ctx context.Context, userID model.UserID, 
 	if user == nil || !user.IsActive() {
 		return false, nil
 	}
-	eligible, err := manageraccess.HasCurrentMembership(ctx, a.deps.Memberships, userID, unitID, at)
+	eligible, err := manageraccess.HasCurrentMembership(ctx, a.academicUnitMembers, userID, unitID, at)
 	if err != nil {
 		return false, apperror.New("exam.unavailable").Wrap(err)
 	}

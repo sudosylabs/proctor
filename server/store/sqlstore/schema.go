@@ -22,6 +22,9 @@ import (
 	"github.com/sudosylabs/proctor/server/migrations"
 )
 
+// ErrSchemaBehind is returned by ValidateSchema when the database has fewer
+// migrations applied than this server embeds; running `proctor migrate up`
+// resolves it.
 type ErrSchemaBehind struct {
 	Database int
 	Local    int
@@ -31,6 +34,9 @@ func (e *ErrSchemaBehind) Error() string {
 	return fmt.Sprintf("database schema is behind: database=%d server=%d; run `proctor migrate up`", e.Database, e.Local)
 }
 
+// ErrSchemaAhead is returned by ValidateSchema when the database was migrated
+// by a newer server than this one. No migration here can resolve it; the
+// server must be upgraded.
 type ErrSchemaAhead struct {
 	Database int
 	Local    int
@@ -40,6 +46,9 @@ func (e *ErrSchemaAhead) Error() string {
 	return fmt.Sprintf("database schema is newer than this server: database=%d server=%d", e.Database, e.Local)
 }
 
+// LocalSchemaVersion returns the highest migration version embedded in this
+// binary, without opening a database. It fails when an embedded file name does
+// not carry a version.
 func LocalSchemaVersion() (int, error) {
 	entries, err := migrations.Assets.ReadDir("postgres")
 	if err != nil {

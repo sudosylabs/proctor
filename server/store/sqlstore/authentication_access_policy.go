@@ -44,24 +44,46 @@ func requireCurrentAuthenticationMethod(
 	return store.NewErrInvalidInput("session", "authentication_provider_id", providerID)
 }
 
-func requireExactExternalIdentity(ctx context.Context, executor sqlxExecutor, userID model.UserID, providerID string, identityID model.ExternalIdentityID) error {
+func requireExactExternalIdentity(
+	ctx context.Context,
+	executor sqlxExecutor,
+	userID model.UserID,
+	providerID string,
+	identityID model.ExternalIdentityID,
+) error {
 	if providerID == "" {
 		if identityID.IsZero() {
 			return nil
 		}
 		return store.NewErrInvalidInput("session", "external_identity_id", identityID.String())
 	}
+
 	if !identityID.IsValid() {
 		return store.NewErrInvalidInput("session", "external_identity_id", identityID.String())
 	}
+
 	var found string
-	err := executor.Get(ctx, &found, `SELECT id FROM external_identities WHERE id=? AND user_id=? AND provider=? AND archived_at IS NULL FOR SHARE`, identityID.String(), userID.String(), providerID)
+	err := executor.Get(
+		ctx,
+		&found,
+		`SELECT id
+		FROM external_identities
+		WHERE id = ?
+			AND user_id = ?
+			AND provider = ?
+			AND archived_at IS NULL
+		FOR SHARE`,
+		identityID.String(),
+		userID.String(),
+		providerID,
+	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return store.ErrAuthenticationMethodDisabled
 	}
 	if err != nil {
 		return fmt.Errorf("validate session external identity: %w", err)
 	}
+
 	return nil
 }
 

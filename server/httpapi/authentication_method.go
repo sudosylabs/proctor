@@ -8,26 +8,16 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
-	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-type authenticationMethodApplication interface {
-	AuthenticationMethods(context.Context, invocation.Invocation) (app.AuthenticationMethodView, error)
-	EnrollPassword(context.Context, invocation.Invocation, string) error
-	ChangePassword(context.Context, invocation.Invocation, app.ChangePasswordCommand) error
-	RemovePassword(context.Context, invocation.Invocation) error
-	BeginProviderConnection(context.Context, invocation.Invocation, app.BeginProviderConnectionCommand) (*model.ExternalAuthenticationStart, error)
-	UnlinkExternalIdentity(context.Context, invocation.Invocation, model.ExternalIdentityID) error
-}
-
-type authenticationMethodResourceModule struct {
-	application authenticationMethodApplication
-	cookies     browserCookies
+type authenticationMethodHandlers struct {
+	app     *identity.Service
+	cookies route.Cookies
 }
 
 type enrollPasswordRequest struct {
@@ -54,25 +44,104 @@ type providerConnectionResponse struct {
 	ExpiresAt   string `json:"expires_at"`
 }
 
-func authenticationMethodResource(application authenticationMethodApplication, cookies browserCookies) apiResource {
-	m := authenticationMethodResourceModule{application: application, cookies: cookies}
-	base := apiPath(literal("authentication-methods"))
-	password := appendRoutePath(base, literal("password"))
-	return newResource("authentication-method",
-		sessionRoute(http.MethodGet, base, nil, m.list),
-		strongRecentSessionRoute(http.MethodPut, password, strongRecentAuthenticationMethodCodes("request.invalid", "authentication.password.invalid", "authentication.password.pattern_invalid", "authentication.password.common_invalid", "authentication.password.identity_invalid", "authentication.password.reused", "service.busy", "authentication.method.disabled", "authentication.method.conflict", "authentication.method.unavailable", "audit.unavailable"), m.enrollPassword),
-		strongRecentSessionRoute(http.MethodPost, appendRoutePath(password, literal("change")), strongRecentAuthenticationMethodCodes(newPasswordErrorCodes("request.invalid", "service.busy", "authentication.password.reused", "authentication.method.not_found", "authentication.method.disabled", "authentication.method.conflict", "authentication.method.unavailable", "audit.unavailable")...), m.changePassword),
-		strongRecentSessionRoute(http.MethodDelete, password, []string{"authentication.method.last_usable", "authentication.method.not_found", "authentication.method.conflict", "authentication.method.unavailable", "audit.unavailable"}, m.removePassword),
-		strongRecentSessionRoute(http.MethodPost, appendRoutePath(base, literal("providers"), providerID("provider_id"), literal("connect")), []string{"request.invalid", "authentication.external.provider_not_found", "authentication.external.unavailable", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.internal", "audit.unavailable", "authentication.desktop_authorization.invalid", "authentication.external.account_not_linked", "authentication.external.rejected", "authentication.external.request.invalid"}, m.connect),
-		strongRecentSessionRoute(http.MethodDelete, appendRoutePath(base, literal("providers"), canonicalID("external_identity_id")), authenticationMethodRemovalCodes(), m.unlink),
+func authenticationMethodResource(app *identity.Service, cookies route.Cookies) route.Resource {
+	h := authenticationMethodHandlers{app: app, cookies: cookies}
+	base := "/authentication-methods"
+	password := "/authentication-methods/password"
+	return route.NewResource("authentication-method",
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   base,
+			Auth:   route.AuthSessionRequired,
+			Handle: h.list,
+		},
+		route.Endpoint{
+			Method: http.MethodPut,
+			Path:   password,
+			Auth:   route.AuthStrongRecentSessionRequired,
+			Errors: strongRecentAuthenticationMethodCodes(
+				"request.invalid",
+				"authentication.password.invalid",
+				"authentication.password.pattern_invalid",
+				"authentication.password.common_invalid",
+				"authentication.password.identity_invalid",
+				"authentication.password.reused",
+				"service.busy",
+				"authentication.method.disabled",
+				"authentication.method.conflict",
+				"authentication.method.unavailable",
+				"audit.unavailable",
+			),
+			Handle: h.enrollPassword,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/authentication-methods/password/change",
+			Auth:   route.AuthStrongRecentSessionRequired,
+			Errors: strongRecentAuthenticationMethodCodes(newPasswordErrorCodes(
+				"request.invalid",
+				"service.busy",
+				"authentication.password.reused",
+				"authentication.method.not_found",
+				"authentication.method.disabled",
+				"authentication.method.conflict",
+				"authentication.method.unavailable",
+				"audit.unavailable",
+			)...),
+			Handle: h.changePassword,
+		},
+		route.Endpoint{
+			Method: http.MethodDelete,
+			Path:   password,
+			Auth:   route.AuthStrongRecentSessionRequired,
+			Errors: []string{
+				"authentication.method.last_usable",
+				"authentication.method.not_found",
+				"authentication.method.conflict",
+				"authentication.method.unavailable",
+				"audit.unavailable",
+			},
+			Handle: h.removePassword,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/authentication-methods/providers/{provider_id:provider}/connect",
+			Auth:   route.AuthStrongRecentSessionRequired,
+			Errors: []string{
+				"request.invalid",
+				"authentication.external.provider_not_found",
+				"authentication.external.unavailable",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"authentication.internal",
+				"audit.unavailable",
+				"authentication.desktop_authorization.invalid",
+				"authentication.external.account_not_linked",
+				"authentication.external.rejected",
+				"authentication.external.request.invalid",
+			},
+			Handle: h.connect,
+		},
+		route.Endpoint{
+			Method: http.MethodDelete,
+			Path:   "/authentication-methods/providers/{external_identity_id}",
+			Auth:   route.AuthStrongRecentSessionRequired,
+			Errors: authenticationMethodRemovalCodes(),
+			Handle: h.unlink,
+		},
 	)
 }
 
 // newPasswordErrorCodes appends the password-policy rejections every route
 // that sets a new password can return.
 func newPasswordErrorCodes(extra ...string) []string {
-	return append(extra, "authentication.password.invalid", "authentication.password.pattern_invalid",
-		"authentication.password.common_invalid", "authentication.password.identity_invalid")
+	return append(
+		extra,
+		"authentication.password.invalid",
+		"authentication.password.pattern_invalid",
+		"authentication.password.common_invalid",
+		"authentication.password.identity_invalid",
+	)
 }
 
 func strongRecentAuthenticationMethodCodes(extra ...string) []string {
@@ -80,77 +149,107 @@ func strongRecentAuthenticationMethodCodes(extra ...string) []string {
 }
 
 func authenticationMethodRemovalCodes() []string {
-	return strongRecentAuthenticationMethodCodes("request.invalid", "authentication.method.last_usable", "authentication.method.not_found", "authentication.method.conflict", "authentication.method.unavailable", "audit.unavailable")
+	return strongRecentAuthenticationMethodCodes(
+		"request.invalid",
+		"authentication.method.last_usable",
+		"authentication.method.not_found",
+		"authentication.method.conflict",
+		"authentication.method.unavailable",
+		"audit.unavailable",
+	)
 }
 
-func (m authenticationMethodResourceModule) list(request operationRequest) (operationResult, error) {
-	view, err := m.application.AuthenticationMethods(request.context, request.invocation())
+func (h authenticationMethodHandlers) list(request route.Request) (route.Result, error) {
+	view, err := h.app.AuthenticationMethods(request.Context, request.Invocation())
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	providers := make([]authenticationProviderMethodResponse, 0, len(view.Providers))
 	for _, provider := range view.Providers {
-		providers = append(providers, authenticationProviderMethodResponse{ID: provider.IdentityID.String(), ProviderID: provider.ProviderID, DisplayName: provider.DisplayName, Type: provider.Type})
+		providers = append(providers, authenticationProviderMethodResponse{
+			ID:          provider.IdentityID.String(),
+			ProviderID:  provider.ProviderID,
+			DisplayName: provider.DisplayName,
+			Type:        provider.Type,
+		})
 	}
-	return jsonResult(http.StatusOK, authenticationMethodResponse{Password: view.Password, Providers: providers}), nil
+
+	return route.JSON(http.StatusOK, authenticationMethodResponse{Password: view.Password, Providers: providers}), nil
 }
 
-func (m authenticationMethodResourceModule) enrollPassword(request operationRequest) (operationResult, error) {
+func (h authenticationMethodHandlers) enrollPassword(request route.Request) (route.Result, error) {
 	var body enrollPasswordRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
-	if err := m.application.EnrollPassword(request.context, request.invocation(), body.Password); err != nil {
-		return operationResult{}, err
+	if err := h.app.EnrollPassword(request.Context, request.Invocation(), body.Password); err != nil {
+		return route.Result{}, err
 	}
-	return noContentResult(), nil
+	return route.NoContent(), nil
 }
 
-func (m authenticationMethodResourceModule) changePassword(request operationRequest) (operationResult, error) {
+func (h authenticationMethodHandlers) changePassword(request route.Request) (route.Result, error) {
 	var body changePasswordRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
-	if err := m.application.ChangePassword(request.context, request.invocation(), app.ChangePasswordCommand{Password: body.Password}); err != nil {
-		return operationResult{}, err
+
+	if err := h.app.ChangePassword(
+		request.Context,
+		request.Invocation(),
+		identity.ChangePasswordCommand{Password: body.Password},
+	); err != nil {
+		return route.Result{}, err
 	}
-	return noContentResult(), nil
+
+	return route.NoContent(), nil
 }
 
-func (m authenticationMethodResourceModule) removePassword(request operationRequest) (operationResult, error) {
-	if err := m.application.RemovePassword(request.context, request.invocation()); err != nil {
-		return operationResult{}, err
+func (h authenticationMethodHandlers) removePassword(request route.Request) (route.Result, error) {
+	if err := h.app.RemovePassword(request.Context, request.Invocation()); err != nil {
+		return route.Result{}, err
 	}
-	return noContentResult(), nil
+	return route.NoContent(), nil
 }
 
-func (m authenticationMethodResourceModule) connect(request operationRequest) (operationResult, error) {
-	providerID, err := request.params.RequireProviderID()
+func (h authenticationMethodHandlers) connect(request route.Request) (route.Result, error) {
+	providerID, err := route.PathProviderID(request, "provider_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	var body beginProviderConnectionRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
-	start, err := m.application.BeginProviderConnection(request.context, request.invocation(), app.BeginProviderConnectionCommand{ProviderID: providerID, ReturnTo: body.ReturnTo, Source: request.metadata.IPAddress})
+
+	start, err := h.app.BeginProviderConnection(request.Context, request.Invocation(), identity.BeginProviderConnectionCommand{
+		ProviderID: providerID,
+		ReturnTo:   body.ReturnTo,
+		Source:     request.Metadata.IPAddress,
+	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	headers := captureResponseHeaders(func(writer http.ResponseWriter) {
-		m.cookies.attachExternalLoginBinding(writer, start.Binding, start.ExpiresAt)
+
+	headers := route.CaptureHeaders(func(writer http.ResponseWriter) {
+		h.cookies.AttachExternalLoginBinding(writer, start.Binding, start.ExpiresAt)
 	})
 	headers.Set("Cache-Control", "no-store")
-	return jsonResult(http.StatusCreated, providerConnectionResponse{RedirectURL: start.RedirectURL, ExpiresAt: wireTimeFromMillis(start.ExpiresAt)}).withHeaders(headers), nil
+	return route.JSON(
+		http.StatusCreated,
+		providerConnectionResponse{RedirectURL: start.RedirectURL, ExpiresAt: route.WireTimeFromMillis(start.ExpiresAt)},
+	).WithHeaders(headers), nil
 }
 
-func (m authenticationMethodResourceModule) unlink(request operationRequest) (operationResult, error) {
-	parsed, err := request.params.RequireExternalIdentityID()
+func (h authenticationMethodHandlers) unlink(request route.Request) (route.Result, error) {
+	parsed, err := route.PathID[model.ExternalIdentityID](request, "external_identity_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	if err = m.application.UnlinkExternalIdentity(request.context, request.invocation(), parsed); err != nil {
-		return operationResult{}, err
+	if err = h.app.UnlinkExternalIdentity(request.Context, request.Invocation(), parsed); err != nil {
+		return route.Result{}, err
 	}
-	return noContentResult(), nil
+	return route.NoContent(), nil
 }

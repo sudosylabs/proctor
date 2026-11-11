@@ -17,6 +17,10 @@ import (
 const (
 	IdentityProviderMaxLength = 64
 	IdentitySubjectMaxRunes   = 512
+	// IdentityProviderMaxCount bounds the external providers one installation
+	// configures, the Access Policy admits, and a safe provider projection
+	// lists.
+	IdentityProviderMaxCount = 64
 )
 
 var validIdentityProvider = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
@@ -81,6 +85,7 @@ func (ei *ExternalIdentity) Validate() error {
 	if !ei.ID.IsValid() {
 		return invalidModelError(where, "external_identity", "id", "must be a valid identifier", "")
 	}
+
 	details := "id=" + ei.ID.String()
 	if ei.CreatedAt.IsZero() || ei.UpdatedAt.IsZero() {
 		return invalidModelError(where, "external_identity", "created_at", "must be set", details)
@@ -103,6 +108,7 @@ func (ei *ExternalIdentity) Validate() error {
 	if ei.ArchivedAt.Valid && ei.ArchivedAt.Time.Before(ei.CreatedAt) {
 		return invalidModelError(where, "external_identity", "archived_at", "must not precede created_at", details)
 	}
+
 	if ei.LastSeenAt.Valid && ei.LastSeenAt.Time.Before(ei.CreatedAt) {
 		return invalidModelError(
 			where,
@@ -112,6 +118,7 @@ func (ei *ExternalIdentity) Validate() error {
 			details,
 		)
 	}
+
 	return nil
 }
 

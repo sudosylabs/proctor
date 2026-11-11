@@ -19,46 +19,48 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/user"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type userSettingsHTTPApplication struct {
-	result         app.UserSettingsView
+	result         user.UserSettingsView
 	err            error
-	invocation     invocation.Invocation
+	inv            invocation.Invocation
 	calls          int
-	replaceResult  app.UserSettingsReplacementResult
+	replaceResult  user.UserSettingsReplacementResult
 	replaceErr     error
-	replaceCommand app.ReplaceOwnUserSettingsCommand
+	replaceCommand user.ReplaceOwnUserSettingsCommand
 	replaceCalls   int
 }
 
 func (a *userSettingsHTTPApplication) ReplaceOwnUserSettings(
 	_ context.Context,
-	invocation invocation.Invocation,
-	command app.ReplaceOwnUserSettingsCommand,
-) (app.UserSettingsReplacementResult, error) {
+	inv invocation.Invocation,
+	command user.ReplaceOwnUserSettingsCommand,
+) (user.UserSettingsReplacementResult, error) {
 	a.replaceCalls++
-	a.invocation = invocation
+	a.inv = inv
 	a.replaceCommand = command
 	return a.replaceResult, a.replaceErr
 }
 
 func (a *userSettingsHTTPApplication) ReadOwnUserSettings(
 	_ context.Context,
-	invocation invocation.Invocation,
-) (app.UserSettingsView, error) {
+	inv invocation.Invocation,
+) (user.UserSettingsView, error) {
 	a.calls++
-	a.invocation = invocation
+	a.inv = inv
 	return a.result, a.err
 }
 
 func TestUserSettingsHTTPReplacesWithoutEchoingSource(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	at := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
@@ -69,15 +71,15 @@ func TestUserSettingsHTTPReplacesWithoutEchoingSource(t *testing.T) {
 	revision := model.NewUserSettingsRevision()
 	next := model.NewUserSettingsRevision()
 	source := "{\n  // exact\n  \"workbench.colorTheme\": \"Proctor Dark\",\n}\n"
-	applicationFake := &userSettingsHTTPApplication{replaceResult: app.UserSettingsReplacementResult{
+	applicationFake := &userSettingsHTTPApplication{replaceResult: user.UserSettingsReplacementResult{
 		Revision: next, FormatVersion: 1, UpdatedAt: at, Changed: true,
 	}}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userSettingsResource(applicationFake))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userSettingsResource(applicationFake))
 	body, err := json.Marshal(map[string]any{
 		"source": source, "format_version": 1, "expected_revision": revision.String(),
 	})
 	require.NoError(t, err)
-	request := httptest.NewRequest(http.MethodPut, "/api/v1/users/me/settings", bytes.NewReader(body))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/users/me/settings", bytes.NewReader(body))
 	request.Header.Set("Authorization", "Bearer session-credential")
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "settings-save-1")
@@ -100,7 +102,7 @@ func TestUserSettingsHTTPReplacesWithoutEchoingSource(t *testing.T) {
 
 func TestUserSettingsHTTPReplacementIsStrictBoundedAndIdempotent(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID: model.PrincipalCredentialID(model.NewSessionCredentialID()), CredentialType: model.CredentialSessionAccess,
@@ -108,11 +110,11 @@ func TestUserSettingsHTTPReplacementIsStrictBoundedAndIdempotent(t *testing.T) {
 		ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now(),
 	}
 	revision := model.NewUserSettingsRevision()
-	applicationFake := &userSettingsHTTPApplication{replaceResult: app.UserSettingsReplacementResult{
+	applicationFake := &userSettingsHTTPApplication{replaceResult: user.UserSettingsReplacementResult{
 		Revision: revision, FormatVersion: 1, UpdatedAt: time.Now(),
 	}}
-	newAPI := func() *API {
-		return newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userSettingsResource(applicationFake))
+	newAPI := func() *route.API {
+		return newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userSettingsResource(applicationFake))
 	}
 	for name, configure := range map[string]func(*http.Request){
 		"missing idempotency": func(request *http.Request) {},
@@ -131,7 +133,7 @@ func TestUserSettingsHTTPReplacementIsStrictBoundedAndIdempotent(t *testing.T) {
 			if name == "trailing value" {
 				body += `{}`
 			}
-			request := httptest.NewRequest(http.MethodPut, "/api/v1/users/me/settings", bytes.NewBufferString(body))
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/users/me/settings", bytes.NewBufferString(body))
 			request.Header.Set("Authorization", "Bearer session-credential")
 			request.Header.Set("Content-Type", "application/json")
 			configure(request)
@@ -147,7 +149,7 @@ func TestUserSettingsHTTPReplacementIsStrictBoundedAndIdempotent(t *testing.T) {
 		Source: maxSource, FormatVersion: 1, ExpectedRevision: revision.String(),
 	})
 	require.NoError(t, err)
-	request := httptest.NewRequest(http.MethodPut, "/api/v1/users/me/settings", bytes.NewReader(body))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/users/me/settings", bytes.NewReader(body))
 	request.Header.Set("Authorization", "Bearer session-credential")
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "maximum-save")
@@ -159,7 +161,7 @@ func TestUserSettingsHTTPReplacementIsStrictBoundedAndIdempotent(t *testing.T) {
 
 func TestUserSettingsHTTPReadsExactSelfDocumentWithoutCaching(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	at := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
@@ -169,24 +171,24 @@ func TestUserSettingsHTTPReadsExactSelfDocumentWithoutCaching(t *testing.T) {
 		ClientType: model.SessionClientDesktop, AuthenticatedAt: at,
 	}
 	source := "{\n  // exact\n  \"workbench.colorTheme\": \"Proctor Dark\",\n}\n"
-	applicationFake := &userSettingsHTTPApplication{result: app.UserSettingsView{
+	applicationFake := &userSettingsHTTPApplication{result: user.UserSettingsView{
 		Source: source, FormatVersion: 1, Revision: model.NewUserSettingsRevision(),
 		Writable: true, UpdatedAt: at,
 	}}
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{principal: principal},
+		routetest.Authenticator{Principal: principal},
 		userSettingsResource(applicationFake),
 	)
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/me/settings", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/me/settings", nil)
 	request.Header.Set("Authorization", "Bearer session-credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
 	require.Equal(t, "private, no-store", response.Header().Get("Cache-Control"))
-	require.Equal(t, 1, applicationFake.calls, "calls/invocation = %d/%#v", applicationFake.calls, applicationFake.invocation)
-	require.Equal(t, principal.UserID, applicationFake.invocation.Principal().UserID, "calls/invocation = %d/%#v", applicationFake.calls, applicationFake.invocation)
+	require.Equal(t, 1, applicationFake.calls, "calls/invocation = %d/%#v", applicationFake.calls, applicationFake.inv)
+	require.Equal(t, principal.UserID, applicationFake.inv.Principal().UserID, "calls/invocation = %d/%#v", applicationFake.calls, applicationFake.inv)
 	var body userSettingsResponse
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
 	require.Equal(t, source, body.Source)
@@ -198,7 +200,7 @@ func TestUserSettingsHTTPReadsExactSelfDocumentWithoutCaching(t *testing.T) {
 
 func TestUserSettingsHTTPReadsUnsupportedFormatAsExactReadOnlySource(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	at := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
@@ -208,17 +210,17 @@ func TestUserSettingsHTTPReadsUnsupportedFormatAsExactReadOnlySource(t *testing.
 		ClientType: model.SessionClientDesktop, AuthenticatedAt: at,
 	}
 	const source = "future-format(source => remains.exact);\n"
-	applicationFake := &userSettingsHTTPApplication{result: app.UserSettingsView{
+	applicationFake := &userSettingsHTTPApplication{result: user.UserSettingsView{
 		Source: source, FormatVersion: 2, Revision: model.NewUserSettingsRevision(),
 		Writable: false, UpdatedAt: at,
 	}}
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{principal: principal},
+		routetest.Authenticator{Principal: principal},
 		userSettingsResource(applicationFake),
 	)
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/me/settings", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/me/settings", nil)
 	request.Header.Set("Authorization", "Bearer session-credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -234,15 +236,15 @@ func TestUserSettingsHTTPReadsUnsupportedFormatAsExactReadOnlySource(t *testing.
 
 func TestUserSettingsHTTPRejectsNonSessionAndArbitraryUserPaths(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	applicationFake := &userSettingsHTTPApplication{}
 	patAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{err: apperror.New("authentication.token_invalid")},
+		routetest.Authenticator{Err: apperror.New("authentication.token_invalid")},
 		userSettingsResource(applicationFake),
 	)
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/me/settings", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/me/settings", nil)
 	request.Header.Set("Authorization", "Bearer personal-access-token")
 	response := httptest.NewRecorder()
 	patAPI.ServeHTTP(response, request)
@@ -254,13 +256,13 @@ func TestUserSettingsHTTPRejectsNonSessionAndArbitraryUserPaths(t *testing.T) {
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now(),
 	}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userSettingsResource(applicationFake))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userSettingsResource(applicationFake))
 	for name, path := range map[string]string{
 		"arbitrary user":   "/api/v1/users/" + model.NewUserID().String() + "/settings",
 		"settings listing": "/api/v1/users/settings",
 	} {
 		t.Run(name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodGet, path, nil)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 			request.Header.Set("Authorization", "Bearer credential")
 			response := httptest.NewRecorder()
 			httpAPI.ServeHTTP(response, request)
@@ -268,7 +270,7 @@ func TestUserSettingsHTTPRejectsNonSessionAndArbitraryUserPaths(t *testing.T) {
 		})
 	}
 	for _, method := range []string{http.MethodPatch, http.MethodDelete} {
-		request := httptest.NewRequest(method, "/api/v1/users/me/settings", nil)
+		request := httptest.NewRequestWithContext(t.Context(), method, "/api/v1/users/me/settings", nil)
 		request.Header.Set("Authorization", "Bearer session-credential")
 		response := httptest.NewRecorder()
 		httpAPI.ServeHTTP(response, request)

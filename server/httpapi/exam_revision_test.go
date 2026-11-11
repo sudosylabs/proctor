@@ -22,13 +22,14 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
 func TestExamRevisionHTTPPublishUsesStrictIdempotentCommandAndSafeSummary(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamRevisionHTTPFake()
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examRevisionResource(fake))
 
@@ -56,7 +57,7 @@ func TestExamRevisionHTTPPublishUsesStrictIdempotentCommandAndSafeSummary(t *tes
 
 func TestExamRevisionHTTPGetAndListUseExactIdentityAndVersionedTupleCursor(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamRevisionHTTPFake()
 	older := fake.summary
 	older.ID = model.NewExamRevisionID()
@@ -64,7 +65,7 @@ func TestExamRevisionHTTPGetAndListUseExactIdentityAndVersionedTupleCursor(t *te
 	fake.page = exam.RevisionPage{Items: []store.ExamRevisionSummary{fake.summary, older}, HasMore: true}
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examRevisionResource(fake))
 
-	getRequest := httptest.NewRequest(http.MethodGet, "/api/v1/exams/"+fake.summary.ExamID.String()+"/revisions/"+fake.summary.ID.String(), nil)
+	getRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/exams/"+fake.summary.ExamID.String()+"/revisions/"+fake.summary.ID.String(), nil)
 	getRequest.Header.Set("Authorization", "Bearer credential")
 	getResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(getResponse, getRequest)
@@ -75,7 +76,7 @@ func TestExamRevisionHTTPGetAndListUseExactIdentityAndVersionedTupleCursor(t *te
 	beforeRevisionID := model.NewExamRevisionID()
 	cursor, err := encodeExamRevisionCursor(examRevisionCursor{Number: 5, RevisionID: beforeRevisionID.String()})
 	require.NoError(t, err)
-	listRequest := httptest.NewRequest(http.MethodGet, "/api/v1/exams/"+fake.summary.ExamID.String()+"/revisions?limit=2&cursor="+cursor, nil)
+	listRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/exams/"+fake.summary.ExamID.String()+"/revisions?limit=2&cursor="+cursor, nil)
 	listRequest.Header.Set("Authorization", "Bearer credential")
 	listResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(listResponse, listRequest)
@@ -84,7 +85,7 @@ func TestExamRevisionHTTPGetAndListUseExactIdentityAndVersionedTupleCursor(t *te
 	require.Equal(t, 2, fake.list.Limit, "status = %d query = %#v body = %s", listResponse.Code, fake.list, listResponse.Body.String())
 	require.Equal(t, int64(5), fake.list.BeforeNumber, "status = %d query = %#v body = %s", listResponse.Code, fake.list, listResponse.Body.String())
 	require.Equal(t, beforeRevisionID, fake.list.BeforeRevisionID, "status = %d query = %#v body = %s", listResponse.Code, fake.list, listResponse.Body.String())
-	malformedRequest := httptest.NewRequest(http.MethodGet, "/api/v1/exams/"+fake.summary.ExamID.String()+"/revisions?cursor=not-a-cursor", nil)
+	malformedRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/exams/"+fake.summary.ExamID.String()+"/revisions?cursor=not-a-cursor", nil)
 	malformedRequest.Header.Set("Authorization", "Bearer credential")
 	malformedResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(malformedResponse, malformedRequest)
@@ -127,7 +128,7 @@ func TestExamRevisionHTTPCursorAndPublishBodyAreStrict(t *testing.T) {
 		})
 	}
 
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamRevisionHTTPFake()
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examRevisionResource(fake))
 	for name, body := range map[string]string{
@@ -148,13 +149,15 @@ func TestExamRevisionHTTPCursorAndPublishBodyAreStrict(t *testing.T) {
 }
 
 type examRevisionHTTPFake struct {
-	Application
 	principal model.Principal
 	summary   store.ExamRevisionSummary
 	publish   exam.PublishRevisionCommand
-	get       exam.GetRevisionQuery
-	list      exam.ListRevisionsQuery
-	page      exam.RevisionPage
+	get       struct {
+		ExamID     model.ExamID
+		RevisionID model.ExamRevisionID
+	}
+	list exam.ListRevisionsQuery
+	page exam.RevisionPage
 }
 
 func newExamRevisionHTTPFake() *examRevisionHTTPFake {
@@ -185,8 +188,13 @@ func (f *examRevisionHTTPFake) PublishExamRevision(_ context.Context, _ invocati
 	return f.summary, nil
 }
 
-func (f *examRevisionHTTPFake) GetExamRevision(_ context.Context, _ invocation.Invocation, query exam.GetRevisionQuery) (store.ExamRevisionSummary, error) {
-	f.get = query
+func (f *examRevisionHTTPFake) GetExamRevision(
+	_ context.Context,
+	_ invocation.Invocation,
+	examID model.ExamID,
+	revisionID model.ExamRevisionID,
+) (store.ExamRevisionSummary, error) {
+	f.get.ExamID, f.get.RevisionID = examID, revisionID
 	return f.summary, nil
 }
 

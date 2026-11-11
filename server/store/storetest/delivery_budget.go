@@ -27,7 +27,7 @@ func TestDeliveryBudgetStore(t *testing.T, ss store.Store) {
 	_, err = appendBrowserActivityFixture(t, ctx, ss, &store.BrowserActivityAppend{Access: access, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, SourceSessionID: source, Events: []model.BrowserActivityEvent{browserActivityEvent(2, model.BrowserActivityOpened, f.revisionID)}})
 	require.NoError(t, err)
 	query := store.DeliveryBudgetAccess{Access: access, ParticipationID: connected.Participation.ID}
-	before, err := ss.ExamAttempt().DeliveryBudget(ctx, query)
+	before, err := ss.DeliveryBudget().DeliveryBudget(ctx, query)
 	require.NoError(t, err)
 	require.NoError(t, before.Validate())
 	require.Equal(t, int64(1), before.Browser.Participation.RetainedRecords)
@@ -36,17 +36,17 @@ func TestDeliveryBudgetStore(t *testing.T, ss store.Store) {
 	require.Equal(t, model.NativeOwnerReservationBytes+model.BrowserOwnerReservationBytes, before.ControlMetadataBytes)
 	foreign := query
 	foreign.Access.CandidateUserID = model.NewUserID()
-	_, err = ss.ExamAttempt().DeliveryBudget(ctx, foreign)
+	_, err = ss.DeliveryBudget().DeliveryBudget(ctx, foreign)
 	require.True(t, store.IsNotFound(err), "foreign quota access")
 	stop := &store.DeliveryDetailsStop{Access: access, Request: model.StopDeliveryDetails{Family: "browser", Reason: model.DeliveryStopLocalLossInventory}, AuditEventID: model.NewAuditEventID(), AuditAt: model.NowUTC()}
 	key := examCommand(f.candidate.ID, store.DeliveryStopDetailsOperation, "stop-browser", "stop-browser")
-	_, err = ss.ExamAttempt().StopDeliveryDetails(ctx, stop, key)
+	_, err = ss.DeliveryBudget().StopDeliveryDetails(ctx, stop, key)
 	require.Error(t, err, "stop committed without audit")
-	unchanged, err := ss.ExamAttempt().DeliveryBudget(ctx, query)
+	unchanged, err := ss.DeliveryBudget().DeliveryBudget(ctx, query)
 	require.NoError(t, err)
 	require.False(t, unchanged.Browser.Participation.SummaryOnly, "missing audit retained quota latch")
 	stop.AuditEventID = saveExamAttemptAudit(t, ctx, ss, f).ID
-	result, err := ss.ExamAttempt().StopDeliveryDetails(ctx, stop, key)
+	result, err := ss.DeliveryBudget().StopDeliveryDetails(ctx, stop, key)
 	require.NoError(t, err)
 	require.NoError(t, result.Validate("browser"))
 	require.False(t, result.Budget.Native.Participation.SummaryOnly)
@@ -57,19 +57,19 @@ func TestDeliveryBudgetStore(t *testing.T, ss store.Store) {
 	require.Equal(t, int64(2), result.Browser[0].SettledThrough)
 	require.Equal(t, int64(0), result.Budget.Browser.PendingBytes)
 	stop.AuditEventID = saveExamAttemptAudit(t, ctx, ss, f).ID
-	replay, err := ss.ExamAttempt().StopDeliveryDetails(ctx, stop, key)
+	replay, err := ss.DeliveryBudget().StopDeliveryDetails(ctx, stop, key)
 	require.NoError(t, err)
 	require.Equal(t, before.Browser.Attempt.RetainedBytes, replay.Budget.Browser.Attempt.RetainedBytes, "stop/retry spent or refunded quota")
 	require.Equal(t, before.ControlMetadataBytes, replay.Budget.ControlMetadataBytes, "stop/retry spent or refunded quota")
 	require.Equal(t, before.Browser.Attempt.AllocatedPositions, replay.Budget.Browser.Attempt.AllocatedPositions, "stop/retry spent or refunded quota")
 	// A recorded event remains receipt-recoverable after detail collection stops.
-	receipts, err := ss.ExamAttempt().BrowserDeliveryReceipts(ctx, store.BrowserDeliveryAccess{Access: access, SourceSessionID: source, ParticipationID: connected.Participation.ID}, 1, 64)
+	receipts, err := ss.BrowserDelivery().BrowserDeliveryReceipts(ctx, store.BrowserDeliveryAccess{Access: access, SourceSessionID: source, ParticipationID: connected.Participation.ID}, 1, 64)
 	require.NoError(t, err)
 	require.Len(t, receipts.Receipts, 1, "cutoff fabricated or erased receipt")
 	require.Equal(t, int64(2), receipts.Receipts[0].Sequence, "cutoff fabricated or erased receipt")
 	stop.Request.Family = "native"
 	stop.AuditEventID = saveExamAttemptAudit(t, ctx, ss, f).ID
-	result, err = ss.ExamAttempt().StopDeliveryDetails(ctx, stop, examCommand(f.candidate.ID, store.DeliveryStopDetailsOperation, "stop-native", "stop-native"))
+	result, err = ss.DeliveryBudget().StopDeliveryDetails(ctx, stop, examCommand(f.candidate.ID, store.DeliveryStopDetailsOperation, "stop-native", "stop-native"))
 	require.NoError(t, err)
 	require.NoError(t, result.Validate("native"), "Participation stop exhausted the whole Attempt")
 	require.False(t, result.Budget.Native.Attempt.SummaryOnly, "Participation stop exhausted the whole Attempt")

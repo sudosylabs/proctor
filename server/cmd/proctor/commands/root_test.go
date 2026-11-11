@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server"
+	"github.com/sudosylabs/proctor/server/operator"
 )
 
 func testExecutors() executors {
@@ -29,8 +30,8 @@ func testExecutors() executors {
 		migrateUp: func(context.Context, string) (int, error) {
 			return 1, nil
 		},
-		migrateStatus: func(context.Context, string) (server.MigrationStatus, error) {
-			return server.MigrationStatus{DatabaseVersion: 1, ServerVersion: 1}, nil
+		migrateStatus: func(context.Context, string) (operator.MigrationStatus, error) {
+			return operator.MigrationStatus{DatabaseVersion: 1, ServerVersion: 1}, nil
 		},
 		recoverAdministrator: func(context.Context, string, server.AdministratorRecoveryCommand) (*server.AdministratorRecoveryResult, error) {
 			return &server.AdministratorRecoveryResult{}, nil

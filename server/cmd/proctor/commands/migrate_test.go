@@ -13,7 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server"
+	"github.com/sudosylabs/proctor/server/operator"
 )
 
 func TestMigrateCommandsUseNarrowServerOperations(t *testing.T) {
@@ -24,9 +24,9 @@ func TestMigrateCommandsUseNarrowServerOperations(t *testing.T) {
 		require.Equal(t, "/etc/proctor.json", path)
 		return 7, nil
 	}
-	execute.migrateStatus = func(_ context.Context, path string) (server.MigrationStatus, error) {
+	execute.migrateStatus = func(_ context.Context, path string) (operator.MigrationStatus, error) {
 		require.Equal(t, "/etc/proctor.json", path)
-		return server.MigrationStatus{DatabaseVersion: 5, ServerVersion: 7, PendingMigrations: 2}, nil
+		return operator.MigrationStatus{DatabaseVersion: 5, ServerVersion: 7, PendingMigrations: 2}, nil
 	}
 
 	code, stdout, stderr := executeForTest(

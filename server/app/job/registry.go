@@ -8,8 +8,6 @@
 package job
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -19,147 +17,70 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-type Execution struct {
-	Job         *model.Job
-	Attempt     *model.JobAttempt
-	checkpoint  func(context.Context, CheckpointValue) error
-	reserveWork func(context.Context, int, int) (bool, error)
-}
-
-func NewExecution(record *model.Job, attempt *model.JobAttempt, checkpoint func(context.Context, CheckpointValue) error, reserveWork func(context.Context, int, int) (bool, error)) Execution {
-	return Execution{Job: record, Attempt: attempt, checkpoint: checkpoint, reserveWork: reserveWork}
-}
-
-func (e Execution) ReserveWork(ctx context.Context, units, limit int) (bool, error) {
-	if e.reserveWork == nil {
-		return false, errors.New("job execution does not support work reservation")
-	}
-	return e.reserveWork(ctx, units, limit)
-}
-
-type CheckpointValue struct {
-	Progress *model.JobProgress
-	Document json.RawMessage
-}
-
-func (e Execution) Checkpoint(ctx context.Context, value CheckpointValue) error {
-	if e.checkpoint == nil {
-		return errors.New("job execution does not support checkpointing")
-	}
-	return e.checkpoint(ctx, value)
-}
-
-var jobContractCode = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,127}$`)
-
-type OutcomeKind string
-
-const (
-	OutcomeSucceeded        OutcomeKind = "succeeded"
-	OutcomeRetryableFailure OutcomeKind = "retryable_failure"
-	OutcomeRelinquished     OutcomeKind = "relinquished"
-	OutcomePermanentFailure OutcomeKind = "permanent_failure"
-	OutcomeCanceled         OutcomeKind = "canceled"
-)
-
-type Outcome struct {
-	Kind            OutcomeKind
-	Result          json.RawMessage
-	PublicErrorCode string
-	Err             error
-}
-
-func RetryableFailure(code string, err error) Outcome {
-	return Outcome{Kind: OutcomeRetryableFailure, PublicErrorCode: code, Err: err}
-}
-
-// Relinquished reports that the claiming node cannot execute the immutable
-// command, while another compatible node may. The attempt remains visible but
-// does not consume the Job's failure-attempt budget.
-func Relinquished(code string, err error) Outcome {
-	return Outcome{Kind: OutcomeRelinquished, PublicErrorCode: code, Err: err}
-}
-
-func PermanentFailure(code string, err error) Outcome {
-	return Outcome{Kind: OutcomePermanentFailure, PublicErrorCode: code, Err: err}
-}
-
-func Canceled(code string) Outcome {
-	return Outcome{Kind: OutcomeCanceled, PublicErrorCode: code}
-}
-
-type Handler interface {
-	Run(context.Context, Execution) Outcome
-}
-
-type Visibility string
-
-const (
-	VisibilityOperator Visibility = "operator"
-	VisibilityDomain   Visibility = "domain"
-)
-
-type Descriptor struct {
-	Type model.JobType
-	// Checkpoints reports whether the handler records resumable checkpoints.
-	Checkpoints           bool
-	ProgressStages        []string
-	PublicErrorCodes      []string
-	Timeout               time.Duration
-	Concurrency           int
-	MaximumAttempts       int
-	LeaseDuration         time.Duration
-	HeartbeatInterval     time.Duration
-	BaseRetryDelay        time.Duration
-	MaximumRetryDelay     time.Duration
-	Cancelable            bool
-	ExplicitRetryStatuses []model.JobStatus
-	Visibility            Visibility
-	SuccessRetention      time.Duration
-	FailureRetention      time.Duration
-	Handler               Handler
-}
-
+// Registry is the closed set of Job types an Engine runs. It is fixed when
+// built and hands out copies, so nothing can change a registered Descriptor.
 type Registry struct {
 	descriptors map[model.JobType]Descriptor
 	types       []model.JobType
 }
 
+// NewRegistry validates values and refuses an empty list, a duplicate type, a
+// missing Handler, a heartbeat interval that is not shorter than the lease,
+// failure retention shorter than success retention, and any progress stage,
+// public error code or retry status that is malformed or repeated. It stores
+// each code list sorted.
 func NewRegistry(values []Descriptor) (*Registry, error) {
 	if len(values) == 0 {
 		return nil, errors.New("job registry requires at least one descriptor")
 	}
+
 	registry := &Registry{descriptors: make(map[model.JobType]Descriptor, len(values)), types: make([]model.JobType, 0, len(values))}
 	for _, value := range values {
-		if value.Handler == nil || value.Timeout <= 0 || value.Concurrency <= 0 || value.MaximumAttempts <= 0 || value.LeaseDuration <= 0 || value.HeartbeatInterval <= 0 || value.HeartbeatInterval >= value.LeaseDuration || value.BaseRetryDelay <= 0 || value.MaximumRetryDelay < value.BaseRetryDelay || (value.Visibility != VisibilityOperator && value.Visibility != VisibilityDomain) || value.SuccessRetention <= 0 || value.FailureRetention < value.SuccessRetention {
+		if value.Handler == nil ||
+			value.Timeout <= 0 ||
+			value.Concurrency <= 0 ||
+			value.LeaseDuration <= 0 ||
+			value.HeartbeatInterval <= 0 ||
+			value.HeartbeatInterval >= value.LeaseDuration ||
+			value.BaseRetryDelay <= 0 ||
+			value.MaximumRetryDelay < value.BaseRetryDelay ||
+			(value.Visibility != VisibilityOperator && value.Visibility != VisibilityDomain) ||
+			value.SuccessRetention <= 0 ||
+			value.FailureRetention < value.SuccessRetention {
 			return nil, fmt.Errorf("invalid descriptor for job type %q", value.Type)
 		}
+
 		if _, exists := registry.descriptors[value.Type]; exists {
 			return nil, fmt.Errorf("duplicate job type %q", value.Type)
 		}
+
 		var normalizeErr error
 		value.ProgressStages, normalizeErr = normalizedCodes(value.ProgressStages)
 		if normalizeErr != nil {
 			return nil, fmt.Errorf("invalid progress stages for job type %q: %w", value.Type, normalizeErr)
 		}
+
 		value.PublicErrorCodes, normalizeErr = normalizedCodes(value.PublicErrorCodes)
 		if normalizeErr != nil {
 			return nil, fmt.Errorf("invalid public error codes for job type %q: %w", value.Type, normalizeErr)
 		}
+
 		value.ExplicitRetryStatuses, normalizeErr = normalizedTerminalJobStatuses(value.ExplicitRetryStatuses)
 		if normalizeErr != nil {
 			return nil, fmt.Errorf("invalid explicit retry statuses for job type %q: %w", value.Type, normalizeErr)
 		}
+
 		registry.descriptors[value.Type] = value
 		registry.types = append(registry.types, value.Type)
 	}
+
 	slices.Sort(registry.types)
 	return registry, nil
 }
 
+// Descriptor returns a copy of the Descriptor registered for jobType,
+// including its Handler, or an error when the type is not registered.
 func (r *Registry) Descriptor(jobType model.JobType) (Descriptor, error) {
-	if r == nil {
-		return Descriptor{}, errors.New("job registry is nil")
-	}
 	descriptor, ok := r.descriptors[jobType]
 	if !ok {
 		return Descriptor{}, fmt.Errorf("job type %q is not registered", jobType)
@@ -170,24 +91,19 @@ func (r *Registry) Descriptor(jobType model.JobType) (Descriptor, error) {
 	return descriptor, nil
 }
 
-func (d Descriptor) SupportsProgressStage(stage string) bool {
-	_, ok := slices.BinarySearch(d.ProgressStages, stage)
-	return ok
+// Types returns the registered Job types in sorted order.
+func (r *Registry) Types() []model.JobType {
+	return append([]model.JobType(nil), r.types...)
 }
 
-func (d Descriptor) SupportsPublicErrorCode(code string) bool {
-	if code == "" {
-		return true
+// MaximumTimeout returns the longest Timeout of any registered type, the
+// longest an Engine waits for its workers when it closes.
+func (r *Registry) MaximumTimeout() time.Duration {
+	var maximum time.Duration
+	for _, descriptor := range r.descriptors {
+		maximum = max(maximum, descriptor.Timeout)
 	}
-	if slices.Contains([]string{"job.canceled", "job.handler_panic", "job.timeout", "job.result.invalid", "job.outcome.invalid"}, code) {
-		return true
-	}
-	_, ok := slices.BinarySearch(d.PublicErrorCodes, code)
-	return ok
-}
-
-func (d Descriptor) SupportsExplicitRetry(status model.JobStatus) bool {
-	return slices.Contains(d.ExplicitRetryStatuses, status)
+	return maximum
 }
 
 func normalizedTerminalJobStatuses(values []model.JobStatus) ([]model.JobStatus, error) {
@@ -202,6 +118,8 @@ func normalizedTerminalJobStatuses(values []model.JobStatus) ([]model.JobStatus,
 	return statuses, nil
 }
 
+var jobContractCode = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,127}$`)
+
 func normalizedCodes(values []string) ([]string, error) {
 	codes := append([]string(nil), values...)
 	slices.Sort(codes)
@@ -211,22 +129,4 @@ func normalizedCodes(values []string) ([]string, error) {
 		}
 	}
 	return codes, nil
-}
-
-func (r *Registry) Types() []model.JobType {
-	if r == nil {
-		return nil
-	}
-	return append([]model.JobType(nil), r.types...)
-}
-
-func (r *Registry) MaximumTimeout() time.Duration {
-	var maximum time.Duration
-	if r == nil {
-		return 0
-	}
-	for _, descriptor := range r.descriptors {
-		maximum = max(maximum, descriptor.Timeout)
-	}
-	return maximum
 }

@@ -53,23 +53,37 @@ func newServingNodeLeaseRuntime(persistence store.ServingNodeLeaseStore, nodeID 
 	if persistence == nil || nodeID == "" {
 		return nil, errors.New("serving node lease dependencies are invalid")
 	}
-	if !validServingNodeLeaseTiming(servingNodeLeaseLifetime, servingNodeLeaseRenewalInterval, servingNodeLeaseOperationLimit, servingNodeLeaseStopMargin) ||
+
+	if !validServingNodeLeaseTiming(
+		servingNodeLeaseLifetime,
+		servingNodeLeaseRenewalInterval,
+		servingNodeLeaseOperationLimit,
+		servingNodeLeaseStopMargin,
+	) ||
 		servingNodeLeaseRetryInterval <= 0 {
 		return nil, errors.New("serving node lease timing is invalid")
 	}
+
 	return &servingNodeLeaseRuntime{
-		store:   persistence,
-		claim:   store.ServingNodeLeaseClaim{NodeID: nodeID, LeaseID: model.NewID(), Lifetime: servingNodeLeaseLifetime},
-		failure: make(chan error, 1), renewalInterval: servingNodeLeaseRenewalInterval, operationLimit: servingNodeLeaseOperationLimit,
-		retryInterval: servingNodeLeaseRetryInterval, stopMargin: servingNodeLeaseStopMargin,
+		store:           persistence,
+		claim:           store.ServingNodeLeaseClaim{NodeID: nodeID, LeaseID: model.NewID(), Lifetime: servingNodeLeaseLifetime},
+		failure:         make(chan error, 1),
+		renewalInterval: servingNodeLeaseRenewalInterval,
+		operationLimit:  servingNodeLeaseOperationLimit,
+		retryInterval:   servingNodeLeaseRetryInterval,
+		stopMargin:      servingNodeLeaseStopMargin,
 	}, nil
 }
 
 // validServingNodeLeaseTiming requires that a regular renewal attempt can
 // finish and still leave the stop margin before the previous lease expires.
 func validServingNodeLeaseTiming(lifetime, renewalInterval, operationLimit, stopMargin time.Duration) bool {
-	return lifetime >= store.ServingNodeLeaseMinimumLifetime && lifetime <= store.ServingNodeLeaseMaximumLifetime &&
-		renewalInterval > 0 && operationLimit > 0 && stopMargin > 0 && renewalInterval+operationLimit+stopMargin <= lifetime
+	return lifetime >= store.ServingNodeLeaseMinimumLifetime &&
+		lifetime <= store.ServingNodeLeaseMaximumLifetime &&
+		renewalInterval > 0 &&
+		operationLimit > 0 &&
+		stopMargin > 0 &&
+		renewalInterval+operationLimit+stopMargin <= lifetime
 }
 
 func (r *servingNodeLeaseRuntime) Start(ctx context.Context) error {
@@ -153,6 +167,7 @@ func (r *servingNodeLeaseRuntime) maintain(ctx context.Context, done chan struct
 			return
 		case <-timer.C:
 		}
+
 		// provenAt is the local start of the last successful renewal. The
 		// database stamps that lease no earlier, so it cannot expire before
 		// provenAt+lifetime; serving stops at least stopMargin before then.
@@ -162,6 +177,7 @@ func (r *servingNodeLeaseRuntime) maintain(ctx context.Context, done chan struct
 			r.fail(errors.Join(errors.New("renew serving node lease: retry slack exhausted"), lastErr))
 			return
 		}
+
 		renewCtx, cancel := context.WithTimeout(ctx, r.operationLimit)
 		err := r.renew(renewCtx)
 		cancel()
@@ -170,13 +186,16 @@ func (r *servingNodeLeaseRuntime) maintain(ctx context.Context, done chan struct
 			timer.Reset(r.renewalInterval)
 			continue
 		}
+
 		if ctx.Err() != nil {
 			return
 		}
+
 		if terminalServingNodeLeaseError(err) {
 			r.fail(fmt.Errorf("renew serving node lease: %w", err))
 			return
 		}
+
 		lastErr = err
 		timer.Reset(r.retryInterval)
 	}
@@ -207,9 +226,13 @@ func (r *servingNodeLeaseRuntime) renew(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if lease == nil || lease.NodeID != r.claim.NodeID || lease.LeaseID != r.claim.LeaseID ||
+
+	if lease == nil ||
+		lease.NodeID != r.claim.NodeID ||
+		lease.LeaseID != r.claim.LeaseID ||
 		!lease.ExpiresAt.Equal(lease.UpdatedAt.Add(r.claim.Lifetime)) {
 		return errServingNodeLeaseInvalidState
 	}
+
 	return nil
 }

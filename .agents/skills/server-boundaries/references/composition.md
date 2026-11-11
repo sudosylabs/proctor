@@ -8,6 +8,30 @@ Construction may be split across cohesive files in the module-root `server`
 package. That keeps backend selection reviewable without turning `server.New`
 into one undifferentiated function or creating a second composition root.
 
+The module root is about building and running one node. Beside the
+construction and lifecycle files it holds only the adapters composition needs,
+one per seam, each in a file named for the two sides it joins
+(`authentication_cache.go`, `mail_sender.go`, `realtime_cluster.go`). An
+adapter belongs there only when the two packages it joins may not import each
+other. A wrapper that only measures a port is not an adapter: it lives in
+`metrics` as `metrics.WrapCache`, `WrapMailer`, `WrapVFS` or `WrapCluster`,
+and the root applies it while acquiring infrastructure, before Platform
+accepts ownership. A metrics or tracing recorder that needs an application
+type (`job.Recorder`, `mail.DeliveryRecorder`, `route.Tracing`) stays in the
+root, because `metrics` and `tracing` may not import application packages.
+
+Offline host commands that only open the configuration or the database live
+in `server/operator` and build no node. The two that need the application,
+administrator recovery and administrator MFA reset, construct an inert node
+through `server.New` with a required-current schema and close it.
+
+While the root acquires infrastructure, one private owner holds exactly the
+`platform.OwnedResources` value that will transfer, plus the metrics and
+tracing modules the root closes itself. Acceptance hands that value to
+`platform.Accept` as one unit; what composition keeps afterwards is a
+lifecycle-free projection whose cache, mailer and cluster types have no
+`Close`, `Stop`, `Start` or `Ping`.
+
 `platform.Service` owns shared infrastructure health, reconfiguration, startup, and shutdown. It is retained by `server.Server`, never passed into `app`, and never used as a service locator.
 
 After the root has selected VFS and transferred its lifecycle to

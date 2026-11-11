@@ -19,17 +19,19 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/onboarding"
+	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 func TestOnboardingImportResponseExcludesPrivateRowAndCredentialMaterial(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)
-	view := app.OnboardingImportView{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportInstitution,
+	view := onboarding.OnboardingImportView{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportInstitution,
 		State: model.OnboardingImportPreviewReady, ScopeType: model.RoleScopeInstitution, ScopeID: model.NewInstitutionID().String(),
 		ParseJobID: model.NewJobID(), CreatedAt: at, UpdatedAt: at, ExpiresAt: at.Add(7 * 24 * time.Hour), Revision: 2, TotalRows: 1, ValidRows: 1}
-	rows := []app.OnboardingImportRowView{{RowNumber: 1, Reference: "safe-row", Operation: "institution_role.create", Status: model.OnboardingImportRowValid}}
+	rows := []onboarding.OnboardingImportRowView{{RowNumber: 1, Reference: "safe-row", Operation: "institution_role.create", Status: model.OnboardingImportRowValid}}
 	encoded, err := json.Marshal(onboardingImportResponseFromView(view, rows))
 	require.NoError(t, err)
 	body := string(encoded)
@@ -41,18 +43,18 @@ func TestOnboardingImportResponseExcludesPrivateRowAndCredentialMaterial(t *test
 func TestOnboardingImportListParsesFiltersAndPagesTheEnvelope(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)
-	newest := app.OnboardingImportView{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportInstitution,
+	newest := onboarding.OnboardingImportView{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportInstitution,
 		State: model.OnboardingImportCompleted, ScopeType: model.RoleScopeInstitution, ScopeID: model.NewInstitutionID().String(),
 		ParseJobID: model.NewJobID(), CreatedAt: at, UpdatedAt: at, ExpiresAt: at.Add(7 * 24 * time.Hour), Revision: 3}
 	older := newest
 	older.ID, older.CreatedAt = model.NewOnboardingImportID(), at.Add(-time.Minute)
-	fake := &recordingOnboardingImportApplication{listPage: app.Page[app.OnboardingImportView]{Items: []app.OnboardingImportView{newest, older}, HasMore: true}}
+	fake := &recordingOnboardingImportApplication{listPage: paging.Page[onboarding.OnboardingImportView]{Items: []onboarding.OnboardingImportView{newest, older}, HasMore: true}}
 	httpAPI := onboardingImportListAPI(t, fake)
 
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, authenticatedCatalogRequest(http.MethodGet, "/api/v1/onboarding-imports?state=completed&state=failed&limit=2"))
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	require.Equal(t, app.ListOnboardingImportsQuery{States: []model.OnboardingImportState{model.OnboardingImportCompleted, model.OnboardingImportFailed}, Limit: 2}, *fake.listQuery)
+	require.Equal(t, onboarding.ListOnboardingImportsQuery{States: []model.OnboardingImportState{model.OnboardingImportCompleted, model.OnboardingImportFailed}, Limit: 2}, *fake.listQuery)
 	var page struct {
 		Items      []map[string]any `json:"items"`
 		NextCursor string           `json:"next_cursor"`
@@ -63,11 +65,11 @@ func TestOnboardingImportListParsesFiltersAndPagesTheEnvelope(t *testing.T) {
 	require.NotContains(t, page.Items[0], "rows")
 	require.NotEmpty(t, page.NextCursor)
 
-	fake.listPage = app.Page[app.OnboardingImportView]{Items: []app.OnboardingImportView{}}
+	fake.listPage = paging.Page[onboarding.OnboardingImportView]{Items: []onboarding.OnboardingImportView{}}
 	response = httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, authenticatedCatalogRequest(http.MethodGet, "/api/v1/onboarding-imports?cursor="+page.NextCursor))
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	require.Equal(t, app.ListOnboardingImportsQuery{BeforeCreatedAt: older.CreatedAt, BeforeID: older.ID, Limit: 50}, *fake.listQuery)
+	require.Equal(t, onboarding.ListOnboardingImportsQuery{BeforeCreatedAt: older.CreatedAt, BeforeID: older.ID, Limit: 50}, *fake.listQuery)
 	require.JSONEq(t, `{"items":[]}`, response.Body.String())
 }
 
@@ -96,7 +98,7 @@ func TestOnboardingImportUploadForwardsTheFileNameAndReturnsIt(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)
 	classID := model.NewClassID().String()
-	fake := &recordingOnboardingImportApplication{uploadView: app.OnboardingImportView{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportStudentClass,
+	fake := &recordingOnboardingImportApplication{uploadView: onboarding.OnboardingImportView{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportStudentClass,
 		State: model.OnboardingImportParsing, ScopeType: model.RoleScopeClass, ScopeID: classID, ParseJobID: model.NewJobID(), FileName: "Year 1 roster.csv",
 		CreatedAt: at, UpdatedAt: at, ExpiresAt: at.Add(7 * 24 * time.Hour), Revision: 1}}
 	httpAPI := onboardingImportListAPI(t, fake)
@@ -127,17 +129,12 @@ func TestOnboardingImportUploadForwardsTheFileNameAndReturnsIt(t *testing.T) {
 	require.Nil(t, fake.uploadCommand)
 }
 
-func onboardingImportListAPI(t *testing.T, fake *recordingOnboardingImportApplication) *API {
+func onboardingImportListAPI(t *testing.T, fake *recordingOnboardingImportApplication) *route.API {
 	t.Helper()
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
 		AuthenticatedAt: time.Now().UTC(), MFACompletedAt: model.OptionalTimeFrom(time.Now().UTC()), ClientType: model.SessionClientWeb,
 	}
-	options := validHTTPOptions(t)
-	options.OnboardingImports = fake
-	options.Application.(*testHTTPApplication).principal = &principal
-	httpAPI, err := New(options)
-	require.NoError(t, err)
-	return httpAPI
+	return newResourceAPI(t, principal, onboardingImportResource(fake))
 }

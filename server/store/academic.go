@@ -100,7 +100,6 @@ type AcademicUnitStore interface {
 	Search(context.Context, model.InstitutionID, AcademicNameListOptions) ([]*model.AcademicUnit, error)
 }
 
-// ProgrammeStore persists courses of study owned by academic units.
 type ProgrammeCreation struct {
 	Programme    *model.Programme
 	AuditEventID model.AuditEventID
@@ -122,6 +121,7 @@ type ProgrammeArchive struct {
 	AuditAt          time.Time
 }
 
+// ProgrammeStore persists courses of study owned by academic units.
 type ProgrammeStore interface {
 	Create(context.Context, *ProgrammeCreation) (*model.Programme, error)
 	Update(context.Context, *ProgrammeUpdate) (*model.Programme, error)
@@ -134,7 +134,6 @@ type ProgrammeStore interface {
 	SeedUpdate(context.Context, *model.Programme) (*model.Programme, error)
 }
 
-// ProgrammeLevelStore persists reusable curriculum stages owned by programmes.
 type ProgrammeLevelCreation struct {
 	Level        *model.ProgrammeLevel
 	AuditEventID model.AuditEventID
@@ -156,6 +155,7 @@ type ProgrammeLevelArchive struct {
 	AuditAt          time.Time
 }
 
+// ProgrammeLevelStore persists reusable curriculum stages owned by programmes.
 type ProgrammeLevelStore interface {
 	Create(context.Context, *ProgrammeLevelCreation) (*model.ProgrammeLevel, error)
 	Update(context.Context, *ProgrammeLevelUpdate) (*model.ProgrammeLevel, error)
@@ -176,8 +176,6 @@ type AcademicPeriodVisibilityScope struct {
 	AcademicUnitRootIDs []model.AcademicUnitID
 }
 
-// AcademicPeriodStore persists institution- or Academic-Unit-owned enrollment
-// periods.
 type AcademicPeriodCreation struct {
 	Period       *model.AcademicPeriod
 	AuditEventID model.AuditEventID
@@ -199,6 +197,8 @@ type AcademicPeriodArchive struct {
 	AuditAt          time.Time
 }
 
+// AcademicPeriodStore persists institution- or Academic-Unit-owned enrollment
+// periods.
 type AcademicPeriodStore interface {
 	Create(context.Context, *AcademicPeriodCreation) (*model.AcademicPeriod, error)
 	CreateIdempotently(context.Context, *AcademicPeriodCreation, *CommandIdempotency) (*AcademicPeriodCommandResult, error)
@@ -209,7 +209,6 @@ type AcademicPeriodStore interface {
 	ListVisible(context.Context, AcademicPeriodVisibilityScope, AcademicPeriodListOptions) ([]*model.AcademicPeriod, error)
 }
 
-// ClassStore persists concrete programme-level rosters for academic periods.
 type ClassCreation struct {
 	Class        *model.Class
 	AuditEventID model.AuditEventID
@@ -253,6 +252,7 @@ type ClassSearchOptions struct {
 	Visibility ClassVisibilityScope
 }
 
+// ClassStore persists concrete programme-level rosters for academic periods.
 type ClassStore interface {
 	Create(context.Context, *ClassCreation) (*model.Class, error)
 	Update(context.Context, *ClassUpdate) (*model.Class, error)

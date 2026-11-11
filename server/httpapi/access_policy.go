@@ -12,46 +12,43 @@ import (
 	"net/http"
 	"sort"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
+// AccessPolicyApplication is the application port its handlers call; it reads,
+// preflights and replaces the Access Policy and answers public access
+// discovery.
 type AccessPolicyApplication interface {
-	GetAccessPolicy(context.Context, invocation.Invocation) (app.AccessPolicyView, error)
-	PreflightAccessPolicy(context.Context, invocation.Invocation, app.PreflightAccessPolicyCommand) (app.AccessPolicyPreflightResult, error)
-	ReplaceAccessPolicy(context.Context, invocation.Invocation, app.ReplaceAccessPolicyCommand) (app.AccessPolicyView, error)
-	DiscoverAccess(context.Context, invocation.Invocation) (app.PublicAccessDiscovery, error)
-}
-
-type unavailableAccessPolicyApplication struct{}
-
-func (unavailableAccessPolicyApplication) GetAccessPolicy(context.Context, invocation.Invocation) (app.AccessPolicyView, error) {
-	return app.AccessPolicyView{}, errUnpresentableResult
-}
-func (unavailableAccessPolicyApplication) PreflightAccessPolicy(context.Context, invocation.Invocation, app.PreflightAccessPolicyCommand) (app.AccessPolicyPreflightResult, error) {
-	return app.AccessPolicyPreflightResult{}, errUnpresentableResult
-}
-func (unavailableAccessPolicyApplication) ReplaceAccessPolicy(context.Context, invocation.Invocation, app.ReplaceAccessPolicyCommand) (app.AccessPolicyView, error) {
-	return app.AccessPolicyView{}, errUnpresentableResult
-}
-func (unavailableAccessPolicyApplication) DiscoverAccess(context.Context, invocation.Invocation) (app.PublicAccessDiscovery, error) {
-	return app.PublicAccessDiscovery{}, errUnpresentableResult
+	GetAccessPolicy(context.Context, invocation.Invocation) (administration.AccessPolicyView, error)
+	PreflightAccessPolicy(
+		context.Context,
+		invocation.Invocation,
+		administration.PreflightAccessPolicyCommand,
+	) (administration.AccessPolicyPreflightResult, error)
+	ReplaceAccessPolicy(
+		context.Context,
+		invocation.Invocation,
+		administration.ReplaceAccessPolicyCommand,
+	) (administration.AccessPolicyView, error)
+	DiscoverAccess(context.Context, invocation.Invocation) (administration.PublicAccessDiscovery, error)
 }
 
 type accessPolicySettingsRequest struct {
-	ExpectedRevision                 int64                                            `json:"expected_revision"`
-	RevokeExistingSessions           Optional[bool]                                   `json:"revoke_existing_sessions"`
-	LocalLoginEnabled                Optional[bool]                                   `json:"local_login_enabled"`
-	PublicRegistrationEnabled        Optional[bool]                                   `json:"public_registration_enabled"`
-	InvitationAdmissionEnabled       Optional[bool]                                   `json:"invitation_admission_enabled"`
-	InvitationLocalCredentialEnabled Optional[bool]                                   `json:"invitation_local_credential_enabled"`
-	DesktopAuthorizationEnabled      Optional[bool]                                   `json:"desktop_authorization_enabled"`
-	ProviderAdmissions               Optional[map[string]model.ProviderAdmissionMode] `json:"provider_admissions"`
-	RoleHolderMFARequired            Optional[bool]                                   `json:"role_holder_mfa_required"`
-	SessionIdleMinutes               Optional[int]                                    `json:"session_idle_minutes"`
-	SessionAbsoluteMinutes           Optional[int]                                    `json:"session_absolute_minutes"`
+	ExpectedRevision                 int64                                                  `json:"expected_revision"`
+	RevokeExistingSessions           route.Optional[bool]                                   `json:"revoke_existing_sessions"`
+	LocalLoginEnabled                route.Optional[bool]                                   `json:"local_login_enabled"`
+	PublicRegistrationEnabled        route.Optional[bool]                                   `json:"public_registration_enabled"`
+	InvitationAdmissionEnabled       route.Optional[bool]                                   `json:"invitation_admission_enabled"`
+	InvitationLocalCredentialEnabled route.Optional[bool]                                   `json:"invitation_local_credential_enabled"`
+	DesktopAuthorizationEnabled      route.Optional[bool]                                   `json:"desktop_authorization_enabled"`
+	ProviderAdmissions               route.Optional[map[string]model.ProviderAdmissionMode] `json:"provider_admissions"`
+	RoleHolderMFARequired            route.Optional[bool]                                   `json:"role_holder_mfa_required"`
+	SessionIdleMinutes               route.Optional[int]                                    `json:"session_idle_minutes"`
+	SessionAbsoluteMinutes           route.Optional[int]                                    `json:"session_absolute_minutes"`
 }
 
 type accessPolicyResponse struct {
@@ -131,115 +128,197 @@ type publicAccessDiscoveryResponse struct {
 	PasswordMinimumLength int    `json:"password_minimum_length"`
 }
 
-type accessPolicyResourceModule struct{ application AccessPolicyApplication }
+type accessPolicyHandlers struct{ app AccessPolicyApplication }
 
-func accessPolicyResource(application AccessPolicyApplication) apiResource {
-	module := accessPolicyResourceModule{application: application}
-	replace := strongRecentSessionRoute(http.MethodPut, apiPath(literal("access-policy")), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress", "request.invalid", "access_policy.invalid", "access_policy.revision_conflict", "access_policy.blocked", "access_policy.unavailable", "resource.not_found"}, module.replace)
-	replace.idempotency = IdempotencyRequired
-	return newResource("access-policy",
-		publicRoute(http.MethodGet, apiPath(literal("discovery")), []string{"access_policy.unavailable", "access_policy.blocked", "access_policy.revision_conflict"}, module.discover),
-		principalRoute(http.MethodGet, apiPath(literal("access-policy")), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "access_policy.unavailable", "access_policy.blocked", "access_policy.revision_conflict", "resource.not_found"}, module.get),
-		strongRecentSessionRoute(http.MethodPost, apiPath(literal("access-policy"), literal("preflight")), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "request.invalid", "access_policy.invalid", "access_policy.revision_conflict", "access_policy.unavailable", "access_policy.blocked", "resource.not_found"}, module.preflight),
+func accessPolicyResource(app AccessPolicyApplication) route.Resource {
+	h := accessPolicyHandlers{app: app}
+	replace := route.Endpoint{
+		Method:      http.MethodPut,
+		Path:        "/access-policy",
+		Auth:        route.AuthStrongRecentSessionRequired,
+		Idempotency: route.IdempotencyRequired,
+		Errors: []string{
+			"authorization.denied",
+			"authorization.request.invalid",
+			"authorization.unavailable",
+			"audit.unavailable",
+			"idempotency.key_required",
+			"idempotency.key_invalid",
+			"idempotency.conflict",
+			"idempotency.in_progress",
+			"request.invalid",
+			"access_policy.invalid",
+			"access_policy.revision_conflict",
+			"access_policy.blocked",
+			"access_policy.unavailable",
+			"resource.not_found",
+		},
+		Handle: h.replace,
+	}
+	return route.NewResource("access-policy",
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/discovery",
+			Auth:   route.AuthPublic,
+			Errors: []string{"access_policy.unavailable", "access_policy.blocked", "access_policy.revision_conflict"},
+			Handle: h.discover,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/access-policy",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"access_policy.unavailable",
+				"access_policy.blocked",
+				"access_policy.revision_conflict",
+				"resource.not_found",
+			},
+			Handle: h.get,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/access-policy/preflight",
+			Auth:   route.AuthStrongRecentSessionRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"request.invalid",
+				"access_policy.invalid",
+				"access_policy.revision_conflict",
+				"access_policy.unavailable",
+				"access_policy.blocked",
+				"resource.not_found",
+			},
+			Handle: h.preflight,
+		},
 		replace,
 	)
 }
 
-func (m accessPolicyResourceModule) get(request operationRequest) (operationResult, error) {
-	view, err := m.application.GetAccessPolicy(request.context, request.invocation())
+func (h accessPolicyHandlers) get(request route.Request) (route.Result, error) {
+	view, err := h.app.GetAccessPolicy(request.Context, request.Invocation())
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, accessPolicyResponseFromView(view)), nil
+	return route.JSON(http.StatusOK, accessPolicyResponseFromView(view)), nil
 }
 
-func (m accessPolicyResourceModule) preflight(request operationRequest) (operationResult, error) {
+func (h accessPolicyHandlers) preflight(request route.Request) (route.Result, error) {
 	var body accessPolicySettingsRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
+
 	settings, revokeExistingSessions, err := requiredAccessPolicySettings(body)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	result, err := m.application.PreflightAccessPolicy(request.context, request.invocation(), app.PreflightAccessPolicyCommand{
-		ExpectedRevision: body.ExpectedRevision, Settings: settings,
-		RevokeExistingSessions: revokeExistingSessions})
+
+	result, err := h.app.PreflightAccessPolicy(request.Context, request.Invocation(), administration.PreflightAccessPolicyCommand{
+		ExpectedRevision:       body.ExpectedRevision,
+		Settings:               settings,
+		RevokeExistingSessions: revokeExistingSessions,
+	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	response := accessPolicyPreflightResponse{Blockers: make([]accessPolicyBlockerResponse, 0, len(result.Blockers)),
-		RoleHoldersWithoutMFACount: result.RoleHoldersWithoutMFACount, RoleHolderSingleFactorSessionCount: result.RoleHolderSingleFactorSessionCount}
+
+	response := accessPolicyPreflightResponse{
+		Blockers:                           make([]accessPolicyBlockerResponse, 0, len(result.Blockers)),
+		RoleHoldersWithoutMFACount:         result.RoleHoldersWithoutMFACount,
+		RoleHolderSingleFactorSessionCount: result.RoleHolderSingleFactorSessionCount,
+	}
 	for _, blocker := range result.Blockers {
 		response.Blockers = append(response.Blockers, accessPolicyBlockerResponse{Code: string(blocker.Code), ProviderID: blocker.ProviderID})
 	}
-	return jsonResult(http.StatusOK, response), nil
+
+	return route.JSON(http.StatusOK, response), nil
 }
 
-func (m accessPolicyResourceModule) replace(request operationRequest) (operationResult, error) {
+func (h accessPolicyHandlers) replace(request route.Request) (route.Result, error) {
 	var body accessPolicySettingsRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
+
 	settings, revokeExistingSessions, err := requiredAccessPolicySettings(body)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	view, err := m.application.ReplaceAccessPolicy(request.context, request.invocation(), app.ReplaceAccessPolicyCommand{
-		ExpectedRevision: body.ExpectedRevision, Settings: settings,
-		RevokeExistingSessions: revokeExistingSessions, IdempotencyKey: request.idempotencyKey})
+
+	view, err := h.app.ReplaceAccessPolicy(request.Context, request.Invocation(), administration.ReplaceAccessPolicyCommand{
+		ExpectedRevision:       body.ExpectedRevision,
+		Settings:               settings,
+		RevokeExistingSessions: revokeExistingSessions,
+		IdempotencyKey:         request.IdempotencyKey,
+	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, accessPolicyResponseFromView(view)), nil
+
+	return route.JSON(http.StatusOK, accessPolicyResponseFromView(view)), nil
 }
 
 func requiredAccessPolicySettings(body accessPolicySettingsRequest) (model.AccessPolicySettings, bool, error) {
-	requiredBoolean := func(field string, value Optional[bool]) (bool, error) {
+	requiredBoolean := func(field string, value route.Optional[bool]) (bool, error) {
 		candidate := value.ValuePointer()
 		if candidate == nil {
 			return false, apperror.New("request.invalid").WithField("field", field)
 		}
+
 		return *candidate, nil
 	}
 	revoke, err := requiredBoolean("revoke_existing_sessions", body.RevokeExistingSessions)
 	if err != nil {
 		return model.AccessPolicySettings{}, false, err
 	}
+
 	localLogin, err := requiredBoolean("local_login_enabled", body.LocalLoginEnabled)
 	if err != nil {
 		return model.AccessPolicySettings{}, false, err
 	}
+
 	publicRegistration, err := requiredBoolean("public_registration_enabled", body.PublicRegistrationEnabled)
 	if err != nil {
 		return model.AccessPolicySettings{}, false, err
 	}
+
 	invitationAdmission, err := requiredBoolean("invitation_admission_enabled", body.InvitationAdmissionEnabled)
 	if err != nil {
 		return model.AccessPolicySettings{}, false, err
 	}
+
 	invitationLocalCredential, err := requiredBoolean("invitation_local_credential_enabled", body.InvitationLocalCredentialEnabled)
 	if err != nil {
 		return model.AccessPolicySettings{}, false, err
 	}
+
 	desktopAuthorization, err := requiredBoolean("desktop_authorization_enabled", body.DesktopAuthorizationEnabled)
 	if err != nil {
 		return model.AccessPolicySettings{}, false, err
 	}
+
 	providerAdmissions := body.ProviderAdmissions.ValuePointer()
 	if providerAdmissions == nil {
 		return model.AccessPolicySettings{}, false, apperror.New("request.invalid").WithField("field", "provider_admissions")
 	}
+
 	roleHolderMFARequired, err := requiredBoolean("role_holder_mfa_required", body.RoleHolderMFARequired)
 	if err != nil {
 		return model.AccessPolicySettings{}, false, err
 	}
+
 	// A Session length is required but may be null, which keeps the
 	// deployment default; a length below one minute is malformed.
-	requiredMinutes := func(field string, value Optional[int]) (int, error) {
+	requiredMinutes := func(field string, value route.Optional[int]) (int, error) {
 		if !value.IsSet() {
 			return 0, apperror.New("request.invalid").WithField("field", field)
 		}
+
 		minutes := value.ValuePointer()
 		if minutes == nil {
 			return 0, nil
@@ -247,57 +326,92 @@ func requiredAccessPolicySettings(body accessPolicySettingsRequest) (model.Acces
 		if *minutes < 1 {
 			return 0, apperror.New("request.invalid").WithField("field", field)
 		}
+
 		return *minutes, nil
 	}
 	idleMinutes, err := requiredMinutes("session_idle_minutes", body.SessionIdleMinutes)
 	if err != nil {
 		return model.AccessPolicySettings{}, false, err
 	}
+
 	absoluteMinutes, err := requiredMinutes("session_absolute_minutes", body.SessionAbsoluteMinutes)
 	if err != nil {
 		return model.AccessPolicySettings{}, false, err
 	}
+
 	return model.AccessPolicySettings{
-		LocalLoginEnabled: localLogin, PublicRegistrationEnabled: publicRegistration,
-		InvitationAdmissionEnabled: invitationAdmission, InvitationLocalCredentialEnabled: invitationLocalCredential,
-		DesktopAuthorizationEnabled: desktopAuthorization, ProviderAdmissions: *providerAdmissions,
-		RoleHolderMFARequired: roleHolderMFARequired, SessionIdleMinutes: idleMinutes, SessionAbsoluteMinutes: absoluteMinutes,
+		LocalLoginEnabled:                localLogin,
+		PublicRegistrationEnabled:        publicRegistration,
+		InvitationAdmissionEnabled:       invitationAdmission,
+		InvitationLocalCredentialEnabled: invitationLocalCredential,
+		DesktopAuthorizationEnabled:      desktopAuthorization,
+		ProviderAdmissions:               *providerAdmissions,
+		RoleHolderMFARequired:            roleHolderMFARequired,
+		SessionIdleMinutes:               idleMinutes,
+		SessionAbsoluteMinutes:           absoluteMinutes,
 	}, revoke, nil
 }
 
-func (m accessPolicyResourceModule) discover(request operationRequest) (operationResult, error) {
-	discovery, err := m.application.DiscoverAccess(request.context, request.invocation())
+func (h accessPolicyHandlers) discover(request route.Request) (route.Result, error) {
+	discovery, err := h.app.DiscoverAccess(request.Context, request.Invocation())
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, publicAccessDiscoveryResponseFromView(discovery)), nil
+	return route.JSON(http.StatusOK, publicAccessDiscoveryResponseFromView(discovery)), nil
 }
 
-func accessPolicyResponseFromView(view app.AccessPolicyView) accessPolicyResponse {
-	response := accessPolicyResponse{History: []accessPolicyTransitionResponse{}, AvailableProviders: []externalAuthenticationProviderResponse{}}
+func accessPolicyResponseFromView(view administration.AccessPolicyView) accessPolicyResponse {
+	response := accessPolicyResponse{
+		History:            []accessPolicyTransitionResponse{},
+		AvailableProviders: []externalAuthenticationProviderResponse{},
+	}
 	if view.Policy == nil {
 		return response
 	}
+
 	p := view.Policy
-	response.ID, response.Revision, response.CreatedAt, response.UpdatedAt = p.ID.String(), p.Revision, model.FormatRFC3339(p.CreatedAt), model.FormatRFC3339(p.UpdatedAt)
+	response.ID, response.Revision, response.CreatedAt, response.UpdatedAt =
+		p.ID.String(),
+		p.Revision,
+		model.FormatRFC3339(p.CreatedAt),
+		model.FormatRFC3339(p.UpdatedAt)
 	response.LocalLoginEnabled, response.PublicRegistrationEnabled = p.LocalLoginEnabled, p.PublicRegistrationEnabled
-	response.InvitationAdmissionEnabled, response.InvitationLocalCredentialEnabled = p.InvitationAdmissionEnabled, p.InvitationLocalCredentialEnabled
+	response.InvitationAdmissionEnabled, response.InvitationLocalCredentialEnabled =
+		p.InvitationAdmissionEnabled,
+		p.InvitationLocalCredentialEnabled
 	response.DesktopAuthorizationEnabled, response.ProviderAdmissions = p.DesktopAuthorizationEnabled, p.Settings().ProviderAdmissions
 	response.RoleHolderMFARequired, response.RoleHolderMFAEnforced = p.RoleHolderMFARequired, view.RoleHolderMFAEnforced
-	response.SessionIdleMinutes, response.SessionAbsoluteMinutes = optionalMinutes(p.SessionIdleMinutes), optionalMinutes(p.SessionAbsoluteMinutes)
-	response.SessionIdleMinutesDefault, response.SessionIdleMinutesMaximum = view.SessionLimits.IdleDefaultMinutes, view.SessionLimits.IdleMaximumMinutes
-	response.SessionAbsoluteMinutesDefault, response.SessionAbsoluteMinutesMaximum = view.SessionLimits.AbsoluteDefaultMinutes, view.SessionLimits.AbsoluteMaximumMinutes
+	response.SessionIdleMinutes, response.SessionAbsoluteMinutes =
+		optionalMinutes(p.SessionIdleMinutes),
+		optionalMinutes(p.SessionAbsoluteMinutes)
+	response.SessionIdleMinutesDefault, response.SessionIdleMinutesMaximum =
+		view.SessionLimits.IdleDefaultMinutes,
+		view.SessionLimits.IdleMaximumMinutes
+	response.SessionAbsoluteMinutesDefault, response.SessionAbsoluteMinutesMaximum =
+		view.SessionLimits.AbsoluteDefaultMinutes,
+		view.SessionLimits.AbsoluteMaximumMinutes
 	response.DurableMail = view.DurableMail
 	for _, transition := range view.History {
 		if transition != nil {
 			response.History = append(response.History, accessPolicyTransitionResponse{
-				FromRevision: transition.FromRevision, ToRevision: transition.ToRevision, ActorUserID: transition.ActorID.String(),
-				ChangedFields: append([]string(nil), transition.ChangedFields...), ChangedAt: model.FormatRFC3339(transition.ChangedAt), Outcome: string(transition.Outcome)})
+				FromRevision:  transition.FromRevision,
+				ToRevision:    transition.ToRevision,
+				ActorUserID:   transition.ActorID.String(),
+				ChangedFields: append([]string(nil), transition.ChangedFields...),
+				ChangedAt:     model.FormatRFC3339(transition.ChangedAt),
+				Outcome:       string(transition.Outcome),
+			})
 		}
 	}
+
 	for _, provider := range view.AvailableProviders {
-		response.AvailableProviders = append(response.AvailableProviders, externalAuthenticationProviderResponse{ID: provider.ID, DisplayName: provider.DisplayName, Type: provider.Type})
+		response.AvailableProviders = append(response.AvailableProviders, externalAuthenticationProviderResponse{
+			ID:          provider.ID,
+			DisplayName: provider.DisplayName,
+			Type:        provider.Type,
+		})
 	}
+
 	return response
 }
 
@@ -309,20 +423,44 @@ func optionalMinutes(minutes int) *int {
 	return &minutes
 }
 
-func publicAccessDiscoveryResponseFromView(view app.PublicAccessDiscovery) publicAccessDiscoveryResponse {
-	response := publicAccessDiscoveryResponse{DiscoveryVersion: view.DiscoveryVersion, CanonicalOrigin: view.CanonicalOrigin,
-		InstallationID: view.InstallationID, Initialized: view.Initialized, PolicyRevision: view.PolicyRevision,
-		Capabilities: publicAccessCapabilitiesResponse{LocalLogin: view.Capabilities.LocalLogin, PublicRegistration: view.Capabilities.PublicRegistration,
-			InvitationAdmission: view.Capabilities.InvitationAdmission, DesktopAuthorization: view.Capabilities.DesktopAuthorization},
-		Providers: []externalAuthenticationProviderResponse{}, DesktopAuthorization: desktopAuthorizationCompatibilityResponse{
-			Protocol: view.DesktopAuthorization.Protocol, MinimumVersion: view.DesktopAuthorization.MinimumVersion, MaximumVersion: view.DesktopAuthorization.MaximumVersion},
-		SupportAddress: view.SupportAddress, PasswordMinimumLength: view.PasswordMinimumLength}
+func publicAccessDiscoveryResponseFromView(view administration.PublicAccessDiscovery) publicAccessDiscoveryResponse {
+	response := publicAccessDiscoveryResponse{
+		DiscoveryVersion: view.DiscoveryVersion,
+		CanonicalOrigin:  view.CanonicalOrigin,
+		InstallationID:   view.InstallationID,
+		Initialized:      view.Initialized,
+		PolicyRevision:   view.PolicyRevision,
+		Capabilities: publicAccessCapabilitiesResponse{
+			LocalLogin:           view.Capabilities.LocalLogin,
+			PublicRegistration:   view.Capabilities.PublicRegistration,
+			InvitationAdmission:  view.Capabilities.InvitationAdmission,
+			DesktopAuthorization: view.Capabilities.DesktopAuthorization,
+		},
+		Providers: []externalAuthenticationProviderResponse{},
+		DesktopAuthorization: desktopAuthorizationCompatibilityResponse{
+			Protocol:       view.DesktopAuthorization.Protocol,
+			MinimumVersion: view.DesktopAuthorization.MinimumVersion,
+			MaximumVersion: view.DesktopAuthorization.MaximumVersion,
+		},
+		SupportAddress:        view.SupportAddress,
+		PasswordMinimumLength: view.PasswordMinimumLength,
+	}
 	if view.Institution != nil {
-		response.Institution = &publicInstitutionPresentationResponse{ID: view.Institution.ID.String(), Name: view.Institution.Name, DisplayName: view.Institution.DisplayName}
+		response.Institution = &publicInstitutionPresentationResponse{
+			ID:          view.Institution.ID.String(),
+			Name:        view.Institution.Name,
+			DisplayName: view.Institution.DisplayName,
+		}
 	}
+
 	for _, provider := range view.Providers {
-		response.Providers = append(response.Providers, externalAuthenticationProviderResponse{ID: provider.ID, DisplayName: provider.DisplayName, Type: provider.Type})
+		response.Providers = append(response.Providers, externalAuthenticationProviderResponse{
+			ID:          provider.ID,
+			DisplayName: provider.DisplayName,
+			Type:        provider.Type,
+		})
 	}
+
 	sort.Slice(response.Providers, func(i, j int) bool { return response.Providers[i].ID < response.Providers[j].ID })
 	return response
 }

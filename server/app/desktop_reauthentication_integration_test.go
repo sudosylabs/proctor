@@ -21,8 +21,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
@@ -54,21 +54,21 @@ func TestDesktopReauthenticationRestoresRecencyWithoutMFA(t *testing.T) {
 	_, err := persistence.Institution().Save(ctx, &model.Institution{Name: "desktop-reauth", DisplayName: "Desktop Reauthentication"})
 	require.NoError(t, err)
 	const password = "correct horse battery staple"
-	user, err := node.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
+	user, err := node.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
 		Username: "desktop-reauth", Email: "desktop-reauth@example.edu", DisplayName: "Ada Candidate",
 	}, Password: password})
 	require.NoError(t, err)
 
 	// Desktop sign-in through a Web Session, without any MFA enrollment.
-	web, err := node.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{
+	web, err := node.App.Identity.Login(ctx, invocation.Invocation{}, identity.LoginCommand{
 		LoginID: user.Username, Password: password, ClientType: model.SessionClientWeb, DeviceID: "browser", Source: "127.0.0.1:1",
 	})
 	require.NoError(t, err)
-	webPrincipal, err := node.App.AuthenticateAccess(ctx, web.Tokens.AccessToken)
+	webPrincipal, err := node.App.Identity.AuthenticateAccess(ctx, web.Tokens.AccessToken)
 	require.NoError(t, err)
 	state, verifier := model.NewCredentialToken(), model.NewCredentialToken()
 	privateKey, publicJWK := integrationDesktopDPoPKey(t)
-	started, err := node.App.StartDesktopAuthorization(ctx, invocation.Invocation{}, app.StartDesktopAuthorizationCommand{
+	started, err := node.App.Identity.StartDesktopAuthorization(ctx, invocation.Invocation{}, identity.StartDesktopAuthorizationCommand{
 		CallbackURL: "http://127.0.0.1:49152/" + model.NewCredentialToken(), State: state, CodeChallenge: model.PKCES256Challenge(verifier),
 		DeviceName: "Exam laptop", PublicJWK: publicJWK, DesktopRelease: build.DesktopRelease, DesktopBuildID: build.DesktopBuildID,
 		Platform: build.Platform, Architecture: build.Architecture, RealtimeProtocol: build.RealtimeProtocol, Source: "127.0.0.1:2",
@@ -76,18 +76,18 @@ func TestDesktopReauthenticationRestoresRecencyWithoutMFA(t *testing.T) {
 	require.NoError(t, err)
 	authorizationURL, err := url.Parse(started.AuthorizationURL)
 	require.NoError(t, err)
-	binding, err := node.App.BindDesktopAuthorization(ctx, invocation.Invocation{}, app.BindDesktopAuthorizationCommand{
+	binding, err := node.App.Identity.BindDesktopAuthorization(ctx, invocation.Invocation{}, identity.BindDesktopAuthorizationCommand{
 		Handle: authorizationURL.Query().Get("request"), BrowserProof: strings.TrimPrefix(authorizationURL.Fragment, "proof="), State: state,
 	})
 	require.NoError(t, err)
-	_, err = node.App.AuthenticateDesktopAuthorizationSession(ctx, invocation.New(*webPrincipal, model.RequestMetadata{}),
-		app.AuthenticateDesktopAuthorizationCommand{Binding: binding.Binding})
+	_, err = node.App.Identity.AuthenticateDesktopAuthorizationSession(ctx, invocation.New(*webPrincipal, model.RequestMetadata{}),
+		identity.AuthenticateDesktopAuthorizationCommand{Binding: binding.Binding})
 	require.NoError(t, err)
-	approved, err := node.App.ApproveDesktopAuthorization(ctx, invocation.Invocation{}, app.ApproveDesktopAuthorizationCommand{Binding: binding.Binding, State: state})
+	approved, err := node.App.Identity.ApproveDesktopAuthorization(ctx, invocation.Invocation{}, identity.ApproveDesktopAuthorizationCommand{Binding: binding.Binding, State: state})
 	require.NoError(t, err)
 	callback, err := url.Parse(approved.RedirectURL)
 	require.NoError(t, err)
-	exchanged, err := node.App.ExchangeDesktopAuthorization(ctx, invocation.Invocation{}, app.ExchangeDesktopAuthorizationCommand{
+	exchanged, err := node.App.Identity.ExchangeDesktopAuthorization(ctx, invocation.Invocation{}, identity.ExchangeDesktopAuthorizationCommand{
 		Code: callback.Query().Get("code"), State: state, CodeVerifier: verifier,
 		DPoPProof: integrationDesktopDPoPProof(t, privateKey, publicJWK, map[string]any{
 			"jti": model.NewCredentialToken(), "htm": "POST", "htu": origin + "/api/v1/auth/desktop/token",
@@ -106,8 +106,8 @@ func TestDesktopReauthenticationRestoresRecencyWithoutMFA(t *testing.T) {
 				"jti": model.NewCredentialToken(), "htm": "POST", "htu": origin + path, "iat": time.Now().Unix(),
 				"nonce": nonce, "ath": base64.RawURLEncoding.EncodeToString(accessHash[:]),
 			})
-			principal, authErr := node.App.AuthenticateDPoP(ctx, exchanged.Tokens.AccessToken, proof, "POST", path)
-			if replacement, challenged := app.DPoPChallengeNonce(authErr); challenged {
+			principal, authErr := node.App.Identity.AuthenticateDPoP(ctx, exchanged.Tokens.AccessToken, proof, "POST", path)
+			if replacement, challenged := identity.DPoPChallengeNonce(authErr); challenged {
 				nonce = replacement
 				continue
 			}
@@ -123,7 +123,7 @@ func TestDesktopReauthenticationRestoresRecencyWithoutMFA(t *testing.T) {
 	stale.AuthenticatedAt = stale.AuthenticatedAt.Add(-time.Hour)
 	stale.MFACompletedAt = model.OptionalTime{}
 	createToken := func(principal model.Principal) error {
-		_, createErr := node.App.CreatePersonalAccessToken(ctx, invocation.New(principal, model.RequestMetadata{}), app.CreatePersonalAccessTokenCommand{
+		_, createErr := node.App.Identity.CreatePersonalAccessToken(ctx, invocation.New(principal, model.RequestMetadata{}), identity.CreatePersonalAccessTokenCommand{
 			Description: "Desktop automation", Scopes: []string{string(model.ActionExamCreate)}, ExpiresAt: time.Now().Add(24 * time.Hour).UnixMilli(),
 		})
 		return createErr
@@ -132,39 +132,39 @@ func TestDesktopReauthenticationRestoresRecencyWithoutMFA(t *testing.T) {
 
 	// A browser Web Session can never start Desktop reauthentication.
 	reauthState, reauthVerifier := model.NewCredentialToken(), model.NewCredentialToken()
-	startCommand := app.StartDesktopReauthenticationCommand{CallbackURL: "http://127.0.0.1:49153/" + model.NewCredentialToken(),
+	startCommand := identity.StartDesktopReauthenticationCommand{CallbackURL: "http://127.0.0.1:49153/" + model.NewCredentialToken(),
 		State: reauthState, CodeChallenge: model.PKCES256Challenge(reauthVerifier), Source: "127.0.0.1:3"}
-	_, err = node.App.StartDesktopReauthentication(ctx, invocation.New(*webPrincipal, model.RequestMetadata{}), startCommand)
+	_, err = node.App.Identity.StartDesktopReauthentication(ctx, invocation.New(*webPrincipal, model.RequestMetadata{}), startCommand)
 	require.True(t, apperror.Is(err, "authentication.desktop_reauthentication.invalid"), "Web Session started Desktop reauthentication: %v", err)
 
-	reauthentication, err := node.App.StartDesktopReauthentication(ctx,
+	reauthentication, err := node.App.Identity.StartDesktopReauthentication(ctx,
 		invocation.New(desktopPrincipal("/api/v1/auth/desktop/reauthentications"), model.RequestMetadata{}), startCommand)
 	require.NoError(t, err)
 	page, err := url.Parse(reauthentication.AuthorizationURL)
 	require.NoError(t, err)
 	require.Equal(t, "/reauthenticate/desktop", page.Path)
-	reauthBinding, err := node.App.BindDesktopReauthentication(ctx, invocation.Invocation{}, app.BindDesktopAuthorizationCommand{
+	reauthBinding, err := node.App.Identity.BindDesktopReauthentication(ctx, invocation.Invocation{}, identity.BindDesktopAuthorizationCommand{
 		Handle: page.Query().Get("request"), BrowserProof: strings.TrimPrefix(page.Fragment, "proof="), State: reauthState,
 	})
 	require.NoError(t, err)
-	hosted, err := node.App.DesktopReauthenticationContext(ctx, invocation.Invocation{}, reauthBinding.Binding)
+	hosted, err := node.App.Identity.DesktopReauthenticationContext(ctx, invocation.Invocation{}, reauthBinding.Binding)
 	require.NoError(t, err)
 	require.Equal(t, "Ada Candidate", hosted.DisplayName)
 	require.Equal(t, "password", hosted.AuthenticationMethod)
 	require.Nil(t, hosted.Provider)
-	_, err = node.App.AuthenticateDesktopReauthenticationPassword(ctx, invocation.Invocation{}, app.AuthenticateDesktopReauthenticationPasswordCommand{
+	_, err = node.App.Identity.AuthenticateDesktopReauthenticationPassword(ctx, invocation.Invocation{}, identity.AuthenticateDesktopReauthenticationPasswordCommand{
 		Binding: reauthBinding.Binding, Password: password, Source: "127.0.0.1:4",
 	})
 	require.NoError(t, err, "password proof without MFA")
-	reauthApproved, err := node.App.ApproveDesktopReauthentication(ctx, invocation.Invocation{},
-		app.ApproveDesktopAuthorizationCommand{Binding: reauthBinding.Binding, State: reauthState})
+	reauthApproved, err := node.App.Identity.ApproveDesktopReauthentication(ctx, invocation.Invocation{},
+		identity.ApproveDesktopAuthorizationCommand{Binding: reauthBinding.Binding, State: reauthState})
 	require.NoError(t, err)
 	loopback, err := url.Parse(reauthApproved.RedirectURL)
 	require.NoError(t, err)
 	require.Len(t, loopback.Query(), 2, "the loopback redirect carries only code and state")
-	completed, err := node.App.CompleteDesktopReauthentication(ctx,
+	completed, err := node.App.Identity.CompleteDesktopReauthentication(ctx,
 		invocation.New(desktopPrincipal("/api/v1/auth/desktop/reauthentications/complete"), model.RequestMetadata{}),
-		app.CompleteDesktopReauthenticationCommand{Code: loopback.Query().Get("code"), CodeVerifier: reauthVerifier, State: reauthState, Source: "127.0.0.1:3"})
+		identity.CompleteDesktopReauthenticationCommand{Code: loopback.Query().Get("code"), CodeVerifier: reauthVerifier, State: reauthState, Source: "127.0.0.1:3"})
 	require.NoError(t, err)
 	require.True(t, completed.RecentlyAuthenticatedUntil.After(time.Now()), "completion did not restore recency")
 

@@ -19,11 +19,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sudosylabs/proctor/server"
+	"github.com/sudosylabs/proctor/server/operator"
 )
 
-type jobListExecutor func(context.Context, string, server.JobQuery) (server.JobList, error)
-type jobShowExecutor func(context.Context, string, string) (server.JobDetail, error)
+type jobListExecutor func(context.Context, string, operator.JobQuery) (operator.JobList, error)
+type jobShowExecutor func(context.Context, string, string) (operator.JobDetail, error)
 
 func newJobsCommand(list jobListExecutor, show jobShowExecutor, text commandText) *cobra.Command {
 	command := &cobra.Command{
@@ -47,34 +47,69 @@ func newJobsListCommand(list jobListExecutor, text commandText) *cobra.Command {
 		Short: text.value("cli.jobs.list.short", "List the newest Jobs with their state, attempts, and last error code", nil),
 		Args:  noArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
-			if err := requireKnown(types, server.JobTypes(), "cli.jobs.error.unknown_type", "unknown job type {{.Value}}; known types: {{.Known}}", text); err != nil {
+			if err := requireKnown(
+				types,
+				operator.JobTypes(),
+				"cli.jobs.error.unknown_type",
+				"unknown job type {{.Value}}; known types: {{.Known}}",
+				text,
+			); err != nil {
 				return err
 			}
-			if err := requireKnown(states, server.JobStates(), "cli.jobs.error.unknown_state", "unknown job state {{.Value}}; known states: {{.Known}}", text); err != nil {
+
+			if err := requireKnown(
+				states,
+				operator.JobStates(),
+				"cli.jobs.error.unknown_state",
+				"unknown job state {{.Value}}; known states: {{.Known}}",
+				text,
+			); err != nil {
 				return err
 			}
-			if limit < 1 || limit > server.JobListMaximumLimit {
-				return newUsageError(text.value("cli.jobs.error.limit", "--limit must be between 1 and {{.Maximum}}",
-					map[string]any{"Maximum": server.JobListMaximumLimit}))
+
+			if limit < 1 || limit > operator.JobListMaximumLimit {
+				return newUsageError(text.value(
+					"cli.jobs.error.limit",
+					"--limit must be between 1 and {{.Maximum}}",
+					map[string]any{"Maximum": operator.JobListMaximumLimit},
+				))
 			}
+
 			path, err := configPath(command, text)
 			if err != nil {
 				return err
 			}
-			result, err := list(command.Context(), path, server.JobQuery{Types: types, States: states, Limit: limit})
+
+			result, err := list(command.Context(), path, operator.JobQuery{Types: types, States: states, Limit: limit})
 			if err != nil {
 				return err
 			}
 			if asJSON {
 				return writeJSON(command.OutOrStdout(), result)
 			}
+
 			return writeJobList(command.OutOrStdout(), result, text)
 		},
 	}
 	flags := command.Flags()
-	flags.StringSliceVar(&types, "type", nil, text.value("cli.jobs.list.flag.type", "only list Jobs of this type (repeatable or comma-separated)", nil))
-	flags.StringSliceVar(&states, "state", nil, text.value("cli.jobs.list.flag.state", "only list Jobs in this state (repeatable or comma-separated)", nil))
-	flags.IntVar(&limit, "limit", server.JobListDefaultLimit, text.value("cli.jobs.list.flag.limit", "list at most this many Jobs (at most 200)", nil))
+	flags.StringSliceVar(
+		&types,
+		"type",
+		nil,
+		text.value("cli.jobs.list.flag.type", "only list Jobs of this type (repeatable or comma-separated)", nil),
+	)
+	flags.StringSliceVar(
+		&states,
+		"state",
+		nil,
+		text.value("cli.jobs.list.flag.state", "only list Jobs in this state (repeatable or comma-separated)", nil),
+	)
+	flags.IntVar(
+		&limit,
+		"limit",
+		operator.JobListDefaultLimit,
+		text.value("cli.jobs.list.flag.limit", "list at most this many Jobs (at most 200)", nil),
+	)
 	flags.BoolVar(&asJSON, "json", false, text.value("cli.jobs.flag.json", "write the result as JSON", nil))
 	return command
 }
@@ -115,29 +150,42 @@ func requireKnown(values, known []string, id, fallback string, text commandText)
 	return nil
 }
 
-func writeJobList(output io.Writer, list server.JobList, text commandText) error {
+func writeJobList(output io.Writer, list operator.JobList, text commandText) error {
 	if len(list.Jobs) == 0 {
 		_, err := fmt.Fprintln(output, text.value("cli.jobs.list.none", "no Jobs match", nil))
 		return err
 	}
+
 	table := tabwriter.NewWriter(output, 0, 4, 2, ' ', 0)
 	_, _ = fmt.Fprintln(table, text.value("cli.jobs.list.header", "ID\tTYPE\tSTATE\tATTEMPTS\tLAST ERROR\tAVAILABLE\tUPDATED", nil))
 	for _, job := range list.Jobs {
-		_, _ = fmt.Fprintf(table, "%s\t%s\t%s\t%d/%d\t%s\t%s\t%s\n", job.ID, job.Type, job.State,
-			job.AttemptCount, job.MaximumAttempts, orDash(job.LastErrorCode),
-			formatInstant(job.AvailableAt), formatInstant(job.UpdatedAt))
+		_, _ = fmt.Fprintf(
+			table,
+			"%s\t%s\t%s\t%d/%d\t%s\t%s\t%s\n",
+			job.ID,
+			job.Type,
+			job.State,
+			job.AttemptCount,
+			job.MaximumAttempts,
+			orDash(job.LastErrorCode),
+			formatInstant(job.AvailableAt),
+			formatInstant(job.UpdatedAt),
+		)
 	}
+
 	if err := table.Flush(); err != nil {
 		return err
 	}
+
 	if list.HasMore {
 		_, err := fmt.Fprintln(output, text.value("cli.jobs.list.more", "more Jobs match; narrow --type or --state, or raise --limit", nil))
 		return err
 	}
+
 	return nil
 }
 
-func writeJobDetail(output io.Writer, job server.JobDetail, text commandText) error {
+func writeJobDetail(output io.Writer, job operator.JobDetail, text commandText) error {
 	table := tabwriter.NewWriter(output, 0, 4, 2, ' ', 0)
 	rows := [][2]string{
 		{text.value("cli.jobs.show.id", "ID", nil), job.ID},
@@ -155,33 +203,52 @@ func writeJobDetail(output io.Writer, job server.JobDetail, text commandText) er
 		rows = append(rows, [2]string{text.value("cli.jobs.show.progress", "Progress", nil),
 			fmt.Sprintf("%d/%d %s", job.Progress.Current, job.Progress.Total, job.Progress.Stage)})
 	}
+
 	for _, row := range rows {
 		_, _ = fmt.Fprintf(table, "%s:\t%s\n", row[0], row[1])
 	}
+
 	if err := table.Flush(); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintln(output); err != nil {
 		return err
 	}
+
 	if len(job.Attempts) == 0 {
 		_, err := fmt.Fprintln(output, text.value("cli.jobs.show.no_attempts", "no attempts yet", nil))
 		return err
 	}
+
 	table = tabwriter.NewWriter(output, 0, 4, 2, ' ', 0)
-	_, _ = fmt.Fprintln(table, text.value("cli.jobs.show.attempt_header", "ATTEMPT\tSTATE\tNODE\tSTARTED\tHEARTBEAT\tLEASE EXPIRES\tCOMPLETED\tERROR", nil))
+	_, _ = fmt.Fprintln(
+		table,
+		text.value("cli.jobs.show.attempt_header", "ATTEMPT\tSTATE\tNODE\tSTARTED\tHEARTBEAT\tLEASE EXPIRES\tCOMPLETED\tERROR", nil),
+	)
 	for _, attempt := range job.Attempts {
-		_, _ = fmt.Fprintf(table, "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", attempt.Number, attempt.State, attempt.NodeID,
-			formatInstant(attempt.StartedAt), formatInstant(attempt.HeartbeatAt), formatInstant(attempt.LeaseExpiresAt),
-			formatOptionalInstant(attempt.CompletedAt), orDash(attempt.ErrorCode))
+		_, _ = fmt.Fprintf(
+			table,
+			"%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			attempt.Number,
+			attempt.State,
+			attempt.NodeID,
+			formatInstant(attempt.StartedAt),
+			formatInstant(attempt.HeartbeatAt),
+			formatInstant(attempt.LeaseExpiresAt),
+			formatOptionalInstant(attempt.CompletedAt),
+			orDash(attempt.ErrorCode),
+		)
 	}
+
 	if err := table.Flush(); err != nil {
 		return err
 	}
+
 	if job.MoreAttempts {
 		_, err := fmt.Fprintln(output, text.value("cli.jobs.show.more_attempts", "older attempts are not shown", nil))
 		return err
 	}
+
 	return nil
 }
 

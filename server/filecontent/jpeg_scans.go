@@ -18,7 +18,7 @@ import (
 // has no scan limit of its own, so a small progressive file with thousands of
 // scans costs minutes of CPU while it holds a content permit. Encoders emit
 // one scan for baseline images and at most 18 for libjpeg's progressive
-// scripts (10 for colour, 6 for greyscale, 18 for CMYK).
+// scripts (10 for color, 6 for greyscale, 18 for CMYK).
 const maximumJPEGScans = 32
 
 var errJPEGTooManyScans = errors.New("JPEG has too many scans")

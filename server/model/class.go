@@ -115,6 +115,7 @@ func (c *Class) Validate() error {
 	if !c.ID.IsValid() {
 		return invalidModelError(where, "class", "id", "must be a valid identifier", "")
 	}
+
 	details := "id=" + c.ID.String()
 	if c.CreatedAt.IsZero() {
 		return invalidModelError(where, "class", "created_at", "must be set", details)
@@ -137,6 +138,7 @@ func (c *Class) Validate() error {
 	if c.ArchivedAt.Valid && c.ArchivedAt.Time.Before(c.CreatedAt) {
 		return invalidModelError(where, "class", "archived_at", "must not precede created_at", details)
 	}
+
 	return validateNamed(where, "class", c.ID.String(), c.Name, c.DisplayName, c.Description)
 }
 

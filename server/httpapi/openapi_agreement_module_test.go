@@ -21,6 +21,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 )
 
 type openAPIDocument struct {
@@ -34,14 +36,14 @@ type openAPIDocument struct {
 }
 
 type openAPIOperation struct {
-	OperationID string                      `json:"operationId"`
-	Auth        AuthRequirement             `json:"x-proctor-auth"`
-	ErrorCodes  []string                    `json:"x-proctor-error-codes"`
-	Idempotency IdempotencyRequirement      `json:"x-proctor-idempotency"`
-	Security    []map[string][]string       `json:"security"`
-	Parameters  []openAPIParameter          `json:"parameters"`
-	RequestBody openAPIRequestBody          `json:"requestBody"`
-	Responses   map[string]openAPIReference `json:"responses"`
+	OperationID string                       `json:"operationId"`
+	Auth        route.AuthRequirement        `json:"x-proctor-auth"`
+	ErrorCodes  []string                     `json:"x-proctor-error-codes"`
+	Idempotency route.IdempotencyRequirement `json:"x-proctor-idempotency"`
+	Security    []map[string][]string        `json:"security"`
+	Parameters  []openAPIParameter           `json:"parameters"`
+	RequestBody openAPIRequestBody           `json:"requestBody"`
+	Responses   map[string]openAPIReference  `json:"responses"`
 }
 
 type openAPIParameter struct {
@@ -162,14 +164,14 @@ func normalizeRuntimeRoutePath(path string) string {
 	return normalized.String()
 }
 
-func securityForAuth(auth AuthRequirement, method string) ([]map[string][]string, error) {
+func securityForAuth(auth route.AuthRequirement, method string) ([]map[string][]string, error) {
 	switch auth {
-	case AuthPublic:
+	case route.AuthPublic:
 		return []map[string][]string{}, nil
-	case AuthRefreshCredentialRequired:
+	case route.AuthRefreshCredentialRequired:
 		return []map[string][]string{{"refreshBearerAuth": {}}, {"refreshDPoPAuth": {}}, {"refreshCookie": {}, "csrfToken": {}}}, nil
-	case AuthMFARecoverySessionRequired, AuthRecentMFARecoverySessionRequired, AuthMFAEnrollmentSessionRequired, AuthPrincipalRequired, AuthSessionRequired, AuthStrongSessionRequired,
-		AuthRecentSessionRequired, AuthStrongRecentSessionRequired:
+	case route.AuthMFARecoverySessionRequired, route.AuthRecentMFARecoverySessionRequired, route.AuthMFAEnrollmentSessionRequired, route.AuthPrincipalRequired, route.AuthSessionRequired, route.AuthStrongSessionRequired,
+		route.AuthRecentSessionRequired, route.AuthStrongRecentSessionRequired:
 		security := []map[string][]string{{"bearerAuth": {}}, {"dpopAuth": {}}}
 		if method == http.MethodGet {
 			return append(security, map[string][]string{"sessionCookie": {}}), nil
@@ -221,7 +223,7 @@ func evaluateOpenAPIProblemAgreement(
 }
 
 func openAPIErrorStatuses() map[string]int {
-	statuses := ApplicationErrorStatuses()
+	statuses := route.ApplicationErrorStatuses()
 	statuses["authentication.credential_ambiguous"] = http.StatusBadRequest
 	statuses["authentication.csrf.invalid"] = http.StatusForbidden
 	statuses["health.not_live"] = http.StatusServiceUnavailable

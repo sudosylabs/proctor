@@ -17,9 +17,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -33,12 +35,12 @@ func (h systemHTTPHealth) Ready() bool { return h.ready }
 
 func TestSystemResourceReturnsTypedUnhealthyProblemThroughKernel(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{}, systemResource(systemHTTPHealth{}, BuildInfo{Version: "test"}))
+	logger, _ := routetest.NewLogger(t)
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, systemResource(systemHTTPHealth{}, BuildInfo{Version: "test"}))
 	response := httptest.NewRecorder()
-	httpAPI.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/health/live", nil))
+	httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health/live", nil))
 	require.Equal(t, http.StatusServiceUnavailable, response.Code, "liveness status = %d: %s", response.Code, response.Body.String())
-	var problem Problem
+	var problem route.Problem
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
 	require.Equal(t, "health.not_live", problem.Code)
 	require.Equal(t, "The process is not healthy.", problem.Detail)
@@ -46,11 +48,11 @@ func TestSystemResourceReturnsTypedUnhealthyProblemThroughKernel(t *testing.T) {
 
 func TestSystemResourceReturnsHealthyStatusAndVersionThroughKernel(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{},
+		routetest.Authenticator{},
 		systemResource(systemHTTPHealth{live: true, ready: true}, BuildInfo{Version: "test-version"}),
 	)
 	for path, body := range map[string]string{
@@ -59,7 +61,7 @@ func TestSystemResourceReturnsHealthyStatusAndVersionThroughKernel(t *testing.T)
 		"/api/v1/system/version": `"version":"test-version"`,
 	} {
 		response := httptest.NewRecorder()
-		httpAPI.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil))
 		require.Equal(t, http.StatusOK, response.Code, "%s response = %d %s", path, response.Code, response.Body.String())
 		require.True(t, bytes.Contains(response.Body.Bytes(), []byte(body)), "%s response = %d %s", path, response.Code, response.Body.String())
 	}
@@ -67,9 +69,9 @@ func TestSystemResourceReturnsHealthyStatusAndVersionThroughKernel(t *testing.T)
 
 func TestBootstrapResourceStrictDecodeAndDeclaredFailureThroughKernel(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	bootstrap := &recordingBootstrap{bootstrapErr: apperror.New("installation.unavailable")}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{}, bootstrapResource(bootstrap))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, bootstrapResource(bootstrap))
 
 	invalid := httptest.NewRecorder()
 	httpAPI.ServeHTTP(invalid, newJSONRequest(http.MethodPost, "/api/v1/bootstrap", bytes.NewBufferString(`{"unknown":true}`)))
@@ -84,15 +86,15 @@ func TestBootstrapResourceStrictDecodeAndDeclaredFailureThroughKernel(t *testing
 
 func TestBootstrapStatusExposesOnlyInitializedFlag(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{},
+		routetest.Authenticator{},
 		bootstrapResource(&bootstrapHTTPApplication{status: &model.InstallationStatus{Initialized: true}}),
 	)
 	response := httptest.NewRecorder()
-	httpAPI.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/bootstrap", nil))
+	httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/bootstrap", nil))
 	require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
 	var body map[string]any
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
@@ -105,9 +107,9 @@ func TestBootstrapStatusExposesOnlyInitializedFlag(t *testing.T) {
 
 func TestBootstrapDeniedDoesNotEchoSecretOrAccountDetail(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	bootstrap := &recordingBootstrap{bootstrapErr: apperror.New("installation.bootstrap_denied")}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{}, bootstrapResource(bootstrap))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, bootstrapResource(bootstrap))
 	const secret = "wrong-secret-material-that-must-not-be-echoed"
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, newJSONRequest(http.MethodPost, "/api/v1/bootstrap", bytes.NewBufferString(
@@ -168,7 +170,7 @@ func TestBootstrapResponseDTOPreservesHistoricalEnvelope(t *testing.T) {
 
 func TestBootstrapUsesApplicationCommand(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	rec := &recordingBootstrap{
 		result: &model.InstallationBootstrapResult{
 			State: &model.InstallationState{
@@ -176,7 +178,7 @@ func TestBootstrapUsesApplicationCommand(t *testing.T) {
 			},
 		},
 	}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{}, bootstrapResource(rec))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, bootstrapResource(rec))
 	body, _ := json.Marshal(map[string]any{
 		"institution":      map[string]any{"name": "northbridge", "display_name": "Northbridge"},
 		"administrator":    map[string]any{"username": "admin", "email": "admin@example.com"},
@@ -197,16 +199,16 @@ func TestBootstrapUsesApplicationCommand(t *testing.T) {
 }
 
 type recordingBootstrap struct {
-	command      app.BootstrapInstallationCommand
+	command      identity.BootstrapInstallationCommand
 	result       *model.InstallationBootstrapResult
 	bootstrapErr error
 }
 
-func (r *recordingBootstrap) GetInstallationStatus(context.Context, invocation.Invocation, app.GetInstallationStatusQuery) (*model.InstallationStatus, error) {
+func (r *recordingBootstrap) GetInstallationStatus(context.Context, invocation.Invocation) (*model.InstallationStatus, error) {
 	return &model.InstallationStatus{Initialized: false}, nil
 }
 
-func (r *recordingBootstrap) BootstrapInstallation(_ context.Context, _ invocation.Invocation, command app.BootstrapInstallationCommand) (*model.InstallationBootstrapResult, error) {
+func (r *recordingBootstrap) BootstrapInstallation(_ context.Context, _ invocation.Invocation, command identity.BootstrapInstallationCommand) (*model.InstallationBootstrapResult, error) {
 	r.command = command
 	return r.result, r.bootstrapErr
 }

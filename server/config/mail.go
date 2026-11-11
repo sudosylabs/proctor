@@ -52,6 +52,7 @@ func validateMail(mailConfig Mail, add func(string, string)) {
 	if mailConfig.Backend != "smtp" {
 		add("mail.backend", "must be smtp")
 	}
+
 	validateSecretSealing(
 		"mail.secret_sealing",
 		mailConfig.SecretSealing,
@@ -60,11 +61,13 @@ func validateMail(mailConfig Mail, add func(string, string)) {
 	if mailConfig.SupportAddress != "" && !validMailbox(mailConfig.SupportAddress) {
 		add("mail.support_address", "must be empty or a plain email address")
 	}
+
 	if zone := mailConfig.DisplayTimezone; zone != "" {
 		if _, err := time.LoadLocation(zone); err != nil || zone == "Local" {
 			add("mail.display_timezone", "must be empty or an IANA time zone name such as UTC or Africa/Lagos")
 		}
 	}
+
 	if !mailConfig.Enabled {
 		return
 	}
@@ -86,11 +89,13 @@ func validateMail(mailConfig Mail, add func(string, string)) {
 	if strings.ContainsAny(mailConfig.SMTP.LocalName, "\x00\r\n") {
 		add("mail.smtp.local_name", "contains invalid characters")
 	}
+
 	switch mailConfig.SMTP.Security {
 	case "none", "starttls", "tls":
 	default:
 		add("mail.smtp.security", "must be none, starttls, or tls")
 	}
+
 	switch mailConfig.SMTP.Authentication {
 	case "none":
 		if mailConfig.SMTP.Username != "" || mailConfig.SMTP.Password != "" {
@@ -106,13 +111,16 @@ func validateMail(mailConfig Mail, add func(string, string)) {
 	default:
 		add("mail.smtp.authentication", "must be none, auto, plain, or login")
 	}
+
 	if mailConfig.SMTP.Timeout.Duration <= 0 {
 		add("mail.smtp.timeout", "must be greater than zero")
 	}
+
 	if mailConfig.SMTP.MessageIDDomain == "" ||
 		strings.ContainsAny(mailConfig.SMTP.MessageIDDomain, "\x00\r\n @") {
 		add("mail.smtp.message_id_domain", "has an invalid format")
 	}
+
 	if mailConfig.SMTP.MaxMessageBytes < 1024 || mailConfig.SMTP.MaxMessageBytes > 100<<20 {
 		add("mail.smtp.max_message_bytes", "must be between 1024 and 104857600")
 	}
@@ -133,9 +141,11 @@ func validateSecretSealing(
 			"must contain at most 8 fallback keys",
 		)
 	}
+
 	if settings.EncryptionKey == "" && len(settings.DecryptionKeys) > 0 {
 		add(prefix+".encryption_key", "is required")
 	}
+
 	keys := make([]string, 0, 1+len(settings.DecryptionKeys))
 	keys = append(keys, settings.EncryptionKey)
 	keys = append(keys, settings.DecryptionKeys...)
@@ -144,19 +154,23 @@ func validateSecretSealing(
 		if encoded == "" && index == 0 {
 			continue
 		}
+
 		field := prefix + ".encryption_key"
 		if index > 0 {
 			field = fmt.Sprintf("%s.decryption_keys[%d]", prefix, index-1)
 		}
+
 		material, ok := decodeCanonicalAES256Key(encoded)
 		if !ok {
 			add(field, "must be canonical standard base64 encoding of exactly 32 bytes")
 			continue
 		}
+
 		if _, duplicate := seen[material]; duplicate {
 			add(prefix+".decryption_keys", "must not contain duplicate decoded keys")
 			continue
 		}
+
 		seen[material] = struct{}{}
 	}
 }

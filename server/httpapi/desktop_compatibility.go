@@ -13,9 +13,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -24,33 +25,33 @@ type unavailableDesktopCompatibilityApplication struct{}
 func (unavailableDesktopCompatibilityApplication) EvaluateDesktopCompatibility(
 	context.Context,
 	invocation.Invocation,
-	app.DesktopCompatibilityQuery,
-) (app.DesktopCompatibilityResult, error) {
-	return app.DesktopCompatibilityResult{}, errUnpresentableResult
+	identity.DesktopCompatibilityQuery,
+) (identity.DesktopCompatibilityResult, error) {
+	return identity.DesktopCompatibilityResult{}, route.ErrUnpresentable
 }
 
 func (unavailableDesktopCompatibilityApplication) GetDesktopCompatibilityPolicy(
 	context.Context,
 	invocation.Invocation,
 ) (*model.DesktopCompatibilityPolicy, error) {
-	return nil, errUnpresentableResult
+	return nil, route.ErrUnpresentable
 }
 
 func (unavailableDesktopCompatibilityApplication) ReplaceDesktopCompatibilityPolicy(
 	context.Context,
 	invocation.Invocation,
-	app.ReplaceDesktopCompatibilityPolicyCommand,
+	identity.ReplaceDesktopCompatibilityPolicyCommand,
 ) (*model.DesktopCompatibilityPolicy, error) {
-	return nil, errUnpresentableResult
+	return nil, route.ErrUnpresentable
 }
 
 type desktopCompatibilityPolicyRequest struct {
-	ExpectedRevision       int64              `json:"expected_revision"`
-	MinimumDesktopRelease  Optional[string]   `json:"minimum_desktop_release"`
-	RevokedDesktopBuildIDs Optional[[]string] `json:"revoked_desktop_build_ids"`
-	AdministratorMessage   Optional[string]   `json:"administrator_message"`
-	Availability           Optional[string]   `json:"availability"`
-	RetryAt                Optional[string]   `json:"retry_at"`
+	ExpectedRevision       int64                    `json:"expected_revision"`
+	MinimumDesktopRelease  route.Optional[string]   `json:"minimum_desktop_release"`
+	RevokedDesktopBuildIDs route.Optional[[]string] `json:"revoked_desktop_build_ids"`
+	AdministratorMessage   route.Optional[string]   `json:"administrator_message"`
+	Availability           route.Optional[string]   `json:"availability"`
+	RetryAt                route.Optional[string]   `json:"retry_at"`
 }
 
 type desktopCompatibilityPolicyResponse struct {
@@ -64,74 +65,97 @@ type desktopCompatibilityPolicyResponse struct {
 	UpdatedAt              string   `json:"updated_at"`
 }
 
-type desktopCompatibilityPolicyResourceModule struct {
-	application DesktopCompatibilityApplication
+type desktopCompatibilityPolicyHandlers struct {
+	app DesktopCompatibilityApplication
 }
 
-func desktopCompatibilityPolicyResource(application DesktopCompatibilityApplication) apiResource {
-	module := desktopCompatibilityPolicyResourceModule{application: application}
-	replace := strongRecentSessionRoute(
-		http.MethodPut,
-		apiPath(literal("desktop-compatibility-policy")),
-		[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress", "request.invalid", "desktop_compatibility_policy.invalid", "desktop_compatibility_policy.revision_conflict", "desktop_compatibility_policy.unavailable", "resource.not_found"},
-		module.replace,
-	)
-	replace.idempotency = IdempotencyRequired
-	return newResource(
+func desktopCompatibilityPolicyResource(app DesktopCompatibilityApplication) route.Resource {
+	h := desktopCompatibilityPolicyHandlers{app: app}
+	replace := route.Endpoint{
+		Method:      http.MethodPut,
+		Path:        "/desktop-compatibility-policy",
+		Auth:        route.AuthStrongRecentSessionRequired,
+		Idempotency: route.IdempotencyRequired,
+		Errors: []string{
+			"authorization.denied",
+			"authorization.request.invalid",
+			"authorization.unavailable",
+			"audit.unavailable",
+			"idempotency.key_required",
+			"idempotency.key_invalid",
+			"idempotency.conflict",
+			"idempotency.in_progress",
+			"request.invalid",
+			"desktop_compatibility_policy.invalid",
+			"desktop_compatibility_policy.revision_conflict",
+			"desktop_compatibility_policy.unavailable",
+			"resource.not_found",
+		},
+		Handle: h.replace,
+	}
+	return route.NewResource(
 		"desktop-compatibility-policy",
-		principalRoute(
-			http.MethodGet,
-			apiPath(literal("desktop-compatibility-policy")),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "desktop_compatibility_policy.unavailable", "desktop_compatibility_policy.revision_conflict", "resource.not_found"},
-			module.get,
-		),
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/desktop-compatibility-policy",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"desktop_compatibility_policy.unavailable",
+				"desktop_compatibility_policy.revision_conflict",
+				"resource.not_found",
+			},
+			Handle: h.get,
+		},
 		replace,
 	)
 }
 
-func (m desktopCompatibilityPolicyResourceModule) get(
-	request operationRequest,
-) (operationResult, error) {
-	policy, err := m.application.GetDesktopCompatibilityPolicy(
-		request.context,
-		request.invocation(),
+func (h desktopCompatibilityPolicyHandlers) get(
+	request route.Request,
+) (route.Result, error) {
+	policy, err := h.app.GetDesktopCompatibilityPolicy(
+		request.Context,
+		request.Invocation(),
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(
+	return route.JSON(
 		http.StatusOK,
 		desktopCompatibilityPolicyResponseFromModel(policy),
-	).withHeaders(privateNoStoreHeaders()), nil
+	).WithHeaders(privateNoStoreHeaders()), nil
 }
 
-func (m desktopCompatibilityPolicyResourceModule) replace(
-	request operationRequest,
-) (operationResult, error) {
+func (h desktopCompatibilityPolicyHandlers) replace(
+	request route.Request,
+) (route.Result, error) {
 	var body desktopCompatibilityPolicyRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 	settings, err := requiredDesktopCompatibilityPolicySettings(body)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	policy, err := m.application.ReplaceDesktopCompatibilityPolicy(
-		request.context,
-		request.invocation(),
-		app.ReplaceDesktopCompatibilityPolicyCommand{
+	policy, err := h.app.ReplaceDesktopCompatibilityPolicy(
+		request.Context,
+		request.Invocation(),
+		identity.ReplaceDesktopCompatibilityPolicyCommand{
 			ExpectedRevision: body.ExpectedRevision,
 			Settings:         settings,
-			IdempotencyKey:   request.idempotencyKey,
+			IdempotencyKey:   request.IdempotencyKey,
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(
+	return route.JSON(
 		http.StatusOK,
 		desktopCompatibilityPolicyResponseFromModel(policy),
-	).withHeaders(privateNoStoreHeaders()), nil
+	).WithHeaders(privateNoStoreHeaders()), nil
 }
 
 func requiredDesktopCompatibilityPolicySettings(
@@ -143,29 +167,34 @@ func requiredDesktopCompatibilityPolicySettings(
 			"request.invalid",
 		).WithField("field", "minimum_desktop_release")
 	}
+
 	revokedBuildIDs := body.RevokedDesktopBuildIDs.ValuePointer()
 	if revokedBuildIDs == nil {
 		return model.DesktopCompatibilityPolicySettings{}, apperror.New(
 			"request.invalid",
 		).WithField("field", "revoked_desktop_build_ids")
 	}
+
 	message := body.AdministratorMessage.ValuePointer()
 	if message == nil {
 		return model.DesktopCompatibilityPolicySettings{}, apperror.New(
 			"request.invalid",
 		).WithField("field", "administrator_message")
 	}
+
 	availability := body.Availability.ValuePointer()
 	if availability == nil {
 		return model.DesktopCompatibilityPolicySettings{}, apperror.New(
 			"request.invalid",
 		).WithField("field", "availability")
 	}
+
 	if body.RetryAt.IsNull() {
 		return model.DesktopCompatibilityPolicySettings{}, apperror.New(
 			"request.invalid",
 		).WithField("field", "retry_at")
 	}
+
 	var retryAt model.OptionalTime
 	if value := body.RetryAt.ValuePointer(); value != nil {
 		parsed, parseErr := model.ParseRFC3339(*value)
@@ -174,8 +203,10 @@ func requiredDesktopCompatibilityPolicySettings(
 				"request.invalid",
 			).WithField("field", "retry_at").Wrap(parseErr)
 		}
+
 		retryAt = model.OptionalTimeFrom(parsed)
 	}
+
 	canonicalBuildIDs := slices.Clone(*revokedBuildIDs)
 	slices.Sort(canonicalBuildIDs)
 	return model.DesktopCompatibilityPolicySettings{
@@ -208,4 +239,23 @@ func desktopCompatibilityPolicyResponseFromModel(
 	response.CreatedAt = model.FormatRFC3339(policy.CreatedAt)
 	response.UpdatedAt = model.FormatRFC3339(policy.UpdatedAt)
 	return response
+}
+
+// DesktopCompatibilityApplication is the Desktop compatibility policy use
+// cases. It serves this resource and the system routes in system.go.
+type DesktopCompatibilityApplication interface {
+	EvaluateDesktopCompatibility(
+		context.Context,
+		invocation.Invocation,
+		identity.DesktopCompatibilityQuery,
+	) (identity.DesktopCompatibilityResult, error)
+	GetDesktopCompatibilityPolicy(
+		context.Context,
+		invocation.Invocation,
+	) (*model.DesktopCompatibilityPolicy, error)
+	ReplaceDesktopCompatibilityPolicy(
+		context.Context,
+		invocation.Invocation,
+		identity.ReplaceDesktopCompatibilityPolicyCommand,
+	) (*model.DesktopCompatibilityPolicy, error)
 }

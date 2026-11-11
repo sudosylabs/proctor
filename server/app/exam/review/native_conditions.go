@@ -19,29 +19,37 @@ import (
 
 // ListNativeConditions returns one page of native condition evidence for a
 // Submission to a caller authorized to view its Submission Review.
-func (s *Service) ListNativeConditions(ctx context.Context, invocation invocation.Invocation, query store.NativeConditionListOptions) (_ *store.NativeConditionPage, resultErr error) {
+func (s *Service) ListNativeConditions(
+	ctx context.Context,
+	inv invocation.Invocation,
+	query store.NativeConditionListOptions,
+) (_ *store.NativeConditionPage, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	if !query.SubmissionID.IsValid() || query.Limit < 1 || query.Limit > 100 || query.AfterID != "" && !query.AfterID.IsValid() {
 		return nil, apperror.Invalid("exam.integrity_review.invalid", "native_condition_list")
 	}
-	if err := s.deps.Authorizer.AuthorizeSubmissionView(ctx, invocation, query.SubmissionID); err != nil {
+	if err := s.authorizer.AuthorizeSubmissionView(ctx, inv, query.SubmissionID); err != nil {
 		return nil, err
 	}
-	page, err := s.deps.Persistence.ListNativeConditions(ctx, query)
+
+	page, err := s.reviews.ListNativeConditions(ctx, query)
 	if err != nil {
 		return nil, storeErrors.Translate(err)
 	}
 	if page == nil || page.Items == nil || len(page.Items) > query.Limit || page.HasMore && len(page.Items) != query.Limit {
 		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("invalid native condition page"))
 	}
+
 	result := &store.NativeConditionPage{Items: make([]model.NativeConditionEvidence, len(page.Items)), HasMore: page.HasMore}
 	previous := query.AfterID.String()
 	for i, value := range page.Items {
 		if value.Validate() != nil || value.ID.String() <= previous {
 			return nil, apperror.New("exam.integrity_review.unavailable").Wrap(model.ErrNativeDeliveryInvalid)
 		}
+
 		previous = value.ID.String()
 		result.Items[i] = value.Clone()
 	}
+
 	return result, nil
 }

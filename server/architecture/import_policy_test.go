@@ -54,6 +54,17 @@ func (p pathPattern) matches(path string) bool {
 	}
 }
 
+func (p pathPattern) String() string {
+	switch p.match {
+	case matchSubtree:
+		return p.path + " and below"
+	case matchDescendants:
+		return "below " + p.path
+	default:
+		return p.path
+	}
+}
+
 type importAccess struct {
 	allowUnlisted bool
 	allowed       []pathPattern
@@ -164,10 +175,6 @@ var dependencyRules = []dependencyRule{
 		thirdParty: allImports(),
 	},
 	{
-		name:    "identity-provider contracts",
-		sources: []pathPattern{exact(serverModule + "/identityprovider")},
-	},
-	{
 		name:    "model build tools",
 		sources: []pathPattern{subtree(serverModule + "/model/internal/idgen")},
 	},
@@ -219,11 +226,7 @@ var dependencyRules = []dependencyRule{
 		name:           "domain model",
 		sources:        []pathPattern{exact(serverModule + "/model")},
 		deniedStandard: standardInfrastructure,
-		project: only(
-			exact(serverModule+"/identityprovider"),
-			exact(serverModule+"/internal/canonicaljson"),
-		),
-		thirdParty: only(exact("golang.org/x/net/idna")),
+		project:        only(exact(serverModule + "/internal/canonicaljson")),
 	},
 	{
 		name:           "store contracts",
@@ -270,7 +273,7 @@ var dependencyRules = []dependencyRule{
 	},
 	{
 		name:           "concrete jobs",
-		sources:        []pathPattern{subtree(serverModule + "/app/jobhandler")},
+		sources:        []pathPattern{subtree(serverModule + "/app/jobs")},
 		deniedStandard: standardInfrastructure,
 		project: only(
 			exact(serverModule+"/model"),
@@ -279,35 +282,54 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app/invocation"),
 			exact(serverModule+"/app/job"),
 			exact(serverModule+"/app/mail"),
+			exact(serverModule+"/app/user"),
+			exact(serverModule+"/app/exam"),
 			exact(serverModule+"/app/exam/attempt"),
+			exact(serverModule+"/app/exam/sitting"),
 		),
 	},
 	{
+		// The engine needs only logging, model and store. The operator Job
+		// service beside it authorizes, audits and reports application errors,
+		// so it adds the access, apperror and invocation leaves.
 		name:           "job engine",
 		sources:        []pathPattern{subtree(serverModule + "/app/job")},
 		deniedStandard: standardInfrastructure,
 		project: only(
+			exact(serverModule+"/logging"),
 			exact(serverModule+"/model"),
 			exact(serverModule+"/store"),
+			exact(serverModule+"/app/access"),
+			exact(serverModule+"/app/apperror"),
+			exact(serverModule+"/app/invocation"),
 		),
 	},
 	{
 		name:           "realtime application",
 		sources:        []pathPattern{subtree(serverModule + "/app/realtime")},
 		deniedStandard: standardInfrastructure,
-		project:        only(exact(serverModule + "/model")),
+		// Delivery stays storage-free: the one Attempt read a Session
+		// revocation needs comes through a port the parent adapts.
+		project: only(exact(serverModule+"/logging"), exact(serverModule+"/model"), exact(serverModule+"/app/apperror")),
 	},
 	{
 		name:           "mail application",
 		sources:        []pathPattern{subtree(serverModule + "/app/mail")},
 		deniedStandard: standardInfrastructureExceptFS,
 		thirdParty:     only(exact("golang.org/x/net/html")),
+		// Composition needs model, store, secretseal, the Exam Manager
+		// contract and localization. The operator mail service beside it
+		// authorizes, audits, pages and reports application errors.
 		project: only(
 			exact(serverModule+"/model"),
 			exact(serverModule+"/store"),
 			exact(serverModule+"/secretseal"),
 			exact(serverModule+"/app/exam"),
 			exact(serverModule+"/localization"),
+			exact(serverModule+"/app/access"),
+			exact(serverModule+"/app/apperror"),
+			exact(serverModule+"/app/invocation"),
+			exact(serverModule+"/app/paging"),
 		),
 	},
 	{
@@ -346,59 +368,78 @@ var dependencyRules = []dependencyRule{
 		),
 	},
 	{
+		// The Sitting area prepares its own schedule mail, so it alone among
+		// the Exam Manager access consumers composes through app/mail.
+		name:           "exam Sitting application",
+		sources:        []pathPattern{exact(serverModule + "/app/exam/sitting")},
+		deniedStandard: standardInfrastructure,
+		project: only(
+			exact(serverModule+"/app/access"),
+			exact(serverModule+"/app/apperror"),
+			exact(serverModule+"/app/idempotency"),
+			exact(serverModule+"/app/invocation"),
+			exact(serverModule+"/app/exam/manageraccess"),
+			exact(serverModule+"/app/mail"),
+			exact(serverModule+"/app/realtime"),
+			exact(serverModule+"/model"),
+			exact(serverModule+"/store"),
+		),
+	},
+	{
 		name: "exam manager access consumers",
 		sources: []pathPattern{
 			exact(serverModule + "/app/exam"),
 			exact(serverModule + "/app/exam/correction"),
 			exact(serverModule + "/app/exam/resource"),
-			exact(serverModule + "/app/exam/sitting"),
 			exact(serverModule + "/app/exam/workspace"),
 		},
 		deniedStandard: standardInfrastructure,
 		project: only(
+			exact(serverModule+"/app/access"),
 			exact(serverModule+"/app/apperror"),
 			exact(serverModule+"/app/idempotency"),
 			exact(serverModule+"/app/invocation"),
 			exact(serverModule+"/app/exam/manageraccess"),
+			exact(serverModule+"/app/realtime"),
 			exact(serverModule+"/model"),
 			exact(serverModule+"/store"),
-			exact(serverModule+"/app/exam/safemarkdown"),
 		),
 	},
 	{
-		name: "exam idempotency consumers",
+		// The Attempt and Integrity review areas prepare the Submission
+		// receipt and the result-release notice, so they compose through
+		// app/mail, and render candidate-visible Markdown through the shared
+		// safe Markdown leaf. Neither decides Exam Manager eligibility.
+		name: "exam mail and safe Markdown consumers",
 		sources: []pathPattern{
 			exact(serverModule + "/app/exam/attempt"),
 			exact(serverModule + "/app/exam/review"),
 		},
 		deniedStandard: standardInfrastructure,
 		project: only(
+			exact(serverModule+"/app/access"),
 			exact(serverModule+"/app/apperror"),
 			exact(serverModule+"/app/idempotency"),
 			exact(serverModule+"/app/invocation"),
+			exact(serverModule+"/app/mail"),
+			exact(serverModule+"/app/realtime"),
 			exact(serverModule+"/model"),
 			exact(serverModule+"/store"),
 			exact(serverModule+"/app/exam/safemarkdown"),
 		),
 	},
 	{
-		name:           "exam application",
-		sources:        []pathPattern{subtree(serverModule + "/app/exam")},
+		name:           "safe Markdown",
+		sources:        []pathPattern{exact(serverModule + "/app/exam/safemarkdown")},
 		deniedStandard: standardInfrastructure,
-		project: only(
-			exact(serverModule+"/app/apperror"),
-			exact(serverModule+"/model"),
-			exact(serverModule+"/store"),
-			exact(serverModule+"/app/exam/safemarkdown"),
-		),
 	},
 	{
 		name:           "file-content adapter",
 		sources:        []pathPattern{subtree(serverModule + "/filecontent")},
 		deniedStandard: standardInfrastructureExceptOS,
 		project: only(
-			exact(serverModule+"/app"),
 			exact(serverModule+"/app/exam"),
+			exact(serverModule+"/app/user"),
 			exact(serverModule+"/model"),
 			exact(repositoryModule+"/packages/vfs"),
 		),
@@ -430,42 +471,240 @@ var dependencyRules = []dependencyRule{
 		),
 	},
 	{
-		name:           "application",
-		sources:        []pathPattern{subtree(serverModule + "/app")},
+		name:           "access application",
+		sources:        []pathPattern{exact(serverModule + "/app/access")},
 		deniedStandard: standardInfrastructure,
 		project: only(
 			exact(serverModule+"/app/apperror"),
+			exact(serverModule+"/app/invocation"),
+			exact(serverModule+"/model"),
+			exact(serverModule+"/store"),
+		),
+	},
+	{
+		name:           "paging application",
+		sources:        []pathPattern{exact(serverModule + "/app/paging")},
+		deniedStandard: standardInfrastructure,
+		project: only(
+			exact(serverModule+"/app/apperror"),
+			exact(serverModule+"/store"),
+		),
+	},
+	{
+		name:           "academic application",
+		sources:        []pathPattern{exact(serverModule + "/app/academic")},
+		deniedStandard: standardInfrastructure,
+		project: only(
+			exact(serverModule+"/app/access"),
+			exact(serverModule+"/app/apperror"),
 			exact(serverModule+"/app/idempotency"),
+			exact(serverModule+"/app/internal/batchitem"),
+			exact(serverModule+"/app/invocation"),
+			exact(serverModule+"/app/mail"),
+			exact(serverModule+"/app/paging"),
+			exact(serverModule+"/app/realtime"),
+			exact(serverModule+"/model"),
+			exact(serverModule+"/store"),
+		),
+	},
+	{
+		name:           "user application",
+		sources:        []pathPattern{exact(serverModule + "/app/user")},
+		deniedStandard: standardInfrastructure,
+		project: only(
+			exact(serverModule+"/app/access"),
+			exact(serverModule+"/app/apperror"),
+			exact(serverModule+"/app/idempotency"),
+			exact(serverModule+"/app/invocation"),
+			exact(serverModule+"/app/paging"),
+			exact(serverModule+"/app/realtime"),
+			exact(serverModule+"/model"),
+			exact(serverModule+"/store"),
+		),
+	},
+	{
+		name:           "identity application",
+		sources:        []pathPattern{exact(serverModule + "/app/identity")},
+		deniedStandard: standardInfrastructure,
+		project: only(
+			exact(serverModule+"/logging"),
+			exact(serverModule+"/app/access"),
+			exact(serverModule+"/app/apperror"),
+			exact(serverModule+"/app/exam/attempt"),
+			exact(serverModule+"/app/idempotency"),
+			exact(serverModule+"/app/internal/batchitem"),
+			exact(serverModule+"/app/invocation"),
+			exact(serverModule+"/app/job"),
+			exact(serverModule+"/app/jobs"),
+			exact(serverModule+"/app/mail"),
+			exact(serverModule+"/app/paging"),
+			exact(serverModule+"/app/realtime"),
+			exact(serverModule+"/app/user"),
+			exact(serverModule+"/model"),
+			exact(serverModule+"/secretseal"),
+			exact(serverModule+"/store"),
+		),
+		thirdParty: only(exact("golang.org/x/crypto/argon2")),
+	},
+	{
+		name:           "administration application",
+		sources:        []pathPattern{exact(serverModule + "/app/administration")},
+		deniedStandard: standardInfrastructure,
+		project: only(
+			exact(serverModule+"/app/access"),
+			exact(serverModule+"/app/apperror"),
+			exact(serverModule+"/app/idempotency"),
+			exact(serverModule+"/app/identity"),
+			exact(serverModule+"/app/internal/batchitem"),
+			exact(serverModule+"/app/invocation"),
+			exact(serverModule+"/app/jobs"),
+			exact(serverModule+"/app/mail"),
+			exact(serverModule+"/app/paging"),
+			exact(serverModule+"/app/realtime"),
+			exact(serverModule+"/model"),
+			exact(serverModule+"/store"),
+		),
+	},
+	{
+		name:           "onboarding application",
+		sources:        []pathPattern{exact(serverModule + "/app/onboarding")},
+		deniedStandard: standardInfrastructure,
+		project: only(
+			exact(serverModule+"/app/academic"),
+			exact(serverModule+"/app/access"),
+			exact(serverModule+"/app/administration"),
+			exact(serverModule+"/app/apperror"),
+			exact(serverModule+"/app/idempotency"),
+			exact(serverModule+"/app/identity"),
+			exact(serverModule+"/app/internal/batchitem"),
+			exact(serverModule+"/app/invocation"),
+			exact(serverModule+"/app/jobs"),
+			exact(serverModule+"/app/mail"),
+			exact(serverModule+"/app/paging"),
+			exact(serverModule+"/app/realtime"),
+			exact(serverModule+"/app/user"),
+			exact(serverModule+"/model"),
+			exact(serverModule+"/store"),
+		),
+	},
+	{
+		name:           "search application",
+		sources:        []pathPattern{exact(serverModule + "/app/search")},
+		deniedStandard: standardInfrastructure,
+		project: only(
+			exact(serverModule+"/app/access"),
+			exact(serverModule+"/app/apperror"),
+			exact(serverModule+"/app/exam"),
+			exact(serverModule+"/app/invocation"),
+			exact(serverModule+"/app/paging"),
+			exact(serverModule+"/app/user"),
+			exact(serverModule+"/model"),
+			exact(serverModule+"/store"),
+		),
+	},
+	{
+		// Only the areas that run batches import the batch item context, and
+		// the Go internal rule keeps every transport from building one.
+		name:           "batch item context",
+		sources:        []pathPattern{exact(serverModule + "/app/internal/batchitem")},
+		deniedStandard: standardInfrastructure,
+		project: only(
+			exact(serverModule+"/model"),
+			exact(serverModule+"/store"),
+		),
+	},
+	{
+		// The parent alone; an application child without its own rule fails
+		// closed.
+		name:           "application",
+		sources:        []pathPattern{exact(serverModule + "/app")},
+		deniedStandard: standardInfrastructure,
+		project: only(
+			exact(serverModule+"/logging"),
+			exact(serverModule+"/app/academic"),
+			exact(serverModule+"/app/access"),
+			exact(serverModule+"/app/administration"),
+			exact(serverModule+"/app/identity"),
+			exact(serverModule+"/app/onboarding"),
+			exact(serverModule+"/app/user"),
+			exact(serverModule+"/app/apperror"),
 			exact(serverModule+"/app/invocation"),
 			exact(serverModule+"/model"),
 			exact(serverModule+"/store"),
 			exact(serverModule+"/app/job"),
-			exact(serverModule+"/app/jobhandler"),
+			exact(serverModule+"/app/jobs"),
 			exact(serverModule+"/app/realtime"),
 			exact(serverModule+"/app/mail"),
+			exact(serverModule+"/app/search"),
 			exact(serverModule+"/secretseal"),
 			subtree(serverModule+"/app/exam"),
 		),
-		thirdParty: only(exact("golang.org/x/crypto/argon2")),
 	},
 	{
 		name:    "hosted webapp transport",
 		sources: []pathPattern{exact(serverModule + "/webui")},
 	},
 	{
-		name: "HTTP and WebSocket transports",
-		sources: []pathPattern{
-			subtree(serverModule + "/httpapi"),
-			subtree(serverModule + "/websocket"),
-		},
+		// The routing kernel serves every resource and knows none. It reaches
+		// the application only for the error, invocation and paging leaves;
+		// it reads a DPoP nonce challenge and delivery recovery state through
+		// small interfaces on the error, and which codes advise Retry-After or
+		// carry an extension member from its generated catalog.
+		name:           "HTTP routing kernel",
+		sources:        []pathPattern{exact(serverModule + "/httpapi/route")},
 		deniedStandard: standardInfrastructureExceptHTTP,
 		project: only(
-			exact(serverModule+"/app"),
+			exact(serverModule+"/logging"),
 			exact(serverModule+"/app/apperror"),
 			exact(serverModule+"/app/invocation"),
+			exact(serverModule+"/app/paging"),
+			exact(serverModule+"/model"),
+			exact(serverModule+"/localization"),
+			exact(serverModule+"/internal/weborigin"),
+		),
+		thirdParty: only(descendants("github.com/gorilla")),
+	},
+	{
+		name:           "HTTP resources",
+		sources:        []pathPattern{subtree(serverModule + "/httpapi")},
+		deniedStandard: standardInfrastructureExceptHTTP,
+		// The resources name the application surface, the area packages whose
+		// command, query and result types they map, store result types, and
+		// the domain and presentation leaves; the routing kernel owns the
+		// router library and browser origins.
+		project: only(
+			exact(serverModule+"/httpapi/route"),
+			exact(serverModule+"/logging"),
+			exact(serverModule+"/app"),
+			exact(serverModule+"/app/academic"),
+			exact(serverModule+"/app/administration"),
+			exact(serverModule+"/app/apperror"),
+			exact(serverModule+"/app/identity"),
+			exact(serverModule+"/app/invocation"),
 			exact(serverModule+"/app/job"),
-			exact(serverModule+"/app/realtime"),
+			exact(serverModule+"/app/mail"),
+			exact(serverModule+"/app/onboarding"),
+			exact(serverModule+"/app/paging"),
+			exact(serverModule+"/app/search"),
+			exact(serverModule+"/app/user"),
 			subtree(serverModule+"/app/exam"),
+			exact(serverModule+"/model"),
+			exact(serverModule+"/store"),
+			exact(serverModule+"/localization"),
+		),
+	},
+	{
+		name:           "WebSocket transport",
+		sources:        []pathPattern{subtree(serverModule + "/websocket")},
+		deniedStandard: standardInfrastructureExceptHTTP,
+		// The socket delivers Realtime events and connects Attempts; it reaches
+		// no other area.
+		project: only(
+			exact(serverModule+"/logging"),
+			exact(serverModule+"/app/apperror"),
+			exact(serverModule+"/app/exam/attempt"),
+			exact(serverModule+"/app/invocation"),
+			exact(serverModule+"/app/realtime"),
 			exact(serverModule+"/model"),
 			exact(serverModule+"/store"),
 			exact(serverModule+"/localization"),
@@ -489,11 +728,18 @@ var dependencyRules = []dependencyRule{
 	{
 		name:    "metrics",
 		sources: []pathPattern{exact(serverModule + "/metrics")},
+		// Beyond its recorder contracts, metrics names only the ports its
+		// measuring wrappers decorate: the platform Cache and Mailer, the
+		// cluster transport, and the reusable VFS and mail contracts.
 		project: only(
 			exact(serverModule+"/config"),
 			exact(serverModule+"/internal/tlscert"),
 			exact(serverModule+"/store/timerlayer"),
 			exact(serverModule+"/store/localcachelayer"),
+			exact(serverModule+"/platform"),
+			exact(serverModule+"/cluster"),
+			exact(repositoryModule+"/packages/vfs"),
+			exact(repositoryModule+"/packages/mail"),
 		),
 		thirdParty: only(subtree("github.com/prometheus/client_golang")),
 	},
@@ -507,7 +753,6 @@ var dependencyRules = []dependencyRule{
 		name:    "external-auth adapters",
 		sources: []pathPattern{subtree(serverModule + "/platform/externalauth")},
 		project: only(
-			exact(serverModule+"/app"),
 			exact(serverModule+"/config"),
 			exact(serverModule+"/model"),
 			exact(serverModule+"/platform/externalauth"),
@@ -524,6 +769,8 @@ var dependencyRules = []dependencyRule{
 			descendants(serverModule+"/cluster"),
 			descendants(serverModule+"/platform/externalauth"),
 			exact(serverModule+"/store/sqlstore"),
+			// metrics wraps the platform ports, so the edge points one way.
+			exact(serverModule+"/metrics"),
 			subtree(serverModule+"/app"),
 			subtree(serverModule+"/httpapi"),
 			subtree(serverModule+"/websocket"),
@@ -532,6 +779,19 @@ var dependencyRules = []dependencyRule{
 	{
 		name:    "healthcheck executable",
 		sources: []pathPattern{exact(serverModule + "/cmd/proctor-healthcheck")},
+	},
+	{
+		// Offline operator commands open the configuration and the database
+		// themselves; they never build a node.
+		name:           "offline operator commands",
+		sources:        []pathPattern{exact(serverModule + "/operator")},
+		deniedStandard: standardInfrastructure,
+		project: only(
+			exact(serverModule+"/config"),
+			exact(serverModule+"/model"),
+			exact(serverModule+"/store"),
+			exact(serverModule+"/store/sqlstore"),
+		),
 	},
 	{
 		name:    "operator executable",
@@ -545,6 +805,7 @@ var dependencyRules = []dependencyRule{
 		project: only(
 			exact(serverModule),
 			exact(serverModule+"/localization"),
+			exact(serverModule+"/operator"),
 		),
 		// x/sys/unix reads CLOCK_MONOTONIC for systemd reload notifications.
 		thirdParty: only(exact("github.com/spf13/cobra"), exact("golang.org/x/sys/unix")),
@@ -590,7 +851,7 @@ var dependencyRules = []dependencyRule{
 	{
 		name:       "configuration",
 		sources:    []pathPattern{exact(serverModule + "/config")},
-		project:    only(exact(serverModule + "/identityprovider")),
+		project:    only(exact(serverModule + "/model")),
 		thirdParty: allImports(),
 	},
 	{
@@ -634,20 +895,36 @@ func TestDependencyRulePrecedence(t *testing.T) {
 		packagePath string
 		wantRule    string
 	}{
-		{packagePath: serverModule + "/app/jobhandler", wantRule: "concrete jobs"},
+		{packagePath: serverModule + "/app/jobs", wantRule: "concrete jobs"},
 		{packagePath: serverModule + "/app/idempotency", wantRule: "idempotency application"},
 		{packagePath: serverModule + "/app/invocation", wantRule: "invocation application"},
 		{packagePath: serverModule + "/app/apperror", wantRule: "application error vocabulary"},
+		{packagePath: serverModule + "/app/access", wantRule: "access application"},
+		{packagePath: serverModule + "/app/paging", wantRule: "paging application"},
+		{packagePath: serverModule + "/app/academic", wantRule: "academic application"},
+		{packagePath: serverModule + "/app/user", wantRule: "user application"},
+		{packagePath: serverModule + "/app/identity", wantRule: "identity application"},
+		{packagePath: serverModule + "/app/administration", wantRule: "administration application"},
+		{packagePath: serverModule + "/app/onboarding", wantRule: "onboarding application"},
+		{packagePath: serverModule + "/app/search", wantRule: "search application"},
+		{packagePath: serverModule + "/app/job", wantRule: "job engine"},
+		{packagePath: serverModule + "/app/mail", wantRule: "mail application"},
 		{packagePath: serverModule + "/app/exam/manageraccess", wantRule: "exam manager access"},
 		{packagePath: serverModule + "/app/exam", wantRule: "exam manager access consumers"},
-		{packagePath: serverModule + "/app/exam/review", wantRule: "exam idempotency consumers"},
-		{packagePath: serverModule + "/app/exam/safemarkdown", wantRule: "exam application"},
+		{packagePath: serverModule + "/app/exam/review", wantRule: "exam mail and safe Markdown consumers"},
+		{packagePath: serverModule + "/app/exam/safemarkdown", wantRule: "safe Markdown"},
+		{packagePath: serverModule + "/app/internal/batchitem", wantRule: "batch item context"},
+		{packagePath: serverModule + "/app", wantRule: "application"},
 		{packagePath: serverModule + "/store/sqlstore", wantRule: "SQL store adapter"},
 		{packagePath: serverModule + "/platform/externalauth/oidc", wantRule: "external-auth adapters"},
 		{packagePath: serverModule + "/internal/openapidoc", wantRule: "OpenAPI compiler"},
 		{packagePath: serverModule + "/internal/errorcatalog", wantRule: "error catalog compiler"},
 		{packagePath: serverModule + "/cmd/proctor-healthcheck", wantRule: "healthcheck executable"},
+		{packagePath: serverModule + "/operator", wantRule: "offline operator commands"},
 		{packagePath: serverModule + "/cmd/ptool/commands", wantRule: "ptool commands"},
+		{packagePath: serverModule + "/httpapi/route", wantRule: "HTTP routing kernel"},
+		{packagePath: serverModule + "/httpapi", wantRule: "HTTP resources"},
+		{packagePath: serverModule + "/websocket", wantRule: "WebSocket transport"},
 	}
 
 	for _, tt := range tests {
@@ -657,54 +934,6 @@ func TestDependencyRulePrecedence(t *testing.T) {
 			require.True(t, ok, "dependencyRuleFor(%q) found no rule", tt.packagePath)
 			require.Equal(t, tt.wantRule, rule.name, "dependencyRuleFor(%q)", tt.packagePath)
 		})
-	}
-}
-
-func TestExamIdempotencyConsumerAllowlist(t *testing.T) {
-	t.Parallel()
-
-	for _, packagePath := range []string{
-		serverModule + "/app/exam",
-		serverModule + "/app/exam/attempt",
-		serverModule + "/app/exam/correction",
-		serverModule + "/app/exam/resource",
-		serverModule + "/app/exam/review",
-		serverModule + "/app/exam/sitting",
-		serverModule + "/app/exam/workspace",
-	} {
-		assert.False(t, forbiddenImport(packagePath, serverModule+"/app/idempotency"), "%s cannot import the shared idempotency leaf", packagePath)
-	}
-	assert.True(t, forbiddenImport(serverModule+"/app/exam/safemarkdown", serverModule+"/app/idempotency"), "unlisted Exam child can import the shared idempotency leaf")
-	assert.True(t, forbiddenImport(serverModule+"/app/exam/attempt/internal", serverModule+"/app/idempotency"), "descendant of a listed Exam command owner can import the shared idempotency leaf")
-}
-
-func TestInvocationLeafBoundary(t *testing.T) {
-	t.Parallel()
-	leaf := serverModule + "/app/invocation"
-	for _, consumer := range []string{"/app", "/app/idempotency", "/app/exam", "/app/exam/attempt", "/app/exam/correction",
-		"/app/exam/resource", "/app/exam/review", "/app/exam/sitting", "/app/exam/workspace"} {
-		assert.False(t, forbiddenImport(serverModule+consumer, leaf), "%s cannot import the shared invocation leaf", consumer)
-	}
-	assert.False(t, forbiddenImport(leaf, serverModule+"/model"), "invocation leaf cannot import model")
-	for _, dependency := range []string{"/app", "/app/apperror", "/app/idempotency", "/app/exam", "/store"} {
-		assert.True(t, forbiddenImport(leaf, serverModule+dependency), "invocation leaf can import forbidden dependency %s", dependency)
-	}
-}
-
-func TestExamManagerAccessBoundary(t *testing.T) {
-	t.Parallel()
-	leaf := serverModule + "/app/exam/manageraccess"
-	for _, consumer := range []string{"/app/exam", "/app/exam/correction", "/app/exam/resource", "/app/exam/sitting", "/app/exam/workspace"} {
-		assert.False(t, forbiddenImport(serverModule+consumer, leaf), "%s cannot import the shared Manager eligibility policy", consumer)
-	}
-	for _, consumer := range []string{"/app/exam/attempt", "/app/exam/review", "/app/exam/resource/internal"} {
-		assert.True(t, forbiddenImport(serverModule+consumer, leaf), "unlisted consumer %s can import the shared Manager eligibility policy", consumer)
-	}
-	for _, dependency := range []string{"/model", "/store"} {
-		assert.False(t, forbiddenImport(leaf, serverModule+dependency), "Manager eligibility policy cannot import %s", dependency)
-	}
-	for _, dependency := range []string{"/app", "/app/exam", "/app/exam/resource", "/app/idempotency", "/store/sqlstore"} {
-		assert.True(t, forbiddenImport(leaf, serverModule+dependency), "Manager eligibility policy can import forbidden dependency %s", dependency)
 	}
 }
 
@@ -764,6 +993,8 @@ func packageOrBelow(packagePath, root string) bool {
 func exemptProductionHelper(packagePath string) bool {
 	return packageOrBelow(packagePath, serverModule+"/testlib") ||
 		packageOrBelow(packagePath, serverModule+"/store/storetest") ||
+		packageOrBelow(packagePath, serverModule+"/app/realtime/realtimetest") ||
+		packageOrBelow(packagePath, serverModule+"/httpapi/route/routetest") ||
 		packageOrBelow(packagePath, serverModule+"/config/configtest")
 }
 

@@ -13,7 +13,8 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/administration"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -44,14 +45,19 @@ type selfAuditResourceResponse struct {
 	ID   string             `json:"id,omitempty"`
 }
 
-func selfAuditEventResponseFromApplication(event app.SelfAuditEvent) selfAuditEventResponse {
+func selfAuditEventResponseFromApplication(event administration.SelfAuditEvent) selfAuditEventResponse {
 	return selfAuditEventResponse{
-		ID: event.ID.String(), CreatedAt: model.FormatRFC3339(event.CreatedAt),
-		Event: string(event.Event), Status: event.Status, Relation: string(event.Relation),
-		Actor:     selfAuditActorResponse{Kind: string(event.ActorKind)},
-		Resource:  selfAuditResourceResponse{Type: event.Resource.Type, ID: event.Resource.ID},
-		ErrorCode: event.ErrorCode, ClientType: event.ClientType,
-		IPAddress: event.IPAddress, UserAgent: event.UserAgent,
+		ID:         event.ID.String(),
+		CreatedAt:  model.FormatRFC3339(event.CreatedAt),
+		Event:      string(event.Event),
+		Status:     event.Status,
+		Relation:   string(event.Relation),
+		Actor:      selfAuditActorResponse{Kind: string(event.ActorKind)},
+		Resource:   selfAuditResourceResponse{Type: event.Resource.Type, ID: event.Resource.ID},
+		ErrorCode:  event.ErrorCode,
+		ClientType: event.ClientType,
+		IPAddress:  event.IPAddress,
+		UserAgent:  event.UserAgent,
 	}
 }
 
@@ -78,54 +84,71 @@ const (
 	selfAuditOrderOldest = "asc"
 )
 
-func (m auditResourceModule) listSelf(request operationRequest) (operationResult, error) {
-	page, err := request.pageRequest()
+func (h auditHandlers) listSelf(request route.Request) (route.Result, error) {
+	page, err := request.Page()
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	query, err := selfAuditQueryFromValues(request.request.URL.Query())
+
+	query, err := selfAuditQueryFromValues(request.HTTP.URL.Query())
 	if err != nil {
-		return operationResult{}, invalidRequestError(err)
+		return route.Result{}, route.InvalidRequest(err)
 	}
+
 	order := selfAuditOrderNewest
 	if query.Ascending {
 		order = selfAuditOrderOldest
 	}
+
 	query.Limit = page.Limit
-	cursor, continued, err := decodePageCursor(page, selfAuditCursorSpec())
+	cursor, continued, err := route.DecodePageCursor(page, selfAuditCursorSpec())
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	if continued {
 		if cursor.Order != order {
-			return operationResult{}, invalidRequestError(errAuditQuery("cursor"))
+			return route.Result{}, route.InvalidRequest(errAuditQuery("cursor"))
 		}
+
 		createdAt, _ := model.ParseRFC3339(cursor.CreatedAt)
 		query.BeforeCreatedAt, query.BeforeID = createdAt, model.AuditEventID(cursor.ID)
 	}
-	result, err := m.audits.ListSelfAuditEvents(request.context, request.invocation(), query)
+
+	result, err := h.app.ListSelfAuditEvents(request.Context, request.Invocation(), query)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if len(result.Items) > query.Limit || result.Counted == continued {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
-	envelope, err := newListResponse(result.Items, result.HasMore, selfAuditEventResponseFromApplication, func(last app.SelfAuditEvent) (string, error) {
-		return encodeOpaqueCursor(selfAuditCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String(), Order: order}, selfAuditCursorSpec())
-	})
+
+	envelope, err := route.NewList(
+		result.Items,
+		result.HasMore,
+		selfAuditEventResponseFromApplication,
+		func(last administration.SelfAuditEvent) (string, error) {
+			return route.EncodeCursor(
+				selfAuditCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String(), Order: order},
+				selfAuditCursorSpec(),
+			)
+		},
+	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	response := selfAuditListResponse{Items: envelope.Items, NextCursor: envelope.NextCursor}
 	if result.Counted {
 		total, lowerBound := result.Total, result.TotalIsLowerBound
 		response.Total, response.TotalIsLowerBound = &total, &lowerBound
 	}
-	return jsonResult(http.StatusOK, response).withHeaders(privateNoStoreHeaders()), nil
+
+	return route.JSON(http.StatusOK, response).WithHeaders(privateNoStoreHeaders()), nil
 }
 
-func selfAuditQueryFromValues(values url.Values) (app.ListSelfAuditEventsQuery, error) {
-	var query app.ListSelfAuditEventsQuery
+func selfAuditQueryFromValues(values url.Values) (administration.ListSelfAuditEventsQuery, error) {
+	var query administration.ListSelfAuditEventsQuery
 	for key, entries := range values {
 		switch key {
 		case "limit", "cursor", "event":
@@ -137,6 +160,7 @@ func selfAuditQueryFromValues(values url.Values) (app.ListSelfAuditEventsQuery, 
 			return query, errAuditQuery(key)
 		}
 	}
+
 	var err error
 	if query.Since, err = optionalAuditTime(values, "created_after"); err != nil {
 		return query, err
@@ -144,11 +168,13 @@ func selfAuditQueryFromValues(values url.Values) (app.ListSelfAuditEventsQuery, 
 	if query.Until, err = optionalAuditTime(values, "created_before"); err != nil {
 		return query, err
 	}
+
 	// The application owns the closed event, status, and relation vocabulary
 	// and answers audit.query.invalid for a value outside it.
 	for _, raw := range values["event"] {
 		query.Events = append(query.Events, model.AuditSelfEvent(raw))
 	}
+
 	switch values.Get("order") {
 	case "", selfAuditOrderNewest:
 	case selfAuditOrderOldest:
@@ -156,6 +182,7 @@ func selfAuditQueryFromValues(values url.Values) (app.ListSelfAuditEventsQuery, 
 	default:
 		return query, errAuditQuery("order")
 	}
+
 	query.Status = model.AuditStatus(values.Get("status"))
 	query.Relation = store.AuditSelfRelation(values.Get("relation"))
 	return query, nil
@@ -173,16 +200,20 @@ func optionalAuditTime(values url.Values, name string) (time.Time, error) {
 	return at, nil
 }
 
-func selfAuditCursorSpec() opaqueCursorSpec[selfAuditCursor] {
-	return opaqueCursorSpec[selfAuditCursor]{
-		label: "self_audit", maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members: []string{"created_at", "id", "order"},
-		validate: func(cursor selfAuditCursor) error {
+func selfAuditCursorSpec() route.CursorSpec[selfAuditCursor] {
+	return route.CursorSpec[selfAuditCursor]{
+		Label:                "self_audit",
+		MaximumEncodedLength: route.DefaultMaximumCursorLength,
+		Members:              []string{"created_at", "id", "order"},
+		Validate: func(cursor selfAuditCursor) error {
 			createdAt, err := model.ParseRFC3339(cursor.CreatedAt)
-			if err != nil || createdAt.IsZero() || !model.AuditEventID(cursor.ID).IsValid() ||
+			if err != nil ||
+				createdAt.IsZero() ||
+				!model.AuditEventID(cursor.ID).IsValid() ||
 				(cursor.Order != selfAuditOrderNewest && cursor.Order != selfAuditOrderOldest) {
 				return errors.New("invalid self audit keyset")
 			}
+
 			return nil
 		},
 	}

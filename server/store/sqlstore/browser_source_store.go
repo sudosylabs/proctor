@@ -49,13 +49,20 @@ func (r browserSourceRefusalRecord) Validate() error {
 // the same declaration returns the original source status or refusal; a
 // different declaration under the same source ID is a conflict, and a refusal
 // is returned as *store.BrowserSourceRefusal.
-func (s *SQLExamAttemptStore) StartBrowserActivity(ctx context.Context, input *store.BrowserActivitySourceStart) (*model.BrowserSourceStatus, error) {
+func (s *SQLBrowserDeliveryStore) StartBrowserActivity(
+	ctx context.Context,
+	input *store.BrowserActivitySourceStart,
+) (*model.BrowserSourceStatus, error) {
 	if input == nil || input.Declaration().Validate() != nil || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("browser_activity", "source_start", nil)
 	}
+
 	canonical, _ := input.Declaration().Canonical()
 	digest := model.SHA256Fingerprint(canonical)
-	result, err := runSQLTransaction(ctx, s.GetMaster().Begin, "start Browser Activity source", func(ctx context.Context, tx *sqlxTxWrapper) (browserSourceStartOutcome, error) {
+	result, err := runSQLTransaction(ctx, s.GetMaster().Begin, "start Browser Activity source", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (browserSourceStartOutcome, error) {
 		return s.startBrowserActivity(ctx, tx, input, canonical, digest)
 	})
 	if err != nil {
@@ -64,6 +71,7 @@ func (s *SQLExamAttemptStore) StartBrowserActivity(ctx context.Context, input *s
 	if result.Refusal != nil {
 		return nil, result.Refusal
 	}
+
 	return result.Status, nil
 }
 
@@ -95,11 +103,18 @@ type browserSourcePrior struct {
 
 // startBrowserActivity performs one source start inside the caller's
 // transaction.
-func (s *SQLExamAttemptStore) startBrowserActivity(ctx context.Context, tx *sqlxTxWrapper, input *store.BrowserActivitySourceStart, canonical []byte, digest string) (browserSourceStartOutcome, error) {
+func (s *SQLBrowserDeliveryStore) startBrowserActivity(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.BrowserActivitySourceStart,
+	canonical []byte,
+	digest string,
+) (browserSourceStartOutcome, error) {
 	guard, part, err := s.lockBrowserSourceStart(ctx, tx, input)
 	if err != nil {
 		return browserSourceStartOutcome{}, err
 	}
+
 	replay, err := replayBrowserSourceStart(ctx, tx, input, digest)
 	if err != nil {
 		return browserSourceStartOutcome{}, err
@@ -107,8 +122,19 @@ func (s *SQLExamAttemptStore) startBrowserActivity(ctx context.Context, tx *sqlx
 	if replay != nil {
 		return *replay, nil
 	}
+
 	var prior browserSourcePrior
-	err = tx.Get(ctx, &prior, `SELECT id::text,policy_revision_id,policy_digest,state,closure_canonical FROM browser_activity_sources WHERE participation_id=? ORDER BY start_ordinal DESC LIMIT 1 FOR UPDATE`, input.ParticipationID.String())
+	err = tx.Get(
+		ctx,
+		&prior,
+		`SELECT id::text, policy_revision_id, policy_digest, state, closure_canonical
+		FROM browser_activity_sources
+		WHERE participation_id = ?
+		ORDER BY start_ordinal DESC
+		LIMIT 1
+		FOR UPDATE`,
+		input.ParticipationID.String(),
+	)
 	hasPrior := err == nil
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return browserSourceStartOutcome{}, err
@@ -119,28 +145,43 @@ func (s *SQLExamAttemptStore) startBrowserActivity(ctx context.Context, tx *sqlx
 	if err = checkBrowserSourceTransition(input, part, prior, hasPrior); err != nil {
 		return browserSourceStartOutcome{}, err
 	}
+
 	var now time.Time
 	if err = tx.Get(ctx, &now, `SELECT clock_timestamp()`); err != nil {
 		return browserSourceStartOutcome{}, err
 	}
+
 	now = now.UTC().Truncate(time.Millisecond)
 	var used int64
-	if err = tx.Get(ctx, &used, `SELECT control_metadata_bytes FROM exam_attempt_delivery_budgets WHERE exam_attempt_id=? FOR UPDATE`, guard.AttemptID); err != nil {
+	if err = tx.Get(
+		ctx,
+		&used,
+		`SELECT control_metadata_bytes
+		FROM exam_attempt_delivery_budgets
+		WHERE exam_attempt_id = ?
+		FOR UPDATE`,
+		guard.AttemptID,
+	); err != nil {
 		return browserSourceStartOutcome{}, err
 	}
+
 	reserved, capacityErr := model.ReserveDeliveryMetadata(used, model.BrowserOwnerReservationBytes)
-	exhausted := input.Transition.Kind == "runtime_reset" && part.Resets >= model.BrowserRuntimeResetStartLimit || input.Transition.Kind == "policy_correction" && part.Corrections >= model.BrowserCorrectionStartLimit
+	exhausted := input.Transition.Kind == "runtime_reset" && part.Resets >= model.BrowserRuntimeResetStartLimit ||
+		input.Transition.Kind == "policy_correction" && part.Corrections >= model.BrowserCorrectionStartLimit
 	if exhausted || capacityErr != nil {
 		return refuseBrowserSourceStart(ctx, tx, input, digest, prior.ID, now, capacityErr)
 	}
+
 	if input.Transition.Kind == "runtime_reset" {
 		if err = closeBrowserSource(ctx, tx, model.BrowserSourceSessionID(prior.ID), model.DeliveryClosedRuntimeReset, now); err != nil {
 			return browserSourceStartOutcome{}, err
 		}
 	}
+
 	if err = insertBrowserSource(ctx, tx, input, guard, part, canonical, digest, now, reserved); err != nil {
 		return browserSourceStartOutcome{}, err
 	}
+
 	status, err := settleBrowserSource(ctx, tx, input.SourceSessionID)
 	if err != nil {
 		return browserSourceStartOutcome{}, err
@@ -148,48 +189,126 @@ func (s *SQLExamAttemptStore) startBrowserActivity(ctx context.Context, tx *sqlx
 	if err := completeBrowserSourceAudit(ctx, tx, input, false, "started"); err != nil {
 		return browserSourceStartOutcome{}, err
 	}
+
 	return browserSourceStartOutcome{Status: status}, nil
 }
 
 // lockBrowserSourceStart locks the Sitting, Attempt, Candidate guard and the
 // active Participation and checks the declared generation.
-func (s *SQLExamAttemptStore) lockBrowserSourceStart(ctx context.Context, tx *sqlxTxWrapper, input *store.BrowserActivitySourceStart) (candidateAttemptGuard, browserSourceStartParticipation, error) {
+func (s *SQLBrowserDeliveryStore) lockBrowserSourceStart(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.BrowserActivitySourceStart,
+) (candidateAttemptGuard, browserSourceStartParticipation, error) {
 	// Serialize browser owner changes before acquiring the shared live guard.
 	var locked string
-	if err := tx.Get(ctx, &locked, `SELECT a.id FROM exam_attempts a JOIN exam_sittings sit ON sit.id=a.exam_sitting_id WHERE a.id=? AND a.candidate_user_id=? FOR SHARE OF sit`, input.Access.AttemptID.String(), input.Access.CandidateUserID.String()); err != nil {
-		return candidateAttemptGuard{}, browserSourceStartParticipation{}, translateError("browser_activity_source", string(input.SourceSessionID), err)
+	if err := tx.Get(
+		ctx,
+		&locked,
+		`SELECT a.id
+		FROM exam_attempts a
+		JOIN exam_sittings sit ON sit.id = a.exam_sitting_id
+		WHERE a.id = ?
+			AND a.candidate_user_id = ?
+		FOR SHARE OF sit`,
+		input.Access.AttemptID.String(),
+		input.Access.CandidateUserID.String(),
+	); err != nil {
+		return candidateAttemptGuard{}, browserSourceStartParticipation{}, translateError(
+			"browser_activity_source",
+			string(input.SourceSessionID),
+			err,
+		)
 	}
-	if err := tx.Get(ctx, &locked, `SELECT id FROM exam_attempts WHERE id=? FOR UPDATE`, input.Access.AttemptID.String()); err != nil {
+
+	if err := tx.Get(ctx, &locked, `SELECT id
+		FROM exam_attempts
+		WHERE id = ?
+		FOR UPDATE`, input.Access.AttemptID.String()); err != nil {
 		return candidateAttemptGuard{}, browserSourceStartParticipation{}, err
 	}
-	guard, err := s.lockCandidateGuard(ctx, tx, input.Access)
+
+	guard, err := lockCandidateGuard(ctx, tx, input.Access)
 	if err != nil {
 		return candidateAttemptGuard{}, browserSourceStartParticipation{}, err
 	}
+
 	var part browserSourceStartParticipation
-	if err := tx.Get(ctx, &part, `SELECT p.generation,o.browser_initial_started,o.browser_correction_starts,o.browser_runtime_reset_starts FROM exam_attempt_participations p JOIN exam_attempt_security_owners o ON o.participation_id=p.id JOIN exam_attempt_connections c ON c.participation_id=p.id WHERE p.id=? AND p.exam_attempt_id=? AND p.state='active' AND c.id=? AND c.state='open' AND p.session_id=? AND c.session_id=? FOR UPDATE OF p,o`, input.ParticipationID.String(), guard.AttemptID, input.Access.ConnectionID.String(), input.Access.SessionID.String(), input.Access.SessionID.String()); err != nil {
-		return candidateAttemptGuard{}, browserSourceStartParticipation{}, translateError("browser_activity_source", string(input.SourceSessionID), err)
+	if err := tx.Get(
+		ctx,
+		&part,
+		`SELECT p.generation, o.browser_initial_started, o.browser_correction_starts,
+			o.browser_runtime_reset_starts
+		FROM exam_attempt_participations p
+		JOIN exam_attempt_security_owners o ON o.participation_id = p.id
+		JOIN exam_attempt_connections c ON c.participation_id = p.id
+		WHERE p.id = ?
+			AND p.exam_attempt_id = ?
+			AND p.state = 'active'
+			AND c.id = ?
+			AND c.state = 'open'
+			AND p.session_id = ?
+			AND c.session_id = ?
+		FOR UPDATE OF p, o`,
+		input.ParticipationID.String(),
+		guard.AttemptID,
+		input.Access.ConnectionID.String(),
+		input.Access.SessionID.String(),
+		input.Access.SessionID.String(),
+	); err != nil {
+		return candidateAttemptGuard{}, browserSourceStartParticipation{}, translateError(
+			"browser_activity_source",
+			string(input.SourceSessionID),
+			err,
+		)
 	}
+
 	if part.Generation != input.Generation {
-		return candidateAttemptGuard{}, browserSourceStartParticipation{}, store.NewErrConflict("browser_activity", "attempt_participation_generation", nil)
+		return candidateAttemptGuard{}, browserSourceStartParticipation{}, store.NewErrConflict(
+			"browser_activity",
+			"attempt_participation_generation",
+			nil,
+		)
 	}
+
 	return guard, part, nil
 }
 
 // replayBrowserSourceStart returns the original status or refusal of a retried
 // source start, or nil when the declaration is new.
-func replayBrowserSourceStart(ctx context.Context, tx *sqlxTxWrapper, input *store.BrowserActivitySourceStart, digest string) (*browserSourceStartOutcome, error) {
+func replayBrowserSourceStart(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.BrowserActivitySourceStart,
+	digest string,
+) (*browserSourceStartOutcome, error) {
 	// Retry identity is checked before mutable policy/gate state. It can return
 	// the original now-closed source but never revive navigation authority.
 	var existing struct {
 		ID     string `db:"id"`
 		Digest string `db:"start_digest"`
 	}
-	err := tx.Get(ctx, &existing, `SELECT id::text,start_digest FROM browser_activity_sources WHERE id=?::uuid AND participation_id=? AND candidate_user_id=? AND registration_id=? AND key_thumbprint=?`, string(input.SourceSessionID), input.ParticipationID.String(), input.Access.CandidateUserID.String(), input.Access.DesktopRegistrationID.String(), input.Access.DPoPKeyThumbprint)
+	err := tx.Get(
+		ctx,
+		&existing,
+		`SELECT id::text, start_digest
+		FROM browser_activity_sources
+		WHERE id = ?::uuid
+			AND participation_id = ?
+			AND candidate_user_id = ?
+			AND registration_id = ?
+			AND key_thumbprint = ?`,
+		string(input.SourceSessionID),
+		input.ParticipationID.String(),
+		input.Access.CandidateUserID.String(),
+		input.Access.DesktopRegistrationID.String(),
+		input.Access.DPoPKeyThumbprint,
+	)
 	if err == nil {
 		if existing.Digest != digest {
 			return nil, store.NewErrConflict("browser_activity", "browser_source_conflict", nil)
 		}
+
 		status, statusErr := browserSourceStatus(ctx, tx, input.SourceSessionID)
 		if statusErr != nil {
 			return nil, statusErr
@@ -197,11 +316,14 @@ func replayBrowserSourceStart(ctx context.Context, tx *sqlxTxWrapper, input *sto
 		if err = completeBrowserSourceAudit(ctx, tx, input, true, "started"); err != nil {
 			return nil, err
 		}
+
 		return &browserSourceStartOutcome{Status: status}, nil
 	}
+
 	if !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
+
 	// A later policy correction can create a successor after a refusal.
 	// Retry identity belongs to the retained predecessor slot, not whichever
 	// source is newest today. Current owner/generation were reauthorized above.
@@ -209,9 +331,28 @@ func replayBrowserSourceStart(ctx context.Context, tx *sqlxTxWrapper, input *sto
 		ID   string `db:"id"`
 		Body []byte `db:"refusal_canonical"`
 	}
-	if err := tx.Select(ctx, &refused, `SELECT id::text,refusal_canonical FROM browser_activity_sources WHERE participation_id=? AND candidate_user_id=? AND registration_id=? AND key_thumbprint=? AND refusal_canonical IS NOT NULL ORDER BY start_ordinal LIMIT ? FOR UPDATE`, input.ParticipationID.String(), input.Access.CandidateUserID.String(), input.Access.DesktopRegistrationID.String(), input.Access.DPoPKeyThumbprint, model.BrowserSourceMaximumPerParticipation); err != nil {
+	if err := tx.Select(
+		ctx,
+		&refused,
+		`SELECT id::text, refusal_canonical
+		FROM browser_activity_sources
+		WHERE participation_id = ?
+			AND candidate_user_id = ?
+			AND registration_id = ?
+			AND key_thumbprint = ?
+			AND refusal_canonical IS NOT NULL
+		ORDER BY start_ordinal
+		LIMIT ?
+		FOR UPDATE`,
+		input.ParticipationID.String(),
+		input.Access.CandidateUserID.String(),
+		input.Access.DesktopRegistrationID.String(),
+		input.Access.DPoPKeyThumbprint,
+		model.BrowserSourceMaximumPerParticipation,
+	); err != nil {
 		return nil, err
 	}
+
 	for _, saved := range refused {
 		var refusal browserSourceRefusalRecord
 		if json.Unmarshal(saved.Body, &refusal) != nil || refusal.Validate() != nil {
@@ -223,6 +364,7 @@ func replayBrowserSourceStart(ctx context.Context, tx *sqlxTxWrapper, input *sto
 		if refusal.RequestDigest != digest {
 			return nil, store.NewErrConflict("browser_activity", "browser_source_conflict", nil)
 		}
+
 		status, err := browserSourceStatus(ctx, tx, model.BrowserSourceSessionID(saved.ID))
 		if err != nil {
 			return nil, err
@@ -230,34 +372,64 @@ func replayBrowserSourceStart(ctx context.Context, tx *sqlxTxWrapper, input *sto
 		if err := completeBrowserSourceAudit(ctx, tx, input, true, refusal.Code); err != nil {
 			return nil, err
 		}
-		return &browserSourceStartOutcome{Refusal: &store.BrowserSourceRefusal{Code: refusal.Code, Status: *status, Capacity: refusal.Capacity}}, nil
+
+		return &browserSourceStartOutcome{Refusal: &store.BrowserSourceRefusal{
+			Code:     refusal.Code,
+			Status:   *status,
+			Capacity: refusal.Capacity,
+		}}, nil
 	}
+
 	return nil, nil
 }
 
 // checkBrowserSourceStartGate requires an open Sitting, no pending browser
 // correction acknowledgement and the enabled sealed policy the start declares.
-func checkBrowserSourceStartGate(ctx context.Context, tx *sqlxTxWrapper, input *store.BrowserActivitySourceStart, guard candidateAttemptGuard) error {
+func checkBrowserSourceStartGate(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.BrowserActivitySourceStart,
+	guard candidateAttemptGuard,
+) error {
 	if guard.SittingState != string(model.ExamSittingOpen) {
 		return store.NewErrConflict("exam_sitting", "exam_sitting_state", nil)
 	}
 	if err := lockSecurityInteraction(ctx, tx, input.Access.AttemptID); err != nil {
 		return err
 	}
-	pending, err := hasPendingCandidateCorrectionCapability(ctx, tx, guard.AttemptID, guard.SittingID, guard.AdmissionRevisionID, guard.RevisionID, model.CandidateCapabilityBrowser)
+
+	pending, err := hasPendingCandidateCorrectionCapability(
+		ctx,
+		tx,
+		guard.AttemptID,
+		guard.SittingID,
+		guard.AdmissionRevisionID,
+		guard.RevisionID,
+		model.CandidateCapabilityBrowser,
+	)
 	if err != nil {
 		return err
 	}
 	if pending {
 		return store.NewErrConflict("browser_activity", "exam_correction_acknowledgement_required", nil)
 	}
+
 	var policy struct {
 		Raw    []byte `db:"browser_policy_canonical"`
 		Digest string `db:"browser_policy_digest"`
 	}
-	if err = tx.Get(ctx, &policy, `SELECT browser_policy_canonical,browser_policy_digest FROM exam_revisions WHERE id=? AND sealed=true`, guard.RevisionID); err != nil {
+	if err = tx.Get(
+		ctx,
+		&policy,
+		`SELECT browser_policy_canonical, browser_policy_digest
+		FROM exam_revisions
+		WHERE id = ?
+			AND sealed = true`,
+		guard.RevisionID,
+	); err != nil {
 		return err
 	}
+
 	parsed, err := model.DecodeBrowserPolicy(policy.Raw)
 	if err != nil {
 		return err
@@ -268,19 +440,29 @@ func checkBrowserSourceStartGate(ctx context.Context, tx *sqlxTxWrapper, input *
 	if input.PolicyRevisionID.String() != guard.RevisionID || input.PolicyDigest != policy.Digest {
 		return store.NewErrConflict("browser_activity", "browser_source_policy", nil)
 	}
+
 	return nil
 }
 
 // checkBrowserSourceTransition checks the declared start transition against
 // the Participation's start history and newest source.
-func checkBrowserSourceTransition(input *store.BrowserActivitySourceStart, part browserSourceStartParticipation, prior browserSourcePrior, hasPrior bool) error {
+func checkBrowserSourceTransition(
+	input *store.BrowserActivitySourceStart,
+	part browserSourceStartParticipation,
+	prior browserSourcePrior,
+	hasPrior bool,
+) error {
 	switch input.Transition.Kind {
 	case "initial":
 		if hasPrior || part.Initial {
 			return store.NewErrConflict("browser_activity", "browser_source_current", nil)
 		}
 	case "runtime_reset":
-		if !hasPrior || prior.ID != string(input.Transition.PredecessorSourceSessionID) || prior.State != "current" || prior.Revision != input.PolicyRevisionID.String() || prior.Digest != input.PolicyDigest {
+		if !hasPrior ||
+			prior.ID != string(input.Transition.PredecessorSourceSessionID) ||
+			prior.State != "current" ||
+			prior.Revision != input.PolicyRevisionID.String() ||
+			prior.Digest != input.PolicyDigest {
 			return store.NewErrConflict("browser_activity", "browser_source_predecessor", nil)
 		}
 	case "policy_correction":
@@ -288,49 +470,79 @@ func checkBrowserSourceTransition(input *store.BrowserActivitySourceStart, part 
 		if hasPrior && (json.Unmarshal(prior.Closure, &closure) != nil || closure.Validate(false) != nil) {
 			return invalidPersistedState("browser_source", "predecessor_closure", model.ErrDeliveryInvalid)
 		}
-		if !hasPrior || prior.ID != string(input.Transition.PredecessorSourceSessionID) || prior.Revision == input.PolicyRevisionID.String() || closure.CloseReason == nil || (*closure.CloseReason != model.DeliveryClosedPolicyCorrection && *closure.CloseReason != model.DeliveryClosedBrowserDisabled && *closure.CloseReason != model.DeliveryClosedRuntimeReset) {
+
+		if !hasPrior ||
+			prior.ID != string(input.Transition.PredecessorSourceSessionID) ||
+			prior.Revision == input.PolicyRevisionID.String() ||
+			closure.CloseReason == nil ||
+			(*closure.CloseReason != model.DeliveryClosedPolicyCorrection &&
+				*closure.CloseReason != model.DeliveryClosedBrowserDisabled &&
+				*closure.CloseReason != model.DeliveryClosedRuntimeReset) {
 			return store.NewErrConflict("browser_activity", "browser_source_predecessor", nil)
 		}
 	}
+
 	return nil
 }
 
 // refuseBrowserSourceStart refuses a start whose budget or metadata capacity
 // is exhausted, recording a runtime reset's refusal on its predecessor.
-func refuseBrowserSourceStart(ctx context.Context, tx *sqlxTxWrapper, input *store.BrowserActivitySourceStart, digest, priorID string, now time.Time, capacityErr error) (browserSourceStartOutcome, error) {
+func refuseBrowserSourceStart(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.BrowserActivitySourceStart,
+	digest, priorID string,
+	now time.Time,
+	capacityErr error,
+) (browserSourceStartOutcome, error) {
 	code := "exam.browser.source_budget_exhausted"
 	var capacity *model.DeliveryMetadataCapacity
 	if capacityErr != nil {
 		if !errors.As(capacityErr, &capacity) {
 			return browserSourceStartOutcome{}, capacityErr
 		}
+
 		code = "exam.delivery.metadata_capacity"
 	}
+
 	if input.Transition.Kind != "runtime_reset" {
 		if capacity != nil {
 			return browserSourceStartOutcome{}, capacity
 		}
 		return browserSourceStartOutcome{}, store.NewErrConflict("browser_activity", "browser_source_limit", nil)
 	}
+
 	if err := closeBrowserSource(ctx, tx, model.BrowserSourceSessionID(priorID), model.DeliveryClosedRuntimeReset, now); err != nil {
 		return browserSourceStartOutcome{}, err
 	}
+
 	refusal := browserSourceRefusalRecord{SourceSessionID: input.SourceSessionID, RequestDigest: digest, Code: code, Capacity: capacity}
 	raw, err := canonicalPreflightValue(refusal)
 	if err != nil || len(raw) > 2048 {
 		return browserSourceStartOutcome{}, model.ErrDeliveryInvalid
 	}
-	if _, err = tx.Exec(ctx, `UPDATE browser_activity_sources SET refusal_canonical=? WHERE id=?::uuid`, raw, priorID); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE browser_activity_sources
+		SET refusal_canonical = ?
+		WHERE id = ?::uuid`, raw, priorID); err != nil {
 		return browserSourceStartOutcome{}, err
 	}
-	if _, err = tx.Exec(ctx, `UPDATE exam_attempt_security_owners SET browser_source_unavailable=true WHERE participation_id=?`, input.ParticipationID.String()); err != nil {
+
+	if _, err = tx.Exec(
+		ctx,
+		`UPDATE exam_attempt_security_owners
+		SET browser_source_unavailable = true
+		WHERE participation_id = ?`,
+		input.ParticipationID.String(),
+	); err != nil {
 		return browserSourceStartOutcome{}, err
 	}
+
 	if capacity != nil {
 		if err = latchDeliveryMetadata(ctx, tx, input.Access.AttemptID); err != nil {
 			return browserSourceStartOutcome{}, err
 		}
 	}
+
 	status, err := browserSourceStatus(ctx, tx, model.BrowserSourceSessionID(priorID))
 	if err != nil {
 		return browserSourceStartOutcome{}, err
@@ -338,18 +550,66 @@ func refuseBrowserSourceStart(ctx context.Context, tx *sqlxTxWrapper, input *sto
 	if err := completeBrowserSourceAudit(ctx, tx, input, false, code); err != nil {
 		return browserSourceStartOutcome{}, err
 	}
+
 	return browserSourceStartOutcome{Refusal: &store.BrowserSourceRefusal{Code: code, Status: *status, Capacity: capacity}}, nil
 }
 
 // insertBrowserSource inserts the started source, reserves its control
 // metadata and advances the Participation's browser start counters.
-func insertBrowserSource(ctx context.Context, tx *sqlxTxWrapper, input *store.BrowserActivitySourceStart, guard candidateAttemptGuard, part browserSourceStartParticipation, canonical []byte, digest string, now time.Time, reserved int64) error {
-	if _, err := tx.Exec(ctx, `INSERT INTO browser_activity_sources(id,exam_id,exam_sitting_id,exam_attempt_id,participation_id,generation,session_id,connection_id,candidate_user_id,registration_id,key_thumbprint,policy_revision_id,policy_digest,start_transition,start_digest,start_canonical,start_ordinal,predecessor_id,reset_reason,state,started_at,reserved_bytes) VALUES(?::uuid,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?::uuid,?,'current',?,?)`, string(input.SourceSessionID), guard.ExamID, guard.SittingID, guard.AttemptID, input.ParticipationID.String(), input.Generation, input.Access.SessionID.String(), input.Access.ConnectionID.String(), input.Access.CandidateUserID.String(), input.Access.DesktopRegistrationID.String(), input.Access.DPoPKeyThumbprint, input.PolicyRevisionID.String(), input.PolicyDigest, input.Transition.Kind, digest, canonical, 1+part.Corrections+part.Resets+browserInitialStartCount(part.Initial), nullableString(string(input.Transition.PredecessorSourceSessionID)), nullableString(string(input.Transition.Reason)), now, model.BrowserOwnerReservationBytes); err != nil {
+func insertBrowserSource(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.BrowserActivitySourceStart,
+	guard candidateAttemptGuard,
+	part browserSourceStartParticipation,
+	canonical []byte,
+	digest string,
+	now time.Time,
+	reserved int64,
+) error {
+	if _, err := tx.Exec(
+		ctx,
+		`INSERT INTO browser_activity_sources(
+			id, exam_id, exam_sitting_id, exam_attempt_id, participation_id, generation, session_id,
+			connection_id, candidate_user_id, registration_id, key_thumbprint, policy_revision_id,
+			policy_digest, start_transition, start_digest, start_canonical, start_ordinal,
+			predecessor_id, reset_reason, state, started_at, reserved_bytes
+		)
+		VALUES(?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::uuid, ?, 'current', ?, ?)`,
+		string(input.SourceSessionID),
+		guard.ExamID,
+		guard.SittingID,
+		guard.AttemptID,
+		input.ParticipationID.String(),
+		input.Generation,
+		input.Access.SessionID.String(),
+		input.Access.ConnectionID.String(),
+		input.Access.CandidateUserID.String(),
+		input.Access.DesktopRegistrationID.String(),
+		input.Access.DPoPKeyThumbprint,
+		input.PolicyRevisionID.String(),
+		input.PolicyDigest,
+		input.Transition.Kind,
+		digest,
+		canonical,
+		1+part.Corrections+part.Resets+browserInitialStartCount(part.Initial),
+		nullableString(string(input.Transition.PredecessorSourceSessionID)),
+		nullableString(string(input.Transition.Reason)),
+		now,
+		model.BrowserOwnerReservationBytes,
+	); err != nil {
 		return translateError("browser_activity_source", string(input.SourceSessionID), err)
 	}
-	if _, err := tx.Exec(ctx, `UPDATE exam_attempt_delivery_budgets SET control_metadata_bytes=? WHERE exam_attempt_id=?`, reserved, guard.AttemptID); err != nil {
+
+	if _, err := tx.Exec(
+		ctx,
+		`UPDATE exam_attempt_delivery_budgets SET control_metadata_bytes = ? WHERE exam_attempt_id = ?`,
+		reserved,
+		guard.AttemptID,
+	); err != nil {
 		return err
 	}
+
 	corrections, resets := part.Corrections, part.Resets
 	if input.Transition.Kind == "policy_correction" {
 		corrections++
@@ -357,13 +617,30 @@ func insertBrowserSource(ctx context.Context, tx *sqlxTxWrapper, input *store.Br
 	if input.Transition.Kind == "runtime_reset" {
 		resets++
 	}
-	if _, err := tx.Exec(ctx, `UPDATE exam_attempt_security_owners SET browser_initial_started=true,browser_correction_starts=?,browser_runtime_reset_starts=?,browser_source_unavailable=false WHERE participation_id=?`, corrections, resets, input.ParticipationID.String()); err != nil {
+
+	if _, err := tx.Exec(
+		ctx,
+		`UPDATE exam_attempt_security_owners
+		SET browser_initial_started = true, browser_correction_starts = ?,
+			browser_runtime_reset_starts = ?, browser_source_unavailable = false
+		WHERE participation_id = ?`,
+		corrections,
+		resets,
+		input.ParticipationID.String(),
+	); err != nil {
 		return err
 	}
+
 	return nil
 }
 
-func closeBrowserSource(ctx context.Context, tx *sqlxTxWrapper, id model.BrowserSourceSessionID, reason model.DeliveryCloseReason, at time.Time) error {
+func closeBrowserSource(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	id model.BrowserSourceSessionID,
+	reason model.DeliveryCloseReason,
+	at time.Time,
+) error {
 	var row struct {
 		Raw       []byte    `db:"closure_canonical"`
 		Allocated int64     `db:"allocated_through_sequence"`
@@ -371,31 +648,57 @@ func closeBrowserSource(ctx context.Context, tx *sqlxTxWrapper, id model.Browser
 		Lease     time.Time `db:"lease_expires_at"`
 		Started   time.Time `db:"started_at"`
 	}
-	if err := tx.Get(ctx, &row, `SELECT s.closure_canonical,s.allocated_through_sequence,s.highest_seen,p.lease_expires_at,s.started_at FROM browser_activity_sources s JOIN exam_attempt_participations p ON p.id=s.participation_id WHERE s.id=?::uuid FOR UPDATE OF s`, string(id)); err != nil {
+	if err := tx.Get(
+		ctx,
+		&row,
+		`SELECT s.closure_canonical, s.allocated_through_sequence, s.highest_seen,
+			p.lease_expires_at, s.started_at
+		FROM browser_activity_sources s
+		JOIN exam_attempt_participations p ON p.id = s.participation_id
+		WHERE s.id = ?::uuid
+		FOR UPDATE OF s`,
+		string(id),
+	); err != nil {
 		return err
 	}
+
 	var closure model.DeliveryClosure
 	if len(row.Raw) > 0 && (json.Unmarshal(row.Raw, &closure) != nil || closure.Validate(false) != nil) {
 		return invalidPersistedState("browser_source", "closure", model.ErrDeliveryInvalid)
 	}
+
 	if row.Lease.Before(at) {
 		at = row.Lease
 		reason = model.DeliveryClosedParticipation
 	}
+
 	// The millisecond closure instant never precedes the microsecond start,
 	// whose clock may lead the closing lifecycle's instant.
 	closure, err := closure.Close(false, reason, max(row.Allocated, row.Seen), deliveryTransitionInstant(at, row.Started), nil)
 	if err != nil {
 		return err
 	}
+
 	raw, err := canonicalPreflightValue(closure)
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, `UPDATE browser_activity_sources SET state='closed',ended_at=?,closure_canonical=?,upload_expires_at=?,allocated_through_sequence=GREATEST(allocated_through_sequence,highest_seen) WHERE id=?::uuid`, *closure.ClosedAt, raw, closure.UploadExpiresAt, string(id))
+
+	_, err = tx.Exec(
+		ctx,
+		`UPDATE browser_activity_sources
+		SET state = 'closed', ended_at = ?, closure_canonical = ?, upload_expires_at = ?,
+			allocated_through_sequence = GREATEST(allocated_through_sequence, highest_seen)
+		WHERE id = ?::uuid`,
+		*closure.ClosedAt,
+		raw,
+		closure.UploadExpiresAt,
+		string(id),
+	)
 	if err != nil {
 		return err
 	}
+
 	_, err = settleBrowserSource(ctx, tx, id)
 	return err
 }
@@ -437,45 +740,90 @@ type browserSourceRow struct {
 	Now                 time.Time      `db:"server_time"`
 }
 
-func browserSourceState(ctx context.Context, tx *sqlxTxWrapper, id model.BrowserSourceSessionID, persist bool) (*model.BrowserSourceStatus, error) {
+func browserSourceState(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	id model.BrowserSourceSessionID,
+	persist bool,
+) (*model.BrowserSourceStatus, error) {
 	var row browserSourceRow
-	if err := tx.Get(ctx, &row, `SELECT s.exam_attempt_id,s.participation_id,s.generation,s.policy_revision_id,s.policy_digest,s.predecessor_id::text,s.start_transition,s.reset_reason,s.started_at,s.closure_canonical,s.allocated_through_sequence,s.highest_seen,s.highest_contiguous,s.terminal_missing_through_sequence,s.declaration_revision,s.summary_canonical,o.browser_summary_only AS part_summary,o.browser_stop_reason AS part_reason,b.browser_summary_only AS attempt_summary,b.browser_stop_reason AS attempt_reason,o.browser_correction_starts,o.browser_runtime_reset_starts,clock_timestamp() AS server_time FROM browser_activity_sources s JOIN exam_attempt_security_owners o ON o.participation_id=s.participation_id JOIN exam_attempt_delivery_budgets b ON b.exam_attempt_id=s.exam_attempt_id WHERE s.id=?::uuid`, string(id)); err != nil {
+	if err := tx.Get(
+		ctx,
+		&row,
+		`SELECT s.exam_attempt_id, s.participation_id, s.generation, s.policy_revision_id,
+			s.policy_digest, s.predecessor_id::text, s.start_transition, s.reset_reason,
+			s.started_at, s.closure_canonical, s.allocated_through_sequence, s.highest_seen,
+			s.highest_contiguous, s.terminal_missing_through_sequence, s.declaration_revision,
+			s.summary_canonical, o.browser_summary_only AS part_summary,
+			o.browser_stop_reason AS part_reason, b.browser_summary_only AS attempt_summary,
+			b.browser_stop_reason AS attempt_reason, o.browser_correction_starts,
+			o.browser_runtime_reset_starts, clock_timestamp() AS server_time
+		FROM browser_activity_sources s
+		JOIN exam_attempt_security_owners o ON o.participation_id = s.participation_id
+		JOIN exam_attempt_delivery_budgets b ON b.exam_attempt_id = s.exam_attempt_id
+		WHERE s.id = ?::uuid`,
+		string(id),
+	); err != nil {
 		return nil, err
 	}
+
 	value, err := newBrowserSourceStatus(id, row)
 	if err != nil {
 		return nil, err
 	}
+
 	allocated := max(row.Allocated, row.Seen)
 	if value.Closure.ClosedAt != nil && !value.ServerTime.Before(*value.Closure.UploadExpiresAt) {
 		value.Closure, err = value.Closure.Expire(false, value.ServerTime)
 		if err != nil {
 			return nil, invalidPersistedState("browser_source", "closure", err)
 		}
+
 		row.Terminal = allocated
-		raw, err := canonicalPreflightValue(value.Closure)
-		if err != nil {
-			return nil, err
+		raw, canonicalErr := canonicalPreflightValue(value.Closure)
+		if canonicalErr != nil {
+			return nil, canonicalErr
 		}
+
 		if persist {
-			if _, err := tx.Exec(ctx, `UPDATE browser_activity_sources SET closure_canonical=?,terminal_missing_through_sequence=?,allocated_through_sequence=? WHERE id=?::uuid`, raw, row.Terminal, allocated, string(id)); err != nil {
-				return nil, err
+			if _, execErr := tx.Exec(
+				ctx,
+				`UPDATE browser_activity_sources
+				SET closure_canonical = ?, terminal_missing_through_sequence = ?,
+					allocated_through_sequence = ?
+				WHERE id = ?::uuid`,
+				raw,
+				row.Terminal,
+				allocated,
+				string(id),
+			); execErr != nil {
+				return nil, execErr
 			}
 		}
 	}
+
 	received, gaps, err := browserDeliveryRanges(ctx, tx, id)
 	if err != nil {
 		return nil, err
 	}
+
 	progress, err := model.ResolveDeliveryProgress(allocated, received, gaps, row.Terminal)
 	if err != nil {
 		return nil, invalidPersistedState("delivery", "progress", err)
 	}
+
 	if persist {
 		var policyRaw []byte
-		if err := tx.Get(ctx, &policyRaw, `SELECT browser_policy_canonical FROM exam_revisions WHERE id=? AND browser_policy_digest=?`, row.Revision, row.Digest); err != nil {
+		if err := tx.Get(
+			ctx,
+			&policyRaw,
+			`SELECT browser_policy_canonical FROM exam_revisions WHERE id = ? AND browser_policy_digest = ?`,
+			row.Revision,
+			row.Digest,
+		); err != nil {
 			return nil, err
 		}
+
 		policy, err := model.DecodeBrowserPolicy(policyRaw)
 		if err != nil {
 			return nil, err
@@ -483,44 +831,83 @@ func browserSourceState(ctx context.Context, tx *sqlxTxWrapper, id model.Browser
 		if err := advanceBrowserInterpretation(ctx, tx, id, value.AttemptID, policy, progress.SettledThrough); err != nil {
 			return nil, err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE browser_activity_sources SET highest_contiguous=?,settled_through_sequence=? WHERE id=?::uuid`, progress.HighestContiguous, progress.SettledThrough, string(id)); err != nil {
+
+		if _, err := tx.Exec(
+			ctx,
+			`UPDATE browser_activity_sources
+			SET highest_contiguous = ?, settled_through_sequence = ?
+			WHERE id = ?::uuid`,
+			progress.HighestContiguous,
+			progress.SettledThrough,
+			string(id),
+		); err != nil {
 			return nil, err
 		}
 	}
-	value.BrowserDeliveryProgress = model.BrowserDeliveryProgress{HighestContiguous: progress.HighestContiguous, SettledThrough: progress.SettledThrough, HighestSeen: progress.HighestSeen, AllocatedThrough: allocated, TerminalMissingThrough: row.Terminal, MissingRanges: progress.Missing, MissingRangesTruncated: progress.MissingTruncated}
+
+	value.BrowserDeliveryProgress = model.BrowserDeliveryProgress{
+		HighestContiguous:      progress.HighestContiguous,
+		SettledThrough:         progress.SettledThrough,
+		HighestSeen:            progress.HighestSeen,
+		AllocatedThrough:       allocated,
+		TerminalMissingThrough: row.Terminal,
+		MissingRanges:          progress.Missing,
+		MissingRangesTruncated: progress.MissingTruncated,
+	}
 	if value.Validate() != nil {
 		return nil, invalidPersistedState("browser_source", "value", model.ErrDeliveryInvalid)
 	}
+
 	if persist {
 		if err := updateBrowserSourceSettlement(ctx, tx, value); err != nil {
 			return nil, err
 		}
 	}
+
 	return value, nil
 }
 
 // newBrowserSourceStatus decodes a source row's identity, closure, summary and
 // detail mode into a status without its delivery progress.
 func newBrowserSourceStatus(id model.BrowserSourceSessionID, row browserSourceRow) (*model.BrowserSourceStatus, error) {
-	value := &model.BrowserSourceStatus{SourceSessionID: id, AttemptID: model.ExamAttemptID(row.Attempt), ParticipationID: model.AttemptParticipationID(row.Part), Generation: row.Generation, PolicyRevisionID: model.ExamRevisionID(row.Revision), PolicyDigest: row.Digest, StartTransition: row.Transition, StartedAt: row.Started.UTC().Truncate(time.Millisecond), DeclarationRevision: row.DeclarationRevision, DetailMode: "collecting", RemainingCorrectionStarts: model.BrowserCorrectionStartLimit - row.Corrections, RemainingRuntimeResetStarts: model.BrowserRuntimeResetStartLimit - row.Resets, ServerTime: row.Now.UTC().Truncate(time.Millisecond)}
+	value := &model.BrowserSourceStatus{
+		SourceSessionID:             id,
+		AttemptID:                   model.ExamAttemptID(row.Attempt),
+		ParticipationID:             model.AttemptParticipationID(row.Part),
+		Generation:                  row.Generation,
+		PolicyRevisionID:            model.ExamRevisionID(row.Revision),
+		PolicyDigest:                row.Digest,
+		StartTransition:             row.Transition,
+		StartedAt:                   row.Started.UTC().Truncate(time.Millisecond),
+		DeclarationRevision:         row.DeclarationRevision,
+		DetailMode:                  "collecting",
+		RemainingCorrectionStarts:   model.BrowserCorrectionStartLimit - row.Corrections,
+		RemainingRuntimeResetStarts: model.BrowserRuntimeResetStartLimit - row.Resets,
+		ServerTime:                  row.Now.UTC().Truncate(time.Millisecond),
+	}
 	if row.Predecessor.Valid {
 		id := model.BrowserSourceSessionID(row.Predecessor.String)
 		value.PredecessorSourceSessionID = &id
 	}
+
 	if row.Reason.Valid {
 		reason := model.BrowserSourceResetReason(row.Reason.String)
 		value.RuntimeResetReason = &reason
 	}
+
 	if len(row.Closure) > 0 && (json.Unmarshal(row.Closure, &value.Closure) != nil || value.Closure.Validate(false) != nil) {
 		return nil, invalidPersistedState("browser_source", "value", model.ErrDeliveryInvalid)
 	}
+
 	if len(row.Summary) > 0 {
 		var summary model.UnretainedDeliverySummary
 		if json.Unmarshal(row.Summary, &summary) != nil {
 			return nil, invalidPersistedState("browser_source", "value", model.ErrDeliveryInvalid)
 		}
+
 		value.Summary = &summary
 	}
+
 	if row.PartSummary || row.AttemptSummary {
 		scope := "participation"
 		reason := model.DeliveryStopReason(row.PartReason.String)
@@ -528,10 +915,12 @@ func newBrowserSourceStatus(id model.BrowserSourceSessionID, row browserSourceRo
 			scope = "attempt"
 			reason = model.DeliveryStopReason(row.AttemptReason.String)
 		}
+
 		value.DetailMode = "summary_only"
 		value.BudgetScope = &scope
 		value.SummaryOnlyReason = &reason
 	}
+
 	return value, nil
 }
 
@@ -545,23 +934,47 @@ func browserInitialStartCount(value bool) int64 {
 // The owning lifecycle transaction has already fenced the Participation. Every
 // source has a reserved closure slot, including sources closed by old delivery
 // finalization paths earlier in that same transaction.
-func closeParticipationBrowserSources(ctx context.Context, tx *sqlxTxWrapper, part model.AttemptParticipationID, reason model.DeliveryCloseReason, at time.Time) error {
+func closeParticipationBrowserSources(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	part model.AttemptParticipationID,
+	reason model.DeliveryCloseReason,
+	at time.Time,
+) error {
 	var ids []string
-	if err := tx.Select(ctx, &ids, `SELECT id::text FROM browser_activity_sources WHERE participation_id=? ORDER BY start_ordinal LIMIT 49 FOR UPDATE`, part.String()); err != nil {
+	if err := tx.Select(
+		ctx,
+		&ids,
+		`SELECT id::text
+		FROM browser_activity_sources
+		WHERE participation_id = ?
+		ORDER BY start_ordinal
+		LIMIT 49
+		FOR UPDATE`,
+		part.String(),
+	); err != nil {
 		return err
 	}
+
 	for _, id := range ids {
 		if err := closeBrowserSource(ctx, tx, model.BrowserSourceSessionID(id), reason, at); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
 // BrowserSourceStatus returns the current delivery status of the source named
 // by access, after verifying the caller's delivery access.
-func (s *SQLExamAttemptStore) BrowserSourceStatus(ctx context.Context, access store.BrowserDeliveryAccess) (*model.BrowserSourceStatus, error) {
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "get Browser source status", func(ctx context.Context, tx *sqlxTxWrapper) (*model.BrowserSourceStatus, error) {
+func (s *SQLBrowserDeliveryStore) BrowserSourceStatus(
+	ctx context.Context,
+	access store.BrowserDeliveryAccess,
+) (*model.BrowserSourceStatus, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "get Browser source status", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*model.BrowserSourceStatus, error) {
 		if err := s.lockBrowserDelivery(ctx, tx, access); err != nil {
 			return nil, err
 		}
@@ -571,18 +984,35 @@ func (s *SQLExamAttemptStore) BrowserSourceStatus(ctx context.Context, access st
 
 // BrowserSourceList returns the delivery status of every Browser Activity
 // source of the Participation, in start order.
-func (s *SQLExamAttemptStore) BrowserSourceList(ctx context.Context, access store.BrowserDeliveryAccess) ([]model.BrowserSourceStatus, error) {
+func (s *SQLBrowserDeliveryStore) BrowserSourceList(
+	ctx context.Context,
+	access store.BrowserDeliveryAccess,
+) ([]model.BrowserSourceStatus, error) {
 	if !access.ParticipationID.IsValid() {
 		return nil, store.NewErrInvalidInput("browser_activity", "participation_id", nil)
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "list Browser source status", func(ctx context.Context, tx *sqlxTxWrapper) ([]model.BrowserSourceStatus, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "list Browser source status", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) ([]model.BrowserSourceStatus, error) {
 		if err := lockBrowserParticipationOwner(ctx, tx, access); err != nil {
 			return nil, err
 		}
+
 		var ids []string
-		if err := tx.Select(ctx, &ids, `SELECT id::text FROM browser_activity_sources WHERE participation_id=? ORDER BY start_ordinal LIMIT 49`, access.ParticipationID.String()); err != nil {
+		if err := tx.Select(
+			ctx,
+			&ids,
+			`SELECT id::text
+			FROM browser_activity_sources
+			WHERE participation_id = ?
+			ORDER BY start_ordinal
+			LIMIT 49`,
+			access.ParticipationID.String(),
+		); err != nil {
 			return nil, err
 		}
+
 		statuses := make([]model.BrowserSourceStatus, 0, len(ids))
 		for _, id := range ids {
 			query := access
@@ -590,34 +1020,50 @@ func (s *SQLExamAttemptStore) BrowserSourceList(ctx context.Context, access stor
 			if err := s.lockBrowserDelivery(ctx, tx, query); err != nil {
 				return nil, err
 			}
+
 			status, err := browserSourceStatus(ctx, tx, query.SourceSessionID)
 			if err != nil {
 				return nil, err
 			}
+
 			statuses = append(statuses, *status)
 		}
+
 		return statuses, nil
 	})
 }
 
 func lockBrowserParticipationOwner(ctx context.Context, tx *sqlxTxWrapper, access store.BrowserDeliveryAccess) error {
-	if err := lockDeliveryParticipationOwner(ctx, tx, store.DeliveryBudgetAccess{Access: access.Access, ParticipationID: access.ParticipationID}); err != nil {
+	if err := lockDeliveryParticipationOwner(
+		ctx,
+		tx,
+		store.DeliveryBudgetAccess{Access: access.Access, ParticipationID: access.ParticipationID},
+	); err != nil {
 		return err
 	}
+
 	a := access.Access
 	var retired bool
-	if err := tx.Get(ctx, &retired, `SELECT browser_retired_at IS NOT NULL FROM exam_attempt_delivery_budgets WHERE exam_attempt_id=?`, a.AttemptID.String()); err != nil {
+	if err := tx.Get(
+		ctx,
+		&retired,
+		`SELECT browser_retired_at IS NOT NULL FROM exam_attempt_delivery_budgets WHERE exam_attempt_id = ?`,
+		a.AttemptID.String(),
+	); err != nil {
 		return err
 	}
+
 	if retired {
 		return model.ErrDeliveryExpired
 	}
+
 	return nil
 }
-func (s *SQLExamAttemptStore) lockBrowserDelivery(ctx context.Context, tx *sqlxTxWrapper, access store.BrowserDeliveryAccess) error {
+func (s *SQLBrowserDeliveryStore) lockBrowserDelivery(ctx context.Context, tx *sqlxTxWrapper, access store.BrowserDeliveryAccess) error {
 	if !access.SourceSessionID.IsValid() {
 		return store.NewErrInvalidInput("browser_activity", "source", nil)
 	}
+
 	var row struct {
 		Part      string         `db:"participation_id"`
 		Closure   []byte         `db:"closure_canonical"`
@@ -628,23 +1074,61 @@ func (s *SQLExamAttemptStore) lockBrowserDelivery(ctx context.Context, tx *sqlxT
 		Reason    sql.NullString `db:"end_reason"`
 		Now       time.Time      `db:"server_time"`
 	}
-	if err := tx.Get(ctx, &row, `SELECT participation_id FROM (SELECT id,exam_attempt_id,participation_id,candidate_user_id,registration_id,key_thumbprint FROM browser_activity_sources UNION ALL SELECT source_session_id,exam_attempt_id,participation_id,candidate_user_id,registration_id,key_thumbprint FROM browser_delivery_retired_sources) s WHERE id=?::uuid AND exam_attempt_id=? AND candidate_user_id=? AND registration_id=? AND key_thumbprint=?`, string(access.SourceSessionID), access.Access.AttemptID.String(), access.Access.CandidateUserID.String(), access.Access.DesktopRegistrationID.String(), access.Access.DPoPKeyThumbprint); err != nil {
+	if err := tx.Get(
+		ctx,
+		&row,
+		`SELECT participation_id
+		FROM (
+			SELECT id, exam_attempt_id, participation_id, candidate_user_id, registration_id,
+				key_thumbprint
+			FROM browser_activity_sources
+			UNION ALL
+			SELECT source_session_id, exam_attempt_id, participation_id, candidate_user_id,
+				registration_id, key_thumbprint
+			FROM browser_delivery_retired_sources
+		) s
+		WHERE id = ?::uuid
+			AND exam_attempt_id = ?
+			AND candidate_user_id = ?
+			AND registration_id = ?
+			AND key_thumbprint = ?`,
+		string(access.SourceSessionID),
+		access.Access.AttemptID.String(),
+		access.Access.CandidateUserID.String(),
+		access.Access.DesktopRegistrationID.String(),
+		access.Access.DPoPKeyThumbprint,
+	); err != nil {
 		return translateError("browser_activity_source", string(access.SourceSessionID), err)
 	}
+
 	if access.ParticipationID != "" && access.ParticipationID.String() != row.Part {
 		return store.NewErrNotFound("browser_activity_source", string(access.SourceSessionID))
 	}
+
 	access.ParticipationID = model.AttemptParticipationID(row.Part)
 	if err := lockBrowserParticipationOwner(ctx, tx, access); err != nil {
 		return err
 	}
-	if err := tx.Get(ctx, &row, `SELECT s.participation_id,s.closure_canonical,s.state,s.ended_at,p.lease_expires_at,p.ended_at AS participation_ended_at,p.end_reason,clock_timestamp() AS server_time FROM browser_activity_sources s JOIN exam_attempt_participations p ON p.id=s.participation_id WHERE s.id=?::uuid FOR UPDATE OF s,p`, string(access.SourceSessionID)); err != nil {
+
+	if err := tx.Get(
+		ctx,
+		&row,
+		`SELECT s.participation_id, s.closure_canonical, s.state, s.ended_at, p.lease_expires_at,
+			p.ended_at AS participation_ended_at, p.end_reason, clock_timestamp() AS server_time
+		FROM browser_activity_sources s
+		JOIN exam_attempt_participations p ON p.id = s.participation_id
+		WHERE s.id = ?::uuid
+		FOR UPDATE OF s, p`,
+		string(access.SourceSessionID),
+	); err != nil {
 		return err
 	}
+
 	var closure model.DeliveryClosure
 	if len(row.Closure) > 0 && (json.Unmarshal(row.Closure, &closure) != nil || closure.Validate(false) != nil) {
 		return invalidPersistedState("browser_source", "closure", model.ErrDeliveryInvalid)
 	}
+
 	if closure.ClosedAt == nil && (row.Ended.Valid || row.PartEnded.Valid || !row.Now.Before(row.Lease)) {
 		at := row.Lease
 		reason := model.DeliveryClosedParticipation
@@ -652,6 +1136,7 @@ func (s *SQLExamAttemptStore) lockBrowserDelivery(ctx context.Context, tx *sqlxT
 			at = row.PartEnded.Time
 			reason = nativeParticipationCloseReason(model.AttemptParticipationEndReason(row.Reason.String))
 		}
+
 		if row.Ended.Valid && row.Ended.Time.Before(at) {
 			at = row.Ended.Time
 		}
@@ -659,10 +1144,11 @@ func (s *SQLExamAttemptStore) lockBrowserDelivery(ctx context.Context, tx *sqlxT
 			return err
 		}
 	} else if closure.ClosedAt == nil {
-		if _, err := s.lockCandidateGuard(ctx, tx, access.Access); err != nil {
+		if _, err := lockCandidateGuard(ctx, tx, access.Access); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -671,16 +1157,30 @@ func closeSittingBrowserSources(ctx context.Context, tx *sqlxTxWrapper, sittingI
 	if !enabled {
 		reason = model.DeliveryClosedBrowserDisabled
 	}
+
 	// The correction owns the Sitting write fence. Page the affected candidates
 	// while retaining one transaction, so no source is left on a superseded policy.
 	for {
 		var ids []string
-		if err := tx.Select(ctx, &ids, `SELECT id::text FROM browser_activity_sources WHERE exam_sitting_id=? AND state='current' ORDER BY id LIMIT 128 FOR UPDATE`, sittingID.String()); err != nil {
+		if err := tx.Select(
+			ctx,
+			&ids,
+			`SELECT id::text
+			FROM browser_activity_sources
+			WHERE exam_sitting_id = ?
+				AND state = 'current'
+			ORDER BY id
+			LIMIT 128
+			FOR UPDATE`,
+			sittingID.String(),
+		); err != nil {
 			return err
 		}
+
 		if len(ids) == 0 {
 			return nil
 		}
+
 		for _, id := range ids {
 			if err := closeBrowserSource(ctx, tx, model.BrowserSourceSessionID(id), reason, at); err != nil {
 				return err
@@ -689,22 +1189,23 @@ func closeSittingBrowserSources(ctx context.Context, tx *sqlxTxWrapper, sittingI
 	}
 }
 
-// ResolveLiveDeliveryTarget returns the Sitting and Class that own the
-// Candidate's live Attempt, after locking its Candidate guard.
-func (s *SQLExamAttemptStore) ResolveLiveDeliveryTarget(ctx context.Context, access store.CandidateAttemptAccess) (*store.DeliveryOwnerTarget, error) {
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "resolve Browser source owner", func(ctx context.Context, tx *sqlxTxWrapper) (*store.DeliveryOwnerTarget, error) {
-		guard, err := s.lockCandidateGuard(ctx, tx, access)
-		if err != nil {
-			return nil, err
-		}
-		return &store.DeliveryOwnerTarget{SittingID: model.ExamSittingID(guard.SittingID), ClassID: model.ClassID(guard.ClassID)}, nil
+func completeBrowserSourceAudit(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.BrowserActivitySourceStart,
+	replayed bool,
+	reason string,
+) error {
+	data, err := model.EncodeAuditData(map[string]any{
+		"source_session_id": string(input.SourceSessionID),
+		"start_transition":  input.Transition.Kind,
+		"replayed":          replayed,
+		"result":            reason,
 	})
-}
-func completeBrowserSourceAudit(ctx context.Context, tx *sqlxTxWrapper, input *store.BrowserActivitySourceStart, replayed bool, reason string) error {
-	data, err := model.EncodeAuditData(map[string]any{"source_session_id": string(input.SourceSessionID), "start_transition": input.Transition.Kind, "replayed": replayed, "result": reason})
 	if err != nil {
 		return err
 	}
+
 	_, err = completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", data, input.AuditAt)
 	return err
 }

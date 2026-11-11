@@ -45,7 +45,7 @@ func TestPlatformDoesNotExposeInfrastructureLookup(t *testing.T) {
 				continue
 			}
 			receiver := function.Recv.List[0].Type
-			if pointer, ok := receiver.(*ast.StarExpr); ok {
+			if pointer, isPointer := receiver.(*ast.StarExpr); isPointer {
 				receiver = pointer.X
 			}
 			identifier, ok := receiver.(*ast.Ident)
@@ -67,20 +67,18 @@ func TestConstructionProjectionRemainsRootPrivate(t *testing.T) {
 		"attachApplicationTelemetry":     true,
 		"composeApplicationDependencies": true,
 		"composeConsumers":               true,
-		"httpAPIOptions":                 true,
+		"httpAPISettings":                true,
 		"composeNode":                    true,
-		"defaultConsumerConstructors":    true,
 	}
 	allowedTypes := map[string]bool{
 		"constructionCapabilities": true,
-		"consumerConstructors":     true,
 	}
 	root := filepath.Join("..")
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
-		if entry.IsDir() || filepath.Ext(path) != ".go" || filepath.Base(path) == "runtime_ownership_test.go" || filepath.Base(path) == "composition_test.go" {
+		if entry.IsDir() || filepath.Ext(path) != ".go" || filepath.Base(path) == "runtime_ownership_test.go" {
 			return nil
 		}
 		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
@@ -132,7 +130,7 @@ func TestConstructionProjectionOmitsLifecycleAuthority(t *testing.T) {
 		}
 		for _, specification := range generic.Specs {
 			typeSpec, ok := specification.(*ast.TypeSpec)
-			if !ok || (typeSpec.Name.Name != "borrowedCache" && typeSpec.Name.Name != "borrowedMailer" && typeSpec.Name.Name != "borrowedCluster" && typeSpec.Name.Name != "runtimeLogger") {
+			if !ok || (typeSpec.Name.Name != "borrowedCache" && typeSpec.Name.Name != "borrowedMailer" && typeSpec.Name.Name != "borrowedCluster") {
 				continue
 			}
 			checked[typeSpec.Name.Name] = true
@@ -150,30 +148,6 @@ func TestConstructionProjectionOmitsLifecycleAuthority(t *testing.T) {
 	for _, name := range []string{"borrowedCache", "borrowedMailer", "borrowedCluster"} {
 		assert.True(t, checked[name], "borrowed capability contract %s was removed or made uninspectable", name)
 	}
-
-	serverPath := filepath.Join("..", "server.go")
-	serverFile, err := parser.ParseFile(token.NewFileSet(), serverPath, nil, 0)
-	require.NoError(t, err)
-	for _, declaration := range serverFile.Decls {
-		generic, ok := declaration.(*ast.GenDecl)
-		if !ok {
-			continue
-		}
-		for _, specification := range generic.Specs {
-			typeSpec, ok := specification.(*ast.TypeSpec)
-			if !ok || typeSpec.Name.Name != "runtimeLogger" {
-				continue
-			}
-			checked["runtimeLogger"] = true
-			contract := typeSpec.Type.(*ast.InterfaceType)
-			for _, method := range contract.Methods.List {
-				for _, name := range method.Names {
-					assert.False(t, forbidden[name.Name], "runtimeLogger exposes lifecycle method %s", name.Name)
-				}
-			}
-		}
-	}
-	assert.True(t, checked["runtimeLogger"], "runtimeLogger borrowed contract was removed or made uninspectable")
 }
 
 func TestTestingRuntimeIsBehavioralProjection(t *testing.T) {

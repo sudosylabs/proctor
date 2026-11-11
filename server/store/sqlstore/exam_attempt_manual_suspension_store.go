@@ -38,18 +38,51 @@ func (examAttemptManualSuspensionOutcome) outcomeDocument() {}
 // SuspendAttempt implements store.ExamAttemptStore: it applies an Exam
 // Manager's kick to the Attempt under an ExamAttemptSuspendOperation command,
 // and returns the retained result with Replayed set on exact retries.
-func (s *SQLExamAttemptStore) SuspendAttempt(ctx context.Context, input *store.ExamAttemptManualSuspension,
+//
+// It locks the Attempt and Sitting, rechecks current Exam management authority
+// unless an authorized override is explicit, requires the expected revision of
+// an Active Attempt in an Open or Paused Sitting, ends the active Participation
+// as kicked, closes its open Connection as kicked, closes native delivery,
+// opens one manual Suspension episode without an Integrity Flag, and commits
+// audit and the idempotent outcome atomically using PostgreSQL time. Exact
+// retries return the retained result after current authority is rechecked.
+// Stable conflicts are exam_attempt_revision, exam_attempt_state,
+// exam_sitting_state, exam_sitting_deadline_reached when PostgreSQL time has
+// reached the Sitting's scheduled end, and attempt_participation_expired when
+// the active generation's lease has lapsed: that generation is Connection Loss,
+// never a kick, and the caller records it through ExpireParticipation. The
+// candidate's own Attempt and a missing manager relationship are not found.
+func (s *SQLExamAttemptStore) SuspendAttempt(
+	ctx context.Context,
+	input *store.ExamAttemptManualSuspension,
 	command *store.CommandIdempotency,
 ) (*store.ExamAttemptManualSuspensionResult, error) {
-	if input == nil || command == nil || command.Operation != store.ExamAttemptSuspendOperation || command.UserID != input.ActorUserID || !input.ExamID.IsValid() || !input.SittingID.IsValid() || !input.AttemptID.IsValid() ||
-		!input.SuspensionID.IsValid() || !input.ActorUserID.IsValid() || input.ExpectedRevision < 1 ||
-		!model.IsValidAttemptSuspensionPrivateReason(input.PrivateReason) || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+	if input == nil ||
+		command == nil ||
+		command.Operation != store.ExamAttemptSuspendOperation ||
+		command.UserID != input.ActorUserID ||
+		!input.ExamID.IsValid() ||
+		!input.SittingID.IsValid() ||
+		!input.AttemptID.IsValid() ||
+		!input.SuspensionID.IsValid() ||
+		!input.ActorUserID.IsValid() ||
+		input.ExpectedRevision < 1 ||
+		!model.IsValidAttemptSuspensionPrivateReason(input.PrivateReason) ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("exam_attempt", "manual_suspension", nil)
 	}
-	guard := &store.ExamAttemptReallow{ExamID: input.ExamID, SittingID: input.SittingID, AttemptID: input.AttemptID,
-		ActorUserID: input.ActorUserID, ManagerOverride: input.ManagerOverride}
+
+	guard := &store.ExamAttemptReallow{
+		ExamID:          input.ExamID,
+		SittingID:       input.SittingID,
+		AttemptID:       input.AttemptID,
+		ActorUserID:     input.ActorUserID,
+		ManagerOverride: input.ManagerOverride,
+	}
 	result, err := runIdempotentMutation(ctx, s.SQLStore, "suspend Exam Attempt", idempotentMutation[examAttemptManualSuspensionOutcome]{
-		command: command, auditEventID: input.AuditEventID,
+		command:      command,
+		auditEventID: input.AuditEventID,
 		execute: func(ctx context.Context, tx *sqlxTxWrapper) (examAttemptManualSuspensionOutcome, error) {
 			if err := guardExamAttemptReallowAuthority(ctx, tx, guard, true); err != nil {
 				return examAttemptManualSuspensionOutcome{}, err
@@ -71,10 +104,12 @@ func (s *SQLExamAttemptStore) SuspendAttempt(ctx context.Context, input *store.E
 	if err != nil {
 		return nil, err
 	}
+
 	aggregate, err := s.loadExamAttemptManualSuspensionResult(ctx, result.Value)
 	if err != nil {
 		return nil, err
 	}
+
 	aggregate.Replayed = result.Replayed
 	return aggregate, nil
 }
@@ -98,30 +133,48 @@ func (row manualSuspensionAttemptRow) domain(attemptID model.ExamAttemptID) (*mo
 	if err != nil {
 		return nil, invalidPersistedState("exam_attempt", "exam_id", err)
 	}
+
 	sittingID, err := model.ParseExamSittingID(row.SittingID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_attempt", "exam_sitting_id", err)
 	}
+
 	candidateID, err := model.ParseUserID(row.CandidateID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_attempt", "candidate_user_id", err)
 	}
+
 	revisionID, err := model.ParseExamRevisionID(row.AdmissionRevisionID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_attempt", "admission_revision_id", err)
 	}
-	attempt := &model.ExamAttempt{ID: attemptID, ExamID: examID, SittingID: sittingID, CandidateUserID: candidateID,
-		AdmissionRevisionID: revisionID, State: model.ExamAttemptState(row.State), CreatedAt: model.TimeUTC(row.CreatedAt),
-		UpdatedAt: model.TimeUTC(row.UpdatedAt), SubmittedAt: OptionalTimeFromNullTime(row.SubmittedAt), Revision: row.Revision}
+
+	attempt := &model.ExamAttempt{
+		ID:                  attemptID,
+		ExamID:              examID,
+		SittingID:           sittingID,
+		CandidateUserID:     candidateID,
+		AdmissionRevisionID: revisionID,
+		State:               model.ExamAttemptState(row.State),
+		CreatedAt:           model.TimeUTC(row.CreatedAt),
+		UpdatedAt:           model.TimeUTC(row.UpdatedAt),
+		SubmittedAt:         OptionalTimeFromNullTime(row.SubmittedAt),
+		Revision:            row.Revision,
+	}
 	if err = attempt.Validate(); err != nil {
 		return nil, invalidPersistedState("exam_attempt", "value", err)
 	}
+
 	return attempt, nil
 }
 
-const manualSuspensionAttemptSelect = `SELECT a.exam_id,a.exam_sitting_id,s.class_id,a.candidate_user_id,a.admission_revision_id,
-	a.state,a.created_at,a.updated_at,a.submitted_at,s.scheduled_end_at,a.revision
-	FROM exam_attempts a JOIN exam_sittings s ON s.id=a.exam_sitting_id AND s.exam_id=a.exam_id WHERE a.id=?`
+const manualSuspensionAttemptSelect = `SELECT a.exam_id, a.exam_sitting_id, s.class_id,
+		a.candidate_user_id, a.admission_revision_id, a.state, a.created_at, a.updated_at,
+		a.submitted_at, s.scheduled_end_at, a.revision
+	FROM exam_attempts a
+	JOIN exam_sittings s ON s.id = a.exam_sitting_id
+		AND s.exam_id = a.exam_id
+	WHERE a.id = ?`
 
 type manualSuspensionParticipationRow struct {
 	ID              string         `db:"id"`
@@ -137,40 +190,62 @@ type manualSuspensionParticipationRow struct {
 	EndReason       sql.NullString `db:"end_reason"`
 }
 
-const manualSuspensionParticipationColumns = `id,session_id,state,generation,renewal_sequence,continuity_credential_hash,
-	started_at,updated_at,lease_expires_at,ended_at,end_reason`
+const manualSuspensionParticipationColumns = `id, session_id, state, generation, renewal_sequence,
+		continuity_credential_hash, started_at, updated_at, lease_expires_at, ended_at, end_reason`
 
 func (row manualSuspensionParticipationRow) domain(attemptID model.ExamAttemptID) (*model.AttemptParticipation, error) {
 	id, err := model.ParseAttemptParticipationID(row.ID)
 	if err != nil {
 		return nil, invalidPersistedState("attempt_participation", "id", err)
 	}
+
 	sessionID, err := model.ParseSessionID(row.SessionID)
 	if err != nil {
 		return nil, invalidPersistedState("attempt_participation", "session_id", err)
 	}
-	participation := &model.AttemptParticipation{ID: id, AttemptID: attemptID, SessionID: sessionID,
-		State: model.AttemptParticipationState(row.State), Generation: row.Generation, RenewalSequence: row.RenewalSequence,
-		ContinuityCredentialHash: row.CredentialHash, StartedAt: model.TimeUTC(row.StartedAt), UpdatedAt: model.TimeUTC(row.UpdatedAt),
-		LeaseExpiresAt: model.TimeUTC(row.LeaseExpiresAt), EndedAt: OptionalTimeFromNullTime(row.EndedAt),
-		EndReason: model.AttemptParticipationEndReason(row.EndReason.String)}
+
+	participation := &model.AttemptParticipation{
+		ID:                       id,
+		AttemptID:                attemptID,
+		SessionID:                sessionID,
+		State:                    model.AttemptParticipationState(row.State),
+		Generation:               row.Generation,
+		RenewalSequence:          row.RenewalSequence,
+		ContinuityCredentialHash: row.CredentialHash,
+		StartedAt:                model.TimeUTC(row.StartedAt),
+		UpdatedAt:                model.TimeUTC(row.UpdatedAt),
+		LeaseExpiresAt:           model.TimeUTC(row.LeaseExpiresAt),
+		EndedAt:                  OptionalTimeFromNullTime(row.EndedAt),
+		EndReason:                model.AttemptParticipationEndReason(row.EndReason.String),
+	}
 	if err = participation.Validate(); err != nil {
 		return nil, invalidPersistedState("attempt_participation", "value", err)
 	}
+
 	return participation, nil
 }
 
 func participationView(participation *model.AttemptParticipation) *store.ExamAttemptParticipationView {
-	return &store.ExamAttemptParticipationView{ID: participation.ID, AttemptID: participation.AttemptID, State: participation.State,
-		Generation: participation.Generation, RenewalSequence: participation.RenewalSequence, StartedAt: participation.StartedAt,
-		UpdatedAt: participation.UpdatedAt, LeaseExpiresAt: participation.LeaseExpiresAt, EndedAt: participation.EndedAt,
-		EndReason: participation.EndReason}
+	return &store.ExamAttemptParticipationView{
+		ID:              participation.ID,
+		AttemptID:       participation.AttemptID,
+		State:           participation.State,
+		Generation:      participation.Generation,
+		RenewalSequence: participation.RenewalSequence,
+		StartedAt:       participation.StartedAt,
+		UpdatedAt:       participation.UpdatedAt,
+		LeaseExpiresAt:  participation.LeaseExpiresAt,
+		EndedAt:         participation.EndedAt,
+		EndReason:       participation.EndReason,
+	}
 }
 
 // suspendExamAttemptByManager runs after the Attempt and Sitting are locked
 // and current authority is rechecked. Lock order follows expiry: Attempt, then
 // Participation, then Connection.
-func suspendExamAttemptByManager(ctx context.Context, tx *sqlxTxWrapper,
+func suspendExamAttemptByManager(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
 	input *store.ExamAttemptManualSuspension,
 ) (examAttemptManualSuspensionOutcome, error) {
 	var zero examAttemptManualSuspensionOutcome
@@ -184,14 +259,17 @@ func suspendExamAttemptByManager(ctx context.Context, tx *sqlxTxWrapper,
 	if attemptRow.State != string(model.ExamAttemptActive) {
 		return zero, store.NewErrConflict("exam_attempt", "exam_attempt_state", nil)
 	}
+
 	attempt, err := attemptRow.domain(input.AttemptID)
 	if err != nil {
 		return zero, err
 	}
+
 	participation, connection, err := lockKickedParticipation(ctx, tx, input.AttemptID)
 	if err != nil {
 		return zero, err
 	}
+
 	var at time.Time
 	if err = tx.Get(ctx, &at, `SELECT statement_timestamp()`); err != nil {
 		return zero, fmt.Errorf("read Exam Attempt manual suspension time: %w", err)
@@ -206,49 +284,122 @@ func suspendExamAttemptByManager(ctx context.Context, tx *sqlxTxWrapper,
 	if !at.Before(participation.LeaseExpiresAt) {
 		return zero, store.NewErrConflict("attempt_participation", "attempt_participation_expired", nil)
 	}
+
 	at = model.TimeUTC(at)
 	if err = model.SuspendExamAttemptByManager(attempt, participation, connection, at); err != nil {
 		return zero, store.NewErrConflict("exam_attempt", "exam_attempt_state", err)
 	}
-	suspension, err := model.NewManualAttemptSuspension(input.SuspensionID, attempt.ID, participation.ID, participation.Generation,
-		input.ActorUserID, input.PrivateReason, at)
+
+	suspension, err := model.NewManualAttemptSuspension(
+		input.SuspensionID,
+		attempt.ID,
+		participation.ID,
+		participation.Generation,
+		input.ActorUserID,
+		input.PrivateReason,
+		at,
+	)
 	if err != nil {
 		return zero, store.NewErrInvalidInput("attempt_suspension", "private_reason", nil)
 	}
-	if _, err = tx.Exec(ctx, `UPDATE exam_attempts SET state=?,updated_at=?,revision=? WHERE id=? AND revision=? AND state='active'`,
-		attempt.State, attempt.UpdatedAt, attempt.Revision, attempt.ID.String(), input.ExpectedRevision); err != nil {
+
+	if _, err = tx.Exec(
+		ctx,
+		`UPDATE exam_attempts
+		SET state = ?, updated_at = ?, revision = ?
+		WHERE id = ?
+			AND revision = ?
+			AND state = 'active'`,
+		attempt.State,
+		attempt.UpdatedAt,
+		attempt.Revision,
+		attempt.ID.String(),
+		input.ExpectedRevision,
+	); err != nil {
 		return zero, fmt.Errorf("suspend kicked Exam Attempt: %w", err)
 	}
-	if _, err = tx.Exec(ctx, `UPDATE exam_attempt_participations SET state=?,updated_at=?,ended_at=?,end_reason=?
-		WHERE id=? AND exam_attempt_id=? AND generation=? AND state='active'`, participation.State, participation.UpdatedAt,
-		participation.EndedAt.Time, participation.EndReason, participation.ID.String(), attempt.ID.String(), participation.Generation); err != nil {
+
+	if _, err = tx.Exec(
+		ctx,
+		`UPDATE exam_attempt_participations
+		SET state = ?, updated_at = ?, ended_at = ?, end_reason = ?
+		WHERE id = ?
+			AND exam_attempt_id = ?
+			AND generation = ?
+			AND state = 'active'`,
+		participation.State,
+		participation.UpdatedAt,
+		participation.EndedAt.Time,
+		participation.EndReason,
+		participation.ID.String(),
+		attempt.ID.String(),
+		participation.Generation,
+	); err != nil {
 		return zero, fmt.Errorf("end kicked Attempt Participation: %w", err)
 	}
+
 	if err = closeNativeDelivery(ctx, tx, participation.ID, model.DeliveryClosedSuspension, at); err != nil {
 		return zero, err
 	}
-	outcome := examAttemptManualSuspensionOutcome{ExamID: attempt.ExamID.String(), SittingID: attempt.SittingID.String(),
-		ClassID: attemptRow.ClassID, CandidateID: attempt.CandidateUserID.String(), AttemptID: attempt.ID.String(),
-		ParticipationID: participation.ID.String(), SuspensionID: suspension.ID.String()}
+
+	outcome := examAttemptManualSuspensionOutcome{
+		ExamID:          attempt.ExamID.String(),
+		SittingID:       attempt.SittingID.String(),
+		ClassID:         attemptRow.ClassID,
+		CandidateID:     attempt.CandidateUserID.String(),
+		AttemptID:       attempt.ID.String(),
+		ParticipationID: participation.ID.String(),
+		SuspensionID:    suspension.ID.String(),
+	}
 	if connection != nil {
-		if _, err = tx.Exec(ctx, `UPDATE exam_attempt_connections SET state=?,closed_at=?,close_reason=?
-			WHERE id=? AND exam_attempt_id=? AND participation_id=? AND state='open'`, connection.State, connection.ClosedAt.Time,
-			connection.CloseReason, connection.ID.String(), attempt.ID.String(), participation.ID.String()); err != nil {
+		if _, err = tx.Exec(
+			ctx,
+			`UPDATE exam_attempt_connections
+			SET state = ?, closed_at = ?, close_reason = ?
+			WHERE id = ?
+				AND exam_attempt_id = ?
+				AND participation_id = ?
+				AND state = 'open'`,
+			connection.State,
+			connection.ClosedAt.Time,
+			connection.CloseReason,
+			connection.ID.String(),
+			attempt.ID.String(),
+			participation.ID.String(),
+		); err != nil {
 			return zero, fmt.Errorf("close kicked Attempt Connection: %w", err)
 		}
+
 		outcome.ConnectionID, outcome.ConnectionClosed = connection.ID.String(), true
 	}
-	if _, err = tx.Exec(ctx, `INSERT INTO exam_attempt_suspensions
-		(id,exam_attempt_id,participation_id,generation,suspension_attempt_revision,state,source,candidate_reason,started_at,
-		 suspended_by_user_id,suspension_private_reason) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-		suspension.ID.String(), suspension.AttemptID.String(), suspension.ParticipationID.String(), suspension.Generation,
-		attempt.Revision, suspension.State, suspension.Source, suspension.CandidateReason, suspension.StartedAt,
-		suspension.SuspendedByUserID.String(), suspension.SuspensionPrivateReason); err != nil {
+
+	if _, err = tx.Exec(
+		ctx,
+		`INSERT INTO exam_attempt_suspensions (
+			id, exam_attempt_id, participation_id, generation, suspension_attempt_revision, state,
+				source, candidate_reason, started_at, suspended_by_user_id,
+				suspension_private_reason
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		suspension.ID.String(),
+		suspension.AttemptID.String(),
+		suspension.ParticipationID.String(),
+		suspension.Generation,
+		attempt.Revision,
+		suspension.State,
+		suspension.Source,
+		suspension.CandidateReason,
+		suspension.StartedAt,
+		suspension.SuspendedByUserID.String(),
+		suspension.SuspensionPrivateReason,
+	); err != nil {
 		return zero, fmt.Errorf("create manual Attempt Suspension: %w", translateError("attempt_suspension", suspension.ID.String(), err))
 	}
+
 	if err = completeExamAttemptManualSuspensionAudit(ctx, tx, outcome, false, "", input.AuditEventID, input.AuditAt); err != nil {
 		return zero, err
 	}
+
 	return outcome, nil
 }
 
@@ -258,22 +409,37 @@ func lockKickedParticipation(ctx context.Context, tx *sqlxTxWrapper, attemptID m
 ) (*model.AttemptParticipation, *model.AttemptConnection, error) {
 	var participationRow manualSuspensionParticipationRow
 	err := tx.Get(ctx, &participationRow, `SELECT `+manualSuspensionParticipationColumns+`
-		FROM exam_attempt_participations WHERE exam_attempt_id=? AND state='active' FOR UPDATE`, attemptID.String())
+		FROM exam_attempt_participations
+		WHERE exam_attempt_id = ?
+			AND state = 'active'
+		FOR UPDATE`, attemptID.String())
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil, store.NewErrConflict("exam_attempt", "exam_attempt_state", nil)
 	}
 	if err != nil {
 		return nil, nil, fmt.Errorf("lock kicked Attempt Participation: %w", err)
 	}
+
 	participation, err := participationRow.domain(attemptID)
 	if err != nil {
 		return nil, nil, err
 	}
+
 	var connection *model.AttemptConnection
 	var connectionRow attemptConnectionRow
-	err = tx.Get(ctx, &connectionRow, `SELECT id,exam_attempt_id,participation_id,session_id,state,opened_at,closed_at,close_reason
-		FROM exam_attempt_connections WHERE exam_attempt_id=? AND participation_id=? AND state='open' FOR UPDATE`,
-		attemptID.String(), participation.ID.String())
+	err = tx.Get(
+		ctx,
+		&connectionRow,
+		`SELECT id, exam_attempt_id, participation_id, session_id, state, opened_at, closed_at,
+			close_reason
+		FROM exam_attempt_connections
+		WHERE exam_attempt_id = ?
+			AND participation_id = ?
+			AND state = 'open'
+		FOR UPDATE`,
+		attemptID.String(),
+		participation.ID.String(),
+	)
 	switch {
 	case err == nil:
 		if connection, err = connectionRow.model(); err != nil {
@@ -282,18 +448,32 @@ func lockKickedParticipation(ctx context.Context, tx *sqlxTxWrapper, attemptID m
 	case !errors.Is(err, sql.ErrNoRows):
 		return nil, nil, fmt.Errorf("lock kicked Attempt Connection: %w", err)
 	}
+
 	return participation, connection, nil
 }
 
-func completeExamAttemptManualSuspensionAudit(ctx context.Context, tx *sqlxTxWrapper, value examAttemptManualSuspensionOutcome,
-	replayed bool, originalAuditID string, auditID model.AuditEventID, auditAt time.Time,
+func completeExamAttemptManualSuspensionAudit(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	value examAttemptManualSuspensionOutcome,
+	replayed bool,
+	originalAuditID string,
+	auditID model.AuditEventID,
+	auditAt time.Time,
 ) error {
-	data := map[string]any{"exam_id": value.ExamID, "exam_sitting_id": value.SittingID, "exam_attempt_id": value.AttemptID,
-		"participation_id": value.ParticipationID, "suspension_id": value.SuspensionID, "connection_closed": value.ConnectionClosed,
-		"replayed": replayed}
+	data := map[string]any{
+		"exam_id":           value.ExamID,
+		"exam_sitting_id":   value.SittingID,
+		"exam_attempt_id":   value.AttemptID,
+		"participation_id":  value.ParticipationID,
+		"suspension_id":     value.SuspensionID,
+		"connection_closed": value.ConnectionClosed,
+		"replayed":          replayed,
+	}
 	if replayed {
 		data["original_audit_event_id"] = originalAuditID
 	}
+
 	encoded, err := model.EncodeAuditData(data)
 	if err != nil {
 		return err
@@ -301,6 +481,7 @@ func completeExamAttemptManualSuspensionAudit(ctx context.Context, tx *sqlxTxWra
 	if _, err = completeAuditEvent(ctx, tx, auditID, model.AuditStatusSuccess, "", encoded, auditAt); err != nil {
 		return fmt.Errorf("complete Exam Attempt manual suspension audit: %w", err)
 	}
+
 	return nil
 }
 
@@ -314,18 +495,22 @@ func (s *SQLExamAttemptStore) loadExamAttemptManualSuspensionResult(ctx context.
 	if err != nil {
 		return nil, invalidPersistedState("command_outcome", "exam_attempt_id", err)
 	}
+
 	classID, err := model.ParseClassID(value.ClassID)
 	if err != nil {
 		return nil, invalidPersistedState("command_outcome", "class_id", err)
 	}
+
 	var attemptRow manualSuspensionAttemptRow
 	if err = s.GetMaster().Get(ctx, &attemptRow, manualSuspensionAttemptSelect, attemptID.String()); err != nil {
 		return nil, translateError("exam_attempt", attemptID.String(), err)
 	}
+
 	attempt, err := attemptRow.domain(attemptID)
 	if err != nil {
 		return nil, err
 	}
+
 	var suspensionRow struct {
 		ParticipationID string    `db:"participation_id"`
 		Generation      int64     `db:"generation"`
@@ -336,17 +521,23 @@ func (s *SQLExamAttemptStore) loadExamAttemptManualSuspensionResult(ctx context.
 		FlagID          string    `db:"flag_id"`
 		SuspendedBy     string    `db:"suspended_by_user_id"`
 	}
-	if err = s.GetMaster().Get(ctx, &suspensionRow, `SELECT participation_id,generation,suspension_attempt_revision,source,
-		candidate_reason,started_at,COALESCE(integrity_flag_id,'') AS flag_id,COALESCE(suspended_by_user_id,'') AS suspended_by_user_id
-		FROM exam_attempt_suspensions WHERE id=? AND exam_attempt_id=?`, value.SuspensionID, attemptID.String()); err != nil {
+	if err = s.GetMaster().Get(ctx, &suspensionRow, `SELECT participation_id, generation,
+			suspension_attempt_revision, source, candidate_reason, started_at,
+			COALESCE(integrity_flag_id, '') AS flag_id,
+			COALESCE(suspended_by_user_id, '') AS suspended_by_user_id
+		FROM exam_attempt_suspensions
+		WHERE id = ?
+			AND exam_attempt_id = ?`, value.SuspensionID, attemptID.String()); err != nil {
 		return nil, translateError("attempt_suspension", value.SuspensionID, err)
 	}
+
 	source := model.AttemptSuspensionSource(suspensionRow.Source)
 	reason := model.AttemptSuspensionCandidateReason(suspensionRow.CandidateReason)
 	flagID, suspendedBy, err := suspensionProvenance(source, reason, suspensionRow.FlagID, suspensionRow.SuspendedBy)
 	if err != nil {
 		return nil, err
 	}
+
 	suspensionID, err := model.ParseAttemptSuspensionID(value.SuspensionID)
 	if err != nil {
 		return nil, invalidPersistedState("command_outcome", "suspension_id", err)
@@ -354,38 +545,72 @@ func (s *SQLExamAttemptStore) loadExamAttemptManualSuspensionResult(ctx context.
 	if source != model.AttemptSuspensionSourceManual || suspensionRow.ParticipationID != value.ParticipationID {
 		return nil, invalidPersistedState("attempt_suspension", "manual_outcome", errors.New("mismatched manual Suspension outcome"))
 	}
+
 	var participationRow manualSuspensionParticipationRow
 	if err = s.GetMaster().Get(ctx, &participationRow, `SELECT `+manualSuspensionParticipationColumns+`
-		FROM exam_attempt_participations WHERE id=? AND exam_attempt_id=?`, value.ParticipationID, attemptID.String()); err != nil {
+		FROM exam_attempt_participations
+		WHERE id = ?
+			AND exam_attempt_id = ?`, value.ParticipationID, attemptID.String()); err != nil {
 		return nil, translateError("attempt_participation", value.ParticipationID, err)
 	}
+
 	participation, err := participationRow.domain(attemptID)
 	if err != nil {
 		return nil, err
 	}
-	if participation.State != model.AttemptParticipationEnded || participation.EndReason != model.AttemptParticipationEndKicked ||
+
+	if participation.State != model.AttemptParticipationEnded ||
+		participation.EndReason != model.AttemptParticipationEndKicked ||
 		participation.Generation != suspensionRow.Generation {
 		return nil, invalidPersistedState("attempt_participation", "manual_outcome", errors.New("kicked Participation was not ended as kicked"))
 	}
+
 	historical := *attempt
 	historical.State, historical.UpdatedAt, historical.SubmittedAt, historical.Revision = model.ExamAttemptSuspended,
 		model.TimeUTC(suspensionRow.StartedAt), model.OptionalTime{}, suspensionRow.AttemptRevision
 	if err = historical.Validate(); err != nil {
 		return nil, invalidPersistedState("exam_attempt", "manual_outcome", err)
 	}
-	result := &store.ExamAttemptManualSuspensionResult{ExamID: attempt.ExamID, SittingID: attempt.SittingID, ClassID: classID,
-		CandidateUserID: attempt.CandidateUserID, Attempt: &historical, Participation: participationView(participation),
+
+	result := &store.ExamAttemptManualSuspensionResult{
+		ExamID:           attempt.ExamID,
+		SittingID:        attempt.SittingID,
+		ClassID:          classID,
+		CandidateUserID:  attempt.CandidateUserID,
+		Attempt:          &historical,
+		Participation:    participationView(participation),
 		ConnectionClosed: value.ConnectionClosed,
-		Suspension: &store.ExamAttemptSuspensionView{ID: suspensionID, AttemptID: attemptID, ParticipationID: participation.ID,
-			FlagID: flagID, Generation: suspensionRow.Generation, State: model.AttemptSuspensionActive, Source: source,
-			CandidateReason: reason, StartedAt: model.TimeUTC(suspensionRow.StartedAt), SuspendedByUserID: suspendedBy}}
+		Suspension: &store.ExamAttemptSuspensionView{
+			ID:                suspensionID,
+			AttemptID:         attemptID,
+			ParticipationID:   participation.ID,
+			FlagID:            flagID,
+			Generation:        suspensionRow.Generation,
+			State:             model.AttemptSuspensionActive,
+			Source:            source,
+			CandidateReason:   reason,
+			StartedAt:         model.TimeUTC(suspensionRow.StartedAt),
+			SuspendedByUserID: suspendedBy,
+		},
+	}
 	if value.ConnectionID != "" {
 		var connectionRow attemptConnectionRow
-		if err = s.GetMaster().Get(ctx, &connectionRow, `SELECT id,exam_attempt_id,participation_id,session_id,state,opened_at,closed_at,close_reason
-			FROM exam_attempt_connections WHERE id=? AND exam_attempt_id=? AND participation_id=?`,
-			value.ConnectionID, attemptID.String(), participation.ID.String()); err != nil {
+		if err = s.GetMaster().Get(
+			ctx,
+			&connectionRow,
+			`SELECT id, exam_attempt_id, participation_id, session_id, state, opened_at, closed_at,
+				close_reason
+			FROM exam_attempt_connections
+			WHERE id = ?
+				AND exam_attempt_id = ?
+				AND participation_id = ?`,
+			value.ConnectionID,
+			attemptID.String(),
+			participation.ID.String(),
+		); err != nil {
 			return nil, translateError("attempt_connection", value.ConnectionID, err)
 		}
+
 		connection, connectionErr := connectionRow.model()
 		if connectionErr != nil {
 			return nil, connectionErr
@@ -393,8 +618,15 @@ func (s *SQLExamAttemptStore) loadExamAttemptManualSuspensionResult(ctx context.
 		if connection.CloseReason != model.AttemptConnectionCloseKicked {
 			return nil, invalidPersistedState("attempt_connection", "manual_outcome", errors.New("kicked Connection was not closed as kicked"))
 		}
-		result.Connection = &store.ExamAttemptManagerConnection{ID: connection.ID, State: connection.State,
-			OpenedAt: connection.OpenedAt, ClosedAt: connection.ClosedAt, CloseReason: connection.CloseReason}
+
+		result.Connection = &store.ExamAttemptManagerConnection{
+			ID:          connection.ID,
+			State:       connection.State,
+			OpenedAt:    connection.OpenedAt,
+			ClosedAt:    connection.ClosedAt,
+			CloseReason: connection.CloseReason,
+		}
 	}
+
 	return result, nil
 }

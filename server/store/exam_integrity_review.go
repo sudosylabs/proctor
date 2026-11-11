@@ -35,6 +35,22 @@ type ExamIntegrityReviewAuthorization struct {
 	AcademicUnitID  model.AcademicUnitID
 }
 
+// ConsistentWith reports whether the projection is for the Submission that was
+// asked for and names its Exam, Sitting, Attempt, candidate and owning
+// Academic Unit.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (a *ExamIntegrityReviewAuthorization) ConsistentWith(submissionID model.SubmissionID) bool {
+	return !(a == nil ||
+		a.SubmissionID != submissionID ||
+		!a.ExamID.IsValid() ||
+		!a.SittingID.IsValid() ||
+		!a.AttemptID.IsValid() ||
+		!a.CandidateUserID.IsValid() ||
+		!a.AcademicUnitID.IsValid())
+}
+
 // ExamIntegrityFlagSummary is the bounded manager projection of one Flag. It
 // contains no evidence details or private candidate-authored material.
 type ExamIntegrityFlagSummary struct {
@@ -160,6 +176,21 @@ type ExamIntegrityReviewMutationResult struct {
 	Review        *model.SubmissionReview
 	Decision      *model.IntegrityReviewDecision
 	Replayed      bool
+}
+
+// ConsistentWith reports whether the outcome carries a consistent
+// authorization projection and a valid Review for the given Submission, and
+// its Decision, when present, is valid and belongs to that Review.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (r *ExamIntegrityReviewMutationResult) ConsistentWith(submissionID model.SubmissionID) bool {
+	return !(r == nil ||
+		!r.Authorization.ConsistentWith(submissionID) ||
+		r.Review == nil ||
+		r.Review.Validate() != nil ||
+		r.Review.SubmissionID != submissionID ||
+		(r.Decision != nil && (r.Decision.Validate() != nil || r.Decision.ReviewID != r.Review.ID)))
 }
 
 // ExamIntegrityReviewStore owns the one Review aggregate for a sealed

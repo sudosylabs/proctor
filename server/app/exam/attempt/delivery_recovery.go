@@ -18,42 +18,48 @@ import (
 // A recovery projection is deliberately obtained after the failed transaction.
 // Every read repeats current ownership checks. Read failures preserve the original
 // refusal without disclosing a cached or client-selected owner's state.
-func (s *Service) nativeDeliveryFailure(ctx context.Context, access store.NativeDeliveryAccess, err error) error {
+func (s *Service) nativeDeliveryFailure(ctx context.Context, deliveryAccess store.NativeDeliveryAccess, err error) error {
 	mapped := deliveryStoreError(err)
 	var fault *apperror.Error
 	if errors.Is(err, store.ErrDeliveryAdmissionFull) || !errors.As(mapped, &fault) || !SupportsDeliveryRecovery(fault.Code()) {
 		return mapped
 	}
-	target, readErr := s.deps.Persistence.ResolveNativeDeliveryTarget(ctx, access)
+	target, readErr := s.nativeDelivery.ResolveNativeDeliveryTarget(ctx, deliveryAccess)
 	if readErr != nil || target == nil || target.Security.Validate() != nil {
 		return mapped
 	}
 	part := target.Security.ParticipationID
-	budget, readErr := s.deps.Persistence.DeliveryBudget(ctx, store.DeliveryBudgetAccess{Access: access.Access, ParticipationID: part})
+	budget, readErr := s.deliveryBudget.DeliveryBudget(ctx, store.DeliveryBudgetAccess{Access: deliveryAccess.Access, ParticipationID: part})
 	if readErr != nil || budget == nil || budget.ParticipationID != part || budget.Generation != target.Security.Generation {
 		return mapped
 	}
-	status, readErr := s.deps.Persistence.NativeDeliveryStatus(ctx, access)
-	if readErr != nil || status == nil || status.StreamID != access.StreamID {
+	status, readErr := s.nativeDelivery.NativeDeliveryStatus(ctx, deliveryAccess)
+	if readErr != nil || status == nil || status.StreamID != deliveryAccess.StreamID {
 		return mapped
 	}
 	return withDeliveryRecovery(fault, model.DeliveryRecovery{Family: "native", Budget: *budget, Native: status})
 }
 
-func (s *Service) browserDeliveryFailure(ctx context.Context, access store.BrowserDeliveryAccess, err error) error {
+func (s *Service) browserDeliveryFailure(ctx context.Context, deliveryAccess store.BrowserDeliveryAccess, err error) error {
 	mapped := deliveryStoreError(err)
 	var fault *apperror.Error
 	if errors.Is(err, store.ErrDeliveryAdmissionFull) || !errors.As(mapped, &fault) || !SupportsDeliveryRecovery(fault.Code()) {
 		return mapped
 	}
-	status, readErr := s.deps.Persistence.BrowserSourceStatus(ctx, access)
-	if readErr != nil || status == nil || status.SourceSessionID != access.SourceSessionID {
+
+	status, readErr := s.browserDelivery.BrowserSourceStatus(ctx, deliveryAccess)
+	if readErr != nil || status == nil || status.SourceSessionID != deliveryAccess.SourceSessionID {
 		return mapped
 	}
-	budget, readErr := s.deps.Persistence.DeliveryBudget(ctx, store.DeliveryBudgetAccess{Access: access.Access, ParticipationID: status.ParticipationID})
+
+	budget, readErr := s.deliveryBudget.DeliveryBudget(
+		ctx,
+		store.DeliveryBudgetAccess{Access: deliveryAccess.Access, ParticipationID: status.ParticipationID},
+	)
 	if readErr != nil || budget == nil {
 		return mapped
 	}
+
 	return withDeliveryRecovery(fault, model.DeliveryRecovery{Family: "browser", Budget: *budget, Browser: status})
 }
 
@@ -90,10 +96,14 @@ func (c deliveryRecoveryCause) DeliveryRecovery() *model.DeliveryRecovery {
 // SupportsDeliveryRecovery identifies the application failures with bounded repair context.
 func SupportsDeliveryRecovery(code string) bool {
 	switch code {
-	case "exam.delivery.pending_capacity", "exam.delivery.replay_window_exceeded",
-		"exam.delivery.detail_budget_exhausted", "exam.delivery.sequence_limit",
-		"exam.delivery.declaration_conflict", "exam.delivery.upload_expired",
-		"exam.delivery.append_rate_limited", "exam.delivery.summary_rate_limited":
+	case "exam.delivery.pending_capacity",
+		"exam.delivery.replay_window_exceeded",
+		"exam.delivery.detail_budget_exhausted",
+		"exam.delivery.sequence_limit",
+		"exam.delivery.declaration_conflict",
+		"exam.delivery.upload_expired",
+		"exam.delivery.append_rate_limited",
+		"exam.delivery.summary_rate_limited":
 		return true
 	default:
 		return false

@@ -16,6 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -73,11 +75,11 @@ func TestWebSocketResourceMapsDeclaredAndRejectsUndeclaredTransportFailures(t *t
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			logger, _ := newTestLogger(t)
+			logger, _ := routetest.NewLogger(t)
 			transport := &focusedWebSocketTransport{acceptErr: apperror.New(apperror.Code(test.code))}
-			httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, webSocketResource(transport))
+			httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, webSocketResource(transport))
 
-			request := httptest.NewRequest(http.MethodGet, "/api/v1/websocket", nil)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/websocket", nil)
 			request.Header.Set("Authorization", "Bearer credential")
 			response := httptest.NewRecorder()
 			httpAPI.ServeHTTP(response, request)
@@ -92,7 +94,7 @@ func (*focusedWebSocketTransport) Close() error { return nil }
 func TestWebSocketResourceRunsNamedUpgradeThroughRoutingKernel(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID:         model.PrincipalCredentialID(model.NewID()),
@@ -104,32 +106,32 @@ func TestWebSocketResourceRunsNamedUpgradeThroughRoutingKernel(t *testing.T) {
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{principal: principal},
+		routetest.Authenticator{Principal: principal},
 		webSocketResource(transport),
 	)
 
 	routes := httpAPI.Routes()
 	require.Len(t, routes, 1)
 	require.Equal(t, "/api/v1/websocket", routes[0].Path)
-	require.Equal(t, AuthSessionRequired, routes[0].Auth)
+	require.Equal(t, route.AuthSessionRequired, routes[0].Auth)
 	require.Equal(t, "websocket-upgrade", routes[0].ProtocolName)
-	require.Equal(t, RouteProtocolUpgrade, routes[0].ProtocolKind)
+	require.Equal(t, route.ProtocolUpgrade, routes[0].ProtocolKind)
 
 	connectionID := model.NewID()
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
 		"/api/v1/websocket?connection_id="+connectionID+"&sequence_number=7",
 		nil,
 	)
 	request.Header.Set("Authorization", "Bearer credential")
-	request.Header.Set(RequestIDHeader, "websocket-request")
+	request.Header.Set(route.RequestIDHeader, "websocket-request")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusSwitchingProtocols, response.Code, "upgrade status = %d: %s", response.Code, response.Body.String())
 	require.Equal(t, 1, transport.acceptCalls)
 	require.Equal(t, principal.UserID, transport.principal.UserID)
 	require.NotEqual(t, "websocket-request", transport.metadata.RequestID)
-	require.Equal(t, response.Header().Get(RequestIDHeader), transport.metadata.RequestID)
+	require.Equal(t, response.Header().Get(route.RequestIDHeader), transport.metadata.RequestID)
 	require.Equal(t, connectionID, transport.connectionID)
 	require.Equal(t, int64(7), transport.sequence)
 	require.True(t, transport.allowMissingOrigin)
@@ -138,7 +140,7 @@ func TestWebSocketResourceRunsNamedUpgradeThroughRoutingKernel(t *testing.T) {
 func TestWebSocketResourceRejectsMissingCredentialAndInvalidResume(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID:         model.PrincipalCredentialID(model.NewID()),
@@ -147,14 +149,14 @@ func TestWebSocketResourceRejectsMissingCredentialAndInvalidResume(t *testing.T)
 		AuthenticatedAt: time.Now(), ClientType: model.SessionClientCLI,
 	}
 	transport := &focusedWebSocketTransport{}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, webSocketResource(transport))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, webSocketResource(transport))
 
 	missing := httptest.NewRecorder()
-	httpAPI.ServeHTTP(missing, httptest.NewRequest(http.MethodGet, "/api/v1/websocket", nil))
+	httpAPI.ServeHTTP(missing, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/websocket", nil))
 	require.Equal(t, http.StatusUnauthorized, missing.Code, "missing credential = %d/%d: %s", missing.Code, transport.acceptCalls, missing.Body.String())
 	require.Equal(t, 0, transport.acceptCalls, "missing credential = %d/%d: %s", missing.Code, transport.acceptCalls, missing.Body.String())
 
-	invalidRequest := httptest.NewRequest(http.MethodGet, "/api/v1/websocket?connection_id=invalid&sequence_number=7", nil)
+	invalidRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/websocket?connection_id=invalid&sequence_number=7", nil)
 	invalidRequest.Header.Set("Authorization", "Bearer credential")
 	invalid := httptest.NewRecorder()
 	httpAPI.ServeHTTP(invalid, invalidRequest)

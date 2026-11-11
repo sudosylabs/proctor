@@ -18,46 +18,29 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type classHTTPApplication struct {
-	updateCommand  app.UpdateClassCommand
-	archiveCommand app.ArchiveClassCommand
+	updateCommand  academic.UpdateClassCommand
+	archiveCommand academic.ArchiveClassCommand
 	result         *model.Class
 	list           []*model.Class
-	createCommand  app.CreateClassCommand
+	createCommand  academic.CreateClassCommand
 	searchErr      error
-}
-
-type classRouteAuthenticator struct {
-	principal model.Principal
-	err       error
-}
-
-func (a classRouteAuthenticator) AuthenticateAccess(context.Context, string) (*model.Principal, error) {
-	if a.err != nil {
-		return nil, a.err
-	}
-	principal := a.principal
-	return &principal, nil
-}
-
-func (a classRouteAuthenticator) AuthenticateBearer(context.Context, string) (*model.Principal, error) {
-	if a.err != nil {
-		return nil, a.err
-	}
-	principal := a.principal
-	return &principal, nil
 }
 
 func TestClassResourceRunsThroughRoutingKernelWithNarrowDependencies(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{
 		UserID:                 model.NewUserID(),
 		SessionID:              model.NewSessionID(),
@@ -79,11 +62,11 @@ func TestClassResourceRunsThroughRoutingKernelWithNarrowDependencies(t *testing.
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{principal: principal},
+		routetest.Authenticator{Principal: principal},
 		classResource(classes),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPost,
 		"/api/v1/programme-levels/"+class.ProgrammeLevelID.String()+"/classes",
 		strings.NewReader(`{"academic_period_id":"`+class.AcademicPeriodID.String()+`","name":"class-a","display_name":"Class A"}`),
@@ -99,7 +82,7 @@ func TestClassResourceRunsThroughRoutingKernelWithNarrowDependencies(t *testing.
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
 	require.Equal(t, class.ID.String(), body.ID)
 
-	invalid := httptest.NewRequest(
+	invalid := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPost,
 		"/api/v1/programme-levels/"+class.ProgrammeLevelID.String()+"/classes",
 		strings.NewReader(`{"academic_period_id":"`+class.AcademicPeriodID.String()+`","name":"class-a","display_name":"Class A","unknown":true}`),
@@ -110,7 +93,7 @@ func TestClassResourceRunsThroughRoutingKernelWithNarrowDependencies(t *testing.
 	httpAPI.ServeHTTP(invalidResponse, invalid)
 	require.Equal(t, http.StatusBadRequest, invalidResponse.Code, "invalid status = %d: %s", invalidResponse.Code, invalidResponse.Body.String())
 
-	archive := httptest.NewRequest(
+	archive := httptest.NewRequestWithContext(t.Context(),
 		http.MethodDelete,
 		"/api/v1/classes/"+class.ID.String(),
 		nil,
@@ -126,7 +109,7 @@ func TestClassResourceRunsThroughRoutingKernelWithNarrowDependencies(t *testing.
 func TestClassResourceFailsClosedForUndeclaredApplicationError(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{
 		UserID:                 model.NewUserID(),
 		SessionID:              model.NewSessionID(),
@@ -140,11 +123,11 @@ func TestClassResourceFailsClosedForUndeclaredApplicationError(t *testing.T) {
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{principal: principal},
+		routetest.Authenticator{Principal: principal},
 		classResource(&classHTTPApplication{searchErr: apperror.New("class.invalid")}),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
 		"/api/v1/academic-units/"+model.NewID()+"/classes",
 		nil,
@@ -153,7 +136,7 @@ func TestClassResourceFailsClosedForUndeclaredApplicationError(t *testing.T) {
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusInternalServerError, response.Code, "status = %d: %s", response.Code, response.Body.String())
-	var problem Problem
+	var problem route.Problem
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
 	require.Equal(t, "server.internal", problem.Code, "problem code")
 }
@@ -161,14 +144,14 @@ func TestClassResourceFailsClosedForUndeclaredApplicationError(t *testing.T) {
 func TestClassResourceFailsClosedForUndeclaredAuthenticationError(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{err: apperror.New("user.conflict")},
+		routetest.Authenticator{Err: apperror.New("user.conflict")},
 		classResource(&classHTTPApplication{}),
 	)
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
 		"/api/v1/classes/"+model.NewID(),
 		nil,
@@ -177,61 +160,48 @@ func TestClassResourceFailsClosedForUndeclaredAuthenticationError(t *testing.T) 
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusInternalServerError, response.Code, "status = %d: %s", response.Code, response.Body.String())
-	var problem Problem
+	var problem route.Problem
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
 	require.Equal(t, "server.internal", problem.Code, "problem code")
 }
 
 func newFocusedResourceAPI(
 	t *testing.T,
-	logger Logger,
-	authenticator Authenticator,
-	resources ...apiResource,
-) *API {
+	logger *logging.Logger,
+	authenticator route.Authenticator,
+	resources ...route.Resource,
+) *route.API {
 	t.Helper()
-	cookies, err := newBrowserCookies("http://localhost:8065")
+	httpAPI, err := route.New(route.Settings{
+		Logger:                  logger,
+		Localizer:               routetest.NewLocalizer(t),
+		PublicURL:               "http://localhost:8065",
+		MaxBodyBytes:            1 << 20,
+		RecentAuthenticationTTL: time.Minute,
+	}, authenticator, resources...)
 	require.NoError(t, err)
-	httpAPI := &API{
-		authenticator:           authenticator,
-		logger:                  logger,
-		localizer:               newTestLocalizer(t),
-		cookies:                 cookies,
-		browserRequests:         browserRequestPolicy{origin: "http://localhost:8065"},
-		recentAuthenticationTTL: time.Minute,
-	}
-	require.NoError(t, httpAPI.buildRoutingKernel(
-		model.APIURLSuffix,
-		1<<20,
-		func() error {
-			return httpAPI.collectResources(model.APIURLSuffix, resources...)
-		},
-	))
 	return httpAPI
 }
 
-func (a *classHTTPApplication) GetClass(context.Context, invocation.Invocation, app.GetClassQuery) (*model.Class, error) {
+func (a *classHTTPApplication) GetClass(context.Context, invocation.Invocation, model.ClassID) (*model.Class, error) {
 	return a.result, nil
 }
-func (a *classHTTPApplication) ListClasses(context.Context, invocation.Invocation, app.ListClassesQuery) (app.Page[*model.Class], error) {
-	return app.Page[*model.Class]{Items: a.list}, nil
+func (a *classHTTPApplication) ListClasses(context.Context, invocation.Invocation, academic.ListClassesQuery) (paging.Page[*model.Class], error) {
+	return paging.Page[*model.Class]{Items: a.list}, nil
 }
-func (a *classHTTPApplication) SearchClasses(context.Context, invocation.Invocation, app.SearchClassesQuery) (app.Page[*model.Class], error) {
-	return app.Page[*model.Class]{Items: a.list}, a.searchErr
+func (a *classHTTPApplication) SearchClasses(context.Context, invocation.Invocation, academic.SearchClassesQuery) (paging.Page[*model.Class], error) {
+	return paging.Page[*model.Class]{Items: a.list}, a.searchErr
 }
 
 func TestClassSearchMapsMissingAcademicUnit(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
 	classes := &classHTTPApplication{searchErr: apperror.New("resource.not_found").WithField("resource", "academic_unit")}
 	transport := &academicUnitHTTPApplication{principal: principal}
-	options := validHTTPOptions(t)
-	options.Logger = logger
-	options.Application = transport
-	options.AcademicUnits = transport
-	options.Institutions = transport
-	options.Classes = classes
-	httpAPI, err := New(options)
+	settings := validHTTPSettings(t)
+	settings.Logger = logger
+	httpAPI, err := newAPI(settings, transport, academicUnitResource(transport), institutionResource(transport), classResource(classes))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = httpAPI.Close() })
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+model.NewID()+"/classes", nil)
@@ -240,33 +210,29 @@ func TestClassSearchMapsMissingAcademicUnit(t *testing.T) {
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusNotFound, response.Code, "status = %d: %s", response.Code, response.Body.String())
 }
-func (a *classHTTPApplication) CreateClass(_ context.Context, _ invocation.Invocation, command app.CreateClassCommand) (*model.Class, error) {
+func (a *classHTTPApplication) CreateClass(_ context.Context, _ invocation.Invocation, command academic.CreateClassCommand) (*model.Class, error) {
 	a.createCommand = command
 	return a.result, nil
 }
-func (a *classHTTPApplication) UpdateClass(_ context.Context, _ invocation.Invocation, command app.UpdateClassCommand) (*model.Class, error) {
+func (a *classHTTPApplication) UpdateClass(_ context.Context, _ invocation.Invocation, command academic.UpdateClassCommand) (*model.Class, error) {
 	a.updateCommand = command
 	return a.result, nil
 }
-func (a *classHTTPApplication) ArchiveClass(_ context.Context, _ invocation.Invocation, command app.ArchiveClassCommand) error {
+func (a *classHTTPApplication) ArchiveClass(_ context.Context, _ invocation.Invocation, command academic.ArchiveClassCommand) error {
 	a.archiveCommand = command
 	return nil
 }
 
 func TestClassHTTPMapsBothParentsFromRouteAndBody(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
 	class := &model.Class{ID: model.ClassID(model.NewID()), ProgrammeLevelID: model.ProgrammeLevelID(model.NewID()), AcademicPeriodID: model.AcademicPeriodID(model.NewID()), Name: "class-a", DisplayName: "Class A"}
 	classes := &classHTTPApplication{result: class}
 	transport := &academicUnitHTTPApplication{principal: principal}
-	options := validHTTPOptions(t)
-	options.Logger = logger
-	options.Application = transport
-	options.AcademicUnits = transport
-	options.Institutions = transport
-	options.Classes = classes
-	httpAPI, err := New(options)
+	settings := validHTTPSettings(t)
+	settings.Logger = logger
+	httpAPI, err := newAPI(settings, transport, academicUnitResource(transport), institutionResource(transport), classResource(classes))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = httpAPI.Close() })
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/programme-levels/"+class.ProgrammeLevelID.String()+"/classes", strings.NewReader(`{"academic_period_id":"`+class.AcademicPeriodID.String()+`","name":"class-a","display_name":"Class A"}`))

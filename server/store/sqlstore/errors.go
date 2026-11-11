@@ -51,8 +51,10 @@ func isDomainError(err error) bool {
 	var notFound *store.ErrNotFound
 	var conflict *store.ErrConflict
 	var reference *store.ErrReference
-	return errors.As(err, &invalid) || errors.As(err, &notFound) ||
-		errors.As(err, &conflict) || errors.As(err, &reference)
+	return errors.As(err, &invalid) ||
+		errors.As(err, &notFound) ||
+		errors.As(err, &conflict) ||
+		errors.As(err, &reference)
 }
 
 // translateIntegrityError translates the integrity violations of every
@@ -66,8 +68,11 @@ func translateIntegrityError(err error) error {
 		return err
 	}
 	switch string(pqErr.Code) {
-	case postgresUniqueViolation, postgresForeignKeyViolation, postgresCheckViolation,
-		postgresNotNullViolation, postgresStringDataTruncation:
+	case postgresUniqueViolation,
+		postgresForeignKeyViolation,
+		postgresCheckViolation,
+		postgresNotNullViolation,
+		postgresStringDataTruncation:
 		return translateError(pqErr.Table, "", err)
 	default:
 		return err

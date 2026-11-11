@@ -22,14 +22,14 @@ import (
 func TestAuthorizeWebSocketExamSubscriptionUsesExamRelationshipGate(t *testing.T) {
 	t.Parallel()
 	exams := &realtimeExamViewFake{}
-	admission := &realtimeAdmissionService{exams: exams}
+	admission := &RealtimeAdmission{exams: exams}
 	principal := testExamPrincipal(model.NewUserID())
 	examID := model.NewExamID()
 	err := admission.AuthorizeWebSocketSubscription(context.Background(), invocation.New(principal, model.RequestMetadata{RequestID: "subscribe"}),
 		model.ActionExamView, model.Resource{Type: model.ResourceExam, ID: examID.String()})
 	require.NoError(t, err)
-	require.Equal(t, examID, exams.examID, "authorization = %s %#v", exams.examID, exams.invocation)
-	require.Equal(t, principal.UserID, exams.invocation.Principal().UserID, "authorization = %s %#v", exams.examID, exams.invocation)
+	require.Equal(t, examID, exams.examID, "authorization = %s %#v", exams.examID, exams.inv)
+	require.Equal(t, principal.UserID, exams.inv.Principal().UserID, "authorization = %s %#v", exams.examID, exams.inv)
 }
 
 func TestAuthorizeWebSocketExamSubscriptionConcealsMissingAndDeniedExams(t *testing.T) {
@@ -37,7 +37,7 @@ func TestAuthorizeWebSocketExamSubscriptionConcealsMissingAndDeniedExams(t *test
 	principal := testExamPrincipal(model.NewUserID())
 	resource := model.Resource{Type: model.ResourceExam, ID: model.NewExamID().String()}
 	for _, failure := range []error{apperror.New("exam.not_found"), apperror.New("authorization.denied")} {
-		admission := &realtimeAdmissionService{exams: &realtimeExamViewFake{err: failure}}
+		admission := &RealtimeAdmission{exams: &realtimeExamViewFake{err: failure}}
 		err := admission.AuthorizeWebSocketSubscription(context.Background(), invocation.New(principal, model.RequestMetadata{}), model.ActionExamView, resource)
 		require.True(t, apperror.Is(err, "resource.not_found"), "error = %v, want concealed resource.not_found", err)
 	}
@@ -46,15 +46,15 @@ func TestAuthorizeWebSocketExamSubscriptionConcealsMissingAndDeniedExams(t *test
 func TestAuthorizeWebSocketSittingSubscriptionUsesRelationshipGate(t *testing.T) {
 	t.Parallel()
 	sittings := &realtimeSittingViewFake{}
-	admission := &realtimeAdmissionService{sittings: sittings}
+	admission := &RealtimeAdmission{sittings: sittings}
 	principal := testExamPrincipal(model.NewUserID())
 	sittingID := model.NewExamSittingID()
 	err := admission.AuthorizeWebSocketSubscription(context.Background(),
 		invocation.New(principal, model.RequestMetadata{RequestID: "sitting-subscribe"}), model.ActionExamSittingView,
 		model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()})
 	require.NoError(t, err)
-	require.Equal(t, sittingID, sittings.sittingID, "authorization = %s %#v", sittings.sittingID, sittings.invocation)
-	require.Equal(t, principal.UserID, sittings.invocation.Principal().UserID, "authorization = %s %#v", sittings.sittingID, sittings.invocation)
+	require.Equal(t, sittingID, sittings.sittingID, "authorization = %s %#v", sittings.sittingID, sittings.inv)
+	require.Equal(t, principal.UserID, sittings.inv.Principal().UserID, "authorization = %s %#v", sittings.sittingID, sittings.inv)
 }
 
 func TestAuthorizeWebSocketSittingSubscriptionConcealsMissingAndDeniedTargets(t *testing.T) {
@@ -62,7 +62,7 @@ func TestAuthorizeWebSocketSittingSubscriptionConcealsMissingAndDeniedTargets(t 
 	principal := testExamPrincipal(model.NewUserID())
 	resource := model.Resource{Type: model.ResourceExamSitting, ID: model.NewExamSittingID().String()}
 	for _, failure := range []error{apperror.New("exam.sitting.not_found"), apperror.New("authorization.denied")} {
-		admission := &realtimeAdmissionService{sittings: &realtimeSittingViewFake{err: failure}}
+		admission := &RealtimeAdmission{sittings: &realtimeSittingViewFake{err: failure}}
 		err := admission.AuthorizeWebSocketSubscription(context.Background(), invocation.New(principal, model.RequestMetadata{}),
 			model.ActionExamSittingView, resource)
 		require.True(t, apperror.Is(err, "resource.not_found"), "error = %v, want concealed resource.not_found", err)
@@ -70,24 +70,24 @@ func TestAuthorizeWebSocketSittingSubscriptionConcealsMissingAndDeniedTargets(t 
 }
 
 type realtimeExamViewFake struct {
-	invocation invocation.Invocation
-	examID     model.ExamID
-	err        error
+	inv    invocation.Invocation
+	examID model.ExamID
+	err    error
 }
 
-func (f *realtimeExamViewFake) AuthorizeExamView(_ context.Context, invocation invocation.Invocation, examID model.ExamID) error {
-	f.invocation, f.examID = invocation, examID
+func (f *realtimeExamViewFake) AuthorizeExamView(_ context.Context, inv invocation.Invocation, examID model.ExamID) error {
+	f.inv, f.examID = inv, examID
 	return f.err
 }
 
 type realtimeSittingViewFake struct {
-	invocation invocation.Invocation
-	sittingID  model.ExamSittingID
-	err        error
+	inv       invocation.Invocation
+	sittingID model.ExamSittingID
+	err       error
 }
 
-func (f *realtimeSittingViewFake) AuthorizeSittingView(_ context.Context, invocation invocation.Invocation, sittingID model.ExamSittingID) error {
-	f.invocation, f.sittingID = invocation, sittingID
+func (f *realtimeSittingViewFake) AuthorizeSittingView(_ context.Context, inv invocation.Invocation, sittingID model.ExamSittingID) error {
+	f.inv, f.sittingID = inv, sittingID
 	return f.err
 }
 

@@ -17,7 +17,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
@@ -33,51 +33,51 @@ func TestAccountAndAdministrativeSessionNoticesUseRealServerGraph(t *testing.T) 
 	}))
 	ctx := context.Background()
 	const password = "correct horse battery staple"
-	bootstrap, appErr := helper.App.BootstrapInstallation(ctx, invocation.Invocation{}, app.BootstrapInstallationCommand{
+	bootstrap, appErr := helper.App.Identity.BootstrapInstallation(ctx, invocation.Invocation{}, identity.BootstrapInstallationCommand{
 		InstitutionName: "security-notice-university", InstitutionDisplayName: "Security Notice University",
 		AdministratorUsername: "mail11-admin", AdministratorEmail: "mail11-admin@example.edu", AdministratorDisplayName: "Mail 11 Admin",
 		AdministratorLocale: "en", AdministratorTimezone: "UTC", Password: password,
 		BootstrapSecret: testlib.BootstrapSecret, Source: "203.0.113.42",
 	})
 	require.NoError(t, appErr)
-	target, appErr := helper.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
+	target, appErr := helper.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
 		Username: "mail11-target", Email: "mail11-target@example.edu", DisplayName: "Mail 11 Target", Locale: "en", Timezone: "UTC",
 	}, Password: password})
 	require.NoError(t, appErr)
-	adminLogin, appErr := helper.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{
+	adminLogin, appErr := helper.App.Identity.Login(ctx, invocation.Invocation{}, identity.LoginCommand{
 		LoginID: bootstrap.Administrator.Username, Password: password, ClientType: model.SessionClientCLI,
 		Source: "203.0.113.42", DeviceName: "mail11-admin-device",
 	})
 	require.NoError(t, appErr)
-	adminPrincipal, appErr := helper.App.AuthenticateAccess(ctx, adminLogin.Tokens.AccessToken)
+	adminPrincipal, appErr := helper.App.Identity.AuthenticateAccess(ctx, adminLogin.Tokens.AccessToken)
 	require.NoError(t, appErr)
 	adminInvocation := invocation.New(*adminPrincipal, model.RequestMetadata{RequestID: "mail11-admin", IPAddress: "203.0.113.42"})
 
 	initialTargetLogin := loginIntegrationUser(t, helper.Handler(), target.Username, password, model.SessionClientCLI, "mail11-initial")
-	_, appErr = helper.App.SetUserEnabled(ctx, adminInvocation, app.SetUserEnabledCommand{ID: target.ID, Enabled: false})
+	_, appErr = helper.App.Identity.SetUserEnabled(ctx, adminInvocation, identity.SetUserEnabledCommand{ID: target.ID, Enabled: false})
 	require.NoError(t, appErr)
-	_, appErr = helper.App.SetUserEnabled(ctx, adminInvocation, app.SetUserEnabledCommand{ID: target.ID, Enabled: true})
+	_, appErr = helper.App.Identity.SetUserEnabled(ctx, adminInvocation, identity.SetUserEnabledCommand{ID: target.ID, Enabled: true})
 	require.NoError(t, appErr)
 	first := loginIntegrationUser(t, helper.Handler(), target.Username, password, model.SessionClientCLI, "mail11-first")
 	second := loginIntegrationUser(t, helper.Handler(), target.Username, password, model.SessionClientCLI, "mail11-second")
-	require.NoError(t, helper.App.RevokeUserSession(ctx, adminInvocation, app.RevokeUserSessionCommand{UserID: target.ID, SessionID: first.Session.ID}))
-	require.NoError(t, helper.App.RevokeUserSessions(ctx, adminInvocation, app.RevokeUserSessionsCommand{UserID: target.ID}))
+	require.NoError(t, helper.App.Identity.RevokeUserSession(ctx, adminInvocation, target.ID, first.Session.ID))
+	require.NoError(t, helper.App.Identity.RevokeUserSessions(ctx, adminInvocation, identity.RevokeUserSessionsCommand{UserID: target.ID}))
 	self := loginIntegrationUser(t, helper.Handler(), target.Username, password, model.SessionClientCLI, "mail11-self")
-	selfPrincipal, appErr := helper.App.AuthenticateAccess(ctx, self.Tokens.AccessToken)
+	selfPrincipal, appErr := helper.App.Identity.AuthenticateAccess(ctx, self.Tokens.AccessToken)
 	require.NoError(t, appErr)
 	selfInvocation := invocation.New(*selfPrincipal, model.RequestMetadata{RequestID: "mail11-self", IPAddress: "198.51.100.9"})
-	require.NoError(t, helper.App.RevokeSession(ctx, selfInvocation, app.RevokeSessionCommand{SessionID: self.Session.ID}))
+	require.NoError(t, helper.App.Identity.RevokeSession(ctx, selfInvocation, self.Session.ID))
 	logout := loginIntegrationUser(t, helper.Handler(), target.Username, password, model.SessionClientCLI, "mail11-logout")
-	logoutPrincipal, appErr := helper.App.AuthenticateAccess(ctx, logout.Tokens.AccessToken)
+	logoutPrincipal, appErr := helper.App.Identity.AuthenticateAccess(ctx, logout.Tokens.AccessToken)
 	require.NoError(t, appErr)
-	require.NoError(t, helper.App.Logout(ctx, invocation.New(*logoutPrincipal, model.RequestMetadata{}), app.LogoutCommand{}))
-	require.NoError(t, helper.App.Logout(ctx, invocation.New(*logoutPrincipal, model.RequestMetadata{}), app.LogoutCommand{}))
+	require.NoError(t, helper.App.Identity.Logout(ctx, invocation.New(*logoutPrincipal, model.RequestMetadata{})))
+	require.NoError(t, helper.App.Identity.Logout(ctx, invocation.New(*logoutPrincipal, model.RequestMetadata{})))
 	all := loginIntegrationUser(t, helper.Handler(), target.Username, password, model.SessionClientCLI, "mail11-self-all")
-	allPrincipal, appErr := helper.App.AuthenticateAccess(ctx, all.Tokens.AccessToken)
+	allPrincipal, appErr := helper.App.Identity.AuthenticateAccess(ctx, all.Tokens.AccessToken)
 	require.NoError(t, appErr)
 	allInvocation := invocation.New(*allPrincipal, model.RequestMetadata{})
 	for range 2 {
-		require.NoError(t, helper.App.RevokeAllSessions(ctx, allInvocation, app.RevokeAllSessionsCommand{}))
+		require.NoError(t, helper.App.Identity.RevokeAllSessions(ctx, allInvocation))
 	}
 	audits, err := persistence.Audit().List(ctx, store.AuditListOptions{
 		ActorID: target.ID, Action: string(model.ActionSessionManage),

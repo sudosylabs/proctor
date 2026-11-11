@@ -264,6 +264,22 @@ type CurrentUserContext struct {
 	UnresolvedAttempt       *CurrentUserAttemptSelector
 }
 
+// ConsistentWith reports whether the context is the given User's, carries a
+// username, display name and a known profile picture kind, lists at least two
+// available product areas, and lists at most twenty management scopes.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (c *CurrentUserContext) ConsistentWith(userID model.UserID) bool {
+	return !(c == nil ||
+		c.UserID != userID ||
+		c.Username == "" ||
+		c.DisplayName == "" ||
+		(c.ProfilePictureKind != model.ProfilePictureCustom && c.ProfilePictureKind != model.ProfilePictureDefault) ||
+		len(c.AvailableProductAreas) < 2 ||
+		len(c.ManagementScopes) > 20)
+}
+
 // UserLastLoginUpdate is the input to UserStore.UpdateLastLogin.
 type UserLastLoginUpdate struct {
 	ID model.UserID

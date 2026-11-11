@@ -27,7 +27,7 @@ func TestBrowserExhaustionSettlement(t *testing.T, ss store.Store, mode string, 
 	for i, source := range sources {
 		start := &store.BrowserActivitySourceStart{Access: access, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, SourceSessionID: source}
 		if i > 0 {
-			start.Transition = model.BrowserStartTransition{Kind: "runtime_reset", PredecessorSourceSessionID: sources[i-1], Reason: model.BrowserSourceResetCoordinatorRestarted}
+			start.Transition = model.BrowserStartTransition{Kind: "runtime_reset", PredecessorSourceSessionID: sources[i-1], Reason: model.BrowserSourceResetCoordinatorRestarted} //nolint:gosec // G602: guarded by i > 0.
 		}
 		_, err := startBrowserSourceFixture(t, ctx, ss, start)
 		require.NoError(t, err)
@@ -42,7 +42,7 @@ func TestBrowserExhaustionSettlement(t *testing.T, ss store.Store, mode string, 
 	access.ContinuityCredentialHash = ""
 	for _, source := range sources {
 		owner := store.BrowserDeliveryAccess{Access: access, ParticipationID: connected.Participation.ID, SourceSessionID: source}
-		_, err = ss.ExamAttempt().SealBrowserDelivery(ctx, &store.BrowserDeliveryFinalDeclaration{Access: owner, Declaration: model.FinalDeliveryDeclaration{DeclarationID: model.NewID(), FinalSequence: 2}, AuditEventID: browserDeliveryAuditFixture(t, ctx, ss, owner), AuditAt: model.NowUTC()}, examCommand(f.candidate.ID, store.BrowserDeliveryFinalOperation, string(source), string(source)))
+		_, err = ss.BrowserDelivery().SealBrowserDelivery(ctx, &store.BrowserDeliveryFinalDeclaration{Access: owner, Declaration: model.FinalDeliveryDeclaration{DeclarationID: model.NewID(), FinalSequence: 2}, AuditEventID: browserDeliveryAuditFixture(t, ctx, ss, owner), AuditAt: model.NowUTC()}, examCommand(f.candidate.ID, store.BrowserDeliveryFinalOperation, string(source), string(source)))
 		require.NoError(t, err)
 	}
 	sub := sealed.Receipt.SubmissionID
@@ -56,15 +56,15 @@ func TestBrowserExhaustionSettlement(t *testing.T, ss store.Store, mode string, 
 	require.NotEqual(t, int64(0), pendingBytes(connected.Attempt.ID), "fixture has no pending delivery")
 	exhaust(connected.Attempt.ID, connected.Participation.ID)
 	owner := store.BrowserDeliveryAccess{Access: access, ParticipationID: connected.Participation.ID, SourceSessionID: sources[1]}
-	status, err := ss.ExamAttempt().BrowserSourceStatus(ctx, owner)
+	status, err := ss.BrowserDelivery().BrowserSourceStatus(ctx, owner)
 	require.NoError(t, err)
 	gap := model.DeclareDeliveryGaps{DeclarationID: model.NewID(), ExpectedDeclarationRevision: 1, AllocatedThroughSequence: 2, Ranges: []model.SequenceRange{{First: 1, Last: 1}}, Reason: "spool_lost"}
 	trigger := func(audit model.AuditEventID) error {
 		if mode == "metadata" || mode == "intervals" {
-			_, declareErr := ss.ExamAttempt().DeclareBrowserDeliveryGaps(ctx, &store.BrowserDeliveryGapDeclaration{Access: owner, Declaration: gap, AuditEventID: audit, AuditAt: model.NowUTC()}, examCommand(f.candidate.ID, store.BrowserDeliveryGapsOperation, "exhaustion-gap", "exhaustion-gap"))
+			_, declareErr := ss.BrowserDelivery().DeclareBrowserDeliveryGaps(ctx, &store.BrowserDeliveryGapDeclaration{Access: owner, Declaration: gap, AuditEventID: audit, AuditAt: model.NowUTC()}, examCommand(f.candidate.ID, store.BrowserDeliveryGapsOperation, "exhaustion-gap", "exhaustion-gap"))
 			return declareErr
 		}
-		_, appendErr := ss.ExamAttempt().AppendHistoricalBrowserDelivery(ctx, &store.BrowserActivityAppend{Access: access, ParticipationID: owner.ParticipationID, Generation: connected.Participation.Generation, SourceSessionID: owner.SourceSessionID, PolicyRevisionID: status.PolicyRevisionID, PolicyDigest: status.PolicyDigest, Events: []model.BrowserActivityEvent{browserActivityEvent(1, model.BrowserActivityOpened, f.revisionID)}, AuditEventID: audit, AuditAt: model.NowUTC()}, examCommand(f.candidate.ID, store.BrowserDeliveryAppendOperation, "exhaustion-append", "exhaustion-append"))
+		_, appendErr := ss.BrowserDelivery().AppendHistoricalBrowserDelivery(ctx, &store.BrowserActivityAppend{Access: access, ParticipationID: owner.ParticipationID, Generation: connected.Participation.Generation, SourceSessionID: owner.SourceSessionID, PolicyRevisionID: status.PolicyRevisionID, PolicyDigest: status.PolicyDigest, Events: []model.BrowserActivityEvent{browserActivityEvent(1, model.BrowserActivityOpened, f.revisionID)}, AuditEventID: audit, AuditAt: model.NowUTC()}, examCommand(f.candidate.ID, store.BrowserDeliveryAppendOperation, "exhaustion-append", "exhaustion-append"))
 		return appendErr
 	}
 	// Failing audit must roll back latching, interpretation and settlement together.
@@ -94,8 +94,8 @@ func TestBrowserExhaustionSettlement(t *testing.T, ss store.Store, mode string, 
 	require.Equal(t, before.ManifestDigest, after.ManifestDigest, "exhaustion changed sealed work")
 	for _, source := range sources {
 		owner.SourceSessionID = source
-		status, err := ss.ExamAttempt().BrowserSourceStatus(ctx, owner)
-		require.NoError(t, err)
+		status, statusErr := ss.BrowserDelivery().BrowserSourceStatus(ctx, owner)
+		require.NoError(t, statusErr)
 		require.Equal(t, int64(2), status.SettledThrough, "exhaustion lost settlement or fabricated receipt")
 		require.Equal(t, int64(0), status.HighestContiguous, "exhaustion lost settlement or fabricated receipt")
 		require.Equal(t, int64(2), status.TerminalMissingThrough, "exhaustion lost settlement or fabricated receipt")

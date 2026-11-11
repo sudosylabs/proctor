@@ -23,7 +23,7 @@ description: Add or change Proctor HTTP routes, handlers, DTOs, credential or as
    explicitly. Completion: cookie, bearer, desktop, WebSocket, and public
    routes cannot inherit accidental authentication behavior.
 5. Add or change a public error code only in
-   `server/httpapi/error_catalog.yaml`, run `make -C server errors-generate`,
+   `server/httpapi/route/error_catalog.yaml`, run `make -C server errors-generate`,
    and mint domain codes only in the application. Completion: the catalog
    check passes and no transport code path constructs a domain code.
    A route's error table lists what its operation can return, no more and no

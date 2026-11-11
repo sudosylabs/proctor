@@ -11,7 +11,6 @@ package sqlstore
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -19,7 +18,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/job"
-	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/jobs"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 	"github.com/sudosylabs/proctor/server/store/storetest"
@@ -32,28 +32,19 @@ func TestJobHistoryCleanupContinuesAcrossNodesPastOneDailyBatch(t *testing.T) {
 	for range 237 {
 		insertTerminalJobHistoryFixture(t, ss, model.JobTypeProfilePictureGenerateDefault, model.JobStatusSucceeded, 31*24*time.Hour, true)
 	}
-	catalog := jobhandler.NewCatalog(jobhandler.CatalogDependencies{JobStore: ss.Job(), Now: time.Now})
-	var descriptor job.Descriptor
-	var proposer job.OccurrenceProposer
-	for _, value := range catalog.Descriptors {
-		if value.Type == model.JobTypeCleanup {
-			descriptor = value
-		}
-	}
-	for _, value := range catalog.Recurrences {
-		if value.Name == "job-history-cleanup" {
-			proposer = value.Proposer
-		}
-	}
+	registered := []job.Descriptor{jobs.NewDefaultProfilePicture(nil).Descriptor}
+	historyCleanup := jobs.NewJobHistoryCleanup(ss.Job(), ss.Job(), time.Now, registered)
+	descriptor, proposer := historyCleanup.Descriptor, historyCleanup.Recurrence.Proposer
 	require.NotNil(t, descriptor.Handler, "history cleanup catalog is incomplete")
 	require.NotNil(t, proposer, "history cleanup catalog is incomplete")
 	occurrence := model.NowUTC()
 	for range 2 {
 		require.NoError(t, proposer.Propose(ctx, occurrence))
 	}
+	logger, logs := newTestLogger(t)
 	for _, nodeID := range []string{"cleanup-node-a", "cleanup-node-b"} {
 		engine, err := job.New(job.Dependencies{Store: ss.Job(), Descriptors: []job.Descriptor{descriptor}, NodeID: nodeID,
-			Diagnostics: historyCleanupDiagnostics{t: t}, Policy: job.Policy{PollInterval: 5 * time.Millisecond}})
+			Diagnostics: logger, Policy: job.Policy{PollInterval: 5 * time.Millisecond}})
 		require.NoError(t, err)
 		err = engine.Start(ctx)
 		require.NoError(t, err)
@@ -77,15 +68,26 @@ func TestJobHistoryCleanupContinuesAcrossNodesPastOneDailyBatch(t *testing.T) {
 	require.NoError(t, ss.GetMaster().Get(ctx, &occurrences, `SELECT COUNT(*) FROM job_permanent_occurrences WHERE type=?`, string(model.JobTypeCleanup)))
 	require.Equal(t, 0, attempts, "cleanup left attempts or forked occurrences: attempts")
 	require.Equal(t, 3, occurrences, "cleanup left attempts or forked occurrences: attempts")
+	// The engines still run, so any error record is a failure of a live pass and
+	// not shutdown noise.
+	require.NotContains(t, logs.String(), `"level":"error"`, "engine diagnostics")
 }
 
-type historyCleanupDiagnostics struct{ t *testing.T }
-
-func (d historyCleanupDiagnostics) ErrorContext(ctx context.Context, message string, err error) {
-	if ctx.Err() != nil {
-		return
-	}
-	assert.Fail(d.t, fmt.Sprintf("%s: %v", message, err))
+// newTestLogger returns a real logger writing JSON records to a buffer the test
+// may read.
+func newTestLogger(tb testing.TB) (*logging.Logger, *logging.Buffer) {
+	tb.Helper()
+	var logs logging.Buffer
+	logger, err := logging.New()
+	require.NoError(tb, err)
+	tb.Cleanup(func() { _ = logger.Shutdown() })
+	require.NoError(tb, logger.Configure(logging.Config{
+		MaxFieldBytes: 1024,
+		Targets: []logging.Target{{
+			Name: "test", Type: "console", Level: "debug", Format: "json", Writer: &logs,
+		}},
+	}))
+	return logger, &logs
 }
 
 func TestJobHistoryCleanupHonorsStateRetentionAndSelfPreservation(t *testing.T) {

@@ -20,7 +20,8 @@ import (
 )
 
 type recoveryStoreFake struct {
-	store.ExamAttemptStore
+	store.BrowserDeliveryStore
+	store.DeliveryBudgetStore
 	refusal, statusError error
 	status               *model.BrowserSourceStatus
 	budget               *model.DeliveryBudgetSnapshot
@@ -52,7 +53,7 @@ func TestBrowserDeliveryRefusalRequiresFreshOwnedRecovery(t *testing.T) {
 			f := newFixture(t)
 			part := model.NewAttemptParticipationID()
 			source := model.BrowserSourceSessionID("00000000-0000-4000-8000-000000000001")
-			p := &recoveryStoreFake{ExamAttemptStore: f.persistence, refusal: store.NewErrConflict("browser_delivery", "declaration_conflict", nil)}
+			p := &recoveryStoreFake{BrowserDeliveryStore: f.persistence, DeliveryBudgetStore: f.persistence, refusal: store.NewErrConflict("browser_delivery", "declaration_conflict", nil)}
 			p.status = &model.BrowserSourceStatus{SourceSessionID: source, AttemptID: f.attemptID, ParticipationID: part, Generation: 1, PolicyRevisionID: f.revision.ID, PolicyDigest: "sha256:" + strings.Repeat("a", 64), StartTransition: "initial", StartedAt: f.at, ServerTime: f.at, DetailMode: "collecting", BrowserDeliveryProgress: model.BrowserDeliveryProgress{MissingRanges: []model.SequenceRange{}}}
 			p.budget = &model.DeliveryBudgetSnapshot{ParticipationID: part, Generation: 1, ServerTime: f.at, Native: model.DeliveryFamilyBudget{Participation: model.NewDeliveryQuotaUsage(true, false), Attempt: model.NewDeliveryQuotaUsage(true, true), PendingByteLimit: model.DeliveryPendingByteLimit}, Browser: model.DeliveryFamilyBudget{Participation: model.NewDeliveryQuotaUsage(false, false), Attempt: model.NewDeliveryQuotaUsage(false, true), PendingByteLimit: model.DeliveryPendingByteLimit}}
 			switch name {
@@ -69,8 +70,8 @@ func TestBrowserDeliveryRefusalRequiresFreshOwnedRecovery(t *testing.T) {
 			case "unrelated error":
 				p.refusal = store.NewErrNotFound("browser_delivery", string(source))
 			}
-			f.service.deps.Persistence = p
-			_, err := f.service.BrowserDeliveryReceipts(context.Background(), f.invocation, BrowserSourceQuery{Access: CandidateAccess{AttemptID: f.attemptID}, SourceSessionID: source, ParticipationID: part}, 1, 32)
+			f.service.browserDelivery, f.service.deliveryBudget = p, p
+			_, err := f.service.BrowserDeliveryReceipts(context.Background(), f.inv, BrowserSourceQuery{Access: CandidateAccess{AttemptID: f.attemptID}, SourceSessionID: source, ParticipationID: part}, 1, 32)
 			var fault *apperror.Error
 			require.ErrorAs(t, err, &fault)
 			var carrier interface {

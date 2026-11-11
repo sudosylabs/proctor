@@ -39,15 +39,27 @@ func invalidStarterWorkspaceContent(cause error) error {
 // StageStarterWorkspaceObject streams one bounded file to a new exact opaque
 // object identity. PostgreSQL publication remains a separate authoritative
 // step; successfully staged bytes are not application-visible by themselves.
-func (c *Content) StageStarterWorkspaceObject(ctx context.Context, objectID model.StarterWorkspaceObjectID, body io.Reader, declaredSize int64, mediaType string) (*model.StarterWorkspaceContent, error) {
+func (c *Content) StageStarterWorkspaceObject(
+	ctx context.Context,
+	objectID model.StarterWorkspaceObjectID,
+	body io.Reader,
+	declaredSize int64,
+	mediaType string,
+) (*model.StarterWorkspaceContent, error) {
 	mediaType = strings.TrimSpace(mediaType)
 	if c == nil || c.filesystem == nil {
 		return nil, errors.New("Starter Workspace content dependency is unavailable")
 	}
-	if !objectID.IsValid() || body == nil || declaredSize < -1 ||
-		declaredSize > model.StarterWorkspaceMaximumFileBytes || mediaType == "" || len(mediaType) > 255 {
+
+	if !objectID.IsValid() ||
+		body == nil ||
+		declaredSize < -1 ||
+		declaredSize > model.StarterWorkspaceMaximumFileBytes ||
+		mediaType == "" ||
+		len(mediaType) > 255 {
 		return nil, invalidStarterWorkspaceContent(errors.New("invalid metadata"))
 	}
+
 	hash := sha256.New()
 	limited := &io.LimitedReader{R: body, N: model.StarterWorkspaceMaximumFileBytes + 1}
 	reader := io.TeeReader(limited, hash)
@@ -56,10 +68,12 @@ func (c *Content) StageStarterWorkspaceObject(ctx context.Context, objectID mode
 	if err != nil {
 		return nil, sanitize("stage Starter Workspace object", err)
 	}
+
 	if info.Size > model.StarterWorkspaceMaximumFileBytes || limited.N == 0 || declaredSize >= 0 && info.Size != declaredSize {
 		_ = c.filesystem.Remove(ctx, starterWorkspaceObjectKey(objectID), vfs.RemoveOptions{})
 		return nil, invalidStarterWorkspaceContent(errors.New("content size mismatch"))
 	}
+
 	return &model.StarterWorkspaceContent{MediaType: mediaType, SizeBytes: info.Size, SHA256: fmt.Sprintf("%x", hash.Sum(nil))}, nil
 }
 

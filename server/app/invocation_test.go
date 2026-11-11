@@ -32,17 +32,17 @@ func TestInvocationCarriesPrincipalAndSafeMetadataImmutably(t *testing.T) {
 		UserAgent: "proctor-test",
 	}
 
-	invocation := invocation.New(principal, metadata)
-	require.Equal(t, principal, invocation.Principal())
-	got := invocation.RequestMetadata()
+	inv := invocation.New(principal, metadata)
+	require.Equal(t, principal, inv.Principal())
+	got := inv.RequestMetadata()
 	require.Equal(t, metadata, got, "RequestMetadata()")
 
 	// Mutating the source metadata after construction must not affect the
 	// invocation; the value is a snapshot.
 	metadata.RequestID = "mutated"
 	principal.CredentialScopes[0] = "mutated"
-	require.Equal(t, "req-1", invocation.RequestMetadata().RequestID, "Invocation retained a live reference to caller metadata")
-	gotPrincipal := invocation.Principal()
+	require.Equal(t, "req-1", inv.RequestMetadata().RequestID, "Invocation retained a live reference to caller metadata")
+	gotPrincipal := inv.Principal()
 	gotPrincipal.CredentialScopes[0] = "returned-value-mutated"
-	require.Equal(t, "scope-a", invocation.Principal().CredentialScopes[0], "Invocation exposed mutable principal scope storage")
+	require.Equal(t, "scope-a", inv.Principal().CredentialScopes[0], "Invocation exposed mutable principal scope storage")
 }

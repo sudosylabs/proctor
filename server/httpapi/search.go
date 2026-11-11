@@ -8,12 +8,15 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/search"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 )
 
 // searchResponse is one bounded page per requested type. Search never
@@ -66,70 +69,99 @@ type searchUserItemResponse struct {
 	Username    string `json:"username"`
 }
 
-type searchResourceModule struct {
-	search SearchApplication
+type searchHandlers struct {
+	app SearchApplication
 }
 
-func searchResource(search SearchApplication) apiResource {
-	module := searchResourceModule{search: search}
-	return newResource(
+func searchResource(application SearchApplication) route.Resource {
+	h := searchHandlers{app: application}
+	return route.NewResource(
 		"search",
-		principalRoute(http.MethodGet, apiPath(literal("search")), []string{
-			"authorization.denied", "authorization.request.invalid", "authorization.unavailable",
-			"request.invalid", "search.query.invalid", "exam.invalid", "exam.unavailable",
-			"administration.unavailable", "resource.not_found",
-		}, module.find),
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/search",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"request.invalid",
+				"search.query.invalid",
+				"exam.invalid",
+				"exam.unavailable",
+				"administration.unavailable",
+				"resource.not_found",
+			},
+			Handle: h.find,
+		},
 	)
 }
 
 // find decodes the search parameters. q, limit and cursor take one value;
 // types repeats. Search answers one bounded page per type, so any cursor is
 // rejected rather than silently ignored.
-func (m searchResourceModule) find(request operationRequest) (operationResult, error) {
-	values := request.request.URL.Query()
+func (h searchHandlers) find(request route.Request) (route.Result, error) {
+	values := request.HTTP.URL.Query()
 	for _, name := range []string{"q", "limit", "cursor"} {
 		if entries, present := values[name]; present && len(entries) != 1 {
-			return operationResult{}, invalidRequestError(errors.New(name + " must be one value"))
+			return route.Result{}, route.InvalidRequest(errors.New(name + " must be one value"))
 		}
 	}
 	if _, present := values["cursor"]; present {
-		return operationResult{}, invalidRequestError(errors.New("search does not continue; cursor is not accepted"))
+		return route.Result{}, route.InvalidRequest(errors.New("search does not continue; cursor is not accepted"))
 	}
-	query := app.SearchQuery{Query: values.Get("q")}
+	query := search.Query{Query: values.Get("q")}
 	if raw, present := values["limit"]; present {
 		limit, err := strconv.Atoi(raw[0])
 		if err != nil || limit < 1 {
-			return operationResult{}, invalidRequestError(errors.New("limit must be a positive integer"))
+			return route.Result{}, route.InvalidRequest(errors.New("limit must be a positive integer"))
 		}
 		query.Limit = limit
 	}
 	for _, raw := range values["types"] {
-		query.Types = append(query.Types, app.SearchType(raw))
+		query.Types = append(query.Types, search.Type(raw))
 	}
-	result, err := m.search.Search(request.context, request.invocation(), query)
+	result, err := h.app.Search(request.Context, request.Invocation(), query)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, searchResponseFromResult(result)), nil
+	return route.JSON(http.StatusOK, searchResponseFromResult(result)), nil
 }
 
-func searchResponseFromResult(result app.SearchResult) searchResponse {
+func searchResponseFromResult(result search.Result) searchResponse {
 	response := searchResponse{Items: make([]searchItemResponse, 0, len(result.Exams)+len(result.Classes)+len(result.Users))}
 	for _, exam := range result.Exams {
 		response.Items = append(response.Items, searchItemResponse{exam: &searchExamItemResponse{
-			Type: string(app.SearchTypeExam), ID: exam.ID.String(), Title: exam.Title, AcademicUnitID: exam.AcademicUnitID.String(),
+			Type:           string(search.TypeExam),
+			ID:             exam.ID.String(),
+			Title:          exam.Title,
+			AcademicUnitID: exam.AcademicUnitID.String(),
 		}})
 	}
+
 	for _, class := range result.Classes {
 		response.Items = append(response.Items, searchItemResponse{class: &searchClassItemResponse{
-			Type: string(app.SearchTypeClass), ID: class.ID.String(), DisplayName: class.DisplayName,
+			Type:             string(search.TypeClass),
+			ID:               class.ID.String(),
+			DisplayName:      class.DisplayName,
 			ProgrammeLevelID: class.ProgrammeLevelID.String(),
 		}})
 	}
+
 	for _, user := range result.Users {
 		response.Items = append(response.Items, searchItemResponse{user: &searchUserItemResponse{
-			Type: string(app.SearchTypeUser), ID: user.ID.String(), DisplayName: user.DisplayName, Username: user.Username,
+			Type:        string(search.TypeUser),
+			ID:          user.ID.String(),
+			DisplayName: user.DisplayName,
+			Username:    user.Username,
 		}})
 	}
+
 	return response
+}
+
+// SearchApplication finds Exams, Classes and Users within the caller's own
+// list visibility for each type.
+type SearchApplication interface {
+	Search(context.Context, invocation.Invocation, search.Query) (search.Result, error)
 }

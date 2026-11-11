@@ -18,21 +18,23 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/onboarding"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type authenticationEntryHTTPApplication struct {
 	authenticationEntryApplication
-	loginCommand        app.LoginCommand
-	loginResult         *app.LoginResult
+	loginCommand        identity.LoginCommand
+	loginResult         *identity.LoginResult
 	loginError          error
 	loginCalls          int
-	logoutCommand       app.LogoutCommand
 	logoutCalls         int
-	registrationCommand app.RegisterLocalUserCommand
+	registrationCommand onboarding.RegisterLocalUserCommand
 	registrationCalls   int
 	registrationError   error
 }
@@ -40,7 +42,7 @@ type authenticationEntryHTTPApplication struct {
 func (af *authenticationEntryHTTPApplication) RegisterLocalUser(
 	_ context.Context,
 	_ invocation.Invocation,
-	command app.RegisterLocalUserCommand,
+	command onboarding.RegisterLocalUserCommand,
 ) error {
 	af.registrationCommand = command
 	af.registrationCalls++
@@ -50,8 +52,8 @@ func (af *authenticationEntryHTTPApplication) RegisterLocalUser(
 func (af *authenticationEntryHTTPApplication) Login(
 	_ context.Context,
 	_ invocation.Invocation,
-	command app.LoginCommand,
-) (*app.LoginResult, error) {
+	command identity.LoginCommand,
+) (*identity.LoginResult, error) {
 	af.loginCommand = command
 	af.loginCalls++
 	return af.loginResult, af.loginError
@@ -60,27 +62,24 @@ func (af *authenticationEntryHTTPApplication) Login(
 func (af *authenticationEntryHTTPApplication) Logout(
 	_ context.Context,
 	_ invocation.Invocation,
-	command app.LogoutCommand,
 ) error {
-	af.logoutCommand = command
 	af.logoutCalls++
 	return nil
 }
 
 type externalAuthenticationEntryHTTPApplication struct {
-	externalAuthenticationEntryApplication
 	providers       []model.ExternalAuthenticationProvider
 	providersError  error
-	beginCommand    app.BeginExternalAuthenticationCommand
+	beginCommand    identity.BeginExternalAuthenticationCommand
 	start           *model.ExternalAuthenticationStart
-	completeCommand app.CompleteExternalAuthenticationCommand
+	completeCommand identity.CompleteExternalAuthenticationCommand
 	completion      *model.ExternalAuthenticationCompletion
 }
 
 func (af *externalAuthenticationEntryHTTPApplication) CompleteExternalAuthentication(
 	_ context.Context,
 	_ invocation.Invocation,
-	command app.CompleteExternalAuthenticationCommand,
+	command identity.CompleteExternalAuthenticationCommand,
 ) (*model.ExternalAuthenticationCompletion, error) {
 	af.completeCommand = command
 	return af.completion, nil
@@ -93,8 +92,8 @@ func (af *externalAuthenticationEntryHTTPApplication) ExternalAuthenticationProv
 func TestExternalAuthenticationCallbackReturnsValidatedRedirectAndCookies(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := newTestLogger(t)
-	cookies, err := newBrowserCookies("http://localhost:8065")
+	logger, _ := routetest.NewLogger(t)
+	cookies, err := route.NewCookies("http://localhost:8065")
 	require.NoError(t, err)
 	now := time.Now()
 	externalAuthentication := &externalAuthenticationEntryHTTPApplication{
@@ -106,9 +105,9 @@ func TestExternalAuthenticationCallbackReturnsValidatedRedirectAndCookies(t *tes
 			},
 		},
 	}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{}, externalAuthenticationResource(externalAuthentication, cookies))
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/auth/providers/oidc/callback?code=accepted", nil)
-	request.AddCookie(&http.Cookie{Name: BrowserExternalLoginCookieName, Value: "binding"})
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, externalAuthenticationResource(externalAuthentication, cookies))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/auth/providers/oidc/callback?code=accepted", nil)
+	request.AddCookie(&http.Cookie{Name: route.BrowserExternalLoginCookieName, Value: "binding"})
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusSeeOther, response.Code, "callback redirect = %d %#v %s", response.Code, response.Header(), response.Body.String())
@@ -123,7 +122,7 @@ func TestExternalAuthenticationCallbackReturnsValidatedRedirectAndCookies(t *tes
 func (af *externalAuthenticationEntryHTTPApplication) BeginExternalAuthentication(
 	_ context.Context,
 	_ invocation.Invocation,
-	command app.BeginExternalAuthenticationCommand,
+	command identity.BeginExternalAuthenticationCommand,
 ) (*model.ExternalAuthenticationStart, error) {
 	af.beginCommand = command
 	return af.start, nil
@@ -132,15 +131,15 @@ func (af *externalAuthenticationEntryHTTPApplication) BeginExternalAuthenticatio
 func TestExternalAuthenticationLoginDefaultsToWebAndNeverCreatesDesktopSessionsDirectly(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := newTestLogger(t)
-	cookies, err := newBrowserCookies("http://localhost:8065")
+	logger, _ := routetest.NewLogger(t)
+	cookies, err := route.NewCookies("http://localhost:8065")
 	require.NoError(t, err)
 	applicationFake := &externalAuthenticationEntryHTTPApplication{start: &model.ExternalAuthenticationStart{
 		RedirectURL: "https://identity.example.test/login", Binding: model.NewCredentialToken(),
 		ExpiresAt: time.Now().Add(time.Minute).UnixMilli(),
 	}}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{}, externalAuthenticationResource(applicationFake, cookies))
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/auth/providers/campus/login", nil)
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, externalAuthenticationResource(applicationFake, cookies))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/auth/providers/campus/login", nil)
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusSeeOther, response.Code, "login redirect = %d %s", response.Code, response.Body.String())
@@ -149,14 +148,14 @@ func TestExternalAuthenticationLoginDefaultsToWebAndNeverCreatesDesktopSessionsD
 
 func TestExternalAuthenticationInvitationClaimUsesStrictPOSTBody(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
-	cookies, err := newBrowserCookies("http://localhost:8065")
+	logger, _ := routetest.NewLogger(t)
+	cookies, err := route.NewCookies("http://localhost:8065")
 	require.NoError(t, err)
 	claim := model.NewCredentialToken()
 	applicationFake := &externalAuthenticationEntryHTTPApplication{start: &model.ExternalAuthenticationStart{
 		RedirectURL: "https://identity.example.test/login", Binding: model.NewCredentialToken(), ExpiresAt: time.Now().Add(time.Minute).UnixMilli(),
 	}}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{}, externalAuthenticationResource(applicationFake, cookies))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, externalAuthenticationResource(applicationFake, cookies))
 	request := newJSONRequest(http.MethodPost, "/api/v1/auth/providers/campus/login",
 		strings.NewReader(`{"invitation_claim":"`+claim+`","return_to":"/join"}`))
 	request.Header.Set("Content-Type", "application/json")
@@ -181,7 +180,7 @@ func TestExternalAuthenticationInvitationClaimUsesStrictPOSTBody(t *testing.T) {
 func TestAuthenticationResourceRunsPublicAndSessionEntriesThroughKernel(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	now := time.Now()
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
@@ -190,7 +189,7 @@ func TestAuthenticationResourceRunsPublicAndSessionEntriesThroughKernel(t *testi
 		ClientType: model.SessionClientCLI, AuthenticatedAt: now,
 	}
 	authentication := &authenticationEntryHTTPApplication{
-		loginResult: &app.LoginResult{
+		loginResult: &identity.LoginResult{
 			User: &model.User{ID: principal.UserID, Username: "student", Email: "student@example.edu"},
 			Session: &model.Session{
 				ID: principal.SessionID, UserID: principal.UserID, ClientType: model.SessionClientWeb,
@@ -203,11 +202,11 @@ func TestAuthenticationResourceRunsPublicAndSessionEntriesThroughKernel(t *testi
 			},
 		},
 	}
-	cookies, err := newBrowserCookies("http://localhost:8065")
+	cookies, err := route.NewCookies("http://localhost:8065")
 	require.NoError(t, err)
 	httpAPI := newFocusedResourceAPI(
-		t, logger, classRouteAuthenticator{principal: principal},
-		authenticationResource(authentication, cookies),
+		t, logger, routetest.Authenticator{Principal: principal},
+		authenticationResource(authentication, authentication, cookies),
 	)
 
 	loginRequest := newJSONRequest(
@@ -228,7 +227,7 @@ func TestAuthenticationResourceRunsPublicAndSessionEntriesThroughKernel(t *testi
 	require.Nil(t, loginBody.Tokens)
 	require.NotNil(t, loginBody.Session)
 
-	logoutRequest := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	logoutRequest := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/auth/logout", nil)
 	logoutRequest.Header.Set("Authorization", "Bearer access")
 	logoutResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(logoutResponse, logoutRequest)
@@ -239,16 +238,16 @@ func TestAuthenticationResourceRunsPublicAndSessionEntriesThroughKernel(t *testi
 func TestExternalAuthenticationProviderListFailsClosedWhenPolicyIsUnavailable(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := newTestLogger(t)
-	cookies, err := newBrowserCookies("http://localhost:8065")
+	logger, _ := routetest.NewLogger(t)
+	cookies, err := route.NewCookies("http://localhost:8065")
 	require.NoError(t, err)
 	applicationFake := &externalAuthenticationEntryHTTPApplication{
 		providers:      []model.ExternalAuthenticationProvider{{ID: "configured-but-unknown", Type: "oidc"}},
 		providersError: apperror.New("authentication.internal"),
 	}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{}, externalAuthenticationResource(applicationFake, cookies))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, externalAuthenticationResource(applicationFake, cookies))
 	response := httptest.NewRecorder()
-	httpAPI.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/auth/providers", nil))
+	httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/auth/providers", nil))
 	require.Equal(t, http.StatusInternalServerError, response.Code, "provider-list failure")
 	require.NotContains(t, response.Body.String(), "configured-but-unknown", "provider-list failure")
 }
@@ -256,17 +255,17 @@ func TestExternalAuthenticationProviderListFailsClosedWhenPolicyIsUnavailable(t 
 func TestAuthenticationResourceKernelRejectsMissingCredentialAndInvalidJSON(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := newTestLogger(t)
-	cookies, err := newBrowserCookies("http://localhost:8065")
+	logger, _ := routetest.NewLogger(t)
+	cookies, err := route.NewCookies("http://localhost:8065")
 	require.NoError(t, err)
 	authentication := &authenticationEntryHTTPApplication{}
 	httpAPI := newFocusedResourceAPI(
-		t, logger, classRouteAuthenticator{},
-		authenticationResource(authentication, cookies),
+		t, logger, routetest.Authenticator{},
+		authenticationResource(authentication, authentication, cookies),
 	)
 
 	refresh := httptest.NewRecorder()
-	httpAPI.ServeHTTP(refresh, httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", nil))
+	httpAPI.ServeHTTP(refresh, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/auth/refresh", nil))
 	require.Equal(t, http.StatusUnauthorized, refresh.Code, "missing refresh credential")
 	require.Contains(t, refresh.Body.String(), `"code":"authentication.required"`, "missing refresh credential")
 
@@ -309,9 +308,9 @@ func TestAuthenticationResourceKernelRejectsMissingCredentialAndInvalidJSON(t *t
 func TestPublicRegistrationUsesStrictBodyAndReturnsNoAccountProjection(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	applicationFake := &authenticationEntryHTTPApplication{}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{}, authenticationResource(applicationFake, browserCookies{}))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, authenticationResource(applicationFake, applicationFake, route.Cookies{}))
 
 	request := newJSONRequest(http.MethodPost, "/api/v1/auth/register",
 		strings.NewReader(`{"username":"student","email":"student@example.edu","first_name":"New","last_name":"Student","password":"long-private-password"}`))
@@ -347,8 +346,8 @@ func TestPublicRegistrationUsesStrictBodyAndReturnsNoAccountProjection(t *testin
 func TestExternalAuthenticationRedirectIsNamedKernelProtocolOperation(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := newTestLogger(t)
-	cookies, err := newBrowserCookies("http://localhost:8065")
+	logger, _ := routetest.NewLogger(t)
+	cookies, err := route.NewCookies("http://localhost:8065")
 	require.NoError(t, err)
 	externalAuthentication := &externalAuthenticationEntryHTTPApplication{
 		providers: []model.ExternalAuthenticationProvider{{ID: "oidc", DisplayName: "Institution Login", Type: "oidc"}},
@@ -358,19 +357,19 @@ func TestExternalAuthenticationRedirectIsNamedKernelProtocolOperation(t *testing
 		},
 	}
 	httpAPI := newFocusedResourceAPI(
-		t, logger, classRouteAuthenticator{},
+		t, logger, routetest.Authenticator{},
 		externalAuthenticationResource(externalAuthentication, cookies),
 	)
 
 	providers := httptest.NewRecorder()
-	httpAPI.ServeHTTP(providers, httptest.NewRequest(http.MethodGet, "/api/v1/auth/providers", nil))
+	httpAPI.ServeHTTP(providers, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/auth/providers", nil))
 	require.Equal(t, http.StatusOK, providers.Code, "providers response")
 	require.Contains(t, providers.Body.String(), `"id":"oidc"`, "providers response")
 
 	begin := httptest.NewRecorder()
 	httpAPI.ServeHTTP(
 		begin,
-		httptest.NewRequest(
+		httptest.NewRequestWithContext(t.Context(),
 			http.MethodGet,
 			"/api/v1/auth/providers/oidc/login?return_to=%2Fexams&client_type=desktop&device_id=device-a",
 			nil,

@@ -137,11 +137,13 @@ func validateConfig(cfg Config) error {
 	if err := validateHostPort("advertise_address", cfg.AdvertiseAddress); err != nil {
 		return err
 	}
+
 	if !cfg.AllowPublicBind {
 		if err := rejectPublicBind(cfg.BindAddress); err != nil {
 			return err
 		}
 	}
+
 	if cfg.DiscoveryTTL <= 0 {
 		return errors.New("discovery ttl must be positive")
 	}
@@ -151,6 +153,7 @@ func validateConfig(cfg Config) error {
 	if strings.TrimSpace(cfg.ServerVersion) == "" {
 		return errors.New("server version is required")
 	}
+
 	probeAt := time.Unix(1, 0).UTC()
 	if err := (cluster.DiscoveryNode{
 		NodeID:           cfg.NodeID,
@@ -163,14 +166,17 @@ func validateConfig(cfg Config) error {
 	}).Validate(); err != nil {
 		return fmt.Errorf("cluster node metadata: %w", err)
 	}
+
 	if len(cfg.SeedAddresses) > maximumConfiguredSeeds {
 		return fmt.Errorf("seed addresses must contain at most %d entries", maximumConfiguredSeeds)
 	}
+
 	for _, seed := range cfg.SeedAddresses {
 		if err := validateHostPort("seed_address", seed); err != nil {
 			return err
 		}
 	}
+
 	meta, err := json.Marshal(localNodeMeta(cfg))
 	if err != nil {
 		return fmt.Errorf("encode local node metadata: %w", err)
@@ -178,6 +184,7 @@ func validateConfig(cfg Config) error {
 	if len(meta) > hashimemberlist.MetaMaxSize {
 		return fmt.Errorf("local node metadata exceeds %d bytes", hashimemberlist.MetaMaxSize)
 	}
+
 	return nil
 }
 
@@ -346,11 +353,11 @@ func (t *Transport) memberlistConfig(ctx context.Context) (*hashimemberlist.Conf
 	if err != nil {
 		return nil, nil, err
 	}
-	bindPortNumber, err := net.LookupPort("tcp", bindPort)
+	bindPortNumber, err := (&net.Resolver{}).LookupPort(ctx, "tcp", bindPort)
 	if err != nil {
 		return nil, nil, fmt.Errorf("bind port: %w", err)
 	}
-	advertisePortNumber, err := net.LookupPort("tcp", advertisePort)
+	advertisePortNumber, err := (&net.Resolver{}).LookupPort(ctx, "tcp", advertisePort)
 	if err != nil {
 		return nil, nil, fmt.Errorf("advertise port: %w", err)
 	}
@@ -582,7 +589,14 @@ func (t *Transport) Broadcast(ctx context.Context, message *cluster.Message) err
 // fanOut sends one encoded envelope to every peer in members. A packet-sized
 // envelope is sent synchronously as one UDP datagram; a larger one is queued
 // for each peer's reliable stream and its outcome is observed later.
-func (t *Transport) fanOut(ctx context.Context, sender memberSender, members []*hashimemberlist.Node, payload []byte, packetLimit int, event cluster.Event) error {
+func (t *Transport) fanOut(
+	ctx context.Context,
+	sender memberSender,
+	members []*hashimemberlist.Node,
+	payload []byte,
+	packetLimit int,
+	event cluster.Event,
+) error {
 	if len(payload) > packetLimit {
 		return broadcastMembers(ctx, t.cfg.NodeID, members, payload, t.queueReliable(event))
 	}
@@ -646,6 +660,7 @@ func (t *Transport) SendToNode(ctx context.Context, nodeID string, message *clus
 	if err := t.validateSend(ctx, message); err != nil {
 		return err
 	}
+
 	if nodeID == t.cfg.NodeID {
 		err := t.dispatchLocal(ctx, message.Clone())
 		if t.cfg.Metrics != nil {
@@ -653,34 +668,47 @@ func (t *Transport) SendToNode(ctx context.Context, nodeID string, message *clus
 			if err != nil {
 				result = "error"
 			}
+
 			t.cfg.Metrics.ObserveClusterMessage("local", t.metricEvent(message.Event), result, len(message.Data))
 		}
+
 		return err
 	}
+
 	payload, err := t.encodeEnvelope(nodeID, message)
 	if err != nil {
 		return err
 	}
+
 	t.mu.RLock()
 	list, packetLimit := t.list, t.packetLimit
 	t.mu.RUnlock()
 	if list == nil {
 		return cluster.ErrNotStarted
 	}
+
 	for _, member := range list.Members() {
 		meta, metaErr := decodeNodeMeta(member.Meta)
 		if (metaErr != nil && member.Name == nodeID) || (metaErr == nil && (meta.NodeID == nodeID || member.Name == nodeID)) {
 			return t.sendToMember(list, member, payload, packetLimit, message.Event)
 		}
 	}
+
 	return fmt.Errorf("%w: %s", cluster.ErrNodeUnavailable, nodeID)
 }
 
 // sendToMember sends one envelope to one peer with the same routing as fanOut.
-func (t *Transport) sendToMember(sender memberSender, member *hashimemberlist.Node, payload []byte, packetLimit int, event cluster.Event) error {
+func (t *Transport) sendToMember(
+	sender memberSender,
+	member *hashimemberlist.Node,
+	payload []byte,
+	packetLimit int,
+	event cluster.Event,
+) error {
 	if len(payload) > packetLimit {
 		return t.queueReliable(event)(member, payload)
 	}
+
 	err := sender.SendBestEffort(member, payload)
 	t.observeSentMessage(event, payload, err)
 	return err

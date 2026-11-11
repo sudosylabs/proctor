@@ -1,0 +1,296 @@
+// ---------------------------------------------------------------------------------------------
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// Modifications Copyright (c) 2026 Sudosy Labs. All rights reserved.
+// Licensed under the GNU Affero General Public License, version 3 only.
+// See LICENSE in the server module root for license information.
+// SPDX-License-Identifier: AGPL-3.0-only
+// ---------------------------------------------------------------------------------------------
+//
+// Adapted from Mattermost server/channels/api4/handlers.go and
+// server/channels/web/handlers.go. Proctor applies authentication requirements
+// from its sealed route catalog while using an immutable principal and the
+// standard net/http request context.
+
+package route
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/logging"
+	"github.com/sudosylabs/proctor/server/model"
+)
+
+type dpopAuthenticator interface {
+	AuthenticateDPoP(context.Context, string, string, string, string) (*model.Principal, error)
+}
+
+func (a *API) newHandlerWithErrorPolicy(
+	handler http.Handler,
+	requirement AuthRequirement,
+	errorPolicy routeErrorPolicy,
+) http.Handler {
+	authenticated := withRequestParams(requireAuthentication(
+		handler,
+		requirement,
+		a.authenticator,
+		a.logger,
+		a.cookies,
+		a.recentAuthenticationTTL,
+		errorPolicy,
+	))
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if !a.browserRequests.allows(request) {
+			code := apperror.Code("authentication.csrf.invalid")
+			if requirement == AuthPublic {
+				code = "request.invalid"
+			}
+			writeRouteApplicationError(writer, request, a.logger, errorPolicy, applicationError(code))
+			return
+		}
+		authenticated.ServeHTTP(writer, request)
+	})
+}
+
+func requireAuthentication(
+	next http.Handler,
+	requirement AuthRequirement,
+	application Authenticator,
+	logger *logging.Logger,
+	cookies Cookies,
+	recentAuthenticationTTL time.Duration,
+	errorPolicy routeErrorPolicy,
+) http.Handler {
+	spec, known := specFor(requirement)
+	switch {
+	case !known:
+		return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			logger.ErrorContext(
+				request.Context(),
+				"route has unsupported authentication requirement",
+				logging.String("requirement", string(requirement)),
+			)
+			writeProblem(writer, internalProblem(request))
+		})
+	case spec.refresh:
+		return requireRefreshCredential(next, logger, cookies, errorPolicy)
+	case spec.principal:
+		return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			credential, appErr := requestAccessCredential(request)
+			if appErr != nil {
+				writeRouteApplicationError(writer, request, logger, errorPolicy, appErr)
+				return
+			}
+
+			if credential.Source == CredentialCookie &&
+				RequiresCSRF(request.Method) {
+				if appErr := cookies.verifyCSRF(request); appErr != nil {
+					writeRouteApplicationError(writer, request, logger, errorPolicy, appErr)
+					return
+				}
+			}
+
+			principal, authErr := authenticateAccessCredential(request, requirement, application, credential)
+			if authErr != nil {
+				if credential.Source == CredentialCookie {
+					cookies.Clear(writer)
+				}
+
+				if credential.Source == CredentialDPoP {
+					writeDPoPApplicationError(writer, request, logger, errorPolicy, authErr)
+				} else {
+					writeRouteApplicationError(writer, request, logger, errorPolicy, authErr)
+				}
+
+				return
+			}
+
+			if appErr := requirePrincipalAssurance(
+				*principal,
+				requirement,
+				time.Now(),
+				recentAuthenticationTTL,
+			); appErr != nil {
+				writeRouteApplicationError(writer, request, logger, errorPolicy, appErr)
+				return
+			}
+
+			ctx := context.WithValue(request.Context(), principalContextKey{}, *principal)
+			ctx = context.WithValue(ctx, credentialSourceContextKey{}, credential.Source)
+			next.ServeHTTP(writer, request.WithContext(ctx))
+		})
+	default:
+		// A public route.
+		return next
+	}
+}
+
+// requireRefreshCredential admits a request carrying a refresh credential,
+// verifying CSRF when the credential arrived in a cookie.
+func requireRefreshCredential(
+	next http.Handler,
+	logger *logging.Logger,
+	cookies Cookies,
+	errorPolicy routeErrorPolicy,
+) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		credential, appErr := requestRefreshCredential(request)
+		if appErr != nil {
+			writeRouteApplicationError(writer, request, logger, errorPolicy, appErr)
+			return
+		}
+		if credential.Source == CredentialCookie {
+			if appErr := cookies.verifyCSRF(request); appErr != nil {
+				writeRouteApplicationError(writer, request, logger, errorPolicy, appErr)
+				return
+			}
+		}
+		ctx := context.WithValue(request.Context(), credentialContextKey{}, credential)
+		ctx = context.WithValue(ctx, credentialSourceContextKey{}, credential.Source)
+		next.ServeHTTP(writer, request.WithContext(ctx))
+	})
+}
+
+// authenticateAccessCredential resolves the principal for an access
+// credential through DPoP, bearer, or access-token authentication by source.
+func authenticateAccessCredential(
+	request *http.Request,
+	requirement AuthRequirement,
+	application Authenticator,
+	credential Credential,
+) (*model.Principal, error) {
+	var principal *model.Principal
+	var authErr error
+	spec, _ := specFor(requirement)
+	if credential.Source == CredentialDPoP {
+		dpop, ok := application.(dpopAuthenticator)
+		if !ok {
+			authErr = applicationError("authentication.dpop.unavailable")
+		} else {
+			proof, proofErr := DPoPProof(request)
+			if proofErr != nil {
+				authErr = proofErr
+			} else {
+				principal, authErr = dpop.AuthenticateDPoP(request.Context(), credential.Token, proof, request.Method, request.URL.EscapedPath())
+			}
+		}
+	} else if spec.personalAccessToken &&
+		credential.Source == CredentialBearer {
+		principal, authErr = application.AuthenticateBearer(
+			request.Context(),
+			credential.Token,
+		)
+	} else {
+		principal, authErr = application.AuthenticateAccess(
+			request.Context(),
+			credential.Token,
+		)
+	}
+	return principal, authErr
+}
+
+// DPoPProof returns the request's single DPoP proof header, or "" when it
+// carries none. A repeated, padded or otherwise malformed header is
+// authentication.dpop.invalid. The kernel reads the proof for the routes it
+// authenticates; an operation that redeems a credential itself, such as
+// refresh, reads it here.
+func DPoPProof(request *http.Request) (string, error) {
+	values := request.Header.Values("DPoP")
+	if len(values) == 0 {
+		return "", nil
+	}
+	if len(values) != 1 || strings.TrimSpace(values[0]) != values[0] || values[0] == "" || strings.ContainsAny(values[0], " \t\r\n,") {
+		return "", applicationError("authentication.dpop.invalid")
+	}
+	return values[0], nil
+}
+
+// dpopNonceChallenge is a DPoP authentication failure that asks the client to
+// sign its proof again with the server-issued nonce it carries (RFC 9449
+// section 8). The kernel answers it with DPoP-Nonce and use_dpop_nonce; any
+// other DPoP failure is invalid_dpop_proof.
+type dpopNonceChallenge interface {
+	DPoPNonce() string
+}
+
+func writeDPoPApplicationError(
+	writer http.ResponseWriter,
+	request *http.Request,
+	logger *logging.Logger,
+	policy routeErrorPolicy,
+	err error,
+) {
+	var challenge dpopNonceChallenge
+	if errors.As(err, &challenge) && challenge.DPoPNonce() != "" {
+		writer.Header().Set("DPoP-Nonce", challenge.DPoPNonce())
+		writer.Header().Set("WWW-Authenticate", `DPoP error="use_dpop_nonce"`)
+	} else {
+		writer.Header().Set("WWW-Authenticate", `DPoP error="invalid_dpop_proof"`)
+	}
+
+	writeRouteApplicationError(writer, request, logger, policy, err)
+}
+
+func applicationError(code apperror.Code) error {
+	return apperror.New(code)
+}
+
+func requirePrincipalAssurance(
+	principal model.Principal,
+	requirement AuthRequirement,
+	now time.Time,
+	recentAuthenticationTTL time.Duration,
+) error {
+	if principal.ValidateMFARecovery() != nil {
+		return apperror.New("authentication.token_invalid")
+	}
+
+	// A restricted Web Session reaches only the routes that declare the
+	// restriction. Both restrictions share the recovery routes; the Access
+	// Policy enrollment restriction also reaches the second-factor challenge.
+	spec, _ := specFor(requirement)
+	if principal.MFARecoveryRequired && !spec.admitsRecoverySession {
+		return apperror.New("authentication.token_invalid")
+	}
+	if principal.MFAEnrollmentRequired && !spec.admitsEnrollmentSession {
+		return apperror.New("authentication.token_invalid")
+	}
+
+	if spec.strong && !principal.HasStrongAuthentication() {
+		return apperror.New("authentication.strong_required")
+	}
+
+	if spec.recent &&
+		!principal.IsRecentlyAuthenticated(now, recentAuthenticationTTL) {
+		return apperror.New("authentication.reauthentication_required")
+	}
+
+	return nil
+}
+
+// RequiresCSRF reports whether method can change state. Such a request must
+// pass the browser-origin check, and CSRF verification when its credential
+// arrived in a cookie. GET, HEAD and OPTIONS need neither.
+func RequiresCSRF(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return false
+	default:
+		return true
+	}
+}
+
+// Authenticator resolves the credentials the kernel extracts.
+// AuthenticateBearer answers a bearer credential on a route that also admits a
+// Personal Access Token; every other access credential goes to
+// AuthenticateAccess. An authenticator that also has AuthenticateDPoP serves
+// proof-bound Desktop credentials; without it they fail with
+// authentication.dpop.unavailable.
+type Authenticator interface {
+	AuthenticateAccess(context.Context, string) (*model.Principal, error)
+	AuthenticateBearer(context.Context, string) (*model.Principal, error)
+}

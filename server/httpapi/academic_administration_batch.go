@@ -11,19 +11,20 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/onboarding"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
+// AcademicAdministrationBatchApplication is the application port its handler
+// calls; it runs one batch of academic administration rows.
 type AcademicAdministrationBatchApplication interface {
-	RunAcademicAdministrationBatch(context.Context, invocation.Invocation, app.RunAcademicAdministrationBatchCommand) (app.AcademicAdministrationBatchResult, error)
-}
-
-type unavailableAcademicAdministrationBatchApplication struct{}
-
-func (unavailableAcademicAdministrationBatchApplication) RunAcademicAdministrationBatch(context.Context, invocation.Invocation, app.RunAcademicAdministrationBatchCommand) (app.AcademicAdministrationBatchResult, error) {
-	return app.AcademicAdministrationBatchResult{}, errUnpresentableResult
+	RunAcademicAdministrationBatch(
+		context.Context,
+		invocation.Invocation,
+		onboarding.RunAcademicAdministrationBatchCommand,
+	) (onboarding.AcademicAdministrationBatchResult, error)
 }
 
 type academicAdministrationBatchItemRequest struct {
@@ -58,49 +59,96 @@ type academicAdministrationBatchResponse struct {
 	Failed    int                                       `json:"failed"`
 }
 
-type academicAdministrationBatchResourceModule struct {
-	batches AcademicAdministrationBatchApplication
+type academicAdministrationBatchHandlers struct {
+	app AcademicAdministrationBatchApplication
 }
 
-func academicAdministrationBatchResource(batches AcademicAdministrationBatchApplication) apiResource {
-	module := academicAdministrationBatchResourceModule{batches: batches}
-	return newResource("academic-administration-batches",
-		idempotentPrincipalRoute(IdempotencyRequired, http.MethodPost, apiPath(literal("academic-administration-batches")),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "authentication.strong_required", "authentication.reauthentication_required", "idempotency.key_required", "idempotency.key_invalid", "administration.unavailable", "invitation.unavailable"}, module.run),
+func academicAdministrationBatchResource(app AcademicAdministrationBatchApplication) route.Resource {
+	h := academicAdministrationBatchHandlers{app: app}
+	return route.NewResource("academic-administration-batches",
+		route.Endpoint{
+			Method:      http.MethodPost,
+			Path:        "/academic-administration-batches",
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"authentication.strong_required",
+				"authentication.reauthentication_required",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"administration.unavailable",
+				"invitation.unavailable",
+			},
+			Handle: h.run,
+		},
 	)
 }
 
-func (m academicAdministrationBatchResourceModule) run(request operationRequest) (operationResult, error) {
+func (h academicAdministrationBatchHandlers) run(request route.Request) (route.Result, error) {
 	var body academicAdministrationBatchRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, invalidRequestError(err)
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, route.InvalidRequest(err)
 	}
-	items := make([]app.AcademicAdministrationBatchItemCommand, 0, len(body.Items))
+
+	items := make([]onboarding.AcademicAdministrationBatchItemCommand, 0, len(body.Items))
 	for _, item := range body.Items {
-		startAt, err := wireTimeMillis("start_at", item.StartAt)
+		startAt, err := route.WireTimeMillis("start_at", item.StartAt)
 		if err != nil {
-			return operationResult{}, err
+			return route.Result{}, err
 		}
-		endAt, err := wireTimeMillis("end_at", item.EndAt)
+
+		endAt, err := route.WireTimeMillis("end_at", item.EndAt)
 		if err != nil {
-			return operationResult{}, err
+			return route.Result{}, err
 		}
-		items = append(items, app.AcademicAdministrationBatchItemCommand{IdempotencyKey: item.Key, UserID: model.UserID(item.UserID),
-			RelationshipID: item.RelationshipID, RoleID: model.RoleID(item.RoleID), AffiliationKind: model.AffiliationKind(item.AffiliationKind),
-			StartAt: startAt, EndAt: endAt})
+
+		items = append(items, onboarding.AcademicAdministrationBatchItemCommand{
+			IdempotencyKey:  item.Key,
+			UserID:          model.UserID(item.UserID),
+			RelationshipID:  item.RelationshipID,
+			RoleID:          model.RoleID(item.RoleID),
+			AffiliationKind: model.AffiliationKind(item.AffiliationKind),
+			StartAt:         startAt,
+			EndAt:           endAt,
+		})
 	}
-	result, err := m.batches.RunAcademicAdministrationBatch(request.context, request.invocation(), app.RunAcademicAdministrationBatchCommand{
-		Operation: app.AcademicAdministrationBatchOperation(body.Operation), ScopeType: model.RoleScopeType(body.ScopeType),
-		ScopeID: body.ScopeID, IdempotencyKey: request.idempotencyKey, Items: items,
-	})
+
+	result, err := h.app.RunAcademicAdministrationBatch(
+		request.Context,
+		request.Invocation(),
+		onboarding.RunAcademicAdministrationBatchCommand{
+			Operation:      onboarding.AcademicAdministrationBatchOperation(body.Operation),
+			ScopeType:      model.RoleScopeType(body.ScopeType),
+			ScopeID:        body.ScopeID,
+			IdempotencyKey: request.IdempotencyKey,
+			Items:          items,
+		},
+	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	response := academicAdministrationBatchResponse{Operation: string(result.Operation), Succeeded: result.Succeeded,
-		NoOp: result.NoOp, Failed: result.Failed, Items: make([]academicAdministrationBatchItemResponse, 0, len(result.Items))}
+
+	response := academicAdministrationBatchResponse{
+		Operation: string(result.Operation),
+		Succeeded: result.Succeeded,
+		NoOp:      result.NoOp,
+		Failed:    result.Failed,
+		Items:     make([]academicAdministrationBatchItemResponse, 0, len(result.Items)),
+	}
 	for _, item := range result.Items {
-		response.Items = append(response.Items, academicAdministrationBatchItemResponse{Index: item.Index, Status: string(item.Status),
-			ResourceID: item.ResourceID, ErrorCode: item.ErrorCode})
+		response.Items = append(response.Items, academicAdministrationBatchItemResponse{
+			Index:      item.Index,
+			Status:     string(item.Status),
+			ResourceID: item.ResourceID,
+			ErrorCode:  item.ErrorCode,
+		})
 	}
-	return jsonResult(http.StatusOK, response), nil
+
+	return route.JSON(http.StatusOK, response), nil
 }

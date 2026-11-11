@@ -25,13 +25,14 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
 func TestExamSittingHTTPScheduleUsesStrictIdempotentCommandAndSafeResponse(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamSittingHTTPFake(t)
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
 	body := `{"exam_revision_id":"` + fake.sitting.ExamRevisionID.String() + `","class_id":"` + fake.sitting.ClassID.String() + `","scheduled_start_at":"2026-08-15T12:30:00+02:00","scheduled_end_at":"2026-08-15T14:30:00+02:00"}`
@@ -78,7 +79,7 @@ func TestExamSittingHTTPMutationBodiesAreClosedDuplicateFreeAndPresenceAware(t *
 		}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			logger, _ := newTestLogger(t)
+			logger, _ := routetest.NewLogger(t)
 			fake := newExamSittingHTTPFake(t)
 			httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
 			request := newJSONRequest(http.MethodPost, examSittingCollectionPath(fake.sitting.ExamID), strings.NewReader(test.body(fake)))
@@ -91,7 +92,7 @@ func TestExamSittingHTTPMutationBodiesAreClosedDuplicateFreeAndPresenceAware(t *
 		})
 	}
 
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamSittingHTTPFake(t)
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
 	path := examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID)
@@ -123,7 +124,7 @@ func TestExamSittingHTTPMutationBodiesAreClosedDuplicateFreeAndPresenceAware(t *
 
 func TestExamSittingHTTPCancelKeepsPrivateReasonOutOfResponse(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamSittingHTTPFake(t)
 	canceled := *fake.sitting
 	canceled.State = model.ExamSittingCanceled
@@ -177,7 +178,7 @@ func TestExamSittingHTTPLifecycleCommandsAreStrictIdempotentAndKeepReasonsPrivat
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			logger, _ := newTestLogger(t)
+			logger, _ := routetest.NewLogger(t)
 			fake := newExamSittingHTTPFake(t)
 			httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
 			request := newJSONRequest(http.MethodPost, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID)+test.suffix, strings.NewReader(test.body))
@@ -205,7 +206,7 @@ func TestExamSittingHTTPLifecycleBodiesRejectUnknownDuplicateAndInvalidValues(t 
 		name, body := name, body
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			logger, _ := newTestLogger(t)
+			logger, _ := routetest.NewLogger(t)
 			fake := newExamSittingHTTPFake(t)
 			httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
 			request := newJSONRequest(http.MethodPost, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID)+"/pause", strings.NewReader(body))
@@ -221,7 +222,7 @@ func TestExamSittingHTTPLifecycleBodiesRejectUnknownDuplicateAndInvalidValues(t 
 
 func TestExamSittingHTTPListNormalizesFiltersAndUsesVersionedDescendingTupleCursor(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamSittingHTTPFake(t)
 	older := *fake.sitting
 	older.ID = model.NewExamSittingID()
@@ -241,7 +242,7 @@ func TestExamSittingHTTPListNormalizesFiltersAndUsesVersionedDescendingTupleCurs
 	query.Set("starts_before", "2026-08-15T18:00:00+02:00")
 	query.Set("limit", "2")
 	query.Set("cursor", cursor)
-	request := httptest.NewRequest(http.MethodGet, examSittingCollectionPath(fake.sitting.ExamID)+"?"+query.Encode(), nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, examSittingCollectionPath(fake.sitting.ExamID)+"?"+query.Encode(), nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -267,7 +268,7 @@ func TestExamSittingHTTPListNormalizesFiltersAndUsesVersionedDescendingTupleCurs
 
 func TestExamSittingHTTPListRejectsPartialOverlapAndMalformedCursor(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamSittingHTTPFake(t)
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
 	unsupported, _ := json.Marshal(map[string]any{"version": 2, "start_at": fake.sitting.ScheduledStartAt.Format(time.RFC3339Nano), "id": fake.sitting.ID.String()})
@@ -280,7 +281,7 @@ func TestExamSittingHTTPListRejectsPartialOverlapAndMalformedCursor(t *testing.T
 		"cursor version":          "cursor=" + url.QueryEscape(base64.RawURLEncoding.EncodeToString(unsupported)),
 	} {
 		t.Run(name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodGet, examSittingCollectionPath(fake.sitting.ExamID)+"?"+query, nil)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, examSittingCollectionPath(fake.sitting.ExamID)+"?"+query, nil)
 			request.Header.Set("Authorization", "Bearer credential")
 			response := httptest.NewRecorder()
 			httpAPI.ServeHTTP(response, request)
@@ -291,10 +292,10 @@ func TestExamSittingHTTPListRejectsPartialOverlapAndMalformedCursor(t *testing.T
 
 func TestExamSittingHTTPGetUsesBothExactIdentities(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamSittingHTTPFake(t)
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
-	request := httptest.NewRequest(http.MethodGet, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID), nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID), nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -305,13 +306,13 @@ func TestExamSittingHTTPGetUsesBothExactIdentities(t *testing.T) {
 
 func TestExamSittingHTTPListsNoShowsWithOpaqueUserCursor(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamSittingHTTPFake(t)
 	first, second := model.NewUserID(), model.NewUserID()
 	fake.noShowPage = sitting.NoShowPage{Items: []store.ExamSittingNoShow{
 		{CandidateUserID: first}, {CandidateUserID: second}}, HasMore: true}
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingResource(fake))
-	request := httptest.NewRequest(http.MethodGet, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID)+"/no-shows?limit=2", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID)+"/no-shows?limit=2", nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -331,13 +332,13 @@ func TestExamSittingHTTPListsNoShowsWithOpaqueUserCursor(t *testing.T) {
 	require.Equal(t, second, decoded, "cursor")
 	require.NotContains(t, body.NextCursor, second.String(), "cursor")
 	fake.noShowPage = sitting.NoShowPage{}
-	secondRequest := httptest.NewRequest(http.MethodGet, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID)+"/no-shows?cursor="+url.QueryEscape(body.NextCursor), nil)
+	secondRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID)+"/no-shows?cursor="+url.QueryEscape(body.NextCursor), nil)
 	secondRequest.Header.Set("Authorization", "Bearer credential")
 	secondResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(secondResponse, secondRequest)
 	require.Equal(t, http.StatusOK, secondResponse.Code, "no-show cursor forwarding = %d query=%#v body=%s", secondResponse.Code, fake.noShows, secondResponse.Body.String())
 	require.Equal(t, second, fake.noShows.AfterCandidateUserID, "no-show cursor forwarding = %d query=%#v body=%s", secondResponse.Code, fake.noShows, secondResponse.Body.String())
-	malformedRequest := httptest.NewRequest(http.MethodGet, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID)+"/no-shows?cursor=not-a-cursor", nil)
+	malformedRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, examSittingMemberPath(fake.sitting.ExamID, fake.sitting.ID)+"/no-shows?cursor=not-a-cursor", nil)
 	malformedRequest.Header.Set("Authorization", "Bearer credential")
 	malformedResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(malformedResponse, malformedRequest)
@@ -360,21 +361,23 @@ func TestExamSittingHTTPListsNoShowsWithOpaqueUserCursor(t *testing.T) {
 }
 
 type examSittingHTTPFake struct {
-	Application
-	principal    model.Principal
-	sitting      *model.ExamSitting
-	schedule     sitting.ScheduleCommand
-	get          sitting.GetQuery
+	principal model.Principal
+	sitting   *model.ExamSitting
+	schedule  sitting.ScheduleCommand
+	get       struct {
+		ExamID    model.ExamID
+		SittingID model.ExamSittingID
+	}
 	list         sitting.ListQuery
 	page         sitting.Page
 	update       sitting.UpdateScheduleCommand
 	updateCalls  int
 	cancel       sitting.CancelCommand
 	cancelResult store.ExamSittingSnapshot
-	pause        sitting.PauseCommand
-	resume       sitting.ResumeCommand
+	pause        sitting.ManagerTransitionCommand
+	resume       sitting.ManagerTransitionCommand
 	extend       sitting.ExtendCommand
-	close        sitting.EarlyCloseCommand
+	close        sitting.ManagerTransitionCommand
 	noShows      sitting.ListNoShowsQuery
 	noShowPage   sitting.NoShowPage
 }
@@ -382,9 +385,9 @@ type examSittingHTTPFake struct {
 func newExamSittingHTTPFake(t *testing.T) *examSittingHTTPFake {
 	t.Helper()
 	at := time.Date(2026, time.August, 15, 9, 30, 0, 123456789, time.UTC)
-	sitting, err := model.NewExamSitting(model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(), at.Add(time.Hour), at.Add(3*time.Hour), at)
+	record, err := model.NewExamSitting(model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(), at.Add(time.Hour), at.Add(3*time.Hour), at)
 	require.NoError(t, err)
-	return &examSittingHTTPFake{principal: testExamHTTPPrincipal(), sitting: sitting, cancelResult: store.ExamSittingSnapshot{Sitting: sitting}}
+	return &examSittingHTTPFake{principal: testExamHTTPPrincipal(), sitting: record, cancelResult: store.ExamSittingSnapshot{Sitting: record}}
 }
 
 func (f *examSittingHTTPFake) AuthenticateAccess(context.Context, string) (*model.Principal, error) {
@@ -402,8 +405,13 @@ func (f *examSittingHTTPFake) ScheduleExamSitting(_ context.Context, _ invocatio
 	return store.ExamSittingSnapshot{Sitting: f.sitting}, nil
 }
 
-func (f *examSittingHTTPFake) GetExamSitting(_ context.Context, _ invocation.Invocation, query sitting.GetQuery) (store.ExamSittingSnapshot, error) {
-	f.get = query
+func (f *examSittingHTTPFake) GetExamSitting(
+	_ context.Context,
+	_ invocation.Invocation,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+) (store.ExamSittingSnapshot, error) {
+	f.get.ExamID, f.get.SittingID = examID, sittingID
 	return store.ExamSittingSnapshot{Sitting: f.sitting}, nil
 }
 
@@ -422,12 +430,12 @@ func (f *examSittingHTTPFake) CancelExamSitting(_ context.Context, _ invocation.
 	return f.cancelResult, nil
 }
 
-func (f *examSittingHTTPFake) PauseExamSitting(_ context.Context, _ invocation.Invocation, command sitting.PauseCommand) (store.ExamSittingSnapshot, error) {
+func (f *examSittingHTTPFake) PauseExamSitting(_ context.Context, _ invocation.Invocation, command sitting.ManagerTransitionCommand) (store.ExamSittingSnapshot, error) {
 	f.pause = command
 	return store.ExamSittingSnapshot{Sitting: f.sitting}, nil
 }
 
-func (f *examSittingHTTPFake) ResumeExamSitting(_ context.Context, _ invocation.Invocation, command sitting.ResumeCommand) (store.ExamSittingSnapshot, error) {
+func (f *examSittingHTTPFake) ResumeExamSitting(_ context.Context, _ invocation.Invocation, command sitting.ManagerTransitionCommand) (store.ExamSittingSnapshot, error) {
 	f.resume = command
 	return store.ExamSittingSnapshot{Sitting: f.sitting}, nil
 }
@@ -437,7 +445,7 @@ func (f *examSittingHTTPFake) ExtendExamSitting(_ context.Context, _ invocation.
 	return store.ExamSittingSnapshot{Sitting: f.sitting}, nil
 }
 
-func (f *examSittingHTTPFake) CloseExamSitting(_ context.Context, _ invocation.Invocation, command sitting.EarlyCloseCommand) (store.ExamSittingSnapshot, error) {
+func (f *examSittingHTTPFake) CloseExamSitting(_ context.Context, _ invocation.Invocation, command sitting.ManagerTransitionCommand) (store.ExamSittingSnapshot, error) {
 	f.close = command
 	return store.ExamSittingSnapshot{Sitting: f.sitting}, nil
 }

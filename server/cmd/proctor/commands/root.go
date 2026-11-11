@@ -6,8 +6,10 @@
 // ---------------------------------------------------------------------------------------------
 
 // Package commands owns the proctor host-operator command tree. Commands parse
-// and present operator input while the module-root server package retains
-// infrastructure selection and lifecycle ownership.
+// and present operator input. The module-root server package retains
+// infrastructure selection and lifecycle ownership for anything that builds a
+// node; package operator runs the offline commands that only read or migrate
+// an installation.
 package commands
 
 import (
@@ -20,6 +22,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sudosylabs/proctor/server"
+	"github.com/sudosylabs/proctor/server/operator"
 )
 
 type usageError struct {
@@ -65,15 +68,15 @@ type executors struct {
 func productionExecutors() executors {
 	return executors{
 		serve:                 serve,
-		validateConfig:        server.ValidateConfig,
-		showConfig:            server.ShowEffectiveConfiguration,
-		clusterStatus:         server.InspectCluster,
-		listJobs:              server.ListJobs,
-		showJob:               server.ShowJob,
-		migrateUp:             server.MigrateUp,
-		migrateStatus:         server.MigrateStatus,
-		planMigrateDown:       server.PlanMigrateDown,
-		migrateDown:           server.MigrateDown,
+		validateConfig:        operator.ValidateConfig,
+		showConfig:            operator.ShowEffectiveConfiguration,
+		clusterStatus:         operator.InspectCluster,
+		listJobs:              operator.ListJobs,
+		showJob:               operator.ShowJob,
+		migrateUp:             operator.MigrateUp,
+		migrateStatus:         operator.MigrateStatus,
+		planMigrateDown:       operator.PlanMigrateDown,
+		migrateDown:           operator.MigrateDown,
 		recoverAdministrator:  server.RecoverAdministratorAccess,
 		resetAdministratorMFA: server.ResetAdministratorMFA,
 		currentBuildInfo:      server.CurrentBuildInfo,

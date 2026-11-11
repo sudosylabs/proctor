@@ -18,7 +18,7 @@ import (
 func advanceUserMailEligibilityRevision(ctx context.Context, tx *sqlxTxWrapper) (int64, error) {
 	var revision int64
 	if err := tx.Get(ctx, &revision, `UPDATE mail_audience_states
-		SET user_eligibility_revision=user_eligibility_revision+1 WHERE singleton=1
+		SET user_eligibility_revision = user_eligibility_revision+1 WHERE singleton = 1
 		RETURNING user_eligibility_revision`); err != nil {
 		return 0, fmt.Errorf("advance User mail eligibility revision: %w", err)
 	}
@@ -28,7 +28,7 @@ func advanceUserMailEligibilityRevision(ctx context.Context, tx *sqlxTxWrapper) 
 func currentUserMailEligibilityRevision(ctx context.Context, tx *sqlxTxWrapper) (int64, error) {
 	var revision int64
 	if err := tx.Get(ctx, &revision, `SELECT user_eligibility_revision FROM mail_audience_states
-		WHERE singleton=1 FOR SHARE`); err != nil {
+		WHERE singleton = 1 FOR SHARE`); err != nil {
 		return 0, fmt.Errorf("lock User mail eligibility chronology: %w", err)
 	}
 	return revision, nil

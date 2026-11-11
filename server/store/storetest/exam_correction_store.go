@@ -94,6 +94,7 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 	require.NoError(t, err)
 	authoringBefore, err := ss.ExamAuthoring().Get(ctx, fixture.examID, fixture.actor.ID)
 	require.NoError(t, err)
+	require.True(t, authoringBefore.Consistent(), "Get returned a result inconsistent with its request")
 
 	at := model.NowUTC()
 	entry, err := model.NewFileEntryForPurpose(model.NewFileEntryID(), model.FilePurposeExamResource, model.FileIndexingNone, at)
@@ -113,6 +114,7 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 	require.NoError(t, err)
 	require.Equal(t, store.ExamCorrectionResourceStagePending, stage.State)
 	require.Equal(t, reservation.StageID, stage.ID)
+	requireStageMatchesContent(t, stage, model.ExamResourceMediaText, 5, "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824")
 	require.Equal(t, lease.ExpiresAt, stage.ExpiresAt)
 	probe.StageBytes(t, ctx, revision.ID, reservation.RenditionID, "hello")
 	rendition, err := model.NewFileRendition(reservation.RenditionID, revision.ID, "original", string(model.ExamResourceMediaText),
@@ -121,7 +123,10 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 	ready, err := ss.ExamCorrection().MarkResourceStageReady(ctx, &store.ExamCorrectionResourceStageReadiness{StageID: stage.ID,
 		ActorUserID: fixture.actor.ID, Rendition: rendition, ReadyAt: at.Add(time.Second)})
 	require.NoError(t, err)
+	require.True(t, ready.ConsistentWith(fixture.examID, sitting.ID, fixture.revisionID, store.ExamCorrectionResourceAddition, reservation.ResourceID, fixture.actor.ID),
+		"MarkResourceStageReady returned a result inconsistent with its request")
 	require.Equal(t, store.ExamCorrectionResourceStageReady, ready.State)
+	requireStageMatchesContent(t, ready, model.ExamResourceMediaText, rendition.Size, rendition.SHA256)
 	require.NotNil(t, ready.Rendition)
 	require.Equal(t, rendition.ID, ready.Rendition.ID)
 	availability := probe.FileAvailability(t, ctx, revision.ID)
@@ -129,6 +134,9 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 	readyReplay, err := ss.ExamCorrection().MarkResourceStageReady(ctx, &store.ExamCorrectionResourceStageReadiness{StageID: stage.ID,
 		ActorUserID: fixture.actor.ID, Rendition: rendition, ReadyAt: at.Add(2 * time.Second)})
 	require.NoError(t, err)
+	require.True(t, readyReplay.ConsistentWith(fixture.examID, sitting.ID, fixture.revisionID, store.ExamCorrectionResourceAddition, reservation.ResourceID, fixture.actor.ID),
+		"MarkResourceStageReady replay returned a result inconsistent with its request")
+	requireStageMatchesContent(t, readyReplay, model.ExamResourceMediaText, rendition.Size, rendition.SHA256)
 	require.Equal(t, store.ExamCorrectionResourceStageReady, readyReplay.State)
 	require.NotNil(t, readyReplay.Rendition)
 	require.Equal(t, *rendition, *readyReplay.Rendition)
@@ -137,6 +145,7 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 	reservedReplay, err := ss.ExamCorrection().ReserveResourceStage(ctx, &reservationReplay, stageCommand)
 	require.NoError(t, err)
 	require.Equal(t, store.ExamCorrectionResourceStageReady, reservedReplay.State)
+	requireStageMatchesContent(t, reservedReplay, model.ExamResourceMediaText, rendition.Size, rendition.SHA256)
 	require.NotNil(t, reservedReplay.Rendition)
 	require.Equal(t, stage.ID, reservedReplay.ID)
 
@@ -151,6 +160,8 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 	applyCommand := examCommand(fixture.actor.ID, "exam.correction.apply", "correction-apply", "correction-apply-command")
 	result, err := ss.ExamCorrection().Apply(ctx, application, applyCommand)
 	require.NoError(t, err)
+	require.True(t, result.Consistent(), "Apply returned a result inconsistent with its request")
+	require.True(t, result.ConsistentWith(fixture.examID, sitting.ID, fixture.revisionID, live.Sitting.Revision), "Apply returned a result inconsistent with its request")
 	require.False(t, result.Replayed)
 	require.NotNil(t, result.Revision)
 	require.Equal(t, model.ExamRevisionPublicationLiveCorrection, result.Revision.Kind)
@@ -204,6 +215,8 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 	requireConflictConstraint(t, err, "exam_correction_resource_stage")
 	afterFailed, err := ss.ExamSitting().Get(ctx, fixture.examID, sitting.ID)
 	require.NoError(t, err)
+	require.True(t, afterFailed.ConsistentAndValid(), "Get returned a result inconsistent with its request")
+	require.True(t, afterFailed.ConsistentAndValidWith(sitting.ID, fixture.examID), "Get returned a result inconsistent with its request")
 	require.Equal(t, result.Revision.ID, afterFailed.Sitting.ExamRevisionID)
 	require.Equal(t, result.Sitting.Sitting.Revision, afterFailed.Sitting.Revision)
 
@@ -222,6 +235,8 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 	secondResult, err := ss.ExamCorrection().Apply(ctx, secondApply,
 		examCommand(fixture.actor.ID, "exam.correction.apply", "correction-second", "correction-second-command"))
 	require.NoError(t, err)
+	require.True(t, secondResult.Consistent(), "Apply returned a result inconsistent with its request")
+	require.True(t, secondResult.ConsistentWith(fixture.examID, sitting.ID, result.Revision.ID, result.Sitting.Sitting.Revision), "Apply returned a result inconsistent with its request")
 	secondSnapshot, err := ss.ExamRevision().GetSnapshot(ctx, fixture.examID, secondResult.Revision.ID)
 	require.NoError(t, err)
 	require.Len(t, secondSnapshot.Resources, 2)
@@ -276,6 +291,8 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 	removed, err := ss.ExamCorrection().Apply(ctx, removeApply,
 		examCommand(fixture.actor.ID, "exam.correction.apply", "correction-remove", "correction-remove-command"))
 	require.NoError(t, err)
+	require.True(t, removed.Consistent(), "Apply returned a result inconsistent with its request")
+	require.True(t, removed.ConsistentWith(fixture.examID, sitting.ID, secondResult.Revision.ID, secondResult.Sitting.Sitting.Revision), "Apply returned a result inconsistent with its request")
 	removedSnapshot, err := ss.ExamRevision().GetSnapshot(ctx, fixture.examID, removed.Revision.ID)
 	require.NoError(t, err)
 	require.Len(t, removedSnapshot.Resources, 1)
@@ -291,11 +308,14 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 	// Draft/default selection is outside live correction and remains unchanged.
 	authoringAfter, err := ss.ExamAuthoring().Get(ctx, fixture.examID, fixture.actor.ID)
 	require.NoError(t, err)
+	require.True(t, authoringAfter.Consistent(), "Get returned a result inconsistent with its request")
 	require.Equal(t, authoringBefore.Exam.DefaultRevisionID, authoringAfter.Exam.DefaultRevisionID, "live correction changed default/Draft: before=%#v after=%#v", authoringBefore, authoringAfter)
 	require.Equal(t, authoringBefore.Draft.BaseRevisionID, authoringAfter.Draft.BaseRevisionID, "live correction changed default/Draft: before=%#v after=%#v", authoringBefore, authoringAfter)
 	require.Equal(t, authoringBefore.Draft.Revision, authoringAfter.Draft.Revision, "live correction changed default/Draft: before=%#v after=%#v", authoringBefore, authoringAfter)
 	scheduledAfter, err := ss.ExamSitting().Get(ctx, fixture.examID, scheduledOnly.ID)
 	require.NoError(t, err)
+	require.True(t, scheduledAfter.ConsistentAndValid(), "Get returned a result inconsistent with its request")
+	require.True(t, scheduledAfter.ConsistentAndValidWith(scheduledOnly.ID, fixture.examID), "Get returned a result inconsistent with its request")
 	require.Equal(t, model.ExamSittingScheduled, scheduledAfter.Sitting.State)
 	require.Equal(t, fixture.revisionID, scheduledAfter.Sitting.ExamRevisionID)
 	require.Equal(t, int64(1), scheduledAfter.Sitting.Revision)
@@ -370,6 +390,8 @@ func TestExamCorrectionStore(t *testing.T, ss store.Store, probe ExamCorrectionS
 	if winner == nil {
 		winner = results[1]
 	}
+	require.True(t, winner.Consistent(), "Apply returned a result inconsistent with its request")
+	require.True(t, winner.ConsistentWith(fixture.examID, sitting.ID, current.Sitting.ExamRevisionID, current.Sitting.Revision), "Apply returned a result inconsistent with its request")
 	winnerSnapshot, err := ss.ExamRevision().GetSnapshot(ctx, fixture.examID, winner.Revision.ID)
 	require.NoError(t, err)
 
@@ -485,11 +507,15 @@ func reserveReadyCorrectionStage(t *testing.T, ctx context.Context, ss store.Sto
 	require.NoError(t, err)
 	probe.StageBytes(t, ctx, revision.ID, reservation.RenditionID, body)
 	digest := fmt.Sprintf("%x", sha256.Sum256([]byte(body)))
+	requireStageMatchesContent(t, stage, model.ExamResourceMediaText, int64(len(body)), digest)
 	rendition, err := model.NewFileRendition(reservation.RenditionID, revision.ID, "original", string(model.ExamResourceMediaText), int64(len(body)), 0, 0, digest, at)
 	require.NoError(t, err)
 	stage, err = ss.ExamCorrection().MarkResourceStageReady(ctx, &store.ExamCorrectionResourceStageReadiness{StageID: stage.ID,
 		ActorUserID: fixture.actor.ID, Rendition: rendition, ReadyAt: at})
 	require.NoError(t, err)
+	require.True(t, stage.ConsistentWith(fixture.examID, sittingID, baseRevisionID, target, resourceID, fixture.actor.ID),
+		"MarkResourceStageReady returned a result inconsistent with its request")
+	requireStageMatchesContent(t, stage, model.ExamResourceMediaText, int64(len(body)), digest)
 	return stage, command
 }
 
@@ -516,4 +542,22 @@ func containsAnyAuditData(audit *model.AuditEvent, values ...string) bool {
 		}
 	}
 	return false
+}
+
+// requireStageMatchesContent asserts what the application no longer re-checks
+// on a correction stage outcome: the stage is in a known state and, once it
+// has a rendition, that rendition is the content the command described.
+func requireStageMatchesContent(t *testing.T, stage *store.ExamCorrectionResourceStage, mediaType model.ExamResourceMediaType, size int64, sha256Hex string) {
+	t.Helper()
+	require.NotNil(t, stage)
+	require.Contains(t, []store.ExamCorrectionResourceStageState{
+		store.ExamCorrectionResourceStagePending,
+		store.ExamCorrectionResourceStageReady,
+		store.ExamCorrectionResourceStageConsumed,
+	}, stage.State)
+	if stage.Rendition != nil {
+		require.Equal(t, mediaType, model.ExamResourceMediaType(stage.Rendition.MediaType))
+		require.Equal(t, size, stage.Rendition.Size)
+		require.Equal(t, sha256Hex, stage.Rendition.SHA256)
+	}
 }

@@ -78,6 +78,7 @@ func Any(key string, value any) Field {
 		if reflected := reflect.TypeOf(value); reflected != nil {
 			name = reflected.String()
 		}
+
 		return String(key, fmt.Sprintf("<unsupported %s>", name))
 	}
 }

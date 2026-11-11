@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -122,79 +123,115 @@ type acknowledgeExamCorrectionResponse struct {
 	AcknowledgedAt       string                               `json:"acknowledged_at"`
 }
 
-func (m examAttemptHTTPModule) acknowledgeCorrection(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) acknowledgeCorrection(request route.Request) (route.Result, error) {
 	access, err := candidateAccess(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	correctionRevisionID, err := request.params.RequireExamRevisionID()
+
+	correctionRevisionID, err := route.PathID[model.ExamRevisionID](request, "exam_revision_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	var body acknowledgeExamCorrectionRequest
 	if err = decodeCandidateWorkspaceJSON(request, &body); err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	mutationAccess, err := candidateWorkspaceMutationAccess(access, candidateWorkspaceMutationAccessRequest{
-		ParticipationID: body.ParticipationID, Generation: body.Generation})
+		ParticipationID: body.ParticipationID,
+		Generation:      body.Generation,
+	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	currentRevisionID, err := model.ParseExamRevisionID(body.ExpectedCurrentRevisionID)
 	if err != nil {
-		return operationResult{}, invalidRequestError(err)
+		return route.Result{}, route.InvalidRequest(err)
 	}
-	result, err := m.application.AcknowledgeExamAttemptCorrection(request.context, request.invocation(), attempt.AcknowledgeCorrectionCommand{
-		Access: mutationAccess, CorrectionRevisionID: correctionRevisionID, ExpectedCurrentRevisionID: currentRevisionID,
-		IdempotencyKey: request.idempotencyKey})
+
+	result, err := h.app.AcknowledgeExamAttemptCorrection(request.Context, request.Invocation(), attempt.AcknowledgeCorrectionCommand{
+		Access:                    mutationAccess,
+		CorrectionRevisionID:      correctionRevisionID,
+		ExpectedCurrentRevisionID: currentRevisionID,
+		IdempotencyKey:            request.IdempotencyKey,
+	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if !result.AcknowledgedAt.Valid {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
-	return jsonResult(http.StatusOK, acknowledgeExamCorrectionResponse{RevisionID: result.CorrectionRevisionID.String(),
-		CurrentRevisionID: result.CurrentRevisionID.String(), RuntimeCapabilities: candidateRuntimeCapabilitiesFromStore(result.RuntimeCapabilities),
+
+	return route.JSON(http.StatusOK, acknowledgeExamCorrectionResponse{
+		RevisionID:           result.CorrectionRevisionID.String(),
+		CurrentRevisionID:    result.CurrentRevisionID.String(),
+		RuntimeCapabilities:  candidateRuntimeCapabilitiesFromStore(result.RuntimeCapabilities),
 		AcknowledgementState: string(model.CorrectionAcknowledgementAcknowledged),
-		AcknowledgedAt:       model.FormatRFC3339(result.AcknowledgedAt.Time)}).withHeaders(noStoreHeaders()), nil
+		AcknowledgedAt:       model.FormatRFC3339(result.AcknowledgedAt.Time),
+	}).WithHeaders(noStoreHeaders()), nil
 }
 
-func (m examAttemptHTTPModule) presentation(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) presentation(request route.Request) (route.Result, error) {
 	access, err := candidateAccess(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	view, err := m.application.GetCandidateExamPresentation(request.context, request.invocation(), access)
+
+	view, err := h.app.GetCandidateExamPresentation(request.Context, request.Invocation(), access)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	response := candidateExamPresentationResponse{AttemptID: view.AttemptID.String(), SittingID: view.SittingID.String(), Title: view.Title,
+
+	response := candidateExamPresentationResponse{
+		AttemptID:                    view.AttemptID.String(),
+		SittingID:                    view.SittingID.String(),
+		Title:                        view.Title,
 		InstructionsMarkdown:         view.InstructionsMarkdown,
 		Capacity:                     examCapacityPolicyResponseFromModel(view.Capacity),
 		CandidateRuntimeCapabilities: candidateRuntimeCapabilitiesFromStore(view.RuntimeCapabilities),
 		BrowserPolicy:                candidateBrowserPolicyFromStore(view.BrowserPolicy),
 		LiveCorrections:              candidateLiveCorrectionsFromModel(view.LiveCorrections),
-		Resources:                    make([]candidateExamResourceResponse, 0, len(view.Resources))}
-	for _, resource := range view.Resources {
-		response.Resources = append(response.Resources, candidateExamResourceResponse{ID: resource.ResourceID.String(), DisplayName: resource.DisplayName,
-			DescriptionMarkdown: resource.DescriptionMarkdown, Position: resource.Position, MediaType: string(resource.MediaType), Size: resource.SizeBytes, SHA256: resource.SHA256})
+		Resources:                    make([]candidateExamResourceResponse, 0, len(view.Resources)),
 	}
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+	for _, resource := range view.Resources {
+		response.Resources = append(response.Resources, candidateExamResourceResponse{
+			ID:                  resource.ResourceID.String(),
+			DisplayName:         resource.DisplayName,
+			DescriptionMarkdown: resource.DescriptionMarkdown,
+			Position:            resource.Position,
+			MediaType:           string(resource.MediaType),
+			Size:                resource.SizeBytes,
+			SHA256:              resource.SHA256,
+		})
+	}
+
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
 func candidateLiveCorrectionsFromModel(values []model.CandidateLiveCorrection) []candidateLiveCorrectionResponse {
 	result := make([]candidateLiveCorrectionResponse, len(values))
 	for index, value := range values {
-		item := candidateLiveCorrectionResponse{RevisionID: value.RevisionID.String(), RevisionNumber: value.RevisionNumber,
-			EffectiveAt: model.FormatRFC3339(value.EffectiveAt), Summary: value.Summary,
-			ChangedAreas:         append([]model.ExamCorrectionChangedArea(nil), value.ChangedAreas...),
-			AffectedCapabilities: append([]model.CandidateCapability{}, value.AffectedCapabilities...), AcknowledgementRequired: value.AcknowledgementRequired, AcknowledgementState: value.AcknowledgementState}
+		item := candidateLiveCorrectionResponse{
+			RevisionID:              value.RevisionID.String(),
+			RevisionNumber:          value.RevisionNumber,
+			EffectiveAt:             model.FormatRFC3339(value.EffectiveAt),
+			Summary:                 value.Summary,
+			ChangedAreas:            append([]model.ExamCorrectionChangedArea(nil), value.ChangedAreas...),
+			AffectedCapabilities:    append([]model.CandidateCapability{}, value.AffectedCapabilities...),
+			AcknowledgementRequired: value.AcknowledgementRequired,
+			AcknowledgementState:    value.AcknowledgementState,
+		}
 		if value.AcknowledgedAt.Valid {
 			at := model.FormatRFC3339(value.AcknowledgedAt.Time)
 			item.AcknowledgedAt = &at
 		}
+
 		result[index] = item
 	}
+
 	return result
 }
 
@@ -202,14 +239,28 @@ func candidateBrowserPolicyFromStore(value *store.CandidateBrowserPolicy) *candi
 	if value == nil {
 		return nil
 	}
-	response := &candidateBrowserPolicyResponse{Enabled: value.Policy.Enabled,
-		PolicyRevisionNumber: value.PolicyRevisionNumber, BrowserActivityDisclosure: value.BrowserActivityDisclosure,
-		StartRuleID: value.Policy.StartRuleID, PolicyRevisionID: value.PolicyRevisionID.String(), PolicyDigest: value.PolicyDigest,
-		Rules: make([]candidateBrowserPolicyRuleResponse, len(value.Policy.Rules))}
-	for index, rule := range value.Policy.Rules {
-		response.Rules[index] = candidateBrowserPolicyRuleResponse{RuleID: rule.RuleID, Origin: rule.Origin, PathPrefix: rule.PathPrefix,
-			HostMatch: string(rule.HostMatch), AllowRedirects: rule.AllowRedirects, BlockedNavigationOutcome: string(rule.BlockedNavigationOutcome), InstitutionHTTPException: rule.InstitutionHTTPException}
+
+	response := &candidateBrowserPolicyResponse{
+		Enabled:                   value.Policy.Enabled,
+		PolicyRevisionNumber:      value.PolicyRevisionNumber,
+		BrowserActivityDisclosure: value.BrowserActivityDisclosure,
+		StartRuleID:               value.Policy.StartRuleID,
+		PolicyRevisionID:          value.PolicyRevisionID.String(),
+		PolicyDigest:              value.PolicyDigest,
+		Rules:                     make([]candidateBrowserPolicyRuleResponse, len(value.Policy.Rules)),
 	}
+	for index, rule := range value.Policy.Rules {
+		response.Rules[index] = candidateBrowserPolicyRuleResponse{
+			RuleID:                   rule.RuleID,
+			Origin:                   rule.Origin,
+			PathPrefix:               rule.PathPrefix,
+			HostMatch:                string(rule.HostMatch),
+			AllowRedirects:           rule.AllowRedirects,
+			BlockedNavigationOutcome: string(rule.BlockedNavigationOutcome),
+			InstitutionHTTPException: rule.InstitutionHTTPException,
+		}
+	}
+
 	return response
 }
 
@@ -219,32 +270,51 @@ func candidateRuntimeCapabilitiesFromStore(value store.CandidateRuntimeCapabilit
 		browser.PolicyRevisionID = value.Browser.PolicyRevisionID.String()
 		browser.PolicyDigest = value.Browser.PolicyDigest
 	}
-	return candidateRuntimeCapabilitiesResponse{SchemaVersion: value.SchemaVersion,
-		ServerTime: model.FormatRFC3339(value.ServerTime), InteractionState: string(value.InteractionState),
-		AttemptConfiguration: candidateAttemptConfigurationResponse{Revision: value.AttemptConfiguration.Revision,
-			Presentation: value.AttemptConfiguration.Presentation, ApprovedCommands: append([]string{}, value.AttemptConfiguration.ApprovedCommands...),
-			ApprovedKeybindings: append([]string{}, value.AttemptConfiguration.ApprovedKeybindings...), Digest: value.AttemptConfiguration.Digest},
+
+	return candidateRuntimeCapabilitiesResponse{
+		SchemaVersion:    value.SchemaVersion,
+		ServerTime:       model.FormatRFC3339(value.ServerTime),
+		InteractionState: string(value.InteractionState),
+		AttemptConfiguration: candidateAttemptConfigurationResponse{
+			Revision:            value.AttemptConfiguration.Revision,
+			Presentation:        value.AttemptConfiguration.Presentation,
+			ApprovedCommands:    append([]string{}, value.AttemptConfiguration.ApprovedCommands...),
+			ApprovedKeybindings: append([]string{}, value.AttemptConfiguration.ApprovedKeybindings...),
+			Digest:              value.AttemptConfiguration.Digest,
+		},
 		FocusLossCollectionEnabled:    value.FocusLossCollectionEnabled,
 		PendingCorrectionCapabilities: append([]model.CandidateCapability{}, value.PendingCorrectionCapabilities...),
-		WorkspaceMutationAllowed:      value.WorkspaceMutationAllowed, SubmissionAllowed: value.SubmissionAllowed,
-		Browser: browser,
-		ExamRevision: candidateExamRevisionResponse{AdmissionRevisionID: value.ExamRevision.AdmissionRevisionID.String(),
-			CurrentRevisionID: value.ExamRevision.CurrentRevisionID.String(), AcknowledgementRequired: value.ExamRevision.AcknowledgementRequired},
-		Departure: candidateDepartureResponse{Allowed: value.Departure.Allowed, Reason: value.Departure.Reason}}
+		WorkspaceMutationAllowed:      value.WorkspaceMutationAllowed,
+		SubmissionAllowed:             value.SubmissionAllowed,
+		Browser:                       browser,
+		ExamRevision: candidateExamRevisionResponse{
+			AdmissionRevisionID:     value.ExamRevision.AdmissionRevisionID.String(),
+			CurrentRevisionID:       value.ExamRevision.CurrentRevisionID.String(),
+			AcknowledgementRequired: value.ExamRevision.AcknowledgementRequired,
+		},
+		Departure: candidateDepartureResponse{Allowed: value.Departure.Allowed, Reason: value.Departure.Reason},
+	}
 }
 
-func (m examAttemptHTTPModule) openResource(request operationRequest) (protocolResult, error) {
+func (h examAttemptHandlers) openResource(request route.Request) (route.ProtocolResult, error) {
 	access, err := candidateAccess(request)
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
-	resourceID, err := request.params.RequireExamResourceID()
+
+	resourceID, err := route.PathID[model.ExamResourceID](request, "exam_resource_id")
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
-	opened, err := m.application.OpenCandidateExamResource(request.context, request.invocation(), attempt.OpenResourceQuery{Access: access, ResourceID: resourceID})
+
+	opened, err := h.app.OpenCandidateExamResource(
+		request.Context,
+		request.Invocation(),
+		attempt.OpenResourceQuery{Access: access, ResourceID: resourceID},
+	)
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
+
 	return candidateAttemptContentResult(request, opened, `"`+opened.SHA256+`"`, nil)
 }

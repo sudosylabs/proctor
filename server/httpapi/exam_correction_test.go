@@ -26,20 +26,21 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/correction"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
 func TestExamSittingCorrectionHTTPStagesResourceContentAndReturnsOnlySafeAuthoritativeMetadata(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamSittingCorrectionHTTPFake()
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingCorrectionResource(fake))
 	raw := []byte("corrected reference")
 	digest := fmt.Sprintf("%x", sha256.Sum256(raw))
 	metadata := `{"base_revision_id":"` + fake.baseRevisionID.String() + `","target_kind":"addition","media_type":"text/markdown","size":19,"sha256":"` + digest + `"}`
 	body, contentType := examResourceMultipart(t, metadata, raw, false)
-	request := httptest.NewRequest(http.MethodPost, examSittingCorrectionBasePath(fake)+"/correction-resource-stages", body)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, examSittingCorrectionBasePath(fake)+"/correction-resource-stages", body)
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", contentType)
 	request.Header.Set("Idempotency-Key", "stage-correction-once")
@@ -81,14 +82,14 @@ func TestExamSittingCorrectionHTTPStageMetadataIsStrictAndExplicitZeroIsValid(t 
 		name, metadata := name, metadata
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			logger, _ := newTestLogger(t)
+			logger, _ := routetest.NewLogger(t)
 			fake := newExamSittingCorrectionHTTPFake()
 			metadata = strings.ReplaceAll(metadata, "BASE", fake.baseRevisionID.String())
 			metadata = strings.ReplaceAll(metadata, "RESOURCE", model.NewExamResourceID().String())
 			metadata = strings.ReplaceAll(metadata, "DIGEST", fmt.Sprintf("%x", sha256.Sum256(nil)))
 			httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingCorrectionResource(fake))
 			body, contentType := examResourceMultipart(t, metadata, nil, false)
-			request := httptest.NewRequest(http.MethodPost, examSittingCorrectionBasePath(fake)+"/correction-resource-stages", body)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, examSittingCorrectionBasePath(fake)+"/correction-resource-stages", body)
 			request.Header.Set("Authorization", "Bearer credential")
 			request.Header.Set("Content-Type", contentType)
 			request.Header.Set("Idempotency-Key", "invalid-stage")
@@ -99,14 +100,14 @@ func TestExamSittingCorrectionHTTPStageMetadataIsStrictAndExplicitZeroIsValid(t 
 		})
 	}
 
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamSittingCorrectionHTTPFake()
 	fake.stageResult.Size = 0
 	fake.stageResult.SHA256 = fmt.Sprintf("%x", sha256.Sum256(nil))
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingCorrectionResource(fake))
 	metadata := fmt.Sprintf(`{"base_revision_id":"%s","target_kind":"addition","media_type":"text/plain","size":0,"sha256":"%s"}`, fake.baseRevisionID, fake.stageResult.SHA256)
 	body, contentType := examResourceMultipart(t, metadata, nil, false)
-	request := httptest.NewRequest(http.MethodPost, examSittingCorrectionBasePath(fake)+"/correction-resource-stages", body)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, examSittingCorrectionBasePath(fake)+"/correction-resource-stages", body)
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", contentType)
 	request.Header.Set("Idempotency-Key", "empty-stage")
@@ -120,14 +121,14 @@ func TestExamSittingCorrectionHTTPStageMetadataIsStrictAndExplicitZeroIsValid(t 
 
 func TestExamSittingCorrectionHTTPAppliesCompleteOrderedManifestAndKeepsReasonPrivate(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamSittingCorrectionHTTPFake()
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingCorrectionResource(fake))
 	first, second := model.NewExamResourceID(), model.NewExamResourceID()
 	stageID := model.NewExamCorrectionResourceStageID()
 	body := fmt.Sprintf(`{"expected_revision":7,"expected_current_revision_id":"%s","instructions_markdown":"","candidate_summary":"A reference was corrected.","affected_capabilities":["browser","submission","workspace"],"acknowledgement_required":true,"reason":"Fix misleading reference","resources":[{"resource_id":"%s","display_name":"New reference","description_markdown":"**Corrected**","stage_id":"%s"},{"resource_id":"%s","display_name":"Existing reference","description_markdown":""}]}`,
 		fake.baseRevisionID, first, stageID, second)
-	request := httptest.NewRequest(http.MethodPost, examSittingCorrectionBasePath(fake)+"/corrections", strings.NewReader(body))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, examSittingCorrectionBasePath(fake)+"/corrections", strings.NewReader(body))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "apply-correction-once")
@@ -162,11 +163,11 @@ func TestExamSittingCorrectionHTTPAppliesCompleteOrderedManifestAndKeepsReasonPr
 
 func TestExamSittingCorrectionHTTPRejectsPaddedPrivateReasonBeforeApplication(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamSittingCorrectionHTTPFake()
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingCorrectionResource(fake))
 	body := fmt.Sprintf(`{"expected_revision":7,"expected_current_revision_id":"%s","candidate_summary":"A correction was made.","affected_capabilities":["browser","submission","workspace"],"acknowledgement_required":false,"reason":" padded ","resources":[]}`, fake.baseRevisionID)
-	request := httptest.NewRequest(http.MethodPost, examSittingCorrectionBasePath(fake)+"/corrections", strings.NewReader(body))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, examSittingCorrectionBasePath(fake)+"/corrections", strings.NewReader(body))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "invalid-correction")
@@ -178,11 +179,11 @@ func TestExamSittingCorrectionHTTPRejectsPaddedPrivateReasonBeforeApplication(t 
 
 func TestExamSittingCorrectionHTTPOmittedInstructionsPreservesCurrentValue(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fake := newExamSittingCorrectionHTTPFake()
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examSittingCorrectionResource(fake))
 	body := fmt.Sprintf(`{"expected_revision":7,"expected_current_revision_id":"%s","candidate_summary":"The resource list was corrected.","affected_capabilities":["browser","submission","workspace"],"acknowledgement_required":false,"reason":"Resource-only correction","resources":[]}`, fake.baseRevisionID)
-	request := httptest.NewRequest(http.MethodPost, examSittingCorrectionBasePath(fake)+"/corrections", strings.NewReader(body))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, examSittingCorrectionBasePath(fake)+"/corrections", strings.NewReader(body))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "resource-only-correction")

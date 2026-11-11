@@ -53,7 +53,7 @@ func TestManagerConnectionEventsAreContentAndCredentialFree(t *testing.T) {
 	closed, err := NewExamAttemptConnectionClosedEvent(sittingID, attemptID, candidateID, connectionID,
 		model.AttemptConnectionCloseTransport, at.Add(time.Minute))
 	require.NoError(t, err)
-	for _, event := range []RealtimeEvent{opened, closed} {
+	for _, event := range []Event{opened, closed} {
 		require.Equal(t, model.ActionExamSittingView, event.Action)
 		require.Equal(t, model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()}, event.Resource)
 		for _, forbidden := range []string{"credential", "hash", "participation_id", "generation", "session_id", "private"} {
@@ -78,7 +78,7 @@ func TestExamAttemptSuspensionAndReallowEventsSeparateCandidateAndManagerPayload
 	require.NoError(t, err)
 	managerReallowed, err := NewExamAttemptReallowedEvent(sittingID, attemptID, candidateID, suspensionID, 3, at.Add(time.Minute))
 	require.NoError(t, err)
-	for _, event := range []RealtimeEvent{candidateSuspended, candidateReallowed} {
+	for _, event := range []Event{candidateSuspended, candidateReallowed} {
 		require.Equal(t, candidateID, event.UserID)
 		require.Equal(t, model.ActionExamSittingParticipate, event.Action)
 		for _, forbidden := range []string{"integrity_flag_id", "suspension_id", "attempt_connection_id", "generation", "private_reason", "credential", "hash"} {
@@ -97,7 +97,7 @@ func TestExamAttemptSuspensionAndReallowEventsSeparateCandidateAndManagerPayload
 			require.FailNow(t, fmt.Sprintf("candidate suspension payload contains unsafe field %q: %s", key, candidateSuspended.Data))
 		}
 	}
-	for _, event := range []RealtimeEvent{managerSuspended, managerReallowed} {
+	for _, event := range []Event{managerSuspended, managerReallowed} {
 		require.Empty(t, event.UserID)
 		require.Equal(t, model.ActionExamSittingView, event.Action)
 		for _, forbidden := range []string{"private_reason", "credential", "hash", "session_id", "evidence"} {
@@ -176,7 +176,7 @@ func TestExamAttemptSubmittedEventsSeparateManagerAndCandidateTargetsWithSafeRec
 			}
 		}
 	}
-	for _, event := range []RealtimeEvent{manager, candidate} {
+	for _, event := range []Event{manager, candidate} {
 		err = event.ValidateForPublish()
 		require.NoError(t, err)
 	}
@@ -222,13 +222,13 @@ func TestFocusLossEventsSeparateNeutralCandidateWarningFromBoundedManagerFlag(t 
 			}
 		}
 	}
-	for _, event := range []RealtimeEvent{warning, flagged} {
+	for _, event := range []Event{warning, flagged} {
 		err = event.ValidateForPublish()
 		require.NoError(t, err)
 	}
 }
 
-func assertCandidateSittingEvent(t *testing.T, event RealtimeEvent, name string, sittingID model.ExamSittingID) {
+func assertCandidateSittingEvent(t *testing.T, event Event, name string, sittingID model.ExamSittingID) {
 	t.Helper()
 	require.Equal(t, name, event.Name)
 	require.Equal(t, model.ActionExamSittingParticipate, event.Action)

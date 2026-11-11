@@ -37,8 +37,9 @@ Use the Academic Unit slice as the conceptual pattern for later capabilities:
 - document stable application error codes in `x-proctor-error-codes`, map each
   code to a declared HTTP response, and return RFC 9457 Problem Details;
 - list every public code once, with its status and meaning, in
-  [`error_catalog.yaml`](error_catalog.yaml). `go run ./cmd/ptool errors
-  generate` renders the generated `error_mapping.go` from it, and the catalog
+  [`route/error_catalog.yaml`](route/error_catalog.yaml). `go run ./cmd/ptool
+  errors generate` renders the generated `route/error_mapping.go` from it, and
+  the catalog
   check in `make -C server check` fails when the mapping is stale, when source
   mints a code the catalog lacks or converts a non-constant string to
   `apperror.Code`, when the transport mints an application-only code, or when
@@ -159,11 +160,14 @@ kernel-owned. After a successful upgrade, the sibling transport owns the
 connection lifecycle. The catalog exposes no mutable router or late-registration
 seam.
 
-`httpapi.New` requires the complete resource capability graph and an explicit
-WebSocket transport. It resolves and validates those dependencies once before
-catalog compilation; production has no no-op transport or application-capability
-fallback. `resource_catalog.go` is a pure ordered resource inventory and must
-contain neither dependency selection nor runtime type assertions.
+`httpapi.New` takes the application and a `Settings` value that names an
+explicit WebSocket transport. It refuses a missing application service or
+setting before it compiles the catalog; production has no no-op transport or
+application fallback. The Job and mail operator services are the exception:
+they are absent in a graph without a Job store, and answer `job.unavailable`
+and `mail.unavailable` themselves. `resources.go` is a pure ordered resource
+inventory: it builds each resource from the application service that owns its
+use cases and contains no runtime type assertions.
 
 Catalog completion exposed two existing pre-upgrade outcomes that the prior
 OpenAPI entry omitted: invalid origin (403) and unavailable WebSocket service
@@ -963,22 +967,55 @@ clients present an unknown value generically.
 
 ## Ownership and extension workflow
 
-`httpapi.New` is the production construction boundary. Its broad `Options` value
-exists only at composition: construction projects each application capability
-through the exact narrow interface accepted by its resource constructor. A
-resource may retain that focused application capability, but never `Options`,
-`*API`, a router, `store.Store`, SQL, `platform.Service`, or concrete adapters.
+The transport is two packages. `httpapi/route` is the routing kernel: how an
+endpoint is declared, compiled, authenticated and dispatched, and how a result
+or an error becomes a response. `httpapi` holds the resources, one file per
+API area, and the production constructor. A resource reaches the kernel only
+through the exported names of `route`; the kernel imports no resource and no
+application area beyond the leaves its import rule lists. The package comment
+of [`route`](route/doc.go) is the guide to declaring an endpoint and writing a
+handler.
+
+`httpapi.New(application, settings)` is the production construction boundary.
+It builds each resource from the named services of `app.App` that own its use
+cases, usually one. A resource constructor takes a consumer interface that
+lists the methods it calls; where no test needs a fake, it takes the concrete
+service instead. `Settings` carries only what is not the application:
+logging, metrics, tracing, localization, health, build information, request
+limits, and the WebSocket transport. A resource may retain its application
+service, but never `Settings`, `*app.App`, `*route.API`, a router,
+`store.Store`, SQL, `platform.Service`, or concrete adapters.
+
+The unexported `newAPI` validates the settings and passes the kernel's share
+of them, the authenticator, and the resources it is given to `route.New`,
+which compiles them. `New` passes the production inventory, and handler tests
+pass resources built over their fakes, so there is one compile path.
 
 The production route trace is intentionally linear and searchable:
 
 ~~~text
 httpapi.New
-    -> productionResources             (resource_catalog.go)
+    -> productionResources             (resources.go)
     -> <domain>Resource                (for example institutionResource)
-    -> principalRoute/sessionRoute/... (route_definition.go)
-    -> collectResources + validation   (catalog_compiler.go)
+    -> route.Endpoint{...} literals    (route/endpoint.go)
+    -> newAPI                          (api.go)
+    -> route.New                       (route/api.go)
+    -> validation + compileRoutes      (route/validate.go, route/compile.go)
     -> application capability method   (for example GetInstitution)
 ~~~
+
+A route is one `route.Endpoint` struct literal. It names its `Method`, `Path`,
+`Auth`, `Errors`, and one of `Handle`, `Protocol`, or `Upgrade`. `Path` is a
+template string such as `/classes/{class_id}`; the compiler parses it. `Auth`
+has no default, so a public route writes `Auth: route.AuthPublic` and a route
+without `Auth` fails to compile. `Idempotency` and `MaxBodyBytes` are set only
+when the route needs them. A `Protocol` or `Upgrade` endpoint also sets
+`ProtocolName` and `ProtocolKind`. `Errors` lists only the operation's own
+codes; the compiler adds the kernel codes that `Auth` and `Method` imply.
+
+A handler is a `route.Operation`: it receives a `route.Request` and returns a
+`route.Result` built with `route.JSON`, `route.NoContent` or `route.Status`,
+or the application's error unchanged.
 
 This is Proctor's declarative analogue to Mattermost's root `api.go` calling
 per-domain `Init*` functions. The explicit inventory retains the same useful
@@ -989,11 +1026,11 @@ To add or change a cohesive resource family:
 
 1. define the focused application capability and transport DTO mapping beside
    the resource;
-2. declare typed paths, one explicit authentication requirement per operation,
+2. declare path templates, one explicit authentication requirement per operation,
    typed ordinary or reviewed protocol results, and the complete public-error
    allowlist;
 3. add the resource constructor once to `productionResources` in
-   `resource_catalog.go`;
+   `resources.go`;
 4. update the checked-in OpenAPI operation and register each new request or
    response DTO in the DTO→schema registry; route/document agreement is
    derived; and
@@ -1010,18 +1047,19 @@ envelope of one.
 
 Package initialization, mutable router access, late registration, arbitrary
 path regular expressions, and direct persistence or platform access are not
-extension mechanisms. `API.Routes` is a defensive manifest projection for
+extension mechanisms. `route.API.Routes` is a defensive manifest projection for
 agreement and diagnostics; callers cannot mutate dispatch through it.
 
 These reviewed v1 shapes are frozen compatibility exceptions, not target
 patterns:
 
 - its v1 PATCH DTO uses pointers, so omitted and explicit `null` currently have
-  the same meaning. Later slices must use the architecture's `Optional[T]`
+  the same meaning. Later slices must use the architecture's `route.Optional[T]`
   representation when those states differ; do not copy the pointer shape;
 - Role PATCH uses pointers, so omitted and explicit `null` leave each mutable
   field unchanged while empty strings or arrays are present and validated.
-  Later slices use `Optional[T]` when omission and null have different meaning.
+  Later slices use `route.Optional[T]` when omission and null have different
+  meaning.
 
 The DTO registry derives these shapes from the DTOs so migration cannot
 silently change existing clients. It does not make them conventions for new endpoints.
@@ -1260,7 +1298,7 @@ type createAcademicUnitRequest struct {
     DisplayName string `json:"display_name"`
 }
 
-unit, err := academicUnits.CreateAcademicUnit(ctx, invocation, command)
+unit, err := academicUnits.CreateAcademicUnit(ctx, inv, command)
 writeJSON(writer, http.StatusCreated, academicUnitResponseFromModel(unit))
 ```
 

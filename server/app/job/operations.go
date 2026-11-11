@@ -10,294 +10,338 @@ package job
 import (
 	"context"
 	"errors"
+	"maps"
+	"strings"
 	"time"
+	"unicode/utf8"
 
+	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-var (
-	ErrQueryInvalid      = errors.New("job query is invalid")
-	ErrCancelUnsupported = errors.New("job cancellation is unsupported")
-	ErrRetryUnsupported  = errors.New("job retry is unsupported")
-)
-
-// View is the canonical safe Job projection. Commands, checkpoints, results,
-// deduplication keys, claim data, and internal errors are intentionally absent.
-type View struct {
-	ID              model.JobID
-	Type            model.JobType
-	Status          model.JobStatus
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-	AvailableAt     time.Time
-	StartedAt       model.OptionalTime
-	CompletedAt     model.OptionalTime
-	PublicErrorCode string
-	AttemptCount    int
-	MaximumAttempts int
-	Progress        *model.JobProgress
-	Revision        int64
-	// CreatedByUserID names the operator who started the Job; it is zero for
-	// recurring and system work.
-	CreatedByUserID model.UserID
-	// CreatedByDisplayName and Subject are presentation the application adds
-	// for operators; the engine leaves them empty.
-	CreatedByDisplayName string
-	Subject              string
+// Operations holds the operator Job use cases: listing and inspecting Jobs
+// and their attempts, and canceling or retrying a Job. A nil Operations
+// answers that Jobs are unavailable.
+type Operations struct {
+	deps OperationsDependencies
 }
 
-// AttemptView is the canonical safe Job Attempt projection. Claim ownership,
-// tokens, checkpoints, and internal errors are intentionally absent.
-type AttemptView struct {
-	ID              model.JobAttemptID
-	Number          int
-	Status          model.JobAttemptStatus
-	StartedAt       time.Time
-	HeartbeatAt     time.Time
-	LeaseExpiresAt  time.Time
-	CompletedAt     model.OptionalTime
-	PublicErrorCode string
+// OperationsDependencies are the collaborators of Operations;
+// NewOperations validates them once and Operations keeps them in deps.
+type OperationsDependencies struct {
+	Jobs          operatorEngine
+	Authorization institutionAuthorizer
+	Audit         access.MutationAuditor
+	Users         store.UserStore
+	ExamExports   store.ExamExportStore
+	Now           func() time.Time
 }
 
-// Page is one page of operator-visible Jobs; HasMore reports that another
-// page follows the last item. The first page, read without a keyset, sets
-// Counted and carries Total: every operator-visible Job the status filter
-// matches, stopped at store.MaximumListCount, where TotalIsLowerBound is set.
-type Page struct {
-	Items             []View
-	HasMore           bool
-	Counted           bool
-	Total             int
-	TotalIsLowerBound bool
+type operatorEngine interface {
+	List(context.Context, ListQuery) (Page, error)
+	CountRecentFailures(context.Context, time.Duration, int) (int, error)
+	Get(context.Context, model.JobID) (View, error)
+	Attempts(context.Context, AttemptListQuery) (AttemptPage, error)
+	PrepareCancellation(context.Context, model.JobID) (ControlTarget, error)
+	PrepareRetry(context.Context, model.JobID) (ControlTarget, error)
+	Cancel(context.Context, ControlTarget, AuditReference) (View, error)
+	Retry(context.Context, ControlTarget, AuditReference) (View, error)
 }
 
-// AttemptPage is one page of a Job's attempts; HasMore reports that another
-// page follows the last item.
-type AttemptPage struct {
-	Items   []AttemptView
-	HasMore bool
+// institutionAuthorizer authorizes an Action on the installation's singleton
+// Institution and returns that Resource for the caller's audit. Production
+// passes InstitutionAuthorization; the tests substitute a fake.
+type institutionAuthorizer interface {
+	AuthorizeInstitution(context.Context, invocation.Invocation, model.Action) (model.Resource, error)
 }
 
-type ListQuery struct {
-	Statuses        []model.JobStatus
-	BeforeCreatedAt time.Time
-	BeforeID        model.JobID
-	Limit           int
+// InstitutionAuthorization authorizes a Job operator Action on the singleton
+// Institution. It is not access.Authorizer.AuthorizeInstitution because an
+// Institution that cannot be read is presented with the Job operator codes
+// here.
+type InstitutionAuthorization struct {
+	Authorizer   *access.Authorizer
+	Institutions store.InstitutionStore
 }
 
-type AttemptListQuery struct {
-	JobID               model.JobID
-	BeforeNumber, Limit int
-}
-
-type controlKind string
-
-const (
-	controlCancel controlKind = "cancel"
-	controlRetry  controlKind = "retry"
-)
-
-// ControlTarget is an engine-validated transition target. Its transition kind
-// and optimistic-concurrency revision cannot be constructed by callers.
-type ControlTarget struct {
-	Projection View
-	id         model.JobID
-	revision   int64
-	kind       controlKind
-}
-
-func (t ControlTarget) View() View { return cloneView(t.Projection) }
-
-// AuditReference identifies the durable audit attempt committed atomically by
-// the Job Store transition.
-type AuditReference struct {
-	EventID model.AuditEventID
-	At      time.Time
-}
-
-func (r *Engine) List(ctx context.Context, query ListQuery) (Page, error) {
-	if query.Limit == 0 {
-		query.Limit = 50
-	}
-	if query.Limit < 1 || query.Limit > 200 || (!query.BeforeID.IsZero() && (!query.BeforeID.IsValid() || query.BeforeCreatedAt.IsZero())) {
-		return Page{}, ErrQueryInvalid
-	}
-	for _, status := range query.Statuses {
-		if !publicStatus(status) {
-			return Page{}, ErrQueryInvalid
-		}
-	}
-	options := store.JobListOptions{Types: r.operatorTypes(), Statuses: query.Statuses, BeforeCreatedAt: query.BeforeCreatedAt, BeforeID: query.BeforeID, Limit: query.Limit + 1}
-	records, err := r.deps.Store.List(ctx, options)
+// AuthorizeInstitution reads the Institution and authorizes action on it.
+func (a InstitutionAuthorization) AuthorizeInstitution(
+	ctx context.Context,
+	inv invocation.Invocation,
+	action model.Action,
+) (model.Resource, error) {
+	institution, err := a.Institutions.GetSingleton(ctx)
 	if err != nil {
+		return model.Resource{}, operationsStoreErrors.Translate(err)
+	}
+
+	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
+	if err = a.Authorizer.Authorize(ctx, inv, action, resource); err != nil {
+		return model.Resource{}, err
+	}
+
+	return resource, nil
+}
+
+// NewOperations builds the operator Job service over the engine. It refuses
+// a missing collaborator.
+func NewOperations(deps OperationsDependencies) (*Operations, error) {
+	if deps.Jobs == nil {
+		return nil, errors.New("job operations engine is required")
+	}
+	if deps.Authorization == nil {
+		return nil, errors.New("job operations authorization is required")
+	}
+	if deps.Audit == nil {
+		return nil, errors.New("job operations audit is required")
+	}
+	if deps.Users == nil {
+		return nil, errors.New("job operations initiator names are required")
+	}
+	if deps.ExamExports == nil {
+		return nil, errors.New("job operations exam export titles are required")
+	}
+	if deps.Now == nil {
+		return nil, errors.New("job operations clock is required")
+	}
+	return &Operations{deps: deps}, nil
+}
+
+// ListJobs lists one page of operator-visible Jobs, with who started each and
+// what it is about.
+func (s *Operations) ListJobs(ctx context.Context, inv invocation.Invocation, query ListQuery) (Page, error) {
+	if s == nil {
+		return Page{}, apperror.New("job.unavailable")
+	}
+	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, inv, model.ActionJobView); err != nil {
 		return Page{}, err
 	}
-	page := Page{HasMore: len(records) > query.Limit}
-	records = records[:min(len(records), query.Limit)]
-	page.Items = make([]View, 0, len(records))
-	for _, record := range records {
-		if record == nil {
-			return Page{}, errors.New("job store returned a nil record")
-		}
-		if r.operatorVisible(record.Type) {
-			page.Items = append(page.Items, project(record))
-		}
+
+	page, err := s.deps.Jobs.List(ctx, query)
+	if err != nil {
+		return Page{}, operationsStoreErrors.Translate(err)
 	}
-	if !query.BeforeID.IsZero() {
-		return page, nil
+	if err = s.presentJobs(ctx, page.Items); err != nil {
+		return Page{}, operationsStoreErrors.Translate(err)
 	}
-	if page.Total, err = r.deps.Store.Count(ctx, options, store.MaximumListCount); err != nil {
-		return Page{}, err
-	}
-	if page.Total < len(page.Items) || page.Total > store.MaximumListCount {
-		return Page{}, errors.New("job store count contradicts its page")
-	}
-	page.Counted, page.TotalIsLowerBound = true, page.Total == store.MaximumListCount
+
 	return page, nil
 }
 
-// CountRecentFailures counts the operator-visible failed Jobs last updated
-// within the given span before PostgreSQL time, stopping at maximum.
-func (r *Engine) CountRecentFailures(ctx context.Context, within time.Duration, maximum int) (int, error) {
-	if within <= 0 || maximum < 1 || maximum > store.MaximumListCount {
-		return 0, ErrQueryInvalid
+// CountRecentJobFailures counts the operator-visible Jobs that failed within
+// the span, authorized and audited exactly as ListJobs is, stopping at
+// maximum. The administration counts read it.
+func (s *Operations) CountRecentJobFailures(
+	ctx context.Context,
+	inv invocation.Invocation,
+	within time.Duration,
+	maximum int,
+) (int, error) {
+	if s == nil {
+		return 0, apperror.New("job.unavailable")
 	}
-	return r.deps.Store.Count(ctx, store.JobListOptions{Types: r.operatorTypes(), Statuses: []model.JobStatus{model.JobStatusFailed},
-		UpdatedWithin: within, Limit: 1}, maximum)
+	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, inv, model.ActionJobView); err != nil {
+		return 0, err
+	}
+
+	total, err := s.deps.Jobs.CountRecentFailures(ctx, within, maximum)
+	if err != nil {
+		return 0, operationsStoreErrors.Translate(err)
+	}
+
+	return total, nil
 }
 
-func (r *Engine) Get(ctx context.Context, id model.JobID) (View, error) {
-	record, err := r.operatorJob(ctx, id)
-	if err != nil {
+// GetJob returns one operator-visible Job.
+func (s *Operations) GetJob(ctx context.Context, inv invocation.Invocation, id model.JobID) (View, error) {
+	if s == nil {
+		return View{}, apperror.New("job.unavailable")
+	}
+	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, inv, model.ActionJobView); err != nil {
 		return View{}, err
 	}
-	return project(record), nil
+	view, err := s.deps.Jobs.Get(ctx, id)
+	if err != nil {
+		return View{}, operationsStoreErrors.Translate(err)
+	}
+	views := []View{view}
+	if err = s.presentJobs(ctx, views); err != nil {
+		return View{}, operationsStoreErrors.Translate(err)
+	}
+	return views[0], nil
 }
 
-func (r *Engine) Attempts(ctx context.Context, query AttemptListQuery) (AttemptPage, error) {
-	if _, err := r.operatorJob(ctx, query.JobID); err != nil {
+// ListJobAttempts lists the execution attempts of one Job.
+func (s *Operations) ListJobAttempts(
+	ctx context.Context,
+	inv invocation.Invocation,
+	query AttemptListQuery,
+) (AttemptPage, error) {
+	if s == nil {
+		return AttemptPage{}, apperror.New("job.unavailable")
+	}
+	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, inv, model.ActionJobView); err != nil {
 		return AttemptPage{}, err
 	}
-	if query.Limit == 0 {
-		query.Limit = 50
-	}
-	if query.Limit < 1 || query.Limit > 200 || query.BeforeNumber < 0 {
-		return AttemptPage{}, ErrQueryInvalid
-	}
-	records, err := r.deps.Store.ListAttemptsPage(ctx, store.JobAttemptListOptions{JobID: query.JobID, BeforeNumber: query.BeforeNumber, Limit: query.Limit + 1})
+
+	page, err := s.deps.Jobs.Attempts(ctx, query)
 	if err != nil {
-		return AttemptPage{}, err
+		return AttemptPage{}, operationsStoreErrors.Translate(err)
 	}
-	page := AttemptPage{HasMore: len(records) > query.Limit}
-	records = records[:min(len(records), query.Limit)]
-	page.Items = make([]AttemptView, 0, len(records))
-	for _, record := range records {
-		page.Items = append(page.Items, projectAttempt(record))
-	}
+
 	return page, nil
 }
 
-func (r *Engine) PrepareCancellation(ctx context.Context, id model.JobID) (ControlTarget, error) {
-	record, err := r.operatorJob(ctx, id)
-	if err != nil {
-		return ControlTarget{}, err
+// CancelJob cancels one Job whose type is cancelable, with audit.
+func (s *Operations) CancelJob(ctx context.Context, inv invocation.Invocation, id model.JobID) (View, error) {
+	if s == nil {
+		return View{}, apperror.New("job.unavailable")
 	}
-	descriptor, err := r.registry.Descriptor(record.Type)
-	if err != nil || !descriptor.Cancelable {
-		return ControlTarget{}, ErrCancelUnsupported
-	}
-	return ControlTarget{Projection: project(record), id: record.ID, revision: record.Revision, kind: controlCancel}, nil
+	return s.controlJob(ctx, inv, "cancel", id, s.deps.Jobs.PrepareCancellation, s.deps.Jobs.Cancel)
 }
 
-func (r *Engine) PrepareRetry(ctx context.Context, id model.JobID) (ControlTarget, error) {
-	record, err := r.operatorJob(ctx, id)
-	if err != nil {
-		return ControlTarget{}, err
+// RetryJob retries one Job whose type supports an explicit retry in its
+// current status, with audit.
+func (s *Operations) RetryJob(ctx context.Context, inv invocation.Invocation, id model.JobID) (View, error) {
+	if s == nil {
+		return View{}, apperror.New("job.unavailable")
 	}
-	descriptor, err := r.registry.Descriptor(record.Type)
-	if err != nil || !descriptor.SupportsExplicitRetry(record.Status) {
-		return ControlTarget{}, ErrRetryUnsupported
-	}
-	return ControlTarget{Projection: project(record), id: record.ID, revision: record.Revision, kind: controlRetry}, nil
+	return s.controlJob(ctx, inv, "retry", id, s.deps.Jobs.PrepareRetry, s.deps.Jobs.Retry)
 }
 
-func (r *Engine) Cancel(ctx context.Context, target ControlTarget, audit AuditReference) (View, error) {
-	if target.kind != controlCancel || !validAuditReference(audit) {
-		return View{}, ErrCancelUnsupported
-	}
-	record, err := r.deps.Store.Cancel(ctx, &store.JobMutation{ID: target.id, ExpectedRevision: target.revision, AuditEventID: audit.EventID, AuditAt: audit.At})
+func (s *Operations) controlJob(
+	ctx context.Context,
+	inv invocation.Invocation,
+	operation string,
+	id model.JobID,
+	prepare func(context.Context, model.JobID) (ControlTarget, error),
+	apply func(context.Context, ControlTarget, AuditReference) (View, error),
+) (View, error) {
+	resource, err := s.deps.Authorization.AuthorizeInstitution(ctx, inv, model.ActionJobManage)
 	if err != nil {
 		return View{}, err
 	}
-	return project(record), nil
-}
 
-func (r *Engine) Retry(ctx context.Context, target ControlTarget, audit AuditReference) (View, error) {
-	if target.kind != controlRetry || !validAuditReference(audit) {
-		return View{}, ErrRetryUnsupported
+	target, err := prepare(ctx, id)
+	if err != nil {
+		return View{}, operationsStoreErrors.Translate(err)
 	}
-	record, err := r.deps.Store.Retry(ctx, &store.JobMutation{ID: target.id, ExpectedRevision: target.revision, AuditEventID: audit.EventID, AuditAt: audit.At})
+
+	view := target.View()
+	auditID, err := s.deps.Audit.Begin(ctx, access.Mutation{
+		Invocation: inv,
+		Action:     model.ActionJobManage,
+		Resource:   resource,
+		Operation:  operation,
+		Value:      map[string]any{"job_id": view.ID.String(), "type": string(view.Type), "status": string(view.Status)},
+	})
 	if err != nil {
 		return View{}, err
 	}
-	return project(record), nil
+
+	updated, err := apply(ctx, target, AuditReference{EventID: auditID, At: s.deps.Now()})
+	if err != nil {
+		_ = s.deps.Audit.Fail(ctx, auditID, "job.conflict")
+		return View{}, operationsStoreErrors.Translate(err)
+	}
+
+	return updated, nil
 }
 
-func (r *Engine) operatorJob(ctx context.Context, id model.JobID) (*model.Job, error) {
-	record, err := r.deps.Store.Get(ctx, id)
+// presentJobs adds, in place, who started each Job and what it is about. Each
+// kind of fact is read once for the whole page. A reader of Jobs holds
+// institution-wide job.view, which covers both.
+func (s *Operations) presentJobs(ctx context.Context, views []View) error {
+	userIDs := make([]model.UserID, 0, len(views))
+	subjectJobs := make(map[model.JobType][]model.JobID)
+	for _, view := range views {
+		if !view.CreatedByUserID.IsZero() {
+			userIDs = append(userIDs, view.CreatedByUserID)
+		}
+		if s.subjectResolver(view.Type) != nil {
+			subjectJobs[view.Type] = append(subjectJobs[view.Type], view.ID)
+		}
+	}
+
+	names := make(map[model.UserID]string)
+	if len(userIDs) > 0 {
+		found, err := s.deps.Users.ListDisplayNames(ctx, userIDs)
+		if err != nil {
+			return err
+		}
+
+		for _, name := range found {
+			names[name.UserID] = name.DisplayName
+		}
+	}
+
+	subjects := make(map[model.JobID]string)
+	for jobType, ids := range subjectJobs {
+		found, err := s.subjectResolver(jobType)(ctx, ids)
+		if err != nil {
+			return err
+		}
+
+		maps.Copy(subjects, found)
+	}
+
+	for index := range views {
+		views[index].CreatedByDisplayName = names[views[index].CreatedByUserID]
+		views[index].Subject = boundSubject(subjects[views[index].ID])
+	}
+
+	return nil
+}
+
+// subjectReader reads the subject of each given Job of one type.
+type subjectReader func(context.Context, []model.JobID) (map[model.JobID]string, error)
+
+// subjectResolver is the closed set of Job types that say what they are about;
+// every other type has no subject.
+func (s *Operations) subjectResolver(jobType model.JobType) subjectReader {
+	switch jobType {
+	case model.JobTypeExamExportBuild:
+		return s.examExportBuildSubjects
+	default:
+		return nil
+	}
+}
+
+// examExportBuildSubjects names the Exam, by the title of the sealed revision
+// its Sitting runs, that each export build Job archives.
+func (s *Operations) examExportBuildSubjects(ctx context.Context, ids []model.JobID) (map[model.JobID]string, error) {
+	titles, err := s.deps.ExamExports.ListBuildTitles(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
-	if record == nil || !r.operatorVisible(record.Type) {
-		return nil, store.NewErrNotFound("job", id.String())
+	result := make(map[model.JobID]string, len(titles))
+	for _, title := range titles {
+		result[title.JobID] = title.Title
 	}
-	return record, nil
+	return result, nil
 }
 
-func (r *Engine) operatorTypes() []model.JobType {
-	result := make([]model.JobType, 0)
-	for _, jobType := range r.registry.Types() {
-		if r.operatorVisible(jobType) {
-			result = append(result, jobType)
-		}
+// maximumSubjectLength bounds the subject an operator sees, in characters.
+const maximumSubjectLength = 200
+
+func boundSubject(subject string) string {
+	subject = strings.TrimSpace(subject)
+	if utf8.RuneCountInString(subject) <= maximumSubjectLength {
+		return subject
 	}
-	return result
+	return string([]rune(subject)[:maximumSubjectLength])
 }
 
-func (r *Engine) operatorVisible(jobType model.JobType) bool {
-	descriptor, err := r.registry.Descriptor(jobType)
-	return err == nil && descriptor.Visibility == VisibilityOperator
-}
-
-func project(record *model.Job) View {
-	view := View{ID: record.ID, Type: record.Type, Status: record.Status, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt, AvailableAt: record.AvailableAt, StartedAt: record.StartedAt, CompletedAt: record.CompletedAt, PublicErrorCode: record.PublicErrorCode, AttemptCount: record.AttemptCount, MaximumAttempts: record.MaximumAttempts, Revision: record.Revision, CreatedByUserID: record.CreatedByUserID}
-	if record.Progress != nil {
-		progress := *record.Progress
-		view.Progress = &progress
-	}
-	return view
-}
-
-func cloneView(view View) View {
-	if view.Progress != nil {
-		progress := *view.Progress
-		view.Progress = &progress
-	}
-	return view
-}
-
-func projectAttempt(record model.JobAttempt) AttemptView {
-	return AttemptView{ID: record.ID, Number: record.Number, Status: record.Status, StartedAt: record.StartedAt, HeartbeatAt: record.HeartbeatAt, LeaseExpiresAt: record.LeaseExpiresAt, CompletedAt: record.CompletedAt, PublicErrorCode: record.PublicErrorCode}
-}
-
-func validAuditReference(audit AuditReference) bool { return audit.EventID != "" && !audit.At.IsZero() }
-
-func publicStatus(status model.JobStatus) bool {
-	switch status {
-	case model.JobStatusQueued, model.JobStatusRunning, model.JobStatusCancelRequested, model.JobStatusSucceeded, model.JobStatusFailed, model.JobStatusCanceled:
-		return true
-	default:
-		return false
-	}
+var operationsStoreErrors = apperror.StoreTable{
+	Rules: []apperror.StoreRule{
+		{Kind: apperror.StoreSentinel, Sentinel: ErrQueryInvalid, Code: "job.query.invalid"},
+		{Kind: apperror.StoreSentinel, Sentinel: ErrCancelUnsupported, Code: "job.cancel.unsupported"},
+		{Kind: apperror.StoreSentinel, Sentinel: ErrRetryUnsupported, Code: "job.retry.unsupported"},
+	},
+	NotFound:    "resource.not_found",
+	Conflict:    "job.conflict",
+	Unavailable: "job.unavailable",
 }

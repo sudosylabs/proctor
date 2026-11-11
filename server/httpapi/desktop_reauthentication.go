@@ -11,23 +11,48 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 // DesktopReauthentication lets a Desktop Session confirm its own User again
 // in the system browser and redeem that proof as recent authentication.
 type DesktopReauthentication interface {
-	StartDesktopReauthentication(context.Context, invocation.Invocation, app.StartDesktopReauthenticationCommand) (*app.DesktopReauthenticationStart, error)
-	BindDesktopReauthentication(context.Context, invocation.Invocation, app.BindDesktopAuthorizationCommand) (*app.DesktopAuthorizationBinding, error)
-	DesktopReauthenticationContext(context.Context, invocation.Invocation, string) (*app.DesktopReauthenticationBrowserContext, error)
-	AuthenticateDesktopReauthenticationPassword(context.Context, invocation.Invocation, app.AuthenticateDesktopReauthenticationPasswordCommand) (*app.DesktopReauthenticationBrowserContext, error)
-	BeginDesktopReauthenticationExternalAuthentication(context.Context, invocation.Invocation, app.BeginDesktopReauthenticationExternalAuthenticationCommand) (*model.ExternalAuthenticationStart, error)
-	ApproveDesktopReauthentication(context.Context, invocation.Invocation, app.ApproveDesktopAuthorizationCommand) (*app.DesktopAuthorizationApproval, error)
-	CancelDesktopReauthentication(context.Context, invocation.Invocation, app.ApproveDesktopAuthorizationCommand) error
-	CompleteDesktopReauthentication(context.Context, invocation.Invocation, app.CompleteDesktopReauthenticationCommand) (*app.DesktopReauthenticationResult, error)
+	StartDesktopReauthentication(
+		context.Context,
+		invocation.Invocation,
+		identity.StartDesktopReauthenticationCommand,
+	) (*identity.DesktopReauthenticationStart, error)
+	BindDesktopReauthentication(
+		context.Context,
+		invocation.Invocation,
+		identity.BindDesktopAuthorizationCommand,
+	) (*identity.DesktopAuthorizationBinding, error)
+	DesktopReauthenticationContext(context.Context, invocation.Invocation, string) (*identity.DesktopReauthenticationBrowserContext, error)
+	AuthenticateDesktopReauthenticationPassword(
+		context.Context,
+		invocation.Invocation,
+		identity.AuthenticateDesktopReauthenticationPasswordCommand,
+	) (*identity.DesktopReauthenticationBrowserContext, error)
+	BeginDesktopReauthenticationExternalAuthentication(
+		context.Context,
+		invocation.Invocation,
+		identity.BeginDesktopReauthenticationExternalAuthenticationCommand,
+	) (*model.ExternalAuthenticationStart, error)
+	ApproveDesktopReauthentication(
+		context.Context,
+		invocation.Invocation,
+		identity.ApproveDesktopAuthorizationCommand,
+	) (*identity.DesktopAuthorizationApproval, error)
+	CancelDesktopReauthentication(context.Context, invocation.Invocation, identity.ApproveDesktopAuthorizationCommand) error
+	CompleteDesktopReauthentication(
+		context.Context,
+		invocation.Invocation,
+		identity.CompleteDesktopReauthenticationCommand,
+	) (*identity.DesktopReauthenticationResult, error)
 }
 
 type desktopReauthenticationStartRequest struct {
@@ -58,181 +83,350 @@ type desktopReauthenticationContextResponse struct {
 	ExpiresAt            string                                  `json:"expires_at"`
 }
 
-type desktopReauthenticationResourceModule struct {
-	application DesktopReauthentication
-	cookies     browserCookies
+type desktopReauthenticationHandlers struct {
+	app     DesktopReauthentication
+	cookies route.Cookies
 }
 
-func desktopReauthenticationResource(application DesktopReauthentication, cookies browserCookies) apiResource {
-	m := desktopReauthenticationResourceModule{application: application, cookies: cookies}
-	base := apiPath(literal("auth"), literal("desktop"), literal("reauthentications"))
-	return newResource("desktop_reauthentication",
-		sessionRoute(http.MethodPost, base, []string{"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.desktop_reauthentication.invalid", "authentication.internal"}, m.start),
-		publicRoute(http.MethodPost, appendRoutePath(base, literal("bind")), []string{"request.invalid", "authentication.desktop_reauthentication.invalid", "authentication.internal"}, m.bind),
-		publicRoute(http.MethodGet, appendRoutePath(base, literal("context")), []string{"authentication.desktop_reauthentication.invalid", "authentication.internal", "authentication.credential_ambiguous"}, m.context),
-		publicRoute(http.MethodPost, appendRoutePath(base, literal("authenticate"), literal("password")), []string{"request.invalid", "authentication.desktop_reauthentication.invalid", "authentication.reauthentication_method_required", "authentication.desktop_reauthentication.denied", "authentication.credentials_invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.internal", "authentication.credential_ambiguous", "audit.unavailable", "service.busy"}, m.authenticatePassword),
-		protocolRoute("desktop-reauthentication-external-login", RouteProtocolRedirect, AuthPublic, http.MethodGet,
-			appendRoutePath(base, literal("authenticate"), literal("providers"), providerID("provider_id"), literal("login")),
-			[]string{"request.invalid", "authentication.desktop_reauthentication.invalid", "authentication.reauthentication_method_required", "authentication.internal", "authentication.external.provider_not_found", "authentication.external.request.invalid", "authentication.external.unavailable", "authentication.external.account_not_linked", "authentication.external.rejected", "authentication.desktop_authorization.invalid", "authentication.token_invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.credential_ambiguous"}, m.authenticateExternal),
-		publicRoute(http.MethodPost, appendRoutePath(base, literal("approve")), []string{"request.invalid", "authentication.desktop_reauthentication.invalid", "authentication.internal", "authentication.credential_ambiguous"}, m.approve),
-		publicRoute(http.MethodPost, appendRoutePath(base, literal("cancel")), []string{"request.invalid", "authentication.desktop_reauthentication.invalid", "authentication.internal", "authentication.credential_ambiguous"}, m.cancel),
-		sessionRoute(http.MethodPost, appendRoutePath(base, literal("complete")), []string{"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.desktop_reauthentication.invalid", "authentication.credentials_invalid", "authentication.internal", "audit.unavailable"}, m.complete),
+func desktopReauthenticationResource(app DesktopReauthentication, cookies route.Cookies) route.Resource {
+	h := desktopReauthenticationHandlers{app: app, cookies: cookies}
+	base := "/auth/desktop/reauthentications"
+	return route.NewResource("desktop_reauthentication",
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   base,
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{
+				"request.invalid",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"authentication.desktop_reauthentication.invalid",
+				"authentication.internal",
+			},
+			Handle: h.start,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/desktop/reauthentications/bind",
+			Auth:   route.AuthPublic,
+			Errors: []string{"request.invalid", "authentication.desktop_reauthentication.invalid", "authentication.internal"},
+			Handle: h.bind,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/auth/desktop/reauthentications/context",
+			Auth:   route.AuthPublic,
+			Errors: []string{"authentication.desktop_reauthentication.invalid", "authentication.internal", "authentication.credential_ambiguous"},
+			Handle: h.context,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/desktop/reauthentications/authenticate/password",
+			Auth:   route.AuthPublic,
+			Errors: []string{
+				"request.invalid",
+				"authentication.desktop_reauthentication.invalid",
+				"authentication.reauthentication_method_required",
+				"authentication.desktop_reauthentication.denied",
+				"authentication.credentials_invalid",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"authentication.internal",
+				"authentication.credential_ambiguous",
+				"audit.unavailable",
+				"service.busy",
+			},
+			Handle: h.authenticatePassword,
+		},
+		route.Endpoint{
+			Method:       http.MethodGet,
+			Path:         "/auth/desktop/reauthentications/authenticate/providers/{provider_id:provider}/login",
+			Auth:         route.AuthPublic,
+			ProtocolName: "desktop-reauthentication-external-login",
+			ProtocolKind: route.ProtocolRedirect,
+			Errors: []string{
+				"request.invalid",
+				"authentication.desktop_reauthentication.invalid",
+				"authentication.reauthentication_method_required",
+				"authentication.internal",
+				"authentication.external.provider_not_found",
+				"authentication.external.request.invalid",
+				"authentication.external.unavailable",
+				"authentication.external.account_not_linked",
+				"authentication.external.rejected",
+				"authentication.desktop_authorization.invalid",
+				"authentication.token_invalid",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"authentication.credential_ambiguous",
+			},
+			Protocol: h.authenticateExternal,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/desktop/reauthentications/approve",
+			Auth:   route.AuthPublic,
+			Errors: []string{
+				"request.invalid",
+				"authentication.desktop_reauthentication.invalid",
+				"authentication.internal",
+				"authentication.credential_ambiguous",
+			},
+			Handle: h.approve,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/desktop/reauthentications/cancel",
+			Auth:   route.AuthPublic,
+			Errors: []string{
+				"request.invalid",
+				"authentication.desktop_reauthentication.invalid",
+				"authentication.internal",
+				"authentication.credential_ambiguous",
+			},
+			Handle: h.cancel,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/desktop/reauthentications/complete",
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{
+				"request.invalid",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"authentication.desktop_reauthentication.invalid",
+				"authentication.credentials_invalid",
+				"authentication.internal",
+				"audit.unavailable",
+			},
+			Handle: h.complete,
+		},
 	)
 }
 
-func (m desktopReauthenticationResourceModule) start(request operationRequest) (operationResult, error) {
+func (h desktopReauthenticationHandlers) start(request route.Request) (route.Result, error) {
 	var input desktopReauthenticationStartRequest
-	if err := request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
 	}
-	result, err := m.application.StartDesktopReauthentication(request.context, request.invocation(), app.StartDesktopReauthenticationCommand{
-		CallbackURL: input.CallbackURL, State: input.State, CodeChallenge: input.CodeChallenge, Source: request.metadata.IPAddress,
-	})
+
+	result, err := h.app.StartDesktopReauthentication(
+		request.Context,
+		request.Invocation(),
+		identity.StartDesktopReauthenticationCommand{
+			CallbackURL:   input.CallbackURL,
+			State:         input.State,
+			CodeChallenge: input.CodeChallenge,
+			Source:        request.Metadata.IPAddress,
+		},
+	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusCreated, desktopAuthorizationStartResponse{AuthorizationURL: result.AuthorizationURL,
-		ExpiresAt: model.FormatRFC3339(result.ExpiresAt)}).withHeaders(noStoreHeaders()), nil
+
+	return route.JSON(http.StatusCreated, desktopAuthorizationStartResponse{AuthorizationURL: result.AuthorizationURL,
+		ExpiresAt: model.FormatRFC3339(result.ExpiresAt)}).WithHeaders(noStoreHeaders()), nil
 }
 
-func (m desktopReauthenticationResourceModule) bind(request operationRequest) (operationResult, error) {
+func (h desktopReauthenticationHandlers) bind(request route.Request) (route.Result, error) {
 	var input desktopAuthorizationProofRequest
-	if err := request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
 	}
-	result, err := m.application.BindDesktopReauthentication(request.context, request.invocation(), app.BindDesktopAuthorizationCommand{
-		Handle: input.Handle, BrowserProof: input.BrowserProof, State: input.State,
+
+	result, err := h.app.BindDesktopReauthentication(request.Context, request.Invocation(), identity.BindDesktopAuthorizationCommand{
+		Handle:       input.Handle,
+		BrowserProof: input.BrowserProof,
+		State:        input.State,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	headers := captureResponseHeaders(func(writer http.ResponseWriter) {
-		m.cookies.attachDesktopReauthenticationBinding(writer, result.Binding, result.ExpiresAt)
+
+	headers := route.CaptureHeaders(func(writer http.ResponseWriter) {
+		h.cookies.AttachDesktopReauthenticationBinding(writer, result.Binding, result.ExpiresAt)
 	})
 	headers.Set("Cache-Control", "no-store")
-	return noContentResult().withHeaders(headers), nil
+	return route.NoContent().WithHeaders(headers), nil
 }
 
-func (m desktopReauthenticationResourceModule) context(request operationRequest) (operationResult, error) {
-	binding, err := m.binding(request.request)
+func (h desktopReauthenticationHandlers) context(request route.Request) (route.Result, error) {
+	binding, err := h.binding(request.HTTP)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	result, err := m.application.DesktopReauthenticationContext(request.context, request.invocation(), binding)
+	result, err := h.app.DesktopReauthenticationContext(request.Context, request.Invocation(), binding)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, desktopReauthenticationContextResponseFromApplication(result)).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, desktopReauthenticationContextResponseFromApplication(result)).WithHeaders(noStoreHeaders()), nil
 }
 
-func (m desktopReauthenticationResourceModule) authenticatePassword(request operationRequest) (operationResult, error) {
-	binding, err := m.binding(request.request)
+func (h desktopReauthenticationHandlers) authenticatePassword(request route.Request) (route.Result, error) {
+	binding, err := h.binding(request.HTTP)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	var input desktopReauthenticationPasswordRequest
-	if err = request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
 	}
-	result, err := m.application.AuthenticateDesktopReauthenticationPassword(request.context, request.invocation(), app.AuthenticateDesktopReauthenticationPasswordCommand{
-		Binding: binding, Password: input.Password, Source: request.metadata.IPAddress,
-	})
+
+	result, err := h.app.AuthenticateDesktopReauthenticationPassword(
+		request.Context,
+		request.Invocation(),
+		identity.AuthenticateDesktopReauthenticationPasswordCommand{
+			Binding:  binding,
+			Password: input.Password,
+			Source:   request.Metadata.IPAddress,
+		},
+	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, desktopReauthenticationContextResponseFromApplication(result)).withHeaders(noStoreHeaders()), nil
+
+	return route.JSON(http.StatusOK, desktopReauthenticationContextResponseFromApplication(result)).WithHeaders(noStoreHeaders()), nil
 }
 
-func (m desktopReauthenticationResourceModule) authenticateExternal(request operationRequest) (protocolResult, error) {
-	binding, err := m.binding(request.request)
+func (h desktopReauthenticationHandlers) authenticateExternal(request route.Request) (route.ProtocolResult, error) {
+	binding, err := h.binding(request.HTTP)
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
-	provider, err := request.params.RequireProviderID()
+
+	provider, err := route.PathProviderID(request, "provider_id")
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
-	start, err := m.application.BeginDesktopReauthenticationExternalAuthentication(request.context, request.invocation(), app.BeginDesktopReauthenticationExternalAuthenticationCommand{
-		ProviderID: provider, Binding: binding, State: request.request.URL.Query().Get("state"), Source: request.metadata.IPAddress,
-	})
+
+	start, err := h.app.BeginDesktopReauthenticationExternalAuthentication(
+		request.Context,
+		request.Invocation(),
+		identity.BeginDesktopReauthenticationExternalAuthenticationCommand{
+			ProviderID: provider,
+			Binding:    binding,
+			State:      request.HTTP.URL.Query().Get("state"),
+			Source:     request.Metadata.IPAddress,
+		},
+	)
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
-	headers := captureResponseHeaders(func(writer http.ResponseWriter) {
-		m.cookies.attachExternalLoginBinding(writer, start.Binding, start.ExpiresAt)
+
+	headers := route.CaptureHeaders(func(writer http.ResponseWriter) {
+		h.cookies.AttachExternalLoginBinding(writer, start.Binding, start.ExpiresAt)
 	})
 	headers.Set("Cache-Control", "no-store")
-	return redirectProtocolResult(start.RedirectURL).withHeaders(headers), nil
+	return route.Redirect(start.RedirectURL).WithHeaders(headers), nil
 }
 
-func (m desktopReauthenticationResourceModule) approve(request operationRequest) (operationResult, error) {
-	binding, err := m.binding(request.request)
+func (h desktopReauthenticationHandlers) approve(request route.Request) (route.Result, error) {
+	binding, err := h.binding(request.HTTP)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	var input desktopAuthorizationStateRequest
-	if err = request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
 	}
-	result, err := m.application.ApproveDesktopReauthentication(request.context, request.invocation(), app.ApproveDesktopAuthorizationCommand{Binding: binding, State: input.State})
+
+	result, err := h.app.ApproveDesktopReauthentication(
+		request.Context,
+		request.Invocation(),
+		identity.ApproveDesktopAuthorizationCommand{Binding: binding, State: input.State},
+	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	headers := captureResponseHeaders(m.cookies.clearDesktopReauthenticationBinding)
+
+	headers := route.CaptureHeaders(h.cookies.ClearDesktopReauthenticationBinding)
 	headers.Set("Cache-Control", "no-store")
-	return jsonResult(http.StatusOK, desktopAuthorizationApprovalResponse{RedirectURL: result.RedirectURL, ExpiresAt: wireTimeFromMillis(result.ExpiresAt)}).withHeaders(headers), nil
+	return route.JSON(
+		http.StatusOK,
+		desktopAuthorizationApprovalResponse{RedirectURL: result.RedirectURL, ExpiresAt: route.WireTimeFromMillis(result.ExpiresAt)},
+	).WithHeaders(headers), nil
 }
 
-func (m desktopReauthenticationResourceModule) cancel(request operationRequest) (operationResult, error) {
-	binding, err := m.binding(request.request)
+func (h desktopReauthenticationHandlers) cancel(request route.Request) (route.Result, error) {
+	binding, err := h.binding(request.HTTP)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	var input desktopAuthorizationStateRequest
-	if err = request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
 	}
-	if err = m.application.CancelDesktopReauthentication(request.context, request.invocation(), app.ApproveDesktopAuthorizationCommand{Binding: binding, State: input.State}); err != nil {
-		return operationResult{}, err
+
+	if err = h.app.CancelDesktopReauthentication(
+		request.Context,
+		request.Invocation(),
+		identity.ApproveDesktopAuthorizationCommand{Binding: binding, State: input.State},
+	); err != nil {
+		return route.Result{}, err
 	}
-	headers := captureResponseHeaders(m.cookies.clearDesktopReauthenticationBinding)
+
+	headers := route.CaptureHeaders(h.cookies.ClearDesktopReauthenticationBinding)
 	headers.Set("Cache-Control", "no-store")
-	return noContentResult().withHeaders(headers), nil
+	return route.NoContent().WithHeaders(headers), nil
 }
 
-func (m desktopReauthenticationResourceModule) complete(request operationRequest) (operationResult, error) {
+func (h desktopReauthenticationHandlers) complete(request route.Request) (route.Result, error) {
 	var input desktopReauthenticationCompleteRequest
-	if err := request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
 	}
-	result, err := m.application.CompleteDesktopReauthentication(request.context, request.invocation(), app.CompleteDesktopReauthenticationCommand{
-		Code: input.Code, CodeVerifier: input.CodeVerifier, State: input.State, Source: request.metadata.IPAddress,
-	})
+
+	result, err := h.app.CompleteDesktopReauthentication(
+		request.Context,
+		request.Invocation(),
+		identity.CompleteDesktopReauthenticationCommand{
+			Code:         input.Code,
+			CodeVerifier: input.CodeVerifier,
+			State:        input.State,
+			Source:       request.Metadata.IPAddress,
+		},
+	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, desktopReauthenticationCompleteResponse{
+
+	return route.JSON(http.StatusOK, desktopReauthenticationCompleteResponse{
 		RecentlyAuthenticatedUntil: model.FormatRFC3339(result.RecentlyAuthenticatedUntil),
-	}).withHeaders(noStoreHeaders()), nil
+	}).WithHeaders(noStoreHeaders()), nil
 }
 
-func (m desktopReauthenticationResourceModule) binding(request *http.Request) (string, error) {
-	binding, err := singleCookieValue(request, BrowserDesktopReauthenticationCookieName)
+func (h desktopReauthenticationHandlers) binding(request *http.Request) (string, error) {
+	binding, err := route.CookieValue(request, route.BrowserDesktopReauthenticationCookieName)
 	if err != nil || binding == "" {
 		return "", apperror.New("authentication.desktop_reauthentication.invalid")
 	}
 	return binding, nil
 }
 
-func desktopReauthenticationContextResponseFromApplication(value *app.DesktopReauthenticationBrowserContext) desktopReauthenticationContextResponse {
+func desktopReauthenticationContextResponseFromApplication(
+	value *identity.DesktopReauthenticationBrowserContext,
+) desktopReauthenticationContextResponse {
 	if value == nil {
 		return desktopReauthenticationContextResponse{}
 	}
-	result := desktopReauthenticationContextResponse{State: string(value.State), DisplayName: value.DisplayName,
-		AuthenticationMethod: "password", ExpiresAt: model.FormatRFC3339(value.ExpiresAt)}
+
+	result := desktopReauthenticationContextResponse{
+		State:                string(value.State),
+		DisplayName:          value.DisplayName,
+		AuthenticationMethod: "password",
+		ExpiresAt:            model.FormatRFC3339(value.ExpiresAt),
+	}
 	if value.Provider != nil {
 		result.AuthenticationMethod = "external"
-		result.Provider = &externalAuthenticationProviderResponse{ID: value.Provider.ID, DisplayName: value.Provider.DisplayName, Type: value.Provider.Type}
+		result.Provider = &externalAuthenticationProviderResponse{
+			ID:          value.Provider.ID,
+			DisplayName: value.Provider.DisplayName,
+			Type:        value.Provider.Type,
+		}
 	}
+
 	return result
 }

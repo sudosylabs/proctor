@@ -49,8 +49,10 @@ An operation change normally touches these surfaces together:
 6. **Consumer adapters** — regenerate webapp API types or update authored API
    recipes when the public contract requires it.
 
-The HTTP Routing Kernel is sealed before serving. Add the resource to its
-explicit production catalog; do not register routes through initialization,
+The HTTP Routing Kernel, package `server/httpapi/route`, is sealed before
+serving. Resources in `server/httpapi` are written against its exported names
+and never reach behind them. Add the resource to the explicit production
+catalog in `server/httpapi/resources.go`; do not register routes through initialization,
 expose router internals, or add a generic response-writer escape hatch.
 
 ## Trace the Sealed Route Catalog
@@ -61,14 +63,18 @@ The production route path is intentionally searchable:
 httpapi.New
   → productionResources
   → one cohesive <domain>Resource
-  → publicRoute / principalRoute / sessionRoute / …
-  → catalog validation and immutable dispatch
+  → one route.Endpoint{…} literal per route
+  → route.New: catalog validation and immutable dispatch
   → one application capability
 ```
 
-The resource constructor declares typed paths, operations, credential
-requirements, allowed public errors, body limits, idempotency, and any named
-protocol-specific result. It retains only its narrow application capability.
+The resource constructor declares each route as one `route.Endpoint` struct
+literal with named fields: `Method`, `Path`, `Auth`, `Errors`, and the
+operation in `Handle`. `Auth` is always written, including `route.AuthPublic`.
+The handler receives a `route.Request` and returns a `route.Result` or the
+application's error. A route sets
+`Idempotency`, `MaxBodyBytes`, or a named `Protocol` operation only when it
+needs one. It retains only its narrow application capability.
 It never retains the complete HTTP options, application facade, router, root
 Store, platform, or concrete adapter.
 

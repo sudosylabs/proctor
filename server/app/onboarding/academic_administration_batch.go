@@ -1,0 +1,468 @@
+// ---------------------------------------------------------------------------------------------
+// Copyright (c) 2026 Sudosy Labs. All rights reserved.
+// Licensed under the GNU Affero General Public License, version 3 only.
+// See LICENSE in the server module root for license information.
+// SPDX-License-Identifier: AGPL-3.0-only
+// ---------------------------------------------------------------------------------------------
+//
+// Application-owned academic administration follows Mattermost's pattern:
+// authorize at the use-case boundary, keep persistence behind per-model
+// stores, and surround every durable mutation with an authoritative audit.
+
+package onboarding
+
+import (
+	"context"
+	"crypto/sha256"
+	"errors"
+	"slices"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/idempotency"
+	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
+)
+
+// MaximumAcademicAdministrationBatchItems bounds one batch request.
+const MaximumAcademicAdministrationBatchItems = 200
+
+// AcademicAdministrationBatchOperation names the one change a batch applies
+// to every item.
+type AcademicAdministrationBatchOperation string
+
+// The operations a batch may apply.
+const (
+	AcademicAdministrationAffiliationAdd        AcademicAdministrationBatchOperation = "affiliation.add"
+	AcademicAdministrationAffiliationEnd        AcademicAdministrationBatchOperation = "affiliation.end"
+	AcademicAdministrationAcademicUnitMemberAdd AcademicAdministrationBatchOperation = "academic_unit_member.add"
+	AcademicAdministrationAcademicUnitMemberEnd AcademicAdministrationBatchOperation = "academic_unit_member.end"
+	AcademicAdministrationClassEnroll           AcademicAdministrationBatchOperation = "class.enroll"
+	AcademicAdministrationClassEnd              AcademicAdministrationBatchOperation = "class.end"
+	AcademicAdministrationClassTransfer         AcademicAdministrationBatchOperation = "class.transfer"
+	AcademicAdministrationRoleBindingCreate     AcademicAdministrationBatchOperation = "role_binding.create"
+	AcademicAdministrationRoleBindingEnd        AcademicAdministrationBatchOperation = "role_binding.end"
+	AcademicAdministrationUserEnable            AcademicAdministrationBatchOperation = "user.enable"
+	AcademicAdministrationUserDisable           AcademicAdministrationBatchOperation = "user.disable"
+	AcademicAdministrationUserSessionsRevoke    AcademicAdministrationBatchOperation = "user_sessions.revoke"
+)
+
+// IsValid reports whether o is a supported academic administration batch
+// operation.
+func (o AcademicAdministrationBatchOperation) IsValid() bool {
+	switch o {
+	case AcademicAdministrationAffiliationAdd,
+		AcademicAdministrationAffiliationEnd,
+		AcademicAdministrationAcademicUnitMemberAdd,
+		AcademicAdministrationAcademicUnitMemberEnd,
+		AcademicAdministrationClassEnroll,
+		AcademicAdministrationClassEnd,
+		AcademicAdministrationClassTransfer,
+		AcademicAdministrationRoleBindingCreate,
+		AcademicAdministrationRoleBindingEnd,
+		AcademicAdministrationUserEnable,
+		AcademicAdministrationUserDisable,
+		AcademicAdministrationUserSessionsRevoke:
+		return true
+	default:
+		return false
+	}
+}
+
+func (o AcademicAdministrationBatchOperation) requiresStrongRecentSession() bool {
+	switch o {
+	case AcademicAdministrationRoleBindingCreate,
+		AcademicAdministrationRoleBindingEnd,
+		AcademicAdministrationUserEnable,
+		AcademicAdministrationUserDisable,
+		AcademicAdministrationUserSessionsRevoke:
+		return true
+	default:
+		return false
+	}
+}
+
+// AcademicAdministrationBatchItemCommand is a closed union. Fields that are
+// not owned by the batch operation make only that row invalid.
+type AcademicAdministrationBatchItemCommand struct {
+	IdempotencyKey  string
+	UserID          model.UserID
+	RelationshipID  string
+	RoleID          model.RoleID
+	AffiliationKind model.AffiliationKind
+	StartAt         int64
+	EndAt           int64
+}
+
+type RunAcademicAdministrationBatchCommand struct {
+	Operation                     AcademicAdministrationBatchOperation
+	ScopeType                     model.RoleScopeType
+	ScopeID                       string
+	IdempotencyKey                string
+	Items                         []AcademicAdministrationBatchItemCommand
+	onboardingImportID            model.OnboardingImportID
+	onboardingImportRowNumber     int
+	progression                   bool
+	progressionSourceAuditID      model.AuditEventID
+	progressionDestinationAuditID model.AuditEventID
+}
+
+// AcademicAdministrationBatchItemResult is the outcome of one item, by its
+// position in the request. ErrorCode is set only when the item failed.
+type AcademicAdministrationBatchItemResult struct {
+	Index      int
+	Status     InvitationBatchItemStatus
+	ResourceID string
+	ErrorCode  string
+}
+
+// AcademicAdministrationBatchResult reports every item of a batch; one item
+// failing does not stop the others.
+type AcademicAdministrationBatchResult struct {
+	Operation AcademicAdministrationBatchOperation
+	Items     []AcademicAdministrationBatchItemResult
+	Succeeded int
+	NoOp      int
+	Failed    int
+}
+
+// RunAcademicAdministrationBatch runs one closed academic administration operation over up to
+// MaximumAcademicAdministrationBatchItems rows, each through the ordinary
+// academic, administration or identity command, after one batch
+// authorization at the scope.
+func (s *Service) RunAcademicAdministrationBatch(
+	ctx context.Context,
+	inv invocation.Invocation,
+	command RunAcademicAdministrationBatchCommand,
+) (AcademicAdministrationBatchResult, error) {
+	command.ScopeID = strings.TrimSpace(command.ScopeID)
+	if !command.Operation.IsValid() ||
+		!model.IsValidOpaqueID(command.ScopeID) ||
+		command.IdempotencyKey == "" ||
+		len(command.Items) < 1 ||
+		len(command.Items) > MaximumAcademicAdministrationBatchItems ||
+		!academicAdministrationBatchScopeMatches(command.Operation, command.ScopeType) {
+		return AcademicAdministrationBatchResult{}, apperror.New("request.invalid")
+	}
+
+	resource, err := academicAdministrationBatchResource(command.ScopeType, command.ScopeID)
+	if err != nil {
+		return AcademicAdministrationBatchResult{}, err
+	}
+
+	batchAction := model.ActionOnboardingBatchManage
+	if command.progression {
+		batchAction = model.ActionAcademicProgressionManage
+	}
+	if err = s.authorize(ctx, inv, batchAction, resource); err != nil {
+		return AcademicAdministrationBatchResult{}, err
+	}
+
+	if command.Operation.requiresStrongRecentSession() {
+		if err = access.RequireStrongRecentSession(inv.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
+			return AcademicAdministrationBatchResult{}, err
+		}
+	}
+
+	result := AcademicAdministrationBatchResult{
+		Operation: command.Operation,
+		Items:     make([]AcademicAdministrationBatchItemResult, len(command.Items)),
+	}
+	keyCounts := make(map[string]int, len(command.Items))
+	for _, item := range command.Items {
+		keyCounts[item.IdempotencyKey]++
+	}
+
+	winners := academicAdministrationDuplicateWinners(command, keyCounts)
+	order := make([]int, len(command.Items))
+	for index := range order {
+		order[index] = index
+	}
+
+	sort.SliceStable(order, func(left, right int) bool {
+		leftItem, rightItem := command.Items[order[left]], command.Items[order[right]]
+		leftKey := academicAdministrationBatchDuplicateKey(command, leftItem)
+		rightKey := academicAdministrationBatchDuplicateKey(command, rightItem)
+		leftDuplicate := leftKey != "" && winners[leftKey] != "" && winners[leftKey] != leftItem.IdempotencyKey
+		rightDuplicate := rightKey != "" && winners[rightKey] != "" && winners[rightKey] != rightItem.IdempotencyKey
+		if leftDuplicate != rightDuplicate {
+			return !leftDuplicate
+		}
+
+		return leftItem.IdempotencyKey < rightItem.IdempotencyKey
+	})
+	for _, index := range order {
+		item := command.Items[index]
+		outcome := AcademicAdministrationBatchItemResult{Index: index}
+		if validateAcademicAdministrationBatchItem(command.Operation, item) != nil || keyCounts[item.IdempotencyKey] != 1 {
+			outcome.Status, outcome.ErrorCode = InvitationBatchItemFailed, "request.invalid"
+			result.Items[index] = outcome
+			continue
+		}
+
+		itemKey := invitationBatchItemIdempotencyKey(command.IdempotencyKey, item.IdempotencyKey)
+		retained := false
+		if s.commandOutcomes != nil {
+			lookup := &store.CommandIdempotency{
+				UserID:    inv.Principal().UserID,
+				Operation: academicAdministrationCommandOperation(command.Operation),
+				KeyDigest: sha256.Sum256([]byte(itemKey)),
+				Retention: idempotency.Retention,
+				Wait:      idempotency.Wait,
+			}
+			retained, err = s.commandOutcomes.Has(ctx, lookup)
+			if err != nil {
+				outcome.Status, outcome.ErrorCode = InvitationBatchItemFailed, "administration.unavailable"
+				result.Items[index] = outcome
+				continue
+			}
+		}
+
+		duplicateKey := academicAdministrationBatchDuplicateKey(command, item)
+		winner := winners[duplicateKey]
+		metadata := &store.CommandBatch{GroupDigest: sha256.Sum256([]byte("proctor.academic_administration_batch\x00" + duplicateKey))}
+		if winner != item.IdempotencyKey {
+			canonicalKey := invitationBatchItemIdempotencyKey(command.IdempotencyKey, winner)
+			metadata.DuplicateOfKeyDigest = sha256.Sum256([]byte(canonicalKey))
+		}
+
+		outcome.ResourceID, outcome.Status, err = s.runAcademicAdministrationBatchItem(
+			ctx,
+			inv,
+			command,
+			item,
+			itemKey,
+			metadata,
+			retained,
+		)
+		if err != nil {
+			outcome.Status, outcome.ErrorCode = InvitationBatchItemFailed, academicAdministrationBatchPublicErrorCode(err)
+		}
+
+		result.Items[index] = outcome
+	}
+
+	for _, outcome := range result.Items {
+		switch outcome.Status {
+		case InvitationBatchItemSucceeded:
+			result.Succeeded++
+		case InvitationBatchItemNoOp:
+			result.NoOp++
+		case InvitationBatchItemFailed:
+			result.Failed++
+		}
+	}
+
+	return result, nil
+}
+
+func academicAdministrationCommandOperation(operation AcademicAdministrationBatchOperation) string {
+	switch operation {
+	case AcademicAdministrationAffiliationAdd:
+		return "affiliation.add"
+	case AcademicAdministrationAffiliationEnd:
+		return "affiliation.end"
+	case AcademicAdministrationAcademicUnitMemberAdd:
+		return "academic_unit_member.add"
+	case AcademicAdministrationAcademicUnitMemberEnd:
+		return "academic_unit_member.end"
+	case AcademicAdministrationClassEnroll, AcademicAdministrationClassTransfer:
+		return "class_member.enroll"
+	case AcademicAdministrationClassEnd:
+		return "class_member.end"
+	case AcademicAdministrationRoleBindingCreate:
+		return "role_binding.create"
+	case AcademicAdministrationRoleBindingEnd:
+		return "role_binding.end"
+	case AcademicAdministrationUserEnable, AcademicAdministrationUserDisable:
+		return "user.enabled_state"
+	case AcademicAdministrationUserSessionsRevoke:
+		return "user_sessions.revoke"
+	default:
+		return ""
+	}
+}
+
+func academicAdministrationDuplicateWinners(command RunAcademicAdministrationBatchCommand, keyCounts map[string]int) map[string]string {
+	winners := make(map[string]string, len(command.Items))
+	for _, item := range command.Items {
+		if keyCounts[item.IdempotencyKey] != 1 || validateAcademicAdministrationBatchItem(command.Operation, item) != nil {
+			continue
+		}
+		key := academicAdministrationBatchDuplicateKey(command, item)
+		if winner, exists := winners[key]; !exists || item.IdempotencyKey < winner {
+			winners[key] = item.IdempotencyKey
+		}
+	}
+	return winners
+}
+
+func academicAdministrationBatchDuplicateKey(
+	batch RunAcademicAdministrationBatchCommand,
+	item AcademicAdministrationBatchItemCommand,
+) string {
+	base := string(batch.Operation) + "\x00" + string(batch.ScopeType) + "\x00" + strings.TrimSpace(batch.ScopeID) + "\x00"
+	switch batch.Operation {
+	case AcademicAdministrationAffiliationAdd:
+		return base + strings.TrimSpace(item.UserID.String()) + "\x00" + string(item.AffiliationKind) + "\x00" +
+			strconv.FormatInt(item.StartAt, 10) + "\x00" + strconv.FormatInt(item.EndAt, 10)
+	case AcademicAdministrationAcademicUnitMemberAdd,
+		AcademicAdministrationClassEnroll,
+		AcademicAdministrationUserEnable,
+		AcademicAdministrationUserDisable,
+		AcademicAdministrationUserSessionsRevoke:
+		key := base + strings.TrimSpace(item.UserID.String())
+		if batch.Operation == AcademicAdministrationAcademicUnitMemberAdd || batch.Operation == AcademicAdministrationClassEnroll {
+			key += "\x00" + strconv.FormatInt(item.StartAt, 10) + "\x00" + strconv.FormatInt(item.EndAt, 10)
+		}
+
+		return key
+	case AcademicAdministrationClassTransfer:
+		return base + strings.TrimSpace(item.UserID.String()) + "\x00" + strings.TrimSpace(item.RelationshipID) + "\x00" +
+			strconv.FormatInt(item.StartAt, 10) + "\x00" + strconv.FormatInt(item.EndAt, 10)
+	case AcademicAdministrationRoleBindingCreate:
+		return base + strings.TrimSpace(item.UserID.String()) + "\x00" + strings.TrimSpace(item.RoleID.String()) + "\x00" +
+			strconv.FormatInt(item.StartAt, 10) + "\x00" + strconv.FormatInt(item.EndAt, 10)
+	default:
+		return base + strings.TrimSpace(item.RelationshipID)
+	}
+}
+
+func academicAdministrationBatchScopeMatches(operation AcademicAdministrationBatchOperation, scopeType model.RoleScopeType) bool {
+	switch operation {
+	case AcademicAdministrationAcademicUnitMemberAdd, AcademicAdministrationAcademicUnitMemberEnd:
+		return scopeType == model.RoleScopeAcademicUnit
+	case AcademicAdministrationClassEnroll, AcademicAdministrationClassEnd, AcademicAdministrationClassTransfer:
+		return scopeType == model.RoleScopeClass
+	case AcademicAdministrationRoleBindingCreate, AcademicAdministrationRoleBindingEnd:
+		return scopeType == model.RoleScopeInstitution || scopeType == model.RoleScopeAcademicUnit || scopeType == model.RoleScopeClass
+	case AcademicAdministrationAffiliationAdd, AcademicAdministrationAffiliationEnd:
+		return scopeType == model.RoleScopeInstitution
+	case AcademicAdministrationUserEnable, AcademicAdministrationUserDisable, AcademicAdministrationUserSessionsRevoke:
+		return scopeType == model.RoleScopeInstitution
+	default:
+		return false
+	}
+}
+
+func academicAdministrationBatchResource(scopeType model.RoleScopeType, scopeID string) (model.Resource, error) {
+	switch scopeType {
+	case model.RoleScopeInstitution:
+		return model.Resource{Type: model.ResourceInstitution, ID: scopeID}, nil
+	case model.RoleScopeAcademicUnit:
+		return model.Resource{Type: model.ResourceAcademicUnit, ID: scopeID}, nil
+	case model.RoleScopeClass:
+		return model.Resource{Type: model.ResourceClass, ID: scopeID}, nil
+	default:
+		return model.Resource{}, apperror.New("request.invalid")
+	}
+}
+
+func validateAcademicAdministrationBatchItem(
+	operation AcademicAdministrationBatchOperation,
+	item AcademicAdministrationBatchItemCommand,
+) error {
+	if !validInvitationBatchItemKey(item.IdempotencyKey) {
+		return errors.New("invalid academic administration batch item key")
+	}
+
+	userID, relationshipID, roleID :=
+		strings.TrimSpace(item.UserID.String()),
+		strings.TrimSpace(item.RelationshipID),
+		strings.TrimSpace(item.RoleID.String())
+	hasUser, hasRelationship, hasRole := userID != "", relationshipID != "", roleID != ""
+	validBounds := item.StartAt >= 0 && item.EndAt >= 0 && (item.EndAt == 0 || item.EndAt > item.StartAt)
+
+	switch operation {
+	case AcademicAdministrationAffiliationAdd:
+		if !hasUser || hasRelationship || hasRole || !item.AffiliationKind.IsValid() || !validBounds {
+			return errors.New("invalid affiliation add item")
+		}
+	case AcademicAdministrationAffiliationEnd,
+		AcademicAdministrationAcademicUnitMemberEnd,
+		AcademicAdministrationClassEnd,
+		AcademicAdministrationRoleBindingEnd:
+		if hasUser || !hasRelationship || hasRole || item.AffiliationKind != "" || item.StartAt != 0 || item.EndAt != 0 {
+			return errors.New("invalid relationship end item")
+		}
+	case AcademicAdministrationAcademicUnitMemberAdd:
+		if !hasUser || hasRelationship || hasRole || item.AffiliationKind != "" || item.EndAt != 0 || !validBounds {
+			return errors.New("invalid Academic Unit membership add item")
+		}
+	case AcademicAdministrationClassEnroll:
+		if !hasUser || hasRelationship || hasRole || item.AffiliationKind != "" || !validBounds {
+			return errors.New("invalid relationship add item")
+		}
+	case AcademicAdministrationClassTransfer:
+		if !hasUser || !hasRelationship || hasRole || item.AffiliationKind != "" || !validBounds {
+			return errors.New("invalid Class transfer item")
+		}
+	case AcademicAdministrationRoleBindingCreate:
+		if !hasUser || hasRelationship || !hasRole || item.AffiliationKind != "" || !validBounds {
+			return errors.New("invalid Role Binding create item")
+		}
+	case AcademicAdministrationUserEnable, AcademicAdministrationUserDisable, AcademicAdministrationUserSessionsRevoke:
+		if !hasUser || hasRelationship || hasRole || item.AffiliationKind != "" || item.StartAt != 0 || item.EndAt != 0 {
+			return errors.New("invalid User operation item")
+		}
+	default:
+		return errors.New("invalid academic administration batch operation")
+	}
+
+	if hasUser && !model.UserID(userID).IsValid() ||
+		hasRelationship && !model.IsValidOpaqueID(relationshipID) ||
+		hasRole && !model.RoleID(roleID).IsValid() {
+		return errors.New("invalid academic administration identifier")
+	}
+
+	return nil
+}
+
+// AcademicAdministrationBatchErrorCodes is the closed catalogue of safe
+// failure codes an academic administration batch item reports. Any other
+// failure is reported as administration.unavailable.
+func AcademicAdministrationBatchErrorCodes() []string {
+	return []string{
+		"request.invalid",
+		"resource.not_found",
+		"authorization.denied",
+		"authorization.request.invalid",
+		"authorization.unavailable",
+		"audit.unavailable",
+		"administration.unavailable",
+		"mail.unavailable",
+		"authentication.token_invalid",
+		"authentication.strong_required",
+		"authentication.reauthentication_required",
+		"affiliation.invalid",
+		"affiliation.conflict",
+		"affiliation.student_has_active_enrollment",
+		"academic_unit_member.invalid",
+		"academic_unit_member.conflict",
+		"class_member.invalid",
+		"class_member.student_affiliation_required",
+		"class.enrollment_conflict",
+		"role_binding.invalid",
+		"role_binding.conflict",
+		"role_binding.last_system_admin",
+		"role_binding.system_admin_scope_invalid",
+		"user.invalid",
+		"user.conflict",
+		"user.last_system_admin",
+		"session.not_found",
+		"idempotency.conflict",
+		"idempotency.in_progress",
+		"onboarding_batch.duplicate",
+	}
+}
+
+func academicAdministrationBatchPublicErrorCode(err error) string {
+	if failure, ok := apperror.As(err); ok && slices.Contains(AcademicAdministrationBatchErrorCodes(), failure.Code()) {
+		return failure.Code()
+	}
+	return "administration.unavailable"
+}

@@ -68,6 +68,52 @@ These targets provision pinned dependencies, wait for health, and remove them
 after the test. If the requested service is unavailable, the test fails; it
 does not silently report success.
 
+Server integration tests carry the `integration` build tag, so the default
+`test`, `test-race`, and `check` targets stay hermetic: they need no
+PostgreSQL, Redis, SMTP, or S3. Tests backed only by a local `httptest` server
+remain in the default suite.
+
+`integration-postgres` discovers every `integration`-tagged test in the
+module-root, `app`, `cmd/proctor/commands`, and `store/sqlstore` packages, so
+a new PostgreSQL test needs no Makefile change. It skips only the WebSocket and
+Mailpit tests owned by `integration-realtime` and `phase-transactional-mail`;
+the S3 variants skip themselves unless `VFS_S3_*` is configured. The SQL
+package also runs the Store conformance suites through the local cache layer,
+which is why these targets allow a long per-package timeout. Individual
+operation and fixture deadlines still bound each test.
+`conformance-postgres` and `conformance-realtime` remain as aliases of
+`integration-postgres` and `integration-realtime`.
+
+The checked-in PostgreSQL service keeps its database on a temporary
+filesystem, so recreating it gives an empty database for the current baseline:
+
+```sh
+make -C server postgres-down
+make -C server postgres-up
+```
+
+For SMTP inspection without the root development stack, the same pinned
+Mailpit is available at SMTP `127.0.0.1:11025` and HTTP
+`http://127.0.0.1:18025` through `make -C server mailpit-up`, `mailpit-logs`,
+and `mailpit-down`.
+
+Three server phase gates combine suites for one area. Maintainers and CI use
+them to certify a phase:
+
+| Gate | What it combines |
+| --- | --- |
+| `make -C server phase-file-jobs` | The hermetic server check, PostgreSQL integration including clustered recovery, shared-object VFS integration, and `GOWORK=off` builds and tests of all four modules. |
+| `make -C server phase-access-onboarding` | The hermetic check plus the real composition graph, PostgreSQL-backed administration, multi-node protocol and recovery scenarios, decorated Store conformance, lock-order regressions, and the migration round trip. It certifies the server protocol and domain, not hosted pages or Desktop UI. |
+| `make -C server phase-transactional-mail` | The hermetic check, PostgreSQL integration, independent module builds and tests, template freshness and rendering, SMTP sender conformance, and an application-through-Mailpit flow. |
+
+The server module pins published revisions of the reusable modules, so an
+isolated `GOWORK=off` check cannot silently borrow newer APIs from `go.work`.
+Those versions must be published before the server module is distributed
+outside this repository. While the repository is private, Git must be
+authenticated for `github.com`; the server Makefile exports the matching
+`GOPRIVATE` pattern so Go bypasses the public module proxy and checksum
+database for these dependencies.
+
 ### 4. Browser Journeys Against a Real Server
 
 ```sh
@@ -170,3 +216,8 @@ node.
 4. Check the diff for secrets, local paths, snapshots, and unrelated changes.
 5. Run the highest relevant gate above.
 6. Report exactly what passed and any dependency-backed check that was not run.
+
+Verification evidence belongs to CI and release artifacts for the exact source
+commit being built. Generated OpenAPI stays tracked, but raw test logs,
+screenshots, and manually copied status matrices are not kept in the
+repository as a second authority.

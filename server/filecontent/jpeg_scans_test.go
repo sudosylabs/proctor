@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/packages/vfs/memory"
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -57,7 +57,7 @@ func TestJPEGScanBombIsRejectedBeforeDecoding(t *testing.T) {
 	t.Run("profile picture", func(t *testing.T) {
 		started := time.Now()
 		_, err := content.NormalizeAndStoreProfilePicture(context.Background(), model.NewFileRevisionID(), bytes.NewReader(bomb), int64(len(bomb)), time.Unix(1, 0))
-		require.ErrorIs(t, err, app.ErrInvalidProfilePicture)
+		require.ErrorIs(t, err, user.ErrInvalidProfilePicture)
 		require.Less(t, time.Since(started), 5*time.Second)
 	})
 	t.Run("exam resource", func(t *testing.T) {

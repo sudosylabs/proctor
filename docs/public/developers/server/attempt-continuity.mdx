@@ -18,10 +18,10 @@ extend a Participation lease, and only PostgreSQL time can decide expiry.
 
 `server/app/exam/attempt` owns admission, Participation and Connection fencing,
 renewal, expiry enforcement, Focus Loss, correction acknowledgement, protected
-Workspace access, Submission sealing, and manager inspection. The parent
-`server/app` facade exposes those capabilities and owns post-commit effect
-adapters. `server/app/exam_attempt_expiry_runtime.go` only schedules bounded
-scans; it does not decide expiry semantics.
+Workspace access, Submission sealing, and manager inspection. `app.App` names
+the Attempt service in its `Attempts` field, and the service publishes its own
+post-commit effects. `server/app/jobs/exam_attempt_expiry.go` only
+schedules bounded scans; it does not decide expiry semantics.
 
 The domain model owns valid states and transitions. The bounded Store contract
 owns atomic lock order, database-time comparison, idempotent outcomes, and

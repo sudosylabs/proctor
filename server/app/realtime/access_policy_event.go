@@ -21,14 +21,20 @@ type accessPolicyChangedData struct {
 
 // NewAccessPolicyChangedEvent creates the content-free refetch signal emitted
 // after a durable policy commit. No policy fields or provider facts fan out.
-func NewAccessPolicyChangedEvent(institutionID model.InstitutionID, revision int64) (RealtimeEvent, error) {
+func NewAccessPolicyChangedEvent(institutionID model.InstitutionID, revision int64) (Event, error) {
 	if !institutionID.IsValid() || revision < 1 {
-		return RealtimeEvent{}, errors.New("Access Policy change event requires valid bounded metadata")
+		return Event{}, errors.New("Access Policy change event requires valid bounded metadata")
 	}
+
 	data, err := json.Marshal(accessPolicyChangedData{Revision: revision})
 	if err != nil {
-		return RealtimeEvent{}, fmt.Errorf("encode Access Policy change event: %w", err)
+		return Event{}, fmt.Errorf("encode Access Policy change event: %w", err)
 	}
-	return RealtimeEvent{Name: "access_policy_changed", Action: model.ActionAccessPolicyView,
-		Resource: model.Resource{Type: model.ResourceInstitution, ID: institutionID.String()}, Data: data}, nil
+
+	return Event{
+		Name:     "access_policy_changed",
+		Action:   model.ActionAccessPolicyView,
+		Resource: model.Resource{Type: model.ResourceInstitution, ID: institutionID.String()},
+		Data:     data,
+	}, nil
 }

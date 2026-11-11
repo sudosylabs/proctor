@@ -47,7 +47,7 @@ func TestDeliveryCorruptReads(t *testing.T, ss store.Store, corrupt func(model.A
 	require.Len(t, ack.Receipts, 1, "stored receipt normalized the Desktop timestamp")
 	require.Equal(t, model.SHA256Fingerprint(canonical), ack.Receipts[0].EventDigest, "stored receipt normalized the Desktop timestamp")
 	browser := store.BrowserDeliveryAccess{Access: access, SourceSessionID: source, ParticipationID: connected.Participation.ID}
-	page, err := ss.ExamAttempt().BrowserDeliveryReceipts(ctx, browser, 1, 1)
+	page, err := ss.BrowserDelivery().BrowserDeliveryReceipts(ctx, browser, 1, 1)
 	require.NoError(t, err)
 	require.Len(t, page.Receipts, 1, "retained receipt changed")
 	require.Equal(t, ack.Receipts[0], page.Receipts[0], "retained receipt changed")
@@ -57,20 +57,20 @@ func TestDeliveryCorruptReads(t *testing.T, ss store.Store, corrupt func(model.A
 		session := fixture.session
 		build := model.DesktopBuildTuple{DesktopRelease: session.DesktopRelease, DesktopBuildID: session.DesktopBuildID, Platform: session.DesktopPlatform, Architecture: session.DesktopArchitecture, RealtimeProtocol: session.DesktopRealtimeProtocol, AttemptConfigurationManifestFingerprint: model.CurrentAttemptConfigurationManifestFingerprint(), DesktopSettingsRegistryFingerprint: "fnv1a64:" + strings.Repeat("b", 16), DesktopTarget: string(session.DesktopPlatform) + "-" + string(session.DesktopArchitecture), ConfigurationManifest: model.EmptyAttemptConfigurationManifest(), CapabilityMatrixIdentity: "storetest-matrix"}
 		build.NativeAgreement = syntheticNativeAgreement(t, build)
-		compatibility, err := ss.DesktopCompatibilityPolicy().Get(ctx)
-		require.NoError(t, err)
+		compatibility, desktopErr := ss.DesktopCompatibilityPolicy().Get(ctx)
+		require.NoError(t, desktopErr)
 		recoveryAccess := store.SecurityPreflightAccess{CandidateUserID: access.CandidateUserID, SessionID: access.SessionID, DesktopRegistrationID: access.DesktopRegistrationID, DPoPKeyThumbprint: access.DPoPKeyThumbprint, DesktopBuild: build, DesktopCompatibilityPolicyRevision: compatibility.Revision}
-		recovery, err := ss.ExamAttempt().RecoverSecurityPolicy(ctx, recoveryAccess, connected.Attempt.ID)
-		require.NoError(t, err)
+		recovery, desktopErr := ss.SecurityPreflight().RecoverSecurityPolicy(ctx, recoveryAccess, connected.Attempt.ID)
+		require.NoError(t, desktopErr)
 		for _, field := range []string{"native_source_sequence", "native_source_id", "native_coverage_state"} {
 			t.Run(field, func(t *testing.T) {
 				restore := corrupt(connected.Participation.ID, "", field)
 				defer restore()
-				_, err := ss.ExamAttempt().RecoverSecurityPolicy(ctx, recoveryAccess, connected.Attempt.ID)
-				assert.ErrorIs(t, err, store.ErrInvalidState)
+				_, securityErr := ss.SecurityPreflight().RecoverSecurityPolicy(ctx, recoveryAccess, connected.Attempt.ID)
+				assert.ErrorIs(t, securityErr, store.ErrInvalidState)
 				control := model.SecurityCoverageRenewal{ControlSequence: 1, PolicyDigest: connected.Security.Policy.Digest, SecuritySessionID: connected.Security.SecuritySessionID, StreamID: connected.Security.DeliveryStreamID, Posture: "compliant", Sources: recovery.CurrentSources, Coverage: recovery.CurrentCoverage, SourceResets: []model.NativeSourceReset{}, DeliveryWatermarks: []model.DeliveryWatermark{}}
-				_, err = ss.ExamAttempt().UpdateSecurityCoverage(ctx, &store.ExamAttemptSecurityCoverageUpdate{Access: access, ParticipationID: native.ParticipationID, Generation: native.Generation, DesktopBuild: build, DesktopCompatibilityPolicyRevision: compatibility.Revision, Coverage: control})
-				assert.ErrorIs(t, err, store.ErrInvalidState)
+				_, securityErr = ss.ExamAttempt().UpdateSecurityCoverage(ctx, &store.ExamAttemptSecurityCoverageUpdate{Access: access, ParticipationID: native.ParticipationID, Generation: native.Generation, DesktopBuild: build, DesktopCompatibilityPolicyRevision: compatibility.Revision, Coverage: control})
+				assert.ErrorIs(t, securityErr, store.ErrInvalidState)
 			})
 		}
 		var source model.NativeSourceCoverage
@@ -88,10 +88,10 @@ func TestDeliveryCorruptReads(t *testing.T, ss store.Store, corrupt func(model.A
 				record.RepeatCount = 2
 			}
 			batch := model.NativeSecurityBatch{StreamID: native.StreamID, BatchSequence: sequence, ParticipationID: native.ParticipationID, Generation: native.Generation, SecuritySessionID: connected.Security.SecuritySessionID, PolicyDigest: connected.Security.Policy.Digest, ApplicationReleaseID: connected.Security.Policy.ApplicationReleaseID, MatrixID: connected.Security.Policy.MatrixID, Records: []model.NativeRecord{{Occurrence: &record}}}
-			raw, err := batch.Canonical()
-			require.NoError(t, err)
-			_, err = ss.ExamAttempt().AppendNativeDelivery(ctx, &store.NativeDeliveryAppend{Access: native, Batch: batch, DesktopBuild: build, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}, examCommand(fixture.candidate.ID, store.NativeDeliveryAppendOperation, key, model.SHA256Fingerprint(raw)))
-			return err
+			raw, canonicalErr := batch.Canonical()
+			require.NoError(t, canonicalErr)
+			_, canonicalErr = ss.NativeDelivery().AppendNativeDelivery(ctx, &store.NativeDeliveryAppend{Access: native, Batch: batch, DesktopBuild: build, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}, examCommand(fixture.candidate.ID, store.NativeDeliveryAppendOperation, key, model.SHA256Fingerprint(raw)))
+			return canonicalErr
 		}
 		require.NoError(t, appendBatch(2, "progress-pending"))
 		func() {
@@ -103,8 +103,8 @@ func TestDeliveryCorruptReads(t *testing.T, ss store.Store, corrupt func(model.A
 		require.NoError(t, appendBatch(4, "transition-pending"))
 		declaration := model.DeclareDeliveryGaps{DeclarationID: model.NewID(), AllocatedThroughSequence: 4, Ranges: []model.SequenceRange{{First: 3, Last: 3}}, Reason: "spool_lost"}
 		settle := func() error {
-			_, err := ss.ExamAttempt().DeclareNativeDeliveryGaps(ctx, &store.NativeDeliveryGapDeclaration{Access: native, Declaration: declaration, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}, examCommand(fixture.candidate.ID, store.NativeDeliveryGapsOperation, "transition-settle", "transition-settle"))
-			return err
+			_, nativeErr := ss.NativeDelivery().DeclareNativeDeliveryGaps(ctx, &store.NativeDeliveryGapDeclaration{Access: native, Declaration: declaration, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}, examCommand(fixture.candidate.ID, store.NativeDeliveryGapsOperation, "transition-settle", "transition-settle"))
+			return nativeErr
 		}
 		func() {
 			restore := corrupt(connected.Participation.ID, "", "native_pending_transition")
@@ -117,15 +117,15 @@ func TestDeliveryCorruptReads(t *testing.T, ss store.Store, corrupt func(model.A
 		t.Run(field, func(t *testing.T) {
 			restore := corrupt(connected.Participation.ID, source, field)
 			defer restore()
-			var err error
+			var statusErr error
 			if field == "browser_receipt" {
-				_, err = ss.ExamAttempt().BrowserDeliveryReceipts(ctx, browser, 1, 1)
+				_, statusErr = ss.BrowserDelivery().BrowserDeliveryReceipts(ctx, browser, 1, 1)
 			} else if field == "browser_closure" {
-				_, err = ss.ExamAttempt().BrowserSourceStatus(ctx, browser)
+				_, statusErr = ss.BrowserDelivery().BrowserSourceStatus(ctx, browser)
 			} else {
-				_, err = ss.ExamAttempt().NativeDeliveryStatus(ctx, native)
+				_, statusErr = ss.NativeDelivery().NativeDeliveryStatus(ctx, native)
 			}
-			require.ErrorIs(t, err, store.ErrInvalidState)
+			require.ErrorIs(t, statusErr, store.ErrInvalidState)
 		})
 	}
 	// A valid append that repairs a gap must fail internally if an already
@@ -152,17 +152,17 @@ func TestDeliveryCorruptReads(t *testing.T, ss store.Store, corrupt func(model.A
 		successor.AuditEventID = browserDeliveryAuditFixture(t, ctx, ss, browser)
 		successor.AuditAt = model.NowUTC()
 		restore := corrupt(connected.Participation.ID, source, field)
-		_, err = ss.ExamAttempt().StartBrowserActivity(ctx, successor)
+		_, err = ss.BrowserDelivery().StartBrowserActivity(ctx, successor)
 		restore()
 		require.ErrorIs(t, err, store.ErrInvalidState, "%s permitted succession or misclassified corruption", field)
-		sources, err := ss.ExamAttempt().BrowserSourceList(ctx, browser)
-		require.NoError(t, err)
+		sources, listErr := ss.BrowserDelivery().BrowserSourceList(ctx, browser)
+		require.NoError(t, listErr)
 		require.Len(t, sources, 1, "invalid predecessor consumed a successor reservation")
 		require.Equal(t, int64(model.BrowserCorrectionStartLimit), sources[0].RemainingCorrectionStarts, "invalid predecessor consumed a successor reservation")
 	}
 	successor.AuditEventID = browserDeliveryAuditFixture(t, ctx, ss, browser)
 	successor.AuditAt = model.NowUTC()
-	next, err := ss.ExamAttempt().StartBrowserActivity(ctx, successor)
+	next, err := ss.BrowserDelivery().StartBrowserActivity(ctx, successor)
 	require.NoError(t, err)
 	require.Equal(t, int64(model.BrowserCorrectionStartLimit-1), next.RemainingCorrectionStarts, "restored predecessor could not create exactly one successor")
 

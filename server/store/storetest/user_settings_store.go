@@ -159,14 +159,14 @@ func TestUserSettingsStore(t *testing.T, ss store.Store) {
 		wait.Add(1)
 		go func(index int) {
 			defer wait.Done()
-			source := exact + string(rune('a'+index))
+			source := exact + string(rune('a'+index)) //nolint:gosec // G115: index ranges over 0 and 1.
 			next := model.NewUserSettingsRevision()
 			_, replaceErr := ss.UserSettings().Replace(ctx, &store.UserSettingsReplacement{
 				UserID: user.ID, Source: source, FormatVersion: 1,
 				ExpectedRevision: concurrentCurrent.Revision, NextRevision: next,
 				UpdatedAt:  concurrentCurrent.UpdatedAt.Add(time.Duration(index+10) * time.Second),
 				AuditEvent: userSettingsAudit(user.ID, institution.ID, concurrentCurrent.Revision, next, len(source)),
-			}, userSettingsCommand(user.ID, "replace-concurrent-"+string(rune('a'+index)), source))
+			}, userSettingsCommand(user.ID, "replace-concurrent-"+string(rune('a'+index)), source)) //nolint:gosec // G115: index ranges over 0 and 1.
 			outcomes <- concurrentOutcome{err: replaceErr}
 		}(index)
 	}

@@ -51,6 +51,21 @@ type Entry struct {
 	// Problem marks a routing or health code the HTTP kernel writes directly
 	// as Problem Details rather than through an application error.
 	Problem bool `yaml:"problem,omitempty"`
+	// RetryAfter is the Retry-After delay, in seconds, the HTTP kernel sends
+	// with the code. Zero sends no Retry-After header.
+	RetryAfter int `yaml:"retry_after,omitempty"`
+	// Extension names the Problem Details extension member the code may
+	// carry: the HTTP kernel presents it when the error's cause chain
+	// supplies a valid value, and never for another code. See
+	// problemExtensions for the members.
+	Extension string `yaml:"extension,omitempty"`
+}
+
+// problemExtensions maps each Problem Details extension member a catalog
+// entry may name to the identifier of the HTTP kernel's matching constant.
+var problemExtensions = map[string]string{
+	"delivery":                   "problemExtensionDelivery",
+	"delivery_metadata_capacity": "problemExtensionDeliveryMetadataCapacity",
 }
 
 // Catalog is the compiled public error code catalog in code order.
@@ -103,14 +118,17 @@ func Parse(source []byte) (*Catalog, error) {
 	if len(parsed.Codes) == 0 {
 		return nil, errors.New("error catalog declares no codes")
 	}
+
 	var problems []string
 	vocabulary := conditionStatuses{statuses: parsed.Conditions, defaultStatus: parsed.DefaultStatus}
 	for word, status := range parsed.Conditions {
 		if !segmentGrammar.MatchString(word) || !errorStatusRange(status) {
 			problems = append(problems, fmt.Sprintf("condition %s: %d is not a snake_case condition with an HTTP error status", word, status))
 		}
+
 		vocabulary.words = append(vocabulary.words, word)
 	}
+
 	sort.Slice(vocabulary.words, func(i, j int) bool {
 		left, right := vocabulary.words[i], vocabulary.words[j]
 		return len(left) > len(right) || len(left) == len(right) && left < right
@@ -118,6 +136,7 @@ func Parse(source []byte) (*Catalog, error) {
 	if !errorStatusRange(parsed.DefaultStatus) {
 		problems = append(problems, fmt.Sprintf("default_status %d is not an HTTP error status", parsed.DefaultStatus))
 	}
+
 	seen := make(map[string]struct{}, len(parsed.Codes))
 	for index := range parsed.Codes {
 		entry := &parsed.Codes[index]
@@ -127,12 +146,15 @@ func Parse(source []byte) (*Catalog, error) {
 		if _, exists := seen[entry.Code]; exists {
 			continue
 		}
+
 		seen[entry.Code] = struct{}{}
 		problems = append(problems, validateEntry(entry, vocabulary.derive(entry.Code))...)
 	}
+
 	if len(problems) > 0 {
 		return nil, fmt.Errorf("invalid error catalog:\n  %s", strings.Join(problems, "\n  "))
 	}
+
 	return &Catalog{Entries: parsed.Codes}, nil
 }
 
@@ -141,6 +163,7 @@ func validateEntry(entry *Entry, derived int) []string {
 	if !codeGrammar.MatchString(entry.Code) {
 		problems = append(problems, fmt.Sprintf("%s: code is not <domain>[.<subdomain>].<condition> with snake_case segments", entry.Code))
 	}
+
 	switch {
 	case entry.Status == 0 && entry.Reason != "":
 		problems = append(problems, fmt.Sprintf("%s: reason documents no status exception", entry.Code))
@@ -151,8 +174,12 @@ func validateEntry(entry *Entry, derived int) []string {
 	case !errorStatusRange(entry.Status):
 		problems = append(problems, fmt.Sprintf("%s: status %d is not an HTTP error status", entry.Code, entry.Status))
 	case strings.TrimSpace(entry.Reason) == "":
-		problems = append(problems, fmt.Sprintf("%s: status %d differs from the condition's %d without a reason", entry.Code, entry.Status, derived))
+		problems = append(
+			problems,
+			fmt.Sprintf("%s: status %d differs from the condition's %d without a reason", entry.Code, entry.Status, derived),
+		)
 	}
+
 	if strings.TrimSpace(entry.Description) == "" {
 		problems = append(problems, fmt.Sprintf("%s: description is required", entry.Code))
 	}
@@ -162,6 +189,17 @@ func validateEntry(entry *Entry, derived int) []string {
 	if entry.WebSocketFallback && (entry.Transport || entry.Problem) {
 		problems = append(problems, fmt.Sprintf("%s: a WebSocket fallback is an application code, not a kernel code", entry.Code))
 	}
+	if entry.Problem && (entry.RetryAfter != 0 || entry.Extension != "") {
+		problems = append(problems, fmt.Sprintf("%s: a kernel problem code carries no retry_after or extension", entry.Code))
+	}
+	if entry.RetryAfter < 0 ||
+		entry.RetryAfter > 0 && entry.Status != http.StatusTooManyRequests && entry.Status != http.StatusServiceUnavailable {
+		problems = append(problems, fmt.Sprintf("%s: retry_after is a positive number of seconds for a 429 or 503 code", entry.Code))
+	}
+	if _, known := problemExtensions[entry.Extension]; entry.Extension != "" && !known {
+		problems = append(problems, fmt.Sprintf("%s: extension %q is not a Problem Details extension member", entry.Code, entry.Extension))
+	}
+
 	return problems
 }
 
@@ -232,14 +270,22 @@ func (c *Catalog) RenderHTTPMapping() []byte {
 func (c *Catalog) renderHTTPMapping() []byte {
 	var out bytes.Buffer
 	out.WriteString(header)
-	out.WriteString("package httpapi\n\nimport \"net/http\"\n\n")
+	out.WriteString("package route\n\nimport \"net/http\"\n\n")
 	out.WriteString("// applicationErrorMappings is the exhaustive HTTP status table for public\n")
 	out.WriteString("// application and kernel error codes, generated from error_catalog.yaml.\n")
 	out.WriteString("var applicationErrorMappings = map[string]applicationErrorMapping{\n")
 	for _, entry := range c.Entries {
-		if !entry.Problem {
-			fmt.Fprintf(&out, "\t%q: {status: %s},\n", entry.Code, statusConstant(entry.Status))
+		if entry.Problem {
+			continue
 		}
+		fmt.Fprintf(&out, "\t%q: {status: %s", entry.Code, statusConstant(entry.Status))
+		if entry.RetryAfter > 0 {
+			fmt.Fprintf(&out, ", retryAfter: %d", entry.RetryAfter)
+		}
+		if entry.Extension != "" {
+			fmt.Fprintf(&out, ", extension: %s", problemExtensions[entry.Extension])
+		}
+		out.WriteString("},\n")
 	}
 	out.WriteString("}\n\n")
 	out.WriteString("// transportProblemCodes are routing and health codes the kernel writes\n")

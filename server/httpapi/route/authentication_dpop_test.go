@@ -1,0 +1,67 @@
+// ---------------------------------------------------------------------------------------------
+// Copyright (c) 2026 Sudosy Labs. All rights reserved.
+// Licensed under the GNU Affero General Public License, version 3 only.
+// See LICENSE in the server module root for license information.
+// SPDX-License-Identifier: AGPL-3.0-only
+// ---------------------------------------------------------------------------------------------
+
+package route
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
+	"github.com/sudosylabs/proctor/server/model"
+)
+
+type dpopMiddlewareAuthenticator struct{}
+
+func (dpopMiddlewareAuthenticator) AuthenticateAccess(context.Context, string) (*model.Principal, error) {
+	return nil, nil
+}
+
+func (dpopMiddlewareAuthenticator) AuthenticateBearer(context.Context, string) (*model.Principal, error) {
+	return nil, nil
+}
+
+func (dpopMiddlewareAuthenticator) AuthenticateDPoP(context.Context, string, string, string, string) (*model.Principal, error) {
+	return nil, nil
+}
+
+func TestProtectedRouteManifestDeclaresDPoPAuthenticationErrors(t *testing.T) {
+	t.Parallel()
+	logger, _ := routetest.NewLogger(t)
+	cookies, err := NewCookies("http://localhost:8065")
+	require.NoError(t, err)
+	api := &API{
+		authenticator: dpopMiddlewareAuthenticator{}, logger: logger, cookies: cookies,
+		recentAuthenticationTTL: time.Minute,
+	}
+	for _, requirement := range []AuthRequirement{AuthSessionRequired} {
+		requirement := requirement
+		t.Run(string(requirement), func(t *testing.T) {
+			declared := routeErrorCodes(requirement, http.MethodPost, []string{"authentication.credentials.invalid"})
+			operationPolicy := newRouteErrorPolicy(declared)
+			handler := api.newHandlerWithErrorPolicy(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+				assert.Fail(t, "protected handler ran after invalid DPoP proof")
+			}), requirement, operationPolicy)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/protected", nil)
+			request.Header.Set("Authorization", "DPoP "+model.NewCredentialToken())
+			request.Header.Set("DPoP", "invalid proof")
+			response := httptest.NewRecorder()
+
+			handler.ServeHTTP(response, request)
+
+			require.Equal(t, http.StatusUnauthorized, response.Code, "status = %d, body = %s", response.Code, response.Body.String())
+			require.Equal(t, `DPoP error="invalid_dpop_proof"`, response.Header().Get("WWW-Authenticate"))
+			require.Contains(t, operationPolicy, "authentication.dpop.invalid", "protected route manifest omitted DPoP authentication error")
+		})
+	}
+}

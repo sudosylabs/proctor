@@ -10,6 +10,7 @@ package httpapi
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"slices"
 	"strings"
 	"testing"
@@ -17,7 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 )
 
 // TestOpenAPIAgreesWithRuntime derives every route's documented contract from
@@ -29,19 +30,18 @@ func TestOpenAPIAgreesWithRuntime(t *testing.T) {
 	t.Parallel()
 
 	document := readOpenAPIDocument(t)
-	runtimeAPI := newRoutingTestAPI(model.APIURLSuffix)
-	require.NoError(t, runtimeAPI.collectResources(model.APIURLSuffix, productionResources(agreementResourceApplications(), nil, BuildInfo{}, browserCookies{}, nil)...))
+	runtimeAPI := newProductionCatalogAPI(t)
 
-	runtimeRoutes := make(map[string]Route)
-	runtimeOperations := make(map[string]AuthRequirement)
-	for _, route := range runtimeAPI.Routes() {
-		key := route.Method + " " + normalizeRuntimeRoutePath(route.Path)
+	runtimeRoutes := make(map[string]route.Entry)
+	runtimeOperations := make(map[string]route.AuthRequirement)
+	for _, entry := range runtimeAPI.Routes() {
+		key := entry.Method + " " + normalizeRuntimeRoutePath(entry.Path)
 		_, exists := runtimeOperations[key]
 		assert.False(t, exists, "runtime catalog repeats %s", key)
-		runtimeOperations[key] = route.Auth
-		runtimeRoutes[key] = route
+		runtimeOperations[key] = entry.Auth
+		runtimeRoutes[key] = entry
 	}
-	documentedOperations := make(map[string]AuthRequirement)
+	documentedOperations := make(map[string]route.AuthRequirement)
 	operationIDs := make(map[string]string)
 	var violations []openAPIAgreementViolation
 	for path, pathItem := range document.Paths {
@@ -68,8 +68,8 @@ func TestOpenAPIAgreesWithRuntime(t *testing.T) {
 				}
 			}
 			violations = evaluateOpenAPIResponseAgreement(violations, document, key, operation)
-			if route, exists := runtimeRoutes[key]; exists {
-				violations = evaluateOpenAPIRouteAgreement(violations, key, route, operation)
+			if entry, exists := runtimeRoutes[key]; exists {
+				violations = evaluateOpenAPIRouteAgreement(violations, key, entry, operation)
 			}
 		}
 	}
@@ -84,17 +84,17 @@ func TestOpenAPIAgreesWithRuntime(t *testing.T) {
 func evaluateOpenAPIRouteAgreement(
 	violations []openAPIAgreementViolation,
 	key string,
-	route Route,
+	entry route.Entry,
 	operation openAPIOperation,
 ) []openAPIAgreementViolation {
-	violations = compareStringSet(violations, key, "error codes", operation.ErrorCodes, route.ErrorCodes)
-	want := effectiveIdempotencyRequirement(route.Idempotency)
-	if got := effectiveIdempotencyRequirement(operation.Idempotency); got != want {
+	violations = compareStringSet(violations, key, "error codes", operation.ErrorCodes, entry.ErrorCodes)
+	want := route.EffectiveIdempotency(entry.Idempotency)
+	if got := route.EffectiveIdempotency(operation.Idempotency); got != want {
 		violations = appendAgreementViolation(violations, key, "idempotency", fmt.Sprintf("got %q, runtime %q", got, want))
 	}
-	parameters := map[IdempotencyRequirement]string{
-		IdempotencyOptional: "#/components/parameters/OptionalIdempotencyKey",
-		IdempotencyRequired: "#/components/parameters/RequiredIdempotencyKey",
+	parameters := map[route.IdempotencyRequirement]string{
+		route.IdempotencyOptional: "#/components/parameters/OptionalIdempotencyKey",
+		route.IdempotencyRequired: "#/components/parameters/RequiredIdempotencyKey",
 	}
 	for requirement, ref := range parameters {
 		documented := slices.ContainsFunc(operation.Parameters, func(parameter openAPIParameter) bool { return parameter.Ref == ref })
@@ -138,11 +138,30 @@ func TestIdentityAndSystemOpenAPIDocument(t *testing.T) {
 	require.NoError(t, json.Unmarshal(document.Paths["/api/v1/websocket"]["get"], &websocket))
 	_, exists := websocket.Responses["101"]
 	assert.True(t, exists, "GET /api/v1/websocket has no 101 response")
-	for name, item := range map[string]string{
+	for name, item := range map[string]string{ //nolint:gosec // G101: OpenAPI schema names and references, not credentials.
 		"SessionListResponse":                        "#/components/schemas/CurrentUserSessionResponse",
 		"PersonalAccessTokenListResponse":            "#/components/schemas/PersonalAccessTokenResponse",
 		"ExternalAuthenticationProviderListResponse": "#/components/schemas/ExternalAuthenticationProviderResponse",
 	} {
 		requireOpenAPIListEnvelope(t, document.Components.Schemas[name], item)
+	}
+}
+
+// isHTTPMethod reports whether an upper-case OpenAPI path-item member names
+// an operation rather than a shared member such as "parameters".
+func isHTTPMethod(method string) bool {
+	switch method {
+	case http.MethodConnect,
+		http.MethodDelete,
+		http.MethodGet,
+		http.MethodHead,
+		http.MethodOptions,
+		http.MethodPatch,
+		http.MethodPost,
+		http.MethodPut,
+		http.MethodTrace:
+		return true
+	default:
+		return false
 	}
 }

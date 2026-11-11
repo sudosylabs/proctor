@@ -25,6 +25,9 @@ const (
 	externalLoginStateLifetimeMaximum = 30 * time.Minute
 )
 
+// SQLExternalLoginStateStore implements store.ExternalLoginStateStore on
+// external_login_states. Consumption is one conditional UPDATE of an
+// unconsumed, unexpired state, so a provider callback succeeds once.
 type SQLExternalLoginStateStore struct {
 	*SQLStore
 	statesQuery sq.SelectBuilder
@@ -97,31 +100,48 @@ func (s SQLExternalLoginStateStore) Save(ctx context.Context, input *store.Exter
 }
 
 // SaveInvitationAdmission stores a new external login state bound to the Invitation claim digest in the input.
-func (s SQLExternalLoginStateStore) SaveInvitationAdmission(ctx context.Context, input *store.ExternalLoginStateInvitationAdmission) (*model.ExternalLoginState, error) {
+func (s SQLExternalLoginStateStore) SaveInvitationAdmission(
+	ctx context.Context,
+	input *store.ExternalLoginStateInvitationAdmission,
+) (*model.ExternalLoginState, error) {
 	state := input.State
 	lifetime := input.Lifetime
 	claimHash := input.ClaimHash
-	if state == nil || state.Purpose != model.ExternalAuthenticationPurposeInvitationAdmission ||
-		!state.InvitationID.IsZero() || !model.IsValidTokenHash(claimHash) {
+	if state == nil ||
+		state.Purpose != model.ExternalAuthenticationPurposeInvitationAdmission ||
+		!state.InvitationID.IsZero() ||
+		!model.IsValidTokenHash(claimHash) {
 		return nil, store.NewErrInvalidInput("external_login_state", "invitation_admission", nil)
 	}
-	return s.save(ctx, state, lifetime, "external invitation admission state save",
+
+	return s.save(
+		ctx,
+		state,
+		lifetime,
+		"external invitation admission state save",
 		func(ctx context.Context, tx *sqlxTxWrapper, candidate *model.ExternalLoginState, databaseNow time.Time) error {
 			var invitationID string
 			if err := tx.Get(ctx, &invitationID, `
-				SELECT id FROM invitations
-				 WHERE claim_hash=? AND state='pending' AND created_at<=? AND expires_at>?
-				   AND (intended_end_at IS NULL OR intended_end_at>?)
-				 FOR SHARE`, claimHash, databaseNow, databaseNow, databaseNow); err != nil {
+				SELECT id
+				FROM invitations
+				WHERE claim_hash = ?
+					AND state = 'pending'
+					AND created_at <= ?
+					AND expires_at > ?
+					AND (intended_end_at IS NULL OR intended_end_at > ?)
+				FOR SHARE`, claimHash, databaseNow, databaseNow, databaseNow); err != nil {
 				return translateError("invitation", "claim", err)
 			}
+
 			parsed, err := parsePersistedID("invitation", "id", invitationID, model.ParseInvitationID)
 			if err != nil {
 				return err
 			}
+
 			candidate.InvitationID = parsed
 			return nil
-		})
+		},
+	)
 }
 
 func (s SQLExternalLoginStateStore) save(
@@ -131,47 +151,64 @@ func (s SQLExternalLoginStateStore) save(
 	operation string,
 	prepare func(context.Context, *sqlxTxWrapper, *model.ExternalLoginState, time.Time) error,
 ) (*model.ExternalLoginState, error) {
-	if state == nil || lifetime < externalLoginStateLifetimeMinimum || lifetime > externalLoginStateLifetimeMaximum ||
+	if state == nil ||
+		lifetime < externalLoginStateLifetimeMinimum ||
+		lifetime > externalLoginStateLifetimeMaximum ||
 		lifetime%time.Millisecond != 0 {
 		return nil, store.NewErrInvalidInput("external_login_state", "value", nil)
 	}
-	if !state.ID.IsZero() || !state.CreatedAt.IsZero() || !state.UpdatedAt.IsZero() ||
-		!state.ExpiresAt.IsZero() || state.ConsumedAt.Valid {
+
+	if !state.ID.IsZero() ||
+		!state.CreatedAt.IsZero() ||
+		!state.UpdatedAt.IsZero() ||
+		!state.ExpiresAt.IsZero() ||
+		state.ConsumedAt.Valid {
 		return nil, store.NewErrInvalidInput("external_login_state", "id", state.ID.String())
 	}
+
 	candidate := *state
-	return runSQLTransaction(ctx, s.GetMaster().Begin, operation, func(ctx context.Context, tx *sqlxTxWrapper) (*model.ExternalLoginState, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, operation, func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*model.ExternalLoginState, error) {
 		var databaseNow time.Time
 		if err := tx.Get(ctx, &databaseNow, `SELECT clock_timestamp()`); err != nil {
 			return nil, fmt.Errorf("read external login state creation time: %w", err)
 		}
+
 		databaseNow = model.TimeUTC(databaseNow)
 		if prepare != nil {
 			if err := prepare(ctx, tx, &candidate, databaseNow); err != nil {
 				return nil, err
 			}
 		}
+
 		candidate.ExpiresAt = databaseNow.Add(lifetime)
 		candidate.PrepareCreate(model.NewExternalLoginStateID(), databaseNow)
 		if err := candidate.Validate(); err != nil {
 			return nil, err
 		}
+
 		row := newExternalLoginStateRow(&candidate)
 		if _, err := tx.NamedExec(ctx, `
 			INSERT INTO external_login_states (
-				id, created_at, updated_at, provider, purpose, target_user_id, session_id, session_credential_id, external_identity_id, invitation_id, browser_authentication_transaction_id, audit_event_id, state_hash, binding_hash,
-				return_to, client_type, device_id, device_name, expires_at,
-				consumed_at
-			) VALUES (
-				:id, :created_at, :updated_at, :provider, :purpose, :target_user_id, :session_id, :session_credential_id, :external_identity_id, :invitation_id, :browser_authentication_transaction_id, :audit_event_id, :state_hash, :binding_hash,
-				:return_to, :client_type, :device_id, :device_name, :expires_at,
-				:consumed_at
+				id, created_at, updated_at, provider, purpose, target_user_id, session_id,
+				session_credential_id, external_identity_id, invitation_id,
+				browser_authentication_transaction_id, audit_event_id, state_hash, binding_hash,
+				return_to, client_type, device_id, device_name, expires_at, consumed_at
+			)
+			VALUES (
+				:id, :created_at, :updated_at, :provider, :purpose, :target_user_id, :session_id,
+				:session_credential_id, :external_identity_id, :invitation_id,
+				:browser_authentication_transaction_id, :audit_event_id, :state_hash, :binding_hash,
+				:return_to, :client_type, :device_id, :device_name, :expires_at, :consumed_at
 			)`, &row); err != nil {
 			return nil, fmt.Errorf(
 				"save external login state: %w",
 				translateError("external_login_state", candidate.ID.String(), err),
 			)
 		}
+
 		return &candidate, nil
 	})
 }
@@ -191,24 +228,31 @@ func (s SQLExternalLoginStateStore) GetByStateHash(
 }
 
 // Consume consumes the external login state named by the input provider, state hash and browser binding hash exactly once.
-func (s SQLExternalLoginStateStore) Consume(ctx context.Context, input *store.ExternalLoginStateConsumption) (*model.ExternalLoginState, error) {
+func (s SQLExternalLoginStateStore) Consume(
+	ctx context.Context,
+	input *store.ExternalLoginStateConsumption,
+) (*model.ExternalLoginState, error) {
 	provider := input.Provider
 	stateHash := input.StateHash
 	bindingHash := input.BindingHash
 	var row externalLoginStateRow
-	err := s.GetMaster().Get(ctx, &row, `
+	err := s.GetMaster().Get(
+		ctx,
+		&row,
+		`
 		UPDATE external_login_states
-		   SET updated_at = consumed.at, consumed_at = consumed.at
-		  FROM (SELECT clock_timestamp() AS at) AS consumed
-		 WHERE provider = ?
-		   AND state_hash = ?
-		   AND binding_hash = ?
-		   AND consumed_at IS NULL
-		   AND created_at <= consumed.at
-		   AND expires_at > consumed.at
-		RETURNING id, created_at, updated_at, provider, purpose, target_user_id, session_id, session_credential_id, external_identity_id, invitation_id, browser_authentication_transaction_id, audit_event_id, state_hash, binding_hash,
-		          return_to, client_type, device_id, device_name, expires_at,
-		          consumed_at`,
+		SET updated_at = consumed.at, consumed_at = consumed.at
+		FROM (SELECT clock_timestamp() AS at) AS consumed
+		WHERE provider = ?
+			AND state_hash = ?
+			AND binding_hash = ?
+			AND consumed_at IS NULL
+			AND created_at <= consumed.at
+			AND expires_at > consumed.at
+		RETURNING id, created_at, updated_at, provider, purpose, target_user_id, session_id,
+			session_credential_id, external_identity_id, invitation_id,
+			browser_authentication_transaction_id, audit_event_id, state_hash, binding_hash,
+			return_to, client_type, device_id, device_name, expires_at, consumed_at`,
 		provider,
 		stateHash,
 		bindingHash,
@@ -216,6 +260,7 @@ func (s SQLExternalLoginStateStore) Consume(ctx context.Context, input *store.Ex
 	if err != nil {
 		return nil, translateError("external_login_state", "", err)
 	}
+
 	return row.model()
 }
 
@@ -223,45 +268,73 @@ func (s SQLExternalLoginStateStore) Maintain(ctx context.Context, limit int) (*s
 	if limit < 1 || limit > 1000 {
 		return nil, store.NewErrInvalidInput("external_login_state", "maintenance_limit", limit)
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "maintain external login states", func(ctx context.Context, tx *sqlxTxWrapper) (*store.ExternalLoginStateMaintenanceResult, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "maintain external login states", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.ExternalLoginStateMaintenanceResult, error) {
 		var terminalized int
 		if err := tx.Get(ctx, &terminalized, `WITH candidates AS (
-			SELECT state.id, state.audit_event_id
-			  FROM external_login_states state
-			  JOIN audit_events audit ON audit.id=state.audit_event_id AND audit.status='attempt'
-			 WHERE state.purpose IN ('connect','reauthenticate') AND state.expires_at<=clock_timestamp()
-			 ORDER BY state.expires_at, state.id
-			 FOR UPDATE OF state, audit SKIP LOCKED LIMIT ?
-		), completed AS (
-			UPDATE audit_events audit
-			   SET updated_at=GREATEST(audit.updated_at, clock_timestamp()), status='fail',
-			       error_code='authentication.external.expired'
-			  FROM candidates candidate
-			 WHERE audit.id=candidate.audit_event_id AND audit.status='attempt'
-			 RETURNING audit.id
-		) SELECT COUNT(*) FROM completed`, limit); err != nil {
+					SELECT state.id, state.audit_event_id
+					FROM external_login_states state
+					JOIN audit_events audit ON audit.id = state.audit_event_id
+						AND audit.status = 'attempt'
+					WHERE state.purpose IN ('connect', 'reauthenticate')
+						AND state.expires_at <= clock_timestamp()
+					ORDER BY state.expires_at, state.id
+					FOR UPDATE OF state, audit SKIP LOCKED
+					LIMIT ?
+				),
+			completed AS (
+				UPDATE audit_events audit
+				SET updated_at = GREATEST(audit.updated_at, clock_timestamp()), status = 'fail',
+					error_code = 'authentication.external.expired'
+				FROM candidates candidate
+				WHERE audit.id = candidate.audit_event_id
+					AND audit.status = 'attempt'
+				RETURNING audit.id
+			)
+			SELECT COUNT(*)
+			FROM completed`, limit); err != nil {
 			return nil, fmt.Errorf("terminalize abandoned external provider connections: %w", err)
 		}
+
 		var purged int
 		if err := tx.Get(ctx, &purged, `WITH candidates AS (
-			SELECT id FROM external_login_states
-			 WHERE expires_at<=clock_timestamp()-(? * interval '1 millisecond')
-			 ORDER BY expires_at, id FOR UPDATE SKIP LOCKED LIMIT ?
-		), removed AS (
-			DELETE FROM external_login_states state USING candidates candidate
-			 WHERE state.id=candidate.id RETURNING state.id
-		) SELECT COUNT(*) FROM removed`, externalLoginStateRetention.Milliseconds(), limit); err != nil {
+					SELECT id
+					FROM external_login_states
+					WHERE expires_at <= clock_timestamp()-(? * interval '1 millisecond')
+					ORDER BY expires_at, id
+					FOR UPDATE SKIP LOCKED
+					LIMIT ?
+				),
+			removed AS (
+				DELETE FROM external_login_states state
+				USING candidates candidate
+				WHERE state.id = candidate.id
+				RETURNING state.id
+			)
+			SELECT COUNT(*)
+			FROM removed`, externalLoginStateRetention.Milliseconds(), limit); err != nil {
 			return nil, fmt.Errorf("purge retained external login states: %w", err)
 		}
+
 		var more bool
 		if err := tx.Get(ctx, &more, `SELECT EXISTS (
-			SELECT 1 FROM external_login_states state JOIN audit_events audit ON audit.id=state.audit_event_id
-			 WHERE state.purpose IN ('connect','reauthenticate') AND state.expires_at<=clock_timestamp() AND audit.status='attempt'
-		) OR EXISTS (
-			SELECT 1 FROM external_login_states WHERE expires_at<=clock_timestamp()-(? * interval '1 millisecond')
-		)`, externalLoginStateRetention.Milliseconds()); err != nil {
+				SELECT 1
+				FROM external_login_states state
+				JOIN audit_events audit ON audit.id = state.audit_event_id
+				WHERE state.purpose IN ('connect', 'reauthenticate')
+					AND state.expires_at <= clock_timestamp()
+					AND audit.status = 'attempt'
+			)
+				OR EXISTS (
+					SELECT 1
+					FROM external_login_states
+					WHERE expires_at <= clock_timestamp()-(? * interval '1 millisecond')
+				)`, externalLoginStateRetention.Milliseconds()); err != nil {
 			return nil, fmt.Errorf("inspect external login state maintenance: %w", err)
 		}
+
 		return &store.ExternalLoginStateMaintenanceResult{Terminalized: terminalized, Purged: purged, More: more}, nil
 	})
 }
@@ -270,26 +343,32 @@ func newExternalLoginStateRow(
 	state *model.ExternalLoginState,
 ) externalLoginStateRow {
 	return externalLoginStateRow{
-		ID:                                 state.ID.String(),
-		CreatedAt:                          UTCTime(state.CreatedAt),
-		UpdatedAt:                          UTCTime(state.UpdatedAt),
-		Provider:                           state.Provider,
-		Purpose:                            string(state.Purpose),
-		SessionID:                          sql.NullString{String: state.SessionID.String(), Valid: !state.SessionID.IsZero()},
-		SessionCredentialID:                sql.NullString{String: state.SessionCredentialID.String(), Valid: !state.SessionCredentialID.IsZero()},
-		ExternalIdentityID:                 sql.NullString{String: state.ExternalIdentityID.String(), Valid: !state.ExternalIdentityID.IsZero()},
-		TargetUserID:                       sql.NullString{String: state.TargetUserID.String(), Valid: !state.TargetUserID.IsZero()},
-		InvitationID:                       sql.NullString{String: state.InvitationID.String(), Valid: !state.InvitationID.IsZero()},
-		BrowserAuthenticationTransactionID: sql.NullString{String: state.BrowserAuthenticationTransactionID.String(), Valid: !state.BrowserAuthenticationTransactionID.IsZero()},
-		AuditEventID:                       sql.NullString{String: state.AuditEventID, Valid: state.AuditEventID != ""},
-		StateHash:                          state.StateHash,
-		BindingHash:                        state.BindingHash,
-		ReturnTo:                           state.ReturnTo,
-		ClientType:                         string(state.ClientType),
-		DeviceID:                           state.DeviceID,
-		DeviceName:                         state.DeviceName,
-		ExpiresAt:                          UTCTime(state.ExpiresAt),
-		ConsumedAt:                         NullTimeFromOptional(state.ConsumedAt),
+		ID:        state.ID.String(),
+		CreatedAt: UTCTime(state.CreatedAt),
+		UpdatedAt: UTCTime(state.UpdatedAt),
+		Provider:  state.Provider,
+		Purpose:   string(state.Purpose),
+		SessionID: sql.NullString{String: state.SessionID.String(), Valid: !state.SessionID.IsZero()},
+		SessionCredentialID: sql.NullString{
+			String: state.SessionCredentialID.String(),
+			Valid:  !state.SessionCredentialID.IsZero(),
+		},
+		ExternalIdentityID: sql.NullString{String: state.ExternalIdentityID.String(), Valid: !state.ExternalIdentityID.IsZero()},
+		TargetUserID:       sql.NullString{String: state.TargetUserID.String(), Valid: !state.TargetUserID.IsZero()},
+		InvitationID:       sql.NullString{String: state.InvitationID.String(), Valid: !state.InvitationID.IsZero()},
+		BrowserAuthenticationTransactionID: sql.NullString{
+			String: state.BrowserAuthenticationTransactionID.String(),
+			Valid:  !state.BrowserAuthenticationTransactionID.IsZero(),
+		},
+		AuditEventID: sql.NullString{String: state.AuditEventID, Valid: state.AuditEventID != ""},
+		StateHash:    state.StateHash,
+		BindingHash:  state.BindingHash,
+		ReturnTo:     state.ReturnTo,
+		ClientType:   string(state.ClientType),
+		DeviceID:     state.DeviceID,
+		DeviceName:   state.DeviceName,
+		ExpiresAt:    UTCTime(state.ExpiresAt),
+		ConsumedAt:   NullTimeFromOptional(state.ConsumedAt),
 	}
 }
 
@@ -298,6 +377,7 @@ func (row externalLoginStateRow) model() (*model.ExternalLoginState, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	value := &model.ExternalLoginState{
 		ID:           id,
 		CreatedAt:    row.CreatedAt.UTC(),
@@ -318,32 +398,54 @@ func (row externalLoginStateRow) model() (*model.ExternalLoginState, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	value.SessionID, err = parseNullablePersistedID("external_login_state", "session_id", row.SessionID, model.ParseSessionID)
 	if err != nil {
 		return nil, err
 	}
-	value.SessionCredentialID, err = parseNullablePersistedID("external_login_state", "session_credential_id", row.SessionCredentialID, model.ParseSessionCredentialID)
+
+	value.SessionCredentialID, err = parseNullablePersistedID(
+		"external_login_state",
+		"session_credential_id",
+		row.SessionCredentialID,
+		model.ParseSessionCredentialID,
+	)
 	if err != nil {
 		return nil, err
 	}
-	value.ExternalIdentityID, err = parseNullablePersistedID("external_login_state", "external_identity_id", row.ExternalIdentityID, model.ParseExternalIdentityID)
+
+	value.ExternalIdentityID, err = parseNullablePersistedID(
+		"external_login_state",
+		"external_identity_id",
+		row.ExternalIdentityID,
+		model.ParseExternalIdentityID,
+	)
 	if err != nil {
 		return nil, err
 	}
+
 	value.TargetUserID = target
 	invitationID, err := parseNullablePersistedID("external_login_state", "invitation_id", row.InvitationID, model.ParseInvitationID)
 	if err != nil {
 		return nil, err
 	}
+
 	value.InvitationID = invitationID
-	browserTransactionID, err := parseNullablePersistedID("external_login_state", "browser_authentication_transaction_id", row.BrowserAuthenticationTransactionID, model.ParseBrowserAuthenticationTransactionID)
+	browserTransactionID, err := parseNullablePersistedID(
+		"external_login_state",
+		"browser_authentication_transaction_id",
+		row.BrowserAuthenticationTransactionID,
+		model.ParseBrowserAuthenticationTransactionID,
+	)
 	if err != nil {
 		return nil, err
 	}
+
 	value.BrowserAuthenticationTransactionID = browserTransactionID
 	if err := validatePersistedModel("external_login_state", value); err != nil {
 		return nil, err
 	}
+
 	return value, nil
 }
 

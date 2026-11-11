@@ -12,12 +12,16 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -61,83 +65,115 @@ type auditResourceResponse struct {
 
 func auditEventResponseFromModel(event *model.AuditEvent) auditEventResponse {
 	return auditEventResponse{
-		ID: event.ID.String(), CreatedAt: model.FormatRFC3339(event.CreatedAt),
-		UpdatedAt: model.FormatRFC3339(event.UpdatedAt),
-		ActorID:   event.ActorID.String(), SessionID: event.SessionID.String(), Action: event.Action,
-		Resource:  auditResourceResponse{Type: event.Resource.Type, ID: event.Resource.ID},
-		ScopeType: event.ScopeType, ScopeID: event.ScopeID,
-		Status: event.Status, RequestID: event.RequestID, NodeID: event.NodeID,
-		ClientType: event.ClientType, AuthMethod: event.AuthMethod,
-		IPAddress: event.IPAddress, UserAgent: event.UserAgent, ErrorCode: event.ErrorCode,
-		Reason: event.AccountDisableReason(),
+		ID:         event.ID.String(),
+		CreatedAt:  model.FormatRFC3339(event.CreatedAt),
+		UpdatedAt:  model.FormatRFC3339(event.UpdatedAt),
+		ActorID:    event.ActorID.String(),
+		SessionID:  event.SessionID.String(),
+		Action:     event.Action,
+		Resource:   auditResourceResponse{Type: event.Resource.Type, ID: event.Resource.ID},
+		ScopeType:  event.ScopeType,
+		ScopeID:    event.ScopeID,
+		Status:     event.Status,
+		RequestID:  event.RequestID,
+		NodeID:     event.NodeID,
+		ClientType: event.ClientType,
+		AuthMethod: event.AuthMethod,
+		IPAddress:  event.IPAddress,
+		UserAgent:  event.UserAgent,
+		ErrorCode:  event.ErrorCode,
+		Reason:     event.AccountDisableReason(),
 	}
 }
 
-type auditResourceModule struct {
-	audits AuditListingApplication
+type auditHandlers struct {
+	app AuditListingApplication
 }
 
-func auditResource(audits AuditListingApplication) apiResource {
-	module := auditResourceModule{audits: audits}
-	return newResource(
+func auditResource(app AuditListingApplication) route.Resource {
+	h := auditHandlers{app: app}
+	return route.NewResource(
 		"audits",
-		principalRoute(http.MethodGet, apiPath(literal("audits")),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.query.invalid", "audit.unavailable", "request.invalid", "resource.not_found"}, module.list),
-		sessionRoute(http.MethodGet, apiPath(literal("users"), literal("me"), literal("audits")),
-			[]string{"audit.query.invalid", "audit.unavailable", "request.invalid"}, module.listSelf),
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/audits",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.query.invalid",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+			},
+			Handle: h.list,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/users/me/audits",
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{"audit.query.invalid", "audit.unavailable", "request.invalid"},
+			Handle: h.listSelf,
+		},
 	)
 }
 
-func (m auditResourceModule) list(request operationRequest) (operationResult, error) {
-	query, err := auditQueryFromRequest(request.request)
+func (h auditHandlers) list(request route.Request) (route.Result, error) {
+	query, err := auditQueryFromRequest(request.HTTP)
 	if err != nil {
-		return operationResult{}, apperror.Invalid("request.invalid", "query")
+		return route.Result{}, apperror.Invalid("request.invalid", "query")
 	}
-	page, listErr := m.audits.ListAuditEvents(
-		request.context,
-		request.invocation(),
+	page, listErr := h.app.ListAuditEvents(
+		request.Context,
+		request.Invocation(),
 		query,
 	)
 	if listErr != nil {
-		return operationResult{}, listErr
+		return route.Result{}, listErr
 	}
-	envelope, err := newListResponse(page.Items, page.HasMore, auditEventResponseFromModel, func(last *model.AuditEvent) (string, error) {
+	envelope, err := route.NewList(page.Items, page.HasMore, auditEventResponseFromModel, func(last *model.AuditEvent) (string, error) {
 		return encodeAuditCursor(auditCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String()})
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	response, err := withPageTotal(envelope, page.PageTotal, !query.BeforeID.IsZero())
+	response, err := route.WithPageTotal(envelope, page.Total, !query.BeforeID.IsZero())
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, response), nil
+	return route.JSON(http.StatusOK, response), nil
 }
 
-func auditQueryFromRequest(request *http.Request) (app.ListAuditEventsQuery, error) {
-	query := app.ListAuditEventsQuery{Limit: defaultAuditPageSize}
+func auditQueryFromRequest(request *http.Request) (administration.ListAuditEventsQuery, error) {
+	query := administration.ListAuditEventsQuery{Limit: defaultAuditPageSize}
 	values := request.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
 		limit, err := strconv.Atoi(raw)
 		if err != nil || limit < 1 || limit > 200 {
 			return query, err
 		}
+
 		query.Limit = limit
 	}
+
 	if raw := values.Get("cursor"); raw != "" {
 		cursor, err := decodeAuditCursor(raw)
 		if err != nil {
 			return query, err
 		}
+
 		createdAt, _ := model.ParseRFC3339(cursor.CreatedAt)
 		query.BeforeCreatedAt = createdAt
 		query.BeforeID = model.AuditEventID(cursor.ID)
 	}
+
 	for _, name := range []string{"created_after", "created_before"} {
 		if entries, present := values[name]; present && (len(entries) != 1 || entries[0] == "") {
 			return query, errAuditQuery(name)
 		}
 	}
+
 	var err error
 	if query.Since, err = optionalAuditTime(values, "created_after"); err != nil {
 		return query, err
@@ -145,19 +181,23 @@ func auditQueryFromRequest(request *http.Request) (app.ListAuditEventsQuery, err
 	if query.Until, err = optionalAuditTime(values, "created_before"); err != nil {
 		return query, err
 	}
+
 	query.ActorID = model.UserID(values.Get("actor_id"))
 	query.Action = values.Get("action")
 	resourceType, resourceID := values.Get("resource_type"), values.Get("resource_id")
 	if (resourceType == "") != (resourceID == "") {
 		return query, errInvalidAuditResource
 	}
+
 	if resourceType != "" {
 		resource := model.Resource{Type: model.ResourceType(resourceType), ID: resourceID}
 		if resource.Validate() != nil {
 			return query, errInvalidAuditResource
 		}
+
 		query.Resource = &resource
 	}
+
 	return query, nil
 }
 
@@ -170,23 +210,31 @@ func (e auditQueryError) Error() string { return string(e) }
 func errAuditQuery(field string) error { return auditQueryError(field) }
 
 func encodeAuditCursor(cursor auditCursor) (string, error) {
-	return encodeOpaqueCursor(cursor, auditCursorSpec())
+	return route.EncodeCursor(cursor, auditCursorSpec())
 }
 
 func decodeAuditCursor(raw string) (auditCursor, error) {
-	return decodeOpaqueCursor(raw, auditCursorSpec())
+	return route.DecodeCursor(raw, auditCursorSpec())
 }
 
-func auditCursorSpec() opaqueCursorSpec[auditCursor] {
-	return opaqueCursorSpec[auditCursor]{
-		label: "audit", maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members: []string{"created_at", "id"},
-		validate: func(cursor auditCursor) error {
+func auditCursorSpec() route.CursorSpec[auditCursor] {
+	return route.CursorSpec[auditCursor]{
+		Label:                "audit",
+		MaximumEncodedLength: route.DefaultMaximumCursorLength,
+		Members:              []string{"created_at", "id"},
+		Validate: func(cursor auditCursor) error {
 			createdAt, err := model.ParseRFC3339(cursor.CreatedAt)
 			if err != nil || createdAt.IsZero() || !model.AuditEventID(cursor.ID).IsValid() {
 				return errors.New("invalid audit keyset")
 			}
+
 			return nil
 		},
 	}
+}
+
+// AuditListingApplication is the application port its handlers call; it lists audit events for administrators and for the caller.
+type AuditListingApplication interface {
+	ListAuditEvents(context.Context, invocation.Invocation, administration.ListAuditEventsQuery) (paging.Counted[*model.AuditEvent], error)
+	ListSelfAuditEvents(context.Context, invocation.Invocation, administration.ListSelfAuditEventsQuery) (administration.SelfAuditPage, error)
 }

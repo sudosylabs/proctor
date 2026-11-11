@@ -17,12 +17,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 func TestRoleHTTPCreateUsesApplicationCommandWithoutPreflight(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password",
@@ -34,20 +35,16 @@ func TestRoleHTTPCreateUsesApplicationCommandWithoutPreflight(t *testing.T) {
 		Permissions: []string{string(model.ActionClassView)},
 	}}
 	transport := &academicUnitHTTPApplication{principal: principal}
-	options := validHTTPOptions(t)
-	options.Logger = logger
-	options.Application = transport
-	options.AcademicUnits = transport
-	options.Institutions = transport
-	options.Roles = roles
-	httpAPI, err := New(options)
+	settings := validHTTPSettings(t)
+	settings.Logger = logger
+	httpAPI, err := newAPI(settings, transport, academicUnitResource(transport), institutionResource(transport), roleResource(roles))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = httpAPI.Close() })
 	body, _ := json.Marshal(map[string]any{
 		"name": "teacher", "display_name": "Teacher",
 		"permissions": []string{string(model.ActionClassView)},
 	})
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/roles", bytes.NewReader(body))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/roles", bytes.NewReader(body))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()

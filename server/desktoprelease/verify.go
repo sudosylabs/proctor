@@ -5,10 +5,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package desktoprelease verifies exact packaged Desktop agreement artifacts.
-// The composition root supplies admitted release keys and immutable expectations;
-// no request, Institution preference or client upload can extend that trust set.
-// It owns signature/byte verification, not eligibility, leases or native effects.
+// Package desktoprelease checks that a packaged Proctor Desktop release is one
+// this server build trusts. Verify compares the release's artifacts with the
+// pinned Expectation byte for byte, checks the Ed25519 signature on its
+// capability matrix against the admitted keys, and returns the verified build.
+//
+// The keys and expectations are supplied when the node is built. No request,
+// Institution setting or client upload can add to them. README.md describes
+// the artifacts.
 package desktoprelease
 
 import (
@@ -64,67 +68,99 @@ type Artifacts struct {
 // schemas, detector catalog and configuration manifest. Returned model catalogs
 // own defensive copies and cannot be altered through caller-owned buffers.
 func Verify(expected Expectation, artifacts Artifacts, admittedKeys map[string]ed25519.PublicKey) (model.DesktopBuildTuple, error) {
-	if expected.Build.Validate() != nil || !model.IsValidAgreementID(expected.ApplicationReleaseID) ||
-		!model.IsValidAgreementID(artifacts.Matrix.KeyID) || len(artifacts.Matrix.Payload) == 0 || len(artifacts.Matrix.Payload) > MatrixMaxBytes {
+	if expected.Build.Validate() != nil ||
+		!model.IsValidAgreementID(expected.ApplicationReleaseID) ||
+		!model.IsValidAgreementID(artifacts.Matrix.KeyID) ||
+		len(artifacts.Matrix.Payload) == 0 ||
+		len(artifacts.Matrix.Payload) > MatrixMaxBytes {
 		return model.DesktopBuildTuple{}, ErrInvalidArtifact
 	}
+
 	key := admittedKeys[artifacts.Matrix.KeyID]
-	if len(key) != ed25519.PublicKeySize || len(artifacts.Matrix.Signature) != ed25519.SignatureSize ||
+	if len(key) != ed25519.PublicKeySize ||
+		len(artifacts.Matrix.Signature) != ed25519.SignatureSize ||
 		!ed25519.Verify(key, artifacts.Matrix.Payload, artifacts.Matrix.Signature) {
 		return model.DesktopBuildTuple{}, ErrInvalidArtifact
 	}
-	if !exactArtifact(artifacts.Registry, expected.RegistryDigest) || !exactArtifact(artifacts.SourceManifest, expected.SourceManifestDigest) ||
-		!exactArtifact(artifacts.Matrix.Payload, expected.MatrixDigest) || !exactArtifact(artifacts.DetectorCatalog, expected.DetectorCatalogDigest) ||
+
+	if !exactArtifact(artifacts.Registry, expected.RegistryDigest) ||
+		!exactArtifact(artifacts.SourceManifest, expected.SourceManifestDigest) ||
+		!exactArtifact(artifacts.Matrix.Payload, expected.MatrixDigest) ||
+		!exactArtifact(artifacts.DetectorCatalog, expected.DetectorCatalogDigest) ||
 		!exactArtifact(artifacts.ConfigurationManifest, expected.Build.AttemptConfigurationManifestFingerprint) ||
 		!bytes.Equal(artifacts.ConfigurationManifest, expected.Build.ConfigurationManifest.Canonical()) {
 		return model.DesktopBuildTuple{}, ErrInvalidArtifact
 	}
+
 	// Every source's exact schema is admitted even when the optional family is
 	// disabled. Effect-only coverage additionally binds its own packaged schema.
-	if len(expected.SourceSchemaDigests) != len(model.NativeSources()) || len(artifacts.Schemas) > len(model.NativeSources())+model.NativeCoverageClaimLimit {
+	if len(expected.SourceSchemaDigests) != len(model.NativeSources()) ||
+		len(artifacts.Schemas) > len(model.NativeSources())+model.NativeCoverageClaimLimit {
 		return model.DesktopBuildTuple{}, ErrInvalidArtifact
 	}
+
 	used := make(map[string]bool, len(artifacts.Schemas))
 	for _, source := range model.NativeSources() {
 		digest := expected.SourceSchemaDigests[source]
 		if !exactArtifact(artifacts.Schemas[digest], digest) {
 			return model.DesktopBuildTuple{}, ErrInvalidArtifact
 		}
+
 		used[digest] = true
 	}
+
 	for _, definition := range expected.Coverage {
 		if !exactArtifact(artifacts.Schemas[definition.SourceSchemaDigest], definition.SourceSchemaDigest) ||
 			definition.SourceID != "" && expected.SourceSchemaDigests[definition.SourceID] != definition.SourceSchemaDigest {
 			return model.DesktopBuildTuple{}, ErrInvalidArtifact
 		}
+
 		used[definition.SourceSchemaDigest] = true
 	}
+
 	if len(used) != len(artifacts.Schemas) {
 		return model.DesktopBuildTuple{}, ErrInvalidArtifact
 	}
+
 	var matrix model.NativeCapabilityMatrix
 	if decodeCanonicalClosed(artifacts.Matrix.Payload, &matrix, MatrixMaxBytes) != nil ||
-		matrix.ReleaseID != expected.ApplicationReleaseID || matrix.MatrixID != expected.Build.CapabilityMatrixIdentity ||
-		matrix.TargetTuple != expected.Build.TargetTuple() || matrix.RegistryDigest != expected.RegistryDigest {
+		matrix.ReleaseID != expected.ApplicationReleaseID ||
+		matrix.MatrixID != expected.Build.CapabilityMatrixIdentity ||
+		matrix.TargetTuple != expected.Build.TargetTuple() ||
+		matrix.RegistryDigest != expected.RegistryDigest {
 		return model.DesktopBuildTuple{}, ErrInvalidArtifact
 	}
+
 	var detectors []model.NativeDetectorDefinition
 	if decodeCanonicalClosed(artifacts.DetectorCatalog, &detectors, ArtifactMaxBytes) != nil {
 		return model.DesktopBuildTuple{}, ErrInvalidArtifact
 	}
-	agreement, err := model.NewDesktopNativeAgreement(expected.RegistryDigest, expected.SourceManifestDigest, expected.MatrixDigest,
-		expected.DetectorCatalogDigest, expected.Coverage, matrix, detectors)
+
+	agreement, err := model.NewDesktopNativeAgreement(
+		expected.RegistryDigest,
+		expected.SourceManifestDigest,
+		expected.MatrixDigest,
+		expected.DetectorCatalogDigest,
+		expected.Coverage,
+		matrix,
+		detectors,
+	)
 	if err != nil {
 		return model.DesktopBuildTuple{}, ErrInvalidArtifact
 	}
+
 	build := expected.Build
 	build.NativeAgreement = agreement
 	return build, nil
 }
 
 func exactArtifact(document []byte, digest string) bool {
-	return len(document) > 0 && len(document) <= ArtifactMaxBytes && model.IsValidSHA256Fingerprint(digest) &&
-		utf8.Valid(document) && json.Valid(document) && model.SHA256Fingerprint(document) == digest
+	return len(document) > 0 &&
+		len(document) <= ArtifactMaxBytes &&
+		model.IsValidSHA256Fingerprint(digest) &&
+		utf8.Valid(document) &&
+		json.Valid(document) &&
+		model.SHA256Fingerprint(document) == digest
 }
 
 // Canonical re-encoding also rejects case aliases and omitted required fields,

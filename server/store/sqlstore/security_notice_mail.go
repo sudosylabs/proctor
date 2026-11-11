@@ -17,12 +17,27 @@ import (
 
 const securityNoticeLifetime = 24 * time.Hour
 
-func validateSecurityNoticeMail(userID model.UserID, occurrence *model.MailOccurrence, delivery *model.MailDelivery, job *model.Job, key model.MailTemplateKey, at time.Time) (string, error) {
+func validateSecurityNoticeMail(
+	userID model.UserID,
+	occurrence *model.MailOccurrence,
+	delivery *model.MailDelivery,
+	job *model.Job,
+	key model.MailTemplateKey,
+	at time.Time,
+) (string, error) {
 	when := model.TimeUTC(at)
-	if !userID.IsValid() || occurrence == nil || delivery == nil || job == nil ||
-		occurrence.Kind != model.MailOccurrenceSecurityNotice || occurrence.TemplateKey != key || occurrence.ActorUserID != userID ||
-		delivery.TargetUserID != userID || delivery.TemplateKey != key || job.Type != model.JobTypeMailDeliver ||
-		!occurrence.CreatedAt.Equal(when) || delivery.Deadline.Sub(delivery.CreatedAt) != securityNoticeLifetime {
+	if !userID.IsValid() ||
+		occurrence == nil ||
+		delivery == nil ||
+		job == nil ||
+		occurrence.Kind != model.MailOccurrenceSecurityNotice ||
+		occurrence.TemplateKey != key ||
+		occurrence.ActorUserID != userID ||
+		delivery.TargetUserID != userID ||
+		delivery.TemplateKey != key ||
+		job.Type != model.JobTypeMailDeliver ||
+		!occurrence.CreatedAt.Equal(when) ||
+		delivery.Deadline.Sub(delivery.CreatedAt) != securityNoticeLifetime {
 		return "", store.NewErrInvalidInput("security_notice", "mail", nil)
 	}
 	if err := validateRecoveryMail(occurrence, delivery, job); err != nil {
@@ -35,6 +50,13 @@ func validateSecurityNoticeMail(userID model.UserID, occurrence *model.MailOccur
 	return payloadKeyID, nil
 }
 
-func insertSecurityNoticeMail(ctx context.Context, tx *sqlxTxWrapper, occurrence *model.MailOccurrence, delivery *model.MailDelivery, job *model.Job, payloadKeyID string) error {
+func insertSecurityNoticeMail(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	occurrence *model.MailOccurrence,
+	delivery *model.MailDelivery,
+	job *model.Job,
+	payloadKeyID string,
+) error {
 	return insertRecoveryMail(ctx, tx, occurrence, delivery, job, payloadKeyID)
 }

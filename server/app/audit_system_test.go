@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -22,7 +23,7 @@ import (
 func TestSystemCriticalAuditHasNoFabricatedActor(t *testing.T) {
 	t.Parallel()
 	audits := &systemAuditStoreFake{}
-	service, err := newAuditService(auditServiceDependencies{Audits: audits, Institutions: securityInstitutionStore{}, NodeID: "node-system"})
+	service, err := access.NewAuditor(access.AuditorDependencies{Audits: audits, Institutions: securityInstitutionStore{}, NodeID: "node-system"})
 	require.NoError(t, err)
 	sittingID, unitID := model.NewExamSittingID(), model.NewAcademicUnitID()
 	jobID, attemptID := model.NewJobID(), model.NewJobAttemptID()
@@ -41,11 +42,11 @@ func TestSystemCriticalAuditHasNoFabricatedActor(t *testing.T) {
 func TestExamSittingSystemAuditAdapterRetainsJobIdentityAtAcademicUnitScope(t *testing.T) {
 	t.Parallel()
 	audits := &systemAuditStoreFake{}
-	service, err := newAuditService(auditServiceDependencies{Audits: audits, Institutions: securityInstitutionStore{}, NodeID: "node-system"})
+	service, err := access.NewAuditor(access.AuditorDependencies{Audits: audits, Institutions: securityInstitutionStore{}, NodeID: "node-system"})
 	require.NoError(t, err)
 	sittingID, unitID := model.NewExamSittingID(), model.NewAcademicUnitID()
 	call := invocation.System{JobID: model.NewJobID(), AttemptID: model.NewJobAttemptID()}
-	id, err := (examSittingSystemAuditAdapter{audit: service}).Begin(context.Background(), call,
+	id, err := service.SystemAudit().BeginJob(context.Background(), call,
 		model.ActionExamSittingManage, model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
 		model.RoleScopeAcademicUnit, unitID.String(), "advance_due", map[string]any{
 			"exam_sitting_id": sittingID.String(),
@@ -74,32 +75,4 @@ func (f *systemAuditStoreFake) Save(_ context.Context, event *model.AuditEvent) 
 	}
 	f.saved = copy.Clone()
 	return copy, nil
-}
-
-type completionContextAuditStore struct {
-	store.AuditStore
-	completionErr error
-}
-
-func (f *completionContextAuditStore) Complete(ctx context.Context, input *store.AuditCompletion) (*model.AuditEvent, error) {
-	id := input.ID
-	status := input.Status
-	errorCode := input.ErrorCode
-	f.completionErr = ctx.Err()
-	return &model.AuditEvent{ID: id, Status: status, ErrorCode: errorCode}, nil
-}
-
-func TestCompleteCriticalActionSurvivesACanceledRequest(t *testing.T) {
-	t.Parallel()
-
-	audits := &completionContextAuditStore{}
-	service := &auditService{deps: auditServiceDependencies{Audits: audits}, now: time.Now}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	auditID := model.NewAuditEventID()
-	for _, status := range []model.AuditStatus{model.AuditStatusFail, model.AuditStatusSuccess} {
-		_, err := service.CompleteCriticalAction(ctx, auditID, status, "", nil)
-		require.NoError(t, err, "status %s", status)
-		require.NoError(t, audits.completionErr, "status %s: the completion write saw the request's cancellation", status)
-	}
 }

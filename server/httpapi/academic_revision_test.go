@@ -17,6 +17,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -24,12 +26,12 @@ func TestAcademicRevisionHTTPContract(t *testing.T) {
 	t.Parallel()
 	for _, kind := range []string{"academic_unit", "programme", "programme_level", "academic_period", "class"} {
 		t.Run(kind, func(t *testing.T) {
-			logger, _ := newTestLogger(t)
+			logger, _ := routetest.NewLogger(t)
 			principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
 			module, path, revision := academicRevisionHTTPFixture(kind, principal)
-			api := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, module)
+			api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, module)
 			call := func(method, suffix, body string) *httptest.ResponseRecorder {
-				request := httptest.NewRequest(method, path+suffix, strings.NewReader(body))
+				request := httptest.NewRequestWithContext(t.Context(), method, path+suffix, strings.NewReader(body))
 				request.Header.Set("Authorization", "Bearer credential")
 				if body != "" {
 					request.Header.Set("Content-Type", "application/json")
@@ -62,7 +64,7 @@ func TestAcademicRevisionHTTPContract(t *testing.T) {
 	}
 }
 
-func academicRevisionHTTPFixture(kind string, principal model.Principal) (apiResource, string, func(string) *int64) {
+func academicRevisionHTTPFixture(kind string, principal model.Principal) (route.Resource, string, func(string) *int64) {
 	switch kind {
 	case "academic_unit":
 		value := &model.AcademicUnit{ID: model.NewAcademicUnitID(), Revision: 7}

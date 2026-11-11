@@ -100,8 +100,11 @@ func TestMailPrimaryKeyFenceSerializesEnqueueBeforeRekey(t *testing.T) {
 
 func waitForBlockedMailQuery(t *testing.T, ctx context.Context, persistence *SQLStore, blockerPID int, queryFragment string) int {
 	t.Helper()
+	// The fragment names a statement, not its layout, so the statement's
+	// line breaks and indentation are read as single spaces.
 	query := `SELECT pid FROM pg_stat_activity
-		WHERE pid <> pg_backend_pid() AND $1 = ANY(pg_blocking_pids(pid)) AND query LIKE '%' || $2 || '%'
+		WHERE pid <> pg_backend_pid() AND $1 = ANY(pg_blocking_pids(pid))
+			AND regexp_replace(query, '\s+', ' ', 'g') LIKE '%' || $2 || '%'
 		ORDER BY pid LIMIT 1`
 	ticker := time.NewTicker(5 * time.Millisecond)
 	defer ticker.Stop()

@@ -34,8 +34,14 @@ const (
 
 func (m ExamResourceMediaType) IsValid() bool {
 	switch m {
-	case ExamResourceMediaPDF, ExamResourceMediaPNG, ExamResourceMediaJPEG, ExamResourceMediaWebP,
-		ExamResourceMediaText, ExamResourceMediaMarkdown, ExamResourceMediaCSV, ExamResourceMediaJSON:
+	case ExamResourceMediaPDF,
+		ExamResourceMediaPNG,
+		ExamResourceMediaJPEG,
+		ExamResourceMediaWebP,
+		ExamResourceMediaText,
+		ExamResourceMediaMarkdown,
+		ExamResourceMediaCSV,
+		ExamResourceMediaJSON:
 		return true
 	default:
 		return false
@@ -58,13 +64,30 @@ type ExamResource struct {
 	ArchivedAt             OptionalTime
 }
 
-func NewExamResource(id ExamResourceID, examID ExamID, entryID FileEntryID, revisionID FileRevisionID, displayName, descriptionMarkdown string, position int, at time.Time) (*ExamResource, error) {
-	resource := &ExamResource{ID: id, ExamID: examID, FileEntryID: entryID, SelectedFileRevisionID: revisionID,
-		DisplayName: strings.TrimSpace(displayName), DescriptionMarkdown: descriptionMarkdown,
-		Position: position, CreatedAt: TimeUTC(at), UpdatedAt: TimeUTC(at)}
+func NewExamResource(
+	id ExamResourceID,
+	examID ExamID,
+	entryID FileEntryID,
+	revisionID FileRevisionID,
+	displayName, descriptionMarkdown string,
+	position int,
+	at time.Time,
+) (*ExamResource, error) {
+	resource := &ExamResource{
+		ID:                     id,
+		ExamID:                 examID,
+		FileEntryID:            entryID,
+		SelectedFileRevisionID: revisionID,
+		DisplayName:            strings.TrimSpace(displayName),
+		DescriptionMarkdown:    descriptionMarkdown,
+		Position:               position,
+		CreatedAt:              TimeUTC(at),
+		UpdatedAt:              TimeUTC(at),
+	}
 	if err := resource.Validate(); err != nil {
 		return nil, err
 	}
+
 	return resource, nil
 }
 
@@ -76,19 +99,29 @@ func (r *ExamResource) Validate() error {
 	if !r.ID.IsValid() || !r.ExamID.IsValid() || !r.FileEntryID.IsValid() || !r.SelectedFileRevisionID.IsValid() {
 		return invalidModelError(where, "exam_resource", "identity", "must contain valid identifiers", "")
 	}
+
 	details := "id=" + r.ID.String()
-	if r.DisplayName == "" || !utf8.ValidString(r.DisplayName) || strings.TrimSpace(r.DisplayName) != r.DisplayName || utf8.RuneCountInString(r.DisplayName) > ExamResourceDisplayNameMaxRunes {
+	if r.DisplayName == "" ||
+		!utf8.ValidString(r.DisplayName) ||
+		strings.TrimSpace(r.DisplayName) != r.DisplayName ||
+		utf8.RuneCountInString(r.DisplayName) > ExamResourceDisplayNameMaxRunes {
 		return invalidModelError(where, "exam_resource", "display_name", "must contain 1 to 255 trimmed Unicode characters", details)
 	}
+
 	if !utf8.ValidString(r.DescriptionMarkdown) || len(r.DescriptionMarkdown) > ExamResourceDescriptionMaxBytes {
 		return invalidModelError(where, "exam_resource", "description_markdown", "must be valid bounded UTF-8", details)
 	}
 	if r.Position < 0 || r.Position >= ExamResourceMaximumCount {
 		return invalidModelError(where, "exam_resource", "position", fmt.Sprintf("must be between 0 and %d", ExamResourceMaximumCount-1), details)
 	}
-	if r.CreatedAt.IsZero() || r.UpdatedAt.IsZero() || r.UpdatedAt.Before(r.CreatedAt) || r.ArchivedAt.Valid && r.ArchivedAt.Time.Before(r.CreatedAt) {
+
+	if r.CreatedAt.IsZero() ||
+		r.UpdatedAt.IsZero() ||
+		r.UpdatedAt.Before(r.CreatedAt) ||
+		r.ArchivedAt.Valid && r.ArchivedAt.Time.Before(r.CreatedAt) {
 		return invalidModelError(where, "exam_resource", "timestamps", "must be ordered and nonzero", details)
 	}
+
 	return nil
 }
 
@@ -117,11 +150,19 @@ func (r *ExamResource) ApplyMetadata(displayName, descriptionMarkdown string, at
 
 func (r *ExamResource) ReplaceContent(revisionID FileRevisionID, at time.Time) (bool, error) {
 	if r == nil || !revisionID.IsValid() {
-		return false, invalidModelError("ExamResource.ReplaceContent", "exam_resource", "selected_file_revision_id", "must be a valid identifier", "")
+		return false, invalidModelError(
+			"ExamResource.ReplaceContent",
+			"exam_resource",
+			"selected_file_revision_id",
+			"must be a valid identifier",
+			"",
+		)
 	}
+
 	if r.SelectedFileRevisionID == revisionID {
 		return false, nil
 	}
+
 	candidate := *r
 	candidate.SelectedFileRevisionID = revisionID
 	candidate.UpdatedAt = TimeUTC(at)
@@ -131,6 +172,7 @@ func (r *ExamResource) ReplaceContent(revisionID FileRevisionID, at time.Time) (
 	if err := candidate.Validate(); err != nil {
 		return false, err
 	}
+
 	*r = candidate
 	return true, nil
 }

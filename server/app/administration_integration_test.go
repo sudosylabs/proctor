@@ -25,8 +25,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
-
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -213,9 +212,9 @@ func TestBootstrapAndRoleAdministrationIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusConflict, protected.Code, "patch built-in role status = %d: %s", protected.Code, protected.Body.String())
 
-	secondAdministrator, appErr := helper.App.CreateLocalUser(
+	secondAdministrator, appErr := helper.App.Identity.CreateLocalUser(
 		context.Background(),
-		app.CreateLocalUserCommand{User: &model.User{
+		identity.CreateLocalUserCommand{User: &model.User{
 			Username: "second-administrator", Email: "second-administrator@example.edu",
 			DisplayName: "Second Administrator",
 		}, Password: password},

@@ -56,8 +56,8 @@ func TestExistingAttemptConfigurationRetainsOriginalProvenanceOnPatchedBuild(t *
 	require.NoError(t, input.DesktopBuild.Validate(), "invalid test build")
 	for _, proposal := range []*model.AttemptConfigurationCandidate{nil, &candidate} {
 		input.InitialConfiguration = proposal
-		retained, err := validateExistingAttemptConfiguration(canonical, frozen.Digest, input)
-		require.NoError(t, err)
+		retained, validateErr := validateExistingAttemptConfiguration(canonical, frozen.Digest, input)
+		require.NoError(t, validateErr)
 		actual, _ := retained.CanonicalAdmission()
 		require.True(t, bytes.Equal(actual, canonical), "rejoin rewrote original provenance")
 	}

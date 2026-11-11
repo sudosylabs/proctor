@@ -49,13 +49,23 @@ func (id OnboardingImportID) IsValid() bool     { return IsValidOpaqueID(string(
 func (id OnboardingImportID) IsZero() bool      { return id == "" }
 
 func (m OnboardingImportMode) IsValid() bool {
-	return m == OnboardingImportStudentClass || m == OnboardingImportTeacherAcademicUnit || m == OnboardingImportInstitution || m == OnboardingImportAcademicAdministration || m == OnboardingImportStudentProgression
+	return m == OnboardingImportStudentClass ||
+		m == OnboardingImportTeacherAcademicUnit ||
+		m == OnboardingImportInstitution ||
+		m == OnboardingImportAcademicAdministration ||
+		m == OnboardingImportStudentProgression
 }
 
 func (s OnboardingImportState) IsValid() bool {
 	switch s {
-	case OnboardingImportUploading, OnboardingImportParsing, OnboardingImportPreviewReady, OnboardingImportExecuting,
-		OnboardingImportCompleted, OnboardingImportCompletedWithErrors, OnboardingImportCanceled, OnboardingImportFailed:
+	case OnboardingImportUploading,
+		OnboardingImportParsing,
+		OnboardingImportPreviewReady,
+		OnboardingImportExecuting,
+		OnboardingImportCompleted,
+		OnboardingImportCompletedWithErrors,
+		OnboardingImportCanceled,
+		OnboardingImportFailed:
 		return true
 	default:
 		return false
@@ -68,8 +78,14 @@ func (p OnboardingImportCommitPolicy) IsValid() bool {
 
 func (s OnboardingImportRowStatus) IsValid() bool {
 	switch s {
-	case OnboardingImportRowValid, OnboardingImportRowInvalid, OnboardingImportRowDuplicate, OnboardingImportRowPending,
-		OnboardingImportRowSucceeded, OnboardingImportRowNoOp, OnboardingImportRowFailed, OnboardingImportRowSkipped,
+	case OnboardingImportRowValid,
+		OnboardingImportRowInvalid,
+		OnboardingImportRowDuplicate,
+		OnboardingImportRowPending,
+		OnboardingImportRowSucceeded,
+		OnboardingImportRowNoOp,
+		OnboardingImportRowFailed,
+		OnboardingImportRowSkipped,
 		OnboardingImportRowCanceled:
 		return true
 	default:
@@ -81,12 +97,17 @@ func ValidateOnboardingImportScope(mode OnboardingImportMode, scopeType RoleScop
 	if !mode.IsValid() || !IsValidOpaqueID(scopeID) {
 		return invalidModelError("ValidateOnboardingImportScope", "onboarding_import", "", "invalid onboarding import scope", "")
 	}
+
 	if (mode == OnboardingImportStudentClass && scopeType != RoleScopeClass) ||
 		(mode == OnboardingImportTeacherAcademicUnit && scopeType != RoleScopeAcademicUnit) ||
 		(mode == OnboardingImportInstitution && scopeType != RoleScopeInstitution) ||
 		(mode == OnboardingImportStudentProgression && scopeType != RoleScopeClass) ||
-		(mode == OnboardingImportAcademicAdministration && scopeType != RoleScopeInstitution && scopeType != RoleScopeAcademicUnit && scopeType != RoleScopeClass) {
+		(mode == OnboardingImportAcademicAdministration &&
+			scopeType != RoleScopeInstitution &&
+			scopeType != RoleScopeAcademicUnit &&
+			scopeType != RoleScopeClass) {
 		return invalidModelError("ValidateOnboardingImportScope", "onboarding_import", "", "onboarding import mode and scope do not match", "")
 	}
+
 	return nil
 }

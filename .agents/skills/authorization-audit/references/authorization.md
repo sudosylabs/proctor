@@ -107,7 +107,7 @@ credential intervention require a strong recent interactive Session.
   takes a raw Principal and request metadata. Every `Authorize<Concept>`
   helper takes `(ctx, Invocation, ...)` and returns `error`, or `(R, error)`
   where `R` is a named struct that says what the helper reports beyond the
-  decision (`ManagerAuthorization{Override}`, `authorizationScope{Type, ID}`,
+  decision (`access.ManagerAuthorization{Override}`, `authorizationScope{Type, ID}`,
   `profileReadAuthorization{FullProfile}`, a `store` visibility scope); never
   a bare `bool`, ID, or several values. A non-audited predicate is
   `Can<Concept>` and returns `(bool, error)`; an error-returning check is an
@@ -115,10 +115,14 @@ credential intervention require a strong recent interactive Session.
   name across ports and adapters: an adapter that forwards to another helper
   keeps that helper's name (`AuthorizeSittingView`, `AuthorizeExamView`,
   `AuthorizeSubmissionReview`), which also keeps two embedded services from
-  exporting the same ambiguous name. `TestAuthorizationHelpersShareOneShape`
-  enforces the shape and the naming.
+  exporting the same ambiguous name. Review holds new helpers to the shape
+  and the naming.
 - List/search queries constrain results by authorized scope in persistence;
-  they do not fetch everything and filter in memory.
+  they do not fetch everything and filter in memory. The list helpers live on
+  `access.Authorizer` beside one another (`AuthorizeExamList`,
+  `AuthorizeAcademicPeriodList`, `AuthorizeClassSearch`,
+  `AuthorizeUserSearch`); each records one collection decision at the
+  Institution and returns the `store` visibility the listing applies.
 - WebSocket commands/subscriptions and background jobs use the same application
   policy boundary and explicit `Invocation` as HTTP callers.
 - Role and binding changes invalidate affected authentication or connection
@@ -289,6 +293,13 @@ operation resolves the canonical Submission first, audits that resource and
 resolved Academic Unit scope, and conceals a denied or mismatched target as not
 found. An identical idempotent mutation replay repeats current authorization
 and audit before returning its retained result.
+The Sitting service makes the current Exam Manager decision
+(`AuthorizeSittingView`, `AuthorizeSubmissionReview`, ...) and reports it as
+`access.ManagerAuthorization`. The Attempt and Integrity review areas each
+declare a `SittingManagerAuthorizer` (`manager_authorization.go`) that
+resolves the canonical Submission and refuses the candidate who made it,
+recording that denial at the Submission's Academic Unit and concealing it as
+not found, before it asks the Sitting service.
 Browser Activity history always requires current exact Exam Manager membership
 plus `exam.attempt.browser_activity.view`. It has no
 administrator override action. Each page and history-bearing export repeats
@@ -318,12 +329,15 @@ enforce both halves.
 Every event about a User's account names that User as its subject
 (`subject_user_id`). A User resource is always its own subject, enforced by
 the model and a database check; a writer whose resource is a scope, Class, or
-the Institution names the affected User through `mutationAttempt.Subject` or
+the Institution names the affected User through `access.Mutation.Subject` or
 the draft's `SubjectUserID` (Role Binding grants and ends, Class and Academic
 Unit membership, Invitation acceptance, self-service MFA, and Personal Access
-Token changes). A runner given a subject its auditor cannot record refuses the
-mutation. A writer that adds an account-relevant operation adds its
-`model.AuditSelfEvent` row in the same change.
+Token changes). An attempt begins through one entry point,
+`Begin(ctx, access.Mutation)`, so every auditor is handed the subject and the
+scope; `access.RunAudited` refuses a malformed subject or explicit scope with
+`audit.internal` before the auditor is asked. A Mutation with neither is
+recorded at the resource's own scope. A writer that adds an account-relevant
+operation adds its `model.AuditSelfEvent` row in the same change.
 
 Authorization decisions fail closed when their durable record cannot be
 written. A critical mutation writes an `attempt` before state changes and that
@@ -344,10 +358,16 @@ the pending state:
   `AuditEventID` and `AuditAt`. The operation completes the attempt as
   `success` in the transaction that commits the state, Session issuance
   included; on any failure the application completes it as `fail` with the
-  public error code (`runAuditedMutation` owns this for ordinary mutations).
+  public error code (`access.RunAudited` owns this for ordinary mutations;
+  the use case sets the instant as `access.Mutation.At`, which reaches the
+  Store as `MutationReference.MutationAt` in UTC, and the runner reads no
+  clock).
   Actor work begins from the Principal (or, for a handoff with no Principal
   yet, the proved account); trusted durable work begins an actorless system
-  attempt and never fabricates a User. This is the protocol for every
+  attempt and never fabricates a User. Exam Jobs and runtime tasks begin
+  theirs through `access.SystemAuditAdapter`: `BeginJob` names the Job
+  execution in the recorded value, and `Begin` serves a periodic task, which
+  runs under no Job. This is the protocol for every
   actor or system mutation unless the next rule applies.
 - **Draft.** When a named aggregate is itself the pending record (a Personal
   Access Token preparation, a Desktop authorization, a live-correction

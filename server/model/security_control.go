@@ -42,9 +42,18 @@ type NativeSourceReset struct {
 }
 
 func (r NativeSourceReset) Validate() error {
-	if r.Kind != "source_reset" || !IsValidAgreementID(r.ResetID) || !slices.Contains(NativeSources(), r.SourceID) || !IsValidAgreementID(r.PreviousSourceInstanceID) || !IsValidAgreementID(r.NewSourceInstanceID) || r.PreviousSourceInstanceID == r.NewSourceInstanceID || !securitySafeInt(r.PreviousFinalSequence) || !slices.Contains([]string{"restart", "resume", "permission_changed"}, r.Reason) || !securityInstant(r.OccurredAt) {
+	if r.Kind != "source_reset" ||
+		!IsValidAgreementID(r.ResetID) ||
+		!slices.Contains(NativeSources(), r.SourceID) ||
+		!IsValidAgreementID(r.PreviousSourceInstanceID) ||
+		!IsValidAgreementID(r.NewSourceInstanceID) ||
+		r.PreviousSourceInstanceID == r.NewSourceInstanceID ||
+		!securitySafeInt(r.PreviousFinalSequence) ||
+		!slices.Contains([]string{"restart", "resume", "permission_changed"}, r.Reason) ||
+		!securityInstant(r.OccurredAt) {
 		return ErrSecurityControlInvalid
 	}
+
 	return nil
 }
 func (r NativeSourceReset) Canonical() ([]byte, error) {
@@ -73,15 +82,27 @@ type SecurityCoverageRenewal struct {
 }
 
 func (c SecurityCoverageRenewal) Validate() error {
-	if c.ControlSequence <= 0 || !securitySafeInt(c.ControlSequence) || !IsValidSHA256Fingerprint(c.PolicyDigest) || !IsValidAgreementID(c.SecuritySessionID) || !IsValidAgreementID(c.StreamID) || !slices.Contains([]string{"checking", "compliant", "degraded", "contained", "failed"}, c.Posture) || ValidateNativeCoverageSnapshot(c.Sources, c.Coverage) != nil || c.SourceResets == nil || len(c.SourceResets) > len(NativeSources()) || c.DeliveryWatermarks == nil || len(c.DeliveryWatermarks) > 50 {
+	if c.ControlSequence <= 0 ||
+		!securitySafeInt(c.ControlSequence) ||
+		!IsValidSHA256Fingerprint(c.PolicyDigest) ||
+		!IsValidAgreementID(c.SecuritySessionID) ||
+		!IsValidAgreementID(c.StreamID) ||
+		!slices.Contains([]string{"checking", "compliant", "degraded", "contained", "failed"}, c.Posture) ||
+		ValidateNativeCoverageSnapshot(c.Sources, c.Coverage) != nil ||
+		c.SourceResets == nil ||
+		len(c.SourceResets) > len(NativeSources()) ||
+		c.DeliveryWatermarks == nil ||
+		len(c.DeliveryWatermarks) > 50 {
 		return ErrSecurityControlInvalid
 	}
+
 	previous := -1
 	for i, reset := range c.SourceResets {
 		order := slices.Index(NativeSources(), reset.SourceID)
 		if reset.Validate() != nil || order <= previous {
 			return ErrSecurityControlInvalid
 		}
+
 		previous = order
 		for _, prior := range c.SourceResets[:i] {
 			if prior.ResetID == reset.ResetID {
@@ -89,20 +110,29 @@ func (c SecurityCoverageRenewal) Validate() error {
 			}
 		}
 	}
+
 	for i, mark := range c.DeliveryWatermarks {
-		if !slices.Contains([]string{"native", "browser"}, mark.Family) || (mark.Family == "native" && !IsValidAgreementID(mark.SourceID) || mark.Family == "browser" && !BrowserSourceSessionID(mark.SourceID).IsValid()) || !securitySafeInt(mark.AllocatedThroughSequence) || !securitySafeInt(mark.AcknowledgedThroughSequence) || mark.AcknowledgedThroughSequence > mark.AllocatedThroughSequence {
+		if !slices.Contains([]string{"native", "browser"}, mark.Family) ||
+			(mark.Family == "native" && !IsValidAgreementID(mark.SourceID) ||
+				mark.Family == "browser" && !BrowserSourceSessionID(mark.SourceID).IsValid()) ||
+			!securitySafeInt(mark.AllocatedThroughSequence) ||
+			!securitySafeInt(mark.AcknowledgedThroughSequence) ||
+			mark.AcknowledgedThroughSequence > mark.AllocatedThroughSequence {
 			return ErrSecurityControlInvalid
 		}
+
 		for _, prior := range c.DeliveryWatermarks[:i] {
 			if prior.Family == mark.Family && prior.SourceID == mark.SourceID {
 				return ErrSecurityControlInvalid
 			}
 		}
 	}
+
 	raw, err := encodeCanonicalExamDocument(c)
 	if err != nil || len(raw) > SecurityControlMaxBytes {
 		return ErrSecurityControlInvalid
 	}
+
 	return nil
 }
 func (c SecurityCoverageRenewal) Canonical() ([]byte, error) {
@@ -163,19 +193,29 @@ type NativeContinuityDecision struct {
 	ReceiptIDs []string
 }
 
-func ResolveNativeSourceContinuity(heads, current []NativeSourceCoverage, history, resets []NativeSourceReset) (NativeContinuityDecision, error) {
-	decision := NativeContinuityDecision{Result: "accepted", Heads: slices.Clone(current), NewResets: []NativeSourceReset{}, ReceiptIDs: []string{}}
+func ResolveNativeSourceContinuity(
+	heads, current []NativeSourceCoverage,
+	history, resets []NativeSourceReset,
+) (NativeContinuityDecision, error) {
+	decision := NativeContinuityDecision{
+		Result:     "accepted",
+		Heads:      slices.Clone(current),
+		NewResets:  []NativeSourceReset{},
+		ReceiptIDs: []string{},
+	}
 	fault := func(result string) (NativeContinuityDecision, error) {
 		return NativeContinuityDecision{Result: result, Heads: slices.Clone(heads), NewResets: []NativeSourceReset{}, ReceiptIDs: []string{}}, nil
 	}
 	if len(heads) != len(current) || len(heads) > len(NativeSources()) || len(resets) > len(heads) {
 		return NativeContinuityDecision{}, ErrSecurityControlInvalid
 	}
+
 	for i, head := range heads {
-		if head.SourceID != current[i].SourceID {
+		if head.SourceID != current[i].SourceID { //nolint:gosec // G602: len(heads) == len(current) is checked above.
 			return NativeContinuityDecision{}, ErrSecurityControlInvalid
 		}
 	}
+
 	for _, reset := range resets {
 		if reset.Validate() != nil {
 			return NativeContinuityDecision{}, ErrSecurityControlInvalid
@@ -184,6 +224,7 @@ func ResolveNativeSourceContinuity(heads, current []NativeSourceCoverage, histor
 			return NativeContinuityDecision{}, ErrSecurityControlInvalid
 		}
 	}
+
 	for i, head := range heads {
 		next := current[i]
 		var edge *NativeSourceReset
@@ -192,9 +233,11 @@ func ResolveNativeSourceContinuity(heads, current []NativeSourceCoverage, histor
 				if edge != nil {
 					return NativeContinuityDecision{}, ErrSecurityControlInvalid
 				}
+
 				edge = &resets[j]
 			}
 		}
+
 		if edge == nil {
 			if next.SourceInstanceID != head.SourceInstanceID {
 				return fault("reset_required")
@@ -202,18 +245,22 @@ func ResolveNativeSourceContinuity(heads, current []NativeSourceCoverage, histor
 			if next.Sequence < head.Sequence {
 				return fault("reset_conflict")
 			}
+
 			continue
 		}
+
 		encoded, err := edge.Canonical()
 		if err != nil {
 			return NativeContinuityDecision{}, err
 		}
+
 		known := false
 		restarts := 0
 		for _, prior := range history {
 			if prior.SourceID == head.SourceID && prior.Reason == "restart" {
 				restarts++
 			}
+
 			if prior.ResetID == edge.ResetID {
 				previous, err := prior.Canonical()
 				if err != nil {
@@ -222,54 +269,79 @@ func ResolveNativeSourceContinuity(heads, current []NativeSourceCoverage, histor
 				if !bytes.Equal(previous, encoded) {
 					return fault("reset_conflict")
 				}
+
 				known = true
 			}
 		}
+
 		if known {
 			if head.SourceInstanceID != edge.NewSourceInstanceID || next.SourceInstanceID != head.SourceInstanceID || next.Sequence < head.Sequence {
 				return fault("reset_conflict")
 			}
+
 			decision.ReceiptIDs = append(decision.ReceiptIDs, edge.ResetID)
 			continue
 		}
-		if edge.PreviousSourceInstanceID != head.SourceInstanceID || edge.PreviousFinalSequence < head.Sequence || next.SourceInstanceID != edge.NewSourceInstanceID || edge.Reason == "restart" && restarts >= 1 {
+
+		if edge.PreviousSourceInstanceID != head.SourceInstanceID ||
+			edge.PreviousFinalSequence < head.Sequence ||
+			next.SourceInstanceID != edge.NewSourceInstanceID ||
+			edge.Reason == "restart" && restarts >= 1 {
 			return fault("reset_conflict")
 		}
+
 		for _, prior := range history {
-			if prior.SourceID == edge.SourceID && (edge.NewSourceInstanceID == prior.PreviousSourceInstanceID || edge.NewSourceInstanceID == prior.NewSourceInstanceID) {
+			if prior.SourceID == edge.SourceID &&
+				(edge.NewSourceInstanceID == prior.PreviousSourceInstanceID || edge.NewSourceInstanceID == prior.NewSourceInstanceID) {
 				return fault("reset_conflict")
 			}
 		}
+
 		decision.NewResets = append(decision.NewResets, *edge)
 		decision.ReceiptIDs = append(decision.ReceiptIDs, edge.ResetID)
 	}
+
 	return decision, nil
 }
 
 func (r SecurityCoverageResult) Validate() error {
-	if !securitySafeInt(r.ProcessedControlSequence) || (r.ProcessedControlSequence == 0) != (r.ProcessedControlDigest == nil) || r.ProcessedControlDigest != nil && !IsValidSHA256Fingerprint(*r.ProcessedControlDigest) || !slices.Contains([]string{"accepted", "stale_control", "reset_required", "reset_conflict"}, r.CoverageResult) || r.SourceResetReceipts == nil || len(r.SourceResetReceipts) > 11 || r.DeliveryWatermarkRejections == nil || len(r.DeliveryWatermarkRejections) > 50 {
+	if !securitySafeInt(r.ProcessedControlSequence) ||
+		(r.ProcessedControlSequence == 0) != (r.ProcessedControlDigest == nil) ||
+		r.ProcessedControlDigest != nil && !IsValidSHA256Fingerprint(*r.ProcessedControlDigest) ||
+		!slices.Contains([]string{"accepted", "stale_control", "reset_required", "reset_conflict"}, r.CoverageResult) ||
+		r.SourceResetReceipts == nil ||
+		len(r.SourceResetReceipts) > 11 ||
+		r.DeliveryWatermarkRejections == nil ||
+		len(r.DeliveryWatermarkRejections) > 50 {
 		return ErrSecurityControlInvalid
 	}
+
 	for i, receipt := range r.SourceResetReceipts {
 		if !IsValidAgreementID(receipt.ResetID) || !IsValidSHA256Fingerprint(receipt.ResetDigest) {
 			return ErrSecurityControlInvalid
 		}
+
 		for _, prior := range r.SourceResetReceipts[:i] {
 			if prior.ResetID == receipt.ResetID {
 				return ErrSecurityControlInvalid
 			}
 		}
 	}
+
 	for i, rejection := range r.DeliveryWatermarkRejections {
-		if !slices.Contains([]string{"native", "browser"}, rejection.Family) || !IsValidAgreementID(rejection.SourceID) || !slices.Contains([]string{"closed_source", "position_limit"}, rejection.Reason) {
+		if !slices.Contains([]string{"native", "browser"}, rejection.Family) ||
+			!IsValidAgreementID(rejection.SourceID) ||
+			!slices.Contains([]string{"closed_source", "position_limit"}, rejection.Reason) {
 			return ErrSecurityControlInvalid
 		}
+
 		for _, prior := range r.DeliveryWatermarkRejections[:i] {
 			if prior.Family == rejection.Family && prior.SourceID == rejection.SourceID {
 				return ErrSecurityControlInvalid
 			}
 		}
 	}
+
 	return nil
 }
 

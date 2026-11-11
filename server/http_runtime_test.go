@@ -40,7 +40,7 @@ func TestHTTPSRedirectUsesCanonicalPublicAuthority(t *testing.T) {
 	t.Parallel()
 
 	handler := newHTTPSRedirectHandler("proctor.example.edu")
-	request := httptest.NewRequest(http.MethodPost, "http://attacker.example/exams/a%2Fb?attempt=1", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "http://attacker.example/exams/a%2Fb?attempt=1", nil)
 	request.Host = "attacker.example"
 	response := httptest.NewRecorder()
 
@@ -103,10 +103,10 @@ func TestHTTPRuntimeServesStaticTLSWithoutNetwork(t *testing.T) {
 	client := tls.Client(clientConnection, &tls.Config{
 		MinVersion:         tls.VersionTLS12,
 		ServerName:         "proctor.example.edu",
-		InsecureSkipVerify: true, // The generated certificate is trusted only by this test.
+		InsecureSkipVerify: true, //nolint:gosec // G402: the generated certificate is trusted only by this test.
 	})
 	require.NoError(t, client.HandshakeContext(t.Context()))
-	request, err := http.NewRequest(http.MethodGet, "https://proctor.example.edu/health/ready", nil)
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://proctor.example.edu/health/ready", nil)
 	require.NoError(t, err)
 	require.NoError(t, request.Write(client))
 	response, err := http.ReadResponse(bufio.NewReader(client), request)
@@ -143,18 +143,18 @@ func TestHTTPRuntimeRestrictsACMEAndWrapsForwarding(t *testing.T) {
 	_, err := manager.TLSConfig().GetCertificate(&tls.ClientHelloInfo{ServerName: "other.example.edu"})
 	require.Error(t, err, "unconfigured cached certificate hostname accepted")
 
-	request := httptest.NewRequest(http.MethodGet, "http://untrusted.example/health/ready", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://untrusted.example/health/ready", nil)
 	response := httptest.NewRecorder()
 	manager.HTTPHandler(runtime.forwarding.Handler).ServeHTTP(response, request)
 	require.Equal(t, http.StatusPermanentRedirect, response.Code, "forwarding response")
 	require.Equal(t, "https://proctor.example.edu/health/ready", response.Header().Get("Location"), "forwarding response")
 
 	challengeHandler := manager.HTTPHandler(runtime.forwarding.Handler)
-	untrustedChallenge := httptest.NewRequest(http.MethodGet, "http://other.example.edu/.well-known/acme-challenge/token", nil)
+	untrustedChallenge := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://other.example.edu/.well-known/acme-challenge/token", nil)
 	untrustedResponse := httptest.NewRecorder()
 	challengeHandler.ServeHTTP(untrustedResponse, untrustedChallenge)
 	require.Equal(t, http.StatusForbidden, untrustedResponse.Code, "untrusted challenge status")
-	configuredChallenge := httptest.NewRequest(http.MethodGet, "http://proctor.example.edu:80/.well-known/acme-challenge/missing", nil)
+	configuredChallenge := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://proctor.example.edu:80/.well-known/acme-challenge/missing", nil)
 	configuredResponse := httptest.NewRecorder()
 	challengeHandler.ServeHTTP(configuredResponse, configuredChallenge)
 	require.Equal(t, http.StatusNotFound, configuredResponse.Code, "configured challenge status")
@@ -220,8 +220,8 @@ func TestHTTPRuntimeGracefulShutdownDrainsForwardingRequests(t *testing.T) {
 	requestStarted := make(chan struct{})
 	releaseRequest := make(chan struct{})
 	runtime := &standardHTTPRuntime{
-		primary: &http.Server{Handler: http.NotFoundHandler()},
-		forwarding: &http.Server{Handler: http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		primary: &http.Server{Handler: http.NotFoundHandler()}, //nolint:gosec // G112: a test server on an in-memory pipe listener.
+		forwarding: &http.Server{Handler: http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) { //nolint:gosec // G112: a test server on an in-memory pipe listener.
 			close(requestStarted)
 			<-releaseRequest
 			writer.WriteHeader(http.StatusPermanentRedirect)

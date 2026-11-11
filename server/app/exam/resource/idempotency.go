@@ -22,8 +22,18 @@ const (
 	idempotencyOperationRemoveResource         = "exam.resource.remove"
 )
 
-func prepareResourceIdempotency(invocation invocation.Invocation, operation, key string, examID model.ExamID, revision int64, resourceID, name, description string, media model.ExamResourceMediaType, size int64, sha string, ids []string) (*store.CommandIdempotency, error) {
-	return idempotency.Require(invocation, operation, key, struct {
+func prepareResourceIdempotency(
+	inv invocation.Invocation,
+	operation, key string,
+	examID model.ExamID,
+	revision int64,
+	resourceID, name, description string,
+	media model.ExamResourceMediaType,
+	size int64,
+	sha string,
+	ids []string,
+) (*store.CommandIdempotency, error) {
+	return idempotency.Require(inv, operation, key, struct {
 		ExamID                string   `json:"exam_id"`
 		ExpectedDraftRevision int64    `json:"expected_draft_revision"`
 		ResourceID            string   `json:"resource_id,omitempty"`
@@ -36,8 +46,8 @@ func prepareResourceIdempotency(invocation invocation.Invocation, operation, key
 	}{examID.String(), revision, resourceID, name, description, string(media), size, sha, ids})
 }
 
-func prepareMetadataIdempotency(invocation invocation.Invocation, command EditMetadataCommand) (*store.CommandIdempotency, error) {
-	return idempotency.Require(invocation, idempotencyOperationEditResourceMetadata, command.IdempotencyKey, struct {
+func prepareMetadataIdempotency(inv invocation.Invocation, command EditMetadataCommand) (*store.CommandIdempotency, error) {
+	return idempotency.Require(inv, idempotencyOperationEditResourceMetadata, command.IdempotencyKey, struct {
 		ExamID                string  `json:"exam_id"`
 		ExpectedDraftRevision int64   `json:"expected_draft_revision"`
 		ResourceID            string  `json:"resource_id"`

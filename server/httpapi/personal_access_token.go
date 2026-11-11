@@ -13,9 +13,12 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -92,7 +95,7 @@ type personalAccessTokenAcademicUnitResponse struct {
 
 func personalAccessTokenGrantableScopesResponseFromApp(
 	request *http.Request,
-	catalogue *app.PersonalAccessTokenGrantableScopes,
+	catalogue *identity.PersonalAccessTokenGrantableScopes,
 ) personalAccessTokenGrantableScopesResponse {
 	response := personalAccessTokenGrantableScopesResponse{
 		Scopes:        []personalAccessTokenGrantableScopeResponse{},
@@ -101,18 +104,21 @@ func personalAccessTokenGrantableScopesResponseFromApp(
 	if catalogue == nil {
 		return response
 	}
+
 	response.AcademicUnitsHasMore = catalogue.AcademicUnitsHasMore
 	for _, unit := range catalogue.AcademicUnits {
 		response.AcademicUnits = append(response.AcademicUnits, personalAccessTokenAcademicUnitResponse{
-			ID: unit.ID.String(), DisplayName: unit.DisplayName,
+			ID:          unit.ID.String(),
+			DisplayName: unit.DisplayName,
 		})
 	}
+
 	for _, scope := range catalogue.Scopes {
 		name := string(scope.Action)
 		item := personalAccessTokenGrantableScopeResponse{
 			Name:            name,
-			Title:           translatedRequestText(request, accessActionTitleLocalizationID(scope.Action), name),
-			Description:     translatedRequestText(request, accessActionDescriptionLocalizationID(scope.Action), ""),
+			Title:           route.Translate(request, accessActionTitleLocalizationID(scope.Action), name),
+			Description:     route.Translate(request, accessActionDescriptionLocalizationID(scope.Action), ""),
 			ResourceTypes:   make([]string, 0, len(scope.ResourceTypes)),
 			InstitutionWide: scope.InstitutionWide,
 			AcademicUnitIDs: make([]string, 0, len(scope.AcademicUnitIDs)),
@@ -120,37 +126,108 @@ func personalAccessTokenGrantableScopesResponseFromApp(
 		for _, resourceType := range scope.ResourceTypes {
 			item.ResourceTypes = append(item.ResourceTypes, string(resourceType))
 		}
+
 		for _, id := range scope.AcademicUnitIDs {
 			item.AcademicUnitIDs = append(item.AcademicUnitIDs, id.String())
 		}
+
 		response.Scopes = append(response.Scopes, item)
 	}
+
 	return response
 }
 
-type personalAccessTokenResourceModule struct {
-	tokens PersonalAccessTokens
+type personalAccessTokenHandlers struct {
+	app PersonalAccessTokens
 }
 
-func personalAccessTokenResource(tokens PersonalAccessTokens) apiResource {
-	module := personalAccessTokenResourceModule{tokens: tokens}
-	collection := apiPath(literal("users"), literal("me"), literal("tokens"))
-	item := apiPath(literal("users"), literal("me"), literal("tokens"), canonicalID("personal_access_token_id"))
-	grantableScopes := apiPath(literal("users"), literal("me"), literal("tokens"), literal("grantable-scopes"))
-	return newResource(
+func personalAccessTokenResource(app PersonalAccessTokens) route.Resource {
+	h := personalAccessTokenHandlers{app: app}
+	collection := "/users/me/tokens"
+	item := "/users/me/tokens/{personal_access_token_id}"
+	grantableScopes := "/users/me/tokens/grantable-scopes"
+	return route.NewResource(
 		"personal-access-tokens",
-		recentSessionRoute(http.MethodPost, collection, []string{"request.invalid", "resource.not_found", "personal_access_token.invalid", "personal_access_token.maximum_reached", "personal_access_token.unavailable", "audit.unavailable", "authentication.session_required"}, module.create),
-		sessionRoute(http.MethodGet, collection, []string{"personal_access_token.unavailable", "authentication.reauthentication_required", "authentication.session_required", "request.invalid"}, module.list),
-		sessionRoute(http.MethodGet, grantableScopes, []string{"personal_access_token.unavailable", "authentication.reauthentication_required", "authentication.session_required"}, module.grantableScopes),
-		sessionRoute(http.MethodPost, appendRoutePath(item, literal("disable")), []string{"request.invalid", "resource.not_found", "personal_access_token.unavailable", "audit.unavailable", "authentication.reauthentication_required", "authentication.session_required", "personal_access_token.invalid"}, module.disable),
-		recentSessionRoute(http.MethodPost, appendRoutePath(item, literal("enable")), []string{"request.invalid", "resource.not_found", "personal_access_token.maximum_reached", "personal_access_token.unavailable", "audit.unavailable", "authentication.session_required", "personal_access_token.invalid"}, module.enable),
-		sessionRoute(http.MethodDelete, item, []string{"request.invalid", "resource.not_found", "personal_access_token.unavailable", "audit.unavailable", "authentication.reauthentication_required", "authentication.session_required", "personal_access_token.invalid"}, module.revoke),
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   collection,
+			Auth:   route.AuthRecentSessionRequired,
+			Errors: []string{
+				"request.invalid",
+				"resource.not_found",
+				"personal_access_token.invalid",
+				"personal_access_token.maximum_reached",
+				"personal_access_token.unavailable",
+				"audit.unavailable",
+				"authentication.session_required",
+			},
+			Handle: h.create,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   collection,
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{
+				"personal_access_token.unavailable",
+				"authentication.reauthentication_required",
+				"authentication.session_required",
+				"request.invalid",
+			},
+			Handle: h.list,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   grantableScopes,
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{"personal_access_token.unavailable", "authentication.reauthentication_required", "authentication.session_required"},
+			Handle: h.grantableScopes,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/me/tokens/{personal_access_token_id}/disable",
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{
+				"request.invalid",
+				"resource.not_found",
+				"personal_access_token.unavailable",
+				"audit.unavailable",
+				"authentication.reauthentication_required",
+				"authentication.session_required",
+				"personal_access_token.invalid",
+			},
+			Handle: h.disable,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/me/tokens/{personal_access_token_id}/enable",
+			Auth:   route.AuthRecentSessionRequired,
+			Errors: []string{
+				"request.invalid",
+				"resource.not_found",
+				"personal_access_token.maximum_reached",
+				"personal_access_token.unavailable",
+				"audit.unavailable",
+				"authentication.session_required",
+				"personal_access_token.invalid",
+			},
+			Handle: h.enable,
+		},
+		route.Endpoint{
+			Method: http.MethodDelete,
+			Path:   item,
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{
+				"request.invalid",
+				"resource.not_found",
+				"personal_access_token.unavailable",
+				"audit.unavailable",
+				"authentication.reauthentication_required",
+				"authentication.session_required",
+				"personal_access_token.invalid",
+			},
+			Handle: h.revoke,
+		},
 	)
-}
-
-func appendRoutePath(path routePath, parts ...pathPart) routePath {
-	combined := append([]pathPart(nil), path.parts...)
-	return apiPath(append(combined, parts...)...)
 }
 
 func personalAccessTokenSessionCodes(extra ...string) []string {
@@ -161,102 +238,140 @@ func personalAccessTokenSessionMutationCodes(extra ...string) []string {
 	return personalAccessTokenSessionCodes(extra...)
 }
 
-func (m personalAccessTokenResourceModule) disable(request operationRequest) (operationResult, error) {
-	return m.setDisabled(request, true)
+func (h personalAccessTokenHandlers) disable(request route.Request) (route.Result, error) {
+	return h.setDisabled(request, true)
 }
 
-func (m personalAccessTokenResourceModule) enable(request operationRequest) (operationResult, error) {
-	return m.setDisabled(request, false)
+func (h personalAccessTokenHandlers) enable(request route.Request) (route.Result, error) {
+	return h.setDisabled(request, false)
 }
 
-func (m personalAccessTokenResourceModule) setDisabled(request operationRequest, disabled bool) (operationResult, error) {
-	tokenID, err := request.params.RequirePersonalAccessTokenID()
+func (h personalAccessTokenHandlers) setDisabled(request route.Request, disabled bool) (route.Result, error) {
+	tokenID, err := route.PathID[model.PersonalAccessTokenID](request, "personal_access_token_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	updated, err := m.tokens.SetPersonalAccessTokenDisabled(
-		request.context,
-		request.invocation(),
-		app.SetPersonalAccessTokenDisabledCommand{TokenID: tokenID, Disabled: disabled},
+	updated, err := h.app.SetPersonalAccessTokenDisabled(
+		request.Context,
+		request.Invocation(),
+		identity.SetPersonalAccessTokenDisabledCommand{TokenID: tokenID, Disabled: disabled},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, personalAccessTokenResponseFromModel(updated)).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, personalAccessTokenResponseFromModel(updated)).WithHeaders(noStoreHeaders()), nil
 }
 
-func (m personalAccessTokenResourceModule) create(request operationRequest) (operationResult, error) {
+func (h personalAccessTokenHandlers) create(request route.Request) (route.Result, error) {
 	var input createPersonalAccessTokenRequest
-	if err := request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
 	}
-	expiresAt, err := wireTimeMillis("expires_at", input.ExpiresAt)
+
+	expiresAt, err := route.WireTimeMillis("expires_at", input.ExpiresAt)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	created, err := m.tokens.CreatePersonalAccessToken(
-		request.context,
-		request.invocation(),
-		app.CreatePersonalAccessTokenCommand{
-			Description: input.Description, Scopes: input.Scopes,
-			AcademicUnitID: model.AcademicUnitID(input.AcademicUnitID), ExpiresAt: expiresAt,
+
+	created, err := h.app.CreatePersonalAccessToken(
+		request.Context,
+		request.Invocation(),
+		identity.CreatePersonalAccessTokenCommand{
+			Description:    input.Description,
+			Scopes:         input.Scopes,
+			AcademicUnitID: model.AcademicUnitID(input.AcademicUnitID),
+			ExpiresAt:      expiresAt,
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusCreated, personalAccessTokenCreationResponse{
-		Token: personalAccessTokenResponseFromModel(created.Token), Credential: created.Credential,
-	}).withHeaders(noStoreHeaders()), nil
+
+	return route.JSON(http.StatusCreated, personalAccessTokenCreationResponse{
+		Token:      personalAccessTokenResponseFromModel(created.Token),
+		Credential: created.Credential,
+	}).WithHeaders(noStoreHeaders()), nil
 }
 
-func (m personalAccessTokenResourceModule) list(request operationRequest) (operationResult, error) {
-	tokens, err := m.tokens.ListPersonalAccessTokens(
-		request.context,
-		request.invocation(),
-		app.ListPersonalAccessTokensQuery{},
+func (h personalAccessTokenHandlers) list(request route.Request) (route.Result, error) {
+	tokens, err := h.app.ListPersonalAccessTokens(
+		request.Context,
+		request.Invocation(),
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	response, err := boundedListResult(request, "personal access token", tokens,
-		func(token *model.PersonalAccessToken) boundedPageKey {
-			return boundedPageKey{At: token.CreatedAt, ID: token.ID.String()}
-		}, personalAccessTokenResponseFromModel)
-	if err != nil {
-		return operationResult{}, err
-	}
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
-}
 
-func (m personalAccessTokenResourceModule) grantableScopes(request operationRequest) (operationResult, error) {
-	catalogue, err := m.tokens.ListGrantablePersonalAccessTokenScopes(
-		request.context,
-		request.invocation(),
-		app.ListGrantablePersonalAccessTokenScopesQuery{},
+	response, err := route.BoundedList(
+		request,
+		"personal access token",
+		tokens,
+		func(token *model.PersonalAccessToken) route.BoundedKey {
+			return route.BoundedKey{At: token.CreatedAt, ID: token.ID.String()}
+		},
+		personalAccessTokenResponseFromModel,
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, personalAccessTokenGrantableScopesResponseFromApp(request.request, catalogue)).
-		withHeaders(noStoreHeaders()), nil
+
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
-func (m personalAccessTokenResourceModule) revoke(request operationRequest) (operationResult, error) {
-	tokenID, err := request.params.RequirePersonalAccessTokenID()
+func (h personalAccessTokenHandlers) grantableScopes(request route.Request) (route.Result, error) {
+	catalogue, err := h.app.ListGrantablePersonalAccessTokenScopes(
+		request.Context,
+		request.Invocation(),
+	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	if _, err := m.tokens.RevokePersonalAccessToken(
-		request.context,
-		request.invocation(),
-		app.RevokePersonalAccessTokenCommand{TokenID: tokenID},
+	return route.JSON(http.StatusOK, personalAccessTokenGrantableScopesResponseFromApp(request.HTTP, catalogue)).
+		WithHeaders(noStoreHeaders()), nil
+}
+
+func (h personalAccessTokenHandlers) revoke(request route.Request) (route.Result, error) {
+	tokenID, err := route.PathID[model.PersonalAccessTokenID](request, "personal_access_token_id")
+	if err != nil {
+		return route.Result{}, err
+	}
+	if _, err := h.app.RevokePersonalAccessToken(
+		request.Context,
+		request.Invocation(),
+		tokenID,
 	); err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return noContentResult(), nil
+	return route.NoContent(), nil
 }
 
 func noStoreHeaders() http.Header {
 	return http.Header{"Cache-Control": []string{"no-store"}}
+}
+
+// PersonalAccessTokens is the application port its handlers call; it creates, lists, revokes and disables personal access tokens.
+type PersonalAccessTokens interface {
+	CreatePersonalAccessToken(
+		context.Context,
+		invocation.Invocation,
+		identity.CreatePersonalAccessTokenCommand,
+	) (*model.PersonalAccessTokenCreation, error)
+	ListPersonalAccessTokens(
+		context.Context,
+		invocation.Invocation,
+	) ([]*model.PersonalAccessToken, error)
+	ListGrantablePersonalAccessTokenScopes(
+		context.Context,
+		invocation.Invocation,
+	) (*identity.PersonalAccessTokenGrantableScopes, error)
+	RevokePersonalAccessToken(
+		context.Context,
+		invocation.Invocation,
+		model.PersonalAccessTokenID,
+	) (*model.PersonalAccessToken, error)
+	SetPersonalAccessTokenDisabled(
+		context.Context,
+		invocation.Invocation,
+		identity.SetPersonalAccessTokenDisabledCommand,
+	) (*model.PersonalAccessToken, error)
 }

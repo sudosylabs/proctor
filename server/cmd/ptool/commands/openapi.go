@@ -45,8 +45,8 @@ func newOpenAPIBuildCommand(options *openAPIOptions) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := writeFileAtomically(filepath.Clean(options.output), compiled); err != nil {
-				return err
+			if writeErr := writeFileAtomically(filepath.Clean(options.output), compiled); writeErr != nil {
+				return writeErr
 			}
 			_, err = fmt.Fprintf(command.OutOrStdout(), "wrote %s from %s\n", options.output, options.source)
 			return err

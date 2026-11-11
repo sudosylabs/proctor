@@ -5,16 +5,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package apperror owns Proctor's single transport-neutral application error
-// type. The parent application and its child modules share it so every
-// expected public failure carries the same stable code, safe fields, and
-// operator-only cause regardless of which module produced it. StoreTable
-// translates typed Store failures and Concealment presents a protected use
-// case's failures, so no module writes its own translator or presenter.
+// Package apperror is the one error type the application returns for a failure
+// a caller is allowed to see. An Error has a stable Code such as
+// "exam.sitting.not_found", a few safe fields, and a wrapped cause kept for
+// operators and never shown to the caller. Build one with New or Invalid.
 //
-// The package depends only on the standard library. It contains no HTTP
-// status, protocol envelope, localization state, or request metadata; each
-// transport maps codes through its own exhaustive table.
+// StoreTable turns typed Store errors into codes, and Concealment reports a
+// resource the caller may not see as resource.not_found, so areas do not write
+// their own translation. The package knows nothing about HTTP: httpapi maps
+// each code to a status from httpapi/route/error_catalog.yaml.
 package apperror
 
 import (

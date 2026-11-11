@@ -22,7 +22,7 @@ type UserTokenPurpose string
 
 const (
 	UserTokenPasswordReset     UserTokenPurpose = "password_reset"
-	UserTokenEmailVerification UserTokenPurpose = "email_verification"
+	UserTokenEmailVerification UserTokenPurpose = "email_verification" //nolint:gosec // G101: a token purpose name, not a credential.
 	// UserTokenEmailChangeUndo is sent to the previous address when an
 	// account's email changes; its Target is that previous address, which
 	// redeeming the token restores.
@@ -81,6 +81,7 @@ func (t *UserToken) Validate() error {
 	if !t.ID.IsValid() {
 		return invalidModelError(where, "user_token", "id", "must be a valid identifier", "")
 	}
+
 	details := "id=" + t.ID.String()
 	if t.CreatedAt.IsZero() || t.UpdatedAt.IsZero() {
 		return invalidModelError(where, "user_token", "created_at", "must be set", details)
@@ -97,6 +98,7 @@ func (t *UserToken) Validate() error {
 	if !IsValidTokenHash(t.TokenHash) {
 		return invalidModelError(where, "user_token", "token_hash", "has an invalid format", details)
 	}
+
 	if !IsValidEmail(t.Target) {
 		return invalidModelError(
 			where,
@@ -106,16 +108,20 @@ func (t *UserToken) Validate() error {
 			details,
 		)
 	}
+
 	if t.ExpiresAt.IsZero() || !t.ExpiresAt.After(t.CreatedAt) {
 		return invalidModelError(where, "user_token", "expires_at", "must be after create_at", details)
 	}
+
 	if t.ConsumedAt.Valid &&
 		(t.ConsumedAt.Time.Before(t.CreatedAt) || !t.ConsumedAt.Time.Before(t.ExpiresAt)) {
 		return invalidModelError(where, "user_token", "consumed_at", "must be within the token lifetime", details)
 	}
+
 	if t.ArchivedAt.Valid && t.ArchivedAt.Time.Before(t.CreatedAt) {
 		return invalidModelError(where, "user_token", "archived_at", "must not precede created_at", details)
 	}
+
 	return nil
 }
 

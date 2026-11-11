@@ -39,7 +39,7 @@ func assertPreparedIdempotency(t *testing.T, got *store.CommandIdempotency, user
 func TestIdempotencyDocumentsAndStoreBoundaryCompatibility(t *testing.T) {
 	t.Parallel()
 	userID := model.NewUserID()
-	invocation := invocation.New(model.Principal{UserID: userID}, model.RequestMetadata{})
+	inv := invocation.New(model.Principal{UserID: userID}, model.RequestMetadata{})
 	examID, entryID := model.NewExamID(), model.NewStarterWorkspaceEntryID().String()
 	version := model.WorkspaceContentVersion("aaaaaaaaaaaaaaaaaaaaaaaaaa")
 	tests := []struct {
@@ -54,7 +54,7 @@ func TestIdempotencyDocumentsAndStoreBoundaryCompatibility(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.path, func(t *testing.T) {
-			prepared, err := prepareWorkspaceIdempotency(invocation, test.operation, test.key, examID, 2,
+			prepared, err := prepareWorkspaceIdempotency(inv, test.operation, test.key, examID, 2,
 				model.WorkspaceContentVersion(test.version), test.entryID, test.path, test.mediaType, test.size, test.sha)
 			require.NoError(t, err)
 			assertPreparedIdempotency(t, prepared, userID, test.operation, test.key, test.document)
@@ -64,12 +64,12 @@ func TestIdempotencyDocumentsAndStoreBoundaryCompatibility(t *testing.T) {
 
 func TestReplacementIdempotencyIncludesExpectedContentVersion(t *testing.T) {
 	t.Parallel()
-	invocation := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
+	inv := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
 	examID, entryID := model.NewExamID(), model.NewStarterWorkspaceEntryID().String()
-	first, err := prepareWorkspaceIdempotency(invocation, idempotencyOperationReplaceFile, "replace-key", examID, 2,
+	first, err := prepareWorkspaceIdempotency(inv, idempotencyOperationReplaceFile, "replace-key", examID, 2,
 		model.WorkspaceContentVersion("aaaaaaaaaaaaaaaaaaaaaaaaaa"), entryID, "", "text/plain", 1, "checksum")
 	require.NoError(t, err)
-	second, err := prepareWorkspaceIdempotency(invocation, idempotencyOperationReplaceFile, "replace-key", examID, 2,
+	second, err := prepareWorkspaceIdempotency(inv, idempotencyOperationReplaceFile, "replace-key", examID, 2,
 		model.WorkspaceContentVersion("bbbbbbbbbbbbbbbbbbbbbbbbbb"), entryID, "", "text/plain", 1, "checksum")
 	require.NoError(t, err)
 	require.NotEqual(t, second.Fingerprint, first.Fingerprint, "expected content version was omitted")
@@ -92,8 +92,8 @@ func TestWorkspaceIdempotencyOperationCompatibility(t *testing.T) {
 
 func TestPrepareIdempotencyRequiresKey(t *testing.T) {
 	t.Parallel()
-	invocation := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
-	_, err := idempotency.Require(invocation, "operation", "", struct{}{})
+	inv := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
+	_, err := idempotency.Require(inv, "operation", "", struct{}{})
 	fault, ok := apperror.As(err)
 	require.True(t, ok)
 	require.Equal(t, "idempotency.key_required", fault.Code())

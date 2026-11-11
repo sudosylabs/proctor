@@ -93,7 +93,7 @@ func TestBrowserPolicyDocumentParserPreservesSchemaAndCanonicalSize(t *testing.T
 		HostMatch: BrowserPolicyHostExact, BlockedNavigationOutcome: BrowserPolicyBlockedNavigationRecord,
 	}})
 	require.NoError(t, err)
-	encoded, err := EncodeBrowserPolicy(policy)
+	_, err = EncodeBrowserPolicy(policy)
 	require.NoError(t, err)
 	// Fill the total limit with individually bounded, distinct rules.
 	for index := 1; index < 15; index++ {
@@ -103,7 +103,7 @@ func TestBrowserPolicyDocumentParserPreservesSchemaAndCanonicalSize(t *testing.T
 			HostMatch:  BrowserPolicyHostExact, BlockedNavigationOutcome: BrowserPolicyBlockedNavigationRecord,
 		})
 	}
-	encoded, err = EncodeBrowserPolicy(policy)
+	encoded, err := EncodeBrowserPolicy(policy)
 	require.NoError(t, err)
 	policy.Rules[0].PathPrefix += strings.Repeat("a", BrowserPolicyMaximumBytes-len(encoded))
 	encoded, err = EncodeBrowserPolicy(policy)

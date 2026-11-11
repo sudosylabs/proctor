@@ -8,11 +8,13 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -84,34 +86,43 @@ func installationStateResponseFromModel(state *model.InstallationState) *install
 	}
 }
 
-func installationBootstrapResponseFromModel(request *http.Request, result *model.InstallationBootstrapResult) installationBootstrapResponse {
+func installationBootstrapResponseFromModel(
+	request *http.Request,
+	result *model.InstallationBootstrapResult,
+) installationBootstrapResponse {
 	if result == nil {
 		return installationBootstrapResponse{}
 	}
+
 	var institution *institutionResponse
 	if result.Institution != nil {
 		mapped := institutionResponseFromModel(result.Institution)
 		institution = &mapped
 	}
+
 	var administrator *userProfileResponse
 	if result.Administrator != nil {
 		mapped := userProfileResponseFromModel(result.Administrator)
 		administrator = &mapped
 	}
+
 	var role *roleResponse
 	if result.Role != nil {
 		mapped := roleResponseFromModel(request, result.Role)
 		role = &mapped
 	}
+
 	var binding *roleBindingResponse
 	if result.RoleBinding != nil {
 		mapped := roleBindingResponseFromModel(result.RoleBinding)
 		binding = &mapped
 	}
+
 	var policy *initialAccessPolicyResponse
 	if result.AccessPolicy != nil {
 		policy = &initialAccessPolicyResponse{
-			ID: result.AccessPolicy.ID.String(), Revision: result.AccessPolicy.Revision,
+			ID:                               result.AccessPolicy.ID.String(),
+			Revision:                         result.AccessPolicy.Revision,
 			LocalLoginEnabled:                result.AccessPolicy.LocalLoginEnabled,
 			PublicRegistrationEnabled:        result.AccessPolicy.PublicRegistrationEnabled,
 			InvitationAdmissionEnabled:       result.AccessPolicy.InvitationAdmissionEnabled,
@@ -119,6 +130,7 @@ func installationBootstrapResponseFromModel(request *http.Request, result *model
 			DesktopAuthorizationEnabled:      result.AccessPolicy.DesktopAuthorizationEnabled,
 		}
 	}
+
 	return installationBootstrapResponse{
 		State:         installationStateResponseFromModel(result.State),
 		Institution:   institution,
@@ -129,49 +141,64 @@ func installationBootstrapResponseFromModel(request *http.Request, result *model
 	}
 }
 
-type bootstrapResourceModule struct {
-	bootstrap BootstrapApplication
+type bootstrapHandlers struct {
+	app BootstrapApplication
 }
 
-func bootstrapResource(bootstrap BootstrapApplication) apiResource {
-	module := bootstrapResourceModule{bootstrap: bootstrap}
-	return newResource(
+func bootstrapResource(app BootstrapApplication) route.Resource {
+	h := bootstrapHandlers{app: app}
+	return route.NewResource(
 		"bootstrap",
-		publicRoute(
-			http.MethodGet,
-			apiPath(literal("bootstrap")),
-			[]string{"installation.unavailable"},
-			module.status,
-		),
-		publicRoute(
-			http.MethodPost,
-			apiPath(literal("bootstrap")),
-			[]string{"request.invalid", "installation.already_initialized", "installation.unavailable", "installation.bootstrap_denied", "authentication.password.invalid", "authentication.password.pattern_invalid", "authentication.password.common_invalid", "authentication.password.identity_invalid", "service.busy", "authentication.rate_limited", "administration.unavailable"},
-			module.install,
-		),
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/bootstrap",
+			Auth:   route.AuthPublic,
+			Errors: []string{"installation.unavailable"},
+			Handle: h.status,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/bootstrap",
+			Auth:   route.AuthPublic,
+			Errors: []string{
+				"request.invalid",
+				"installation.already_initialized",
+				"installation.unavailable",
+				"installation.bootstrap_denied",
+				"authentication.password.invalid",
+				"authentication.password.pattern_invalid",
+				"authentication.password.common_invalid",
+				"authentication.password.identity_invalid",
+				"service.busy",
+				"authentication.rate_limited",
+				"administration.unavailable",
+			},
+			Handle: h.install,
+		},
 	)
 }
 
-func (m bootstrapResourceModule) status(request operationRequest) (operationResult, error) {
-	status, err := m.bootstrap.GetInstallationStatus(request.context, request.invocation(), app.GetInstallationStatusQuery{})
+func (h bootstrapHandlers) status(request route.Request) (route.Result, error) {
+	status, err := h.app.GetInstallationStatus(request.Context, request.Invocation())
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, installationStatusResponse{Initialized: status.Initialized}), nil
+	return route.JSON(http.StatusOK, installationStatusResponse{Initialized: status.Initialized}), nil
 }
 
-func (m bootstrapResourceModule) install(request operationRequest) (operationResult, error) {
+func (h bootstrapHandlers) install(request route.Request) (route.Result, error) {
 	var input bootstrapRequest
-	if err := request.decodeJSON(&input); err != nil {
-		return operationResult{}, apperror.New("request.invalid").WithField("field", "body").Wrap(err)
+	if err := request.DecodeJSON(&input); err != nil {
+		return route.Result{}, apperror.New("request.invalid").WithField("field", "body").Wrap(err)
 	}
 	if input.Institution == nil || input.Administrator == nil {
-		return operationResult{}, apperror.New("request.invalid").WithField("field", "bootstrap")
+		return route.Result{}, apperror.New("request.invalid").WithField("field", "bootstrap")
 	}
-	result, err := m.bootstrap.BootstrapInstallation(
-		request.context,
-		invocation.New(model.Principal{}, request.metadata),
-		app.BootstrapInstallationCommand{
+
+	result, err := h.app.BootstrapInstallation(
+		request.Context,
+		invocation.New(model.Principal{}, request.Metadata),
+		identity.BootstrapInstallationCommand{
 			InstitutionName:          input.Institution.Name,
 			InstitutionDisplayName:   input.Institution.DisplayName,
 			InstitutionDescription:   input.Institution.Description,
@@ -184,11 +211,22 @@ func (m bootstrapResourceModule) install(request operationRequest) (operationRes
 			AdministratorTimezone:    input.Administrator.Timezone,
 			Password:                 input.Password,
 			BootstrapSecret:          input.BootstrapSecret,
-			Source:                   request.metadata.IPAddress,
+			Source:                   request.Metadata.IPAddress,
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusCreated, installationBootstrapResponseFromModel(request.request, result)), nil
+
+	return route.JSON(http.StatusCreated, installationBootstrapResponseFromModel(request.HTTP, result)), nil
+}
+
+// BootstrapApplication is the application port its handlers call; it reports and performs installation bootstrap.
+type BootstrapApplication interface {
+	GetInstallationStatus(context.Context, invocation.Invocation) (*model.InstallationStatus, error)
+	BootstrapInstallation(
+		context.Context,
+		invocation.Invocation,
+		identity.BootstrapInstallationCommand,
+	) (*model.InstallationBootstrapResult, error)
 }

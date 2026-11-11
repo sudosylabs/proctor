@@ -177,8 +177,8 @@ func (s *Sender) Send(ctx context.Context, message mail.Message) (mail.Receipt, 
 	if err != nil {
 		return mail.Receipt{}, err
 	}
-	if err := ctx.Err(); err != nil {
-		return mail.Receipt{}, mail.Error("send", err)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return mail.Receipt{}, mail.Error("send", ctxErr)
 	}
 
 	client, cleanup, err := s.connect(ctx)
@@ -187,12 +187,12 @@ func (s *Sender) Send(ctx context.Context, message mail.Message) (mail.Receipt, 
 	}
 	defer cleanup()
 
-	if err := client.Mail(delivery.EnvelopeFrom); err != nil {
-		return mail.Receipt{}, s.smtpError(ctx, "mail-from", err, false)
+	if mailErr := client.Mail(delivery.EnvelopeFrom); mailErr != nil {
+		return mail.Receipt{}, s.smtpError(ctx, "mail-from", mailErr, false)
 	}
 	for _, recipient := range delivery.Recipients {
-		if err := client.Rcpt(recipient); err != nil {
-			return mail.Receipt{}, s.smtpError(ctx, "recipient", err, false)
+		if rcptErr := client.Rcpt(recipient); rcptErr != nil {
+			return mail.Receipt{}, s.smtpError(ctx, "recipient", rcptErr, false)
 		}
 	}
 	data, err := client.Data()
@@ -255,9 +255,9 @@ func (s *Sender) connect(ctx context.Context) (*smtp.Client, func(), error) {
 	if contextDeadline, ok := ctx.Deadline(); ok && contextDeadline.Before(deadline) {
 		deadline = contextDeadline
 	}
-	if err := connection.SetDeadline(deadline); err != nil {
+	if setDeadlineErr := connection.SetDeadline(deadline); setDeadlineErr != nil {
 		_ = connection.Close()
-		return nil, nil, mail.Error("connect", classify(ctx, mail.ErrConnection, err, false))
+		return nil, nil, mail.Error("connect", classify(ctx, mail.ErrConnection, setDeadlineErr, false))
 	}
 
 	stopWatcher := make(chan struct{})

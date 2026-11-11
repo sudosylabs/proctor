@@ -13,33 +13,34 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type administratorRecoveryRuntimeFake struct {
-	command    app.AdministratorRecoveryCommand
-	result     *app.AdministratorRecoveryResult
-	err        error
-	mfaCommand app.AdministratorMFAResetCommand
-	mfaResult  *app.AdministratorMFAResetResult
-	system     invocation.System
+	command          identity.AdministratorRecoveryCommand
+	result           *identity.AdministratorRecoveryResult
+	err              error
+	mfaInstitutionID model.InstitutionID
+	mfaUserID        model.UserID
+	mfaResult        *identity.AdministratorMFAResetResult
+	system           invocation.System
 }
 
-func (f *administratorRecoveryRuntimeFake) ResetAdministratorMFA(_ context.Context, system invocation.System, command app.AdministratorMFAResetCommand) (*app.AdministratorMFAResetResult, error) {
-	f.mfaCommand, f.system = command, system
+func (f *administratorRecoveryRuntimeFake) ResetAdministratorMFA(_ context.Context, system invocation.System, institutionID model.InstitutionID, userID model.UserID) (*identity.AdministratorMFAResetResult, error) {
+	f.mfaInstitutionID, f.mfaUserID, f.system = institutionID, userID, system
 	return f.mfaResult, f.err
 }
 
-func (f *administratorRecoveryRuntimeFake) RecoverAdministratorAccess(_ context.Context, system invocation.System, command app.AdministratorRecoveryCommand) (*app.AdministratorRecoveryResult, error) {
+func (f *administratorRecoveryRuntimeFake) RecoverAdministratorAccess(_ context.Context, system invocation.System, command identity.AdministratorRecoveryCommand) (*identity.AdministratorRecoveryResult, error) {
 	f.command, f.system = command, system
 	return f.result, f.err
 }
 
 func TestInertServerExposesOnlyExplicitAdministratorRecoveryCapability(t *testing.T) {
 	t.Parallel()
-	fake := &administratorRecoveryRuntimeFake{result: &app.AdministratorRecoveryResult{PasswordRotated: true}}
+	fake := &administratorRecoveryRuntimeFake{result: &identity.AdministratorRecoveryResult{PasswordRotated: true}}
 	node := &Server{components: runtimeComponents{administratorRecovery: fake}}
 	command := AdministratorRecoveryCommand{
 		InstitutionID: "institution", UserID: "user", EnableLocalLogin: true, Password: "private",

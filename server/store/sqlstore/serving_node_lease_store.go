@@ -24,6 +24,8 @@ import (
 // shared so they exclude recovery without serializing one another.
 const servingNodeLeaseFenceKey = "proctor:serving-node-lease-fence"
 
+// SQLServingNodeLeaseStore implements store.ServingNodeLeaseStore on
+// serving_node_leases.
 type SQLServingNodeLeaseStore struct{ *SQLStore }
 
 type servingNodeLeaseRow struct {
@@ -41,20 +43,27 @@ func (s SQLServingNodeLeaseStore) Upsert(ctx context.Context, claim *store.Servi
 	if claim == nil {
 		return nil, store.NewErrInvalidInput("serving_node_lease", "upsert", nil)
 	}
+
 	nodeID, leaseID, lifetime := strings.TrimSpace(claim.NodeID), strings.TrimSpace(claim.LeaseID), claim.Lifetime
 	if !validServingNodeLeaseInput(nodeID, leaseID, lifetime) {
 		return nil, store.NewErrInvalidInput("serving_node_lease", "upsert", nil)
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "upsert serving node lease", func(ctx context.Context, tx *sqlxTxWrapper) (*store.ServingNodeLease, error) {
+
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "upsert serving node lease", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.ServingNodeLease, error) {
 		if err := lockServingNodeLease(ctx, tx, nodeID); err != nil {
 			return nil, err
 		}
+
 		var databaseAt time.Time
 		if err := tx.Get(ctx, &databaseAt, `SELECT clock_timestamp()`); err != nil {
 			return nil, fmt.Errorf("read serving node lease time: %w", err)
 		}
+
 		var current servingNodeLeaseRow
-		err := tx.Get(ctx, &current, `SELECT node_id, lease_id, updated_at, expires_at FROM serving_node_leases WHERE node_id=?`, nodeID)
+		err := tx.Get(ctx, &current, `SELECT node_id, lease_id, updated_at, expires_at FROM serving_node_leases WHERE node_id = ?`, nodeID)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("read serving node lease: %w", err)
 		}
@@ -64,6 +73,7 @@ func (s SQLServingNodeLeaseStore) Upsert(ctx context.Context, claim *store.Servi
 		if err == nil && current.LeaseID != leaseID && current.ExpiresAt.After(databaseAt) {
 			return nil, store.NewErrConflict("serving_node_lease", "node_id_live", nil)
 		}
+
 		expiresAt := databaseAt.Add(lifetime)
 		var row servingNodeLeaseRow
 		if err := tx.Get(ctx, &row, `
@@ -74,6 +84,7 @@ func (s SQLServingNodeLeaseStore) Upsert(ctx context.Context, claim *store.Servi
 			RETURNING node_id, lease_id, updated_at, expires_at`, nodeID, leaseID, databaseAt, expiresAt); err != nil {
 			return nil, fmt.Errorf("upsert serving node lease: %w", translateError("serving_node_lease", nodeID, err))
 		}
+
 		return servingNodeLeaseModel(row)
 	})
 }
@@ -86,11 +97,14 @@ func (s SQLServingNodeLeaseStore) Delete(ctx context.Context, input *store.Servi
 	if !validServingNodeLeaseIdentity(nodeID, leaseID) {
 		return store.NewErrInvalidInput("serving_node_lease", "node_id", nil)
 	}
-	_, err := runSQLTransaction(ctx, s.GetMaster().Begin, "delete serving node lease", func(ctx context.Context, tx *sqlxTxWrapper) (struct{}, error) {
+	_, err := runSQLTransaction(ctx, s.GetMaster().Begin, "delete serving node lease", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (struct{}, error) {
 		if err := lockServingNodeLease(ctx, tx, nodeID); err != nil {
 			return struct{}{}, err
 		}
-		if _, err := tx.Exec(ctx, `DELETE FROM serving_node_leases WHERE node_id=? AND lease_id=?`, nodeID, leaseID); err != nil {
+		if _, err := tx.Exec(ctx, `DELETE FROM serving_node_leases WHERE node_id = ? AND lease_id = ?`, nodeID, leaseID); err != nil {
 			return struct{}{}, fmt.Errorf("delete serving node lease: %w", err)
 		}
 		return struct{}{}, nil
@@ -120,7 +134,8 @@ func lockServingNodeLeaseFence(ctx context.Context, tx *sqlxTxWrapper) error {
 
 func validServingNodeLeaseInput(nodeID, leaseID string, lifetime time.Duration) bool {
 	return validServingNodeLeaseIdentity(nodeID, leaseID) &&
-		lifetime >= store.ServingNodeLeaseMinimumLifetime && lifetime <= store.ServingNodeLeaseMaximumLifetime &&
+		lifetime >= store.ServingNodeLeaseMinimumLifetime &&
+		lifetime <= store.ServingNodeLeaseMaximumLifetime &&
 		lifetime%time.Millisecond == 0
 }
 
@@ -129,7 +144,12 @@ func validServingNodeLeaseIdentity(nodeID, leaseID string) bool {
 }
 
 func servingNodeLeaseModel(row servingNodeLeaseRow) (*store.ServingNodeLease, error) {
-	lease := &store.ServingNodeLease{NodeID: row.NodeID, LeaseID: row.LeaseID, UpdatedAt: model.TimeUTC(row.UpdatedAt), ExpiresAt: model.TimeUTC(row.ExpiresAt)}
+	lease := &store.ServingNodeLease{
+		NodeID:    row.NodeID,
+		LeaseID:   row.LeaseID,
+		UpdatedAt: model.TimeUTC(row.UpdatedAt),
+		ExpiresAt: model.TimeUTC(row.ExpiresAt),
+	}
 	if err := lease.Validate(); err != nil {
 		return nil, fmt.Errorf("serving node lease persisted state: %w", err)
 	}

@@ -81,6 +81,7 @@ func (rb *RoleBinding) Validate() error {
 	if !rb.ID.IsValid() {
 		return invalidModelError(where, "role_binding", "id", "must be a valid identifier", "")
 	}
+
 	details := "id=" + rb.ID.String()
 	if rb.CreatedAt.IsZero() || rb.UpdatedAt.IsZero() {
 		return invalidModelError(where, "role_binding", "created_at", "must be set", details)
@@ -100,18 +101,34 @@ func (rb *RoleBinding) Validate() error {
 	if !rb.OriginInvitationID.IsZero() && !rb.OriginInvitationID.IsValid() {
 		return invalidModelError(where, "role_binding", "origin_invitation_id", "must be empty or a valid identifier", details)
 	}
+
 	if rb.OriginAcademicUnitMemberID.IsValid() && (!rb.OriginInvitationID.IsValid() || rb.ScopeType != RoleScopeAcademicUnit) {
-		return invalidModelError(where, "role_binding", "origin_package", "membership provenance requires one complete Academic Unit Invitation package", details)
+		return invalidModelError(
+			where,
+			"role_binding",
+			"origin_package",
+			"membership provenance requires one complete Academic Unit Invitation package",
+			details,
+		)
 	}
+
 	if rb.OriginInvitationID.IsValid() && rb.ScopeType != RoleScopeAcademicUnit && rb.ScopeType != RoleScopeInstitution {
-		return invalidModelError(where, "role_binding", "origin_package", "Invitation provenance requires an Academic Unit or Institution scope", details)
+		return invalidModelError(
+			where,
+			"role_binding",
+			"origin_package",
+			"Invitation provenance requires an Academic Unit or Institution scope",
+			details,
+		)
 	}
+
 	if !rb.ScopeType.IsValid() {
 		return invalidModelError(where, "role_binding", "scope_type", "has an unknown value", details)
 	}
 	if !IsValidOpaqueID(rb.ScopeID) {
 		return invalidModelError(where, "role_binding", "scope_id", "must be a valid identifier", details)
 	}
+
 	return validateEffectiveInterval(where, "role_binding", details, rb.StartsAt, rb.EndsAt)
 }
 

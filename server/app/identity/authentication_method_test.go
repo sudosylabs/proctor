@@ -1,0 +1,191 @@
+// ---------------------------------------------------------------------------------------------
+// Copyright (c) 2026 Sudosy Labs. All rights reserved.
+// Licensed under the GNU Affero General Public License, version 3 only.
+// See LICENSE in the server module root for license information.
+// SPDX-License-Identifier: AGPL-3.0-only
+// ---------------------------------------------------------------------------------------------
+
+package identity
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
+	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
+)
+
+type authenticationMethodPasswordStoreFake struct {
+	store.PasswordCredentialStore
+	enroll *store.PasswordCredentialEnrollment
+	remove *store.PasswordCredentialRemoval
+	change *store.PasswordCredentialChange
+	// revoked is the Session the last Change reported as revoked.
+	revoked *model.Session
+}
+
+func (s *authenticationMethodPasswordStoreFake) Change(_ context.Context, input *store.PasswordCredentialChange) (*store.AuthenticationMethodMutationResult, error) {
+	s.change = input
+	s.revoked = &model.Session{ID: model.NewSessionID(), UserID: input.UserID}
+	return &store.AuthenticationMethodMutationResult{RevokedSessions: []*model.Session{s.revoked}, RevokedTokenHashes: []string{"revoked-hash"}}, nil
+}
+
+func TestPasswordChangeKeepsTheCallingSessionAndPublishesOtherRevocations(t *testing.T) {
+	now := time.UnixMilli(30_000)
+	passwords := &authenticationMethodPasswordStoreFake{}
+	audit := &accessPolicyAuditFake{beginID: model.NewAuditEventID().String()}
+	effects := &realtimetest.Publisher{}
+	hasher, err := NewPasswordHasher(PasswordHasherDependencies{Settings: testPasswordPolicy(), Recorder: nil})
+	require.NoError(t, err)
+	user := &model.User{ID: model.NewUserID(), Username: "marie.curie", Email: "marie@example.edu", DisplayName: "Marie Curie"}
+	service := &Service{users: &accountTokenUserStoreFake{byID: user}, mail: &accountTokenMailerFake{enabled: true}, passwords: passwords, externalIdentities: &authenticationMethodIdentityStoreFake{}, externalProviders: externalProviderSourceSet{}, capabilities: &accessPolicyCapabilitiesFake{}, hasher: hasher, auditor: audit, publisher: effects, recentAuthenticationTTL: 15 * time.Minute, now: func() time.Time { return now }}
+	require.NoError(t, service.requireAuthenticationMethods())
+	principal := userSettingsSessionPrincipal(now)
+	principal.UserID = user.ID
+	principal.AuthenticationStrength = model.AuthenticationMultiFactor
+	principal.MFACompletedAt = model.OptionalTimeFrom(now)
+
+	// #nosec G101 -- Synthetic password used only to exercise the password change.
+	err = service.ChangePassword(context.Background(), invocation.New(principal, model.RequestMetadata{}), ChangePasswordCommand{Password: "radium-and-polonium-1898"})
+	require.NoError(t, err)
+	require.NotNil(t, passwords.change)
+	require.Equal(t, user.ID, passwords.change.UserID)
+	require.Equal(t, principal.SessionID, passwords.change.KeepSessionID)
+	require.Equal(t, model.SessionRevocationPasswordChanged, passwords.change.RevocationReason)
+	require.NoError(t, hasher.Verify(context.Background(), passwords.change.PasswordHash, "radium-and-polonium-1898"))
+	require.Equal(t, model.MailTemplateIdentityPasswordChanged, passwords.change.Occurrence.TemplateKey)
+	require.Equal(t, model.AuditEventID(audit.beginID), passwords.change.AuditEventID)
+	require.Equal(t, "change_password", audit.attempt.Operation)
+	// Contract: one revocation, of the Session the change revoked and its
+	// access token.
+	require.Equal(t, []realtimetest.Call{{
+		Method: realtimetest.SessionsRevoked, UserID: user.ID,
+		SessionIDs: []model.SessionID{passwords.revoked.ID}, AccessTokenHashes: []string{"revoked-hash"},
+	}}, effects.Calls())
+}
+
+func TestPasswordChangeAppliesThePolicyBeforeWork(t *testing.T) {
+	now := time.UnixMilli(40_000)
+	passwords := &authenticationMethodPasswordStoreFake{}
+	audit := &accessPolicyAuditFake{beginID: model.NewAuditEventID().String()}
+	hasher, err := NewPasswordHasher(PasswordHasherDependencies{Settings: testPasswordPolicy(), Recorder: nil})
+	require.NoError(t, err)
+	user := &model.User{ID: model.NewUserID(), Username: "marie.curie", Email: "marie@example.edu", DisplayName: "Marie Curie"}
+	service := &Service{users: &accountTokenUserStoreFake{byID: user}, mail: &accountTokenMailerFake{enabled: true}, passwords: passwords, externalIdentities: &authenticationMethodIdentityStoreFake{}, externalProviders: externalProviderSourceSet{}, capabilities: &accessPolicyCapabilitiesFake{}, hasher: hasher, auditor: audit, publisher: &realtimetest.Publisher{}, recentAuthenticationTTL: 15 * time.Minute, now: func() time.Time { return now }}
+	require.NoError(t, service.requireAuthenticationMethods())
+	principal := userSettingsSessionPrincipal(now)
+	principal.UserID = user.ID
+	principal.AuthenticationStrength = model.AuthenticationMultiFactor
+	principal.MFACompletedAt = model.OptionalTimeFrom(now)
+	for password, code := range map[string]string{
+		"marie.curie-forever":   "authentication.password.identity_invalid",
+		"football1234":          "authentication.password.common_invalid",
+		"aaaaaaaaaaaaaaaa":      "authentication.password.pattern_invalid",
+		"short-pw":              "authentication.password.invalid",
+		"MarieCurieLab-Paris-1": "authentication.password.identity_invalid",
+	} {
+		t.Run(password, func(t *testing.T) {
+			err := service.ChangePassword(context.Background(), invocation.New(principal, model.RequestMetadata{}), ChangePasswordCommand{Password: password})
+			require.Equal(t, code, apperror.CodeOf(err, ""))
+		})
+	}
+	require.Nil(t, passwords.change, "a rejected password reached the Store")
+	require.Empty(t, audit.attempt.Operation, "a rejected password reached audit")
+}
+
+func (s *authenticationMethodPasswordStoreFake) Enroll(_ context.Context, input *store.PasswordCredentialEnrollment) (*store.AuthenticationMethodMutationResult, error) {
+	s.enroll = input
+	return &store.AuthenticationMethodMutationResult{}, nil
+}
+func (s *authenticationMethodPasswordStoreFake) Remove(_ context.Context, input *store.PasswordCredentialRemoval) (*store.AuthenticationMethodMutationResult, error) {
+	s.remove = input
+	return &store.AuthenticationMethodMutationResult{}, nil
+}
+
+type authenticationMethodIdentityStoreFake struct {
+	store.ExternalIdentityStore
+	unlink *store.ExternalIdentityUnlink
+}
+
+func (s *authenticationMethodIdentityStoreFake) Unlink(_ context.Context, input *store.ExternalIdentityUnlink) (*store.AuthenticationMethodMutationResult, error) {
+	s.unlink = input
+	return &store.AuthenticationMethodMutationResult{}, nil
+}
+
+func TestAuthenticationMethodEnrollmentRequiresStrongRecentAndPreparesHashOnly(t *testing.T) {
+	now := time.UnixMilli(10_000)
+	passwords := &authenticationMethodPasswordStoreFake{}
+	audit := &accessPolicyAuditFake{beginID: model.NewAuditEventID().String()}
+	hasher, err := NewPasswordHasher(PasswordHasherDependencies{Settings: testPasswordPolicy(), Recorder: nil})
+	require.NoError(t, err)
+	service := &Service{users: &accountTokenUserStoreFake{byID: &model.User{ID: model.NewUserID(), Username: "student", Email: "student@example.edu"}}, mail: &accountTokenMailerFake{enabled: true}, passwords: passwords, externalIdentities: &authenticationMethodIdentityStoreFake{}, externalProviders: externalProviderSourceSet{}, capabilities: &accessPolicyCapabilitiesFake{}, hasher: hasher, auditor: audit, publisher: &realtimetest.Publisher{}, recentAuthenticationTTL: 15 * time.Minute, now: func() time.Time { return now }}
+	require.NoError(t, service.requireAuthenticationMethods())
+	principal := userSettingsSessionPrincipal(now)
+	principal.AuthenticationStrength = model.AuthenticationMultiFactor
+	principal.MFACompletedAt = model.OptionalTimeFrom(now)
+	err = service.EnrollPassword(context.Background(), invocation.New(principal, model.RequestMetadata{}), "correct horse battery staple")
+	require.NoError(t, err)
+	require.NotNil(t, passwords.enroll)
+	require.Equal(t, principal.UserID, passwords.enroll.Credential.UserID)
+	require.NotEmpty(t, passwords.enroll.Credential.PasswordHash)
+	require.NotEqual(t, "correct horse battery staple", passwords.enroll.Credential.PasswordHash)
+	require.Equal(t, model.AuditEventID(audit.beginID), passwords.enroll.AuditEventID)
+	weak := principal
+	weak.AuthenticationStrength = model.AuthenticationSingleFactor
+	weak.MFACompletedAt = model.OptionalTime{}
+	passwords.enroll = nil
+	err = service.EnrollPassword(context.Background(), invocation.New(weak, model.RequestMetadata{}), "correct horse battery staple")
+	require.True(t, apperror.Is(err, "authentication.strong_required"), "weak enrollment error = %v", err)
+	require.Nil(t, passwords.enroll, "weak enrollment reached Store")
+}
+
+func TestPasswordEnrollmentRejectsWorkBeforeAuditAndPersistence(t *testing.T) {
+	now := time.UnixMilli(10_000)
+	passwords := &authenticationMethodPasswordStoreFake{}
+	audit := &accessPolicyAuditFake{beginID: model.NewAuditEventID().String()}
+	hasher, err := NewPasswordHasher(PasswordHasherDependencies{Settings: testPasswordPolicy(), Recorder: nil})
+	require.NoError(t, err)
+	service := &Service{users: &accountTokenUserStoreFake{byID: &model.User{ID: model.NewUserID(), Username: "student", Email: "student@example.edu"}}, mail: &accountTokenMailerFake{enabled: true}, passwords: passwords, externalIdentities: &authenticationMethodIdentityStoreFake{}, externalProviders: externalProviderSourceSet{}, capabilities: &accessPolicyCapabilitiesFake{}, hasher: hasher, auditor: audit, publisher: &realtimetest.Publisher{}, recentAuthenticationTTL: 15 * time.Minute, now: func() time.Time { return now }}
+	require.NoError(t, service.requireAuthenticationMethods())
+	principal := userSettingsSessionPrincipal(now)
+	principal.AuthenticationStrength = model.AuthenticationMultiFactor
+	principal.MFACompletedAt = model.OptionalTimeFrom(now)
+	inv := invocation.New(principal, model.RequestMetadata{})
+	saturatePasswordWork(t, hasher)
+	err = service.EnrollPassword(context.Background(), inv, "correct horse battery staple")
+	require.True(t, apperror.Is(err, "service.busy"), "saturated enrollment = %v", err)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err = service.EnrollPassword(ctx, inv, "correct horse battery staple")
+	require.True(t, apperror.Is(err, "authentication.internal"))
+	require.ErrorIs(t, err, context.Canceled)
+	require.Nil(t, passwords.enroll, "rejected password work reached audit or credential mutation")
+	require.Empty(t, audit.attempt.Operation, "rejected password work reached audit or credential mutation")
+}
+
+func TestAuthenticationMethodRemovalPassesCapabilitiesAndExactIdentity(t *testing.T) {
+	now := time.UnixMilli(20_000)
+	identities := &authenticationMethodIdentityStoreFake{}
+	audit := &accessPolicyAuditFake{beginID: model.NewAuditEventID().String()}
+	hasher, _ := NewPasswordHasher(PasswordHasherDependencies{Settings: testPasswordPolicy(), Recorder: nil})
+	capabilities := &accessPolicyCapabilitiesFake{snapshot: AccessPolicyCapabilitySnapshot{Providers: []AccessPolicyProviderCapability{{Descriptor: model.ExternalAuthenticationProvider{ID: "campus"}}}}}
+	service := &Service{users: &accountTokenUserStoreFake{byID: &model.User{ID: model.NewUserID(), Username: "student", Email: "student@example.edu"}}, mail: &accountTokenMailerFake{enabled: true}, passwords: &authenticationMethodPasswordStoreFake{}, externalIdentities: identities, externalProviders: externalProviderSourceSet{}, capabilities: capabilities, hasher: hasher, auditor: audit, publisher: &realtimetest.Publisher{}, recentAuthenticationTTL: 15 * time.Minute, now: func() time.Time { return now }}
+	require.NoError(t, service.requireAuthenticationMethods())
+	principal := userSettingsSessionPrincipal(now)
+	principal.AuthenticationStrength = model.AuthenticationMultiFactor
+	principal.MFACompletedAt = model.OptionalTimeFrom(now)
+	id := model.NewExternalIdentityID()
+	err := service.UnlinkExternalIdentity(context.Background(), invocation.New(principal, model.RequestMetadata{}), id)
+	require.NoError(t, err)
+	require.NotNil(t, identities.unlink)
+	require.Equal(t, id, identities.unlink.ID)
+	require.Equal(t, principal.UserID, identities.unlink.UserID)
+	_, ok := identities.unlink.Capabilities.Providers["campus"]
+	require.True(t, ok, "capabilities = %#v", identities.unlink.Capabilities)
+}

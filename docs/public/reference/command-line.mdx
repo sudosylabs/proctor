@@ -13,7 +13,14 @@ policy path. Run `proctor help` or command-specific `--help` from the exact
 release binary for localized usage and the current flag surface.
 
 Every command accepts `--config` (short form `-c`). An explicit path wins over
-`PROCTOR_CONFIG` and the default `config/config.json`.
+`PROCTOR_CONFIG` and the default `config/config.json`. The flag is persistent,
+so it may also come before the command. `proctor completion --help` describes
+shell-completion generation.
+
+Help and messages are localized. The CLI picks its locale from
+`PROCTOR_LOCALE`, then the standard `LC_ALL`, `LC_MESSAGES`, and `LANG`
+environment variables. Command names, flags, and machine-readable values stay
+the same in every locale.
 
 ## Commands
 
@@ -163,8 +170,12 @@ proctor administrator recover \
   --rotate-password
 ```
 
-`--rotate-password` reads the new password from private standard input; a
-password is never a positional argument or flag. The operation writes a durable
+`--rotate-password` reads the new password from redirected, non-terminal
+standard input; a password is never a positional argument or flag. Capture it
+without echo using your shell's private-input facility (for example `read -rs`
+followed by a standard-input redirection), and never put the value in the
+command itself. The command mints no Session and preserves MFA and existing
+Sessions. The operation writes a durable
 recovery record while transports and workers remain stopped. Restart normally
 so Proctor reconciles its audit record. Other flags are `--institution-id`,
 `--user-id`, and `--enable-local-login`.
@@ -192,6 +203,11 @@ provider first if it is unavailable. Disabling MFA does not lift the recovery
 restriction. A second host recovery command is rejected until the pending
 record has been reconciled. After a crashed node, wait for its serving lease
 to expire before retrying either command.
+
+Neither command migrates the database. Each refuses to run unless the database
+schema exactly matches the build, and tells you to run `proctor migrate status`
+and `proctor migrate up` first. Running an offline command never creates a
+serving lease.
 
 ## Build Identity
 

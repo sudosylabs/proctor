@@ -99,6 +99,47 @@ type ExamSubmissionSealResult struct {
 	Replayed        bool
 }
 
+// ConsistentWith reports whether the outcome carries a complete Submission
+// receipt for the sealed Attempt at the acknowledged workspace cursor and
+// expected Exam Revision, names the resolved target's Exam, Sitting, Class and
+// candidate and the seal's Participation, generation and Connection, and uses
+// the proposed Submission ID and receipt code unless it replays an earlier
+// seal. It reads target, which the caller has already checked.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (r *ExamSubmissionSealResult) ConsistentWith(
+	target *ExamSubmissionSealTarget,
+	sealAccess ExamSubmissionSealAccess,
+	proposedID model.SubmissionID,
+	proposedCode model.SubmissionReceiptCode,
+) bool {
+	return !(r == nil ||
+		!r.Receipt.SubmissionID.IsValid() ||
+		!r.Receipt.ReceiptCode.IsValid() ||
+		r.Receipt.AttemptID != sealAccess.AttemptID ||
+		!r.Sealed() ||
+		r.Receipt.WorkspaceCursor != sealAccess.ExpectedWorkspaceCursor ||
+		r.Receipt.ExamRevisionID != sealAccess.ExpectedCurrentRevisionID ||
+		!IsValidWorkspaceSHA256(r.Receipt.ManifestDigest) ||
+		r.Receipt.SubmittedAt.IsZero() ||
+		r.Receipt.BrowserActivity.Validate() != nil ||
+		r.ExamID != target.ExamID ||
+		r.SittingID != target.SittingID ||
+		r.ClassID != target.ClassID ||
+		r.CandidateUserID != target.CandidateUserID ||
+		r.ParticipationID != sealAccess.ParticipationID ||
+		r.Generation != sealAccess.Generation ||
+		r.ConnectionID != sealAccess.ConnectionID ||
+		(!r.Replayed && (r.Receipt.SubmissionID != proposedID || r.Receipt.ReceiptCode != proposedCode)))
+}
+
+// Sealed is the application's postcondition on a seal: the Attempt is now
+// submitted.
+func (r *ExamSubmissionSealResult) Sealed() bool {
+	return r.Receipt.State == model.ExamAttemptSubmitted
+}
+
 // ExamSubmissionAutomaticSealListOptions selects one deterministic bounded
 // page of unfinished Attempts for a Closing Sitting. AttemptID is the complete
 // keyset cursor; paths, credentials, and candidate-authored content never
@@ -149,6 +190,44 @@ type ExamSubmissionAutomaticSealResult struct {
 	ConnectionClosed bool
 }
 
+// ConsistentWith reports whether the outcome carries a complete Submission
+// receipt for the target Attempt at its current Exam Revision, names the
+// target's Exam, Sitting, Class, candidate, Participation, generation and
+// Connection, uses the proposed Submission ID and receipt code unless it
+// replays an earlier seal, and a replay closed no Connection.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (r *ExamSubmissionAutomaticSealResult) ConsistentWith(
+	target ExamSubmissionAutomaticSealTarget,
+	proposed model.SubmissionID,
+	proposedCode model.SubmissionReceiptCode,
+) bool {
+	return !(r == nil ||
+		!r.Sealed() ||
+		r.Receipt.AttemptID != target.AttemptID ||
+		r.Receipt.ExamRevisionID != target.CurrentRevisionID ||
+		!r.Receipt.SubmissionID.IsValid() ||
+		!r.Receipt.ReceiptCode.IsValid() ||
+		r.Receipt.WorkspaceCursor < 0 ||
+		!IsValidWorkspaceSHA256(r.Receipt.ManifestDigest) ||
+		r.Receipt.SubmittedAt.IsZero() ||
+		r.ExamID != target.ExamID ||
+		r.SittingID != target.SittingID ||
+		r.ClassID != target.ClassID ||
+		r.CandidateUserID != target.CandidateUserID ||
+		r.ParticipationID != target.ParticipationID ||
+		r.Generation != target.Generation ||
+		r.ConnectionID != target.ConnectionID ||
+		(!r.Replayed && (r.Receipt.SubmissionID != proposed || r.Receipt.ReceiptCode != proposedCode)))
+}
+
+// Sealed is the application's postcondition on an automatic seal: the Attempt
+// is now submitted, and a replay closed no Connection.
+func (r *ExamSubmissionAutomaticSealResult) Sealed() bool {
+	return r.ExamSubmissionSealResult.Sealed() && !(r.Replayed && r.ConnectionClosed)
+}
+
 // ExamSubmissionManagerEndPreparation is the exact preflight projection for
 // an authorized manager seal. The target is safe application identity; SealAt
 // is reserved by PostgreSQL and Replayed means the same manager-ended terminal
@@ -186,6 +265,47 @@ type ExamSubmissionManagerEndResult struct {
 	ConnectionClosed bool
 }
 
+// ConsistentWith reports whether the outcome carries a complete Submission
+// receipt for the Attempt the manager ended, names the commanded Exam and
+// Sitting and the prepared target's Class, candidate, Participation,
+// generation and Connection, uses the proposed Submission ID and receipt code
+// unless it replays an earlier end, and a replay closed no Connection.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (r *ExamSubmissionManagerEndResult) ConsistentWith(
+	attemptID model.ExamAttemptID,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	target ExamSubmissionAutomaticSealTarget,
+	proposed model.SubmissionID,
+	proposedCode model.SubmissionReceiptCode,
+) bool {
+	return !(r == nil ||
+		!r.Ended() ||
+		r.Receipt.AttemptID != attemptID ||
+		!r.Receipt.ExamRevisionID.IsValid() ||
+		!r.Receipt.SubmissionID.IsValid() ||
+		!r.Receipt.ReceiptCode.IsValid() ||
+		r.Receipt.WorkspaceCursor < 0 ||
+		!IsValidWorkspaceSHA256(r.Receipt.ManifestDigest) ||
+		r.Receipt.SubmittedAt.IsZero() ||
+		r.ExamID != examID ||
+		r.SittingID != sittingID ||
+		r.ClassID != target.ClassID ||
+		r.CandidateUserID != target.CandidateUserID ||
+		r.ParticipationID != target.ParticipationID ||
+		r.Generation != target.Generation ||
+		r.ConnectionID != target.ConnectionID ||
+		(!r.Replayed && (r.Receipt.SubmissionID != proposed || r.Receipt.ReceiptCode != proposedCode)))
+}
+
+// Ended is the application's postcondition on a manager end: the Attempt is
+// now submitted, and a replay closed no Connection.
+func (r *ExamSubmissionManagerEndResult) Ended() bool {
+	return r.Sealed() && !(r.Replayed && r.ConnectionClosed)
+}
+
 // ExamSubmissionAutomaticSealPreparation reserves the PostgreSQL action time
 // used by a fresh automatic receipt and reports whether the terminal aggregate
 // already exists. The terminal mutation still rechecks all lifecycle state.
@@ -204,6 +324,22 @@ type ExamSubmissionAuthorization struct {
 	AttemptID       model.ExamAttemptID
 	CandidateUserID model.UserID
 	AcademicUnitID  model.AcademicUnitID
+}
+
+// ConsistentWith reports whether the projection is for the Submission that was
+// asked for and names its Exam, Sitting, Attempt, candidate and owning
+// Academic Unit.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (a *ExamSubmissionAuthorization) ConsistentWith(submissionID model.SubmissionID) bool {
+	return !(a == nil ||
+		a.SubmissionID != submissionID ||
+		!a.ExamID.IsValid() ||
+		!a.SittingID.IsValid() ||
+		!a.AttemptID.IsValid() ||
+		!a.CandidateUserID.IsValid() ||
+		!a.AcademicUnitID.IsValid())
 }
 
 // ExamSubmissionManifestItem is manager-visible protected metadata for one

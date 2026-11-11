@@ -138,7 +138,7 @@ func testFiles(version, commit string) fstest.MapFS {
 
 func perform(t *testing.T, handler http.Handler, method, target string) *httptest.ResponseRecorder {
 	t.Helper()
-	request := httptest.NewRequest(method, target, nil)
+	request := httptest.NewRequestWithContext(t.Context(), method, target, nil)
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if body, err := io.ReadAll(response.Result().Body); err == nil {

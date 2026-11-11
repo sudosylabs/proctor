@@ -66,10 +66,12 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 		SignalID:      model.NewFocusLossSignalID(), Sequence: 3, DurationMilliseconds: 900,
 		Source:       model.FocusLossSourceFullscreenExited,
 		AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
-	lateTarget, err := ss.ExamAttempt().ResolveEndedFocusLossTarget(ctx, focusAccess)
+	lateTarget, err := ss.ExamFocusLoss().ResolveEndedFocusLossTarget(ctx, focusAccess)
 	require.NoError(t, err)
-	late, err := ss.ExamAttempt().RecordEndedFocusLoss(ctx, lateInput)
+	late, err := ss.ExamFocusLoss().RecordEndedFocusLoss(ctx, lateInput)
 	require.NoError(t, err)
+	require.True(t, late.ConsistentWith(lateTarget, focusAccess, lateInput.Sequence, lateInput.DurationMilliseconds, lateInput.Source, lateInput.DiscrepancyID, lateInput.SignalID),
+		"RecordEndedFocusLoss returned a result inconsistent with its request")
 	require.NotNil(t, lateTarget, "RecordEndedFocusLoss() target")
 	require.NotNil(t, late, "RecordEndedFocusLoss() target")
 	require.False(t, late.Duplicate, "RecordEndedFocusLoss() target")
@@ -83,8 +85,10 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 	replayLateInput := *lateInput
 	replayLateInput.DiscrepancyID, replayLateInput.SignalID = model.NewIntegrityDiscrepancyID(), model.NewFocusLossSignalID()
 	replayLateInput.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
-	replayedLate, err := ss.ExamAttempt().RecordEndedFocusLoss(ctx, &replayLateInput)
+	replayedLate, err := ss.ExamFocusLoss().RecordEndedFocusLoss(ctx, &replayLateInput)
 	require.NoError(t, err)
+	require.True(t, replayedLate.ConsistentWith(lateTarget, focusAccess, replayLateInput.Sequence, replayLateInput.DurationMilliseconds, replayLateInput.Source, replayLateInput.DiscrepancyID, replayLateInput.SignalID),
+		"RecordEndedFocusLoss replay returned a result inconsistent with its request")
 	require.NotNil(t, replayedLate)
 	require.True(t, replayedLate.Duplicate)
 	require.Equal(t, late.Discrepancy.ID, replayedLate.Discrepancy.ID)
@@ -92,11 +96,12 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 	changedLateInput := replayLateInput
 	changedLateInput.DurationMilliseconds++
 	changedLateInput.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
-	_, changedErr := ss.ExamAttempt().RecordEndedFocusLoss(ctx, &changedLateInput)
+	_, changedErr := ss.ExamFocusLoss().RecordEndedFocusLoss(ctx, &changedLateInput)
 	require.Error(t, changedErr, "RecordEndedFocusLoss(same sequence with changed semantics) succeeded")
 
 	authorization, err := reviews.Resolve(ctx, sealed.Receipt.SubmissionID)
 	require.NoError(t, err)
+	require.True(t, authorization.ConsistentWith(sealed.Receipt.SubmissionID), "Resolve returned a result inconsistent with its request")
 	require.NotNil(t, authorization)
 	require.Equal(t, sealed.Receipt.SubmissionID, authorization.SubmissionID)
 	require.Equal(t, fixture.examID, authorization.ExamID)
@@ -107,6 +112,7 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 
 	snapshot, err := reviews.Get(ctx, sealed.Receipt.SubmissionID)
 	require.NoError(t, err)
+	require.True(t, snapshot.Authorization.ConsistentWith(sealed.Receipt.SubmissionID), "Get returned a result inconsistent with its request")
 	require.NotNil(t, snapshot)
 	require.NotNil(t, snapshot.Submission)
 	require.Equal(t, sealed.Receipt.SubmissionID, snapshot.Submission.ID)
@@ -159,6 +165,7 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 		"review-decision", "review-decision")
 	decided, err := reviews.SaveDecision(ctx, decisionInput, decisionCommand)
 	require.NoError(t, err)
+	require.True(t, decided.ConsistentWith(sealed.Receipt.SubmissionID), "SaveDecision returned a result inconsistent with its request")
 	require.NotNil(t, decided)
 	require.False(t, decided.Replayed)
 	require.NotNil(t, decided.Review)
@@ -177,6 +184,7 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 		sealed.Receipt.SubmissionID, model.ActionSubmissionReview).ID
 	replayed, err := reviews.SaveDecision(ctx, &replayInput, decisionCommand)
 	require.NoError(t, err)
+	require.True(t, replayed.ConsistentWith(sealed.Receipt.SubmissionID), "SaveDecision replay returned a result inconsistent with its request")
 	require.NotNil(t, replayed, "SaveDecision(exact replay) = %#v, first = %#v", replayed, decided)
 	require.True(t, replayed.Replayed, "SaveDecision(exact replay) = %#v, first = %#v", replayed, decided)
 	require.NotNil(t, replayed.Review, "SaveDecision(exact replay) = %#v, first = %#v", replayed, decided)
@@ -197,6 +205,7 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 	drafted, err := reviews.UpdateDraft(ctx, draftInput, examCommand(fixture.manager.ID,
 		store.ExamIntegrityReviewDraftOperation, "review-draft", "review-draft"))
 	require.NoError(t, err)
+	require.True(t, drafted.ConsistentWith(sealed.Receipt.SubmissionID), "UpdateDraft returned a result inconsistent with its request")
 	require.NotNil(t, drafted)
 	require.NotNil(t, drafted.Review)
 	require.Equal(t, int64(2), drafted.Review.Revision)
@@ -213,8 +222,10 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 	finalized, err := reviews.Finalize(ctx, finalizeInput, examCommand(fixture.manager.ID,
 		store.ExamIntegrityReviewFinalizeOperation, "review-finalize", "review-finalize"))
 	require.NoError(t, err)
+	require.True(t, finalized.ConsistentWith(sealed.Receipt.SubmissionID), "Finalize returned a result inconsistent with its request")
 	require.NotNil(t, finalized)
 	require.NotNil(t, finalized.Review)
+	require.Equal(t, finalizeInput.ReviewID, finalized.Review.ID)
 	require.Equal(t, model.SubmissionReviewFinalized, finalized.Review.State)
 	require.Equal(t, model.SubmissionReviewWithheld, finalized.Review.ReleaseState)
 	require.Equal(t, int64(3), finalized.Review.Revision)
@@ -295,8 +306,10 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 	released, err := reviews.Release(ctx, releaseInput, examCommand(fixture.manager.ID,
 		store.ExamIntegrityReviewReleaseOperation, "review-release", "review-release"))
 	require.NoError(t, err)
+	require.True(t, released.ConsistentWith(sealed.Receipt.SubmissionID), "Release returned a result inconsistent with its request")
 	require.NotNil(t, released)
 	require.NotNil(t, released.Review)
+	require.Equal(t, releaseInput.ReviewID, released.Review.ID)
 	require.Equal(t, model.SubmissionReviewReleased, released.Review.ReleaseState)
 	require.Equal(t, int64(4), released.Review.Revision)
 	require.True(t, released.Review.ReleasedAt.Valid)
@@ -319,8 +332,11 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 	replayedRelease, err := reviews.Release(ctx, &replayRelease, examCommand(fixture.manager.ID,
 		store.ExamIntegrityReviewReleaseOperation, "review-release", "review-release"))
 	require.NoError(t, err)
+	require.True(t, replayedRelease.ConsistentWith(sealed.Receipt.SubmissionID), "Release replay returned a result inconsistent with its request")
 	require.NotNil(t, replayedRelease)
 	require.True(t, replayedRelease.Replayed)
+	require.NotNil(t, replayedRelease.Review)
+	require.Equal(t, replayRelease.ReviewID, replayedRelease.Review.ID)
 	require.Equal(t, released.Review.ID, replayedRelease.Review.ID)
 	revokeIntegrityReviewManager(t, ctx, ss, fixture)
 	revokedReplay := replayRelease
@@ -346,8 +362,10 @@ func TestExamIntegrityReviewStore(t *testing.T, ss store.Store, reviews store.Ex
 	postReleaseInput.DiscrepancyID, postReleaseInput.SignalID = model.NewIntegrityDiscrepancyID(), model.NewFocusLossSignalID()
 	postReleaseInput.Sequence = 4
 	postReleaseInput.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
-	postRelease, err := ss.ExamAttempt().RecordEndedFocusLoss(ctx, &postReleaseInput)
+	postRelease, err := ss.ExamFocusLoss().RecordEndedFocusLoss(ctx, &postReleaseInput)
 	require.NoError(t, err)
+	require.True(t, postRelease.ConsistentWith(lateTarget, focusAccess, postReleaseInput.Sequence, postReleaseInput.DurationMilliseconds, postReleaseInput.Source, postReleaseInput.DiscrepancyID, postReleaseInput.SignalID),
+		"RecordEndedFocusLoss returned a result inconsistent with its request")
 	require.NotNil(t, postRelease)
 	require.False(t, postRelease.Duplicate)
 	require.Equal(t, int64(4), postRelease.Discrepancy.Sequence)
@@ -391,6 +409,7 @@ func revokeIntegrityReviewManager(t *testing.T, ctx context.Context, ss store.St
 	require.NoError(t, err)
 	access, err := ss.ExamAuthoring().Access(ctx, fixture.examID, fixture.manager.ID)
 	require.NoError(t, err)
+	require.True(t, access.ConsistentWith(fixture.examID, fixture.unitID), "Access returned a result inconsistent with its request")
 	at := model.NowUTC()
 	add := newExamManagerMutation(t, ctx, ss, fixture.examID, fixture.manager.ID, replacement.ID,
 		access.Exam.Revision, at, false)
@@ -479,15 +498,17 @@ func testEndedFocusLossAfterAutomaticSeal(t *testing.T, ctx context.Context, ss 
 		require.NotNil(t, sealed)
 		require.True(t, sealed.Receipt.SubmissionID.IsValid())
 		require.False(t, sealed.ConnectionClosed)
-		target, err := ss.ExamAttempt().ResolveEndedFocusLossTarget(ctx, access)
+		target, err := ss.ExamFocusLoss().ResolveEndedFocusLossTarget(ctx, access)
 		require.NoError(t, err)
 		input := &store.ExamAttemptFocusLossDiscrepancy{Access: access,
 			DiscrepancyID: model.NewIntegrityDiscrepancyID(),
 			SignalID:      model.NewFocusLossSignalID(), Sequence: 2, DurationMilliseconds: 700,
 			Source:       model.FocusLossSourceFullscreenExited,
 			AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
-		recorded, err := ss.ExamAttempt().RecordEndedFocusLoss(ctx, input)
+		recorded, err := ss.ExamFocusLoss().RecordEndedFocusLoss(ctx, input)
 		require.NoError(t, err)
+		require.True(t, recorded.ConsistentWith(target, access, input.Sequence, input.DurationMilliseconds, input.Source, input.DiscrepancyID, input.SignalID),
+			"RecordEndedFocusLoss returned a result inconsistent with its request")
 		require.NotNil(t, target, "automatic suspended late discrepancy target")
 		require.Equal(t, sealed.Receipt.SubmissionID, target.SubmissionID, "automatic suspended late discrepancy target")
 		require.NotNil(t, recorded, "automatic suspended late discrepancy target")
@@ -507,9 +528,9 @@ func testEndedFocusLossAfterAutomaticSeal(t *testing.T, ctx context.Context, ss 
 		require.NoError(t, err)
 		connected, currentAccess := connectFocusLossFixture(t, ctx, ss, fixture, "review-automatic-selector-reconnect")
 		sealed := automaticSeal(t, "review-automatic-selector", fixture, connected.Attempt.ID)
-		_, err = ss.ExamAttempt().ResolveEndedFocusLossTarget(ctx, oldAccess)
+		_, err = ss.ExamFocusLoss().ResolveEndedFocusLossTarget(ctx, oldAccess)
 		require.Error(t, err, "ResolveEndedFocusLossTarget(previous generation) succeeded")
-		current, err := ss.ExamAttempt().ResolveEndedFocusLossTarget(ctx, currentAccess)
+		current, err := ss.ExamFocusLoss().ResolveEndedFocusLossTarget(ctx, currentAccess)
 		require.NoError(t, err)
 		require.NotNil(t, current)
 		require.Equal(t, sealed.Receipt.SubmissionID, current.SubmissionID)
@@ -568,6 +589,7 @@ func testIntegrityReviewGappedFinalization(t *testing.T, ctx context.Context, ss
 	fixture, _, flagged, sealed, _ := newIntegrityReviewFixtureWithFinalSequence(t, ctx, ss, "review-gapped", 2)
 	snapshot, err := reviews.Get(ctx, sealed.Receipt.SubmissionID)
 	require.NoError(t, err)
+	require.True(t, snapshot.Authorization.ConsistentWith(sealed.Receipt.SubmissionID), "Get returned a result inconsistent with its request")
 	require.NotNil(t, snapshot)
 	require.NotNil(t, snapshot.Submission)
 	require.Equal(t, model.SubmissionIntegrityGapped, snapshot.Submission.IntegrityState)
@@ -591,6 +613,7 @@ func testIntegrityReviewGappedFinalization(t *testing.T, ctx context.Context, ss
 	require.NoError(t, err)
 	require.NotNil(t, finalized)
 	require.NotNil(t, finalized.Review)
+	require.Equal(t, finalize.ReviewID, finalized.Review.ID)
 	require.Equal(t, model.SubmissionReviewFinalized, finalized.Review.State)
 }
 

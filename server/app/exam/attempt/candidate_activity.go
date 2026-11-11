@@ -39,35 +39,54 @@ type CandidateActivityPage struct {
 // ListCandidateExamActivity returns one page of the caller's own Sittings and
 // Attempts, newest scheduled start first. On a registered desktop the page
 // also reflects that desktop's Session and registration.
-func (s *Service) ListCandidateExamActivity(ctx context.Context, invocation invocation.Invocation, query CandidateActivityQuery) (_ CandidateActivityPage, resultErr error) {
+func (s *Service) ListCandidateExamActivity(
+	ctx context.Context,
+	inv invocation.Invocation,
+	query CandidateActivityQuery,
+) (_ CandidateActivityPage, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	principal := invocation.Principal()
-	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess || query.Limit < 1 || query.Limit > 200 ||
+	principal := inv.Principal()
+	if principal.Validate() != nil ||
+		principal.CredentialType != model.CredentialSessionAccess ||
+		query.Limit < 1 ||
+		query.Limit > 200 ||
 		(query.BeforeScheduledStart.IsZero() != query.BeforeSittingID.IsZero()) {
 		return CandidateActivityPage{}, apperror.Invalid("exam.attempt.invalid", "candidate_activity")
 	}
-	options := store.CandidateExamActivityListOptions{CandidateUserID: principal.UserID,
-		BeforeScheduledStart: model.TimeUTC(query.BeforeScheduledStart), BeforeSittingID: query.BeforeSittingID, Limit: query.Limit + 1}
+
+	options := store.CandidateExamActivityListOptions{
+		CandidateUserID:      principal.UserID,
+		BeforeScheduledStart: model.TimeUTC(query.BeforeScheduledStart),
+		BeforeSittingID:      query.BeforeSittingID,
+		Limit:                query.Limit + 1,
+	}
 	if principal.HasRegisteredDesktopKey() {
 		options.DesktopSessionID = principal.SessionID
 		options.DesktopRegistrationID = principal.DesktopRegistrationID
 		options.DPoPKeyThumbprint = principal.DPoPKeyThumbprint
 	}
-	stored, err := s.deps.Persistence.ListCandidateActivity(ctx, options)
+
+	stored, err := s.attempts.ListCandidateActivity(ctx, options)
 	if err != nil {
 		return CandidateActivityPage{}, storeError(storeErrors, err)
 	}
 	if stored == nil || stored.ServerTime.IsZero() || stored.Items == nil {
 		return CandidateActivityPage{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("incomplete candidate activity projection"))
 	}
-	page := CandidateActivityPage{ServerTime: model.TimeUTC(stored.ServerTime),
-		Items: make([]store.CandidateExamActivityItem, 0, min(len(stored.Items), query.Limit)), HasMore: len(stored.Items) > query.Limit}
+
+	page := CandidateActivityPage{
+		ServerTime: model.TimeUTC(stored.ServerTime),
+		Items:      make([]store.CandidateExamActivityItem, 0, min(len(stored.Items), query.Limit)),
+		HasMore:    len(stored.Items) > query.Limit,
+	}
 	for index, item := range stored.Items {
 		if index == query.Limit {
 			break
 		}
+
 		item.AllowedActions = append([]store.CandidateExamAllowedAction(nil), item.AllowedActions...)
 		page.Items = append(page.Items, item)
 	}
+
 	return page, nil
 }

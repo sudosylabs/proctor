@@ -92,8 +92,10 @@ const (
 
 func (r ExamSittingReasonCode) IsValid() bool {
 	switch r {
-	case ExamSittingReasonManagerCanceled, ExamSittingReasonScheduleElapsed,
-		ExamSittingReasonAcademicStructureInvalid, ExamSittingReasonManagerClosed,
+	case ExamSittingReasonManagerCanceled,
+		ExamSittingReasonScheduleElapsed,
+		ExamSittingReasonAcademicStructureInvalid,
+		ExamSittingReasonManagerClosed,
 		ExamSittingReasonScheduledEndReached:
 		return true
 	default:
@@ -102,7 +104,8 @@ func (r ExamSittingReasonCode) IsValid() bool {
 }
 
 func (r ExamSittingReasonCode) isCancellation() bool {
-	return r == ExamSittingReasonManagerCanceled || r == ExamSittingReasonScheduleElapsed ||
+	return r == ExamSittingReasonManagerCanceled ||
+		r == ExamSittingReasonScheduleElapsed ||
 		r == ExamSittingReasonAcademicStructureInvalid
 }
 
@@ -112,32 +115,55 @@ func (r ExamSittingReasonCode) isClosing() bool {
 
 // NewExamSitting constructs a Scheduled Sitting. The application supplies
 // identity and time; ScheduledEndAt is the sole v1 delivery deadline.
-func NewExamSitting(id ExamSittingID, examID ExamID, examRevisionID ExamRevisionID, classID ClassID, scheduledStartAt, scheduledEndAt, at time.Time) (*ExamSitting, error) {
+func NewExamSitting(
+	id ExamSittingID,
+	examID ExamID,
+	examRevisionID ExamRevisionID,
+	classID ClassID,
+	scheduledStartAt, scheduledEndAt, at time.Time,
+) (*ExamSitting, error) {
 	sitting := &ExamSitting{
-		ID: id, ExamID: examID, ExamRevisionID: examRevisionID, ClassID: classID,
-		ScheduledStartAt: TimeUTC(scheduledStartAt), ScheduledEndAt: TimeUTC(scheduledEndAt),
-		State: ExamSittingScheduled, CreatedAt: TimeUTC(at), UpdatedAt: TimeUTC(at), Revision: 1,
+		ID:               id,
+		ExamID:           examID,
+		ExamRevisionID:   examRevisionID,
+		ClassID:          classID,
+		ScheduledStartAt: TimeUTC(scheduledStartAt),
+		ScheduledEndAt:   TimeUTC(scheduledEndAt),
+		State:            ExamSittingScheduled,
+		CreatedAt:        TimeUTC(at),
+		UpdatedAt:        TimeUTC(at),
+		Revision:         1,
 	}
 	if err := sitting.Validate(); err != nil {
 		return nil, err
 	}
+
 	return sitting, nil
 }
 
 // ApplySchedule atomically changes the complete pre-open delivery selection.
 // Once lifecycle processing has begun, schedule extension is owned by its
 // separate transition and this operation fails without mutation.
-func (s *ExamSitting) ApplySchedule(examRevisionID ExamRevisionID, classID ClassID, scheduledStartAt, scheduledEndAt, at time.Time) (bool, error) {
+func (s *ExamSitting) ApplySchedule(
+	examRevisionID ExamRevisionID,
+	classID ClassID,
+	scheduledStartAt, scheduledEndAt, at time.Time,
+) (bool, error) {
 	if s == nil {
 		return false, invalidModelError("ExamSitting.ApplySchedule", "exam_sitting", "value", "is required", "")
 	}
 	if s.State != ExamSittingScheduled {
 		return false, invalidModelError("ExamSitting.ApplySchedule", "exam_sitting", "state", "must be scheduled", "id="+s.ID.String())
 	}
+
 	scheduledStartAt, scheduledEndAt = TimeUTC(scheduledStartAt), TimeUTC(scheduledEndAt)
-	if s.ExamRevisionID == examRevisionID && s.ClassID == classID && s.ScheduledStartAt == scheduledStartAt && s.ScheduledEndAt == scheduledEndAt {
+	if s.ExamRevisionID == examRevisionID &&
+		s.ClassID == classID &&
+		s.ScheduledStartAt == scheduledStartAt &&
+		s.ScheduledEndAt == scheduledEndAt {
 		return false, nil
 	}
+
 	candidate := *s
 	candidate.ExamRevisionID = examRevisionID
 	candidate.ClassID = classID
@@ -147,10 +173,12 @@ func (s *ExamSitting) ApplySchedule(examRevisionID ExamRevisionID, classID Class
 	if candidate.UpdatedAt.Before(s.UpdatedAt) {
 		candidate.UpdatedAt = s.UpdatedAt
 	}
+
 	candidate.Revision++
 	if err := candidate.Validate(); err != nil {
 		return false, err
 	}
+
 	*s = candidate
 	return true, nil
 }
@@ -245,10 +273,18 @@ func (s *ExamSitting) ExtendEnd(endAt, at time.Time) error {
 	if s.State != ExamSittingOpen && s.State != ExamSittingPaused {
 		return invalidModelError("ExamSitting.ExtendEnd", "exam_sitting", "state", "must be open or paused", "id="+s.ID.String())
 	}
+
 	endAt = TimeUTC(endAt)
 	if !endAt.After(s.ScheduledEndAt) {
-		return invalidModelError("ExamSitting.ExtendEnd", "exam_sitting", "scheduled_end_at", "must extend the current deadline", "id="+s.ID.String())
+		return invalidModelError(
+			"ExamSitting.ExtendEnd",
+			"exam_sitting",
+			"scheduled_end_at",
+			"must extend the current deadline",
+			"id="+s.ID.String(),
+		)
 	}
+
 	candidate := *s
 	candidate.ScheduledEndAt = endAt
 	candidate.UpdatedAt = examSittingTransitionTime(s.UpdatedAt, at)
@@ -266,9 +302,17 @@ func (s *ExamSitting) RetargetRevision(revisionID ExamRevisionID, at time.Time) 
 	if s.State != ExamSittingOpen && s.State != ExamSittingPaused {
 		return invalidModelError("ExamSitting.RetargetRevision", "exam_sitting", "state", "must be open or paused", "id="+s.ID.String())
 	}
+
 	if !revisionID.IsValid() || revisionID == s.ExamRevisionID {
-		return invalidModelError("ExamSitting.RetargetRevision", "exam_sitting", "exam_revision_id", "must identify a different valid Revision", "id="+s.ID.String())
+		return invalidModelError(
+			"ExamSitting.RetargetRevision",
+			"exam_sitting",
+			"exam_revision_id",
+			"must identify a different valid Revision",
+			"id="+s.ID.String(),
+		)
 	}
+
 	candidate := *s
 	candidate.ExamRevisionID = revisionID
 	candidate.UpdatedAt = examSittingTransitionTime(s.UpdatedAt, at)
@@ -342,6 +386,7 @@ func (s *ExamSitting) Validate() error {
 	if !s.ID.IsValid() || !s.ExamID.IsValid() || !s.ExamRevisionID.IsValid() || !s.ClassID.IsValid() {
 		return invalidModelError(where, "exam_sitting", "identity", "must contain valid identifiers", "")
 	}
+
 	details := "id=" + s.ID.String()
 	if !s.State.IsValid() {
 		return invalidModelError(where, "exam_sitting", "state", "must be valid", details)
@@ -349,50 +394,85 @@ func (s *ExamSitting) Validate() error {
 	if s.ScheduledStartAt.IsZero() || s.ScheduledEndAt.IsZero() || !s.ScheduledStartAt.Before(s.ScheduledEndAt) {
 		return invalidModelError(where, "exam_sitting", "schedule", "must be a nonempty half-open interval", details)
 	}
-	if s.ScheduledStartAt.Location() != time.UTC || s.ScheduledEndAt.Location() != time.UTC ||
-		s.CreatedAt.Location() != time.UTC || s.UpdatedAt.Location() != time.UTC {
+
+	if s.ScheduledStartAt.Location() != time.UTC ||
+		s.ScheduledEndAt.Location() != time.UTC ||
+		s.CreatedAt.Location() != time.UTC ||
+		s.UpdatedAt.Location() != time.UTC {
 		return invalidModelError(where, "exam_sitting", "timestamps", "must use UTC", details)
 	}
+
 	if s.CreatedAt.IsZero() || s.UpdatedAt.IsZero() || s.UpdatedAt.Before(s.CreatedAt) {
 		return invalidModelError(where, "exam_sitting", "timestamps", "must be ordered and nonzero", details)
 	}
+
 	switch s.State {
 	case ExamSittingScheduled:
 		if s.OpenedAt.Valid || s.PausedAt.Valid || s.ClosingAt.Valid || s.ClosedAt.Valid || s.CanceledAt.Valid || s.ReasonCode != "" {
 			return invalidModelError(where, "exam_sitting", "lifecycle", "does not match scheduled state", details)
 		}
 	case ExamSittingOpen:
-		if !validExamSittingLifecycleTime(s.OpenedAt, s.CreatedAt, s.UpdatedAt) || s.PausedAt.Valid || s.ClosingAt.Valid || s.ClosedAt.Valid || s.CanceledAt.Valid || s.ReasonCode != "" {
+		if !validExamSittingLifecycleTime(s.OpenedAt, s.CreatedAt, s.UpdatedAt) ||
+			s.PausedAt.Valid ||
+			s.ClosingAt.Valid ||
+			s.ClosedAt.Valid ||
+			s.CanceledAt.Valid ||
+			s.ReasonCode != "" {
 			return invalidModelError(where, "exam_sitting", "lifecycle", "does not match open state", details)
 		}
 	case ExamSittingPaused:
-		if !validExamSittingLifecycleTime(s.OpenedAt, s.CreatedAt, s.UpdatedAt) || !validExamSittingLifecycleTime(s.PausedAt, s.OpenedAt.Time, s.UpdatedAt) ||
-			s.ClosingAt.Valid || s.ClosedAt.Valid || s.CanceledAt.Valid || s.ReasonCode != "" {
+		if !validExamSittingLifecycleTime(s.OpenedAt, s.CreatedAt, s.UpdatedAt) ||
+			!validExamSittingLifecycleTime(s.PausedAt, s.OpenedAt.Time, s.UpdatedAt) ||
+			s.ClosingAt.Valid ||
+			s.ClosedAt.Valid ||
+			s.CanceledAt.Valid ||
+			s.ReasonCode != "" {
 			return invalidModelError(where, "exam_sitting", "lifecycle", "does not match paused state", details)
 		}
 	case ExamSittingClosing:
-		if !validExamSittingLifecycleTime(s.OpenedAt, s.CreatedAt, s.UpdatedAt) || !validExamSittingLifecycleTime(s.ClosingAt, s.OpenedAt.Time, s.UpdatedAt) ||
-			s.PausedAt.Valid || s.ClosedAt.Valid || s.CanceledAt.Valid || !s.ReasonCode.isClosing() {
+		if !validExamSittingLifecycleTime(s.OpenedAt, s.CreatedAt, s.UpdatedAt) ||
+			!validExamSittingLifecycleTime(s.ClosingAt, s.OpenedAt.Time, s.UpdatedAt) ||
+			s.PausedAt.Valid ||
+			s.ClosedAt.Valid ||
+			s.CanceledAt.Valid ||
+			!s.ReasonCode.isClosing() {
 			return invalidModelError(where, "exam_sitting", "lifecycle", "does not match closing state", details)
 		}
 	case ExamSittingClosed:
-		if !validExamSittingLifecycleTime(s.OpenedAt, s.CreatedAt, s.UpdatedAt) || !validExamSittingLifecycleTime(s.ClosingAt, s.OpenedAt.Time, s.UpdatedAt) ||
-			!validExamSittingLifecycleTime(s.ClosedAt, s.ClosingAt.Time, s.UpdatedAt) || s.PausedAt.Valid || s.CanceledAt.Valid || !s.ReasonCode.isClosing() {
+		if !validExamSittingLifecycleTime(s.OpenedAt, s.CreatedAt, s.UpdatedAt) ||
+			!validExamSittingLifecycleTime(s.ClosingAt, s.OpenedAt.Time, s.UpdatedAt) ||
+			!validExamSittingLifecycleTime(s.ClosedAt, s.ClosingAt.Time, s.UpdatedAt) ||
+			s.PausedAt.Valid ||
+			s.CanceledAt.Valid ||
+			!s.ReasonCode.isClosing() {
 			return invalidModelError(where, "exam_sitting", "lifecycle", "does not match closed state", details)
 		}
 	case ExamSittingCanceled:
-		if s.OpenedAt.Valid || s.PausedAt.Valid || s.ClosingAt.Valid || s.ClosedAt.Valid ||
-			!s.CanceledAt.Valid || s.CanceledAt.Time.IsZero() || s.CanceledAt.Time.Location() != time.UTC ||
-			s.CanceledAt.Time.Before(s.CreatedAt) || s.CanceledAt.Time.After(s.UpdatedAt) || !s.ReasonCode.isCancellation() {
+		if s.OpenedAt.Valid ||
+			s.PausedAt.Valid ||
+			s.ClosingAt.Valid ||
+			s.ClosedAt.Valid ||
+			!s.CanceledAt.Valid ||
+			s.CanceledAt.Time.IsZero() ||
+			s.CanceledAt.Time.Location() != time.UTC ||
+			s.CanceledAt.Time.Before(s.CreatedAt) ||
+			s.CanceledAt.Time.After(s.UpdatedAt) ||
+			!s.ReasonCode.isCancellation() {
 			return invalidModelError(where, "exam_sitting", "lifecycle", "does not match canceled state", details)
 		}
 	}
+
 	if s.Revision < 1 {
 		return invalidModelError(where, "exam_sitting", "revision", "must be positive", details)
 	}
+
 	return nil
 }
 
 func validExamSittingLifecycleTime(value OptionalTime, notBefore, notAfter time.Time) bool {
-	return value.Valid && !value.Time.IsZero() && value.Time.Location() == time.UTC && !value.Time.Before(notBefore) && !value.Time.After(notAfter)
+	return value.Valid &&
+		!value.Time.IsZero() &&
+		value.Time.Location() == time.UTC &&
+		!value.Time.Before(notBefore) &&
+		!value.Time.After(notAfter)
 }

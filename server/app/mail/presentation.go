@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------------------------
 
 // This file turns typed presentation details into the shared message layout:
-// an optional emphasised hero detail and an ordered list of labelled facts.
+// an optional emphasized hero detail and an ordered list of labeled facts.
 package mail
 
 import (
@@ -34,13 +34,17 @@ const (
 
 func kindFor(key model.MailTemplateKey) messageKind {
 	switch key {
-	case model.MailTemplateIdentityVerifyEmail, model.MailTemplateIdentityEmailChangeVerifyNew,
-		model.MailTemplateIdentityPasswordReset, model.MailTemplateIdentityAccountDisabled,
-		model.MailTemplateIdentityAccountEnabled, model.MailTemplateIdentityEmailVerifiedByAdmin:
+	case model.MailTemplateIdentityVerifyEmail,
+		model.MailTemplateIdentityEmailChangeVerifyNew,
+		model.MailTemplateIdentityPasswordReset,
+		model.MailTemplateIdentityAccountDisabled,
+		model.MailTemplateIdentityAccountEnabled,
+		model.MailTemplateIdentityEmailVerifiedByAdmin:
 		return kindAccount
 	case model.MailTemplateSystemTest:
 		return kindSystem
 	}
+
 	switch {
 	case strings.HasPrefix(string(key), "identity."):
 		return kindSecurity
@@ -65,7 +69,7 @@ type heroProperties struct {
 	Struck    bool
 }
 
-// factProperties is one labelled row in the message's detail list.
+// factProperties is one labeled row in the message's detail list.
 type factProperties struct {
 	Label  string
 	Value  string
@@ -223,7 +227,11 @@ func examManagerLayout(manager *ExamManagerDetails, c clock, data *copyData) lay
 	return func(copy templateCopy, _ *copyResolver) layout {
 		var l layout
 		labels := copy.labels
-		role := map[string]string{"manager": labels.Manager, "owner": labels.Owner, "no_longer_manager": labels.NoLongerManager}[manager.Relationship]
+		role := map[string]string{
+			"manager":           labels.Manager,
+			"owner":             labels.Owner,
+			"no_longer_manager": labels.NoLongerManager,
+		}[manager.Relationship]
 		l.fact(labels.Exam, data.ExamTitle)
 		l.fact(labels.YourRole, role)
 		l.fact(labels.Since, c.dateTime(manager.ActionAt))
@@ -239,17 +247,23 @@ func sittingLayout(request renderRequest, c clock, data *copyData) layoutBuilder
 	return func(copy templateCopy, r *copyResolver) layout {
 		labels := copy.labels
 		minutes := int(sitting.EndsAt.Sub(sitting.StartsAt).Round(time.Minute) / time.Minute)
-		hero := &heroProperties{Label: labels.When, Primary: c.date(sitting.StartsAt),
-			Secondary: c.timeRange(sitting.StartsAt, sitting.EndsAt) + " · " + r.duration(minutes/60, minutes%60), Struck: struck}
+		hero := &heroProperties{
+			Label:     labels.When,
+			Primary:   c.date(sitting.StartsAt),
+			Secondary: c.timeRange(sitting.StartsAt, sitting.EndsAt) + " · " + r.duration(minutes/60, minutes%60),
+			Struck:    struck,
+		}
 		if struck {
 			hero.Label = labels.WasScheduled
 		}
+
 		l := layout{Hero: hero}
 		l.fact(labels.Exam, data.ExamTitle)
 		l.fact(labels.Class, data.Class)
 		if prior := strings.TrimSpace(sitting.PriorClassDisplayName); prior != "" && request.Key == model.MailTemplateExamSittingRescheduled {
 			l.fact(labels.PreviousClass, prior)
 		}
+
 		return l
 	}
 }
@@ -367,29 +381,62 @@ func validatePresentation(request renderRequest) error {
 		valid    func() bool
 		name     string
 	}{
-		{isPersonalAccessTokenTemplate(request.Key), request.PersonalAccessToken != nil,
-			func() bool { return validPersonalAccessTokenDetails(request.PersonalAccessToken) }, "PAT"},
-		{isExamManagerTemplate(request.Key), request.ExamManager != nil,
-			func() bool { return validExamManagerDetails(request.ExamManager) }, "Exam Manager"},
-		{isSittingScheduleTemplate(request.Key), request.SittingSchedule != nil,
-			func() bool { return validSittingScheduleDetails(request.SittingSchedule) }, "Sitting schedule"},
-		{isClassTransitionTemplate(request.Key), request.ClassTransition != nil,
-			func() bool { return validClassTransitionDetails(request.Key, request.ClassTransition) }, "Class transition"},
-		{isSubmissionReceiptTemplate(request.Key), request.SubmissionReceipt != nil,
-			func() bool { return validSubmissionReceiptDetails(request.SubmissionReceipt) }, "Submission receipt"},
-		{request.Key == model.MailTemplateExamResultReleased, request.ResultRelease != nil,
+		{
+			isPersonalAccessTokenTemplate(request.Key),
+			request.PersonalAccessToken != nil,
+			func() bool { return validPersonalAccessTokenDetails(request.PersonalAccessToken) },
+			"PAT",
+		},
+		{
+			isExamManagerTemplate(request.Key),
+			request.ExamManager != nil,
+			func() bool { return validExamManagerDetails(request.ExamManager) },
+			"Exam Manager",
+		},
+		{
+			isSittingScheduleTemplate(request.Key),
+			request.SittingSchedule != nil,
+			func() bool { return validSittingScheduleDetails(request.SittingSchedule) },
+			"Sitting schedule",
+		},
+		{
+			isClassTransitionTemplate(request.Key),
+			request.ClassTransition != nil,
+			func() bool { return validClassTransitionDetails(request.Key, request.ClassTransition) },
+			"Class transition",
+		},
+		{
+			isSubmissionReceiptTemplate(request.Key),
+			request.SubmissionReceipt != nil,
+			func() bool { return validSubmissionReceiptDetails(request.SubmissionReceipt) },
+			"Submission receipt",
+		},
+		{
+			request.Key == model.MailTemplateExamResultReleased,
+			request.ResultRelease != nil,
 			func() bool {
 				return !request.ResultRelease.ReleasedAt.IsZero() && validBoundedMailLabel(request.ResultRelease.ExamTitle)
-			}, "result release"},
-		{request.Key == model.MailTemplateIdentityEmailChangeWarningOld, request.EmailChange != nil,
-			func() bool { return model.IsValidEmail(strings.TrimSpace(request.EmailChange.NewAddress)) }, "email change"},
-		{request.Key == model.MailTemplateExamRetentionScheduled, request.Retention != nil,
-			func() bool { return !request.Retention.RetireAfter.IsZero() }, "retention"},
+			},
+			"result release",
+		},
+		{
+			request.Key == model.MailTemplateIdentityEmailChangeWarningOld,
+			request.EmailChange != nil,
+			func() bool { return model.IsValidEmail(strings.TrimSpace(request.EmailChange.NewAddress)) },
+			"email change",
+		},
+		{
+			request.Key == model.MailTemplateExamRetentionScheduled,
+			request.Retention != nil,
+			func() bool { return !request.Retention.RetireAfter.IsZero() },
+			"retention",
+		},
 	}
 	for _, check := range checks {
 		if check.declared != check.present || check.present && !check.valid() {
 			return fmt.Errorf("mail template %q has invalid %s details", request.Key, check.name)
 		}
 	}
+
 	return nil
 }

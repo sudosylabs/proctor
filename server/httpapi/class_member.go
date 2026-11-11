@@ -8,9 +8,12 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -37,87 +40,119 @@ type classEnrollmentResponse struct {
 	Previous   *classMemberResponse `json:"previous,omitempty"`
 }
 
-type classMemberResourceModule struct {
-	members ClassMemberApplication
+type classMemberHandlers struct {
+	app ClassMemberApplication
 }
 
-func classMemberResource(members ClassMemberApplication) apiResource {
-	module := classMemberResourceModule{members: members}
-	return newResource(
+func classMemberResource(app ClassMemberApplication) route.Resource {
+	h := classMemberHandlers{app: app}
+	return route.NewResource(
 		"class-members",
-		principalRoute(
-			http.MethodGet,
-			apiPath(literal("classes"), canonicalID("class_id"), literal("members")),
-			academicRelationshipReadErrorCodes(),
-			module.list,
-		),
-		principalRoute(
-			http.MethodPost,
-			apiPath(literal("classes"), canonicalID("class_id"), literal("members")),
-			academicRelationshipMutationErrorCodes("class_member.invalid", "class_member.student_affiliation_required", "class.enrollment_conflict", "mail.unavailable"),
-			module.enroll,
-		),
-		principalRoute(
-			http.MethodDelete,
-			apiPath(literal("class-members"), canonicalID("class_member_id")),
-			academicRelationshipMutationErrorCodes("class.enrollment_conflict", "mail.unavailable"),
-			module.end,
-		),
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/classes/{class_id}/members",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: academicRelationshipReadErrorCodes(),
+			Handle: h.list,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/classes/{class_id}/members",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: academicRelationshipMutationErrorCodes(
+				"class_member.invalid",
+				"class_member.student_affiliation_required",
+				"class.enrollment_conflict",
+				"mail.unavailable",
+			),
+			Handle: h.enroll,
+		},
+		route.Endpoint{
+			Method: http.MethodDelete,
+			Path:   "/class-members/{class_member_id}",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: academicRelationshipMutationErrorCodes("class.enrollment_conflict", "mail.unavailable"),
+			Handle: h.end,
+		},
 	)
 }
 
-func (m classMemberResourceModule) list(request operationRequest) (operationResult, error) {
-	classID, err := request.params.RequireClassID()
+func (h classMemberHandlers) list(request route.Request) (route.Result, error) {
+	classID, err := route.PathID[model.ClassID](request, "class_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	scope := model.Resource{Type: model.ResourceClass, ID: classID.String()}
-	query, after, err := membershipPageQuery(request.request, scope)
+	query, after, err := membershipPageQuery(request.HTTP, scope)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	page, err := m.members.ListClassMembersPage(request.context, request.invocation(), app.ListClassMembersPageQuery{ClassID: classID, MembershipPageQuery: query, AfterUserID: model.UserID(after.AfterUserID), AfterID: model.ClassMemberID(after.AfterID)})
+
+	page, err := h.app.ListClassMembersPage(request.Context, request.Invocation(), academic.ListClassMembersPageQuery{
+		ClassID:             classID,
+		MembershipPageQuery: query,
+		AfterUserID:         model.UserID(after.AfterUserID),
+		AfterID:             model.ClassMemberID(after.AfterID),
+	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return membershipListResult(scope, page.ActiveAt, page.Members, page.HasMore, classMemberResponseFromModel,
-		func(member *model.ClassMember) (string, string) { return member.UserID.String(), member.ID.String() })
+
+	return membershipListResult(
+		scope,
+		page.ActiveAt,
+		page.Members,
+		page.HasMore,
+		classMemberResponseFromModel,
+		func(member *model.ClassMember) (string, string) { return member.UserID.String(), member.ID.String() },
+	)
 }
 
-func (m classMemberResourceModule) enroll(request operationRequest) (operationResult, error) {
-	classID, err := request.params.RequireClassID()
+func (h classMemberHandlers) enroll(request route.Request) (route.Result, error) {
+	classID, err := route.PathID[model.ClassID](request, "class_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	var body enrollClassMemberRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
-	startAt, err := wireTimeMillis("start_at", body.StartAt)
+
+	startAt, err := route.WireTimeMillis("start_at", body.StartAt)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	endAt, err := wireTimeMillis("end_at", body.EndAt)
+
+	endAt, err := route.WireTimeMillis("end_at", body.EndAt)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	enrollment, err := m.members.EnrollClassMember(request.context, request.invocation(), app.EnrollClassMemberCommand{ClassID: classID, UserID: model.UserID(body.UserID), StartAt: startAt, EndAt: endAt})
+
+	enrollment, err := h.app.EnrollClassMember(request.Context, request.Invocation(), academic.EnrollClassMemberCommand{
+		ClassID: classID,
+		UserID:  model.UserID(body.UserID),
+		StartAt: startAt,
+		EndAt:   endAt,
+	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusCreated, classEnrollmentResponseFromModel(enrollment)), nil
+
+	return route.JSON(http.StatusCreated, classEnrollmentResponseFromModel(enrollment)), nil
 }
 
-func (m classMemberResourceModule) end(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireClassMemberID()
+func (h classMemberHandlers) end(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.ClassMemberID](request, "class_member_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	ended, err := m.members.EndClassMember(request.context, request.invocation(), app.EndClassMemberCommand{ID: id})
+	ended, err := h.app.EndClassMember(request.Context, request.Invocation(), academic.EndClassMemberCommand{ID: id})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, classMemberResponseFromModel(ended)), nil
+	return route.JSON(http.StatusOK, classMemberResponseFromModel(ended)), nil
 }
 
 func classMemberResponseFromModel(member *model.ClassMember) classMemberResponse {
@@ -147,4 +182,11 @@ func classEnrollmentResponseFromModel(enrollment *model.ClassEnrollment) classEn
 		response.Previous = &previous
 	}
 	return response
+}
+
+// ClassMemberApplication is the application port its handlers call; it lists, enrolls and ends Class memberships.
+type ClassMemberApplication interface {
+	ListClassMembersPage(context.Context, invocation.Invocation, academic.ListClassMembersPageQuery) (*academic.ClassMemberPage, error)
+	EnrollClassMember(context.Context, invocation.Invocation, academic.EnrollClassMemberCommand) (*model.ClassEnrollment, error)
+	EndClassMember(context.Context, invocation.Invocation, academic.EndClassMemberCommand) (*model.ClassMember, error)
 }

@@ -69,8 +69,8 @@ type HostPolicy func(ctx context.Context, host string) error
 func HostWhitelist(hosts ...string) HostPolicy {
 	whitelist := make(map[string]bool, len(hosts))
 	for _, h := range hosts {
-		if h, err := idna.Lookup.ToASCII(h); err == nil {
-			whitelist[h] = true
+		if ascii, err := idna.Lookup.ToASCII(h); err == nil {
+			whitelist[ascii] = true
 		}
 	}
 	return func(_ context.Context, host string) error {
@@ -247,7 +247,8 @@ func (m *Manager) TLSConfig() *tls.Config {
 	return &tls.Config{
 		GetCertificate: m.GetCertificate,
 		NextProtos: []string{
-			"h2", "http/1.1", // enable HTTP/2
+			"h2",
+			"http/1.1",     // enable HTTP/2
 			acme.ALPNProto, // enable tls-alpn ACME challenges
 		},
 	}
@@ -308,7 +309,7 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 		if cert := m.certTokens[name]; cert != nil {
 			return cert, nil
 		}
-		if cert, err := m.cacheGet(ctx, certKey{domain: name, isToken: true}); err == nil {
+		if cert, cacheGetErr := m.cacheGet(ctx, certKey{domain: name, isToken: true}); cacheGetErr == nil {
 			return cert, nil
 		}
 		// TODO: cache error results?
@@ -316,8 +317,8 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 	}
 
 	// regular domain
-	if err := m.hostPolicy()(ctx, name); err != nil {
-		return nil, err
+	if hostPolicyErr := m.hostPolicy()(ctx, name); hostPolicyErr != nil {
+		return nil, hostPolicyErr
 	}
 
 	ck := certKey{
@@ -328,7 +329,7 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 	if err == nil {
 		return cert, nil
 	}
-	if err != ErrCacheMiss {
+	if !errors.Is(err, ErrCacheMiss) {
 		return nil, err
 	}
 
@@ -337,7 +338,9 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 	if err != nil {
 		return nil, err
 	}
-	m.cachePut(ctx, ck, cert)
+	// Best effort, as upstream: the certificate is already held in memory and
+	// a failed cache write only costs a reissue after a restart.
+	_ = m.cachePut(ctx, ck, cert)
 	return cert, nil
 }
 
@@ -360,8 +363,10 @@ func supportsECDSA(hello *tls.ClientHelloInfo) bool {
 		for _, scheme := range hello.SignatureSchemes {
 			const tlsECDSAWithSHA1 tls.SignatureScheme = 0x0203 // constant added in Go 1.10
 			switch scheme {
-			case tlsECDSAWithSHA1, tls.ECDSAWithP256AndSHA256,
-				tls.ECDSAWithP384AndSHA384, tls.ECDSAWithP521AndSHA512:
+			case tlsECDSAWithSHA1,
+				tls.ECDSAWithP256AndSHA256,
+				tls.ECDSAWithP384AndSHA384,
+				tls.ECDSAWithP521AndSHA512:
 				ecdsaOK = true
 				break schemeLoop
 			}
@@ -370,6 +375,7 @@ func supportsECDSA(hello *tls.ClientHelloInfo) bool {
 			return false
 		}
 	}
+
 	if hello.SupportedCurves != nil {
 		ecdsaOK := false
 		for _, curve := range hello.SupportedCurves {
@@ -378,10 +384,12 @@ func supportsECDSA(hello *tls.ClientHelloInfo) bool {
 				break
 			}
 		}
+
 		if !ecdsaOK {
 			return false
 		}
 	}
+
 	for _, suite := range hello.CipherSuites {
 		switch suite {
 		case tls.TLS_ECDHE_ECDSA_WITH_RC4_128_SHA,
@@ -394,6 +402,7 @@ func supportsECDSA(hello *tls.ClientHelloInfo) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -438,7 +447,8 @@ func (m *Manager) HTTPHandler(fallback http.Handler) http.Handler {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
-		w.Write(data)
+		// The status line is already sent; a failed write leaves nothing to report.
+		_, _ = w.Write(data) //nolint:gosec // G705: the key authorization this manager stored for the token, not request input.
 	})
 }
 
@@ -448,7 +458,7 @@ func handleHTTPRedirect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	target := "https://" + stripPort(r.Host) + r.URL.RequestURI()
-	http.Redirect(w, r, target, http.StatusFound)
+	http.Redirect(w, r, target, http.StatusFound) //nolint:gosec // G710: upgrades the request to HTTPS on the host the client itself addressed.
 }
 
 func stripPort(hostport string) string {
@@ -632,7 +642,7 @@ func (m *Manager) createCert(ctx context.Context, ck certKey) (*tls.Certificate,
 			if !ok {
 				return
 			}
-			if _, err := validCert(ck, s.cert, s.key, m.now()); err == nil {
+			if _, validCertErr := validCert(ck, s.cert, s.key, m.now()); validCertErr == nil {
 				return
 			}
 			delete(m.state, ck)
@@ -739,7 +749,8 @@ AuthorizeOrderLoop:
 		// after we're done.
 		defer func(urls []string) {
 			m.runBackground(func(ctx context.Context) {
-				m.deactivatePendingAuthz(ctx, urls)
+				// deactivatePendingAuthz retains its error for Close to report.
+				_ = m.deactivatePendingAuthz(ctx, urls)
 			})
 		}(o.AuthzURLs)
 
@@ -756,9 +767,9 @@ AuthorizeOrderLoop:
 
 		// Satisfy all pending authorizations.
 		for _, zurl := range o.AuthzURLs {
-			z, err := client.GetAuthorization(ctx, zurl)
-			if err != nil {
-				return nil, err
+			z, getErr := client.GetAuthorization(ctx, zurl)
+			if getErr != nil {
+				return nil, getErr
 			}
 			if z.Status != acme.StatusPending {
 				// We are interested only in pending authorizations.
@@ -774,17 +785,17 @@ AuthorizeOrderLoop:
 				return nil, fmt.Errorf("acme/autocert: unable to satisfy %q for domain %q: no viable challenge type found", z.URI, domain)
 			}
 			// Respond to the challenge and wait for validation result.
-			cleanup, err := m.fulfill(ctx, client, chal, domain)
-			if err != nil {
+			cleanup, getErr := m.fulfill(ctx, client, chal, domain)
+			if getErr != nil {
 				continue AuthorizeOrderLoop
 			}
 			defer func() {
 				resultErr = errors.Join(resultErr, cleanup())
 			}()
-			if _, err := client.Accept(ctx, chal); err != nil {
+			if _, acceptErr := client.Accept(ctx, chal); acceptErr != nil {
 				continue AuthorizeOrderLoop
 			}
-			if _, err := client.WaitAuthorization(ctx, z.URI); err != nil {
+			if _, waitErr := client.WaitAuthorization(ctx, z.URI); waitErr != nil {
 				continue AuthorizeOrderLoop
 			}
 		}
@@ -858,6 +869,7 @@ func (m *Manager) fulfill(ctx context.Context, client *acme.Client, chal *acme.C
 		if err != nil {
 			return nil, err
 		}
+
 		m.putCertToken(ctx, domain, &cert)
 		return func() error {
 			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
@@ -871,6 +883,7 @@ func (m *Manager) fulfill(ctx context.Context, client *acme.Client, chal *acme.C
 		if err != nil {
 			return nil, err
 		}
+
 		p := client.HTTP01ChallengePath(chal.Token)
 		m.putHTTPToken(ctx, p, resp)
 		return func() error {
@@ -881,6 +894,7 @@ func (m *Manager) fulfill(ctx context.Context, client *acme.Client, chal *acme.C
 			return err
 		}, nil
 	}
+
 	return nil, fmt.Errorf("acme/autocert: unknown challenge type %q", chal.Type)
 }
 
@@ -893,7 +907,8 @@ func (m *Manager) putCertToken(ctx context.Context, name string, cert *tls.Certi
 		m.certTokens = make(map[string]*tls.Certificate)
 	}
 	m.certTokens[name] = cert
-	m.cachePut(ctx, certKey{domain: name, isToken: true}, cert)
+	// Best effort, as upstream: the in-memory token answers this node's challenge.
+	_ = m.cachePut(ctx, certKey{domain: name, isToken: true}, cert)
 }
 
 // deleteCertToken removes the token certificate with the specified name
@@ -938,7 +953,8 @@ func (m *Manager) putHTTPToken(ctx context.Context, tokenPath, val string) {
 	b := []byte(val)
 	m.httpTokens[tokenPath] = b
 	if m.Cache != nil {
-		m.Cache.Put(ctx, httpTokenCacheKey(tokenPath), b)
+		// Best effort, as upstream: the in-memory token answers this node's challenge.
+		_ = m.Cache.Put(ctx, httpTokenCacheKey(tokenPath), b)
 	}
 }
 
@@ -1055,11 +1071,11 @@ func (m *Manager) Close() error {
 	m.stopRenew()
 	// Synchronize with a possible runBackground Add before waiting.
 	m.backgroundMu.Lock()
-	m.backgroundMu.Unlock()
+	m.backgroundMu.Unlock() //nolint:staticcheck // SA2001: a barrier that waits out an in-flight runBackground Add before Wait.
 	m.background.Wait()
 	// Synchronize with a possible beginOperation Add before waiting.
 	m.operationMu.Lock()
-	m.operationMu.Unlock()
+	m.operationMu.Unlock() //nolint:staticcheck // SA2001: a barrier that waits out an in-flight beginOperation Add before Wait.
 	m.operations.Wait()
 	return m.retainedCleanupError()
 }
@@ -1097,7 +1113,7 @@ func (m *Manager) randomInt63n(maximum int64) int64 {
 	m.randMu.Lock()
 	defer m.randMu.Unlock()
 	if m.rand == nil {
-		m.rand = mathrand.New(mathrand.NewSource(time.Now().UnixNano()))
+		m.rand = mathrand.New(mathrand.NewSource(time.Now().UnixNano())) //nolint:gosec // G404: renewal and retry jitter, not a secret.
 	}
 	return m.rand.Int63n(maximum)
 }
@@ -1132,20 +1148,20 @@ func (m *Manager) accountKey(ctx context.Context) (crypto.Signer, error) {
 	}
 
 	data, err := m.Cache.Get(ctx, keyName)
-	if err == ErrCacheMiss {
+	if errors.Is(err, ErrCacheMiss) {
 		data, err = m.Cache.Get(ctx, legacyKeyName)
 	}
-	if err == ErrCacheMiss {
-		key, err := genKey()
-		if err != nil {
-			return nil, err
+	if errors.Is(err, ErrCacheMiss) {
+		key, genKeyErr := genKey()
+		if genKeyErr != nil {
+			return nil, genKeyErr
 		}
 		var buf bytes.Buffer
-		if err := encodeECDSAKey(&buf, key); err != nil {
-			return nil, err
+		if encodeErr := encodeECDSAKey(&buf, key); encodeErr != nil {
+			return nil, encodeErr
 		}
-		if err := m.Cache.Put(ctx, keyName, buf.Bytes()); err != nil {
-			return nil, err
+		if putErr := m.Cache.Put(ctx, keyName, buf.Bytes()); putErr != nil {
+			return nil, putErr
 		}
 		return key, nil
 	}
@@ -1197,11 +1213,11 @@ func (m *Manager) acmeClient(ctx context.Context) (*acme.Client, error) {
 // isAccountAlreadyExist reports whether the err, as returned from acme.Client.Register,
 // indicates the account has already been registered.
 func isAccountAlreadyExist(err error) bool {
-	if err == acme.ErrAccountAlreadyExists {
+	if errors.Is(err, acme.ErrAccountAlreadyExists) {
 		return true
 	}
-	ae, ok := err.(*acme.Error)
-	return ok && ae.StatusCode == http.StatusConflict
+	var ae *acme.Error
+	return errors.As(err, &ae) && ae.StatusCode == http.StatusConflict
 }
 
 func (m *Manager) hostPolicy() HostPolicy {
@@ -1289,15 +1305,18 @@ func validCert(ck certKey, der [][]byte, key crypto.Signer, now time.Time) (leaf
 	for _, b := range der {
 		n += len(b)
 	}
+
 	pub := make([]byte, n)
 	n = 0
 	for _, b := range der {
 		n += copy(pub[n:], b)
 	}
+
 	x509Cert, err := x509.ParseCertificates(pub)
 	if err != nil || len(x509Cert) == 0 {
 		return nil, errors.New("acme/autocert: no public key found")
 	}
+
 	// verify the leaf is not expired and matches the domain name
 	leaf = x509Cert[0]
 	if now.Before(leaf.NotBefore) {
@@ -1313,6 +1332,7 @@ func validCert(ck certKey, der [][]byte, key crypto.Signer, now time.Time) (leaf
 	if isRevokedLetsEncrypt(leaf) {
 		return nil, errors.New("acme/autocert: certificate was probably revoked by Let's Encrypt")
 	}
+
 	// ensure the leaf corresponds to the private key and matches the certKey type
 	switch pub := leaf.PublicKey.(type) {
 	case *rsa.PublicKey:
@@ -1331,7 +1351,7 @@ func validCert(ck certKey, der [][]byte, key crypto.Signer, now time.Time) (leaf
 		if !ok {
 			return nil, errors.New("acme/autocert: private key type does not match public key type")
 		}
-		if pub.X.Cmp(prv.X) != 0 || pub.Y.Cmp(prv.Y) != 0 {
+		if !pub.Equal(prv.Public()) {
 			return nil, errors.New("acme/autocert: private key does not match public key")
 		}
 		if ck.isRSA && !ck.isToken {
@@ -1340,6 +1360,7 @@ func validCert(ck certKey, der [][]byte, key crypto.Signer, now time.Time) (leaf
 	default:
 		return nil, errors.New("acme/autocert: unknown public key algorithm")
 	}
+
 	return leaf, nil
 }
 
@@ -1348,6 +1369,7 @@ func validCert(ck certKey, der [][]byte, key crypto.Signer, now time.Time) (leaf
 // can be safely removed from May 2022.
 func isRevokedLetsEncrypt(cert *x509.Certificate) bool {
 	O := cert.Issuer.Organization
-	return len(O) == 1 && O[0] == "Let's Encrypt" &&
+	return len(O) == 1 &&
+		O[0] == "Let's Encrypt" &&
 		cert.NotBefore.Before(time.Date(2022, time.January, 26, 0, 48, 0, 0, time.UTC))
 }

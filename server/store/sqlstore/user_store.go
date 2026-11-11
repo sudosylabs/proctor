@@ -28,6 +28,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLUserStore implements store.UserStore on users; credentials live in their
+// own Stores.
 type SQLUserStore struct {
 	*SQLStore
 	usersQuery sq.SelectBuilder
@@ -116,7 +118,10 @@ func (s SQLUserStore) Create(ctx context.Context, input *store.UserCreation) (*s
 		credential = &candidate
 	}
 
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "user creation", func(ctx context.Context, tx *sqlxTxWrapper) (*store.UserCreationResult, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "user creation", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.UserCreationResult, error) {
 		if err := insertUser(ctx, tx, &user); err != nil {
 			return nil, err
 		}
@@ -142,9 +147,17 @@ const (
 	publicRegistrationMailLifetimeMaximum  = 30 * 24 * time.Hour
 )
 
-func (s SQLUserStore) RegisterLocal(ctx context.Context, input *store.PublicLocalUserRegistration) (*store.PublicLocalUserRegistrationResult, error) {
-	if input == nil || input.User == nil || input.Settings == nil || input.PasswordCredential == nil ||
-		input.DefaultProfilePictureJob == nil || input.VerificationToken == nil || input.AuditEvent == nil {
+func (s SQLUserStore) RegisterLocal(
+	ctx context.Context,
+	input *store.PublicLocalUserRegistration,
+) (*store.PublicLocalUserRegistrationResult, error) {
+	if input == nil ||
+		input.User == nil ||
+		input.Settings == nil ||
+		input.PasswordCredential == nil ||
+		input.DefaultProfilePictureJob == nil ||
+		input.VerificationToken == nil ||
+		input.AuditEvent == nil {
 		return nil, store.NewErrInvalidInput("user", "public_registration", nil)
 	}
 	user := *input.User
@@ -153,28 +166,61 @@ func (s SQLUserStore) RegisterLocal(ctx context.Context, input *store.PublicLoca
 	defaultJob := *input.DefaultProfilePictureJob
 	token := *input.VerificationToken
 	audit := input.AuditEvent.Clone()
-	if input.TokenLifetime < publicRegistrationTokenLifetimeMinimum || input.TokenLifetime > publicRegistrationTokenLifetimeMaximum ||
-		input.MailLifetime < publicRegistrationMailLifetimeMinimum || input.MailLifetime > publicRegistrationMailLifetimeMaximum ||
-		input.MailLifetime > input.TokenLifetime || input.TokenLifetime%time.Millisecond != 0 || input.MailLifetime%time.Millisecond != 0 ||
-		user.Validate() != nil || user.EmailVerified || user.Revision != 1 || user.ArchivedAt.Valid || user.DisabledAt.Valid ||
-		user.LastLoginAt.Valid || user.LastActivityAt.Valid || user.ProfilePictureChangedAt.Valid ||
-		user.DefaultProfilePictureFileID.IsValid() || user.CustomProfilePictureFileID.IsValid() ||
-		credential.Validate() != nil || credential.UserID != user.ID || credential.ArchivedAt.Valid ||
-		validateInitialUserSettingsDocument(&user, settings) != nil || validateUserDefaultProfilePictureJob(&user, &defaultJob) != nil ||
-		token.Validate() != nil || token.UserID != user.ID || token.Purpose != model.UserTokenEmailVerification || token.Target != user.Email ||
-		audit == nil || !audit.ID.IsZero() || !audit.CreatedAt.IsZero() || !audit.UpdatedAt.IsZero() ||
-		audit.Action != string(model.ActionAuthenticationPublicRegistration) || audit.ActorID.IsValid() ||
-		audit.Resource.Type != model.ResourceUser || audit.Resource.ID != user.ID.String() ||
-		audit.ScopeType != model.RoleScopeInstitution || !model.InstitutionID(audit.ScopeID).IsValid() || audit.Status != model.AuditStatusSuccess {
+	if input.TokenLifetime < publicRegistrationTokenLifetimeMinimum ||
+		input.TokenLifetime > publicRegistrationTokenLifetimeMaximum ||
+		input.MailLifetime < publicRegistrationMailLifetimeMinimum ||
+		input.MailLifetime > publicRegistrationMailLifetimeMaximum ||
+		input.MailLifetime > input.TokenLifetime ||
+		input.TokenLifetime%time.Millisecond != 0 ||
+		input.MailLifetime%time.Millisecond != 0 ||
+		user.Validate() != nil ||
+		user.EmailVerified ||
+		user.Revision != 1 ||
+		user.ArchivedAt.Valid ||
+		user.DisabledAt.Valid ||
+		user.LastLoginAt.Valid ||
+		user.LastActivityAt.Valid ||
+		user.ProfilePictureChangedAt.Valid ||
+		user.DefaultProfilePictureFileID.IsValid() ||
+		user.CustomProfilePictureFileID.IsValid() ||
+		credential.Validate() != nil ||
+		credential.UserID != user.ID ||
+		credential.ArchivedAt.Valid ||
+		validateInitialUserSettingsDocument(&user, settings) != nil ||
+		validateUserDefaultProfilePictureJob(&user, &defaultJob) != nil ||
+		token.Validate() != nil ||
+		token.UserID != user.ID ||
+		token.Purpose != model.UserTokenEmailVerification ||
+		token.Target != user.Email ||
+		audit == nil ||
+		!audit.ID.IsZero() ||
+		!audit.CreatedAt.IsZero() ||
+		!audit.UpdatedAt.IsZero() ||
+		audit.Action != string(model.ActionAuthenticationPublicRegistration) ||
+		audit.ActorID.IsValid() ||
+		audit.Resource.Type != model.ResourceUser ||
+		audit.Resource.ID != user.ID.String() ||
+		audit.ScopeType != model.RoleScopeInstitution ||
+		!model.InstitutionID(audit.ScopeID).IsValid() ||
+		audit.Status != model.AuditStatusSuccess {
 		return nil, store.NewErrInvalidInput("user", "public_registration", nil)
 	}
-	payloadKeyID, err := validateUserEmailMail(user.ID, input.VerificationOccurrence, input.VerificationDelivery,
-		input.VerificationJob, model.MailOccurrenceAccountToken, model.MailTemplateIdentityVerifyEmail)
+	payloadKeyID, err := validateUserEmailMail(
+		user.ID,
+		input.VerificationOccurrence,
+		input.VerificationDelivery,
+		input.VerificationJob,
+		model.MailOccurrenceAccountToken,
+		model.MailTemplateIdentityVerifyEmail,
+	)
 	if err != nil || input.VerificationOccurrence.ID.String() != token.ID.String() {
 		return nil, store.NewErrInvalidInput("user", "public_registration_mail", err)
 	}
 
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "public local user registration", func(ctx context.Context, tx *sqlxTxWrapper) (*store.PublicLocalUserRegistrationResult, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "public local user registration", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.PublicLocalUserRegistrationResult, error) {
 		policy, err := getAccessPolicy(ctx, tx, "FOR SHARE")
 		if err != nil {
 			return nil, err
@@ -195,8 +241,12 @@ func (s SQLUserStore) RegisterLocal(ctx context.Context, input *store.PublicLoca
 		occurrence, delivery, deliveryJob, rebaseErr := recoveryMailAtWithLifetime(
 			input.VerificationOccurrence, input.VerificationDelivery, input.VerificationJob, at, input.MailLifetime,
 		)
-		if rebaseErr != nil || user.Validate() != nil || settings.Validate() != nil || credential.Validate() != nil ||
-			validateUserDefaultProfilePictureJob(&user, &defaultJob) != nil || token.Validate() != nil {
+		if rebaseErr != nil ||
+			user.Validate() != nil ||
+			settings.Validate() != nil ||
+			credential.Validate() != nil ||
+			validateUserDefaultProfilePictureJob(&user, &defaultJob) != nil ||
+			token.Validate() != nil {
 			return nil, store.NewErrInvalidInput("user", "public_registration_lifecycle", rebaseErr)
 		}
 		if payloadKeyID != "" {
@@ -237,9 +287,12 @@ func validateUserDefaultProfilePictureJob(user *model.User, job *model.Job) erro
 	command, commandErr := model.DecodeDefaultProfilePictureCommand(job.Command)
 	if job.Validate() != nil ||
 		job.Type != model.JobTypeProfilePictureGenerateDefault ||
-		job.Status != model.JobStatusQueued || job.AttemptCount != 0 ||
+		job.Status != model.JobStatusQueued ||
+		job.AttemptCount != 0 ||
 		job.DedupePolicy != model.JobDedupeActive ||
-		job.DedupeKey != user.ID.String() || commandErr != nil || command.UserID != user.ID {
+		job.DedupeKey != user.ID.String() ||
+		commandErr != nil ||
+		command.UserID != user.ID {
 		return store.NewErrInvalidInput("user", "default_profile_picture_job", nil)
 	}
 	return nil
@@ -254,7 +307,8 @@ func insertUser(ctx context.Context, executor sqlxExecutor, user *model.User) er
 			timezone, last_login_at, last_activity_at, disabled_at,
 			default_profile_picture_seed, default_profile_picture_file_id,
 			custom_profile_picture_file_id, profile_picture_changed_at
-		) VALUES (
+		)
+		VALUES (
 			:id, :created_at, :updated_at, :archived_at, :revision, :username, :email,
 			:email_verified, :display_name, :first_name, :last_name, :locale,
 			:timezone, :last_login_at, :last_activity_at, :disabled_at,
@@ -311,7 +365,7 @@ func (s SQLUserStore) List(
 			options.AfterID,
 		)
 	}
-	query = query.OrderBy("users.username", "users.id").Limit(uint64(options.Limit))
+	query = query.OrderBy("users.username", "users.id").Limit(uint64(options.Limit)) //nolint:gosec // G115: validUserListOptions bounds Limit to 1..201.
 	rows := []userRow{}
 	if err := s.GetMaster().SelectBuilder(ctx, &rows, query); err != nil {
 		return nil, fmt.Errorf("list users: %w", err)
@@ -366,7 +420,8 @@ func filterUserList(query sq.SelectBuilder, options store.UserListOptions) (sq.S
 
 // validUserListOptions reports whether the list page size, cursor and visibility bounds are acceptable.
 func validUserListOptions(options store.UserListOptions) bool {
-	return !(options.Limit < 1 || options.Limit > 201 ||
+	return !(options.Limit < 1 ||
+		options.Limit > 201 ||
 		(options.ID != "" && !options.ID.IsValid()) ||
 		(options.AfterUsername == "") != (options.AfterID == "") ||
 		(options.AfterID != "" && !options.AfterID.IsValid()) ||
@@ -384,7 +439,8 @@ func validUserListMembershipFilters(options store.UserListOptions) bool {
 	if len(options.AffiliationKinds) == 0 && options.AcademicUnitID == "" {
 		return true
 	}
-	if options.Visibility.ActiveAt.IsZero() || len(options.AffiliationKinds) > 4 ||
+	if options.Visibility.ActiveAt.IsZero() ||
+		len(options.AffiliationKinds) > 4 ||
 		(options.AcademicUnitID != "" && !options.AcademicUnitID.IsValid()) {
 		return false
 	}
@@ -409,8 +465,11 @@ func filterUserListAffiliations(query sq.SelectBuilder, options store.UserListOp
 	activeAt := model.TimeUTC(options.Visibility.ActiveAt)
 	return query.Where(`EXISTS (
 		SELECT 1 FROM affiliations af
-		WHERE af.user_id = users.id AND af.kind = ANY(?) AND af.archived_at IS NULL
-		AND af.start_at <= ? AND (af.end_at IS NULL OR af.end_at > ?)
+		WHERE af.user_id = users.id
+			AND af.kind = ANY(?)
+			AND af.archived_at IS NULL
+			AND af.start_at <= ?
+			AND (af.end_at IS NULL OR af.end_at > ?)
 	)`, pq.Array(kinds), activeAt, activeAt)
 }
 
@@ -435,16 +494,18 @@ func filterUserListAcademicUnit(query sq.SelectBuilder, options store.UserListOp
 	activeAt := model.TimeUTC(options.Visibility.ActiveAt)
 	return query.Where(`EXISTS (
 		SELECT 1 FROM academic_unit_members filter_aum
-		WHERE filter_aum.user_id = users.id AND filter_aum.archived_at IS NULL
-		AND filter_aum.start_at <= ? AND (filter_aum.end_at IS NULL OR filter_aum.end_at > ?)
-		AND filter_aum.academic_unit_id IN (
-			WITH RECURSIVE filter_units AS (
-				SELECT id FROM academic_units WHERE id = ? AND archived_at IS NULL
-				UNION ALL SELECT child.id FROM academic_units child
-				JOIN filter_units parent ON child.parent_id = parent.id
-				WHERE child.archived_at IS NULL
-			) SELECT id FROM filter_units
-		)
+		WHERE filter_aum.user_id = users.id
+			AND filter_aum.archived_at IS NULL
+			AND filter_aum.start_at <= ?
+			AND (filter_aum.end_at IS NULL OR filter_aum.end_at > ?)
+			AND filter_aum.academic_unit_id IN (
+				WITH RECURSIVE filter_units AS (
+					SELECT id FROM academic_units WHERE id = ? AND archived_at IS NULL
+					UNION ALL SELECT child.id FROM academic_units child
+					JOIN filter_units parent ON child.parent_id = parent.id
+					WHERE child.archived_at IS NULL
+				) SELECT id FROM filter_units
+			)
 	)`, activeAt, activeAt, options.AcademicUnitID)
 }
 
@@ -453,13 +514,17 @@ func filterUserListVisibility(query sq.SelectBuilder, visibility store.UserVisib
 	if visibility.InstitutionWide {
 		return query, nil
 	}
-	if len(visibility.ClassIDs) == 0 && len(visibility.AcademicUnitRootIDs) == 0 &&
-		len(visibility.ClassMemberAcademicUnitRootIDs) == 0 && !visibility.ClassMemberInstitutionWide {
+
+	if len(visibility.ClassIDs) == 0 &&
+		len(visibility.AcademicUnitRootIDs) == 0 &&
+		len(visibility.ClassMemberAcademicUnitRootIDs) == 0 &&
+		!visibility.ClassMemberInstitutionWide {
 		query = query.Where("FALSE")
 	} else {
 		if visibility.ActiveAt.IsZero() {
 			return query, store.NewErrInvalidInput("user", "visibility_active_at", nil)
 		}
+
 		activeAt := model.TimeUTC(visibility.ActiveAt)
 		query = query.Prefix(`WITH RECURSIVE user_allowed_units AS (
 			SELECT id FROM academic_units WHERE id = ANY(?) AND archived_at IS NULL
@@ -471,35 +536,51 @@ func filterUserListVisibility(query sq.SelectBuilder, visibility store.UserVisib
 			UNION ALL SELECT child.id FROM academic_units child
 			JOIN class_member_allowed_units parent ON child.parent_id = parent.id
 			WHERE child.archived_at IS NULL
-		)`, pq.Array(idStrings(visibility.AcademicUnitRootIDs)), pq.Array(idStrings(visibility.ClassMemberAcademicUnitRootIDs))).Where(`(
+		)`, pq.Array(idStrings(visibility.AcademicUnitRootIDs)), pq.Array(idStrings(visibility.ClassMemberAcademicUnitRootIDs))).Where(
+			`(
 		EXISTS (
 			SELECT 1 FROM academic_unit_members aum
-			WHERE aum.user_id = users.id AND aum.archived_at IS NULL
-			AND aum.start_at <= ? AND (aum.end_at IS NULL OR aum.end_at > ?)
-			AND aum.academic_unit_id IN (SELECT id FROM user_allowed_units)
+			WHERE aum.user_id = users.id
+				AND aum.archived_at IS NULL
+				AND aum.start_at <= ?
+				AND (aum.end_at IS NULL OR aum.end_at > ?)
+				AND aum.academic_unit_id IN (SELECT id FROM user_allowed_units)
 		) OR EXISTS (
 			SELECT 1 FROM class_members cm
 			JOIN classes c ON c.id = cm.class_id AND c.archived_at IS NULL
 			JOIN programme_levels pl ON pl.id = c.programme_level_id AND pl.archived_at IS NULL
 			JOIN programmes p ON p.id = pl.programme_id AND p.archived_at IS NULL
-			WHERE cm.user_id = users.id AND cm.archived_at IS NULL
-			AND cm.start_at <= ? AND (cm.end_at IS NULL OR cm.end_at > ?)
-			AND (p.academic_unit_id IN (SELECT id FROM user_allowed_units)
-				OR cm.class_id = ANY(?) OR ?
-				OR p.academic_unit_id IN (SELECT id FROM class_member_allowed_units))
+			WHERE cm.user_id = users.id
+				AND cm.archived_at IS NULL
+				AND cm.start_at <= ?
+				AND (cm.end_at IS NULL OR cm.end_at > ?)
+				AND (p.academic_unit_id IN (SELECT id FROM user_allowed_units)
+					OR cm.class_id = ANY(?) OR ?
+					OR p.academic_unit_id IN (SELECT id FROM class_member_allowed_units))
 		) OR EXISTS (
 			SELECT 1 FROM role_bindings rb
 			JOIN roles r ON r.id = rb.role_id AND r.archived_at IS NULL
 			LEFT JOIN classes c ON rb.scope_type = 'class' AND c.id = rb.scope_id AND c.archived_at IS NULL
 			LEFT JOIN programme_levels pl ON pl.id = c.programme_level_id AND pl.archived_at IS NULL
 			LEFT JOIN programmes p ON p.id = pl.programme_id AND p.archived_at IS NULL
-			WHERE rb.user_id = users.id AND rb.archived_at IS NULL
-			AND rb.start_at <= ? AND (rb.end_at IS NULL OR rb.end_at > ?)
-			AND ((rb.scope_type = 'academic_unit' AND rb.scope_id IN (SELECT id FROM user_allowed_units))
-				OR (rb.scope_type = 'class' AND p.academic_unit_id IN (SELECT id FROM user_allowed_units)))
-		))`, activeAt, activeAt, activeAt, activeAt, pq.Array(idStrings(visibility.ClassIDs)),
-			visibility.ClassMemberInstitutionWide, activeAt, activeAt)
+			WHERE rb.user_id = users.id
+				AND rb.archived_at IS NULL
+				AND rb.start_at <= ?
+				AND (rb.end_at IS NULL OR rb.end_at > ?)
+				AND ((rb.scope_type = 'academic_unit' AND rb.scope_id IN (SELECT id FROM user_allowed_units))
+					OR (rb.scope_type = 'class' AND p.academic_unit_id IN (SELECT id FROM user_allowed_units)))
+		))`,
+			activeAt,
+			activeAt,
+			activeAt,
+			activeAt,
+			pq.Array(idStrings(visibility.ClassIDs)),
+			visibility.ClassMemberInstitutionWide,
+			activeAt,
+			activeAt,
+		)
 	}
+
 	return query, nil
 }
 
@@ -530,20 +611,43 @@ func (s SQLUserStore) GetCurrentContext(ctx context.Context, userID model.UserID
 	if !userID.IsValid() || scopeLimit < 1 || scopeLimit > 51 {
 		return nil, store.NewErrInvalidInput("user", "current_context", nil)
 	}
+
 	examManagementActions := pq.Array([]string{
-		string(model.ActionExamCreate), string(model.ActionExamView),
-		string(model.ActionExamManage), string(model.ActionExamPublish), string(model.ActionExamSittingCreate),
-		string(model.ActionExamSittingView), string(model.ActionExamSittingManage), string(model.ActionSubmissionView),
+		string(model.ActionExamCreate),
+		string(model.ActionExamView),
+		string(model.ActionExamManage),
+		string(model.ActionExamPublish),
+		string(model.ActionExamSittingCreate),
+		string(model.ActionExamSittingView),
+		string(model.ActionExamSittingManage),
+		string(model.ActionSubmissionView),
 	})
 	administrationActions := pq.Array([]string{
-		string(model.ActionInstitutionManage), string(model.ActionRoleManage), string(model.ActionAuditView),
-		string(model.ActionAcademicAuditView), string(model.ActionUserView), string(model.ActionUserManage),
-		string(model.ActionJobView), string(model.ActionJobManage), string(model.ActionMailView), string(model.ActionMailManage),
-		string(model.ActionAcademicUnitView), string(model.ActionAcademicUnitManage), string(model.ActionAcademicUnitMembersView),
-		string(model.ActionAcademicUnitMembersManage), string(model.ActionAcademicPeriodView), string(model.ActionAcademicPeriodManage),
-		string(model.ActionProgrammeView), string(model.ActionProgrammeManage), string(model.ActionProgrammeLevelView),
-		string(model.ActionProgrammeLevelManage), string(model.ActionClassView), string(model.ActionClassManage),
-		string(model.ActionClassMembersView), string(model.ActionClassMembersManage), string(model.ActionAcademicProgressionManage),
+		string(model.ActionInstitutionManage),
+		string(model.ActionRoleManage),
+		string(model.ActionAuditView),
+		string(model.ActionAcademicAuditView),
+		string(model.ActionUserView),
+		string(model.ActionUserManage),
+		string(model.ActionJobView),
+		string(model.ActionJobManage),
+		string(model.ActionMailView),
+		string(model.ActionMailManage),
+		string(model.ActionAcademicUnitView),
+		string(model.ActionAcademicUnitManage),
+		string(model.ActionAcademicUnitMembersView),
+		string(model.ActionAcademicUnitMembersManage),
+		string(model.ActionAcademicPeriodView),
+		string(model.ActionAcademicPeriodManage),
+		string(model.ActionProgrammeView),
+		string(model.ActionProgrammeManage),
+		string(model.ActionProgrammeLevelView),
+		string(model.ActionProgrammeLevelManage),
+		string(model.ActionClassView),
+		string(model.ActionClassManage),
+		string(model.ActionClassMembersView),
+		string(model.ActionClassMembersManage),
+		string(model.ActionAcademicProgressionManage),
 	})
 	result, err := s.currentUserProductAreas(ctx, userID, examManagementActions, administrationActions)
 	if err != nil {
@@ -555,11 +659,16 @@ func (s SQLUserStore) GetCurrentContext(ctx context.Context, userID model.UserID
 	if err = s.loadCurrentUserUnresolvedAttempt(ctx, result, userID); err != nil {
 		return nil, err
 	}
+
 	return result, nil
 }
 
 // currentUserProductAreas reads the current User's identity and the product areas their access opens.
-func (s SQLUserStore) currentUserProductAreas(ctx context.Context, userID model.UserID, examManagementActions, administrationActions any) (*store.CurrentUserContext, error) {
+func (s SQLUserStore) currentUserProductAreas(
+	ctx context.Context,
+	userID model.UserID,
+	examManagementActions, administrationActions any,
+) (*store.CurrentUserContext, error) {
 	var row struct {
 		UserID             string `db:"user_id"`
 		Username           string `db:"username"`
@@ -571,55 +680,80 @@ func (s SQLUserStore) currentUserProductAreas(ctx context.Context, userID model.
 		HasExamManagement  bool   `db:"has_exam_management"`
 		HasAdministration  bool   `db:"has_administration"`
 	}
-	err := s.GetMaster().Get(ctx, &row, `WITH RECURSIVE active_bindings AS (
-		SELECT binding.scope_type,binding.scope_id,role.name,role.permissions
-		FROM role_bindings binding JOIN roles role ON role.id=binding.role_id
-		WHERE binding.user_id=? AND binding.archived_at IS NULL AND role.archived_at IS NULL
-		AND binding.start_at<=statement_timestamp() AND (binding.end_at IS NULL OR binding.end_at>statement_timestamp())
-	), unit_ancestors(root_id,id) AS (
-		SELECT id,id FROM academic_units WHERE archived_at IS NULL
-		UNION ALL
-		SELECT child.root_id,parent.id FROM unit_ancestors child
-		JOIN academic_units current ON current.id=child.id
-		JOIN academic_units parent ON parent.id=current.parent_id AND parent.archived_at IS NULL
-	), managed_exams AS (
-		SELECT exam.id,exam.academic_unit_id FROM exams exam
-		JOIN exam_managers manager ON manager.exam_id=exam.id AND manager.user_id=?
-		JOIN academic_unit_members member ON member.academic_unit_id=exam.academic_unit_id AND member.user_id=?
-		WHERE member.archived_at IS NULL AND member.start_at<=statement_timestamp()
-		AND (member.end_at IS NULL OR member.end_at>statement_timestamp())
+	err := s.GetMaster().Get(
+		ctx,
+		&row,
+		`WITH RECURSIVE `+activeRoleBindingsCTE+`,
+		`+unitAncestorsByRootCTE+`,
+		`+managedExamsCTE+`
+		SELECT u.id AS user_id, u.username, u.display_name,
+			u.custom_profile_picture_file_id IS NOT NULL AS custom_picture,
+			EXISTS(
+				SELECT 1
+				FROM affiliations affiliation
+				WHERE affiliation.user_id = u.id
+					AND affiliation.archived_at IS NULL
+					AND affiliation.start_at <= statement_timestamp()
+					AND (affiliation.end_at IS NULL OR affiliation.end_at > statement_timestamp())
+			) AS has_affiliation,
+			EXISTS(SELECT 1 FROM active_bindings) AS has_assigned_access,
+			(
+				EXISTS(
+					SELECT 1
+					FROM class_members member
+					WHERE member.user_id = u.id
+						AND member.archived_at IS NULL
+						AND member.start_at <= statement_timestamp()
+						AND (member.end_at IS NULL OR member.end_at > statement_timestamp())
+				)
+				OR EXISTS(
+					SELECT 1
+					FROM exam_attempts attempt
+					WHERE attempt.candidate_user_id = u.id
+						AND attempt.state IN ('ready', 'active', 'suspended')
+				)
+			) AS has_student_activity,
+			EXISTS(
+				SELECT 1
+				FROM active_bindings binding
+				WHERE `+examManagementBindingSQL+`
+			) AS has_exam_management,
+			EXISTS(
+				SELECT 1
+				FROM active_bindings binding
+				WHERE binding.permissions && ?::text[]
+			) AS has_administration
+		FROM users u
+		WHERE u.id = ?
+			AND u.archived_at IS NULL
+			AND u.disabled_at IS NULL`,
+		userID.String(),
+		userID.String(),
+		userID.String(),
+		model.SystemAdministratorRoleName,
+		string(model.ActionExamManageOverride),
+		examManagementActions,
+		administrationActions,
+		userID.String(),
 	)
-	SELECT u.id AS user_id,u.username,u.display_name,u.custom_profile_picture_file_id IS NOT NULL AS custom_picture,
-		EXISTS(SELECT 1 FROM affiliations affiliation WHERE affiliation.user_id=u.id AND affiliation.archived_at IS NULL
-			AND affiliation.start_at<=statement_timestamp() AND (affiliation.end_at IS NULL OR affiliation.end_at>statement_timestamp())) AS has_affiliation,
-		EXISTS(SELECT 1 FROM active_bindings) AS has_assigned_access,
-		(EXISTS(SELECT 1 FROM class_members member WHERE member.user_id=u.id AND member.archived_at IS NULL
-			AND member.start_at<=statement_timestamp() AND (member.end_at IS NULL OR member.end_at>statement_timestamp()))
-		 OR EXISTS(SELECT 1 FROM exam_attempts attempt WHERE attempt.candidate_user_id=u.id
-			AND attempt.state IN ('ready','active','suspended'))) AS has_student_activity,
-		EXISTS(SELECT 1 FROM active_bindings binding WHERE
-			(binding.name=? AND ?=ANY(binding.permissions) AND binding.scope_type='institution') OR
-			(binding.permissions && ?::text[] AND EXISTS (
-				SELECT 1 FROM managed_exams managed WHERE binding.scope_type='institution' OR
-					(binding.scope_type='academic_unit' AND binding.scope_id IN (
-						SELECT id FROM unit_ancestors WHERE root_id=managed.academic_unit_id))))) AS has_exam_management,
-		EXISTS(SELECT 1 FROM active_bindings binding WHERE binding.permissions &&
-			?::text[]) AS has_administration
-	FROM users u WHERE u.id=? AND u.archived_at IS NULL AND u.disabled_at IS NULL`,
-		userID.String(), userID.String(), userID.String(), model.SystemAdministratorRoleName,
-		string(model.ActionExamManageOverride), examManagementActions, administrationActions, userID.String())
 	if err != nil {
 		return nil, translateError("user", userID.String(), err)
 	}
-	result := &store.CurrentUserContext{Username: row.Username, DisplayName: row.DisplayName,
+
+	result := &store.CurrentUserContext{
+		Username:             row.Username,
+		DisplayName:          row.DisplayName,
 		ProfilePictureKind:   model.ProfilePictureDefault,
-		NoCurrentAffiliation: !row.HasAffiliation, NoAssignedAccess: !row.HasAssignedAccess}
+		NoCurrentAffiliation: !row.HasAffiliation,
+		NoAssignedAccess:     !row.HasAssignedAccess,
+	}
 	if row.CustomPicture {
 		result.ProfilePictureKind = model.ProfilePictureCustom
 	}
 	if result.UserID, err = model.ParseUserID(row.UserID); err != nil {
 		return nil, invalidPersistedState("user", "id", err)
 	}
+
 	result.AvailableProductAreas = []store.CurrentUserProductArea{
 		store.CurrentUserProductAreaAccount,
 	}
@@ -629,15 +763,21 @@ func (s SQLUserStore) currentUserProductAreas(ctx context.Context, userID model.
 	if row.HasExamManagement {
 		result.AvailableProductAreas = append(result.AvailableProductAreas, store.CurrentUserProductAreaExamManagement)
 	}
+
 	result.AvailableProductAreas = append(result.AvailableProductAreas, store.CurrentUserProductAreaSettings)
 	if row.HasStudentActivity {
 		result.AvailableProductAreas = append(result.AvailableProductAreas, store.CurrentUserProductAreaStudentActivity)
 	}
+
 	return result, nil
 }
 
 // loadCurrentUserManagementScopes adds the bounded list of institution and Academic Unit scopes the User can navigate to manage.
-func (s SQLUserStore) loadCurrentUserManagementScopes(ctx context.Context, result *store.CurrentUserContext, userID model.UserID, scopeLimit int,
+func (s SQLUserStore) loadCurrentUserManagementScopes(
+	ctx context.Context,
+	result *store.CurrentUserContext,
+	userID model.UserID,
+	scopeLimit int,
 	examManagementActions, administrationActions any,
 ) error {
 	type scopeRow struct {
@@ -646,59 +786,57 @@ func (s SQLUserStore) loadCurrentUserManagementScopes(ctx context.Context, resul
 		DisplayName string `db:"display_name"`
 	}
 	rows := []scopeRow{}
-	if err := s.GetMaster().Select(ctx, &rows, `WITH RECURSIVE active_bindings AS (
-		SELECT binding.scope_type,binding.scope_id,role.name,role.permissions
-		FROM role_bindings binding JOIN roles role ON role.id=binding.role_id
-		WHERE binding.user_id=? AND binding.archived_at IS NULL AND role.archived_at IS NULL
-		AND binding.start_at<=statement_timestamp() AND (binding.end_at IS NULL OR binding.end_at>statement_timestamp())
-	), unit_ancestors(root_id,id) AS (
-		SELECT id,id FROM academic_units WHERE archived_at IS NULL
-		UNION ALL
-		SELECT child.root_id,parent.id FROM unit_ancestors child
-		JOIN academic_units current ON current.id=child.id
-		JOIN academic_units parent ON parent.id=current.parent_id AND parent.archived_at IS NULL
-	), managed_exams AS (
-		SELECT exam.id,exam.academic_unit_id FROM exams exam
-		JOIN exam_managers manager ON manager.exam_id=exam.id AND manager.user_id=?
-		JOIN academic_unit_members member ON member.academic_unit_id=exam.academic_unit_id AND member.user_id=?
-		WHERE member.archived_at IS NULL AND member.start_at<=statement_timestamp()
-		AND (member.end_at IS NULL OR member.end_at>statement_timestamp())
-	), navigable_bindings AS (
-		SELECT binding.* FROM active_bindings binding WHERE binding.scope_type IN ('institution','academic_unit') AND (
+	if err := s.GetMaster().Select(
+		ctx,
+		&rows,
+		`WITH RECURSIVE `+activeRoleBindingsCTE+`,
+	`+unitAncestorsByRootCTE+`,
+	`+managedExamsCTE+`,
+	navigable_bindings AS (
+		SELECT binding.* FROM active_bindings binding WHERE binding.scope_type IN ('institution', 'academic_unit') AND (
 			binding.permissions && ?::text[] OR
-			(binding.name=? AND ?=ANY(binding.permissions) AND binding.scope_type='institution') OR
-			(binding.permissions && ?::text[] AND EXISTS (
-				SELECT 1 FROM managed_exams managed WHERE binding.scope_type='institution' OR
-					(binding.scope_type='academic_unit' AND binding.scope_id IN (
-						SELECT id FROM unit_ancestors WHERE root_id=managed.academic_unit_id))))
+			`+examManagementBindingSQL+`
 		)
 	), scopes AS (
-		SELECT 'institution'::text AS scope_type,institution.id AS scope_id,institution.display_name
-		FROM navigable_bindings binding JOIN institutions institution ON binding.scope_type='institution' AND institution.id=binding.scope_id
+		SELECT 'institution'::text AS scope_type, institution.id AS scope_id, institution.display_name
+		FROM navigable_bindings binding JOIN institutions institution ON binding.scope_type = 'institution' AND institution.id = binding.scope_id
 		WHERE institution.archived_at IS NULL
 		UNION
-		SELECT 'academic_unit'::text,unit.id,unit.display_name FROM navigable_bindings binding
-		JOIN academic_units unit ON binding.scope_type='academic_unit' AND unit.id=binding.scope_id WHERE unit.archived_at IS NULL
+		SELECT 'academic_unit'::text, unit.id, unit.display_name FROM navigable_bindings binding
+		JOIN academic_units unit ON binding.scope_type = 'academic_unit' AND unit.id = binding.scope_id WHERE unit.archived_at IS NULL
 	)
-	SELECT scope_type,scope_id,display_name FROM scopes ORDER BY scope_type,display_name,scope_id LIMIT ?`,
-		userID.String(), userID.String(), userID.String(), administrationActions,
-		model.SystemAdministratorRoleName, string(model.ActionExamManageOverride), examManagementActions, scopeLimit); err != nil {
+	SELECT scope_type, scope_id, display_name FROM scopes ORDER BY scope_type, display_name, scope_id LIMIT ?`,
+		userID.String(),
+		userID.String(),
+		userID.String(),
+		administrationActions,
+		model.SystemAdministratorRoleName,
+		string(model.ActionExamManageOverride),
+		examManagementActions,
+		scopeLimit,
+	); err != nil {
 		return fmt.Errorf("list current User management scopes: %w", err)
 	}
+
 	result.ManagementScopesHasMore = len(rows) == scopeLimit
 	if result.ManagementScopesHasMore {
 		rows = rows[:len(rows)-1]
 	}
+
 	result.ManagementScopes = make([]store.CurrentUserManagementScope, 0, len(rows))
 	for _, scope := range rows {
 		scopeType := model.RoleScopeType(scope.ScopeType)
 		if !scopeType.IsValid() || !model.IsValidOpaqueID(scope.ScopeID) || scope.DisplayName == "" {
 			return invalidPersistedState("user", "current_context_scope", errors.New("invalid management scope"))
 		}
+
 		result.ManagementScopes = append(result.ManagementScopes, store.CurrentUserManagementScope{
-			ScopeType: scopeType, ScopeID: scope.ScopeID, DisplayName: scope.DisplayName,
+			ScopeType:   scopeType,
+			ScopeID:     scope.ScopeID,
+			DisplayName: scope.DisplayName,
 		})
 	}
+
 	return nil
 }
 
@@ -709,8 +847,9 @@ func (s SQLUserStore) loadCurrentUserUnresolvedAttempt(ctx context.Context, resu
 		SittingID string `db:"sitting_id"`
 		State     string `db:"state"`
 	}
-	err := s.GetMaster().Get(ctx, &attempt, `SELECT id AS attempt_id,exam_sitting_id AS sitting_id,state FROM exam_attempts
-		WHERE candidate_user_id=? AND state IN ('ready','active','suspended') ORDER BY updated_at DESC,id DESC LIMIT 1`, userID.String())
+	err := s.GetMaster().Get(ctx, &attempt, `SELECT id AS attempt_id, exam_sitting_id AS sitting_id, state FROM exam_attempts
+		WHERE candidate_user_id = ?
+			AND state IN ('ready', 'active', 'suspended') ORDER BY updated_at DESC, id DESC LIMIT 1`, userID.String())
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("resolve current User unresolved Attempt: %w", err)
 	}
@@ -763,16 +902,24 @@ func validVisibilityIDs[T interface{ IsValid() bool }](ids []T) bool {
 // which the active User is visible at visibility.ActiveAt. A zero match means
 // the User is not visible; institution-wide visibility is invalid input because
 // it needs no match.
-func (s SQLUserStore) MatchVisibility(ctx context.Context, userID model.UserID, visibility store.UserVisibilityScope) (store.UserVisibilityMatch, error) {
-	if !userID.IsValid() || visibility.InstitutionWide || visibility.ActiveAt.IsZero() ||
+func (s SQLUserStore) MatchVisibility(
+	ctx context.Context,
+	userID model.UserID,
+	visibility store.UserVisibilityScope,
+) (store.UserVisibilityMatch, error) {
+	if !userID.IsValid() ||
+		visibility.InstitutionWide ||
+		visibility.ActiveAt.IsZero() ||
 		len(visibility.ClassIDs)+len(visibility.AcademicUnitRootIDs)+len(visibility.ClassMemberAcademicUnitRootIDs) > 256 ||
 		!validVisibilityIDs(visibility.ClassIDs) ||
 		!validVisibilityIDs(visibility.AcademicUnitRootIDs) ||
 		!validVisibilityIDs(visibility.ClassMemberAcademicUnitRootIDs) {
 		return store.UserVisibilityMatch{}, store.NewErrInvalidInput("user", "visibility_match", nil)
 	}
-	if len(visibility.ClassIDs) == 0 && len(visibility.AcademicUnitRootIDs) == 0 &&
-		len(visibility.ClassMemberAcademicUnitRootIDs) == 0 && !visibility.ClassMemberInstitutionWide {
+	if len(visibility.ClassIDs) == 0 &&
+		len(visibility.AcademicUnitRootIDs) == 0 &&
+		len(visibility.ClassMemberAcademicUnitRootIDs) == 0 &&
+		!visibility.ClassMemberInstitutionWide {
 		return store.UserVisibilityMatch{}, nil
 	}
 
@@ -780,9 +927,17 @@ func (s SQLUserStore) MatchVisibility(ctx context.Context, userID model.UserID, 
 		ScopeType model.RoleScopeType `db:"scope_type"`
 		ScopeID   string              `db:"scope_id"`
 	}
-	err := s.GetMaster().Get(ctx, &match, userVisibilityMatchQuery, userID, model.TimeUTC(visibility.ActiveAt),
-		pq.Array(idStrings(visibility.AcademicUnitRootIDs)), pq.Array(idStrings(visibility.ClassMemberAcademicUnitRootIDs)),
-		pq.Array(idStrings(visibility.ClassIDs)), visibility.ClassMemberInstitutionWide)
+	err := s.GetMaster().Get(
+		ctx,
+		&match,
+		userVisibilityMatchQuery,
+		userID,
+		model.TimeUTC(visibility.ActiveAt),
+		pq.Array(idStrings(visibility.AcademicUnitRootIDs)),
+		pq.Array(idStrings(visibility.ClassMemberAcademicUnitRootIDs)),
+		pq.Array(idStrings(visibility.ClassIDs)),
+		visibility.ClassMemberInstitutionWide,
+	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return store.UserVisibilityMatch{}, nil
 	}
@@ -799,7 +954,8 @@ const userVisibilityMatchQuery = `
 			SELECT ?::varchar AS user_id, ?::timestamptz AS active_at
 		), user_allowed_units(root_id, id) AS (
 			SELECT id, id FROM academic_units
-			WHERE id = ANY(?::varchar[]) AND archived_at IS NULL
+			WHERE id = ANY(?::varchar[])
+				AND archived_at IS NULL
 			UNION ALL
 			SELECT parent.root_id, child.id
 			FROM academic_units child
@@ -807,7 +963,8 @@ const userVisibilityMatchQuery = `
 			WHERE child.archived_at IS NULL
 		), class_member_allowed_units(root_id, id) AS (
 			SELECT id, id FROM academic_units
-			WHERE id = ANY(?::varchar[]) AND archived_at IS NULL
+			WHERE id = ANY(?::varchar[])
+				AND archived_at IS NULL
 			UNION ALL
 			SELECT parent.root_id, child.id
 			FROM academic_units child
@@ -818,7 +975,8 @@ const userVisibilityMatchQuery = `
 			FROM class_members cm
 			JOIN classes c ON c.id = cm.class_id AND c.archived_at IS NULL
 			CROSS JOIN input i
-			WHERE cm.user_id = i.user_id AND cm.archived_at IS NULL
+			WHERE cm.user_id = i.user_id
+				AND cm.archived_at IS NULL
 			  AND cm.start_at <= i.active_at AND (cm.end_at IS NULL OR cm.end_at > i.active_at)
 			  AND cm.class_id = ANY(?::varchar[])
 			UNION ALL
@@ -828,7 +986,8 @@ const userVisibilityMatchQuery = `
 			JOIN programme_levels pl ON pl.id = c.programme_level_id AND pl.archived_at IS NULL
 			JOIN programmes p ON p.id = pl.programme_id AND p.archived_at IS NULL
 			CROSS JOIN input i
-			WHERE cm.user_id = i.user_id AND cm.archived_at IS NULL
+			WHERE cm.user_id = i.user_id
+				AND cm.archived_at IS NULL
 			  AND cm.start_at <= i.active_at AND (cm.end_at IS NULL OR cm.end_at > i.active_at)
 			  AND ?
 			UNION ALL
@@ -839,14 +998,16 @@ const userVisibilityMatchQuery = `
 			JOIN programmes p ON p.id = pl.programme_id AND p.archived_at IS NULL
 			JOIN class_member_allowed_units au ON au.id = p.academic_unit_id
 			CROSS JOIN input i
-			WHERE cm.user_id = i.user_id AND cm.archived_at IS NULL
+			WHERE cm.user_id = i.user_id
+				AND cm.archived_at IS NULL
 			  AND cm.start_at <= i.active_at AND (cm.end_at IS NULL OR cm.end_at > i.active_at)
 			UNION ALL
 			SELECT 'academic_unit', au.root_id, 2
 			FROM academic_unit_members aum
 			JOIN user_allowed_units au ON au.id = aum.academic_unit_id
 			CROSS JOIN input i
-			WHERE aum.user_id = i.user_id AND aum.archived_at IS NULL
+			WHERE aum.user_id = i.user_id
+				AND aum.archived_at IS NULL
 			  AND aum.start_at <= i.active_at AND (aum.end_at IS NULL OR aum.end_at > i.active_at)
 			UNION ALL
 			SELECT 'academic_unit', au.root_id, 2
@@ -856,7 +1017,8 @@ const userVisibilityMatchQuery = `
 			JOIN programmes p ON p.id = pl.programme_id AND p.archived_at IS NULL
 			JOIN user_allowed_units au ON au.id = p.academic_unit_id
 			CROSS JOIN input i
-			WHERE cm.user_id = i.user_id AND cm.archived_at IS NULL
+			WHERE cm.user_id = i.user_id
+				AND cm.archived_at IS NULL
 			  AND cm.start_at <= i.active_at AND (cm.end_at IS NULL OR cm.end_at > i.active_at)
 			UNION ALL
 			SELECT 'academic_unit', au.root_id, 2
@@ -864,7 +1026,8 @@ const userVisibilityMatchQuery = `
 			JOIN roles r ON r.id = rb.role_id AND r.archived_at IS NULL
 			JOIN user_allowed_units au ON rb.scope_type = 'academic_unit' AND au.id = rb.scope_id
 			CROSS JOIN input i
-			WHERE rb.user_id = i.user_id AND rb.archived_at IS NULL
+			WHERE rb.user_id = i.user_id
+				AND rb.archived_at IS NULL
 			  AND rb.start_at <= i.active_at AND (rb.end_at IS NULL OR rb.end_at > i.active_at)
 			UNION ALL
 			SELECT 'academic_unit', au.root_id, 2
@@ -875,7 +1038,8 @@ const userVisibilityMatchQuery = `
 			JOIN programmes p ON p.id = pl.programme_id AND p.archived_at IS NULL
 			JOIN user_allowed_units au ON au.id = p.academic_unit_id
 			CROSS JOIN input i
-			WHERE rb.user_id = i.user_id AND rb.archived_at IS NULL
+			WHERE rb.user_id = i.user_id
+				AND rb.archived_at IS NULL
 			  AND rb.start_at <= i.active_at AND (rb.end_at IS NULL OR rb.end_at > i.active_at)
 		)
 		SELECT matches.scope_type, matches.scope_id
@@ -900,11 +1064,18 @@ func (s SQLUserStore) get(
 // ExpectedRevision+1 in one audited transaction. A User no longer at
 // ExpectedRevision is a user_changed conflict.
 func (s SQLUserStore) UpdateProfile(ctx context.Context, input *store.UserProfileUpdate) (*model.User, error) {
-	if input == nil || !input.UserID.IsValid() || input.ExpectedRevision <= 0 ||
-		!input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+	if input == nil ||
+		!input.UserID.IsValid() ||
+		input.ExpectedRevision <= 0 ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("user", "profile_update", nil)
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "audited user profile update", func(ctx context.Context, tx *sqlxTxWrapper) (*model.User, error) {
+
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "audited user profile update", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*model.User, error) {
 		current, err := getUserByIDForUpdate(ctx, tx, input.UserID.String())
 		if err != nil {
 			return nil, err
@@ -912,20 +1083,23 @@ func (s SQLUserStore) UpdateProfile(ctx context.Context, input *store.UserProfil
 		if current.Revision != input.ExpectedRevision {
 			return nil, store.NewErrConflict("user", "user_changed", nil)
 		}
+
 		candidate := *current
 		candidate.ApplyProfileChanges(&input.Changes)
 		candidate.PrepareUpdate(model.TimeUTC(input.AuditAt))
 		candidate.Revision = input.ExpectedRevision + 1
-		if err := candidate.Validate(); err != nil {
-			return nil, store.NewErrInvalidInput("user", "value", nil).Wrap(err)
+		if validateErr := candidate.Validate(); validateErr != nil {
+			return nil, store.NewErrInvalidInput("user", "value", nil).Wrap(validateErr)
 		}
-		if err := updateUserProfile(ctx, tx, &candidate, input.ExpectedRevision); err != nil {
-			return nil, err
+		if updateErr := updateUserProfile(ctx, tx, &candidate, input.ExpectedRevision); updateErr != nil {
+			return nil, updateErr
 		}
+
 		updated, err := getUserByID(ctx, tx, candidate.ID.String())
 		if err != nil {
 			return nil, err
 		}
+
 		encoded, appErr := model.EncodeAuditData(updated.Auditable())
 		if appErr != nil {
 			return nil, appErr
@@ -933,6 +1107,7 @@ func (s SQLUserStore) UpdateProfile(ctx context.Context, input *store.UserProfil
 		if _, err := completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", encoded, input.AuditAt); err != nil {
 			return nil, fmt.Errorf("complete user profile update audit: %w", err)
 		}
+
 		return updated, nil
 	})
 }
@@ -1015,7 +1190,9 @@ func (s SQLUserStore) UpdateLastLogin(ctx context.Context, input *store.UserLast
 	id := input.ID
 	at := input.At
 	loginAt := model.TimeUTC(at)
-	result, err := s.GetMaster().Exec(ctx, `
+	result, err := s.GetMaster().Exec(
+		ctx,
+		`
 		UPDATE users
 		   SET updated_at = GREATEST(updated_at, ?),
 		       last_login_at = GREATEST(last_login_at, created_at, ?),
@@ -1090,14 +1267,27 @@ func (row userRow) model() (*model.User, error) {
 	if err != nil {
 		return nil, err
 	}
-	defaultPictureID, err := parseNullablePersistedID("user", "default_profile_picture_file_id", row.DefaultProfilePictureFileID, model.ParseFileEntryID)
+
+	defaultPictureID, err := parseNullablePersistedID(
+		"user",
+		"default_profile_picture_file_id",
+		row.DefaultProfilePictureFileID,
+		model.ParseFileEntryID,
+	)
 	if err != nil {
 		return nil, err
 	}
-	customPictureID, err := parseNullablePersistedID("user", "custom_profile_picture_file_id", row.CustomProfilePictureFileID, model.ParseFileEntryID)
+
+	customPictureID, err := parseNullablePersistedID(
+		"user",
+		"custom_profile_picture_file_id",
+		row.CustomProfilePictureFileID,
+		model.ParseFileEntryID,
+	)
 	if err != nil {
 		return nil, err
 	}
+
 	value := &model.User{
 		ID:                          id,
 		CreatedAt:                   row.CreatedAt.UTC(),
@@ -1123,6 +1313,7 @@ func (row userRow) model() (*model.User, error) {
 	if err := validatePersistedModel("user", value); err != nil {
 		return nil, err
 	}
+
 	return value, nil
 }
 

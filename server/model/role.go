@@ -133,6 +133,7 @@ func (r *Role) Validate() error {
 	if !r.ID.IsValid() {
 		return invalidModelError(where, "role", "id", "must be a valid identifier", "")
 	}
+
 	details := "id=" + r.ID.String()
 	if r.CreatedAt.IsZero() || r.UpdatedAt.IsZero() {
 		return invalidModelError(where, "role", "created_at", "must be set", details)
@@ -149,6 +150,7 @@ func (r *Role) Validate() error {
 	if len(r.Permissions) > RolePermissionMaxCount {
 		return invalidModelError(where, "role", "permissions", "contains too many values", details)
 	}
+
 	seen := make(map[string]struct{}, len(r.Permissions))
 	for _, permission := range r.Permissions {
 		if len(permission) > RolePermissionMaxLength || !validPermission.MatchString(permission) {
@@ -157,8 +159,10 @@ func (r *Role) Validate() error {
 		if _, exists := seen[permission]; exists {
 			return invalidModelError(where, "role", "permissions", "contains a duplicate action", details)
 		}
+
 		seen[permission] = struct{}{}
 	}
+
 	return nil
 }
 

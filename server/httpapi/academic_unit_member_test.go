@@ -18,19 +18,19 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
 type academicUnitMemberHTTPApplication struct {
-	pageQuery     app.ListAcademicUnitMembersPageQuery
-	pageResult    *app.AcademicUnitMemberPage
+	pageQuery     academic.ListAcademicUnitMembersPageQuery
+	pageResult    *academic.AcademicUnitMemberPage
 	result        *model.AcademicUnitMember
-	values        []*model.AcademicUnitMember
-	createCommand app.CreateAcademicUnitMemberCommand
-	endCommand    app.EndAcademicUnitMemberCommand
+	createCommand academic.CreateAcademicUnitMemberCommand
+	endCommand    academic.EndAcademicUnitMemberCommand
 }
 
 func TestAcademicUnitMemberHistoryQueryIncludesEndedMemberships(t *testing.T) {
@@ -46,7 +46,7 @@ func TestAcademicUnitMemberHistoryQueryIncludesEndedMemberships(t *testing.T) {
 func TestAcademicUnitMemberHistoryQueryRejectsInvalidBoolean(t *testing.T) {
 	t.Parallel()
 
-	request := httptest.NewRequest("GET", "/api/v1/academic-units/unit/members?history=invalid", nil)
+	request := httptest.NewRequestWithContext(t.Context(), "GET", "/api/v1/academic-units/unit/members?history=invalid", nil)
 	_, _, err := membershipPageQuery(request, model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewID()})
 	require.Error(t, err, "invalid history query was accepted")
 }
@@ -61,23 +61,23 @@ func TestAcademicUnitMemberFalseHistoryQueryUsesActiveAt(t *testing.T) {
 	require.Equal(t, int64(123), *query.ActiveAt, "active at")
 }
 
-func (a *academicUnitMemberHTTPApplication) CreateAcademicUnitMember(_ context.Context, _ invocation.Invocation, command app.CreateAcademicUnitMemberCommand) (*model.AcademicUnitMember, error) {
+func (a *academicUnitMemberHTTPApplication) CreateAcademicUnitMember(_ context.Context, _ invocation.Invocation, command academic.CreateAcademicUnitMemberCommand) (*model.AcademicUnitMember, error) {
 	a.createCommand = command
 	return a.result, nil
 }
-func (a *academicUnitMemberHTTPApplication) EndAcademicUnitMember(_ context.Context, _ invocation.Invocation, command app.EndAcademicUnitMemberCommand) (*model.AcademicUnitMember, error) {
+func (a *academicUnitMemberHTTPApplication) EndAcademicUnitMember(_ context.Context, _ invocation.Invocation, command academic.EndAcademicUnitMemberCommand) (*model.AcademicUnitMember, error) {
 	a.endCommand = command
 	return a.result, nil
 }
 
 func TestAcademicUnitMemberResourceRunsThroughRoutingKernel(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
 	unitID, userID := model.NewID(), model.NewID()
 	member := &model.AcademicUnitMember{ID: model.NewAcademicUnitMemberID(), AcademicUnitID: model.AcademicUnitID(unitID), UserID: model.UserID(userID), CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100), StartsAt: model.TimeFromMillis(100)}
 	members := &academicUnitMemberHTTPApplication{result: member}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, academicUnitMemberResource(members))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicUnitMemberResource(members))
 
 	create := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/academic-units/"+unitID+"/members", strings.NewReader(`{"user_id":"`+userID+`","start_at":"1970-01-01T00:00:00.1Z"}`))
 	create.Header.Set("Authorization", "Bearer credential")
@@ -92,7 +92,7 @@ func TestAcademicUnitMemberResourceRunsThroughRoutingKernel(t *testing.T) {
 	_, exposed := body["revision"]
 	require.False(t, exposed, "persistence revision leaked into DTO: %#v", body)
 
-	list := httptest.NewRequest(http.MethodGet, "/api/v1/academic-units/"+unitID+"/members?history=true", nil)
+	list := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+unitID+"/members?history=true", nil)
 	list.Header.Set("Authorization", "Bearer credential")
 	listed := httptest.NewRecorder()
 	httpAPI.ServeHTTP(listed, list)
@@ -105,13 +105,13 @@ func TestAcademicUnitMemberResourceRunsThroughRoutingKernel(t *testing.T) {
 
 func TestAcademicUnitMemberListNamesMembersAndTheirRolesHere(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
 	unitID, userID, roleID := model.NewAcademicUnitID(), model.NewUserID(), model.NewRoleID()
 	member := &model.AcademicUnitMember{ID: model.NewAcademicUnitMemberID(), AcademicUnitID: unitID, UserID: userID, CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100), StartsAt: model.TimeFromMillis(100)}
 	identity := store.UserIdentity{ID: userID, Username: "amina", DisplayName: "Amina Diallo"}
 	members := &academicUnitMemberHTTPApplication{}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, academicUnitMemberResource(members))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicUnitMemberResource(members))
 	list := func() map[string]json.RawMessage {
 		t.Helper()
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+unitID.String()+"/members", nil)
@@ -127,7 +127,7 @@ func TestAcademicUnitMemberListNamesMembersAndTheirRolesHere(t *testing.T) {
 		return body.Items[0]
 	}
 
-	members.pageResult = &app.AcademicUnitMemberPage{Members: []*model.AcademicUnitMember{member}, Users: map[model.UserID]store.UserIdentity{userID: identity}}
+	members.pageResult = &academic.AcademicUnitMemberPage{Members: []*model.AcademicUnitMember{member}, Users: map[model.UserID]store.UserIdentity{userID: identity}}
 	item := list()
 	require.JSONEq(t, `{"display_name":"Amina Diallo","username":"amina"}`, string(item["user"]), "no email without Institution-wide user.view")
 	_, rolesShown := item["roles_here"]
@@ -136,7 +136,7 @@ func TestAcademicUnitMemberListNamesMembersAndTheirRolesHere(t *testing.T) {
 	require.False(t, moreShown, "no roles_here_more without role_binding.view on the unit")
 
 	identity.Email = "amina@example.edu"
-	members.pageResult = &app.AcademicUnitMemberPage{
+	members.pageResult = &academic.AcademicUnitMemberPage{
 		Members: []*model.AcademicUnitMember{member}, Users: map[model.UserID]store.UserIdentity{userID: identity},
 		RolesHere: map[model.UserID]store.UserRoleBindingSummary{userID: {UserID: userID, More: 2, Bindings: []store.RoleBindingSummary{{
 			RoleID: roleID, DisplayName: "Reviewer", ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String(),
@@ -150,9 +150,9 @@ func TestAcademicUnitMemberListNamesMembersAndTheirRolesHere(t *testing.T) {
 
 func TestAcademicUnitMemberResourceRejectsInvalidQueryAndMissingPrincipal(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, academicUnitMemberResource(&academicUnitMemberHTTPApplication{}))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, academicUnitMemberResource(&academicUnitMemberHTTPApplication{}))
 
 	invalid := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+model.NewID()+"/members?history=invalid", nil)
 	invalid.Header.Set("Authorization", "Bearer credential")
@@ -166,12 +166,12 @@ func TestAcademicUnitMemberResourceRejectsInvalidQueryAndMissingPrincipal(t *tes
 	require.Equal(t, http.StatusUnauthorized, unauthenticatedResponse.Code, "unauthenticated status = %d: %s", unauthenticatedResponse.Code, unauthenticatedResponse.Body.String())
 }
 
-func (a *academicUnitMemberHTTPApplication) ListAcademicUnitMembersPage(_ context.Context, _ invocation.Invocation, query app.ListAcademicUnitMembersPageQuery) (*app.AcademicUnitMemberPage, error) {
+func (a *academicUnitMemberHTTPApplication) ListAcademicUnitMembersPage(_ context.Context, _ invocation.Invocation, query academic.ListAcademicUnitMembersPageQuery) (*academic.AcademicUnitMemberPage, error) {
 	a.pageQuery = query
 	if a.pageResult != nil {
 		return a.pageResult, nil
 	}
-	return &app.AcademicUnitMemberPage{}, nil
+	return &academic.AcademicUnitMemberPage{}, nil
 }
 
 func TestAcademicUnitMemberOpenAPIDocument(t *testing.T) {

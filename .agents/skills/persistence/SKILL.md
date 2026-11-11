@@ -29,6 +29,8 @@ description: Design or change Proctor Store contracts, named atomic operations, 
 
 Contracts return domain types or explicit store projection/aggregate results. SQL rows, nullable driver types, builders, handles, and column names stay private to `sqlstore`. Invalid rehydrated state is an internal integrity failure.
 
+A result type's `Consistent…` predicates are part of the Store contract, asserted by the conformance suite on every real result; the application does not re-check them and checks only a transition's state, revision, and time postconditions, through a narrower predicate declared beside the full one.
+
 A persisted spelling that only the adapter reads, such as a compact control ledger, an idempotent outcome, or a replay record, is a `sqlstore` type with its own json tags. The `model` package carries json tags only for documents whose one canonical serialization it owns (see its package documentation); `store` contracts carry none. Candidate and manager read projections, pages, and list options are query-shaped Store results and stay in `store`.
 
 Contracts name every entity by its typed model ID (`model.UserID`, `model.AuditEventID`, and so on) in method parameters, results, and command, cursor, and visibility fields; application commands, queries, results, authorization helpers, and effect ports do the same (`[]model.SessionID`, not `[]string`), and the architecture test `TestEntityIdentifiersAreTyped` enforces both. A plain `string` identifier is reserved for a reference whose entity type is chosen at runtime (a Role scope, a Resource, an onboarding row target, a retention record, a mail rekey target) and for runtime tokens such as node and lease IDs, plus identifiers another party defines (identity provider, Desktop agreement and build, mail key IDs); those are checked with `model.IsValidOpaqueID` or their own validator, and the test lists each with its reason. Every entity ID is validated through its typed ID's `IsValid` or `Parse`. Persisted text, such as an idempotent outcome or checkpoint, converts back to the typed ID at the adapter boundary.
@@ -40,11 +42,10 @@ a value `XListOptions` or scope struct. Inside inputs, audit is the field pair
 `AuditEventID` and `AuditAt` for an attempt, or the field `AuditEvent` for a
 draft; optimistic concurrency on the entity the operation acts on is
 `ExpectedRevision`, and a fence on a different resource (the recipient User,
-the Exam draft, the Sitting) is `Expected<Resource>Revision`; the architecture
-test `TestStoreRevisionFencesNameTheirResource` rejects a qualifier that
-repeats the input's own entity or says `Current`; `TestStoreMutationsTakeOneInput`
-rejects a mutation that takes more than one positional input; and a
-retryable operation takes a trailing `*CommandIdempotency` parameter. The older
+the Exam draft, the Sitting) is `Expected<Resource>Revision`, never a
+qualifier that repeats the input's own entity or says `Current`; and a
+retryable operation takes a trailing `*CommandIdempotency` parameter. Review
+holds new operations to these shapes; no test does. The older
 identity and membership operations that still carry `Command` and replay flags
 inside their input follow the same rule when next changed.
 
@@ -181,8 +182,7 @@ persisted document, outcome, or identifier: until the first supported release
 a format changes outright and development databases are recreated. Only
 contracts an external party negotiates keep a version (the `/api/v1` HTTP
 generation, the Desktop and cluster peer protocol ranges, and Desktop native
-agreement keys). The architecture test `TestNamesCarryNoVersionSuffix`
-enforces both rules.
+agreement keys). Review enforces both rules.
 PostgreSQL transaction-scoped coordination serializes the complete namespace;
 the named aggregate mutation, successful audit completion, and outcome insert
 commit together. Replaying identical input returns the recorded outcome after
@@ -244,7 +244,12 @@ across a daylight-saving transition.
 
 The examination boundary is divided into cohesive Store contracts for Exam
 authoring/publication, Sittings, Attempts and Participation, Workspace and
-Submission, and Integrity and Review. They expose named atomic operations for
+Submission, and Integrity and Review. What a Candidate's Desktop reports
+around an Attempt has its own contracts beside `ExamAttemptStore`, which keeps
+the Attempt aggregate's lifecycle: `SecurityPreflightStore`,
+`ExamFocusLossStore`, `NativeDeliveryStore`, `BrowserDeliveryStore`, and
+`DeliveryBudgetStore` for the budget, detail stop, and upload expiry the two
+delivery families share. They expose named atomic operations for
 publication, Sitting scheduling/rescheduling/cancellation, live correction,
 first connection, participation fencing, workspace mutation, submission
 sealing, Sitting closure, suspension/re-allow, and review finalization. The

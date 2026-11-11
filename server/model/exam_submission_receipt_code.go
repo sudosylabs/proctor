@@ -123,8 +123,15 @@ func (c SubmissionReceiptCode) Display() string {
 // MarshalText encodes the canonical form and refuses an invalid code.
 func (c SubmissionReceiptCode) MarshalText() ([]byte, error) {
 	if !c.IsValid() {
-		return nil, invalidModelError("SubmissionReceiptCode.MarshalText", "exam_submission", "receipt_code", "cannot marshal invalid Submission receipt code", "")
+		return nil, invalidModelError(
+			"SubmissionReceiptCode.MarshalText",
+			"exam_submission",
+			"receipt_code",
+			"cannot marshal invalid Submission receipt code",
+			"",
+		)
 	}
+
 	return []byte(c), nil
 }
 
@@ -132,12 +139,20 @@ func (c SubmissionReceiptCode) MarshalText() ([]byte, error) {
 // are never normalized.
 func (c *SubmissionReceiptCode) UnmarshalText(data []byte) error {
 	if c == nil {
-		return invalidModelError("SubmissionReceiptCode.UnmarshalText", "exam_submission", "receipt_code", "receipt code unmarshal target is nil", "")
+		return invalidModelError(
+			"SubmissionReceiptCode.UnmarshalText",
+			"exam_submission",
+			"receipt_code",
+			"receipt code unmarshal target is nil",
+			"",
+		)
 	}
+
 	code := SubmissionReceiptCode(data)
 	if !code.IsValid() {
 		return invalidSubmissionReceiptCode()
 	}
+
 	*c = code
 	return nil
 }

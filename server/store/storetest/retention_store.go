@@ -59,19 +59,19 @@ func TestRetentionStore(t *testing.T, ss store.Store, probe RetentionSQLProbe) {
 	replace := func(key string) {
 		input := &store.RetentionPolicyReplacement{RetentionMutation: store.RetentionMutation{Principal: principal, RecentAuthenticationTTL: time.Hour}, ExpectedRevision: policy.Revision, Settings: settings}
 		prepareRetentionPolicyAttempt(t, ctx, ss, f.institutionID, input)
-		result, err := ss.RetentionPolicy().Replace(ctx, input, retentionPolicyCommand(f.manager.ID, key))
-		require.NoError(t, err)
+		result, retentionErr := ss.RetentionPolicy().Replace(ctx, input, retentionPolicyCommand(f.manager.ID, key))
+		require.NoError(t, retentionErr)
 		policy = result.Policy
 	}
 	replace("retention-initial")
 	mutation := func(action model.Action) store.RetentionMutation {
-		a, err := ss.Audit().Save(ctx, &model.AuditEvent{ActorID: principal.UserID, SessionID: principal.SessionID, Action: string(action), Resource: model.Resource{Type: model.ResourceInstitution, ID: f.institutionID.String()}, ScopeType: model.RoleScopeInstitution, ScopeID: f.institutionID.String(), Status: model.AuditStatusAttempt, NodeID: "retention-test"})
-		require.NoError(t, err)
+		a, auditErr := ss.Audit().Save(ctx, &model.AuditEvent{ActorID: principal.UserID, SessionID: principal.SessionID, Action: string(action), Resource: model.Resource{Type: model.ResourceInstitution, ID: f.institutionID.String()}, ScopeType: model.RoleScopeInstitution, ScopeID: f.institutionID.String(), Status: model.AuditStatusAttempt, NodeID: "retention-test"})
+		require.NoError(t, auditErr)
 		return store.RetentionMutation{Principal: principal, AuditEventID: a.ID, AuditAt: model.NowUTC(), RecentAuthenticationTTL: 10 * time.Minute}
 	}
 	preview := func(key string) *model.RetentionPreview {
-		p, err := ss.Retention().CreatePreview(ctx, &store.RetentionPreviewCreation{RetentionMutation: mutation(model.ActionRetentionPolicyView), PreviewID: model.NewRetentionPreviewID(), ExpectedPolicyRevision: policy.Revision}, examCommand(f.manager.ID, store.RetentionPreviewOperation, key, key))
-		require.NoError(t, err)
+		p, retentionErr := ss.Retention().CreatePreview(ctx, &store.RetentionPreviewCreation{RetentionMutation: mutation(model.ActionRetentionPolicyView), PreviewID: model.NewRetentionPreviewID(), ExpectedPolicyRevision: policy.Revision}, examCommand(f.manager.ID, store.RetentionPreviewOperation, key, key))
+		require.NoError(t, retentionErr)
 		return p
 	}
 	before := preview("before-deadline")
@@ -82,8 +82,8 @@ func TestRetentionStore(t *testing.T, ss store.Store, probe RetentionSQLProbe) {
 	require.Equal(t, int64(1), p.Work.Eligible)
 	require.Equal(t, int64(1), p.Integrity.Eligible)
 	change := func(state model.RetentionControlState, key string) *model.RetentionControl {
-		current, err := ss.Retention().GetControl(ctx)
-		require.NoError(t, err)
+		current, retentionErr := ss.Retention().GetControl(ctx)
+		require.NoError(t, retentionErr)
 		input := &store.RetentionControlChange{RetentionMutation: mutation(model.ActionRetentionCleanupManage), ExpectedRevision: current.Revision, ExpectedPolicyRevision: policy.Revision, State: state}
 		if state == model.RetentionControlEnabled {
 			input.PreviewID = preview(key + "-preview").ID
@@ -91,13 +91,13 @@ func TestRetentionStore(t *testing.T, ss store.Store, probe RetentionSQLProbe) {
 		keyValue := examCommand(f.manager.ID, store.RetentionControlOperation, key, key)
 		missing := *input
 		missing.AuditEventID = model.NewAuditEventID()
-		_, err = ss.Retention().ChangeControl(ctx, &missing, keyValue)
-		require.Error(t, err, "control committed without critical audit")
-		result, err := ss.Retention().ChangeControl(ctx, input, keyValue)
-		require.NoError(t, err)
+		_, retentionErr = ss.Retention().ChangeControl(ctx, &missing, keyValue)
+		require.Error(t, retentionErr, "control committed without critical audit")
+		result, retentionErr := ss.Retention().ChangeControl(ctx, input, keyValue)
+		require.NoError(t, retentionErr)
 		input.RetentionMutation = mutation(model.ActionRetentionCleanupManage)
-		replay, err := ss.Retention().ChangeControl(ctx, input, keyValue)
-		require.NoError(t, err)
+		replay, retentionErr := ss.Retention().ChangeControl(ctx, input, keyValue)
+		require.NoError(t, retentionErr)
 		require.True(t, replay.Replayed, "control retry reapplied mutation")
 		require.Equal(t, result.Control.Revision, replay.Control.Revision, "control retry reapplied mutation")
 		return result.Control
@@ -108,10 +108,10 @@ func TestRetentionStore(t *testing.T, ss store.Store, probe RetentionSQLProbe) {
 	require.True(t, control.Permits(storedPolicy), "approval projection disagrees")
 	require.True(t, storedPolicy.AutomaticDeletionEnabled, "approval projection disagrees")
 	reconcile := func(expected store.RetentionReconciliationResult) {
-		a, err := ss.Audit().Save(ctx, &model.AuditEvent{Action: string(model.ActionRetentionCleanupManage), Resource: model.Resource{Type: model.ResourceSubmission, ID: subID.String()}, ScopeType: model.RoleScopeInstitution, ScopeID: f.institutionID.String(), Status: model.AuditStatusAttempt, NodeID: "retention-job"})
-		require.NoError(t, err)
-		result, err := ss.Retention().ReconcileSubmission(ctx, &store.RetentionReconciliation{SubmissionID: subID, AuditEventID: a.ID, AuditAt: model.NowUTC()})
-		require.NoError(t, err)
+		a, auditErr := ss.Audit().Save(ctx, &model.AuditEvent{Action: string(model.ActionRetentionCleanupManage), Resource: model.Resource{Type: model.ResourceSubmission, ID: subID.String()}, ScopeType: model.RoleScopeInstitution, ScopeID: f.institutionID.String(), Status: model.AuditStatusAttempt, NodeID: "retention-job"})
+		require.NoError(t, auditErr)
+		result, auditErr := ss.Retention().ReconcileSubmission(ctx, &store.RetentionReconciliation{SubmissionID: subID, AuditEventID: a.ID, AuditAt: model.NowUTC()})
+		require.NoError(t, auditErr)
 		require.NotNil(t, result, "reconcile")
 		require.Equal(t, expected, *result, "reconcile")
 	}
@@ -124,6 +124,7 @@ func TestRetentionStore(t *testing.T, ss store.Store, probe RetentionSQLProbe) {
 	require.Len(t, notices, 2, "manager/operator notices")
 	revision, err := ss.ExamRevision().GetSummary(ctx, f.sitting.ExamID, f.sitting.ExamRevisionID)
 	require.NoError(t, err)
+	require.True(t, revision.ConsistentWith(f.sitting.ExamRevisionID, f.sitting.ExamID), "GetSummary returned a result inconsistent with its request")
 	for _, n := range notices {
 		require.Equal(t, revision.Title, n.ExamTitle, "notice exam title")
 		require.True(t, f.sitting.ScheduledStartAt.Equal(n.SittingStartAt), "notice sitting start = %s", n.SittingStartAt)
@@ -265,8 +266,8 @@ func TestRetentionStore(t *testing.T, ss store.Store, probe RetentionSQLProbe) {
 	}()
 	close(startRace)
 	racedHold, racedHoldErr := <-holdResult, <-holdError
-	racedRetirement, racedRetirementErr := <-retireResult, <-retireError
-	require.NoError(t, racedRetirementErr)
+	racedRetirement, racedErr := <-retireResult, <-retireError
+	require.NoError(t, racedErr)
 	if racedHoldErr == nil {
 		require.Equal(t, 0, racedRetirement.Retired, "hold and retirement both committed")
 		releaseRace := &store.ExamRecordsHoldRelease{ExamRecordsMutation: recordsMutation(t, ctx, ss, f.unitID, scope, principal, model.ActionRetentionHoldRelease), HoldID: racedHold.Hold.ID, ExpectedRevision: racedHold.Hold.Revision, ReasonCode: "case_closed", PrivateReason: "Concurrent preservation review is finished.", RecentAuthenticationTTL: 10 * time.Minute}

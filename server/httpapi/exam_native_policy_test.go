@@ -17,6 +17,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -27,10 +28,10 @@ func TestExamNativePolicyHTTPStrictBoundary(t *testing.T) {
 	require.NoError(t, err)
 	for name, body := range map[string]string{"valid": string(valid), "missing native": `{"expected_revision":1}`, "null native": `{"expected_revision":1,"native":null}`, "case alias": strings.Replace(string(valid), `"native":`, `"NATIVE":`, 1), "extra": strings.Replace(string(valid), `"native":`, `"extra":1,"native":`, 1), "missing boolean": strings.Replace(string(valid), `"observe_os_clipboard_changes":false,`, "", 1), "external capture enabled": strings.Replace(string(valid), `"id":"external_capture","mode":"disabled"`, `"id":"external_capture","mode":"enforce"`, 1)} {
 		t.Run(name, func(t *testing.T) {
-			logger, _ := newTestLogger(t)
+			logger, _ := routetest.NewLogger(t)
 			fake := &examHTTPApplication{principal: principal, view: view}
 			api := newFocusedResourceAPI(t, logger, fake, examResource(fake))
-			request := httptest.NewRequest(http.MethodPut, "/api/v1/exams/"+view.Exam.ID.String()+"/draft/policies/native", bytes.NewBufferString(body))
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/exams/"+view.Exam.ID.String()+"/draft/policies/native", bytes.NewBufferString(body))
 			request.Header.Set("Authorization", "Bearer credential")
 			request.Header.Set("Content-Type", "application/json")
 			request.Header.Set("Idempotency-Key", "native-policy-key")

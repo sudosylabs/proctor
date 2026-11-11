@@ -8,18 +8,12 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
-	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
-
-type DesktopRegistrations interface {
-	ListDesktopRegistrations(context.Context, invocation.Invocation, app.ListDesktopRegistrationsQuery) ([]*model.DesktopRegistration, error)
-	RevokeDesktopRegistration(context.Context, invocation.Invocation, app.RevokeDesktopRegistrationCommand) error
-}
 
 type desktopRegistrationResponse struct {
 	ID               string `json:"id"`
@@ -35,54 +29,84 @@ type desktopRegistrationResponse struct {
 	Current          bool   `json:"current"`
 }
 
-type desktopRegistrationResourceModule struct {
-	application DesktopRegistrations
+type desktopRegistrationHandlers struct {
+	app *identity.Service
 }
 
-func desktopRegistrationResource(application DesktopRegistrations) apiResource {
-	module := desktopRegistrationResourceModule{application: application}
-	collection := apiPath(literal("users"), literal("me"), literal("desktop-registrations"))
-	item := appendRoutePath(collection, canonicalID("desktop_registration_id"))
-	return newResource(
+func desktopRegistrationResource(app *identity.Service) route.Resource {
+	h := desktopRegistrationHandlers{app: app}
+	collection := "/users/me/desktop-registrations"
+	item := "/users/me/desktop-registrations/{desktop_registration_id}"
+	return route.NewResource(
 		"desktop-registrations",
-		sessionRoute(http.MethodGet, collection, []string{"desktop_registration.unavailable", "authentication.reauthentication_required", "authentication.session_required", "request.invalid"}, module.list),
-		strongRecentSessionRoute(http.MethodDelete, item, []string{"desktop_registration.unavailable", "request.invalid", "resource.not_found", "audit.unavailable", "authentication.session_required"}, module.revoke),
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   collection,
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{
+				"desktop_registration.unavailable",
+				"authentication.reauthentication_required",
+				"authentication.session_required",
+				"request.invalid",
+			},
+			Handle: h.list,
+		},
+		route.Endpoint{
+			Method: http.MethodDelete,
+			Path:   item,
+			Auth:   route.AuthStrongRecentSessionRequired,
+			Errors: []string{
+				"desktop_registration.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"audit.unavailable",
+				"authentication.session_required",
+			},
+			Handle: h.revoke,
+		},
 	)
 }
 
-func (m desktopRegistrationResourceModule) list(request operationRequest) (operationResult, error) {
-	registrations, err := m.application.ListDesktopRegistrations(
-		request.context, request.invocation(), app.ListDesktopRegistrationsQuery{},
-	)
+func (h desktopRegistrationHandlers) list(request route.Request) (route.Result, error) {
+	registrations, err := h.app.ListDesktopRegistrations(request.Context, request.Invocation())
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	principal, _ := Principal(request.context)
-	response, err := boundedListResult(request, "Desktop Registration", registrations,
-		func(registration *model.DesktopRegistration) boundedPageKey {
-			return boundedPageKey{At: registration.CreatedAt, ID: registration.ID.String()}
+
+	principal, _ := route.Principal(request.Context)
+	response, err := route.BoundedList(
+		request,
+		"Desktop Registration",
+		registrations,
+		func(registration *model.DesktopRegistration) route.BoundedKey {
+			return route.BoundedKey{At: registration.CreatedAt, ID: registration.ID.String()}
 		},
 		func(registration *model.DesktopRegistration) desktopRegistrationResponse {
 			return desktopRegistrationResponseFromModel(registration, principal.DesktopRegistrationID == registration.ID)
-		})
+		},
+	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, response).withHeaders(privateNoStoreHeaders()), nil
+
+	return route.JSON(http.StatusOK, response).WithHeaders(privateNoStoreHeaders()), nil
 }
 
-func (m desktopRegistrationResourceModule) revoke(request operationRequest) (operationResult, error) {
-	registrationID, err := request.params.RequireDesktopRegistrationID()
+func (h desktopRegistrationHandlers) revoke(request route.Request) (route.Result, error) {
+	registrationID, err := route.PathID[model.DesktopRegistrationID](request, "desktop_registration_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	if err = m.application.RevokeDesktopRegistration(
-		request.context, request.invocation(),
-		app.RevokeDesktopRegistrationCommand{RegistrationID: registrationID},
+
+	if err = h.app.RevokeDesktopRegistration(
+		request.Context,
+		request.Invocation(),
+		registrationID,
 	); err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return noContentResult().withHeaders(privateNoStoreHeaders()), nil
+
+	return route.NoContent().WithHeaders(privateNoStoreHeaders()), nil
 }
 
 func desktopRegistrationResponseFromModel(
@@ -92,17 +116,23 @@ func desktopRegistrationResponseFromModel(
 	if registration == nil {
 		return desktopRegistrationResponse{}
 	}
+
 	status := "active"
 	if registration.RevokedAt.Valid {
 		status = "revoked"
 	}
+
 	return desktopRegistrationResponse{
-		ID: registration.ID.String(), DisplayName: registration.DisplayName,
-		DesktopRelease: registration.DesktopRelease, DesktopBuildID: registration.DesktopBuildID,
-		Platform: string(registration.Platform), Architecture: string(registration.Architecture),
+		ID:               registration.ID.String(),
+		DisplayName:      registration.DisplayName,
+		DesktopRelease:   registration.DesktopRelease,
+		DesktopBuildID:   registration.DesktopBuildID,
+		Platform:         string(registration.Platform),
+		Architecture:     string(registration.Architecture),
 		RealtimeProtocol: registration.RealtimeProtocol,
 		CreatedAt:        model.FormatRFC3339(registration.CreatedAt),
 		LastUsedAt:       model.FormatRFC3339(registration.LastUsedAt),
-		Status:           status, Current: current,
+		Status:           status,
+		Current:          current,
 	}
 }

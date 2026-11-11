@@ -103,11 +103,16 @@ func NewInitialDesktopCompatibilityPolicy(institutionID InstitutionID, at time.T
 
 // Validate checks persisted policy state without normalizing malformed data.
 func (p *DesktopCompatibilityPolicy) Validate() error {
-	if p == nil || !p.InstitutionID.IsValid() || p.Revision < 1 ||
-		p.CreatedAt.IsZero() || p.UpdatedAt.IsZero() || p.UpdatedAt.Before(p.CreatedAt) ||
+	if p == nil ||
+		!p.InstitutionID.IsValid() ||
+		p.Revision < 1 ||
+		p.CreatedAt.IsZero() ||
+		p.UpdatedAt.IsZero() ||
+		p.UpdatedAt.Before(p.CreatedAt) ||
 		(p.RetryAt.Valid && !p.RetryAt.Time.After(p.UpdatedAt)) {
 		return errDesktopCompatibilityPolicyInvalid
 	}
+
 	return p.Settings().Validate()
 }
 
@@ -131,33 +136,42 @@ func (p *DesktopCompatibilityPolicy) Settings() DesktopCompatibilityPolicySettin
 // Validate checks policy input. Collections are canonical so fingerprints,
 // idempotency documents, and persistence do not depend on caller ordering.
 func (s DesktopCompatibilityPolicySettings) Validate() error {
-	if !s.Availability.IsValid() || (s.Availability == DesktopAvailabilityReady && s.RetryAt.Valid) ||
+	if !s.Availability.IsValid() ||
+		(s.Availability == DesktopAvailabilityReady && s.RetryAt.Valid) ||
 		(s.RetryAt.Valid && s.RetryAt.Time.IsZero()) {
 		return errDesktopCompatibilityPolicyInvalid
 	}
+
 	if s.MinimumDesktopRelease != "" && !IsValidDesktopRelease(s.MinimumDesktopRelease) {
 		return errDesktopCompatibilityPolicyInvalid
 	}
 	if len(s.RevokedDesktopBuildIDs) > DesktopCompatibilityPolicyRevokedBuildMaxCount {
 		return errDesktopCompatibilityPolicyInvalid
 	}
+
 	previous := ""
 	for _, buildID := range s.RevokedDesktopBuildIDs {
 		if !IsValidDesktopBuildID(buildID) || buildID <= previous {
 			return errDesktopCompatibilityPolicyInvalid
 		}
+
 		previous = buildID
 	}
+
 	message := s.AdministratorMessage
-	if message != strings.TrimSpace(message) || len(message) > DesktopCompatibilityPolicyMessageMaxBytes ||
-		utf8.RuneCountInString(message) > DesktopCompatibilityPolicyMessageMaxRunes || !utf8.ValidString(message) {
+	if message != strings.TrimSpace(message) ||
+		len(message) > DesktopCompatibilityPolicyMessageMaxBytes ||
+		utf8.RuneCountInString(message) > DesktopCompatibilityPolicyMessageMaxRunes ||
+		!utf8.ValidString(message) {
 		return errDesktopCompatibilityPolicyInvalid
 	}
+
 	for _, value := range message {
 		if unicode.IsControl(value) {
 			return errDesktopCompatibilityPolicyInvalid
 		}
 	}
+
 	return nil
 }
 
@@ -174,16 +188,21 @@ func (p *DesktopCompatibilityPolicy) Replace(
 	if expectedRevision != p.Revision {
 		return ErrDesktopCompatibilityPolicyRevisionConflict
 	}
+
 	at = TimeUTC(at)
 	if at.Before(p.UpdatedAt) || settings.RetryAt.Valid && !settings.RetryAt.Time.After(at) {
 		return errDesktopCompatibilityPolicyInvalid
 	}
+
 	if p.MinimumDesktopRelease == settings.MinimumDesktopRelease &&
 		slices.Equal(p.RevokedDesktopBuildIDs, settings.RevokedDesktopBuildIDs) &&
-		p.AdministratorMessage == settings.AdministratorMessage && p.Availability == settings.Availability &&
-		p.RetryAt.Valid == settings.RetryAt.Valid && (!p.RetryAt.Valid || p.RetryAt.Time.Equal(settings.RetryAt.Time)) {
+		p.AdministratorMessage == settings.AdministratorMessage &&
+		p.Availability == settings.Availability &&
+		p.RetryAt.Valid == settings.RetryAt.Valid &&
+		(!p.RetryAt.Valid || p.RetryAt.Time.Equal(settings.RetryAt.Time)) {
 		return nil
 	}
+
 	p.MinimumDesktopRelease = settings.MinimumDesktopRelease
 	// An empty set has one persisted/wire representation: an array, never null.
 	p.RevokedDesktopBuildIDs = append([]string{}, settings.RevokedDesktopBuildIDs...)
@@ -240,17 +259,24 @@ type DesktopBuildTuple struct {
 
 // Validate checks one immutable build-catalog entry.
 func (t DesktopBuildTuple) Validate() error {
-	if !IsValidDesktopRelease(t.DesktopRelease) || !IsValidDesktopBuildID(t.DesktopBuildID) ||
-		!t.Platform.IsValid() || !t.Architecture.IsValid() || !IsValidAgreementID(t.DesktopTarget) || t.RealtimeProtocol < 1 ||
+	if !IsValidDesktopRelease(t.DesktopRelease) ||
+		!IsValidDesktopBuildID(t.DesktopBuildID) ||
+		!t.Platform.IsValid() ||
+		!t.Architecture.IsValid() ||
+		!IsValidAgreementID(t.DesktopTarget) ||
+		t.RealtimeProtocol < 1 ||
 		!IsValidSHA256Fingerprint(t.AttemptConfigurationManifestFingerprint) ||
 		t.ConfigurationManifest.Fingerprint() != t.AttemptConfigurationManifestFingerprint ||
 		!IsValidRegistryFingerprint(t.DesktopSettingsRegistryFingerprint) ||
 		!validBoundedDesktopIdentity(t.CapabilityMatrixIdentity, DesktopCapabilityMatrixIdentityMaxBytes) {
 		return invalidModelError("DesktopBuildTuple.Validate", "desktop_build_tuple", "", "desktop build tuple is invalid", "")
 	}
-	if t.NativeAgreement != nil && (t.NativeAgreement.Matrix().MatrixID != t.CapabilityMatrixIdentity || t.NativeAgreement.Matrix().TargetTuple != t.DesktopTarget) {
+
+	if t.NativeAgreement != nil &&
+		(t.NativeAgreement.Matrix().MatrixID != t.CapabilityMatrixIdentity || t.NativeAgreement.Matrix().TargetTuple != t.DesktopTarget) {
 		return invalidModelError("DesktopBuildTuple.Validate", "desktop_build_tuple", "", "desktop build native agreement binding is invalid", "")
 	}
+
 	return nil
 }
 
@@ -301,6 +327,7 @@ func CompareDesktopReleases(left, right string) (int, error) {
 	if !leftValid || !rightValid {
 		return 0, invalidModelError("CompareDesktopReleases", "desktop_compatibility", "", "desktop release is invalid", "")
 	}
+
 	for index := range leftRelease.core {
 		if comparison := compareSemanticNumericIdentifier(
 			leftRelease.core[index],
@@ -309,6 +336,7 @@ func CompareDesktopReleases(left, right string) (int, error) {
 			return comparison, nil
 		}
 	}
+
 	if len(leftRelease.prerelease) == 0 && len(rightRelease.prerelease) == 0 {
 		return 0, nil
 	}
@@ -318,6 +346,7 @@ func CompareDesktopReleases(left, right string) (int, error) {
 	if len(rightRelease.prerelease) == 0 {
 		return -1, nil
 	}
+
 	limit := min(len(leftRelease.prerelease), len(rightRelease.prerelease))
 	for index := range limit {
 		leftIdentifier := leftRelease.prerelease[index]
@@ -339,6 +368,7 @@ func CompareDesktopReleases(left, right string) (int, error) {
 			return 1, nil
 		}
 	}
+
 	switch {
 	case len(leftRelease.prerelease) < len(rightRelease.prerelease):
 		return -1, nil
@@ -396,22 +426,27 @@ func validSemanticIdentifiers(value string, build bool) bool {
 	if value == "" {
 		return false
 	}
+
 	for _, identifier := range strings.Split(value, ".") {
 		if identifier == "" {
 			return false
 		}
+
 		for index := range len(identifier) {
 			character := identifier[index]
 			if !((character >= '0' && character <= '9') ||
 				(character >= 'A' && character <= 'Z') ||
-				(character >= 'a' && character <= 'z') || character == '-') {
+				(character >= 'a' && character <= 'z') ||
+				character == '-') {
 				return false
 			}
 		}
+
 		if !build && isSemanticNumericIdentifier(identifier) && hasSemanticLeadingZero(identifier) {
 			return false
 		}
 	}
+
 	return true
 }
 

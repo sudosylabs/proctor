@@ -21,8 +21,6 @@ const (
 	ExamAttemptExpireParticipationOperation       = "exam.attempt.expire_participation"
 	ExamAttemptReallowOperation                   = "exam.attempt.reallow"
 	ExamAttemptSuspendOperation                   = "exam.attempt.suspend"
-	ExamAttemptFocusLossOperation                 = "exam.attempt.focus_loss.record"
-	ExamAttemptFocusLossDiscrepancyOperation      = "exam.attempt.focus_loss.discrepancy"
 	ExamAttemptCorrectionAcknowledgementOperation = "exam.attempt.correction.acknowledge"
 )
 
@@ -80,6 +78,64 @@ type ExamAttemptConnectResult struct {
 	Replayed                  bool
 }
 
+// ConsistentWith reports whether the outcome carries a valid Attempt, Attempt
+// Workspace, Participation and Connection that all belong to that one Attempt,
+// the Attempt is the candidate's in the Sitting and Class the command named,
+// and the Connection was opened by the given Session.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (r *ExamAttemptConnectResult) ConsistentWith(
+	classID model.ClassID,
+	candidateID model.UserID,
+	sessionID model.SessionID,
+	sittingID model.ExamSittingID,
+) bool {
+	return !(r == nil ||
+		r.Attempt == nil ||
+		r.Workspace == nil ||
+		r.Participation == nil ||
+		r.Connection == nil ||
+		r.Attempt.Validate() != nil ||
+		r.Workspace.Validate() != nil ||
+		!r.Participation.Consistent() ||
+		r.Connection.Validate() != nil ||
+		r.Attempt.CandidateUserID != candidateID ||
+		r.Attempt.SittingID != sittingID ||
+		r.Workspace.AttemptID != r.Attempt.ID ||
+		r.ClassID != classID ||
+		r.Participation.AttemptID != r.Attempt.ID ||
+		r.Connection.AttemptID != r.Attempt.ID ||
+		r.Connection.ParticipationID != r.Participation.ID ||
+		r.Connection.SessionID != sessionID)
+}
+
+// Connected is the application's postcondition on an admission: the
+// Participation it returns is in lifecycle order. The application checks the
+// admitted Attempt, Participation and Connection states itself.
+func (r *ExamAttemptConnectResult) Connected() bool {
+	return r.Participation.LifecycleInOrder()
+}
+
+// ConfigurationConsistent reports whether the admitted security posture,
+// frozen Attempt configuration, runtime capabilities, browser policy and live
+// corrections are each valid and agree with the outcome's Attempt and
+// Participation. An outcome without its Attempt or Participation is
+// inconsistent.
+func (r *ExamAttemptConnectResult) ConfigurationConsistent() bool {
+	return !(r == nil ||
+		r.Attempt == nil ||
+		r.Participation == nil ||
+		r.Security.Validate() != nil ||
+		r.Security.ParticipationID != r.Participation.ID ||
+		r.Security.Policy.Scope.AttemptID != r.Attempt.ID ||
+		r.Security.Generation != r.Participation.Generation ||
+		r.Configuration.Validate() != nil ||
+		r.RuntimeCapabilities.Validate() != nil ||
+		!r.RuntimeCapabilities.ConsistentWithBrowserPolicy(r.BrowserPolicy) ||
+		!r.RuntimeCapabilities.ConsistentWithLiveCorrections(r.LiveCorrections))
+}
+
 // ExamAttemptParticipationView is safe for application results and command
 // outcomes. It deliberately omits the continuity credential hash.
 type ExamAttemptParticipationView struct {
@@ -93,6 +149,48 @@ type ExamAttemptParticipationView struct {
 	LeaseExpiresAt  time.Time
 	EndedAt         model.OptionalTime
 	EndReason       model.AttemptParticipationEndReason
+}
+
+// Consistent reports whether the view names its Participation and Attempt, its
+// generation, renewal sequence and instants are in order, and its end instant
+// and end reason are present exactly when the Participation ended.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (v *ExamAttemptParticipationView) Consistent() bool {
+	return !(v == nil ||
+		!v.ID.IsValid() ||
+		!v.AttemptID.IsValid() ||
+		v.Generation < 1 ||
+		v.RenewalSequence < 0 ||
+		v.StartedAt.IsZero() ||
+		v.UpdatedAt.IsZero() ||
+		v.LeaseExpiresAt.IsZero() ||
+		(v.EndedAt.Valid && v.EndedAt.Time.IsZero()) ||
+		!v.LifecycleInOrder())
+}
+
+// LifecycleInOrder is the application's postcondition on a Participation a
+// transition returns: it was updated and leased no earlier than it started,
+// it is active or ended, and its end instant and end reason are present
+// exactly when it ended, the end falling within its started and updated
+// instants.
+func (v *ExamAttemptParticipationView) LifecycleInOrder() bool {
+	if v.UpdatedAt.Before(v.StartedAt) || v.LeaseExpiresAt.Before(v.StartedAt) {
+		return false
+	}
+
+	switch v.State {
+	case model.AttemptParticipationActive:
+		return !v.EndedAt.Valid && v.EndReason == ""
+	case model.AttemptParticipationEnded:
+		return v.EndedAt.Valid &&
+			!v.EndedAt.Time.Before(v.StartedAt) &&
+			!v.EndedAt.Time.After(v.UpdatedAt) &&
+			v.EndReason != ""
+	}
+
+	return false
 }
 
 // ExamAttemptParticipationRenewal is the complete sensitive selector for one
@@ -134,134 +232,40 @@ type ExamAttemptParticipationRenewalResult struct {
 	Duplicate        bool
 }
 
-// ExamAttemptFocusLossAccess is the complete hash-only selector for one
-// trusted-client Focus Loss claim. Persistence rechecks the established
-// Attempt/candidate, an Open or Paused Sitting, the exact active unexpired
-// Participation generation, and owning Session-bound open Connection before
-// accepting a new sequence or disabled-policy diagnostic. Established Focus
-// monitoring does not continuously re-poll Class membership; connect/reconnect
-// owns that check. The sole closed-selector exception is an exact retry of the
-// accepted claim whose own FlagAndSuspend transition closed this causal
-// Participation and Connection; that retry must still prove the retained
-// generation, hash, candidate, Session, Connection, and scope.
-type ExamAttemptFocusLossAccess struct {
-	AttemptID                model.ExamAttemptID
-	ParticipationID          model.AttemptParticipationID
-	Generation               int64
-	CandidateUserID          model.UserID
-	SessionID                model.SessionID
-	ConnectionID             model.AttemptConnectionID
-	ContinuityCredentialHash string
-}
-
-// ExamAttemptFocusLossTarget is the bounded preflight projection used to begin
-// one Class-scoped audit. It carries no credential, Session, client source,
-// duration, policy document, evidence, or private state. It may resolve the
-// exact retained policy_suspended causal selector solely so the caller can
-// begin audit for a possible duplicate; RecordFocusLoss decides that only the
-// identical retained claim may pass that exception and otherwise rechecks the
-// complete selector and scope under its transaction locks.
-type ExamAttemptFocusLossTarget struct {
-	ExamID          model.ExamID
-	SittingID       model.ExamSittingID
-	ClassID         model.ClassID
-	CandidateUserID model.UserID
-	AttemptID       model.ExamAttemptID
-	ParticipationID model.AttemptParticipationID
-	Generation      int64
-}
-
-// ExamAttemptFocusLossSignal carries one bounded claim plus server-proposed
-// append identities. The client supplies only sequence,
-// duration, and optional closed source classification; it cannot select an
-// outcome, severity, receipt time, flag state, or guilt finding. Unused
-// proposed identities are harmless. Sequence is the natural idempotency key.
-type ExamAttemptFocusLossSignal struct {
-	Access               ExamAttemptFocusLossAccess
-	SignalID             model.FocusLossSignalID
-	EvidenceID           model.IntegrityEvidenceID
-	FlagID               model.IntegrityFlagID
-	SuspensionID         model.AttemptSuspensionID
-	Sequence             int64
-	DurationMilliseconds int64
-	Source               model.FocusLossSource
-	AuditEventID         model.AuditEventID
-	AuditAt              time.Time
-}
-
-// ExamAttemptFocusLossResult is the safe retained decision for one accepted
-// sequence. Duplicate is true only for an exact same-sequence duration/source
-// repeat; the remaining fields reproduce the prior result so callers can
-// acknowledge it while suppressing transient effects. MissingBefore records a
-// forward gap without inventing observations. DiagnosticCount is the bounded
-// generation aggregate used only while collection is disabled.
+// ConsistentWith reports whether the renewal carries valid security coverage,
+// is the given candidate's Attempt, Participation and generation in a named
+// Exam and Sitting, accepted the given sequence, and grants a lease that ends
+// after the decision time and no later than one initial lease from it.
 //
-// A qualifying signal enters the receipt-time rolling bucket. A crossing
-// consumes the whole bucket immediately and resets WindowIncidentCount to zero.
-// The first crossing creates the one open Focus Loss Flag for this
-// Attempt/generation; later crossings retain evidence without another Flag.
-// CandidateWarningCreated is possible once per generation only for
-// FlagAndWarn. ManagerNotificationRequired is true only when the Flag is first
-// created. FlagAndSuspend atomically ends Participation and Connection as
-// policy_suspended, suspends the Attempt, and returns the safe episode views.
-type ExamAttemptFocusLossResult struct {
-	ExamID                      model.ExamID
-	SittingID                   model.ExamSittingID
-	ClassID                     model.ClassID
-	CandidateUserID             model.UserID
-	AttemptID                   model.ExamAttemptID
-	ParticipationID             model.AttemptParticipationID
-	Generation                  int64
-	Signal                      *model.FocusLossSignal
-	AcceptedSequence            int64
-	DatabaseTime                time.Time
-	CollectionEnabled           bool
-	Qualified                   bool
-	MissingBefore               int64
-	WindowIncidentCount         int
-	ThresholdCrossed            bool
-	PolicyOutcome               model.IntegrityThresholdOutcome
-	RetainedEvidenceCount       int
-	Overflow                    *model.FocusLossEvidenceOverflow
-	DiagnosticCount             int64
-	Flag                        *model.IntegrityFlag
-	FlagCreated                 bool
-	CandidateWarningCreated     bool
-	ManagerNotificationRequired bool
-	Attempt                     *model.ExamAttempt
-	Participation               *ExamAttemptParticipationView
-	Connection                  *ExamAttemptManagerConnection
-	ConnectionClosed            bool
-	Suspension                  *ExamAttemptSuspensionView
-	Duplicate                   bool
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (r *ExamAttemptParticipationRenewalResult) ConsistentWith(
+	attemptID model.ExamAttemptID,
+	participationID model.AttemptParticipationID,
+	candidateID model.UserID,
+	generation int64,
+	sequence int64,
+) bool {
+	return !(r == nil ||
+		r.SecurityCoverage.Validate() != nil ||
+		r.AttemptID != attemptID ||
+		r.ParticipationID != participationID ||
+		!r.ExamID.IsValid() ||
+		!r.SittingID.IsValid() ||
+		r.CandidateUserID != candidateID ||
+		r.Generation != generation ||
+		r.DatabaseTime.IsZero() ||
+		r.LeaseExpiresAt.IsZero() ||
+		!r.Renewed(sequence))
 }
 
-// ExamAttemptFocusLossDiscrepancyTarget is the safe scope for one claim that
-// reached the server only after Submission sealing ended integrity collection.
-// It is not authority to reopen the Attempt or mutate its settled/gapped state.
-type ExamAttemptFocusLossDiscrepancyTarget struct {
-	ExamAttemptFocusLossTarget
-	SubmissionID model.SubmissionID
-}
-
-// ExamAttemptFocusLossDiscrepancy carries the exact ended-generation selector,
-// bounded client claim, proposed immutable identities, and a pre-created safe
-// audit attempt. Sequence is the natural idempotency fence.
-type ExamAttemptFocusLossDiscrepancy struct {
-	Access               ExamAttemptFocusLossAccess
-	DiscrepancyID        model.IntegrityDiscrepancyID
-	SignalID             model.FocusLossSignalID
-	Sequence             int64
-	DurationMilliseconds int64
-	Source               model.FocusLossSource
-	AuditEventID         model.AuditEventID
-	AuditAt              time.Time
-}
-
-type ExamAttemptFocusLossDiscrepancyResult struct {
-	Target      ExamAttemptFocusLossDiscrepancyTarget
-	Discrepancy *model.IntegrityDiscrepancy
-	Duplicate   bool
+// Renewed is the application's postcondition on a renewal: it accepted the
+// given sequence and grants a lease that ends after the decision time and no
+// later than one initial lease from it.
+func (r *ExamAttemptParticipationRenewalResult) Renewed(sequence int64) bool {
+	return r.AcceptedSequence == sequence &&
+		r.LeaseExpiresAt.After(r.DatabaseTime) &&
+		!r.LeaseExpiresAt.After(r.DatabaseTime.Add(model.AttemptParticipationInitialLease))
 }
 
 // ExamAttemptParticipationExpiryDue is a bounded, hash-free candidate from
@@ -277,6 +281,22 @@ type ExamAttemptParticipationExpiryDue struct {
 	ParticipationID model.AttemptParticipationID
 	Generation      int64
 	LeaseExpiresAt  time.Time
+}
+
+// ConsistentWith reports whether the expiry target is the given generation of
+// the given Attempt's Participation.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (d *ExamAttemptParticipationExpiryDue) ConsistentWith(
+	attemptID model.ExamAttemptID,
+	participationID model.AttemptParticipationID,
+	generation int64,
+) bool {
+	return !(d == nil ||
+		d.AttemptID != attemptID ||
+		d.ParticipationID != participationID ||
+		d.Generation != generation)
 }
 
 // ExamAttemptParticipationExpiry supplies proposed append-only identities for
@@ -310,6 +330,94 @@ type ExamAttemptSuspensionView struct {
 	// SuspendedByUserID identifies the Exam Manager of a manual episode; a
 	// policy episode has none and links FlagID instead.
 	SuspendedByUserID model.UserID
+}
+
+// ConsistentActiveOrAbsent reports whether the view is absent, or is the given
+// Attempt's active Suspension: it names its Participation and generation,
+// carries the provenance of its source, has started, and has neither ended nor
+// been re-allowed.
+//
+// It is the one consistency check that answers true for a nil receiver. An
+// Attempt that is not suspended has no active Suspension view, so absence is a
+// consistent answer wherever this is asked; a caller that requires a
+// Suspension checks for nil itself.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (v *ExamAttemptSuspensionView) ConsistentActiveOrAbsent(attemptID model.ExamAttemptID) bool {
+	if v == nil {
+		return true
+	}
+
+	return !(!v.ID.IsValid() ||
+		v.AttemptID != attemptID ||
+		!v.ParticipationID.IsValid() ||
+		!v.validProvenance() ||
+		v.Generation <= 0 ||
+		v.StartedAt.IsZero() ||
+		!v.ActiveOrAbsent())
+}
+
+// ActiveOrAbsent is the application's postcondition on the Suspension a
+// transition or snapshot reports as active: the view is absent, or it is
+// active and has neither ended nor been re-allowed.
+func (v *ExamAttemptSuspensionView) ActiveOrAbsent() bool {
+	return v == nil ||
+		v.State == model.AttemptSuspensionActive &&
+			!v.EndedAt.Valid &&
+			v.ReallowedByUserID.IsZero()
+}
+
+// ConsistentClosedBy reports whether the view is the given Attempt's closed
+// Suspension: it names its Participation and generation, carries the
+// provenance of its source, ended no earlier than it started, and was
+// re-allowed by the given actor. Unlike ConsistentActiveOrAbsent, an absent
+// view is not consistent.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (v *ExamAttemptSuspensionView) ConsistentClosedBy(attemptID model.ExamAttemptID, actorID model.UserID) bool {
+	return !(v == nil ||
+		!v.ID.IsValid() ||
+		v.AttemptID != attemptID ||
+		!v.ParticipationID.IsValid() ||
+		!v.validProvenance() ||
+		v.Generation <= 0 ||
+		v.StartedAt.IsZero() ||
+		v.ReallowedByUserID != actorID ||
+		!v.Closed())
+}
+
+// Closed is the application's postcondition on the Suspension a re-allow
+// closes: it is closed and ended no earlier than it started.
+func (v *ExamAttemptSuspensionView) Closed() bool {
+	return v.State == model.AttemptSuspensionClosed &&
+		v.EndedAt.Valid &&
+		!v.EndedAt.Time.Before(v.StartedAt)
+}
+
+// validProvenance accepts a policy episode that links its Flag or a manual
+// episode (an Exam Manager's kick) that links its suspending manager. Every
+// re-allowable episode passes it in both its active and closed state.
+func (v *ExamAttemptSuspensionView) validProvenance() bool {
+	switch v.Source {
+	case model.AttemptSuspensionSourcePolicy:
+		return v.FlagID.IsValid() && reallowableSuspensionReason(v.CandidateReason) && v.SuspendedByUserID.IsZero()
+	case model.AttemptSuspensionSourceManual:
+		return v.FlagID.IsZero() &&
+			v.CandidateReason == model.AttemptSuspensionCandidateReasonManagerSuspended &&
+			v.SuspendedByUserID.IsValid()
+	default:
+		return false
+	}
+}
+
+// reallowableSuspensionReason names the policy suspension reasons a manager
+// may re-allow. Active and closed validation share it so the post-commit
+// check cannot reject an outcome the Store deliberately committed.
+func reallowableSuspensionReason(reason model.AttemptSuspensionCandidateReason) bool {
+	return reason == model.AttemptSuspensionCandidateReasonSecureContinuityLost ||
+		reason == model.AttemptSuspensionCandidateReasonFocusLossPolicy
 }
 
 // ExamAttemptParticipationExpiryResult is the retained, safe committed
@@ -369,6 +477,47 @@ type ExamAttemptReallowResult struct {
 	Replayed             bool
 }
 
+// ConsistentWith reports whether the outcome is the commanded Attempt, valid
+// and ready again at the next revision, in the commanded Exam, Sitting and
+// Class for one candidate, and its Suspension is the commanded episode,
+// consistently closed by the acting manager.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (r *ExamAttemptReallowResult) ConsistentWith(
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	classID model.ClassID,
+	attemptID model.ExamAttemptID,
+	expectedAttemptRevision int64,
+	suspensionID model.AttemptSuspensionID,
+	actorID model.UserID,
+) bool {
+	return !(r == nil ||
+		r.Attempt == nil ||
+		r.Suspension == nil ||
+		r.ExamID != examID ||
+		r.SittingID != sittingID ||
+		r.ClassID != classID ||
+		!r.CandidateUserID.IsValid() ||
+		r.Attempt.ID != attemptID ||
+		r.Attempt.ExamID != examID ||
+		r.Attempt.SittingID != sittingID ||
+		r.Attempt.CandidateUserID != r.CandidateUserID ||
+		r.Attempt.Validate() != nil ||
+		r.Suspension.ID != suspensionID ||
+		!r.Suspension.ConsistentClosedBy(attemptID, actorID) ||
+		!r.Reallowed(expectedAttemptRevision))
+}
+
+// Reallowed is the application's postcondition on a re-allow: the Attempt is
+// ready again at the next revision and its Suspension is closed.
+func (r *ExamAttemptReallowResult) Reallowed(expectedAttemptRevision int64) bool {
+	return r.Attempt.State == model.ExamAttemptReady &&
+		r.Attempt.Revision == expectedAttemptRevision+1 &&
+		r.Suspension.Closed()
+}
+
 // ExamAttemptManualSuspension is one exact, revision-fenced Exam Manager kick
 // of an active Attempt. The private trimmed UTF-8 reason is retained only with
 // the Suspension episode; it must not enter ordinary audit data, command
@@ -402,6 +551,65 @@ type ExamAttemptManualSuspensionResult struct {
 	Replayed         bool
 }
 
+// ConsistentWith reports whether the outcome is the commanded Attempt, valid
+// and suspended at the next revision, in the commanded Exam, Sitting and Class
+// for one candidate; its Participation ended as kicked; its Suspension is that
+// Attempt's active manual episode for that Participation and generation,
+// placed by the acting manager; and a Connection is reported exactly when one
+// was closed, as kicked.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (r *ExamAttemptManualSuspensionResult) ConsistentWith(
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+	expectedAttemptRevision int64,
+	classID model.ClassID,
+	actorID model.UserID,
+) bool {
+	return !(r == nil ||
+		r.Attempt == nil ||
+		r.Participation == nil ||
+		r.Suspension == nil ||
+		r.ExamID != examID ||
+		r.SittingID != sittingID ||
+		r.ClassID != classID ||
+		!r.CandidateUserID.IsValid() ||
+		r.Attempt.ID != attemptID ||
+		r.Attempt.ExamID != examID ||
+		r.Attempt.SittingID != sittingID ||
+		r.Attempt.CandidateUserID != r.CandidateUserID ||
+		r.Attempt.Validate() != nil ||
+		!r.Participation.Consistent() ||
+		r.Participation.AttemptID != attemptID ||
+		!r.Suspension.ConsistentActiveOrAbsent(attemptID) ||
+		r.Suspension.ParticipationID != r.Participation.ID ||
+		r.Suspension.Generation != r.Participation.Generation ||
+		r.Suspension.SuspendedByUserID != actorID ||
+		(r.Connection != nil && !r.Connection.ID.IsValid()) ||
+		!r.Suspended(expectedAttemptRevision))
+}
+
+// Suspended is the application's postcondition on a manual suspension: the
+// Attempt is suspended at the next revision; its Participation ended in
+// order, as kicked; its Suspension is an active manual episode; and a
+// Connection is reported exactly when one was closed, closed as kicked.
+func (r *ExamAttemptManualSuspensionResult) Suspended(expectedAttemptRevision int64) bool {
+	return r.Attempt.State == model.ExamAttemptSuspended &&
+		r.Attempt.Revision == expectedAttemptRevision+1 &&
+		r.Participation.LifecycleInOrder() &&
+		r.Participation.State == model.AttemptParticipationEnded &&
+		r.Participation.EndReason == model.AttemptParticipationEndKicked &&
+		r.Suspension.ActiveOrAbsent() &&
+		r.Suspension.Source == model.AttemptSuspensionSourceManual &&
+		r.ConnectionClosed == (r.Connection != nil) &&
+		(r.Connection == nil ||
+			r.Connection.State == model.AttemptConnectionClosed &&
+				r.Connection.CloseReason == model.AttemptConnectionCloseKicked &&
+				r.Connection.ClosedAt.Valid)
+}
+
 type ExamAttemptConnectionClose struct {
 	ConnectionID    model.AttemptConnectionID
 	CandidateUserID model.UserID
@@ -420,6 +628,27 @@ type ExamAttemptConnectionCloseResult struct {
 	Changed         bool
 }
 
+// ConsistentWith reports whether the outcome names an Exam and carries the
+// valid Connection that was asked to close, belonging to the given Attempt in
+// the given Sitting.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (r *ExamAttemptConnectionCloseResult) ConsistentWith(
+	attemptID model.ExamAttemptID,
+	sittingID model.ExamSittingID,
+	connectionID model.AttemptConnectionID,
+) bool {
+	return !(r == nil ||
+		r.Connection == nil ||
+		!r.ExamID.IsValid() ||
+		r.AttemptID != attemptID ||
+		r.SittingID != sittingID ||
+		r.Connection.ID != connectionID ||
+		r.Connection.AttemptID != attemptID ||
+		r.Connection.Validate() != nil)
+}
+
 // CandidateAttemptAccess is the sensitive selector shared by protected reads.
 // The application hashes the presented raw credential before calling Store.
 // Reads verify the owning Attempt, active unexpired Participation, open
@@ -433,84 +662,6 @@ type CandidateAttemptAccess struct {
 	DPoPKeyThumbprint        string
 	ConnectionID             model.AttemptConnectionID
 	ContinuityCredentialHash string
-}
-
-type DeliveryOwnerTarget struct {
-	SittingID model.ExamSittingID
-	ClassID   model.ClassID
-}
-
-type BrowserActivitySourceStart struct {
-	AuditEventID     model.AuditEventID
-	AuditAt          time.Time
-	Access           CandidateAttemptAccess
-	ParticipationID  model.AttemptParticipationID
-	Generation       int64
-	SourceSessionID  model.BrowserSourceSessionID
-	PolicyRevisionID model.ExamRevisionID
-	PolicyDigest     string
-	Transition       model.BrowserStartTransition
-}
-
-func (v BrowserActivitySourceStart) Declaration() model.BrowserSourceStart {
-	return model.BrowserSourceStart{ParticipationID: v.ParticipationID, Generation: v.Generation, SourceSessionID: v.SourceSessionID, PolicyRevisionID: v.PolicyRevisionID, PolicyDigest: v.PolicyDigest, Transition: v.Transition}
-}
-
-// BrowserSourceRefusal represents an already committed predecessor closure.
-// Current capabilities are loaded after commit by the application.
-type BrowserSourceRefusal struct {
-	Capabilities *CandidateRuntimeCapabilities
-	Code         string
-	Status       model.BrowserSourceStatus
-	Capacity     *model.DeliveryMetadataCapacity
-}
-
-func (v *BrowserSourceRefusal) Error() string { return "browser source replacement refused" }
-func (v *BrowserSourceRefusal) Unwrap() error {
-	if v.Capacity != nil {
-		return v.Capacity
-	}
-	return nil
-}
-
-type BrowserDeliveryAccess struct {
-	Access          CandidateAttemptAccess
-	SourceSessionID model.BrowserSourceSessionID
-	ParticipationID model.AttemptParticipationID
-}
-
-type BrowserActivityAppend struct {
-	AuditEventID     model.AuditEventID
-	AuditAt          time.Time
-	PolicyRevisionID model.ExamRevisionID
-	PolicyDigest     string
-	Access           CandidateAttemptAccess
-	ParticipationID  model.AttemptParticipationID
-	Generation       int64
-	SourceSessionID  model.BrowserSourceSessionID
-	Events           []model.BrowserActivityEvent
-}
-
-type BrowserDeliveryRefusal struct{ Reason string }
-
-func (v *BrowserDeliveryRefusal) Error() string { return "browser detail delivery refused" }
-
-type BrowserActivityListOptions struct {
-	ExamID          model.ExamID
-	SittingID       model.ExamSittingID
-	AttemptID       model.ExamAttemptID
-	AfterReceivedAt time.Time
-	AfterSourceID   model.BrowserSourceSessionID
-	AfterSequence   int64
-	Limit           int
-}
-
-type BrowserActivityRecord struct {
-	AttemptID       model.ExamAttemptID
-	ParticipationID model.AttemptParticipationID
-	Generation      int64
-	SourceSessionID model.BrowserSourceSessionID
-	Event           model.BrowserActivityEvent
 }
 
 type ExamAttemptCorrectionAcknowledgement struct {
@@ -532,6 +683,27 @@ type ExamAttemptCorrectionAcknowledgementTarget struct {
 	CurrentRevisionID    model.ExamRevisionID
 }
 
+// ConsistentWith reports whether the target is the given candidate's Attempt,
+// names the correction Revision being acknowledged and the expected current
+// Revision, and names its Sitting and Class.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (t *ExamAttemptCorrectionAcknowledgementTarget) ConsistentWith(
+	attemptID model.ExamAttemptID,
+	candidateID model.UserID,
+	correctionRevisionID model.ExamRevisionID,
+	currentRevisionID model.ExamRevisionID,
+) bool {
+	return !(t == nil ||
+		t.AttemptID != attemptID ||
+		t.CandidateUserID != candidateID ||
+		t.CorrectionRevisionID != correctionRevisionID ||
+		t.CurrentRevisionID != currentRevisionID ||
+		!t.SittingID.IsValid() ||
+		!t.ClassID.IsValid())
+}
+
 type ExamAttemptCorrectionAcknowledgementResult struct {
 	AttemptID            model.ExamAttemptID
 	CorrectionRevisionID model.ExamRevisionID
@@ -540,6 +712,24 @@ type ExamAttemptCorrectionAcknowledgementResult struct {
 	MutationAuditEventID model.AuditEventID
 	Duplicate            bool
 	Replayed             bool
+}
+
+// ConsistentWith reports whether the outcome is for the given Attempt, names
+// the acknowledged correction Revision and the expected current Revision, and
+// records when the acknowledgement happened.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (r *ExamAttemptCorrectionAcknowledgementResult) ConsistentWith(
+	attemptID model.ExamAttemptID,
+	correctionRevisionID model.ExamRevisionID,
+	currentRevisionID model.ExamRevisionID,
+) bool {
+	return !(r == nil ||
+		r.AttemptID != attemptID ||
+		r.CorrectionRevisionID != correctionRevisionID ||
+		r.CurrentRevisionID != currentRevisionID ||
+		r.AcknowledgedAt.IsZero())
 }
 
 // CandidateExamResource omits managed-file identities and storage selectors.
@@ -568,6 +758,23 @@ type CandidateExamPresentation struct {
 	RuntimeCapabilities  CandidateRuntimeCapabilities
 	BrowserPolicy        *CandidateBrowserPolicy
 	LiveCorrections      []model.CandidateLiveCorrection
+}
+
+// Consistent reports whether the presentation carries valid delivery capacity
+// and runtime capabilities, a browser policy and live corrections that agree
+// with those capabilities, and both the admission and the current Exam
+// Revision.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (p *CandidateExamPresentation) Consistent() bool {
+	return !(p == nil ||
+		p.Capacity.Validate() != nil ||
+		p.RuntimeCapabilities.Validate() != nil ||
+		!p.RuntimeCapabilities.ConsistentWithBrowserPolicy(p.BrowserPolicy) ||
+		!p.RuntimeCapabilities.ConsistentWithLiveCorrections(p.LiveCorrections) ||
+		p.RuntimeCapabilities.ExamRevision.AdmissionRevisionID.IsZero() ||
+		p.RuntimeCapabilities.ExamRevision.CurrentRevisionID.IsZero())
 }
 
 type CandidateInteractionState string
@@ -667,7 +874,10 @@ func (c CandidateRuntimeCapabilities) Validate() error {
 		if !c.Browser.PolicyRevisionID.IsZero() || c.Browser.PolicyDigest != "" {
 			return errors.New("disabled candidate browser capability has policy metadata")
 		}
-	case CandidateBrowserAvailable, CandidateBrowserSittingPaused, CandidateBrowserAcknowledgementRequired, CandidateBrowserTemporarilyUnavailable:
+	case CandidateBrowserAvailable,
+		CandidateBrowserSittingPaused,
+		CandidateBrowserAcknowledgementRequired,
+		CandidateBrowserTemporarilyUnavailable:
 		if !c.Browser.PolicyRevisionID.IsValid() || !model.IsValidSHA256Fingerprint(c.Browser.PolicyDigest) {
 			return errors.New("enabled candidate browser capability lacks policy metadata")
 		}
@@ -683,6 +893,70 @@ func (c CandidateRuntimeCapabilities) Validate() error {
 		}
 	}
 	return nil
+}
+
+// ConsistentWithBrowserPolicy reports whether the delivered browser policy
+// agrees with these capabilities. While a browser correction awaits
+// acknowledgement no policy is delivered. Otherwise the policy is that of the
+// current Exam Revision, is valid with a disclosure that matches it, is
+// enabled exactly when the browser capability is not disabled, names the
+// capability's policy revision and digest when enabled, and carries its own
+// true digest.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (c CandidateRuntimeCapabilities) ConsistentWithBrowserPolicy(policy *CandidateBrowserPolicy) bool {
+	if slices.Contains(c.PendingCorrectionCapabilities, model.CandidateCapabilityBrowser) {
+		return policy == nil
+	}
+
+	if policy == nil ||
+		!policy.PolicyRevisionID.IsValid() ||
+		policy.PolicyRevisionID != c.ExamRevision.CurrentRevisionID ||
+		policy.PolicyRevisionNumber < 1 ||
+		policy.Policy.Validate() != nil ||
+		policy.BrowserActivityDisclosure.Validate() != nil ||
+		policy.BrowserActivityDisclosure.MayCreateIntegrityEvidence != policy.Policy.MayCreateIntegrityEvidence() {
+		return false
+	}
+
+	if policy.Policy.Enabled != (c.Browser.State != CandidateBrowserDisabled) {
+		return false
+	}
+
+	if policy.Policy.Enabled &&
+		(policy.PolicyRevisionID != c.Browser.PolicyRevisionID || policy.PolicyDigest != c.Browser.PolicyDigest) {
+		return false
+	}
+
+	digest, err := model.BrowserPolicyDigest(policy.Policy)
+
+	return !(err != nil || policy.PolicyDigest != digest)
+}
+
+// ConsistentWithLiveCorrections reports whether the delivered live corrections
+// are each valid, ascend strictly by revision number, never name the admission
+// Revision, and leave pending exactly the capabilities these capabilities
+// report, with acknowledgement required exactly when any is pending.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (c CandidateRuntimeCapabilities) ConsistentWithLiveCorrections(corrections []model.CandidateLiveCorrection) bool {
+	var previous int64
+	for _, correction := range corrections {
+		if correction.Validate() != nil ||
+			correction.RevisionNumber <= previous ||
+			correction.RevisionID == c.ExamRevision.AdmissionRevisionID {
+			return false
+		}
+
+		previous = correction.RevisionNumber
+	}
+
+	pending := model.PendingCorrectionCapabilities(corrections)
+
+	return !(!slices.Equal(pending, c.PendingCorrectionCapabilities) ||
+		(len(pending) != 0) != c.ExamRevision.AcknowledgementRequired)
 }
 
 // CandidateAttemptWorkspaceItem is safe logical metadata; it exposes neither
@@ -720,12 +994,37 @@ type CandidateAttemptWorkspacePage struct {
 	RefreshRequired bool
 }
 
+// Consistent reports whether the page names its Attempt Workspace at a
+// non-negative cursor, and a page that asks for a refresh carries no items and
+// no further page.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (p *CandidateAttemptWorkspacePage) Consistent() bool {
+	return !(p == nil ||
+		!p.WorkspaceID.IsValid() ||
+		p.Cursor < 0 ||
+		(p.RefreshRequired && (len(p.Items) != 0 || p.HasMore)))
+}
+
 // CandidateResourceContent is an internal, post-authorization selector for the
 // file service. API serializers must never expose its managed-file identities.
 type CandidateResourceContent struct {
 	Resource       CandidateExamResource
 	FileRevisionID model.FileRevisionID
 	RenditionID    model.FileRenditionID
+}
+
+// ConsistentWith reports whether the selector is for the Resource that was
+// asked for and names the File Revision and rendition to serve.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (c *CandidateResourceContent) ConsistentWith(resourceID model.ExamResourceID) bool {
+	return !(c == nil ||
+		c.Resource.ResourceID != resourceID ||
+		!c.FileRevisionID.IsValid() ||
+		!c.RenditionID.IsValid())
 }
 
 // CandidateWorkspaceContent is an internal, post-authorization selector for
@@ -754,6 +1053,43 @@ type ExamAttemptManagerSnapshot struct {
 	LatestParticipation *ExamAttemptParticipationView
 	CurrentConnection   *ExamAttemptManagerConnection
 	ActiveSuspension    *ExamAttemptSuspensionView
+}
+
+// ConsistentWith reports whether the snapshot carries a valid Attempt of the
+// given Exam, and its active Suspension, when present, is that Attempt's
+// consistent active Suspension. It does not ask which Sitting the Attempt is
+// in.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (s *ExamAttemptManagerSnapshot) ConsistentWith(examID model.ExamID) bool {
+	return !(s == nil ||
+		s.Attempt == nil ||
+		s.Attempt.Validate() != nil ||
+		s.Attempt.ExamID != examID ||
+		!s.ActiveSuspension.ConsistentActiveOrAbsent(s.Attempt.ID))
+}
+
+// ConsistentWithExamAndSitting reports everything ConsistentWith does and also
+// that the Attempt is in the given Sitting. A Sitting-scoped listing asks it
+// of each row.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (s *ExamAttemptManagerSnapshot) ConsistentWithExamAndSitting(examID model.ExamID, sittingID model.ExamSittingID) bool {
+	return !(s == nil ||
+		s.Attempt == nil ||
+		s.Attempt.Validate() != nil ||
+		s.Attempt.ExamID != examID ||
+		s.Attempt.SittingID != sittingID ||
+		!s.ActiveSuspension.ConsistentActiveOrAbsent(s.Attempt.ID))
+}
+
+// SuspensionActiveOrAbsent is the application's postcondition on a manager
+// snapshot: its active Suspension, when present, is active and neither ended
+// nor re-allowed.
+func (s *ExamAttemptManagerSnapshot) SuspensionActiveOrAbsent() bool {
+	return s.ActiveSuspension.ActiveOrAbsent()
 }
 
 // ExamAttemptManagerListOptions is Sitting-scoped and keyset bounded. Results
@@ -925,6 +1261,22 @@ type SittingCandidateStatusPage struct {
 	Items           []SittingCandidateStatusItem
 }
 
+// ConsistentWith reports whether the page is for the given Exam and Sitting,
+// carries the server time it was read at, the Sitting's valid state and
+// revision, and an item list, which may be empty but not absent.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (p *SittingCandidateStatusPage) ConsistentWith(examID model.ExamID, sittingID model.ExamSittingID) bool {
+	return !(p == nil ||
+		p.ExamID != examID ||
+		p.SittingID != sittingID ||
+		p.ServerTime.IsZero() ||
+		!p.SittingState.IsValid() ||
+		p.SittingRevision < 1 ||
+		p.Items == nil)
+}
+
 // ExamAttemptInvalidationTarget is the minimal post-commit projection for an
 // Attempt suspended by Session revocation.
 type ExamAttemptInvalidationTarget struct {
@@ -933,147 +1285,98 @@ type ExamAttemptInvalidationTarget struct {
 	CandidateUserID model.UserID
 }
 
-// ExamAttemptStore owns admission's deep atomic boundary: authoritative
-// membership/state checks, first Attempt and logical Workspace bootstrap,
-// generation fencing, Connection creation, audit, and idempotent outcome commit
-// occur together. Exact command replays recover the stored outcome only after
-// rechecking current session, Sitting capability, and exact-Class membership;
-// every fresh connection performs the same current eligibility checks.
+// ExamAttemptSecurityCoverageUpdate reports security coverage for the active
+// Participation generation over the Candidate's open Connection.
+type ExamAttemptSecurityCoverageUpdate struct {
+	Access                             CandidateAttemptAccess
+	ParticipationID                    model.AttemptParticipationID
+	Generation                         int64
+	DesktopBuild                       model.DesktopBuildTuple
+	DesktopCompatibilityPolicyRevision int64
+	Coverage                           model.SecurityCoverageRenewal
+}
+
+// ExamAttemptStore persists the Attempt aggregate: a Candidate's admission
+// and Connection, the Participation lease, suspension and re-allow,
+// correction acknowledgement, and the Attempt as Exam Managers and the
+// Candidate read it. Each mutation is one atomic operation that commits its
+// audit, and its idempotent outcome where it takes a command, with the change.
 type ExamAttemptStore interface {
-	AppendNativeDelivery(context.Context, *NativeDeliveryAppend, *CommandIdempotency) (*model.NativeSecurityAcknowledgement, error)
-	ResolveNativeDeliveryTarget(context.Context, NativeDeliveryAccess) (*NativeDeliveryTarget, error)
-	// Native delivery operations recheck current User/registered-key ownership
-	// before replay. Live owners additionally require exact Connection continuity.
-	// Gap/final declaration revisions, position and metadata charges, semantic
-	// receipts, successful audit and command outcome commit atomically. Status
-	// expires closed owners using their original immutable upload deadline.
-	NativeDeliveryStatus(context.Context, NativeDeliveryAccess) (*model.NativeSecurityStreamStatus, error)
-	NativeDeliveryReceipt(context.Context, NativeDeliveryAccess, int64) (*model.NativeBatchReceipt, error)
-	DeclareNativeDeliveryGaps(context.Context, *NativeDeliveryGapDeclaration, *CommandIdempotency) (*model.DeliveryGapReceipt, error)
-	SealNativeDelivery(context.Context, *NativeDeliveryFinalDeclaration, *CommandIdempotency) (*model.NativeSecurityStreamStatus, error)
-	UpdateNativeDeliverySummary(context.Context, *NativeDeliverySummaryUpdate, *CommandIdempotency) (*model.NativeSecurityStreamStatus, error)
-
-	ResolveSecurityPreflightSitting(context.Context, string, model.UserID, model.SessionID) (model.ExamSittingID, error)
-	RecoverSecurityPolicy(context.Context, SecurityPreflightAccess, model.ExamAttemptID) (*SecurityPolicyRecovery, error)
-	PrepareSecurityPreflight(context.Context, *SecurityPreflightPrepare, *CommandIdempotency) (*SecurityPreflightPrepared, error)
-	ReportSecurityPreflight(context.Context, *SecurityPreflightReport, *CommandIdempotency) (*model.SecurityPreflightResult, error)
+	// Connect admits the Candidate to the Sitting, creating the Attempt and
+	// its Workspace on first admission, and opens a Connection under a new or
+	// continued Participation. A replayed command returns the stored outcome.
 	Connect(context.Context, *ExamAttemptConnect, *CommandIdempotency) (*ExamAttemptConnectResult, error)
-	ListSessionRevocationInvalidationTargets(context.Context, model.UserID, []model.SessionID) ([]ExamAttemptInvalidationTarget, error)
-	// RenewParticipation locks and validates the exact Attempt, active
-	// Participation generation, owning candidate, Session-bound open Connection,
-	// and credential digest. Sequence equal to the current accepted sequence is
-	// an idempotent duplicate; an older sequence conflicts. A greater sequence
-	// sets expiry to the earlier of PostgreSQL decision time plus the fixed
-	// 20-second lease and the locked current Sitting end.
-	// expires_at <= database_now returns the stable expired conflict and never
-	// mutates or revives the generation. Stable conflict constraints are
-	// attempt_participation_credential, attempt_participation_generation,
-	// attempt_participation_sequence, and attempt_participation_expired.
-	RenewParticipation(context.Context, *ExamAttemptParticipationRenewal) (*ExamAttemptParticipationRenewalResult, error)
-	UpdateSecurityCoverage(context.Context, *ExamAttemptSecurityCoverageUpdate) (model.SecurityCoverageResult, error)
-	// ResolveFocusLossTarget resolves safe audit/effect scope after checking the
-	// established access selector. It also resolves the exact retained
-	// policy_suspended causal selector for duplicate-audit preflight only; it
-	// performs no evaluation or mutation and grants no new-claim authority.
-	ResolveFocusLossTarget(context.Context, ExamAttemptFocusLossAccess) (*ExamAttemptFocusLossTarget, error)
-	// RecordFocusLoss is the single PostgreSQL-time evaluation operation. It
-	// atomically accepts the next sequence, records gap uncertainty, evaluates and
-	// consumes the rolling bucket, bounds evidence/overflow or disabled-policy
-	// diagnostics, creates at most one Flag and warning per generation, applies
-	// the configured suspension fence, and completes the supplied safe audit.
-	// Equal latest sequence is a duplicate only when duration and source match;
-	// changed equal-sequence or lower sequence conflicts as focus_loss_sequence.
-	// Exact duplicates reauthorize and complete their new audit before returning
-	// the retained result. A threshold-crossing FlagAndSuspend duplicate remains
-	// replayable through its exact retained causal selector after that transition
-	// closed the Participation and Connection; it cannot admit any different or
-	// later claim through the closed selector. Stable access conflicts retain the
-	// existing Attempt/Participation/Connection constraint vocabulary.
-	RecordFocusLoss(context.Context, *ExamAttemptFocusLossSignal) (*ExamAttemptFocusLossResult, error)
-	// ResolveEndedFocusLossTarget accepts only the exact candidate, Session,
-	// credential, Participation generation, and Connection retained by a sealed
-	// Submission whose Attempt is submitted and whose Participation/Connection
-	// are terminal. Voluntary sealing records submitted; automatic sealing
-	// records sitting_closed for live records and preserves any earlier terminal
-	// cause. It performs no mutation and exists only to begin the discrepancy
-	// audit.
-	ResolveEndedFocusLossTarget(context.Context, ExamAttemptFocusLossAccess) (*ExamAttemptFocusLossDiscrepancyTarget, error)
-	// RecordEndedFocusLoss retains at most the bounded discrepancy maximum. It
-	// serializes on the sealed Submission, accepts only a sequence above the
-	// submitted high-water and prior discrepancy high-water, records explicit
-	// gaps, completes audit atomically, and never mutates Submission integrity or
-	// a draft/finalized/released Review. Exact same-sequence semantics replay.
-	RecordEndedFocusLoss(context.Context, *ExamAttemptFocusLossDiscrepancy) (*ExamAttemptFocusLossDiscrepancyResult, error)
-	// ResolveParticipationExpiry returns the exact active generation only when
-	// expires_at <= PostgreSQL current time, with the same safe scope projection
-	// produced by the scanner. A late renewal uses it to begin actorless scoped
-	// audit before invoking ExpireParticipation; it never performs the transition.
-	// Exact selector/generation mismatches and a current unexpired lease fail
-	// with stable not-found/conflict errors rather than exposing another record.
-	ResolveParticipationExpiry(context.Context, model.ExamAttemptID, model.AttemptParticipationID, int64) (*ExamAttemptParticipationExpiryDue, error)
-	DeliveryBudget(context.Context, DeliveryBudgetAccess) (*model.DeliveryBudgetSnapshot, error)
-	StopDeliveryDetails(context.Context, *DeliveryDetailsStop, *CommandIdempotency) (*model.StopDeliveryDetailsResult, error)
-	ListExpiredDeliveries(context.Context, int) ([]DeliveryExpiryDue, error)
-	ExpireDelivery(context.Context, *DeliveryExpiry) (bool, error)
-	// ListExpiredParticipations returns at most limit active generations whose
-	// expiry is at or before PostgreSQL's current time, ordered by
-	// (LeaseExpiresAt, ParticipationID). Limit is 1..200.
-	ListExpiredParticipations(context.Context, int) ([]ExamAttemptParticipationExpiryDue, error)
-	// ExpireParticipation is the single conditional operation shared by late
-	// renewal and the recurring scan. It locks the exact generation and, when
-	// expires_at <= PostgreSQL now, atomically ends it as lease_expired, closes
-	// its open Connection, creates neutral Connection Loss evidence and the one
-	// generation-scoped flag, suspends the Attempt, completes audit, and retains
-	// the outcome. Exact later calls rehydrate that outcome. A generation that
-	// was renewed before the lock conflicts as attempt_participation_not_expired
-	// without partial state; a non-current generation conflicts as
-	// attempt_participation_generation.
-	ExpireParticipation(context.Context, *ExamAttemptParticipationExpiry) (*ExamAttemptParticipationExpiryResult, error)
-	// ReallowAttempt locks the exact active Suspension and Attempt revision,
-	// rechecks current Exam management authority unless an authorized override
-	// is explicit, closes only that episode, returns the Attempt to active, and
-	// commits audit and the idempotent outcome atomically. It preserves all
-	// evidence and creates no Participation or credential. Exact retries return
-	// the retained result without a second revision change after current
-	// authority is rechecked. Stable conflicts are exam_attempt_revision,
-	// attempt_suspension_active, exam_attempt_state, and exam_sitting_state.
-	ReallowAttempt(context.Context, *ExamAttemptReallow, *CommandIdempotency) (*ExamAttemptReallowResult, error)
-	// SuspendAttempt applies an Exam Manager's kick. It locks the Attempt and
-	// Sitting, rechecks current Exam management authority unless an
-	// authorized override is explicit, requires the expected revision of an
-	// Active Attempt in an Open or Paused Sitting, ends the active Participation
-	// as kicked, closes its open Connection as kicked, closes native delivery,
-	// opens one manual Suspension episode without an Integrity Flag, and
-	// commits audit and the idempotent outcome atomically using PostgreSQL
-	// time. Exact retries return the retained result after current authority
-	// is rechecked. Stable conflicts are exam_attempt_revision,
-	// exam_attempt_state, exam_sitting_state, exam_sitting_deadline_reached
-	// when PostgreSQL time has reached the Sitting's scheduled end, and
-	// attempt_participation_expired when the active generation's lease has
-	// lapsed: that generation is Connection Loss, never a kick, and the caller
-	// records it through ExpireParticipation. The candidate's own Attempt
-	// and a missing manager relationship are not found.
-	SuspendAttempt(context.Context, *ExamAttemptManualSuspension, *CommandIdempotency) (*ExamAttemptManualSuspensionResult, error)
+	// CloseConnection closes the Candidate's open Connection for the given
+	// reason. Closing a Connection that is already closed reports Changed false.
 	CloseConnection(context.Context, *ExamAttemptConnectionClose) (*ExamAttemptConnectionCloseResult, error)
-	Get(context.Context, model.ExamID, model.ExamAttemptID) (*ExamAttemptManagerSnapshot, error)
-	List(context.Context, ExamAttemptManagerListOptions) ([]ExamAttemptManagerSnapshot, error)
-	ListCandidateActivity(context.Context, CandidateExamActivityListOptions) (*CandidateExamActivityPage, error)
-	ListSittingCandidateStatuses(context.Context, SittingCandidateStatusListOptions) (*SittingCandidateStatusPage, error)
-	GetCandidatePresentation(context.Context, CandidateAttemptAccess) (*CandidateExamPresentation, error)
-	ResolveLiveDeliveryTarget(context.Context, CandidateAttemptAccess) (*DeliveryOwnerTarget, error)
-	AppendHistoricalBrowserDelivery(context.Context, *BrowserActivityAppend, *CommandIdempotency) (*model.BrowserActivityAcknowledgement, error)
-	ResolveBrowserDeliveryTarget(context.Context, BrowserDeliveryAccess) (*DeliveryOwnerTarget, error)
-	BrowserDeliveryReceipts(context.Context, BrowserDeliveryAccess, int64, int) (*model.BrowserReceiptPage, error)
-	DeclareBrowserDeliveryGaps(context.Context, *BrowserDeliveryGapDeclaration, *CommandIdempotency) (*model.BrowserDeliveryGapResult, error)
-	SealBrowserDelivery(context.Context, *BrowserDeliveryFinalDeclaration, *CommandIdempotency) (*model.BrowserSourceStatus, error)
-	UpdateBrowserDeliverySummary(context.Context, *BrowserDeliverySummaryUpdate, *CommandIdempotency) (*model.BrowserDeliverySummaryResult, error)
 
-	BrowserSourceStatus(context.Context, BrowserDeliveryAccess) (*model.BrowserSourceStatus, error)
-	BrowserSourceList(context.Context, BrowserDeliveryAccess) ([]model.BrowserSourceStatus, error)
-	StartBrowserActivity(context.Context, *BrowserActivitySourceStart) (*model.BrowserSourceStatus, error)
-	AppendBrowserActivity(context.Context, *BrowserActivityAppend) (*model.BrowserActivityAcknowledgement, error)
-	ResolveCorrectionAcknowledgementTarget(context.Context, ExamAttemptCorrectionAcknowledgement) (*ExamAttemptCorrectionAcknowledgementTarget, error)
-	AcknowledgeCorrection(context.Context, *ExamAttemptCorrectionAcknowledgement, *CommandIdempotency) (*ExamAttemptCorrectionAcknowledgementResult, error)
-	ListBrowserActivity(context.Context, BrowserActivityListOptions) ([]BrowserActivityRecord, error)
+	// RenewParticipation extends the lease of the active Participation
+	// generation for the next renewal sequence. Repeating the current sequence
+	// returns the existing lease; an expired generation is a conflict.
+	RenewParticipation(context.Context, *ExamAttemptParticipationRenewal) (*ExamAttemptParticipationRenewalResult, error)
+	// UpdateSecurityCoverage records the security coverage reported over the
+	// Candidate's open Connection without extending the Participation lease.
+	UpdateSecurityCoverage(context.Context, *ExamAttemptSecurityCoverageUpdate) (model.SecurityCoverageResult, error)
+	// ResolveParticipationExpiry returns the named active Participation
+	// generation when its lease has expired, so the caller can begin the audit
+	// for ExpireParticipation. It changes nothing.
+	ResolveParticipationExpiry(
+		context.Context,
+		model.ExamAttemptID,
+		model.AttemptParticipationID,
+		int64,
+	) (*ExamAttemptParticipationExpiryDue, error)
+	// ListExpiredParticipations returns up to limit (1..200) active
+	// Participation generations whose lease has expired, oldest expiry first.
+	ListExpiredParticipations(context.Context, int) ([]ExamAttemptParticipationExpiryDue, error)
+	// ExpireParticipation ends an expired Participation generation, closes its
+	// Connection, records Connection Loss evidence and its Flag, and suspends
+	// the Attempt. A later call for the same generation returns that outcome.
+	ExpireParticipation(context.Context, *ExamAttemptParticipationExpiry) (*ExamAttemptParticipationExpiryResult, error)
+
+	// SuspendAttempt applies an Exam Manager's kick: it ends the active
+	// Participation, closes its Connection, and opens a manual Suspension on
+	// the Attempt at the expected revision.
+	SuspendAttempt(context.Context, *ExamAttemptManualSuspension, *CommandIdempotency) (*ExamAttemptManualSuspensionResult, error)
+	// ReallowAttempt closes the named active Suspension and returns the
+	// Attempt, at the expected revision, to a state the Candidate can reconnect
+	// from. It keeps all evidence and creates no Participation.
+	ReallowAttempt(context.Context, *ExamAttemptReallow, *CommandIdempotency) (*ExamAttemptReallowResult, error)
+
+	// ResolveCorrectionAcknowledgementTarget validates an acknowledgement and
+	// returns the scope its audit is recorded under. It changes nothing.
+	ResolveCorrectionAcknowledgementTarget(
+		context.Context,
+		ExamAttemptCorrectionAcknowledgement,
+	) (*ExamAttemptCorrectionAcknowledgementTarget, error)
+	// AcknowledgeCorrection records that the Candidate acknowledged a live
+	// correction Revision of the Exam.
+	AcknowledgeCorrection(
+		context.Context,
+		*ExamAttemptCorrectionAcknowledgement,
+		*CommandIdempotency,
+	) (*ExamAttemptCorrectionAcknowledgementResult, error)
+
+	// Get returns an Exam Manager's snapshot of one Attempt of the Exam.
+	Get(context.Context, model.ExamID, model.ExamAttemptID) (*ExamAttemptManagerSnapshot, error)
+	// List returns one page of a Sitting's Attempts for an Exam Manager,
+	// newest first.
+	List(context.Context, ExamAttemptManagerListOptions) ([]ExamAttemptManagerSnapshot, error)
+	// ListSittingCandidateStatuses returns one page of a Sitting's Candidates
+	// with each one's Attempt, presence, suspension and integrity state.
+	ListSittingCandidateStatuses(context.Context, SittingCandidateStatusListOptions) (*SittingCandidateStatusPage, error)
+	// ListSessionRevocationInvalidationTargets returns the Exams and Sittings
+	// of the Candidate's Attempts that were suspended through a Participation
+	// bound to one of the given Sessions.
+	ListSessionRevocationInvalidationTargets(context.Context, model.UserID, []model.SessionID) ([]ExamAttemptInvalidationTarget, error)
+
+	// ListCandidateActivity returns one page of the Candidate's Sittings with
+	// the state of their Attempt in each and what they may do next.
+	ListCandidateActivity(context.Context, CandidateExamActivityListOptions) (*CandidateExamActivityPage, error)
+	// GetCandidatePresentation returns the Exam content, capacity and runtime
+	// capabilities the Candidate sees for their live Attempt.
+	GetCandidatePresentation(context.Context, CandidateAttemptAccess) (*CandidateExamPresentation, error)
+	// ResolveCandidateResource returns the stored file behind an Exam Resource
+	// the Candidate's live Attempt may read.
 	ResolveCandidateResource(context.Context, CandidateAttemptAccess, model.ExamResourceID) (*CandidateResourceContent, error)
 }

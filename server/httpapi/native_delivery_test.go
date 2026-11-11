@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -23,6 +24,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
+	"github.com/sudosylabs/proctor/server/internal/errorcatalog"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -44,11 +47,11 @@ func (f *nativeDeliveryHTTPFake) UpdateNativeDeliverySummary(context.Context, in
 
 func TestNativeDeliveryHTTPPreservesOptionalHistoricalFences(t *testing.T) {
 	f := &nativeDeliveryHTTPFake{examAttemptHTTPFake: newExamAttemptHTTPFake(t)}
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	api := newFocusedResourceAPI(t, logger, f, nativeDeliveryResource(f))
 	path := "/api/v1/exam-attempts/" + f.attempt.ID.String() + "/security-streams/" + model.NewID()
 	for _, live := range []bool{true, false} {
-		request := f.candidateRequest(http.MethodGet, path)
+		request := f.candidateRequest(t, http.MethodGet, path)
 		if !live {
 			request.Header.Del(candidateAttemptCredentialHeader)
 			request.Header.Del(candidateAttemptConnectionHeader)
@@ -68,7 +71,7 @@ func TestNativeDeliveryHTTPPreservesOptionalHistoricalFences(t *testing.T) {
 		require.NotContains(t, response.Body.String(), f.credential, "response exposed continuity credential")
 	}
 	before := f.calls
-	request := f.candidateRequest(http.MethodGet, path)
+	request := f.candidateRequest(t, http.MethodGet, path)
 	request.Header.Add(candidateAttemptCredentialHeader, f.credential)
 	response := httptest.NewRecorder()
 	api.ServeHTTP(response, request)
@@ -78,14 +81,14 @@ func TestNativeDeliveryHTTPPreservesOptionalHistoricalFences(t *testing.T) {
 
 func TestNativeDeliverySummaryStrictBodyAndRetryDelay(t *testing.T) {
 	f := &nativeDeliveryHTTPFake{examAttemptHTTPFake: newExamAttemptHTTPFake(t)}
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	api := newFocusedResourceAPI(t, logger, f, nativeDeliveryResource(f))
 	path := "/api/v1/exam-attempts/" + f.attempt.ID.String() + "/security-streams/" + model.NewID() + "/summary"
 	for _, body := range []string{
 		`{"summary_sequence":1,"unretained_record_count":0,"count_complete":false,"raw_content":"forbidden"}`,
 		`{"summary_sequence":1,"unretained_record_count":0,"count_complete":false,"first_unretained_at":null}`,
 	} {
-		request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, strings.NewReader(body))
 		request.Header.Set("Authorization", "Bearer credential")
 		request.Header.Set("Content-Type", "application/json")
 		request.Header.Set("Idempotency-Key", "summary-once")
@@ -118,7 +121,7 @@ func (f *nativeDeliveryHTTPFake) AppendNativeDelivery(_ context.Context, _ invoc
 
 func TestNativeDeliveryAppendClosedBodyAndBounds(t *testing.T) {
 	f := &nativeDeliveryHTTPFake{examAttemptHTTPFake: newExamAttemptHTTPFake(t)}
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	api := newFocusedResourceAPI(t, logger, f, nativeDeliveryResource(f))
 	path := "/api/v1/exam-attempts/" + f.attempt.ID.String() + "/security-batches"
 	batch := model.NativeSecurityBatch{StreamID: model.NewID(), BatchSequence: 1, ParticipationID: model.NewAttemptParticipationID(), Generation: 1, SecuritySessionID: model.NewID(), PolicyDigest: model.SHA256Fingerprint([]byte("synthetic-policy")), ApplicationReleaseID: "synthetic-release", MatrixID: "synthetic-matrix", Records: []model.NativeRecord{{Gap: &model.NativeSourceGap{Kind: "source_gap", SourceID: model.NativeSourceCapture, SourceInstanceID: model.NewID(), Reason: "source_loss", OccurredAt: time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC)}}}}
@@ -126,7 +129,7 @@ func TestNativeDeliveryAppendClosedBodyAndBounds(t *testing.T) {
 	require.NoError(t, err)
 	for _, body := range [][]byte{raw, bytes.Replace(raw, []byte(`"kind":"source_gap"`), []byte(`"raw_inventory":"forbidden","kind":"source_gap"`), 1), append(bytes.Repeat([]byte(" "), 256*1024), raw...)} {
 		before := f.calls
-		request := f.candidateRequest(http.MethodPost, path)
+		request := f.candidateRequest(t, http.MethodPost, path)
 		request.Body = io.NopCloser(bytes.NewReader(body))
 		request.ContentLength = int64(len(body))
 		request.Header.Set("Content-Type", "application/json")
@@ -147,4 +150,26 @@ func TestNativeDeliveryAppendClosedBodyAndBounds(t *testing.T) {
 		require.Equal(t, want, response.Code, "invalid append reached application: %d %s", response.Code, response.Body.String())
 		require.Equal(t, before, f.calls, "invalid append reached application: %d %s", response.Code, response.Body.String())
 	}
+}
+
+// TestDeliveryRecoveryCodesAgreeWithTheErrorCatalog holds the routing kernel's
+// catalog-driven delivery member to the Attempt module's list: the kernel
+// presents recovery state for exactly the codes the application attaches it
+// to, which the WebSocket transport also reads.
+func TestDeliveryRecoveryCodesAgreeWithTheErrorCatalog(t *testing.T) {
+	source, err := os.ReadFile("route/error_catalog.yaml")
+	require.NoError(t, err)
+	catalog, err := errorcatalog.Parse(source)
+	require.NoError(t, err)
+	var catalogued, supported []string
+	for _, entry := range catalog.Entries {
+		if entry.Extension == "delivery" {
+			catalogued = append(catalogued, entry.Code)
+		}
+		if attempt.SupportsDeliveryRecovery(entry.Code) {
+			supported = append(supported, entry.Code)
+		}
+	}
+	require.NotEmpty(t, supported)
+	require.Equal(t, supported, catalogued)
 }

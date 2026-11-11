@@ -28,6 +28,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLUserTokenStore implements store.UserTokenStore on user_tokens; consuming a
+// token applies its account change in the same transaction.
 type SQLUserTokenStore struct {
 	*SQLStore
 	tokensQuery sq.SelectBuilder
@@ -40,9 +42,22 @@ const (
 	userEmailChangeWarningLifetimeMaximum = 7 * 24 * time.Hour
 )
 
-func validateUserEmailMail(userID model.UserID, occurrence *model.MailOccurrence, delivery *model.MailDelivery, job *model.Job, kind model.MailOccurrenceKind, key model.MailTemplateKey) (string, error) {
-	if occurrence == nil || delivery == nil || job == nil || occurrence.Kind != kind || occurrence.TemplateKey != key ||
-		occurrence.ActorUserID != userID || delivery.TargetUserID != userID || delivery.TemplateKey != key {
+func validateUserEmailMail(
+	userID model.UserID,
+	occurrence *model.MailOccurrence,
+	delivery *model.MailDelivery,
+	job *model.Job,
+	kind model.MailOccurrenceKind,
+	key model.MailTemplateKey,
+) (string, error) {
+	if occurrence == nil ||
+		delivery == nil ||
+		job == nil ||
+		occurrence.Kind != kind ||
+		occurrence.TemplateKey != key ||
+		occurrence.ActorUserID != userID ||
+		delivery.TargetUserID != userID ||
+		delivery.TemplateKey != key {
 		return "", store.NewErrInvalidInput("user_email", "mail", nil)
 	}
 	expectedJobType := model.JobTypeMailDeliver
@@ -63,34 +78,72 @@ func validateUserEmailMail(userID model.UserID, occurrence *model.MailOccurrence
 }
 
 func (s SQLUserTokenStore) ChangeEmail(ctx context.Context, input *store.UserEmailChange) (*store.UserEmailChangeResult, error) {
-	if input == nil || !input.UserID.IsValid() || input.ExpectedRevision <= 0 || !model.IsValidEmail(input.NewEmail) ||
-		input.NewEmail != strings.ToLower(strings.TrimSpace(model.SanitizeUnicode(input.NewEmail))) || input.Token == nil || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() ||
-		input.TokenLifetime < userEmailChangeTokenLifetimeMinimum || input.TokenLifetime > userEmailChangeTokenLifetimeMaximum ||
-		input.WarningLifetime < userEmailChangeWarningLifetimeMinimum || input.WarningLifetime > userEmailChangeWarningLifetimeMaximum ||
-		input.TokenLifetime%time.Millisecond != 0 || input.WarningLifetime%time.Millisecond != 0 {
+	if input == nil ||
+		!input.UserID.IsValid() ||
+		input.ExpectedRevision <= 0 ||
+		!model.IsValidEmail(input.NewEmail) ||
+		input.NewEmail != strings.ToLower(strings.TrimSpace(model.SanitizeUnicode(input.NewEmail))) ||
+		input.Token == nil ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() ||
+		input.TokenLifetime < userEmailChangeTokenLifetimeMinimum ||
+		input.TokenLifetime > userEmailChangeTokenLifetimeMaximum ||
+		input.WarningLifetime < userEmailChangeWarningLifetimeMinimum ||
+		input.WarningLifetime > userEmailChangeWarningLifetimeMaximum ||
+		input.TokenLifetime%time.Millisecond != 0 ||
+		input.WarningLifetime%time.Millisecond != 0 {
 		return nil, store.NewErrInvalidInput("user_email", "change", nil)
 	}
+
 	token := *input.Token
-	if token.Validate() != nil || token.UserID != input.UserID || token.Purpose != model.UserTokenEmailVerification || token.Target != input.NewEmail {
+	if token.Validate() != nil ||
+		token.UserID != input.UserID ||
+		token.Purpose != model.UserTokenEmailVerification ||
+		token.Target != input.NewEmail {
 		return nil, store.NewErrInvalidInput("user_email", "change", nil)
 	}
+
 	if input.UndoToken == nil {
 		return nil, store.NewErrInvalidInput("user_email", "undo_token", nil)
 	}
+
 	undoToken := *input.UndoToken
-	if undoToken.Validate() != nil || undoToken.UserID != input.UserID || undoToken.Purpose != model.UserTokenEmailChangeUndo ||
-		undoToken.Target == input.NewEmail || undoToken.TokenHash == token.TokenHash {
+	if undoToken.Validate() != nil ||
+		undoToken.UserID != input.UserID ||
+		undoToken.Purpose != model.UserTokenEmailChangeUndo ||
+		undoToken.Target == input.NewEmail ||
+		undoToken.TokenHash == token.TokenHash {
 		return nil, store.NewErrInvalidInput("user_email", "undo_token", nil)
 	}
-	warningKey, err := validateUserEmailMail(input.UserID, input.WarningOccurrence, input.WarningDelivery, input.WarningJob, model.MailOccurrenceAccountToken, model.MailTemplateIdentityEmailChangeWarningOld)
+
+	warningKey, err := validateUserEmailMail(
+		input.UserID,
+		input.WarningOccurrence,
+		input.WarningDelivery,
+		input.WarningJob,
+		model.MailOccurrenceAccountToken,
+		model.MailTemplateIdentityEmailChangeWarningOld,
+	)
 	if err != nil || input.WarningOccurrence.ID.String() != undoToken.ID.String() {
 		return nil, store.NewErrInvalidInput("user_email", "warning", err)
 	}
-	verificationKey, err := validateUserEmailMail(input.UserID, input.VerificationOccurrence, input.VerificationDelivery, input.VerificationJob, model.MailOccurrenceAccountToken, model.MailTemplateIdentityEmailChangeVerifyNew)
+
+	verificationKey, err := validateUserEmailMail(
+		input.UserID,
+		input.VerificationOccurrence,
+		input.VerificationDelivery,
+		input.VerificationJob,
+		model.MailOccurrenceAccountToken,
+		model.MailTemplateIdentityEmailChangeVerifyNew,
+	)
 	if err != nil || input.VerificationOccurrence.ID.String() != token.ID.String() {
 		return nil, store.NewErrInvalidInput("user_email", "verification", err)
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "user email change", func(ctx context.Context, tx *sqlxTxWrapper) (*store.UserEmailChangeResult, error) {
+
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "user email change", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.UserEmailChangeResult, error) {
 		for _, keyID := range []string{warningKey, verificationKey} {
 			if keyID != "" {
 				if err := requireMailPayloadPrimary(ctx, tx, keyID); err != nil {
@@ -98,16 +151,19 @@ func (s SQLUserTokenStore) ChangeEmail(ctx context.Context, input *store.UserEma
 				}
 			}
 		}
+
 		if err := lockUserTokenPurpose(ctx, tx, input.UserID.String(), model.UserTokenEmailVerification); err != nil {
 			return nil, err
 		}
 		if err := lockUserTokenPurpose(ctx, tx, input.UserID.String(), model.UserTokenEmailChangeUndo); err != nil {
 			return nil, err
 		}
+
 		var databaseNow time.Time
 		if err := tx.Get(ctx, &databaseNow, `SELECT clock_timestamp()`); err != nil {
 			return nil, fmt.Errorf("read user email change database time: %w", err)
 		}
+
 		at := model.TimeUTC(databaseNow)
 		token.CreatedAt, token.UpdatedAt = at, at
 		token.ArchivedAt, token.ConsumedAt = model.OptionalTime{}, model.OptionalTime{}
@@ -115,24 +171,28 @@ func (s SQLUserTokenStore) ChangeEmail(ctx context.Context, input *store.UserEma
 		if validationErr := token.Validate(); validationErr != nil {
 			return nil, store.NewErrInvalidInput("user_email", "token_lifetime", validationErr)
 		}
+
 		undoToken.CreatedAt, undoToken.UpdatedAt = at, at
 		undoToken.ArchivedAt, undoToken.ConsumedAt = model.OptionalTime{}, model.OptionalTime{}
 		undoToken.ExpiresAt = at.Add(input.WarningLifetime)
 		if validationErr := undoToken.Validate(); validationErr != nil {
 			return nil, store.NewErrInvalidInput("user_email", "undo_lifetime", validationErr)
 		}
+
 		warningOccurrence, warningDelivery, warningJob, err := recoveryMailAtWithLifetime(
 			input.WarningOccurrence, input.WarningDelivery, input.WarningJob, at, input.WarningLifetime,
 		)
 		if err != nil {
 			return nil, err
 		}
+
 		verificationOccurrence, verificationDelivery, verificationJob, err := recoveryMailAtWithLifetime(
 			input.VerificationOccurrence, input.VerificationDelivery, input.VerificationJob, at, input.TokenLifetime,
 		)
 		if err != nil {
 			return nil, err
 		}
+
 		user, err := lockActiveUserForEmailTransition(ctx, tx, input.UserID)
 		if err != nil {
 			return nil, err
@@ -140,20 +200,56 @@ func (s SQLUserTokenStore) ChangeEmail(ctx context.Context, input *store.UserEma
 		if user.Revision != input.ExpectedRevision || user.Email == input.NewEmail || user.Email != undoToken.Target {
 			return nil, store.NewErrConflict("user", "email_revision", nil)
 		}
+
 		mailEligibilityRevision, err := advanceUserMailEligibilityRevision(ctx, tx)
 		if err != nil {
 			return nil, err
 		}
+
 		var priorIDs []string
-		if err = tx.Select(ctx, &priorIDs, `SELECT id FROM user_tokens WHERE user_id=? AND purpose=? AND archived_at IS NULL AND consumed_at IS NULL FOR UPDATE`, input.UserID.String(), model.UserTokenEmailVerification); err != nil {
+		if err = tx.Select(
+			ctx,
+			&priorIDs,
+			`SELECT id FROM user_tokens WHERE user_id = ? AND purpose = ? AND archived_at IS NULL AND consumed_at IS NULL FOR UPDATE`,
+			input.UserID.String(),
+			model.UserTokenEmailVerification,
+		); err != nil {
 			return nil, fmt.Errorf("lock prior email tokens: %w", err)
 		}
+
 		// Existing lifecycle times can lead the database clock. Preserve their
 		// ordering without moving the new credential or mail deadlines forward.
-		if _, err = tx.Exec(ctx, `UPDATE user_tokens SET updated_at=GREATEST(updated_at,?),archived_at=GREATEST(updated_at,?) WHERE user_id=? AND purpose=? AND archived_at IS NULL AND consumed_at IS NULL`, at, at, input.UserID.String(), model.UserTokenEmailVerification); err != nil {
+		if _, err = tx.Exec(
+			ctx,
+			`UPDATE user_tokens
+			SET updated_at = GREATEST(updated_at, ?), archived_at = GREATEST(updated_at, ?)
+			WHERE user_id = ?
+				AND purpose = ?
+				AND archived_at IS NULL
+				AND consumed_at IS NULL`,
+			at,
+			at,
+			input.UserID.String(),
+			model.UserTokenEmailVerification,
+		); err != nil {
 			return nil, fmt.Errorf("invalidate prior email tokens: %w", err)
 		}
-		result, err := tx.Exec(ctx, `UPDATE users SET email=?,email_verified=false,mail_eligibility_revision=?,updated_at=GREATEST(updated_at,?),revision=revision+1 WHERE id=? AND revision=? AND archived_at IS NULL AND disabled_at IS NULL`, input.NewEmail, mailEligibilityRevision, at, input.UserID.String(), input.ExpectedRevision)
+
+		result, err := tx.Exec(
+			ctx,
+			`UPDATE users
+			SET email = ?, email_verified = false, mail_eligibility_revision = ?,
+				updated_at = GREATEST(updated_at, ?), revision = revision + 1
+			WHERE id = ?
+				AND revision = ?
+				AND archived_at IS NULL
+				AND disabled_at IS NULL`,
+			input.NewEmail,
+			mailEligibilityRevision,
+			at,
+			input.UserID.String(),
+			input.ExpectedRevision,
+		)
 		if err != nil {
 			return nil, translateError("user", input.UserID.String(), err)
 		}
@@ -175,10 +271,12 @@ func (s SQLUserTokenStore) ChangeEmail(ctx context.Context, input *store.UserEma
 		if err = insertRecoveryMail(ctx, tx, verificationOccurrence, verificationDelivery, verificationJob, verificationKey); err != nil {
 			return nil, err
 		}
+
 		updated, err := getUserByID(ctx, tx, input.UserID.String())
 		if err != nil {
 			return nil, err
 		}
+
 		encoded, err := model.EncodeAuditData(updated.Auditable())
 		if err != nil {
 			return nil, err
@@ -186,6 +284,7 @@ func (s SQLUserTokenStore) ChangeEmail(ctx context.Context, input *store.UserEma
 		if _, err = completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", encoded, input.AuditAt); err != nil {
 			return nil, fmt.Errorf("complete user email change audit: %w", err)
 		}
+
 		return &store.UserEmailChangeResult{User: updated, Token: &token, UndoToken: &undoToken}, nil
 	})
 }
@@ -194,19 +293,33 @@ func (s SQLUserTokenStore) VerifyEmailPrivileged(ctx context.Context, input *sto
 	if input == nil || !input.UserID.IsValid() || input.ExpectedRevision <= 0 || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("user_email", "privileged_verification", nil)
 	}
-	keyID, err := validateUserEmailMail(input.UserID, input.Occurrence, input.Delivery, input.Job, model.MailOccurrenceSecurityNotice, model.MailTemplateIdentityEmailVerifiedByAdmin)
+
+	keyID, err := validateUserEmailMail(
+		input.UserID,
+		input.Occurrence,
+		input.Delivery,
+		input.Job,
+		model.MailOccurrenceSecurityNotice,
+		model.MailTemplateIdentityEmailVerifiedByAdmin,
+	)
 	if err != nil {
 		return nil, err
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "privileged email verification", func(ctx context.Context, tx *sqlxTxWrapper) (*model.User, error) {
+
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "privileged email verification", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*model.User, error) {
 		if keyID != "" {
 			if err := requireMailPayloadPrimary(ctx, tx, keyID); err != nil {
 				return nil, err
 			}
 		}
+
 		if err := lockUserTokenPurpose(ctx, tx, input.UserID.String(), model.UserTokenEmailVerification); err != nil {
 			return nil, err
 		}
+
 		user, err := lockActiveUserForEmailTransition(ctx, tx, input.UserID)
 		if err != nil {
 			return nil, err
@@ -214,19 +327,54 @@ func (s SQLUserTokenStore) VerifyEmailPrivileged(ctx context.Context, input *sto
 		if user.Revision != input.ExpectedRevision || user.EmailVerified {
 			return nil, store.NewErrConflict("user", "email_revision", nil)
 		}
+
 		mailEligibilityRevision, err := advanceUserMailEligibilityRevision(ctx, tx)
 		if err != nil {
 			return nil, err
 		}
+
 		var priorIDs []string
-		if err = tx.Select(ctx, &priorIDs, `SELECT id FROM user_tokens WHERE user_id=? AND purpose=? AND archived_at IS NULL AND consumed_at IS NULL FOR UPDATE`, input.UserID.String(), model.UserTokenEmailVerification); err != nil {
+		if err = tx.Select(
+			ctx,
+			&priorIDs,
+			`SELECT id FROM user_tokens WHERE user_id = ? AND purpose = ? AND archived_at IS NULL AND consumed_at IS NULL FOR UPDATE`,
+			input.UserID.String(),
+			model.UserTokenEmailVerification,
+		); err != nil {
 			return nil, err
 		}
+
 		at := input.Occurrence.CreatedAt
-		if _, err = tx.Exec(ctx, `UPDATE user_tokens SET updated_at=GREATEST(updated_at,?),archived_at=GREATEST(updated_at,?) WHERE user_id=? AND purpose=? AND archived_at IS NULL AND consumed_at IS NULL`, at, at, input.UserID.String(), model.UserTokenEmailVerification); err != nil {
+		if _, err = tx.Exec(
+			ctx,
+			`UPDATE user_tokens
+			SET updated_at = GREATEST(updated_at, ?), archived_at = GREATEST(updated_at, ?)
+			WHERE user_id = ?
+				AND purpose = ?
+				AND archived_at IS NULL
+				AND consumed_at IS NULL`,
+			at,
+			at,
+			input.UserID.String(),
+			model.UserTokenEmailVerification,
+		); err != nil {
 			return nil, err
 		}
-		result, err := tx.Exec(ctx, `UPDATE users SET email_verified=true,mail_eligibility_revision=?,updated_at=GREATEST(updated_at,?),revision=revision+1 WHERE id=? AND revision=? AND archived_at IS NULL AND disabled_at IS NULL`, mailEligibilityRevision, at, input.UserID.String(), input.ExpectedRevision)
+
+		result, err := tx.Exec(
+			ctx,
+			`UPDATE users
+			SET email_verified = true, mail_eligibility_revision = ?, updated_at = GREATEST(updated_at, ?),
+				revision = revision + 1
+			WHERE id = ?
+				AND revision = ?
+				AND archived_at IS NULL
+				AND disabled_at IS NULL`,
+			mailEligibilityRevision,
+			at,
+			input.UserID.String(),
+			input.ExpectedRevision,
+		)
 		if err != nil {
 			return nil, translateError("user", input.UserID.String(), err)
 		}
@@ -239,10 +387,12 @@ func (s SQLUserTokenStore) VerifyEmailPrivileged(ctx context.Context, input *sto
 		if err = insertRecoveryMail(ctx, tx, input.Occurrence, input.Delivery, input.Job, keyID); err != nil {
 			return nil, err
 		}
+
 		updated, err := getUserByID(ctx, tx, input.UserID.String())
 		if err != nil {
 			return nil, err
 		}
+
 		encoded, err := model.EncodeAuditData(updated.Auditable())
 		if err != nil {
 			return nil, err
@@ -250,13 +400,19 @@ func (s SQLUserTokenStore) VerifyEmailPrivileged(ctx context.Context, input *sto
 		if _, err = completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", encoded, input.AuditAt); err != nil {
 			return nil, err
 		}
+
 		return updated, nil
 	})
 }
 
 func lockActiveUserForEmailTransition(ctx context.Context, tx *sqlxTxWrapper, id model.UserID) (*model.User, error) {
 	var row userRow
-	if err := tx.Get(ctx, &row, `SELECT `+strings.Join(userSliceColumns(), ",")+` FROM users WHERE id=? AND archived_at IS NULL AND disabled_at IS NULL FOR UPDATE`, id.String()); err != nil {
+	if err := tx.Get(
+		ctx,
+		&row,
+		`SELECT `+strings.Join(userSliceColumns(), ",")+` FROM users WHERE id = ? AND archived_at IS NULL AND disabled_at IS NULL FOR UPDATE`,
+		id.String(),
+	); err != nil {
 		return nil, translateError("user", id.String(), err)
 	}
 	return row.model()
@@ -275,55 +431,136 @@ func validateRecoveryMail(occurrence *model.MailOccurrence, delivery *model.Mail
 	if err := job.Validate(); err != nil {
 		return store.NewErrInvalidInput("job", "value", err)
 	}
+
 	command, err := model.DecodeMailDeliveryCommand(job.Command)
-	if err != nil || delivery.AttemptCount != 0 || delivery.Revision != 1 || delivery.AcceptedAt.Valid || delivery.FailedAt.Valid ||
-		delivery.OccurrenceID != occurrence.ID || delivery.JobID != job.ID || delivery.TemplateKey != occurrence.TemplateKey ||
-		delivery.TargetUserID != occurrence.ActorUserID || delivery.TargetInvitationID.IsValid() ||
-		!occurrence.CreatedAt.Equal(delivery.CreatedAt) || !delivery.UpdatedAt.Equal(delivery.CreatedAt) || !delivery.MessageDate.Equal(delivery.CreatedAt) ||
-		job.AttemptCount != 0 || job.DedupePolicy != model.JobDedupeActive || job.MaximumAttempts != model.MailMaximumAttempts || job.StartedAt.Valid ||
-		len(job.Checkpoint) != 0 || len(job.Result) != 0 || job.Progress != nil || job.WorkReserved != 0 ||
-		!job.CreatedAt.Equal(delivery.CreatedAt) || !job.UpdatedAt.Equal(delivery.CreatedAt) || !job.AvailableAt.Equal(delivery.CreatedAt) ||
-		command.DeliveryID != delivery.ID || job.DedupeKey != delivery.ID.String() {
+	if err != nil ||
+		delivery.AttemptCount != 0 ||
+		delivery.Revision != 1 ||
+		delivery.AcceptedAt.Valid ||
+		delivery.FailedAt.Valid ||
+		delivery.OccurrenceID != occurrence.ID ||
+		delivery.JobID != job.ID ||
+		delivery.TemplateKey != occurrence.TemplateKey ||
+		delivery.TargetUserID != occurrence.ActorUserID ||
+		delivery.TargetInvitationID.IsValid() ||
+		!occurrence.CreatedAt.Equal(delivery.CreatedAt) ||
+		!delivery.UpdatedAt.Equal(delivery.CreatedAt) ||
+		!delivery.MessageDate.Equal(delivery.CreatedAt) ||
+		job.AttemptCount != 0 ||
+		job.DedupePolicy != model.JobDedupeActive ||
+		job.MaximumAttempts != model.MailMaximumAttempts ||
+		job.StartedAt.Valid ||
+		len(job.Checkpoint) != 0 ||
+		len(job.Result) != 0 ||
+		job.Progress != nil ||
+		job.WorkReserved != 0 ||
+		!job.CreatedAt.Equal(delivery.CreatedAt) ||
+		!job.UpdatedAt.Equal(delivery.CreatedAt) ||
+		!job.AvailableAt.Equal(delivery.CreatedAt) ||
+		command.DeliveryID != delivery.ID ||
+		job.DedupeKey != delivery.ID.String() {
 		return store.NewErrInvalidInput("user_token", "mail_relationship", err)
 	}
-	queued := delivery.State == model.MailDeliveryQueued && delivery.PublicFailureCode == "" && len(delivery.EncryptedPayload) > 0 &&
-		job.Status == model.JobStatusQueued && job.Revision == 1 && !job.CompletedAt.Valid && job.PublicErrorCode == ""
+
+	queued := delivery.State == model.MailDeliveryQueued &&
+		delivery.PublicFailureCode == "" &&
+		len(delivery.EncryptedPayload) > 0 &&
+		job.Status == model.JobStatusQueued &&
+		job.Revision == 1 &&
+		!job.CompletedAt.Valid &&
+		job.PublicErrorCode == ""
 	suppressedTerminal := delivery.State == model.MailDeliverySuppressed &&
-		(delivery.PublicFailureCode == model.MailDeliveryDisabledCode || delivery.PublicFailureCode == model.MailDeliveryRecipientIneligibleCode) && len(delivery.EncryptedPayload) == 0 &&
-		job.Status == model.JobStatusCanceled && job.Revision == 2 && job.CompletedAt.Valid && job.CompletedAt.Time.Equal(delivery.CreatedAt) && job.PublicErrorCode == "job.canceled"
+		(delivery.PublicFailureCode == model.MailDeliveryDisabledCode ||
+			delivery.PublicFailureCode == model.MailDeliveryRecipientIneligibleCode) &&
+		len(delivery.EncryptedPayload) == 0 &&
+		job.Status == model.JobStatusCanceled &&
+		job.Revision == 2 &&
+		job.CompletedAt.Valid &&
+		job.CompletedAt.Time.Equal(delivery.CreatedAt) &&
+		job.PublicErrorCode == "job.canceled"
 	if !queued && !suppressedTerminal {
 		return store.NewErrInvalidInput("user_token", "mail_lifecycle", nil)
 	}
+
 	return nil
 }
 
 // insertRecoveryMail inserts one prepared direct mail. An encrypted payload
 // takes the primary-key fence here, so no caller can insert an old-key
 // payload behind a rekey that has started.
-func insertRecoveryMail(ctx context.Context, tx *sqlxTxWrapper, occurrence *model.MailOccurrence, delivery *model.MailDelivery, job *model.Job, payloadKeyID string) error {
+func insertRecoveryMail(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	occurrence *model.MailOccurrence,
+	delivery *model.MailDelivery,
+	job *model.Job,
+	payloadKeyID string,
+) error {
 	if payloadKeyID != "" {
 		if err := requireMailPayloadPrimary(ctx, tx, payloadKeyID); err != nil {
 			return err
 		}
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO mail_occurrences (id, kind, template_key, actor_user_id, created_at) VALUES (?, ?, ?, ?, ?)`, occurrence.ID.String(), string(occurrence.Kind), string(occurrence.TemplateKey), occurrence.ActorUserID.String(), occurrence.CreatedAt); err != nil {
+
+	if _, err := tx.Exec(
+		ctx,
+		`INSERT INTO mail_occurrences (id, kind, template_key, actor_user_id, created_at) VALUES (?, ?, ?, ?, ?)`,
+		occurrence.ID.String(),
+		string(occurrence.Kind),
+		string(occurrence.TemplateKey),
+		occurrence.ActorUserID.String(),
+		occurrence.CreatedAt,
+	); err != nil {
 		return fmt.Errorf("insert recovery mail occurrence: %w", translateError("mail_occurrence", occurrence.ID.String(), err))
 	}
+
 	if err := insertPreparedMailJob(ctx, tx, job); err != nil {
 		return fmt.Errorf("insert recovery mail job: %w", translateError("job", job.ID.String(), err))
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO mail_deliveries (`+mailDeliveryColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, delivery.ID.String(), delivery.OccurrenceID.String(), delivery.JobID.String(), nullableID(delivery.TargetUserID.String()), nullableID(delivery.TargetInvitationID.String()), string(delivery.TemplateKey), delivery.TemplateDigest, delivery.MaskedRecipient, string(delivery.State), delivery.CreatedAt, delivery.UpdatedAt, delivery.MessageDate, delivery.Deadline, delivery.MessageID, delivery.AttemptCount, optionalTimeValue(delivery.AcceptedAt), optionalTimeValue(delivery.FailedAt), delivery.PublicFailureCode, nullableMailPayloadKeyID(payloadKeyID), mailNullableJSON(delivery.EncryptedPayload), delivery.Revision); err != nil {
+
+	if _, err := tx.Exec(
+		ctx,
+		`INSERT INTO mail_deliveries (`+mailDeliveryColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		delivery.ID.String(),
+		delivery.OccurrenceID.String(),
+		delivery.JobID.String(),
+		nullableID(delivery.TargetUserID.String()),
+		nullableID(delivery.TargetInvitationID.String()),
+		string(delivery.TemplateKey),
+		delivery.TemplateDigest,
+		delivery.MaskedRecipient,
+		string(delivery.State),
+		delivery.CreatedAt,
+		delivery.UpdatedAt,
+		delivery.MessageDate,
+		delivery.Deadline,
+		delivery.MessageID,
+		delivery.AttemptCount,
+		optionalTimeValue(delivery.AcceptedAt),
+		optionalTimeValue(delivery.FailedAt),
+		delivery.PublicFailureCode,
+		nullableMailPayloadKeyID(payloadKeyID),
+		mailNullableJSON(delivery.EncryptedPayload),
+		delivery.Revision,
+	); err != nil {
 		return fmt.Errorf("insert recovery mail delivery: %w", translateError("mail_delivery", delivery.ID.String(), err))
 	}
+
 	if payloadKeyID != "" {
 		if err := incrementMailPayloadKeyReference(ctx, tx, payloadKeyID); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
-func recoveryMailAt(occurrence *model.MailOccurrence, delivery *model.MailDelivery, job *model.Job, at time.Time) (*model.MailOccurrence, *model.MailDelivery, *model.Job, error) {
+func recoveryMailAt(
+	occurrence *model.MailOccurrence,
+	delivery *model.MailDelivery,
+	job *model.Job,
+	at time.Time,
+) (*model.MailOccurrence, *model.MailDelivery, *model.Job, error) {
 	if err := validateRecoveryMail(occurrence, delivery, job); err != nil {
 		return nil, nil, nil, err
 	}
@@ -331,7 +568,13 @@ func recoveryMailAt(occurrence *model.MailOccurrence, delivery *model.MailDelive
 	return recoveryMailAtWithLifetime(occurrence, delivery, job, at, lifetime)
 }
 
-func recoveryMailAtWithLifetime(occurrence *model.MailOccurrence, delivery *model.MailDelivery, job *model.Job, at time.Time, lifetime time.Duration) (*model.MailOccurrence, *model.MailDelivery, *model.Job, error) {
+func recoveryMailAtWithLifetime(
+	occurrence *model.MailOccurrence,
+	delivery *model.MailDelivery,
+	job *model.Job,
+	at time.Time,
+	lifetime time.Duration,
+) (*model.MailOccurrence, *model.MailDelivery, *model.Job, error) {
 	if err := validateRecoveryMail(occurrence, delivery, job); err != nil {
 		return nil, nil, nil, err
 	}
@@ -362,18 +605,29 @@ func suppressSupersededTokenMail(ctx context.Context, tx *sqlxTxWrapper, occurre
 	if len(occurrenceIDs) == 0 {
 		return nil
 	}
+
 	var rows []mailDeliveryRow
-	if err := tx.Select(ctx, &rows, `SELECT `+mailDeliveryColumns+` FROM mail_deliveries WHERE occurrence_id = ANY(?) FOR UPDATE`, pq.Array(occurrenceIDs)); err != nil {
+	if err := tx.Select(
+		ctx,
+		&rows,
+		`SELECT `+mailDeliveryColumns+` FROM mail_deliveries WHERE occurrence_id = ANY(?) FOR UPDATE`,
+		pq.Array(occurrenceIDs),
+	); err != nil {
 		return fmt.Errorf("lock superseded token mail: %w", err)
 	}
+
 	for index := range rows {
 		current, err := rows[index].model()
 		if err != nil {
 			return err
 		}
-		if current.State == model.MailDeliveryAccepted || current.State == model.MailDeliverySuppressed || current.State == model.MailDeliveryCanceled {
+
+		if current.State == model.MailDeliveryAccepted ||
+			current.State == model.MailDeliverySuppressed ||
+			current.State == model.MailDeliveryCanceled {
 			continue
 		}
+
 		job, err := getJob(ctx, tx, current.JobID, true)
 		if err != nil {
 			return err
@@ -381,6 +635,7 @@ func suppressSupersededTokenMail(ctx context.Context, tx *sqlxTxWrapper, occurre
 		if job.Type != model.JobTypeMailDeliverCredential || job.DedupeKey != current.ID.String() {
 			return invalidPersistedState("mail_delivery", "job", fmt.Errorf("superseded token delivery job relationship is invalid"))
 		}
+
 		transitionAt := model.TimeUTC(at)
 		if transitionAt.Before(current.UpdatedAt) {
 			transitionAt = current.UpdatedAt
@@ -388,6 +643,7 @@ func suppressSupersededTokenMail(ctx context.Context, tx *sqlxTxWrapper, occurre
 		if transitionAt.Before(job.UpdatedAt) {
 			transitionAt = job.UpdatedAt
 		}
+
 		updated, err := current.Suppress(model.MailDeliveryObsoleteCode, transitionAt)
 		if err != nil {
 			return store.NewErrConflict("mail_delivery", "invalid_transition", err)
@@ -395,6 +651,7 @@ func suppressSupersededTokenMail(ctx context.Context, tx *sqlxTxWrapper, occurre
 		if err = updateMailDelivery(ctx, tx, current, updated); err != nil {
 			return err
 		}
+
 		if job.Status == model.JobStatusQueued || job.Status == model.JobStatusRunning {
 			updatedJob, cancelErr := job.RequestCancellation(transitionAt)
 			if cancelErr != nil {
@@ -405,6 +662,7 @@ func suppressSupersededTokenMail(ctx context.Context, tx *sqlxTxWrapper, occurre
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -458,12 +716,19 @@ func (s SQLUserTokenStore) Issue(
 	if input.AuditEvent.Resource.Type != model.ResourceUser ||
 		input.AuditEvent.Resource.ID != candidate.UserID.String() ||
 		input.AuditEvent.Status != model.AuditStatusSuccess ||
-		input.AuditEvent.ScopeType != model.RoleScopeInstitution || !model.InstitutionID(input.AuditEvent.ScopeID).IsValid() ||
-		input.Occurrence.ID.String() != candidate.ID.String() || input.Occurrence.Kind != model.MailOccurrenceAccountToken ||
-		input.Occurrence.ActorUserID != candidate.UserID || input.Delivery.TargetUserID != candidate.UserID ||
-		input.Delivery.OccurrenceID != input.Occurrence.ID || input.Delivery.JobID != input.Job.ID ||
-		input.Delivery.Deadline.After(candidate.ExpiresAt) || input.Delivery.State != model.MailDeliveryQueued ||
-		len(input.Delivery.EncryptedPayload) == 0 || input.Job.Type != model.JobTypeMailDeliverCredential || input.Job.Status != model.JobStatusQueued {
+		input.AuditEvent.ScopeType != model.RoleScopeInstitution ||
+		!model.InstitutionID(input.AuditEvent.ScopeID).IsValid() ||
+		input.Occurrence.ID.String() != candidate.ID.String() ||
+		input.Occurrence.Kind != model.MailOccurrenceAccountToken ||
+		input.Occurrence.ActorUserID != candidate.UserID ||
+		input.Delivery.TargetUserID != candidate.UserID ||
+		input.Delivery.OccurrenceID != input.Occurrence.ID ||
+		input.Delivery.JobID != input.Job.ID ||
+		input.Delivery.Deadline.After(candidate.ExpiresAt) ||
+		input.Delivery.State != model.MailDeliveryQueued ||
+		len(input.Delivery.EncryptedPayload) == 0 ||
+		input.Job.Type != model.JobTypeMailDeliverCredential ||
+		input.Job.Status != model.JobStatusQueued {
 		return nil, store.NewErrInvalidInput("user_token", "audit_event", nil)
 	}
 	if candidate.Purpose == model.UserTokenEmailChangeUndo {
@@ -488,7 +753,10 @@ func (s SQLUserTokenStore) Issue(
 		return nil, store.NewErrInvalidInput("mail_delivery", "encrypted_payload", err)
 	}
 
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "user token issue", func(ctx context.Context, tx *sqlxTxWrapper) (*model.UserToken, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "user token issue", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*model.UserToken, error) {
 		if err := requireMailPayloadPrimary(ctx, tx, payloadKeyID); err != nil {
 			return nil, err
 		}
@@ -506,10 +774,18 @@ func (s SQLUserTokenStore) Issue(
 			return nil, err
 		}
 		var priorIDs []string
-		if err := tx.Select(ctx, &priorIDs, `SELECT id FROM user_tokens WHERE user_id = ? AND purpose = ? AND archived_at IS NULL AND consumed_at IS NULL FOR UPDATE`, candidate.UserID.String(), candidate.Purpose); err != nil {
+		if err := tx.Select(
+			ctx,
+			&priorIDs,
+			`SELECT id FROM user_tokens WHERE user_id = ? AND purpose = ? AND archived_at IS NULL AND consumed_at IS NULL FOR UPDATE`,
+			candidate.UserID.String(),
+			candidate.Purpose,
+		); err != nil {
 			return nil, fmt.Errorf("lock prior user tokens: %w", err)
 		}
-		if _, err := tx.Exec(ctx, `
+		if _, err := tx.Exec(
+			ctx,
+			`
 			UPDATE user_tokens
 			   SET updated_at = GREATEST(updated_at, ?), archived_at = GREATEST(updated_at, ?)
 			 WHERE user_id = ? AND purpose = ?
@@ -568,62 +844,82 @@ func (s SQLUserTokenStore) GetByHash(
 }
 
 // ConsumeEmailVerification consumes the email verification token named by the input hash at the input instant and records the supplied audit event.
-func (s SQLUserTokenStore) ConsumeEmailVerification(ctx context.Context, input *store.EmailVerificationConsumption) (*store.EmailVerificationResult, error) {
+func (s SQLUserTokenStore) ConsumeEmailVerification(
+	ctx context.Context,
+	input *store.EmailVerificationConsumption,
+) (*store.EmailVerificationResult, error) {
 	tokenHash := input.TokenHash
 	now := input.Now
 	auditEvent := input.AuditEvent
 	if !model.IsValidTokenHash(tokenHash) || now.IsZero() || auditEvent == nil {
 		return nil, store.NewErrInvalidInput("user_token", "consume", nil)
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "email verification", func(ctx context.Context, tx *sqlxTxWrapper) (*store.EmailVerificationResult, error) {
+
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "email verification", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.EmailVerificationResult, error) {
 		if err := lockUserTokenPurposeByHash(ctx, tx, tokenHash, model.UserTokenEmailVerification); err != nil {
 			return nil, err
 		}
+
 		databaseNow, err := jobDatabaseNow(ctx, tx)
 		if err != nil {
 			return nil, err
 		}
+
 		token, err := lockActiveUserToken(
 			ctx, tx, tokenHash, model.UserTokenEmailVerification, databaseNow,
 		)
 		if err != nil {
 			return nil, err
 		}
+
 		user, err := lockTokenUser(ctx, tx, token)
 		if err != nil {
 			return nil, err
 		}
+
 		at := transitionInstant(databaseNow, token.CreatedAt, token.UpdatedAt, user.UpdatedAt)
 		mailEligibilityRevision, err := advanceUserMailEligibilityRevision(ctx, tx)
 		if err != nil {
 			return nil, err
 		}
-		if _, err := tx.Exec(ctx, `
+
+		if _, execErr := tx.Exec(
+			ctx,
+			`
 		UPDATE users
 		   SET updated_at = GREATEST(updated_at, ?), email_verified = true, mail_eligibility_revision = ?, revision = revision + 1
 		 WHERE id = ? AND archived_at IS NULL AND disabled_at IS NULL`,
-			at, mailEligibilityRevision, user.ID,
-		); err != nil {
-			return nil, fmt.Errorf("verify user email: %w", err)
+			at,
+			mailEligibilityRevision,
+			user.ID,
+		); execErr != nil {
+			return nil, fmt.Errorf("verify user email: %w", execErr)
 		}
-		if err := consumeUserTokens(
+
+		if consumeErr := consumeUserTokens(
 			ctx, tx, token.UserID, token.Purpose, at,
-		); err != nil {
-			return nil, err
+		); consumeErr != nil {
+			return nil, consumeErr
 		}
+
 		event, err := tokenAuditEvent(auditEvent, token.UserID, model.ActionAuthenticationEmailVerificationComplete)
 		if err != nil {
 			return nil, err
 		}
-		if _, err := insertAuditEventAt(ctx, tx, event, at); err != nil {
-			return nil, fmt.Errorf("audit email verification: %w", err)
+		if _, insertErr := insertAuditEventAt(ctx, tx, event, at); insertErr != nil {
+			return nil, fmt.Errorf("audit email verification: %w", insertErr)
 		}
+
 		token.ConsumedAt = sql.NullTime{Time: latestTime(token.CreatedAt, at), Valid: true}
 		token.UpdatedAt = latestTime(token.UpdatedAt, at)
 		verified, err := user.model()
 		if err != nil {
 			return nil, err
 		}
+
 		verified.UpdatedAt = latestTime(verified.UpdatedAt, at)
 		verified.EmailVerified = true
 		verified.Revision++
@@ -631,6 +927,7 @@ func (s SQLUserTokenStore) ConsumeEmailVerification(ctx context.Context, input *
 		if err != nil {
 			return nil, err
 		}
+
 		return &store.EmailVerificationResult{Token: rehydratedToken, User: verified}, nil
 	})
 }
@@ -639,69 +936,101 @@ func (s SQLUserTokenStore) ConsumePasswordReset(
 	ctx context.Context,
 	input *store.PasswordResetCompletion,
 ) (*store.PasswordResetResult, error) {
-	if input == nil || !model.IsValidTokenHash(input.TokenHash) ||
-		!model.IsValidPasswordHash(input.PasswordHash) || !input.Reuse.Valid() || input.At.IsZero() || input.AuditEvent == nil ||
-		!input.RevocationReason.IsValid() || input.Occurrence == nil || input.Delivery == nil || input.Job == nil {
+	if input == nil ||
+		!model.IsValidTokenHash(input.TokenHash) ||
+		!model.IsValidPasswordHash(input.PasswordHash) ||
+		!input.Reuse.Valid() ||
+		input.At.IsZero() ||
+		input.AuditEvent == nil ||
+		!input.RevocationReason.IsValid() ||
+		input.Occurrence == nil ||
+		input.Delivery == nil ||
+		input.Job == nil {
 		return nil, store.NewErrInvalidInput("user_token", "password_reset", nil)
 	}
-	if input.Occurrence.Kind != model.MailOccurrenceSecurityNotice || input.Occurrence.TemplateKey != model.MailTemplateIdentityPasswordChanged ||
-		input.Delivery.TemplateKey != model.MailTemplateIdentityPasswordChanged || input.Job.Type != model.JobTypeMailDeliver {
+
+	if input.Occurrence.Kind != model.MailOccurrenceSecurityNotice ||
+		input.Occurrence.TemplateKey != model.MailTemplateIdentityPasswordChanged ||
+		input.Delivery.TemplateKey != model.MailTemplateIdentityPasswordChanged ||
+		input.Job.Type != model.JobTypeMailDeliver {
 		return nil, store.NewErrInvalidInput("user_token", "password_reset_mail", nil)
 	}
+
 	if err := validateRecoveryMail(input.Occurrence, input.Delivery, input.Job); err != nil {
 		return nil, err
 	}
+
 	payloadKeyID, err := mailPayloadKeyID(input.Delivery.EncryptedPayload)
 	if err != nil {
 		return nil, store.NewErrInvalidInput("mail_delivery", "encrypted_payload", err)
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "password reset", func(ctx context.Context, tx *sqlxTxWrapper) (*store.PasswordResetResult, error) {
+
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "password reset", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.PasswordResetResult, error) {
 		if payloadKeyID != "" {
 			if err := requireMailPayloadPrimary(ctx, tx, payloadKeyID); err != nil {
 				return nil, err
 			}
 		}
+
 		if err := requireCurrentLocalLogin(ctx, tx); err != nil {
 			return nil, err
 		}
+
 		// Discover only the lock key; token validity is rechecked under the lock.
 		// Take the Session lock before token, User and credential row locks, matching
 		// issuance and removal so either the new Session is revoked or proof fails.
 		var resetUserID string
-		if err := tx.Get(ctx, &resetUserID, `SELECT user_id FROM user_tokens WHERE token_hash=? AND purpose='password_reset'`, input.TokenHash); err != nil {
+		if err := tx.Get(
+			ctx,
+			&resetUserID,
+			`SELECT user_id FROM user_tokens WHERE token_hash = ? AND purpose = 'password_reset'`,
+			input.TokenHash,
+		); err != nil {
 			return nil, translateError("user_token", "", err)
 		}
+
 		if err := lockUserSessions(ctx, tx, resetUserID); err != nil {
 			return nil, err
 		}
 		if err := lockUserTokenPurposeByHash(ctx, tx, input.TokenHash, model.UserTokenPasswordReset); err != nil {
 			return nil, err
 		}
+
 		databaseNow, err := jobDatabaseNow(ctx, tx)
 		if err != nil {
 			return nil, err
 		}
+
 		token, err := lockActiveUserToken(
 			ctx, tx, input.TokenHash, model.UserTokenPasswordReset, databaseNow,
 		)
 		if err != nil {
 			return nil, err
 		}
+
 		user, err := lockTokenUser(ctx, tx, token)
 		if err != nil {
 			return nil, err
 		}
+
 		var credential passwordCredentialRow
-		if err := tx.Get(ctx, &credential, `
+		if getErr := tx.Get(
+			ctx,
+			&credential,
+			`
 		SELECT id, created_at, updated_at, archived_at, user_id,
 		       revision, password_hash, password_changed_at
 		  FROM password_credentials
 		 WHERE user_id = ? AND archived_at IS NULL
 		 FOR UPDATE`,
 			token.UserID,
-		); err != nil {
-			return nil, translateError("password_credential", token.UserID, err)
+		); getErr != nil {
+			return nil, translateError("password_credential", token.UserID, getErr)
 		}
+
 		resetUser, err := model.ParseUserID(token.UserID)
 		if err != nil {
 			return nil, invalidPersistedState("user_token", "user_id", err)
@@ -709,75 +1038,112 @@ func (s SQLUserTokenStore) ConsumePasswordReset(
 		if err = refusePasswordReuse(ctx, tx, resetUser, input.Reuse); err != nil {
 			return nil, err
 		}
+
 		var sessionFloor sql.NullTime
 		if err = tx.Get(ctx, &sessionFloor, `SELECT MAX(GREATEST(s.updated_at, c.updated_at)) FROM sessions s
-			LEFT JOIN session_credentials c ON c.session_id=s.id AND c.archived_at IS NULL AND c.revoked_at IS NULL
-			WHERE s.user_id=? AND s.archived_at IS NULL AND s.revoked_at IS NULL`, token.UserID); err != nil {
+			LEFT JOIN session_credentials c ON c.session_id = s.id AND c.archived_at IS NULL AND c.revoked_at IS NULL
+			WHERE s.user_id = ?
+				AND s.archived_at IS NULL
+				AND s.revoked_at IS NULL`, token.UserID); err != nil {
 			return nil, fmt.Errorf("read password reset Session floor: %w", err)
 		}
-		at := passwordChangeInstant(transitionInstant(databaseNow, token.CreatedAt, token.UpdatedAt, user.UpdatedAt,
-			credential.UpdatedAt, TimeFromNullTime(sessionFloor)), credential.PasswordChangedAt)
+
+		at := passwordChangeInstant(transitionInstant(
+			databaseNow,
+			token.CreatedAt,
+			token.UpdatedAt,
+			user.UpdatedAt,
+			credential.UpdatedAt,
+			TimeFromNullTime(sessionFloor),
+		), credential.PasswordChangedAt)
 		occurrence, delivery, job, err := recoveryMailAt(input.Occurrence, input.Delivery, input.Job, at)
 		if err != nil {
 			return nil, err
 		}
-		if err = retainSupersededPassword(ctx, tx, resetUser, credential.PasswordHash, credential.PasswordChangedAt, at, input.Reuse.Limit); err != nil {
+
+		if err = retainSupersededPassword(
+			ctx,
+			tx,
+			resetUser,
+			credential.PasswordHash,
+			credential.PasswordChangedAt,
+			at,
+			input.Reuse.Limit,
+		); err != nil {
 			return nil, err
 		}
+
 		credential.Revision++
 		credential.PasswordHash = input.PasswordHash
 		credential.PasswordChangedAt = latestTime(credential.PasswordChangedAt, at)
 		credential.UpdatedAt = latestTime(credential.UpdatedAt, at)
-		if _, err := tx.Exec(ctx, `
-		UPDATE password_credentials
-		   SET updated_at = GREATEST(updated_at, ?), password_hash = ?, password_changed_at = GREATEST(password_changed_at, ?), revision = revision + 1
-		 WHERE id = ? AND user_id = ? AND archived_at IS NULL`,
-			at, input.PasswordHash, at, credential.ID, token.UserID,
-		); err != nil {
-			return nil, fmt.Errorf("update reset password: %w", err)
+		if _, execErr := tx.Exec(
+			ctx,
+			`
+			UPDATE password_credentials
+			SET updated_at = GREATEST(updated_at, ?), password_hash = ?,
+				password_changed_at = GREATEST(password_changed_at, ?), revision = revision + 1
+			WHERE id = ?
+				AND user_id = ?
+				AND archived_at IS NULL`,
+			at,
+			input.PasswordHash,
+			at,
+			credential.ID,
+			token.UserID,
+		); execErr != nil {
+			return nil, fmt.Errorf("update reset password: %w", execErr)
 		}
+
 		sessionRows, hashes, err := revokeAllUserSessionsAt(
 			ctx, tx, token.UserID, at, input.RevocationReason,
 		)
 		if err != nil {
 			return nil, err
 		}
-		if err := consumeUserTokens(
+
+		if consumeErr := consumeUserTokens(
 			ctx, tx, token.UserID, token.Purpose, at,
-		); err != nil {
-			return nil, err
+		); consumeErr != nil {
+			return nil, consumeErr
 		}
+
 		event, err := tokenAuditEvent(input.AuditEvent, token.UserID, model.ActionAuthenticationPasswordResetComplete)
 		if err != nil {
 			return nil, err
 		}
-		if _, err := insertAuditEventAt(ctx, tx, event, at); err != nil {
-			return nil, fmt.Errorf("audit password reset: %w", err)
+		if _, insertErr := insertAuditEventAt(ctx, tx, event, at); insertErr != nil {
+			return nil, fmt.Errorf("audit password reset: %w", insertErr)
 		}
 		if occurrence.ActorUserID.String() != token.UserID || delivery.TargetUserID.String() != token.UserID {
 			return nil, store.NewErrInvalidInput("user_token", "password_reset_mail_target", nil)
 		}
-		if err := insertRecoveryMail(ctx, tx, occurrence, delivery, job, payloadKeyID); err != nil {
-			return nil, err
+		if insertErr := insertRecoveryMail(ctx, tx, occurrence, delivery, job, payloadKeyID); insertErr != nil {
+			return nil, insertErr
 		}
+
 		token.ConsumedAt = sql.NullTime{Time: latestTime(token.CreatedAt, at), Valid: true}
 		token.UpdatedAt = latestTime(token.UpdatedAt, at)
 		rehydratedUser, err := user.model()
 		if err != nil {
 			return nil, err
 		}
+
 		revokedSessions, err := revokedSessionModelsAt(sessionRows, at, input.RevocationReason)
 		if err != nil {
 			return nil, err
 		}
+
 		rehydratedToken, err := token.model()
 		if err != nil {
 			return nil, err
 		}
+
 		rehydratedCredential, err := credential.model()
 		if err != nil {
 			return nil, err
 		}
+
 		return &store.PasswordResetResult{
 			Token:               rehydratedToken,
 			User:                rehydratedUser,
@@ -798,7 +1164,8 @@ func insertUserToken(
 		INSERT INTO user_tokens (
 			id, created_at, updated_at, archived_at, user_id, purpose,
 			token_hash, target, expires_at, consumed_at
-		) VALUES (
+		)
+		VALUES (
 			:id, :created_at, :updated_at, :archived_at, :user_id, :purpose,
 			:token_hash, :target, :expires_at, :consumed_at
 		)`, &row); err != nil {
@@ -829,7 +1196,13 @@ func lockUserTokenPurposeByHash(
 	purpose model.UserTokenPurpose,
 ) error {
 	var userID string
-	if err := executor.Get(ctx, &userID, `SELECT user_id FROM user_tokens WHERE token_hash = ? AND purpose = ?`, tokenHash, purpose); err != nil {
+	if err := executor.Get(
+		ctx,
+		&userID,
+		`SELECT user_id FROM user_tokens WHERE token_hash = ? AND purpose = ?`,
+		tokenHash,
+		purpose,
+	); err != nil {
 		return translateError("user_token", "", err)
 	}
 	return lockUserTokenPurpose(ctx, executor, userID, purpose)
@@ -877,14 +1250,19 @@ func lockActiveUserToken(
 	at time.Time,
 ) (*userTokenRow, error) {
 	var row userTokenRow
-	if err := executor.Get(ctx, &row, `
+	if err := executor.Get(
+		ctx,
+		&row,
+		`
 		SELECT id, created_at, updated_at, archived_at, user_id, purpose,
 		       token_hash, target, expires_at, consumed_at
 		  FROM user_tokens
 		 WHERE token_hash = ? AND purpose = ?
 		   AND archived_at IS NULL AND consumed_at IS NULL AND expires_at > ?
 		 FOR UPDATE`,
-		tokenHash, purpose, model.TimeUTC(at),
+		tokenHash,
+		purpose,
+		model.TimeUTC(at),
 	); err != nil {
 		return nil, translateError("user_token", "", err)
 	}
@@ -897,7 +1275,10 @@ func lockTokenUser(
 	token *userTokenRow,
 ) (*userRow, error) {
 	var user userRow
-	if err := executor.Get(ctx, &user, `
+	if err := executor.Get(
+		ctx,
+		&user,
+		`
 		SELECT id, created_at, updated_at, archived_at, revision, username, email,
 		       email_verified, display_name, first_name, last_name, locale,
 		       timezone, last_login_at, last_activity_at, disabled_at
@@ -906,7 +1287,8 @@ func lockTokenUser(
 		  FROM users
 		 WHERE id = ? AND email = ? AND archived_at IS NULL AND disabled_at IS NULL
 		 FOR UPDATE`,
-		token.UserID, token.Target,
+		token.UserID,
+		token.Target,
 	); err != nil {
 		return nil, translateError("user_token", "", err)
 	}
@@ -921,12 +1303,17 @@ func consumeUserTokens(
 	at time.Time,
 ) error {
 	at = model.TimeUTC(at)
-	result, err := executor.Exec(ctx, `
+	result, err := executor.Exec(
+		ctx,
+		`
 		UPDATE user_tokens
 		   SET updated_at = GREATEST(updated_at, ?), consumed_at = GREATEST(created_at, ?)
 		 WHERE user_id = ? AND purpose = ?
 		   AND archived_at IS NULL AND consumed_at IS NULL`,
-		at, at, userID, purpose,
+		at,
+		at,
+		userID,
+		purpose,
 	)
 	if err != nil {
 		return fmt.Errorf("consume user tokens: %w", err)
@@ -942,8 +1329,11 @@ func tokenAuditEvent(
 	userID string,
 	expectedAction model.Action,
 ) (*model.AuditEvent, error) {
-	if event == nil || event.Status != model.AuditStatusSuccess || event.Action != string(expectedAction) ||
-		event.ScopeType != model.RoleScopeInstitution || !model.InstitutionID(event.ScopeID).IsValid() {
+	if event == nil ||
+		event.Status != model.AuditStatusSuccess ||
+		event.Action != string(expectedAction) ||
+		event.ScopeType != model.RoleScopeInstitution ||
+		!model.InstitutionID(event.ScopeID).IsValid() {
 		return nil, store.NewErrInvalidInput("user_token", "audit_event", nil)
 	}
 	candidate := event.Clone()

@@ -8,235 +8,44 @@
 package app
 
 import (
-	"context"
-	"errors"
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-func TestAuthenticationCacheInvalidatorRequiresDependencies(t *testing.T) {
-	t.Parallel()
+// accessCredentialCachePrefix is the namespace the identity area's cache
+// invalidator deletes access-credential entries from.
+const accessCredentialCachePrefix = "authentication/access/"
 
-	_, err := newAuthenticationCacheInvalidator(authenticationCacheInvalidatorDependencies{Cache: nil, Diagnostics: &securityEffectsDiagnosticsFake{}})
-	require.Error(t, err, "nil cache was accepted")
-	_, err = newAuthenticationCacheInvalidator(authenticationCacheInvalidatorDependencies{Cache: newAuthenticationCacheFake(), Diagnostics: nil})
-	require.Error(t, err, "nil diagnostics was accepted")
-}
+type securityInstitutionStore struct{ store.InstitutionStore }
 
 func TestRealtimeServiceRequiresSecurityDependencies(t *testing.T) {
 	t.Parallel()
 
-	invalidator, err := newAuthenticationCacheInvalidator(authenticationCacheInvalidatorDependencies{Cache: newAuthenticationCacheFake(), Diagnostics: &securityEffectsDiagnosticsFake{}})
+	invalidator, err := identity.NewCacheInvalidator(identity.CacheInvalidatorDependencies{Cache: newAuthenticationCacheFake(), Diagnostics: newDiscardLogger(t)})
 	require.NoError(t, err)
-	_, err = newRealtimeService(nil, &securityEffectsRealtimeDiagnosticsFake{})
+	_, err = newRealtimeService(nil, newDiscardLogger(t))
 	require.Error(t, err, "nil authentication invalidator was accepted")
 	_, err = newRealtimeService(invalidator, nil)
 	require.Error(t, err, "nil realtime diagnostics were accepted")
 }
 
-func TestAuthenticationServiceRequiresSecurityDependencies(t *testing.T) {
-	t.Parallel()
-
-	persistence := newAuthenticationStoreFake()
-	cache := newAuthenticationCacheFake()
-	hasher, err := newPasswordHasher(passwordHasherDependencies{Settings: testPasswordPolicy(), Recorder: nil})
-	require.NoError(t, err)
-	type dependencies struct {
-		users              store.UserStore
-		passwords          store.PasswordCredentialStore
-		sessions           store.SessionStore
-		sessionCredentials store.SessionCredentialStore
-		attempts           *authenticationAttemptAccounting
-		audit              mutationAuditor
-		loginAudit         localLoginAuditor
-		effects            authenticationSecurityEffects
-		mfa                authenticationMFAVerifier
-		personalTokens     authenticationPATResolver
-		newCredential      func() string
-	}
-	valid := dependencies{
-		users: persistence.User(), passwords: persistence.PasswordCredential(),
-		sessions: persistence.Session(), sessionCredentials: persistence.SessionCredential(),
-		attempts: mustAuthenticationAttemptAccounting(t, cache),
-		audit:    &mutationAttemptAuditorFake{}, loginAudit: &localLoginAuditorFake{},
-		effects: discardAuthenticationSecurityEffects{},
-		mfa:     discardAuthenticationMFAVerifier{}, personalTokens: discardAuthenticationPATResolver{},
-		newCredential: model.NewCredentialToken,
-	}
-	desktop := testAuthenticationDesktopDependencies(t, cache)
-	construct := func(deps dependencies) error {
-		_, constructorErr := newAuthenticationService(authenticationServiceDependencies{Users: deps.users, Passwords: deps.passwords, Sessions: deps.sessions, SessionCredentials: deps.sessionCredentials, AccessPolicy: allowAllAuthenticationAccessPolicy(), Cache: cache, Attempts: deps.attempts, SecurityEffects: deps.effects, Audit: deps.audit, LoginAudit: deps.loginAudit, Hasher: hasher, MFA: deps.mfa, PersonalTokens: deps.personalTokens, SessionPolicy: SessionPolicy{}, LoginRateLimit: LoginRateLimitPolicy{}, Diagnostics: &securityEffectsDiagnosticsFake{}, NewCredential: deps.newCredential, Now: nil, Desktop: desktop})
-		return constructorErr
-	}
-	tests := []struct {
-		name   string
-		mutate func(*dependencies)
-	}{
-		{name: "users", mutate: func(deps *dependencies) { deps.users = nil }},
-		{name: "passwords", mutate: func(deps *dependencies) { deps.passwords = nil }},
-		{name: "sessions", mutate: func(deps *dependencies) { deps.sessions = nil }},
-		{name: "session credentials", mutate: func(deps *dependencies) { deps.sessionCredentials = nil }},
-		{name: "attempt accounting", mutate: func(deps *dependencies) { deps.attempts = nil }},
-		{name: "audit", mutate: func(deps *dependencies) { deps.audit = nil }},
-		{name: "login audit", mutate: func(deps *dependencies) { deps.loginAudit = nil }},
-		{name: "effects", mutate: func(deps *dependencies) { deps.effects = nil }},
-		{name: "MFA verifier", mutate: func(deps *dependencies) { deps.mfa = nil }},
-		{name: "PAT resolver", mutate: func(deps *dependencies) { deps.personalTokens = nil }},
-		{name: "credential generator", mutate: func(deps *dependencies) { deps.newCredential = nil }},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			candidate := valid
-			test.mutate(&candidate)
-			require.Error(t, construct(candidate), "nil %s dependency was accepted", test.name)
-		})
-	}
-}
-
-func TestExternalAuthenticationServiceRequiresInvalidator(t *testing.T) {
-	t.Parallel()
-
-	persistence := newAuthenticationStoreFake()
-	authentication := newTestAuthenticationService(t, persistence)
-	audit, auditErr := newAuditService(auditServiceDependencies{Audits: securityAuditStore{}, Institutions: securityInstitutionStore{}, NodeID: model.NewID()})
-	require.NoError(t, auditErr)
-	_, err := newExternalAuthenticationService(externalAuthenticationServiceDependencies{Registry: securityEffectsProviderSourceFake{}, LoginStates: securityExternalLoginStateStore{}, Institutions: securityInstitutionStore{}, Identities: securityExternalIdentityStore{}, Sessions: persistence.Session(), AccessPolicy: allowAllAuthenticationAccessPolicy(), Attempts: mustAuthenticationAttemptAccounting(t, newAuthenticationCacheFake()), Authentication: authentication, Invalidator: nil, Audit: audit, MutationAudit: mutationAuditAdapter{audit: audit}, Capabilities: &accessPolicyCapabilitiesFake{}, InvitationAcceptor: &externalInvitationAcceptorFake{}, DesktopAuthorization: &externalDesktopAuthorizationFake{}, DesktopReauthentication: externalDesktopReauthenticationFake{}, Policy: ExternalAuthenticationPolicy{}, RecentAuthenticationTTL: 15 * time.Minute, Diagnostics: &securityEffectsDiagnosticsFake{}, NewCredential: model.NewCredentialToken, Now: nil})
-	require.Error(t, err, "nil authentication invalidator was accepted")
-}
-
-func TestAuditServiceRequiresDependencies(t *testing.T) {
-	t.Parallel()
-
-	_, err := newAuditService(auditServiceDependencies{Audits: nil, Institutions: securityInstitutionStore{}, NodeID: model.NewID()})
-	require.Error(t, err, "nil audit store was accepted")
-	_, err = newAuditService(auditServiceDependencies{Audits: securityAuditStore{}, Institutions: nil, NodeID: model.NewID()})
-	require.Error(t, err, "nil audit institution store was accepted")
-	_, err = newAuditService(auditServiceDependencies{Audits: securityAuditStore{}, Institutions: securityInstitutionStore{}, NodeID: ""})
-	require.Error(t, err, "empty audit node ID was accepted")
-}
-
-type securityExternalLoginStateStore struct{ store.ExternalLoginStateStore }
-type securityInstitutionStore struct{ store.InstitutionStore }
-type securityExternalIdentityStore struct{ store.ExternalIdentityStore }
-type securityAuditStore struct{ store.AuditStore }
-
+// TestAuthenticationAndRealtimeRetainOnlyNarrowSiblingPorts keeps the
+// realtime service from holding authentication. Authentication cannot hold
+// the realtime service at all: it lives in the identity area, which never
+// imports this package, and its own fields are checked there.
 func TestAuthenticationAndRealtimeRetainOnlyNarrowSiblingPorts(t *testing.T) {
 	t.Parallel()
 
-	authenticationType := reflect.TypeOf(authenticationService{})
-	realtimePointerType := reflect.TypeOf((*realtimeService)(nil))
-	for index := 0; index < authenticationType.NumField(); index++ {
-		field := authenticationType.Field(index)
-		require.NotEqual(t, realtimePointerType, field.Type, "authenticationService retains realtimeService in field %q", field.Name)
-		// now and wait are clock primitives, not sibling callbacks.
-		if field.Type.Kind() == reflect.Func && field.Name != "now" && field.Name != "wait" {
-			require.Equal(t, "newCredential", field.Name)
-		}
-	}
-
-	realtimeType := reflect.TypeOf(realtimeService{})
-	authenticationPointerType := reflect.TypeOf((*authenticationService)(nil))
+	realtimeType := reflect.TypeOf(realtime.Service{})
+	identityPointerType := reflect.TypeOf((*identity.Service)(nil))
 	for index := 0; index < realtimeType.NumField(); index++ {
 		field := realtimeType.Field(index)
-		require.NotEqual(t, authenticationPointerType, field.Type, "realtimeService retains authenticationService in field %q", field.Name)
+		require.NotEqual(t, identityPointerType, field.Type, "realtime.Service retains the identity Service in field %q", field.Name)
 	}
-}
-
-func TestAuthenticationCacheInvalidatorOwnsKeysAndSafeDiagnostics(t *testing.T) {
-	t.Parallel()
-
-	cache := &securityEffectsCacheFake{
-		authenticationCacheFake: newAuthenticationCacheFake(),
-		deleteErrors: map[string]error{
-			authenticationCachePrefix + "failed-hash": errors.New("delete failed"),
-		},
-	}
-	diagnostics := &securityEffectsDiagnosticsFake{}
-	invalidator, err := newAuthenticationCacheInvalidator(authenticationCacheInvalidatorDependencies{Cache: cache, Diagnostics: diagnostics})
-	require.NoError(t, err)
-
-	invalidator.InvalidateAccessCredentials(
-		context.Background(),
-		[]string{"first-hash", "failed-hash"},
-	)
-	invalidator.InvalidateSessionActivity(
-		context.Background(),
-		[]model.SessionID{"session-one", "session-two"},
-	)
-
-	wantDeletes := []string{
-		authenticationCachePrefix + "first-hash",
-		authenticationCachePrefix + "failed-hash",
-		activityCachePrefix + "session-one",
-		activityCachePrefix + "session-two",
-	}
-	require.Equal(t, wantDeletes, cache.deleted, "deleted keys")
-	require.Equal(t, []string{"authentication cache delete failed"}, diagnostics.messages, "diagnostics")
-	require.Equal(t, []string{"cache operation failed"}, diagnostics.errors, "diagnostic errors")
-}
-
-type securityEffectsCacheFake struct {
-	*authenticationCacheFake
-	deleted      []string
-	deleteErrors map[string]error
-}
-
-type securityEffectsProviderSourceFake struct{}
-
-func (securityEffectsProviderSourceFake) Descriptors() []model.ExternalAuthenticationProvider {
-	return nil
-}
-
-func (securityEffectsProviderSourceFake) Provider(string) (ExternalIdentityProvider, bool) {
-	return nil, false
-}
-
-func (c *securityEffectsCacheFake) Delete(_ context.Context, key string) error {
-	c.deleted = append(c.deleted, key)
-	return c.deleteErrors[key]
-}
-
-type securityEffectsDiagnosticsFake struct {
-	messages []string
-	errors   []string
-}
-
-func (d *securityEffectsDiagnosticsFake) WarnContext(_ context.Context, message string, err error) {
-	d.messages = append(d.messages, message)
-	d.errors = append(d.errors, err.Error())
-}
-
-type securityEffectsRealtimeDiagnosticsFake struct{}
-
-func (*securityEffectsRealtimeDiagnosticsFake) ErrorContext(context.Context, string, error) {}
-
-func (*securityEffectsRealtimeDiagnosticsFake) ErrorContextWithEvent(
-	context.Context,
-	string,
-	string,
-	error,
-) {
-}
-
-type discardAuthenticationSecurityEffects struct{}
-
-func (discardAuthenticationSecurityEffects) AuthenticationCacheInvalidated(
-	context.Context,
-	model.UserID,
-	[]string,
-) {
-}
-
-func (discardAuthenticationSecurityEffects) SessionsRevoked(
-	context.Context,
-	model.UserID,
-	[]model.SessionID,
-	[]string,
-) {
 }

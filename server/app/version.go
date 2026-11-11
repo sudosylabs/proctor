@@ -11,12 +11,15 @@ import (
 	"runtime"
 )
 
+// Version, Commit and BuildTime are set by the release build through -ldflags
+// -X; a development build keeps these defaults.
 var (
 	Version   = "dev"
 	Commit    = "unknown"
 	BuildTime = "unknown"
 )
 
+// BuildInfo identifies the running binary: its release, source commit, build time and Go toolchain.
 type BuildInfo struct {
 	Version   string
 	Commit    string
@@ -24,6 +27,8 @@ type BuildInfo struct {
 	GoVersion string
 }
 
+// CurrentBuildInfo reads the link-time build variables and the Go runtime
+// version.
 func CurrentBuildInfo() BuildInfo {
 	return BuildInfo{
 		Version:   Version,

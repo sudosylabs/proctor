@@ -29,6 +29,21 @@ type ExamRecordsScope struct {
 	AttemptID       model.ExamAttemptID
 }
 
+// ConsistentWith reports whether the resolved records scope is the scope that
+// was asked for, names the Institution and Academic Unit that own it, and, for
+// a scope narrowed to one Submission, names that Submission's candidate and
+// Attempt.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (s *ExamRecordsScope) ConsistentWith(scope model.RetentionHoldScope) bool {
+	return !(s == nil ||
+		s.Scope != scope ||
+		!s.AcademicUnitID.IsValid() ||
+		!s.InstitutionID.IsValid() ||
+		scope.SubmissionID.IsValid() && (!s.CandidateUserID.IsValid() || !s.AttemptID.IsValid()))
+}
+
 // ExamRecordsCompletionSnapshot exposes bounded counts, not student work.
 // PendingReviews counts Submissions with neither a finalized Review nor a
 // current waiver. Counts and state belong to the same database snapshot.
@@ -37,6 +52,21 @@ type ExamRecordsCompletionSnapshot struct {
 	SittingState    model.ExamSittingState
 	SubmissionCount int64
 	PendingReviews  int64
+}
+
+// ConsistentWith reports whether the snapshot carries a valid records
+// completion for the given Sitting and its counts are possible: neither is
+// negative and no more Reviews are pending than there are Submissions.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (s *ExamRecordsCompletionSnapshot) ConsistentWith(sittingID model.ExamSittingID) bool {
+	return !(s == nil ||
+		s.Completion.Validate() != nil ||
+		s.Completion.SittingID != sittingID ||
+		s.SubmissionCount < 0 ||
+		s.PendingReviews < 0 ||
+		s.PendingReviews > s.SubmissionCount)
 }
 
 type ExamRecordsMutation struct {
@@ -95,13 +125,35 @@ type ExamRecordsCompletionResult struct {
 	Completion *model.ExamSittingRecordsCompletion
 	Replayed   bool
 }
+
 type ExamRecordsWaiverResult struct {
 	Waiver   *model.SubmissionReviewWaiver
 	Replayed bool
 }
+
 type ExamRecordsHoldResult struct {
 	Hold     *model.RetentionHold
 	Replayed bool
+}
+
+// ConsistentWithRelease reports whether the outcome carries the valid
+// Retention Hold that was asked to be released, on the given scope, and that
+// Hold now records its release.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (r *ExamRecordsHoldResult) ConsistentWithRelease(holdID model.RetentionHoldID, scope model.RetentionHoldScope) bool {
+	return !(r == nil ||
+		r.Hold.Validate() != nil ||
+		r.Hold.ID != holdID ||
+		r.Hold.Scope != scope ||
+		!r.Released())
+}
+
+// Released is the application's postcondition on a Retention Hold release:
+// the Hold now records its release.
+func (r *ExamRecordsHoldResult) Released() bool {
+	return r.Hold.ReleasedAt.Valid
 }
 
 // ExamRecordsStore owns records completion and preservation. App preflights

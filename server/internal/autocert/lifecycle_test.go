@@ -122,12 +122,12 @@ func TestManagerCloseCancelsAndWaitsForInFlightCertificateIssuance(t *testing.T)
 	clientTLS := tls.Client(clientConnection, &tls.Config{
 		MinVersion:         tls.VersionTLS12,
 		ServerName:         "proctor.example.edu",
-		InsecureSkipVerify: true, // Issuance is deliberately canceled before a certificate exists.
+		InsecureSkipVerify: true, //nolint:gosec // G402: issuance is deliberately canceled before a certificate exists.
 	})
 	serverHandshake := make(chan error, 1)
 	clientHandshake := make(chan error, 1)
-	go func() { serverHandshake <- serverTLS.Handshake() }()
-	go func() { clientHandshake <- clientTLS.Handshake() }()
+	go func() { serverHandshake <- serverTLS.HandshakeContext(t.Context()) }()
+	go func() { clientHandshake <- clientTLS.HandshakeContext(t.Context()) }()
 	<-cache.started
 
 	closed := make(chan error, 1)
@@ -189,7 +189,8 @@ func TestManagerCloseCancelsAndWaitsForAuthorizationCleanup(t *testing.T) {
 		HTTPClient:   &http.Client{Transport: roundTripper},
 	}
 	manager.runBackground(func(ctx context.Context) {
-		manager.deactivatePendingAuthz(ctx, []string{"https://ca.invalid/authorization/1"})
+		// The canceled cleanup's error is retained for Close; the test asserts Close waits.
+		_ = manager.deactivatePendingAuthz(ctx, []string{"https://ca.invalid/authorization/1"})
 	})
 	<-roundTripper.started
 	closed := make(chan error, 1)

@@ -23,20 +23,21 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
 func TestExamHTTPCreateAndGetUseApplicationFacade(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	view := testExamHTTPView(t, principal.UserID)
 	fake := &examHTTPApplication{principal: principal, view: view}
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examResource(fake))
 
 	body := []byte(`{"academic_unit_id":"` + view.Exam.AcademicUnitID.String() + `","title":"Systems","instructions_markdown":"Use **Go**."}`)
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/exams", bytes.NewReader(body))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams", bytes.NewReader(body))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "exam-retry")
@@ -49,18 +50,18 @@ func TestExamHTTPCreateAndGetUseApplicationFacade(t *testing.T) {
 	require.Equal(t, "exam-retry", fake.create.IdempotencyKey)
 	assertExamHTTPResponse(t, response.Body.Bytes(), view)
 
-	get := httptest.NewRequest(http.MethodGet, "/api/v1/exams/"+view.Exam.ID.String(), nil)
+	get := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/exams/"+view.Exam.ID.String(), nil)
 	get.Header.Set("Authorization", "Bearer credential")
 	got := httptest.NewRecorder()
 	httpAPI.ServeHTTP(got, get)
 	require.Equal(t, http.StatusOK, got.Code, "get = %d query=%#v body=%s", got.Code, fake.get, got.Body.String())
-	require.Equal(t, view.Exam.ID, fake.get.ExamID, "get = %d query=%#v body=%s", got.Code, fake.get, got.Body.String())
+	require.Equal(t, view.Exam.ID, fake.get, "get = %d query=%#v body=%s", got.Code, fake.get, got.Body.String())
 	assertExamHTTPResponse(t, got.Body.Bytes(), view)
 }
 
 func TestExamHTTPListUsesBoundedCatalogQueryAndSummary(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	unitID, examID := model.NewAcademicUnitID(), model.NewExamID()
 	fake := &examHTTPApplication{principal: principal, catalog: exam.CatalogPage{Items: []store.ExamSummary{{
@@ -68,7 +69,7 @@ func TestExamHTTPListUsesBoundedCatalogQueryAndSummary(t *testing.T) {
 		Title: "Systems", UpdatedAt: time.Date(2026, 8, 14, 8, 0, 0, 0, time.UTC), Revision: 2, ManagerCount: 1,
 	}}}}
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examResource(fake))
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/exams?academic_unit_id="+unitID.String()+"&q=systems+design&archive_state=all&limit=25", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/exams?academic_unit_id="+unitID.String()+"&q=systems+design&archive_state=all&limit=25", nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -84,14 +85,14 @@ func TestExamHTTPListUsesBoundedCatalogQueryAndSummary(t *testing.T) {
 	wantBefore := time.Date(2026, 8, 13, 7, 6, 5, 432123000, time.UTC)
 	cursor, err := encodeExamCatalogCursor(examCatalogCursor{UpdatedAt: before.Format(time.RFC3339Nano), ExamID: examID.String()})
 	require.NoError(t, err)
-	second := httptest.NewRequest(http.MethodGet, "/api/v1/exams?cursor="+url.QueryEscape(cursor), nil)
+	second := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/exams?cursor="+url.QueryEscape(cursor), nil)
 	second.Header.Set("Authorization", "Bearer credential")
 	secondResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(secondResponse, second)
 	require.Equal(t, http.StatusOK, secondResponse.Code, "catalog cursor forwarding = %d query=%#v body=%s", secondResponse.Code, fake.list, secondResponse.Body.String())
 	require.True(t, fake.list.BeforeUpdatedAt.Equal(wantBefore), "catalog cursor forwarding = %d query=%#v body=%s", secondResponse.Code, fake.list, secondResponse.Body.String())
 	require.Equal(t, examID, fake.list.BeforeExamID, "catalog cursor forwarding = %d query=%#v body=%s", secondResponse.Code, fake.list, secondResponse.Body.String())
-	malformed := httptest.NewRequest(http.MethodGet, "/api/v1/exams?cursor=not-a-cursor", nil)
+	malformed := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/exams?cursor=not-a-cursor", nil)
 	malformed.Header.Set("Authorization", "Bearer credential")
 	malformedResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(malformedResponse, malformed)
@@ -120,7 +121,7 @@ func TestExamCatalogCursorRoundTripsAndRejectsInvalidInput(t *testing.T) {
 
 func TestExamManagerHTTPListAndMutationsUseStrictBoundedContracts(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	view := testExamHTTPView(t, principal.UserID)
 	target := model.NewUserID()
@@ -135,7 +136,7 @@ func TestExamManagerHTTPListAndMutationsUseStrictBoundedContracts(t *testing.T) 
 	}
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examResource(fake))
 
-	list := httptest.NewRequest(http.MethodGet, "/api/v1/exams/"+view.Exam.ID.String()+"/managers?limit=1", nil)
+	list := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/exams/"+view.Exam.ID.String()+"/managers?limit=1", nil)
 	list.Header.Set("Authorization", "Bearer credential")
 	listed := httptest.NewRecorder()
 	httpAPI.ServeHTTP(listed, list)
@@ -145,14 +146,14 @@ func TestExamManagerHTTPListAndMutationsUseStrictBoundedContracts(t *testing.T) 
 	require.False(t, bytes.Contains(listed.Body.Bytes(), []byte("display_name")), "list = %d query=%#v body=%s", listed.Code, fake.managerList, listed.Body.String())
 	cursor, err := encodeExamManagerCursor(examManagerCursor{GrantedAt: grantedAt.Format(time.RFC3339Nano), UserID: target.String()})
 	require.NoError(t, err)
-	second := httptest.NewRequest(http.MethodGet, "/api/v1/exams/"+view.Exam.ID.String()+"/managers?cursor="+url.QueryEscape(cursor), nil)
+	second := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/exams/"+view.Exam.ID.String()+"/managers?cursor="+url.QueryEscape(cursor), nil)
 	second.Header.Set("Authorization", "Bearer credential")
 	secondResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(secondResponse, second)
 	require.Equal(t, http.StatusOK, secondResponse.Code, "manager cursor forwarding = %d query=%#v body=%s", secondResponse.Code, fake.managerList, secondResponse.Body.String())
 	require.True(t, fake.managerList.BeforeGrantedAt.Equal(grantedAt), "manager cursor forwarding = %d query=%#v body=%s", secondResponse.Code, fake.managerList, secondResponse.Body.String())
 	require.Equal(t, target, fake.managerList.BeforeUserID, "manager cursor forwarding = %d query=%#v body=%s", secondResponse.Code, fake.managerList, secondResponse.Body.String())
-	malformed := httptest.NewRequest(http.MethodGet, "/api/v1/exams/"+view.Exam.ID.String()+"/managers?cursor=not-a-cursor", nil)
+	malformed := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/exams/"+view.Exam.ID.String()+"/managers?cursor=not-a-cursor", nil)
 	malformed.Header.Set("Authorization", "Bearer credential")
 	malformedResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(malformedResponse, malformed)
@@ -193,7 +194,7 @@ func TestExamManagerCursorIsUnversionedAndStrict(t *testing.T) {
 
 func TestExamHTTPArchiveUsesRequiredIdempotentApplicationCommand(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	view := testExamHTTPView(t, principal.UserID)
 	archived := view.Exam
@@ -214,11 +215,11 @@ func TestExamHTTPArchiveUsesRequiredIdempotentApplicationCommand(t *testing.T) {
 
 func TestExamHTTPCreateRequiresIdempotencyKey(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	fake := &examHTTPApplication{principal: principal, view: testExamHTTPView(t, principal.UserID)}
 	httpAPI := newFocusedResourceAPI(t, logger, fake, examResource(fake))
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/exams", bytes.NewReader([]byte(`{"academic_unit_id":"`+model.NewAcademicUnitID().String()+`","title":"Systems"}`)))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams", bytes.NewReader([]byte(`{"academic_unit_id":"`+model.NewAcademicUnitID().String()+`","title":"Systems"}`)))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
@@ -229,7 +230,7 @@ func TestExamHTTPCreateRequiresIdempotencyKey(t *testing.T) {
 
 func TestExamHTTPPatchDraftPreservesOmittedAndExplicitEmptyFields(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	view := testExamHTTPView(t, principal.UserID)
 	fake := &examHTTPApplication{principal: principal, view: view}
@@ -251,7 +252,7 @@ func TestExamHTTPPatchDraftPreservesOmittedAndExplicitEmptyFields(t *testing.T) 
 
 func TestExamHTTPPatchDraftTreatsNullAsUnchangedAndRequiresAValue(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	view := testExamHTTPView(t, principal.UserID)
 	fake := &examHTTPApplication{principal: principal, view: view}
@@ -268,7 +269,7 @@ func TestExamHTTPPatchDraftTreatsNullAsUnchangedAndRequiresAValue(t *testing.T) 
 
 func TestExamHTTPPatchDraftRequiresIdempotencyKey(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	view := testExamHTTPView(t, principal.UserID)
 	fake := &examHTTPApplication{principal: principal, view: view}
@@ -284,7 +285,7 @@ func TestExamHTTPPatchDraftRequiresIdempotencyKey(t *testing.T) {
 
 func TestExamHTTPConfigureDraftFocusLossUsesTypedApplicationCommand(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	view := testExamHTTPView(t, principal.UserID)
 	fake := &examHTTPApplication{principal: principal, view: view}
@@ -319,10 +320,10 @@ func TestExamHTTPConfigureDraftFocusLossRequiresExplicitEnabledAndRejectsRawPoli
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			logger, _ := newTestLogger(t)
+			logger, _ := routetest.NewLogger(t)
 			fake := &examHTTPApplication{principal: principal, view: view}
 			httpAPI := newFocusedResourceAPI(t, logger, fake, examResource(fake))
-			request := httptest.NewRequest(http.MethodPut, "/api/v1/exams/"+view.Exam.ID.String()+"/draft/policies/focus-loss", bytes.NewReader([]byte(body)))
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/exams/"+view.Exam.ID.String()+"/draft/policies/focus-loss", bytes.NewReader([]byte(body)))
 			request.Header.Set("Authorization", "Bearer credential")
 			request.Header.Set("Content-Type", "application/json")
 			request.Header.Set("Idempotency-Key", "invalid-focus-loss-policy")
@@ -344,17 +345,17 @@ func TestExamHTTPResponseIsBoundedAndContainsTypedPolicy(t *testing.T) {
 	require.NoError(t, json.Unmarshal(encoded, &document))
 	_, exists := document["managers"]
 	require.False(t, exists, "bounded view exposed manager collection")
-	exam := document["exam"].(map[string]any)
+	examDocument := document["exam"].(map[string]any)
 	for _, field := range []string{"created_at", "updated_at"} {
-		value, ok := exam[field].(string)
-		require.True(t, ok, "%s = %#v, want RFC3339 string", field, exam[field])
+		value, ok := examDocument[field].(string)
+		require.True(t, ok, "%s = %#v, want RFC3339 string", field, examDocument[field])
 		_, err = time.Parse(time.RFC3339Nano, value)
 		require.NoError(t, err, "parse %s", field)
 	}
-	_, present := exam["archived_at"]
-	require.False(t, present, "archived_at = %#v, want omitted for active exam", exam["archived_at"])
+	_, present := examDocument["archived_at"]
+	require.False(t, present, "archived_at = %#v, want omitted for active exam", examDocument["archived_at"])
 	for _, legacy := range []string{"create_at", "update_at", "delete_at"} {
-		_, exists := exam[legacy]
+		_, exists := examDocument[legacy]
 		require.False(t, exists, "response exposed legacy timestamp field %q", legacy)
 	}
 	draft := document["draft"].(map[string]any)
@@ -371,7 +372,6 @@ func TestExamHTTPResponseIsBoundedAndContainsTypedPolicy(t *testing.T) {
 }
 
 type examHTTPApplication struct {
-	Application
 	principal              model.Principal
 	view                   exam.View
 	create                 exam.CreateCommand
@@ -383,9 +383,9 @@ type examHTTPApplication struct {
 	catalog                exam.CatalogPage
 	archive                exam.ArchiveCommand
 	archived               model.Exam
-	get                    exam.GetQuery
+	get                    model.ExamID
 	managerList            exam.ListManagersQuery
-	managerCommand         exam.AddManagerCommand
+	managerCommand         exam.ManagerChangeCommand
 	managerPage            exam.ManagerPage
 	managerChange          store.ExamManagerCommandResult
 }
@@ -394,15 +394,15 @@ func (a *examHTTPApplication) ListExamManagers(_ context.Context, _ invocation.I
 	a.managerList = query
 	return a.managerPage, nil
 }
-func (a *examHTTPApplication) AddExamManager(_ context.Context, _ invocation.Invocation, command exam.AddManagerCommand) (store.ExamManagerCommandResult, error) {
+func (a *examHTTPApplication) AddExamManager(_ context.Context, _ invocation.Invocation, command exam.ManagerChangeCommand) (store.ExamManagerCommandResult, error) {
 	a.managerCommand = command
 	return a.managerChange, nil
 }
-func (a *examHTTPApplication) RemoveExamManager(_ context.Context, _ invocation.Invocation, command exam.RemoveManagerCommand) (store.ExamManagerCommandResult, error) {
+func (a *examHTTPApplication) RemoveExamManager(_ context.Context, _ invocation.Invocation, command exam.ManagerChangeCommand) (store.ExamManagerCommandResult, error) {
 	a.managerCommand = command
 	return a.managerChange, nil
 }
-func (a *examHTTPApplication) TransferExamOwnership(_ context.Context, _ invocation.Invocation, command exam.TransferOwnerCommand) (store.ExamManagerCommandResult, error) {
+func (a *examHTTPApplication) TransferExamOwnership(_ context.Context, _ invocation.Invocation, command exam.ManagerChangeCommand) (store.ExamManagerCommandResult, error) {
 	a.managerCommand = command
 	return a.managerChange, nil
 }
@@ -428,8 +428,8 @@ func (a *examHTTPApplication) CreateExam(_ context.Context, _ invocation.Invocat
 	a.create = command
 	return a.view, nil
 }
-func (a *examHTTPApplication) GetExam(_ context.Context, _ invocation.Invocation, query exam.GetQuery) (exam.View, error) {
-	a.get = query
+func (a *examHTTPApplication) GetExam(_ context.Context, _ invocation.Invocation, id model.ExamID) (exam.View, error) {
+	a.get = id
 	return a.view, nil
 }
 func (a *examHTTPApplication) EditExamDraftText(_ context.Context, _ invocation.Invocation, command exam.EditDraftTextCommand) (exam.View, error) {

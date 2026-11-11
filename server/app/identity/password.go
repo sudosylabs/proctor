@@ -1,0 +1,381 @@
+// ---------------------------------------------------------------------------------------------
+// Copyright (c) 2026 Sudosy Labs. All rights reserved.
+// Licensed under the GNU Affero General Public License, version 3 only.
+// See LICENSE in the server module root for license information.
+// SPDX-License-Identifier: AGPL-3.0-only
+// ---------------------------------------------------------------------------------------------
+//
+// Password hashing follows the PHC string format and OWASP-recommended
+// Argon2id parameters. Mattermost's current multi-hasher implementation was
+// reviewed, but Proctor has no legacy bcrypt/PBKDF2 database to migrate and
+// therefore uses one memory-hard format with bounded parsing.
+
+package identity
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+	"unicode/utf8"
+
+	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/store"
+	"golang.org/x/crypto/argon2"
+)
+
+// ErrPasswordMismatch is returned by Verify for a wrong password and also for
+// an unparsable stored encoding, so callers cannot tell the two apart.
+var ErrPasswordMismatch = errors.New("password does not match")
+
+var dummyHashes = struct {
+	sync.Mutex
+	values map[passwordParameters]string
+}{values: make(map[passwordParameters]string)}
+
+type passwordParameters struct {
+	memoryKiB   uint32
+	iterations  uint32
+	parallelism uint8
+	saltBytes   uint32
+	keyBytes    uint32
+}
+
+// PasswordHasherDependencies are the collaborators of PasswordHasher;
+// NewPasswordHasher validates them once and PasswordHasher keeps them in deps.
+type PasswordHasherDependencies struct {
+	Settings PasswordPolicy
+	Recorder PasswordWorkRecorder
+}
+
+// PasswordHasher hashes and verifies passwords with Argon2id under one bound on
+// concurrent work. One instance is shared by every password flow.
+type PasswordHasher struct {
+	deps PasswordHasherDependencies
+
+	minimumLength int
+	maximumLength int
+	historyCount  int
+	parameters    passwordParameters
+	dummyHash     string
+	work          chan struct{}
+}
+
+// NewPasswordHasher builds the hasher from the password policy.
+func NewPasswordHasher(deps PasswordHasherDependencies) (*PasswordHasher, error) {
+	settings := deps.Settings
+	if settings.MaximumConcurrentOperations <= 0 {
+		return nil, errors.New("maximum concurrent password operations must be positive")
+	}
+	if settings.HistoryCount < 0 || settings.HistoryCount > store.MaximumPasswordHistory {
+		return nil, errors.New("password history count is out of range")
+	}
+	// The bounds parseArgon2id accepts, so every hash this hasher makes is one
+	// it can verify, and no setting wraps when narrowed to Argon2's widths.
+	if settings.ArgonMemoryKiB < 19*1024 || settings.ArgonMemoryKiB > 1024*1024 ||
+		settings.ArgonIterations < 1 || settings.ArgonIterations > 20 ||
+		settings.ArgonParallelism < 1 || settings.ArgonParallelism > 64 ||
+		settings.ArgonSaltBytes < 16 || settings.ArgonSaltBytes > 64 ||
+		settings.ArgonKeyBytes < 16 || settings.ArgonKeyBytes > 64 {
+		return nil, errors.New("Argon2id parameters are out of range")
+	}
+
+	hasher := &PasswordHasher{
+		deps:          deps,
+		minimumLength: settings.MinimumLength,
+		maximumLength: settings.MaximumLength,
+		historyCount:  settings.HistoryCount,
+		work:          make(chan struct{}, settings.MaximumConcurrentOperations),
+		parameters: passwordParameters{
+			memoryKiB:   uint32(settings.ArgonMemoryKiB),
+			iterations:  uint32(settings.ArgonIterations),
+			parallelism: uint8(settings.ArgonParallelism),
+			saltBytes:   uint32(settings.ArgonSaltBytes),
+			keyBytes:    uint32(settings.ArgonKeyBytes),
+		},
+	}
+	dummyHashes.Lock()
+	dummy := dummyHashes.values[hasher.parameters]
+	if dummy == "" {
+		// Startup completes before requests can use this hasher. The cached
+		// timing hash is neither admitted nor recorded as runtime work.
+		var err error
+		dummy, err = hasher.hashUnchecked("proctor-dummy-password-never-used")
+		if err != nil {
+			dummyHashes.Unlock()
+			return nil, fmt.Errorf("create password timing hash: %w", err)
+		}
+
+		dummyHashes.values[hasher.parameters] = dummy
+	}
+
+	dummyHashes.Unlock()
+	hasher.dummyHash = dummy
+	return hasher, nil
+}
+
+// Hash validates the password against the length limits and returns its
+// Argon2id encoding with a fresh salt. It fails when the hasher is at capacity.
+func (h *PasswordHasher) Hash(ctx context.Context, password string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if err := h.Validate(password); err != nil {
+		return "", apperror.New("authentication.password.invalid").WithField("field", "password").Wrap(err)
+	}
+	release, err := h.admit(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer release()
+	encoded, err := h.hashUnchecked(password)
+	if err != nil {
+		return "", err
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	return encoded, nil
+}
+
+func (h *PasswordHasher) hashUnchecked(password string) (string, error) {
+	salt := make([]byte, h.parameters.saltBytes)
+	if _, err := rand.Read(salt); err != nil {
+		return "", fmt.Errorf("read password salt: %w", err)
+	}
+	key := argon2.IDKey(
+		[]byte(password),
+		salt,
+		h.parameters.iterations,
+		h.parameters.memoryKiB,
+		h.parameters.parallelism,
+		h.parameters.keyBytes,
+	)
+	return fmt.Sprintf(
+		"$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
+		argon2.Version,
+		h.parameters.memoryKiB,
+		h.parameters.iterations,
+		h.parameters.parallelism,
+		base64.RawStdEncoding.EncodeToString(salt),
+		base64.RawStdEncoding.EncodeToString(key),
+	), nil
+}
+
+// Verify reports nil when password matches the Argon2id encoding, and
+// ErrPasswordMismatch when it does not.
+func (h *PasswordHasher) Verify(ctx context.Context, encoded, password string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	parameters, salt, expected, err := parseArgon2id(encoded)
+	if err != nil {
+		return ErrPasswordMismatch
+	}
+	release, err := h.admit(ctx)
+	if err != nil {
+		return err
+	}
+	defer release()
+	actual := argon2.IDKey(
+		[]byte(password),
+		salt,
+		parameters.iterations,
+		parameters.memoryKiB,
+		parameters.parallelism,
+		uint32(len(expected)), //nolint:gosec // G115: parseArgon2id bounds the key to 16..64 bytes.
+	)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if subtle.ConstantTimeCompare(actual, expected) != 1 {
+		return ErrPasswordMismatch
+	}
+	return nil
+}
+
+// VerifyDummy spends a Verify against a fixed hash so that checking an unknown
+// account takes as long as checking a known one. A mismatch returns nil.
+func (h *PasswordHasher) VerifyDummy(ctx context.Context, password string) error {
+	if len(password) > h.maximumLength {
+		password = "invalid-password-length"
+	}
+	err := h.Verify(ctx, h.dummyHash, password)
+	if errors.Is(err, ErrPasswordMismatch) {
+		return nil
+	}
+	return err
+}
+
+// admit bounds all runtime password work without creating a waiting queue.
+// Argon2 cannot be interrupted: the synchronous caller retains its permit
+// until computation returns, even after the request context is canceled.
+func (h *PasswordHasher) admit(ctx context.Context) (func(), error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	select {
+	case h.work <- struct{}{}:
+		if err := ctx.Err(); err != nil {
+			<-h.work
+			return nil, err
+		}
+		startedAt := time.Now()
+		if h.deps.Recorder != nil {
+			h.deps.Recorder.Started()
+		}
+		return func() {
+			if h.deps.Recorder != nil {
+				h.deps.Recorder.Finished(time.Since(startedAt))
+			}
+			<-h.work
+		}, nil
+	default:
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if h.deps.Recorder != nil {
+			h.deps.Recorder.Rejected()
+		}
+		return nil, apperror.New("service.busy")
+	}
+}
+
+// PasswordHashError preserves validation and capacity failures while keeping
+// operational failures under the owning use case's unavailable code.
+func PasswordHashError(err error, unavailableCode apperror.Code) error {
+	if apperror.Is(err, "authentication.password.invalid") {
+		return err
+	}
+	return passwordWorkError(err, unavailableCode)
+}
+
+func passwordWorkError(err error, unavailableCode apperror.Code) error {
+	if apperror.Is(err, "service.busy") {
+		return err
+	}
+	return apperror.New(unavailableCode).Wrap(err)
+}
+
+// NeedsRehash reports whether encoded was made with parameters other than the
+// hasher's current ones. An unparsable encoding reports false.
+func (h *PasswordHasher) NeedsRehash(encoded string) bool {
+	parameters, salt, key, err := parseArgon2id(encoded)
+	if err != nil {
+		return false
+	}
+	return parameters.memoryKiB != h.parameters.memoryKiB ||
+		parameters.iterations != h.parameters.iterations ||
+		parameters.parallelism != h.parameters.parallelism ||
+		uint32(len(salt)) != h.parameters.saltBytes || //nolint:gosec // G115: parseArgon2id bounds the salt to 16..64 bytes.
+		uint32(len(key)) != h.parameters.keyBytes //nolint:gosec // G115: parseArgon2id bounds the key to 16..64 bytes.
+}
+
+// maximumPasswordLength is the configured maximum password length in bytes.
+func (h *PasswordHasher) maximumPasswordLength() int {
+	return h.maximumLength
+}
+
+// Validate reports whether password is valid UTF-8 and within the configured
+// minimum length in characters and maximum length in bytes.
+func (h *PasswordHasher) Validate(password string) error {
+	if !utf8.ValidString(password) {
+		return errors.New("password must be valid UTF-8")
+	}
+	length := utf8.RuneCountInString(password)
+	if length < h.minimumLength {
+		return fmt.Errorf("password must contain at least %d characters", h.minimumLength)
+	}
+	if len(password) > h.maximumLength {
+		return fmt.Errorf("password must contain at most %d bytes", h.maximumLength)
+	}
+	return nil
+}
+
+func parseArgon2id(encoded string) (passwordParameters, []byte, []byte, error) {
+	parts := strings.Split(encoded, "$")
+	if len(parts) != 6 || parts[0] != "" || parts[1] != "argon2id" {
+		return passwordParameters{}, nil, nil, errors.New("invalid Argon2id hash")
+	}
+	if parts[2] != "v="+strconv.Itoa(argon2.Version) {
+		return passwordParameters{}, nil, nil, errors.New("unsupported Argon2id version")
+	}
+	parameters, err := parseArgon2Parameters(parts[3])
+	if err != nil {
+		return passwordParameters{}, nil, nil, err
+	}
+	salt, err := base64.RawStdEncoding.Strict().DecodeString(parts[4])
+	if err != nil || len(salt) < 16 || len(salt) > 64 {
+		return passwordParameters{}, nil, nil, errors.New("invalid Argon2id salt")
+	}
+	key, err := base64.RawStdEncoding.Strict().DecodeString(parts[5])
+	if err != nil || len(key) < 16 || len(key) > 64 {
+		return passwordParameters{}, nil, nil, errors.New("invalid Argon2id key")
+	}
+	parameters.saltBytes = uint32(len(salt)) //nolint:gosec // G115: the salt is checked to 16..64 bytes above.
+	parameters.keyBytes = uint32(len(key))   //nolint:gosec // G115: the key is checked to 16..64 bytes above.
+	return parameters, salt, key, nil
+}
+
+func parseArgon2Parameters(value string) (passwordParameters, error) {
+	parts := strings.Split(value, ",")
+	if len(parts) != 3 {
+		return passwordParameters{}, errors.New("invalid Argon2id parameters")
+	}
+	memory, err := parseBoundedParameter(parts[0], "m=", 19*1024, 1024*1024)
+	if err != nil {
+		return passwordParameters{}, err
+	}
+	iterations, err := parseBoundedParameter(parts[1], "t=", 1, 20)
+	if err != nil {
+		return passwordParameters{}, err
+	}
+	parallelism, err := parseBoundedParameter(parts[2], "p=", 1, 64)
+	if err != nil {
+		return passwordParameters{}, err
+	}
+	return passwordParameters{
+		memoryKiB:   uint32(memory),     //nolint:gosec // G115: parseBoundedParameter caps m at 1048576.
+		iterations:  uint32(iterations), //nolint:gosec // G115: parseBoundedParameter caps t at 20.
+		parallelism: uint8(parallelism), //nolint:gosec // G115: parseBoundedParameter caps p at 64.
+	}, nil
+}
+
+func parseBoundedParameter(value, prefix string, minimum, maximum uint64) (uint64, error) {
+	if !strings.HasPrefix(value, prefix) {
+		return 0, errors.New("invalid Argon2id parameter")
+	}
+	parsed, err := strconv.ParseUint(strings.TrimPrefix(value, prefix), 10, 32)
+	if err != nil || parsed < minimum || parsed > maximum {
+		return 0, errors.New("Argon2id parameter outside safe bounds")
+	}
+	return parsed, nil
+}
+
+// PasswordPolicy is the immutable password-hashing projection composition
+// supplies so password code does not import deployment config.
+type PasswordPolicy struct {
+	MinimumLength               int
+	MaximumLength               int
+	ArgonMemoryKiB              int
+	ArgonIterations             int
+	ArgonParallelism            int
+	ArgonSaltBytes              int
+	ArgonKeyBytes               int
+	MaximumConcurrentOperations int
+	HistoryCount                int
+}
+
+// PasswordWorkRecorder observes bounded runtime password work. Implementations
+// must be concurrency-safe and return promptly; nil disables recording.
+type PasswordWorkRecorder interface {
+	Started()
+	Finished(time.Duration)
+	Rejected()
+}

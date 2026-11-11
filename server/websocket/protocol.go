@@ -91,6 +91,7 @@ func (e *Event) ValidateForPublish() error {
 	if e.UserID != "" && !model.UserID(e.UserID).IsValid() {
 		return errors.New("websocket event user ID is invalid")
 	}
+
 	if e.Action == "" && e.Resource == (Resource{}) {
 		if e.UserID == "" {
 			return errors.New("websocket event requires a user target or authorized resource")
@@ -101,12 +102,14 @@ func (e *Event) ValidateForPublish() error {
 			return errors.New("websocket event authorization target is invalid")
 		}
 	}
+
 	if len(e.Data) > MaxMessageBytes {
 		return fmt.Errorf("websocket event data exceeds %d bytes", MaxMessageBytes)
 	}
 	if len(e.Data) != 0 && !json.Valid(e.Data) {
 		return errors.New("websocket event data is not valid JSON")
 	}
+
 	return nil
 }
 
@@ -142,16 +145,21 @@ func (r *Request) Validate() error {
 	if r.Sequence <= 0 {
 		return errors.New("websocket request sequence must be greater than zero")
 	}
-	if len(r.Action) == 0 || len(r.Action) > MaxActionBytes ||
-		!utf8.ValidString(r.Action) || !validName(r.Action) {
+
+	if len(r.Action) == 0 ||
+		len(r.Action) > MaxActionBytes ||
+		!utf8.ValidString(r.Action) ||
+		!validName(r.Action) {
 		return errors.New("websocket request action is invalid")
 	}
+
 	if len(r.Data) > MaxMessageBytes {
 		return fmt.Errorf("websocket request data exceeds %d bytes", MaxMessageBytes)
 	}
 	if len(r.Data) != 0 && !json.Valid(r.Data) {
 		return errors.New("websocket request data is not valid JSON")
 	}
+
 	return nil
 }
 
@@ -186,9 +194,13 @@ func validName(value string) bool {
 		if (character < 'a' || character > 'z') &&
 			(character < 'A' || character > 'Z') &&
 			(character < '0' || character > '9') &&
-			character != '.' && character != '_' && character != '-' && character != ':' {
+			character != '.' &&
+			character != '_' &&
+			character != '-' &&
+			character != ':' {
 			return false
 		}
 	}
+
 	return true
 }

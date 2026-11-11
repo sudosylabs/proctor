@@ -29,8 +29,8 @@ func TestErrorCatalogAgreesWithServerSource(t *testing.T) {
 	command.SetArgs([]string{
 		"check",
 		"--module", module,
-		"--catalog", filepath.Join(module, "httpapi", "error_catalog.yaml"),
-		"--mapping", filepath.Join(module, "httpapi", "error_mapping.go"),
+		"--catalog", filepath.Join(module, "httpapi", "route", "error_catalog.yaml"),
+		"--mapping", filepath.Join(module, "httpapi", "route", "error_mapping.go"),
 	})
 	err := command.Execute()
 	require.NoError(t, err, "errors check: %v\n%s", err, output.String())

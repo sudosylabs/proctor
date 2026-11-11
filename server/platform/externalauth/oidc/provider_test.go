@@ -253,7 +253,7 @@ func TestProviderFreshProofRequiresAuthenticationTimeAfterBoundFlow(t *testing.T
 				}
 				encoded, _ := json.Marshal(claims)
 				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "opaque-token", "token_type": "Bearer", "id_token": oidctest.SignIDToken(key, "fresh-key", coreoidc.RS256, string(encoded))})
+				_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "opaque-token", "token_type": "Bearer", "id_token": oidctest.SignIDToken(key, "fresh-key", coreoidc.RS256, string(encoded))}) //nolint:gosec // G101: a fixture token response from a test server.
 			}))
 			defer server.Close()
 			issuer = server.URL

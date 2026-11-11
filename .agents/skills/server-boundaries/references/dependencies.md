@@ -2,89 +2,123 @@
 
 ## Dependency direction
 
-~~~text
-identityprovider ← {model, config}
-internal/canonicaljson ← model ← store ← app/job
-{model, store} ← app/apperror ← {app, app/idempotency, app/exam, httpapi, websocket}
-model ← app/invocation ← {app, app/idempotency, app/exam}
-{model, store, app/apperror, app/invocation} ← app/idempotency ← {app, app/exam}
-{model, store, app/job, app/mail, app/exam} ← app/jobhandler ← app
-model ← app/realtime ← {app, websocket}
-{model, store} ← app/exam ← app
-{model, store, secretseal, app/exam, localization} ← app/mail ← app
-localization ← {httpapi, websocket}
-internal/weborigin ← {httpapi, websocket}
-app/exam/safemarkdown ← {app/exam/attempt, app/exam/review}
-app/exam/manageraccess ← {app/exam, app/exam/resource, app/exam/workspace, app/exam/correction, app/exam/sitting}
-secretseal ← app
-{model, localization, app/mail} ← cmd/mailpreview
-{localization, app/mail, cmd/proctor/commands, httpapi, websocket} ← cmd/ptool
-{internal/openapidoc, internal/errorcatalog} ← cmd/ptool
-cmd/ptool/devseed ← cmd/ptool/commands
-logging ← platform
-{config, internal/tlscert, store/timerlayer, store/localcachelayer} ← metrics ← server
-config ← tracing ← server
-app ← httpapi
-webui ← server
-model ← filecontent
-packages/vfs ← filecontent
-app ← filecontent
-{app, httpapi, app/realtime, websocket, filecontent} ← server ← cmd/proctor/commands ← cmd/proctor
-{model, internal/canonicaljson} ← desktoprelease ← server
-internal/autocert ← server
-internal/tlscert ← {server, metrics}
-~~~
+Dependencies point inward: transports and infrastructure adapters depend on
+the application, the application on its area packages and shared leaves, and
+everything on the `model` and `store` contracts.
 
 Infrastructure adapters sit to the side and point inward at their contracts. The root `server` package imports the components needed to assemble the graph.
 
+`platform` never imports `metrics`: the measuring wrappers decorate the
+platform ports, so that edge points one way.
+
+`operator` holds the offline host commands that read or migrate an
+installation without starting it (`config validate` and `show`, `migrate`,
+`jobs`, `cluster status`). It opens the configuration and the database itself
+and builds no node, so it may not import the module root, the application, or
+a transport. A host command that needs the application (administrator recovery,
+administrator MFA reset) stays in the module root and goes through
+`server.New`; moving it would give the CLI a second composition path.
+
 The physical layout reflects that graph: `httpapi` sits beside `app` because it
-is an outer adapter depending inward on application capabilities. Packages
-inside `app/` are application-owned modules, not transports.
+is an outer adapter depending inward on application capabilities. Its child
+`httpapi/route` is the routing kernel the resources in `httpapi` are written
+against: it knows no API area, so it may not import the parent `app`, an area
+package, `store`, or `httpapi` itself. The module root names the kernel's
+ports and its `API` type directly when it composes the transport;
+`websocket`, `webui` and `cmd/ptool` do not import it. Packages inside `app/`
+are application-owned modules, not transports.
 
-| Package | Allowed production dependencies | Forbidden examples |
-| --- | --- | --- |
-| `identityprovider` | Standard library | Domain models, deployment configuration, application, persistence, transports |
-| `model` | Standard library, `identityprovider`, `internal/canonicaljson`, and narrowly justified domain libraries | `app`, HTTP, SQL, cluster, WebSocket, and any transport DTO or adapter-only persisted spelling |
-| `internal/canonicaljson` | Standard-library bounded JSON validation and encoding | Domain models, schema ownership, application, persistence, transports, infrastructure |
-| `config` | Standard library, `identityprovider`, and narrowly scoped IDNA hostname validation | Domain models, application, persistence, transports |
-| `store` | `model` | `sqlstore`, HTTP, application services |
-| `store/sqlstore` | `model`, `store`, `config`, `migrations`, `internal/canonicaljson`, SQL libraries | Application services, transports, runtime composition |
-| `app/job` | `model`, `store.JobStore`, standard library | parent `app`, concrete Jobs, transports, concrete adapters |
-| `app/apperror` | `store` error contracts, standard library | SQL, HTTP status, localization, transports, concrete adapters |
-| `app/invocation` | `model`, standard library | authorization or audit policy, `store`, parent `app`, Exam modules, transports, concrete adapters |
-| `app/idempotency` | `model`, `store`, `app/apperror`, `app/invocation`, standard library | business operation policy, parent `app`, Exam modules, transports, concrete adapters |
-| `app/jobhandler` | `model`, bounded `store` contracts, `app/job`, leaf `app/mail` and `app/exam` capabilities, `secretseal`, standard library | parent `app`, `store.Catalog`, transports, platform, concrete adapters |
-| `app/realtime` | `model`, standard library, consumer-owned ports | parent `app`, HTTP, WebSocket libraries, cluster adapters |
-| `app/exam` | `model`, bounded `store` contracts, standard library, consumer-owned ports, `app/apperror`, `app/invocation`, `app/idempotency`, and explicitly shared leaf packages such as `app/exam/safemarkdown` | parent `app`, transports, platform, concrete adapters |
-| `app/exam/safemarkdown` | Standard library | model, store, parent `app`, transports, concrete adapters |
-| `app/exam/manageraccess` | `model`, bounded Store access projection, narrow membership port, standard library | parent `app` or `app/exam`, sibling use cases, transports, concrete adapters |
-| `app/mail` | `model`, bounded `store` mail records, `secretseal`, `localization`, the Exam Manager preparation contract, standard-library templating, and consumer-owned sending ports | parent `app`, transports, platform, SQL, configuration, concrete adapters |
-| `secretseal` | Standard library cryptography and encoding | model, persistence, configuration, transports, concrete adapters |
-| `localization` | Standard library, caller-supplied catalog filesystems, and the CLDR-aware localization engine | application, domain, persistence, transports, concrete adapters |
-| `logging` | Standard library and the hidden logging engine/target implementation | application, domain, persistence, transports, global logger state |
-| `metrics` | `config`, `internal/tlscert`, narrow store recorder contracts, standard library, and Prometheus client libraries | application policy, platform service location, concrete infrastructure adapters, global Prometheus registry |
-| `tracing` | `config`, standard library, and OpenTelemetry API, SDK, and OTLP/HTTP exporter libraries | application policy, transports, store contracts, platform service location, a process-global tracer provider |
-| `app` | `model`, `store`, `app/apperror`, `app/invocation`, `app/idempotency`, `app/job`, `app/jobhandler`, `app/realtime`, `app/exam`, `app/mail`, consumer-owned ports | `platform`, `httpapi`, `sqlstore` |
-| `filecontent` | `model`, consumer-owned `app` content contracts, `app/exam` export archive types, `packages/vfs`, narrowly allowlisted content codecs | persistence, transports, platform service location, Jobs, configuration, concrete VFS backends |
-| `httpapi` | `app`, `app/apperror`, `app/invocation`, `app/job`, `app/realtime`, `app/exam` and its children, `store` result types, `model`, `localization`, `internal/weborigin`, HTTP libraries | Store contracts and functions, `sqlstore`, `platform` |
-| `webui` | Standard-library HTTP and filesystem contracts | Application, domain, persistence, configuration, concrete filesystems, third-party libraries |
-| `websocket` | the `httpapi` allowance with WebSocket libraries in place of HTTP libraries | Store contracts and functions, SQL and platform service location |
-| concrete adapters | Their inward contracts and implementation libraries | Application policy |
-| `desktoprelease` | `model`, `internal/canonicaljson`, standard-library signature and artifact validation | persistence, transports, application eligibility, process/filesystem selection |
-| `internal/weborigin` | Standard-library URL parsing | Domain models, application, persistence, transports, configuration |
-| `internal/autocert` | Standard library, `x/crypto/acme`, and `x/net/idna` | Product policy, application, persistence, transports, unrelated third-party libraries |
-| `internal/tlscert` | Standard library | Configuration, product policy, application, persistence, transports, third-party libraries |
-| `internal/openapidoc` | Caller-supplied filesystems, OpenAPI/YAML parsing and validation, standard-library encoding | Process filesystem selection, runtime policy, application, persistence, transports |
-| `internal/errorcatalog` | Caller-supplied catalog bytes and minted-code inventories, YAML parsing, standard-library rendering | Process filesystem and toolchain access, application, persistence, transports |
-| `server` | Construction dependencies | Business rules |
-| `cmd/proctor-healthcheck` | Standard-library HTTP readiness probing | Server packages, application state, configuration, persistence, and third-party libraries |
-| `cmd/proctor` | `cmd/proctor/commands` and standard-library process lifecycle | Server, application, persistence, and concrete infrastructure |
-| `cmd/proctor/commands` | Module-root `server`, `localization`, Cobra, `golang.org/x/sys/unix` for the systemd notification clock, and standard-library presentation concerns | Application packages, persistence, platform, and independent infrastructure construction |
-| `cmd/mailpreview` | `model`, `localization`, `app/mail`, standard library, and repository source assets | parent application, persistence, infrastructure adapters, mail delivery |
-| `cmd/ptool` | `localization` plus the consumer-owned localization definition registries in `app/mail`, `cmd/proctor/commands`, `httpapi`, and `websocket`; `internal/openapidoc` and `internal/errorcatalog` behind the local-filesystem build/check adapters, which also type-check production packages to inventory minted error codes | runtime composition and concrete infrastructure construction |
-| `cmd/ptool/devseed` | Standard-library HTTP, synthetic fixture construction, and private local journal I/O | Application packages, persistence, runtime composition, concrete server adapters |
+## Dependency rules
 
-Tests and `testlib` may cross production boundaries for verification. Ordered,
+`dependencyRules` in
+[`server/architecture/import_policy_test.go`](../../../../server/architecture/import_policy_test.go)
+is the one statement of which package may import which. The table below is
+generated from it: `TestDependencyReferenceMatchesRules` fails when they
+differ and prints the table to paste between the markers.
+
+Rules are listed in precedence order and the first rule whose packages match
+owns a production package; a package no rule matches fails closed. Paths are
+relative to the server module, `server` is its root, and `packages/...` are the
+reusable modules. An import a row does not allow is forbidden, and
+`TestDependencyAllowancesAreUsed` removes an allowance once nothing the rule
+owns imports it. The rule comments in `dependencyRules` say why an allowance
+exists.
+
+<!-- Generated from dependencyRules by TestDependencyReferenceMatchesRules. -->
+
+*Infrastructure* is `net/http`, `database/sql` and below, `net/smtp`, `os`, `io/fs`, `path/filepath`.
+
+| Rule | Packages | Server and repository imports | Third-party imports | Standard library denied |
+| --- | --- | --- | --- | --- |
+| reusable modules | `packages/cache` and below, `packages/mail` and below, `packages/vfs` and below | any except `server` and below | any | none |
+| composition root | `server` | any | any | none |
+| model build tools | `model/internal/idgen` and below | none | none | none |
+| route error-code analysis for tests | `internal/errorflow` | none | `golang.org/x/tools/go` and below | none |
+| static TLS key pair files | `internal/tlscert` | none | none | none |
+| ACME adapter | `internal/autocert` | none | `golang.org/x/crypto/acme`, `golang.org/x/net/idna` | none |
+| OpenAPI compiler | `internal/openapidoc` | none | `github.com/getkin/kin-openapi/openapi3`, `gopkg.in/yaml.v3` | infrastructure except `io/fs` |
+| error catalog compiler | `internal/errorcatalog` | none | `gopkg.in/yaml.v3` | infrastructure except `net/http` |
+| browser origin serialization | `internal/weborigin` | none | none | infrastructure |
+| canonical agreement JSON | `internal/canonicaljson` | none | none | infrastructure |
+| domain model | `model` | `internal/canonicaljson` | none | infrastructure |
+| store contracts | `store` | any except below `server`, but `model` | none | infrastructure |
+| SQL store adapter | `store/sqlstore` and below | `model`, `internal/canonicaljson`, `store`, `config`, `migrations` | any | none |
+| local cache store layer | `store/localcachelayer` and below | `model`, `store`, `packages/cache` | none | infrastructure |
+| generic store layers | `store/timerlayer` and below, `store/retrylayer` and below | `model`, `store` | none | infrastructure |
+| concrete jobs | `app/jobs` and below | `model`, `store`, `secretseal`, `app/invocation`, `app/job`, `app/mail`, `app/user`, `app/exam`, `app/exam/attempt`, `app/exam/sitting` | none | infrastructure |
+| job engine | `app/job` and below | `logging`, `model`, `store`, `app/access`, `app/apperror`, `app/invocation` | none | infrastructure |
+| realtime application | `app/realtime` and below | `logging`, `model`, `app/apperror` | none | infrastructure |
+| mail application | `app/mail` and below | `model`, `store`, `secretseal`, `app/exam`, `localization`, `app/access`, `app/apperror`, `app/invocation`, `app/paging` | `golang.org/x/net/html` | infrastructure except `io/fs` |
+| application error vocabulary | `app/apperror` | `model`, `store` | none | infrastructure |
+| invocation application | `app/invocation` | `model` | none | infrastructure |
+| idempotency application | `app/idempotency` | `app/apperror`, `app/invocation`, `model`, `store` | none | infrastructure |
+| exam manager access | `app/exam/manageraccess` | `model`, `store` | none | infrastructure |
+| exam Sitting application | `app/exam/sitting` | `app/access`, `app/apperror`, `app/idempotency`, `app/invocation`, `app/exam/manageraccess`, `app/mail`, `app/realtime`, `model`, `store` | none | infrastructure |
+| exam manager access consumers | `app/exam`, `app/exam/correction`, `app/exam/resource`, `app/exam/workspace` | `app/access`, `app/apperror`, `app/idempotency`, `app/invocation`, `app/exam/manageraccess`, `app/realtime`, `model`, `store` | none | infrastructure |
+| exam mail and safe Markdown consumers | `app/exam/attempt`, `app/exam/review` | `app/access`, `app/apperror`, `app/idempotency`, `app/invocation`, `app/mail`, `app/realtime`, `model`, `store`, `app/exam/safemarkdown` | none | infrastructure |
+| safe Markdown | `app/exam/safemarkdown` | none | none | infrastructure |
+| file-content adapter | `filecontent` and below | `app/exam`, `app/user`, `model`, `packages/vfs` | `github.com/HugoSmits86/nativewebp`, `github.com/disintegration/imaging`, below `github.com/pdfcpu/pdfcpu`, `golang.org/x/image/webp` | infrastructure except `os` |
+| Desktop release verification | `desktoprelease` | `model`, `internal/canonicaljson` | none | infrastructure |
+| secret sealing | `secretseal` | none | none | infrastructure |
+| localization | `localization` | none | `github.com/nicksnyder/go-i18n/v2/i18n` and below, `golang.org/x/text/language` | infrastructure except `io/fs` |
+| access application | `app/access` | `app/apperror`, `app/invocation`, `model`, `store` | none | infrastructure |
+| paging application | `app/paging` | `app/apperror`, `store` | none | infrastructure |
+| academic application | `app/academic` | `app/access`, `app/apperror`, `app/idempotency`, `app/internal/batchitem`, `app/invocation`, `app/mail`, `app/paging`, `app/realtime`, `model`, `store` | none | infrastructure |
+| user application | `app/user` | `app/access`, `app/apperror`, `app/idempotency`, `app/invocation`, `app/paging`, `app/realtime`, `model`, `store` | none | infrastructure |
+| identity application | `app/identity` | `logging`, `app/access`, `app/apperror`, `app/exam/attempt`, `app/idempotency`, `app/internal/batchitem`, `app/invocation`, `app/job`, `app/jobs`, `app/mail`, `app/paging`, `app/realtime`, `app/user`, `model`, `secretseal`, `store` | `golang.org/x/crypto/argon2` | infrastructure |
+| administration application | `app/administration` | `app/access`, `app/apperror`, `app/idempotency`, `app/identity`, `app/internal/batchitem`, `app/invocation`, `app/jobs`, `app/mail`, `app/paging`, `app/realtime`, `model`, `store` | none | infrastructure |
+| onboarding application | `app/onboarding` | `app/academic`, `app/access`, `app/administration`, `app/apperror`, `app/idempotency`, `app/identity`, `app/internal/batchitem`, `app/invocation`, `app/jobs`, `app/mail`, `app/paging`, `app/realtime`, `app/user`, `model`, `store` | none | infrastructure |
+| search application | `app/search` | `app/access`, `app/apperror`, `app/exam`, `app/invocation`, `app/paging`, `app/user`, `model`, `store` | none | infrastructure |
+| batch item context | `app/internal/batchitem` | `model`, `store` | none | infrastructure |
+| application | `app` | `logging`, `app/academic`, `app/access`, `app/administration`, `app/identity`, `app/onboarding`, `app/user`, `app/apperror`, `app/invocation`, `model`, `store`, `app/job`, `app/jobs`, `app/realtime`, `app/mail`, `app/search`, `secretseal`, `app/exam` and below | none | infrastructure |
+| hosted webapp transport | `webui` | none | none | none |
+| HTTP routing kernel | `httpapi/route` | `logging`, `app/apperror`, `app/invocation`, `app/paging`, `model`, `localization`, `internal/weborigin` | below `github.com/gorilla` | infrastructure except `net/http` |
+| HTTP resources | `httpapi` and below | `httpapi/route`, `logging`, `app`, `app/academic`, `app/administration`, `app/apperror`, `app/identity`, `app/invocation`, `app/job`, `app/mail`, `app/onboarding`, `app/paging`, `app/search`, `app/user`, `app/exam` and below, `model`, `store`, `localization` | none | infrastructure except `net/http` |
+| WebSocket transport | `websocket` and below | `logging`, `app/apperror`, `app/exam/attempt`, `app/invocation`, `app/realtime`, `model`, `store`, `localization`, `internal/weborigin` | below `github.com/gorilla` | infrastructure except `net/http` |
+| cluster contracts | `cluster` | none | none | none |
+| cluster adapters | `cluster/local` and below, `cluster/memberlist` and below | `cluster` | any | none |
+| metrics | `metrics` | `config`, `internal/tlscert`, `store/timerlayer`, `store/localcachelayer`, `platform`, `cluster`, `packages/vfs`, `packages/mail` | `github.com/prometheus/client_golang` and below | none |
+| tracing | `tracing` | `config` | `go.opentelemetry.io/otel` and below | none |
+| external-auth adapters | `platform/externalauth` and below | `config`, `model`, `platform/externalauth` | any | none |
+| platform lifecycle | `platform` | any except below `packages/cache`, below `packages/mail`, below `packages/vfs`, below `cluster`, below `platform/externalauth`, `store/sqlstore`, `metrics`, `app` and below, `httpapi` and below, `websocket` and below | none | none |
+| healthcheck executable | `cmd/proctor-healthcheck` | none | none | none |
+| offline operator commands | `operator` | `config`, `model`, `store`, `store/sqlstore` | none | infrastructure |
+| operator executable | `cmd/proctor` | `cmd/proctor/commands` | none | none |
+| operator commands | `cmd/proctor/commands` and below | `server`, `localization`, `operator` | `github.com/spf13/cobra`, `golang.org/x/sys/unix` | `database/sql` and below, `net/smtp` |
+| ptool executable | `cmd/ptool` | `cmd/ptool/commands` | none | none |
+| ptool commands | `cmd/ptool/commands` and below | `cmd/ptool/devseed`, `app/mail`, `cmd/proctor/commands`, `httpapi`, `internal/errorcatalog`, `internal/openapidoc`, `localization`, `websocket` | `github.com/spf13/cobra` | none |
+| development seed HTTP client | `cmd/ptool/devseed` | none | none | none |
+| unknown ptool children | below `cmd/ptool` | none | none | all |
+| mail preview executable | `cmd/mailpreview` | `app/mail`, `localization`, `model` | none | none |
+| configuration | `config` | `model` | any | none |
+| leaf infrastructure | `logging`, `migrations` | none | any | none |
+
+<!-- End of generated dependency rules. -->
+
+Tests and `testlib` may cross production boundaries for verification; the
+test-support packages `store/storetest`, `config/configtest`,
+`app/realtime/realtimetest` and `httpapi/route/routetest` are imported only
+by tests. Ordered,
 declarative package rules enforce the production allowlist with no debt or
 waiver mechanism.
 
@@ -113,18 +147,16 @@ depends only on `model`. Transports import it directly to build an
 Every type and constant has one name. Transports name a use case's command,
 query, and result types in the package that declares them (`attempt.ConnectCommand`,
 `exam.View`, `job.Page`, `store.ExamSummary`); no application package
-re-exports another package's type or constant under a second name. The only
-aliases are the parent's embedded-field names for Exam services, which share
-the type name `Service`. A transport may name `store` result types, but never
+re-exports another package's type or constant under a second name. A transport may name `store` result types, but never
 a Store contract, function, or variable, so persistence stays out of reach
-(`TestApplicationDeclaresNoForwardingNames`,
-`TestTransportsNameOnlyStoreResultTypes`).
+(`TestTransportsNameOnlyStoreResultTypes`). Review rejects a re-exported name.
 
 Each package is imported under the name it declares (`job`, not
 `jobengine`). An import alias exists only where the same file imports two
-packages that declare one name, such as `packages/mail` beside `app/mail`;
-a local variable that would shadow a package name is renamed instead
-(`TestInternalImportsUseTheirPackageName`).
+packages that declare one name, such as `packages/mail` beside `app/mail`,
+and each such package has one alias, listed under `importas` in
+`.golangci.yml` (`mailpkg`, `appmail`). A local variable that would shadow a
+package name is renamed instead.
 
 The shared Exam Manager eligibility leaf is consumed only by `app/exam`,
 `app/exam/resource`, `app/exam/workspace`, `app/exam/correction`, and
@@ -155,9 +187,9 @@ product meaning and policy:
   The `app/mail` child module concentrates server-owned composition,
   the complete definition registry, semantic preparation operations,
   suppression, shared payload freezing/encryption, stable routing metadata,
-  closed typed rendering, and family-specific meaning. Parent use cases
-  consume narrow preparation ports using the child package's contracts
-  directly and persist the result through named aggregate transactions. Mail
+  closed typed rendering, and family-specific meaning. The area that sends a
+  mail prepares it with the child package's contracts and persists the result
+  through a named aggregate transaction. Mail
   is not sent synchronously inside a durable business transaction.
 - `secretseal` owns versioned AES-256-GCM envelopes, bounded key rings,
   authenticated purpose/owner binding, and safe cryptographic failures for

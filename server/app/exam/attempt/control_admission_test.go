@@ -25,21 +25,21 @@ func TestControlAllowanceSeparatesRenewalAndRecoveryAndSharesSessions(t *testing
 	f := newFixture(t)
 	ctx := context.Background()
 	for range 40 {
-		release, err := f.service.enterControl(ctx, f.invocation, false)
+		release, err := f.service.enterControl(ctx, f.inv, false)
 		require.NoError(t, err)
 		release()
 	}
-	otherPrincipal := f.invocation.Principal()
+	otherPrincipal := f.inv.Principal()
 	otherPrincipal.SessionID = model.NewSessionID()
-	other := invocation.New(otherPrincipal, f.invocation.RequestMetadata())
+	other := invocation.New(otherPrincipal, f.inv.RequestMetadata())
 	_, err := f.service.enterControl(ctx, other, false)
 	require.Error(t, err, "Session replacement refilled control allowance")
 	release, err := f.service.enterControl(ctx, other, true)
 	require.NoError(t, err, "status load consumed renewal allowance")
 	release()
 	// A public status operation rejects before its Store can observe selectors.
-	p := &recoveryStoreFake{ExamAttemptStore: f.persistence}
-	f.service.deps.Persistence = p
+	p := &recoveryStoreFake{BrowserDeliveryStore: f.persistence, DeliveryBudgetStore: f.persistence}
+	f.service.browserDelivery, f.service.deliveryBudget = p, p
 	_, err = f.service.BrowserDeliveryReceipts(ctx, other, BrowserSourceQuery{Access: CandidateAccess{AttemptID: f.attemptID}, ParticipationID: model.NewAttemptParticipationID(), SourceSessionID: "00000000-0000-4000-8000-000000000001"}, 1, 32)
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault, "control overload reached persistence or lost its code")
@@ -99,8 +99,8 @@ func TestControlWorkerAndIdentityStorageBounds(t *testing.T) {
 		release()
 	}
 	for len(allowance.users) < controlUsers {
-		release, err := allowance.enter(context.Background(), model.NewUserID(), at)
-		require.NoError(t, err)
+		release, enterErr := allowance.enter(context.Background(), model.NewUserID(), at)
+		require.NoError(t, enterErr)
 		release()
 	}
 	release, err := allowance.enter(context.Background(), model.NewUserID(), at)
@@ -249,14 +249,14 @@ func TestLiveControlRejectsInvalidRenewalsBeforeAdmission(t *testing.T) {
 	// More malformed requests than any burst: none may take a worker, a queue
 	// place, or the caller's allowance.
 	for range 2 * deliveryControlLane.burst {
-		_, err := f.service.RenewExamAttemptParticipation(context.Background(), f.invocation, RenewParticipationCommand{
+		_, err := f.service.RenewExamAttemptParticipation(context.Background(), f.inv, RenewParticipationCommand{
 			AttemptID: f.attemptID, ParticipationID: participationID, ConnectionID: f.connectionID,
 			Generation: 0, Sequence: 1, ContinuityCredential: model.NewCredentialToken(),
 		})
 		var fault *apperror.Error
 		require.ErrorAs(t, err, &fault)
 		require.Equal(t, "exam.attempt.invalid", fault.Code())
-		_, err = f.service.UpdateExamSecurityCoverage(context.Background(), f.invocation, UpdateSecurityCoverageCommand{
+		_, err = f.service.UpdateExamSecurityCoverage(context.Background(), f.inv, UpdateSecurityCoverageCommand{
 			Access: CandidateAccess{AttemptID: f.attemptID}, ParticipationID: participationID, Generation: 0})
 		require.Error(t, err)
 		require.NotEqual(t, "exam.delivery.control_rate_limited", apperror.CodeOf(err, ""))
@@ -265,10 +265,10 @@ func TestLiveControlRejectsInvalidRenewalsBeforeAdmission(t *testing.T) {
 	require.Empty(t, f.service.liveControls.slots, "rejected requests held a worker")
 	f.persistence.renewResult = &store.ExamAttemptParticipationRenewalResult{SecurityCoverage: renewalCoverageResultFixture(),
 		AttemptID: f.attemptID, ExamID: f.sitting.ExamID, SittingID: f.sitting.ID,
-		CandidateUserID: f.invocation.Principal().UserID, ParticipationID: participationID, Generation: 3, AcceptedSequence: 7,
+		CandidateUserID: f.inv.Principal().UserID, ParticipationID: participationID, Generation: 3, AcceptedSequence: 7,
 		DatabaseTime: f.at, LeaseExpiresAt: f.at.Add(model.AttemptParticipationInitialLease),
 	}
-	_, err := f.service.RenewExamAttemptParticipation(context.Background(), f.invocation, RenewParticipationCommand{
+	_, err := f.service.RenewExamAttemptParticipation(context.Background(), f.inv, RenewParticipationCommand{
 		SecurityCoverage: renewalCoverageFixture(), AttemptID: f.attemptID, ParticipationID: participationID,
 		ConnectionID: f.connectionID, Generation: 3, Sequence: 7, ContinuityCredential: model.NewCredentialToken(),
 	})

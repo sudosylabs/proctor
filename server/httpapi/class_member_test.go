@@ -18,34 +18,34 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type classMemberHTTPApplication struct {
-	pageQuery     app.ListClassMembersPageQuery
-	pageResult    *app.ClassMemberPage
+	pageQuery     academic.ListClassMembersPageQuery
+	pageResult    *academic.ClassMemberPage
 	result        *model.ClassEnrollment
 	ended         *model.ClassMember
-	values        []*model.ClassMember
-	enrollCommand app.EnrollClassMemberCommand
-	endCommand    app.EndClassMemberCommand
+	enrollCommand academic.EnrollClassMemberCommand
+	endCommand    academic.EndClassMemberCommand
 }
 
-func (a *classMemberHTTPApplication) EnrollClassMember(_ context.Context, _ invocation.Invocation, command app.EnrollClassMemberCommand) (*model.ClassEnrollment, error) {
+func (a *classMemberHTTPApplication) EnrollClassMember(_ context.Context, _ invocation.Invocation, command academic.EnrollClassMemberCommand) (*model.ClassEnrollment, error) {
 	a.enrollCommand = command
 	return a.result, nil
 }
 
-func (a *classMemberHTTPApplication) EndClassMember(_ context.Context, _ invocation.Invocation, command app.EndClassMemberCommand) (*model.ClassMember, error) {
+func (a *classMemberHTTPApplication) EndClassMember(_ context.Context, _ invocation.Invocation, command academic.EndClassMemberCommand) (*model.ClassMember, error) {
 	a.endCommand = command
 	return a.ended, nil
 }
 
 func TestClassMemberHTTPUsesDTOAndRouteOwnedClass(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
 	classID, userID := model.NewID(), model.NewID()
 	member := &model.ClassMember{
@@ -54,7 +54,7 @@ func TestClassMemberHTTPUsesDTOAndRouteOwnedClass(t *testing.T) {
 		UserID: model.UserID(userID), StartsAt: model.TimeFromMillis(100),
 	}
 	classMembers := &classMemberHTTPApplication{result: &model.ClassEnrollment{Membership: member}}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, classMemberResource(classMembers))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, classMemberResource(classMembers))
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/classes/"+classID+"/members", strings.NewReader(`{"user_id":"`+userID+`","start_at":"1970-01-01T00:00:00.1Z"}`))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
@@ -72,14 +72,14 @@ func TestClassMemberHTTPUsesDTOAndRouteOwnedClass(t *testing.T) {
 
 func TestClassMemberResourceForwardsHistoryAndEndsMembership(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
 	classID := model.NewID()
 	member := &model.ClassMember{ID: model.NewClassMemberID(), ClassID: model.ClassID(classID), AcademicPeriodID: model.NewAcademicPeriodID(), UserID: model.NewUserID(), CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100), StartsAt: model.TimeFromMillis(100)}
 	members := &classMemberHTTPApplication{ended: member}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, classMemberResource(members))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, classMemberResource(members))
 
-	list := httptest.NewRequest(http.MethodGet, "/api/v1/classes/"+classID+"/members?history=true", nil)
+	list := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/classes/"+classID+"/members?history=true", nil)
 	list.Header.Set("Authorization", "Bearer credential")
 	listed := httptest.NewRecorder()
 	httpAPI.ServeHTTP(listed, list)
@@ -89,7 +89,7 @@ func TestClassMemberResourceForwardsHistoryAndEndsMembership(t *testing.T) {
 	require.True(t, *members.pageQuery.History, "history listing")
 	require.JSONEq(t, `{"items":[]}`, listed.Body.String(), "empty collection envelope")
 
-	end := httptest.NewRequest(http.MethodDelete, "/api/v1/class-members/"+member.ID.String(), nil)
+	end := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/api/v1/class-members/"+member.ID.String(), nil)
 	end.Header.Set("Authorization", "Bearer credential")
 	ended := httptest.NewRecorder()
 	httpAPI.ServeHTTP(ended, end)
@@ -100,19 +100,19 @@ func TestClassMemberResourceForwardsHistoryAndEndsMembership(t *testing.T) {
 
 func TestClassMemberHistoryQueryIsForwarded(t *testing.T) {
 	t.Parallel()
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/classes/class/members?history=true", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/classes/class/members?history=true", nil)
 	query, _, err := membershipPageQuery(request, model.Resource{Type: model.ResourceClass, ID: model.NewID()})
 	require.NoError(t, err)
 	require.NotNil(t, query.History)
 	require.True(t, *query.History, "history")
 }
 
-func (a *classMemberHTTPApplication) ListClassMembersPage(_ context.Context, _ invocation.Invocation, query app.ListClassMembersPageQuery) (*app.ClassMemberPage, error) {
+func (a *classMemberHTTPApplication) ListClassMembersPage(_ context.Context, _ invocation.Invocation, query academic.ListClassMembersPageQuery) (*academic.ClassMemberPage, error) {
 	a.pageQuery = query
 	if a.pageResult != nil {
 		return a.pageResult, nil
 	}
-	return &app.ClassMemberPage{}, nil
+	return &academic.ClassMemberPage{}, nil
 }
 
 func TestClassMemberOpenAPIDocument(t *testing.T) {

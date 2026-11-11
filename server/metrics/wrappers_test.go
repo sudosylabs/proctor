@@ -1,0 +1,75 @@
+// ---------------------------------------------------------------------------------------------
+// Copyright (c) 2026 Sudosy Labs. All rights reserved.
+// Licensed under the GNU Affero General Public License, version 3 only.
+// See LICENSE in the server module root for license information.
+// SPDX-License-Identifier: AGPL-3.0-only
+// ---------------------------------------------------------------------------------------------
+
+package metrics
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"io"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/sudosylabs/proctor/packages/mail"
+	"github.com/sudosylabs/proctor/packages/vfs"
+	"github.com/sudosylabs/proctor/server/cluster"
+	"github.com/sudosylabs/proctor/server/platform"
+)
+
+func TestMetricAdapterOutcomesStayBounded(t *testing.T) {
+	t.Parallel()
+
+	cacheCases := []struct {
+		err  error
+		want string
+	}{{nil, "success"}, {platform.ErrCacheMiss, "miss"}, {platform.ErrCacheNotStored, "not_stored"}, {context.DeadlineExceeded, "timeout"}, {errors.New("private"), "error"}}
+	for _, test := range cacheCases {
+		t.Run(test.want, func(t *testing.T) {
+			require.Equal(t, test.want, cacheOutcome(test.err), "cacheOutcome(%v)", test.err)
+		})
+	}
+	vfsCases := []struct {
+		err  error
+		want string
+	}{{nil, "success"}, {vfs.ErrNotFound, "not_found"}, {vfs.ErrConflict, "conflict"}, {vfs.ErrUnsupported, "unsupported"}, {errors.New("private"), "error"}}
+	for _, test := range vfsCases {
+		t.Run(test.want, func(t *testing.T) {
+			require.Equal(t, test.want, vfsOutcome(test.err), "vfsOutcome(%v)", test.err)
+		})
+	}
+	require.Equal(t, "acceptance_uncertain", smtpOutcome(mail.WithOutcome(mail.OutcomeAcceptanceUncertain, errors.New("private"))))
+}
+
+func TestMeasuredClusterLabelsOnlyRegisteredEvents(t *testing.T) {
+	t.Parallel()
+
+	recorder := &measuredCluster{events: map[cluster.Event]struct{}{"registered.event": {}}}
+	require.Equal(t, "registered.event", recorder.metricEvent("registered.event"))
+	require.Equal(t, "unregistered", recorder.metricEvent("peer.supplied"))
+	require.Equal(t, "none", recorder.metricEvent(""))
+}
+
+func TestMeasuredReadCloserCountsBytesAndCompletesOnce(t *testing.T) {
+	t.Parallel()
+
+	var bytesRead int
+	var outcomes []string
+	reader := newMeasuredReadCloser(io.NopCloser(bytes.NewBufferString("payload")), func(count int) {
+		bytesRead += count
+	}, func(outcome string) {
+		outcomes = append(outcomes, outcome)
+	})
+	data, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	require.NoError(t, reader.Close())
+	require.Equal(t, "payload", string(data), "data")
+	require.Len(t, "payload", bytesRead, "data")
+	require.Len(t, outcomes, 1)
+	require.Equal(t, "complete", outcomes[0])
+}

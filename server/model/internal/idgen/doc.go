@@ -5,7 +5,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package main generates the mechanical behavior of model entity identifiers.
-// It owns only the explicit generation catalog and deterministic rendering;
-// domain type declarations and shared behavior remain in package model.
+// Package main is the generator behind model/id_gen.go. For each ID type listed
+// in catalog.go it writes the repetitive functions: the constructor, the
+// parser, the validity checks, and text and JSON conversion. The ID types
+// themselves are declared by hand in model/id.go. Run it with
+// make -C server generate.
 package main

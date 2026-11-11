@@ -27,20 +27,21 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/resource"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
 func TestExamResourceHTTPUploadUsesStrictMetadataFirstStreamingContract(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	fake := newExamResourceHTTPFake(principal)
-	api := newFocusedResourceAPI(t, logger, fake, examResourceHTTPResource(fake))
+	api := newFocusedResourceAPI(t, logger, fake, examResourceResource(fake))
 	raw := []byte("# Notes")
 	checksum := fmt.Sprintf("%x", sha256.Sum256(raw))
 	body, contentType := examResourceMultipart(t, `{"expected_revision":1,"display_name":"Reference","description_markdown":"Read **this**.","media_type":"text/markdown","size":7,"sha256":"`+checksum+`"}`, raw, false)
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/exams/"+fake.examID.String()+"/draft/resources", body)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams/"+fake.examID.String()+"/draft/resources", body)
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", contentType)
 	request.Header.Set("Idempotency-Key", "resource-once")
@@ -59,14 +60,14 @@ func TestExamResourceHTTPUploadUsesStrictMetadataFirstStreamingContract(t *testi
 
 func TestExamResourceHTTPRejectsTrailingMultipartPartBeforeApplicationCommit(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	fake := newExamResourceHTTPFake(principal)
-	api := newFocusedResourceAPI(t, logger, fake, examResourceHTTPResource(fake))
+	api := newFocusedResourceAPI(t, logger, fake, examResourceResource(fake))
 	raw := []byte("notes")
 	checksum := fmt.Sprintf("%x", sha256.Sum256(raw))
 	body, contentType := examResourceMultipart(t, `{"expected_revision":1,"display_name":"Reference","description_markdown":"","media_type":"text/plain","size":5,"sha256":"`+checksum+`"}`, raw, true)
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/exams/"+fake.examID.String()+"/draft/resources", body)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams/"+fake.examID.String()+"/draft/resources", body)
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", contentType)
 	request.Header.Set("Idempotency-Key", "resource-once")
@@ -88,12 +89,12 @@ func TestExamResourceHTTPRejectsDuplicateOrMissingMultipartMetadata(t *testing.T
 		{name: "missing size", metadata: `{"expected_revision":1,"display_name":"Reference","media_type":"text/plain","sha256":"` + checksum + `"}`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			logger, _ := newTestLogger(t)
+			logger, _ := routetest.NewLogger(t)
 			principal := testExamHTTPPrincipal()
 			fake := newExamResourceHTTPFake(principal)
-			api := newFocusedResourceAPI(t, logger, fake, examResourceHTTPResource(fake))
+			api := newFocusedResourceAPI(t, logger, fake, examResourceResource(fake))
 			body, contentType := examResourceMultipart(t, test.metadata, []byte("notes"), false)
-			request := httptest.NewRequest(http.MethodPost, "/api/v1/exams/"+fake.examID.String()+"/draft/resources", body)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams/"+fake.examID.String()+"/draft/resources", body)
 			request.Header.Set("Authorization", "Bearer credential")
 			request.Header.Set("Content-Type", contentType)
 			request.Header.Set("Idempotency-Key", "resource-once")
@@ -107,13 +108,13 @@ func TestExamResourceHTTPRejectsDuplicateOrMissingMultipartMetadata(t *testing.T
 
 func TestExamResourceHTTPAcceptsExplicitZeroSizeText(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	fake := newExamResourceHTTPFake(principal)
-	api := newFocusedResourceAPI(t, logger, fake, examResourceHTTPResource(fake))
+	api := newFocusedResourceAPI(t, logger, fake, examResourceResource(fake))
 	checksum := fmt.Sprintf("%x", sha256.Sum256(nil))
 	body, contentType := examResourceMultipart(t, `{"expected_revision":1,"display_name":"Empty notes","media_type":"text/plain","size":0,"sha256":"`+checksum+`"}`, nil, false)
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/exams/"+fake.examID.String()+"/draft/resources", body)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/exams/"+fake.examID.String()+"/draft/resources", body)
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", contentType)
 	request.Header.Set("Idempotency-Key", "resource-empty")
@@ -127,10 +128,10 @@ func TestExamResourceHTTPAcceptsExplicitZeroSizeText(t *testing.T) {
 
 func TestExamResourceHTTPMetadataPatchIsPresenceAware(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	fake := newExamResourceHTTPFake(principal)
-	api := newFocusedResourceAPI(t, logger, fake, examResourceHTTPResource(fake))
+	api := newFocusedResourceAPI(t, logger, fake, examResourceResource(fake))
 	path := "/api/v1/exams/" + fake.examID.String() + "/draft/resources/" + fake.record.Resource.ID.String()
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodPatch, path, strings.NewReader(`{"expected_revision":1,"description_markdown":""}`))
 	request.Header.Set("Authorization", "Bearer credential")
@@ -153,10 +154,10 @@ func TestExamResourceHTTPMetadataPatchIsPresenceAware(t *testing.T) {
 
 func TestExamResourceHTTPRemoveReturnsNoContent(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	fake := newExamResourceHTTPFake(principal)
-	api := newFocusedResourceAPI(t, logger, fake, examResourceHTTPResource(fake))
+	api := newFocusedResourceAPI(t, logger, fake, examResourceResource(fake))
 	path := "/api/v1/exams/" + fake.examID.String() + "/draft/resources/" + fake.record.Resource.ID.String()
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, path, strings.NewReader(`{"expected_revision":1}`))
 	request.Header.Set("Authorization", "Bearer credential")
@@ -171,12 +172,12 @@ func TestExamResourceHTTPRemoveReturnsNoContent(t *testing.T) {
 
 func TestExamResourceHTTPProtectedContentIsInlinePrivateAndConditional(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := testExamHTTPPrincipal()
 	fake := newExamResourceHTTPFake(principal)
-	api := newFocusedResourceAPI(t, logger, fake, examResourceHTTPResource(fake))
+	api := newFocusedResourceAPI(t, logger, fake, examResourceResource(fake))
 	path := "/api/v1/exams/" + fake.examID.String() + "/draft/resources/" + fake.record.Resource.ID.String() + "/content"
-	request := httptest.NewRequest(http.MethodGet, path, nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	api.ServeHTTP(response, request)
@@ -189,7 +190,7 @@ func TestExamResourceHTTPProtectedContentIsInlinePrivateAndConditional(t *testin
 	require.NotEmpty(t, response.Header().Get("Content-Security-Policy"), "response=%d headers=%v body", response.Code, response.Header())
 	require.Len(t, response.Header().Values("X-Content-Type-Options"), 1, "response=%d headers=%v body", response.Code, response.Header())
 	require.Equal(t, "nosniff", response.Header().Get("X-Content-Type-Options"), "response=%d headers=%v body", response.Code, response.Header())
-	conditional := httptest.NewRequest(http.MethodGet, path, nil)
+	conditional := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 	conditional.Header.Set("Authorization", "Bearer credential")
 	conditional.Header.Set("If-None-Match", etag)
 	notModified := httptest.NewRecorder()
@@ -214,9 +215,9 @@ func newExamResourceHTTPFake(principal model.Principal) *examResourceHTTPFake {
 	examID := model.NewExamID()
 	revisionID := model.NewFileRevisionID()
 	at := time.Now().UTC()
-	resource, _ := model.NewExamResource(model.NewExamResourceID(), examID, model.NewFileEntryID(), revisionID, "Reference", "", 0, at)
+	examResource, _ := model.NewExamResource(model.NewExamResourceID(), examID, model.NewFileEntryID(), revisionID, "Reference", "", 0, at)
 	rendition, _ := model.NewFileRendition(model.NewFileRenditionID(), revisionID, "original", "text/plain", 9, 0, 0, strings.Repeat("a", 64), at)
-	return &examResourceHTTPFake{principal: principal, examID: examID, record: store.ExamResourceRecord{Resource: resource, Rendition: rendition, DraftRevision: 2}}
+	return &examResourceHTTPFake{principal: principal, examID: examID, record: store.ExamResourceRecord{Resource: examResource, Rendition: rendition, DraftRevision: 2}}
 }
 func (f *examResourceHTTPFake) AuthenticateAccess(context.Context, string) (*model.Principal, error) {
 	p := f.principal
@@ -249,10 +250,10 @@ func (f *examResourceHTTPFake) RemoveExamResource(context.Context, invocation.In
 	f.removed = true
 	return f.record, nil
 }
-func (f *examResourceHTTPFake) ListExamResources(context.Context, invocation.Invocation, resource.ListQuery) ([]store.ExamResourceRecord, error) {
+func (f *examResourceHTTPFake) ListExamResources(context.Context, invocation.Invocation, model.ExamID) ([]store.ExamResourceRecord, error) {
 	return []store.ExamResourceRecord{f.record}, nil
 }
-func (f *examResourceHTTPFake) OpenExamResource(context.Context, invocation.Invocation, resource.OpenQuery) (resource.Opened, error) {
+func (f *examResourceHTTPFake) OpenExamResource(context.Context, invocation.Invocation, model.ExamID, model.ExamResourceID) (resource.Opened, error) {
 	opened := resource.Opened{Record: f.record, Body: io.NopCloser(strings.NewReader("protected"))}
 	return opened, nil
 }

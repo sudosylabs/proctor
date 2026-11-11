@@ -18,45 +18,47 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type retentionHTTPFake struct {
 	RetentionApplication
-	control    app.ChangeRetentionControlCommand
-	preview    app.CreateRetentionPreviewCommand
-	noticePage *app.RetentionNoticePage
-	recordPage *app.RetentionRecordPage
+	control    administration.ChangeRetentionControlCommand
+	preview    administration.CreateRetentionPreviewCommand
+	noticePage *administration.RetentionNoticePage
+	recordPage *administration.RetentionRecordPage
 	after      model.RetentionRetirementID
 	calls      int
 }
 
-func (f *retentionHTTPFake) ChangeRetentionControl(_ context.Context, _ invocation.Invocation, c app.ChangeRetentionControlCommand) (*model.RetentionControl, error) {
+func (f *retentionHTTPFake) ChangeRetentionControl(_ context.Context, _ invocation.Invocation, c administration.ChangeRetentionControlCommand) (*model.RetentionControl, error) {
 	f.calls++
 	f.control = c
 	return &model.RetentionControl{Revision: 2, State: c.State, ApprovedPolicyRevision: c.ExpectedPolicyRevision, ApprovedPreviewID: c.PreviewID, UpdatedAt: model.NowUTC()}, nil
 }
-func (f *retentionHTTPFake) CreateRetentionPreview(_ context.Context, _ invocation.Invocation, c app.CreateRetentionPreviewCommand) (*model.RetentionPreview, error) {
+func (f *retentionHTTPFake) CreateRetentionPreview(_ context.Context, _ invocation.Invocation, c administration.CreateRetentionPreviewCommand) (*model.RetentionPreview, error) {
 	f.calls++
 	f.preview = c
 	return &model.RetentionPreview{ID: model.NewRetentionPreviewID(), PolicyRevision: c.ExpectedPolicyRevision, CreatedAt: model.NowUTC(), ExpiresAt: model.NowUTC().Add(time.Hour)}, nil
 }
-func (f *retentionHTTPFake) ListRetentionNotices(_ context.Context, _ invocation.Invocation, after model.RetentionRetirementID, _ int) (*app.RetentionNoticePage, error) {
+func (f *retentionHTTPFake) ListRetentionNotices(_ context.Context, _ invocation.Invocation, after model.RetentionRetirementID, _ int) (*administration.RetentionNoticePage, error) {
 	f.calls++
 	f.after = after
 	return f.noticePage, nil
 }
-func (f *retentionHTTPFake) ListRetentionRecords(context.Context, invocation.Invocation, model.SubmissionID, int) (*app.RetentionRecordPage, error) {
+func (f *retentionHTTPFake) ListRetentionRecords(context.Context, invocation.Invocation, model.SubmissionID, int) (*administration.RetentionRecordPage, error) {
 	f.calls++
 	return f.recordPage, nil
 }
 func retentionHTTPPrincipal() model.Principal {
 	return model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor, AuthenticatedAt: model.NowUTC(), MFACompletedAt: model.OptionalTimeFrom(model.NowUTC()), ClientType: model.SessionClientWeb}
 }
-func serveRetentionHTTP(api http.Handler, method, path, body, key string) *httptest.ResponseRecorder {
-	request := httptest.NewRequest(method, path, strings.NewReader(body))
+func serveRetentionHTTP(t *testing.T, api http.Handler, method, path, body, key string) *httptest.ResponseRecorder {
+	request := httptest.NewRequestWithContext(t.Context(), method, path, strings.NewReader(body))
 	request.Header.Set("Authorization", "Bearer session")
 	request.Header.Set("Content-Type", "application/json")
 	if key != "" {
@@ -68,7 +70,7 @@ func serveRetentionHTTP(api http.Handler, method, path, body, key string) *httpt
 }
 func TestRetentionHTTPControlRequiresInteractiveRecentProofAndIdempotency(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := retentionHTTPPrincipal()
 	previewID := model.NewRetentionPreviewID()
 	body := `{"expected_revision":1,"expected_policy_revision":3,"state":"enabled","preview_id":"` + previewID.String() + `"}`
@@ -94,8 +96,8 @@ func TestRetentionHTTPControlRequiresInteractiveRecentProofAndIdempotency(t *tes
 			p := principal
 			test.alter(&p)
 			application := &retentionHTTPFake{}
-			api := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: p}, retentionResource(application))
-			r := serveRetentionHTTP(api, "PUT", "/api/v1/retention/control", body, test.key)
+			api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: p}, retentionResource(application))
+			r := serveRetentionHTTP(t, api, "PUT", "/api/v1/retention/control", body, test.key)
 			require.Equal(t, test.want, r.Code, "status=%d body=%s", r.Code, r.Body.String())
 			if test.want != 200 {
 				require.Equal(t, 0, application.calls, "blocked control reached application")
@@ -111,28 +113,28 @@ func TestRetentionHTTPControlRequiresInteractiveRecentProofAndIdempotency(t *tes
 }
 func TestRetentionHTTPRejectsUnknownFieldsAndCrossPurposeCursors(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	application := &retentionHTTPFake{}
-	api := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: retentionHTTPPrincipal()}, retentionResource(application))
-	r := serveRetentionHTTP(api, "POST", "/api/v1/retention/previews", `{"expected_revision":1,"delete_now":true}`, "preview")
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: retentionHTTPPrincipal()}, retentionResource(application))
+	r := serveRetentionHTTP(t, api, "POST", "/api/v1/retention/previews", `{"expected_revision":1,"delete_now":true}`, "preview")
 	require.Equal(t, 400, r.Code, "unknown destructive parameter reached application")
 	require.Equal(t, 0, application.calls, "unknown destructive parameter reached application")
-	cursor, err := encodeOpaqueCursor(retentionCursor{After: model.NewSubmissionID().String()}, retentionCursorSpec())
+	cursor, err := route.EncodeCursor(retentionCursor{After: model.NewSubmissionID().String()}, retentionCursorSpec())
 	require.NoError(t, err)
 	for _, query := range []string{"?cursor=" + cursor, "?limit=1&limit=2", "?user_id=" + model.NewUserID().String(), "?limit=201"} {
-		r = serveRetentionHTTP(api, "GET", "/api/v1/users/me/retention-notices"+query, "", "")
+		r = serveRetentionHTTP(t, api, "GET", "/api/v1/users/me/retention-notices"+query, "", "")
 		require.Equal(t, 400, r.Code, "bad query admitted: %s", query)
 		require.Equal(t, 0, application.calls, "bad query admitted: %s", query)
 	}
 }
 func TestRetentionHTTPNoticeProjectionIsRecipientOnlyAndBounded(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	p := retentionHTTPPrincipal()
 	notice := model.RetentionNotice{RetirementID: model.NewRetentionRetirementID(), RecipientUserID: p.UserID, Scope: model.RetentionHoldScope{ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(), SubmissionID: model.NewSubmissionID()}, ExamTitle: "Algorithms final", SittingStartAt: time.Date(2026, 5, 4, 9, 0, 0, 0, time.UTC), SittingEndAt: time.Date(2026, 5, 4, 11, 0, 0, 0, time.UTC), Category: model.RetentionCategoryWork, State: model.RetentionRetirementGrace, CreatedAt: model.NowUTC(), RetireAfter: model.NowUTC().Add(7 * 24 * time.Hour), DeliveryState: "failed", DeliveryErrorCode: "mail.preparation_unavailable"}
-	application := &retentionHTTPFake{noticePage: &app.RetentionNoticePage{Items: []model.RetentionNotice{notice}, HasMore: true}}
-	api := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: p}, retentionResource(application))
-	r := serveRetentionHTTP(api, "GET", "/api/v1/users/me/retention-notices?limit=1", "", "")
+	application := &retentionHTTPFake{noticePage: &administration.RetentionNoticePage{Items: []model.RetentionNotice{notice}, HasMore: true}}
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: p}, retentionResource(application))
+	r := serveRetentionHTTP(t, api, "GET", "/api/v1/users/me/retention-notices?limit=1", "", "")
 	var page retentionNoticesResponse
 	require.Equal(t, 200, r.Code, "notice=%d %s", r.Code, r.Body.String())
 	require.NoError(t, json.Unmarshal(r.Body.Bytes(), &page), "notice=%d %s", r.Code, r.Body.String())
@@ -143,13 +145,13 @@ func TestRetentionHTTPNoticeProjectionIsRecipientOnlyAndBounded(t *testing.T) {
 	require.Equal(t, "Algorithms final", page.Items[0].ExamTitle)
 	require.Equal(t, "2026-05-04T09:00:00Z", page.Items[0].SittingStartAt)
 	require.Equal(t, "2026-05-04T11:00:00Z", page.Items[0].SittingEndAt)
-	application.noticePage = &app.RetentionNoticePage{Items: []model.RetentionNotice{}}
-	r = serveRetentionHTTP(api, "GET", "/api/v1/users/me/retention-notices?limit=1&cursor="+page.NextCursor, "", "")
+	application.noticePage = &administration.RetentionNoticePage{Items: []model.RetentionNotice{}}
+	r = serveRetentionHTTP(t, api, "GET", "/api/v1/users/me/retention-notices?limit=1&cursor="+page.NextCursor, "", "")
 	require.Equal(t, 200, r.Code, "cursor did not roundtrip")
 	require.Equal(t, notice.RetirementID, application.after, "cursor did not roundtrip")
 	notice.RecipientUserID = model.NewUserID()
-	application.noticePage = &app.RetentionNoticePage{Items: []model.RetentionNotice{notice}}
-	r = serveRetentionHTTP(api, "GET", "/api/v1/users/me/retention-notices", "", "")
+	application.noticePage = &administration.RetentionNoticePage{Items: []model.RetentionNotice{notice}}
+	r = serveRetentionHTTP(t, api, "GET", "/api/v1/users/me/retention-notices", "", "")
 	require.Equal(t, 500, r.Code, "wrong recipient response exposed")
 }
 
@@ -159,4 +161,31 @@ func TestRetentionOpenAPIDocument(t *testing.T) {
 	for _, name := range []string{"RetentionControlOK", "RetentionPreviewOK", "RetentionRecordsOK", "RetentionNoticesOK"} {
 		require.Equal(t, "#/components/headers/PrivateNoStore", document.Components.Responses[name].Headers["Cache-Control"].Ref, "%s lacks no-store", name)
 	}
+}
+
+func TestRetentionHTTPRecordsPresentsFullPageOfSubmissions(t *testing.T) {
+	t.Parallel()
+	logger, _ := routetest.NewLogger(t)
+	categories := []model.RetentionCategory{model.RetentionCategoryWork, model.RetentionCategoryIntegrity, model.RetentionCategoryBrowserActivity, model.RetentionCategorySecurityOperational}
+	page := &administration.RetentionRecordPage{PolicyRevision: 3, AsOf: model.NowUTC(), HasMore: true}
+	var want []string
+	for range 6 {
+		scope := model.RetentionHoldScope{ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(), SubmissionID: model.NewSubmissionID()}
+		for _, category := range categories {
+			page.Items = append(page.Items, administration.RetentionRecordView{Record: model.RetentionRecord{Scope: scope, Category: category}})
+			want = append(want, scope.SubmissionID.String()+"/"+string(category))
+		}
+	}
+	application := &retentionHTTPFake{recordPage: page}
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: retentionHTTPPrincipal()}, retentionResource(application))
+	r := serveRetentionHTTP(t, api, "GET", "/api/v1/retention/records?limit=10", "", "")
+	require.Equal(t, 200, r.Code, "records=%d %s", r.Code, r.Body.String())
+	var response retentionRecordsResponse
+	require.NoError(t, json.Unmarshal(r.Body.Bytes(), &response))
+	got := make([]string, 0, len(response.Items))
+	for _, item := range response.Items {
+		got = append(got, item.SubmissionID+"/"+item.Category)
+	}
+	require.Equal(t, want, got)
+	require.NotEmpty(t, response.NextCursor)
 }

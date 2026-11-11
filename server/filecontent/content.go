@@ -58,10 +58,17 @@ func New(filesystem vfs.FileSystem, policy Policy, recorder WorkRecorder) (*Cont
 	return &Content{filesystem: filesystem, work: make(chan struct{}, policy.MaximumConcurrentOperations), recorder: recorder}, nil
 }
 
-func (c *Content) storeRendition(ctx context.Context, revisionID model.FileRevisionID, renditionID model.FileRenditionID, body io.Reader, size int64) error {
+func (c *Content) storeRendition(
+	ctx context.Context,
+	revisionID model.FileRevisionID,
+	renditionID model.FileRenditionID,
+	body io.Reader,
+	size int64,
+) error {
 	if c == nil || c.filesystem == nil || !revisionID.IsValid() || !renditionID.IsValid() || body == nil || size < 0 {
 		return errors.New("invalid profile-picture rendition")
 	}
+
 	_, err := c.filesystem.Write(ctx, renditionKey(revisionID, renditionID), body, vfs.WriteOptions{
 		Size:        &size,
 		NoOverwrite: c.filesystem.Capabilities().ConditionalWrite,
@@ -71,14 +78,20 @@ func (c *Content) storeRendition(ctx context.Context, revisionID model.FileRevis
 
 // OpenProfilePictureRendition opens one exact rendition selected by
 // authoritative profile-picture metadata.
-func (c *Content) OpenProfilePictureRendition(ctx context.Context, revisionID model.FileRevisionID, renditionID model.FileRenditionID) (io.ReadCloser, error) {
+func (c *Content) OpenProfilePictureRendition(
+	ctx context.Context,
+	revisionID model.FileRevisionID,
+	renditionID model.FileRenditionID,
+) (io.ReadCloser, error) {
 	if c == nil || c.filesystem == nil || !revisionID.IsValid() || !renditionID.IsValid() {
 		return nil, errors.New("invalid file rendition identity")
 	}
+
 	file, err := c.filesystem.Open(ctx, renditionKey(revisionID, renditionID), vfs.OpenOptions{})
 	if err != nil {
 		return nil, sanitize("open rendition", err)
 	}
+
 	return file.Body, nil
 }
 
@@ -104,7 +117,11 @@ func (c *Content) removeRenditions(ctx context.Context, revisionID model.FileRev
 
 // RemoveFileRevisionRenditions idempotently removes an exact authoritative
 // rendition manifest without discovering sibling content.
-func (c *Content) RemoveFileRevisionRenditions(ctx context.Context, revisionID model.FileRevisionID, renditionIDs []model.FileRenditionID) error {
+func (c *Content) RemoveFileRevisionRenditions(
+	ctx context.Context,
+	revisionID model.FileRevisionID,
+	renditionIDs []model.FileRenditionID,
+) error {
 	return c.removeRenditions(ctx, revisionID, renditionIDs)
 }
 

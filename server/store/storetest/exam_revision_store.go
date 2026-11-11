@@ -174,6 +174,7 @@ func testExamRevisionStore(t *testing.T, ss store.Store, probe *ExamRevisionRete
 	require.Equal(t, fileResult.Object.ID, retained.StarterWorkspace[1].ObjectID)
 	summary, err := ss.ExamRevision().GetSummary(ctx, examID, first.Revision.ID)
 	require.NoError(t, err)
+	require.True(t, summary.ConsistentWith(first.Revision.ID, examID), "GetSummary returned a result inconsistent with its request")
 	require.Equal(t, 1, summary.ResourceCount)
 	require.Equal(t, 2, summary.StarterWorkspaceEntries)
 	require.Equal(t, first.Revision.PolicyDigest, summary.PolicyDigest)

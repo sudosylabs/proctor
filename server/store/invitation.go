@@ -318,7 +318,11 @@ type InvitationStore interface {
 	IssueStudentClass(context.Context, *StudentClassInvitationIssue) (*model.Invitation, error)
 	IssueStudentClassIdempotently(context.Context, *StudentClassInvitationIssue, *CommandIdempotency) (*InvitationCommandResult, error)
 	IssueTeacherAcademicUnit(context.Context, *TeacherAcademicUnitInvitationIssue) (*model.Invitation, error)
-	IssueTeacherAcademicUnitIdempotently(context.Context, *TeacherAcademicUnitInvitationIssue, *CommandIdempotency) (*InvitationCommandResult, error)
+	IssueTeacherAcademicUnitIdempotently(
+		context.Context,
+		*TeacherAcademicUnitInvitationIssue,
+		*CommandIdempotency,
+	) (*InvitationCommandResult, error)
 	IssueScopedRole(context.Context, *ScopedRoleInvitationIssue) (*model.Invitation, error)
 	IssueScopedRoleIdempotently(context.Context, *ScopedRoleInvitationIssue, *CommandIdempotency) (*InvitationCommandResult, error)
 	ResolveOnboardingInvitationNoOp(context.Context, *model.Invitation) (*model.Invitation, bool, error)
@@ -329,7 +333,10 @@ type InvitationStore interface {
 	Get(context.Context, model.InvitationID) (*model.Invitation, error)
 	GetByClaimHash(context.Context, string) (*model.Invitation, error)
 	AcceptStudentClass(context.Context, *StudentClassInvitationAcceptance) (*StudentClassInvitationAcceptanceResult, error)
-	AcceptTeacherAcademicUnit(context.Context, *TeacherAcademicUnitInvitationAcceptance) (*TeacherAcademicUnitInvitationAcceptanceResult, error)
+	AcceptTeacherAcademicUnit(
+		context.Context,
+		*TeacherAcademicUnitInvitationAcceptance,
+	) (*TeacherAcademicUnitInvitationAcceptanceResult, error)
 	AcceptScopedRole(context.Context, *ScopedRoleInvitationAcceptance) (*ScopedRoleInvitationAcceptanceResult, error)
 	AcceptExternalIdentity(context.Context, *ExternalIdentityInvitationAcceptance) (*ExternalIdentityInvitationAcceptanceResult, error)
 	List(context.Context, InvitationListOptions) (*InvitationPage, error)

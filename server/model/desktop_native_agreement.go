@@ -31,8 +31,19 @@ const (
 )
 
 func NativeSources() []NativeSourceID {
-	return []NativeSourceID{NativeSourceDisplay, NativeSourceWindow, NativeSourceCapture, NativeSourceProcess,
-		NativeSourceSession, NativeSourceClipboard, NativeSourcePrint, NativeSourceStorage, NativeSourceVirtualization, NativeSourceNetwork, NativeSourceMedia}
+	return []NativeSourceID{
+		NativeSourceDisplay,
+		NativeSourceWindow,
+		NativeSourceCapture,
+		NativeSourceProcess,
+		NativeSourceSession,
+		NativeSourceClipboard,
+		NativeSourcePrint,
+		NativeSourceStorage,
+		NativeSourceVirtualization,
+		NativeSourceNetwork,
+		NativeSourceMedia,
+	}
 }
 
 func (s NativeSourceID) IsValid() bool { return slices.Contains(NativeSources(), s) }
@@ -108,43 +119,68 @@ type DesktopNativeAgreement struct {
 
 var errNativeAgreement = errors.New("desktop native agreement is invalid")
 
-func NewDesktopNativeAgreement(registryDigest, sourceManifestDigest, matrixDigest, detectorCatalogDigest string,
-	definitions []NativeCoverageDefinition, matrix NativeCapabilityMatrix, detectors []NativeDetectorDefinition,
+func NewDesktopNativeAgreement(
+	registryDigest, sourceManifestDigest, matrixDigest, detectorCatalogDigest string,
+	definitions []NativeCoverageDefinition,
+	matrix NativeCapabilityMatrix,
+	detectors []NativeDetectorDefinition,
 ) (*DesktopNativeAgreement, error) {
-	if !IsValidSHA256Fingerprint(registryDigest) || !IsValidSHA256Fingerprint(sourceManifestDigest) ||
-		!IsValidSHA256Fingerprint(matrixDigest) || !IsValidSHA256Fingerprint(detectorCatalogDigest) || matrix.RegistryDigest != registryDigest ||
-		!IsValidAgreementID(matrix.MatrixID) || !IsValidAgreementID(matrix.ReleaseID) || !IsValidAgreementID(matrix.TargetTuple) ||
-		len(definitions) == 0 || len(definitions) > NativeCoverageClaimLimit || len(matrix.Entries) != len(definitions) ||
-		detectors == nil || len(detectors) > 256 {
+	if !IsValidSHA256Fingerprint(registryDigest) ||
+		!IsValidSHA256Fingerprint(sourceManifestDigest) ||
+		!IsValidSHA256Fingerprint(matrixDigest) ||
+		!IsValidSHA256Fingerprint(detectorCatalogDigest) ||
+		matrix.RegistryDigest != registryDigest ||
+		!IsValidAgreementID(matrix.MatrixID) ||
+		!IsValidAgreementID(matrix.ReleaseID) ||
+		!IsValidAgreementID(matrix.TargetTuple) ||
+		len(definitions) == 0 ||
+		len(definitions) > NativeCoverageClaimLimit ||
+		len(matrix.Entries) != len(definitions) ||
+		detectors == nil ||
+		len(detectors) > 256 {
 		return nil, errNativeAgreement
 	}
+
 	previous := ""
 	baselineSources := map[NativeSourceID]bool{}
 	for index, definition := range definitions {
 		entry := matrix.Entries[index]
-		if !IsValidAgreementID(definition.CoverageKey) || definition.CoverageKey <= previous || !IsValidAgreementID(definition.CapabilityID) ||
-			!IsValidSHA256Fingerprint(definition.SourceSchemaDigest) || definition.SourceID != "" && !definition.SourceID.IsValid() ||
-			definition.PermittedClaims == nil || len(definition.PermittedClaims) > 2 || entry.CoverageKey != definition.CoverageKey ||
-			entry.SourceSchemaDigest != definition.SourceSchemaDigest || !IsValidAgreementID(entry.ComponentID) || !IsValidAgreementID(entry.AdapterVersion) ||
-			entry.HelperBuildID != "" && !IsValidAgreementID(entry.HelperBuildID) || validateNativePermissions(entry.RequiredPermissions) != nil ||
-			validateNativePermissions(definition.RequiredPermissions) != nil || !slices.Equal(entry.RequiredPermissions, definition.RequiredPermissions) ||
+		if !IsValidAgreementID(definition.CoverageKey) ||
+			definition.CoverageKey <= previous ||
+			!IsValidAgreementID(definition.CapabilityID) ||
+			!IsValidSHA256Fingerprint(definition.SourceSchemaDigest) ||
+			definition.SourceID != "" && !definition.SourceID.IsValid() ||
+			definition.PermittedClaims == nil ||
+			len(definition.PermittedClaims) > 2 ||
+			entry.CoverageKey != definition.CoverageKey ||
+			entry.SourceSchemaDigest != definition.SourceSchemaDigest ||
+			!IsValidAgreementID(entry.ComponentID) ||
+			!IsValidAgreementID(entry.AdapterVersion) ||
+			entry.HelperBuildID != "" && !IsValidAgreementID(entry.HelperBuildID) ||
+			validateNativePermissions(entry.RequiredPermissions) != nil ||
+			validateNativePermissions(definition.RequiredPermissions) != nil ||
+			!slices.Equal(entry.RequiredPermissions, definition.RequiredPermissions) ||
 			validateNativeLimitations(entry.Limitations) != nil {
 			return nil, errNativeAgreement
 		}
+
 		previous = definition.CoverageKey
 		for i, claim := range definition.PermittedClaims {
 			if claim != NativeClaimObserve && claim != NativeClaimEnforce || slices.Contains(definition.PermittedClaims[:i], claim) {
 				return nil, errNativeAgreement
 			}
 		}
+
 		if entry.Claim == NativeClaimUnavailable {
 			if entry.Verification != "unavailable" {
 				return nil, errNativeAgreement
 			}
-		} else if (entry.Claim != NativeClaimObserve && entry.Claim != NativeClaimEnforce) || entry.Verification != "passed" ||
+		} else if (entry.Claim != NativeClaimObserve && entry.Claim != NativeClaimEnforce) ||
+			entry.Verification != "passed" ||
 			!slices.Contains(definition.PermittedClaims, entry.Claim) {
 			return nil, errNativeAgreement
 		}
+
 		if definition.Baseline {
 			if entry.Claim != NativeClaimEnforce || entry.Verification != "passed" {
 				return nil, errNativeAgreement
@@ -154,17 +190,26 @@ func NewDesktopNativeAgreement(registryDigest, sourceManifestDigest, matrixDiges
 			}
 		}
 	}
+
 	// Mandatory baseline source certification is independent of optional families.
 	for _, source := range []NativeSourceID{NativeSourceDisplay, NativeSourceWindow, NativeSourceCapture} {
 		if !baselineSources[source] {
 			return nil, errNativeAgreement
 		}
 	}
+
 	if err := validateNativeDetectors(detectors, definitions); err != nil {
 		return nil, err
 	}
-	result := &DesktopNativeAgreement{registryDigest: registryDigest, sourceManifestDigest: sourceManifestDigest, matrixDigest: matrixDigest,
-		detectorCatalogDigest: detectorCatalogDigest, releaseID: matrix.ReleaseID, targetTuple: matrix.TargetTuple}
+
+	result := &DesktopNativeAgreement{
+		registryDigest:        registryDigest,
+		sourceManifestDigest:  sourceManifestDigest,
+		matrixDigest:          matrixDigest,
+		detectorCatalogDigest: detectorCatalogDigest,
+		releaseID:             matrix.ReleaseID,
+		targetTuple:           matrix.TargetTuple,
+	}
 	result.definitions = cloneNativeDefinitions(definitions)
 	result.matrix = cloneNativeMatrix(matrix)
 	result.detectors = cloneNativeDetectors(detectors)
@@ -176,12 +221,20 @@ func validateNativeDetectors(detectors []NativeDetectorDefinition, definitions [
 	previous := ""
 	var version int64
 	for _, detector := range detectors {
-		if !IsValidAgreementID(detector.DetectorID) || detector.Version < 1 || detector.Version > 9007199254740991 ||
-			detector.DetectorID < previous || detector.DetectorID == previous && detector.Version <= version ||
-			!IsValidAgreementID(detector.CapabilityID) || validateNativeConditionIDs(detector.ConditionIDs) != nil ||
-			len(detector.SourceIDs) == 0 || len(detector.SourceIDs) > len(NativeSources()) || len(detector.AllowedModes) == 0 || len(detector.AllowedModes) > 2 {
+		if !IsValidAgreementID(detector.DetectorID) ||
+			detector.Version < 1 ||
+			detector.Version > 9007199254740991 ||
+			detector.DetectorID < previous ||
+			detector.DetectorID == previous && detector.Version <= version ||
+			!IsValidAgreementID(detector.CapabilityID) ||
+			validateNativeConditionIDs(detector.ConditionIDs) != nil ||
+			len(detector.SourceIDs) == 0 ||
+			len(detector.SourceIDs) > len(NativeSources()) ||
+			len(detector.AllowedModes) == 0 ||
+			len(detector.AllowedModes) > 2 {
 			return errNativeAgreement
 		}
+
 		previous, version = detector.DetectorID, detector.Version
 		lastSource := -1
 		for _, source := range detector.SourceIDs {
@@ -189,6 +242,7 @@ func validateNativeDetectors(detectors []NativeDetectorDefinition, definitions [
 			if order < 0 || order <= lastSource {
 				return errNativeAgreement
 			}
+
 			lastSource = order
 			found := false
 			for _, definition := range definitions {
@@ -196,25 +250,30 @@ func validateNativeDetectors(detectors []NativeDetectorDefinition, definitions [
 					found = true
 				}
 			}
+
 			if !found {
 				return errNativeAgreement
 			}
 		}
+
 		for i, mode := range detector.AllowedModes {
 			if mode != NativeClaimObserve && mode != NativeClaimEnforce || slices.Contains(detector.AllowedModes[:i], mode) {
 				return errNativeAgreement
 			}
+
 			supported := false
 			for _, definition := range definitions {
 				if definition.CapabilityID == detector.CapabilityID && slices.Contains(definition.PermittedClaims, mode) {
 					supported = true
 				}
 			}
+
 			if !supported {
 				return errNativeAgreement
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -222,11 +281,14 @@ func validateNativePermissions(values []string) error {
 	if values == nil || len(values) > 5 {
 		return errNativeAgreement
 	}
+
 	for i, value := range values {
-		if !slices.Contains([]string{"accessibility", "full_disk_access", "endpoint_security", "camera", "microphone"}, value) || slices.Contains(values[:i], value) {
+		if !slices.Contains([]string{"accessibility", "full_disk_access", "endpoint_security", "camera", "microphone"}, value) ||
+			slices.Contains(values[:i], value) {
 			return errNativeAgreement
 		}
 	}
+
 	return nil
 }
 
@@ -345,15 +407,27 @@ func (a *DesktopNativeAgreement) Coverage(key string, required NativeCapabilityC
 	return entry, nil
 }
 
-func (a *DesktopNativeAgreement) ValidateDetector(id string, version int64, capability, condition string, mode NativeCapabilityClaim, sources []NativeSourceID) error {
+func (a *DesktopNativeAgreement) ValidateDetector(
+	id string,
+	version int64,
+	capability, condition string,
+	mode NativeCapabilityClaim,
+	sources []NativeSourceID,
+) error {
 	if a == nil {
 		return errNativeAgreement
 	}
+
 	for _, detector := range a.detectors {
-		if detector.DetectorID == id && detector.Version == version && detector.CapabilityID == capability &&
-			slices.Contains(detector.ConditionIDs, condition) && slices.Contains(detector.AllowedModes, mode) && slices.Equal(detector.SourceIDs, sources) {
+		if detector.DetectorID == id &&
+			detector.Version == version &&
+			detector.CapabilityID == capability &&
+			slices.Contains(detector.ConditionIDs, condition) &&
+			slices.Contains(detector.AllowedModes, mode) &&
+			slices.Equal(detector.SourceIDs, sources) {
 			return nil
 		}
 	}
+
 	return errNativeAgreement
 }

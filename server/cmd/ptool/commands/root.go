@@ -5,6 +5,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
+// Package commands is the ptool command tree, one file per subcommand: errors,
+// openapi, i18n, dev and release.
 package commands
 
 import (

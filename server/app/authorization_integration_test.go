@@ -20,8 +20,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -44,7 +45,7 @@ func TestPrivilegedAuditListingIsScopedAndDurablyAudited(t *testing.T) {
 	})
 	require.NoError(t, err)
 	password := "correct horse battery staple"
-	user, appErr := helper.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
+	user, appErr := helper.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
 		Username: "security-auditor", Email: "security-auditor@example.edu",
 		DisplayName: "Security Auditor",
 	}, Password: password})
@@ -164,7 +165,7 @@ func TestAuthorizationResolvesCurrentAcademicHierarchy(t *testing.T) {
 	})
 	require.NoError(t, err)
 	password := "correct horse battery staple"
-	user, err := helper.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
+	user, err := helper.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
 		Username: "hierarchy-teacher", Email: "hierarchy-teacher@example.edu",
 		DisplayName: "Hierarchy Teacher",
 	}, Password: password})
@@ -173,7 +174,7 @@ func TestAuthorizationResolvesCurrentAcademicHierarchy(t *testing.T) {
 		t, helper.Handler(), user.Username, password,
 		model.SessionClientCLI, "hierarchy-device",
 	)
-	principal, err := helper.App.AuthenticateAccess(ctx, login.Tokens.AccessToken)
+	principal, err := helper.App.Identity.AuthenticateAccess(ctx, login.Tokens.AccessToken)
 	require.NoError(t, err)
 	_, err = persistence.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
 		AcademicUnitID: root.ID,
@@ -259,12 +260,12 @@ func TestPrincipalPermissionAndUserVisibilityPolicies(t *testing.T) {
 	})
 	require.NoError(t, err)
 	password := "correct horse battery staple"
-	viewer, err := helper.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
+	viewer, err := helper.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
 		Username: "directory-viewer", Email: "directory-viewer@example.edu",
 		DisplayName: "Directory Viewer",
 	}, Password: password})
 	require.NoError(t, err)
-	target, err := helper.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
+	target, err := helper.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
 		Username: "directory-target", Email: "directory-target@example.edu",
 		DisplayName: "Directory Target",
 	}, Password: password})
@@ -273,7 +274,7 @@ func TestPrincipalPermissionAndUserVisibilityPolicies(t *testing.T) {
 		t, helper.Handler(), viewer.Username, password,
 		model.SessionClientCLI, "directory-device",
 	)
-	principal, err := helper.App.AuthenticateAccess(ctx, login.Tokens.AccessToken)
+	principal, err := helper.App.Identity.AuthenticateAccess(ctx, login.Tokens.AccessToken)
 	require.NoError(t, err)
 	metadata := model.RequestMetadata{
 		RequestID: model.NewID(),
@@ -304,8 +305,8 @@ func TestPrincipalPermissionAndUserVisibilityPolicies(t *testing.T) {
 		model.Resource{Type: model.ResourceUser, ID: target.ID.String()},
 	)
 	require.True(t, apperror.Is(authErr, "authorization.denied"), "cross-user profile-picture authorization = %v", authErr)
-	_, err = helper.App.GetUserProfile(
-		ctx, invocation.New(*principal, metadata), app.GetUserProfileQuery{ID: target.ID},
+	_, err = helper.App.Users.GetUserProfile(
+		ctx, invocation.New(*principal, metadata), target.ID,
 	)
 	require.True(t, apperror.Is(err, "authorization.denied"), "unbound cross-user read error = %v", err)
 
@@ -320,8 +321,8 @@ func TestPrincipalPermissionAndUserVisibilityPolicies(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	visible, err := helper.App.GetUserProfile(
-		ctx, invocation.New(*principal, metadata), app.GetUserProfileQuery{ID: target.ID},
+	visible, err := helper.App.Users.GetUserProfile(
+		ctx, invocation.New(*principal, metadata), target.ID,
 	)
 	require.NoError(t, err, "authorized cross-user read = %#v", visible)
 	require.Equal(t, target.ID, visible.ID, "authorized cross-user read = %#v", visible)
@@ -334,8 +335,8 @@ func TestPrincipalPermissionAndUserVisibilityPolicies(t *testing.T) {
 
 	_, err = storetest.EndRoleBinding(ctx, persistence, binding.ID, model.NowUTC())
 	require.NoError(t, err)
-	_, err = helper.App.GetUserProfile(
-		ctx, invocation.New(*principal, metadata), app.GetUserProfileQuery{ID: target.ID},
+	_, err = helper.App.Users.GetUserProfile(
+		ctx, invocation.New(*principal, metadata), target.ID,
 	)
 	require.True(t, apperror.Is(err, "authorization.denied"), "ended binding cross-user read error = %v", err)
 
@@ -416,7 +417,7 @@ func TestAcademicUnitVisibilityIsBoundedAcrossUsersBindingsAndAudits(t *testing.
 	password := "correct horse battery staple"
 	createUser := func(username string) *model.User {
 		t.Helper()
-		user, appErr := helper.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
+		user, appErr := helper.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
 			Username: username, Email: username + "@example.edu", DisplayName: username,
 			EmailVerified: true, Locale: "fr", Timezone: "Europe/Paris",
 		}, Password: password})
@@ -506,9 +507,9 @@ func TestAcademicUnitVisibilityIsBoundedAcrossUsersBindingsAndAudits(t *testing.
 	require.NoError(t, err)
 
 	login := loginIntegrationUser(t, helper.Handler(), viewer.Username, password, model.SessionClientCLI, "scoped-device")
-	principal, appErr := helper.App.AuthenticateAccess(ctx, login.Tokens.AccessToken)
+	principal, appErr := helper.App.Identity.AuthenticateAccess(ctx, login.Tokens.AccessToken)
 	require.NoError(t, appErr)
-	invocation := invocation.New(*principal, model.RequestMetadata{
+	inv := invocation.New(*principal, model.RequestMetadata{
 		RequestID: model.NewID(), IPAddress: "127.0.0.1", UserAgent: "access-visibility-integration-test",
 	})
 
@@ -685,7 +686,7 @@ func TestAcademicUnitVisibilityIsBoundedAcrossUsersBindingsAndAudits(t *testing.
 	historicalRead := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users/"+historicalUser.ID.String(), nil, login.Tokens.AccessToken)
 	require.Equal(t, http.StatusForbidden, historicalRead.Code, "historical user read status = %d: %s", historicalRead.Code, historicalRead.Body.String())
 
-	bindings, listErr := helper.App.ListRoleBindings(ctx, invocation, app.ListRoleBindingsQuery{UserID: bindingUser.ID})
+	bindings, listErr := helper.App.Administration.ListRoleBindings(ctx, inv, administration.ListRoleBindingsQuery{UserID: bindingUser.ID})
 	require.NoError(t, listErr)
 	seenBindings := map[string]bool{}
 	for _, binding := range bindings {

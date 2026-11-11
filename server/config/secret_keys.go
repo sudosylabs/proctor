@@ -80,11 +80,14 @@ func decodeCanonicalAES256Key(encoded string) ([32]byte, bool) {
 	if len(encoded) != base64.StdEncoding.EncodedLen(len(material)) {
 		return material, false
 	}
+
 	decoded, err := base64.StdEncoding.Strict().DecodeString(encoded)
-	if err != nil || len(decoded) != len(material) ||
+	if err != nil ||
+		len(decoded) != len(material) ||
 		base64.StdEncoding.EncodeToString(decoded) != encoded {
 		return material, false
 	}
+
 	copy(material[:], decoded)
 	return material, true
 }

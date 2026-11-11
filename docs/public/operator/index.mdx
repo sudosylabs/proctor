@@ -34,11 +34,13 @@ changes infrastructure redundancy, not authorization or feature availability.
    the separate metrics and cluster boundaries.
 6. Route traffic by [readiness and observable evidence](./health-and-observability.mdx),
    not process existence.
-7. Use the bounded [maintenance and recovery procedures](./maintenance-and-recovery.mdx)
+7. Connect a production relay and
+   [verify transactional mail delivery](./mail-delivery.mdx).
+8. Use the bounded [maintenance and recovery procedures](./maintenance-and-recovery.mdx)
    that are implemented today.
-8. [Back up, restore, upgrade, and roll back](./backup-restore-and-upgrade.mdx)
+9. [Back up, restore, upgrade, and roll back](./backup-restore-and-upgrade.mdx)
    PostgreSQL, file bytes, configuration, and key rings as one set.
-9. Stop at the explicit [pre-production limits](./pre-production-readiness.mdx)
+10. Stop at the explicit [pre-production limits](./pre-production-readiness.mdx)
    instead of inventing sizing, recovery-objective, or support promises.
 
 <GovernedFigure asset="installation-authority-topology" />

@@ -37,9 +37,9 @@ explicitly.
 | --- | --- |
 | Domain model | Stable Job intent, current lifecycle, and append-only Job Attempt history |
 | `store.JobStore` | Enqueue, claim, lease fence, checkpoint, terminal transition, and retention guarantees |
-| `app/job` | Generic engine mechanics and safe projections |
+| `app/job` | Generic engine mechanics and safe projections, and `job.Operations`, the operator service that authorizes and audits listing, cancellation, and retry |
 | Owning application capability | Why work exists, actor authorization, domain policy, and durable effects |
-| `app/jobhandler` | Typed handler catalog, strict payloads, descriptors, recurrence definitions, and concrete handlers |
+| `app/jobs` | Typed handler catalog, strict payloads, descriptors, recurrence definitions, and concrete handlers |
 | Module-root server | Engine start, readiness participation, and close order |
 
 A worker receives only the capabilities its handler declares. It does not
@@ -133,7 +133,10 @@ specific recipient. The independent `packages/mail` module owns portable MIME,
 validation, SMTP, and transport outcome classification. Server-owned
 `app/mail` owns product meaning, definitions, localization, templates,
 recipient rules, encrypted frozen payloads, suppression, delivery policy, and
-stable Message-ID construction.
+stable Message-ID construction. The same package holds `mail.Operations`, the
+operator service for delivery inspection, cancellation, retry, metrics, test
+mail, and payload-key rotation, together with the mail telemetry contracts and
+health the delivery Jobs report through.
 
 A `MailOccurrence` is one logical notification caused by a domain transition.
 A `MailDelivery` is one frozen recipient delivery. A generic Job executes

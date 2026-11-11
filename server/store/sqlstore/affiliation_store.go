@@ -24,6 +24,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLAffiliationStore implements store.AffiliationStore on the affiliations
+// table. It refuses to end a student Affiliation while the user still has an
+// active Class enrollment.
 type SQLAffiliationStore struct {
 	*SQLStore
 	query sq.SelectBuilder
@@ -57,10 +60,15 @@ func (affiliationCommandOutcome) outcomeDocument() {}
 
 func affiliationColumns() []string {
 	return []string{
-		"affiliations.id", "affiliations.created_at", "affiliations.updated_at",
-		"affiliations.archived_at", "affiliations.user_id", "affiliations.kind",
+		"affiliations.id",
+		"affiliations.created_at",
+		"affiliations.updated_at",
+		"affiliations.archived_at",
+		"affiliations.user_id",
+		"affiliations.kind",
 		"affiliations.revision",
-		"affiliations.start_at", "affiliations.end_at",
+		"affiliations.start_at",
+		"affiliations.end_at",
 	}
 }
 
@@ -73,14 +81,17 @@ func (s SQLAffiliationStore) Create(ctx context.Context, input *store.Affiliatio
 	if !input.Affiliation.ID.IsValid() {
 		return nil, store.NewErrInvalidInput("affiliation", "id", input.Affiliation.ID.String())
 	}
+
 	candidate := *input.Affiliation
 	if err := candidate.Validate(); err != nil {
 		return nil, store.NewErrInvalidInput("affiliation", "value", nil).Wrap(err)
 	}
+
 	encoded, appErr := model.EncodeAuditData(candidate.Auditable())
 	if appErr != nil {
 		return nil, appErr
 	}
+
 	execute := func(ctx context.Context, tx *sqlxTxWrapper) (*affiliationMutationResult, error) {
 		if err := lockAffiliationLifecycle(ctx, tx); err != nil {
 			return nil, err
@@ -88,30 +99,46 @@ func (s SQLAffiliationStore) Create(ctx context.Context, input *store.Affiliatio
 		if err := lockAffiliationKind(ctx, tx, candidate.UserID.String(), candidate.Kind); err != nil {
 			return nil, err
 		}
+
 		existing, err := findExactAffiliation(ctx, tx, &candidate)
 		if err != nil {
 			return nil, err
 		}
+
 		if existing != nil && input.Command != nil {
-			if err = completeAdministrativeNoOpAudit(ctx, tx, input.AuditEventID, input.AuditAt, "affiliation_id", existing.ID.String()); err != nil {
+			if err = completeAdministrativeNoOpAudit(
+				ctx,
+				tx,
+				input.AuditEventID,
+				input.AuditAt,
+				"affiliation_id",
+				existing.ID.String(),
+			); err != nil {
 				return nil, err
 			}
+
 			return &affiliationMutationResult{Value: existing, NoOp: true}, nil
 		}
+
 		if err := ensureAffiliationRangeAvailable(ctx, tx, &candidate); err != nil {
 			return nil, err
 		}
+
 		row := newAffiliationRow(&candidate)
 		if _, err := tx.NamedExec(ctx, `INSERT INTO affiliations (
-			id, created_at, updated_at, archived_at, revision, user_id, kind, start_at, end_at
-		) VALUES (
-			:id, :created_at, :updated_at, :archived_at, :revision, :user_id, :kind, :start_at, :end_at
-		)`, &row); err != nil {
+				id, created_at, updated_at, archived_at, revision, user_id, kind, start_at, end_at
+			)
+			VALUES (
+				:id, :created_at, :updated_at, :archived_at, :revision, :user_id, :kind, :start_at,
+				:end_at
+			)`, &row); err != nil {
 			return nil, fmt.Errorf("create affiliation: %w", translateError("affiliation", candidate.ID.String(), err))
 		}
+
 		if _, err := completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", encoded, input.AuditAt); err != nil {
 			return nil, fmt.Errorf("complete affiliation creation audit: %w", err)
 		}
+
 		return &affiliationMutationResult{Value: &candidate}, nil
 	}
 	if input.Command == nil {
@@ -119,23 +146,38 @@ func (s SQLAffiliationStore) Create(ctx context.Context, input *store.Affiliatio
 		if err != nil {
 			return nil, err
 		}
+
 		input.NoOp = result.NoOp
 		return result.Value, nil
 	}
+
 	result, err := runIdempotentMutation(ctx, s.SQLStore, "idempotent affiliation creation", idempotentMutation[*affiliationMutationResult]{
-		command: input.Command, auditEventID: input.AuditEventID, execute: execute,
-		encode: encodeAffiliationMutationOutcome, decode: decodeAffiliationMutationOutcome,
+		command:       input.Command,
+		auditEventID:  input.AuditEventID,
+		execute:       execute,
+		encode:        encodeAffiliationMutationOutcome,
+		decode:        decodeAffiliationMutationOutcome,
 		hydrateReplay: s.hydrateAffiliationMutationOutcome,
 		onboardingOutcome: func(value *affiliationMutationResult) (onboardingImportCommandResult, error) {
 			return administrativeOnboardingOutcome(value.Value.ID.String(), value.NoOp)
 		},
 		completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, value *affiliationMutationResult, original string) error {
-			return completeAdministrativeReplayAudit(ctx, tx, input.AuditEventID, input.AuditAt, "affiliation_id", value.Value.ID.String(), value.NoOp, original)
+			return completeAdministrativeReplayAudit(
+				ctx,
+				tx,
+				input.AuditEventID,
+				input.AuditAt,
+				"affiliation_id",
+				value.Value.ID.String(),
+				value.NoOp,
+				original,
+			)
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	input.Replayed, input.NoOp = result.Replayed, result.Value.NoOp
 	return result.Value.Value, nil
 }
@@ -156,17 +198,23 @@ func (s SQLAffiliationStore) Save(
 	if !affiliation.ID.IsZero() {
 		return nil, store.NewErrInvalidInput("affiliation", "id", affiliation.ID.String())
 	}
+
 	id, err := model.ParseAffiliationID(model.NewID())
 	if err != nil {
 		return nil, err
 	}
+
 	candidate := *affiliation
 	candidate.PrepareCreate(id, model.NowUTC())
 	if err := candidate.Validate(); err != nil {
 		return nil, store.NewErrInvalidInput("affiliation", "value", nil).Wrap(err)
 	}
+
 	row := newAffiliationRow(&candidate)
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "affiliation save", func(ctx context.Context, tx *sqlxTxWrapper) (*model.Affiliation, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "affiliation save", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*model.Affiliation, error) {
 		if err := lockAffiliationLifecycle(ctx, tx); err != nil {
 			return nil, err
 		}
@@ -176,17 +224,21 @@ func (s SQLAffiliationStore) Save(
 		if err := ensureAffiliationRangeAvailable(ctx, tx, &candidate); err != nil {
 			return nil, err
 		}
+
 		if _, err := tx.NamedExec(ctx, `
 			INSERT INTO affiliations (
 				id, created_at, updated_at, archived_at, revision, user_id, kind, start_at, end_at
-			) VALUES (
-				:id, :created_at, :updated_at, :archived_at, :revision, :user_id, :kind, :start_at, :end_at
+			)
+			VALUES (
+				:id, :created_at, :updated_at, :archived_at, :revision, :user_id, :kind, :start_at,
+				:end_at
 			)`, &row); err != nil {
 			return nil, fmt.Errorf(
 				"save affiliation: %w",
 				translateError("affiliation", candidate.ID.String(), err),
 			)
 		}
+
 		return &candidate, nil
 	})
 }
@@ -195,10 +247,12 @@ func (s SQLAffiliationStore) Save(
 func (s SQLAffiliationStore) Get(ctx context.Context, id model.AffiliationID) (*model.Affiliation, error) {
 	var row affiliationRow
 	if err := s.GetMaster().GetBuilder(ctx, &row, s.query.Where(sq.Eq{
-		"affiliations.id": id, "affiliations.archived_at": nil,
+		"affiliations.id":          id,
+		"affiliations.archived_at": nil,
 	})); err != nil {
 		return nil, translateError("affiliation", id.String(), err)
 	}
+
 	return row.model()
 }
 
@@ -206,7 +260,8 @@ func (s SQLAffiliationStore) Get(ctx context.Context, id model.AffiliationID) (*
 // newest start first.
 func (s SQLAffiliationStore) ListByUser(ctx context.Context, userID model.UserID) ([]*model.Affiliation, error) {
 	return s.selectAffiliations(ctx, s.query.Where(sq.Eq{
-		"affiliations.user_id": userID, "affiliations.archived_at": nil,
+		"affiliations.user_id":     userID,
+		"affiliations.archived_at": nil,
 	}).OrderBy("affiliations.start_at DESC", "affiliations.id"))
 }
 
@@ -214,7 +269,8 @@ func (s SQLAffiliationStore) ListByUser(ctx context.Context, userID model.UserID
 func (s SQLAffiliationStore) ListActiveByUser(ctx context.Context, userID model.UserID, at time.Time) ([]*model.Affiliation, error) {
 	activeAt := model.TimeUTC(at)
 	return s.selectAffiliations(ctx, s.query.Where(sq.Eq{
-		"affiliations.user_id": userID, "affiliations.archived_at": nil,
+		"affiliations.user_id":     userID,
+		"affiliations.archived_at": nil,
 	}).Where(sq.LtOrEq{"affiliations.start_at": activeAt}).
 		Where("(affiliations.end_at IS NULL OR affiliations.end_at > ?)", activeAt).
 		OrderBy("affiliations.kind", "affiliations.id"))
@@ -225,17 +281,25 @@ func (s SQLAffiliationStore) ListActiveByUser(ctx context.Context, userID model.
 // without input.Command, and an audited no-op (input.NoOp set) under a command
 // idempotency key.
 func (s SQLAffiliationStore) End(ctx context.Context, input *store.AffiliationEnd) (*model.Affiliation, error) {
-	if input == nil || !input.ID.IsValid() || input.ExpectedRevision <= 0 || input.EndAt.IsZero() || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+	if input == nil ||
+		!input.ID.IsValid() ||
+		input.ExpectedRevision <= 0 ||
+		input.EndAt.IsZero() ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("affiliation", "end", nil)
 	}
+
 	execute := func(ctx context.Context, tx *sqlxTxWrapper) (*affiliationMutationResult, error) {
 		if err := lockAffiliationLifecycle(ctx, tx); err != nil {
 			return nil, err
 		}
+
 		before, err := s.getAffiliationInTransaction(ctx, tx, input.ID)
 		if err != nil {
 			return nil, err
 		}
+
 		if before.EndsAt.Valid {
 			if input.Command == nil {
 				return nil, store.NewErrConflict("affiliation", "revision", nil)
@@ -243,12 +307,15 @@ func (s SQLAffiliationStore) End(ctx context.Context, input *store.AffiliationEn
 			if err = completeAdministrativeNoOpAudit(ctx, tx, input.AuditEventID, input.AuditAt, "affiliation_id", before.ID.String()); err != nil {
 				return nil, err
 			}
+
 			return &affiliationMutationResult{Value: before, NoOp: true}, nil
 		}
+
 		current, err := s.endAffiliation(ctx, tx, input.ID, input.ExpectedRevision, input.EndAt)
 		if err != nil {
 			return nil, err
 		}
+
 		encoded, appErr := model.EncodeAuditData(current.Auditable())
 		if appErr != nil {
 			return nil, appErr
@@ -256,6 +323,7 @@ func (s SQLAffiliationStore) End(ctx context.Context, input *store.AffiliationEn
 		if _, err := completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", encoded, input.AuditAt); err != nil {
 			return nil, fmt.Errorf("complete affiliation end audit: %w", err)
 		}
+
 		return &affiliationMutationResult{Value: current}, nil
 	}
 	if input.Command == nil {
@@ -263,23 +331,38 @@ func (s SQLAffiliationStore) End(ctx context.Context, input *store.AffiliationEn
 		if err != nil {
 			return nil, err
 		}
+
 		input.NoOp = result.NoOp
 		return result.Value, nil
 	}
+
 	result, err := runIdempotentMutation(ctx, s.SQLStore, "idempotent affiliation end", idempotentMutation[*affiliationMutationResult]{
-		command: input.Command, auditEventID: input.AuditEventID, execute: execute,
-		encode: encodeAffiliationMutationOutcome, decode: decodeAffiliationMutationOutcome,
+		command:       input.Command,
+		auditEventID:  input.AuditEventID,
+		execute:       execute,
+		encode:        encodeAffiliationMutationOutcome,
+		decode:        decodeAffiliationMutationOutcome,
 		hydrateReplay: s.hydrateAffiliationMutationOutcome,
 		onboardingOutcome: func(value *affiliationMutationResult) (onboardingImportCommandResult, error) {
 			return administrativeOnboardingOutcome(value.Value.ID.String(), value.NoOp)
 		},
 		completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, value *affiliationMutationResult, original string) error {
-			return completeAdministrativeReplayAudit(ctx, tx, input.AuditEventID, input.AuditAt, "affiliation_id", value.Value.ID.String(), value.NoOp, original)
+			return completeAdministrativeReplayAudit(
+				ctx,
+				tx,
+				input.AuditEventID,
+				input.AuditAt,
+				"affiliation_id",
+				value.Value.ID.String(),
+				value.NoOp,
+				original,
+			)
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	input.Replayed, input.NoOp = result.Replayed, result.Value.NoOp
 	return result.Value.Value, nil
 }
@@ -290,9 +373,16 @@ func findExactAffiliation(ctx context.Context, tx sqlxExecutor, candidate *model
 		endAt = candidate.EndsAt.Time
 	}
 	var row affiliationRow
-	err := tx.Get(ctx, &row, `SELECT id,created_at,updated_at,archived_at,revision,user_id,kind,start_at,end_at
-		FROM affiliations WHERE user_id=? AND kind=? AND start_at=? AND end_at IS NOT DISTINCT FROM ? AND archived_at IS NULL
-		ORDER BY id LIMIT 1`, candidate.UserID.String(), candidate.Kind, candidate.StartsAt, endAt)
+	err := tx.Get(ctx, &row, `SELECT id, created_at, updated_at, archived_at, revision, user_id,
+			kind, start_at, end_at
+		FROM affiliations
+		WHERE user_id = ?
+			AND kind = ?
+			AND start_at = ?
+			AND end_at IS NOT DISTINCT FROM ?
+			AND archived_at IS NULL
+		ORDER BY id
+		LIMIT 1`, candidate.UserID.String(), candidate.Kind, candidate.StartsAt, endAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -321,31 +411,49 @@ func decodeAffiliationMutationOutcome(data []byte) (*affiliationMutationResult, 
 	return &affiliationMutationResult{Value: &model.Affiliation{ID: id}, NoOp: outcome.NoOp}, nil
 }
 
-func (s SQLAffiliationStore) hydrateAffiliationMutationOutcome(ctx context.Context, tx *sqlxTxWrapper, value *affiliationMutationResult) (*affiliationMutationResult, error) {
+func (s SQLAffiliationStore) hydrateAffiliationMutationOutcome(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	value *affiliationMutationResult,
+) (*affiliationMutationResult, error) {
 	if value == nil || value.Value == nil {
 		return nil, store.NewErrInvalidInput("affiliation", "command_outcome", nil)
 	}
+
 	hydrated, err := s.getAffiliationInTransaction(ctx, tx, value.Value.ID)
 	if err != nil {
 		return nil, err
 	}
+
 	value.Value = hydrated
 	return value, nil
 }
 
-func (s SQLAffiliationStore) getAffiliationInTransaction(ctx context.Context, tx sqlxExecutor, id model.AffiliationID) (*model.Affiliation, error) {
+func (s SQLAffiliationStore) getAffiliationInTransaction(
+	ctx context.Context,
+	tx sqlxExecutor,
+	id model.AffiliationID,
+) (*model.Affiliation, error) {
 	var row affiliationRow
 	if err := tx.GetBuilder(ctx, &row, s.query.Where(sq.Eq{"affiliations.id": id, "affiliations.archived_at": nil})); err != nil {
 		return nil, translateError("affiliation", id.String(), err)
 	}
+
 	return row.model()
 }
 
-func (s SQLAffiliationStore) endAffiliation(ctx context.Context, tx sqlxExecutor, id model.AffiliationID, expectedRevision int64, endAt time.Time) (*model.Affiliation, error) {
+func (s SQLAffiliationStore) endAffiliation(
+	ctx context.Context,
+	tx sqlxExecutor,
+	id model.AffiliationID,
+	expectedRevision int64,
+	endAt time.Time,
+) (*model.Affiliation, error) {
 	var row affiliationRow
 	if err := tx.GetBuilder(ctx, &row, s.query.Where(sq.Eq{"affiliations.id": id, "affiliations.archived_at": nil})); err != nil {
 		return nil, translateError("affiliation", id.String(), err)
 	}
+
 	current, err := row.model()
 	if err != nil {
 		return nil, err
@@ -353,27 +461,54 @@ func (s SQLAffiliationStore) endAffiliation(ctx context.Context, tx sqlxExecutor
 	if current.Revision != expectedRevision {
 		return nil, store.NewErrConflict("affiliation", "affiliation_changed", nil)
 	}
+
 	endAt = model.TimeUTC(endAt)
 	if !endAt.After(current.StartsAt) || (current.EndsAt.Valid && !endAt.Before(current.EndsAt.Time)) {
 		return nil, store.NewErrConflict("affiliation", "affiliation_end_time", nil)
 	}
+
 	if current.Kind == model.AffiliationStudent {
 		var activeEnrollment bool
-		if err := tx.Get(ctx, &activeEnrollment, `SELECT EXISTS (SELECT 1 FROM class_members WHERE user_id = ? AND archived_at IS NULL AND end_at IS NULL)`, current.UserID.String()); err != nil {
-			return nil, fmt.Errorf("check affiliation enrollment dependencies: %w", err)
+		if getErr := tx.Get(
+			ctx,
+			&activeEnrollment,
+			`SELECT EXISTS (
+				SELECT 1
+				FROM class_members
+				WHERE user_id = ?
+					AND archived_at IS NULL
+					AND end_at IS NULL
+			)`,
+			current.UserID.String(),
+		); getErr != nil {
+			return nil, fmt.Errorf("check affiliation enrollment dependencies: %w", getErr)
 		}
+
 		if activeEnrollment {
 			return nil, store.NewErrConflict("affiliation", "affiliation_student_has_active_enrollment", nil)
 		}
 	}
+
 	at := model.TimeUTC(endAt)
-	result, err := tx.Exec(ctx, `UPDATE affiliations SET updated_at = GREATEST(updated_at, ?), end_at = ?, revision = revision + 1 WHERE id = ? AND archived_at IS NULL AND revision = ?`, at, at, id, expectedRevision)
+	result, err := tx.Exec(
+		ctx,
+		`UPDATE affiliations
+		SET updated_at = GREATEST(updated_at, ?), end_at = ?, revision = revision + 1
+		WHERE id = ?
+			AND archived_at IS NULL
+			AND revision = ?`,
+		at,
+		at,
+		id,
+		expectedRevision,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("end affiliation: %w", err)
 	}
 	if err := requireAffected(result, "affiliation", id.String()); err != nil {
 		return nil, err
 	}
+
 	current.UpdatedAt = latestTime(current.UpdatedAt, at)
 	current.EndsAt = model.OptionalTimeFrom(endAt)
 	current.Revision = expectedRevision + 1
@@ -399,9 +534,14 @@ func ensureAffiliationRangeAvailable(ctx context.Context, executor sqlxExecutor,
 	endAt := NullTimeFromOptional(candidate.EndsAt)
 	var overlaps bool
 	if err := executor.Get(ctx, &overlaps, `SELECT EXISTS (
-		SELECT 1 FROM affiliations WHERE user_id = ? AND kind = ? AND archived_at IS NULL
-		 AND (end_at IS NULL OR end_at > ?) AND (CAST(? AS timestamptz) IS NULL OR start_at < ?)
-	)`, candidate.UserID.String(), candidate.Kind, startAt, endAt, endAt); err != nil {
+			SELECT 1
+			FROM affiliations
+			WHERE user_id = ?
+				AND kind = ?
+				AND archived_at IS NULL
+				AND (end_at IS NULL OR end_at > ?)
+				AND (CAST(? AS timestamptz) IS NULL OR start_at < ?)
+		)`, candidate.UserID.String(), candidate.Kind, startAt, endAt, endAt); err != nil {
 		return fmt.Errorf("check affiliation overlap: %w", err)
 	}
 	if overlaps {

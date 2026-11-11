@@ -1,0 +1,113 @@
+// ---------------------------------------------------------------------------------------------
+// Copyright (c) 2026 Sudosy Labs. All rights reserved.
+// Licensed under the GNU Affero General Public License, version 3 only.
+// See LICENSE in the server module root for license information.
+// SPDX-License-Identifier: AGPL-3.0-only
+// ---------------------------------------------------------------------------------------------
+
+package identity
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
+)
+
+func newAuditedDesktopAuthorizationService(t *testing.T, persistence *desktopAuthorizationStoreFake,
+	auditor securityAuditor, at time.Time,
+) *Service {
+	t.Helper()
+	service := newTestDesktopAuthorizationService(t, persistence, func() time.Time { return at })
+	service.securityAudit = auditor
+	return service
+}
+
+func TestDesktopAuthorizationApproveRejectsForeignPrincipal(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
+	auditor := &securityAuditorFake{}
+	persistence := &desktopAuthorizationStoreFake{contextUserID: model.NewUserID(),
+		issueResult: &store.DesktopAuthorizationCodeIssued{CallbackURL: "http://127.0.0.1:49152/" + model.NewCredentialToken(), CodeExpiresAt: at.Add(time.Minute)}}
+	service := newAuditedDesktopAuthorizationService(t, persistence, auditor, at)
+	foreign := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
+		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
+		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
+		ClientType: model.SessionClientWeb, AuthenticatedAt: at}
+
+	approval, err := service.ApproveDesktopAuthorization(context.Background(), invocation.New(foreign, model.RequestMetadata{}),
+		ApproveDesktopAuthorizationCommand{Binding: model.NewCredentialToken(), State: model.NewCredentialToken()})
+	require.Nil(t, approval, "foreign approval = %#v, %v", approval, err)
+	require.True(t, apperror.Is(err, "authentication.desktop_authorization.rejected"), "foreign approval = %#v, %v", approval, err)
+	require.Nil(t, persistence.issued, "foreign approval issued")
+	// The one issue event is the refused approval by the foreign account.
+	issues := auditor.withOperation("issue_code")
+	require.Len(t, issues, 1, "foreign approval issued")
+	require.Equal(t, foreign.UserID, issues[0].actor, "foreign approval issued")
+	require.Equal(t, model.AuditStatusFail, issues[0].status, "foreign approval issued")
+}
+
+func TestDesktopAuthorizationApproveAndExchangeAuditTheApprovingAccount(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
+	auditor := &securityAuditorFake{}
+	account := model.NewUserID()
+	persistence := &desktopAuthorizationStoreFake{contextUserID: account, exchangeUserID: account,
+		issueResult: &store.DesktopAuthorizationCodeIssued{CallbackURL: "http://127.0.0.1:49152/" + model.NewCredentialToken(), CodeExpiresAt: at.Add(time.Minute)},
+		exchangeErr: store.NewErrNotFound("browser_authentication_transaction", "")}
+	service := newAuditedDesktopAuthorizationService(t, persistence, auditor, at)
+	browser := model.RequestMetadata{RequestID: "approve-request", IPAddress: "192.0.2.30", UserAgent: "browser"}
+
+	_, err := service.ApproveDesktopAuthorization(context.Background(), invocation.New(model.Principal{}, browser),
+		ApproveDesktopAuthorizationCommand{Binding: model.NewCredentialToken(), State: model.NewCredentialToken()})
+	require.NoError(t, err)
+	issues := auditor.withOperation("issue_code")
+	require.Len(t, issues, 1, "approval audit actor")
+	require.Equal(t, account, issues[0].actor, "approval audit actor")
+	require.Equal(t, browser, issues[0].metadata, "approval audit actor")
+	exchangeCommand := testDesktopAuthorizationExchangeCommand(
+		t, service, at, model.NewCredentialToken(), model.NewCredentialToken(), model.NewCredentialToken(), "",
+	)
+	desktop := model.RequestMetadata{RequestID: "exchange-request", IPAddress: "192.0.2.31", UserAgent: "desktop"}
+	_, err = service.ExchangeDesktopAuthorization(context.Background(), invocation.New(model.Principal{}, desktop), exchangeCommand)
+	require.True(t, apperror.Is(err, "authentication.desktop_authorization.rejected"), "exchange err = %v", err)
+	exchanges := auditor.withOperation("exchange")
+	require.Len(t, exchanges, 1, "exchange audit actor")
+	require.Equal(t, account, exchanges[0].actor, "exchange audit actor")
+	require.Equal(t, desktop, exchanges[0].metadata, "exchange audit actor")
+}
+
+func TestDesktopAuthorizationAuditAdapterRecordsActorSessionAndRequest(t *testing.T) {
+	t.Parallel()
+	audits := &systemAuditStoreFake{}
+	auditor, err := access.NewAuditor(access.AuditorDependencies{Audits: audits, Institutions: loginAuditInstitutionStore{id: model.NewInstitutionID()}, NodeID: "node-desktop"})
+	require.NoError(t, err)
+	service := &Service{securityAudit: auditor}
+	account, sessionID, institutionID := model.NewUserID(), model.NewSessionID(), model.NewInstitutionID()
+	metadata := model.RequestMetadata{RequestID: "request-desktop", IPAddress: "192.0.2.40", UserAgent: "agent"}
+	issue, err := service.beginDesktopIssueAudit(context.Background(),
+		invocation.New(model.Principal{UserID: account, SessionID: sessionID}, metadata), account, institutionID)
+	require.NoError(t, err)
+	require.Equal(t, account, issue.ActorID)
+	require.Equal(t, sessionID, issue.SessionID)
+	require.Equal(t, "192.0.2.40", issue.IPAddress)
+	require.Equal(t, "agent", issue.UserAgent)
+	require.Equal(t, "request-desktop", issue.RequestID)
+	require.Equal(t, string(model.SessionClientWeb), issue.ClientType)
+	require.Equal(t, institutionID.String(), issue.ScopeID)
+	require.Equal(t, model.AuditStatusAttempt, issue.Status)
+	exchange, err := service.beginDesktopExchangeAudit(context.Background(), invocation.New(model.Principal{}, metadata), account, institutionID)
+	require.NoError(t, err)
+	require.Equal(t, account, exchange.ActorID)
+	require.Empty(t, exchange.SessionID)
+	require.Equal(t, "192.0.2.40", exchange.IPAddress)
+	require.Equal(t, string(model.SessionClientDesktop), exchange.ClientType)
+	require.Equal(t, "authentication.desktop_session_issue", exchange.Action)
+}

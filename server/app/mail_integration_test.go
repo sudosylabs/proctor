@@ -17,9 +17,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -38,7 +39,7 @@ func TestControlledMailUsesRealApplicationGraphAndDurableWorker(t *testing.T) {
 	)
 	ctx := context.Background()
 	const password = "correct horse battery staple"
-	bootstrap, appErr := helper.App.BootstrapInstallation(ctx, invocation.Invocation{}, app.BootstrapInstallationCommand{
+	bootstrap, appErr := helper.App.Identity.BootstrapInstallation(ctx, invocation.Invocation{}, identity.BootstrapInstallationCommand{
 		InstitutionName: "mail-university", InstitutionDisplayName: "Mail University",
 		AdministratorUsername: "mail-operator", AdministratorEmail: "mail-operator@example.edu",
 		AdministratorDisplayName: "Mail Operator", AdministratorLocale: "en", AdministratorTimezone: "UTC",
@@ -52,24 +53,24 @@ func TestControlledMailUsesRealApplicationGraphAndDurableWorker(t *testing.T) {
 	require.NoError(t, err)
 	operator, err = persistence.User().Get(ctx, operator.ID)
 	require.NoError(t, err)
-	login, appErr := helper.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{
+	login, appErr := helper.App.Identity.Login(ctx, invocation.Invocation{}, identity.LoginCommand{
 		LoginID: operator.Username, Password: password, ClientType: model.SessionClientWeb,
 		Source: "127.0.0.1:1", DeviceName: "mail-integration",
 	})
 	require.NoError(t, appErr)
-	principal, appErr := helper.App.AuthenticateAccess(ctx, login.Tokens.AccessToken)
+	principal, appErr := helper.App.Identity.AuthenticateAccess(ctx, login.Tokens.AccessToken)
 	require.NoError(t, appErr)
-	invocation := invocation.New(*principal, model.RequestMetadata{RequestID: "mail-integration"})
-	queued, appErr := helper.App.SendTestMail(ctx, invocation)
+	inv := invocation.New(*principal, model.RequestMetadata{RequestID: "mail-integration"})
+	queued, appErr := helper.App.Mail.SendTestMail(ctx, inv)
 	require.NoError(t, appErr)
 	require.Equal(t, operator.ID, queued.TargetUserID)
 	require.Equal(t, model.MailDeliveryQueued, queued.State)
 	require.Equal(t, "m***@example.edu", queued.MaskedRecipient)
-	page, appErr := helper.App.ListMailDeliveries(ctx, invocation, app.ListMailDeliveriesQuery{States: []model.MailDeliveryState{model.MailDeliveryQueued}, TemplateKeys: []model.MailTemplateKey{model.MailTemplateSystemTest}, Limit: 20})
+	page, appErr := helper.App.Mail.ListMailDeliveries(ctx, inv, mail.ListDeliveriesQuery{States: []model.MailDeliveryState{model.MailDeliveryQueued}, TemplateKeys: []model.MailTemplateKey{model.MailTemplateSystemTest}, Limit: 20})
 	require.NoError(t, appErr, "queued delivery page = %#v", page)
 	require.Len(t, page.Items, 1, "queued delivery page = %#v", page)
 	require.Equal(t, queued.ID, page.Items[0].ID, "queued delivery page = %#v", page)
-	canceled, appErr := helper.App.CancelMailDelivery(ctx, invocation, queued.ID)
+	canceled, appErr := helper.App.Mail.CancelMailDelivery(ctx, inv, queued.ID)
 	require.NoError(t, appErr, "canceled delivery = %#v", canceled)
 	require.Equal(t, model.MailDeliveryCanceled, canceled.State, "canceled delivery = %#v", canceled)
 	require.Equal(t, queued.ID, canceled.ID, "canceled delivery = %#v", canceled)
@@ -77,15 +78,15 @@ func TestControlledMailUsesRealApplicationGraphAndDurableWorker(t *testing.T) {
 	durableCanceled, err := persistence.Mail().GetDelivery(ctx, queued.ID)
 	require.NoError(t, err, "canceled durable delivery = %#v", durableCanceled)
 	require.Empty(t, durableCanceled.EncryptedPayload, "canceled durable delivery = %#v", durableCanceled)
-	_, appErr = helper.App.RetryMailDelivery(ctx, invocation, queued.ID)
+	_, appErr = helper.App.Mail.RetryMailDelivery(ctx, inv, queued.ID)
 	require.True(t, apperror.Is(appErr, "mail.conflict"), "RetryMailDelivery(canceled) error = %v", appErr)
-	queued, appErr = helper.App.SendTestMail(ctx, invocation)
+	queued, appErr = helper.App.Mail.SendTestMail(ctx, inv)
 	require.NoError(t, appErr)
 
 	startIntegrationServer(t, helper)
 	deadline := time.Now().Add(10 * time.Second)
 	for {
-		view, readErr := helper.App.GetMailDelivery(ctx, invocation, queued.ID)
+		view, readErr := helper.App.Mail.GetMailDelivery(ctx, inv, queued.ID)
 		require.NoError(t, readErr)
 		if view.State == model.MailDeliveryAccepted {
 			require.Equal(t, queued.MessageID, view.MessageID)

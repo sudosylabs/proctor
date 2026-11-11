@@ -23,7 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/packages/mail"
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
@@ -44,18 +44,18 @@ func TestEmailTransitionsUseRealServerGraphAndFrozenRecipients(t *testing.T) {
 	)
 	ctx := context.Background()
 	const password = "correct horse battery staple"
-	bootstrap, appErr := helper.App.BootstrapInstallation(ctx, invocation.Invocation{}, app.BootstrapInstallationCommand{
+	bootstrap, appErr := helper.App.Identity.BootstrapInstallation(ctx, invocation.Invocation{}, identity.BootstrapInstallationCommand{
 		InstitutionName: "email-transition-university", InstitutionDisplayName: "Email Transition University",
 		AdministratorUsername: "email-transition-admin", AdministratorEmail: "email-transition-admin@example.edu",
 		AdministratorDisplayName: "Email Transition Admin", AdministratorLocale: "en", AdministratorTimezone: "UTC",
 		Password: password, BootstrapSecret: testlib.BootstrapSecret, Source: "127.0.0.1:1",
 	})
 	require.NoError(t, appErr)
-	first, appErr := helper.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
+	first, appErr := helper.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
 		Username: "email-transition-first", Email: "first-old@example.edu", DisplayName: "First User",
 	}, Password: password})
 	require.NoError(t, appErr)
-	second, appErr := helper.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
+	second, appErr := helper.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
 		Username: "email-transition-second", Email: "second-old@example.edu", DisplayName: "Second User",
 	}, Password: password})
 	require.NoError(t, appErr)

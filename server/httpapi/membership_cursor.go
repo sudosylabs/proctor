@@ -10,6 +10,7 @@ package httpapi
 import (
 	"errors"
 
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -23,16 +24,21 @@ type membershipPageCursor struct {
 	AfterID     string             `json:"after_id"`
 }
 
-func membershipPageCursorSpec() opaqueCursorSpec[membershipPageCursor] {
-	return opaqueCursorSpec[membershipPageCursor]{
-		label: "membership", maximumEncodedLength: 1024,
-		members: []string{"scope_type", "scope_id", "active_at", "after_user_id", "after_id"},
-		validate: func(cursor membershipPageCursor) error {
+func membershipPageCursorSpec() route.CursorSpec[membershipPageCursor] {
+	return route.CursorSpec[membershipPageCursor]{
+		Label:                "membership",
+		MaximumEncodedLength: 1024,
+		Members:              []string{"scope_type", "scope_id", "active_at", "after_user_id", "after_id"},
+		Validate: func(cursor membershipPageCursor) error {
 			if (cursor.ScopeType != model.ResourceAcademicUnit && cursor.ScopeType != model.ResourceClass) ||
-				!model.IsValidOpaqueID(cursor.ScopeID) || cursor.ActiveAt == nil || *cursor.ActiveAt < 0 ||
-				!model.UserID(cursor.AfterUserID).IsValid() || !model.IsValidOpaqueID(cursor.AfterID) {
+				!model.IsValidOpaqueID(cursor.ScopeID) ||
+				cursor.ActiveAt == nil ||
+				*cursor.ActiveAt < 0 ||
+				!model.UserID(cursor.AfterUserID).IsValid() ||
+				!model.IsValidOpaqueID(cursor.AfterID) {
 				return errors.New("invalid membership keyset")
 			}
+
 			return nil
 		},
 	}

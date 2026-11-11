@@ -10,20 +10,22 @@ package app
 import (
 	"context"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// realtimeAdmissionService admits long-lived WebSocket clients. It
+// RealtimeAdmission admits long-lived WebSocket clients. It
 // revalidates a Session principal before the transport keeps trusting it and
 // authorizes each subscription against current resource state, concealing
 // Exams and Sittings the caller may not see.
-type realtimeAdmissionService struct {
-	principals    *authenticationService
+type RealtimeAdmission struct {
+	principals    *identity.Service
 	exams         realtimeExamViewAuthorizer
 	sittings      realtimeSittingViewAuthorizer
-	authorization *accessControlService
+	authorization *access.Authorizer
 	operational   OperationalRecorder
 }
 
@@ -53,9 +55,9 @@ var (
 // AuthorizeWebSocketSubscription authorizes one subscription Action on its
 // Resource. Exams and Sittings use their relationship gates; every other
 // Resource takes the audited Access Control decision.
-func (s *realtimeAdmissionService) AuthorizeWebSocketSubscription(
+func (s *RealtimeAdmission) AuthorizeWebSocketSubscription(
 	ctx context.Context,
-	invocation invocation.Invocation,
+	inv invocation.Invocation,
 	action model.Action,
 	resource model.Resource,
 ) (resultErr error) {
@@ -69,24 +71,28 @@ func (s *realtimeAdmissionService) AuthorizeWebSocketSubscription(
 		if err != nil {
 			return invalidRealtimeRequest("subscription")
 		}
-		return realtimeExamFailures.Conceal(s.exams.AuthorizeExamView(ctx, invocation, examID))
+		return realtimeExamFailures.Conceal(s.exams.AuthorizeExamView(ctx, inv, examID))
 	}
 	if action == model.ActionExamSittingView && resource.Type == model.ResourceExamSitting {
 		sittingID, err := model.ParseExamSittingID(resource.ID)
 		if err != nil {
 			return invalidRealtimeRequest("subscription")
 		}
-		return realtimeSittingFailures.Conceal(s.sittings.AuthorizeSittingView(ctx, invocation, sittingID))
+		return realtimeSittingFailures.Conceal(s.sittings.AuthorizeSittingView(ctx, inv, sittingID))
 	}
-	err := s.authorization.Authorize(ctx, invocation, action, resource)
+	err := s.authorization.Authorize(ctx, inv, action, resource)
 	recordOperational(s.operational, "authorization", "decision", err)
 	return err
 }
 
 // ValidateWebSocketPrincipal revalidates the authoritative Session and User
 // state behind a long-lived connection's principal.
-func (s *realtimeAdmissionService) ValidateWebSocketPrincipal(ctx context.Context, principal model.Principal) error {
-	err := s.principals.validatePrincipal(ctx, principal)
+func (s *RealtimeAdmission) ValidateWebSocketPrincipal(ctx context.Context, principal model.Principal) error {
+	err := s.principals.ValidatePrincipal(ctx, principal)
 	recordOperational(s.operational, "realtime", "principal_validate", err)
 	return err
+}
+
+func invalidRealtimeRequest(field string) error {
+	return apperror.New("websocket.request.invalid").WithField("field", field)
 }

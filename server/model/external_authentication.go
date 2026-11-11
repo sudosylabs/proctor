@@ -40,8 +40,12 @@ const (
 )
 
 func (p ExternalAuthenticationPurpose) IsValid() bool {
-	return p == ExternalAuthenticationPurposeMFARecovery || p == ExternalAuthenticationPurposeReauthenticate || p == ExternalAuthenticationPurposeLogin || p == ExternalAuthenticationPurposeConnect ||
-		p == ExternalAuthenticationPurposeInvitationAdmission || p == ExternalAuthenticationPurposeDesktopAuthorization ||
+	return p == ExternalAuthenticationPurposeMFARecovery ||
+		p == ExternalAuthenticationPurposeReauthenticate ||
+		p == ExternalAuthenticationPurposeLogin ||
+		p == ExternalAuthenticationPurposeConnect ||
+		p == ExternalAuthenticationPurposeInvitationAdmission ||
+		p == ExternalAuthenticationPurposeDesktopAuthorization ||
 		p == ExternalAuthenticationPurposeDesktopReauthentication
 }
 
@@ -108,11 +112,13 @@ func (c ExternalAuthenticationCallback) SingleValue(
 	maximumLength int,
 ) (string, error) {
 	values := c.Values[name]
-	if len(values) != 1 || values[0] == "" ||
+	if len(values) != 1 ||
+		values[0] == "" ||
 		len(values[0]) > maximumLength ||
 		strings.ContainsAny(values[0], "\x00\r\n") {
 		return "", ErrInvalidExternalAuthenticationCallback
 	}
+
 	return values[0], nil
 }
 
@@ -124,10 +130,13 @@ func (c ExternalAuthenticationCallback) OptionalSingleValue(
 	if !exists {
 		return "", nil
 	}
-	if len(values) != 1 || len(values[0]) > maximumLength ||
+
+	if len(values) != 1 ||
+		len(values[0]) > maximumLength ||
 		strings.ContainsAny(values[0], "\x00\r\n") {
 		return "", ErrInvalidExternalAuthenticationCallback
 	}
+
 	return values[0], nil
 }
 
@@ -187,6 +196,7 @@ func (s *ExternalLoginState) Validate() error {
 	if !s.ID.IsValid() {
 		return invalidModelError(where, "external_login_state", "id", "must be a valid identifier", "")
 	}
+
 	details := "id=" + s.ID.String()
 	if s.CreatedAt.IsZero() || s.UpdatedAt.IsZero() {
 		return invalidModelError(where, "external_login_state", "created_at", "must be set", details)
@@ -194,6 +204,7 @@ func (s *ExternalLoginState) Validate() error {
 	if s.UpdatedAt.Before(s.CreatedAt) {
 		return invalidModelError(where, "external_login_state", "updated_at", "must not precede created_at", details)
 	}
+
 	if len(s.Provider) == 0 ||
 		len(s.Provider) > IdentityProviderMaxLength ||
 		!validIdentityProvider.MatchString(s.Provider) {
@@ -205,9 +216,11 @@ func (s *ExternalLoginState) Validate() error {
 			details,
 		)
 	}
+
 	if err := s.validatePurposeTarget(details); err != nil {
 		return err
 	}
+
 	if !IsValidTokenHash(s.StateHash) || !IsValidTokenHash(s.BindingHash) {
 		return invalidModelError(
 			where,
@@ -217,6 +230,7 @@ func (s *ExternalLoginState) Validate() error {
 			details,
 		)
 	}
+
 	if !IsSafeRelativeURL(s.ReturnTo) {
 		return invalidModelError(
 			where,
@@ -226,6 +240,7 @@ func (s *ExternalLoginState) Validate() error {
 			details,
 		)
 	}
+
 	if !s.ClientType.IsValid() || s.ClientType == SessionClientCLI {
 		return invalidModelError(
 			where,
@@ -235,6 +250,7 @@ func (s *ExternalLoginState) Validate() error {
 			details,
 		)
 	}
+
 	if len(s.DeviceID) > SessionDeviceIDMaxLength ||
 		utf8.RuneCountInString(s.DeviceName) > SessionDeviceNameMaxRunes {
 		return invalidModelError(
@@ -245,6 +261,7 @@ func (s *ExternalLoginState) Validate() error {
 			details,
 		)
 	}
+
 	if s.ExpiresAt.IsZero() || !s.ExpiresAt.After(s.CreatedAt) {
 		return invalidModelError(
 			where,
@@ -254,6 +271,7 @@ func (s *ExternalLoginState) Validate() error {
 			details,
 		)
 	}
+
 	if s.ConsumedAt.Valid &&
 		(s.ConsumedAt.Time.Before(s.CreatedAt) || !s.ConsumedAt.Time.Before(s.ExpiresAt)) {
 		return invalidModelError(
@@ -264,6 +282,7 @@ func (s *ExternalLoginState) Validate() error {
 			details,
 		)
 	}
+
 	return nil
 }
 
@@ -271,24 +290,44 @@ func (s *ExternalLoginState) Validate() error {
 func (s *ExternalLoginState) validatePurposeTarget(details string) error {
 	const where = "ExternalLoginState.Validate"
 	if !s.Purpose.IsValid() ||
-		(s.Purpose == ExternalAuthenticationPurposeLogin && (!s.TargetUserID.IsZero() || !s.InvitationID.IsZero() || !s.BrowserAuthenticationTransactionID.IsZero() || s.AuditEventID != "")) ||
-		(s.Purpose == ExternalAuthenticationPurposeConnect && (!s.TargetUserID.IsValid() || !s.InvitationID.IsZero() || !s.BrowserAuthenticationTransactionID.IsZero() || !AuditEventID(s.AuditEventID).IsValid())) ||
-		(s.Purpose == ExternalAuthenticationPurposeInvitationAdmission && (!s.TargetUserID.IsZero() || !s.InvitationID.IsValid() || !s.BrowserAuthenticationTransactionID.IsZero() || s.AuditEventID != "")) ||
-		((s.Purpose == ExternalAuthenticationPurposeDesktopAuthorization || s.Purpose == ExternalAuthenticationPurposeDesktopReauthentication) && (!s.TargetUserID.IsZero() || !s.InvitationID.IsZero() || !s.BrowserAuthenticationTransactionID.IsValid() || s.AuditEventID != "")) {
+		(s.Purpose == ExternalAuthenticationPurposeLogin &&
+			(!s.TargetUserID.IsZero() || !s.InvitationID.IsZero() || !s.BrowserAuthenticationTransactionID.IsZero() || s.AuditEventID != "")) ||
+		(s.Purpose == ExternalAuthenticationPurposeConnect &&
+			(!s.TargetUserID.IsValid() ||
+				!s.InvitationID.IsZero() ||
+				!s.BrowserAuthenticationTransactionID.IsZero() ||
+				!AuditEventID(s.AuditEventID).IsValid())) ||
+		(s.Purpose == ExternalAuthenticationPurposeInvitationAdmission &&
+			(!s.TargetUserID.IsZero() || !s.InvitationID.IsValid() || !s.BrowserAuthenticationTransactionID.IsZero() || s.AuditEventID != "")) ||
+		((s.Purpose == ExternalAuthenticationPurposeDesktopAuthorization || s.Purpose == ExternalAuthenticationPurposeDesktopReauthentication) &&
+			(!s.TargetUserID.IsZero() || !s.InvitationID.IsZero() || !s.BrowserAuthenticationTransactionID.IsValid() || s.AuditEventID != "")) {
 		return invalidModelError(where, "external_login_state", "purpose", "has an invalid target", details)
 	}
-	if s.Purpose == ExternalAuthenticationPurposeMFARecovery && (!s.TargetUserID.IsValid() || !s.InvitationID.IsZero() || !s.BrowserAuthenticationTransactionID.IsZero() || s.AuditEventID != "" || s.ReturnTo != "/account/security") {
+
+	if s.Purpose == ExternalAuthenticationPurposeMFARecovery &&
+		(!s.TargetUserID.IsValid() ||
+			!s.InvitationID.IsZero() ||
+			!s.BrowserAuthenticationTransactionID.IsZero() ||
+			s.AuditEventID != "" ||
+			s.ReturnTo != "/account/security") {
 		return invalidModelError(where, "external_login_state", "recovery", "requires the exact User and security task", details)
 	}
+
 	if s.Purpose == ExternalAuthenticationPurposeReauthenticate {
-		if !s.TargetUserID.IsValid() || !s.SessionID.IsValid() || !s.SessionCredentialID.IsValid() || !s.ExternalIdentityID.IsValid() ||
-			!s.InvitationID.IsZero() || !s.BrowserAuthenticationTransactionID.IsZero() || !AuditEventID(s.AuditEventID).IsValid() ||
+		if !s.TargetUserID.IsValid() ||
+			!s.SessionID.IsValid() ||
+			!s.SessionCredentialID.IsValid() ||
+			!s.ExternalIdentityID.IsValid() ||
+			!s.InvitationID.IsZero() ||
+			!s.BrowserAuthenticationTransactionID.IsZero() ||
+			!AuditEventID(s.AuditEventID).IsValid() ||
 			(s.ReturnTo != "/account/security" && s.ReturnTo != "/account/connect-provider") {
 			return invalidModelError(where, "external_login_state", "reauthentication", "has an invalid current Session or task", details)
 		}
 	} else if !s.SessionID.IsZero() || !s.SessionCredentialID.IsZero() || !s.ExternalIdentityID.IsZero() {
 		return invalidModelError(where, "external_login_state", "session_id", "requires the reauthentication purpose", details)
 	}
+
 	return nil
 }
 
@@ -315,14 +354,17 @@ func (s *ExternalLoginState) Auditable() map[string]any {
 // IsSafeRelativeURL accepts a local absolute-path reference without authority,
 // backslashes, fragments, or control characters.
 func IsSafeRelativeURL(value string) bool {
-	if value == "" || len(value) > ExternalLoginReturnToMaxLength ||
-		!strings.HasPrefix(value, "/") || strings.HasPrefix(value, "//") ||
+	if value == "" ||
+		len(value) > ExternalLoginReturnToMaxLength ||
+		!strings.HasPrefix(value, "/") ||
+		strings.HasPrefix(value, "//") ||
 		strings.ContainsAny(value, "\\#\x00\r\n") {
 		return false
 	}
+
 	parsed, err := url.ParseRequestURI(value)
 	return err == nil &&
-		parsed.IsAbs() == false &&
+		!parsed.IsAbs() &&
 		parsed.Host == "" &&
 		parsed.Fragment == ""
 }

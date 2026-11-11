@@ -46,8 +46,8 @@ func testCorrectionCapabilityGates(t *testing.T, ss store.Store) {
 				instructions := "Corrected instructions."
 				command.InstructionsMarkdown = &instructions
 			} else {
-				policy, err := model.NewBrowserPolicy(true, "start", []model.BrowserPolicyRule{{RuleID: "start", Origin: "https://example.edu", PathPrefix: "/reference", HostMatch: model.BrowserPolicyHostExact, AllowRedirects: true, BlockedNavigationOutcome: model.BrowserPolicyBlockedNavigationRecord}})
-				require.NoError(t, err)
+				policy, newErr := model.NewBrowserPolicy(true, "start", []model.BrowserPolicyRule{{RuleID: "start", Origin: "https://example.edu", PathPrefix: "/reference", HostMatch: model.BrowserPolicyHostExact, AllowRedirects: true, BlockedNavigationOutcome: model.BrowserPolicyBlockedNavigationRecord}})
+				require.NoError(t, newErr)
 				command.BrowserPolicy = &policy
 			}
 			corrected, err := ss.ExamCorrection().Apply(ctx, command, examCommand(fixture.manager.ID, "exam.sitting.correction.apply", "correction-capabilities", "correction-capabilities"))

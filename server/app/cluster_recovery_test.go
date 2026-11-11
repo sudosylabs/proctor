@@ -15,8 +15,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -26,51 +26,6 @@ import (
 // invalidations are lost or duplicated. Authoritative PostgreSQL (store) state
 // decide correctness, not cache state or message delivery.
 
-func TestSessionRevocationWithoutClusterFanoutRejectsWithWarmPeerCache(t *testing.T) {
-	t.Parallel()
-
-	// Node A revokes in the store and clears its local cache, but the peer
-	// never receives the cluster invalidation. Every subsequent authentication
-	// must reject the credential even while an old positive entry remains.
-	storeFake := newAuthenticationStoreFake()
-	cacheA := newAuthenticationCacheFake()
-	cacheB := newAuthenticationCacheFake()
-	serviceA := newTestAuthenticationServiceWithCache(t, storeFake, cacheA)
-	serviceB := newTestAuthenticationServiceWithCache(t, storeFake, cacheB)
-
-	user, rawAccess := seedAuthenticatedSession(t, serviceA)
-	ctx := context.Background()
-	hash := model.HashToken(rawAccess)
-	cacheLegacyAuthentication(t, cacheA, storeFake.accessByHash[hash], storeFake.sessionByCredential[hash], user)
-	cacheLegacyAuthentication(t, cacheB, storeFake.accessByHash[hash], storeFake.sessionByCredential[hash], user)
-
-	// Both nodes have previously accepted the credential.
-	_, err := serviceA.authenticateAccess(ctx, rawAccess)
-	require.NoError(t, err)
-	_, err = serviceB.authenticateAccess(ctx, rawAccess)
-	require.NoError(t, err)
-
-	// Commit revocation on node A only; intentionally skip peer fan-out.
-	sessionID := ""
-	for id, session := range storeFake.sessions {
-		if session.UserID == user.ID {
-			sessionID = id
-			break
-		}
-	}
-	require.NotEmpty(t, sessionID, "session not found")
-	hashes, err := storeFake.Session().Withdraw(ctx, &store.SessionWithdrawal{ID: model.SessionID(sessionID), UserID: user.ID, RevokedAt: time.Now(), Reason: model.SessionRevocationInactiveUser})
-	require.NoError(t, err)
-	invalidator, err := newAuthenticationCacheInvalidator(authenticationCacheInvalidatorDependencies{Cache: cacheA, Diagnostics: &securityEffectsDiagnosticsFake{}})
-	require.NoError(t, err)
-	invalidator.InvalidateAccessCredentials(ctx, hashes)
-
-	_, err = cacheB.Get(ctx, authenticationCachePrefix+hash)
-	require.NoError(t, err)
-	_, err = serviceB.authenticateAccess(ctx, rawAccess)
-	require.True(t, apperror.Is(err, "authentication.token_invalid"), "node B auth after committed revocation with stale cache error = %v", err)
-}
-
 func TestDuplicateSessionRevocationPropagationIsIdempotent(t *testing.T) {
 	t.Parallel()
 
@@ -78,15 +33,15 @@ func TestDuplicateSessionRevocationPropagationIsIdempotent(t *testing.T) {
 	sink := &recordingRealtimeSink{}
 	cluster := &recordingRealtimeCluster{}
 	realtime := newTestRealtimeService(t, cache)
-	require.NoError(t, realtime.AttachRealtimeClusterFanout(cluster))
-	require.NoError(t, realtime.AttachRealtimeSink(sink))
+	require.NoError(t, realtime.AttachClusterFanout(cluster))
+	require.NoError(t, realtime.AttachSink(sink))
 
 	userID := model.NewID()
 	sessionID := model.NewID()
 	hash := model.HashToken(model.NewCredentialToken())
 	ctx := context.Background()
 	// Seed a cache entry that both propagations must delete.
-	require.NoError(t, cache.SetAlways(ctx, authenticationCachePrefix+hash, []byte(`{}`), time.Hour))
+	require.NoError(t, cache.SetAlways(ctx, accessCredentialCachePrefix+hash, []byte(`{}`), time.Hour))
 
 	realtime.SessionsRevoked(ctx, model.UserID(userID), []model.SessionID{model.SessionID(sessionID)}, []string{hash})
 	realtime.SessionsRevoked(ctx, model.UserID(userID), []model.SessionID{model.SessionID(sessionID)}, []string{hash})
@@ -94,8 +49,8 @@ func TestDuplicateSessionRevocationPropagationIsIdempotent(t *testing.T) {
 	require.GreaterOrEqual(t, len(sink.sessionCloses), 2, "session closes")
 	require.GreaterOrEqual(t, len(cluster.broadcasts), 2, "cluster broadcasts")
 	// Second delete is a no-op success; cache must remain absent.
-	_, err := cache.Get(ctx, authenticationCachePrefix+hash)
-	require.ErrorIs(t, err, ErrAuthenticationCacheMiss, "cache after duplicate revocation")
+	_, err := cache.Get(ctx, accessCredentialCachePrefix+hash)
+	require.ErrorIs(t, err, identity.ErrAuthenticationCacheMiss, "cache after duplicate revocation")
 }
 
 func TestMissedAuthorizationInvalidationStillUsesCurrentStoreState(t *testing.T) {
@@ -131,13 +86,12 @@ func TestMissedAuthorizationInvalidationStillUsesCurrentStoreState(t *testing.T)
 		roles:       map[string]*model.Role{roleID: role},
 		bindings:    map[string]*model.RoleBinding{bindingID: binding},
 	}
-	resolver, err := newAccessScopeResolver(accessScopeResolverDependencies{Institutions: root.Institution(), AcademicUnits: recoveryAccessAcademicUnitStore{}, Classes: recoveryAccessClassStore{}, Users: recoveryAccessUserStore{}, ClassMembers: recoveryAccessClassMemberStore{}, Exams: &accessExamAuthoringStoreFake{}, Sittings: &accessExamSittingStoreFake{}, Submissions: &accessExamSubmissionStoreFake{}, AcademicPeriods: &accessAcademicPeriodStoreFake{}})
+	resolver, err := access.NewScopeResolver(access.ScopeResolverDependencies{Institutions: root.Institution(), AcademicUnits: recoveryAccessAcademicUnitStore{}, Classes: recoveryAccessClassStore{}, Users: recoveryAccessUserStore{}, ClassMembers: recoveryAccessClassMemberStore{}, Exams: &accessExamAuthoringStoreFake{}, Sittings: &accessExamSittingStoreFake{}, Submissions: &accessExamSubmissionStoreFake{}, AcademicPeriods: &accessAcademicPeriodStoreFake{}})
 	require.NoError(t, err)
-	audit, err := newAuditService(auditServiceDependencies{Audits: root.Audit(), Institutions: root.Institution(), NodeID: "node-test"})
+	audit, err := access.NewAuditor(access.AuditorDependencies{Audits: root.Audit(), Institutions: root.Institution(), NodeID: "node-test"})
 	require.NoError(t, err)
-	authz, err := newAccessControlService(accessControlServiceDependencies{Roles: root.Role(), Bindings: root.RoleBinding(), Resolver: resolver, Audit: audit})
+	authz, err := access.NewAuthorizer(access.AuthorizerDependencies{Roles: root.Role(), Bindings: root.RoleBinding(), Resolver: resolver, Audit: audit, Now: func() time.Time { return now }})
 	require.NoError(t, err)
-	authz.now = func() time.Time { return now }
 
 	principal := model.Principal{
 		UserID:                 model.UserID(userID),
@@ -170,42 +124,6 @@ type recoveryAccessClassStore struct{ store.ClassStore }
 type recoveryAccessUserStore struct{ store.UserStore }
 type recoveryAccessClassMemberStore struct{ store.ClassMemberStore }
 
-func TestSessionExpiryRejectsDespitePositiveCache(t *testing.T) {
-	t.Parallel()
-
-	// Even without invalidation, an old positive cache entry cannot override
-	// the Session's authoritative absolute or idle expiry.
-	storeFake := newAuthenticationStoreFake()
-	cache := newAuthenticationCacheFake()
-	service := newTestAuthenticationServiceWithCache(t, storeFake, cache)
-	service.deps.SessionPolicy.AccessTTL = time.Hour
-	service.deps.SessionPolicy.IdleTTL = time.Hour
-	service.deps.SessionPolicy.AbsoluteTTL = time.Hour
-
-	fixedNow := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
-	service.deps.Now = func() time.Time { return fixedNow }
-
-	_, rawAccess := seedAuthenticatedSession(t, service)
-	ctx := context.Background()
-	_, err := service.authenticateAccess(ctx, rawAccess)
-	require.NoError(t, err)
-
-	// Keep a valid snapshot while the durable Session expires.
-	for _, session := range storeFake.sessions {
-		for _, credential := range storeFake.accessByHash {
-			if credential.SessionID != session.ID {
-				continue
-			}
-			user := storeFake.users[session.UserID.String()]
-			cacheLegacyAuthentication(t, cache, credential, session, user)
-			session.ExpiresAt = fixedNow.Add(-time.Minute)
-			session.IdleExpiresAt = fixedNow.Add(-time.Minute)
-		}
-	}
-	_, err = service.authenticateAccess(ctx, rawAccess)
-	require.True(t, apperror.Is(err, "authentication.token_invalid"), "auth with expired authoritative Session error = %v", err)
-}
-
 func TestDuplicateRealtimePeerPublicationDoesNotRebroadcast(t *testing.T) {
 	t.Parallel()
 
@@ -214,11 +132,11 @@ func TestDuplicateRealtimePeerPublicationDoesNotRebroadcast(t *testing.T) {
 	sink := &recordingRealtimeSink{}
 	cluster := &recordingRealtimeCluster{}
 	service := newTestRealtimeService(t, noopAuthenticationCache{})
-	require.NoError(t, service.AttachRealtimeClusterFanout(cluster))
-	require.NoError(t, service.AttachRealtimeSink(sink))
+	require.NoError(t, service.AttachClusterFanout(cluster))
+	require.NoError(t, service.AttachSink(sink))
 
 	unitID := model.NewID()
-	event := realtime.RealtimeEvent{
+	event := realtime.Event{
 		Name:   "academic_unit_created",
 		Action: model.ActionAcademicUnitView,
 		Resource: model.Resource{
@@ -226,7 +144,7 @@ func TestDuplicateRealtimePeerPublicationDoesNotRebroadcast(t *testing.T) {
 			ID:   unitID,
 		},
 	}
-	require.NoError(t, service.PublishRealtimeEvent(context.Background(), event))
+	require.NoError(t, service.Publish(context.Background(), event))
 	require.Len(t, cluster.broadcasts, 1, "broadcasts")
 	payload := cluster.broadcasts[0].data
 
@@ -238,33 +156,6 @@ func TestDuplicateRealtimePeerPublicationDoesNotRebroadcast(t *testing.T) {
 	require.Len(t, cluster.broadcasts, 1, "peer path rebroadcast: broadcasts")
 	// Local sink may observe duplicates; durable correctness is HTTP resync.
 	require.GreaterOrEqual(t, len(sink.events), 3, "local events")
-}
-
-func seedAuthenticatedSession(
-	t *testing.T,
-	service *authenticationService,
-) (*model.User, string) {
-	t.Helper()
-	password := "CorrectHorseBatteryStaple1!"
-	suffix := model.NewID()
-	user, err := service.CreateLocalUser(context.Background(), CreateLocalUserCommand{
-		User: &model.User{
-			Username: "cluster-user-" + suffix,
-			Email:    "cluster-user-" + suffix + "@example.edu",
-		},
-		Password: password,
-	})
-	require.NoError(t, err)
-	result, err := service.Login(context.Background(), invocation.Invocation{}, LoginCommand{
-		LoginID:    user.Username,
-		Password:   password,
-		ClientType: model.SessionClientCLI,
-		Source:     "127.0.0.1",
-	})
-	require.NoError(t, err)
-	require.NotNil(t, result.Tokens)
-	require.NotEmpty(t, result.Tokens.AccessToken)
-	return user, result.Tokens.AccessToken
 }
 
 // recoveryAuthorizationStore is a minimal root store for authorization

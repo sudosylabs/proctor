@@ -31,20 +31,42 @@ func CanonicalizeBrowserPolicyOrigin(value string) (string, error) {
 
 func canonicalizeBrowserPolicyRuleOrigin(value string, httpException bool) (string, error) {
 	if len(value) > BrowserPolicyOriginMaximumBytes || !browserASCII(value) || invalidBrowserURLText(value) {
-		return "", invalidModelError("canonicalizeBrowserPolicyRuleOrigin", "browser_url", "", "origin contains forbidden characters or exceeds its limit", "")
+		return "", invalidModelError(
+			"canonicalizeBrowserPolicyRuleOrigin",
+			"browser_url",
+			"",
+			"origin contains forbidden characters or exceeds its limit",
+			"",
+		)
 	}
+
 	parsed, err := url.Parse(value)
 	scheme, port := "https", "443"
 	if httpException {
 		scheme, port = "http", "80"
 	}
-	if err != nil || parsed.Scheme != scheme || parsed.Host == "" || parsed.User != nil || strings.ContainsAny(value, "?#") || (parsed.Path != "" && parsed.Path != "/") || parsed.RawPath != "" {
-		return "", invalidModelError("canonicalizeBrowserPolicyRuleOrigin", "browser_url", "", "origin does not match its explicit network scheme", "")
+
+	if err != nil ||
+		parsed.Scheme != scheme ||
+		parsed.Host == "" ||
+		parsed.User != nil ||
+		strings.ContainsAny(value, "?#") ||
+		(parsed.Path != "" && parsed.Path != "/") ||
+		parsed.RawPath != "" {
+		return "", invalidModelError(
+			"canonicalizeBrowserPolicyRuleOrigin",
+			"browser_url",
+			"",
+			"origin does not match its explicit network scheme",
+			"",
+		)
 	}
+
 	host, port, err := canonicalBrowserHostPortWithDefault(parsed, port)
 	if err != nil {
 		return "", err
 	}
+
 	return scheme + "://" + browserHostPort(host, port), nil
 }
 
@@ -52,45 +74,71 @@ func canonicalizeBrowserPolicyRuleOrigin(value string, httpException bool) (stri
 // exactly. Authoring only removes one non-root trailing slash; it never rewrites
 // dot segments, repeated internal slashes or percent-encoded unreserved bytes.
 func CanonicalizeBrowserPolicyPath(value string) (string, error) {
-	if len(value) > BrowserPolicyPathMaximumBytes || !browserASCII(value) || value == "" ||
-		value[0] != '/' || strings.HasPrefix(value, "//") || invalidBrowserURLText(value) || strings.ContainsAny(value, "?#") {
-		return "", invalidModelError("CanonicalizeBrowserPolicyPath", "browser_url", "", "path prefix must be a bounded ASCII absolute path without query or fragment", "")
+	if len(value) > BrowserPolicyPathMaximumBytes ||
+		!browserASCII(value) ||
+		value == "" ||
+		value[0] != '/' ||
+		strings.HasPrefix(value, "//") ||
+		invalidBrowserURLText(value) ||
+		strings.ContainsAny(value, "?#") {
+		return "", invalidModelError(
+			"CanonicalizeBrowserPolicyPath",
+			"browser_url",
+			"",
+			"path prefix must be a bounded ASCII absolute path without query or fragment",
+			"",
+		)
 	}
+
 	canonical, err := canonicalBrowserPath(value)
 	if err != nil || canonical != value {
 		return "", invalidModelError("CanonicalizeBrowserPolicyPath", "browser_url", "", "path prefix requires forbidden normalization", "")
 	}
+
 	for _, segment := range strings.Split(value, "/") {
 		if browserDotSegment(segment) != 0 {
 			return "", invalidModelError("CanonicalizeBrowserPolicyPath", "browser_url", "", "path prefix contains a dot segment", "")
 		}
 	}
+
 	if value != "/" {
 		value = strings.TrimSuffix(value, "/")
 	}
+
 	// Removing another slash would change a significant empty path segment.
 	if value != "/" && strings.HasSuffix(value, "/") {
 		return "", invalidModelError("CanonicalizeBrowserPolicyPath", "browser_url", "", "path prefix has multiple trailing slashes", "")
 	}
+
 	return value, nil
 }
 
 func CanonicalizeBrowserLocation(value string) (BrowserLocation, error) {
 	if invalidBrowserURLText(value) || browserStringLength(value) > BrowserNavigationMaximumCharacters {
-		return BrowserLocation{}, invalidModelError("CanonicalizeBrowserLocation", "browser_url", "", "URL contains forbidden characters or exceeds its limit", "")
+		return BrowserLocation{}, invalidModelError(
+			"CanonicalizeBrowserLocation",
+			"browser_url",
+			"",
+			"URL contains forbidden characters or exceeds its limit",
+			"",
+		)
 	}
+
 	parsed, err := url.Parse(value)
 	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" || parsed.User != nil {
 		return BrowserLocation{}, invalidModelError("CanonicalizeBrowserLocation", "browser_url", "", "URL must be absolute HTTP or HTTPS", "")
 	}
+
 	defaultPort := "443"
 	if parsed.Scheme == "http" {
 		defaultPort = "80"
 	}
+
 	host, port, err := canonicalBrowserHostPortWithDefault(parsed, defaultPort)
 	if err != nil {
 		return BrowserLocation{}, err
 	}
+
 	// Read the original pathname: net/url's escaping and path.Clean have
 	// different semantics from the browser's serialized pathname.
 	rest := value[strings.Index(value, "://")+3:]
@@ -101,30 +149,39 @@ func CanonicalizeBrowserLocation(value string) (BrowserLocation, error) {
 			rawPath = rawPath[:end]
 		}
 	}
+
 	urlPath, err := canonicalBrowserPath(rawPath)
 	if err != nil {
 		return BrowserLocation{}, err
 	}
+
 	return BrowserLocation{Scheme: parsed.Scheme, Host: host, Port: port, Path: urlPath}, nil
 }
 
 func canonicalBrowserHostPortWithDefault(parsed *url.URL, defaultPort string) (string, string, error) {
 	host := parsed.Hostname()
-	if host == "" || len(host) > 253 || !browserASCII(host) || strings.HasSuffix(host, ".") ||
-		strings.ContainsAny(parsed.Host, "[]") || strings.HasSuffix(parsed.Host, ":") {
+	if host == "" ||
+		len(host) > 253 ||
+		!browserASCII(host) ||
+		strings.HasSuffix(host, ".") ||
+		strings.ContainsAny(parsed.Host, "[]") ||
+		strings.HasSuffix(parsed.Host, ":") {
 		return "", "", invalidModelError("canonicalBrowserHostPortWithDefault", "browser_url", "", "host is unsupported or invalid", "")
 	}
+
 	host = strings.ToLower(host)
 	for _, label := range strings.Split(host, ".") {
 		if len(label) < 1 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' || strings.HasPrefix(label, "xn--") {
 			return "", "", invalidModelError("canonicalBrowserHostPortWithDefault", "browser_url", "", "host label is unsupported or invalid", "")
 		}
+
 		for _, character := range []byte(label) {
 			if !(character >= 'a' && character <= 'z' || character >= '0' && character <= '9' || character == '-') {
 				return "", "", invalidModelError("canonicalBrowserHostPortWithDefault", "browser_url", "", "host label is invalid", "")
 			}
 		}
 	}
+
 	if browserNumericHost(host) {
 		var err error
 		host, err = canonicalBrowserIPv4(host)
@@ -132,6 +189,7 @@ func canonicalBrowserHostPortWithDefault(parsed *url.URL, defaultPort string) (s
 			return "", "", err
 		}
 	}
+
 	port := parsed.Port()
 	if port != "" {
 		number, err := strconv.Atoi(port)
@@ -142,6 +200,7 @@ func canonicalBrowserHostPortWithDefault(parsed *url.URL, defaultPort string) (s
 			port = ""
 		}
 	}
+
 	return host, port, nil
 }
 
@@ -191,6 +250,7 @@ func canonicalBrowserPath(value string) (string, error) {
 	if value == "" || value[0] != '/' || invalidBrowserURLText(value) || strings.ContainsAny(value, "?#") {
 		return "", invalidModelError("canonicalBrowserPath", "browser_url", "", "invalid browser pathname", "")
 	}
+
 	for index := 0; index < len(value); index++ {
 		if value[index] != '%' {
 			continue
@@ -198,16 +258,20 @@ func canonicalBrowserPath(value string) (string, error) {
 		if index+2 >= len(value) {
 			return "", invalidModelError("canonicalBrowserPath", "browser_url", "", "malformed percent encoding", "")
 		}
+
 		high, low := fromHex(value[index+1]), fromHex(value[index+2])
 		if high < 0 || low < 0 {
 			return "", invalidModelError("canonicalBrowserPath", "browser_url", "", "malformed percent encoding", "")
 		}
-		decoded := byte(high<<4 | low)
+
+		decoded := byte(high<<4 | low) //nolint:gosec // G115: high and low are hex digits checked non-negative above, so the value is at most 0xff.
 		if decoded == '/' || decoded == '\\' {
 			return "", invalidModelError("canonicalBrowserPath", "browser_url", "", "encoded path separator is forbidden", "")
 		}
+
 		index += 2
 	}
+
 	segments := strings.Split(value[1:], "/")
 	selected := make([]string, 0, len(segments))
 	for index, segment := range segments {
@@ -215,12 +279,14 @@ func canonicalBrowserPath(value string) (string, error) {
 		if dot == 2 && len(selected) > 0 {
 			selected = selected[:len(selected)-1]
 		}
+
 		if dot == 0 {
 			selected = append(selected, segment)
 		} else if index == len(segments)-1 {
 			selected = append(selected, "")
 		}
 	}
+
 	raw := "/" + strings.Join(selected, "/")
 	var encoded strings.Builder
 	for index := range len(raw) {
@@ -234,6 +300,7 @@ func canonicalBrowserPath(value string) (string, error) {
 			encoded.WriteByte(character)
 		}
 	}
+
 	return encoded.String(), nil
 }
 
@@ -259,39 +326,49 @@ func canonicalBrowserIPv4(host string) (string, error) {
 	if len(parts) < 1 || len(parts) > 4 {
 		return "", invalidModelError("canonicalBrowserIPv4", "browser_url", "", "numeric host is invalid", "")
 	}
+
 	numbers := make([]uint64, len(parts))
 	for index, part := range parts {
 		if part == "" {
 			return "", invalidModelError("canonicalBrowserIPv4", "browser_url", "", "numeric host is invalid", "")
 		}
+
 		radix, digits := 10, part
 		if len(digits) >= 2 && (strings.HasPrefix(digits, "0x") || strings.HasPrefix(digits, "0X")) {
 			radix, digits = 16, digits[2:]
 		} else if len(digits) >= 2 && digits[0] == '0' {
 			radix, digits = 8, digits[1:]
 		}
+
 		if digits == "" {
 			digits = "0"
 		}
+
 		number, err := strconv.ParseUint(digits, radix, 32)
 		if err != nil {
 			return "", invalidModelError("canonicalBrowserIPv4", "browser_url", "", "numeric host is invalid", "")
 		}
+
 		numbers[index] = number
 	}
+
 	for _, number := range numbers[:len(numbers)-1] {
 		if number > 255 {
 			return "", invalidModelError("canonicalBrowserIPv4", "browser_url", "", "numeric host is invalid", "")
 		}
 	}
+
 	lastLimit := uint64(1) << (8 * (5 - len(numbers)))
 	if numbers[len(numbers)-1] >= lastLimit {
 		return "", invalidModelError("canonicalBrowserIPv4", "browser_url", "", "numeric host is invalid", "")
 	}
+
 	address := numbers[len(numbers)-1]
 	for index, number := range numbers[:len(numbers)-1] {
 		address += number << (8 * (3 - index))
 	}
+
+	//nolint:gosec // G115: each conversion deliberately keeps one octet.
 	return net.IPv4(byte(address>>24), byte(address>>16), byte(address>>8), byte(address)).String(), nil
 }
 

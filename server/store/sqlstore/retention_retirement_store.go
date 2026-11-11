@@ -36,15 +36,37 @@ type retentionRetirementRow struct {
 	PurgeVerified      int64          `db:"purge_verified"`
 }
 
-const retentionRetirementQuery = `SELECT r.id,r.exam_id,r.exam_sitting_id,r.submission_id,r.category,r.state,r.policy_revision,r.control_revision,
-		r.completion_revision,r.scheduled_at,r.retire_after,r.retired_at,r.canceled_at,r.cancellation_reason,
-		(SELECT count(*) FROM retention_purge_objects WHERE retirement_id=r.id AND absence_verified_at IS NULL) AS purge_pending,
-		(SELECT count(*) FROM retention_purge_objects WHERE retirement_id=r.id AND absence_verified_at IS NOT NULL) AS purge_verified
-		FROM retention_retirements r`
+const retentionRetirementQuery = `SELECT r.id, r.exam_id, r.exam_sitting_id, r.submission_id, r.category,
+		r.state, r.policy_revision, r.control_revision, r.completion_revision, r.scheduled_at, r.retire_after,
+		r.retired_at, r.canceled_at, r.cancellation_reason,
+		(
+			SELECT count(*)
+			FROM retention_purge_objects
+			WHERE retirement_id = r.id
+				AND absence_verified_at IS NULL
+		) AS purge_pending,
+		(
+			SELECT count(*)
+			FROM retention_purge_objects
+			WHERE retirement_id = r.id
+				AND absence_verified_at IS NOT NULL
+		) AS purge_verified
+	FROM retention_retirements r`
 
-func getActiveRetirement(ctx context.Context, executor sqlxExecutor, id model.SubmissionID, category model.RetentionCategory) (*model.RetentionRetirement, error) {
+func getActiveRetirement(
+	ctx context.Context,
+	executor sqlxExecutor,
+	id model.SubmissionID,
+	category model.RetentionCategory,
+) (*model.RetentionRetirement, error) {
 	var row retentionRetirementRow
-	err := executor.Get(ctx, &row, retentionRetirementQuery+` WHERE r.submission_id=? AND r.category=? AND r.state<>'canceled'`, id.String(), category)
+	err := executor.Get(
+		ctx,
+		&row,
+		retentionRetirementQuery+` WHERE r.submission_id = ? AND r.category = ? AND r.state <> 'canceled'`,
+		id.String(),
+		category,
+	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -55,13 +77,26 @@ func getActiveRetirement(ctx context.Context, executor sqlxExecutor, id model.Su
 }
 
 func (row retentionRetirementRow) retirement() (*model.RetentionRetirement, error) {
-	r := &model.RetentionRetirement{ID: model.RetentionRetirementID(row.ID),
-		Scope:    model.RetentionHoldScope{ExamID: model.ExamID(row.ExamID), SittingID: model.ExamSittingID(row.SittingID), SubmissionID: model.SubmissionID(row.SubmissionID)},
-		Category: model.RetentionCategory(row.Category), State: model.RetentionRetirementState(row.State), PolicyRevision: row.PolicyRevision,
-		ControlRevision: row.ControlRevision, CompletionRevision: row.CompletionRevision,
-		ScheduledAt: model.TimeUTC(row.ScheduledAt), RetireAfter: model.TimeUTC(row.RetireAfter),
-		RetiredAt: optionalTime(row.RetiredAt), CanceledAt: optionalTime(row.CanceledAt), CancellationReason: row.CancellationReason.String,
-		PurgePending: row.PurgePending, PurgeVerified: row.PurgeVerified}
+	r := &model.RetentionRetirement{
+		ID: model.RetentionRetirementID(row.ID),
+		Scope: model.RetentionHoldScope{
+			ExamID:       model.ExamID(row.ExamID),
+			SittingID:    model.ExamSittingID(row.SittingID),
+			SubmissionID: model.SubmissionID(row.SubmissionID),
+		},
+		Category:           model.RetentionCategory(row.Category),
+		State:              model.RetentionRetirementState(row.State),
+		PolicyRevision:     row.PolicyRevision,
+		ControlRevision:    row.ControlRevision,
+		CompletionRevision: row.CompletionRevision,
+		ScheduledAt:        model.TimeUTC(row.ScheduledAt),
+		RetireAfter:        model.TimeUTC(row.RetireAfter),
+		RetiredAt:          optionalTime(row.RetiredAt),
+		CanceledAt:         optionalTime(row.CanceledAt),
+		CancellationReason: row.CancellationReason.String,
+		PurgePending:       row.PurgePending,
+		PurgeVerified:      row.PurgeVerified,
+	}
 	if err := r.Validate(); err != nil {
 		return nil, invalidPersistedState("retention_retirement", "value", err)
 	}
@@ -71,11 +106,17 @@ func (row retentionRetirementRow) retirement() (*model.RetentionRetirement, erro
 // ReconcileSubmission cancels, schedules or commits the retention retirements
 // of one Submission's records under the current policy and control, and
 // completes the input audit.
-func (s *SQLRetentionStore) ReconcileSubmission(ctx context.Context, input *store.RetentionReconciliation) (*store.RetentionReconciliationResult, error) {
+func (s *SQLRetentionStore) ReconcileSubmission(
+	ctx context.Context,
+	input *store.RetentionReconciliation,
+) (*store.RetentionReconciliationResult, error) {
 	if input == nil || !input.SubmissionID.IsValid() || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("retention_retirement", "reconciliation", nil)
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "retention reconciliation", func(ctx context.Context, tx *sqlxTxWrapper) (*store.RetentionReconciliationResult, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "retention reconciliation", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.RetentionReconciliationResult, error) {
 		return reconcileSubmissionRetention(ctx, tx, input)
 	})
 }
@@ -83,23 +124,31 @@ func (s *SQLRetentionStore) ReconcileSubmission(ctx context.Context, input *stor
 // reconcileSubmissionRetention locks the retention fence and the Submission's
 // Exam, Sitting and row, settles retiring deliveries, and reconciles each
 // record, integrity first.
-func reconcileSubmissionRetention(ctx context.Context, tx *sqlxTxWrapper, input *store.RetentionReconciliation) (*store.RetentionReconciliationResult, error) {
-	policy, err := getRetentionPolicy(ctx, tx, "FOR UPDATE OF p,i")
+func reconcileSubmissionRetention(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.RetentionReconciliation,
+) (*store.RetentionReconciliationResult, error) {
+	policy, err := getRetentionPolicy(ctx, tx, "FOR UPDATE OF p, i")
 	if err != nil {
 		return nil, err
 	}
+
 	control, err := getRetentionControl(ctx, tx, policy.InstitutionID, true)
 	if err != nil {
 		return nil, err
 	}
+
 	facts, err := lockRetentionSubmission(ctx, tx, input.SubmissionID, policy)
 	if err != nil {
 		return nil, err
 	}
+
 	var at time.Time
 	if err = tx.Get(ctx, &at, `SELECT clock_timestamp()`); err != nil {
 		return nil, err
 	}
+
 	at = model.TimeUTC(at)
 	expiredCanceled, err := settleRetiringDeliveries(ctx, tx, input.SubmissionID, at)
 	if err != nil {
@@ -107,9 +156,16 @@ func reconcileSubmissionRetention(ctx context.Context, tx *sqlxTxWrapper, input 
 	}
 	// Re-read after the same Exam/Sitting fences used by holds, completion,
 	// late evidence, and export source selection.
-	if err = tx.Get(ctx, &facts, retentionFactsQuery+` AND sub.id=?`, policy.InstitutionID.String(), input.SubmissionID.String()); err != nil {
+	if err = tx.Get(
+		ctx,
+		&facts,
+		retentionFactsQuery+` AND sub.id = ?`,
+		policy.InstitutionID.String(),
+		input.SubmissionID.String(),
+	); err != nil {
 		return nil, err
 	}
+
 	result := &store.RetentionReconciliationResult{Canceled: expiredCanceled}
 	records := facts.records()
 	// Integrity retires first. Work may never disappear while its retained
@@ -119,32 +175,45 @@ func reconcileSubmissionRetention(ctx context.Context, tx *sqlxTxWrapper, input 
 			return nil, err
 		}
 	}
-	encoded, err := model.EncodeAuditData(map[string]any{"submission_id": input.SubmissionID.String(), "policy_revision": policy.Revision,
-		"control_revision": control.Revision, "scheduled": result.Scheduled, "canceled": result.Canceled, "retired": result.Retired})
+
+	encoded, err := model.EncodeAuditData(map[string]any{
+		"submission_id":    input.SubmissionID.String(),
+		"policy_revision":  policy.Revision,
+		"control_revision": control.Revision,
+		"scheduled":        result.Scheduled,
+		"canceled":         result.Canceled,
+		"retired":          result.Retired,
+	})
 	if err != nil {
 		return nil, err
 	}
 	if _, err = completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", encoded, input.AuditAt); err != nil {
 		return nil, err
 	}
+
 	return result, nil
 }
 
 // lockRetentionSubmission reads the Submission's retention facts and locks
 // its Exam, Sitting and Submission rows in that order.
-func lockRetentionSubmission(ctx context.Context, tx *sqlxTxWrapper, submissionID model.SubmissionID, policy *model.RetentionPolicy) (retentionFactsRow, error) {
+func lockRetentionSubmission(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	submissionID model.SubmissionID,
+	policy *model.RetentionPolicy,
+) (retentionFactsRow, error) {
 	var facts retentionFactsRow
-	if err := tx.Get(ctx, &facts, retentionFactsQuery+` AND sub.id=?`, policy.InstitutionID.String(), submissionID.String()); err != nil {
+	if err := tx.Get(ctx, &facts, retentionFactsQuery+` AND sub.id = ?`, policy.InstitutionID.String(), submissionID.String()); err != nil {
 		return facts, translateError("submission", submissionID.String(), err)
 	}
 	var id string
-	if err := tx.Get(ctx, &id, `SELECT id FROM exams WHERE id=? FOR UPDATE`, facts.ExamID); err != nil {
+	if err := tx.Get(ctx, &id, `SELECT id FROM exams WHERE id = ? FOR UPDATE`, facts.ExamID); err != nil {
 		return facts, err
 	}
-	if err := tx.Get(ctx, &id, `SELECT id FROM exam_sittings WHERE id=? FOR UPDATE`, facts.SittingID); err != nil {
+	if err := tx.Get(ctx, &id, `SELECT id FROM exam_sittings WHERE id = ? FOR UPDATE`, facts.SittingID); err != nil {
 		return facts, err
 	}
-	if err := tx.Get(ctx, &id, `SELECT id FROM exam_submissions WHERE id=? FOR UPDATE`, submissionID.String()); err != nil {
+	if err := tx.Get(ctx, &id, `SELECT id FROM exam_submissions WHERE id = ? FOR UPDATE`, submissionID.String()); err != nil {
 		return facts, err
 	}
 	return facts, nil
@@ -153,11 +222,21 @@ func lockRetentionSubmission(ctx context.Context, tx *sqlxTxWrapper, submissionI
 // reconcileRetentionRecord cancels a record's grace retirement that is no
 // longer eligible, schedules an eligible unscheduled record, and commits a
 // retirement whose grace period has ended.
-func reconcileRetentionRecord(ctx context.Context, tx *sqlxTxWrapper, submissionID model.SubmissionID, policy *model.RetentionPolicy, control *model.RetentionControl, record model.RetentionRecord, at time.Time, result *store.RetentionReconciliationResult) error {
+func reconcileRetentionRecord(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	submissionID model.SubmissionID,
+	policy *model.RetentionPolicy,
+	control *model.RetentionControl,
+	record model.RetentionRecord,
+	at time.Time,
+	result *store.RetentionReconciliationResult,
+) error {
 	eligibility, err := record.Eligibility(policy, at)
 	if err != nil {
 		return err
 	}
+
 	retirement, err := getActiveRetirement(ctx, tx, record.Scope.SubmissionID, record.Category)
 	if err != nil {
 		return err
@@ -165,28 +244,39 @@ func reconcileRetentionRecord(ctx context.Context, tx *sqlxTxWrapper, submission
 	if record.RetiredAt.Valid {
 		return nil
 	}
-	if retirement != nil && retirement.State == model.RetentionRetirementGrace &&
-		(!control.Permits(policy) || eligibility.Blocker != model.RetentionBlockerNone ||
-			retirement.PolicyRevision != policy.Revision || retirement.ControlRevision != control.Revision || retirement.CompletionRevision != record.CompletionRevision) {
+
+	if retirement != nil &&
+		retirement.State == model.RetentionRetirementGrace &&
+		(!control.Permits(policy) ||
+			eligibility.Blocker != model.RetentionBlockerNone ||
+			retirement.PolicyRevision != policy.Revision ||
+			retirement.ControlRevision != control.Revision ||
+			retirement.CompletionRevision != record.CompletionRevision) {
 		if err = cancelOneRetirement(ctx, tx, retirement.ID, at, "eligibility_changed"); err != nil {
 			return err
 		}
+
 		result.Canceled++
 		retirement = nil
 	}
+
 	if !control.Permits(policy) || eligibility.Blocker != model.RetentionBlockerNone {
 		return nil
 	}
+
 	if retirement == nil {
 		if err = scheduleRetention(ctx, tx, policy, control, record, at); err != nil {
 			return err
 		}
+
 		result.Scheduled++
 		return nil
 	}
+
 	if retirement.State != model.RetentionRetirementGrace || at.Before(retirement.RetireAfter) {
 		return nil
 	}
+
 	ready, err := retentionRetirementReady(ctx, tx, submissionID, record)
 	if err != nil || !ready {
 		return err
@@ -194,69 +284,195 @@ func reconcileRetentionRecord(ctx context.Context, tx *sqlxTxWrapper, submission
 	if err = commitRetention(ctx, tx, retirement, at); err != nil {
 		return err
 	}
+
 	result.Retired++
 	return nil
 }
 
 // retentionRetirementReady reports whether no accepted evidence still awaits
 // interpretation and, for Work with integrity, whether integrity has retired.
-func retentionRetirementReady(ctx context.Context, tx *sqlxTxWrapper, submissionID model.SubmissionID, record model.RetentionRecord) (bool, error) {
+func retentionRetirementReady(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	submissionID model.SubmissionID,
+	record model.RetentionRecord,
+) (bool, error) {
 	// Await the finite expiry pass when accepted records still await
 	// interpretation; deleting them could erase a future evidence copy.
 	var pendingInterpretation bool
-	if err := tx.Get(ctx, &pendingInterpretation, `SELECT EXISTS(SELECT 1 FROM browser_activity_events WHERE exam_attempt_id=(SELECT exam_attempt_id FROM exam_submissions WHERE id=?) AND interpretation_state=0) OR EXISTS(SELECT 1 FROM exam_native_delivery_batches b JOIN exam_attempt_security_owners o USING(participation_id) WHERE o.exam_attempt_id=(SELECT exam_attempt_id FROM exam_submissions WHERE id=?) AND NOT b.processed)`, submissionID.String(), submissionID.String()); err != nil {
+	if err := tx.Get(
+		ctx,
+		&pendingInterpretation,
+		`SELECT
+			EXISTS(
+				SELECT 1
+				FROM browser_activity_events
+				WHERE exam_attempt_id = (SELECT exam_attempt_id FROM exam_submissions WHERE id = ?)
+					AND interpretation_state = 0
+			)
+			OR EXISTS(
+				SELECT 1
+				FROM exam_native_delivery_batches b
+				JOIN exam_attempt_security_owners o USING(participation_id)
+				WHERE o.exam_attempt_id = (SELECT exam_attempt_id FROM exam_submissions WHERE id = ?)
+					AND NOT b.processed
+			)`,
+		submissionID.String(),
+		submissionID.String(),
+	); err != nil {
 		return false, err
 	}
+
 	if pendingInterpretation {
 		return false, nil
 	}
+
 	if record.Category == model.RetentionCategoryWork && record.HasIntegrity {
 		var integrityRetired bool
-		if err := tx.Get(ctx, &integrityRetired, `SELECT integrity_retired_at IS NOT NULL FROM exam_submissions WHERE id=?`, submissionID.String()); err != nil {
+		if err := tx.Get(
+			ctx,
+			&integrityRetired,
+			`SELECT integrity_retired_at IS NOT NULL FROM exam_submissions WHERE id = ?`,
+			submissionID.String(),
+		); err != nil {
 			return false, err
 		}
+
 		if !integrityRetired {
 			return false, nil
 		}
 	}
+
 	return true, nil
 }
 
 func cancelOneRetirement(ctx context.Context, tx *sqlxTxWrapper, id model.RetentionRetirementID, at time.Time, reason string) error {
-	_, err := tx.Exec(ctx, `WITH canceled AS (UPDATE retention_retirements SET state='canceled',canceled_at=GREATEST(scheduled_at,?),cancellation_reason=?
-		WHERE id=? AND state='grace' RETURNING id)
-		UPDATE retention_notices SET canceled_at=GREATEST(created_at,?),delivery_state=CASE WHEN mail_delivery_id IS NULL AND delivery_state='pending' THEN 'suppressed' ELSE delivery_state END WHERE retirement_id IN (SELECT id FROM canceled) AND canceled_at IS NULL`, at, reason, id.String(), at)
+	_, err := tx.Exec(
+		ctx,
+		`WITH canceled AS (
+			UPDATE retention_retirements
+			SET state = 'canceled', canceled_at = GREATEST(scheduled_at, ?), cancellation_reason = ?
+			WHERE id = ?
+				AND state = 'grace'
+			RETURNING id
+		)
+		UPDATE retention_notices
+		SET canceled_at = GREATEST(created_at, ?),
+			delivery_state = CASE
+				WHEN mail_delivery_id IS NULL AND delivery_state = 'pending' THEN 'suppressed'
+				ELSE delivery_state
+			END
+		WHERE retirement_id IN (SELECT id FROM canceled)
+			AND canceled_at IS NULL`,
+		at,
+		reason,
+		id.String(),
+		at,
+	)
 	return err
 }
 
-func scheduleRetention(ctx context.Context, tx *sqlxTxWrapper, policy *model.RetentionPolicy, control *model.RetentionControl, record model.RetentionRecord, at time.Time) error {
+func scheduleRetention(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	policy *model.RetentionPolicy,
+	control *model.RetentionControl,
+	record model.RetentionRecord,
+	at time.Time,
+) error {
 	id := model.NewRetentionRetirementID()
-	_, err := tx.Exec(ctx, `INSERT INTO retention_retirements(id,institution_id,exam_id,exam_sitting_id,submission_id,category,state,
-		policy_revision,control_revision,completion_revision,scheduled_at,retire_after) VALUES (?,?,?,?,?,?,'grace',?,?,?,?,?)`,
-		id.String(), policy.InstitutionID.String(), record.Scope.ExamID.String(), record.Scope.SittingID.String(), record.Scope.SubmissionID.String(), record.Category,
-		policy.Revision, control.Revision, record.CompletionRevision, at, at.Add(time.Duration(policy.DeletionGraceDays)*24*time.Hour))
+	_, err := tx.Exec(
+		ctx,
+		`INSERT INTO retention_retirements(id, institution_id, exam_id, exam_sitting_id, submission_id, category, state,
+		policy_revision, control_revision, completion_revision, scheduled_at, retire_after) VALUES (?, ?, ?, ?, ?, ?, 'grace', ?, ?, ?, ?, ?)`,
+		id.String(),
+		policy.InstitutionID.String(),
+		record.Scope.ExamID.String(),
+		record.Scope.SittingID.String(),
+		record.Scope.SubmissionID.String(),
+		record.Category,
+		policy.Revision,
+		control.Revision,
+		record.CompletionRevision,
+		at,
+		at.Add(time.Duration(policy.DeletionGraceDays)*24*time.Hour),
+	)
 	if err != nil {
 		return err
 	}
+
 	// The notice is a durable product record, independent of SMTP availability.
 	// Managers and operators are resolved at schedule time. Candidate inclusion
 	// is a deliberate Institution policy option, initially false.
-	_, err = tx.Exec(ctx, `INSERT INTO retention_notices(retirement_id,recipient_user_id,created_at)
-		SELECT ?,u.id,? FROM users u WHERE u.archived_at IS NULL AND u.disabled_at IS NULL AND (
-		 EXISTS(SELECT 1 FROM exam_managers m JOIN exams e ON e.id=m.exam_id
-		  JOIN academic_unit_members um ON um.academic_unit_id=e.academic_unit_id AND um.user_id=m.user_id
-		  WHERE m.exam_id=? AND m.user_id=u.id AND um.archived_at IS NULL AND um.start_at<=? AND (um.end_at IS NULL OR um.end_at>?)) OR
-		 EXISTS(SELECT 1 FROM role_bindings b JOIN roles r ON r.id=b.role_id WHERE b.user_id=u.id AND b.scope_type='institution'
-		  AND b.scope_id=? AND b.archived_at IS NULL AND b.start_at<=? AND (b.end_at IS NULL OR b.end_at>?) AND r.name=? AND r.built_in=true AND r.archived_at IS NULL) OR
-		 (? AND EXISTS(SELECT 1 FROM exam_submissions sub JOIN exam_attempts a ON a.id=sub.exam_attempt_id WHERE sub.id=? AND a.candidate_user_id=u.id)))`,
-		id.String(), at, record.Scope.ExamID.String(), at, at, policy.InstitutionID.String(), at, at, model.SystemAdministratorRoleName, policy.CandidateNotices, record.Scope.SubmissionID.String())
+	_, err = tx.Exec(
+		ctx,
+		`INSERT INTO retention_notices(retirement_id, recipient_user_id, created_at)
+		SELECT ?, u.id, ?
+		FROM users u
+		WHERE u.archived_at IS NULL
+			AND u.disabled_at IS NULL
+			AND (
+				EXISTS(
+					SELECT 1
+					FROM exam_managers m
+					JOIN exams e ON e.id = m.exam_id
+					JOIN academic_unit_members um ON um.academic_unit_id = e.academic_unit_id
+						AND um.user_id = m.user_id
+					WHERE m.exam_id = ?
+						AND m.user_id = u.id
+						AND um.archived_at IS NULL
+						AND um.start_at <= ?
+						AND (um.end_at IS NULL OR um.end_at > ?)
+				)
+				OR EXISTS(
+					SELECT 1
+					FROM role_bindings b
+					JOIN roles r ON r.id = b.role_id
+					WHERE b.user_id = u.id
+						AND b.scope_type = 'institution'
+						AND b.scope_id = ?
+						AND b.archived_at IS NULL
+						AND b.start_at <= ?
+						AND (b.end_at IS NULL OR b.end_at > ?)
+						AND r.name = ?
+						AND r.built_in = true
+						AND r.archived_at IS NULL
+				)
+				OR (
+					?
+					AND EXISTS(
+						SELECT 1
+						FROM exam_submissions sub
+						JOIN exam_attempts a ON a.id = sub.exam_attempt_id
+						WHERE sub.id = ?
+							AND a.candidate_user_id = u.id
+					)
+				)
+			)`,
+		id.String(),
+		at,
+		record.Scope.ExamID.String(),
+		at,
+		at,
+		policy.InstitutionID.String(),
+		at,
+		at,
+		model.SystemAdministratorRoleName,
+		policy.CandidateNotices,
+		record.Scope.SubmissionID.String(),
+	)
 	return err
 }
 
 func commitRetention(ctx context.Context, tx *sqlxTxWrapper, retirement *model.RetentionRetirement, at time.Time) error {
 	// This named transition is the only ordinary SQL path authorizing the
 	// immutability guards' deletion exception. The receipt commits with removal.
-	_, err := tx.Exec(ctx, `UPDATE retention_retirements SET state='retired',retired_at=? WHERE id=? AND state='grace'`, at, retirement.ID.String())
+	_, err := tx.Exec(
+		ctx,
+		`UPDATE retention_retirements SET state = 'retired', retired_at = ? WHERE id = ? AND state = 'grace'`,
+		at,
+		retirement.ID.String(),
+	)
 	if err != nil {
 		return err
 	}
@@ -281,40 +497,63 @@ func retireSubmissionIntegrity(ctx context.Context, tx *sqlxTxWrapper, id model.
 	// Export creation retains only an Export ID; its independently expiring
 	// archive and exact retry survive source retirement without copying content.
 	queries := []string{
-		`DELETE FROM native_condition_evidence WHERE exam_attempt_id=(SELECT exam_attempt_id FROM exam_submissions WHERE id=?)`,
-		`DELETE FROM exam_native_occurrences WHERE participation_id IN (SELECT participation_id FROM exam_attempt_security_owners WHERE exam_attempt_id=(SELECT exam_attempt_id FROM exam_submissions WHERE id=?))`,
-		`DELETE FROM exam_native_delivery_records WHERE kind='occurrence' AND participation_id IN (SELECT participation_id FROM exam_attempt_security_owners WHERE exam_attempt_id=(SELECT exam_attempt_id FROM exam_submissions WHERE id=?))`,
-		`DELETE FROM submission_review_finalizations WHERE submission_review_id IN (SELECT id FROM submission_reviews WHERE submission_id=?)`,
-		`DELETE FROM submission_review_inventory_evidence WHERE submission_review_id IN (SELECT id FROM submission_reviews WHERE submission_id=?)`,
-		`DELETE FROM submission_review_inventory_flags WHERE submission_review_id IN (SELECT id FROM submission_reviews WHERE submission_id=?)`,
-		`DELETE FROM submission_review_inventory_discrepancies WHERE submission_id=?`,
-		`DELETE FROM integrity_review_decisions WHERE submission_review_id IN (SELECT id FROM submission_reviews WHERE submission_id=?)`,
-		`DELETE FROM submission_reviews WHERE submission_id=?`,
-		`DELETE FROM submission_review_waivers WHERE submission_id=?`,
-		`DELETE FROM integrity_discrepancies WHERE submission_id=?`,
-		`DELETE FROM exam_attempt_focus_loss_evaluations WHERE exam_attempt_id=(SELECT exam_attempt_id FROM exam_submissions WHERE id=?)`,
-		`DELETE FROM exam_attempt_suspensions WHERE exam_attempt_id=(SELECT exam_attempt_id FROM exam_submissions WHERE id=?)`,
-		`DELETE FROM integrity_evidence WHERE exam_attempt_id=(SELECT exam_attempt_id FROM exam_submissions WHERE id=?)`,
-		`DELETE FROM browser_integrity_groups WHERE exam_attempt_id=(SELECT exam_attempt_id FROM exam_submissions WHERE id=?)`,
-		`DELETE FROM browser_integrity_overflow WHERE exam_attempt_id=(SELECT exam_attempt_id FROM exam_submissions WHERE id=?)`,
-		`DELETE FROM integrity_flags WHERE exam_attempt_id=(SELECT exam_attempt_id FROM exam_submissions WHERE id=?)`,
-		`DELETE FROM exam_attempt_manager_end_actions WHERE exam_attempt_id=(SELECT exam_attempt_id FROM exam_submissions WHERE id=?)`,
-		`DELETE FROM command_outcomes WHERE operation <> '` + store.ExamExportCreateOperation + `' AND original_audit_event_id IN (SELECT id FROM audit_events WHERE resource_type='submission' AND resource_id=?)`,
+		`DELETE FROM native_condition_evidence WHERE exam_attempt_id = (SELECT exam_attempt_id FROM exam_submissions WHERE id = ?)`,
+		`DELETE FROM exam_native_occurrences
+		WHERE participation_id IN (
+			SELECT participation_id
+			FROM exam_attempt_security_owners
+			WHERE exam_attempt_id = (SELECT exam_attempt_id FROM exam_submissions WHERE id = ?)
+		)`,
+		`DELETE FROM exam_native_delivery_records
+		WHERE kind = 'occurrence'
+			AND participation_id IN (
+				SELECT participation_id
+				FROM exam_attempt_security_owners
+				WHERE exam_attempt_id = (SELECT exam_attempt_id FROM exam_submissions WHERE id = ?)
+			)`,
+		`DELETE FROM submission_review_finalizations WHERE submission_review_id IN (SELECT id FROM submission_reviews WHERE submission_id = ?)`,
+		`DELETE FROM submission_review_inventory_evidence
+		WHERE submission_review_id IN (SELECT id FROM submission_reviews WHERE submission_id = ?)`,
+		`DELETE FROM submission_review_inventory_flags WHERE submission_review_id IN (SELECT id FROM submission_reviews WHERE submission_id = ?)`,
+		`DELETE FROM submission_review_inventory_discrepancies WHERE submission_id = ?`,
+		`DELETE FROM integrity_review_decisions WHERE submission_review_id IN (SELECT id FROM submission_reviews WHERE submission_id = ?)`,
+		`DELETE FROM submission_reviews WHERE submission_id = ?`,
+		`DELETE FROM submission_review_waivers WHERE submission_id = ?`,
+		`DELETE FROM integrity_discrepancies WHERE submission_id = ?`,
+		`DELETE FROM exam_attempt_focus_loss_evaluations WHERE exam_attempt_id = (SELECT exam_attempt_id FROM exam_submissions WHERE id = ?)`,
+		`DELETE FROM exam_attempt_suspensions WHERE exam_attempt_id = (SELECT exam_attempt_id FROM exam_submissions WHERE id = ?)`,
+		`DELETE FROM integrity_evidence WHERE exam_attempt_id = (SELECT exam_attempt_id FROM exam_submissions WHERE id = ?)`,
+		`DELETE FROM browser_integrity_groups WHERE exam_attempt_id = (SELECT exam_attempt_id FROM exam_submissions WHERE id = ?)`,
+		`DELETE FROM browser_integrity_overflow WHERE exam_attempt_id = (SELECT exam_attempt_id FROM exam_submissions WHERE id = ?)`,
+		`DELETE FROM integrity_flags WHERE exam_attempt_id = (SELECT exam_attempt_id FROM exam_submissions WHERE id = ?)`,
+		`DELETE FROM exam_attempt_manager_end_actions WHERE exam_attempt_id = (SELECT exam_attempt_id FROM exam_submissions WHERE id = ?)`,
+		`DELETE FROM command_outcomes
+		WHERE operation <> '` + store.ExamExportCreateOperation + `'
+			AND original_audit_event_id IN (
+				SELECT id
+				FROM audit_events
+				WHERE resource_type = 'submission'
+					AND resource_id = ?
+			)`,
 	}
 	for _, query := range queries {
 		if _, err := tx.Exec(ctx, query, id.String()); err != nil {
 			return err
 		}
 	}
+
 	// Clear the immutable header's integrity payload before deleting its source
 	// foreign key. The explicit state keeps manager projections from inventing
 	// a settled result or reproducing the former unresolved count.
-	_, err := tx.Exec(ctx, `UPDATE exam_submissions SET integrity_retired_at=?,integrity_state='retired',
-		final_focus_loss_sequence=NULL,unresolved_integrity_count=NULL
-		WHERE id=? AND integrity_retired_at IS NULL`, at, id.String())
+	_, err := tx.Exec(ctx, `UPDATE exam_submissions
+		SET integrity_retired_at = ?, integrity_state = 'retired',
+			final_focus_loss_sequence = NULL, unresolved_integrity_count = NULL
+		WHERE id = ?
+			AND integrity_retired_at IS NULL`, at, id.String())
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -322,25 +561,41 @@ func retireSubmissionIntegrity(ctx context.Context, tx *sqlxTxWrapper, id model.
 // Submission's work. Every disjunct is served by an audit index, so
 // PostgreSQL combines them with a bitmap OR instead of scanning every audit
 // event for each retired Submission.
-const workOutcomeRetirement = `DELETE FROM command_outcomes WHERE operation <> '` + store.ExamExportCreateOperation + `' AND original_audit_event_id IN (SELECT e.id FROM audit_events e JOIN exam_submissions sub ON sub.id=?
- WHERE (e.resource_type='submission' AND e.resource_id=sub.id) OR e.result->>'workspace_id'=sub.workspace_id OR
- e.result->>'exam_attempt_workspace_id'=sub.workspace_id OR e.result->>'exam_submission_id'=sub.id OR e.result->>'exam_attempt_id'=sub.exam_attempt_id)`
+const workOutcomeRetirement = `DELETE FROM command_outcomes
+		WHERE operation <> '` + store.ExamExportCreateOperation + `'
+			AND original_audit_event_id IN (
+				SELECT e.id
+				FROM audit_events e
+				JOIN exam_submissions sub ON sub.id = ?
+				WHERE (e.resource_type = 'submission' AND e.resource_id = sub.id)
+					OR e.result->>'workspace_id' = sub.workspace_id
+					OR e.result->>'exam_attempt_workspace_id' = sub.workspace_id
+					OR e.result->>'exam_submission_id' = sub.id
+					OR e.result->>'exam_attempt_id' = sub.exam_attempt_id
+			)`
 
 func retireSubmissionWork(ctx context.Context, tx *sqlxTxWrapper, retirement *model.RetentionRetirement, at time.Time) error {
 	id := retirement.Scope.SubmissionID.String()
 	// Content metadata already carries the immutable managed object identity;
 	// key selection remains owned by File Content, never by SQL or HTTP.
-	_, err := tx.Exec(ctx, `INSERT INTO retention_purge_objects(retirement_id,object_id,writer_finished)
-		SELECT ?,o.id,o.content_version IS NOT NULL FROM exam_attempt_workspace_objects o JOIN exam_submissions sub ON sub.workspace_id=o.workspace_id
-		WHERE sub.id=? AND o.storage_origin='attempt' ON CONFLICT DO NOTHING`, retirement.ID.String(), id)
+	_, err := tx.Exec(ctx, `INSERT INTO retention_purge_objects(retirement_id, object_id, writer_finished)
+		SELECT ?, o.id, o.content_version IS NOT NULL
+		FROM exam_attempt_workspace_objects o
+		JOIN exam_submissions sub ON sub.workspace_id = o.workspace_id
+		WHERE sub.id = ?
+			AND o.storage_origin = 'attempt'
+		ON CONFLICT DO NOTHING`, retirement.ID.String(), id)
 	if err != nil {
 		return err
 	}
+
 	queries := []string{
-		`DELETE FROM exam_submission_manifest_entries WHERE submission_id=?`,
-		`DELETE FROM exam_attempt_workspace_entries WHERE workspace_id=(SELECT workspace_id FROM exam_submissions WHERE id=?)`,
-		`DELETE FROM exam_attempt_workspace_journal WHERE workspace_id=(SELECT workspace_id FROM exam_submissions WHERE id=?)`,
-		`DELETE FROM exam_attempt_workspace_objects WHERE workspace_id=(SELECT workspace_id FROM exam_submissions WHERE id=?) AND storage_origin='starter'`,
+		`DELETE FROM exam_submission_manifest_entries WHERE submission_id = ?`,
+		`DELETE FROM exam_attempt_workspace_entries WHERE workspace_id = (SELECT workspace_id FROM exam_submissions WHERE id = ?)`,
+		`DELETE FROM exam_attempt_workspace_journal WHERE workspace_id = (SELECT workspace_id FROM exam_submissions WHERE id = ?)`,
+		`DELETE FROM exam_attempt_workspace_objects
+		WHERE workspace_id = (SELECT workspace_id FROM exam_submissions WHERE id = ?)
+			AND storage_origin = 'starter'`,
 		workOutcomeRetirement,
 	}
 	for _, query := range queries {
@@ -348,9 +603,22 @@ func retireSubmissionWork(ctx context.Context, tx *sqlxTxWrapper, retirement *mo
 			return err
 		}
 	}
+
 	// Empty integrity has no retained payload to dispose of, but work removal
 	// still closes the late-ingestion path permanently.
-	_, err = tx.Exec(ctx, `UPDATE exam_submissions SET work_retired_at=?,integrity_retired_at=COALESCE(integrity_retired_at,?),workspace_cursor=NULL,manifest_digest=NULL,manifest_entry_count=NULL,manifest_total_file_bytes=NULL,integrity_state='retired',final_focus_loss_sequence=NULL,unresolved_integrity_count=NULL WHERE id=? AND work_retired_at IS NULL`, at, at, id)
+	_, err = tx.Exec(
+		ctx,
+		`UPDATE exam_submissions
+		SET work_retired_at = ?, integrity_retired_at = COALESCE(integrity_retired_at, ?),
+			workspace_cursor = NULL, manifest_digest = NULL, manifest_entry_count = NULL,
+			manifest_total_file_bytes = NULL, integrity_state = 'retired', final_focus_loss_sequence = NULL,
+			unresolved_integrity_count = NULL
+		WHERE id = ?
+			AND work_retired_at IS NULL`,
+		at,
+		at,
+		id,
+	)
 	return err
 }
 
@@ -358,35 +626,55 @@ func (s *SQLRetentionStore) BeginPurgeBatch(ctx context.Context, limit int) ([]s
 	if limit < 1 || limit > model.RetentionMaximumPageSize {
 		return nil, store.NewErrInvalidInput("retention_purge", "limit", nil)
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "begin retention purge batch", func(ctx context.Context, tx *sqlxTxWrapper) ([]store.RetentionPurgeObject, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "begin retention purge batch", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) ([]store.RetentionPurgeObject, error) {
 		var rows []struct {
 			RetirementID string `db:"retirement_id"`
 			ObjectID     string `db:"object_id"`
 		}
 		err := tx.Select(ctx, &rows, `WITH candidates AS MATERIALIZED (
-			SELECT p.retirement_id,p.object_id,p.verify_after FROM retention_purge_objects p
-			JOIN retention_retirements r ON r.id=p.retirement_id JOIN exam_submissions sub ON sub.id=r.submission_id
-			WHERE p.absence_verified_at IS NULL AND p.verify_after<=clock_timestamp() AND r.state='retired' AND sub.work_retired_at IS NOT NULL
-			AND NOT EXISTS(SELECT 1 FROM exam_attempt_workspace_entries WHERE current_object_id=p.object_id)
-			AND NOT EXISTS(SELECT 1 FROM exam_submission_manifest_entries WHERE workspace_object_id=p.object_id)
-			ORDER BY p.verify_after,p.retirement_id,p.object_id LIMIT ? FOR UPDATE OF p SKIP LOCKED
-		), deferred AS (
-			UPDATE retention_purge_objects p SET verify_after=clock_timestamp()+interval '1 hour'
-			FROM candidates c WHERE p.retirement_id=c.retirement_id AND p.object_id=c.object_id
-			RETURNING p.retirement_id,p.object_id
-		)
-		SELECT d.retirement_id,d.object_id FROM deferred d JOIN candidates c USING(retirement_id,object_id)
-		ORDER BY c.verify_after,d.retirement_id,d.object_id`, limit)
+				SELECT p.retirement_id, p.object_id, p.verify_after
+				FROM retention_purge_objects p
+				JOIN retention_retirements r ON r.id = p.retirement_id
+				JOIN exam_submissions sub ON sub.id = r.submission_id
+				WHERE p.absence_verified_at IS NULL
+					AND p.verify_after <= clock_timestamp()
+					AND r.state = 'retired'
+					AND sub.work_retired_at IS NOT NULL
+					AND NOT EXISTS(SELECT 1 FROM exam_attempt_workspace_entries WHERE current_object_id = p.object_id)
+					AND NOT EXISTS(SELECT 1 FROM exam_submission_manifest_entries WHERE workspace_object_id = p.object_id)
+				ORDER BY p.verify_after, p.retirement_id, p.object_id
+				LIMIT ?
+				FOR UPDATE OF p SKIP LOCKED
+			), deferred AS (
+				UPDATE retention_purge_objects p
+				SET verify_after = clock_timestamp()+interval '1 hour'
+				FROM candidates c
+				WHERE p.retirement_id = c.retirement_id
+					AND p.object_id = c.object_id
+				RETURNING p.retirement_id, p.object_id
+			)
+			SELECT d.retirement_id, d.object_id
+			FROM deferred d
+			JOIN candidates c USING(retirement_id, object_id)
+			ORDER BY c.verify_after, d.retirement_id, d.object_id`, limit)
 		if err != nil {
 			return nil, err
 		}
+
 		result := make([]store.RetentionPurgeObject, len(rows))
 		for i, row := range rows {
-			result[i] = store.RetentionPurgeObject{RetirementID: model.RetentionRetirementID(row.RetirementID), ObjectID: model.AttemptWorkspaceObjectID(row.ObjectID)}
+			result[i] = store.RetentionPurgeObject{
+				RetirementID: model.RetentionRetirementID(row.RetirementID),
+				ObjectID:     model.AttemptWorkspaceObjectID(row.ObjectID),
+			}
 			if !result[i].RetirementID.IsValid() || !result[i].ObjectID.IsValid() {
 				return nil, invalidPersistedState("retention_purge", "identity", errors.New("invalid identity"))
 			}
 		}
+
 		return result, nil
 	})
 }
@@ -395,39 +683,77 @@ func (s *SQLRetentionStore) CompletePurge(ctx context.Context, input *store.Rete
 	if input == nil || !input.RetirementID.IsValid() || !input.ObjectID.IsValid() {
 		return store.NewErrInvalidInput("retention_purge", "completion", nil)
 	}
-	_, err := runSQLTransaction(ctx, s.GetMaster().Begin, "retention purge completion", func(ctx context.Context, tx *sqlxTxWrapper) (bool, error) {
+
+	_, err := runSQLTransaction(ctx, s.GetMaster().Begin, "retention purge completion", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (bool, error) {
 		var row struct {
 			ObjectID       string `db:"object_id"`
 			WriterFinished bool   `db:"writer_finished"`
 		}
-		err := tx.Get(ctx, &row, `SELECT p.object_id,p.writer_finished FROM retention_purge_objects p JOIN retention_retirements r ON r.id=p.retirement_id
-			WHERE p.retirement_id=? AND p.object_id=? AND r.state='retired' FOR UPDATE OF p`, input.RetirementID.String(), input.ObjectID.String())
+		err := tx.Get(
+			ctx,
+			&row,
+			`SELECT p.object_id, p.writer_finished
+			FROM retention_purge_objects p
+			JOIN retention_retirements r ON r.id = p.retirement_id
+			WHERE p.retirement_id = ?
+				AND p.object_id = ?
+				AND r.state = 'retired'
+			FOR UPDATE OF p`,
+			input.RetirementID.String(),
+			input.ObjectID.String(),
+		)
 		if err != nil {
 			return false, translateError("retention_purge", input.ObjectID.String(), err)
 		}
+
 		id := row.ObjectID
 		if !row.WriterFinished {
 			// An expired upload reservation does not prove an outstanding
 			// remote write cannot finish late. Keep its exact-key reference
 			// and repeat observations; never claim final purge for uncertainty.
-			_, err = tx.Exec(ctx, `UPDATE retention_purge_objects SET last_absence_observed_at=clock_timestamp(),verify_after=clock_timestamp()+interval '1 hour'
-				WHERE retirement_id=? AND object_id=?`, input.RetirementID.String(), id)
+			_, err = tx.Exec(
+				ctx,
+				`UPDATE retention_purge_objects
+				SET last_absence_observed_at = clock_timestamp(), verify_after = clock_timestamp()+interval '1 hour'
+				WHERE retirement_id = ?
+					AND object_id = ?`,
+				input.RetirementID.String(),
+				id,
+			)
 			return true, err
 		}
+
 		var referenced bool
-		if err = tx.Get(ctx, &referenced, `SELECT EXISTS(SELECT 1 FROM exam_attempt_workspace_entries WHERE current_object_id=?)
-			OR EXISTS(SELECT 1 FROM exam_submission_manifest_entries WHERE workspace_object_id=?)`, id, id); err != nil {
+		if err = tx.Get(ctx, &referenced, `SELECT EXISTS(SELECT 1 FROM exam_attempt_workspace_entries WHERE current_object_id = ?)
+			OR EXISTS(SELECT 1 FROM exam_submission_manifest_entries WHERE workspace_object_id = ?)`, id, id); err != nil {
 			return false, err
 		}
+
 		if referenced {
 			return false, store.NewErrConflict("retention_purge", "object_referenced", nil)
 		}
-		if _, err = tx.Exec(ctx, `DELETE FROM exam_attempt_workspace_objects WHERE id=? AND storage_origin='attempt'
-			AND NOT EXISTS(SELECT 1 FROM exam_attempt_workspace_entries WHERE current_object_id=?)
-			AND NOT EXISTS(SELECT 1 FROM exam_submission_manifest_entries WHERE workspace_object_id=?)`, id, id, id); err != nil {
+
+		if _, err = tx.Exec(ctx, `DELETE FROM exam_attempt_workspace_objects
+			WHERE id = ?
+				AND storage_origin = 'attempt'
+				AND NOT EXISTS(SELECT 1 FROM exam_attempt_workspace_entries WHERE current_object_id = ?)
+				AND NOT EXISTS(SELECT 1 FROM exam_submission_manifest_entries WHERE workspace_object_id = ?)`, id, id, id); err != nil {
 			return false, err
 		}
-		_, err = tx.Exec(ctx, `UPDATE retention_purge_objects SET absence_verified_at=COALESCE(absence_verified_at,clock_timestamp()),last_absence_observed_at=clock_timestamp(),verify_after=clock_timestamp() WHERE retirement_id=? AND object_id=?`, input.RetirementID.String(), id)
+
+		_, err = tx.Exec(
+			ctx,
+			`UPDATE retention_purge_objects
+			SET absence_verified_at = COALESCE(absence_verified_at, clock_timestamp()),
+				last_absence_observed_at = clock_timestamp(), verify_after = clock_timestamp()
+			WHERE retirement_id = ?
+				AND object_id = ?`,
+			input.RetirementID.String(),
+			id,
+		)
 		return true, err
 	})
 	return err

@@ -14,32 +14,60 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-func prepareDecisionIdempotency(invocation invocation.Invocation, command SaveDecisionCommand) (*store.CommandIdempotency, error) {
-	return idempotency.Require(invocation, store.ExamIntegrityReviewDecisionOperation, command.IdempotencyKey, struct {
-		SubmissionID             string `json:"submission_id"`
-		ReviewID                 string `json:"submission_review_id,omitempty"`
-		FlagID                   string `json:"integrity_flag_id"`
-		ExpectedReviewRevision   int64  `json:"expected_review_revision"`
-		ExpectedDecisionRevision int64  `json:"expected_decision_revision"`
-		Outcome                  string `json:"outcome"`
-		PrivateRationale         string `json:"private_rationale"`
-	}{command.SubmissionID.String(), command.ReviewID.String(), command.FlagID.String(), command.ExpectedReviewRevision, command.ExpectedDecisionRevision, string(command.Outcome), command.PrivateRationale})
+func prepareDecisionIdempotency(inv invocation.Invocation, command SaveDecisionCommand) (*store.CommandIdempotency, error) {
+	return idempotency.Require(
+		inv,
+		store.ExamIntegrityReviewDecisionOperation,
+		command.IdempotencyKey,
+		struct {
+			SubmissionID             string `json:"submission_id"`
+			ReviewID                 string `json:"submission_review_id,omitempty"`
+			FlagID                   string `json:"integrity_flag_id"`
+			ExpectedReviewRevision   int64  `json:"expected_review_revision"`
+			ExpectedDecisionRevision int64  `json:"expected_decision_revision"`
+			Outcome                  string `json:"outcome"`
+			PrivateRationale         string `json:"private_rationale"`
+		}{
+			command.SubmissionID.String(),
+			command.ReviewID.String(),
+			command.FlagID.String(),
+			command.ExpectedReviewRevision,
+			command.ExpectedDecisionRevision,
+			string(command.Outcome),
+			command.PrivateRationale,
+		},
+	)
 }
 
-func prepareDraftIdempotency(invocation invocation.Invocation, command UpdateDraftCommand) (*store.CommandIdempotency, error) {
-	return idempotency.Require(invocation, store.ExamIntegrityReviewDraftOperation, command.IdempotencyKey, struct {
-		SubmissionID           string `json:"submission_id"`
-		ReviewID               string `json:"submission_review_id,omitempty"`
-		ExpectedReviewRevision int64  `json:"expected_review_revision"`
-		ManagerNotes           string `json:"manager_notes"`
-		StudentRemarksMarkdown string `json:"student_remarks_markdown"`
-	}{command.SubmissionID.String(), command.ReviewID.String(), command.ExpectedReviewRevision, command.ManagerNotes, command.StudentRemarksMarkdown})
+func prepareDraftIdempotency(inv invocation.Invocation, command UpdateDraftCommand) (*store.CommandIdempotency, error) {
+	return idempotency.Require(
+		inv,
+		store.ExamIntegrityReviewDraftOperation,
+		command.IdempotencyKey,
+		struct {
+			SubmissionID           string `json:"submission_id"`
+			ReviewID               string `json:"submission_review_id,omitempty"`
+			ExpectedReviewRevision int64  `json:"expected_review_revision"`
+			ManagerNotes           string `json:"manager_notes"`
+			StudentRemarksMarkdown string `json:"student_remarks_markdown"`
+		}{
+			command.SubmissionID.String(),
+			command.ReviewID.String(),
+			command.ExpectedReviewRevision,
+			command.ManagerNotes,
+			command.StudentRemarksMarkdown,
+		},
+	)
 }
 
-func prepareTerminalIdempotency(invocation invocation.Invocation, operation, key string, submissionID model.SubmissionID,
-	reviewID model.SubmissionReviewID, expectedRevision int64,
+func prepareTerminalIdempotency(
+	inv invocation.Invocation,
+	operation, key string,
+	submissionID model.SubmissionID,
+	reviewID model.SubmissionReviewID,
+	expectedRevision int64,
 ) (*store.CommandIdempotency, error) {
-	return idempotency.Require(invocation, operation, key, struct {
+	return idempotency.Require(inv, operation, key, struct {
 		SubmissionID     string `json:"submission_id"`
 		ReviewID         string `json:"submission_review_id"`
 		ExpectedRevision int64  `json:"expected_review_revision"`

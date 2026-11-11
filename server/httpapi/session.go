@@ -14,9 +14,12 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -44,98 +47,137 @@ func sessionResponsesFromModels(request *http.Request, sessions []*model.Session
 	return items
 }
 
-type sessionResourceModule struct {
-	sessions Sessions
-	cookies  browserCookies
+type sessionHandlers struct {
+	app     Sessions
+	cookies route.Cookies
 }
 
-func sessionResource(sessions Sessions, cookies browserCookies) apiResource {
-	module := sessionResourceModule{sessions: sessions, cookies: cookies}
-	base := apiPath(literal("users"), literal("me"), literal("sessions"))
-	return newResource(
+func sessionResource(app Sessions, cookies route.Cookies) route.Resource {
+	h := sessionHandlers{app: app, cookies: cookies}
+	base := "/users/me/sessions"
+	return route.NewResource(
 		"sessions",
-		sessionRoute(http.MethodGet, base, []string{"authentication.internal", "request.invalid"}, module.list),
-		sessionRoute(http.MethodPost, appendRoutePath(base, literal("revoke")), []string{"request.invalid", "session.id.invalid", "session.not_found", "authentication.internal", "audit.unavailable"}, module.revoke),
-		sessionRoute(http.MethodPost, appendRoutePath(base, literal("revoke-all")), []string{"authentication.internal", "audit.unavailable"}, module.revokeAll),
-		sessionRoute(http.MethodPost, appendRoutePath(base, literal("revoke-others")), []string{"authentication.internal", "audit.unavailable"}, module.revokeOthers),
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   base,
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{"authentication.internal", "request.invalid"},
+			Handle: h.list,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/me/sessions/revoke",
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{"request.invalid", "session.id.invalid", "session.not_found", "authentication.internal", "audit.unavailable"},
+			Handle: h.revoke,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/me/sessions/revoke-all",
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{"authentication.internal", "audit.unavailable"},
+			Handle: h.revokeAll,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/me/sessions/revoke-others",
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{"authentication.internal", "audit.unavailable"},
+			Handle: h.revokeOthers,
+		},
 	)
 }
 
-func (m sessionResourceModule) list(request operationRequest) (operationResult, error) {
-	sessions, err := m.sessions.ListSessions(
-		request.context,
-		request.invocation(),
-		app.ListSessionsQuery{},
+func (h sessionHandlers) list(request route.Request) (route.Result, error) {
+	sessions, err := h.app.ListSessions(
+		request.Context,
+		request.Invocation(),
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	presentable := make([]*model.Session, 0, len(sessions))
 	for _, session := range sessions {
-		if sessionResponseFromModel(request.request, session) != nil {
+		if sessionResponseFromModel(request.HTTP, session) != nil {
 			presentable = append(presentable, session)
 		}
 	}
-	response, err := boundedListResult(request, "Session", presentable,
-		func(session *model.Session) boundedPageKey {
-			return boundedPageKey{At: session.CreatedAt, ID: session.ID.String()}
+
+	response, err := route.BoundedList(
+		request,
+		"Session",
+		presentable,
+		func(session *model.Session) route.BoundedKey {
+			return route.BoundedKey{At: session.CreatedAt, ID: session.ID.String()}
 		},
 		func(session *model.Session) currentUserSessionResponse {
 			return currentUserSessionResponse{
-				sessionResponse: *sessionResponseFromModel(request.request, session),
-				Current:         session.ID == request.principal.SessionID,
+				sessionResponse: *sessionResponseFromModel(request.HTTP, session),
+				Current:         session.ID == request.Principal.SessionID,
 			}
-		})
+		},
+	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, response), nil
+
+	return route.JSON(http.StatusOK, response), nil
 }
 
-func (m sessionResourceModule) revoke(request operationRequest) (operationResult, error) {
+func (h sessionHandlers) revoke(request route.Request) (route.Result, error) {
 	var input revokeSessionRequest
-	if err := request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
 	}
-	if err := m.sessions.RevokeSession(
-		request.context,
-		request.invocation(),
-		app.RevokeSessionCommand{SessionID: model.SessionID(input.SessionID)},
+	if err := h.app.RevokeSession(
+		request.Context,
+		request.Invocation(),
+		model.SessionID(input.SessionID),
 	); err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	result := noContentResult()
-	if input.SessionID == request.principal.SessionID.String() &&
-		credentialSourceFromContext(request.context) == credentialSourceCookie {
-		result = result.withHeaders(captureResponseHeaders(m.cookies.clear))
+	result := route.NoContent()
+	if input.SessionID == request.Principal.SessionID.String() &&
+		route.CredentialSourceOf(request.Context) == route.CredentialCookie {
+		result = result.WithHeaders(route.CaptureHeaders(h.cookies.Clear))
 	}
 	return result, nil
 }
 
-func (m sessionResourceModule) revokeAll(request operationRequest) (operationResult, error) {
-	if err := m.sessions.RevokeAllSessions(
-		request.context,
-		request.invocation(),
-		app.RevokeAllSessionsCommand{},
+func (h sessionHandlers) revokeAll(request route.Request) (route.Result, error) {
+	if err := h.app.RevokeAllSessions(
+		request.Context,
+		request.Invocation(),
 	); err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	result := noContentResult()
-	if credentialSourceFromContext(request.context) == credentialSourceCookie {
-		result = result.withHeaders(captureResponseHeaders(m.cookies.clear))
+	result := route.NoContent()
+	if route.CredentialSourceOf(request.Context) == route.CredentialCookie {
+		result = result.WithHeaders(route.CaptureHeaders(h.cookies.Clear))
 	}
 	return result, nil
 }
 
 // revokeOthers keeps the requesting Session, so its cookies stay in place.
-func (m sessionResourceModule) revokeOthers(request operationRequest) (operationResult, error) {
-	result, err := m.sessions.RevokeOtherSessions(
-		request.context,
-		request.invocation(),
-		app.RevokeOtherSessionsCommand{},
+func (h sessionHandlers) revokeOthers(request route.Request) (route.Result, error) {
+	result, err := h.app.RevokeOtherSessions(
+		request.Context,
+		request.Invocation(),
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, revokeOtherSessionsResponse{RevokedSessionCount: result.RevokedSessionCount}), nil
+	return route.JSON(http.StatusOK, revokeOtherSessionsResponse{RevokedSessionCount: result.RevokedSessionCount}), nil
+}
+
+// Sessions is the application port its handlers call; it lists and revokes the caller's own Sessions.
+type Sessions interface {
+	ListSessions(context.Context, invocation.Invocation) ([]*model.Session, error)
+	RevokeSession(context.Context, invocation.Invocation, model.SessionID) error
+	RevokeAllSessions(context.Context, invocation.Invocation) error
+	RevokeOtherSessions(
+		context.Context,
+		invocation.Invocation,
+	) (*identity.RevokeOtherSessionsResult, error)
 }

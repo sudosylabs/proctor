@@ -24,18 +24,30 @@ import (
 // Link links a new external identity to an active User when its provider is
 // enabled and current, rejecting the link when MFA re-enrollment is pending or
 // the external login state predates the User's last MFA reset.
-func (s SQLExternalIdentityStore) Link(ctx context.Context, input *store.ExternalIdentityLink) (*store.AuthenticationMethodMutationResult, error) {
-	if input == nil || input.Identity == nil || !input.Identity.ID.IsZero() ||
-		!input.Identity.UserID.IsValid() || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() ||
+func (s SQLExternalIdentityStore) Link(
+	ctx context.Context,
+	input *store.ExternalIdentityLink,
+) (*store.AuthenticationMethodMutationResult, error) {
+	if input == nil ||
+		input.Identity == nil ||
+		!input.Identity.ID.IsZero() ||
+		!input.Identity.UserID.IsValid() ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() ||
 		!validAccessDeploymentCapabilities(input.Capabilities) {
 		return nil, store.NewErrInvalidInput("external_identity", "link", nil)
 	}
+
 	identity := *input.Identity
 	identity.Provider = normalizeProviderID(identity.Provider)
 	if _, ok := input.Capabilities.Providers[identity.Provider]; !ok {
 		return nil, store.ErrAuthenticationMethodDisabled
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "link external identity", func(ctx context.Context, tx *sqlxTxWrapper) (*store.AuthenticationMethodMutationResult, error) {
+
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "link external identity", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.AuthenticationMethodMutationResult, error) {
 		if err := lockSystemAdministratorAuthenticationPaths(ctx, tx); err != nil {
 			return nil, err
 		}
@@ -45,6 +57,7 @@ func (s SQLExternalIdentityStore) Link(ctx context.Context, input *store.Externa
 		if err := requireMFARecoveryAuthenticationMethodSource(ctx, tx, identity.UserID, input.AuditEventID); err != nil {
 			return nil, err
 		}
+
 		recovery, err := getMFARecoveryState(ctx, tx, identity.UserID)
 		if err != nil {
 			return nil, err
@@ -52,21 +65,42 @@ func (s SQLExternalIdentityStore) Link(ctx context.Context, input *store.Externa
 		if recovery.ReenrollmentRequired {
 			return nil, store.ErrMFAReenrollmentRequired
 		}
+
 		if !input.ExternalLoginStateID.IsZero() || recovery.ResetAt.Valid {
 			var startedAt time.Time
-			if err := tx.Get(ctx, &startedAt, `SELECT created_at FROM external_login_states WHERE id=? AND purpose='connect' AND target_user_id=? AND provider=? AND audit_event_id=? AND consumed_at IS NOT NULL AND expires_at>clock_timestamp() FOR UPDATE`, input.ExternalLoginStateID.String(), identity.UserID.String(), identity.Provider, input.AuditEventID); err != nil {
+			if err := tx.Get(
+				ctx,
+				&startedAt,
+				`SELECT created_at
+				FROM external_login_states
+				WHERE id = ?
+					AND purpose = 'connect'
+					AND target_user_id = ?
+					AND provider = ?
+					AND audit_event_id = ?
+					AND consumed_at IS NOT NULL
+					AND expires_at > clock_timestamp()
+				FOR UPDATE`,
+				input.ExternalLoginStateID.String(),
+				identity.UserID.String(),
+				identity.Provider,
+				input.AuditEventID,
+			); err != nil {
 				return nil, translateError("external_login_state", "", err)
 			}
+
 			if recovery.ResetAt.Valid && startedAt.Before(recovery.ResetAt.Time) {
 				return nil, store.ErrAuthenticationGenerationChanged
 			}
 		}
+
 		if err := requireActiveUser(ctx, tx, identity.UserID.String(), false); err != nil {
 			return nil, err
 		}
 		if err := requireCurrentExternalProvider(ctx, tx, identity.Provider); err != nil {
 			return nil, err
 		}
+
 		identity.PrepareCreate(model.NewExternalIdentityID(), model.TimeUTC(input.AuditAt))
 		if err := identity.Validate(); err != nil {
 			return nil, err
@@ -77,7 +111,12 @@ func (s SQLExternalIdentityStore) Link(ctx context.Context, input *store.Externa
 		if err := completeAuthenticationMethodAudit(ctx, tx, input.AuditEventID, input.AuditAt, identity.Auditable()); err != nil {
 			return nil, err
 		}
-		return &store.AuthenticationMethodMutationResult{Identity: &identity, RevokedSessions: []*model.Session{}, RevokedTokenHashes: []string{}}, nil
+
+		return &store.AuthenticationMethodMutationResult{
+			Identity:           &identity,
+			RevokedSessions:    []*model.Session{},
+			RevokedTokenHashes: []string{},
+		}, nil
 	})
 }
 
@@ -85,13 +124,25 @@ func (s SQLExternalIdentityStore) Link(ctx context.Context, input *store.Externa
 // authenticated, using the database clock. It refuses with
 // store.ErrLastUsableAuthenticationMethod when the identity is the User's last
 // usable authentication path.
-func (s SQLExternalIdentityStore) Unlink(ctx context.Context, input *store.ExternalIdentityUnlink) (*store.AuthenticationMethodMutationResult, error) {
-	if input == nil || !input.ID.IsValid() || !input.UserID.IsValid() || input.ChangedAt.IsZero() ||
-		!input.RevocationReason.IsValid() || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() ||
+func (s SQLExternalIdentityStore) Unlink(
+	ctx context.Context,
+	input *store.ExternalIdentityUnlink,
+) (*store.AuthenticationMethodMutationResult, error) {
+	if input == nil ||
+		!input.ID.IsValid() ||
+		!input.UserID.IsValid() ||
+		input.ChangedAt.IsZero() ||
+		!input.RevocationReason.IsValid() ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() ||
 		!validAccessDeploymentCapabilities(input.Capabilities) {
 		return nil, store.NewErrInvalidInput("external_identity", "unlink", nil)
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "unlink external identity", func(ctx context.Context, tx *sqlxTxWrapper) (*store.AuthenticationMethodMutationResult, error) {
+
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "unlink external identity", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.AuthenticationMethodMutationResult, error) {
 		if err := lockSystemAdministratorAuthenticationPaths(ctx, tx); err != nil {
 			return nil, err
 		}
@@ -104,34 +155,68 @@ func (s SQLExternalIdentityStore) Unlink(ctx context.Context, input *store.Exter
 		if err := requireActiveUser(ctx, tx, input.UserID.String(), false); err != nil {
 			return nil, err
 		}
+
 		policy, err := getAccessPolicy(ctx, tx, "FOR SHARE")
 		if err != nil {
 			return nil, err
 		}
+
 		identity, err := getExternalIdentityForUpdate(ctx, tx, input.ID.String(), input.UserID.String())
 		if err != nil {
 			return nil, err
 		}
-		usable, err := hasUsableUserAuthenticationPath(ctx, tx, input.UserID.String(), policy.Settings(), input.Capabilities, false, identity.ID.String())
+
+		usable, err := hasUsableUserAuthenticationPath(
+			ctx,
+			tx,
+			input.UserID.String(),
+			policy.Settings(),
+			input.Capabilities,
+			false,
+			identity.ID.String(),
+		)
 		if err != nil {
 			return nil, err
 		}
 		if !usable {
 			return nil, store.ErrLastUsableAuthenticationMethod
 		}
+
 		var at time.Time
-		if err := tx.Get(ctx, &at, `SELECT clock_timestamp()`); err != nil {
-			return nil, fmt.Errorf("read external identity unlink time: %w", err)
+		if getErr := tx.Get(ctx, &at, `SELECT clock_timestamp()`); getErr != nil {
+			return nil, fmt.Errorf("read external identity unlink time: %w", getErr)
 		}
+
 		at = model.TimeUTC(at)
-		if _, err = tx.Exec(ctx, `UPDATE external_identities SET updated_at=GREATEST(updated_at, ?), archived_at=GREATEST(created_at, ?) WHERE id=? AND user_id=? AND archived_at IS NULL`, at, at, identity.ID.String(), input.UserID.String()); err != nil {
+		if _, err = tx.Exec(
+			ctx,
+			`UPDATE external_identities
+			SET updated_at = GREATEST(updated_at, ?), archived_at = GREATEST(created_at, ?)
+			WHERE id = ?
+				AND user_id = ?
+				AND archived_at IS NULL`,
+			at,
+			at,
+			identity.ID.String(),
+			input.UserID.String(),
+		); err != nil {
 			return nil, fmt.Errorf("archive external identity: %w", err)
 		}
+
 		identity.UpdatedAt, identity.ArchivedAt = latestTime(identity.UpdatedAt, at), model.OptionalTimeFrom(latestTime(identity.CreatedAt, at))
-		rows, hashes, err := revokeUserSessionsForAuthenticationMethod(ctx, tx, input.UserID.String(), "", identity.ID, at, input.RevocationReason)
+		rows, hashes, err := revokeUserSessionsForAuthenticationMethod(
+			ctx,
+			tx,
+			input.UserID.String(),
+			"",
+			identity.ID,
+			at,
+			input.RevocationReason,
+		)
 		if err != nil {
 			return nil, err
 		}
+
 		sessions, err := revokedSessionModelsAt(rows, at, input.RevocationReason)
 		if err != nil {
 			return nil, err
@@ -139,19 +224,33 @@ func (s SQLExternalIdentityStore) Unlink(ctx context.Context, input *store.Exter
 		if err := completeAuthenticationMethodAudit(ctx, tx, input.AuditEventID, input.AuditAt, identity.Auditable()); err != nil {
 			return nil, err
 		}
+
 		return &store.AuthenticationMethodMutationResult{Identity: identity, RevokedSessions: sessions, RevokedTokenHashes: hashes}, nil
 	})
 }
 
 // Enroll creates the first password credential for an active User when local
 // login is enabled, completing the audit event in the same transaction.
-func (s SQLPasswordCredentialStore) Enroll(ctx context.Context, input *store.PasswordCredentialEnrollment) (*store.AuthenticationMethodMutationResult, error) {
-	if input == nil || input.Credential == nil || !input.Credential.ID.IsZero() || !input.Credential.UserID.IsValid() ||
-		!input.Reuse.Valid() || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() || !validAccessDeploymentCapabilities(input.Capabilities) {
+func (s SQLPasswordCredentialStore) Enroll(
+	ctx context.Context,
+	input *store.PasswordCredentialEnrollment,
+) (*store.AuthenticationMethodMutationResult, error) {
+	if input == nil ||
+		input.Credential == nil ||
+		!input.Credential.ID.IsZero() ||
+		!input.Credential.UserID.IsValid() ||
+		!input.Reuse.Valid() ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() ||
+		!validAccessDeploymentCapabilities(input.Capabilities) {
 		return nil, store.NewErrInvalidInput("password_credential", "enroll", nil)
 	}
+
 	credential := *input.Credential
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "enroll password credential", func(ctx context.Context, tx *sqlxTxWrapper) (*store.AuthenticationMethodMutationResult, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "enroll password credential", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.AuthenticationMethodMutationResult, error) {
 		if err := lockSystemAdministratorAuthenticationPaths(ctx, tx); err != nil {
 			return nil, err
 		}
@@ -170,6 +269,7 @@ func (s SQLPasswordCredentialStore) Enroll(ctx context.Context, input *store.Pas
 		if err := refusePasswordReuse(ctx, tx, credential.UserID, input.Reuse); err != nil {
 			return nil, err
 		}
+
 		credential.PrepareCreate(model.NewPasswordCredentialID(), model.TimeUTC(input.AuditAt))
 		if err := credential.Validate(); err != nil {
 			return nil, err
@@ -180,7 +280,12 @@ func (s SQLPasswordCredentialStore) Enroll(ctx context.Context, input *store.Pas
 		if err := completeAuthenticationMethodAudit(ctx, tx, input.AuditEventID, input.AuditAt, credential.Auditable()); err != nil {
 			return nil, err
 		}
-		return &store.AuthenticationMethodMutationResult{PasswordCredential: &credential, RevokedSessions: []*model.Session{}, RevokedTokenHashes: []string{}}, nil
+
+		return &store.AuthenticationMethodMutationResult{
+			PasswordCredential: &credential,
+			RevokedSessions:    []*model.Session{},
+			RevokedTokenHashes: []string{},
+		}, nil
 	})
 }
 
@@ -189,12 +294,24 @@ func (s SQLPasswordCredentialStore) Enroll(ctx context.Context, input *store.Pas
 // password-authenticated Sessions. It refuses with
 // store.ErrLastUsableAuthenticationMethod when no other usable authentication
 // path remains.
-func (s SQLPasswordCredentialStore) Remove(ctx context.Context, input *store.PasswordCredentialRemoval) (*store.AuthenticationMethodMutationResult, error) {
-	if input == nil || !input.UserID.IsValid() || input.ChangedAt.IsZero() || !input.RevocationReason.IsValid() ||
-		!input.AuditEventID.IsValid() || input.AuditAt.IsZero() || !validAccessDeploymentCapabilities(input.Capabilities) {
+func (s SQLPasswordCredentialStore) Remove(
+	ctx context.Context,
+	input *store.PasswordCredentialRemoval,
+) (*store.AuthenticationMethodMutationResult, error) {
+	if input == nil ||
+		!input.UserID.IsValid() ||
+		input.ChangedAt.IsZero() ||
+		!input.RevocationReason.IsValid() ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() ||
+		!validAccessDeploymentCapabilities(input.Capabilities) {
 		return nil, store.NewErrInvalidInput("password_credential", "remove", nil)
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "remove password credential", func(ctx context.Context, tx *sqlxTxWrapper) (*store.AuthenticationMethodMutationResult, error) {
+
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "remove password credential", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.AuthenticationMethodMutationResult, error) {
 		if err := lockSystemAdministratorAuthenticationPaths(ctx, tx); err != nil {
 			return nil, err
 		}
@@ -207,14 +324,17 @@ func (s SQLPasswordCredentialStore) Remove(ctx context.Context, input *store.Pas
 		if err := requireActiveUser(ctx, tx, input.UserID.String(), false); err != nil {
 			return nil, err
 		}
+
 		policy, err := getAccessPolicy(ctx, tx, "FOR SHARE")
 		if err != nil {
 			return nil, err
 		}
+
 		credential, err := getPasswordCredentialForUpdate(ctx, tx, input.UserID.String())
 		if err != nil {
 			return nil, err
 		}
+
 		usable, err := hasUsableUserAuthenticationPath(ctx, tx, input.UserID.String(), policy.Settings(), input.Capabilities, true, "")
 		if err != nil {
 			return nil, err
@@ -222,18 +342,47 @@ func (s SQLPasswordCredentialStore) Remove(ctx context.Context, input *store.Pas
 		if !usable {
 			return nil, store.ErrLastUsableAuthenticationMethod
 		}
+
 		at := model.TimeUTC(input.ChangedAt)
-		if _, err = tx.Exec(ctx, `UPDATE password_credentials SET updated_at=GREATEST(updated_at, ?), archived_at=GREATEST(created_at, ?) WHERE id=? AND user_id=? AND archived_at IS NULL`, at, at, credential.ID.String(), input.UserID.String()); err != nil {
+		if _, err = tx.Exec(
+			ctx,
+			`UPDATE password_credentials
+			SET updated_at = GREATEST(updated_at, ?), archived_at = GREATEST(created_at, ?)
+			WHERE id = ?
+				AND user_id = ?
+				AND archived_at IS NULL`,
+			at,
+			at,
+			credential.ID.String(),
+			input.UserID.String(),
+		); err != nil {
 			return nil, fmt.Errorf("archive password credential: %w", err)
 		}
-		credential.UpdatedAt, credential.ArchivedAt = latestTime(credential.UpdatedAt, at), model.OptionalTimeFrom(latestTime(credential.CreatedAt, at))
-		if _, err = tx.Exec(ctx, `UPDATE user_tokens SET updated_at=GREATEST(updated_at, ?), archived_at=GREATEST(created_at, ?) WHERE user_id=? AND purpose='password_reset' AND archived_at IS NULL AND consumed_at IS NULL`, at, at, input.UserID.String()); err != nil {
+
+		credential.UpdatedAt, credential.ArchivedAt = latestTime(
+			credential.UpdatedAt,
+			at,
+		), model.OptionalTimeFrom(latestTime(credential.CreatedAt, at))
+		if _, err = tx.Exec(
+			ctx,
+			`UPDATE user_tokens
+			SET updated_at = GREATEST(updated_at, ?), archived_at = GREATEST(created_at, ?)
+			WHERE user_id = ?
+				AND purpose = 'password_reset'
+				AND archived_at IS NULL
+				AND consumed_at IS NULL`,
+			at,
+			at,
+			input.UserID.String(),
+		); err != nil {
 			return nil, fmt.Errorf("invalidate password recovery state: %w", err)
 		}
+
 		rows, hashes, err := revokeUserSessionsForAuthenticationMethod(ctx, tx, input.UserID.String(), "password", "", at, input.RevocationReason)
 		if err != nil {
 			return nil, err
 		}
+
 		sessions, err := revokedSessionModelsAt(rows, at, input.RevocationReason)
 		if err != nil {
 			return nil, err
@@ -241,23 +390,49 @@ func (s SQLPasswordCredentialStore) Remove(ctx context.Context, input *store.Pas
 		if err := completeAuthenticationMethodAudit(ctx, tx, input.AuditEventID, input.AuditAt, credential.Auditable()); err != nil {
 			return nil, err
 		}
-		return &store.AuthenticationMethodMutationResult{PasswordCredential: credential, RevokedSessions: sessions, RevokedTokenHashes: hashes}, nil
+
+		return &store.AuthenticationMethodMutationResult{
+			PasswordCredential: credential,
+			RevokedSessions:    sessions,
+			RevokedTokenHashes: hashes,
+		}, nil
 	})
 }
 
 // Change replaces the active User's password, invalidates outstanding
 // password-reset tokens, revokes the User's other Sessions, and queues the
 // password-changed notice in one transaction at one database instant.
-func (s SQLPasswordCredentialStore) Change(ctx context.Context, input *store.PasswordCredentialChange) (*store.AuthenticationMethodMutationResult, error) {
-	if input == nil || !input.UserID.IsValid() || !input.KeepSessionID.IsValid() || !model.IsValidPasswordHash(input.PasswordHash) ||
-		!input.Reuse.Valid() || !input.RevocationReason.IsValid() || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+func (s SQLPasswordCredentialStore) Change(
+	ctx context.Context,
+	input *store.PasswordCredentialChange,
+) (*store.AuthenticationMethodMutationResult, error) {
+	if input == nil ||
+		!input.UserID.IsValid() ||
+		!input.KeepSessionID.IsValid() ||
+		!model.IsValidPasswordHash(input.PasswordHash) ||
+		!input.Reuse.Valid() ||
+		!input.RevocationReason.IsValid() ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("password_credential", "change", nil)
 	}
-	keyID, err := validateUserEmailMail(input.UserID, input.Occurrence, input.Delivery, input.Job, model.MailOccurrenceSecurityNotice, model.MailTemplateIdentityPasswordChanged)
+
+	keyID, err := validateUserEmailMail(
+		input.UserID,
+		input.Occurrence,
+		input.Delivery,
+		input.Job,
+		model.MailOccurrenceSecurityNotice,
+		model.MailTemplateIdentityPasswordChanged,
+	)
 	if err != nil {
 		return nil, err
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "change password credential", func(ctx context.Context, tx *sqlxTxWrapper) (*store.AuthenticationMethodMutationResult, error) {
+
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "change password credential", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.AuthenticationMethodMutationResult, error) {
 		if err := lockUserSessions(ctx, tx, input.UserID.String()); err != nil {
 			return nil, err
 		}
@@ -270,6 +445,7 @@ func (s SQLPasswordCredentialStore) Change(ctx context.Context, input *store.Pas
 		if err := requireCurrentLocalLogin(ctx, tx); err != nil {
 			return nil, err
 		}
+
 		credential, err := getPasswordCredentialForUpdate(ctx, tx, input.UserID.String())
 		if err != nil {
 			return nil, err
@@ -277,33 +453,71 @@ func (s SQLPasswordCredentialStore) Change(ctx context.Context, input *store.Pas
 		if err = refusePasswordReuse(ctx, tx, input.UserID, input.Reuse); err != nil {
 			return nil, err
 		}
+
 		databaseNow, err := jobDatabaseNow(ctx, tx)
 		if err != nil {
 			return nil, err
 		}
+
 		at := passwordChangeInstant(transitionInstant(databaseNow, credential.UpdatedAt), credential.PasswordChangedAt)
-		if err = retainSupersededPassword(ctx, tx, input.UserID, credential.PasswordHash, credential.PasswordChangedAt, at, input.Reuse.Limit); err != nil {
+		if err = retainSupersededPassword(
+			ctx,
+			tx,
+			input.UserID,
+			credential.PasswordHash,
+			credential.PasswordChangedAt,
+			at,
+			input.Reuse.Limit,
+		); err != nil {
 			return nil, err
 		}
+
 		occurrence, delivery, job, err := recoveryMailAt(input.Occurrence, input.Delivery, input.Job, at)
 		if err != nil {
 			return nil, err
 		}
-		if _, err = tx.Exec(ctx, `UPDATE password_credentials SET updated_at=GREATEST(updated_at, ?), password_hash=?, password_changed_at=GREATEST(password_changed_at, ?), revision=revision+1 WHERE id=? AND user_id=? AND archived_at IS NULL`,
-			at, input.PasswordHash, at, credential.ID.String(), input.UserID.String()); err != nil {
+
+		if _, err = tx.Exec(
+			ctx,
+			`UPDATE password_credentials
+			SET updated_at = GREATEST(updated_at, ?), password_hash = ?,
+				password_changed_at = GREATEST(password_changed_at, ?), revision = revision + 1
+			WHERE id = ?
+				AND user_id = ?
+				AND archived_at IS NULL`,
+			at,
+			input.PasswordHash,
+			at,
+			credential.ID.String(),
+			input.UserID.String(),
+		); err != nil {
 			return nil, fmt.Errorf("change password credential: %w", err)
 		}
+
 		credential.Revision++
 		credential.PasswordHash = input.PasswordHash
 		credential.PasswordChangedAt = latestTime(credential.PasswordChangedAt, at)
 		credential.UpdatedAt = latestTime(credential.UpdatedAt, at)
-		if _, err = tx.Exec(ctx, `UPDATE user_tokens SET updated_at=GREATEST(updated_at, ?), archived_at=GREATEST(created_at, ?) WHERE user_id=? AND purpose='password_reset' AND archived_at IS NULL AND consumed_at IS NULL`, at, at, input.UserID.String()); err != nil {
+		if _, err = tx.Exec(
+			ctx,
+			`UPDATE user_tokens
+			SET updated_at = GREATEST(updated_at, ?), archived_at = GREATEST(created_at, ?)
+			WHERE user_id = ?
+				AND purpose = 'password_reset'
+				AND archived_at IS NULL
+				AND consumed_at IS NULL`,
+			at,
+			at,
+			input.UserID.String(),
+		); err != nil {
 			return nil, fmt.Errorf("invalidate password recovery state: %w", err)
 		}
+
 		rows, hashes, err := revokeUserSessionsExceptAt(ctx, tx, input.UserID.String(), input.KeepSessionID, at, input.RevocationReason)
 		if err != nil {
 			return nil, err
 		}
+
 		sessions, err := revokedSessionModelsAt(rows, at, input.RevocationReason)
 		if err != nil {
 			return nil, err
@@ -314,13 +528,27 @@ func (s SQLPasswordCredentialStore) Change(ctx context.Context, input *store.Pas
 		if err := completeAuthenticationMethodAudit(ctx, tx, input.AuditEventID, input.AuditAt, credential.Auditable()); err != nil {
 			return nil, err
 		}
-		return &store.AuthenticationMethodMutationResult{PasswordCredential: credential, RevokedSessions: sessions, RevokedTokenHashes: hashes}, nil
+
+		return &store.AuthenticationMethodMutationResult{
+			PasswordCredential: credential,
+			RevokedSessions:    sessions,
+			RevokedTokenHashes: hashes,
+		}, nil
 	})
 }
 
 func requireActiveUser(ctx context.Context, tx *sqlxTxWrapper, userID string, requireVerifiedEmail bool) error {
 	var active bool
-	err := tx.Get(ctx, &active, `SELECT archived_at IS NULL AND disabled_at IS NULL AND (NOT ? OR email_verified) FROM users WHERE id=? FOR UPDATE`, requireVerifiedEmail, userID)
+	err := tx.Get(
+		ctx,
+		&active,
+		`SELECT archived_at IS NULL AND disabled_at IS NULL AND (NOT ? OR email_verified)
+		FROM users
+		WHERE id = ?
+		FOR UPDATE`,
+		requireVerifiedEmail,
+		userID,
+	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return store.NewErrNotFound("user", userID).Wrap(err)
 	}
@@ -330,68 +558,204 @@ func requireActiveUser(ctx context.Context, tx *sqlxTxWrapper, userID string, re
 	if !active {
 		return store.NewErrConflict("user", "authentication_method_user_ineligible", nil)
 	}
+
 	return nil
 }
 
-func hasUsableUserAuthenticationPath(ctx context.Context, executor sqlxExecutor, userID string, settings model.AccessPolicySettings, capabilities store.AccessDeploymentCapabilities, excludePassword bool, excludedIdentityID string) (bool, error) {
+func hasUsableUserAuthenticationPath(
+	ctx context.Context,
+	executor sqlxExecutor,
+	userID string,
+	settings model.AccessPolicySettings,
+	capabilities store.AccessDeploymentCapabilities,
+	excludePassword bool,
+	excludedIdentityID string,
+) (bool, error) {
 	providers := make([]string, 0, len(settings.ProviderAdmissions))
 	for provider := range settings.ProviderAdmissions {
 		if _, ok := capabilities.Providers[provider]; ok {
 			providers = append(providers, provider)
 		}
 	}
+
 	sort.Strings(providers)
 	var found bool
-	err := executor.Get(ctx, &found, `SELECT ((? AND NOT ? AND EXISTS (SELECT 1 FROM password_credentials WHERE user_id=? AND archived_at IS NULL)) OR EXISTS (SELECT 1 FROM external_identities WHERE user_id=? AND archived_at IS NULL AND provider=ANY(?) AND (?='' OR id<>?)))`, settings.LocalLoginEnabled, excludePassword, userID, userID, pq.Array(providers), excludedIdentityID, excludedIdentityID)
+	err := executor.Get(
+		ctx,
+		&found,
+		`SELECT (
+			(
+				?
+				AND NOT ?
+				AND EXISTS (
+					SELECT 1 FROM password_credentials WHERE user_id = ? AND archived_at IS NULL
+				)
+			)
+			OR EXISTS (
+				SELECT 1
+				FROM external_identities
+				WHERE user_id = ?
+					AND archived_at IS NULL
+					AND provider = ANY(?)
+					AND (? = '' OR id <> ?)
+			)
+		)`,
+		settings.LocalLoginEnabled,
+		excludePassword,
+		userID,
+		userID,
+		pq.Array(providers),
+		excludedIdentityID,
+		excludedIdentityID,
+	)
 	return found, err
 }
 
 func getExternalIdentityForUpdate(ctx context.Context, tx *sqlxTxWrapper, id, userID string) (*model.ExternalIdentity, error) {
 	var row externalIdentityRow
-	if err := tx.Get(ctx, &row, `SELECT id, created_at, updated_at, archived_at, user_id, provider, subject, last_seen_at FROM external_identities WHERE id=? AND user_id=? AND archived_at IS NULL FOR UPDATE`, id, userID); err != nil {
+	if err := tx.Get(
+		ctx,
+		&row,
+		`SELECT id, created_at, updated_at, archived_at, user_id, provider, subject, last_seen_at
+		FROM external_identities
+		WHERE id = ?
+			AND user_id = ?
+			AND archived_at IS NULL
+		FOR UPDATE`,
+		id,
+		userID,
+	); err != nil {
 		return nil, translateError("external_identity", id, err)
 	}
+
 	return row.model()
 }
 
 func getPasswordCredentialForUpdate(ctx context.Context, tx *sqlxTxWrapper, userID string) (*model.PasswordCredential, error) {
 	var row passwordCredentialRow
-	if err := tx.Get(ctx, &row, `SELECT id, created_at, updated_at, archived_at, user_id, revision, password_hash, password_changed_at FROM password_credentials WHERE user_id=? AND archived_at IS NULL FOR UPDATE`, userID); err != nil {
+	if err := tx.Get(
+		ctx,
+		&row,
+		`SELECT id, created_at, updated_at, archived_at, user_id, revision, password_hash,
+			password_changed_at
+		FROM password_credentials
+		WHERE user_id = ?
+			AND archived_at IS NULL
+		FOR UPDATE`,
+		userID,
+	); err != nil {
 		return nil, translateError("password_credential", userID, err)
 	}
+
 	return row.model()
 }
 
-func revokeUserSessionsForAuthenticationMethod(ctx context.Context, executor sqlxExecutor, userID, method string, identityID model.ExternalIdentityID, at time.Time, reason model.SessionRevocationReason) ([]sessionRow, []string, error) {
+func revokeUserSessionsForAuthenticationMethod(
+	ctx context.Context,
+	executor sqlxExecutor,
+	userID, method string,
+	identityID model.ExternalIdentityID,
+	at time.Time,
+	reason model.SessionRevocationReason,
+) ([]sessionRow, []string, error) {
 	rows := []sessionRow{}
-	if err := executor.Select(ctx, &rows, `SELECT id, created_at, updated_at, archived_at, user_id, authentication_generation, mfa_recovery_required, mfa_enrollment_required, client_type, desktop_registration_id, dpop_key_thumbprint, desktop_release, desktop_build_id, desktop_platform, desktop_architecture, desktop_realtime_protocol, device_id, device_name, authentication_method, authentication_provider_id, external_identity_id, authentication_strength, authenticated_at, reauthenticated_at, mfa_completed_at, last_activity_at, idle_expires_at, expires_at, revoked_at, revocation_reason FROM sessions WHERE user_id=? AND archived_at IS NULL AND revoked_at IS NULL AND ((?<>'' AND external_identity_id=?) OR (?='' AND authentication_method=? AND authentication_provider_id='')) FOR UPDATE`, userID, identityID.String(), identityID.String(), identityID.String(), method); err != nil {
+	if err := executor.Select(
+		ctx,
+		&rows,
+		`SELECT id, created_at, updated_at, archived_at, user_id, authentication_generation,
+			mfa_recovery_required, mfa_enrollment_required, client_type, desktop_registration_id,
+			dpop_key_thumbprint, desktop_release, desktop_build_id, desktop_platform,
+			desktop_architecture, desktop_realtime_protocol, device_id, device_name,
+			authentication_method, authentication_provider_id, external_identity_id,
+			authentication_strength, authenticated_at, reauthenticated_at, mfa_completed_at,
+			last_activity_at, idle_expires_at, expires_at, revoked_at, revocation_reason
+		FROM sessions
+		WHERE user_id = ?
+			AND archived_at IS NULL
+			AND revoked_at IS NULL
+			AND (
+				(? <> '' AND external_identity_id = ?)
+				OR (? = '' AND authentication_method = ? AND authentication_provider_id = '')
+			)
+		FOR UPDATE`,
+		userID,
+		identityID.String(),
+		identityID.String(),
+		identityID.String(),
+		method,
+	); err != nil {
 		return nil, nil, err
 	}
+
 	if len(rows) == 0 {
 		return rows, []string{}, nil
 	}
+
 	ids := make([]string, 0, len(rows))
 	for _, row := range rows {
 		ids = append(ids, row.ID)
 	}
+
 	hashes := []string{}
-	if err := executor.Select(ctx, &hashes, `SELECT token_hash FROM session_credentials WHERE session_id=ANY(?) AND archived_at IS NULL AND revoked_at IS NULL FOR UPDATE`, pq.Array(ids)); err != nil {
+	if err := executor.Select(
+		ctx,
+		&hashes,
+		`SELECT token_hash
+		FROM session_credentials
+		WHERE session_id = ANY(?)
+			AND archived_at IS NULL
+			AND revoked_at IS NULL
+		FOR UPDATE`,
+		pq.Array(ids),
+	); err != nil {
 		return nil, nil, err
 	}
-	if _, err := executor.Exec(ctx, `UPDATE session_credentials SET updated_at=GREATEST(updated_at, ?), revoked_at=GREATEST(created_at, ?) WHERE session_id=ANY(?) AND archived_at IS NULL AND revoked_at IS NULL`, at, at, pq.Array(ids)); err != nil {
+
+	if _, err := executor.Exec(
+		ctx,
+		`UPDATE session_credentials
+		SET updated_at = GREATEST(updated_at, ?), revoked_at = GREATEST(created_at, ?)
+		WHERE session_id = ANY(?)
+			AND archived_at IS NULL
+			AND revoked_at IS NULL`,
+		at,
+		at,
+		pq.Array(ids),
+	); err != nil {
 		return nil, nil, err
 	}
-	if _, err := executor.Exec(ctx, `UPDATE sessions SET updated_at=GREATEST(updated_at, ?), revoked_at=GREATEST(created_at, ?), revocation_reason=? WHERE id=ANY(?) AND archived_at IS NULL AND revoked_at IS NULL`, at, at, string(reason), pq.Array(ids)); err != nil {
+
+	if _, err := executor.Exec(
+		ctx,
+		`UPDATE sessions
+		SET updated_at = GREATEST(updated_at, ?), revoked_at = GREATEST(created_at, ?),
+			revocation_reason = ?
+		WHERE id = ANY(?)
+			AND archived_at IS NULL
+			AND revoked_at IS NULL`,
+		at,
+		at,
+		string(reason),
+		pq.Array(ids),
+	); err != nil {
 		return nil, nil, err
 	}
+
 	return rows, hashes, nil
 }
 
-func completeAuthenticationMethodAudit(ctx context.Context, tx *sqlxTxWrapper, auditID model.AuditEventID, auditAt time.Time, result any) error {
+func completeAuthenticationMethodAudit(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	auditID model.AuditEventID,
+	auditAt time.Time,
+	result any,
+) error {
 	encoded, err := model.EncodeAuditData(result)
 	if err != nil {
 		return err
 	}
+
 	_, err = completeAuditEvent(ctx, tx, auditID, model.AuditStatusSuccess, "", encoded, auditAt)
 	return err
 }

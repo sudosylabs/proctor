@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -32,115 +33,201 @@ type ReportSecurityPreflightCommand struct {
 	IdempotencyKey string
 }
 
-func (s *Service) securityPreflightAccess(ctx context.Context, invocation invocation.Invocation, sittingID model.ExamSittingID) (store.SecurityPreflightAccess, error) {
-	principal := invocation.Principal()
+func (s *Service) securityPreflightAccess(
+	ctx context.Context,
+	inv invocation.Invocation,
+	sittingID model.ExamSittingID,
+) (store.SecurityPreflightAccess, error) {
+	principal := inv.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return store.SecurityPreflightAccess{}, apperror.New("authentication.token_invalid")
 	}
 	if !principal.HasRegisteredDesktopKey() {
 		return store.SecurityPreflightAccess{}, apperror.New("exam.attempt.registered_desktop_required")
 	}
-	build, err := s.deps.DesktopBuilds.ResolveAttemptDesktopBuild(ctx, principal)
+
+	build, err := s.desktopBuilds.ResolveAttemptDesktopBuild(ctx, principal)
 	if err != nil || build.Build.Validate() != nil || build.Build.NativeAgreement == nil || build.CompatibilityPolicyRevision < 1 {
 		return store.SecurityPreflightAccess{}, apperror.New("exam.attempt.desktop_incompatible").Wrap(err)
 	}
-	return store.SecurityPreflightAccess{SittingID: sittingID, CandidateUserID: principal.UserID, SessionID: principal.SessionID, DesktopRegistrationID: principal.DesktopRegistrationID, DPoPKeyThumbprint: principal.DPoPKeyThumbprint, DesktopBuild: build.Build, DesktopCompatibilityPolicyRevision: build.CompatibilityPolicyRevision}, nil
+
+	return store.SecurityPreflightAccess{
+		SittingID:                          sittingID,
+		CandidateUserID:                    principal.UserID,
+		SessionID:                          principal.SessionID,
+		DesktopRegistrationID:              principal.DesktopRegistrationID,
+		DPoPKeyThumbprint:                  principal.DPoPKeyThumbprint,
+		DesktopBuild:                       build.Build,
+		DesktopCompatibilityPolicyRevision: build.CompatibilityPolicyRevision,
+	}, nil
 }
-func (s *Service) beginPreflightAudit(ctx context.Context, invocation invocation.Invocation, sittingID model.ExamSittingID, operation string) (model.AuditEventID, error) {
-	snapshot, err := s.deps.Sittings.Resolve(ctx, sittingID)
+func (s *Service) beginPreflightAudit(
+	ctx context.Context,
+	inv invocation.Invocation,
+	sittingID model.ExamSittingID,
+	operation string,
+) (model.AuditEventID, error) {
+	snapshot, err := s.sittings.Resolve(ctx, sittingID)
 	if err != nil {
 		return "", storeError(storeErrors, err)
 	}
-	if snapshot == nil || snapshot.Sitting == nil || snapshot.Sitting.ID != sittingID || !snapshot.Sitting.ClassID.IsValid() {
-		return "", apperror.New("exam.attempt.unavailable").Wrap(errors.New("preflight Sitting ownership is invalid"))
-	}
-	return s.deps.Auditor.BeginAtScope(ctx, invocation, model.ActionExamSittingParticipate, model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()}, model.RoleScopeClass, snapshot.Sitting.ClassID.String(), operation, map[string]any{"exam_sitting_id": sittingID.String()}, nil)
+
+	return s.auditor.Begin(ctx, access.Mutation{
+		Invocation: inv,
+		Action:     model.ActionExamSittingParticipate,
+		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
+		ScopeType:  model.RoleScopeClass,
+		ScopeID:    snapshot.Sitting.ClassID.String(),
+		Operation:  operation,
+		Value:      map[string]any{"exam_sitting_id": sittingID.String()},
+	})
 }
 
 // PrepareExamSecurityPreflight idempotently starts a security preflight for
 // the caller's desktop against a Sitting, optionally for an existing Attempt,
 // and returns a fresh challenge bound to the reported registry, source
 // manifest, and configuration digests.
-func (s *Service) PrepareExamSecurityPreflight(ctx context.Context, invocation invocation.Invocation, command PrepareSecurityPreflightCommand) (_ *store.SecurityPreflightPrepared, resultErr error) {
+func (s *Service) PrepareExamSecurityPreflight(
+	ctx context.Context,
+	inv invocation.Invocation,
+	command PrepareSecurityPreflightCommand,
+) (_ *store.SecurityPreflightPrepared, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	release, admissionErr := s.enterControl(ctx, invocation, false)
+	release, admissionErr := s.enterControl(ctx, inv, false)
 	if admissionErr != nil {
 		return nil, admissionErr
 	}
 	defer release()
-	if !command.SittingID.IsValid() || command.AttemptID != "" && !command.AttemptID.IsValid() || !model.IsValidSHA256Fingerprint(command.NativeRegistryDigest) || !model.IsValidSHA256Fingerprint(command.SourceManifestDigest) || !model.IsValidSHA256Fingerprint(command.ConfigurationManifestFingerprint) {
+
+	if !command.SittingID.IsValid() ||
+		command.AttemptID != "" && !command.AttemptID.IsValid() ||
+		!model.IsValidSHA256Fingerprint(command.NativeRegistryDigest) ||
+		!model.IsValidSHA256Fingerprint(command.SourceManifestDigest) ||
+		!model.IsValidSHA256Fingerprint(command.ConfigurationManifestFingerprint) {
 		return nil, apperror.Invalid("exam.attempt.invalid", "security_preflight")
 	}
-	access, err := s.securityPreflightAccess(ctx, invocation, command.SittingID)
+
+	preflightAccess, err := s.securityPreflightAccess(ctx, inv, command.SittingID)
 	if err != nil {
 		return nil, err
 	}
-	idempotency, err := idempotency.Require(invocation, store.SecurityPreflightPrepareOperation, command.IdempotencyKey, struct {
-		SittingID     model.ExamSittingID `json:"sitting_id"`
-		AttemptID     model.ExamAttemptID `json:"attempt_id,omitempty"`
-		Registry      string              `json:"native_registry_digest"`
-		Manifest      string              `json:"source_manifest_digest"`
-		Configuration string              `json:"configuration_manifest_fingerprint"`
-	}{command.SittingID, command.AttemptID, command.NativeRegistryDigest, command.SourceManifestDigest, command.ConfigurationManifestFingerprint})
+
+	commandIdempotency, err := idempotency.Require(
+		inv,
+		store.SecurityPreflightPrepareOperation,
+		command.IdempotencyKey,
+		struct {
+			SittingID     model.ExamSittingID `json:"sitting_id"`
+			AttemptID     model.ExamAttemptID `json:"attempt_id,omitempty"`
+			Registry      string              `json:"native_registry_digest"`
+			Manifest      string              `json:"source_manifest_digest"`
+			Configuration string              `json:"configuration_manifest_fingerprint"`
+		}{
+			command.SittingID,
+			command.AttemptID,
+			command.NativeRegistryDigest,
+			command.SourceManifestDigest,
+			command.ConfigurationManifestFingerprint,
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
-	audit, err := s.beginPreflightAudit(ctx, invocation, command.SittingID, store.SecurityPreflightPrepareOperation)
+
+	audit, err := s.beginPreflightAudit(ctx, inv, command.SittingID, store.SecurityPreflightPrepareOperation)
 	if err != nil {
 		return nil, err
 	}
-	result, err := s.deps.Persistence.PrepareSecurityPreflight(ctx, &store.SecurityPreflightPrepare{Access: access, AttemptID: command.AttemptID, PreflightID: model.NewID(), Challenge: model.NewCredentialToken(), NativeRegistryDigest: command.NativeRegistryDigest, SourceManifestDigest: command.SourceManifestDigest, ConfigurationManifestFingerprint: command.ConfigurationManifestFingerprint, AuditEventID: audit, AuditAt: s.deps.Now()}, idempotency)
+
+	result, err := s.securityPreflight.PrepareSecurityPreflight(
+		ctx,
+		&store.SecurityPreflightPrepare{
+			Access:                           preflightAccess,
+			AttemptID:                        command.AttemptID,
+			PreflightID:                      model.NewID(),
+			Challenge:                        model.NewCredentialToken(),
+			NativeRegistryDigest:             command.NativeRegistryDigest,
+			SourceManifestDigest:             command.SourceManifestDigest,
+			ConfigurationManifestFingerprint: command.ConfigurationManifestFingerprint,
+			AuditEventID:                     audit,
+			AuditAt:                          s.now(),
+		},
+		commandIdempotency,
+	)
 	if err != nil {
 		return nil, s.failAudit(ctx, audit, storeError(securityPreflightStoreErrors, err))
 	}
-	if result == nil || result.Challenge.Validate() != nil || result.Resolved.Policy.Validate(result.ServerTime) != nil || result.Resolved.Policy.SittingID != command.SittingID {
-		return nil, apperror.New("exam.attempt.unavailable").Wrap(errors.New("preflight Store returned an invalid policy"))
-	}
+
 	return result, nil
 }
 
 // ReportExamSecurityPreflight idempotently records the desktop's report for a
 // prepared preflight and returns the server's evaluation. The preflight is
 // resolved only for the caller's own user and Session.
-func (s *Service) ReportExamSecurityPreflight(ctx context.Context, invocation invocation.Invocation, command ReportSecurityPreflightCommand) (_ *model.SecurityPreflightResult, resultErr error) {
+func (s *Service) ReportExamSecurityPreflight(
+	ctx context.Context,
+	inv invocation.Invocation,
+	command ReportSecurityPreflightCommand,
+) (_ *model.SecurityPreflightResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	release, admissionErr := s.enterControl(ctx, invocation, false)
+	release, admissionErr := s.enterControl(ctx, inv, false)
 	if admissionErr != nil {
 		return nil, admissionErr
 	}
 	defer release()
+
 	if !model.IsValidAgreementID(command.PreflightID) || command.Report.Validate() != nil {
 		return nil, apperror.Invalid("exam.attempt.invalid", "security_preflight_report")
 	}
-	principal := invocation.Principal()
+
+	principal := inv.Principal()
 	// Authenticate before looking up a resource selector or beginning an audit.
-	access, err := s.securityPreflightAccess(ctx, invocation, "")
+	preflightAccess, err := s.securityPreflightAccess(ctx, inv, "")
 	if err != nil {
 		return nil, err
 	}
-	sittingID, err := s.deps.Persistence.ResolveSecurityPreflightSitting(ctx, command.PreflightID, principal.UserID, principal.SessionID)
+
+	sittingID, err := s.securityPreflight.ResolveSecurityPreflightSitting(ctx, command.PreflightID, principal.UserID, principal.SessionID)
 	if err != nil {
 		return nil, storeError(securityPreflightStoreErrors, err)
 	}
-	access.SittingID = sittingID
-	idempotency, err := idempotency.Require(invocation, store.SecurityPreflightReportOperation, command.IdempotencyKey, struct {
+
+	preflightAccess.SittingID = sittingID
+	commandIdempotency, err := idempotency.Require(inv, store.SecurityPreflightReportOperation, command.IdempotencyKey, struct {
 		PreflightID string                        `json:"preflight_id"`
 		Report      model.SecurityPreflightReport `json:"report"`
 	}{command.PreflightID, command.Report})
 	if err != nil {
 		return nil, err
 	}
-	audit, err := s.beginPreflightAudit(ctx, invocation, sittingID, store.SecurityPreflightReportOperation)
+
+	audit, err := s.beginPreflightAudit(ctx, inv, sittingID, store.SecurityPreflightReportOperation)
 	if err != nil {
 		return nil, err
 	}
-	result, err := s.deps.Persistence.ReportSecurityPreflight(ctx, &store.SecurityPreflightReport{Access: access, PreflightID: command.PreflightID, Report: command.Report, AuditEventID: audit, AuditAt: s.deps.Now()}, idempotency)
+
+	result, err := s.securityPreflight.ReportSecurityPreflight(
+		ctx,
+		&store.SecurityPreflightReport{
+			Access:       preflightAccess,
+			PreflightID:  command.PreflightID,
+			Report:       command.Report,
+			AuditEventID: audit,
+			AuditAt:      s.now(),
+		},
+		commandIdempotency,
+	)
 	if err != nil {
 		return nil, s.failAudit(ctx, audit, storeError(securityPreflightStoreErrors, err))
 	}
-	if result == nil || result.PreflightID != command.PreflightID || !model.IsValidSHA256Fingerprint(result.ReportDigest) || (result.Admission != "eligible" && result.Admission != "blocked") {
+
+	if result == nil ||
+		result.PreflightID != command.PreflightID ||
+		!model.IsValidSHA256Fingerprint(result.ReportDigest) ||
+		(result.Admission != "eligible" && result.Admission != "blocked") {
 		return nil, apperror.New("exam.attempt.unavailable").Wrap(errors.New("preflight Store returned an invalid report receipt"))
 	}
+
 	return result, nil
 }
 
@@ -148,33 +235,42 @@ func (s *Service) ReportExamSecurityPreflight(ctx context.Context, invocation in
 // Attempt table.
 var securityPreflightStoreErrors = storeErrors.With(
 	apperror.StoreRule{Kind: apperror.StoreSentinel, Sentinel: model.ErrNativeCatalogUnavailable, Code: "exam.security.catalog_missing"},
-	apperror.StoreRule{Kind: apperror.StoreSentinel, Sentinel: model.ErrNativeCoverageUnsupported, Code: "exam.security.unsupported_capability"},
+	apperror.StoreRule{
+		Kind:     apperror.StoreSentinel,
+		Sentinel: model.ErrNativeCoverageUnsupported,
+		Code:     "exam.security.unsupported_capability",
+	},
 )
 
 // RecoverExamSecurityPolicy returns the frozen security policy, current
 // coverage, and source state of the caller's active Attempt to its registered
 // Session. It does not grant or renew a Participation Lease.
-func (s *Service) RecoverExamSecurityPolicy(ctx context.Context, invocation invocation.Invocation, attemptID model.ExamAttemptID) (_ *store.SecurityPolicyRecovery, resultErr error) {
+func (s *Service) RecoverExamSecurityPolicy(
+	ctx context.Context,
+	inv invocation.Invocation,
+	attemptID model.ExamAttemptID,
+) (_ *store.SecurityPolicyRecovery, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	release, admissionErr := s.enterControl(ctx, invocation, false)
+	release, admissionErr := s.enterControl(ctx, inv, false)
 	if admissionErr != nil {
 		return nil, admissionErr
 	}
 	defer release()
+
 	if !attemptID.IsValid() {
 		return nil, apperror.Invalid("exam.attempt.invalid", "attempt_id")
 	}
-	access, err := s.securityPreflightAccess(ctx, invocation, "")
+
+	preflightAccess, err := s.securityPreflightAccess(ctx, inv, "")
 	if err != nil {
 		return nil, err
 	}
-	result, err := s.deps.Persistence.RecoverSecurityPolicy(ctx, access, attemptID)
+
+	result, err := s.securityPreflight.RecoverSecurityPolicy(ctx, preflightAccess, attemptID)
 	if err != nil {
 		return nil, storeError(securityPreflightStoreErrors, err)
 	}
-	if result == nil || result.ServerTime.IsZero() || result.SecurityCoverage.Validate() != nil || result.CurrentSources == nil || result.CurrentCoverage == nil || result.SourceResetReceipts == nil || len(result.CurrentSources) > 11 || len(result.CurrentCoverage) > 64 || len(result.SourceResetReceipts) > 11 || result.Security.Validate() != nil || result.Security.Policy.Scope.AttemptID != attemptID || result.FrozenAttemptConfiguration.Validate() != nil {
-		return nil, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent security policy recovery"))
-	}
+
 	return result, nil
 }
 
@@ -188,31 +284,46 @@ type UpdateSecurityCoverageCommand struct {
 // UpdateExamSecurityCoverage renews the security coverage reported by the
 // candidate's live Attempt Participation, fenced by participation generation
 // and checked against the caller's desktop build.
-func (s *Service) UpdateExamSecurityCoverage(ctx context.Context, invocation invocation.Invocation, command UpdateSecurityCoverageCommand) (_ model.SecurityCoverageResult, resultErr error) {
+func (s *Service) UpdateExamSecurityCoverage(
+	ctx context.Context,
+	inv invocation.Invocation,
+	command UpdateSecurityCoverageCommand,
+) (_ model.SecurityCoverageResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	// Malformed updates are refused before they can occupy the live lane.
-	selector, err := candidateSelector(invocation, command.Access)
+	selector, err := candidateSelector(inv, command.Access)
 	if err != nil {
 		return model.SecurityCoverageResult{}, err
 	}
 	if !command.ParticipationID.IsValid() || command.Generation < 1 || command.Coverage.Validate() != nil {
 		return model.SecurityCoverageResult{}, apperror.Invalid("exam.attempt.invalid", "security_coverage")
 	}
-	release, admissionErr := s.enterControl(ctx, invocation, true)
+
+	release, admissionErr := s.enterControl(ctx, inv, true)
 	if admissionErr != nil {
 		return model.SecurityCoverageResult{}, admissionErr
 	}
 	defer release()
-	build, err := s.deps.DesktopBuilds.ResolveAttemptDesktopBuild(ctx, invocation.Principal())
+
+	build, err := s.desktopBuilds.ResolveAttemptDesktopBuild(ctx, inv.Principal())
 	if err != nil || build.Build.Validate() != nil || build.Build.NativeAgreement == nil || build.CompatibilityPolicyRevision < 1 {
 		return model.SecurityCoverageResult{}, apperror.New("exam.attempt.desktop_incompatible").Wrap(err)
 	}
-	result, err := s.deps.Persistence.UpdateSecurityCoverage(ctx, &store.ExamAttemptSecurityCoverageUpdate{Access: selector, ParticipationID: command.ParticipationID, Generation: command.Generation, DesktopBuild: build.Build, DesktopCompatibilityPolicyRevision: build.CompatibilityPolicyRevision, Coverage: command.Coverage})
+
+	result, err := s.attempts.UpdateSecurityCoverage(ctx, &store.ExamAttemptSecurityCoverageUpdate{
+		Access:                             selector,
+		ParticipationID:                    command.ParticipationID,
+		Generation:                         command.Generation,
+		DesktopBuild:                       build.Build,
+		DesktopCompatibilityPolicyRevision: build.CompatibilityPolicyRevision,
+		Coverage:                           command.Coverage,
+	})
 	if err != nil {
 		return model.SecurityCoverageResult{}, storeError(securityPreflightStoreErrors, err)
 	}
 	if result.Validate() != nil {
 		return model.SecurityCoverageResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent security coverage result"))
 	}
+
 	return result, nil
 }

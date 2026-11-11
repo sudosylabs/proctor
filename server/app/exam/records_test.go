@@ -41,7 +41,7 @@ func TestRecordsRequiresManagerAndExactMembershipOrScopedOverride(t *testing.T) 
 				f.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: f.unitID}}
 			}
 			command := CompleteRecordsCommand{Scope: persistence.scope.Scope, ExpectedRevision: 1, IdempotencyKey: "completion-key"}
-			value, err := records.CompleteExamSittingRecords(context.Background(), f.invocation, command)
+			value, err := records.CompleteExamSittingRecords(context.Background(), f.inv, command)
 			require.NoError(t, err)
 			require.True(t, value.IsCurrent(), "completion failed to carry current authority: %#v, %#v", value, persistence.completion)
 			require.Equal(t, tc.want, f.authorizer.action, "completion failed to carry current authority: %#v, %#v", value, persistence.completion)
@@ -55,94 +55,20 @@ func TestRecordsRequiresManagerAndExactMembershipOrScopedOverride(t *testing.T) 
 	}
 }
 
-func TestRecordsRejectsSelfWaiverWithDurableDenial(t *testing.T) {
-	f, records, persistence, authorizer := newRecordsFixture(t)
-	persistence.scope.Scope.SubmissionID = model.NewSubmissionID()
-	persistence.scope.CandidateUserID = f.userID
-	_, err := records.WaiveSubmissionReview(context.Background(), f.invocation, WaiveReviewCommand{Scope: persistence.scope.Scope,
-		ReasonCode: "review_not_required", PrivateReason: "Private institutional rationale", IdempotencyKey: "waiver-key"})
-	var fault *apperror.Error
-	require.ErrorAs(t, err, &fault, "self waiver")
-	require.Equal(t, "resource.not_found", fault.Code(), "self waiver")
-	require.True(t, authorizer.denied, "self waiver")
-	require.Nil(t, persistence.waiver, "self waiver")
-	require.Equal(t, []string{"records.resolve", "records.deny_self"}, *f.order)
-	_, err = records.GetSubmissionReviewWaiver(context.Background(), f.invocation, persistence.scope.Scope)
-	require.Error(t, err, "candidate read private waiver rationale")
-}
-
-func TestRecordsWaiverKeepsPrivateRationaleOutOfAudit(t *testing.T) {
-	f, records, persistence, _ := newRecordsFixture(t)
-	persistence.scope.Scope.SubmissionID = model.NewSubmissionID()
-	private := "Private candidate evidence and rationale."
-	value, err := records.WaiveSubmissionReview(context.Background(), f.invocation, WaiveReviewCommand{Scope: persistence.scope.Scope,
-		ExpectedReviewRevision: 3, ExpectedDiscrepancyCount: 2, ReasonCode: "review_not_required", PrivateReason: private, IdempotencyKey: "waiver-key"})
-	require.NoError(t, err)
-	require.Equal(t, private, value.PrivateReason)
-	require.Equal(t, private, persistence.waiver.PrivateReason)
-	require.Equal(t, int64(2), persistence.waiver.ExpectedDiscrepancyCount)
-	for _, field := range f.auditor.value {
-		text, ok := field.(string)
-		if ok {
-			require.NotContains(t, text, private, "private rationale entered audit")
-		}
-	}
-	require.Equal(t, "review_not_required", f.auditor.value["reason_code"])
-	require.Nil(t, f.auditor.value["private_reason"])
-}
-
 func TestRecordsIdempotencyAndAuditFailClosed(t *testing.T) {
 	f, records, persistence, _ := newRecordsFixture(t)
 	command := CompleteRecordsCommand{Scope: persistence.scope.Scope, ExpectedRevision: 1}
-	_, err := records.CompleteExamSittingRecords(context.Background(), f.invocation, command)
+	_, err := records.CompleteExamSittingRecords(context.Background(), f.inv, command)
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault, "required key")
 	require.Equal(t, "idempotency.key_required", fault.Code(), "required key")
 	require.Empty(t, *f.order, "required key")
 	command.IdempotencyKey = "completion-key"
 	persistence.err = store.NewErrConflict("authorization", "authority", nil)
-	_, err = records.CompleteExamSittingRecords(context.Background(), f.invocation, command)
+	_, err = records.CompleteExamSittingRecords(context.Background(), f.inv, command)
 	require.ErrorAs(t, err, &fault, "current authority failure")
 	require.Equal(t, "resource.not_found", fault.Code(), "current authority failure")
 	require.Equal(t, "exam.not_found", f.auditor.failedCode, "current authority failure")
-}
-
-func TestRecordsHoldReleaseRequiresStrongRecentProof(t *testing.T) {
-	for _, tc := range []struct {
-		name           string
-		strong, recent bool
-		want           string
-	}{
-		{"single factor", false, true, "authentication.strong_required"},
-		{"stale strong proof", true, false, "authentication.reauthentication_required"},
-		{"fresh strong proof", true, true, ""},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			f, records, persistence, _ := newRecordsFixture(t)
-			principal := f.invocation.Principal()
-			principal.AuthenticationStrength = model.AuthenticationSingleFactor
-			if tc.strong {
-				principal.AuthenticationStrength = model.AuthenticationMultiFactor
-			}
-			principal.AuthenticatedAt = fixedPublicationTime().Add(-time.Minute)
-			if !tc.recent {
-				principal.AuthenticatedAt = principal.AuthenticatedAt.Add(-time.Hour)
-			}
-			invocation := invocation.New(principal, model.RequestMetadata{})
-			_, err := records.ReleaseRetentionHold(context.Background(), invocation, ReleaseRetentionHoldCommand{Scope: persistence.scope.Scope,
-				HoldID: model.NewRetentionHoldID(), ExpectedRevision: 1, ReasonCode: "case_closed", PrivateReason: "Case resolved.", IdempotencyKey: "release-key"})
-			if tc.want == "" {
-				require.NoError(t, err, "release")
-				require.NotNil(t, persistence.release, "release")
-				require.Equal(t, 5*time.Minute, persistence.release.RecentAuthenticationTTL, "release")
-				return
-			}
-			var fault *apperror.Error
-			require.ErrorAs(t, err, &fault, "release")
-			require.Equal(t, tc.want, fault.Code(), "release")
-			require.Nil(t, persistence.release, "release")
-		})
-	}
 }
 
 func newRecordsFixture(t *testing.T) (authoringFixture, *Records, *recordsStoreFake, *recordsAuthorizerFake) {

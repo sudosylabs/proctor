@@ -26,6 +26,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLSessionStore implements store.SessionStore on sessions; revocation also
+// retires the Session's credentials.
 type SQLSessionStore struct {
 	*SQLStore
 	sessionsQuery sq.SelectBuilder
@@ -149,7 +151,10 @@ func (s SQLSessionStore) Save(
 		return nil, nil, err
 	}
 
-	result, err := runSQLTransaction(ctx, s.GetMaster().Begin, "session save", func(ctx context.Context, tx *sqlxTxWrapper) (*sessionSaveTransactionResult, error) {
+	result, err := runSQLTransaction(ctx, s.GetMaster().Begin, "session save", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*sessionSaveTransactionResult, error) {
 		return saveSession(ctx, tx, input, &candidate, prepared, maximumActive)
 	})
 	if err != nil {
@@ -159,8 +164,13 @@ func (s SQLSessionStore) Save(
 }
 
 // saveSession issues the prepared Session and credentials inside the save transaction.
-func saveSession(ctx context.Context, tx *sqlxTxWrapper, input *store.SessionCreation, candidate *model.Session,
-	prepared []*model.SessionCredential, maximumActive int,
+func saveSession(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.SessionCreation,
+	candidate *model.Session,
+	prepared []*model.SessionCredential,
+	maximumActive int,
 ) (*sessionSaveTransactionResult, error) {
 	if err := requireSessionIssuance(ctx, tx, input, candidate); err != nil {
 		return nil, err
@@ -207,9 +217,18 @@ func requireSessionIssuance(ctx context.Context, tx *sqlxTxWrapper, input *store
 }
 
 // insertIssuedSession enforces the per-User Session limit, inserts the Session and credentials and records the login.
-func insertIssuedSession(ctx context.Context, tx *sqlxTxWrapper, candidate *model.Session, prepared []*model.SessionCredential, maximumActive int) error {
+func insertIssuedSession(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	candidate *model.Session,
+	prepared []*model.SessionCredential,
+	maximumActive int,
+) error {
 	var active int
-	if err := tx.Get(ctx, &active, `
+	if err := tx.Get(
+		ctx,
+		&active,
+		`
 		SELECT COUNT(*)
 		  FROM sessions
 		 WHERE user_id = ?
@@ -223,19 +242,23 @@ func insertIssuedSession(ctx context.Context, tx *sqlxTxWrapper, candidate *mode
 	); err != nil {
 		return fmt.Errorf("count active sessions: %w", err)
 	}
+
 	if active >= maximumActive {
 		return store.NewErrConflict("session", "sessions_maximum_per_user", nil)
 	}
-
 	if err := insertSession(ctx, tx, candidate); err != nil {
 		return err
 	}
+
 	for _, credential := range prepared {
 		if err := insertSessionCredential(ctx, tx, credential); err != nil {
 			return err
 		}
 	}
-	userResult, err := tx.Exec(ctx, `
+
+	userResult, err := tx.Exec(
+		ctx,
+		`
 		UPDATE users
 		   SET updated_at = GREATEST(updated_at, ?),
 		       last_login_at = GREATEST(last_login_at, created_at, ?),
@@ -249,6 +272,7 @@ func insertIssuedSession(ctx context.Context, tx *sqlxTxWrapper, candidate *mode
 	if err != nil {
 		return fmt.Errorf("update user login time: %w", err)
 	}
+
 	return requireAffected(userResult, "user", candidate.UserID.String())
 }
 
@@ -260,6 +284,7 @@ func prepareInitialSessionCredentials(
 	if len(credentials) != 2 {
 		return nil, store.NewErrInvalidInput("session", "credentials", len(credentials))
 	}
+
 	prepared := make([]*model.SessionCredential, 0, 2)
 	kinds := map[model.SessionCredentialKind]bool{}
 	for _, credential := range credentials {
@@ -269,12 +294,14 @@ func prepareInitialSessionCredentials(
 		if !credential.ID.IsZero() {
 			return nil, store.NewErrInvalidInput("session_credential", "id", credential.ID.String())
 		}
+
 		candidate := *credential
 		candidate.SessionID = session.ID
 		candidate.PrepareCreate(model.NewSessionCredentialID(), at)
 		if err := candidate.Validate(); err != nil {
 			return nil, err
 		}
+
 		if candidate.ExpiresAt.After(session.ExpiresAt) {
 			return nil, store.NewErrInvalidInput(
 				"session_credential",
@@ -282,15 +309,19 @@ func prepareInitialSessionCredentials(
 				model.MillisFromTime(candidate.ExpiresAt),
 			)
 		}
+
 		if kinds[candidate.Kind] {
 			return nil, store.NewErrInvalidInput("session_credential", "kind", candidate.Kind)
 		}
+
 		kinds[candidate.Kind] = true
 		prepared = append(prepared, &candidate)
 	}
+
 	if !kinds[model.SessionCredentialAccess] || !kinds[model.SessionCredentialRefresh] {
 		return nil, store.NewErrInvalidInput("session", "credentials", "access_and_refresh_required")
 	}
+
 	return prepared, nil
 }
 
@@ -298,21 +329,22 @@ func insertSession(ctx context.Context, executor sqlxExecutor, session *model.Se
 	row := newSessionRow(session)
 	if _, err := executor.NamedExec(ctx, `
 		INSERT INTO sessions (
-			id, created_at, updated_at, archived_at, user_id, authentication_generation, mfa_recovery_required, mfa_enrollment_required, client_type,
-			desktop_registration_id, dpop_key_thumbprint, desktop_release, desktop_build_id,
-			desktop_platform, desktop_architecture, desktop_realtime_protocol,
-			device_id, device_name, authentication_method, authentication_provider_id, external_identity_id,
-			authentication_strength, authenticated_at, reauthenticated_at, mfa_completed_at,
-			last_activity_at, idle_expires_at, expires_at, revoked_at,
+			id, created_at, updated_at, archived_at, user_id, authentication_generation,
+			mfa_recovery_required, mfa_enrollment_required, client_type, desktop_registration_id,
+			dpop_key_thumbprint, desktop_release, desktop_build_id, desktop_platform, desktop_architecture,
+			desktop_realtime_protocol, device_id, device_name, authentication_method,
+			authentication_provider_id, external_identity_id, authentication_strength, authenticated_at,
+			reauthenticated_at, mfa_completed_at, last_activity_at, idle_expires_at, expires_at, revoked_at,
 			revocation_reason
-		) VALUES (
-			:id, :created_at, :updated_at, :archived_at, :user_id, :authentication_generation, :mfa_recovery_required, :mfa_enrollment_required, :client_type,
-			:desktop_registration_id, :dpop_key_thumbprint, :desktop_release, :desktop_build_id,
-			:desktop_platform, :desktop_architecture, :desktop_realtime_protocol,
-			:device_id, :device_name, :authentication_method, :authentication_provider_id, :external_identity_id,
+		)
+		VALUES (
+			:id, :created_at, :updated_at, :archived_at, :user_id, :authentication_generation,
+			:mfa_recovery_required, :mfa_enrollment_required, :client_type, :desktop_registration_id,
+			:dpop_key_thumbprint, :desktop_release, :desktop_build_id, :desktop_platform,
+			:desktop_architecture, :desktop_realtime_protocol, :device_id, :device_name,
+			:authentication_method, :authentication_provider_id, :external_identity_id,
 			:authentication_strength, :authenticated_at, :reauthenticated_at, :mfa_completed_at,
-			:last_activity_at, :idle_expires_at, :expires_at, :revoked_at,
-			:revocation_reason
+			:last_activity_at, :idle_expires_at, :expires_at, :revoked_at, :revocation_reason
 		)`, &row); err != nil {
 		return fmt.Errorf("save session: %w", translateError("session", session.ID.String(), err))
 	}
@@ -336,11 +368,15 @@ func (s SQLSessionStore) Get(ctx context.Context, id model.SessionID) (*model.Se
 // ListByUser returns one page of the unarchived Sessions of the query's User,
 // newest first.
 func (s SQLSessionStore) ListByUser(ctx context.Context, page *store.SessionPageQuery) ([]*model.Session, error) {
-	if page == nil || !page.UserID.IsValid() || page.Limit < 1 || page.Limit > store.MaximumSessionPageSize ||
+	if page == nil ||
+		!page.UserID.IsValid() ||
+		page.Limit < 1 ||
+		page.Limit > store.MaximumSessionPageSize ||
 		page.BeforeCreatedAt.IsZero() != page.BeforeID.IsZero() ||
 		(!page.BeforeID.IsZero() && !page.BeforeID.IsValid()) {
 		return nil, store.NewErrInvalidInput("session", "page", nil)
 	}
+
 	query := s.sessionsQuery.Where(sq.Eq{
 		"sessions.user_id":     page.UserID,
 		"sessions.archived_at": nil,
@@ -351,6 +387,7 @@ func (s SQLSessionStore) ListByUser(ctx context.Context, page *store.SessionPage
 			Where(sq.Gt{"sessions.idle_expires_at": at}).
 			Where(sq.Gt{"sessions.expires_at": at})
 	}
+
 	if !page.BeforeID.IsZero() {
 		before := model.TimeUTC(page.BeforeCreatedAt)
 		query = query.Where(sq.Or{
@@ -358,19 +395,23 @@ func (s SQLSessionStore) ListByUser(ctx context.Context, page *store.SessionPage
 			sq.And{sq.Eq{"sessions.created_at": before}, sq.Gt{"sessions.id": page.BeforeID}},
 		})
 	}
+
 	query = query.OrderBy("sessions.created_at DESC", "sessions.id").Limit(uint64(page.Limit))
 	rows := []sessionRow{}
 	if err := s.GetMaster().SelectBuilder(ctx, &rows, query); err != nil {
 		return nil, fmt.Errorf("list sessions by user: %w", err)
 	}
+
 	sessions := make([]*model.Session, 0, len(rows))
 	for _, row := range rows {
 		session, err := row.model()
 		if err != nil {
 			return nil, err
 		}
+
 		sessions = append(sessions, session)
 	}
+
 	return sessions, nil
 }
 
@@ -416,7 +457,10 @@ func (s SQLSessionStore) UpdateActivity(ctx context.Context, input *store.Sessio
 	activityAt := model.TimeUTC(input.LastActivityAt)
 	idleAt := model.TimeUTC(input.IdleExpiresAt)
 	var touched int
-	err := s.GetMaster().Get(ctx, &touched, `
+	err := s.GetMaster().Get(
+		ctx,
+		&touched,
+		`
 		WITH touched AS (
 			UPDATE sessions
 			   SET updated_at = GREATEST(updated_at, ?),
@@ -448,6 +492,7 @@ func (s SQLSessionStore) UpdateActivity(ctx context.Context, input *store.Sessio
 	if touched != 1 {
 		return store.NewErrNotFound("session", id.String())
 	}
+
 	return nil
 }
 
@@ -472,7 +517,10 @@ func (s SQLSessionStore) Withdraw(ctx context.Context, input *store.SessionWithd
 // EnforceExpiry revokes the User's unrevoked Session as expired when it has
 // expired at at, returning its revoked credential hashes with Expired set. An
 // unexpired Session is returned unchanged.
-func (s SQLSessionStore) EnforceExpiry(ctx context.Context, input *store.SessionExpiryEnforcement) (*store.SessionExpiryEnforcementResult, error) {
+func (s SQLSessionStore) EnforceExpiry(
+	ctx context.Context,
+	input *store.SessionExpiryEnforcement,
+) (*store.SessionExpiryEnforcementResult, error) {
 	id := input.ID
 	userID := input.UserID
 	at := input.At
@@ -480,24 +528,33 @@ func (s SQLSessionStore) EnforceExpiry(ctx context.Context, input *store.Session
 	if !id.IsValid() || !userID.IsValid() || !at.After(time.Unix(0, 0)) {
 		return nil, store.NewErrInvalidInput("session", "expiry", nil)
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "session expiry enforcement", func(ctx context.Context, tx *sqlxTxWrapper) (*store.SessionExpiryEnforcementResult, error) {
+
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "session expiry enforcement", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.SessionExpiryEnforcementResult, error) {
 		if err := lockUserSessions(ctx, tx, userID.String()); err != nil {
 			return nil, err
 		}
+
 		var row sessionRow
 		if err := tx.Get(ctx, &row, `
-		SELECT id, created_at, updated_at, archived_at, user_id, authentication_generation, mfa_recovery_required, mfa_enrollment_required, client_type,
-		       desktop_registration_id, dpop_key_thumbprint, desktop_release, desktop_build_id,
-		       desktop_platform, desktop_architecture, desktop_realtime_protocol,
-		       device_id, device_name, authentication_method, authentication_provider_id, external_identity_id,
-		       authentication_strength, authenticated_at, reauthenticated_at, mfa_completed_at,
-		       last_activity_at, idle_expires_at, expires_at, revoked_at,
-		       revocation_reason
-		  FROM sessions
-		 WHERE id = ? AND user_id = ? AND archived_at IS NULL AND revoked_at IS NULL
-		 FOR UPDATE`, id, userID); err != nil {
+			SELECT id, created_at, updated_at, archived_at, user_id, authentication_generation,
+				mfa_recovery_required, mfa_enrollment_required, client_type, desktop_registration_id,
+				dpop_key_thumbprint, desktop_release, desktop_build_id, desktop_platform,
+				desktop_architecture, desktop_realtime_protocol, device_id, device_name,
+				authentication_method, authentication_provider_id, external_identity_id,
+				authentication_strength, authenticated_at, reauthenticated_at, mfa_completed_at,
+				last_activity_at, idle_expires_at, expires_at, revoked_at, revocation_reason
+			FROM sessions
+			WHERE id = ?
+				AND user_id = ?
+				AND archived_at IS NULL
+				AND revoked_at IS NULL
+			FOR UPDATE`, id, userID); err != nil {
 			return nil, translateError("session", id.String(), err)
 		}
+
 		session, err := row.model()
 		if err != nil {
 			return nil, err
@@ -505,6 +562,7 @@ func (s SQLSessionStore) EnforceExpiry(ctx context.Context, input *store.Session
 		if !session.IsExpiredAt(at) {
 			return &store.SessionExpiryEnforcementResult{Session: session}, nil
 		}
+
 		hashes, err := revokeOneUserSessionAt(
 			ctx, tx, id.String(), userID.String(), at, model.SessionRevocationExpired,
 		)
@@ -514,11 +572,14 @@ func (s SQLSessionStore) EnforceExpiry(ctx context.Context, input *store.Session
 		if session.UpdatedAt.Before(at) {
 			session.UpdatedAt = at
 		}
+
 		// Revocation SQL clamps PostgreSQL time to the node-clock creation.
 		session.RevokedAt = model.OptionalTimeFrom(latestTime(session.CreatedAt, at))
 		session.RevocationReason = model.SessionRevocationExpired
 		return &store.SessionExpiryEnforcementResult{
-			Session: session, TokenHashes: hashes, Expired: true,
+			Session:     session,
+			TokenHashes: hashes,
+			Expired:     true,
 		}, nil
 	})
 }
@@ -531,14 +592,20 @@ func (s SQLSessionStore) Revoke(
 	ctx context.Context,
 	input *store.SessionRevocation,
 ) (*store.SessionRevocationResult, error) {
-	if input == nil || !input.SessionID.IsValid() || !input.UserID.IsValid() ||
-		input.RevokedAt.IsZero() || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+	if input == nil ||
+		!input.SessionID.IsValid() ||
+		!input.UserID.IsValid() ||
+		input.RevokedAt.IsZero() ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("session", "revocation", nil)
 	}
+
 	reason := model.SessionRevocationReason(model.SanitizeUnicode(string(input.Reason)))
 	if !reason.IsValid() {
 		return nil, store.NewErrInvalidInput("session", "revocation_reason", nil)
 	}
+
 	selfRevocation := reason == model.SessionRevocationUserSession || reason == model.SessionRevocationUserLogout
 	payloadKeyID := ""
 	if selfRevocation {
@@ -547,63 +614,99 @@ func (s SQLSessionStore) Revoke(
 		}
 	} else {
 		var err error
-		payloadKeyID, err = validateSecurityNoticeMail(model.UserID(input.UserID), input.Occurrence, input.Delivery, input.DeliveryJob, model.MailTemplateIdentitySessionsRevokedByAdmin, input.RevokedAt)
+		payloadKeyID, err = validateSecurityNoticeMail(
+			input.UserID,
+			input.Occurrence,
+			input.Delivery,
+			input.DeliveryJob,
+			model.MailTemplateIdentitySessionsRevokedByAdmin,
+			input.RevokedAt,
+		)
 		if err != nil {
 			return nil, err
 		}
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "audited session revocation", func(ctx context.Context, tx *sqlxTxWrapper) (*store.SessionRevocationResult, error) {
+
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "audited session revocation", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.SessionRevocationResult, error) {
 		if payloadKeyID != "" {
 			if err := requireMailPayloadPrimary(ctx, tx, payloadKeyID); err != nil {
 				return nil, err
 			}
 		}
+
 		if err := lockUserSessions(ctx, tx, input.UserID.String()); err != nil {
 			return nil, err
 		}
+
 		var row sessionRow
-		if err := tx.Get(ctx, &row, `
-		SELECT id, created_at, updated_at, archived_at, user_id, authentication_generation, mfa_recovery_required, mfa_enrollment_required, client_type,
-		       desktop_registration_id, dpop_key_thumbprint, desktop_release, desktop_build_id,
-		       desktop_platform, desktop_architecture, desktop_realtime_protocol,
-		       device_id, device_name, authentication_method, authentication_provider_id, external_identity_id,
-		       authentication_strength, authenticated_at, reauthenticated_at, mfa_completed_at,
-		       last_activity_at, idle_expires_at, expires_at, revoked_at,
-		       revocation_reason
-		  FROM sessions
-		 WHERE id = ? AND user_id = ? AND archived_at IS NULL AND revoked_at IS NULL
-		 FOR UPDATE`,
+		if err := tx.Get(
+			ctx,
+			&row,
+			`
+			SELECT id, created_at, updated_at, archived_at, user_id, authentication_generation,
+				mfa_recovery_required, mfa_enrollment_required, client_type, desktop_registration_id,
+				dpop_key_thumbprint, desktop_release, desktop_build_id, desktop_platform,
+				desktop_architecture, desktop_realtime_protocol, device_id, device_name,
+				authentication_method, authentication_provider_id, external_identity_id,
+				authentication_strength, authenticated_at, reauthenticated_at, mfa_completed_at,
+				last_activity_at, idle_expires_at, expires_at, revoked_at, revocation_reason
+			FROM sessions
+			WHERE id = ?
+				AND user_id = ?
+				AND archived_at IS NULL
+				AND revoked_at IS NULL
+			FOR UPDATE`,
 			input.SessionID,
 			input.UserID,
 		); err != nil {
 			if errors.Is(err, sql.ErrNoRows) && reason == model.SessionRevocationUserLogout {
 				encoded, encodeErr := model.EncodeAuditData(map[string]any{
-					"user_id": input.UserID, "session_id": input.SessionID, "no_op": true,
+					"user_id":    input.UserID,
+					"session_id": input.SessionID,
+					"no_op":      true,
 				})
 				if encodeErr != nil {
 					return nil, encodeErr
 				}
-				if _, auditErr := completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", encoded, input.AuditAt); auditErr != nil {
+
+				if _, auditErr := completeAuditEvent(
+					ctx,
+					tx,
+					input.AuditEventID,
+					model.AuditStatusSuccess,
+					"",
+					encoded,
+					input.AuditAt,
+				); auditErr != nil {
 					return nil, fmt.Errorf("complete logout no-op audit: %w", auditErr)
 				}
+
 				return &store.SessionRevocationResult{}, nil
 			}
+
 			return nil, translateError("session", input.SessionID.String(), err)
 		}
+
 		hashes, err := revokeOneUserSession(
 			ctx, tx, input.SessionID.String(), input.UserID.String(), input.RevokedAt, reason,
 		)
 		if err != nil {
 			return nil, err
 		}
+
 		session, err := row.model()
 		if err != nil {
 			return nil, err
 		}
+
 		revokedAt := model.TimeUTC(input.RevokedAt)
 		if session.UpdatedAt.Before(revokedAt) {
 			session.UpdatedAt = revokedAt
 		}
+
 		// Revocation SQL clamps the instant to the Session's creation.
 		session.RevokedAt = model.OptionalTimeFrom(latestTime(session.CreatedAt, revokedAt))
 		session.RevocationReason = reason
@@ -612,15 +715,18 @@ func (s SQLSessionStore) Revoke(
 				return nil, err
 			}
 		}
+
 		encoded, appErr := model.EncodeAuditData(session.Auditable())
 		if appErr != nil {
 			return nil, appErr
 		}
+
 		if _, err := completeAuditEvent(
 			ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", encoded, input.AuditAt,
 		); err != nil {
 			return nil, fmt.Errorf("complete session revocation audit: %w", err)
 		}
+
 		return &store.SessionRevocationResult{Session: session, TokenHashes: hashes}, nil
 	})
 }
@@ -660,14 +766,19 @@ type userSessionsRevocationPlan struct {
 
 // planUserSessionsRevocation validates a revoke-all request and its prepared Notice mail.
 func planUserSessionsRevocation(input *store.UserSessionsRevocation) (userSessionsRevocationPlan, error) {
-	if input == nil || !input.UserID.IsValid() || input.RevokedAt.IsZero() ||
-		!input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+	if input == nil ||
+		!input.UserID.IsValid() ||
+		input.RevokedAt.IsZero() ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() {
 		return userSessionsRevocationPlan{}, store.NewErrInvalidInput("session", "user_revocation", nil)
 	}
+
 	plan := userSessionsRevocationPlan{reason: model.SessionRevocationReason(model.SanitizeUnicode(string(input.Reason)))}
 	if !plan.reason.IsValid() {
 		return userSessionsRevocationPlan{}, store.NewErrInvalidInput("session", "revocation_reason", nil)
 	}
+
 	plan.mailUnprepared = input.Occurrence == nil && input.Delivery == nil && input.DeliveryJob == nil
 	plan.selfRevocation = plan.reason == model.SessionRevocationUserAllSessions ||
 		plan.reason == model.SessionRevocationUserOtherSessions
@@ -675,47 +786,67 @@ func planUserSessionsRevocation(input *store.UserSessionsRevocation) (userSessio
 		(input.KeepSessionID != "" && !input.KeepSessionID.IsValid()) {
 		return userSessionsRevocationPlan{}, store.NewErrInvalidInput("session", "keep_session_id", nil)
 	}
+
 	if plan.selfRevocation && (!plan.mailUnprepared || input.Command != nil) {
 		return userSessionsRevocationPlan{}, store.NewErrInvalidInput("session", "self_revocation_notice", nil)
 	}
 	if !plan.selfRevocation && plan.mailUnprepared && input.Command == nil {
 		return userSessionsRevocationPlan{}, store.NewErrInvalidInput("session", "user_revocation_notice", nil)
 	}
+
 	if !plan.mailUnprepared {
 		var err error
-		plan.payloadKeyID, err = validateSecurityNoticeMail(input.UserID, input.Occurrence, input.Delivery, input.DeliveryJob, model.MailTemplateIdentitySessionsRevokedByAdmin, input.RevokedAt)
+		plan.payloadKeyID, err = validateSecurityNoticeMail(
+			input.UserID,
+			input.Occurrence,
+			input.Delivery,
+			input.DeliveryJob,
+			model.MailTemplateIdentitySessionsRevokedByAdmin,
+			input.RevokedAt,
+		)
 		if err != nil {
 			return userSessionsRevocationPlan{}, err
 		}
 	}
+
 	return plan, nil
 }
 
 // revokeUserSessions revokes every Session of the User, queues any Notice and completes the audit inside the transaction.
-func revokeUserSessions(ctx context.Context, tx *sqlxTxWrapper, input *store.UserSessionsRevocation, plan userSessionsRevocationPlan) (*userSessionsMutationResult, error) {
+func revokeUserSessions(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.UserSessionsRevocation,
+	plan userSessionsRevocationPlan,
+) (*userSessionsMutationResult, error) {
 	if plan.payloadKeyID != "" {
 		if err := requireMailPayloadPrimary(ctx, tx, plan.payloadKeyID); err != nil {
 			return nil, err
 		}
 	}
+
 	if err := lockUserSessions(ctx, tx, input.UserID.String()); err != nil {
 		return nil, err
 	}
+
 	if input.KeepSessionID != "" {
 		if err := requireLiveUserSession(ctx, tx, input.UserID, input.KeepSessionID, input.RevokedAt); err != nil {
 			return nil, err
 		}
 	}
+
 	rows, hashes, err := revokeUserSessionsExceptAt(
 		ctx, tx, input.UserID.String(), input.KeepSessionID, input.RevokedAt, plan.reason,
 	)
 	if err != nil {
 		return nil, err
 	}
+
 	sessions, err := revokedSessionModels(rows, input.RevokedAt, plan.reason)
 	if err != nil {
 		return nil, err
 	}
+
 	if !plan.selfRevocation && len(sessions) > 0 {
 		if plan.mailUnprepared {
 			return nil, store.NewErrInvalidInput("session", "user_revocation_notice", nil)
@@ -724,6 +855,7 @@ func revokeUserSessions(ctx context.Context, tx *sqlxTxWrapper, input *store.Use
 			return nil, err
 		}
 	}
+
 	result := map[string]any{
 		"user_id":               input.UserID,
 		"revoked_session_count": len(sessions),
@@ -731,16 +863,22 @@ func revokeUserSessions(ctx context.Context, tx *sqlxTxWrapper, input *store.Use
 	if input.KeepSessionID != "" {
 		result["kept_session_id"] = input.KeepSessionID
 	}
+
 	encoded, appErr := model.EncodeAuditData(result)
 	if appErr != nil {
 		return nil, appErr
 	}
+
 	if _, err := completeAuditEvent(
 		ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", encoded, input.AuditAt,
 	); err != nil {
 		return nil, fmt.Errorf("complete user session revocation audit: %w", err)
 	}
-	return &userSessionsMutationResult{Value: &store.UserSessionsRevocationResult{Sessions: sessions, TokenHashes: hashes}, NoOp: len(sessions) == 0}, nil
+
+	return &userSessionsMutationResult{
+		Value: &store.UserSessionsRevocationResult{Sessions: sessions, TokenHashes: hashes},
+		NoOp:  len(sessions) == 0,
+	}, nil
 }
 
 // revokeAllForUserIdempotently runs the revoke-all mutation under its command idempotency key.
@@ -749,31 +887,44 @@ func (s SQLSessionStore) revokeAllForUserIdempotently(
 	input *store.UserSessionsRevocation,
 	execute func(context.Context, *sqlxTxWrapper) (*userSessionsMutationResult, error),
 ) (*store.UserSessionsRevocationResult, error) {
-	result, err := runIdempotentMutation(ctx, s.SQLStore, "idempotent user session revocation", idempotentMutation[*userSessionsMutationResult]{
-		command: input.Command, auditEventID: input.AuditEventID, execute: execute,
-		encode: func(value *userSessionsMutationResult) ([]byte, error) {
-			return encodeOutcome(userSessionsCommandOutcome{UserID: input.UserID.String(), NoOp: value.NoOp})
+	result, err := runIdempotentMutation(
+		ctx,
+		s.SQLStore,
+		"idempotent user session revocation",
+		idempotentMutation[*userSessionsMutationResult]{
+			command:      input.Command,
+			auditEventID: input.AuditEventID,
+			execute:      execute,
+			encode: func(value *userSessionsMutationResult) ([]byte, error) {
+				return encodeOutcome(userSessionsCommandOutcome{UserID: input.UserID.String(), NoOp: value.NoOp})
+			},
+			decode: func(data []byte) (*userSessionsMutationResult, error) {
+				var outcome userSessionsCommandOutcome
+				if decodeErr := decodeOutcome(data, &outcome); decodeErr != nil {
+					return nil, decodeErr
+				}
+				if !model.UserID(outcome.UserID).IsValid() {
+					return nil, invalidPersistedState("command_outcome", "user_id", nil)
+				}
+
+				return &userSessionsMutationResult{
+					Value:  &store.UserSessionsRevocationResult{Sessions: []*model.Session{}, TokenHashes: []string{}},
+					NoOp:   outcome.NoOp,
+					UserID: outcome.UserID,
+				}, nil
+			},
+			onboardingOutcome: func(value *userSessionsMutationResult) (onboardingImportCommandResult, error) {
+				return administrativeOnboardingOutcome(input.UserID.String(), value.NoOp)
+			},
+			completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, value *userSessionsMutationResult, original string) error {
+				return completeAdministrativeReplayAudit(ctx, tx, input.AuditEventID, input.AuditAt, "user_id", value.UserID, value.NoOp, original)
+			},
 		},
-		decode: func(data []byte) (*userSessionsMutationResult, error) {
-			var outcome userSessionsCommandOutcome
-			if decodeErr := decodeOutcome(data, &outcome); decodeErr != nil {
-				return nil, decodeErr
-			}
-			if !model.UserID(outcome.UserID).IsValid() {
-				return nil, invalidPersistedState("command_outcome", "user_id", nil)
-			}
-			return &userSessionsMutationResult{Value: &store.UserSessionsRevocationResult{Sessions: []*model.Session{}, TokenHashes: []string{}}, NoOp: outcome.NoOp, UserID: outcome.UserID}, nil
-		},
-		onboardingOutcome: func(value *userSessionsMutationResult) (onboardingImportCommandResult, error) {
-			return administrativeOnboardingOutcome(input.UserID.String(), value.NoOp)
-		},
-		completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, value *userSessionsMutationResult, original string) error {
-			return completeAdministrativeReplayAudit(ctx, tx, input.AuditEventID, input.AuditAt, "user_id", value.UserID, value.NoOp, original)
-		},
-	})
+	)
 	if err != nil {
 		return nil, err
 	}
+
 	input.Replayed, input.NoOp = result.Replayed, result.Value.NoOp
 	return result.Value.Value, nil
 }
@@ -812,7 +963,10 @@ func revokeOneUserSessionAt(
 ) ([]string, error) {
 	at = model.TimeUTC(at)
 	var matchedSessionID string
-	if err := tx.Get(ctx, &matchedSessionID, `
+	if err := tx.Get(
+		ctx,
+		&matchedSessionID,
+		`
 		SELECT id
 		  FROM sessions
 		 WHERE id = ? AND user_id = ? AND archived_at IS NULL AND revoked_at IS NULL`,
@@ -821,11 +975,15 @@ func revokeOneUserSessionAt(
 	); err != nil {
 		return nil, translateError("session", id, err)
 	}
+
 	hashes, err := selectActiveTokenHashes(ctx, tx, id)
 	if err != nil {
 		return nil, err
 	}
-	result, err := tx.Exec(ctx, `
+
+	result, err := tx.Exec(
+		ctx,
+		`
 		UPDATE sessions
 		   SET updated_at = GREATEST(updated_at, ?),
 		       revoked_at = GREATEST(created_at, ?),
@@ -843,7 +1001,10 @@ func revokeOneUserSessionAt(
 	if err := requireAffected(result, "session", id); err != nil {
 		return nil, err
 	}
-	if _, err := tx.Exec(ctx, `
+
+	if _, err := tx.Exec(
+		ctx,
+		`
 		UPDATE session_credentials
 		   SET updated_at = GREATEST(updated_at, ?), revoked_at = GREATEST(created_at, ?)
 		 WHERE session_id = ? AND archived_at IS NULL AND revoked_at IS NULL`,
@@ -853,6 +1014,7 @@ func revokeOneUserSessionAt(
 	); err != nil {
 		return nil, fmt.Errorf("revoke session credentials: %w", err)
 	}
+
 	return hashes, nil
 }
 
@@ -889,7 +1051,10 @@ func revokeUserSessionsExceptAt(
 	at = model.TimeUTC(at)
 	kept := keep.String()
 	hashes := []string{}
-	if err := executor.Select(ctx, &hashes, `
+	if err := executor.Select(
+		ctx,
+		&hashes,
+		`
 		SELECT credential.token_hash
 		  FROM session_credentials credential
 		  JOIN sessions session ON session.id = credential.session_id
@@ -900,27 +1065,41 @@ func revokeUserSessionsExceptAt(
 		   AND credential.revoked_at IS NULL
 		   AND (? = '' OR session.id <> ?)
 		 FOR UPDATE OF credential`,
-		userID, kept, kept,
+		userID,
+		kept,
+		kept,
 	); err != nil {
 		return nil, nil, fmt.Errorf("select user session credentials: %w", err)
 	}
+
 	rows := []sessionRow{}
-	if err := executor.Select(ctx, &rows, `
-		SELECT id, created_at, updated_at, archived_at, user_id, authentication_generation, mfa_recovery_required, mfa_enrollment_required, client_type,
-		       desktop_registration_id, dpop_key_thumbprint, desktop_release, desktop_build_id,
-		       desktop_platform, desktop_architecture, desktop_realtime_protocol,
-		       device_id, device_name, authentication_method, authentication_provider_id, external_identity_id,
-		       authentication_strength, authenticated_at, reauthenticated_at, mfa_completed_at,
-		       last_activity_at, idle_expires_at, expires_at, revoked_at,
-		       revocation_reason
-		  FROM sessions
-		 WHERE user_id = ? AND archived_at IS NULL AND revoked_at IS NULL AND (? = '' OR id <> ?)
-		 FOR UPDATE`,
-		userID, kept, kept,
+	if err := executor.Select(
+		ctx,
+		&rows,
+		`
+		SELECT id, created_at, updated_at, archived_at, user_id, authentication_generation,
+			mfa_recovery_required, mfa_enrollment_required, client_type, desktop_registration_id,
+			dpop_key_thumbprint, desktop_release, desktop_build_id, desktop_platform, desktop_architecture,
+			desktop_realtime_protocol, device_id, device_name, authentication_method,
+			authentication_provider_id, external_identity_id, authentication_strength, authenticated_at,
+			reauthenticated_at, mfa_completed_at, last_activity_at, idle_expires_at, expires_at, revoked_at,
+			revocation_reason
+		FROM sessions
+		WHERE user_id = ?
+			AND archived_at IS NULL
+			AND revoked_at IS NULL
+			AND (? = '' OR id <> ?)
+		FOR UPDATE`,
+		userID,
+		kept,
+		kept,
 	); err != nil {
 		return nil, nil, fmt.Errorf("select user sessions: %w", err)
 	}
-	if _, err := executor.Exec(ctx, `
+
+	if _, err := executor.Exec(
+		ctx,
+		`
 		UPDATE session_credentials credential
 		   SET updated_at = GREATEST(credential.updated_at, ?), revoked_at = GREATEST(credential.created_at, ?)
 		  FROM sessions session
@@ -933,11 +1112,16 @@ func revokeUserSessionsExceptAt(
 		   AND (? = '' OR session.id <> ?)`,
 		at,
 		at,
-		userID, kept, kept,
+		userID,
+		kept,
+		kept,
 	); err != nil {
 		return nil, nil, fmt.Errorf("revoke user session credentials: %w", err)
 	}
-	if _, err := executor.Exec(ctx, `
+
+	if _, err := executor.Exec(
+		ctx,
+		`
 		UPDATE sessions
 		   SET updated_at = GREATEST(updated_at, ?),
 		       revoked_at = GREATEST(created_at, ?),
@@ -946,10 +1130,13 @@ func revokeUserSessionsExceptAt(
 		at,
 		at,
 		string(reason),
-		userID, kept, kept,
+		userID,
+		kept,
+		kept,
 	); err != nil {
 		return nil, nil, fmt.Errorf("revoke user sessions: %w", err)
 	}
+
 	return rows, hashes, nil
 }
 
@@ -989,12 +1176,18 @@ func revokedSessionModelsAt(
 func requireLiveUserSession(ctx context.Context, executor sqlxExecutor, userID model.UserID, id model.SessionID, at time.Time) error {
 	at = model.TimeUTC(at)
 	var matched string
-	if err := executor.Get(ctx, &matched, `
+	if err := executor.Get(
+		ctx,
+		&matched,
+		`
 		SELECT id
 		  FROM sessions
 		 WHERE id = ? AND user_id = ? AND archived_at IS NULL AND revoked_at IS NULL
 		   AND idle_expires_at > ? AND expires_at > ?`,
-		id.String(), userID.String(), at, at,
+		id.String(),
+		userID.String(),
+		at,
+		at,
 	); err != nil {
 		return translateError("session", id.String(), err)
 	}
@@ -1019,7 +1212,10 @@ func selectActiveTokenHashes(
 	sessionID string,
 ) ([]string, error) {
 	hashes := []string{}
-	if err := executor.Select(ctx, &hashes, `
+	if err := executor.Select(
+		ctx,
+		&hashes,
+		`
 		SELECT token_hash
 		  FROM session_credentials
 		 WHERE session_id = ? AND archived_at IS NULL AND revoked_at IS NULL
@@ -1071,10 +1267,12 @@ func (row sessionRow) model() (*model.Session, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	userID, err := parsePersistedID("session", "user_id", row.UserID, model.ParseUserID)
 	if err != nil {
 		return nil, err
 	}
+
 	session := &model.Session{
 		ID:                       id,
 		CreatedAt:                row.CreatedAt.UTC(),
@@ -1111,15 +1309,18 @@ func (row sessionRow) model() (*model.Session, error) {
 			return nil, store.NewErrInvalidInput("session", "desktop_registration_id", row.DesktopRegistrationID.String)
 		}
 	}
+
 	if row.ExternalIdentityID.Valid {
 		session.ExternalIdentityID, err = model.ParseExternalIdentityID(row.ExternalIdentityID.String)
 		if err != nil {
 			return nil, store.NewErrInvalidInput("session", "external_identity_id", row.ExternalIdentityID.String)
 		}
 	}
+
 	if err := validatePersistedModel("session", session); err != nil {
 		return nil, err
 	}
+
 	return session, nil
 }
 

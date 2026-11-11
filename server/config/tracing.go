@@ -104,16 +104,20 @@ func validateTracingHeaders(headers map[string]string, plaintextRemoteEndpoint b
 	if plaintextRemoteEndpoint {
 		add("tracing.headers", "require an https endpoint_url unless the collector is on loopback")
 	}
+
 	canonical := make(map[string]struct{}, len(headers))
 	for name, value := range headers {
 		switch {
 		case len(name) > maximumTracingHeaderNameBytes || !httpguts.ValidHeaderFieldName(name):
 			add("tracing.headers", "names must be HTTP header tokens of at most 256 bytes")
 			continue
-		case value == "" || len(value) > maximumTracingHeaderValueBytes ||
-			!httpguts.ValidHeaderFieldValue(value) || strings.TrimSpace(value) != value:
+		case value == "" ||
+			len(value) > maximumTracingHeaderValueBytes ||
+			!httpguts.ValidHeaderFieldValue(value) ||
+			strings.TrimSpace(value) != value:
 			add("tracing.headers", "values must be non-empty HTTP header values without surrounding whitespace, at most 8192 bytes")
 		}
+
 		key := http.CanonicalHeaderKey(name)
 		if _, reserved := reservedTracingHeaders[key]; reserved {
 			add("tracing.headers", "must not set transport-controlled headers such as Content-Type or Host")
@@ -121,6 +125,7 @@ func validateTracingHeaders(headers map[string]string, plaintextRemoteEndpoint b
 		if _, duplicate := canonical[key]; duplicate {
 			add("tracing.headers", "names must be unique ignoring case")
 		}
+
 		canonical[key] = struct{}{}
 	}
 }

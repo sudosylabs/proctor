@@ -18,19 +18,27 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/exam/correction"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
 const examSittingCorrectionUploadBodyLimit = model.ExamResourceMaximumBytes + 64*1024
 
+// ExamSittingCorrectionApplication is the application port its handlers call;
+// it stages corrected resource content and applies a correction to a live
+// Sitting.
 type ExamSittingCorrectionApplication interface {
-	StageExamSittingCorrectionResourceContent(context.Context, invocation.Invocation, correction.StageResourceContentCommand) (correction.ResourceStage, error)
+	StageExamSittingCorrectionResourceContent(
+		context.Context,
+		invocation.Invocation,
+		correction.StageResourceContentCommand,
+	) (correction.ResourceStage, error)
 	ApplyExamSittingCorrection(context.Context, invocation.Invocation, correction.ApplyCommand) (correction.AppliedCorrection, error)
 }
 
-type examSittingCorrectionHTTPModule struct {
-	application ExamSittingCorrectionApplication
+type examSittingCorrectionHandlers struct {
+	app ExamSittingCorrectionApplication
 }
 
 type examSittingCorrectionStageMetadata struct {
@@ -54,8 +62,8 @@ type examSittingCorrectionStageResponse struct {
 type applyExamSittingCorrectionRequest struct {
 	ExpectedSittingRevision   int64                                  `json:"expected_revision"`
 	ExpectedCurrentRevisionID string                                 `json:"expected_current_revision_id"`
-	InstructionsMarkdown      Optional[string]                       `json:"instructions_markdown"`
-	BrowserPolicy             Optional[browserPolicyDocument]        `json:"browser_policy"`
+	InstructionsMarkdown      route.Optional[string]                 `json:"instructions_markdown"`
+	BrowserPolicy             route.Optional[browserPolicyDocument]  `json:"browser_policy"`
 	AffectedCapabilities      []model.CandidateCapability            `json:"affected_capabilities"`
 	CandidateSummary          string                                 `json:"candidate_summary"`
 	AcknowledgementRequired   bool                                   `json:"acknowledgement_required"`
@@ -88,10 +96,12 @@ func (b *applyExamSittingCorrectionRequest) UnmarshalJSON(encoded []byte) error 
 	if err := decodeDuplicateFreeExamCorrectionObject(encoded, &decoded); err != nil {
 		return err
 	}
+
 	var members map[string]json.RawMessage
 	if err := json.Unmarshal(encoded, &members); err != nil {
 		return err
 	}
+
 	resources, exists := members["resources"]
 	if !exists || bytes.Equal(bytes.TrimSpace(resources), []byte("null")) {
 		return errors.New("resources is required and must be an array")
@@ -114,6 +124,7 @@ func (b *applyExamSittingCorrectionRequest) UnmarshalJSON(encoded []byte) error 
 	if len(decoded.Resources) > 10 {
 		return errors.New("resources exceeds the maximum of 10")
 	}
+
 	*b = applyExamSittingCorrectionRequest(decoded)
 	return nil
 }
@@ -147,147 +158,250 @@ func decodeDuplicateFreeExamCorrectionObject(encoded []byte, target any) error {
 	return nil
 }
 
-func examSittingCorrectionResource(application ExamSittingCorrectionApplication) apiResource {
-	module := examSittingCorrectionHTTPModule{application: application}
-	stages := apiPath(literal("exams"), canonicalID("exam_id"), literal("sittings"), canonicalID("exam_sitting_id"), literal("correction-resource-stages"))
-	corrections := apiPath(literal("exams"), canonicalID("exam_id"), literal("sittings"), canonicalID("exam_sitting_id"), literal("corrections"))
-	return newResource(
+func examSittingCorrectionResource(app ExamSittingCorrectionApplication) route.Resource {
+	h := examSittingCorrectionHandlers{app: app}
+	stages := "/exams/{exam_id}/sittings/{exam_sitting_id}/correction-resource-stages"
+	corrections := "/exams/{exam_id}/sittings/{exam_sitting_id}/corrections"
+	return route.NewResource(
 		"exam-sitting-corrections",
-		idempotentProtocolRoute(IdempotencyRequired, examSittingCorrectionUploadBodyLimit, "exam-sitting-correction-resource-stage", RouteProtocolStreamingUpload, AuthPrincipalRequired, http.MethodPost, stages, []string{"authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "exam.sitting.correction.invalid", "exam.sitting.correction.conflict", "exam.sitting.correction.unavailable", "exam.archived", "exam.sitting.revision_conflict", "exam.sitting.state_conflict", "exam.sitting.deadline_reached", "service.busy", "exam.sitting.correction.content_invalid", "exam.sitting.correction.stage_conflict", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress"}, module.stage),
-		idempotentPrincipalRoute(IdempotencyRequired, http.MethodPost, corrections, []string{"authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "exam.sitting.correction.invalid", "exam.sitting.correction.conflict", "exam.sitting.correction.unavailable", "exam.archived", "exam.sitting.revision_conflict", "exam.sitting.state_conflict", "exam.sitting.deadline_reached", "exam.sitting.correction.no_changes", "exam.sitting.correction.manifest_conflict", "exam.sitting.correction.stage_conflict", "exam.resource.limit", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress"}, module.apply),
+		route.Endpoint{
+			Method:       http.MethodPost,
+			Path:         stages,
+			Auth:         route.AuthPrincipalRequired,
+			Idempotency:  route.IdempotencyRequired,
+			MaxBodyBytes: examSittingCorrectionUploadBodyLimit,
+			ProtocolName: "exam-sitting-correction-resource-stage",
+			ProtocolKind: route.ProtocolStreamingUpload,
+			Errors: []string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.sitting.correction.invalid",
+				"exam.sitting.correction.conflict",
+				"exam.sitting.correction.unavailable",
+				"exam.archived",
+				"exam.sitting.revision_conflict",
+				"exam.sitting.state_conflict",
+				"exam.sitting.deadline_reached",
+				"service.busy",
+				"exam.sitting.correction.content_invalid",
+				"exam.sitting.correction.stage_conflict",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+			},
+			Protocol: h.stage,
+		},
+		route.Endpoint{
+			Method:      http.MethodPost,
+			Path:        corrections,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
+			Errors: []string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.sitting.correction.invalid",
+				"exam.sitting.correction.conflict",
+				"exam.sitting.correction.unavailable",
+				"exam.archived",
+				"exam.sitting.revision_conflict",
+				"exam.sitting.state_conflict",
+				"exam.sitting.deadline_reached",
+				"exam.sitting.correction.no_changes",
+				"exam.sitting.correction.manifest_conflict",
+				"exam.sitting.correction.stage_conflict",
+				"exam.resource.limit",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+			},
+			Handle: h.apply,
+		},
 	)
 }
 
-func (m examSittingCorrectionHTTPModule) stage(request operationRequest) (protocolResult, error) {
+func (h examSittingCorrectionHandlers) stage(request route.Request) (route.ProtocolResult, error) {
 	examID, sittingID, err := examSittingCorrectionIDs(request)
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
+
 	var metadata examSittingCorrectionStageMetadata
-	content, err := decodeExamResourceMultipart(request.request, &metadata)
+	content, err := decodeExamResourceMultipart(request.HTTP, &metadata)
 	if err != nil {
-		return protocolResult{}, invalidRequestError(err)
+		return route.ProtocolResult{}, route.InvalidRequest(err)
 	}
 	if metadata.Size == nil {
-		return protocolResult{}, invalidRequestError(errors.New("size is required"))
+		return route.ProtocolResult{}, route.InvalidRequest(errors.New("size is required"))
 	}
+
 	baseRevisionID, err := model.ParseExamRevisionID(metadata.BaseRevisionID)
 	if err != nil {
-		return protocolResult{}, invalidRequestError(err)
+		return route.ProtocolResult{}, route.InvalidRequest(err)
 	}
+
 	target := store.ExamCorrectionResourceStageTarget(metadata.TargetKind)
 	var resourceID model.ExamResourceID
 	switch target {
 	case store.ExamCorrectionResourceAddition:
 		if metadata.ReplacesResourceID != "" {
-			return protocolResult{}, invalidRequestError(errors.New("must be omitted for an addition"))
+			return route.ProtocolResult{}, route.InvalidRequest(errors.New("must be omitted for an addition"))
 		}
 	case store.ExamCorrectionResourceReplacement:
 		if metadata.ReplacesResourceID == "" {
-			return protocolResult{}, invalidRequestError(errors.New("is required for a replacement"))
+			return route.ProtocolResult{}, route.InvalidRequest(errors.New("is required for a replacement"))
 		}
+
 		resourceID, err = model.ParseExamResourceID(metadata.ReplacesResourceID)
 		if err != nil {
-			return protocolResult{}, invalidRequestError(err)
+			return route.ProtocolResult{}, route.InvalidRequest(err)
 		}
 	default:
-		return protocolResult{}, invalidRequestError(errors.New("must be addition or replacement"))
+		return route.ProtocolResult{}, route.InvalidRequest(errors.New("must be addition or replacement"))
 	}
-	result, err := m.application.StageExamSittingCorrectionResourceContent(request.context, request.invocation(), correction.StageResourceContentCommand{
-		ExamID: examID, SittingID: sittingID, BaseRevisionID: baseRevisionID, Target: target, ResourceID: resourceID,
-		MediaType: model.ExamResourceMediaType(metadata.MediaType), Body: content, Size: *metadata.Size,
-		ExpectedSHA256: metadata.SHA256, IdempotencyKey: request.idempotencyKey,
-	})
+
+	result, err := h.app.StageExamSittingCorrectionResourceContent(
+		request.Context,
+		request.Invocation(),
+		correction.StageResourceContentCommand{
+			ExamID:         examID,
+			SittingID:      sittingID,
+			BaseRevisionID: baseRevisionID,
+			Target:         target,
+			ResourceID:     resourceID,
+			MediaType:      model.ExamResourceMediaType(metadata.MediaType),
+			Body:           content,
+			Size:           *metadata.Size,
+			ExpectedSHA256: metadata.SHA256,
+			IdempotencyKey: request.IdempotencyKey,
+		},
+	)
 	if err != nil {
-		return protocolResult{}, err
+		return route.ProtocolResult{}, err
 	}
+
 	response := examSittingCorrectionStageResponse{
-		StageID: result.StageID.String(), ResourceID: result.ResourceID.String(), MediaType: string(result.MediaType),
-		Size: result.Size, SHA256: result.SHA256, ExpiresAt: model.FormatRFC3339(result.ExpiresAt),
+		StageID:    result.StageID.String(),
+		ResourceID: result.ResourceID.String(),
+		MediaType:  string(result.MediaType),
+		Size:       result.Size,
+		SHA256:     result.SHA256,
+		ExpiresAt:  model.FormatRFC3339(result.ExpiresAt),
 	}
-	return streamingUploadProtocolResult(http.StatusCreated, response), nil
+	return route.StreamingUpload(http.StatusCreated, response), nil
 }
 
-func (m examSittingCorrectionHTTPModule) apply(request operationRequest) (operationResult, error) {
+func (h examSittingCorrectionHandlers) apply(request route.Request) (route.Result, error) {
 	examID, sittingID, err := examSittingCorrectionIDs(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	var body applyExamSittingCorrectionRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 	if body.ExpectedSittingRevision < 1 || !validExamSittingCorrectionReason(body.Reason) {
-		return operationResult{}, invalidRequestError(errors.New("expected revision and reason are invalid"))
+		return route.Result{}, route.InvalidRequest(errors.New("expected revision and reason are invalid"))
 	}
+
 	currentRevisionID, err := model.ParseExamRevisionID(body.ExpectedCurrentRevisionID)
 	if err != nil {
-		return operationResult{}, invalidRequestError(err)
+		return route.Result{}, route.InvalidRequest(err)
 	}
+
 	manifest := make([]correction.ResourceManifestItem, len(body.Resources))
 	resourceIDs := make(map[model.ExamResourceID]struct{}, len(body.Resources))
 	stageIDs := make(map[model.ExamCorrectionResourceStageID]struct{}, len(body.Resources))
 	for index, item := range body.Resources {
 		resourceID, parseErr := model.ParseExamResourceID(item.ResourceID)
 		if parseErr != nil {
-			return operationResult{}, invalidRequestError(parseErr)
+			return route.Result{}, route.InvalidRequest(parseErr)
 		}
 		if _, exists := resourceIDs[resourceID]; exists {
-			return operationResult{}, invalidRequestError(errors.New("resource_id values must be unique"))
+			return route.Result{}, route.InvalidRequest(errors.New("resource_id values must be unique"))
 		}
+
 		resourceIDs[resourceID] = struct{}{}
 		var stageID model.ExamCorrectionResourceStageID
 		if item.StageID != "" {
 			stageID, parseErr = model.ParseExamCorrectionResourceStageID(item.StageID)
 			if parseErr != nil {
-				return operationResult{}, invalidRequestError(parseErr)
+				return route.Result{}, route.InvalidRequest(parseErr)
 			}
 			if _, exists := stageIDs[stageID]; exists {
-				return operationResult{}, invalidRequestError(errors.New("stage_id values must be unique"))
+				return route.Result{}, route.InvalidRequest(errors.New("stage_id values must be unique"))
 			}
+
 			stageIDs[stageID] = struct{}{}
 		}
+
 		manifest[index] = correction.ResourceManifestItem{
-			ResourceID: resourceID, DisplayName: item.DisplayName,
-			DescriptionMarkdown: item.DescriptionMarkdown, StageID: stageID,
+			ResourceID:          resourceID,
+			DisplayName:         item.DisplayName,
+			DescriptionMarkdown: item.DescriptionMarkdown,
+			StageID:             stageID,
 		}
 	}
+
 	instructions := correction.OptionalInstructions{Present: body.InstructionsMarkdown.IsSet()}
 	if value := body.InstructionsMarkdown.ValuePointer(); value != nil {
 		instructions.Markdown = *value
 	}
+
 	browserPolicy := correction.OptionalBrowserPolicy{Present: body.BrowserPolicy.IsSet()}
 	if document := body.BrowserPolicy.ValuePointer(); document != nil {
 		browserPolicy.Policy, err = document.model()
 		if err != nil {
-			return operationResult{}, invalidRequestError(err)
+			return route.Result{}, route.InvalidRequest(err)
 		}
 	}
-	result, err := m.application.ApplyExamSittingCorrection(request.context, request.invocation(), correction.ApplyCommand{
-		ExamID: examID, SittingID: sittingID, ExpectedSittingRevision: body.ExpectedSittingRevision,
-		ExpectedCurrentRevisionID: currentRevisionID, Instructions: instructions, BrowserPolicy: browserPolicy, Resources: manifest,
-		CandidateSummary: body.CandidateSummary, AcknowledgementRequired: body.AcknowledgementRequired, AffectedCapabilities: body.AffectedCapabilities,
-		PrivateReason: body.Reason, IdempotencyKey: request.idempotencyKey,
+
+	result, err := h.app.ApplyExamSittingCorrection(request.Context, request.Invocation(), correction.ApplyCommand{
+		ExamID:                    examID,
+		SittingID:                 sittingID,
+		ExpectedSittingRevision:   body.ExpectedSittingRevision,
+		ExpectedCurrentRevisionID: currentRevisionID,
+		Instructions:              instructions,
+		BrowserPolicy:             browserPolicy,
+		Resources:                 manifest,
+		CandidateSummary:          body.CandidateSummary,
+		AcknowledgementRequired:   body.AcknowledgementRequired,
+		AffectedCapabilities:      body.AffectedCapabilities,
+		PrivateReason:             body.Reason,
+		IdempotencyKey:            request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	response := examSittingCorrectionResponse{
 		AffectedCapabilities: append([]model.CandidateCapability{}, result.AffectedCapabilities...),
-		ExamID:               result.ExamID.String(), ExamSittingID: result.SittingID.String(),
-		PreviousRevisionID: result.PreviousRevisionID.String(), RevisionID: result.RevisionID.String(),
-		RevisionNumber: result.RevisionNumber, SittingRevision: result.SittingRevision,
-		SittingState: string(result.SittingState), EffectiveAt: model.FormatRFC3339(result.EffectiveAt),
+		ExamID:               result.ExamID.String(),
+		ExamSittingID:        result.SittingID.String(),
+		PreviousRevisionID:   result.PreviousRevisionID.String(),
+		RevisionID:           result.RevisionID.String(),
+		RevisionNumber:       result.RevisionNumber,
+		SittingRevision:      result.SittingRevision,
+		SittingState:         string(result.SittingState),
+		EffectiveAt:          model.FormatRFC3339(result.EffectiveAt),
 	}
-	return jsonResult(http.StatusCreated, response), nil
+	return route.JSON(http.StatusCreated, response), nil
 }
 
-func examSittingCorrectionIDs(request operationRequest) (model.ExamID, model.ExamSittingID, error) {
+func examSittingCorrectionIDs(request route.Request) (model.ExamID, model.ExamSittingID, error) {
 	examID, err := examResourceExamID(request)
 	if err != nil {
 		return "", "", err
 	}
-	sittingID, err := request.params.RequireExamSittingID()
+	sittingID, err := route.PathID[model.ExamSittingID](request, "exam_sitting_id")
 	if err != nil {
 		return "", "", err
 	}
@@ -295,6 +409,9 @@ func examSittingCorrectionIDs(request operationRequest) (model.ExamID, model.Exa
 }
 
 func validExamSittingCorrectionReason(reason string) bool {
-	return utf8.ValidString(reason) && strings.TrimSpace(reason) == reason && utf8.RuneCountInString(reason) >= 1 &&
-		utf8.RuneCountInString(reason) <= 1000 && len(reason) <= 4000
+	return utf8.ValidString(reason) &&
+		strings.TrimSpace(reason) == reason &&
+		utf8.RuneCountInString(reason) >= 1 &&
+		utf8.RuneCountInString(reason) <= 1000 &&
+		len(reason) <= 4000
 }

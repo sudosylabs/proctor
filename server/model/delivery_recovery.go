@@ -22,21 +22,26 @@ func (r DeliveryRecovery) Validate() error {
 	if r.Budget.Validate() != nil {
 		return ErrDeliveryInvalid
 	}
+
 	switch r.Family {
 	case "native":
 		if r.Browser != nil || r.Native != nil && r.Native.Validate() != nil {
 			return ErrDeliveryInvalid
 		}
 	case "browser":
-		if r.Native != nil || r.Browser != nil && (r.Browser.Validate() != nil || r.Browser.ParticipationID != r.Budget.ParticipationID || r.Browser.Generation != r.Budget.Generation) {
+		if r.Native != nil ||
+			r.Browser != nil &&
+				(r.Browser.Validate() != nil || r.Browser.ParticipationID != r.Budget.ParticipationID || r.Browser.Generation != r.Budget.Generation) {
 			return ErrDeliveryInvalid
 		}
 	default:
 		return ErrDeliveryInvalid
 	}
+
 	raw, err := json.Marshal(r)
 	if err != nil || len(raw) > 32*1024 {
 		return ErrDeliveryInvalid
 	}
+
 	return nil
 }

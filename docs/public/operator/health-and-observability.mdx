@@ -48,8 +48,15 @@ The `proctor_` families cover readiness, HTTP, stores, caches, WebSocket,
 cluster, Jobs, VFS, mail, and selected domain outcomes.
 
 When binding beyond loopback, configuration requires static TLS and a random
-32–512-byte bearer token. Keep the token in protected secret input. Do not put
-it in scrape URLs or logs.
+32–512-byte bearer token. Keep the token in protected secret input (prefer
+`PROCTOR_METRICS_BEARER_TOKEN`). Do not put it in scrape URLs or logs. The
+scraper sends it as `Authorization: Bearer <token>`; on loopback the token is
+optional. Listener settings take effect only after a restart, and every
+`Metrics` field has a matching `PROCTOR_METRICS_` override.
+
+Apply your own target labels in Prometheus. Proctor's labels never contain raw
+request or VFS paths, cache keys, host, node, User, Session, or Exam
+identifiers, mail recipients, payloads, credentials, or error text.
 
 ### Database Pool Saturation
 

@@ -51,24 +51,48 @@ func EncodeSittingMailExpansionCommand(value SittingMailExpansionCommand) (json.
 func DecodeSittingMailExpansionCommand(raw json.RawMessage) (SittingMailExpansionCommand, error) {
 	var value SittingMailExpansionCommand
 	if decodeStrictSittingMail(raw, &value) != nil || !value.OccurrenceID.IsValid() {
-		return SittingMailExpansionCommand{}, invalidModelError("DecodeSittingMailExpansionCommand", "sitting_mail_job", "", "invalid Sitting mail expansion command", "")
+		return SittingMailExpansionCommand{}, invalidModelError(
+			"DecodeSittingMailExpansionCommand",
+			"sitting_mail_job",
+			"",
+			"invalid Sitting mail expansion command",
+			"",
+		)
 	}
+
 	return value, nil
 }
 
 func EncodeSittingMailExpansionCheckpoint(value SittingMailExpansionCheckpoint) (json.RawMessage, error) {
 	if (!value.AfterUserID.IsZero() && !value.AfterUserID.IsValid()) || value.Expanded < 0 || value.Suppressed < 0 || value.Undeliverable < 0 {
-		return nil, invalidModelError("EncodeSittingMailExpansionCheckpoint", "sitting_mail_job", "", "invalid Sitting mail expansion checkpoint", "")
+		return nil, invalidModelError(
+			"EncodeSittingMailExpansionCheckpoint",
+			"sitting_mail_job",
+			"",
+			"invalid Sitting mail expansion checkpoint",
+			"",
+		)
 	}
+
 	return json.Marshal(value)
 }
 
 func DecodeSittingMailExpansionCheckpoint(raw json.RawMessage) (SittingMailExpansionCheckpoint, error) {
 	var value SittingMailExpansionCheckpoint
 	if decodeStrictSittingMail(raw, &value) != nil ||
-		(!value.AfterUserID.IsZero() && !value.AfterUserID.IsValid()) || value.Expanded < 0 || value.Suppressed < 0 || value.Undeliverable < 0 {
-		return SittingMailExpansionCheckpoint{}, invalidModelError("DecodeSittingMailExpansionCheckpoint", "sitting_mail_job", "", "invalid Sitting mail expansion checkpoint", "")
+		(!value.AfterUserID.IsZero() && !value.AfterUserID.IsValid()) ||
+		value.Expanded < 0 ||
+		value.Suppressed < 0 ||
+		value.Undeliverable < 0 {
+		return SittingMailExpansionCheckpoint{}, invalidModelError(
+			"DecodeSittingMailExpansionCheckpoint",
+			"sitting_mail_job",
+			"",
+			"invalid Sitting mail expansion checkpoint",
+			"",
+		)
 	}
+
 	return value, nil
 }
 

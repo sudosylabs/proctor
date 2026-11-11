@@ -15,34 +15,14 @@ package httpapi
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"io"
 	"net/http"
-	"strings"
 
-	"github.com/sudosylabs/proctor/server/app"
-	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/onboarding"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
-
-type principalContextKey struct{}
-type credentialContextKey struct{}
-type credentialSourceContextKey struct{}
-
-type credentialSource string
-
-const (
-	credentialSourceBearer credentialSource = "bearer"
-	credentialSourceCookie credentialSource = "cookie"
-	credentialSourceDPoP   credentialSource = "dpop"
-)
-
-type requestCredential struct {
-	token  string
-	source credentialSource
-}
 
 type loginRequest struct {
 	LoginID    string                  `json:"login_id"`
@@ -146,17 +126,19 @@ func sessionResponseFromModel(request *http.Request, session *model.Session) *se
 		return nil
 	}
 	return &sessionResponse{
-		ID:                    session.ID.String(),
-		CreatedAt:             model.FormatRFC3339(session.CreatedAt),
-		UpdatedAt:             model.FormatRFC3339(session.UpdatedAt),
-		ArchivedAt:            session.ArchivedAt.FormatRFC3339(),
-		UserID:                session.UserID.String(),
-		MFARecoveryRequired:   session.MFARecoveryRequired,
-		MFAEnrollmentRequired: session.MFAEnrollmentRequired,
-		ClientType:            string(session.ClientType),
-		DesktopRegistrationID: session.DesktopRegistrationID.String(),
-		DesktopRelease:        session.DesktopRelease, DesktopBuildID: session.DesktopBuildID,
-		DesktopPlatform: string(session.DesktopPlatform), DesktopArchitecture: string(session.DesktopArchitecture),
+		ID:                      session.ID.String(),
+		CreatedAt:               model.FormatRFC3339(session.CreatedAt),
+		UpdatedAt:               model.FormatRFC3339(session.UpdatedAt),
+		ArchivedAt:              session.ArchivedAt.FormatRFC3339(),
+		UserID:                  session.UserID.String(),
+		MFARecoveryRequired:     session.MFARecoveryRequired,
+		MFAEnrollmentRequired:   session.MFAEnrollmentRequired,
+		ClientType:              string(session.ClientType),
+		DesktopRegistrationID:   session.DesktopRegistrationID.String(),
+		DesktopRelease:          session.DesktopRelease,
+		DesktopBuildID:          session.DesktopBuildID,
+		DesktopPlatform:         string(session.DesktopPlatform),
+		DesktopArchitecture:     string(session.DesktopArchitecture),
 		DesktopRealtimeProtocol: session.DesktopRealtimeProtocol,
 		DeviceID:                session.DeviceID,
 		DeviceName:              session.DeviceName,
@@ -179,7 +161,7 @@ func localizedSessionRevocationReason(request *http.Request, reason model.Sessio
 		return ""
 	}
 	fallback := sessionRevocationReasonPresentation(reason)
-	return translatedRequestText(request, sessionRevocationLocalizationID(reason), fallback)
+	return route.Translate(request, sessionRevocationLocalizationID(reason), fallback)
 }
 
 func sessionRevocationReasonPresentation(reason model.SessionRevocationReason) string {
@@ -240,7 +222,7 @@ func authenticationTokensResponseFromModel(tokens *model.AuthenticationTokens) *
 	}
 }
 
-func authenticationResponseFromLogin(request *http.Request, result *app.LoginResult) authenticationResponse {
+func authenticationResponseFromLogin(request *http.Request, result *identity.LoginResult) authenticationResponse {
 	if result == nil {
 		return authenticationResponse{}
 	}
@@ -267,180 +249,299 @@ func authenticationResponseFromRefresh(
 	}
 }
 
+// RegistrationApplication is public self-registration, which the onboarding
+// area owns beside Invitations.
+type RegistrationApplication interface {
+	RegisterLocalUser(context.Context, invocation.Invocation, onboarding.RegisterLocalUserCommand) error
+}
+
 type authenticationEntryApplication interface {
-	RegisterLocalUser(context.Context, invocation.Invocation, app.RegisterLocalUserCommand) error
-	Login(context.Context, invocation.Invocation, app.LoginCommand) (*app.LoginResult, error)
-	RefreshSession(context.Context, invocation.Invocation, app.RefreshSessionCommand) (*model.Session, *model.AuthenticationTokens, error)
-	Logout(context.Context, invocation.Invocation, app.LogoutCommand) error
-	RequestEmailVerification(context.Context, invocation.Invocation, app.RequestEmailVerificationCommand) error
-	CompleteEmailVerification(context.Context, invocation.Invocation, app.CompleteEmailVerificationCommand) (*model.User, error)
-	CompleteEmailChangeUndo(context.Context, invocation.Invocation, app.CompleteEmailChangeUndoCommand) error
-	InspectEmailVerification(context.Context, invocation.Invocation, app.InspectAccountTokenCommand) (*app.EmailVerificationInspection, error)
-	InspectEmailChangeUndo(context.Context, invocation.Invocation, app.InspectAccountTokenCommand) (*app.EmailChangeUndoInspection, error)
-	RequestPasswordReset(context.Context, invocation.Invocation, app.RequestPasswordResetCommand) error
-	CompletePasswordReset(context.Context, invocation.Invocation, app.CompletePasswordResetCommand) (*model.User, error)
+	Login(context.Context, invocation.Invocation, identity.LoginCommand) (*identity.LoginResult, error)
+	RefreshSession(context.Context, invocation.Invocation, identity.RefreshSessionCommand) (*model.Session, *model.AuthenticationTokens, error)
+	Logout(context.Context, invocation.Invocation) error
+	RequestEmailVerification(context.Context, invocation.Invocation, identity.RequestEmailVerificationCommand) error
+	CompleteEmailVerification(context.Context, invocation.Invocation, identity.CompleteEmailVerificationCommand) (*model.User, error)
+	CompleteEmailChangeUndo(context.Context, invocation.Invocation, identity.CompleteEmailChangeUndoCommand) error
+	InspectEmailVerification(
+		context.Context,
+		invocation.Invocation,
+		identity.InspectAccountTokenCommand,
+	) (*identity.EmailVerificationInspection, error)
+	InspectEmailChangeUndo(
+		context.Context,
+		invocation.Invocation,
+		identity.InspectAccountTokenCommand,
+	) (*identity.EmailChangeUndoInspection, error)
+	RequestPasswordReset(context.Context, invocation.Invocation, identity.RequestPasswordResetCommand) error
+	CompletePasswordReset(context.Context, invocation.Invocation, identity.CompletePasswordResetCommand) (*model.User, error)
 }
 
-type authenticationResourceModule struct {
+type authenticationHandlers struct {
+	registration   RegistrationApplication
 	authentication authenticationEntryApplication
-	cookies        browserCookies
+	cookies        route.Cookies
 }
 
-func authenticationResource(authentication authenticationEntryApplication, cookies browserCookies) apiResource {
-	module := authenticationResourceModule{authentication: authentication, cookies: cookies}
-	return newResource(
+func authenticationResource(
+	registration RegistrationApplication,
+	authentication authenticationEntryApplication,
+	cookies route.Cookies,
+) route.Resource {
+	h := authenticationHandlers{registration: registration, authentication: authentication, cookies: cookies}
+	return route.NewResource(
 		"authentication",
-		publicRoute(
-			http.MethodPost, apiPath(literal("auth"), literal("register")),
-			[]string{
-				"request.invalid", "authentication.password.invalid", "authentication.password.pattern_invalid", "authentication.password.common_invalid", "authentication.password.identity_invalid", "service.busy", "authentication.registration.invalid",
-				"authentication.registration.invitation_required", "authentication.registration.unavailable",
-				"authentication.rate_limited", "authentication.rate_limit_unavailable",
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/register",
+			Auth:   route.AuthPublic,
+			Errors: []string{
+				"request.invalid",
+				"authentication.password.invalid",
+				"authentication.password.pattern_invalid",
+				"authentication.password.common_invalid",
+				"authentication.password.identity_invalid",
+				"service.busy",
+				"authentication.registration.invalid",
+				"authentication.registration.invitation_required",
+				"authentication.registration.unavailable",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
 			},
-			module.register,
-		),
-		publicRoute(http.MethodPost, apiPath(literal("auth"), literal("login")), []string{"request.invalid", "authentication.mfa.enrollment_required", "authentication.client_type.invalid", "authentication.password.invalid", "service.busy", "authentication.credentials_invalid", "authentication.mfa.required", "authentication.mfa.code_invalid", "authentication.mfa.unavailable", "authentication.sessions.maximum_reached", "authentication.desktop_authorization.account_session_locked", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.internal", "audit.unavailable", "authentication.external.invalid", "authentication.session.invalid"}, module.login),
-		refreshCredentialRoute(http.MethodPost, apiPath(literal("auth"), literal("refresh")), []string{"authentication.token_invalid", "authentication.mfa.enrollment_required", "authentication.internal", "authentication.dpop.invalid", "authentication.dpop.replayed", "authentication.dpop.use_nonce", "authentication.dpop.unavailable"}, module.refresh),
-		mfaRecoverySessionRoute(http.MethodPost, apiPath(literal("auth"), literal("logout")), []string{"authentication.internal", "audit.unavailable"}, module.logout),
-		sessionRoute(
-			http.MethodPost,
-			apiPath(literal("auth"), literal("email-verification"), literal("request")),
-			sessionAuthenticationMutationErrorCodes(
-				"authentication.rate_limited", "authentication.rate_limit_unavailable",
+			Handle: h.register,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/login",
+			Auth:   route.AuthPublic,
+			Errors: []string{
+				"request.invalid",
+				"authentication.mfa.enrollment_required",
+				"authentication.client_type.invalid",
+				"authentication.password.invalid",
+				"service.busy",
+				"authentication.credentials_invalid",
+				"authentication.mfa.required",
+				"authentication.mfa.code_invalid",
+				"authentication.mfa.unavailable",
+				"authentication.sessions.maximum_reached",
+				"authentication.desktop_authorization.account_session_locked",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"authentication.internal",
+				"audit.unavailable",
+				"authentication.external.invalid",
+				"authentication.session.invalid",
+			},
+			Handle: h.login,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/refresh",
+			Auth:   route.AuthRefreshCredentialRequired,
+			Errors: []string{
+				"authentication.token_invalid",
+				"authentication.mfa.enrollment_required",
+				"authentication.internal",
+				"authentication.dpop.invalid",
+				"authentication.dpop.replayed",
+				"authentication.dpop.use_nonce",
+				"authentication.dpop.unavailable",
+			},
+			Handle: h.refresh,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/logout",
+			Auth:   route.AuthMFARecoverySessionRequired,
+			Errors: []string{"authentication.internal", "audit.unavailable"},
+			Handle: h.logout,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/email-verification/request",
+			Auth:   route.AuthSessionRequired,
+			Errors: sessionAuthenticationMutationErrorCodes(
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
 				"authentication.account_recovery.unavailable",
 			),
-			module.requestEmailVerification,
-		),
-		publicRoute(
-			http.MethodPost,
-			apiPath(literal("auth"), literal("email-verification"), literal("complete")),
-			[]string{
-				"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable",
-				"authentication.account_token.invalid", "authentication.account_recovery.unavailable",
+			Handle: h.requestEmailVerification,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/email-verification/complete",
+			Auth:   route.AuthPublic,
+			Errors: []string{
+				"request.invalid",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"authentication.account_token.invalid",
+				"authentication.account_recovery.unavailable",
 			},
-			module.completeEmailVerification,
-		),
-		publicRoute(
-			http.MethodPost,
-			apiPath(literal("auth"), literal("email-verification"), literal("inspect")),
-			[]string{
-				"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable",
-				"authentication.account_token.invalid", "authentication.account_recovery.unavailable",
+			Handle: h.completeEmailVerification,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/email-verification/inspect",
+			Auth:   route.AuthPublic,
+			Errors: []string{
+				"request.invalid",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"authentication.account_token.invalid",
+				"authentication.account_recovery.unavailable",
 			},
-			module.inspectEmailVerification,
-		),
-		publicRoute(
-			http.MethodPost,
-			apiPath(literal("auth"), literal("email-change"), literal("undo")),
-			[]string{
-				"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable",
-				"authentication.account_token.invalid", "authentication.account_recovery.unavailable",
+			Handle: h.inspectEmailVerification,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/email-change/undo",
+			Auth:   route.AuthPublic,
+			Errors: []string{
+				"request.invalid",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"authentication.account_token.invalid",
+				"authentication.account_recovery.unavailable",
 				"authentication.email_change_undo.conflict",
 			},
-			module.completeEmailChangeUndo,
-		),
-		publicRoute(
-			http.MethodPost,
-			apiPath(literal("auth"), literal("email-change"), literal("undo"), literal("inspect")),
-			[]string{
-				"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable",
-				"authentication.account_token.invalid", "authentication.account_recovery.unavailable",
-			},
-			module.inspectEmailChangeUndo,
-		),
-		publicRoute(
-			http.MethodPost,
-			apiPath(literal("auth"), literal("password-reset"), literal("request")),
-			[]string{
-				"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable",
+			Handle: h.completeEmailChangeUndo,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/email-change/undo/inspect",
+			Auth:   route.AuthPublic,
+			Errors: []string{
+				"request.invalid",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"authentication.account_token.invalid",
 				"authentication.account_recovery.unavailable",
 			},
-			module.requestPasswordReset,
-		),
-		publicRoute(
-			http.MethodPost,
-			apiPath(literal("auth"), literal("password-reset"), literal("complete")),
-			[]string{
-				"request.invalid", "authentication.password.invalid", "authentication.password.pattern_invalid", "authentication.password.common_invalid", "authentication.password.identity_invalid", "authentication.password.reused", "service.busy", "authentication.rate_limited",
-				"authentication.rate_limit_unavailable", "authentication.account_token.invalid",
+			Handle: h.inspectEmailChangeUndo,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/password-reset/request",
+			Auth:   route.AuthPublic,
+			Errors: []string{
+				"request.invalid",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
 				"authentication.account_recovery.unavailable",
 			},
-			module.completePasswordReset,
-		),
+			Handle: h.requestPasswordReset,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/password-reset/complete",
+			Auth:   route.AuthPublic,
+			Errors: []string{
+				"request.invalid",
+				"authentication.password.invalid",
+				"authentication.password.pattern_invalid",
+				"authentication.password.common_invalid",
+				"authentication.password.identity_invalid",
+				"authentication.password.reused",
+				"service.busy",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"authentication.account_token.invalid",
+				"authentication.account_recovery.unavailable",
+			},
+			Handle: h.completePasswordReset,
+		},
 	)
 }
 
-func (m authenticationResourceModule) register(request operationRequest) (operationResult, error) {
+func (h authenticationHandlers) register(request route.Request) (route.Result, error) {
 	var input publicRegistrationRequest
-	if err := request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
 	}
-	if err := m.authentication.RegisterLocalUser(
-		request.context,
-		invocation.New(model.Principal{}, request.metadata),
-		app.RegisterLocalUserCommand{
-			Username: input.Username, Email: input.Email, FirstName: input.FirstName,
-			LastName: input.LastName, Password: input.Password,
-			Source: request.metadata.IPAddress,
+
+	if err := h.registration.RegisterLocalUser(
+		request.Context,
+		invocation.New(model.Principal{}, request.Metadata),
+		onboarding.RegisterLocalUserCommand{
+			Username:  input.Username,
+			Email:     input.Email,
+			FirstName: input.FirstName,
+			LastName:  input.LastName,
+			Password:  input.Password,
+			Source:    request.Metadata.IPAddress,
 		},
 	); err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return statusResult(http.StatusAccepted).withHeaders(http.Header{"Cache-Control": {"no-store"}}), nil
+
+	return route.Status(http.StatusAccepted).WithHeaders(http.Header{"Cache-Control": {"no-store"}}), nil
 }
 
 func sessionAuthenticationMutationErrorCodes(extra ...string) []string {
 	return append([]string(nil), extra...)
 }
 
-func (m authenticationResourceModule) login(request operationRequest) (operationResult, error) {
+func (h authenticationHandlers) login(request route.Request) (route.Result, error) {
 	var input loginRequest
-	if err := request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
 	}
-	result, err := m.authentication.Login(
-		request.context,
-		invocation.New(model.Principal{}, request.metadata),
-		app.LoginCommand{
-			LoginID: input.LoginID, Password: input.Password, ClientType: input.ClientType,
-			DeviceID: input.DeviceID, DeviceName: input.DeviceName, MFACode: input.MFACode,
-			Source: request.metadata.IPAddress,
+
+	result, err := h.authentication.Login(
+		request.Context,
+		invocation.New(model.Principal{}, request.Metadata),
+		identity.LoginCommand{
+			LoginID:    input.LoginID,
+			Password:   input.Password,
+			ClientType: input.ClientType,
+			DeviceID:   input.DeviceID,
+			DeviceName: input.DeviceName,
+			MFACode:    input.MFACode,
+			Source:     request.Metadata.IPAddress,
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	response := authenticationResponseFromLogin(request.request, result)
+
+	response := authenticationResponseFromLogin(request.HTTP, result)
 	headers := http.Header{"Cache-Control": {"no-store"}}
 	if usesBrowserCookieTransport(input.ClientType) {
-		headers = combineResponseHeaders(headers, captureResponseHeaders(func(writer http.ResponseWriter) {
+		headers = route.CombineHeaders(headers, route.CaptureHeaders(func(writer http.ResponseWriter) {
 			if result != nil {
-				m.cookies.attach(writer, result.Tokens)
+				h.cookies.Attach(writer, result.Tokens)
 			}
 		}))
 		response.Tokens = nil
 	}
-	return jsonResult(http.StatusOK, response).withHeaders(headers), nil
+
+	return route.JSON(http.StatusOK, response).WithHeaders(headers), nil
 }
 
-func (m authenticationResourceModule) refresh(request operationRequest) (operationResult, error) {
-	credential, ok := credentialFromContext(request.context)
+func (h authenticationHandlers) refresh(request route.Request) (route.Result, error) {
+	credential, ok := route.RefreshCredential(request.Context)
 	if !ok {
-		return operationResult{}, authenticationRequiredError()
+		return route.Result{}, route.AuthenticationRequired()
 	}
-	command := app.RefreshSessionCommand{RefreshToken: credential.token}
-	if credential.source == credentialSourceDPoP {
-		proof, proofErr := requestDPoPProof(request.request)
+
+	command := identity.RefreshSessionCommand{RefreshToken: credential.Token}
+	if credential.Source == route.CredentialDPoP {
+		proof, proofErr := route.DPoPProof(request.HTTP)
 		if proofErr != nil {
-			return operationResult{}, errorWithHeaders(proofErr, dpopErrorHeaders(proofErr))
+			return route.Result{}, route.ErrorWithHeaders(proofErr, dpopErrorHeaders(proofErr))
 		}
-		command.DPoP = &app.DPoPRequestProof{
-			Proof: proof, Method: request.request.Method, Path: request.request.URL.EscapedPath(),
+
+		command.DPoP = &identity.DPoPRequestProof{
+			Proof:  proof,
+			Method: request.HTTP.Method,
+			Path:   request.HTTP.URL.EscapedPath(),
 		}
 	}
-	session, tokens, err := m.authentication.RefreshSession(
-		request.context,
-		invocation.New(model.Principal{}, request.metadata),
+
+	session, tokens, err := h.authentication.RefreshSession(
+		request.Context,
+		invocation.New(model.Principal{}, request.Metadata),
 		command,
 	)
 	if err != nil {
@@ -448,305 +549,169 @@ func (m authenticationResourceModule) refresh(request operationRequest) (operati
 		if command.DPoP != nil {
 			headers = dpopErrorHeaders(err)
 		}
-		if credential.source == credentialSourceCookie {
-			headers = combineResponseHeaders(headers, captureResponseHeaders(m.cookies.clear))
+		if credential.Source == route.CredentialCookie {
+			headers = route.CombineHeaders(headers, route.CaptureHeaders(h.cookies.Clear))
 		}
-		return operationResult{}, errorWithHeaders(err, headers)
+
+		return route.Result{}, route.ErrorWithHeaders(err, headers)
 	}
-	response := authenticationResponseFromRefresh(request.request, session, tokens)
+
+	response := authenticationResponseFromRefresh(request.HTTP, session, tokens)
 	headers := http.Header{"Cache-Control": {"no-store"}}
-	if credential.source == credentialSourceCookie {
+	if credential.Source == route.CredentialCookie {
 		response.Tokens = nil
-		headers = combineResponseHeaders(headers, captureResponseHeaders(func(writer http.ResponseWriter) {
-			m.cookies.attach(writer, tokens)
+		headers = route.CombineHeaders(headers, route.CaptureHeaders(func(writer http.ResponseWriter) {
+			h.cookies.Attach(writer, tokens)
 		}))
 	}
-	return jsonResult(http.StatusOK, response).withHeaders(headers), nil
+
+	return route.JSON(http.StatusOK, response).WithHeaders(headers), nil
 }
 
 func dpopErrorHeaders(err error) http.Header {
 	headers := http.Header{"WWW-Authenticate": {`DPoP error="invalid_dpop_proof"`}}
-	if nonce, ok := app.DPoPChallengeNonce(err); ok {
+	if nonce, ok := identity.DPoPChallengeNonce(err); ok {
 		headers.Set("DPoP-Nonce", nonce)
 		headers.Set("WWW-Authenticate", `DPoP error="use_dpop_nonce"`)
 	}
 	return headers
 }
 
-func (m authenticationResourceModule) logout(request operationRequest) (operationResult, error) {
-	if err := m.authentication.Logout(request.context, request.invocation(), app.LogoutCommand{}); err != nil {
-		return operationResult{}, err
+func (h authenticationHandlers) logout(request route.Request) (route.Result, error) {
+	if err := h.authentication.Logout(request.Context, request.Invocation()); err != nil {
+		return route.Result{}, err
 	}
-	result := noContentResult().withHeaders(http.Header{"Cache-Control": {"no-store"}})
-	if credentialSourceFromContext(request.context) == credentialSourceCookie {
-		result = result.withHeaders(combineResponseHeaders(result.headers, captureResponseHeaders(m.cookies.clear)))
+	result := route.NoContent().WithHeaders(http.Header{"Cache-Control": {"no-store"}})
+	if route.CredentialSourceOf(request.Context) == route.CredentialCookie {
+		result = result.WithHeaders(route.CombineHeaders(result.Headers(), route.CaptureHeaders(h.cookies.Clear)))
 	}
 	return result, nil
 }
 
-func (m authenticationResourceModule) requestEmailVerification(request operationRequest) (operationResult, error) {
-	err := m.authentication.RequestEmailVerification(
-		request.context, request.invocation(),
-		app.RequestEmailVerificationCommand{Source: request.metadata.IPAddress},
+func (h authenticationHandlers) requestEmailVerification(request route.Request) (route.Result, error) {
+	err := h.authentication.RequestEmailVerification(
+		request.Context,
+		request.Invocation(),
+		identity.RequestEmailVerificationCommand{Source: request.Metadata.IPAddress},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return statusResult(http.StatusAccepted), nil
+
+	return route.Status(http.StatusAccepted), nil
 }
 
-func (m authenticationResourceModule) completeEmailVerification(request operationRequest) (operationResult, error) {
+func (h authenticationHandlers) completeEmailVerification(request route.Request) (route.Result, error) {
 	var input emailVerificationCompletion
-	if err := request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
 	}
-	_, err := m.authentication.CompleteEmailVerification(
-		request.context,
-		invocation.New(model.Principal{}, request.metadata),
-		app.CompleteEmailVerificationCommand{Token: input.Token, Source: request.metadata.IPAddress},
+	_, err := h.authentication.CompleteEmailVerification(
+		request.Context,
+		invocation.New(model.Principal{}, request.Metadata),
+		identity.CompleteEmailVerificationCommand{Token: input.Token, Source: request.Metadata.IPAddress},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return noContentResult(), nil
+	return route.NoContent(), nil
 }
 
-func (m authenticationResourceModule) completeEmailChangeUndo(request operationRequest) (operationResult, error) {
+func (h authenticationHandlers) completeEmailChangeUndo(request route.Request) (route.Result, error) {
 	var input emailChangeUndoCompletion
-	if err := request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
 	}
-	if err := m.authentication.CompleteEmailChangeUndo(request.context, invocation.New(model.Principal{}, request.metadata),
-		app.CompleteEmailChangeUndoCommand{Token: input.Token, Source: request.metadata.IPAddress}); err != nil {
-		return operationResult{}, err
-	}
-	return noContentResult(), nil
-}
 
-func (m authenticationResourceModule) inspectEmailVerification(request operationRequest) (operationResult, error) {
-	var input accountTokenInspectionRequest
-	if err := request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
-	}
-	inspected, err := m.authentication.InspectEmailVerification(request.context, invocation.New(model.Principal{}, request.metadata),
-		app.InspectAccountTokenCommand{Token: input.Token, Source: request.metadata.IPAddress})
-	if err != nil {
-		return operationResult{}, err
-	}
-	return jsonResult(http.StatusOK, emailVerificationInspectionResponse{Email: inspected.Email}).withHeaders(noStoreHeaders()), nil
-}
-
-func (m authenticationResourceModule) inspectEmailChangeUndo(request operationRequest) (operationResult, error) {
-	var input accountTokenInspectionRequest
-	if err := request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
-	}
-	inspected, err := m.authentication.InspectEmailChangeUndo(request.context, invocation.New(model.Principal{}, request.metadata),
-		app.InspectAccountTokenCommand{Token: input.Token, Source: request.metadata.IPAddress})
-	if err != nil {
-		return operationResult{}, err
-	}
-	return jsonResult(http.StatusOK, emailChangeUndoInspectionResponse{RestoredEmail: inspected.RestoredEmail,
-		MaskedCurrentEmail: inspected.MaskedCurrentEmail, ChangedAt: model.FormatRFC3339(inspected.ChangedAt)}).withHeaders(noStoreHeaders()), nil
-}
-
-func (m authenticationResourceModule) requestPasswordReset(request operationRequest) (operationResult, error) {
-	var input passwordResetRequest
-	if err := request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
-	}
-	if err := m.authentication.RequestPasswordReset(
-		request.context,
-		invocation.New(model.Principal{}, request.metadata),
-		app.RequestPasswordResetCommand{Email: input.Email, Source: request.metadata.IPAddress},
+	if err := h.authentication.CompleteEmailChangeUndo(
+		request.Context,
+		invocation.New(model.Principal{}, request.Metadata),
+		identity.CompleteEmailChangeUndoCommand{Token: input.Token, Source: request.Metadata.IPAddress},
 	); err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return statusResult(http.StatusAccepted), nil
+
+	return route.NoContent(), nil
 }
 
-func (m authenticationResourceModule) completePasswordReset(request operationRequest) (operationResult, error) {
-	var input passwordResetCompletion
-	if err := request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
+func (h authenticationHandlers) inspectEmailVerification(request route.Request) (route.Result, error) {
+	var input accountTokenInspectionRequest
+	if err := request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
 	}
-	_, err := m.authentication.CompletePasswordReset(
-		request.context,
-		invocation.New(model.Principal{}, request.metadata),
-		app.CompletePasswordResetCommand{
-			Token: input.Token, Password: input.Password, Source: request.metadata.IPAddress,
+
+	inspected, err := h.authentication.InspectEmailVerification(
+		request.Context,
+		invocation.New(model.Principal{}, request.Metadata),
+		identity.InspectAccountTokenCommand{Token: input.Token, Source: request.Metadata.IPAddress},
+	)
+	if err != nil {
+		return route.Result{}, err
+	}
+
+	return route.JSON(http.StatusOK, emailVerificationInspectionResponse{Email: inspected.Email}).WithHeaders(noStoreHeaders()), nil
+}
+
+func (h authenticationHandlers) inspectEmailChangeUndo(request route.Request) (route.Result, error) {
+	var input accountTokenInspectionRequest
+	if err := request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
+	}
+
+	inspected, err := h.authentication.InspectEmailChangeUndo(
+		request.Context,
+		invocation.New(model.Principal{}, request.Metadata),
+		identity.InspectAccountTokenCommand{Token: input.Token, Source: request.Metadata.IPAddress},
+	)
+	if err != nil {
+		return route.Result{}, err
+	}
+
+	return route.JSON(http.StatusOK, emailChangeUndoInspectionResponse{
+		RestoredEmail:      inspected.RestoredEmail,
+		MaskedCurrentEmail: inspected.MaskedCurrentEmail,
+		ChangedAt:          model.FormatRFC3339(inspected.ChangedAt),
+	}).WithHeaders(noStoreHeaders()), nil
+}
+
+func (h authenticationHandlers) requestPasswordReset(request route.Request) (route.Result, error) {
+	var input passwordResetRequest
+	if err := request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
+	}
+	if err := h.authentication.RequestPasswordReset(
+		request.Context,
+		invocation.New(model.Principal{}, request.Metadata),
+		identity.RequestPasswordResetCommand{Email: input.Email, Source: request.Metadata.IPAddress},
+	); err != nil {
+		return route.Result{}, err
+	}
+	return route.Status(http.StatusAccepted), nil
+}
+
+func (h authenticationHandlers) completePasswordReset(request route.Request) (route.Result, error) {
+	var input passwordResetCompletion
+	if err := request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
+	}
+
+	_, err := h.authentication.CompletePasswordReset(
+		request.Context,
+		invocation.New(model.Principal{}, request.Metadata),
+		identity.CompletePasswordResetCommand{
+			Token:    input.Token,
+			Password: input.Password,
+			Source:   request.Metadata.IPAddress,
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return noContentResult().withHeaders(captureResponseHeaders(m.cookies.clear)), nil
+
+	return route.NoContent().WithHeaders(route.CaptureHeaders(h.cookies.Clear)), nil
 }
 
 func usesBrowserCookieTransport(clientType model.SessionClientType) bool {
 	return clientType == model.SessionClientDesktop ||
 		clientType == model.SessionClientWeb
-}
-
-func requestAccessCredential(request *http.Request) (requestCredential, error) {
-	return requestCredentialFrom(request, BrowserAccessCookieName)
-}
-
-func requestRefreshCredential(request *http.Request) (requestCredential, error) {
-	return requestCredentialFrom(request, BrowserRefreshCookieName)
-}
-
-func requestCredentialFrom(
-	request *http.Request,
-	cookieName string,
-) (requestCredential, error) {
-	token, source, hasAuthorization, appErr := optionalAuthorizationCredential(request)
-	if appErr != nil {
-		return requestCredential{}, appErr
-	}
-	cookie, appErr := singleCookieValue(request, cookieName)
-	if appErr != nil {
-		return requestCredential{}, appErr
-	}
-	if hasAuthorization && cookie != "" {
-		return requestCredential{}, ambiguousCredentialError()
-	}
-	if hasAuthorization {
-		return requestCredential{token: token, source: source}, nil
-	}
-	if cookie != "" {
-		return requestCredential{token: cookie, source: credentialSourceCookie}, nil
-	}
-	return requestCredential{}, authenticationRequiredError()
-}
-
-func optionalAuthorizationCredential(request *http.Request) (string, credentialSource, bool, error) {
-	values := request.Header.Values("Authorization")
-	if len(values) == 0 {
-		return "", "", false, nil
-	}
-	if len(values) != 1 {
-		return "", "", false, authenticationRequiredError()
-	}
-	parts := strings.Fields(values[0])
-	if len(parts) != 2 || parts[1] == "" {
-		return "", "", false, authenticationRequiredError()
-	}
-	switch {
-	case strings.EqualFold(parts[0], "Bearer"):
-		return parts[1], credentialSourceBearer, true, nil
-	case parts[0] == "DPoP":
-		return parts[1], credentialSourceDPoP, true, nil
-	default:
-		return "", "", false, authenticationRequiredError()
-	}
-}
-
-func singleCookieValue(
-	request *http.Request,
-	name string,
-) (string, error) {
-	var value string
-	for _, cookie := range request.Cookies() {
-		if cookie.Name != name {
-			continue
-		}
-		if value != "" || cookie.Value == "" {
-			return "", ambiguousCredentialError()
-		}
-		value = cookie.Value
-	}
-	return value, nil
-}
-
-func Principal(ctx context.Context) (model.Principal, bool) {
-	principal, ok := ctx.Value(principalContextKey{}).(model.Principal)
-	return principal, ok && principal.ValidateMFARecovery() == nil
-}
-
-func credentialFromContext(ctx context.Context) (requestCredential, bool) {
-	credential, ok := ctx.Value(credentialContextKey{}).(requestCredential)
-	return credential, ok && credential.token != "" && credential.source != ""
-}
-
-func credentialSourceFromContext(ctx context.Context) credentialSource {
-	source, _ := ctx.Value(credentialSourceContextKey{}).(credentialSource)
-	return source
-}
-
-func decodeRequestJSON(request *http.Request, target any) error {
-	if err := requireJSONMediaType(request); err != nil {
-		return err
-	}
-	if request.Body == nil {
-		return errors.New("request body is required")
-	}
-	decoder := json.NewDecoder(request.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		return err
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		if err == nil {
-			return errors.New("request body must contain one JSON value")
-		}
-		return err
-	}
-	return nil
-}
-
-func invalidRequestError(err error) error {
-	out := apperror.New("request.invalid")
-	if err != nil {
-		out = out.Wrap(err)
-	}
-	return out
-}
-
-func authenticationRequiredError() error {
-	return apperror.New("authentication.required")
-}
-
-func ambiguousCredentialError() error {
-	return apperror.New("authentication.credential_ambiguous").WithField("field", "credential")
-}
-
-func writeApplicationError(
-	writer http.ResponseWriter,
-	request *http.Request,
-	logger Logger,
-	appErr error,
-) {
-	if applicationErrorRequiresLogging(appErr) {
-		logger.ErrorContext(
-			request.Context(),
-			"application request failed",
-			logString("request_id", RequestID(request.Context())),
-			logString("error_id", applicationErrorCode(appErr)),
-			logErr(appErr),
-		)
-	}
-	WriteError(writer, request, appErr)
-}
-
-func applicationErrorCode(err error) string {
-	var failure applicationFailure
-	if errors.As(err, &failure) {
-		return failure.Code()
-	}
-	return serverInternalCode
-}
-
-func applicationErrorRequiresLogging(err error) bool {
-	var failure applicationFailure
-	if errors.As(err, &failure) {
-		// Capacity refusals are expected overload outcomes counted by the owning
-		// work pool. Logging each refusal would amplify a request burst.
-		if failure.Code() == "service.busy" {
-			return false
-		}
-		mapping, ok := applicationErrorMappings[failure.Code()]
-		return !ok || mapping.status >= http.StatusInternalServerError
-	}
-	return true
 }

@@ -61,6 +61,7 @@ func scanMintedErrorCodes(ctx context.Context, moduleDir string) ([]errorcatalog
 	if err != nil {
 		return nil, fmt.Errorf("go list: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}
+
 	exports := make(map[string]string)
 	var targets []listedPackage
 	decoder := json.NewDecoder(bytes.NewReader(output))
@@ -71,17 +72,20 @@ func scanMintedErrorCodes(ctx context.Context, moduleDir string) ([]errorcatalog
 		} else if err != nil {
 			return nil, fmt.Errorf("decode go list output: %w", err)
 		}
+
 		exports[listed.ImportPath] = listed.Export
 		if listed.Module != nil && listed.Module.Path == serverModulePath && usesApplicationErrors(listed) {
 			targets = append(targets, listed)
 		}
 	}
+
 	fset := token.NewFileSet()
 	imports := importer.ForCompiler(fset, "gc", func(path string) (io.ReadCloser, error) {
 		file := exports[path]
 		if file == "" {
 			return nil, fmt.Errorf("no export data for %s", path)
 		}
+
 		return os.Open(file)
 	})
 	var mints []errorcatalog.Mint
@@ -91,13 +95,16 @@ func scanMintedErrorCodes(ctx context.Context, moduleDir string) ([]errorcatalog
 		if err != nil {
 			return nil, err
 		}
+
 		mints = append(mints, found...)
 		problems = append(problems, invalid...)
 	}
+
 	if len(problems) > 0 {
 		sort.Strings(problems)
 		return nil, fmt.Errorf("application error codes must be constants:\n  %s", strings.Join(problems, "\n  "))
 	}
+
 	return mints, nil
 }
 
@@ -120,13 +127,16 @@ func scanPackage(fset *token.FileSet, imports types.Importer, target listedPacka
 		if err != nil {
 			return nil, nil, err
 		}
+
 		files = append(files, file)
 	}
+
 	info := &types.Info{Types: make(map[ast.Expr]types.TypeAndValue)}
 	config := types.Config{Importer: imports}
 	if _, err := config.Check(target.ImportPath, fset, files, info); err != nil {
 		return nil, nil, fmt.Errorf("type-check %s: %w", target.ImportPath, err)
 	}
+
 	webSocket := target.ImportPath == webSocketPath || strings.HasPrefix(target.ImportPath, webSocketPath+"/")
 	transport := webSocket || target.ImportPath == httpTransportPath || strings.HasPrefix(target.ImportPath, httpTransportPath+"/")
 	compared := comparedExpressions(files)
@@ -136,17 +146,25 @@ func scanPackage(fset *token.FileSet, imports types.Importer, target listedPacka
 		if !isApplicationErrorCode(value.Type) || compared[expression] {
 			continue
 		}
+
 		position := fset.Position(expression.Pos())
 		location := fmt.Sprintf("%s:%d", relativeSourcePath(position.Filename), position.Line)
 		if value.Value != nil && value.Value.Kind() == constant.String {
-			mints = append(mints, errorcatalog.Mint{Code: constant.StringVal(value.Value), Package: target.ImportPath,
-				Position: location, Transport: transport, WebSocket: webSocket})
+			mints = append(mints, errorcatalog.Mint{
+				Code:      constant.StringVal(value.Value),
+				Package:   target.ImportPath,
+				Position:  location,
+				Transport: transport,
+				WebSocket: webSocket,
+			})
 			continue
 		}
+
 		if call, ok := expression.(*ast.CallExpr); ok && len(call.Args) == 1 && info.Types[call.Fun].IsType() {
 			problems = append(problems, location+": conversion of a non-constant value to apperror.Code")
 		}
 	}
+
 	return mints, problems, nil
 }
 

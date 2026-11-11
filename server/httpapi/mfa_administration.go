@@ -8,18 +8,14 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
-	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/model"
 )
 
-type MFAAdministration interface {
-	ResetUserMFA(context.Context, invocation.Invocation, app.ResetUserMFACommand) error
-}
-
-type mfaAdministrationResourceModule struct{ application MFAAdministration }
+type mfaAdministrationHandlers struct{ app *identity.Service }
 
 type resetUserMFARequest struct {
 	IdentityVerified      bool   `json:"identity_verified"`
@@ -27,21 +23,52 @@ type resetUserMFARequest struct {
 	VerificationReference string `json:"verification_reference"`
 }
 
-func mfaAdministrationResource(application MFAAdministration) apiResource {
-	module := mfaAdministrationResourceModule{application: application}
-	return newResource("mfa-administration", strongRecentSessionRoute(http.MethodPost, apiPath(literal("users"), canonicalID("user_id"), literal("mfa"), literal("reset")), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "authentication.mfa.reset_invalid", "authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "authentication.session_required"}, module.reset))
+func mfaAdministrationResource(app *identity.Service) route.Resource {
+	h := mfaAdministrationHandlers{app: app}
+	return route.NewResource(
+		"mfa-administration",
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/{user_id}/mfa/reset",
+			Auth:   route.AuthStrongRecentSessionRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"authentication.mfa.reset_invalid",
+				"authentication.mfa.disabled",
+				"authentication.mfa.not_found",
+				"authentication.mfa.conflict",
+				"authentication.mfa.unavailable",
+				"authentication.internal",
+				"authentication.session_required",
+			},
+			Handle: h.reset,
+		},
+	)
 }
-func (m mfaAdministrationResourceModule) reset(request operationRequest) (operationResult, error) {
-	userID, err := request.params.RequireUserID()
+func (h mfaAdministrationHandlers) reset(request route.Request) (route.Result, error) {
+	userID, err := route.PathID[model.UserID](request, "user_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	var body resetUserMFARequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
-	if err := m.application.ResetUserMFA(request.context, request.invocation(), app.ResetUserMFACommand{UserID: userID, IdentityVerified: body.IdentityVerified, Reason: body.Reason, VerificationReference: body.VerificationReference}); err != nil {
-		return operationResult{}, err
+
+	if err := h.app.ResetUserMFA(request.Context, request.Invocation(), identity.ResetUserMFACommand{
+		UserID:                userID,
+		IdentityVerified:      body.IdentityVerified,
+		Reason:                body.Reason,
+		VerificationReference: body.VerificationReference,
+	}); err != nil {
+		return route.Result{}, err
 	}
-	return noContentResult().withHeaders(noStoreHeaders()), nil
+
+	return route.NoContent().WithHeaders(noStoreHeaders()), nil
 }

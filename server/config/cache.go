@@ -43,11 +43,14 @@ func validateNamespace(field, namespace string, add func(string, string)) {
 		add(field, "must contain between 1 and 128 characters")
 		return
 	}
+
 	for _, character := range namespace {
 		if (character < 'a' || character > 'z') &&
 			(character < 'A' || character > 'Z') &&
 			(character < '0' || character > '9') &&
-			character != '.' && character != '_' && character != '-' {
+			character != '.' &&
+			character != '_' &&
+			character != '-' {
 			add(field, "contains an invalid character")
 			return
 		}
@@ -70,11 +73,13 @@ func validateCache(cache Cache, add func(string, string)) {
 		if len(cache.Redis.Addresses) == 0 {
 			add("cache.redis.addresses", "must contain at least one address")
 		}
+
 		for index, address := range cache.Redis.Addresses {
 			if !validHostPort(address) {
 				add(fmt.Sprintf("cache.redis.addresses[%d]", index), "must be a host:port TCP address")
 			}
 		}
+
 		if cache.Redis.Database < 0 {
 			add("cache.redis.database", "must not be negative")
 		}
@@ -84,5 +89,6 @@ func validateCache(cache Cache, add func(string, string)) {
 	default:
 		add("cache.backend", "must be memory or redis")
 	}
+
 	validateNamespace("cache.namespace", cache.Namespace, add)
 }

@@ -27,6 +27,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLClassStore implements store.ClassStore on the classes table, resolving
+// each Class's programme level, programme and academic-unit lineage.
 type SQLClassStore struct {
 	*SQLStore
 	classesQuery sq.SelectBuilder
@@ -98,22 +100,32 @@ func (s SQLClassStore) createClass(ctx context.Context, candidate *model.Class, 
 		if err := validateActiveProgrammeLevel(ctx, tx, candidate.ProgrammeLevelID.String()); err != nil {
 			return nil, err
 		}
-		if err := validateAcademicPeriodApplicable(ctx, tx, candidate.ProgrammeLevelID.String(), candidate.AcademicPeriodID.String()); err != nil {
+
+		if err := validateAcademicPeriodApplicable(
+			ctx,
+			tx,
+			candidate.ProgrammeLevelID.String(),
+			candidate.AcademicPeriodID.String(),
+		); err != nil {
 			return nil, err
 		}
+
 		row := newClassRow(candidate)
 		if _, err := tx.NamedExec(ctx, `INSERT INTO classes (
-			id, created_at, updated_at, archived_at, revision, programme_level_id,
-			academic_period_id, name, display_name, description
-		) VALUES (
-			:id, :created_at, :updated_at, :archived_at, :revision, :programme_level_id,
-			:academic_period_id, :name, :display_name, :description
-		)`, &row); err != nil {
+				id, created_at, updated_at, archived_at, revision, programme_level_id,
+				academic_period_id, name, display_name, description
+			)
+			VALUES (
+				:id, :created_at, :updated_at, :archived_at, :revision, :programme_level_id,
+				:academic_period_id, :name, :display_name, :description
+			)`, &row); err != nil {
 			return nil, fmt.Errorf("create class: %w", translateError("class", candidate.ID.String(), err))
 		}
+
 		if err := audit.complete(ctx, tx, candidate.Auditable()); err != nil {
 			return nil, err
 		}
+
 		return candidate, nil
 	})
 }
@@ -133,7 +145,12 @@ func (s SQLClassStore) Get(ctx context.Context, id model.ClassID) (*model.Class,
 
 // GetByName returns the unarchived Class with name in the given Programme Level
 // and Academic Period, or a not-found error.
-func (s SQLClassStore) GetByName(ctx context.Context, programmeLevelID model.ProgrammeLevelID, academicPeriodID model.AcademicPeriodID, name string) (*model.Class, error) {
+func (s SQLClassStore) GetByName(
+	ctx context.Context,
+	programmeLevelID model.ProgrammeLevelID,
+	academicPeriodID model.AcademicPeriodID,
+	name string,
+) (*model.Class, error) {
 	var row classRow
 	query := s.classesQuery.Where(sq.Eq{
 		"classes.programme_level_id": programmeLevelID,
@@ -145,12 +162,17 @@ func (s SQLClassStore) GetByName(ctx context.Context, programmeLevelID model.Pro
 		key := programmeLevelID.String() + "/" + academicPeriodID.String() + "/" + name
 		return nil, translateError("class", key, err)
 	}
+
 	return row.model()
 }
 
 // ListByProgrammeLevel returns one page of the Programme Level's unarchived
 // Classes ordered by name then identity.
-func (s SQLClassStore) ListByProgrammeLevel(ctx context.Context, programmeLevelID model.ProgrammeLevelID, options store.AcademicNameListOptions) ([]*model.Class, error) {
+func (s SQLClassStore) ListByProgrammeLevel(
+	ctx context.Context,
+	programmeLevelID model.ProgrammeLevelID,
+	options store.AcademicNameListOptions,
+) ([]*model.Class, error) {
 	query, valid := academicNamePage(s.classesQuery.
 		Where(sq.Eq{
 			"classes.programme_level_id": programmeLevelID,
@@ -159,6 +181,7 @@ func (s SQLClassStore) ListByProgrammeLevel(ctx context.Context, programmeLevelI
 	if !valid {
 		return nil, store.NewErrInvalidInput("class", "list_options", options)
 	}
+
 	return s.selectClasses(ctx, query, "list classes by programme level")
 }
 
@@ -176,7 +199,11 @@ func (s SQLClassStore) ListByAcademicPeriod(ctx context.Context, academicPeriodI
 
 // SearchByAcademicUnit returns one page of unarchived Classes under the
 // Academic Unit's unarchived Programmes selected and ordered by options.
-func (s SQLClassStore) SearchByAcademicUnit(ctx context.Context, academicUnitID model.AcademicUnitID, options store.AcademicNameListOptions) ([]*model.Class, error) {
+func (s SQLClassStore) SearchByAcademicUnit(
+	ctx context.Context,
+	academicUnitID model.AcademicUnitID,
+	options store.AcademicNameListOptions,
+) ([]*model.Class, error) {
 	query, valid := academicNamePage(s.classesQuery.
 		Join("programme_levels ON programme_levels.id = classes.programme_level_id").
 		Join("programmes ON programmes.id = programme_levels.programme_id").
@@ -189,6 +216,7 @@ func (s SQLClassStore) SearchByAcademicUnit(ctx context.Context, academicUnitID 
 	if !valid {
 		return nil, store.NewErrInvalidInput("class", "list_options", options)
 	}
+
 	return s.selectClasses(ctx, query, "search classes by academic unit")
 }
 
@@ -197,18 +225,26 @@ func (s SQLClassStore) SearchByAcademicUnit(ctx context.Context, academicUnitID 
 // same statement, so no Class outside the scope is ever loaded.
 func (s SQLClassStore) SearchVisible(ctx context.Context, options store.ClassSearchOptions) ([]*model.Class, error) {
 	visibility := options.Visibility
-	if options.Limit < 1 || options.Limit > maximumAcademicPageProbe ||
+	if options.Limit < 1 ||
+		options.Limit > maximumAcademicPageProbe ||
 		len(visibility.AcademicUnitRootIDs)+len(visibility.ClassIDs) > 256 ||
-		!validVisibilityIDs(visibility.AcademicUnitRootIDs) || !validVisibilityIDs(visibility.ClassIDs) {
+		!validVisibilityIDs(visibility.AcademicUnitRootIDs) ||
+		!validVisibilityIDs(visibility.ClassIDs) {
 		return nil, store.NewErrInvalidInput("class", "search_options", nil)
 	}
+
 	query := s.classesQuery.
 		Prefix(`WITH RECURSIVE class_visible_units AS (
-			SELECT id FROM academic_units WHERE id = ANY(?) AND archived_at IS NULL
-			UNION ALL SELECT child.id FROM academic_units child
-			JOIN class_visible_units parent ON child.parent_id = parent.id
-			WHERE child.archived_at IS NULL
-		)`, pq.Array(idStrings(visibility.AcademicUnitRootIDs))).
+				SELECT id
+				FROM academic_units
+				WHERE id = ANY(?)
+					AND archived_at IS NULL
+				UNION ALL
+				SELECT child.id
+				FROM academic_units child
+				JOIN class_visible_units parent ON child.parent_id = parent.id
+				WHERE child.archived_at IS NULL
+			)`, pq.Array(idStrings(visibility.AcademicUnitRootIDs))).
 		Join("programme_levels ON programme_levels.id = classes.programme_level_id").
 		Join("programmes ON programmes.id = programme_levels.programme_id").
 		Where(sq.Eq{
@@ -216,12 +252,20 @@ func (s SQLClassStore) SearchVisible(ctx context.Context, options store.ClassSea
 			"programme_levels.archived_at": nil,
 			"classes.archived_at":          nil,
 		}).
-		Where(`(? OR programmes.academic_unit_id IN (SELECT id FROM class_visible_units) OR classes.id = ANY(?))`,
-			visibility.InstitutionWide, pq.Array(idStrings(visibility.ClassIDs)))
+		Where(
+			`(
+				?
+				OR programmes.academic_unit_id IN (SELECT id FROM class_visible_units)
+				OR classes.id = ANY(?)
+			)`,
+			visibility.InstitutionWide,
+			pq.Array(idStrings(visibility.ClassIDs)),
+		)
 	if term := strings.TrimSpace(options.Term); term != "" {
 		pattern := directorySearchPattern(term)
 		query = query.Where("(classes.name ILIKE ? ESCAPE '!' OR classes.display_name ILIKE ? ESCAPE '!')", pattern, pattern)
 	}
+
 	query = query.OrderBy("classes.name", "classes.id").Limit(uint64(options.Limit))
 	return s.selectClasses(ctx, query, "search visible classes")
 }
@@ -233,13 +277,13 @@ func (s SQLClassStore) GetAcademicUnitID(ctx context.Context, id model.ClassID) 
 	var academicUnitID string
 	if err := s.GetMaster().Get(ctx, &academicUnitID, `
 		SELECT programmes.academic_unit_id
-		  FROM classes
-		  JOIN programme_levels ON programme_levels.id = classes.programme_level_id
-		  JOIN programmes ON programmes.id = programme_levels.programme_id
-		 WHERE classes.id = ?
-		   AND classes.archived_at IS NULL
-		   AND programme_levels.archived_at IS NULL
-		   AND programmes.archived_at IS NULL`, id); err != nil {
+		FROM classes
+		JOIN programme_levels ON programme_levels.id = classes.programme_level_id
+		JOIN programmes ON programmes.id = programme_levels.programme_id
+		WHERE classes.id = ?
+			AND classes.archived_at IS NULL
+			AND programme_levels.archived_at IS NULL
+			AND programmes.archived_at IS NULL`, id); err != nil {
 		return "", translateError("class", id.String(), err)
 	}
 	parsed, err := parsePersistedID("class", "academic_unit_id", academicUnitID, model.ParseAcademicUnitID)
@@ -273,10 +317,15 @@ func (s SQLClassStore) selectClasses(
 // transaction. The Class must still be at ExpectedRevision and owned by
 // ExpectedAcademicUnitID; otherwise the update conflicts or is not found.
 func (s SQLClassStore) Update(ctx context.Context, input *store.ClassUpdate) (*model.Class, error) {
-	if input == nil || input.Class == nil || !input.ExpectedAcademicUnitID.IsValid() ||
-		input.ExpectedRevision <= 0 || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+	if input == nil ||
+		input.Class == nil ||
+		!input.ExpectedAcademicUnitID.IsValid() ||
+		input.ExpectedRevision <= 0 ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("class", "update", nil)
 	}
+
 	candidate := *input.Class
 	candidate.Revision = input.ExpectedRevision + 1
 	if err := candidate.Validate(); err != nil {
@@ -285,10 +334,16 @@ func (s SQLClassStore) Update(ctx context.Context, input *store.ClassUpdate) (*m
 	if err := s.validateInstitution(ctx, &candidate); err != nil {
 		return nil, err
 	}
+
 	return s.updateClass(ctx, &candidate, input.ExpectedAcademicUnitID, &academicMutationAudit{eventID: input.AuditEventID, at: input.AuditAt})
 }
 
-func (s SQLClassStore) updateClass(ctx context.Context, candidate *model.Class, expectedUnitID model.AcademicUnitID, audit *academicMutationAudit) (*model.Class, error) {
+func (s SQLClassStore) updateClass(
+	ctx context.Context,
+	candidate *model.Class,
+	expectedUnitID model.AcademicUnitID,
+	audit *academicMutationAudit,
+) (*model.Class, error) {
 	return runSQLTransaction(ctx, s.GetMaster().Begin, "class update", func(ctx context.Context, tx *sqlxTxWrapper) (*model.Class, error) {
 		if err := lockProgrammeLifecycle(ctx, tx); err != nil {
 			return nil, err
@@ -302,26 +357,42 @@ func (s SQLClassStore) updateClass(ctx context.Context, candidate *model.Class, 
 		if err := lockClassLifecycle(ctx, tx); err != nil {
 			return nil, err
 		}
+
 		if expectedUnitID != "" {
 			if err := requireExpectedClassSnapshot(ctx, tx, candidate.ID, expectedUnitID, candidate.Revision-1); err != nil {
 				return nil, err
 			}
 		}
+
 		if err := validateActiveProgrammeLevel(ctx, tx, candidate.ProgrammeLevelID.String()); err != nil {
 			return nil, err
 		}
-		if err := validateAcademicPeriodApplicable(ctx, tx, candidate.ProgrammeLevelID.String(), candidate.AcademicPeriodID.String()); err != nil {
+
+		if err := validateAcademicPeriodApplicable(
+			ctx,
+			tx,
+			candidate.ProgrammeLevelID.String(),
+			candidate.AcademicPeriodID.String(),
+		); err != nil {
 			return nil, err
 		}
-		result, err := tx.NamedExec(ctx, `UPDATE classes SET
-		updated_at = :updated_at, programme_level_id = :programme_level_id,
-		academic_period_id = :academic_period_id, revision = :revision, name = :name,
-		display_name = :display_name, description = :description
-	 WHERE id = :id AND archived_at IS NULL AND revision = :expected_revision`, map[string]any{
-			"id": candidate.ID.String(), "updated_at": candidate.UpdatedAt, "programme_level_id": candidate.ProgrammeLevelID.String(),
-			"academic_period_id": candidate.AcademicPeriodID.String(), "revision": candidate.Revision,
-			"name": candidate.Name, "display_name": candidate.DisplayName, "description": candidate.Description,
-			"expected_revision": candidate.Revision - 1,
+
+		result, err := tx.NamedExec(ctx, `UPDATE classes
+			SET updated_at = :updated_at, programme_level_id = :programme_level_id,
+				academic_period_id = :academic_period_id, revision = :revision, name = :name,
+				display_name = :display_name, description = :description
+			WHERE id = :id
+				AND archived_at IS NULL
+				AND revision = :expected_revision`, map[string]any{
+			"id":                 candidate.ID.String(),
+			"updated_at":         candidate.UpdatedAt,
+			"programme_level_id": candidate.ProgrammeLevelID.String(),
+			"academic_period_id": candidate.AcademicPeriodID.String(),
+			"revision":           candidate.Revision,
+			"name":               candidate.Name,
+			"display_name":       candidate.DisplayName,
+			"description":        candidate.Description,
+			"expected_revision":  candidate.Revision - 1,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("update class: %w", translateError("class", candidate.ID.String(), err))
@@ -332,6 +403,7 @@ func (s SQLClassStore) updateClass(ctx context.Context, candidate *model.Class, 
 		if err := audit.complete(ctx, tx, candidate.Auditable()); err != nil {
 			return nil, err
 		}
+
 		return candidate, nil
 	})
 }
@@ -339,14 +411,34 @@ func (s SQLClassStore) updateClass(ctx context.Context, candidate *model.Class, 
 // Archive archives the Class at input.ArchiveAt and completes its audit event,
 // fenced on ExpectedRevision and ExpectedAcademicUnitID.
 func (s SQLClassStore) Archive(ctx context.Context, input *store.ClassArchive) (*model.Class, error) {
-	if input == nil || !input.ID.IsValid() || !input.ExpectedAcademicUnitID.IsValid() ||
-		input.ExpectedRevision <= 0 || input.ArchiveAt.IsZero() || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+	if input == nil ||
+		!input.ID.IsValid() ||
+		!input.ExpectedAcademicUnitID.IsValid() ||
+		input.ExpectedRevision <= 0 ||
+		input.ArchiveAt.IsZero() ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("class", "archive", nil)
 	}
-	return s.archiveClass(ctx, input.ID, input.ArchiveAt, input.ExpectedRevision, input.ExpectedAcademicUnitID, &academicMutationAudit{eventID: input.AuditEventID, at: input.AuditAt})
+
+	return s.archiveClass(
+		ctx,
+		input.ID,
+		input.ArchiveAt,
+		input.ExpectedRevision,
+		input.ExpectedAcademicUnitID,
+		&academicMutationAudit{eventID: input.AuditEventID, at: input.AuditAt},
+	)
 }
 
-func (s SQLClassStore) archiveClass(ctx context.Context, id model.ClassID, archiveAt time.Time, expectedRevision int64, expectedUnitID model.AcademicUnitID, audit *academicMutationAudit) (*model.Class, error) {
+func (s SQLClassStore) archiveClass(
+	ctx context.Context,
+	id model.ClassID,
+	archiveAt time.Time,
+	expectedRevision int64,
+	expectedUnitID model.AcademicUnitID,
+	audit *academicMutationAudit,
+) (*model.Class, error) {
 	return runSQLTransaction(ctx, s.GetMaster().Begin, "class archive", func(ctx context.Context, tx *sqlxTxWrapper) (*model.Class, error) {
 		if err := lockProgrammeLifecycle(ctx, tx); err != nil {
 			return nil, err
@@ -354,11 +446,13 @@ func (s SQLClassStore) archiveClass(ctx context.Context, id model.ClassID, archi
 		if err := lockClassLifecycle(ctx, tx); err != nil {
 			return nil, err
 		}
+
 		if expectedUnitID != "" {
 			if err := requireExpectedClassSnapshot(ctx, tx, id, expectedUnitID, expectedRevision); err != nil {
 				return nil, err
 			}
 		}
+
 		var row classRow
 		query := s.classesQuery.Where(sq.Eq{"classes.id": id, "classes.archived_at": nil})
 		if err := tx.GetBuilder(ctx, &row, query); err != nil {
@@ -367,26 +461,52 @@ func (s SQLClassStore) archiveClass(ctx context.Context, id model.ClassID, archi
 		if err := requireAcademicRevision("class", expectedRevision, row.Revision); err != nil {
 			return nil, err
 		}
+
 		var dependent bool
 		if err := tx.Get(ctx, &dependent, `SELECT EXISTS (
-		SELECT 1 FROM class_members WHERE class_id = ? AND archived_at IS NULL AND end_at IS NULL
-		UNION ALL SELECT 1 FROM role_bindings WHERE scope_type = 'class' AND scope_id = ? AND archived_at IS NULL AND end_at IS NULL
-	)`, id, id); err != nil {
+				SELECT 1
+				FROM class_members
+				WHERE class_id = ?
+					AND archived_at IS NULL
+					AND end_at IS NULL
+				UNION ALL
+				SELECT 1
+				FROM role_bindings
+				WHERE scope_type = 'class'
+					AND scope_id = ?
+					AND archived_at IS NULL
+					AND end_at IS NULL
+			)`, id, id); err != nil {
 			return nil, fmt.Errorf("check class archive dependencies: %w", err)
 		}
+
 		if dependent {
 			return nil, store.NewErrConflict("class", "class_has_active_dependents", nil)
 		}
-		result, err := tx.Exec(ctx, `UPDATE classes SET updated_at = GREATEST(updated_at, ?), archived_at = GREATEST(created_at, ?), revision = revision + 1 WHERE id = ? AND archived_at IS NULL AND revision = ?`, model.TimeUTC(archiveAt), model.TimeUTC(archiveAt), id, row.Revision)
+
+		result, err := tx.Exec(
+			ctx,
+			`UPDATE classes
+			SET updated_at = GREATEST(updated_at, ?), archived_at = GREATEST(created_at, ?),
+				revision = revision + 1
+			WHERE id = ?
+				AND archived_at IS NULL
+				AND revision = ?`,
+			model.TimeUTC(archiveAt),
+			model.TimeUTC(archiveAt),
+			id,
+			row.Revision,
+		)
 		if err != nil {
 			return nil, fmt.Errorf("archive class: %w", err)
 		}
 		if err = requireClassRevisionAffected(ctx, tx, result, id.String()); err != nil {
 			return nil, err
 		}
-		if err := tx.GetBuilder(ctx, &row, s.classesQuery.Where(sq.Eq{"classes.id": id})); err != nil {
-			return nil, fmt.Errorf("read archived class: %w", err)
+		if getBuilderErr := tx.GetBuilder(ctx, &row, s.classesQuery.Where(sq.Eq{"classes.id": id})); getBuilderErr != nil {
+			return nil, fmt.Errorf("read archived class: %w", getBuilderErr)
 		}
+
 		class, err := row.model()
 		if err != nil {
 			return nil, err
@@ -394,6 +514,7 @@ func (s SQLClassStore) archiveClass(ctx context.Context, id model.ClassID, archi
 		if err := audit.complete(ctx, tx, class.Auditable()); err != nil {
 			return nil, err
 		}
+
 		return class, nil
 	})
 }
@@ -405,24 +526,31 @@ func lockClassLifecycle(ctx context.Context, tx sqlxExecutor) error {
 	return nil
 }
 
-func requireExpectedClassSnapshot(ctx context.Context, executor sqlxExecutor, id model.ClassID, expectedAcademicUnitID model.AcademicUnitID, expectedRevision int64) error {
+func requireExpectedClassSnapshot(
+	ctx context.Context,
+	executor sqlxExecutor,
+	id model.ClassID,
+	expectedAcademicUnitID model.AcademicUnitID,
+	expectedRevision int64,
+) error {
 	var snapshot struct {
 		AcademicUnitID string `db:"academic_unit_id"`
 		Revision       int64  `db:"revision"`
 	}
 	if err := executor.Get(ctx, &snapshot, `
 		SELECT academic_units.id AS academic_unit_id, classes.revision
-		  FROM classes
-		  JOIN programme_levels ON programme_levels.id = classes.programme_level_id
-		  JOIN programmes ON programmes.id = programme_levels.programme_id
-		  JOIN academic_units ON academic_units.id = programmes.academic_unit_id
-		 WHERE classes.id = ?
-		   AND classes.archived_at IS NULL
-		   AND programme_levels.archived_at IS NULL
-		   AND programmes.archived_at IS NULL
-		   AND academic_units.archived_at IS NULL`, id); err != nil {
+		FROM classes
+		JOIN programme_levels ON programme_levels.id = classes.programme_level_id
+		JOIN programmes ON programmes.id = programme_levels.programme_id
+		JOIN academic_units ON academic_units.id = programmes.academic_unit_id
+		WHERE classes.id = ?
+			AND classes.archived_at IS NULL
+			AND programme_levels.archived_at IS NULL
+			AND programmes.archived_at IS NULL
+			AND academic_units.archived_at IS NULL`, id); err != nil {
 		return translateError("class", id.String(), err)
 	}
+
 	academicUnitID, err := parsePersistedID("class", "academic_unit_id", snapshot.AcademicUnitID, model.ParseAcademicUnitID)
 	if err != nil {
 		return err
@@ -430,6 +558,7 @@ func requireExpectedClassSnapshot(ctx context.Context, executor sqlxExecutor, id
 	if academicUnitID != expectedAcademicUnitID || snapshot.Revision != expectedRevision {
 		return store.NewErrConflict("class", "class_changed", nil)
 	}
+
 	return nil
 }
 
@@ -442,7 +571,9 @@ func requireClassRevisionAffected(ctx context.Context, executor sqlxExecutor, re
 		return nil
 	}
 	var exists bool
-	if err := executor.Get(ctx, &exists, `SELECT EXISTS (SELECT 1 FROM classes WHERE id = ? AND archived_at IS NULL)`, id); err != nil {
+	if err := executor.Get(ctx, &exists, `SELECT EXISTS (
+			SELECT 1 FROM classes WHERE id = ? AND archived_at IS NULL
+		)`, id); err != nil {
 		return fmt.Errorf("check class revision conflict: %w", err)
 	}
 	if exists {
@@ -463,26 +594,39 @@ func (s SQLClassStore) validateInstitution(
 func validateAcademicPeriodApplicable(ctx context.Context, executor sqlxExecutor, levelID, periodID string) error {
 	var applicable bool
 	if err := executor.Get(ctx, &applicable, `WITH RECURSIVE lineage AS (
-		SELECT au.id, au.parent_id, au.institution_id
-		  FROM programme_levels pl
-		  JOIN programmes p ON p.id = pl.programme_id AND p.archived_at IS NULL
-		  JOIN academic_units au ON au.id = p.academic_unit_id AND au.archived_at IS NULL
-		 WHERE pl.id = ? AND pl.archived_at IS NULL
-		UNION ALL
-		SELECT parent.id, parent.parent_id, parent.institution_id
-		  FROM academic_units parent JOIN lineage child ON child.parent_id = parent.id
-		 WHERE parent.archived_at IS NULL
-	)
-	SELECT EXISTS (
-		SELECT 1 FROM academic_periods ap
-		 WHERE ap.id = ? AND ap.archived_at IS NULL
-		   AND (
-			(ap.owner_type = 'institution' AND ap.institution_id = (SELECT institution_id FROM lineage LIMIT 1))
-			OR (ap.owner_type = 'academic_unit' AND ap.academic_unit_id IN (SELECT id FROM lineage))
-		   )
-	)`, levelID, periodID); err != nil {
+			SELECT au.id, au.parent_id, au.institution_id
+			FROM programme_levels pl
+			JOIN programmes p ON p.id = pl.programme_id
+				AND p.archived_at IS NULL
+			JOIN academic_units au ON au.id = p.academic_unit_id
+				AND au.archived_at IS NULL
+			WHERE pl.id = ?
+				AND pl.archived_at IS NULL
+			UNION ALL
+			SELECT parent.id, parent.parent_id, parent.institution_id
+			FROM academic_units parent
+			JOIN lineage child ON child.parent_id = parent.id
+			WHERE parent.archived_at IS NULL
+		)
+		SELECT EXISTS (
+			SELECT 1
+			FROM academic_periods ap
+			WHERE ap.id = ?
+				AND ap.archived_at IS NULL
+				AND (
+					(
+						ap.owner_type = 'institution'
+						AND ap.institution_id = (SELECT institution_id FROM lineage LIMIT 1)
+					)
+					OR (
+						ap.owner_type = 'academic_unit'
+						AND ap.academic_unit_id IN (SELECT id FROM lineage)
+					)
+				)
+		)`, levelID, periodID); err != nil {
 		return fmt.Errorf("validate class academic period applicability: %w", err)
 	}
+
 	if !applicable {
 		var levelExists, periodExists bool
 		if err := executor.Get(ctx, &levelExists, "SELECT EXISTS (SELECT 1 FROM programme_levels WHERE id = ?)", levelID); err != nil {
@@ -497,8 +641,10 @@ func validateAcademicPeriodApplicable(ctx context.Context, executor sqlxExecutor
 		if !periodExists {
 			return store.NewErrReference("class", "classes_academic_period_id_fkey", nil)
 		}
+
 		return store.NewErrReference("class", "classes_academic_period_not_applicable", nil)
 	}
+
 	return nil
 }
 

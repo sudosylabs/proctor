@@ -1,0 +1,180 @@
+// ---------------------------------------------------------------------------------------------
+// Copyright (c) 2026 Sudosy Labs. All rights reserved.
+// Licensed under the GNU Affero General Public License, version 3 only.
+// See LICENSE in the server module root for license information.
+// SPDX-License-Identifier: AGPL-3.0-only
+// ---------------------------------------------------------------------------------------------
+
+package administration
+
+import (
+	"context"
+	"errors"
+	"strconv"
+
+	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/idempotency"
+	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
+)
+
+// ReplaceRetentionPolicyCommand completely replaces the
+// Institution policy behind optimistic revision and idempotency fences.
+type ReplaceRetentionPolicyCommand struct {
+	ExpectedRevision int64
+	Settings         model.RetentionPolicySettings
+	IdempotencyKey   string
+}
+
+// GetRetentionPolicy returns the current administrative policy.
+func (s *Service) GetRetentionPolicy(
+	ctx context.Context,
+	inv invocation.Invocation,
+) (*model.RetentionPolicy, error) {
+	institution, _, err := s.authorizeRetentionPolicy(ctx, inv, model.ActionRetentionPolicyView)
+	if err != nil {
+		return nil, err
+	}
+	policy, err := s.retentionPolicies.Get(ctx)
+	if err != nil || policy == nil || policy.Validate() != nil || policy.InstitutionID != institution.ID {
+		return nil, retentionPolicyError(err)
+	}
+	return policy.Clone(), nil
+}
+
+// ReplaceRetentionPolicy replaces the current policy.
+func (s *Service) ReplaceRetentionPolicy(
+	ctx context.Context,
+	inv invocation.Invocation,
+	command ReplaceRetentionPolicyCommand,
+) (*model.RetentionPolicy, error) {
+	if err := access.RequireStrongRecentSession(
+		inv.Principal(),
+		s.now(),
+		s.recentAuthenticationTTL,
+	); err != nil {
+		return nil, err
+	}
+
+	institution, resource, err := s.authorizeRetentionPolicy(
+		ctx,
+		inv,
+		model.ActionRetentionPolicyManage,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if command.ExpectedRevision < 1 || command.Settings.Validate() != nil {
+		return nil, apperror.New("retention_policy.invalid")
+	}
+	if command.IdempotencyKey == "" {
+		return nil, apperror.New("idempotency.key_required")
+	}
+
+	idempotency, err := idempotency.Prepare(
+		inv,
+		"retention_policy.replace",
+		command.IdempotencyKey,
+		struct {
+			InstitutionID    model.InstitutionID           `json:"institution_id"`
+			ExpectedRevision int64                         `json:"expected_revision"`
+			Settings         model.RetentionPolicySettings `json:"settings"`
+		}{
+			InstitutionID:    institution.ID,
+			ExpectedRevision: command.ExpectedRevision,
+			Settings:         command.Settings,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	stored, err := access.RunAudited(
+		ctx,
+		s.auditor,
+		access.Mutation{
+			Invocation: inv,
+			Action:     model.ActionRetentionPolicyManage,
+			Resource:   resource,
+			ScopeType:  model.RoleScopeInstitution,
+			ScopeID:    institution.ID.String(),
+			Operation:  "replace",
+			Value: map[string]any{
+				"expected_revision":                   command.ExpectedRevision,
+				"submission_retention_days":           command.Settings.SubmissionRetentionDays,
+				"integrity_retention_days":            command.Settings.IntegrityRetentionDays,
+				"browser_activity_retention_days":     command.Settings.BrowserActivityRetentionDays,
+				"security_operational_retention_days": command.Settings.SecurityOperationalRetentionDays,
+				"audit_retention_days":                command.Settings.AuditRetentionDays,
+				"export_retention_days":               command.Settings.ExportRetentionDays,
+				"deletion_grace_days":                 command.Settings.DeletionGraceDays,
+				"candidate_notices":                   command.Settings.CandidateNotices,
+			},
+			At: s.now(),
+		},
+		func(
+			ctx context.Context,
+			reference access.MutationReference,
+		) (*store.RetentionPolicyReplacementResult, error) {
+			return s.retentionPolicies.Replace(
+				ctx,
+				&store.RetentionPolicyReplacement{
+					RetentionMutation: store.RetentionMutation{
+						Principal:               inv.Principal(),
+						RecentAuthenticationTTL: s.recentAuthenticationTTL,
+						AuditEventID:            reference.ID,
+						AuditAt:                 reference.MutationAt,
+					},
+					ExpectedRevision: command.ExpectedRevision,
+					Settings:         command.Settings,
+				},
+				idempotency,
+			)
+		},
+		retentionPolicyError,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if stored == nil || stored.Policy == nil || stored.Policy.Validate() != nil || stored.Policy.InstitutionID != institution.ID {
+		return nil, apperror.New("retention_policy.unavailable")
+	}
+
+	return stored.Policy.Clone(), nil
+}
+
+// authorizeRetentionPolicy authorizes a retention Action on the singleton
+// Institution.
+func (s *Service) authorizeRetentionPolicy(
+	ctx context.Context,
+	inv invocation.Invocation,
+	action model.Action,
+) (*model.Institution, model.Resource, error) {
+	institution, err := s.institutions.GetSingleton(ctx)
+	if err != nil || institution == nil || !institution.ID.IsValid() {
+		return nil, model.Resource{}, retentionPolicyError(err)
+	}
+	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
+	if err := s.authorizer.Authorize(ctx, inv, action, resource); err != nil {
+		return nil, model.Resource{}, err
+	}
+	return institution, resource, nil
+}
+
+func retentionPolicyError(err error) error {
+	var revision *store.ErrRetentionPolicyRevisionConflict
+	if errors.As(err, &revision) {
+		return apperror.New("retention_policy.revision_conflict").WithField(
+			"current_revision",
+			strconv.FormatInt(revision.CurrentRevision, 10),
+		).Wrap(err)
+	}
+	return retentionPolicyStoreErrors.Translate(err)
+}
+
+var retentionPolicyStoreErrors = apperror.StoreTable{
+	Rules:       []apperror.StoreRule{{Kind: apperror.StoreConflict, Entity: "authorization", Code: "authorization.denied"}},
+	Unavailable: "retention_policy.unavailable",
+}

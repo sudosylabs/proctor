@@ -19,16 +19,18 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type institutionHTTPApplication struct {
 	principal model.Principal
 	result    *model.Institution
-	command   app.UpdateInstitutionCommand
+	command   academic.UpdateInstitutionCommand
 }
 
 func (a *institutionHTTPApplication) AuthenticateAccess(
@@ -47,10 +49,9 @@ func (a *institutionHTTPApplication) AuthenticateBearer(
 
 func (a *institutionHTTPApplication) GetInstitution(
 	_ context.Context,
-	invocation invocation.Invocation,
-	_ app.GetInstitutionQuery,
+	inv invocation.Invocation,
 ) (*model.Institution, error) {
-	if invocation.Principal().UserID != a.principal.UserID {
+	if inv.Principal().UserID != a.principal.UserID {
 		return nil, apperror.New("request.invalid")
 	}
 	return a.result, nil
@@ -58,10 +59,10 @@ func (a *institutionHTTPApplication) GetInstitution(
 
 func (a *institutionHTTPApplication) UpdateInstitution(
 	_ context.Context,
-	invocation invocation.Invocation,
-	command app.UpdateInstitutionCommand,
+	inv invocation.Invocation,
+	command academic.UpdateInstitutionCommand,
 ) (*model.Institution, error) {
-	if invocation.Principal().UserID != a.principal.UserID {
+	if inv.Principal().UserID != a.principal.UserID {
 		return nil, apperror.New("request.invalid")
 	}
 	a.command = command
@@ -71,7 +72,7 @@ func (a *institutionHTTPApplication) UpdateInstitution(
 func TestInstitutionHTTPMapsDTOsWithoutPermissionPreflight(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	institution := &model.Institution{
 		ID: model.InstitutionID(model.NewID()), CreatedAt: model.TimeFromMillis(10), UpdatedAt: model.TimeFromMillis(20),
 		Name: "northbridge", DisplayName: "Northbridge University",
@@ -88,7 +89,7 @@ func TestInstitutionHTTPMapsDTOsWithoutPermissionPreflight(t *testing.T) {
 	}
 	httpAPI := newFocusedResourceAPI(t, logger, fakeApplication, institutionResource(fakeApplication))
 
-	getRequest := httptest.NewRequest(http.MethodGet, "/api/v1/institution", nil)
+	getRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/institution", nil)
 	getRequest.Header.Set("Authorization", "Bearer test-credential")
 	getResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(getResponse, getRequest)
@@ -99,7 +100,7 @@ func TestInstitutionHTTPMapsDTOsWithoutPermissionPreflight(t *testing.T) {
 	require.Equal(t, institution.Name, got.Name)
 	require.Equal(t, examCapacityPolicyResponseFromModel(model.DefaultExamCapacityPolicy()), got.ExamCapacity)
 
-	patchRequest := httptest.NewRequest(
+	patchRequest := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPatch, "/api/v1/institution",
 		strings.NewReader(`{"display_name":"Northbridge","exam_capacity":{"resource_maximum_count":25,"resource_maximum_bytes":20971520,"workspace_maximum_entries":750,"workspace_maximum_file_bytes":20971520,"workspace_maximum_total_bytes":104857600}}`),
 	)
@@ -119,7 +120,7 @@ func TestInstitutionHTTPMapsDTOsWithoutPermissionPreflight(t *testing.T) {
 func TestInstitutionResourceRejectsUnknownPatchFields(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	fakeApplication := &institutionHTTPApplication{
 		principal: model.Principal{
 			UserID: model.NewUserID(), SessionID: model.NewSessionID(),
@@ -134,7 +135,7 @@ func TestInstitutionResourceRejectsUnknownPatchFields(t *testing.T) {
 	httpAPI := newFocusedResourceAPI(
 		t, logger, fakeApplication, institutionResource(fakeApplication),
 	)
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPatch, "/api/v1/institution",
 		strings.NewReader(`{"display_name":"Northbridge","unknown":true}`),
 	)
@@ -143,7 +144,7 @@ func TestInstitutionResourceRejectsUnknownPatchFields(t *testing.T) {
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusBadRequest, response.Code, "status = %d: %s", response.Code, response.Body.String())
-	var problem Problem
+	var problem route.Problem
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
 	require.Equal(t, "request.invalid", problem.Code, "problem code")
 }

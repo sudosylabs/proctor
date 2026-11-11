@@ -21,37 +21,42 @@ import (
 
 // nonUseCaseSurface names the exported App methods that are not use cases,
 // with the reason each takes no Invocation. Every other exported method is a
-// use case.
+// use case. A key is the App field that holds the service, then the method
+// ("Realtime.Publish"), or "App" for a method of App itself, so an exemption
+// covers one method of one service and not every method of that name.
 var nonUseCaseSurface = map[string]string{
-	"Jobs":                           "runtime handle that composition borrows",
-	"AttachRealtimeSink":             "composition attaches the WebSocket sink once before readiness",
-	"AttachRealtimeClusterFanout":    "composition attaches the cluster fan-out once before readiness",
-	"AuthenticateAccess":             principalResolution,
-	"AuthenticateBearer":             principalResolution,
-	"AuthenticateDPoP":               principalResolution,
-	"ValidateWebSocketPrincipal":     "WebSocket admission revalidates the Principal a connection was opened with before it builds any Invocation",
-	"AuthenticationCacheInvalidated": realtimePropagation,
-	"SessionsRevoked":                realtimePropagation,
-	"InvalidateAuthorization":        realtimePropagation,
-	"InvalidateCurrentUserContext":   realtimePropagation,
-	"PublishRealtimeEvent":           realtimePropagation,
-	"UnbindExamAttemptConnection":    realtimePropagation,
-	"ResolveAttemptDesktopBuild":     attemptPort,
-	"ResolveNativeDeliveryBuild":     attemptPort,
-	"CreateLocalUser":                "unauthorized provisioning seam that only integration tests reach; production creates Users through bootstrap, registration and Invitations",
+	"App.JobEngine":                                "runtime handle that composition borrows",
+	"Realtime.AttachSink":                          "composition attaches the WebSocket sink once before readiness",
+	"Realtime.AttachClusterFanout":                 "composition attaches the cluster fan-out once before readiness",
+	"Identity.AuthenticateAccess":                  principalResolution,
+	"Identity.AuthenticateBearer":                  principalResolution,
+	"Identity.AuthenticateDPoP":                    principalResolution,
+	"RealtimeAdmission.ValidateWebSocketPrincipal": "WebSocket admission revalidates the Principal a connection was opened with before it builds any Invocation",
+	"Identity.ValidatePrincipal":                   "WebSocket admission and onboarding import revalidate a Principal established earlier before they build an Invocation from it",
+	"Realtime.AuthenticationCacheInvalidated":      realtimePropagation,
+	"Realtime.SessionsRevoked":                     realtimePropagation,
+	"Realtime.InvalidateAuthorization":             realtimePropagation,
+	"Realtime.InvalidateCurrentUserContext":        realtimePropagation,
+	"Realtime.Publish":                             realtimePropagation,
+	"Realtime.UnbindExamAttemptConnection":         realtimePropagation,
+	"Realtime.Report":                              "realtime.Publisher's record of a post-commit effect that failed; the area use case that owns the Invocation calls it and still succeeds",
+	"Identity.ResolveAttemptDesktopBuild":          attemptPort,
+	"Identity.ResolveNativeDeliveryBuild":          attemptPort,
+	"Identity.CreateLocalUser":                     "unauthorized provisioning seam that only integration tests reach; production creates Users through bootstrap, registration and Invitations",
 }
 
 const (
 	principalResolution = "credential resolution establishes the Principal that an Invocation then carries"
-	realtimePropagation = "post-commit realtime propagation port that the realtime child and cluster peers call after the use case that owns the Invocation"
+	realtimePropagation = "post-commit realtime.Publisher method that an area use case, the realtime child or a cluster peer calls after the use case that owns the Invocation"
 	attemptPort         = "port of the Attempt child that the parent implements; it runs inside an Attempt use case that already holds the Invocation"
 )
 
 // TestUseCasesTakeAnInvocationFirst keeps one call shape for every use case:
 // each exported method of the application surface (the method set of
-// *app.App, promoted from its embedded services) takes (context.Context,
-// invocation.Invocation, ...) or, for actorless Job, periodic, startup and
-// host-operator work, (context.Context, invocation.System, ...).
+// *app.App and of each named service field such as App.Academic) takes
+// (context.Context, invocation.Invocation, ...) or, for actorless Job,
+// periodic, startup and host-operator work, (context.Context,
+// invocation.System, ...).
 func TestUseCasesTakeAnInvocationFirst(t *testing.T) {
 	t.Parallel()
 	for _, violation := range useCaseInvocationViolations(typedServerPackages(t), serverModule, nonUseCaseSurface) {
@@ -85,13 +90,27 @@ func (*service) Attach(string) error { return nil }
 
 func (*service) helper(context.Context) {}
 
-type App struct{ *service }
+type area struct{}
+
+func (*area) CreateThing(context.Context, invocation.Invocation, string) error { return nil }
+
+func (*area) ArchiveThing(context.Context, string) error { return nil }
+
+func (*area) Attach(string) error { return nil }
+
+type App struct {
+	*service
+	Area *area
+}
 `,
 	})
 	require.Equal(t, []string{
+		"fixture/app.App.Area.ArchiveThing takes (context.Context, string); a use case takes (context.Context, invocation.Invocation or invocation.System, ...)",
+		// App.Attach is exempt; a method of the same name on another service is not.
+		"fixture/app.App.Area.Attach takes (string); a use case takes (context.Context, invocation.Invocation or invocation.System, ...)",
 		"fixture/app.App.CountThings takes (invocation.Invocation); a use case takes (context.Context, invocation.Invocation or invocation.System, ...)",
 		"fixture/app.App.ListThings takes (context.Context, string); a use case takes (context.Context, invocation.Invocation or invocation.System, ...)",
-	}, useCaseInvocationViolations(loaded, "fixture", map[string]string{"Attach": "composition hook"}))
+	}, useCaseInvocationViolations(loaded, "fixture", map[string]string{"App.Attach": "composition hook"}))
 }
 
 func useCaseInvocationViolations(loaded []*packages.Package, module string, exempt map[string]string) []string {
@@ -104,28 +123,43 @@ func useCaseInvocationViolations(loaded []*packages.Package, module string, exem
 		if !ok {
 			continue
 		}
-		methods := types.NewMethodSet(types.NewPointer(application.Type()))
-		for index := range methods.Len() {
-			method := methods.At(index).Obj()
-			if !method.Exported() {
-				continue
+		violations = append(violations, surfaceInvocationViolations(pkg.PkgPath+".App", types.NewPointer(application.Type()), module, exempt)...)
+		// A named area field (app.Academic) is surface too: its service's
+		// exported methods are the area's use cases.
+		if structure, ok := application.Type().Underlying().(*types.Struct); ok {
+			for field := range structure.Fields() {
+				if field.Exported() && !field.Embedded() {
+					violations = append(violations, surfaceInvocationViolations(pkg.PkgPath+".App."+field.Name(), field.Type(), module, exempt)...)
+				}
 			}
-			if _, ok := exempt[method.Name()]; ok {
-				continue
-			}
-			signature := method.Type().(*types.Signature)
-			if takesInvocationFirst(signature, module) {
-				continue
-			}
-			parameters := make([]string, 0, signature.Params().Len())
-			for parameter := range signature.Params().Variables() {
-				parameters = append(parameters, types.TypeString(parameter.Type(), func(p *types.Package) string { return p.Name() }))
-			}
-			violations = append(violations, fmt.Sprintf("%s.App.%s takes (%s); a use case takes (context.Context, invocation.Invocation or invocation.System, ...)",
-				pkg.PkgPath, method.Name(), strings.Join(parameters, ", ")))
 		}
 	}
 	sort.Strings(violations)
+	return violations
+}
+
+func surfaceInvocationViolations(owner string, surface types.Type, module string, exempt map[string]string) []string {
+	var violations []string
+	methods := types.NewMethodSet(surface)
+	for index := range methods.Len() {
+		method := methods.At(index).Obj()
+		if !method.Exported() {
+			continue
+		}
+		if _, ok := exempt[owner[strings.LastIndex(owner, ".")+1:]+"."+method.Name()]; ok {
+			continue
+		}
+		signature := method.Type().(*types.Signature)
+		if takesInvocationFirst(signature, module) {
+			continue
+		}
+		parameters := make([]string, 0, signature.Params().Len())
+		for parameter := range signature.Params().Variables() {
+			parameters = append(parameters, types.TypeString(parameter.Type(), func(p *types.Package) string { return p.Name() }))
+		}
+		violations = append(violations, fmt.Sprintf("%s.%s takes (%s); a use case takes (context.Context, invocation.Invocation or invocation.System, ...)",
+			owner, method.Name(), strings.Join(parameters, ", ")))
+	}
 	return violations
 }
 

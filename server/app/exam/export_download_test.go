@@ -15,6 +15,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"io"
+
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -30,9 +32,9 @@ func TestExamExportDownloadRechecksAuthorityAfterStorageOpen(t *testing.T) {
 			base.readAt = func() time.Time { return databaseNow }
 			// PostgreSQL decides expiry even when the serving node's wall clock
 			// lags behind it. No response body has reached the caller during Open.
-			service.deps.Now = func() time.Time { return databaseNow.Add(-10 * time.Second) }
+			service.now = func() time.Time { return databaseNow.Add(-10 * time.Second) }
 			if scenario == "node clock ahead" {
-				service.deps.Now = func() time.Time { return databaseNow.Add(10 * time.Second) }
+				service.now = func() time.Time { return databaseNow.Add(10 * time.Second) }
 			}
 			body := &exportClosingBody{}
 			content.body = body
@@ -48,7 +50,7 @@ func TestExamExportDownloadRechecksAuthorityAfterStorageOpen(t *testing.T) {
 					base.artifactID = model.NewJobAttemptID()
 				}
 			}
-			download, err := service.OpenExamExport(context.Background(), f.invocation, ExportQuery{Scope: base.value.Scope, ExportID: base.value.ID})
+			download, err := service.OpenExamExport(context.Background(), f.inv, ExportQuery{Scope: base.value.Scope, ExportID: base.value.ID})
 			if scenario == "unchanged archive" || scenario == "node clock ahead" {
 				require.NoError(t, err, "current archive was not available")
 				require.NotNil(t, download, "current archive was not available")
@@ -68,4 +70,46 @@ func TestExamExportDownloadRechecksAuthorityAfterStorageOpen(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestExamExportDownloadRechecksOrdinaryPermissionAndExpiry(t *testing.T) {
+	f, service, s, auth, content := newExportFixture(t)
+	s.value.State = model.ExamExportReady
+	s.value.ArchiveSizeBytes = 42
+	s.value.ArchiveSHA256 = strings.Repeat("a", 64)
+	s.value.ReadyAt = model.OptionalTimeFrom(s.value.CreatedAt)
+	query := ExportQuery{Scope: s.value.Scope, ExportID: s.value.ID}
+	auth.deny = model.ActionSubmissionViewOverride
+	_, err := service.OpenExamExport(context.Background(), f.inv, query)
+	require.Error(t, err, "download bypassed ordinary read authority")
+	require.Equal(t, 0, content.opens, "download bypassed ordinary read authority")
+	auth.deny = ""
+	s.value.CreatedAt = s.value.CreatedAt.Add(-48 * time.Hour)
+	s.value.ExpiresAt = s.value.ExpiresAt.Add(-48 * time.Hour)
+	s.value.SourceExpiresAt = s.value.SourceExpiresAt.Add(-48 * time.Hour)
+	s.value.ReadyAt = model.OptionalTimeFrom(s.value.CreatedAt)
+	_, err = service.OpenExamExport(context.Background(), f.inv, query)
+	require.Error(t, err, "expired download reached content")
+	require.Equal(t, 0, content.opens, "expired download reached content")
+}
+
+type exportClosingBody struct{ closed bool }
+
+func (*exportClosingBody) Read([]byte) (int, error) { return 0, io.EOF }
+
+func (b *exportClosingBody) Close() error { b.closed = true; return nil }
+
+func TestExamExportDownloadExpiresDuringStorageOpen(t *testing.T) {
+	f, service, s, _, content := newExportFixture(t)
+	s.value.State, s.value.ArchiveSizeBytes, s.value.ArchiveSHA256, s.value.ReadyAt = model.ExamExportReady, 42, strings.Repeat("a", 64), model.OptionalTimeFrom(s.value.CreatedAt)
+	now := s.value.CreatedAt
+	s.readAt = func() time.Time { return now }
+	body := &exportClosingBody{}
+	content.body = body
+	content.opened = func() { now = s.value.ExpiresAt }
+	_, err := service.OpenExamExport(context.Background(), f.inv, ExportQuery{Scope: s.value.Scope, ExportID: s.value.ID})
+	var fault *apperror.Error
+	require.ErrorAs(t, err, &fault, "late storage Open escaped expiry")
+	require.Equal(t, "exam.export.expired", fault.Code(), "late storage Open escaped expiry")
+	require.True(t, body.closed, "late storage Open escaped expiry")
 }

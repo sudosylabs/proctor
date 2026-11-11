@@ -23,9 +23,14 @@ type OperationalEvent struct {
 	outcome   string
 }
 
+// Subsystem names the application area that emitted the event.
 func (e OperationalEvent) Subsystem() string { return e.subsystem }
-func (e OperationalEvent) Event() string     { return e.event }
-func (e OperationalEvent) Outcome() string   { return e.outcome }
+
+// Event names what happened within the subsystem.
+func (e OperationalEvent) Event() string { return e.event }
+
+// Outcome is a bounded classification of the result, never error text.
+func (e OperationalEvent) Outcome() string { return e.outcome }
 
 // OperationalRecorder is the single application observability seam. The
 // interface stays small while named events give operations product-level

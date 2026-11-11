@@ -11,8 +11,7 @@ import (
 	"context"
 
 	"github.com/sudosylabs/proctor/server/app/job"
-	"github.com/sudosylabs/proctor/server/httpapi"
-	"github.com/sudosylabs/proctor/server/logging"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store/timerlayer"
 	"github.com/sudosylabs/proctor/server/tracing"
@@ -21,9 +20,9 @@ import (
 // httpTracing adapts the tracing module to the HTTP transport's port.
 type httpTracing struct{ tracing *tracing.Module }
 
-var _ httpapi.Tracing = httpTracing{}
+var _ route.Tracing = httpTracing{}
 
-func (t httpTracing) StartRequest(ctx context.Context, request httpapi.TracedRequest) (context.Context, httpapi.RequestSpan) {
+func (t httpTracing) StartRequest(ctx context.Context, request route.TracedRequest) (context.Context, route.RequestSpan) {
 	return t.tracing.StartHTTPRequest(ctx, request.Header, request.Method, request.ContinueParent, request.RequestID)
 }
 
@@ -45,21 +44,9 @@ var _ job.Tracer = jobTracing{}
 func (t jobTracing) StartExecution(ctx context.Context, jobType model.JobType) (context.Context, func(job.ExecutionOutcome)) {
 	ctx, finish := t.tracing.StartJobExecution(ctx, string(jobType))
 	return ctx, func(outcome job.ExecutionOutcome) {
-		finish(string(outcome), outcome != job.ExecutionSucceeded && outcome != job.ExecutionCanceled &&
-			outcome != job.ExecutionRelinquished && outcome != job.ExecutionShutdown)
+		finish(string(outcome), outcome != job.ExecutionSucceeded &&
+			outcome != job.ExecutionCanceled &&
+			outcome != job.ExecutionRelinquished &&
+			outcome != job.ExecutionShutdown)
 	}
-}
-
-// logCorrelationFields adds the request ID and the current trace and span IDs
-// to every context-carrying log record. They are server-assigned or
-// trusted-proxy correlation identifiers, never request content.
-func logCorrelationFields(ctx context.Context) []logging.Field {
-	var fields []logging.Field
-	if requestID := httpapi.RequestID(ctx); requestID != "" {
-		fields = append(fields, logging.String("request_id", requestID))
-	}
-	if traceID, spanID, ok := tracing.Correlation(ctx); ok {
-		fields = append(fields, logging.String("trace_id", traceID), logging.String("span_id", spanID))
-	}
-	return fields
 }

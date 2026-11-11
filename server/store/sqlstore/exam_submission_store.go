@@ -75,32 +75,49 @@ type examSubmissionSealAccessRow struct {
 }
 
 func validExamSubmissionSealAccess(access store.ExamSubmissionSealAccess) bool {
-	return access.AttemptID.IsValid() && access.ParticipationID.IsValid() && access.Generation > 0 &&
-		access.ConnectionID.IsValid() && access.CandidateUserID.IsValid() && access.SessionID.IsValid() &&
-		model.IsValidTokenHash(access.ContinuityCredentialHash) && access.ExpectedWorkspaceCursor >= 0 &&
-		access.ExpectedCurrentRevisionID.IsValid() && access.FinalFocusLossSequence >= 0
+	return access.AttemptID.IsValid() &&
+		access.ParticipationID.IsValid() &&
+		access.Generation > 0 &&
+		access.ConnectionID.IsValid() &&
+		access.CandidateUserID.IsValid() &&
+		access.SessionID.IsValid() &&
+		model.IsValidTokenHash(access.ContinuityCredentialHash) &&
+		access.ExpectedWorkspaceCursor >= 0 &&
+		access.ExpectedCurrentRevisionID.IsValid() &&
+		access.FinalFocusLossSequence >= 0
 }
 
-func (s *SQLExamSubmissionStore) ResolveSealTarget(ctx context.Context, access store.ExamSubmissionSealAccess) (*store.ExamSubmissionSealTarget, error) {
+func (s *SQLExamSubmissionStore) ResolveSealTarget(
+	ctx context.Context,
+	access store.ExamSubmissionSealAccess,
+) (*store.ExamSubmissionSealTarget, error) {
 	if !validExamSubmissionSealAccess(access) {
 		return nil, store.NewErrInvalidInput("exam_submission", "seal_access", nil)
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "resolve Exam Submission seal target", func(ctx context.Context, tx *sqlxTxWrapper) (*store.ExamSubmissionSealTarget, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "resolve Exam Submission seal target", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.ExamSubmissionSealTarget, error) {
 		row, _, databaseNow, err := lockExamSubmissionSealAccess(ctx, tx, access, true)
 		if err != nil {
 			return nil, err
 		}
+
 		target, targetErr := examSubmissionSealTarget(row)
 		if targetErr != nil {
 			return nil, targetErr
 		}
+
 		target.Replayed = row.AttemptState == string(model.ExamAttemptSubmitted)
 		target.SealAt = model.TimeFromMillis(model.MillisFromTime(databaseNow))
 		return target, nil
 	})
 }
 
-func lockExamSubmissionSealAccess(ctx context.Context, tx *sqlxTxWrapper, access store.ExamSubmissionSealAccess,
+func lockExamSubmissionSealAccess(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	access store.ExamSubmissionSealAccess,
 	allowCommittedCausal bool,
 ) (examSubmissionSealAccessRow, examSubmissionIntegrityTail, time.Time, error) {
 	var zero examSubmissionSealAccessRow
@@ -110,36 +127,48 @@ func lockExamSubmissionSealAccess(ctx context.Context, tx *sqlxTxWrapper, access
 	if err := lockExamSubmissionEnrollmentFence(ctx, tx, access); err != nil {
 		return zero, examSubmissionIntegrityTail{}, time.Time{}, err
 	}
+
 	row, err := lockExamSubmissionCausalAccessRow(ctx, tx, access)
 	if err != nil {
 		return zero, examSubmissionIntegrityTail{}, time.Time{}, err
 	}
+
 	var memberships []examSubmissionMembershipRow
-	if err = tx.Select(ctx, &memberships, `SELECT start_at,end_at,archived_at FROM class_members
-		WHERE class_id=? AND user_id=? ORDER BY start_at,id FOR SHARE`, row.ClassID, access.CandidateUserID.String()); err != nil {
+	if err = tx.Select(ctx, &memberships, `SELECT start_at, end_at, archived_at
+		FROM class_members
+		WHERE class_id = ?
+			AND user_id = ?
+		ORDER BY start_at, id
+		FOR SHARE`, row.ClassID, access.CandidateUserID.String()); err != nil {
 		return zero, examSubmissionIntegrityTail{}, time.Time{}, fmt.Errorf("lock Exam Submission membership history: %w", err)
 	}
+
 	integrityTail, err := lockExamSubmissionIntegrityTail(ctx, tx, access)
 	if err != nil {
 		return zero, examSubmissionIntegrityTail{}, time.Time{}, err
 	}
+
 	var databaseNow time.Time
 	if err = tx.Get(ctx, &databaseNow, `SELECT statement_timestamp()`); err != nil {
 		return zero, examSubmissionIntegrityTail{}, time.Time{}, fmt.Errorf("read Exam Submission decision time: %w", err)
 	}
+
 	databaseNow = model.TimeUTC(databaseNow)
 	if err = verifyExamSubmissionCandidateAccess(row, memberships, access, databaseNow); err != nil {
 		return zero, examSubmissionIntegrityTail{}, time.Time{}, err
 	}
+
 	if allowCommittedCausal && row.AttemptState == string(model.ExamAttemptSubmitted) {
 		if err = verifyCommittedExamSubmissionCausal(ctx, tx, row, access); err != nil {
 			return zero, examSubmissionIntegrityTail{}, time.Time{}, err
 		}
 		return row, integrityTail, databaseNow, nil
 	}
+
 	if err = verifyActiveExamSubmissionSealAccess(ctx, tx, row, access, databaseNow); err != nil {
 		return zero, examSubmissionIntegrityTail{}, time.Time{}, err
 	}
+
 	return row, integrityTail, databaseNow, nil
 }
 
@@ -147,62 +176,99 @@ func lockExamSubmissionSealAccess(ctx context.Context, tx *sqlxTxWrapper, access
 // takes the candidate and Class enrollment locks before the causal row lock.
 func lockExamSubmissionEnrollmentFence(ctx context.Context, tx *sqlxTxWrapper, access store.ExamSubmissionSealAccess) error {
 	var periodID string
-	if err := tx.Get(ctx, &periodID, `SELECT cl.academic_period_id FROM exam_attempts a
-		JOIN exam_sittings s ON s.id=a.exam_sitting_id AND s.exam_id=a.exam_id
-		JOIN classes cl ON cl.id=s.class_id WHERE a.id=? AND a.candidate_user_id=?`,
-		access.AttemptID.String(), access.CandidateUserID.String()); err != nil {
+	if err := tx.Get(
+		ctx,
+		&periodID,
+		`SELECT cl.academic_period_id
+		FROM exam_attempts a
+		JOIN exam_sittings s ON s.id = a.exam_sitting_id AND s.exam_id = a.exam_id
+		JOIN classes cl ON cl.id = s.class_id
+		WHERE a.id = ?
+			AND a.candidate_user_id = ?`,
+		access.AttemptID.String(),
+		access.CandidateUserID.String(),
+	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return store.NewErrNotFound("exam_submission_access", access.AttemptID.String())
 		}
 		return fmt.Errorf("resolve Exam Submission enrollment fence: %w", err)
 	}
+
 	if err := lockCandidateUser(ctx, tx, access.CandidateUserID.String()); err != nil {
 		return err
 	}
+
 	return lockClassEnrollment(ctx, tx, access.CandidateUserID.String(), periodID)
 }
 
 // lockExamSubmissionCausalAccessRow locks the Attempt, Participation,
 // Connection and Workspace with their causal context and rejects retired work.
-func lockExamSubmissionCausalAccessRow(ctx context.Context, tx *sqlxTxWrapper, access store.ExamSubmissionSealAccess) (examSubmissionSealAccessRow, error) {
+func lockExamSubmissionCausalAccessRow(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	access store.ExamSubmissionSealAccess,
+) (examSubmissionSealAccessRow, error) {
 	var row examSubmissionSealAccessRow
-	err := tx.Get(ctx, &row, `SELECT a.exam_id,a.exam_sitting_id,s.class_id,cl.academic_period_id,a.candidate_user_id,
-		a.admission_revision_id,COALESCE(retained.exam_revision_id,s.exam_revision_id) AS current_revision_id,
-		a.state AS attempt_state,a.created_at AS attempt_created_at,
-		a.updated_at AS attempt_updated_at,a.submitted_at AS attempt_submitted_at,a.revision AS attempt_revision,retained.work_retired_at,
-		s.state AS sitting_state,s.scheduled_end_at,w.id AS workspace_id,w.cursor AS workspace_cursor,
-		p.state AS participation_state,p.generation AS participation_generation,p.renewal_sequence,
-		p.continuity_credential_hash,p.started_at AS participation_started_at,p.updated_at AS participation_updated_at,
-		p.lease_expires_at,p.ended_at AS participation_ended_at,p.end_reason AS participation_end_reason,
-		c.state AS connection_state,c.opened_at AS connection_opened_at,c.closed_at AS connection_closed_at,
-		c.close_reason AS connection_close_reason,se.archived_at AS session_archived_at,se.revoked_at AS session_revoked_at,
-		se.idle_expires_at AS session_idle_expires_at,se.expires_at AS session_expires_at,
-		u.archived_at AS user_archived_at,u.disabled_at AS user_disabled_at,cl.archived_at AS class_archived_at,
-		pl.archived_at AS level_archived_at,pr.archived_at AS programme_archived_at,
-		au.archived_at AS unit_archived_at,ap.archived_at AS period_archived_at
+	err := tx.Get(
+		ctx,
+		&row,
+		`SELECT a.exam_id, a.exam_sitting_id, s.class_id, cl.academic_period_id,
+			a.candidate_user_id, a.admission_revision_id,
+			COALESCE(retained.exam_revision_id, s.exam_revision_id) AS current_revision_id,
+			a.state AS attempt_state, a.created_at AS attempt_created_at,
+			a.updated_at AS attempt_updated_at, a.submitted_at AS attempt_submitted_at,
+			a.revision AS attempt_revision, retained.work_retired_at, s.state AS sitting_state,
+			s.scheduled_end_at, w.id AS workspace_id, w.cursor AS workspace_cursor,
+			p.state AS participation_state, p.generation AS participation_generation,
+			p.renewal_sequence, p.continuity_credential_hash,
+			p.started_at AS participation_started_at, p.updated_at AS participation_updated_at,
+			p.lease_expires_at, p.ended_at AS participation_ended_at,
+			p.end_reason AS participation_end_reason, c.state AS connection_state,
+			c.opened_at AS connection_opened_at, c.closed_at AS connection_closed_at,
+			c.close_reason AS connection_close_reason, se.archived_at AS session_archived_at,
+			se.revoked_at AS session_revoked_at, se.idle_expires_at AS session_idle_expires_at,
+			se.expires_at AS session_expires_at, u.archived_at AS user_archived_at,
+			u.disabled_at AS user_disabled_at, cl.archived_at AS class_archived_at,
+			pl.archived_at AS level_archived_at, pr.archived_at AS programme_archived_at,
+			au.archived_at AS unit_archived_at, ap.archived_at AS period_archived_at
 		FROM exam_attempts a
-		JOIN exam_sittings s ON s.id=a.exam_sitting_id AND s.exam_id=a.exam_id
-		LEFT JOIN exam_submissions retained ON retained.exam_attempt_id=a.id AND retained.sealed=true
-		JOIN exam_attempt_workspaces w ON w.exam_attempt_id=a.id
-		JOIN exam_attempt_participations p ON p.id=? AND p.exam_attempt_id=a.id
-		JOIN exam_attempt_connections c ON c.id=? AND c.exam_attempt_id=a.id AND c.participation_id=p.id
-		JOIN sessions se ON se.id=? AND se.user_id=a.candidate_user_id AND c.session_id=se.id
-		JOIN users u ON u.id=a.candidate_user_id JOIN classes cl ON cl.id=s.class_id
-		JOIN programme_levels pl ON pl.id=cl.programme_level_id JOIN programmes pr ON pr.id=pl.programme_id
-		JOIN academic_units au ON au.id=pr.academic_unit_id
-		JOIN academic_periods ap ON ap.id=cl.academic_period_id AND ap.institution_id=au.institution_id
-		WHERE a.id=? AND a.candidate_user_id=?
-		FOR UPDATE OF a,p,c,w FOR SHARE OF s,se,u,cl,pl,pr,au,ap`, access.ParticipationID.String(),
-		access.ConnectionID.String(), access.SessionID.String(), access.AttemptID.String(), access.CandidateUserID.String())
+		JOIN exam_sittings s ON s.id = a.exam_sitting_id AND s.exam_id = a.exam_id
+		LEFT JOIN exam_submissions retained ON retained.exam_attempt_id = a.id
+			AND retained.sealed = true
+		JOIN exam_attempt_workspaces w ON w.exam_attempt_id = a.id
+		JOIN exam_attempt_participations p ON p.id = ? AND p.exam_attempt_id = a.id
+		JOIN exam_attempt_connections c ON c.id = ?
+			AND c.exam_attempt_id = a.id
+			AND c.participation_id = p.id
+		JOIN sessions se ON se.id = ? AND se.user_id = a.candidate_user_id AND c.session_id = se.id
+		JOIN users u ON u.id = a.candidate_user_id
+		JOIN classes cl ON cl.id = s.class_id
+		JOIN programme_levels pl ON pl.id = cl.programme_level_id
+		JOIN programmes pr ON pr.id = pl.programme_id
+		JOIN academic_units au ON au.id = pr.academic_unit_id
+		JOIN academic_periods ap ON ap.id = cl.academic_period_id
+			AND ap.institution_id = au.institution_id
+		WHERE a.id = ?
+			AND a.candidate_user_id = ?
+		FOR UPDATE OF a, p, c, w
+		FOR SHARE OF s, se, u, cl, pl, pr, au, ap`,
+		access.ParticipationID.String(),
+		access.ConnectionID.String(),
+		access.SessionID.String(),
+		access.AttemptID.String(),
+		access.CandidateUserID.String(),
+	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return examSubmissionSealAccessRow{}, store.NewErrNotFound("exam_submission_access", access.AttemptID.String())
 		}
 		return examSubmissionSealAccessRow{}, fmt.Errorf("lock Exam Submission causal access: %w", err)
 	}
+
 	if row.WorkRetiredAt.Valid {
 		return examSubmissionSealAccessRow{}, store.NewErrNotFound("exam_submission_access", access.AttemptID.String())
 	}
+
 	return row, nil
 }
 
@@ -216,34 +282,52 @@ type examSubmissionMembershipRow struct {
 
 // verifyExamSubmissionCandidateAccess requires exactly one current membership,
 // a live Session and academic chain, and the presented Participation credential.
-func verifyExamSubmissionCandidateAccess(row examSubmissionSealAccessRow, memberships []examSubmissionMembershipRow,
-	access store.ExamSubmissionSealAccess, databaseNow time.Time,
+func verifyExamSubmissionCandidateAccess(
+	row examSubmissionSealAccessRow,
+	memberships []examSubmissionMembershipRow,
+	access store.ExamSubmissionSealAccess,
+	databaseNow time.Time,
 ) error {
 	currentMemberships := 0
 	for _, membership := range memberships {
-		if !membership.ArchivedAt.Valid && !databaseNow.Before(membership.StartAt) &&
+		if !membership.ArchivedAt.Valid &&
+			!databaseNow.Before(membership.StartAt) &&
 			(!membership.EndAt.Valid || databaseNow.Before(membership.EndAt.Time)) {
 			currentMemberships++
 		}
 	}
-	if currentMemberships != 1 || row.SessionArchivedAt.Valid || row.SessionRevokedAt.Valid ||
-		!databaseNow.Before(row.SessionIdleExpiresAt) || !databaseNow.Before(row.SessionExpiresAt) ||
-		row.UserArchivedAt.Valid || row.UserDisabledAt.Valid || row.ClassArchivedAt.Valid || row.LevelArchivedAt.Valid ||
-		row.ProgrammeArchivedAt.Valid || row.UnitArchivedAt.Valid || row.PeriodArchivedAt.Valid {
+
+	if currentMemberships != 1 ||
+		row.SessionArchivedAt.Valid ||
+		row.SessionRevokedAt.Valid ||
+		!databaseNow.Before(row.SessionIdleExpiresAt) ||
+		!databaseNow.Before(row.SessionExpiresAt) ||
+		row.UserArchivedAt.Valid ||
+		row.UserDisabledAt.Valid ||
+		row.ClassArchivedAt.Valid ||
+		row.LevelArchivedAt.Valid ||
+		row.ProgrammeArchivedAt.Valid ||
+		row.UnitArchivedAt.Valid ||
+		row.PeriodArchivedAt.Valid {
 		return store.NewErrNotFound("exam_submission_access", access.AttemptID.String())
 	}
+
 	if row.ParticipationGeneration != access.Generation {
 		return store.NewErrConflict("attempt_participation", "attempt_participation_generation", nil)
 	}
 	if subtle.ConstantTimeCompare([]byte(row.CredentialHash), []byte(access.ContinuityCredentialHash)) != 1 {
 		return store.NewErrConflict("attempt_participation", "attempt_participation_credential", nil)
 	}
+
 	return nil
 }
 
 // verifyCommittedExamSubmissionCausal locks the sealed Submission of an
 // already submitted Attempt and requires it to match the presented causal access.
-func verifyCommittedExamSubmissionCausal(ctx context.Context, tx *sqlxTxWrapper, row examSubmissionSealAccessRow,
+func verifyCommittedExamSubmissionCausal(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	row examSubmissionSealAccessRow,
 	access store.ExamSubmissionSealAccess,
 ) error {
 	var causal struct {
@@ -255,17 +339,24 @@ func verifyCommittedExamSubmissionCausal(ctx context.Context, tx *sqlxTxWrapper,
 		ConnectionID           string `db:"connection_id"`
 		Sealed                 bool   `db:"sealed"`
 	}
-	if causalErr := tx.Get(ctx, &causal, `SELECT exam_revision_id,workspace_cursor,final_focus_loss_sequence,participation_id,
-		generation,connection_id,sealed FROM exam_submissions WHERE exam_attempt_id=? FOR UPDATE`, access.AttemptID.String()); causalErr != nil {
+	if causalErr := tx.Get(ctx, &causal, `SELECT exam_revision_id, workspace_cursor,
+			final_focus_loss_sequence, participation_id, generation, connection_id, sealed
+		FROM exam_submissions
+		WHERE exam_attempt_id = ?
+		FOR UPDATE`, access.AttemptID.String()); causalErr != nil {
 		return translateError("exam_submission", access.AttemptID.String(), causalErr)
 	}
+
 	if causal.ParticipationID != access.ParticipationID.String() || causal.Generation != access.Generation {
 		return store.NewErrConflict("attempt_participation", "attempt_participation_generation", nil)
 	}
-	if causal.ConnectionID != access.ConnectionID.String() || row.ConnectionState != string(model.AttemptConnectionClosed) ||
+
+	if causal.ConnectionID != access.ConnectionID.String() ||
+		row.ConnectionState != string(model.AttemptConnectionClosed) ||
 		row.ConnectionCloseReason.String != string(model.AttemptConnectionCloseSubmitted) {
 		return store.NewErrConflict("attempt_connection", "attempt_connection_closed", nil)
 	}
+
 	if causal.WorkspaceCursor != access.ExpectedWorkspaceCursor {
 		return store.NewErrConflict("attempt_workspace", "attempt_workspace_cursor", nil)
 	}
@@ -275,18 +366,25 @@ func verifyCommittedExamSubmissionCausal(ctx context.Context, tx *sqlxTxWrapper,
 	if causal.ExamRevisionID != access.ExpectedCurrentRevisionID.String() {
 		return store.NewErrConflict("exam_submission", "exam_submission_causal_selector", nil)
 	}
-	if !causal.Sealed || row.ParticipationState != string(model.AttemptParticipationEnded) ||
+
+	if !causal.Sealed ||
+		row.ParticipationState != string(model.AttemptParticipationEnded) ||
 		row.ParticipationEndReason.String != string(model.AttemptParticipationEndSubmitted) {
 		return store.NewErrConflict("exam_attempt", "exam_attempt_state", nil)
 	}
+
 	return nil
 }
 
 // verifyActiveExamSubmissionSealAccess requires an open Connection, active
 // Participation, open Sitting and active Attempt, takes the security interaction
 // lock, and checks the revision selection, pending acknowledgements and cursor.
-func verifyActiveExamSubmissionSealAccess(ctx context.Context, tx *sqlxTxWrapper, row examSubmissionSealAccessRow,
-	access store.ExamSubmissionSealAccess, databaseNow time.Time,
+func verifyActiveExamSubmissionSealAccess(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	row examSubmissionSealAccessRow,
+	access store.ExamSubmissionSealAccess,
+	databaseNow time.Time,
 ) error {
 	if row.ConnectionState != string(model.AttemptConnectionOpen) {
 		return store.NewErrConflict("attempt_connection", "attempt_connection_closed", nil)
@@ -306,25 +404,44 @@ func verifyActiveExamSubmissionSealAccess(ctx context.Context, tx *sqlxTxWrapper
 	if row.CurrentRevisionID != access.ExpectedCurrentRevisionID.String() {
 		return store.NewErrConflict("exam_sitting", "exam_sitting_revision_selection", nil)
 	}
+
 	var pendingAcknowledgements int
-	if err := tx.Get(ctx, &pendingAcknowledgements, `SELECT COUNT(*) FROM exam_sitting_live_corrections live
-		JOIN exam_revisions correction ON correction.id=live.correction_revision_id AND correction.exam_id=live.exam_id
-		JOIN exam_revisions admission ON admission.id=? AND admission.exam_id=live.exam_id
-		JOIN exam_revisions current_revision ON current_revision.id=? AND current_revision.exam_id=live.exam_id
-		WHERE live.exam_sitting_id=? AND correction.number>admission.number AND correction.number<=current_revision.number
-		AND correction.candidate_correction_acknowledgement_required=true
-		AND 'submission' = ANY(correction.candidate_correction_affected_capabilities)
-		AND NOT EXISTS (SELECT 1 FROM exam_attempt_correction_acknowledgements acknowledgement
-			WHERE acknowledgement.exam_attempt_id=? AND acknowledgement.correction_revision_id=correction.id)`,
-		row.AdmissionRevisionID, row.CurrentRevisionID, row.SittingID, access.AttemptID.String()); err != nil {
+	if err := tx.Get(
+		ctx,
+		&pendingAcknowledgements,
+		`SELECT COUNT(*)
+		FROM exam_sitting_live_corrections live
+		JOIN exam_revisions correction ON correction.id = live.correction_revision_id
+			AND correction.exam_id = live.exam_id
+		JOIN exam_revisions admission ON admission.id = ? AND admission.exam_id = live.exam_id
+		JOIN exam_revisions current_revision ON current_revision.id = ?
+			AND current_revision.exam_id = live.exam_id
+		WHERE live.exam_sitting_id = ?
+			AND correction.number > admission.number
+			AND correction.number <= current_revision.number
+			AND correction.candidate_correction_acknowledgement_required = true
+			AND 'submission' = ANY(correction.candidate_correction_affected_capabilities)
+			AND NOT EXISTS (
+				SELECT 1
+				FROM exam_attempt_correction_acknowledgements acknowledgement
+				WHERE acknowledgement.exam_attempt_id = ?
+					AND acknowledgement.correction_revision_id = correction.id
+			)`,
+		row.AdmissionRevisionID,
+		row.CurrentRevisionID,
+		row.SittingID,
+		access.AttemptID.String(),
+	); err != nil {
 		return err
 	}
+
 	if pendingAcknowledgements != 0 {
 		return store.NewErrConflict("exam_submission", "exam_correction_acknowledgement_required", nil)
 	}
 	if row.WorkspaceCursor != access.ExpectedWorkspaceCursor {
 		return store.NewErrConflict("attempt_workspace", "attempt_workspace_cursor", nil)
 	}
+
 	return nil
 }
 
@@ -333,28 +450,40 @@ func examSubmissionSealTarget(row examSubmissionSealAccessRow) (*store.ExamSubmi
 	if err != nil {
 		return nil, invalidPersistedState("exam_submission", "exam_id", err)
 	}
+
 	sittingID, err := model.ParseExamSittingID(row.SittingID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_submission", "exam_sitting_id", err)
 	}
+
 	classID, err := model.ParseClassID(row.ClassID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_submission", "class_id", err)
 	}
+
 	candidateID, err := model.ParseUserID(row.CandidateID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_submission", "candidate_user_id", err)
 	}
+
 	workspaceID, err := model.ParseExamAttemptWorkspaceID(row.WorkspaceID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_submission", "workspace_id", err)
 	}
+
 	currentRevisionID, err := model.ParseExamRevisionID(row.CurrentRevisionID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_submission", "exam_revision_id", err)
 	}
-	return &store.ExamSubmissionSealTarget{ExamID: examID, SittingID: sittingID, ClassID: classID,
-		CandidateUserID: candidateID, WorkspaceID: workspaceID, CurrentRevisionID: currentRevisionID}, nil
+
+	return &store.ExamSubmissionSealTarget{
+		ExamID:            examID,
+		SittingID:         sittingID,
+		ClassID:           classID,
+		CandidateUserID:   candidateID,
+		WorkspaceID:       workspaceID,
+		CurrentRevisionID: currentRevisionID,
+	}, nil
 }
 
 type examSubmissionSealOutcome struct {
@@ -385,16 +514,27 @@ type submissionReceiptDocument struct {
 	SubmittedAt     time.Time                         `json:"submitted_at"`
 }
 
-func (s *SQLExamSubmissionStore) Seal(ctx context.Context, input *store.ExamSubmissionSeal,
+func (s *SQLExamSubmissionStore) Seal(
+	ctx context.Context,
+	input *store.ExamSubmissionSeal,
 	command *store.CommandIdempotency,
 ) (*store.ExamSubmissionSealResult, error) {
-	if input == nil || command == nil || command.Operation != store.ExamSubmissionSealOperation || command.UserID != input.Access.CandidateUserID || !input.SubmissionID.IsValid() ||
-		!input.ReceiptCode.IsValid() || !validExamSubmissionSealAccess(input.Access) || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+	if input == nil ||
+		command == nil ||
+		command.Operation != store.ExamSubmissionSealOperation ||
+		command.UserID != input.Access.CandidateUserID ||
+		!input.SubmissionID.IsValid() ||
+		!input.ReceiptCode.IsValid() ||
+		!validExamSubmissionSealAccess(input.Access) ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("exam_submission", "seal", nil)
 	}
+
 	prepared := *input
 	result, err := runIdempotentMutation(ctx, s.SQLStore, "seal voluntary Exam Submission", idempotentMutation[examSubmissionSealOutcome]{
-		command: command, auditEventID: prepared.AuditEventID,
+		command:      command,
+		auditEventID: prepared.AuditEventID,
 		execute: func(ctx context.Context, tx *sqlxTxWrapper) (examSubmissionSealOutcome, error) {
 			return sealExamSubmission(ctx, tx, &prepared)
 		},
@@ -407,16 +547,19 @@ func (s *SQLExamSubmissionStore) Seal(ctx context.Context, input *store.ExamSubm
 			if _, err := examSubmissionSealResult(outcome); err != nil {
 				return outcome, err
 			}
+
 			return outcome, nil
 		},
 		hydrateReplay: func(ctx context.Context, tx *sqlxTxWrapper, outcome examSubmissionSealOutcome) (examSubmissionSealOutcome, error) {
 			if _, _, _, err := lockExamSubmissionSealAccess(ctx, tx, prepared.Access, true); err != nil {
 				return outcome, err
 			}
+
 			value, err := browserSubmissionSettlement(ctx, tx, prepared.Access.AttemptID)
 			if err != nil {
 				return outcome, err
 			}
+
 			outcome.Receipt.BrowserActivity = value
 			return outcome, nil
 		},
@@ -425,26 +568,35 @@ func (s *SQLExamSubmissionStore) Seal(ctx context.Context, input *store.ExamSubm
 			if lockErr != nil {
 				return lockErr
 			}
+
 			target, targetErr := examSubmissionSealTarget(row)
 			if targetErr != nil {
 				return targetErr
 			}
-			if target.ExamID.String() != outcome.ExamID || target.SittingID.String() != outcome.SittingID ||
-				target.ClassID.String() != outcome.ClassID || target.CandidateUserID.String() != outcome.CandidateID ||
-				outcome.Receipt.AttemptID != prepared.Access.AttemptID || outcome.ParticipationID != prepared.Access.ParticipationID.String() ||
-				outcome.Generation != prepared.Access.Generation || outcome.ConnectionID != prepared.Access.ConnectionID.String() {
+
+			if target.ExamID.String() != outcome.ExamID ||
+				target.SittingID.String() != outcome.SittingID ||
+				target.ClassID.String() != outcome.ClassID ||
+				target.CandidateUserID.String() != outcome.CandidateID ||
+				outcome.Receipt.AttemptID != prepared.Access.AttemptID ||
+				outcome.ParticipationID != prepared.Access.ParticipationID.String() ||
+				outcome.Generation != prepared.Access.Generation ||
+				outcome.ConnectionID != prepared.Access.ConnectionID.String() {
 				return store.NewErrNotFound("exam_submission_access", prepared.Access.AttemptID.String())
 			}
+
 			return completeExamSubmissionAudit(ctx, tx, outcome, prepared.AuditEventID, prepared.AuditAt, true, originalAuditID)
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	response, err := examSubmissionSealResult(result.Value)
 	if err != nil {
 		return nil, err
 	}
+
 	response.Replayed = result.Replayed
 	return response, nil
 }
@@ -469,18 +621,22 @@ func sealExamSubmission(ctx context.Context, tx *sqlxTxWrapper, input *store.Exa
 	if err != nil {
 		return zero, err
 	}
+
 	row, integrityTail, databaseNow, err := lockExamSubmissionSealAccess(ctx, tx, input.Access, false)
 	if err != nil {
 		return zero, err
 	}
+
 	sealAt, payloadKeyID, err := checkExamSubmissionSealPreconditions(ctx, tx, input, recipient, integrityTail, databaseNow)
 	if err != nil {
 		return zero, err
 	}
+
 	tail := input.Access.FinalFocusLossSequence - integrityTail.AcceptedSequence
 	if tail > math.MaxInt64-integrityTail.TotalUnresolved {
 		return zero, store.NewErrConflict("focus_loss_signal", "focus_loss_sequence", nil)
 	}
+
 	unresolved := integrityTail.TotalUnresolved + tail
 	focusUnresolved := unresolved
 	browserUnresolved, browserActivity, err := settleVoluntaryBrowserActivity(ctx, tx, input.Access, databaseNow)
@@ -490,15 +646,18 @@ func sealExamSubmission(ctx context.Context, tx *sqlxTxWrapper, input *store.Exa
 	if browserUnresolved > math.MaxInt64-unresolved {
 		return zero, store.NewErrConflict("browser_activity", "browser_activity_accounting", nil)
 	}
+
 	unresolved += browserUnresolved
 	rows, entries, err := loadAuthoritativeExamSubmissionManifest(ctx, tx, row.WorkspaceID)
 	if err != nil {
 		return zero, err
 	}
+
 	manifest, err := model.NewExamSubmissionManifest(row.WorkspaceCursor, entries)
 	if err != nil {
 		return zero, invalidPersistedState("exam_submission_manifest", "value", err)
 	}
+
 	attempt, participation, connection, err := row.activeDomain(input.Access)
 	if err != nil {
 		return zero, err
@@ -506,33 +665,50 @@ func sealExamSubmission(ctx context.Context, tx *sqlxTxWrapper, input *store.Exa
 	if err = model.SubmitExamAttempt(attempt, participation, connection, sealAt); err != nil {
 		return zero, store.NewErrConflict("exam_attempt", "exam_attempt_state", err)
 	}
+
 	workspaceID, err := model.ParseExamAttemptWorkspaceID(row.WorkspaceID)
 	if err != nil {
 		return zero, invalidPersistedState("exam_submission", "workspace_id", err)
 	}
-	submission, err := model.NewExamSubmission(model.ExamSubmissionSpecification{ID: input.SubmissionID,
-		ReceiptCode: input.ReceiptCode, AttemptID: input.Access.AttemptID, ExamRevisionID: input.Access.ExpectedCurrentRevisionID, WorkspaceID: workspaceID, Manifest: manifest,
-		FinalFocusLossSequence: input.Access.FinalFocusLossSequence, UnresolvedIntegrityCount: unresolved,
-		BrowserActivity: browserActivity,
-		Provenance:      model.ExamSubmissionCandidateSubmitted, SubmittedAt: sealAt})
+
+	submission, err := model.NewExamSubmission(model.ExamSubmissionSpecification{
+		ID:                       input.SubmissionID,
+		ReceiptCode:              input.ReceiptCode,
+		AttemptID:                input.Access.AttemptID,
+		ExamRevisionID:           input.Access.ExpectedCurrentRevisionID,
+		WorkspaceID:              workspaceID,
+		Manifest:                 manifest,
+		FinalFocusLossSequence:   input.Access.FinalFocusLossSequence,
+		UnresolvedIntegrityCount: unresolved,
+		BrowserActivity:          browserActivity,
+		Provenance:               model.ExamSubmissionCandidateSubmitted,
+		SubmittedAt:              sealAt,
+	})
 	if err != nil {
 		return zero, store.NewErrInvalidInput("exam_submission", "value", nil).Wrap(err)
 	}
 	if err = insertVoluntaryExamSubmissionHeader(ctx, tx, submission, input.Access); err != nil {
 		return zero, err
 	}
+
 	if err = insertTerminalIntegrityDiscrepancies(ctx, tx, submission, integrityDiscrepancyTarget{
-		AttemptID: input.Access.AttemptID, ParticipationID: input.Access.ParticipationID,
-		Generation: input.Access.Generation, ConnectionID: input.Access.ConnectionID,
+		AttemptID:       input.Access.AttemptID,
+		ParticipationID: input.Access.ParticipationID,
+		Generation:      input.Access.Generation,
+		ConnectionID:    input.Access.ConnectionID,
 	}, terminalIntegrityDiscrepancies{FocusUnresolved: focusUnresolved,
 		FocusReason:       model.IntegrityDiscrepancyFocusLossSequenceGap,
 		BrowserUnresolved: browserUnresolved}); err != nil {
 		return zero, err
 	}
+
 	if err = insertVoluntaryExamSubmissionManifest(ctx, tx, submission, manifest.Entries, rows); err != nil {
 		return zero, err
 	}
-	if _, err = tx.Exec(ctx, `UPDATE exam_submissions SET sealed=true WHERE id=? AND sealed=false`, submission.ID.String()); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE exam_submissions
+		SET sealed = true
+		WHERE id = ?
+			AND sealed = false`, submission.ID.String()); err != nil {
 		return zero, fmt.Errorf("seal Exam Submission header: %w", err)
 	}
 	if err = settleVoluntaryExamSubmissionFocusLoss(ctx, tx, input.Access, integrityTail, tail); err != nil {
@@ -541,33 +717,57 @@ func sealExamSubmission(ctx context.Context, tx *sqlxTxWrapper, input *store.Exa
 	if err = persistSubmittedExamAttempt(ctx, tx, attempt, participation, connection); err != nil {
 		return zero, err
 	}
+
 	target, err := examSubmissionSealTarget(row)
 	if err != nil {
 		return zero, err
 	}
-	outcome := examSubmissionSealOutcome{Receipt: submissionReceiptDocument{BrowserActivity: submission.BrowserActivity, SubmissionID: submission.ID,
-		ReceiptCode: submission.ReceiptCode, AttemptID: submission.AttemptID, ExamRevisionID: submission.ExamRevisionID, State: attempt.State, WorkspaceCursor: submission.WorkspaceCursor,
-		ManifestDigest: submission.ManifestDigest, SubmittedAt: submission.SubmittedAt}, ExamID: target.ExamID.String(),
-		SittingID: target.SittingID.String(), ClassID: target.ClassID.String(), CandidateID: target.CandidateUserID.String(),
-		ParticipationID: participation.ID.String(), Generation: participation.Generation, ConnectionID: connection.ID.String()}
+
+	outcome := examSubmissionSealOutcome{
+		Receipt: submissionReceiptDocument{
+			BrowserActivity: submission.BrowserActivity,
+			SubmissionID:    submission.ID,
+			ReceiptCode:     submission.ReceiptCode,
+			AttemptID:       submission.AttemptID,
+			ExamRevisionID:  submission.ExamRevisionID,
+			State:           attempt.State,
+			WorkspaceCursor: submission.WorkspaceCursor,
+			ManifestDigest:  submission.ManifestDigest,
+			SubmittedAt:     submission.SubmittedAt,
+		},
+		ExamID:          target.ExamID.String(),
+		SittingID:       target.SittingID.String(),
+		ClassID:         target.ClassID.String(),
+		CandidateID:     target.CandidateUserID.String(),
+		ParticipationID: participation.ID.String(),
+		Generation:      participation.Generation,
+		ConnectionID:    connection.ID.String(),
+	}
 	if err = completeExamSubmissionAudit(ctx, tx, outcome, input.AuditEventID, input.AuditAt, false, ""); err != nil {
 		return zero, err
 	}
 	if err = insertExamSubmissionReceiptMail(ctx, tx, input.Notice, payloadKeyID); err != nil {
 		return zero, err
 	}
+
 	return outcome, nil
 }
 
 // checkExamSubmissionSealPreconditions checks the final Focus Loss sequence,
 // seal time and receipt recipient revision, validates the receipt mail, and
 // requires its payload key to be primary, returning the seal time and key.
-func checkExamSubmissionSealPreconditions(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamSubmissionSeal,
-	recipient *model.User, integrityTail examSubmissionIntegrityTail, databaseNow time.Time,
+func checkExamSubmissionSealPreconditions(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.ExamSubmissionSeal,
+	recipient *model.User,
+	integrityTail examSubmissionIntegrityTail,
+	databaseNow time.Time,
 ) (time.Time, string, error) {
 	if input.Access.FinalFocusLossSequence < integrityTail.AcceptedSequence {
 		return time.Time{}, "", store.NewErrConflict("focus_loss_signal", "focus_loss_sequence", nil)
 	}
+
 	sealAt := model.TimeUTC(input.AuditAt)
 	if sealAt.After(databaseNow) {
 		return time.Time{}, "", store.NewErrConflict("exam_submission", "seal_time", nil)
@@ -575,82 +775,156 @@ func checkExamSubmissionSealPreconditions(ctx context.Context, tx *sqlxTxWrapper
 	if input.ExpectedRecipientRevision < 1 || recipient.Revision != input.ExpectedRecipientRevision {
 		return time.Time{}, "", store.NewErrConflict("exam_submission", "receipt_recipient_changed", nil)
 	}
-	payloadKeyID, err := validateExamSubmissionReceiptMail(input.Notice, recipient, input.SubmissionID, input.AuditAt,
-		model.MailTemplateExamSubmissionReceived)
+
+	payloadKeyID, err := validateExamSubmissionReceiptMail(
+		input.Notice,
+		recipient,
+		input.SubmissionID,
+		input.AuditAt,
+		model.MailTemplateExamSubmissionReceived,
+	)
 	if err != nil {
 		return time.Time{}, "", err
 	}
+
 	if payloadKeyID != "" {
 		if err = requireMailPayloadPrimary(ctx, tx, payloadKeyID); err != nil {
 			return time.Time{}, "", err
 		}
 	}
+
 	return sealAt, payloadKeyID, nil
 }
 
 // insertVoluntaryExamSubmissionHeader inserts the unsealed Submission header
 // bound to the presented Participation generation and Connection.
-func insertVoluntaryExamSubmissionHeader(ctx context.Context, tx *sqlxTxWrapper, submission *model.ExamSubmission,
+func insertVoluntaryExamSubmissionHeader(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	submission *model.ExamSubmission,
 	access store.ExamSubmissionSealAccess,
 ) error {
-	if _, err := tx.Exec(ctx, `INSERT INTO exam_submissions
-		(id,receipt_code,exam_attempt_id,exam_revision_id,workspace_id,participation_id,generation,connection_id,manifest_schema_version,
-		workspace_cursor,manifest_digest,manifest_entry_count,manifest_total_file_bytes,final_focus_loss_sequence,
-		integrity_state,unresolved_integrity_count,provenance,submitted_at,sealed)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,false)`, submission.ID.String(), submission.ReceiptCode.String(), submission.AttemptID.String(),
-		submission.ExamRevisionID.String(), submission.WorkspaceID.String(), access.ParticipationID.String(), access.Generation,
-		access.ConnectionID.String(), submission.ManifestSchemaVersion, submission.WorkspaceCursor,
-		submission.ManifestDigest, submission.ManifestEntryCount, submission.ManifestTotalFileBytes,
+	if _, err := tx.Exec(
+		ctx,
+		`INSERT INTO exam_submissions (
+			id, receipt_code, exam_attempt_id, exam_revision_id, workspace_id, participation_id,
+			generation, connection_id, manifest_schema_version, workspace_cursor, manifest_digest,
+			manifest_entry_count, manifest_total_file_bytes, final_focus_loss_sequence,
+			integrity_state, unresolved_integrity_count, provenance, submitted_at, sealed
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, false)`,
+		submission.ID.String(),
+		submission.ReceiptCode.String(),
+		submission.AttemptID.String(),
+		submission.ExamRevisionID.String(),
+		submission.WorkspaceID.String(),
+		access.ParticipationID.String(),
+		access.Generation,
+		access.ConnectionID.String(),
+		submission.ManifestSchemaVersion,
+		submission.WorkspaceCursor,
+		submission.ManifestDigest,
+		submission.ManifestEntryCount,
+		submission.ManifestTotalFileBytes,
 		submission.FinalFocusLossSequence,
-		string(submission.IntegrityState), submission.UnresolvedIntegrityCount, string(submission.Provenance),
-		submission.SubmittedAt); err != nil {
+		string(submission.IntegrityState),
+		submission.UnresolvedIntegrityCount,
+		string(submission.Provenance),
+		submission.SubmittedAt,
+	); err != nil {
 		return fmt.Errorf("insert Exam Submission: %w", translateError("exam_submission", submission.ID.String(), err))
 	}
+
 	return nil
 }
 
 // insertVoluntaryExamSubmissionManifest inserts each canonical manifest Entry
 // in order, requiring it to match the authoritative Workspace row.
-func insertVoluntaryExamSubmissionManifest(ctx context.Context, tx *sqlxTxWrapper, submission *model.ExamSubmission,
-	entries []model.ExamSubmissionManifestEntry, rows []examSubmissionManifestPersistenceRow,
+func insertVoluntaryExamSubmissionManifest(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	submission *model.ExamSubmission,
+	entries []model.ExamSubmissionManifestEntry,
+	rows []examSubmissionManifestPersistenceRow,
 ) error {
 	for index, entry := range entries {
 		persisted := rows[index]
 		if persisted.EntryID != entry.EntryID.String() {
 			return invalidPersistedState("exam_submission_manifest", "order", errors.New("canonical Entry order changed"))
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO exam_submission_manifest_entries
-			(submission_id,workspace_id,entry_id,kind,path,content_version,media_type,size_bytes,sha256,storage_origin,
-			starter_object_id,attempt_object_id,workspace_object_id)
-			VALUES (?,?,?,?,?,NULLIF(?,''),NULLIF(?,''),?,NULLIF(?,''),NULLIF(?,''),NULLIF(?,''),NULLIF(?,''),?)`,
-			submission.ID.String(), submission.WorkspaceID.String(), entry.EntryID.String(), string(entry.Kind), entry.Path,
-			entry.ContentVersion.String(), entry.MediaType, nullableSubmissionSize(entry), entry.SHA256, string(entry.StorageOrigin),
-			entry.StarterObjectID.String(), entry.AttemptObjectID.String(), persisted.WorkspaceObjectID); err != nil {
-			return fmt.Errorf("insert Exam Submission manifest Entry: %w", translateError("exam_submission_manifest_entry", entry.EntryID.String(), err))
+
+		if _, err := tx.Exec(
+			ctx,
+			`INSERT INTO exam_submission_manifest_entries (
+				submission_id, workspace_id, entry_id, kind, path, content_version, media_type,
+				size_bytes, sha256, storage_origin, starter_object_id, attempt_object_id,
+				workspace_object_id
+			)
+			VALUES (
+				?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?, NULLIF(?, ''), NULLIF(?, ''),
+				NULLIF(?, ''), NULLIF(?, ''), ?
+			)`,
+			submission.ID.String(),
+			submission.WorkspaceID.String(),
+			entry.EntryID.String(),
+			string(entry.Kind),
+			entry.Path,
+			entry.ContentVersion.String(),
+			entry.MediaType,
+			nullableSubmissionSize(entry),
+			entry.SHA256,
+			string(entry.StorageOrigin),
+			entry.StarterObjectID.String(),
+			entry.AttemptObjectID.String(),
+			persisted.WorkspaceObjectID,
+		); err != nil {
+			return fmt.Errorf(
+				"insert Exam Submission manifest Entry: %w",
+				translateError("exam_submission_manifest_entry", entry.EntryID.String(), err),
+			)
 		}
 	}
+
 	return nil
 }
 
 // settleVoluntaryExamSubmissionFocusLoss charges the Focus Loss tail to the
 // current evaluation and clears the generation's pending Focus Loss window.
-func settleVoluntaryExamSubmissionFocusLoss(ctx context.Context, tx *sqlxTxWrapper, access store.ExamSubmissionSealAccess,
-	integrityTail examSubmissionIntegrityTail, tail int64,
+func settleVoluntaryExamSubmissionFocusLoss(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	access store.ExamSubmissionSealAccess,
+	integrityTail examSubmissionIntegrityTail,
+	tail int64,
 ) error {
 	if integrityTail.CurrentExists {
 		if tail > math.MaxInt64-integrityTail.CurrentUnresolved {
 			return store.NewErrConflict("focus_loss_signal", "focus_loss_sequence", nil)
 		}
-		if _, err := tx.Exec(ctx, `UPDATE exam_attempt_focus_loss_evaluations SET unresolved_missing_count=?
-			WHERE exam_attempt_id=? AND generation=?`, integrityTail.CurrentUnresolved+tail,
-			access.AttemptID.String(), access.Generation); err != nil {
+
+		if _, err := tx.Exec(
+			ctx,
+			`UPDATE exam_attempt_focus_loss_evaluations
+			SET unresolved_missing_count = ?
+			WHERE exam_attempt_id = ?
+				AND generation = ?`,
+			integrityTail.CurrentUnresolved+tail,
+			access.AttemptID.String(),
+			access.Generation,
+		); err != nil {
 			return fmt.Errorf("settle Exam Submission integrity gaps: %w", err)
 		}
 	}
-	if _, err := tx.Exec(ctx, `DELETE FROM exam_attempt_focus_loss_pending WHERE exam_attempt_id=? AND generation=?`,
-		access.AttemptID.String(), access.Generation); err != nil {
+
+	if _, err := tx.Exec(
+		ctx,
+		`DELETE FROM exam_attempt_focus_loss_pending WHERE exam_attempt_id = ? AND generation = ?`,
+		access.AttemptID.String(),
+		access.Generation,
+	); err != nil {
 		return fmt.Errorf("settle Exam Submission pending Focus Loss window: %w", err)
 	}
+
 	return nil
 }
 
@@ -668,7 +942,12 @@ func nullableInt64Pointer(value *int64) any {
 	return *value
 }
 
-func settleVoluntaryBrowserActivity(ctx context.Context, tx *sqlxTxWrapper, access store.ExamSubmissionSealAccess, databaseNow time.Time) (int64, model.BrowserSubmissionSettlement, error) {
+func settleVoluntaryBrowserActivity(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	access store.ExamSubmissionSealAccess,
+	databaseNow time.Time,
+) (int64, model.BrowserSubmissionSettlement, error) {
 	return settleSubmissionBrowserSources(ctx, tx, access.AttemptID, model.DeliveryClosedSubmission, databaseNow)
 }
 
@@ -679,22 +958,39 @@ type examSubmissionIntegrityTail struct {
 	CurrentExists     bool
 }
 
-func lockExamSubmissionIntegrityTail(ctx context.Context, tx *sqlxTxWrapper, access store.ExamSubmissionSealAccess) (examSubmissionIntegrityTail, error) {
+func lockExamSubmissionIntegrityTail(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	access store.ExamSubmissionSealAccess,
+) (examSubmissionIntegrityTail, error) {
 	var rows []struct {
 		Generation       int64 `db:"generation"`
 		AcceptedSequence int64 `db:"accepted_sequence"`
 		Unresolved       int64 `db:"unresolved_missing_count"`
 	}
-	if err := tx.Select(ctx, &rows, `SELECT generation,accepted_sequence,unresolved_missing_count
-		FROM exam_attempt_focus_loss_evaluations WHERE exam_attempt_id=? ORDER BY generation FOR UPDATE`,
-		access.AttemptID.String()); err != nil {
+	if err := tx.Select(
+		ctx,
+		&rows,
+		`SELECT generation, accepted_sequence, unresolved_missing_count
+		FROM exam_attempt_focus_loss_evaluations
+		WHERE exam_attempt_id = ?
+		ORDER BY generation
+		FOR UPDATE`,
+		access.AttemptID.String(),
+	); err != nil {
 		return examSubmissionIntegrityTail{}, fmt.Errorf("lock Exam Submission Focus Loss history: %w", err)
 	}
+
 	var result examSubmissionIntegrityTail
 	for _, row := range rows {
 		if row.Unresolved > math.MaxInt64-result.TotalUnresolved {
-			return examSubmissionIntegrityTail{}, invalidPersistedState("exam_submission", "integrity_gaps", errors.New("unresolved gap count overflows"))
+			return examSubmissionIntegrityTail{}, invalidPersistedState(
+				"exam_submission",
+				"integrity_gaps",
+				errors.New("unresolved gap count overflows"),
+			)
 		}
+
 		result.TotalUnresolved += row.Unresolved
 		if row.Generation == access.Generation {
 			result.CurrentExists = true
@@ -702,27 +998,39 @@ func lockExamSubmissionIntegrityTail(ctx context.Context, tx *sqlxTxWrapper, acc
 			result.CurrentUnresolved = row.Unresolved
 		}
 	}
+
 	return result, nil
 }
 
-func loadAuthoritativeExamSubmissionManifest(ctx context.Context, tx *sqlxTxWrapper, workspaceID string) ([]examSubmissionManifestPersistenceRow, []model.ExamSubmissionManifestEntry, error) {
+func loadAuthoritativeExamSubmissionManifest(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	workspaceID string,
+) ([]examSubmissionManifestPersistenceRow, []model.ExamSubmissionManifestEntry, error) {
 	var rows []examSubmissionManifestPersistenceRow
-	if err := tx.Select(ctx, &rows, `SELECT e.id AS entry_id,e.kind,e.path,e.current_object_id AS workspace_object_id,
-		o.content_version,o.media_type,o.size_bytes,o.sha256,o.storage_origin,o.starter_object_id,
-		CASE WHEN o.storage_origin='attempt' THEN o.id END AS attempt_object_id
-		FROM exam_attempt_workspace_entries e LEFT JOIN exam_attempt_workspace_objects o
-		ON o.workspace_id=e.workspace_id AND o.id=e.current_object_id
-		WHERE e.workspace_id=? ORDER BY e.id FOR SHARE OF e`, workspaceID); err != nil {
+	if err := tx.Select(ctx, &rows, `SELECT e.id AS entry_id, e.kind, e.path,
+			e.current_object_id AS workspace_object_id, o.content_version, o.media_type,
+			o.size_bytes, o.sha256, o.storage_origin, o.starter_object_id,
+			CASE WHEN o.storage_origin = 'attempt' THEN o.id END AS attempt_object_id
+		FROM exam_attempt_workspace_entries e
+		LEFT JOIN exam_attempt_workspace_objects o ON o.workspace_id = e.workspace_id
+			AND o.id = e.current_object_id
+		WHERE e.workspace_id = ?
+		ORDER BY e.id
+		FOR SHARE OF e`, workspaceID); err != nil {
 		return nil, nil, fmt.Errorf("load authoritative Exam Submission manifest: %w", err)
 	}
+
 	entries := make([]model.ExamSubmissionManifestEntry, 0, len(rows))
 	for _, row := range rows {
 		entry, err := row.model()
 		if err != nil {
 			return nil, nil, err
 		}
+
 		entries = append(entries, entry)
 	}
+
 	return rows, entries, nil
 }
 
@@ -731,62 +1039,103 @@ func (row examSubmissionManifestPersistenceRow) model() (model.ExamSubmissionMan
 	if err != nil {
 		return model.ExamSubmissionManifestEntry{}, invalidPersistedState("exam_submission_manifest_entry", "entry_id", err)
 	}
-	entry := model.ExamSubmissionManifestEntry{EntryID: id, Kind: model.StarterWorkspaceEntryKind(row.Kind), Path: row.Path,
-		MediaType: row.MediaType.String, SizeBytes: row.SizeBytes.Int64, SHA256: row.SHA256.String,
-		StorageOrigin: model.AttemptWorkspaceObjectStorage(row.StorageOrigin.String)}
+
+	entry := model.ExamSubmissionManifestEntry{
+		EntryID:       id,
+		Kind:          model.StarterWorkspaceEntryKind(row.Kind),
+		Path:          row.Path,
+		MediaType:     row.MediaType.String,
+		SizeBytes:     row.SizeBytes.Int64,
+		SHA256:        row.SHA256.String,
+		StorageOrigin: model.AttemptWorkspaceObjectStorage(row.StorageOrigin.String),
+	}
 	if row.ContentVersion.Valid {
 		entry.ContentVersion, err = model.ParseWorkspaceContentVersion(row.ContentVersion.String)
 		if err != nil {
 			return entry, invalidPersistedState("exam_submission_manifest_entry", "content_version", err)
 		}
 	}
+
 	if row.StarterObjectID.Valid {
 		entry.StarterObjectID, err = model.ParseStarterWorkspaceObjectID(row.StarterObjectID.String)
 		if err != nil {
 			return entry, invalidPersistedState("exam_submission_manifest_entry", "starter_object_id", err)
 		}
 	}
+
 	if row.AttemptObjectID.Valid {
 		entry.AttemptObjectID, err = model.ParseAttemptWorkspaceObjectID(row.AttemptObjectID.String)
 		if err != nil {
 			return entry, invalidPersistedState("exam_submission_manifest_entry", "attempt_object_id", err)
 		}
 	}
+
 	if err = entry.Validate(); err != nil {
 		return entry, invalidPersistedState("exam_submission_manifest_entry", "value", err)
 	}
+
 	return entry, nil
 }
 
-func (row examSubmissionSealAccessRow) activeDomain(access store.ExamSubmissionSealAccess) (*model.ExamAttempt, *model.AttemptParticipation, *model.AttemptConnection, error) {
+func (row examSubmissionSealAccessRow) activeDomain(
+	access store.ExamSubmissionSealAccess,
+) (*model.ExamAttempt, *model.AttemptParticipation, *model.AttemptConnection, error) {
 	examID, err := model.ParseExamID(row.ExamID)
 	if err != nil {
 		return nil, nil, nil, invalidPersistedState("exam_attempt", "exam_id", err)
 	}
+
 	sittingID, err := model.ParseExamSittingID(row.SittingID)
 	if err != nil {
 		return nil, nil, nil, invalidPersistedState("exam_attempt", "exam_sitting_id", err)
 	}
+
 	candidateID, err := model.ParseUserID(row.CandidateID)
 	if err != nil {
 		return nil, nil, nil, invalidPersistedState("exam_attempt", "candidate_user_id", err)
 	}
+
 	revisionID, err := model.ParseExamRevisionID(row.AdmissionRevisionID)
 	if err != nil {
 		return nil, nil, nil, invalidPersistedState("exam_attempt", "admission_revision_id", err)
 	}
-	attempt := &model.ExamAttempt{ID: access.AttemptID, ExamID: examID, SittingID: sittingID, CandidateUserID: candidateID,
-		AdmissionRevisionID: revisionID, State: model.ExamAttemptState(row.AttemptState), CreatedAt: model.TimeUTC(row.AttemptCreatedAt),
-		UpdatedAt: model.TimeUTC(row.AttemptUpdatedAt), SubmittedAt: OptionalTimeFromNullTime(row.AttemptSubmittedAt), Revision: row.AttemptRevision}
-	participation := &model.AttemptParticipation{ID: access.ParticipationID, AttemptID: access.AttemptID, SessionID: access.SessionID,
-		State: model.AttemptParticipationState(row.ParticipationState), Generation: row.ParticipationGeneration,
-		RenewalSequence: row.RenewalSequence, ContinuityCredentialHash: row.CredentialHash,
-		StartedAt: model.TimeUTC(row.ParticipationStartedAt), UpdatedAt: model.TimeUTC(row.ParticipationUpdatedAt),
-		LeaseExpiresAt: model.TimeUTC(row.LeaseExpiresAt), EndedAt: OptionalTimeFromNullTime(row.ParticipationEndedAt),
-		EndReason: model.AttemptParticipationEndReason(row.ParticipationEndReason.String)}
-	connection := &model.AttemptConnection{ID: access.ConnectionID, AttemptID: access.AttemptID, ParticipationID: access.ParticipationID,
-		SessionID: access.SessionID, State: model.AttemptConnectionState(row.ConnectionState), OpenedAt: model.TimeUTC(row.ConnectionOpenedAt),
-		ClosedAt: OptionalTimeFromNullTime(row.ConnectionClosedAt), CloseReason: model.AttemptConnectionCloseReason(row.ConnectionCloseReason.String)}
+
+	attempt := &model.ExamAttempt{
+		ID:                  access.AttemptID,
+		ExamID:              examID,
+		SittingID:           sittingID,
+		CandidateUserID:     candidateID,
+		AdmissionRevisionID: revisionID,
+		State:               model.ExamAttemptState(row.AttemptState),
+		CreatedAt:           model.TimeUTC(row.AttemptCreatedAt),
+		UpdatedAt:           model.TimeUTC(row.AttemptUpdatedAt),
+		SubmittedAt:         OptionalTimeFromNullTime(row.AttemptSubmittedAt),
+		Revision:            row.AttemptRevision,
+	}
+	participation := &model.AttemptParticipation{
+		ID:                       access.ParticipationID,
+		AttemptID:                access.AttemptID,
+		SessionID:                access.SessionID,
+		State:                    model.AttemptParticipationState(row.ParticipationState),
+		Generation:               row.ParticipationGeneration,
+		RenewalSequence:          row.RenewalSequence,
+		ContinuityCredentialHash: row.CredentialHash,
+		StartedAt:                model.TimeUTC(row.ParticipationStartedAt),
+		UpdatedAt:                model.TimeUTC(row.ParticipationUpdatedAt),
+		LeaseExpiresAt:           model.TimeUTC(row.LeaseExpiresAt),
+		EndedAt:                  OptionalTimeFromNullTime(row.ParticipationEndedAt),
+		EndReason:                model.AttemptParticipationEndReason(row.ParticipationEndReason.String),
+	}
+	connection := &model.AttemptConnection{
+		ID:              access.ConnectionID,
+		AttemptID:       access.AttemptID,
+		ParticipationID: access.ParticipationID,
+		SessionID:       access.SessionID,
+		State:           model.AttemptConnectionState(row.ConnectionState),
+		OpenedAt:        model.TimeUTC(row.ConnectionOpenedAt),
+		ClosedAt:        OptionalTimeFromNullTime(row.ConnectionClosedAt),
+		CloseReason:     model.AttemptConnectionCloseReason(row.ConnectionCloseReason.String),
+	}
 	if err = attempt.Validate(); err != nil {
 		return nil, nil, nil, invalidPersistedState("exam_attempt", "value", err)
 	}
@@ -796,54 +1145,109 @@ func (row examSubmissionSealAccessRow) activeDomain(access store.ExamSubmissionS
 	if err = connection.Validate(); err != nil {
 		return nil, nil, nil, invalidPersistedState("attempt_connection", "value", err)
 	}
+
 	return attempt, participation, connection, nil
 }
 
-func persistSubmittedExamAttempt(ctx context.Context, tx *sqlxTxWrapper, attempt *model.ExamAttempt,
-	participation *model.AttemptParticipation, connection *model.AttemptConnection,
+func persistSubmittedExamAttempt(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	attempt *model.ExamAttempt,
+	participation *model.AttemptParticipation,
+	connection *model.AttemptConnection,
 ) error {
-	result, err := tx.Exec(ctx, `UPDATE exam_attempts SET state=?,updated_at=?,submitted_at=?,revision=?
-		WHERE id=? AND state='active' AND revision=?`, string(attempt.State), attempt.UpdatedAt, attempt.SubmittedAt.Time,
-		attempt.Revision, attempt.ID.String(), attempt.Revision-1)
+	result, err := tx.Exec(
+		ctx,
+		`UPDATE exam_attempts
+		SET state = ?, updated_at = ?, submitted_at = ?, revision = ?
+		WHERE id = ?
+			AND state = 'active'
+			AND revision = ?`,
+		string(attempt.State),
+		attempt.UpdatedAt,
+		attempt.SubmittedAt.Time,
+		attempt.Revision,
+		attempt.ID.String(),
+		attempt.Revision-1,
+	)
 	if err != nil {
 		return fmt.Errorf("submit Exam Attempt: %w", err)
 	}
 	if affected, rowsErr := result.RowsAffected(); rowsErr != nil || affected != 1 {
 		return store.NewErrConflict("exam_attempt", "exam_attempt_state", rowsErr)
 	}
-	result, err = tx.Exec(ctx, `UPDATE exam_attempt_participations SET state=?,updated_at=?,ended_at=?,end_reason=?
-		WHERE id=? AND exam_attempt_id=? AND generation=? AND state='active'`, string(participation.State), participation.UpdatedAt,
-		participation.EndedAt.Time, string(participation.EndReason), participation.ID.String(), participation.AttemptID.String(), participation.Generation)
+
+	result, err = tx.Exec(
+		ctx,
+		`UPDATE exam_attempt_participations
+		SET state = ?, updated_at = ?, ended_at = ?, end_reason = ?
+		WHERE id = ?
+			AND exam_attempt_id = ?
+			AND generation = ?
+			AND state = 'active'`,
+		string(participation.State),
+		participation.UpdatedAt,
+		participation.EndedAt.Time,
+		string(participation.EndReason),
+		participation.ID.String(),
+		participation.AttemptID.String(),
+		participation.Generation,
+	)
 	if err != nil {
 		return fmt.Errorf("end submitted Attempt Participation: %w", err)
 	}
 	if affected, rowsErr := result.RowsAffected(); rowsErr != nil || affected != 1 {
 		return store.NewErrConflict("attempt_participation", "attempt_participation_expired", rowsErr)
 	}
-	if err := closeNativeDelivery(ctx, tx, participation.ID, model.DeliveryClosedSubmission, participation.EndedAt.Time); err != nil {
-		return err
+	if closeErr := closeNativeDelivery(ctx, tx, participation.ID, model.DeliveryClosedSubmission, participation.EndedAt.Time); closeErr != nil {
+		return closeErr
 	}
-	result, err = tx.Exec(ctx, `UPDATE exam_attempt_connections SET state=?,closed_at=?,close_reason=?
-		WHERE id=? AND exam_attempt_id=? AND participation_id=? AND state='open'`, string(connection.State),
-		connection.ClosedAt.Time, string(connection.CloseReason), connection.ID.String(), connection.AttemptID.String(),
-		connection.ParticipationID.String())
+
+	result, err = tx.Exec(
+		ctx,
+		`UPDATE exam_attempt_connections
+		SET state = ?, closed_at = ?, close_reason = ?
+		WHERE id = ?
+			AND exam_attempt_id = ?
+			AND participation_id = ?
+			AND state = 'open'`,
+		string(connection.State),
+		connection.ClosedAt.Time,
+		string(connection.CloseReason),
+		connection.ID.String(),
+		connection.AttemptID.String(),
+		connection.ParticipationID.String(),
+	)
 	if err != nil {
 		return fmt.Errorf("close submitted Attempt Connection: %w", err)
 	}
 	if affected, rowsErr := result.RowsAffected(); rowsErr != nil || affected != 1 {
 		return store.NewErrConflict("attempt_connection", "attempt_connection_closed", rowsErr)
 	}
+
 	return nil
 }
 
-func completeExamSubmissionAudit(ctx context.Context, tx *sqlxTxWrapper, outcome examSubmissionSealOutcome,
-	auditID model.AuditEventID, auditAt time.Time, replayed bool, originalAuditID string,
+func completeExamSubmissionAudit(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	outcome examSubmissionSealOutcome,
+	auditID model.AuditEventID,
+	auditAt time.Time,
+	replayed bool,
+	originalAuditID string,
 ) error {
-	data := map[string]any{"exam_submission_id": outcome.Receipt.SubmissionID.String(), "exam_attempt_id": outcome.Receipt.AttemptID.String(),
-		"exam_sitting_id": outcome.SittingID, "candidate_user_id": outcome.CandidateID,
-		"exam_revision_id": outcome.Receipt.ExamRevisionID.String(),
-		"workspace_cursor": outcome.Receipt.WorkspaceCursor, "manifest_digest": outcome.Receipt.ManifestDigest,
-		"state": string(outcome.Receipt.State), "submitted_at": outcome.Receipt.SubmittedAt}
+	data := map[string]any{
+		"exam_submission_id": outcome.Receipt.SubmissionID.String(),
+		"exam_attempt_id":    outcome.Receipt.AttemptID.String(),
+		"exam_sitting_id":    outcome.SittingID,
+		"candidate_user_id":  outcome.CandidateID,
+		"exam_revision_id":   outcome.Receipt.ExamRevisionID.String(),
+		"workspace_cursor":   outcome.Receipt.WorkspaceCursor,
+		"manifest_digest":    outcome.Receipt.ManifestDigest,
+		"state":              string(outcome.Receipt.State),
+		"submitted_at":       outcome.Receipt.SubmittedAt,
+	}
 	if replayed {
 		if originalAuditID == "" {
 			data["replayed"] = true
@@ -852,6 +1256,7 @@ func completeExamSubmissionAudit(ctx context.Context, tx *sqlxTxWrapper, outcome
 			data["original_audit_event_id"] = originalAuditID
 		}
 	}
+
 	encoded, err := model.EncodeAuditData(data)
 	if err != nil {
 		return err
@@ -859,41 +1264,63 @@ func completeExamSubmissionAudit(ctx context.Context, tx *sqlxTxWrapper, outcome
 	if _, err = completeAuditEvent(ctx, tx, auditID, model.AuditStatusSuccess, "", encoded, auditAt); err != nil {
 		return fmt.Errorf("complete Exam Submission audit: %w", err)
 	}
+
 	return nil
 }
 
 func examSubmissionSealResult(outcome examSubmissionSealOutcome) (*store.ExamSubmissionSealResult, error) {
-	if !outcome.Receipt.SubmissionID.IsValid() || !outcome.Receipt.ReceiptCode.IsValid() || !outcome.Receipt.AttemptID.IsValid() || !outcome.Receipt.ExamRevisionID.IsValid() ||
-		outcome.Receipt.State != model.ExamAttemptSubmitted || outcome.Receipt.WorkspaceCursor < 0 ||
-		len(outcome.Receipt.ManifestDigest) != 64 || outcome.Receipt.SubmittedAt.IsZero() || outcome.Generation < 1 {
+	if !outcome.Receipt.SubmissionID.IsValid() ||
+		!outcome.Receipt.ReceiptCode.IsValid() ||
+		!outcome.Receipt.AttemptID.IsValid() ||
+		!outcome.Receipt.ExamRevisionID.IsValid() ||
+		outcome.Receipt.State != model.ExamAttemptSubmitted ||
+		outcome.Receipt.WorkspaceCursor < 0 ||
+		len(outcome.Receipt.ManifestDigest) != 64 ||
+		outcome.Receipt.SubmittedAt.IsZero() ||
+		outcome.Generation < 1 {
 		return nil, errors.New("invalid Exam Submission seal outcome")
 	}
+
 	examID, err := model.ParseExamID(outcome.ExamID)
 	if err != nil {
 		return nil, err
 	}
+
 	sittingID, err := model.ParseExamSittingID(outcome.SittingID)
 	if err != nil {
 		return nil, err
 	}
+
 	classID, err := model.ParseClassID(outcome.ClassID)
 	if err != nil {
 		return nil, err
 	}
+
 	candidateID, err := model.ParseUserID(outcome.CandidateID)
 	if err != nil {
 		return nil, err
 	}
+
 	participationID, err := model.ParseAttemptParticipationID(outcome.ParticipationID)
 	if err != nil {
 		return nil, err
 	}
+
 	connectionID, err := model.ParseAttemptConnectionID(outcome.ConnectionID)
 	if err != nil {
 		return nil, err
 	}
-	return &store.ExamSubmissionSealResult{Receipt: store.ExamSubmissionReceipt(outcome.Receipt), ExamID: examID, SittingID: sittingID, ClassID: classID,
-		CandidateUserID: candidateID, ParticipationID: participationID, Generation: outcome.Generation, ConnectionID: connectionID}, nil
+
+	return &store.ExamSubmissionSealResult{
+		Receipt:         store.ExamSubmissionReceipt(outcome.Receipt),
+		ExamID:          examID,
+		SittingID:       sittingID,
+		ClassID:         classID,
+		CandidateUserID: candidateID,
+		ParticipationID: participationID,
+		Generation:      outcome.Generation,
+		ConnectionID:    connectionID,
+	}, nil
 }
 
 type examSubmissionHeaderRow struct {
@@ -921,15 +1348,36 @@ type examSubmissionHeaderRow struct {
 	SubmittedAt              time.Time      `db:"submitted_at"`
 }
 
-const examSubmissionHeaderSelect = `SELECT id,receipt_code,exam_attempt_id,exam_revision_id,workspace_id,manifest_schema_version,workspace_cursor,
- manifest_digest,manifest_entry_count,manifest_total_file_bytes,final_focus_loss_sequence,integrity_state,
- unresolved_integrity_count,work_retired_at,integrity_retired_at,provenance,submitted_at,
- (SELECT browser_state FROM exam_attempt_delivery_budgets WHERE exam_attempt_id=exam_submissions.exam_attempt_id) AS browser_state,
- (SELECT browser_inventory_revision FROM exam_attempt_delivery_budgets WHERE exam_attempt_id=exam_submissions.exam_attempt_id) AS browser_inventory_revision,
- (SELECT browser_source_count FROM exam_attempt_delivery_budgets WHERE exam_attempt_id=exam_submissions.exam_attempt_id) AS browser_source_count,
- (SELECT browser_pending_count FROM exam_attempt_delivery_budgets WHERE exam_attempt_id=exam_submissions.exam_attempt_id) AS browser_pending_count,
- (SELECT browser_incomplete_count FROM exam_attempt_delivery_budgets WHERE exam_attempt_id=exam_submissions.exam_attempt_id) AS browser_incomplete_count
- FROM exam_submissions`
+const examSubmissionHeaderSelect = `SELECT id, receipt_code, exam_attempt_id, exam_revision_id,
+		workspace_id, manifest_schema_version, workspace_cursor, manifest_digest,
+		manifest_entry_count, manifest_total_file_bytes, final_focus_loss_sequence, integrity_state,
+		unresolved_integrity_count, work_retired_at, integrity_retired_at, provenance, submitted_at,
+		(
+			SELECT browser_state
+			FROM exam_attempt_delivery_budgets
+			WHERE exam_attempt_id = exam_submissions.exam_attempt_id
+		) AS browser_state,
+		(
+			SELECT browser_inventory_revision
+			FROM exam_attempt_delivery_budgets
+			WHERE exam_attempt_id = exam_submissions.exam_attempt_id
+		) AS browser_inventory_revision,
+		(
+			SELECT browser_source_count
+			FROM exam_attempt_delivery_budgets
+			WHERE exam_attempt_id = exam_submissions.exam_attempt_id
+		) AS browser_source_count,
+		(
+			SELECT browser_pending_count
+			FROM exam_attempt_delivery_budgets
+			WHERE exam_attempt_id = exam_submissions.exam_attempt_id
+		) AS browser_pending_count,
+		(
+			SELECT browser_incomplete_count
+			FROM exam_attempt_delivery_budgets
+			WHERE exam_attempt_id = exam_submissions.exam_attempt_id
+		) AS browser_incomplete_count
+	FROM exam_submissions`
 
 func (row examSubmissionHeaderRow) model() (*model.ExamSubmission, error) {
 	// Work retirement leaves only a permanent receipt, never a readable header
@@ -937,48 +1385,77 @@ func (row examSubmissionHeaderRow) model() (*model.ExamSubmission, error) {
 	if row.WorkRetiredAt.Valid {
 		return nil, store.NewErrNotFound("exam_submission", row.ID)
 	}
-	if !row.WorkspaceCursor.Valid || !row.ManifestDigest.Valid || !row.ManifestEntryCount.Valid ||
-		!row.ManifestTotalFileBytes.Valid || row.ManifestEntryCount.Int64 < 0 ||
+
+	if !row.WorkspaceCursor.Valid ||
+		!row.ManifestDigest.Valid ||
+		!row.ManifestEntryCount.Valid ||
+		!row.ManifestTotalFileBytes.Valid ||
+		row.ManifestEntryCount.Int64 < 0 ||
 		row.ManifestEntryCount.Int64 > model.AttemptWorkspaceMaximumEntries {
 		return nil, invalidPersistedState("exam_submission", "manifest", errors.New("retained manifest header is incomplete"))
 	}
+
 	if row.IntegrityRetiredAt.Valid {
-		if row.IntegrityState != string(model.SubmissionIntegrityRetired) || row.FinalFocusLossSequence.Valid ||
+		if row.IntegrityState != string(model.SubmissionIntegrityRetired) ||
+			row.FinalFocusLossSequence.Valid ||
 			row.UnresolvedIntegrityCount.Valid {
 			return nil, invalidPersistedState("exam_submission", "integrity", errors.New("retired integrity header retains private data"))
 		}
 	} else if !row.FinalFocusLossSequence.Valid || !row.UnresolvedIntegrityCount.Valid {
 		return nil, invalidPersistedState("exam_submission", "integrity", errors.New("retained integrity header is incomplete"))
 	}
+
 	id, err := model.ParseSubmissionID(row.ID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_submission", "id", err)
 	}
+
 	attemptID, err := model.ParseExamAttemptID(row.AttemptID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_submission", "exam_attempt_id", err)
 	}
+
 	revisionID, err := model.ParseExamRevisionID(row.ExamRevisionID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_submission", "exam_revision_id", err)
 	}
+
 	workspaceID, err := model.ParseExamAttemptWorkspaceID(row.WorkspaceID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_submission", "workspace_id", err)
 	}
-	submission := &model.ExamSubmission{ID: id, ReceiptCode: model.SubmissionReceiptCode(row.ReceiptCode), AttemptID: attemptID, ExamRevisionID: revisionID, WorkspaceID: workspaceID,
-		ManifestSchemaVersion: row.ManifestSchemaVersion, WorkspaceCursor: row.WorkspaceCursor.Int64,
-		ManifestDigest: row.ManifestDigest.String, ManifestEntryCount: int(row.ManifestEntryCount.Int64),
-		ManifestTotalFileBytes: row.ManifestTotalFileBytes.Int64, FinalFocusLossSequence: row.FinalFocusLossSequence.Int64,
-		BrowserActivity: model.BrowserSubmissionSettlement{State: row.BrowserState, InventoryRevision: row.BrowserInventoryRevision, SourceCount: row.BrowserSourceCount, PendingSourceCount: row.BrowserPendingCount, IncompleteSourceCount: row.BrowserIncompleteCount},
-		IntegrityState:  model.SubmissionIntegrityState(row.IntegrityState), UnresolvedIntegrityCount: row.UnresolvedIntegrityCount.Int64,
-		Provenance: model.ExamSubmissionProvenance(row.Provenance), SubmittedAt: model.TimeUTC(row.SubmittedAt)}
+
+	submission := &model.ExamSubmission{
+		ID:                     id,
+		ReceiptCode:            model.SubmissionReceiptCode(row.ReceiptCode),
+		AttemptID:              attemptID,
+		ExamRevisionID:         revisionID,
+		WorkspaceID:            workspaceID,
+		ManifestSchemaVersion:  row.ManifestSchemaVersion,
+		WorkspaceCursor:        row.WorkspaceCursor.Int64,
+		ManifestDigest:         row.ManifestDigest.String,
+		ManifestEntryCount:     int(row.ManifestEntryCount.Int64),
+		ManifestTotalFileBytes: row.ManifestTotalFileBytes.Int64,
+		FinalFocusLossSequence: row.FinalFocusLossSequence.Int64,
+		BrowserActivity: model.BrowserSubmissionSettlement{
+			State:                 row.BrowserState,
+			InventoryRevision:     row.BrowserInventoryRevision,
+			SourceCount:           row.BrowserSourceCount,
+			PendingSourceCount:    row.BrowserPendingCount,
+			IncompleteSourceCount: row.BrowserIncompleteCount,
+		},
+		IntegrityState:           model.SubmissionIntegrityState(row.IntegrityState),
+		UnresolvedIntegrityCount: row.UnresolvedIntegrityCount.Int64,
+		Provenance:               model.ExamSubmissionProvenance(row.Provenance),
+		SubmittedAt:              model.TimeUTC(row.SubmittedAt),
+	}
 	if row.IntegrityRetiredAt.Valid {
 		submission.IntegrityRetiredAt = model.OptionalTimeFrom(row.IntegrityRetiredAt.Time)
 	}
 	if err = submission.Validate(); err != nil {
 		return nil, invalidPersistedState("exam_submission", "value", err)
 	}
+
 	return submission, nil
 }
 
@@ -986,6 +1463,7 @@ func (s *SQLExamSubmissionStore) Resolve(ctx context.Context, submissionID model
 	if !submissionID.IsValid() {
 		return nil, store.NewErrInvalidInput("exam_submission", "id", nil)
 	}
+
 	var row struct {
 		SubmissionID    string `db:"submission_id"`
 		ExamID          string `db:"exam_id"`
@@ -994,12 +1472,16 @@ func (s *SQLExamSubmissionStore) Resolve(ctx context.Context, submissionID model
 		CandidateUserID string `db:"candidate_user_id"`
 		AcademicUnitID  string `db:"academic_unit_id"`
 	}
-	if err := s.GetMaster().Get(ctx, &row, `SELECT sub.id AS submission_id,a.exam_id,a.exam_sitting_id,
-		a.id AS exam_attempt_id,a.candidate_user_id,e.academic_unit_id FROM exam_submissions sub
-		JOIN exam_attempts a ON a.id=sub.exam_attempt_id JOIN exams e ON e.id=a.exam_id
-		WHERE sub.id=? AND sub.sealed=true`, submissionID.String()); err != nil {
+	if err := s.GetMaster().Get(ctx, &row, `SELECT sub.id AS submission_id, a.exam_id,
+			a.exam_sitting_id, a.id AS exam_attempt_id, a.candidate_user_id, e.academic_unit_id
+		FROM exam_submissions sub
+		JOIN exam_attempts a ON a.id = sub.exam_attempt_id
+		JOIN exams e ON e.id = a.exam_id
+		WHERE sub.id = ?
+			AND sub.sealed = true`, submissionID.String()); err != nil {
 		return nil, translateError("exam_submission", submissionID.String(), err)
 	}
+
 	result := &store.ExamSubmissionAuthorization{SubmissionID: submissionID}
 	var err error
 	if result.ExamID, err = model.ParseExamID(row.ExamID); err != nil {
@@ -1017,6 +1499,7 @@ func (s *SQLExamSubmissionStore) Resolve(ctx context.Context, submissionID model
 	if result.AcademicUnitID, err = model.ParseAcademicUnitID(row.AcademicUnitID); err != nil {
 		return nil, invalidPersistedState("exam_submission", "academic_unit_id", err)
 	}
+
 	return result, nil
 }
 
@@ -1024,89 +1507,137 @@ func (s *SQLExamSubmissionStore) Get(ctx context.Context, submissionID model.Sub
 	if !submissionID.IsValid() {
 		return nil, store.NewErrInvalidInput("exam_submission", "id", nil)
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "get immutable Exam Submission", func(ctx context.Context, tx *sqlxTxWrapper) (*model.ExamSubmission, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "get immutable Exam Submission", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*model.ExamSubmission, error) {
 		var row examSubmissionHeaderRow
-		if err := tx.Get(ctx, &row, examSubmissionHeaderSelect+` WHERE id=? AND sealed=true AND work_retired_at IS NULL FOR SHARE`, submissionID.String()); err != nil {
+		if err := tx.Get(
+			ctx,
+			&row,
+			examSubmissionHeaderSelect+`
+			WHERE id = ?
+				AND sealed = true
+				AND work_retired_at IS NULL
+			FOR SHARE`,
+			submissionID.String(),
+		); err != nil {
 			return nil, translateError("exam_submission", submissionID.String(), err)
 		}
+
 		submission, err := row.model()
 		if err != nil {
 			return nil, err
 		}
+
 		_, entries, err := loadStoredExamSubmissionManifest(ctx, tx, submissionID)
 		if err != nil {
 			return nil, err
 		}
+
 		manifest, err := model.NewExamSubmissionManifest(submission.WorkspaceCursor, entries)
 		if err != nil {
 			return nil, invalidPersistedState("exam_submission", "manifest", err)
 		}
-		if manifest.SchemaVersion != submission.ManifestSchemaVersion || manifest.SHA256 != submission.ManifestDigest ||
-			manifest.EntryCount != submission.ManifestEntryCount || manifest.TotalFileBytes != submission.ManifestTotalFileBytes {
+
+		if manifest.SchemaVersion != submission.ManifestSchemaVersion ||
+			manifest.SHA256 != submission.ManifestDigest ||
+			manifest.EntryCount != submission.ManifestEntryCount ||
+			manifest.TotalFileBytes != submission.ManifestTotalFileBytes {
 			return nil, invalidPersistedState("exam_submission", "manifest", errors.New("manifest summary does not match immutable Entries"))
 		}
+
 		return submission, nil
 	})
 }
 
-func loadStoredExamSubmissionManifest(ctx context.Context, executor sqlxExecutor, submissionID model.SubmissionID) ([]examSubmissionManifestPersistenceRow, []model.ExamSubmissionManifestEntry, error) {
+func loadStoredExamSubmissionManifest(
+	ctx context.Context,
+	executor sqlxExecutor,
+	submissionID model.SubmissionID,
+) ([]examSubmissionManifestPersistenceRow, []model.ExamSubmissionManifestEntry, error) {
 	var rows []examSubmissionManifestPersistenceRow
-	if err := executor.Select(ctx, &rows, `SELECT entry_id,kind,path,workspace_object_id,content_version,media_type,
-		size_bytes,sha256,storage_origin,starter_object_id,attempt_object_id
-		FROM exam_submission_manifest_entries WHERE submission_id=? ORDER BY entry_id`, submissionID.String()); err != nil {
+	if err := executor.Select(ctx, &rows, `SELECT entry_id, kind, path, workspace_object_id,
+			content_version, media_type, size_bytes, sha256, storage_origin, starter_object_id,
+			attempt_object_id
+		FROM exam_submission_manifest_entries
+		WHERE submission_id = ?
+		ORDER BY entry_id`, submissionID.String()); err != nil {
 		return nil, nil, fmt.Errorf("load stored Exam Submission manifest: %w", err)
 	}
+
 	entries := make([]model.ExamSubmissionManifestEntry, 0, len(rows))
 	for _, row := range rows {
 		entry, err := row.model()
 		if err != nil {
 			return nil, nil, err
 		}
+
 		entries = append(entries, entry)
 	}
+
 	return rows, entries, nil
 }
 
-func (s *SQLExamSubmissionStore) ListManifest(ctx context.Context, options store.ExamSubmissionManifestListOptions) (*store.ExamSubmissionManifestPage, error) {
-	if !options.SubmissionID.IsValid() || options.Limit < 1 || options.Limit > 200 ||
+func (s *SQLExamSubmissionStore) ListManifest(
+	ctx context.Context,
+	options store.ExamSubmissionManifestListOptions,
+) (*store.ExamSubmissionManifestPage, error) {
+	if !options.SubmissionID.IsValid() ||
+		options.Limit < 1 ||
+		options.Limit > 200 ||
 		(!options.AfterEntryID.IsZero() && !options.AfterEntryID.IsValid()) {
 		return nil, store.NewErrInvalidInput("exam_submission_manifest", "list_options", nil)
 	}
+
 	header, err := s.Get(ctx, options.SubmissionID)
 	if err != nil {
 		return nil, err
 	}
-	query := `SELECT entry_id,kind,path,workspace_object_id,content_version,media_type,size_bytes,sha256,
-		storage_origin,starter_object_id,attempt_object_id FROM exam_submission_manifest_entries
-		WHERE submission_id=?`
+
+	query := `SELECT entry_id, kind, path, workspace_object_id, content_version, media_type,
+			size_bytes, sha256, storage_origin, starter_object_id, attempt_object_id
+		FROM exam_submission_manifest_entries
+		WHERE submission_id = ?`
 	args := []any{options.SubmissionID.String()}
 	if !options.AfterEntryID.IsZero() {
-		query += ` AND entry_id>?`
+		query += ` AND entry_id > ?`
 		args = append(args, options.AfterEntryID.String())
 	}
+
 	query += ` ORDER BY entry_id LIMIT ?`
 	args = append(args, options.Limit+1)
 	var rows []examSubmissionManifestPersistenceRow
 	if err = s.GetMaster().Select(ctx, &rows, query, args...); err != nil {
 		return nil, fmt.Errorf("list Exam Submission manifest: %w", err)
 	}
-	page := &store.ExamSubmissionManifestPage{SubmissionID: header.ID, WorkspaceCursor: header.WorkspaceCursor,
-		ManifestDigest: header.ManifestDigest, HasMore: len(rows) > options.Limit}
+
+	page := &store.ExamSubmissionManifestPage{
+		SubmissionID:    header.ID,
+		WorkspaceCursor: header.WorkspaceCursor,
+		ManifestDigest:  header.ManifestDigest,
+		HasMore:         len(rows) > options.Limit,
+	}
 	if page.HasMore {
 		rows = rows[:options.Limit]
 	}
+
 	page.Items = make([]store.ExamSubmissionManifestItem, 0, len(rows))
 	for _, row := range rows {
 		entry, entryErr := row.model()
 		if entryErr != nil {
 			return nil, entryErr
 		}
+
 		page.Items = append(page.Items, submissionManifestItem(entry))
 	}
+
 	return page, nil
 }
 
-func (s *SQLExamSubmissionStore) ResolveFile(ctx context.Context, submissionID model.SubmissionID,
+func (s *SQLExamSubmissionStore) ResolveFile(
+	ctx context.Context,
+	submissionID model.SubmissionID,
 	entryID model.AttemptWorkspaceEntryID,
 ) (*store.ExamSubmissionFileSelector, error) {
 	if !submissionID.IsValid() || !entryID.IsValid() {
@@ -1115,12 +1646,17 @@ func (s *SQLExamSubmissionStore) ResolveFile(ctx context.Context, submissionID m
 	if _, err := s.Get(ctx, submissionID); err != nil {
 		return nil, err
 	}
+
 	var row examSubmissionManifestPersistenceRow
-	if err := s.GetMaster().Get(ctx, &row, `SELECT entry_id,kind,path,workspace_object_id,content_version,media_type,
-		size_bytes,sha256,storage_origin,starter_object_id,attempt_object_id
-		FROM exam_submission_manifest_entries WHERE submission_id=? AND entry_id=?`, submissionID.String(), entryID.String()); err != nil {
+	if err := s.GetMaster().Get(ctx, &row, `SELECT entry_id, kind, path, workspace_object_id,
+			content_version, media_type, size_bytes, sha256, storage_origin, starter_object_id,
+			attempt_object_id
+		FROM exam_submission_manifest_entries
+		WHERE submission_id = ?
+			AND entry_id = ?`, submissionID.String(), entryID.String()); err != nil {
 		return nil, translateError("exam_submission_manifest_entry", entryID.String(), err)
 	}
+
 	entry, err := row.model()
 	if err != nil {
 		return nil, err
@@ -1128,13 +1664,26 @@ func (s *SQLExamSubmissionStore) ResolveFile(ctx context.Context, submissionID m
 	if entry.Kind != model.StarterWorkspaceEntryFile {
 		return nil, store.NewErrNotFound("exam_submission_manifest_entry", entryID.String())
 	}
-	return &store.ExamSubmissionFileSelector{Entry: submissionManifestItem(entry), StorageOrigin: entry.StorageOrigin,
-		StarterObjectID: entry.StarterObjectID, AttemptObjectID: entry.AttemptObjectID, ContentVersion: entry.ContentVersion}, nil
+
+	return &store.ExamSubmissionFileSelector{
+		Entry:           submissionManifestItem(entry),
+		StorageOrigin:   entry.StorageOrigin,
+		StarterObjectID: entry.StarterObjectID,
+		AttemptObjectID: entry.AttemptObjectID,
+		ContentVersion:  entry.ContentVersion,
+	}, nil
 }
 
 func submissionManifestItem(entry model.ExamSubmissionManifestEntry) store.ExamSubmissionManifestItem {
-	return store.ExamSubmissionManifestItem{EntryID: entry.EntryID, Kind: entry.Kind, Path: entry.Path,
-		ContentVersion: entry.ContentVersion, MediaType: entry.MediaType, SizeBytes: entry.SizeBytes, SHA256: entry.SHA256}
+	return store.ExamSubmissionManifestItem{
+		EntryID:        entry.EntryID,
+		Kind:           entry.Kind,
+		Path:           entry.Path,
+		ContentVersion: entry.ContentVersion,
+		MediaType:      entry.MediaType,
+		SizeBytes:      entry.SizeBytes,
+		SHA256:         entry.SHA256,
+	}
 }
 
 var _ store.ExamSubmissionStore = (*SQLExamSubmissionStore)(nil)

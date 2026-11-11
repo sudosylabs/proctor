@@ -80,9 +80,12 @@ func validDiscoveryNodeID(value string) bool {
 		if (character < 'a' || character > 'z') &&
 			(character < 'A' || character > 'Z') &&
 			(character < '0' || character > '9') &&
-			character != '.' && character != '_' && character != '-' {
+			character != '.' &&
+			character != '_' &&
+			character != '-' {
 			return false
 		}
 	}
+
 	return true
 }

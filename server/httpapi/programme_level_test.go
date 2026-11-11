@@ -18,55 +18,58 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type programmeLevelHTTPApplication struct {
-	archiveCommand app.ArchiveProgrammeLevelCommand
+	archiveCommand academic.ArchiveProgrammeLevelCommand
 	result         *model.ProgrammeLevel
 	list           []*model.ProgrammeLevel
 	err            error
-	createCommand  app.CreateProgrammeLevelCommand
-	updateCommand  app.UpdateProgrammeLevelCommand
+	createCommand  academic.CreateProgrammeLevelCommand
+	updateCommand  academic.UpdateProgrammeLevelCommand
 }
 
-func (a *programmeLevelHTTPApplication) GetProgrammeLevel(context.Context, invocation.Invocation, app.GetProgrammeLevelQuery) (*model.ProgrammeLevel, error) {
+func (a *programmeLevelHTTPApplication) GetProgrammeLevel(context.Context, invocation.Invocation, model.ProgrammeLevelID) (*model.ProgrammeLevel, error) {
 	return a.result, a.err
 }
-func (a *programmeLevelHTTPApplication) ListProgrammeLevels(context.Context, invocation.Invocation, app.ListProgrammeLevelsQuery) (app.Page[*model.ProgrammeLevel], error) {
-	return app.Page[*model.ProgrammeLevel]{Items: a.list}, a.err
+func (a *programmeLevelHTTPApplication) ListProgrammeLevels(context.Context, invocation.Invocation, academic.ListProgrammeLevelsQuery) (paging.Page[*model.ProgrammeLevel], error) {
+	return paging.Page[*model.ProgrammeLevel]{Items: a.list}, a.err
 }
-func (a *programmeLevelHTTPApplication) CreateProgrammeLevel(_ context.Context, _ invocation.Invocation, command app.CreateProgrammeLevelCommand) (*model.ProgrammeLevel, error) {
+func (a *programmeLevelHTTPApplication) CreateProgrammeLevel(_ context.Context, _ invocation.Invocation, command academic.CreateProgrammeLevelCommand) (*model.ProgrammeLevel, error) {
 	a.createCommand = command
 	return a.result, a.err
 }
-func (a *programmeLevelHTTPApplication) UpdateProgrammeLevel(_ context.Context, _ invocation.Invocation, command app.UpdateProgrammeLevelCommand) (*model.ProgrammeLevel, error) {
+func (a *programmeLevelHTTPApplication) UpdateProgrammeLevel(_ context.Context, _ invocation.Invocation, command academic.UpdateProgrammeLevelCommand) (*model.ProgrammeLevel, error) {
 	a.updateCommand = command
 	return a.result, a.err
 }
-func (a *programmeLevelHTTPApplication) ArchiveProgrammeLevel(_ context.Context, _ invocation.Invocation, command app.ArchiveProgrammeLevelCommand) error {
+func (a *programmeLevelHTTPApplication) ArchiveProgrammeLevel(_ context.Context, _ invocation.Invocation, command academic.ArchiveProgrammeLevelCommand) error {
 	a.archiveCommand = command
 	return a.err
 }
 
 func TestProgrammeLevelHTTPPreservesMissingProgrammeProblemField(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
 	programmeID := model.NewID()
 	levels := &programmeLevelHTTPApplication{err: apperror.New("resource.not_found").WithField("resource", "programme")}
 	httpAPI := newFocusedResourceAPI(
-		t, logger, classRouteAuthenticator{principal: principal}, programmeLevelResource(levels),
+		t, logger, routetest.Authenticator{Principal: principal}, programmeLevelResource(levels),
 	)
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/programmes/"+programmeID+"/levels", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/programmes/"+programmeID+"/levels", nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusNotFound, response.Code, "status = %d: %s", response.Code, response.Body.String())
-	var problem Problem
+	var problem route.Problem
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
 	require.Equal(t, "resource.not_found", problem.Code)
 	require.Equal(t, "programme", problem.Fields["resource"])
@@ -74,12 +77,12 @@ func TestProgrammeLevelHTTPPreservesMissingProgrammeProblemField(t *testing.T) {
 
 func TestProgrammeLevelHTTPMapsDTOWithoutPermissionPreflight(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
 	level := &model.ProgrammeLevel{ID: model.ProgrammeLevelID(model.NewID()), ProgrammeID: model.ProgrammeID(model.NewID()), Name: "year-1", DisplayName: "Year 1"}
 	levels := &programmeLevelHTTPApplication{result: level}
 	httpAPI := newFocusedResourceAPI(
-		t, logger, classRouteAuthenticator{principal: principal}, programmeLevelResource(levels),
+		t, logger, routetest.Authenticator{Principal: principal}, programmeLevelResource(levels),
 	)
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/programmes/"+level.ProgrammeID.String()+"/levels", strings.NewReader(`{"name":"year-1","display_name":"Year 1"}`))
 	request.Header.Set("Authorization", "Bearer credential")
@@ -93,7 +96,7 @@ func TestProgrammeLevelHTTPMapsDTOWithoutPermissionPreflight(t *testing.T) {
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
 	require.Equal(t, level.ID.String(), body.ID)
 	require.Equal(t, level.ProgrammeID.String(), body.ProgrammeID)
-	invalid := httptest.NewRequest(http.MethodPost, "/api/v1/programmes/"+level.ProgrammeID.String()+"/levels", strings.NewReader(`{"name":"year-1","display_name":"Year 1","unknown":true}`))
+	invalid := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/programmes/"+level.ProgrammeID.String()+"/levels", strings.NewReader(`{"name":"year-1","display_name":"Year 1","unknown":true}`))
 	invalid.Header.Set("Authorization", "Bearer credential")
 	invalid.Header.Set("Content-Type", "application/json")
 	invalidResponse := httptest.NewRecorder()

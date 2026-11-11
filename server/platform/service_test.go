@@ -380,6 +380,11 @@ func (testStore) ExamCorrection() store.ExamCorrectionStore             { return
 func (testStore) ExamRecords() store.ExamRecordsStore                   { return nil }
 func (testStore) ExamExport() store.ExamExportStore                     { return nil }
 func (testStore) ExamAttempt() store.ExamAttemptStore                   { return nil }
+func (testStore) ExamFocusLoss() store.ExamFocusLossStore               { return nil }
+func (testStore) SecurityPreflight() store.SecurityPreflightStore       { return nil }
+func (testStore) NativeDelivery() store.NativeDeliveryStore             { return nil }
+func (testStore) BrowserDelivery() store.BrowserDeliveryStore           { return nil }
+func (testStore) DeliveryBudget() store.DeliveryBudgetStore             { return nil }
 func (testStore) ExamAttemptWorkspace() store.ExamAttemptWorkspaceStore { return nil }
 func (testStore) ExamSubmission() store.ExamSubmissionStore             { return nil }
 func (testStore) ExamIntegrityReview() store.ExamIntegrityReviewStore   { return nil }

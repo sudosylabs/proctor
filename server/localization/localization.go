@@ -106,20 +106,24 @@ func New(source fs.FS, defaultLocale string) (*Localizer, error) {
 	if source == nil {
 		return nil, errors.New("i18n catalog filesystem is nil")
 	}
+
 	defaultLocale, ok := normalizeLocale(defaultLocale)
 	if !ok {
 		return nil, fmt.Errorf("invalid default locale %q", defaultLocale)
 	}
+
 	files, err := fs.ReadDir(source, ".")
 	if err != nil {
 		return nil, fmt.Errorf("read i18n catalogs: %w", err)
 	}
+
 	catalogs := make(map[string]map[string]message)
 	bundle := goi18n.NewBundle(language.English)
 	for _, file := range files {
 		if file.IsDir() || path.Ext(file.Name()) != ".json" {
 			continue
 		}
+
 		locale, valid := normalizeLocale(strings.TrimSuffix(file.Name(), path.Ext(file.Name())))
 		if !valid {
 			return nil, fmt.Errorf("i18n catalog %q has an invalid locale filename", file.Name())
@@ -127,66 +131,87 @@ func New(source fs.FS, defaultLocale string) (*Localizer, error) {
 		if _, exists := catalogs[locale]; exists {
 			return nil, fmt.Errorf("duplicate normalized i18n locale %q", locale)
 		}
+
 		entries, readErr := readEntries(source, file.Name())
 		if readErr != nil {
 			return nil, readErr
 		}
+
 		messages := make(map[string]message, len(entries))
 		previous := ""
 		for index, entry := range entries {
-			if !keyPattern.MatchString(string(entry.ID)) {
+			if !keyPattern.MatchString(entry.ID) {
 				return nil, fmt.Errorf("i18n catalog %q entry %d has invalid id %q", file.Name(), index, entry.ID)
 			}
 			if index > 0 && previous >= entry.ID {
 				return nil, fmt.Errorf("i18n catalog %q ids are not unique and lexically sorted at %q", file.Name(), entry.ID)
 			}
+
 			compiled, compileErr := compileMessage(entry.ID, entry.Translation)
 			if compileErr != nil {
 				return nil, fmt.Errorf("i18n catalog %q id %q: %w", file.Name(), entry.ID, compileErr)
 			}
+
 			messages[entry.ID] = compiled
 			previous = entry.ID
 		}
+
 		if len(messages) == 0 {
 			return nil, fmt.Errorf("i18n catalog %q is empty", file.Name())
 		}
+
 		catalogs[locale] = messages
 		compiled := make([]*goi18n.Message, 0, len(messages))
 		for _, message := range messages {
 			compiled = append(compiled, message.compiled)
 		}
+
 		if err := bundle.AddMessages(language.Make(locale), compiled...); err != nil {
 			return nil, fmt.Errorf("register i18n catalog %q: %w", file.Name(), err)
 		}
 	}
+
 	english, ok := catalogs[EnglishLocale]
 	if !ok {
 		return nil, errors.New("i18n catalogs require en.json")
 	}
+
 	for locale, messages := range catalogs {
 		if locale == EnglishLocale {
 			continue
 		}
+
 		for key, translated := range messages {
 			canonical, exists := english[key]
 			if !exists {
 				return nil, fmt.Errorf("i18n locale %q contains unknown id %q", locale, key)
 			}
+
 			if translated.placeholders != canonical.placeholders {
-				return nil, fmt.Errorf("i18n locale %q id %q has placeholders %q, want %q", locale, key, translated.placeholders, canonical.placeholders)
+				return nil, fmt.Errorf(
+					"i18n locale %q id %q has placeholders %q, want %q",
+					locale,
+					key,
+					translated.placeholders,
+					canonical.placeholders,
+				)
 			}
+
 			if translated.plural != canonical.plural {
 				return nil, fmt.Errorf("i18n locale %q id %q changes singular/plural shape", locale, key)
 			}
 		}
 	}
+
 	if !hasCatalogCandidate(catalogs, defaultLocale) {
 		return nil, fmt.Errorf("default locale %q is not represented by an i18n catalog", defaultLocale)
 	}
+
 	locales := make([]string, 0, len(catalogs))
 	for locale := range catalogs {
 		locales = append(locales, locale)
 	}
+
 	sort.Strings(locales)
 	return &Localizer{defaultLocale: defaultLocale, catalogs: catalogs, locales: locales, bundle: bundle}, nil
 }
@@ -217,11 +242,13 @@ func compileMessage(key string, value catalogTranslation) (message, error) {
 	if len(value.forms) == 0 {
 		return message{}, errors.New("translation is empty")
 	}
+
 	if len(value.forms) > 1 || value.forms["other"] == "" {
 		if _, exists := value.forms["other"]; !exists {
 			return message{}, errors.New("plural translation requires an other form")
 		}
 	}
+
 	placeholders := ""
 	firstForm := true
 	for form, text := range value.forms {
@@ -229,6 +256,7 @@ func compileMessage(key string, value catalogTranslation) (message, error) {
 		if err != nil {
 			return message{}, fmt.Errorf("%s form: %w", form, err)
 		}
+
 		if firstForm {
 			placeholders = compiledPlaceholders
 			firstForm = false
@@ -236,6 +264,7 @@ func compileMessage(key string, value catalogTranslation) (message, error) {
 			return message{}, fmt.Errorf("plural forms use different placeholders %q and %q", placeholders, compiledPlaceholders)
 		}
 	}
+
 	compiled := &goi18n.Message{ID: key}
 	compiled.Zero = value.forms["zero"]
 	compiled.One = value.forms["one"]
@@ -253,11 +282,13 @@ func validateMessageText(key, value string) (string, error) {
 	if !utf8.ValidString(value) || len(value) > maxTranslationBytes {
 		return "", fmt.Errorf("translation is not bounded valid UTF-8")
 	}
+
 	for _, character := range value {
 		if unicode.IsControl(character) && character != '\n' && character != '\t' {
 			return "", errors.New("translation contains a control character")
 		}
 	}
+
 	matches := placeholderPattern.FindAllStringSubmatch(value, -1)
 	names := make([]string, 0, len(matches))
 	seen := make(map[string]struct{}, len(matches))
@@ -265,18 +296,22 @@ func validateMessageText(key, value string) (string, error) {
 		if _, exists := seen[match[1]]; exists {
 			continue
 		}
+
 		seen[match[1]] = struct{}{}
 		names = append(names, match[1])
 	}
+
 	sort.Strings(names)
 	withoutPlaceholders := placeholderPattern.ReplaceAllString(value, "")
 	if strings.Contains(withoutPlaceholders, "{{") || strings.Contains(withoutPlaceholders, "}}") {
 		return "", errors.New("translation uses unsupported template syntax")
 	}
-	_, err := template.New(string(key)).Option("missingkey=error").Parse(value)
+
+	_, err := template.New(key).Option("missingkey=error").Parse(value)
 	if err != nil {
 		return "", fmt.Errorf("parse translation: %w", err)
 	}
+
 	return strings.Join(names, ","), nil
 }
 
@@ -292,6 +327,7 @@ func (l *Localizer) ResolveRequest(requestedLocale string, request Request) (Tra
 	if l == nil {
 		return Translation{}, errors.New("localizer is nil")
 	}
+
 	canonical, exists := l.catalogs[EnglishLocale][request.ID]
 	if !exists {
 		return Translation{}, fmt.Errorf("unknown localization id %q", request.ID)
@@ -299,6 +335,7 @@ func (l *Localizer) ResolveRequest(requestedLocale string, request Request) (Tra
 	if canonical.plural && request.PluralCount == nil {
 		return Translation{}, fmt.Errorf("localization id %q requires a plural count", request.ID)
 	}
+
 	selectedLocale := ""
 	for _, candidate := range localeCandidates(requestedLocale, l.defaultLocale, EnglishLocale) {
 		if catalog, exists := l.catalogs[candidate]; exists {
@@ -308,12 +345,16 @@ func (l *Localizer) ResolveRequest(requestedLocale string, request Request) (Tra
 			}
 		}
 	}
+
 	if selectedLocale == "" {
 		return Translation{}, fmt.Errorf("localization id %q is unavailable", request.ID)
 	}
+
 	localizer := goi18n.NewLocalizer(l.bundle, selectedLocale)
 	text, tag, err := localizer.LocalizeWithTag(&goi18n.LocalizeConfig{
-		MessageID: request.ID, TemplateData: request.TemplateData, PluralCount: request.PluralCount,
+		MessageID:      request.ID,
+		TemplateData:   request.TemplateData,
+		PluralCount:    request.PluralCount,
 		TemplateParser: &goi18ntemplate.TextParser{Option: "missingkey=error"},
 	})
 	if err != nil {
@@ -322,10 +363,12 @@ func (l *Localizer) ResolveRequest(requestedLocale string, request Request) (Tra
 	if len(text) > maxRenderedMessageBytes {
 		return Translation{}, fmt.Errorf("rendered localization id %q exceeds %d bytes", request.ID, maxRenderedMessageBytes)
 	}
+
 	locale, ok := normalizeLocale(tag.String())
 	if !ok {
 		locale = tag.String()
 	}
+
 	return Translation{Locale: locale, Text: text}, nil
 }
 

@@ -55,6 +55,7 @@ func TestExamResourceStore(t *testing.T, ss store.Store) {
 	require.Equal(t, first.finalization.Resource.ID, listed[0].Resource.ID)
 	got, err := ss.ExamResource().Get(ctx, examID, first.finalization.Resource.ID)
 	require.NoError(t, err)
+	require.True(t, got.Consistent(), "Get returned a result inconsistent with its request")
 	require.Equal(t, first.finalization.Rendition.SHA256, got.Rendition.SHA256)
 
 	replacement := reserveExamResource(t, ctx, ss, examID, creator.ID, first.finalization.Resource.ID, "Reference", 0, 2, at.Add(3*time.Second), model.ExamResourceMediaText, got)

@@ -12,6 +12,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -73,167 +74,240 @@ type FocusLossEvaluation struct {
 // may raise an Integrity Flag and open an Attempt Suspension. A claim that
 // arrives after the Attempt or Sitting ended is evaluated without changing
 // the Attempt.
-func (s *Service) EvaluateExamAttemptFocusLoss(ctx context.Context, invocation invocation.Invocation, command FocusLossCommand) (_ FocusLossEvaluation, resultErr error) {
+func (s *Service) EvaluateExamAttemptFocusLoss(
+	ctx context.Context,
+	inv invocation.Invocation,
+	command FocusLossCommand,
+) (_ FocusLossEvaluation, resultErr error) {
 	defer func() { s.recordOperational("focus_loss", resultErr) }()
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	selector, err := focusLossSelector(invocation, command)
+	selector, err := focusLossSelector(inv, command)
 	if err != nil {
 		return FocusLossEvaluation{}, err
 	}
-	target, err := s.deps.Persistence.ResolveFocusLossTarget(ctx, selector)
+
+	target, err := s.focusLoss.ResolveFocusLossTarget(ctx, selector)
 	if err != nil {
 		if endedFocusLossCandidate(err) {
-			return s.evaluateEndedFocusLoss(ctx, invocation, command, selector)
+			return s.evaluateEndedFocusLoss(ctx, inv, command, selector)
 		}
 		return FocusLossEvaluation{}, storeError(storeErrors, err)
 	}
+
 	if !validFocusLossTarget(target, selector) {
 		return FocusLossEvaluation{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Focus Loss audit target"))
 	}
-	auditID, err := s.deps.Auditor.BeginAtScope(ctx, invocation, model.ActionExamSittingParticipate,
-		model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()}, model.RoleScopeClass,
-		target.ClassID.String(), store.ExamAttemptFocusLossOperation, map[string]any{
-			"exam_attempt_id": command.AttemptID.String(), "generation": command.Generation, "sequence": command.Sequence,
-		}, nil)
+
+	auditID, err := s.auditor.Begin(ctx, access.Mutation{
+		Invocation: inv,
+		Action:     model.ActionExamSittingParticipate,
+		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
+		ScopeType:  model.RoleScopeClass,
+		ScopeID:    target.ClassID.String(),
+		Operation:  store.ExamAttemptFocusLossOperation,
+		Value: map[string]any{
+			"exam_attempt_id": command.AttemptID.String(),
+			"generation":      command.Generation,
+			"sequence":        command.Sequence,
+		},
+	})
 	if err != nil {
 		return FocusLossEvaluation{}, err
 	}
-	stored, err := s.deps.Persistence.RecordFocusLoss(ctx, &store.ExamAttemptFocusLossSignal{
-		Access: selector, SignalID: s.deps.NewFocusLossSignal(),
-		EvidenceID: s.deps.NewEvidence(), FlagID: s.deps.NewFlag(), SuspensionID: s.deps.NewSuspension(),
-		Sequence: command.Sequence, DurationMilliseconds: command.DurationMilliseconds, Source: command.Source,
-		AuditEventID: auditID, AuditAt: model.TimeUTC(s.deps.Now()),
+
+	stored, err := s.focusLoss.RecordFocusLoss(ctx, &store.ExamAttemptFocusLossSignal{
+		Access:               selector,
+		SignalID:             s.newFocusLossSignalID(),
+		EvidenceID:           s.newEvidenceID(),
+		FlagID:               s.newFlagID(),
+		SuspensionID:         s.newSuspensionID(),
+		Sequence:             command.Sequence,
+		DurationMilliseconds: command.DurationMilliseconds,
+		Source:               command.Source,
+		AuditEventID:         auditID,
+		AuditAt:              model.TimeUTC(s.now()),
 	})
 	if err != nil {
 		if endedFocusLossCandidate(err) {
-			if auditErr := s.deps.Auditor.Fail(ctx, auditID, "exam.attempt.state_conflict"); auditErr != nil {
+			if auditErr := s.auditor.Fail(ctx, auditID, "exam.attempt.state_conflict"); auditErr != nil {
 				return FocusLossEvaluation{}, auditErr
 			}
-			return s.evaluateEndedFocusLoss(ctx, invocation, command, selector)
+			return s.evaluateEndedFocusLoss(ctx, inv, command, selector)
 		}
+
 		return FocusLossEvaluation{}, s.failAudit(ctx, auditID, err)
 	}
-	result, err := projectFocusLoss(stored, target, selector, command)
+
+	result, err := projectFocusLoss(stored, command)
 	if err != nil {
 		return FocusLossEvaluation{}, err
 	}
-	if !result.Duplicate && (result.GapDetected || result.FlagCreated || result.ManagerNotificationRequired ||
-		result.CandidateWarningCreated || result.SuspensionCreated) {
-		if effectErr := s.deps.Effects.FocusLossEvaluated(ctx, result); effectErr != nil {
-			s.deps.EffectFailures.Report(ctx, "exam_attempt_focus_loss_evaluated", effectErr)
+
+	if !result.Duplicate &&
+		(result.GapDetected ||
+			result.FlagCreated ||
+			result.ManagerNotificationRequired ||
+			result.CandidateWarningCreated ||
+			result.SuspensionCreated) {
+		if effectErr := s.publishFocusLossEvaluated(ctx, result); effectErr != nil {
+			s.publisher.Report(ctx, "exam_attempt_focus_loss_evaluated", effectErr)
 		}
 	}
+
 	return result, nil
 }
 
 func endedFocusLossCandidate(err error) bool {
 	var conflict *store.ErrConflict
-	return errors.As(err, &conflict) && (conflict.Constraint == "exam_attempt_state" ||
-		conflict.Constraint == "exam_sitting_state")
+	return errors.As(err, &conflict) &&
+		(conflict.Constraint == "exam_attempt_state" ||
+			conflict.Constraint == "exam_sitting_state")
 }
 
-func (s *Service) evaluateEndedFocusLoss(ctx context.Context, invocation invocation.Invocation, command FocusLossCommand,
+func (s *Service) evaluateEndedFocusLoss(
+	ctx context.Context,
+	inv invocation.Invocation,
+	command FocusLossCommand,
 	selector store.ExamAttemptFocusLossAccess,
 ) (FocusLossEvaluation, error) {
-	target, err := s.deps.Persistence.ResolveEndedFocusLossTarget(ctx, selector)
+	target, err := s.focusLoss.ResolveEndedFocusLossTarget(ctx, selector)
 	if err != nil {
 		return FocusLossEvaluation{}, storeError(storeErrors, err)
 	}
 	if target == nil || !target.SubmissionID.IsValid() || !validFocusLossTarget(&target.ExamAttemptFocusLossTarget, selector) {
 		return FocusLossEvaluation{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent late Focus Loss audit target"))
 	}
-	auditID, err := s.deps.Auditor.BeginAtScope(ctx, invocation, model.ActionExamSittingParticipate,
-		model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()}, model.RoleScopeClass,
-		target.ClassID.String(), store.ExamAttemptFocusLossDiscrepancyOperation, map[string]any{
-			"exam_attempt_id": command.AttemptID.String(), "submission_id": target.SubmissionID.String(),
-			"generation": command.Generation, "sequence": command.Sequence,
-		}, nil)
+
+	auditID, err := s.auditor.Begin(ctx, access.Mutation{
+		Invocation: inv,
+		Action:     model.ActionExamSittingParticipate,
+		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
+		ScopeType:  model.RoleScopeClass,
+		ScopeID:    target.ClassID.String(),
+		Operation:  store.ExamAttemptFocusLossDiscrepancyOperation,
+		Value: map[string]any{
+			"exam_attempt_id": command.AttemptID.String(),
+			"submission_id":   target.SubmissionID.String(),
+			"generation":      command.Generation,
+			"sequence":        command.Sequence,
+		},
+	})
 	if err != nil {
 		return FocusLossEvaluation{}, err
 	}
-	discrepancyID := s.deps.NewDiscrepancy()
-	signalID := s.deps.NewFocusLossSignal()
-	stored, err := s.deps.Persistence.RecordEndedFocusLoss(ctx, &store.ExamAttemptFocusLossDiscrepancy{
-		Access: selector, DiscrepancyID: discrepancyID, SignalID: signalID,
-		Sequence: command.Sequence, DurationMilliseconds: command.DurationMilliseconds, Source: command.Source,
-		AuditEventID: auditID, AuditAt: model.TimeUTC(s.deps.Now()),
+
+	discrepancyID := s.newDiscrepancyID()
+	signalID := s.newFocusLossSignalID()
+	stored, err := s.focusLoss.RecordEndedFocusLoss(ctx, &store.ExamAttemptFocusLossDiscrepancy{
+		Access:               selector,
+		DiscrepancyID:        discrepancyID,
+		SignalID:             signalID,
+		Sequence:             command.Sequence,
+		DurationMilliseconds: command.DurationMilliseconds,
+		Source:               command.Source,
+		AuditEventID:         auditID,
+		AuditAt:              model.TimeUTC(s.now()),
 	})
 	if err != nil {
 		return FocusLossEvaluation{}, s.failAudit(ctx, auditID, err)
 	}
-	if stored == nil || stored.Discrepancy == nil || stored.Discrepancy.Validate() != nil ||
-		stored.Target != *target || stored.Discrepancy.SubmissionID != target.SubmissionID ||
-		stored.Discrepancy.AttemptID != selector.AttemptID || stored.Discrepancy.ParticipationID != selector.ParticipationID ||
-		stored.Discrepancy.Generation != selector.Generation ||
-		stored.Discrepancy.Sequence != command.Sequence || stored.Discrepancy.DurationMilliseconds != command.DurationMilliseconds ||
-		stored.Discrepancy.Source != command.Source || (!stored.Duplicate &&
-		(stored.Discrepancy.ID != discrepancyID || stored.Discrepancy.SignalID != signalID)) {
-		return FocusLossEvaluation{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent late Focus Loss outcome"))
+
+	result := FocusLossEvaluation{
+		ExamID:              target.ExamID,
+		SittingID:           target.SittingID,
+		CandidateUserID:     target.CandidateUserID,
+		SubmissionID:        target.SubmissionID,
+		AttemptID:           target.AttemptID,
+		ParticipationID:     target.ParticipationID,
+		DiscrepancyID:       stored.Discrepancy.ID,
+		Generation:          target.Generation,
+		AcceptedSequence:    stored.Discrepancy.Sequence,
+		ReceivedAt:          stored.Discrepancy.ReceivedAt,
+		Duplicate:           stored.Duplicate,
+		GapDetected:         stored.Discrepancy.MissingBefore > 0,
+		DiscrepancyRecorded: true,
 	}
-	result := FocusLossEvaluation{ExamID: target.ExamID, SittingID: target.SittingID, CandidateUserID: target.CandidateUserID,
-		SubmissionID: target.SubmissionID, AttemptID: target.AttemptID, ParticipationID: target.ParticipationID,
-		DiscrepancyID: stored.Discrepancy.ID, Generation: target.Generation,
-		AcceptedSequence: stored.Discrepancy.Sequence, ReceivedAt: stored.Discrepancy.ReceivedAt,
-		Duplicate: stored.Duplicate, GapDetected: stored.Discrepancy.MissingBefore > 0, DiscrepancyRecorded: true}
 	if !result.Duplicate {
-		if effectErr := s.deps.Effects.FocusLossEvaluated(ctx, result); effectErr != nil {
-			s.deps.EffectFailures.Report(ctx, "exam_attempt_focus_loss_discrepancy_recorded", effectErr)
+		if effectErr := s.publishFocusLossEvaluated(ctx, result); effectErr != nil {
+			s.publisher.Report(ctx, "exam_attempt_focus_loss_discrepancy_recorded", effectErr)
 		}
 	}
+
 	return result, nil
 }
 
-func focusLossSelector(invocation invocation.Invocation, command FocusLossCommand) (store.ExamAttemptFocusLossAccess, error) {
-	selector, err := candidateSelector(invocation, CandidateAccess{AttemptID: command.AttemptID,
-		ConnectionID: command.ConnectionID, ContinuityCredential: command.ContinuityCredential})
+func focusLossSelector(inv invocation.Invocation, command FocusLossCommand) (store.ExamAttemptFocusLossAccess, error) {
+	selector, err := candidateSelector(inv, CandidateAccess{
+		AttemptID:            command.AttemptID,
+		ConnectionID:         command.ConnectionID,
+		ContinuityCredential: command.ContinuityCredential,
+	})
 	if err != nil {
 		return store.ExamAttemptFocusLossAccess{}, err
 	}
-	if command.SchemaVersion != model.FocusLossSignalSchemaVersion || !command.ParticipationID.IsValid() ||
-		command.Generation < 1 || command.Sequence < 1 ||
-		command.DurationMilliseconds < 1 || command.DurationMilliseconds > model.FocusLossMaximumDurationMilliseconds ||
+
+	if command.SchemaVersion != model.FocusLossSignalSchemaVersion ||
+		!command.ParticipationID.IsValid() ||
+		command.Generation < 1 ||
+		command.Sequence < 1 ||
+		command.DurationMilliseconds < 1 ||
+		command.DurationMilliseconds > model.FocusLossMaximumDurationMilliseconds ||
 		!command.Source.IsValid() {
 		return store.ExamAttemptFocusLossAccess{}, apperror.Invalid("exam.attempt.invalid", "focus_loss")
 	}
-	return store.ExamAttemptFocusLossAccess{AttemptID: selector.AttemptID, ParticipationID: command.ParticipationID,
-		Generation: command.Generation, CandidateUserID: selector.CandidateUserID, SessionID: selector.SessionID,
-		ConnectionID: selector.ConnectionID, ContinuityCredentialHash: selector.ContinuityCredentialHash}, nil
+
+	return store.ExamAttemptFocusLossAccess{
+		AttemptID:                selector.AttemptID,
+		ParticipationID:          command.ParticipationID,
+		Generation:               command.Generation,
+		CandidateUserID:          selector.CandidateUserID,
+		SessionID:                selector.SessionID,
+		ConnectionID:             selector.ConnectionID,
+		ContinuityCredentialHash: selector.ContinuityCredentialHash,
+	}, nil
 }
 
-func validFocusLossTarget(target *store.ExamAttemptFocusLossTarget, access store.ExamAttemptFocusLossAccess) bool {
-	return target != nil && target.ExamID.IsValid() && target.SittingID.IsValid() && target.ClassID.IsValid() &&
-		target.CandidateUserID == access.CandidateUserID && target.AttemptID == access.AttemptID &&
-		target.ParticipationID == access.ParticipationID && target.Generation == access.Generation
+func validFocusLossTarget(target *store.ExamAttemptFocusLossTarget, focusLossAccess store.ExamAttemptFocusLossAccess) bool {
+	return target != nil &&
+		target.ExamID.IsValid() &&
+		target.SittingID.IsValid() &&
+		target.ClassID.IsValid() &&
+		target.CandidateUserID == focusLossAccess.CandidateUserID &&
+		target.AttemptID == focusLossAccess.AttemptID &&
+		target.ParticipationID == focusLossAccess.ParticipationID &&
+		target.Generation == focusLossAccess.Generation
 }
 
-func projectFocusLoss(stored *store.ExamAttemptFocusLossResult, target *store.ExamAttemptFocusLossTarget,
-	access store.ExamAttemptFocusLossAccess, command FocusLossCommand,
-) (FocusLossEvaluation, error) {
-	if stored == nil || stored.Signal == nil || stored.Signal.Validate() != nil || stored.ExamID != target.ExamID ||
-		stored.SittingID != target.SittingID || stored.ClassID != target.ClassID || stored.CandidateUserID != access.CandidateUserID ||
-		stored.AttemptID != access.AttemptID || stored.ParticipationID != access.ParticipationID || stored.Generation != access.Generation ||
-		stored.Signal.AttemptID != access.AttemptID || stored.Signal.ParticipationID != access.ParticipationID ||
-		stored.Signal.Generation != access.Generation || stored.Signal.Sequence != command.Sequence ||
-		stored.Signal.DurationMilliseconds != command.DurationMilliseconds || stored.Signal.Source != command.Source ||
-		stored.AcceptedSequence != command.Sequence || stored.DatabaseTime.IsZero() ||
-		!stored.DatabaseTime.Equal(stored.Signal.ReceivedAt) || stored.MissingBefore < 0 ||
-		stored.WindowIncidentCount < 0 || stored.RetainedEvidenceCount < 0 ||
-		stored.RetainedEvidenceCount > model.FocusLossMaximumEvidenceEpisodes || stored.DiagnosticCount < 0 {
+func projectFocusLoss(stored *store.ExamAttemptFocusLossResult, command FocusLossCommand) (FocusLossEvaluation, error) {
+	if !stored.Accepted(command.Sequence) {
 		return FocusLossEvaluation{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Focus Loss outcome"))
 	}
-	if !validFocusLossEnforcement(stored, access) {
+
+	if !validFocusLossEnforcement(stored) {
 		return FocusLossEvaluation{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Focus Loss enforcement outcome"))
 	}
-	result := FocusLossEvaluation{ExamID: stored.ExamID, SittingID: stored.SittingID, CandidateUserID: stored.CandidateUserID,
-		AttemptID: stored.AttemptID, ParticipationID: stored.ParticipationID, Generation: stored.Generation,
-		AcceptedSequence: stored.AcceptedSequence, ReceivedAt: stored.DatabaseTime, Duplicate: stored.Duplicate,
-		GapDetected: stored.MissingBefore > 0, PolicyDisabled: !stored.CollectionEnabled, Qualified: stored.Qualified,
-		ThresholdCrossed: stored.ThresholdCrossed, PolicyOutcome: stored.PolicyOutcome,
+
+	result := FocusLossEvaluation{
+		ExamID:                      stored.ExamID,
+		SittingID:                   stored.SittingID,
+		CandidateUserID:             stored.CandidateUserID,
+		AttemptID:                   stored.AttemptID,
+		ParticipationID:             stored.ParticipationID,
+		Generation:                  stored.Generation,
+		AcceptedSequence:            stored.AcceptedSequence,
+		ReceivedAt:                  stored.DatabaseTime,
+		Duplicate:                   stored.Duplicate,
+		GapDetected:                 stored.MissingBefore > 0,
+		PolicyDisabled:              !stored.CollectionEnabled,
+		Qualified:                   stored.Qualified,
+		ThresholdCrossed:            stored.ThresholdCrossed,
+		PolicyOutcome:               stored.PolicyOutcome,
 		RetainedEvidenceCount:       stored.RetainedEvidenceCount,
 		FlagCreated:                 stored.FlagCreated,
 		CandidateWarningCreated:     stored.CandidateWarningCreated,
 		ManagerNotificationRequired: stored.ManagerNotificationRequired,
-		ConnectionClosed:            stored.ConnectionClosed}
+		ConnectionClosed:            stored.ConnectionClosed,
+	}
 	if stored.Flag != nil {
 		result.Flag = *stored.Flag
 	}
@@ -249,95 +323,113 @@ func projectFocusLoss(stored *store.ExamAttemptFocusLossResult, target *store.Ex
 	if stored.Connection != nil {
 		result.Connection = *stored.Connection
 	}
+
 	if stored.Suspension != nil {
 		result.Suspension = *stored.Suspension
 		result.SuspensionCreated = true
 	}
+
 	return result, nil
 }
 
-func validFocusLossEnforcement(result *store.ExamAttemptFocusLossResult, access store.ExamAttemptFocusLossAccess) bool {
-	if result.Overflow != nil && (result.Overflow.Validate() != nil || result.Overflow.AttemptID != access.AttemptID ||
-		result.Overflow.ParticipationID != access.ParticipationID || result.Overflow.Generation != access.Generation) {
-		return false
-	}
+func validFocusLossEnforcement(result *store.ExamAttemptFocusLossResult) bool {
 	if !result.CollectionEnabled {
-		return !result.Qualified && !result.ThresholdCrossed && result.PolicyOutcome == "" && result.Flag == nil && result.Attempt == nil &&
-			result.Participation == nil && result.Connection == nil && result.Suspension == nil && !result.FlagCreated &&
-			!result.CandidateWarningCreated && !result.ManagerNotificationRequired && !result.ConnectionClosed
+		return !result.Qualified &&
+			!result.ThresholdCrossed &&
+			result.PolicyOutcome == "" &&
+			result.Flag == nil &&
+			result.Attempt == nil &&
+			result.Participation == nil &&
+			result.Connection == nil &&
+			result.Suspension == nil &&
+			!result.FlagCreated &&
+			!result.CandidateWarningCreated &&
+			!result.ManagerNotificationRequired &&
+			!result.ConnectionClosed
 	}
-	if !result.Qualified && (result.ThresholdCrossed || result.PolicyOutcome != "" || result.Flag != nil || result.FlagCreated ||
-		result.CandidateWarningCreated || result.ManagerNotificationRequired || result.Attempt != nil || result.Participation != nil ||
-		result.Connection != nil || result.ConnectionClosed || result.Suspension != nil) {
+
+	if !result.Qualified &&
+		(result.ThresholdCrossed ||
+			result.PolicyOutcome != "" ||
+			result.Flag != nil ||
+			result.FlagCreated ||
+			result.CandidateWarningCreated ||
+			result.ManagerNotificationRequired ||
+			result.Attempt != nil ||
+			result.Participation != nil ||
+			result.Connection != nil ||
+			result.ConnectionClosed ||
+			result.Suspension != nil) {
 		return false
 	}
-	if (result.FlagCreated || result.ManagerNotificationRequired || result.CandidateWarningCreated || result.Suspension != nil ||
-		result.ConnectionClosed) && (!result.ThresholdCrossed || !result.Qualified) {
+
+	if (result.FlagCreated ||
+		result.ManagerNotificationRequired ||
+		result.CandidateWarningCreated ||
+		result.Suspension != nil ||
+		result.ConnectionClosed) &&
+		(!result.ThresholdCrossed || !result.Qualified) {
 		return false
 	}
+
 	if result.ThresholdCrossed {
 		switch result.PolicyOutcome {
 		case model.IntegrityOutcomeFlag, model.IntegrityOutcomeFlagAndWarn, model.IntegrityOutcomeFlagAndSuspend:
 		default:
 			return false
 		}
+
 		if result.Flag == nil || result.RetainedEvidenceCount == 0 && result.Overflow == nil {
 			return false
 		}
 	} else if result.PolicyOutcome != "" {
 		return false
 	}
-	if result.FlagCreated != result.ManagerNotificationRequired || result.CandidateWarningCreated &&
-		(!result.ThresholdCrossed || result.PolicyOutcome != model.IntegrityOutcomeFlagAndWarn) {
+
+	if result.FlagCreated != result.ManagerNotificationRequired ||
+		result.CandidateWarningCreated &&
+			(!result.ThresholdCrossed || result.PolicyOutcome != model.IntegrityOutcomeFlagAndWarn) {
 		return false
 	}
-	if result.Flag != nil && (result.Flag.Validate() != nil || result.Flag.AttemptID != access.AttemptID ||
-		result.Flag.Generation != access.Generation || result.Flag.Kind != model.IntegrityPolicyFocusLoss) {
+
+	if result.Participation != nil && !result.Participation.LifecycleInOrder() {
 		return false
 	}
-	if result.FlagCreated && result.Flag == nil {
+
+	if result.Connection != nil && !validFocusLossConnection(result.Connection) {
 		return false
 	}
-	if result.Attempt != nil && (result.Attempt.Validate() != nil || result.Attempt.ID != access.AttemptID ||
-		result.Attempt.ExamID != result.ExamID || result.Attempt.SittingID != result.SittingID ||
-		result.Attempt.CandidateUserID != result.CandidateUserID) {
+
+	if result.ConnectionClosed &&
+		(result.Connection == nil ||
+			result.Connection.State != model.AttemptConnectionClosed ||
+			result.Connection.CloseReason != model.AttemptConnectionClosePolicySuspended) {
 		return false
 	}
-	if result.Participation != nil && (!validParticipationView(result.Participation) ||
-		result.Participation.ID != access.ParticipationID || result.Participation.Generation != access.Generation) {
+
+	if result.Suspension != nil &&
+		(!result.Suspension.ActiveOrAbsent() ||
+			result.Suspension.CandidateReason != model.AttemptSuspensionCandidateReasonFocusLossPolicy) {
 		return false
 	}
-	if result.Connection != nil && (result.Connection.ID != access.ConnectionID || !validFocusLossConnection(result.Connection)) {
-		return false
-	}
-	if result.ConnectionClosed && (result.Connection == nil || result.Connection.State != model.AttemptConnectionClosed ||
-		result.Connection.CloseReason != model.AttemptConnectionClosePolicySuspended) {
-		return false
-	}
-	if result.Suspension != nil && (!validActiveSuspension(result.Suspension, access.AttemptID) || result.Flag == nil ||
-		result.Suspension.ParticipationID != access.ParticipationID || result.Suspension.Generation != access.Generation ||
-		result.Suspension.FlagID != result.Flag.ID ||
-		result.Suspension.CandidateReason != model.AttemptSuspensionCandidateReasonFocusLossPolicy) {
-		return false
-	}
+
 	if result.PolicyOutcome == model.IntegrityOutcomeFlagAndSuspend && result.ThresholdCrossed {
-		return result.Attempt != nil && result.Attempt.State == model.ExamAttemptSuspended && result.Participation != nil &&
+		return result.Attempt.State == model.ExamAttemptSuspended &&
 			result.Participation.State == model.AttemptParticipationEnded &&
-			result.Participation.EndReason == model.AttemptParticipationEndPolicySuspended && result.Connection != nil &&
-			result.Connection.State == model.AttemptConnectionClosed && result.Suspension != nil
+			result.Participation.EndReason == model.AttemptParticipationEndPolicySuspended &&
+			result.Connection.State == model.AttemptConnectionClosed &&
+			result.Suspension != nil
 	}
+
 	return result.Suspension == nil && !result.ConnectionClosed
 }
 
 func validFocusLossConnection(connection *store.ExamAttemptManagerConnection) bool {
-	if connection == nil || !connection.ID.IsValid() || connection.OpenedAt.IsZero() {
-		return false
-	}
 	switch connection.State {
 	case model.AttemptConnectionOpen:
 		return !connection.ClosedAt.Valid && connection.CloseReason == ""
 	case model.AttemptConnectionClosed:
-		return connection.ClosedAt.Valid && !connection.ClosedAt.Time.Before(connection.OpenedAt) && connection.CloseReason.IsValid()
+		return connection.ClosedAt.Valid && !connection.ClosedAt.Time.Before(connection.OpenedAt)
 	default:
 		return false
 	}

@@ -23,7 +23,7 @@ type routingHandler struct {
 
 func (h *routingHandler) ServeHTTP(writer http.ResponseWriter, _ *http.Request) {
 	h.seen++
-	_, _ = writer.Write([]byte(h.name))
+	_, _ = writer.Write([]byte(h.name)) //nolint:gosec // G705: a test handler echoing its own fixed name.
 }
 
 type routingTransport struct {

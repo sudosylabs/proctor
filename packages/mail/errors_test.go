@@ -19,7 +19,7 @@ func TestClassifyReturnsPortableOutcome(t *testing.T) {
 	}{
 		{name: "nil", err: nil, want: mail.OutcomeUnknown},
 		{name: "unknown", err: errors.New("third-party failure"), want: mail.OutcomeUnknown},
-		{name: "cancelled", err: context.Canceled, want: mail.OutcomeTemporary},
+		{name: "canceled", err: context.Canceled, want: mail.OutcomeTemporary},
 		{name: "deadline", err: context.DeadlineExceeded, want: mail.OutcomeTemporary},
 		{name: "connection", err: mail.ErrConnection, want: mail.OutcomeTemporary},
 		{name: "invalid message", err: mail.ErrInvalidMessage, want: mail.OutcomePermanent},

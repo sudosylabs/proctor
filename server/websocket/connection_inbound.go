@@ -21,10 +21,10 @@ import (
 	"io"
 	"time"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -45,6 +45,7 @@ func (c *connectionRuntime) readPump(ctx context.Context) {
 				if appendCtx.Err() != nil {
 					return
 				}
+
 				c.handleExamAttemptBrowserAppend(appendCtx, &request)
 			}
 		}
@@ -62,6 +63,7 @@ func (c *connectionRuntime) readPump(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
+
 		var request Request
 		if err := c.socket.ReadJSON(&request); err != nil {
 			if c.recorder != nil {
@@ -69,32 +71,40 @@ func (c *connectionRuntime) readPump(ctx context.Context) {
 			}
 			return
 		}
+
 		if ctx.Err() != nil {
 			return
 		}
+
 		// Every frame spends from the connection budget before validation or
 		// dispatch, so no action can drive unbounded application work.
 		if !c.inbound.allow(c.clock.Now()) {
 			if c.recorder != nil {
 				c.recorder.ObserveWebSocketMessage("inbound", boundedWebSocketAction(request.Action), "rate_limited", len(request.Data))
 			}
+
 			if c.inbound.exhausted() {
 				c.close(CloseRateLimited, localizedCloseReason(c.localizer, c.locale, websocketCloseMessages["rate_limited"]), false)
 				return
 			}
+
 			c.enqueueError(request.Sequence, "websocket.rate_limited", websocketErrorRateLimited)
 			continue
 		}
+
 		if err := request.Validate(); err != nil {
 			if c.recorder != nil {
 				c.recorder.ObserveWebSocketMessage("inbound", boundedWebSocketAction(request.Action), "invalid", len(request.Data))
 			}
+
 			c.enqueueError(request.Sequence, "websocket.request.invalid", websocketErrorRequestInvalid)
 			continue
 		}
+
 		if c.recorder != nil {
 			c.recorder.ObserveWebSocketMessage("inbound", boundedWebSocketAction(request.Action), "accepted", len(request.Data))
 		}
+
 		if request.Action == examAttemptBrowserAppendAction {
 			select {
 			case appends <- request:
@@ -103,8 +113,10 @@ func (c *connectionRuntime) readPump(ctx context.Context) {
 				// available. The normal shared append bucket still applies on retry.
 				c.enqueueDeliveryError(request.Sequence, "exam.delivery.append_rate_limited", nil)
 			}
+
 			continue
 		}
+
 		c.handleRequest(ctx, &request)
 	}
 }
@@ -143,6 +155,7 @@ func (c *connectionRuntime) handleRequest(
 			c.enqueueError(request.Sequence, "websocket.subscription.invalid", websocketErrorSubscriptionInvalid)
 			return
 		}
+
 		metadata := c.metadata
 		metadata.RequestID = fmt.Sprintf("%s:%d", c.id, request.Sequence)
 		if err := c.application.AuthorizeWebSocketSubscription(
@@ -156,9 +169,11 @@ func (c *connectionRuntime) handleRequest(
 			if code != "authorization.denied" {
 				presentation = websocketErrorSubscriptionFailed
 			}
+
 			c.enqueueError(request.Sequence, code, presentation)
 			return
 		}
+
 		c.mu.Lock()
 		_, existed := c.subscriptions[subscription.Key()]
 		if !existed &&
@@ -171,11 +186,13 @@ func (c *connectionRuntime) handleRequest(
 			)
 			return
 		}
+
 		c.subscriptions[subscription.Key()] = subscription
 		c.mu.Unlock()
 		if !existed && c.recorder != nil {
 			c.recorder.AddWebSocketSubscriptions(1)
 		}
+
 		c.enqueueResponse(request.Sequence, nil)
 	case "unsubscribe":
 		var subscription Subscription
@@ -184,6 +201,7 @@ func (c *connectionRuntime) handleRequest(
 			c.enqueueError(request.Sequence, "websocket.subscription.invalid", websocketErrorSubscriptionInvalid)
 			return
 		}
+
 		c.mu.Lock()
 		_, existed := c.subscriptions[subscription.Key()]
 		if c.attempt == nil || subscription != c.examAttemptSubscriptionLocked() {
@@ -191,10 +209,12 @@ func (c *connectionRuntime) handleRequest(
 		} else {
 			existed = false
 		}
+
 		c.mu.Unlock()
 		if existed && c.recorder != nil {
 			c.recorder.AddWebSocketSubscriptions(-1)
 		}
+
 		c.enqueueResponse(request.Sequence, nil)
 	case examAttemptConnectAction:
 		c.handleExamAttemptConnect(ctx, request)
@@ -219,12 +239,14 @@ func (c *connectionRuntime) handleExamAttemptConnect(ctx context.Context, reques
 		c.enqueueError(request.Sequence, "websocket.request.invalid", websocketErrorAttemptConnectRequestInvalid)
 		return
 	}
+
 	sittingID, _ := model.ParseExamSittingID(decoded.ExamSittingID)
 	canonicalRequest, marshalErr := json.Marshal(decoded)
 	if marshalErr != nil {
 		c.enqueueError(request.Sequence, "websocket.request.invalid", websocketErrorAttemptConnectRequestInvalid)
 		return
 	}
+
 	requestHash := sha256.Sum256(canonicalRequest)
 	c.mu.Lock()
 	if c.attempt != nil && (c.attempt.sittingID != sittingID || c.attempt.requestHash != requestHash) {
@@ -232,38 +254,62 @@ func (c *connectionRuntime) handleExamAttemptConnect(ctx context.Context, reques
 		c.enqueueError(request.Sequence, "exam.attempt.already_connected", websocketErrorAttemptAlreadyConnected)
 		return
 	}
+
 	c.mu.Unlock()
-	attempts, ok := c.application.(examAttemptApplication)
-	if !ok {
+	attempts := c.attempts
+	if attempts == nil {
 		c.enqueueError(request.Sequence, "exam.attempt.unavailable", websocketErrorAttemptConnectionFailed)
 		return
 	}
+
 	metadata := c.metadata
 	metadata.RequestID = fmt.Sprintf("%s:%d", c.id, request.Sequence)
-	result, err := attempts.ConnectExamAttempt(ctx, invocation.New(c.principal, metadata), attempt.ConnectCommand{Security: decoded.Security,
-		SittingID: sittingID, ContinuityCredential: decoded.ContinuityCredential,
+	result, err := attempts.ConnectExamAttempt(ctx, invocation.New(c.principal, metadata), attempt.ConnectCommand{
+		Security:                         decoded.Security,
+		SittingID:                        sittingID,
+		ContinuityCredential:             decoded.ContinuityCredential,
 		ConfigurationManifestFingerprint: decoded.ConfigurationManifestFingerprint,
-		InitialConfiguration:             decoded.InitialConfiguration, IdempotencyKey: decoded.IdempotencyKey,
+		InitialConfiguration:             decoded.InitialConfiguration,
+		IdempotencyKey:                   decoded.IdempotencyKey,
 	})
 	if err != nil {
 		code, presentation := examAttemptConnectError(err)
 		var capacity *model.DeliveryMetadataCapacity
 		if code == "exam.delivery.metadata_capacity" && errors.As(err, &capacity) && capacity.Validate() == nil {
 			value := *capacity
-			c.enqueueOutbound(outboundMessage{response: &Response{Status: "error", Sequence: request.Sequence, Error: &Error{DeliveryMetadataCapacity: &value, Code: string(code), Message: localizedText(c.localizer, c.locale, websocketErrorMessage(presentation))}}})
+			c.enqueueOutbound(outboundMessage{response: &Response{
+				Status:   "error",
+				Sequence: request.Sequence,
+				Error: &Error{
+					DeliveryMetadataCapacity: &value,
+					Code:                     string(code),
+					Message:                  localizedText(c.localizer, c.locale, websocketErrorMessage(presentation)),
+				},
+			}})
 		} else {
 			c.enqueueError(request.Sequence, code, presentation)
 		}
+
 		return
 	}
-	if result.Connection.State != model.AttemptConnectionOpen || result.Attempt.SittingID != sittingID ||
-		result.Connection.AttemptID != result.Attempt.ID || result.Connection.ParticipationID != result.Participation.ID {
+
+	if result.Connection.State != model.AttemptConnectionOpen ||
+		result.Attempt.SittingID != sittingID ||
+		result.Connection.AttemptID != result.Attempt.ID ||
+		result.Connection.ParticipationID != result.Participation.ID {
 		c.enqueueError(request.Sequence, "exam.attempt.unavailable", websocketErrorAttemptConnectionFailed)
 		return
 	}
-	binding := &examAttemptBinding{attemptID: result.Attempt.ID, sittingID: sittingID,
-		classID: result.ClassID, connectionID: result.Connection.ID, participationID: result.Participation.ID,
-		generation: result.Participation.Generation, requestHash: requestHash}
+
+	binding := &examAttemptBinding{
+		attemptID:       result.Attempt.ID,
+		sittingID:       sittingID,
+		classID:         result.ClassID,
+		connectionID:    result.Connection.ID,
+		participationID: result.Participation.ID,
+		generation:      result.Participation.Generation,
+		requestHash:     requestHash,
+	}
 	subscription := Subscription{Action: model.ActionExamSittingParticipate,
 		Resource: Resource{Type: model.ResourceExamSitting, ID: sittingID.String()}}
 	c.mu.Lock()
@@ -272,6 +318,7 @@ func (c *connectionRuntime) handleExamAttemptConnect(ctx context.Context, reques
 		c.enqueueError(request.Sequence, "exam.attempt.already_connected", websocketErrorAttemptAlreadyConnected)
 		return
 	}
+
 	_, subscriptionExisted := c.subscriptions[subscription.Key()]
 	c.attempt = binding
 	c.subscriptions[subscription.Key()] = subscription
@@ -279,15 +326,19 @@ func (c *connectionRuntime) handleExamAttemptConnect(ctx context.Context, reques
 	if !subscriptionExisted && c.recorder != nil {
 		c.recorder.AddWebSocketSubscriptions(1)
 	}
+
 	encoded, err := json.Marshal(examAttemptConnectResponse{
-		Security:  result.Security,
-		AttemptID: result.Attempt.ID.String(), WorkspaceID: result.Workspace.ID.String(),
-		ParticipationID: result.Participation.ID.String(), AttemptConnectionID: result.Connection.ID.String(),
-		Generation:             result.Participation.Generation,
-		RenewalIntervalSeconds: int64(model.AttemptParticipationRenewalInterval / time.Second),
-		StartedAt:              model.FormatRFC3339(result.Participation.StartedAt),
-		LeaseExpiresAt:         model.FormatRFC3339(result.Participation.LeaseExpiresAt),
-		FirstAdmission:         result.FirstAdmission, Replayed: result.Replayed,
+		Security:                     result.Security,
+		AttemptID:                    result.Attempt.ID.String(),
+		WorkspaceID:                  result.Workspace.ID.String(),
+		ParticipationID:              result.Participation.ID.String(),
+		AttemptConnectionID:          result.Connection.ID.String(),
+		Generation:                   result.Participation.Generation,
+		RenewalIntervalSeconds:       int64(model.AttemptParticipationRenewalInterval / time.Second),
+		StartedAt:                    model.FormatRFC3339(result.Participation.StartedAt),
+		LeaseExpiresAt:               model.FormatRFC3339(result.Participation.LeaseExpiresAt),
+		FirstAdmission:               result.FirstAdmission,
+		Replayed:                     result.Replayed,
 		CandidateRuntimeCapabilities: candidateRuntimeCapabilitiesWire(result.RuntimeCapabilities),
 		BrowserPolicy:                candidateBrowserPolicyWire(result.BrowserPolicy),
 		LiveCorrections:              candidateLiveCorrectionsWire(result.LiveCorrections),
@@ -296,13 +347,21 @@ func (c *connectionRuntime) handleExamAttemptConnect(ctx context.Context, reques
 		c.enqueueError(request.Sequence, "exam.attempt.unavailable", websocketErrorAttemptConnectionFailed)
 		return
 	}
+
 	c.enqueueResponse(request.Sequence, encoded)
 }
 
 func boundedWebSocketAction(action string) string {
 	switch action {
-	case "ping", "subscribe", "unsubscribe", examAttemptConnectAction, examAttemptRenewAction, examAttemptSecurityUpdateAction,
-		examAttemptFocusLossAction, examAttemptBrowserStartAction, examAttemptBrowserAppendAction:
+	case "ping",
+		"subscribe",
+		"unsubscribe",
+		examAttemptConnectAction,
+		examAttemptRenewAction,
+		examAttemptSecurityUpdateAction,
+		examAttemptFocusLossAction,
+		examAttemptBrowserStartAction,
+		examAttemptBrowserAppendAction:
 		return action
 	default:
 		return "unknown"
@@ -315,42 +374,66 @@ func (c *connectionRuntime) handleExamAttemptBrowserStart(ctx context.Context, r
 		c.enqueueError(request.Sequence, "websocket.request.invalid", websocketErrorBrowserActivityInvalid)
 		return
 	}
+
 	c.mu.Lock()
 	if c.attempt == nil || decoded.Generation != c.attempt.generation || decoded.ParticipationID != c.attempt.participationID.String() {
 		c.mu.Unlock()
 		c.enqueueError(request.Sequence, "exam.attempt.connection_closed", websocketErrorAttemptConnectionInactive)
 		return
 	}
+
 	binding := *c.attempt
 	c.mu.Unlock()
-	attempts, ok := c.application.(examAttemptApplication)
-	if !ok {
+	attempts := c.attempts
+	if attempts == nil {
 		c.enqueueError(request.Sequence, "exam.attempt.unavailable", websocketErrorBrowserActivityFailed)
 		return
 	}
+
 	metadata := c.metadata
 	metadata.RequestID = fmt.Sprintf("%s:%d", c.id, request.Sequence)
 	result, err := attempts.StartExamAttemptBrowserActivity(ctx, invocation.New(c.principal, metadata), attempt.StartBrowserActivityCommand{
-		CandidateAccess: attempt.CandidateAccess{AttemptID: binding.attemptID, ConnectionID: binding.connectionID,
-			ContinuityCredential: decoded.ContinuityCredential}, ParticipationID: binding.participationID, Generation: binding.generation,
-		SourceSessionID: model.BrowserSourceSessionID(decoded.SourceSessionID), PolicyRevisionID: model.ExamRevisionID(decoded.PolicyRevisionID), PolicyDigest: decoded.PolicyDigest, Transition: decoded.Transition,
+		CandidateAccess: attempt.CandidateAccess{
+			AttemptID:            binding.attemptID,
+			ConnectionID:         binding.connectionID,
+			ContinuityCredential: decoded.ContinuityCredential,
+		},
+		ParticipationID:  binding.participationID,
+		Generation:       binding.generation,
+		SourceSessionID:  model.BrowserSourceSessionID(decoded.SourceSessionID),
+		PolicyRevisionID: model.ExamRevisionID(decoded.PolicyRevisionID),
+		PolicyDigest:     decoded.PolicyDigest,
+		Transition:       decoded.Transition,
 	})
 	if err != nil {
 		code := apperror.Classify(err, "exam.attempt.unavailable")
 		var refusal *store.BrowserSourceRefusal
 		if errors.As(err, &refusal) && refusal.Status.Validate() == nil && refusal.Capabilities != nil && refusal.Capabilities.Validate() == nil {
 			caps := candidateRuntimeCapabilitiesWire(*refusal.Capabilities)
-			c.enqueueOutbound(outboundMessage{response: &Response{Status: "error", Sequence: request.Sequence, Error: &Error{Code: string(code), Message: localizedText(c.localizer, c.locale, websocketErrorMessage(websocketErrorBrowserActivityFailed)), BrowserSourceStatus: &refusal.Status, CandidateRuntimeCapabilities: &caps, DeliveryMetadataCapacity: refusal.Capacity}}})
+			c.enqueueOutbound(outboundMessage{response: &Response{
+				Status:   "error",
+				Sequence: request.Sequence,
+				Error: &Error{
+					Code:                         string(code),
+					Message:                      localizedText(c.localizer, c.locale, websocketErrorMessage(websocketErrorBrowserActivityFailed)),
+					BrowserSourceStatus:          &refusal.Status,
+					CandidateRuntimeCapabilities: &caps,
+					DeliveryMetadataCapacity:     refusal.Capacity,
+				},
+			}})
 			return
 		}
+
 		c.enqueueError(request.Sequence, code, websocketErrorBrowserActivityFailed)
 		return
 	}
+
 	encoded, err := json.Marshal(result)
 	if err != nil {
 		c.enqueueError(request.Sequence, "exam.attempt.unavailable", websocketErrorBrowserActivityFailed)
 		return
 	}
+
 	c.enqueueResponse(request.Sequence, encoded)
 }
 
@@ -360,36 +443,49 @@ func (c *connectionRuntime) handleExamAttemptBrowserAppend(ctx context.Context, 
 		c.enqueueError(request.Sequence, "websocket.request.invalid", websocketErrorBrowserActivityInvalid)
 		return
 	}
+
 	c.mu.Lock()
 	if c.attempt == nil || decoded.Generation != c.attempt.generation || decoded.ParticipationID != c.attempt.participationID.String() {
 		c.mu.Unlock()
 		c.enqueueError(request.Sequence, "exam.attempt.connection_closed", websocketErrorAttemptConnectionInactive)
 		return
 	}
+
 	binding := *c.attempt
 	c.mu.Unlock()
-	attempts, ok := c.application.(examAttemptApplication)
-	if !ok {
+	attempts := c.attempts
+	if attempts == nil {
 		c.enqueueError(request.Sequence, "exam.attempt.unavailable", websocketErrorBrowserActivityFailed)
 		return
 	}
+
 	metadata := c.metadata
 	metadata.RequestID = fmt.Sprintf("%s:%d", c.id, request.Sequence)
 	result, err := attempts.AppendExamAttemptBrowserActivity(ctx, invocation.New(c.principal, metadata), attempt.AppendBrowserActivityCommand{
-		CandidateAccess: attempt.CandidateAccess{AttemptID: binding.attemptID, ConnectionID: binding.connectionID,
-			ContinuityCredential: decoded.ContinuityCredential}, ParticipationID: binding.participationID, Generation: binding.generation,
-		SourceSessionID: model.BrowserSourceSessionID(decoded.SourceSessionID), PolicyRevisionID: model.ExamRevisionID(decoded.PolicyRevisionID), PolicyDigest: decoded.PolicyDigest, Events: events,
+		CandidateAccess: attempt.CandidateAccess{
+			AttemptID:            binding.attemptID,
+			ConnectionID:         binding.connectionID,
+			ContinuityCredential: decoded.ContinuityCredential,
+		},
+		ParticipationID:  binding.participationID,
+		Generation:       binding.generation,
+		SourceSessionID:  model.BrowserSourceSessionID(decoded.SourceSessionID),
+		PolicyRevisionID: model.ExamRevisionID(decoded.PolicyRevisionID),
+		PolicyDigest:     decoded.PolicyDigest,
+		Events:           events,
 	})
 	if err != nil {
 		code := apperror.Classify(err, "exam.attempt.unavailable")
 		c.enqueueDeliveryError(request.Sequence, code, err)
 		return
 	}
+
 	encoded, err := json.Marshal(browserActivityAcknowledgementWire(result))
 	if err != nil {
 		c.enqueueError(request.Sequence, "exam.attempt.unavailable", websocketErrorBrowserActivityFailed)
 		return
 	}
+
 	c.enqueueResponse(request.Sequence, encoded)
 }
 
@@ -412,42 +508,65 @@ func (c *connectionRuntime) handleExamAttemptRenew(ctx context.Context, request 
 		c.enqueueError(request.Sequence, "websocket.request.invalid", websocketErrorAttemptRenewalRequestInvalid)
 		return
 	}
+
 	c.mu.Lock()
 	if c.attempt == nil || decoded.Generation != c.attempt.generation {
 		c.mu.Unlock()
 		c.enqueueError(request.Sequence, "exam.attempt.connection_closed", websocketErrorAttemptConnectionInactive)
 		return
 	}
+
 	binding := *c.attempt
 	c.mu.Unlock()
-	attempts, ok := c.application.(examAttemptApplication)
-	if !ok {
+	attempts := c.attempts
+	if attempts == nil {
 		c.enqueueError(request.Sequence, "exam.attempt.unavailable", websocketErrorAttemptRenewalFailed)
 		return
 	}
+
 	metadata := c.metadata
 	metadata.RequestID = fmt.Sprintf("%s:%d", c.id, request.Sequence)
-	result, err := attempts.RenewExamAttemptParticipation(ctx, invocation.New(c.principal, metadata), attempt.RenewParticipationCommand{SecurityCoverage: decoded.SecurityCoverage,
-		AttemptID: binding.attemptID, ParticipationID: binding.participationID, ConnectionID: binding.connectionID,
-		Generation: decoded.Generation, Sequence: decoded.Sequence, ContinuityCredential: decoded.ContinuityCredential,
+	result, err := attempts.RenewExamAttemptParticipation(ctx, invocation.New(
+		c.principal,
+		metadata,
+	), attempt.RenewParticipationCommand{
+		SecurityCoverage:     decoded.SecurityCoverage,
+		AttemptID:            binding.attemptID,
+		ParticipationID:      binding.participationID,
+		ConnectionID:         binding.connectionID,
+		Generation:           decoded.Generation,
+		Sequence:             decoded.Sequence,
+		ContinuityCredential: decoded.ContinuityCredential,
 	})
 	if err != nil {
 		code, presentation := examAttemptRenewError(err)
 		c.enqueueError(request.Sequence, code, presentation)
 		return
 	}
-	if result.AttemptID != binding.attemptID || result.ParticipationID != binding.participationID ||
-		result.Generation != binding.generation || result.AcceptedSequence != decoded.Sequence || result.DatabaseTime.IsZero() ||
+
+	if result.AttemptID != binding.attemptID ||
+		result.ParticipationID != binding.participationID ||
+		result.Generation != binding.generation ||
+		result.AcceptedSequence != decoded.Sequence ||
+		result.DatabaseTime.IsZero() ||
 		result.LeaseExpiresAt.IsZero() {
 		c.enqueueError(request.Sequence, "exam.attempt.unavailable", websocketErrorAttemptRenewalFailed)
 		return
 	}
-	encoded, err := json.Marshal(examAttemptRenewResponse{SecurityCoverage: securityCoverageFrom(result.SecurityCoverage), Generation: result.Generation, AcceptedSequence: result.AcceptedSequence,
-		DatabaseTime: model.FormatRFC3339(result.DatabaseTime), LeaseExpiresAt: model.FormatRFC3339(result.LeaseExpiresAt), Duplicate: result.Duplicate})
+
+	encoded, err := json.Marshal(examAttemptRenewResponse{
+		SecurityCoverage: securityCoverageFrom(result.SecurityCoverage),
+		Generation:       result.Generation,
+		AcceptedSequence: result.AcceptedSequence,
+		DatabaseTime:     model.FormatRFC3339(result.DatabaseTime),
+		LeaseExpiresAt:   model.FormatRFC3339(result.LeaseExpiresAt),
+		Duplicate:        result.Duplicate,
+	})
 	if err != nil {
 		c.enqueueError(request.Sequence, "exam.attempt.unavailable", websocketErrorAttemptRenewalFailed)
 		return
 	}
+
 	c.enqueueResponse(request.Sequence, encoded)
 }
 
@@ -457,47 +576,71 @@ func (c *connectionRuntime) handleExamAttemptFocusLoss(ctx context.Context, requ
 		c.enqueueError(request.Sequence, "websocket.request.invalid", websocketErrorFocusLossSignalInvalid)
 		return
 	}
+
 	c.mu.Lock()
 	if c.attempt == nil || decoded.Generation != c.attempt.generation {
 		c.mu.Unlock()
 		c.enqueueError(request.Sequence, "exam.attempt.connection_closed", websocketErrorAttemptConnectionInactive)
 		return
 	}
+
 	binding := *c.attempt
 	c.mu.Unlock()
-	attempts, ok := c.application.(examAttemptApplication)
-	if !ok {
+	attempts := c.attempts
+	if attempts == nil {
 		c.enqueueError(request.Sequence, "exam.attempt.unavailable", websocketErrorFocusLossFailed)
 		return
 	}
+
 	metadata := c.metadata
 	metadata.RequestID = fmt.Sprintf("%s:%d", c.id, request.Sequence)
-	result, err := attempts.EvaluateExamAttemptFocusLoss(ctx, invocation.New(c.principal, metadata),
-		attempt.FocusLossCommand{SchemaVersion: decoded.SchemaVersion,
-			AttemptID: binding.attemptID, ParticipationID: binding.participationID,
-			ConnectionID: binding.connectionID, Generation: decoded.Generation, Sequence: decoded.Sequence,
-			DurationMilliseconds: decoded.DurationMilliseconds, Source: model.FocusLossSource(decoded.Source),
-			ContinuityCredential: decoded.ContinuityCredential})
+	result, err := attempts.EvaluateExamAttemptFocusLoss(
+		ctx,
+		invocation.New(c.principal, metadata),
+		attempt.FocusLossCommand{
+			SchemaVersion:        decoded.SchemaVersion,
+			AttemptID:            binding.attemptID,
+			ParticipationID:      binding.participationID,
+			ConnectionID:         binding.connectionID,
+			Generation:           decoded.Generation,
+			Sequence:             decoded.Sequence,
+			DurationMilliseconds: decoded.DurationMilliseconds,
+			Source:               model.FocusLossSource(decoded.Source),
+			ContinuityCredential: decoded.ContinuityCredential,
+		},
+	)
 	if err != nil {
 		code, presentation := examAttemptFocusLossError(err)
 		c.enqueueError(request.Sequence, code, presentation)
 		return
 	}
-	if result.AttemptID != binding.attemptID || result.ParticipationID != binding.participationID ||
-		result.Generation != binding.generation || result.AcceptedSequence != decoded.Sequence || result.ReceivedAt.IsZero() ||
+
+	if result.AttemptID != binding.attemptID ||
+		result.ParticipationID != binding.participationID ||
+		result.Generation != binding.generation ||
+		result.AcceptedSequence != decoded.Sequence ||
+		result.ReceivedAt.IsZero() ||
 		(result.SuspensionCreated && !result.ConnectionClosed) {
 		c.enqueueError(request.Sequence, "exam.attempt.unavailable", websocketErrorFocusLossFailed)
 		return
 	}
-	encoded, err := json.Marshal(examAttemptFocusLossResponse{Generation: result.Generation,
-		AcceptedSequence: result.AcceptedSequence, ReceivedAt: model.FormatRFC3339(result.ReceivedAt),
-		Duplicate: result.Duplicate, GapDetected: result.GapDetected, PolicyDisabled: result.PolicyDisabled,
-		WarningCreated: result.CandidateWarningCreated, SuspensionCreated: result.SuspensionCreated,
-		DiscrepancyRecorded: result.DiscrepancyRecorded})
+
+	encoded, err := json.Marshal(examAttemptFocusLossResponse{
+		Generation:          result.Generation,
+		AcceptedSequence:    result.AcceptedSequence,
+		ReceivedAt:          model.FormatRFC3339(result.ReceivedAt),
+		Duplicate:           result.Duplicate,
+		GapDetected:         result.GapDetected,
+		PolicyDisabled:      result.PolicyDisabled,
+		WarningCreated:      result.CandidateWarningCreated,
+		SuspensionCreated:   result.SuspensionCreated,
+		DiscrepancyRecorded: result.DiscrepancyRecorded,
+	})
 	if err != nil {
 		c.enqueueError(request.Sequence, "exam.attempt.unavailable", websocketErrorFocusLossFailed)
 		return
 	}
+
 	if result.ConnectionClosed || result.SuspensionCreated {
 		c.mu.Lock()
 		removedSubscription := false
@@ -507,11 +650,13 @@ func (c *connectionRuntime) handleExamAttemptFocusLoss(ctx context.Context, requ
 			delete(c.subscriptions, key)
 			c.attempt = nil
 		}
+
 		c.mu.Unlock()
 		if removedSubscription && c.recorder != nil {
 			c.recorder.AddWebSocketSubscriptions(-1)
 		}
 	}
+
 	c.enqueueResponse(request.Sequence, encoded)
 }
 
@@ -551,6 +696,7 @@ func (c *connectionRuntime) finalizeExamAttempt(ctx context.Context) {
 			delete(c.subscriptions, key)
 			c.attempt = nil
 		}
+
 		c.mu.Unlock()
 		if removedSubscription && c.recorder != nil {
 			c.recorder.AddWebSocketSubscriptions(-1)
@@ -558,20 +704,25 @@ func (c *connectionRuntime) finalizeExamAttempt(ctx context.Context) {
 		if binding == nil {
 			return
 		}
-		attempts, ok := c.application.(examAttemptApplication)
-		if !ok {
+
+		attempts := c.attempts
+		if attempts == nil {
 			return
 		}
+
 		closeCtx, cancel := c.finalizationContext(ctx)
 		defer cancel()
 		metadata := c.metadata
 		metadata.RequestID = c.id + ":attempt-close"
 		_, err := attempts.CloseExamAttemptConnection(closeCtx, invocation.New(c.principal, metadata), attempt.CloseConnectionCommand{
-			AttemptID: binding.attemptID, SittingID: binding.sittingID, ClassID: binding.classID,
-			ConnectionID: binding.connectionID, Reason: model.AttemptConnectionCloseTransport,
+			AttemptID:    binding.attemptID,
+			SittingID:    binding.sittingID,
+			ClassID:      binding.classID,
+			ConnectionID: binding.connectionID,
+			Reason:       model.AttemptConnectionCloseTransport,
 		})
 		if err != nil && c.logger != nil {
-			c.logger.WarnContext(closeCtx, "Exam Attempt connection close failed", err)
+			c.logger.WarnContext(closeCtx, "Exam Attempt connection close failed", logging.Err(err))
 		}
 	})
 }
@@ -591,52 +742,77 @@ func (c *connectionRuntime) handleExamAttemptSecurityUpdate(ctx context.Context,
 		c.enqueueError(request.Sequence, "websocket.request.invalid", websocketErrorAttemptRenewalRequestInvalid)
 		return
 	}
+
 	c.mu.Lock()
 	if c.attempt == nil || decoded.Generation != c.attempt.generation {
 		c.mu.Unlock()
 		c.enqueueError(request.Sequence, "exam.attempt.connection_closed", websocketErrorAttemptConnectionInactive)
 		return
 	}
+
 	binding := *c.attempt
 	c.mu.Unlock()
-	attempts, ok := c.application.(examAttemptApplication)
-	if !ok {
+	attempts := c.attempts
+	if attempts == nil {
 		c.enqueueError(request.Sequence, "exam.attempt.unavailable", websocketErrorAttemptRenewalFailed)
 		return
 	}
+
 	metadata := c.metadata
 	metadata.RequestID = fmt.Sprintf("%s:%d", c.id, request.Sequence)
-	result, err := attempts.UpdateExamSecurityCoverage(ctx, invocation.New(c.principal, metadata), attempt.UpdateSecurityCoverageCommand{Access: attempt.CandidateAccess{AttemptID: binding.attemptID, ConnectionID: binding.connectionID, ContinuityCredential: decoded.ContinuityCredential}, ParticipationID: binding.participationID, Generation: binding.generation, Coverage: decoded.SecurityCoverage})
+	result, err := attempts.UpdateExamSecurityCoverage(ctx, invocation.New(
+		c.principal,
+		metadata,
+	), attempt.UpdateSecurityCoverageCommand{
+		Access: attempt.CandidateAccess{
+			AttemptID:            binding.attemptID,
+			ConnectionID:         binding.connectionID,
+			ContinuityCredential: decoded.ContinuityCredential,
+		},
+		ParticipationID: binding.participationID,
+		Generation:      binding.generation,
+		Coverage:        decoded.SecurityCoverage,
+	})
 	if err != nil {
 		code, presentation := examAttemptRenewError(err)
 		c.enqueueError(request.Sequence, code, presentation)
 		return
 	}
+
 	if result.Validate() != nil {
 		c.enqueueError(request.Sequence, "exam.attempt.unavailable", websocketErrorAttemptRenewalFailed)
 		return
 	}
+
 	encoded, err := json.Marshal(securityCoverageFrom(result))
 	if err != nil {
 		c.enqueueError(request.Sequence, "exam.attempt.unavailable", websocketErrorAttemptRenewalFailed)
 		return
 	}
+
 	c.enqueueResponse(request.Sequence, encoded)
 }
 
 // Live and historical delivery share the same bounded recovery projection.
 func (c *connectionRuntime) enqueueDeliveryError(sequence int64, code apperror.Code, err error) {
-	value := &Error{Code: string(code), Message: localizedText(c.localizer, c.locale, websocketErrorMessage(websocketErrorBrowserActivityFailed))}
+	value := &Error{
+		Code:    string(code),
+		Message: localizedText(c.localizer, c.locale, websocketErrorMessage(websocketErrorBrowserActivityFailed)),
+	}
 	var recovery interface {
 		DeliveryRecovery() *model.DeliveryRecovery
 	}
-	if app.SupportsDeliveryRecovery(string(code)) && errors.As(err, &recovery) {
+	if attempt.SupportsDeliveryRecovery(string(code)) && errors.As(err, &recovery) {
 		if state := recovery.DeliveryRecovery(); state != nil && state.Validate() == nil {
 			value.Delivery = state
 		}
 	}
-	if code == "exam.delivery.pending_capacity" || code == "exam.delivery.append_rate_limited" || code == "exam.delivery.summary_rate_limited" {
+
+	if code == "exam.delivery.pending_capacity" ||
+		code == "exam.delivery.append_rate_limited" ||
+		code == "exam.delivery.summary_rate_limited" {
 		value.RetryAfterSeconds = 1
 	}
+
 	c.enqueueOutbound(outboundMessage{response: &Response{Status: "error", Sequence: sequence, Error: value}})
 }

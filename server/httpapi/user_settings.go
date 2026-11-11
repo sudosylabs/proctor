@@ -8,9 +8,12 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/user"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -37,28 +40,42 @@ type userSettingsReplacementResponse struct {
 	Changed       bool   `json:"changed"`
 }
 
-type userSettingsResourceModule struct {
-	settings UserSettingsApplication
+type userSettingsHandlers struct {
+	app UserSettingsApplication
 }
 
-func userSettingsResource(settings UserSettingsApplication) apiResource {
-	module := userSettingsResourceModule{settings: settings}
-	path := apiPath(literal("users"), literal("me"), literal("settings"))
-	replace := sessionRoute(
-		http.MethodPut,
-		path,
-		userSettingsSessionMutationCodes(
-			"request.invalid", "user_settings.invalid", "user_settings.format_unsupported",
-			"user_settings.revision_conflict", "user_settings.unavailable", "audit.unavailable",
-			"idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress",
+func userSettingsResource(app UserSettingsApplication) route.Resource {
+	h := userSettingsHandlers{app: app}
+	path := "/users/me/settings"
+	replace := route.Endpoint{
+		Method:       http.MethodPut,
+		Path:         path,
+		Auth:         route.AuthSessionRequired,
+		Idempotency:  route.IdempotencyRequired,
+		MaxBodyBytes: userSettingsReplacementBodyMaxBytes,
+		Errors: userSettingsSessionMutationCodes(
+			"request.invalid",
+			"user_settings.invalid",
+			"user_settings.format_unsupported",
+			"user_settings.revision_conflict",
+			"user_settings.unavailable",
+			"audit.unavailable",
+			"idempotency.key_required",
+			"idempotency.key_invalid",
+			"idempotency.conflict",
+			"idempotency.in_progress",
 		),
-		module.replace,
-	)
-	replace.idempotency = IdempotencyRequired
-	replace.maxBodyBytes = userSettingsReplacementBodyMaxBytes
-	return newResource(
+		Handle: h.replace,
+	}
+	return route.NewResource(
 		"user-settings",
-		sessionRoute(http.MethodGet, path, userSettingsSessionCodes("user_settings.unavailable"), module.read),
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   path,
+			Auth:   route.AuthSessionRequired,
+			Errors: userSettingsSessionCodes("user_settings.unavailable"),
+			Handle: h.read,
+		},
 		replace,
 	)
 }
@@ -71,42 +88,59 @@ func userSettingsSessionMutationCodes(extra ...string) []string {
 	return userSettingsSessionCodes(extra...)
 }
 
-func (m userSettingsResourceModule) read(request operationRequest) (operationResult, error) {
-	view, err := m.settings.ReadOwnUserSettings(request.context, request.invocation())
+func (h userSettingsHandlers) read(request route.Request) (route.Result, error) {
+	view, err := h.app.ReadOwnUserSettings(request.Context, request.Invocation())
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, userSettingsResponse{
+	return route.JSON(http.StatusOK, userSettingsResponse{
 		Source:        view.Source,
 		FormatVersion: view.FormatVersion,
 		Revision:      view.Revision.String(),
 		Writable:      view.Writable,
 		UpdatedAt:     model.FormatRFC3339(view.UpdatedAt),
-	}).withHeaders(http.Header{"Cache-Control": []string{"private, no-store"}}), nil
+	}).WithHeaders(http.Header{"Cache-Control": []string{"private, no-store"}}), nil
 }
 
-func (m userSettingsResourceModule) replace(request operationRequest) (operationResult, error) {
+func (h userSettingsHandlers) replace(request route.Request) (route.Result, error) {
 	var input userSettingsReplaceRequest
-	if err := request.decodeJSON(&input); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
 	}
+
 	expectedRevision, err := model.ParseUserSettingsRevision(input.ExpectedRevision)
 	if err != nil {
-		return operationResult{}, invalidRequestError(err)
+		return route.Result{}, route.InvalidRequest(err)
 	}
-	result, err := m.settings.ReplaceOwnUserSettings(
-		request.context,
-		request.invocation(),
-		app.ReplaceOwnUserSettingsCommand{
-			Source: input.Source, FormatVersion: input.FormatVersion,
-			ExpectedRevision: expectedRevision, IdempotencyKey: request.idempotencyKey,
+
+	result, err := h.app.ReplaceOwnUserSettings(
+		request.Context,
+		request.Invocation(),
+		user.ReplaceOwnUserSettingsCommand{
+			Source:           input.Source,
+			FormatVersion:    input.FormatVersion,
+			ExpectedRevision: expectedRevision,
+			IdempotencyKey:   request.IdempotencyKey,
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, userSettingsReplacementResponse{
-		Revision: result.Revision.String(), FormatVersion: result.FormatVersion,
-		UpdatedAt: model.FormatRFC3339(result.UpdatedAt), Changed: result.Changed,
-	}).withHeaders(http.Header{"Cache-Control": []string{"private, no-store"}}), nil
+
+	return route.JSON(http.StatusOK, userSettingsReplacementResponse{
+		Revision:      result.Revision.String(),
+		FormatVersion: result.FormatVersion,
+		UpdatedAt:     model.FormatRFC3339(result.UpdatedAt),
+		Changed:       result.Changed,
+	}).WithHeaders(http.Header{"Cache-Control": []string{"private, no-store"}}), nil
+}
+
+// UserSettingsApplication is the application port its handlers call; it reads and replaces the caller's own settings document.
+type UserSettingsApplication interface {
+	ReadOwnUserSettings(context.Context, invocation.Invocation) (user.UserSettingsView, error)
+	ReplaceOwnUserSettings(
+		context.Context,
+		invocation.Invocation,
+		user.ReplaceOwnUserSettingsCommand,
+	) (user.UserSettingsReplacementResult, error)
 }

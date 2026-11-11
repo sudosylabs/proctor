@@ -33,9 +33,11 @@ type SecurityPolicyScope struct {
 }
 
 func (s SecurityPolicyScope) Validate() error {
-	if s.Kind == "admission" && IsValidAgreementID(s.AdmissionScopeID) && s.AttemptID == "" || s.Kind == "attempt" && s.AttemptID.IsValid() && s.AdmissionScopeID == "" {
+	if s.Kind == "admission" && IsValidAgreementID(s.AdmissionScopeID) && s.AttemptID == "" ||
+		s.Kind == "attempt" && s.AttemptID.IsValid() && s.AdmissionScopeID == "" {
 		return nil
 	}
+
 	return ErrSecurityPolicyInvalid
 }
 
@@ -79,7 +81,18 @@ type SecurityCatalogBinding struct {
 type NativeSourceCategory string
 
 func NativeSourceCategories() []NativeSourceCategory {
-	return []NativeSourceCategory{"os-clipboard-change", "removable-block-storage", "portable-mtp", "system-proxy-state", "os-managed-vpn-state", "tunnel-interface-state", "route-change", "network-source-health", "camera", "microphone"}
+	return []NativeSourceCategory{
+		"os-clipboard-change",
+		"removable-block-storage",
+		"portable-mtp",
+		"system-proxy-state",
+		"os-managed-vpn-state",
+		"tunnel-interface-state",
+		"route-change",
+		"network-source-health",
+		"camera",
+		"microphone",
+	}
 }
 
 type NativeCoverageRequirement struct {
@@ -124,21 +137,46 @@ func ResolveNativePolicy(input NativePolicyResolution) (ResolvedNativePolicy, er
 	if _, err := EncodeExamPolicySet(input.Selections); err != nil {
 		return ResolvedNativePolicy{}, err
 	}
+
 	agreement := input.Build.NativeAgreement
 	if input.Build.Validate() != nil || agreement == nil || agreement.RegistryDigest() != input.Selections.Native.RegistryDigest {
 		return ResolvedNativePolicy{}, ErrNativeCoverageUnsupported
 	}
+
 	matrix := agreement.Matrix()
-	policy := EffectiveExamSecurityPolicy{PolicyID: input.PolicyID, Revision: input.Revision, Ordinal: input.Ordinal, InstitutionID: input.InstitutionID, ExamRevisionID: input.ExamRevisionID, SittingID: input.SittingID, Scope: input.Scope, IssuedAt: input.IssuedAt, ActiveFrom: input.ActiveFrom, ApplicationReleaseID: matrix.ReleaseID, MatrixID: matrix.MatrixID, TargetTuple: matrix.TargetTuple, RegistryDigest: agreement.RegistryDigest(), FocusLossMode: NativeModeDisabled, ConnectionLossMode: NativeModeEnforce, ResolvedExceptionRefs: []string{}, EvidenceClassID: "native_integrity", VisibilityClassID: "examiner_restricted", RetentionClassID: "native_minimized", Capabilities: slices.Clone(input.Selections.Native.Families)}
+	policy := EffectiveExamSecurityPolicy{
+		PolicyID:              input.PolicyID,
+		Revision:              input.Revision,
+		Ordinal:               input.Ordinal,
+		InstitutionID:         input.InstitutionID,
+		ExamRevisionID:        input.ExamRevisionID,
+		SittingID:             input.SittingID,
+		Scope:                 input.Scope,
+		IssuedAt:              input.IssuedAt,
+		ActiveFrom:            input.ActiveFrom,
+		ApplicationReleaseID:  matrix.ReleaseID,
+		MatrixID:              matrix.MatrixID,
+		TargetTuple:           matrix.TargetTuple,
+		RegistryDigest:        agreement.RegistryDigest(),
+		FocusLossMode:         NativeModeDisabled,
+		ConnectionLossMode:    NativeModeEnforce,
+		ResolvedExceptionRefs: []string{},
+		EvidenceClassID:       "native_integrity",
+		VisibilityClassID:     "examiner_restricted",
+		RetentionClassID:      "native_minimized",
+		Capabilities:          slices.Clone(input.Selections.Native.Families),
+	}
 	if input.Selections.FocusLoss.Enabled {
 		policy.FocusLossMode = NativeModeObserve
 		if input.Selections.FocusLoss.Outcome == IntegrityOutcomeFlagAndSuspend {
 			policy.FocusLossMode = NativeModeEnforce
 		}
 	}
+
 	if err := policy.seal(input.ActivationTime); err != nil {
 		return ResolvedNativePolicy{}, err
 	}
+
 	return resolvePolicyCoverage(policy, agreement)
 }
 
@@ -165,20 +203,39 @@ func (r ResolvedNativePolicy) Validate(agreement *DesktopNativeAgreement, at tim
 
 func resolvePolicyCoverage(policy EffectiveExamSecurityPolicy, agreement *DesktopNativeAgreement) (ResolvedNativePolicy, error) {
 	matrix := agreement.Matrix()
-	if policy.RegistryDigest != agreement.RegistryDigest() || policy.ApplicationReleaseID != matrix.ReleaseID || policy.MatrixID != matrix.MatrixID || policy.TargetTuple != matrix.TargetTuple {
+	if policy.RegistryDigest != agreement.RegistryDigest() ||
+		policy.ApplicationReleaseID != matrix.ReleaseID ||
+		policy.MatrixID != matrix.MatrixID ||
+		policy.TargetTuple != matrix.TargetTuple {
 		return ResolvedNativePolicy{}, ErrNativeCoverageUnsupported
 	}
+
 	native := NativeSecurityPolicy{RegistryDigest: policy.RegistryDigest, Families: policy.Capabilities}
 	requirements, err := resolveNativeRequirements(native, agreement)
 	if err != nil {
 		return ResolvedNativePolicy{}, err
 	}
-	bindings := []SecurityCatalogBinding{{Kind: "detector", CatalogID: "native.detectors", Revision: agreement.DetectorCatalogDigest(), Digest: agreement.DetectorCatalogDigest()}}
+
+	bindings := []SecurityCatalogBinding{{
+		Kind:      "detector",
+		CatalogID: "native.detectors",
+		Revision:  agreement.DetectorCatalogDigest(),
+		Digest:    agreement.DetectorCatalogDigest(),
+	}}
 	digest, err := policy.ContentDigest(bindings, agreement.MatrixDigest())
 	if err != nil {
 		return ResolvedNativePolicy{}, err
 	}
-	result := ResolvedNativePolicy{Policy: policy, PolicyContentDigest: digest, CapabilityMatrixDigest: agreement.MatrixDigest(), CatalogBindings: bindings, Requirements: requirements, Sources: []NativeSourceID{}, Categories: selectedNativeCategories(native)}
+
+	result := ResolvedNativePolicy{
+		Policy:                 policy,
+		PolicyContentDigest:    digest,
+		CapabilityMatrixDigest: agreement.MatrixDigest(),
+		CatalogBindings:        bindings,
+		Requirements:           requirements,
+		Sources:                []NativeSourceID{},
+		Categories:             selectedNativeCategories(native),
+	}
 	for _, source := range NativeSources() {
 		for _, requirement := range requirements {
 			if requirement.SourceID == source && requirement.Entry.Claim != NativeClaimUnavailable {
@@ -187,6 +244,7 @@ func resolvePolicyCoverage(policy EffectiveExamSecurityPolicy, agreement *Deskto
 			}
 		}
 	}
+
 	return result, nil
 }
 
@@ -198,15 +256,22 @@ func resolveNativeRequirements(policy NativeSecurityPolicy, agreement *DesktopNa
 			selected[definition.CoverageKey] = NativeClaimEnforce
 		}
 	}
+
 	add := func(id string, claim NativeCapabilityClaim) { selected["native."+id+".v1"] = claim }
 	for _, family := range policy.Families {
 		f := family.fields
-		if len(f.AllowedApplicationIDs)+len(f.AllowedStorageFunctionClassIDs)+len(f.AllowedManagedProfileIDs)+len(f.AllowedAdapterClassIDs)+len(f.AllowedTunnelClassIDs) > 0 {
+		if len(f.AllowedApplicationIDs)+
+			len(f.AllowedStorageFunctionClassIDs)+
+			len(f.AllowedManagedProfileIDs)+
+			len(f.AllowedAdapterClassIDs)+
+			len(f.AllowedTunnelClassIDs) > 0 {
 			return nil, ErrNativeCatalogUnavailable
 		}
+
 		if f.Mode == NativeModeDisabled {
 			continue
 		}
+
 		claim := NativeCapabilityClaim(f.Mode)
 		switch f.ID {
 		case "process_application":
@@ -233,6 +298,7 @@ func resolveNativeRequirements(policy NativeSecurityPolicy, agreement *DesktopNa
 				if sub == "route_change" {
 					required = NativeClaimObserve
 				}
+
 				add(sub, required)
 			}
 		case "virtualization":
@@ -245,33 +311,48 @@ func resolveNativeRequirements(policy NativeSecurityPolicy, agreement *DesktopNa
 			if f.RequireReady {
 				add(f.ID+"_ready", claim)
 			}
+
 			if f.ConcurrentUseCheck == "supported_required" {
 				sub := f.ID + "_other_application_use"
 				if f.ID == "microphone" {
 					sub = "microphone_other_stream_running"
 				}
+
 				add(sub, claim)
 			}
 		}
 	}
+
 	if len(selected) > NativeCoverageClaimLimit {
 		return nil, ErrNativeCoverageUnsupported
 	}
+
 	result := make([]NativeCoverageRequirement, 0, len(selected))
 	for _, definition := range definitions {
 		claim, exists := selected[definition.CoverageKey]
 		if !exists {
 			continue
 		}
+
 		entry, err := agreement.Coverage(definition.CoverageKey, claim)
 		if err != nil {
 			return nil, ErrNativeCoverageUnsupported
 		}
-		result = append(result, NativeCoverageRequirement{CoverageKey: definition.CoverageKey, CapabilityID: definition.CapabilityID, SourceID: definition.SourceID, RequiredClaim: claim, Entry: entry, Baseline: definition.Baseline})
+
+		result = append(result, NativeCoverageRequirement{
+			CoverageKey:   definition.CoverageKey,
+			CapabilityID:  definition.CapabilityID,
+			SourceID:      definition.SourceID,
+			RequiredClaim: claim,
+			Entry:         entry,
+			Baseline:      definition.Baseline,
+		})
 	}
+
 	if len(result) != len(selected) {
 		return nil, ErrNativeCoverageUnsupported
 	}
+
 	return result, nil
 }
 func selectedNativeCategories(policy NativeSecurityPolicy) []NativeSourceCategory {
@@ -319,9 +400,32 @@ func securityInstant(value time.Time) bool {
 	return !value.IsZero() && offset == 0 && value.Nanosecond()%int(time.Millisecond) == 0
 }
 func (p EffectiveExamSecurityPolicy) validateFields(at time.Time) error {
-	if !IsValidAgreementID(p.PolicyID) || !isSecurityRevision(p.Revision) || p.Ordinal < 1 || p.Ordinal > 9007199254740991 || !p.InstitutionID.IsValid() || !p.ExamRevisionID.IsValid() || !p.SittingID.IsValid() || p.Scope.Validate() != nil || !securityInstant(p.IssuedAt) || !securityInstant(p.ActiveFrom) || p.ActiveFrom.Before(p.IssuedAt) || at.IsZero() || p.ActiveFrom.After(at) || !IsValidAgreementID(p.ApplicationReleaseID) || !IsValidAgreementID(p.MatrixID) || !IsValidAgreementID(p.TargetTuple) || !p.FocusLossMode.IsValid() || p.ConnectionLossMode != NativeModeEnforce || p.ResolvedExceptionRefs == nil || len(p.ResolvedExceptionRefs) != 0 || p.EvidenceClassID != "native_integrity" || p.VisibilityClassID != "examiner_restricted" || p.RetentionClassID != "native_minimized" {
+	if !IsValidAgreementID(p.PolicyID) ||
+		!isSecurityRevision(p.Revision) ||
+		p.Ordinal < 1 ||
+		p.Ordinal > 9007199254740991 ||
+		!p.InstitutionID.IsValid() ||
+		!p.ExamRevisionID.IsValid() ||
+		!p.SittingID.IsValid() ||
+		p.Scope.Validate() != nil ||
+		!securityInstant(p.IssuedAt) ||
+		!securityInstant(p.ActiveFrom) ||
+		p.ActiveFrom.Before(p.IssuedAt) ||
+		at.IsZero() ||
+		p.ActiveFrom.After(at) ||
+		!IsValidAgreementID(p.ApplicationReleaseID) ||
+		!IsValidAgreementID(p.MatrixID) ||
+		!IsValidAgreementID(p.TargetTuple) ||
+		!p.FocusLossMode.IsValid() ||
+		p.ConnectionLossMode != NativeModeEnforce ||
+		p.ResolvedExceptionRefs == nil ||
+		len(p.ResolvedExceptionRefs) != 0 ||
+		p.EvidenceClassID != "native_integrity" ||
+		p.VisibilityClassID != "examiner_restricted" ||
+		p.RetentionClassID != "native_minimized" {
 		return ErrSecurityPolicyInvalid
 	}
+
 	return (NativeSecurityPolicy{RegistryDigest: p.RegistryDigest, BaselineID: "desktop_candidate", Families: p.Capabilities}).Validate()
 }
 func (p EffectiveExamSecurityPolicy) document(omitted ...string) (map[string]json.RawMessage, error) {
@@ -382,14 +486,24 @@ func validateSecurityBindings(bindings []SecurityCatalogBinding) error {
 	if bindings == nil || len(bindings) > 32 {
 		return ErrSecurityPolicyInvalid
 	}
+
 	previous := ""
 	for _, binding := range bindings {
 		key := binding.Kind + "\x00" + binding.CatalogID
-		if !slices.Contains([]string{"application", "storage_function", "managed_network_profile", "network_adapter_class", "tunnel_class", "detector"}, binding.Kind) || !IsValidAgreementID(binding.CatalogID) || !isSecurityRevision(binding.Revision) || !IsValidSHA256Fingerprint(binding.Digest) || key <= previous {
+		if !slices.Contains(
+			[]string{"application", "storage_function", "managed_network_profile", "network_adapter_class", "tunnel_class", "detector"},
+			binding.Kind,
+		) ||
+			!IsValidAgreementID(binding.CatalogID) ||
+			!isSecurityRevision(binding.Revision) ||
+			!IsValidSHA256Fingerprint(binding.Digest) ||
+			key <= previous {
 			return ErrSecurityPolicyInvalid
 		}
+
 		previous = key
 	}
+
 	return nil
 }
 
@@ -419,7 +533,11 @@ func (p EffectiveExamSecurityPolicy) MarshalJSON() ([]byte, error) {
 		*wire
 		IssuedAt   securityJSONInstant `json:"issued_at"`
 		ActiveFrom securityJSONInstant `json:"active_from"`
-	}{wire: (*wire)(&p), IssuedAt: securityJSONInstant{Time: p.IssuedAt, spelling: p.issuedAtSpelling}, ActiveFrom: securityJSONInstant{Time: p.ActiveFrom, spelling: p.activeFromSpelling}})
+	}{
+		wire:       (*wire)(&p),
+		IssuedAt:   securityJSONInstant{Time: p.IssuedAt, spelling: p.issuedAtSpelling},
+		ActiveFrom: securityJSONInstant{Time: p.ActiveFrom, spelling: p.activeFromSpelling},
+	})
 }
 func (p *EffectiveExamSecurityPolicy) UnmarshalJSON(raw []byte) error {
 	if p == nil {

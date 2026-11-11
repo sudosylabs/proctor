@@ -8,15 +8,15 @@
 package filecontent_test
 
 import (
-	"github.com/sudosylabs/proctor/server/app"
-	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/jobs"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/filecontent"
 )
 
 var (
-	_ app.ProfilePictureUploadFiles            = (*filecontent.Content)(nil)
-	_ app.ProfilePictureReadFiles              = (*filecontent.Content)(nil)
-	_ app.DefaultProfilePictureRenderFiles     = (*filecontent.Content)(nil)
-	_ app.DefaultProfilePictureGenerationFiles = (*filecontent.Content)(nil)
-	_ jobhandler.FileRevisionContentPurger     = (*filecontent.Content)(nil)
+	_ user.ProfilePictureUploadFiles            = (*filecontent.Content)(nil)
+	_ user.ProfilePictureReadFiles              = (*filecontent.Content)(nil)
+	_ user.DefaultProfilePictureRenderFiles     = (*filecontent.Content)(nil)
+	_ user.DefaultProfilePictureGenerationFiles = (*filecontent.Content)(nil)
+	_ jobs.FileRevisionContentPurger            = (*filecontent.Content)(nil)
 )

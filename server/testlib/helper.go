@@ -144,6 +144,7 @@ func Setup(tb testing.TB, options ...Option) *Helper {
 	for _, option := range options {
 		option(&settings)
 	}
+
 	store, err := config.NewStore(
 		context.Background(),
 		config.NewMemoryStore(nil),
@@ -154,6 +155,9 @@ func Setup(tb testing.TB, options ...Option) *Helper {
 	testConfig.Authentication.Bootstrap.DevelopmentMode = false
 	testConfig.Authentication.Bootstrap.Secret = BootstrapSecret
 	testConfig.Mail.SecretSealing.EncryptionKey = base64.StdEncoding.EncodeToString(make([]byte, 32))
+	// Tests that run the server listen on a free port, so they never collide
+	// with a development server or each other on the default 8065.
+	testConfig.Server.ListenAddress = "127.0.0.1:0"
 	_, _, err = store.Set(context.Background(), testConfig)
 	require.NoError(tb, err)
 	if settings.updateConfig != nil {
@@ -169,7 +173,11 @@ func Setup(tb testing.TB, options ...Option) *Helper {
 	require.NoError(tb, logger.Configure(logging.Config{
 		MaxFieldBytes: store.Get().Log.MaxFieldBytes,
 		Targets: []logging.Target{{
-			Name: "test", Type: "console", Level: "trace", Format: "json", Writer: logs,
+			Name:   "test",
+			Type:   "console",
+			Level:  "trace",
+			Format: "json",
+			Writer: logs,
 		}},
 	}))
 	logger.LockConfiguration()
@@ -183,6 +191,7 @@ func Setup(tb testing.TB, options ...Option) *Helper {
 		require.NoError(tb, err)
 		mailerOverride = mailer
 	}
+
 	filesystem := memory.New()
 	if settings.cluster == nil && store.Get().Cluster.Backend == "local" {
 		settings.cluster, err = local.New(store.Get().Cluster.NodeID, testClusterLogger{})
@@ -195,6 +204,7 @@ func Setup(tb testing.TB, options ...Option) *Helper {
 		lifecycle = NewLifecycleStore()
 		persistenceOverride = lifecycle
 	}
+
 	runtime, err := server.NewForTesting(context.Background(), server.TestingOverrides{
 		Configuration:       store,
 		Logger:              logger,
@@ -276,6 +286,21 @@ func (s *LifecycleStore) ExamCorrection() store.ExamCorrectionStore {
 
 func (s *LifecycleStore) ExamAttempt() store.ExamAttemptStore {
 	return lifecycleExamAttemptStore{}
+}
+func (s *LifecycleStore) ExamFocusLoss() store.ExamFocusLossStore {
+	return lifecycleExamFocusLossStore{}
+}
+func (s *LifecycleStore) SecurityPreflight() store.SecurityPreflightStore {
+	return lifecycleSecurityPreflightStore{}
+}
+func (s *LifecycleStore) NativeDelivery() store.NativeDeliveryStore {
+	return lifecycleNativeDeliveryStore{}
+}
+func (s *LifecycleStore) BrowserDelivery() store.BrowserDeliveryStore {
+	return lifecycleBrowserDeliveryStore{}
+}
+func (s *LifecycleStore) DeliveryBudget() store.DeliveryBudgetStore {
+	return lifecycleDeliveryBudgetStore{}
 }
 func (s *LifecycleStore) ExamAttemptWorkspace() store.ExamAttemptWorkspaceStore {
 	return lifecycleExamAttemptWorkspaceStore{}
@@ -423,6 +448,13 @@ type lifecycleExamAuthoringStore struct{ store.ExamAuthoringStore }
 type lifecycleExamResourceStore struct{ store.ExamResourceStore }
 type lifecycleExamCorrectionStore struct{ store.ExamCorrectionStore }
 type lifecycleExamAttemptStore struct{ store.ExamAttemptStore }
+type lifecycleExamFocusLossStore struct{ store.ExamFocusLossStore }
+type lifecycleSecurityPreflightStore struct {
+	store.SecurityPreflightStore
+}
+type lifecycleNativeDeliveryStore struct{ store.NativeDeliveryStore }
+type lifecycleBrowserDeliveryStore struct{ store.BrowserDeliveryStore }
+type lifecycleDeliveryBudgetStore struct{ store.DeliveryBudgetStore }
 type lifecycleExamAttemptWorkspaceStore struct {
 	store.ExamAttemptWorkspaceStore
 }

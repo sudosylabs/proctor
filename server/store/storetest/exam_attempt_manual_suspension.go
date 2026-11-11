@@ -60,6 +60,8 @@ func TestExamAttemptManualSuspensionStore(t *testing.T, ss store.Store) {
 	command := examCommand(fixture.manager.ID, store.ExamAttemptSuspendOperation, "kick", "kick")
 	kicked, err := ss.ExamAttempt().SuspendAttempt(ctx, first, command)
 	require.NoError(t, err)
+	require.True(t, kicked.ConsistentWith(fixture.examID, fixture.sitting.ID, connected.Attempt.ID, connected.Attempt.Revision, fixture.class.ID, fixture.manager.ID),
+		"SuspendAttempt returned a result inconsistent with its request")
 	require.False(t, kicked.Replayed)
 	require.NotNil(t, kicked.Attempt)
 	require.Equal(t, model.ExamAttemptSuspended, kicked.Attempt.State)
@@ -84,6 +86,7 @@ func TestExamAttemptManualSuspensionStore(t *testing.T, ss store.Store) {
 
 	snapshot, err := ss.ExamAttempt().Get(ctx, fixture.examID, connected.Attempt.ID)
 	require.NoError(t, err)
+	require.True(t, snapshot.ConsistentWith(fixture.examID), "Get returned a result inconsistent with its request")
 	require.NotNil(t, snapshot.ActiveSuspension)
 	require.Equal(t, first.SuspensionID, snapshot.ActiveSuspension.ID)
 	require.Equal(t, model.AttemptSuspensionSourceManual, snapshot.ActiveSuspension.Source)
@@ -93,6 +96,7 @@ func TestExamAttemptManualSuspensionStore(t *testing.T, ss store.Store) {
 		ExamID: fixture.examID, SittingID: fixture.sitting.ID, ExcludeCandidateUserID: fixture.manager.ID,
 		ReallowAuthorized: true, Limit: 50})
 	require.NoError(t, err)
+	require.True(t, statuses.ConsistentWith(fixture.examID, fixture.sitting.ID), "ListSittingCandidateStatuses returned a result inconsistent with its request")
 	require.Len(t, statuses.Items, 1)
 	require.NotNil(t, statuses.Items[0].Suspension)
 	require.Equal(t, model.AttemptSuspensionCandidateReasonManagerSuspended, statuses.Items[0].Suspension.CandidateReason)
@@ -117,6 +121,8 @@ func TestExamAttemptManualSuspensionStore(t *testing.T, ss store.Store) {
 		AuditEventID: saveExamAttemptReallowAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()},
 		examCommand(fixture.manager.ID, store.ExamAttemptReallowOperation, "kick-reallow", "kick-reallow"))
 	require.NoError(t, err)
+	require.True(t, reallowed.ConsistentWith(fixture.examID, fixture.sitting.ID, fixture.class.ID, connected.Attempt.ID, kicked.Attempt.Revision, first.SuspensionID, fixture.manager.ID),
+		"ReallowAttempt returned a result inconsistent with its request")
 	require.Equal(t, model.ExamAttemptReady, reallowed.Attempt.State)
 	require.Equal(t, model.AttemptSuspensionClosed, reallowed.Suspension.State)
 	require.Equal(t, model.AttemptSuspensionSourceManual, reallowed.Suspension.Source)
@@ -129,6 +135,8 @@ func TestExamAttemptManualSuspensionStore(t *testing.T, ss store.Store) {
 	replay.AuditEventID, replay.AuditAt = saveExamAttemptReallowAudit(t, ctx, ss, fixture).ID, model.NowUTC()
 	replayed, err := ss.ExamAttempt().SuspendAttempt(ctx, &replay, command)
 	require.NoError(t, err)
+	require.True(t, replayed.ConsistentWith(fixture.examID, fixture.sitting.ID, connected.Attempt.ID, connected.Attempt.Revision, fixture.class.ID, fixture.manager.ID),
+		"SuspendAttempt replay returned a result inconsistent with its request")
 	require.True(t, replayed.Replayed)
 	require.Equal(t, first.SuspensionID, replayed.Suspension.ID)
 	require.Equal(t, model.ExamAttemptSuspended, replayed.Attempt.State)
@@ -200,6 +208,8 @@ func TestExamAttemptManualSuspensionBounds(t *testing.T, ss store.Store, probe E
 	due, err := ss.ExamAttempt().ResolveParticipationExpiry(ctx, connected.Attempt.ID, connected.Participation.ID,
 		connected.Participation.Generation)
 	require.NoError(t, err)
+	require.True(t, due.ConsistentWith(connected.Attempt.ID, connected.Participation.ID, connected.Participation.Generation),
+		"ResolveParticipationExpiry returned a result inconsistent with its request")
 	expired, err := ss.ExamAttempt().ExpireParticipation(ctx, &store.ExamAttemptParticipationExpiry{
 		AttemptID: due.AttemptID, ParticipationID: due.ParticipationID, Generation: due.Generation,
 		EvidenceID: model.NewIntegrityEvidenceID(), FlagID: model.NewIntegrityFlagID(), SuspensionID: model.NewAttemptSuspensionID(),

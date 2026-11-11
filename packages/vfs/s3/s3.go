@@ -105,11 +105,11 @@ func (f *FS) Open(ctx context.Context, name string, options vfs.OpenOptions) (*v
 	if err != nil {
 		return nil, vfs.Error(op, name, err)
 	}
-	if err := options.Validate(); err != nil {
-		return nil, vfs.Error(op, name, err)
+	if validateErr := options.Validate(); validateErr != nil {
+		return nil, vfs.Error(op, name, validateErr)
 	}
-	if err := ctx.Err(); err != nil {
-		return nil, vfs.Error(op, name, err)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, vfs.Error(op, name, ctxErr)
 	}
 
 	info, err := f.client.StatObject(ctx, f.bucket, f.key(name), minio.StatObjectOptions{})
@@ -125,7 +125,7 @@ func (f *FS) Open(ctx context.Context, name string, options vfs.OpenOptions) (*v
 		if options.Length > 0 {
 			end = options.Offset + options.Length - 1
 		}
-		if err := getOptions.SetRange(options.Offset, end); err != nil {
+		if setRangeErr := getOptions.SetRange(options.Offset, end); setRangeErr != nil {
 			return nil, vfs.Error(op, name, vfs.ErrInvalidRange)
 		}
 	}
@@ -149,14 +149,14 @@ func (f *FS) Write(ctx context.Context, name string, body io.Reader, options vfs
 	if body == nil {
 		return vfs.Info{}, vfs.Error(op, name, fmt.Errorf("body is nil"))
 	}
-	if err := options.Validate(); err != nil {
-		return vfs.Info{}, vfs.Error(op, name, err)
+	if validateErr := options.Validate(); validateErr != nil {
+		return vfs.Info{}, vfs.Error(op, name, validateErr)
 	}
 	if options.ExpectedRevision != "" || options.NoOverwrite {
 		return vfs.Info{}, vfs.Error(op, name, vfs.ErrUnsupported)
 	}
-	if err := ctx.Err(); err != nil {
-		return vfs.Info{}, vfs.Error(op, name, err)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return vfs.Info{}, vfs.Error(op, name, ctxErr)
 	}
 
 	size := int64(-1)
@@ -199,8 +199,8 @@ func (f *FS) Stat(ctx context.Context, name string) (vfs.Info, error) {
 	if err != nil {
 		return vfs.Info{}, vfs.Error(op, name, err)
 	}
-	if err := ctx.Err(); err != nil {
-		return vfs.Info{}, vfs.Error(op, name, err)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return vfs.Info{}, vfs.Error(op, name, ctxErr)
 	}
 	info, err := f.client.StatObject(ctx, f.bucket, f.key(name), minio.StatObjectOptions{})
 	if err != nil {
@@ -301,8 +301,8 @@ func (f *FS) Copy(ctx context.Context, source, destination string, options vfs.T
 	if options.NoOverwrite || options.DestinationRevision != "" {
 		return vfs.Info{}, vfs.Error(op, destination, vfs.ErrUnsupported)
 	}
-	if err := ctx.Err(); err != nil {
-		return vfs.Info{}, vfs.Error(op, source+" -> "+destination, err)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return vfs.Info{}, vfs.Error(op, source+" -> "+destination, ctxErr)
 	}
 
 	sourceOptions := minio.CopySrcOptions{Bucket: f.bucket, Object: f.key(source)}

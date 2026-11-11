@@ -7,12 +7,14 @@
 
 package httpapi
 
-func validateAcademicRevision(value Optional[int64]) error {
+import "github.com/sudosylabs/proctor/server/httpapi/route"
+
+func validateAcademicRevision(value route.Optional[int64]) error {
 	if value.IsNull() {
-		return invalidRequestError(nil)
+		return route.InvalidRequest(nil)
 	}
 	if revision := value.ValuePointer(); revision != nil && *revision <= 0 {
-		return invalidRequestError(nil)
+		return route.InvalidRequest(nil)
 	}
 	return nil
 }
@@ -21,15 +23,15 @@ func validateAcademicRevision(value Optional[int64]) error {
 // archive. Like every other fence it travels in the JSON body; a DELETE
 // without a body archives unconditionally.
 type archiveAcademicRequest struct {
-	ExpectedRevision Optional[int64] `json:"expected_revision"`
+	ExpectedRevision route.Optional[int64] `json:"expected_revision"`
 }
 
-func (r operationRequest) academicRevision() (*int64, error) {
-	if r.request.ContentLength == 0 && r.request.Header.Get("Content-Type") == "" {
+func academicRevision(request route.Request) (*int64, error) {
+	if request.HTTP.ContentLength == 0 && request.HTTP.Header.Get("Content-Type") == "" {
 		return nil, nil
 	}
 	var body archiveAcademicRequest
-	if err := r.decodeJSON(&body); err != nil {
+	if err := request.DecodeJSON(&body); err != nil {
 		return nil, err
 	}
 	if err := validateAcademicRevision(body.ExpectedRevision); err != nil {

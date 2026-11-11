@@ -56,8 +56,8 @@ func TestExamExportRetention(t *testing.T, ss store.Store, dates RetentionSQLPro
 	policy = replaced.Policy
 	dates.AgeCompletion(t, ctx, f.sitting.ID)
 	mutation := func(action model.Action) store.RetentionMutation {
-		a, err := ss.Audit().Save(ctx, &model.AuditEvent{ActorID: principal.UserID, SessionID: principal.SessionID, Action: string(action), Resource: model.Resource{Type: model.ResourceInstitution, ID: f.institutionID.String()}, ScopeType: model.RoleScopeInstitution, ScopeID: f.institutionID.String(), Status: model.AuditStatusAttempt, NodeID: "export-retention"})
-		require.NoError(t, err)
+		a, auditErr := ss.Audit().Save(ctx, &model.AuditEvent{ActorID: principal.UserID, SessionID: principal.SessionID, Action: string(action), Resource: model.Resource{Type: model.ResourceInstitution, ID: f.institutionID.String()}, ScopeType: model.RoleScopeInstitution, ScopeID: f.institutionID.String(), Status: model.AuditStatusAttempt, NodeID: "export-retention"})
+		require.NoError(t, auditErr)
 		return store.RetentionMutation{Principal: principal, AuditEventID: a.ID, AuditAt: model.NowUTC(), RecentAuthenticationTTL: 10 * time.Minute}
 	}
 	preview, err := ss.Retention().CreatePreview(ctx, &store.RetentionPreviewCreation{RetentionMutation: mutation(model.ActionRetentionPolicyView), PreviewID: model.NewRetentionPreviewID(), ExpectedPolicyRevision: policy.Revision}, examCommand(f.manager.ID, store.RetentionPreviewOperation, "export-retention-preview", "export-retention-preview"))
@@ -71,10 +71,10 @@ func TestExamExportRetention(t *testing.T, ss store.Store, dates RetentionSQLPro
 		peer = ss.Retention()
 	}
 	reconcile := func(expected store.RetentionReconciliationResult) {
-		a, err := ss.Audit().Save(ctx, &model.AuditEvent{Action: string(model.ActionRetentionCleanupManage), Resource: model.Resource{Type: model.ResourceSubmission, ID: id.String()}, ScopeType: model.RoleScopeInstitution, ScopeID: f.institutionID.String(), Status: model.AuditStatusAttempt, NodeID: "export-retention-peer"})
-		require.NoError(t, err)
-		result, err := peer.ReconcileSubmission(ctx, &store.RetentionReconciliation{SubmissionID: id, AuditEventID: a.ID, AuditAt: model.NowUTC()})
-		require.NoError(t, err)
+		a, auditErr := ss.Audit().Save(ctx, &model.AuditEvent{Action: string(model.ActionRetentionCleanupManage), Resource: model.Resource{Type: model.ResourceSubmission, ID: id.String()}, ScopeType: model.RoleScopeInstitution, ScopeID: f.institutionID.String(), Status: model.AuditStatusAttempt, NodeID: "export-retention-peer"})
+		require.NoError(t, auditErr)
+		result, auditErr := peer.ReconcileSubmission(ctx, &store.RetentionReconciliation{SubmissionID: id, AuditEventID: a.ID, AuditAt: model.NowUTC()})
+		require.NoError(t, auditErr)
 		require.NotNil(t, result, "reconcile")
 		require.Equal(t, expected, *result, "reconcile")
 	}
@@ -126,6 +126,7 @@ func TestExamExportRetention(t *testing.T, ss store.Store, dates RetentionSQLPro
 	access := input.ExamExportAccess
 	ready, err := ss.ExamExport().Get(ctx, &access)
 	require.NoError(t, err)
+	require.True(t, ready.ConsistentWith(access.ExportID, access.Scope, access.Principal.UserID), "Get returned a result inconsistent with its request")
 	require.Equal(t, model.ExamExportReady, ready.Export.State, "independent archive disappeared with its source")
 	input.ExportID, input.JobID = model.NewExamExportID(), model.NewJobID()
 	input.ExamRecordsMutation = recordsMutation(t, ctx, ss, f.unitID, scope, principal, model.ActionExamRecordsExport)

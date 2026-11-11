@@ -19,7 +19,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/job"
-	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/jobs"
+	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
@@ -31,11 +33,11 @@ func TestMailRekeyOldPrimaryRelinquishesOnceAndNewPrimaryCompletes(t *testing.T)
 	at := model.NowUTC().Add(-time.Second)
 	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "mail-rekey-cluster", DisplayName: "Mail Rekey Cluster"})
 	require.NoError(t, err)
-	user, defaultJob, err := prepareUserDefaultProfilePictureJob(&model.User{Username: "mail-rekey-operator", Email: "mail-rekey-operator@example.test"}, at)
+	account, defaultJob, err := prepareUserDefaultProfilePictureJob(&model.User{Username: "mail-rekey-operator", Email: "mail-rekey-operator@example.test"}, at)
 	require.NoError(t, err)
-	settings, err := prepareInitialUserSettingsDocument(user)
+	settings, err := user.PrepareInitialSettingsDocument(account)
 	require.NoError(t, err)
-	_, err = persistence.User().Create(ctx, &store.UserCreation{User: user, Settings: settings, DefaultProfilePictureJob: defaultJob})
+	_, err = persistence.User().Create(ctx, &store.UserCreation{User: account, Settings: settings, DefaultProfilePictureJob: defaultJob})
 	require.NoError(t, err)
 
 	oldKey := base64.StdEncoding.EncodeToString([]byte("old-mail-rekey-key-material-0001"))
@@ -44,11 +46,11 @@ func TestMailRekeyOldPrimaryRelinquishesOnceAndNewPrimaryCompletes(t *testing.T)
 	require.NoError(t, err)
 	newSealer, err := secretseal.New(secretseal.Settings{EncryptionKey: newKey, DecryptionKeys: []string{oldKey}, MaximumPlaintext: 1024})
 	require.NoError(t, err)
-	command, _ := json.Marshal(jobhandler.MailRekeyCommand{PrimaryKeyID: newSealer.PrimaryKeyID(), RetiringKeyID: oldSealer.PrimaryKeyID()})
+	command, _ := json.Marshal(mail.RekeyCommand{PrimaryKeyID: newSealer.PrimaryKeyID(), RetiringKeyID: oldSealer.PrimaryKeyID()})
 	rekeyJob, err := model.NewJob(model.NewJobID(), model.JobTypeMailRekey, command,
 		"mail-rekey:"+newSealer.PrimaryKeyID()+":"+oldSealer.PrimaryKeyID(), at, at, 10)
 	require.NoError(t, err)
-	audit, err := persistence.Audit().Save(ctx, &model.AuditEvent{ActorID: user.ID, Action: string(model.ActionMailRekey),
+	audit, err := persistence.Audit().Save(ctx, &model.AuditEvent{ActorID: account.ID, Action: string(model.ActionMailRekey),
 		Resource:  model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()},
 		ScopeType: model.RoleScopeInstitution, ScopeID: institution.ID.String(), Status: model.AuditStatusAttempt,
 		NodeID: "new-primary-node", ClientType: string(model.SessionClientWeb), AuthMethod: "password"})
@@ -57,13 +59,11 @@ func TestMailRekeyOldPrimaryRelinquishesOnceAndNewPrimaryCompletes(t *testing.T)
 		RetiringKeyID: oldSealer.PrimaryKeyID(), Job: rekeyJob, AuditEventID: audit.ID, AuditAt: model.NowUTC()})
 	require.NoError(t, err)
 
-	oldDescriptor := integrationJobDescriptor(t, jobhandler.NewCatalog(jobhandler.CatalogDependencies{
-		JobStore: persistence.Job(), MailRekey: persistence.Mail(), MailSealer: oldSealer,
-	}), model.JobTypeMailRekey)
+	oldDescriptor := jobs.NewMailRekey(persistence.Mail(), oldSealer).Descriptor
 	oldDescriptor.BaseRetryDelay, oldDescriptor.MaximumRetryDelay = 10*time.Millisecond, 10*time.Millisecond
 	oldDescriptor.LeaseDuration, oldDescriptor.HeartbeatInterval = mailRekeyClusterLease, mailRekeyClusterHeartbeat
 	oldNode, err := job.New(job.Dependencies{Store: persistence.Job(), Descriptors: []job.Descriptor{oldDescriptor},
-		NodeID: "old-primary-node", Diagnostics: &integrationJobDiagnostics{}, Policy: job.Policy{PollInterval: 5 * time.Millisecond}})
+		NodeID: "old-primary-node", Diagnostics: newDiscardLogger(t), Policy: job.Policy{PollInterval: 5 * time.Millisecond}})
 	require.NoError(t, err)
 	err = oldNode.Start(ctx)
 	require.NoError(t, err)
@@ -81,13 +81,11 @@ func TestMailRekeyOldPrimaryRelinquishesOnceAndNewPrimaryCompletes(t *testing.T)
 	require.Len(t, attempts, 1, "no-compatible-node attempts")
 	require.Equal(t, "old-primary-node", attempts[0].NodeID, "no-compatible-node attempts")
 
-	newDescriptor := integrationJobDescriptor(t, jobhandler.NewCatalog(jobhandler.CatalogDependencies{
-		JobStore: persistence.Job(), MailRekey: persistence.Mail(), MailSealer: newSealer,
-	}), model.JobTypeMailRekey)
+	newDescriptor := jobs.NewMailRekey(persistence.Mail(), newSealer).Descriptor
 	newDescriptor.BaseRetryDelay, newDescriptor.MaximumRetryDelay = 10*time.Millisecond, 10*time.Millisecond
 	newDescriptor.LeaseDuration, newDescriptor.HeartbeatInterval = mailRekeyClusterLease, mailRekeyClusterHeartbeat
 	newNode, err := job.New(job.Dependencies{Store: persistence.Job(), Descriptors: []job.Descriptor{newDescriptor},
-		NodeID: "new-primary-node", Diagnostics: &integrationJobDiagnostics{}, Policy: job.Policy{PollInterval: 5 * time.Millisecond}})
+		NodeID: "new-primary-node", Diagnostics: newDiscardLogger(t), Policy: job.Policy{PollInterval: 5 * time.Millisecond}})
 	require.NoError(t, err)
 	err = newNode.Start(ctx)
 	require.NoError(t, err)
@@ -99,7 +97,7 @@ func TestMailRekeyOldPrimaryRelinquishesOnceAndNewPrimaryCompletes(t *testing.T)
 
 	completed, err := persistence.Job().Get(ctx, rekeyJob.ID)
 	require.NoError(t, err)
-	var proof jobhandler.MailRekeyResult
+	var proof mail.RekeyResult
 	err = json.Unmarshal(completed.Result, &proof)
 	require.NoError(t, err, "completed retirement proof = %#v", proof)
 	require.True(t, proof.RetirementSafe, "completed retirement proof = %#v", proof)
@@ -116,15 +114,15 @@ const (
 	mailRekeyClusterConvergence = 30 * time.Second
 )
 
-func waitForMailRekeyJob(t *testing.T, jobs store.JobStore, jobID model.JobID,
+func waitForMailRekeyJob(t *testing.T, jobStore store.JobStore, jobID model.JobID,
 	ready func(*model.Job, []model.JobAttempt) bool,
 ) {
 	t.Helper()
 	deadline := time.Now().Add(mailRekeyClusterConvergence)
 	for {
-		job, err := jobs.Get(context.Background(), jobID)
+		job, err := jobStore.Get(context.Background(), jobID)
 		require.NoError(t, err)
-		attempts, err := jobs.ListAttempts(context.Background(), jobID)
+		attempts, err := jobStore.ListAttempts(context.Background(), jobID)
 		require.NoError(t, err)
 		if ready(job, attempts) {
 			return

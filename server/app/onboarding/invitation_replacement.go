@@ -1,0 +1,420 @@
+// ---------------------------------------------------------------------------------------------
+// Copyright (c) 2026 Sudosy Labs. All rights reserved.
+// Licensed under the GNU Affero General Public License, version 3 only.
+// See LICENSE in the server module root for license information.
+// SPDX-License-Identifier: AGPL-3.0-only
+// ---------------------------------------------------------------------------------------------
+
+package onboarding
+
+import (
+	"context"
+	"strings"
+	"time"
+
+	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
+)
+
+// ReplaceInvitation revokes a pending Invitation and issues its corrected replacement,
+// reauthorizing the replacement's target.
+func (s *Service) ReplaceInvitation(
+	ctx context.Context,
+	inv invocation.Invocation,
+	command ReplaceInvitationCommand,
+) (InvitationAdministrationView, error) {
+	id := command.ID
+	if !id.IsValid() || command.ExpectedRevision < 1 {
+		return InvitationAdministrationView{}, apperror.New("request.invalid").WithField("field", "invitation_id")
+	}
+	if _, err := invitationLifetime(command.ExpiresInDays, model.InvitationLifetime); err != nil {
+		return InvitationAdministrationView{}, err
+	}
+
+	visibility, err := s.visibility(ctx, inv, model.ActionInvitationManage)
+	if err != nil {
+		return InvitationAdministrationView{}, err
+	}
+
+	current, err := s.invitations.GetForAdministration(ctx, id, visibility)
+	if err != nil {
+		return InvitationAdministrationView{}, invitationStoreErrors.Translate(err)
+	}
+	if !s.mail.Enabled() {
+		return InvitationAdministrationView{}, apperror.New("invitation.mail_unavailable")
+	}
+
+	lifetime, err := invitationLifetime(command.ExpiresInDays, replacedInvitationLifetime(current.Invitation))
+	if err != nil {
+		return InvitationAdministrationView{}, err
+	}
+
+	replacement, rawClaim, err := s.prepareReplacement(ctx, inv, command, lifetime)
+	if err != nil {
+		return InvitationAdministrationView{}, err
+	}
+
+	actionURL, err := identity.AccountCredentialLink(s.publicURL, "/join", rawClaim)
+	if err != nil {
+		return InvitationAdministrationView{}, apperror.New("invitation.unavailable").Wrap(err)
+	}
+
+	prepared, err := s.mail.PrepareInvitation(replacement, actionURL)
+	if err != nil {
+		return InvitationAdministrationView{}, apperror.New("invitation.mail_unavailable").Wrap(err)
+	}
+
+	currentAttempt := access.Mutation{
+		Invocation: inv,
+		Action:     model.ActionInvitationManage,
+		Resource:   invitationResource(current.Invitation),
+		ScopeType:  current.Invitation.ScopeType,
+		ScopeID:    current.Invitation.ScopeID,
+		Operation:  "supersede",
+		Value:      current.Invitation.Auditable(),
+		At:         s.now(),
+	}
+	result, err := access.RunAudited(
+		ctx,
+		s.auditor,
+		currentAttempt,
+		func(ctx context.Context, currentReference access.MutationReference) (*store.InvitationAdministrationRecord, error) {
+			replacementAttempt := access.Mutation{
+				Invocation: inv,
+				Action:     model.ActionInvitationCreate,
+				Resource:   invitationResource(replacement),
+				ScopeType:  replacement.ScopeType,
+				ScopeID:    replacement.ScopeID,
+				Operation:  "replacement_issue",
+				Value:      replacement.Auditable(),
+				At:         model.TimeUTC(currentReference.MutationAt),
+			}
+			return access.RunAudited(
+				ctx,
+				s.auditor,
+				replacementAttempt,
+				func(ctx context.Context, replacementReference access.MutationReference) (*store.InvitationAdministrationRecord, error) {
+					return s.invitations.Replace(ctx, &store.InvitationReplacement{
+						CurrentID:               id,
+						ExpectedRevision:        command.ExpectedRevision,
+						Replacement:             replacement,
+						Lifetime:                lifetime,
+						Occurrence:              prepared.Occurrence,
+						Delivery:                prepared.Delivery,
+						DeliveryJob:             prepared.Job,
+						ActorUserID:             inv.Principal().UserID,
+						CurrentAuditEventID:     currentReference.ID,
+						ReplacementAuditEventID: replacementReference.ID,
+						AuditAt:                 currentReference.MutationAt,
+					})
+				},
+				invitationStoreErrors.Translate,
+			)
+		},
+		invitationStoreErrors.Translate,
+	)
+	if err != nil {
+		return InvitationAdministrationView{}, err
+	}
+
+	return invitationAdministrationView(result), nil
+}
+
+func (s *Service) prepareReplacement(
+	ctx context.Context,
+	inv invocation.Invocation,
+	command ReplaceInvitationCommand,
+	lifetime time.Duration,
+) (*model.Invitation, string, error) {
+	purpose := model.InvitationPurpose(strings.TrimSpace(command.Purpose))
+	if !purpose.IsValid() {
+		return nil, "", apperror.New("request.invalid").WithField("field", "purpose")
+	}
+
+	at := model.TimeUTC(s.now())
+	rawClaim := s.newToken()
+	if !model.IsValidCredentialToken(rawClaim) {
+		return nil, "", apperror.New("invitation.unavailable")
+	}
+
+	draft := invitationReplacementDraft{
+		purpose:  purpose,
+		at:       at,
+		rawClaim: rawClaim,
+		startsAt: model.TimeFromMillis(command.IntendedStartsAt),
+		endsAt:   model.OptionalTimeFromMillis(command.IntendedEndsAt),
+		actor:    inv.Principal().UserID,
+		lifetime: lifetime,
+	}
+	var (
+		value *model.Invitation
+		err   error
+	)
+	switch purpose {
+	case model.InvitationPurposeStudentClass:
+		value, err = s.prepareStudentClassReplacement(ctx, inv, command, draft)
+	case model.InvitationPurposeTeacherAcademicUnit, model.InvitationPurposeAcademicUnitRole:
+		value, err = s.prepareAcademicUnitReplacement(ctx, inv, command, draft)
+	case model.InvitationPurposeInstitutionRole:
+		value, err = s.prepareInstitutionRoleReplacement(ctx, inv, command, draft)
+	default:
+		return nil, "", apperror.New("request.invalid").WithField("field", "purpose")
+	}
+
+	if err != nil {
+		return nil, "", err
+	}
+
+	return value, rawClaim, nil
+}
+
+// invitationReplacementDraft carries the purpose-independent replacement values shared by every purpose step.
+type invitationReplacementDraft struct {
+	purpose  model.InvitationPurpose
+	at       time.Time
+	rawClaim string
+	startsAt time.Time
+	endsAt   model.OptionalTime
+	actor    model.UserID
+	lifetime time.Duration
+}
+
+// prepareStudentClassReplacement authorizes the Class target and builds the replacement Student Class Invitation.
+func (s *Service) prepareStudentClassReplacement(
+	ctx context.Context,
+	inv invocation.Invocation,
+	command ReplaceInvitationCommand,
+	draft invitationReplacementDraft,
+) (*model.Invitation, error) {
+	classID, err := model.ParseClassID(strings.TrimSpace(command.ClassID.String()))
+	if err != nil {
+		return nil, apperror.New("request.invalid").WithField("field", "class_id").Wrap(err)
+	}
+
+	resource := model.Resource{Type: model.ResourceClass, ID: classID.String()}
+	for _, action := range []model.Action{model.ActionInvitationCreate, model.ActionClassMembersManage} {
+		if err = s.authorize(ctx, inv, action, resource); err != nil {
+			return nil, err
+		}
+	}
+
+	class, err := s.classes.Get(ctx, classID)
+	if err != nil || class.ID != classID {
+		return nil, invitationStoreErrors.Translate(err)
+	}
+
+	period, err := s.periods.Get(ctx, class.AcademicPeriodID)
+	if err != nil || period.ID != class.AcademicPeriodID {
+		return nil, invitationStoreErrors.Translate(err)
+	}
+
+	startsAt := draft.startsAt
+	if startsAt.IsZero() {
+		startsAt = period.StartsAt
+	}
+
+	value, err := model.NewStudentClassInvitation(model.StudentClassInvitationInput{
+		ID:               model.NewInvitationID(),
+		TargetEmail:      command.TargetEmail,
+		ClassID:          class.ID,
+		AcademicPeriodID: period.ID,
+		IntendedStartsAt: startsAt,
+		IntendedEndsAt:   draft.endsAt,
+		Suggestions: model.InvitationProfileSuggestions{
+			Username:    command.SuggestedUsername,
+			DisplayName: command.SuggestedDisplayName,
+			FirstName:   command.SuggestedFirstName,
+			LastName:    command.SuggestedLastName,
+			Locale:      command.SuggestedLocale,
+			Timezone:    command.SuggestedTimezone,
+		},
+		InviterUserID: draft.actor,
+		ScopeType:     model.RoleScopeClass,
+		ScopeID:       class.ID.String(),
+		ClaimHash:     model.HashInvitationClaim(draft.rawClaim),
+		IssuedAt:      draft.at,
+		Lifetime:      draft.lifetime,
+	})
+	if err != nil {
+		return nil, apperror.DomainInvalid("invitation.invalid", err)
+	}
+
+	return value, nil
+}
+
+// prepareAcademicUnitReplacement authorizes the Academic Unit target and delegated Role and builds the replacement
+// Teacher Academic Unit or Academic Unit Role Invitation.
+func (s *Service) prepareAcademicUnitReplacement(
+	ctx context.Context,
+	inv invocation.Invocation,
+	command ReplaceInvitationCommand,
+	draft invitationReplacementDraft,
+) (*model.Invitation, error) {
+	purpose := draft.purpose
+	unitID, err := model.ParseAcademicUnitID(strings.TrimSpace(command.AcademicUnitID.String()))
+	if err != nil {
+		return nil, apperror.New("request.invalid").WithField("field", "academic_unit_id").Wrap(err)
+	}
+
+	roleID, err := model.ParseRoleID(strings.TrimSpace(command.RoleID.String()))
+	if err != nil {
+		return nil, apperror.New("request.invalid").WithField("field", "role_id").Wrap(err)
+	}
+
+	resource := model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()}
+	required := []model.Action{model.ActionInvitationCreate, model.ActionAcademicUnitMembersManage}
+	if purpose == model.InvitationPurposeAcademicUnitRole {
+		required[1] = model.ActionRoleBindingManage
+	}
+
+	for _, action := range required {
+		if err = s.authorize(ctx, inv, action, resource); err != nil {
+			return nil, err
+		}
+	}
+
+	unit, err := s.academicUnits.Get(ctx, unitID)
+	if err != nil || unit.ID != unitID || unit.IsArchived() {
+		return nil, invitationStoreErrors.Translate(err)
+	}
+
+	role, err := s.roles.Get(ctx, roleID)
+	if err != nil || role.ID != roleID || role.IsArchived() {
+		return nil, invitationStoreErrors.Translate(err)
+	}
+	if err = validateInvitationDelegableRole(role, model.RoleScopeAcademicUnit); err != nil {
+		return nil, err
+	}
+	if err = s.authorizeActionDelegation(ctx, inv, role.Permissions, model.RoleScopeAcademicUnit, unitID.String()); err != nil {
+		return nil, err
+	}
+
+	startsAt := draft.startsAt
+	if startsAt.IsZero() {
+		startsAt = draft.at
+	}
+
+	if purpose == model.InvitationPurposeTeacherAcademicUnit {
+		value, modelErr := model.NewTeacherAcademicUnitInvitation(model.TeacherAcademicUnitInvitationInput{
+			ID:               model.NewInvitationID(),
+			TargetEmail:      command.TargetEmail,
+			AcademicUnitID:   unit.ID,
+			RoleID:           role.ID,
+			RoleActions:      role.Permissions,
+			IntendedStartsAt: startsAt,
+			IntendedEndsAt:   draft.endsAt,
+			Suggestions: model.InvitationProfileSuggestions{
+				Username:    command.SuggestedUsername,
+				DisplayName: command.SuggestedDisplayName,
+				FirstName:   command.SuggestedFirstName,
+				LastName:    command.SuggestedLastName,
+				Locale:      command.SuggestedLocale,
+				Timezone:    command.SuggestedTimezone,
+			},
+			InviterUserID: draft.actor,
+			ScopeType:     model.RoleScopeAcademicUnit,
+			ScopeID:       unit.ID.String(),
+			ClaimHash:     model.HashInvitationClaim(draft.rawClaim),
+			IssuedAt:      draft.at,
+			Lifetime:      draft.lifetime,
+		})
+		if modelErr != nil {
+			return nil, apperror.DomainInvalid("invitation.invalid", modelErr)
+		}
+
+		return value, nil
+	}
+
+	value, modelErr := model.NewScopedRoleInvitation(model.ScopedRoleInvitationInput{
+		ID:               model.NewInvitationID(),
+		Purpose:          purpose,
+		TargetEmail:      command.TargetEmail,
+		AcademicUnitID:   unit.ID,
+		RoleID:           role.ID,
+		RoleActions:      role.Permissions,
+		IntendedStartsAt: startsAt,
+		IntendedEndsAt:   draft.endsAt,
+		InviterUserID:    draft.actor,
+		ScopeType:        model.RoleScopeAcademicUnit,
+		ScopeID:          unit.ID.String(),
+		ClaimHash:        model.HashInvitationClaim(draft.rawClaim),
+		IssuedAt:         draft.at,
+		Lifetime:         draft.lifetime,
+	})
+	if modelErr != nil {
+		return nil, apperror.DomainInvalid("invitation.invalid", modelErr)
+	}
+
+	return value, nil
+}
+
+// prepareInstitutionRoleReplacement requires recent strong authentication, authorizes the Institution target and
+// delegated Role, and builds the replacement Institution Role Invitation.
+func (s *Service) prepareInstitutionRoleReplacement(
+	ctx context.Context,
+	inv invocation.Invocation,
+	command ReplaceInvitationCommand,
+	draft invitationReplacementDraft,
+) (*model.Invitation, error) {
+	if err := access.RequireStrongRecentSession(inv.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
+		return nil, err
+	}
+
+	institutionID, err := model.ParseInstitutionID(strings.TrimSpace(command.InstitutionID.String()))
+	if err != nil {
+		return nil, apperror.New("request.invalid").WithField("field", "institution_id").Wrap(err)
+	}
+
+	roleID, err := model.ParseRoleID(strings.TrimSpace(command.RoleID.String()))
+	if err != nil {
+		return nil, apperror.New("request.invalid").WithField("field", "role_id").Wrap(err)
+	}
+
+	resource := model.Resource{Type: model.ResourceInstitution, ID: institutionID.String()}
+	for _, action := range []model.Action{model.ActionInvitationCreate, model.ActionRoleBindingManage} {
+		if err = s.authorize(ctx, inv, action, resource); err != nil {
+			return nil, err
+		}
+	}
+
+	role, err := s.roles.Get(ctx, roleID)
+	if err != nil || role.ID != roleID || role.IsArchived() {
+		return nil, invitationStoreErrors.Translate(err)
+	}
+	if err = validateInvitationDelegableRole(role, model.RoleScopeInstitution); err != nil {
+		return nil, err
+	}
+	if err = s.authorizeActionDelegation(ctx, inv, role.Permissions, model.RoleScopeInstitution, institutionID.String()); err != nil {
+		return nil, err
+	}
+
+	startsAt := draft.startsAt
+	if startsAt.IsZero() {
+		startsAt = draft.at
+	}
+
+	value, modelErr := model.NewScopedRoleInvitation(model.ScopedRoleInvitationInput{
+		ID:               model.NewInvitationID(),
+		Purpose:          draft.purpose,
+		TargetEmail:      command.TargetEmail,
+		RoleID:           role.ID,
+		RoleActions:      role.Permissions,
+		IntendedStartsAt: startsAt,
+		IntendedEndsAt:   draft.endsAt,
+		InviterUserID:    draft.actor,
+		ScopeType:        model.RoleScopeInstitution,
+		ScopeID:          institutionID.String(),
+		ClaimHash:        model.HashInvitationClaim(draft.rawClaim),
+		IssuedAt:         draft.at,
+		Lifetime:         draft.lifetime,
+	})
+	if modelErr != nil {
+		return nil, apperror.DomainInvalid("invitation.invalid", modelErr)
+	}
+
+	return value, nil
+}

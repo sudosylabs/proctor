@@ -8,12 +8,17 @@
 package app
 
 import (
+	"bytes"
+	"context"
+	"encoding/base64"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
@@ -24,10 +29,10 @@ func TestSittingMailPreparerFreezesAllFourSafeRenderVariants(t *testing.T) {
 	require.NoError(t, err)
 	renderer := sittingMailRendererFake{}
 	preparer, err := newSittingMailPreparer(renderer, &mailSenderFake{enabled: true,
-		from: MailAddress{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t), func() time.Time { return at }, nil)
+		from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t), func() time.Time { return at }, nil)
 	require.NoError(t, err)
 	prepared, err := preparer.Prepare(model.NewUserID(), sitting, store.ExamSittingMailScheduled,
-		SittingScheduleMailDetails{ExamTitle: "Algorithms", ClassDisplayName: "Class A"})
+		mail.SittingScheduleDetails{ExamTitle: "Algorithms", ClassDisplayName: "Class A"})
 	require.NoError(t, err)
 	require.Equal(t, model.MailOccurrenceSittingSchedule, prepared.Occurrence.Kind)
 	require.NotNil(t, prepared.Bundle)
@@ -46,12 +51,31 @@ type sittingMailRendererFake struct{}
 
 func (sittingMailRendererFake) SittingLocales() (string, []string) { return "en", []string{"en"} }
 
-func (sittingMailRendererFake) Render(request MailRenderRequest) (FrozenMailContent, error) {
-	details, ok := request.Presentation.(SittingScheduleMailDetails)
+func (sittingMailRendererFake) Render(request mail.RenderRequest) (mail.FrozenContent, error) {
+	details, ok := request.Presentation.(mail.SittingScheduleDetails)
 	if !ok {
-		return FrozenMailContent{}, nil
+		return mail.FrozenContent{}, nil
 	}
 	key := request.Key
-	return FrozenMailContent{Subject: string(key), Text: details.ExamTitle + " " + details.ClassDisplayName,
+	return mail.FrozenContent{Subject: string(key), Text: details.ExamTitle + " " + details.ClassDisplayName,
 		HTML: "<p>" + details.ExamTitle + " " + details.ClassDisplayName + "</p>"}, nil
+}
+
+type mailSenderFake struct {
+	enabled bool
+	from    mail.Address
+}
+
+func (s *mailSenderFake) Enabled() bool      { return s.enabled }
+func (s *mailSenderFake) From() mail.Address { return s.from }
+func (s *mailSenderFake) Send(context.Context, mail.Outbound) (mail.TransportOutcome, error) {
+	return mail.TransportUnknown, nil
+}
+
+func mailTestSealer(t *testing.T) *secretseal.Sealer {
+	t.Helper()
+	key := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
+	value, err := secretseal.New(secretseal.Settings{EncryptionKey: key, MaximumPlaintext: secretseal.MaximumPlaintextBytes})
+	require.NoError(t, err)
+	return value
 }

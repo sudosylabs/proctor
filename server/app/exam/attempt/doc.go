@@ -5,24 +5,26 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package attempt owns candidate admission, Participation and Connection
-// fencing, authenticated renewal, database-time expiry enforcement, bounded
-// Focus Loss evaluation, policy suspension and manager re-allow,
-// correction-aware protected presentation, and the acknowledged mutable
-// Attempt Workspace. Ended Focus Loss claims enter its explicit bounded
-// discrepancy use case and can never rewrite collected evidence. It also owns voluntary immutable Submission sealing,
-// actorless per-Attempt sealing invoked by bounded Sitting-close work, and
-// purpose-specific protected manager inspection. Workspace use cases own
-// path-safe manifest and journal recovery, selective entry fences, staged
-// content coordination, Attempt-scoped idempotency, audit intent, and safe
-// post-commit refetch hints. The automatic seal use case owns system-audit
-// intent and post-commit effects but neither pages populations nor schedules
-// Jobs. The package does not own HTTP or WebSocket wire contracts, SQL, VFS
-// selection, durable Job execution, or infrastructure lifecycle. The parent
-// application embeds the service as part of its surface.
+// Package attempt holds the candidate side of an Exam: everything from
+// joining a Sitting to sealing a Submission. It admits candidates, fences
+// each Participation and Connection, renews and expires Participations
+// against database time, evaluates Focus Loss, suspends and re-allows
+// Attempts, shows candidates the protected Exam, and stores their Attempt
+// Workspace. It also seals Submissions, both when a candidate submits and when
+// a closing Sitting seals the remaining Attempts, and lets managers inspect
+// Attempts and Submissions.
 //
-// The package depends inward on model, the bounded Exam Attempt, Attempt
-// Workspace, and Submission Store contracts, the shared safemarkdown leaf,
-// and narrow consumer-owned audit, content, and realtime ports. It never
-// imports its parent package, transports, concrete adapters, or platform.
+// Collected evidence is never rewritten. A Focus Loss report that arrives
+// after the Attempt ended is recorded as a discrepancy for review and leaves
+// the Attempt unchanged.
+//
+// The package does not speak HTTP or WebSocket, run SQL, choose a file store,
+// or run Jobs; the Sitting-close Job calls into it. It imports only model,
+// store, app/access, app/apperror, app/invocation, app/idempotency,
+// app/realtime, app/mail and app/exam/safemarkdown; it reaches the Sitting
+// area through the SittingAuthorizer port. Start with attempt.go for Service
+// and its dependencies, then the file named for the use case (connection.go,
+// workspace.go, submission.go, ...). manager_authorization.go holds who may
+// act as a manager on a Sitting's Attempts and Submissions, and
+// submission_mail.go prepares the candidate's receipt.
 package attempt

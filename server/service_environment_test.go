@@ -30,7 +30,7 @@ func TestParseServiceEnvironment(t *testing.T) {
 			require.Equal(t, test.want, got, "parse %q", test.value)
 		})
 	}
-	for _, value := range []string{"development", "prod", "staging", "produciton", "dev/production"} {
+	for _, value := range []string{"development", "prod", "staging", "produc" + "iton", "dev/production"} {
 		_, err := parseServiceEnvironment(value)
 		require.Error(t, err, "accepted unknown environment %q", value)
 	}

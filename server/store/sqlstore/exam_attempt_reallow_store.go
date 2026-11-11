@@ -34,16 +34,38 @@ func (examAttemptReallowOutcome) outcomeDocument() {}
 // active Suspension and returns the Attempt to active under an
 // ExamAttemptReallowOperation command. Exact retries return the retained result
 // after rechecking authority.
-func (s *SQLExamAttemptStore) ReallowAttempt(ctx context.Context, input *store.ExamAttemptReallow,
+//
+// It locks the exact active Suspension and Attempt revision, rechecks current
+// Exam management authority unless an authorized override is explicit, closes
+// only that episode, returns the Attempt to active, and commits audit and the
+// idempotent outcome atomically. It preserves all evidence and creates no
+// Participation or credential. Exact retries return the retained result
+// without a second revision change after current authority is rechecked.
+// Stable conflicts are exam_attempt_revision, attempt_suspension_active,
+// exam_attempt_state, and exam_sitting_state.
+func (s *SQLExamAttemptStore) ReallowAttempt(
+	ctx context.Context,
+	input *store.ExamAttemptReallow,
 	command *store.CommandIdempotency,
 ) (*store.ExamAttemptReallowResult, error) {
-	if input == nil || command == nil || command.Operation != store.ExamAttemptReallowOperation || command.UserID != input.ActorUserID || !input.ExamID.IsValid() || !input.SittingID.IsValid() || !input.AttemptID.IsValid() ||
-		!input.SuspensionID.IsValid() || !input.ActorUserID.IsValid() || input.ExpectedRevision < 1 ||
-		!input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+	if input == nil ||
+		command == nil ||
+		command.Operation != store.ExamAttemptReallowOperation ||
+		command.UserID != input.ActorUserID ||
+		!input.ExamID.IsValid() ||
+		!input.SittingID.IsValid() ||
+		!input.AttemptID.IsValid() ||
+		!input.SuspensionID.IsValid() ||
+		!input.ActorUserID.IsValid() ||
+		input.ExpectedRevision < 1 ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("exam_attempt", "reallow", nil)
 	}
+
 	result, err := runIdempotentMutation(ctx, s.SQLStore, "re-allow Exam Attempt", idempotentMutation[examAttemptReallowOutcome]{
-		command: command, auditEventID: input.AuditEventID,
+		command:      command,
+		auditEventID: input.AuditEventID,
 		execute: func(ctx context.Context, tx *sqlxTxWrapper) (examAttemptReallowOutcome, error) {
 			return reallowExamAttempt(ctx, tx, input)
 		},
@@ -62,10 +84,12 @@ func (s *SQLExamAttemptStore) ReallowAttempt(ctx context.Context, input *store.E
 	if err != nil {
 		return nil, err
 	}
+
 	aggregate, err := s.loadExamAttemptReallowResult(ctx, result.Value)
 	if err != nil {
 		return nil, err
 	}
+
 	aggregate.Replayed = result.Replayed
 	return aggregate, nil
 }
@@ -77,14 +101,21 @@ type examAttemptReallowGuard struct {
 	ActorIsManager  bool   `db:"actor_is_manager"`
 }
 
-func guardExamAttemptReallowAuthority(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamAttemptReallow,
+func guardExamAttemptReallowAuthority(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.ExamAttemptReallow,
 	lock bool,
 ) error {
 	var guard examAttemptReallowGuard
-	query := `SELECT a.state AS attempt_state,s.state AS sitting_state,a.candidate_user_id,
-		EXISTS (SELECT 1 FROM exam_managers m WHERE m.exam_id=a.exam_id AND m.user_id=?) AS actor_is_manager
-		FROM exam_attempts a JOIN exam_sittings s ON s.id=a.exam_sitting_id AND s.exam_id=a.exam_id
-		WHERE a.id=? AND a.exam_id=? AND a.exam_sitting_id=?`
+	query := `SELECT a.state AS attempt_state, s.state AS sitting_state, a.candidate_user_id,
+			` + attemptExamManagerExistsSQL + ` AS actor_is_manager
+		FROM exam_attempts a
+		JOIN exam_sittings s ON s.id = a.exam_sitting_id
+			AND s.exam_id = a.exam_id
+		WHERE a.id = ?
+			AND a.exam_id = ?
+			AND a.exam_sitting_id = ?`
 	if lock {
 		// The Sitting row is only fenced against state changes: FOR SHARE
 		// still conflicts with Sitting transitions but not with the FOR SHARE
@@ -93,6 +124,7 @@ func guardExamAttemptReallowAuthority(ctx context.Context, tx *sqlxTxWrapper, in
 		// would still conflict with that FOR SHARE.
 		query += ` FOR UPDATE OF a FOR SHARE OF s`
 	}
+
 	err := tx.Get(ctx, &guard, query, input.ActorUserID.String(), input.AttemptID.String(), input.ExamID.String(), input.SittingID.String())
 	if err != nil {
 		return translateError("exam_attempt", input.AttemptID.String(), err)
@@ -106,6 +138,7 @@ func guardExamAttemptReallowAuthority(ctx context.Context, tx *sqlxTxWrapper, in
 	if guard.SittingState == string(model.ExamSittingClosing) || guard.SittingState == string(model.ExamSittingClosed) {
 		return store.NewErrConflict("exam_sitting", "exam_sitting_state", nil)
 	}
+
 	return nil
 }
 
@@ -143,39 +176,65 @@ func reallowExamAttempt(ctx context.Context, tx *sqlxTxWrapper, input *store.Exa
 	if err := guardExamAttemptReallowAuthority(ctx, tx, input, true); err != nil {
 		return zero, err
 	}
+
 	row, err := lockExamAttemptReallowSuspension(ctx, tx, input)
 	if err != nil {
 		return zero, err
 	}
+
 	attempt, suspension, err := examAttemptReallowDomain(input, row)
 	if err != nil {
 		return zero, err
 	}
+
 	focusLossWindowReset, err := applyExamAttemptReallow(ctx, tx, input, row, attempt, suspension)
 	if err != nil {
 		return zero, err
 	}
-	value := examAttemptReallowOutcome{ExamID: input.ExamID.String(), SittingID: input.SittingID.String(), ClassID: row.ClassID,
-		CandidateID: row.CandidateID, AttemptID: input.AttemptID.String(), SuspensionID: input.SuspensionID.String(),
-		FocusLossWindowReset: focusLossWindowReset}
+
+	value := examAttemptReallowOutcome{
+		ExamID:               input.ExamID.String(),
+		SittingID:            input.SittingID.String(),
+		ClassID:              row.ClassID,
+		CandidateID:          row.CandidateID,
+		AttemptID:            input.AttemptID.String(),
+		SuspensionID:         input.SuspensionID.String(),
+		FocusLossWindowReset: focusLossWindowReset,
+	}
 	if err = completeExamAttemptReallowAudit(ctx, tx, value, false, "", input.AuditEventID, input.AuditAt); err != nil {
 		return zero, err
 	}
+
 	return value, nil
 }
 
 // lockExamAttemptReallowSuspension locks the Suspension and requires it to be
 // active on a suspended Attempt at the expected revision.
-func lockExamAttemptReallowSuspension(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamAttemptReallow) (examAttemptReallowRow, error) {
+func lockExamAttemptReallowSuspension(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.ExamAttemptReallow,
+) (examAttemptReallowRow, error) {
 	var row examAttemptReallowRow
-	err := tx.Get(ctx, &row, `SELECT a.exam_id,a.exam_sitting_id,s.class_id,a.candidate_user_id,a.admission_revision_id,
-		a.state AS attempt_state,a.created_at AS attempt_created_at,a.updated_at AS attempt_updated_at,a.submitted_at,
-		a.revision AS attempt_revision,su.participation_id,COALESCE(su.integrity_flag_id,'') AS flag_id,su.state AS suspension_state,
-		su.source,su.candidate_reason,su.generation,su.started_at,su.ended_at,su.reallowed_by_user_id,su.private_reason,
-		su.suspended_by_user_id,su.suspension_private_reason
-		FROM exam_attempt_suspensions su JOIN exam_attempts a ON a.id=su.exam_attempt_id
-		JOIN exam_sittings s ON s.id=a.exam_sitting_id WHERE su.id=? AND su.exam_attempt_id=? FOR UPDATE OF su`,
-		input.SuspensionID.String(), input.AttemptID.String())
+	err := tx.Get(
+		ctx,
+		&row,
+		`SELECT a.exam_id, a.exam_sitting_id, s.class_id, a.candidate_user_id,
+			a.admission_revision_id, a.state AS attempt_state, a.created_at AS attempt_created_at,
+			a.updated_at AS attempt_updated_at, a.submitted_at, a.revision AS attempt_revision,
+			su.participation_id, COALESCE(su.integrity_flag_id, '') AS flag_id,
+			su.state AS suspension_state, su.source, su.candidate_reason, su.generation,
+			su.started_at, su.ended_at, su.reallowed_by_user_id, su.private_reason,
+			su.suspended_by_user_id, su.suspension_private_reason
+		FROM exam_attempt_suspensions su
+		JOIN exam_attempts a ON a.id = su.exam_attempt_id
+		JOIN exam_sittings s ON s.id = a.exam_sitting_id
+		WHERE su.id = ?
+			AND su.exam_attempt_id = ?
+		FOR UPDATE OF su`,
+		input.SuspensionID.String(),
+		input.AttemptID.String(),
+	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return row, store.NewErrConflict("attempt_suspension", "attempt_suspension_active", nil)
 	}
@@ -191,38 +250,68 @@ func lockExamAttemptReallowSuspension(ctx context.Context, tx *sqlxTxWrapper, in
 	if row.AttemptState != string(model.ExamAttemptSuspended) {
 		return row, store.NewErrConflict("exam_attempt", "exam_attempt_state", nil)
 	}
+
 	return row, nil
 }
 
 // examAttemptReallowDomain builds and validates the Attempt and Suspension
 // from row and validates the re-allow private reason.
-func examAttemptReallowDomain(input *store.ExamAttemptReallow, row examAttemptReallowRow) (*model.ExamAttempt, *model.AttemptSuspension, error) {
+func examAttemptReallowDomain(
+	input *store.ExamAttemptReallow,
+	row examAttemptReallowRow,
+) (*model.ExamAttempt, *model.AttemptSuspension, error) {
 	attemptID := input.AttemptID
 	revisionID, err := model.ParseExamRevisionID(row.AdmissionRevisionID)
 	if err != nil {
 		return nil, nil, invalidPersistedState("exam_attempt", "admission_revision_id", err)
 	}
+
 	candidateID, err := model.ParseUserID(row.CandidateID)
 	if err != nil {
 		return nil, nil, invalidPersistedState("exam_attempt", "candidate_user_id", err)
 	}
+
 	participationID, err := model.ParseAttemptParticipationID(row.ParticipationID)
 	if err != nil {
 		return nil, nil, invalidPersistedState("attempt_suspension", "participation_id", err)
 	}
-	flagID, suspendedBy, err := suspensionProvenance(model.AttemptSuspensionSource(row.Source),
-		model.AttemptSuspensionCandidateReason(row.CandidateReason), row.FlagID, row.SuspendedByUserID.String)
+
+	flagID, suspendedBy, err := suspensionProvenance(
+		model.AttemptSuspensionSource(row.Source),
+		model.AttemptSuspensionCandidateReason(row.CandidateReason),
+		row.FlagID,
+		row.SuspendedByUserID.String,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
-	attempt := &model.ExamAttempt{ID: attemptID, ExamID: input.ExamID, SittingID: input.SittingID, CandidateUserID: candidateID,
-		AdmissionRevisionID: revisionID, State: model.ExamAttemptState(row.AttemptState), CreatedAt: model.TimeUTC(row.AttemptCreatedAt),
-		UpdatedAt: model.TimeUTC(row.AttemptUpdatedAt), SubmittedAt: OptionalTimeFromNullTime(row.SubmittedAt), Revision: row.AttemptRevision}
-	suspension := &model.AttemptSuspension{ID: input.SuspensionID, AttemptID: attemptID, ParticipationID: participationID,
-		FlagID: flagID, Generation: row.Generation, State: model.AttemptSuspensionState(row.SuspensionState),
-		Source: model.AttemptSuspensionSource(row.Source), CandidateReason: model.AttemptSuspensionCandidateReason(row.CandidateReason),
-		StartedAt: model.TimeUTC(row.StartedAt), EndedAt: OptionalTimeFromNullTime(row.EndedAt),
-		SuspendedByUserID: suspendedBy, SuspensionPrivateReason: row.SuspensionReason.String}
+
+	attempt := &model.ExamAttempt{
+		ID:                  attemptID,
+		ExamID:              input.ExamID,
+		SittingID:           input.SittingID,
+		CandidateUserID:     candidateID,
+		AdmissionRevisionID: revisionID,
+		State:               model.ExamAttemptState(row.AttemptState),
+		CreatedAt:           model.TimeUTC(row.AttemptCreatedAt),
+		UpdatedAt:           model.TimeUTC(row.AttemptUpdatedAt),
+		SubmittedAt:         OptionalTimeFromNullTime(row.SubmittedAt),
+		Revision:            row.AttemptRevision,
+	}
+	suspension := &model.AttemptSuspension{
+		ID:                      input.SuspensionID,
+		AttemptID:               attemptID,
+		ParticipationID:         participationID,
+		FlagID:                  flagID,
+		Generation:              row.Generation,
+		State:                   model.AttemptSuspensionState(row.SuspensionState),
+		Source:                  model.AttemptSuspensionSource(row.Source),
+		CandidateReason:         model.AttemptSuspensionCandidateReason(row.CandidateReason),
+		StartedAt:               model.TimeUTC(row.StartedAt),
+		EndedAt:                 OptionalTimeFromNullTime(row.EndedAt),
+		SuspendedByUserID:       suspendedBy,
+		SuspensionPrivateReason: row.SuspensionReason.String,
+	}
 	if err = attempt.Validate(); err != nil {
 		return nil, nil, invalidPersistedState("exam_attempt", "value", err)
 	}
@@ -232,14 +321,20 @@ func examAttemptReallowDomain(input *store.ExamAttemptReallow, row examAttemptRe
 	if !model.IsValidAttemptSuspensionPrivateReason(input.PrivateReason) {
 		return nil, nil, store.NewErrInvalidInput("attempt_suspension", "private_reason", nil)
 	}
+
 	return attempt, suspension, nil
 }
 
 // applyExamAttemptReallow transitions the Suspension and Attempt at database
 // time, writes both, and resets the causal Focus Loss window when the Focus
 // Loss policy caused the Suspension; it reports whether it reset the window.
-func applyExamAttemptReallow(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamAttemptReallow, row examAttemptReallowRow,
-	attempt *model.ExamAttempt, suspension *model.AttemptSuspension,
+func applyExamAttemptReallow(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.ExamAttemptReallow,
+	row examAttemptReallowRow,
+	attempt *model.ExamAttempt,
+	suspension *model.AttemptSuspension,
 ) (bool, error) {
 	// Database time decides the transition, matching the system expiry and
 	// suspension paths, so a skewed application clock cannot reject a valid
@@ -248,6 +343,7 @@ func applyExamAttemptReallow(ctx context.Context, tx *sqlxTxWrapper, input *stor
 	if err := tx.Get(ctx, &changedAt, `SELECT statement_timestamp()`); err != nil {
 		return false, fmt.Errorf("read Exam Attempt re-allow time: %w", err)
 	}
+
 	changedAt = model.TimeUTC(changedAt)
 	if err := suspension.Reallow(input.ActorUserID, input.PrivateReason, changedAt); err != nil {
 		return false, fmt.Errorf("close Attempt Suspension: %w", err)
@@ -255,32 +351,73 @@ func applyExamAttemptReallow(ctx context.Context, tx *sqlxTxWrapper, input *stor
 	if err := attempt.Reallow(changedAt); err != nil {
 		return false, fmt.Errorf("re-allow Exam Attempt: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `UPDATE exam_attempt_suspensions SET state='closed',ended_at=?,reallowed_by_user_id=?,private_reason=? WHERE id=? AND state='active'`,
-		suspension.EndedAt.Time, suspension.ReallowedByUserID.String(), suspension.PrivateReason, suspension.ID.String()); err != nil {
+
+	if _, err := tx.Exec(
+		ctx,
+		`UPDATE exam_attempt_suspensions
+		SET state = 'closed', ended_at = ?, reallowed_by_user_id = ?, private_reason = ?
+		WHERE id = ?
+			AND state = 'active'`,
+		suspension.EndedAt.Time,
+		suspension.ReallowedByUserID.String(),
+		suspension.PrivateReason,
+		suspension.ID.String(),
+	); err != nil {
 		return false, fmt.Errorf("close Attempt Suspension: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `UPDATE exam_attempts SET state='ready',updated_at=?,revision=? WHERE id=? AND revision=?`,
-		attempt.UpdatedAt, attempt.Revision, attempt.ID.String(), row.AttemptRevision); err != nil {
+
+	if _, err := tx.Exec(
+		ctx,
+		`UPDATE exam_attempts
+		SET state = 'ready', updated_at = ?, revision = ?
+		WHERE id = ?
+			AND revision = ?`,
+		attempt.UpdatedAt,
+		attempt.Revision,
+		attempt.ID.String(),
+		row.AttemptRevision,
+	); err != nil {
 		return false, fmt.Errorf("re-allow Exam Attempt: %w", err)
 	}
+
 	focusLossWindowReset := row.CandidateReason == string(model.AttemptSuspensionCandidateReasonFocusLossPolicy)
 	if focusLossWindowReset {
-		if _, err := tx.Exec(ctx, `DELETE FROM exam_attempt_focus_loss_pending WHERE exam_attempt_id=? AND generation=?`,
-			input.AttemptID.String(), row.Generation); err != nil {
+		if _, err := tx.Exec(
+			ctx,
+			`DELETE FROM exam_attempt_focus_loss_pending
+			WHERE exam_attempt_id = ?
+				AND generation = ?`,
+			input.AttemptID.String(),
+			row.Generation,
+		); err != nil {
 			return false, fmt.Errorf("reset causal Focus Loss window: %w", err)
 		}
 	}
+
 	return focusLossWindowReset, nil
 }
 
-func completeExamAttemptReallowAudit(ctx context.Context, tx *sqlxTxWrapper, value examAttemptReallowOutcome,
-	replayed bool, originalAuditID string, auditID model.AuditEventID, auditAt time.Time,
+func completeExamAttemptReallowAudit(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	value examAttemptReallowOutcome,
+	replayed bool,
+	originalAuditID string,
+	auditID model.AuditEventID,
+	auditAt time.Time,
 ) error {
-	data := map[string]any{"exam_id": value.ExamID, "exam_sitting_id": value.SittingID, "exam_attempt_id": value.AttemptID,
-		"suspension_id": value.SuspensionID, "focus_loss_window_reset": value.FocusLossWindowReset, "replayed": replayed}
+	data := map[string]any{
+		"exam_id":                 value.ExamID,
+		"exam_sitting_id":         value.SittingID,
+		"exam_attempt_id":         value.AttemptID,
+		"suspension_id":           value.SuspensionID,
+		"focus_loss_window_reset": value.FocusLossWindowReset,
+		"replayed":                replayed,
+	}
 	if replayed {
 		data["original_audit_event_id"] = originalAuditID
 	}
+
 	encoded, err := model.EncodeAuditData(data)
 	if err != nil {
 		return err
@@ -288,6 +425,7 @@ func completeExamAttemptReallowAudit(ctx context.Context, tx *sqlxTxWrapper, val
 	if _, err = completeAuditEvent(ctx, tx, auditID, model.AuditStatusSuccess, "", encoded, auditAt); err != nil {
 		return fmt.Errorf("complete Exam Attempt re-allow audit: %w", err)
 	}
+
 	return nil
 }
 
@@ -322,79 +460,140 @@ type examAttemptReallowResultRow struct {
 
 // loadExamAttemptReallowResult reads the re-allowed Attempt and Suspension
 // named by value outside the command transaction.
-func (s *SQLExamAttemptStore) loadExamAttemptReallowResult(ctx context.Context, value examAttemptReallowOutcome) (*store.ExamAttemptReallowResult, error) {
+func (s *SQLExamAttemptStore) loadExamAttemptReallowResult(
+	ctx context.Context,
+	value examAttemptReallowOutcome,
+) (*store.ExamAttemptReallowResult, error) {
 	var row examAttemptReallowResultRow
-	err := s.GetMaster().Get(ctx, &row, `SELECT a.exam_id,a.exam_sitting_id,s.class_id,a.candidate_user_id,a.id AS attempt_id,a.admission_revision_id,
-		a.state AS attempt_state,a.created_at AS attempt_created_at,a.updated_at AS attempt_updated_at,a.submitted_at,a.revision AS attempt_revision,
-		su.id AS suspension_id,su.participation_id,COALESCE(su.integrity_flag_id,'') AS flag_id,su.state AS suspension_state,su.source,
-		su.candidate_reason,su.generation,su.started_at,su.ended_at,su.reallowed_by_user_id,su.private_reason,
-		COALESCE(su.suspended_by_user_id,'') AS suspended_by_user_id,COALESCE(su.suspension_private_reason,'') AS suspension_private_reason
-		FROM exam_attempts a JOIN exam_sittings s ON s.id=a.exam_sitting_id JOIN exam_attempt_suspensions su ON su.exam_attempt_id=a.id
-		WHERE a.id=? AND su.id=?`, value.AttemptID, value.SuspensionID)
+	err := s.GetMaster().Get(ctx, &row, `SELECT a.exam_id, a.exam_sitting_id, s.class_id,
+			a.candidate_user_id, a.id AS attempt_id, a.admission_revision_id,
+			a.state AS attempt_state, a.created_at AS attempt_created_at,
+			a.updated_at AS attempt_updated_at, a.submitted_at, a.revision AS attempt_revision,
+			su.id AS suspension_id, su.participation_id,
+			COALESCE(su.integrity_flag_id, '') AS flag_id, su.state AS suspension_state, su.source,
+			su.candidate_reason, su.generation, su.started_at, su.ended_at, su.reallowed_by_user_id,
+			su.private_reason, COALESCE(su.suspended_by_user_id, '') AS suspended_by_user_id,
+			COALESCE(su.suspension_private_reason, '') AS suspension_private_reason
+		FROM exam_attempts a
+		JOIN exam_sittings s ON s.id = a.exam_sitting_id
+		JOIN exam_attempt_suspensions su ON su.exam_attempt_id = a.id
+		WHERE a.id = ?
+			AND su.id = ?`, value.AttemptID, value.SuspensionID)
 	if err != nil {
 		return nil, translateError("attempt_suspension", value.SuspensionID, err)
 	}
+
 	examID, err := model.ParseExamID(row.ExamID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_attempt", "exam_id", err)
 	}
+
 	sittingID, err := model.ParseExamSittingID(row.SittingID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_attempt", "exam_sitting_id", err)
 	}
+
 	classID, err := model.ParseClassID(row.ClassID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_attempt", "class_id", err)
 	}
+
 	candidateID, err := model.ParseUserID(row.CandidateID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_attempt", "candidate_user_id", err)
 	}
+
 	attemptID, err := model.ParseExamAttemptID(row.AttemptID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_attempt", "id", err)
 	}
+
 	revisionID, err := model.ParseExamRevisionID(row.AdmissionRevisionID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_attempt", "admission_revision_id", err)
 	}
+
 	suspensionID, err := model.ParseAttemptSuspensionID(row.SuspensionID)
 	if err != nil {
 		return nil, invalidPersistedState("attempt_suspension", "id", err)
 	}
+
 	participationID, err := model.ParseAttemptParticipationID(row.ParticipationID)
 	if err != nil {
 		return nil, invalidPersistedState("attempt_suspension", "participation_id", err)
 	}
-	flagID, suspendedBy, err := suspensionProvenance(model.AttemptSuspensionSource(row.Source),
-		model.AttemptSuspensionCandidateReason(row.CandidateReason), row.FlagID, row.SuspendedByUserID)
+
+	flagID, suspendedBy, err := suspensionProvenance(
+		model.AttemptSuspensionSource(row.Source),
+		model.AttemptSuspensionCandidateReason(row.CandidateReason),
+		row.FlagID,
+		row.SuspendedByUserID,
+	)
 	if err != nil {
 		return nil, err
 	}
+
 	reallowedID, err := model.ParseUserID(row.ReallowedByUserID)
 	if err != nil {
 		return nil, invalidPersistedState("attempt_suspension", "reallowed_by_user_id", err)
 	}
-	attempt := &model.ExamAttempt{ID: attemptID, ExamID: examID, SittingID: sittingID, CandidateUserID: candidateID,
-		AdmissionRevisionID: revisionID, State: model.ExamAttemptState(row.AttemptState), CreatedAt: model.TimeUTC(row.AttemptCreatedAt),
-		UpdatedAt: model.TimeUTC(row.AttemptUpdatedAt), SubmittedAt: OptionalTimeFromNullTime(row.SubmittedAt), Revision: row.AttemptRevision}
+
+	attempt := &model.ExamAttempt{
+		ID:                  attemptID,
+		ExamID:              examID,
+		SittingID:           sittingID,
+		CandidateUserID:     candidateID,
+		AdmissionRevisionID: revisionID,
+		State:               model.ExamAttemptState(row.AttemptState),
+		CreatedAt:           model.TimeUTC(row.AttemptCreatedAt),
+		UpdatedAt:           model.TimeUTC(row.AttemptUpdatedAt),
+		SubmittedAt:         OptionalTimeFromNullTime(row.SubmittedAt),
+		Revision:            row.AttemptRevision,
+	}
 	if err = attempt.Validate(); err != nil {
 		return nil, invalidPersistedState("exam_attempt", "value", err)
 	}
-	domainSuspension := &model.AttemptSuspension{ID: suspensionID, AttemptID: attemptID, ParticipationID: participationID,
-		FlagID: flagID, Generation: row.Generation, State: model.AttemptSuspensionState(row.SuspensionState),
-		Source: model.AttemptSuspensionSource(row.Source), CandidateReason: model.AttemptSuspensionCandidateReason(row.CandidateReason),
-		StartedAt: model.TimeUTC(row.StartedAt), EndedAt: OptionalTimeFromNullTime(row.EndedAt),
-		ReallowedByUserID: reallowedID, PrivateReason: row.PrivateReason,
-		SuspendedByUserID: suspendedBy, SuspensionPrivateReason: row.SuspensionReason}
+
+	domainSuspension := &model.AttemptSuspension{
+		ID:                      suspensionID,
+		AttemptID:               attemptID,
+		ParticipationID:         participationID,
+		FlagID:                  flagID,
+		Generation:              row.Generation,
+		State:                   model.AttemptSuspensionState(row.SuspensionState),
+		Source:                  model.AttemptSuspensionSource(row.Source),
+		CandidateReason:         model.AttemptSuspensionCandidateReason(row.CandidateReason),
+		StartedAt:               model.TimeUTC(row.StartedAt),
+		EndedAt:                 OptionalTimeFromNullTime(row.EndedAt),
+		ReallowedByUserID:       reallowedID,
+		PrivateReason:           row.PrivateReason,
+		SuspendedByUserID:       suspendedBy,
+		SuspensionPrivateReason: row.SuspensionReason,
+	}
 	if err = domainSuspension.Validate(); err != nil {
 		return nil, invalidPersistedState("attempt_suspension", "value", err)
 	}
-	return &store.ExamAttemptReallowResult{ExamID: examID, SittingID: sittingID, ClassID: classID, CandidateUserID: candidateID,
-		Attempt: attempt, FocusLossWindowReset: value.FocusLossWindowReset,
-		Suspension: &store.ExamAttemptSuspensionView{ID: domainSuspension.ID, AttemptID: domainSuspension.AttemptID,
-			ParticipationID: domainSuspension.ParticipationID, FlagID: domainSuspension.FlagID, Generation: domainSuspension.Generation,
-			State: domainSuspension.State, Source: domainSuspension.Source, CandidateReason: domainSuspension.CandidateReason,
-			StartedAt: domainSuspension.StartedAt, EndedAt: domainSuspension.EndedAt, ReallowedByUserID: domainSuspension.ReallowedByUserID,
-			SuspendedByUserID: domainSuspension.SuspendedByUserID}}, nil
+
+	return &store.ExamAttemptReallowResult{
+		ExamID:               examID,
+		SittingID:            sittingID,
+		ClassID:              classID,
+		CandidateUserID:      candidateID,
+		Attempt:              attempt,
+		FocusLossWindowReset: value.FocusLossWindowReset,
+		Suspension: &store.ExamAttemptSuspensionView{
+			ID:                domainSuspension.ID,
+			AttemptID:         domainSuspension.AttemptID,
+			ParticipationID:   domainSuspension.ParticipationID,
+			FlagID:            domainSuspension.FlagID,
+			Generation:        domainSuspension.Generation,
+			State:             domainSuspension.State,
+			Source:            domainSuspension.Source,
+			CandidateReason:   domainSuspension.CandidateReason,
+			StartedAt:         domainSuspension.StartedAt,
+			EndedAt:           domainSuspension.EndedAt,
+			ReallowedByUserID: domainSuspension.ReallowedByUserID,
+			SuspendedByUserID: domainSuspension.SuspendedByUserID,
+		},
+	}, nil
 }

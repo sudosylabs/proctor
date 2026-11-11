@@ -32,17 +32,36 @@ func getMFARecoveryState(ctx context.Context, executor sqlxExecutor, userID mode
 	if !userID.IsValid() {
 		return nil, store.NewErrInvalidInput("user_mfa_recovery", "user_id", nil)
 	}
+
 	var row mfaRecoveryRow
-	if err := executor.Get(ctx, &row, `SELECT u.id user_id,COALESCE(r.generation,0) generation,r.reset_at,COALESCE(r.reenrollment_required,false) reenrollment_required,r.updated_at FROM users u LEFT JOIN user_mfa_recovery r ON r.user_id=u.id WHERE u.id=? AND u.archived_at IS NULL AND u.disabled_at IS NULL`, userID.String()); err != nil {
+	if err := executor.Get(
+		ctx,
+		&row,
+		`SELECT u.id user_id, COALESCE(r.generation, 0) generation, r.reset_at,
+			COALESCE(r.reenrollment_required, false) reenrollment_required, r.updated_at
+		FROM users u
+		LEFT JOIN user_mfa_recovery r ON r.user_id = u.id
+		WHERE u.id = ?
+			AND u.archived_at IS NULL
+			AND u.disabled_at IS NULL`,
+		userID.String(),
+	); err != nil {
 		return nil, translateError("user_mfa_recovery", userID.String(), err)
 	}
-	state := &model.UserMFARecovery{UserID: userID, Generation: row.Generation, ResetAt: OptionalTimeFromNullTime(row.ResetAt), ReenrollmentRequired: row.ReenrollmentRequired}
+
+	state := &model.UserMFARecovery{
+		UserID:               userID,
+		Generation:           row.Generation,
+		ResetAt:              OptionalTimeFromNullTime(row.ResetAt),
+		ReenrollmentRequired: row.ReenrollmentRequired,
+	}
 	if row.UpdatedAt.Valid {
 		state.UpdatedAt = model.TimeUTC(row.UpdatedAt.Time)
 	}
 	if err := state.Validate(); err != nil {
 		return nil, err
 	}
+
 	return state, nil
 }
 
@@ -59,37 +78,59 @@ func requireSessionAuthenticationGeneration(ctx context.Context, executor sqlxEx
 	return nil
 }
 
-func requireSessionIssuanceRecovery(ctx context.Context, executor sqlxExecutor, session *model.Session, stateID model.ExternalLoginStateID) error {
+func requireSessionIssuanceRecovery(
+	ctx context.Context,
+	executor sqlxExecutor,
+	session *model.Session,
+	stateID model.ExternalLoginStateID,
+) error {
 	if err := requireSessionAuthenticationGeneration(ctx, executor, session); err != nil {
 		return err
 	}
 	if session.MFARecoveryRequired && session.ClientType != model.SessionClientWeb {
 		return store.ErrMFAReenrollmentRequired
 	}
+
 	if session.AuthenticationMethod == "password" {
 		if !stateID.IsZero() {
 			return store.NewErrInvalidInput("session", "external_login_state_id", nil)
 		}
 		return nil
 	}
+
 	if stateID.IsZero() && session.AuthenticationGeneration == 0 && !session.MFARecoveryRequired {
 		return nil
 	}
 	if !stateID.IsValid() {
 		return store.NewErrInvalidInput("session", "external_login_state_id", nil)
 	}
+
 	state, err := getMFARecoveryState(ctx, executor, session.UserID)
 	if err != nil {
 		return err
 	}
+
 	var proof struct {
 		CreatedAt    time.Time      `db:"created_at"`
 		Purpose      string         `db:"purpose"`
 		TargetUserID sql.NullString `db:"target_user_id"`
 	}
-	if err := executor.Get(ctx, &proof, `SELECT created_at,purpose,target_user_id FROM external_login_states WHERE id=? AND provider=? AND consumed_at IS NOT NULL AND purpose IN ('login','mfa_recovery') FOR SHARE`, stateID.String(), session.AuthenticationProviderID); err != nil {
+	if err := executor.Get(
+		ctx,
+		&proof,
+		`SELECT created_at, purpose, target_user_id
+		FROM external_login_states
+		WHERE id = ?
+			AND provider = ?
+			AND consumed_at IS NOT NULL
+			AND purpose IN ('login', 'mfa_recovery')
+		FOR SHARE`,
+		stateID.String(),
+		session.AuthenticationProviderID,
+	); err != nil {
 		return translateError("external_login_state", stateID.String(), err)
 	}
+
 	if state.ResetAt.Valid && proof.CreatedAt.Before(state.ResetAt.Time) {
 		return store.ErrAuthenticationGenerationChanged
 	}
@@ -99,14 +140,23 @@ func requireSessionIssuanceRecovery(ctx context.Context, executor sqlxExecutor, 
 	if state.ReenrollmentRequired && proof.Purpose != "mfa_recovery" {
 		return store.ErrMFAReenrollmentRequired
 	}
+
 	return nil
 }
 
 // currentSessionRecoveryPredicate is included in authoritative access and
 // refresh resolution. A recovery Session remains distinguishable and can only
 // reach explicitly recovery-aware operations; a stale generation never resolves.
-const currentSessionRecoveryPredicate = `sessions.authentication_generation=COALESCE((SELECT generation FROM user_mfa_recovery WHERE user_id=sessions.user_id),0)
-AND sessions.mfa_recovery_required=COALESCE((SELECT reenrollment_required FROM user_mfa_recovery WHERE user_id=sessions.user_id),false)`
+const currentSessionRecoveryPredicate = `sessions.authentication_generation = COALESCE((
+		SELECT generation
+		FROM user_mfa_recovery
+		WHERE user_id = sessions.user_id
+	), 0)
+	AND sessions.mfa_recovery_required = COALESCE((
+		SELECT reenrollment_required
+		FROM user_mfa_recovery
+		WHERE user_id = sessions.user_id
+	), false)`
 
 // Legacy PAT audit preparations carry their source Session rather than a raw
 // access credential. Once recovery exists, that Session must still belong to
@@ -123,10 +173,32 @@ func requireMFARecoveryPATSource(ctx context.Context, executor sqlxExecutor, use
 	if state.Generation == 0 {
 		return nil
 	}
+
 	var active bool
-	if err := executor.Get(ctx, &active, `SELECT true FROM sessions WHERE id=? AND user_id=? AND authentication_generation=? AND NOT mfa_recovery_required AND NOT mfa_enrollment_required AND archived_at IS NULL AND revoked_at IS NULL AND idle_expires_at>? AND expires_at>? FOR SHARE`, sessionID, userID, state.Generation, at, at); err != nil {
+	if err := executor.Get(
+		ctx,
+		&active,
+		`SELECT true
+		FROM sessions
+		WHERE id = ?
+			AND user_id = ?
+			AND authentication_generation = ?
+			AND NOT mfa_recovery_required
+			AND NOT mfa_enrollment_required
+			AND archived_at IS NULL
+			AND revoked_at IS NULL
+			AND idle_expires_at > ?
+			AND expires_at > ?
+		FOR SHARE`,
+		sessionID,
+		userID,
+		state.Generation,
+		at,
+		at,
+	); err != nil {
 		return translateError("session", "pat_preparation", err)
 	}
+
 	return nil
 }
 
@@ -134,7 +206,12 @@ func requireMFARecoveryPATSource(ctx context.Context, executor sqlxExecutor, use
 // source Session. After any reset, that Session must still have current
 // authority, even if the old request reserved its audit after the reset.
 // The caller holds the User Session fence until the credential write commits.
-func requireMFARecoveryAuthenticationMethodSource(ctx context.Context, executor sqlxExecutor, userID model.UserID, auditID model.AuditEventID) error {
+func requireMFARecoveryAuthenticationMethodSource(
+	ctx context.Context,
+	executor sqlxExecutor,
+	userID model.UserID,
+	auditID model.AuditEventID,
+) error {
 	state, err := getMFARecoveryState(ctx, executor, userID)
 	if err != nil {
 		return err
@@ -149,7 +226,18 @@ func requireMFARecoveryAuthenticationMethodSource(ctx context.Context, executor 
 		SessionID sql.NullString `db:"session_id"`
 		At        time.Time      `db:"at"`
 	}
-	if err := executor.Get(ctx, &source, `SELECT session_id,clock_timestamp() AS at FROM audit_events WHERE id=? AND actor_id=? AND status='attempt' FOR SHARE`, auditID, userID.String()); err != nil {
+	if err := executor.Get(
+		ctx,
+		&source,
+		`SELECT session_id, clock_timestamp() AS at
+		FROM audit_events
+		WHERE id = ?
+			AND actor_id = ?
+			AND status = 'attempt'
+		FOR SHARE`,
+		auditID,
+		userID.String(),
+	); err != nil {
 		return translateError("audit_event", auditID.String(), err)
 	}
 	return requireMFARecoveryPATSource(ctx, executor, userID.String(), source.SessionID.String, source.At)

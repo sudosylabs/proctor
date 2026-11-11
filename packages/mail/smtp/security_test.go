@@ -2,6 +2,7 @@ package smtp_test
 
 import (
 	"bufio"
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -38,7 +39,7 @@ func TestSTARTTLSAuthentication(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			address, wait := startSMTPServer(t, func(connection net.Conn) error {
-				return serveSecureSMTP(connection, serverTLS, test.mechanism, "user", "secret")
+				return serveSecureSMTP(t.Context(), connection, serverTLS, test.mechanism, "user", "secret")
 			})
 			sender, err := mailsmtp.New(mailsmtp.Config{
 				Address:         address,
@@ -68,7 +69,7 @@ func TestImplicitTLS(t *testing.T) {
 	serverTLS, roots := testCertificate(t)
 	address, wait := startSMTPServer(t, func(connection net.Conn) error {
 		tlsConnection := tls.Server(connection, serverTLS.Clone())
-		if err := tlsConnection.Handshake(); err != nil {
+		if err := tlsConnection.HandshakeContext(t.Context()); err != nil {
 			return err
 		}
 		return serveSMTP(tlsConnection, nil)
@@ -91,6 +92,7 @@ func TestImplicitTLS(t *testing.T) {
 }
 
 func serveSecureSMTP(
+	ctx context.Context,
 	connection net.Conn,
 	serverTLS *tls.Config,
 	mechanism, username, password string,
@@ -107,8 +109,8 @@ func serveSecureSMTP(
 	if !strings.HasPrefix(command, "EHLO ") {
 		return fmt.Errorf("expected EHLO, got %q", command)
 	}
-	if err := writeSMTP(writer, "250-test.example", "250 STARTTLS"); err != nil {
-		return err
+	if writeSMTPErr := writeSMTP(writer, "250-test.example", "250 STARTTLS"); writeSMTPErr != nil {
+		return writeSMTPErr
 	}
 	command, err = readSMTP(reader)
 	if err != nil {
@@ -117,13 +119,13 @@ func serveSecureSMTP(
 	if command != "STARTTLS" {
 		return fmt.Errorf("expected STARTTLS, got %q", command)
 	}
-	if err := writeSMTP(writer, "220 2.0.0 ready for TLS"); err != nil {
-		return err
+	if writeSMTPErr := writeSMTP(writer, "220 2.0.0 ready for TLS"); writeSMTPErr != nil {
+		return writeSMTPErr
 	}
 
 	tlsConnection := tls.Server(connection, serverTLS.Clone())
-	if err := tlsConnection.Handshake(); err != nil {
-		return err
+	if handshakeErr := tlsConnection.HandshakeContext(ctx); handshakeErr != nil {
+		return handshakeErr
 	}
 	reader = bufio.NewReader(tlsConnection)
 	writer = bufio.NewWriter(tlsConnection)
@@ -134,8 +136,8 @@ func serveSecureSMTP(
 	if !strings.HasPrefix(command, "EHLO ") {
 		return fmt.Errorf("expected EHLO after STARTTLS, got %q", command)
 	}
-	if err := writeSMTP(writer, "250-test.example", "250 AUTH PLAIN LOGIN"); err != nil {
-		return err
+	if writeSMTPErr := writeSMTP(writer, "250-test.example", "250 AUTH PLAIN LOGIN"); writeSMTPErr != nil {
+		return writeSMTPErr
 	}
 
 	command, err = readSMTP(reader)
@@ -159,8 +161,8 @@ func serveSecureSMTP(
 		if command != "AUTH LOGIN" {
 			return fmt.Errorf("unexpected LOGIN command %q", command)
 		}
-		if err := writeSMTP(writer, "334 "+base64.StdEncoding.EncodeToString([]byte("Username:"))); err != nil {
-			return err
+		if writeSMTPErr := writeSMTP(writer, "334 "+base64.StdEncoding.EncodeToString([]byte("Username:"))); writeSMTPErr != nil {
+			return writeSMTPErr
 		}
 		encodedUsername, readErr := readSMTP(reader)
 		if readErr != nil {
@@ -169,8 +171,8 @@ func serveSecureSMTP(
 		if decodedString(encodedUsername) != username {
 			return fmt.Errorf("unexpected LOGIN username")
 		}
-		if err := writeSMTP(writer, "334 "+base64.StdEncoding.EncodeToString([]byte("Password:"))); err != nil {
-			return err
+		if writeSMTPErr := writeSMTP(writer, "334 "+base64.StdEncoding.EncodeToString([]byte("Password:"))); writeSMTPErr != nil {
+			return writeSMTPErr
 		}
 		encodedPassword, readErr := readSMTP(reader)
 		if readErr != nil {
@@ -182,8 +184,8 @@ func serveSecureSMTP(
 	default:
 		return fmt.Errorf("unsupported test mechanism %q", mechanism)
 	}
-	if err := writeSMTP(writer, "235 2.7.0 authenticated"); err != nil {
-		return err
+	if writeSMTPErr := writeSMTP(writer, "235 2.7.0 authenticated"); writeSMTPErr != nil {
+		return writeSMTPErr
 	}
 	command, err = readSMTP(reader)
 	if err != nil {

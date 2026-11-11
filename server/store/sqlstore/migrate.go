@@ -29,6 +29,9 @@ import (
 	"github.com/sudosylabs/proctor/server/migrations"
 )
 
+// Migrator owns a store and a Morph engine for explicit migration commands and
+// tests. Close releases both; normal startup uses ApplyPendingMigrations on the
+// operational store instead.
 type Migrator struct {
 	store  *SQLStore
 	engine *migrationEngine
@@ -78,8 +81,8 @@ func (ss *SQLStore) ApplyPendingMigrations(ctx context.Context) (result Migratio
 	if err != nil {
 		return result, fmt.Errorf("inspect pending migrations: %w", err)
 	}
-	if err := engine.ApplyAll(); err != nil {
-		return result, fmt.Errorf("apply database migrations: %w", err)
+	if applyAllErr := engine.ApplyAll(); applyAllErr != nil {
+		return result, fmt.Errorf("apply database migrations: %w", applyAllErr)
 	}
 	result.Applied = len(pending)
 	result.SchemaVersion, err = ss.GetDBSchemaVersion(ctx)
@@ -89,6 +92,8 @@ func (ss *SQLStore) ApplyPendingMigrations(ctx context.Context) (result Migratio
 	return result, nil
 }
 
+// NewMigrator opens a dedicated store from settings and prepares the migration
+// engine on it. It closes the store again if the engine cannot be prepared.
 func NewMigrator(ctx context.Context, settings Settings) (*Migrator, error) {
 	store, err := New(ctx, settings)
 	if err != nil {
@@ -107,6 +112,7 @@ func newMigrationEngine(ctx context.Context, store *SQLStore, settings Settings,
 	if err != nil {
 		return nil, fmt.Errorf("list embedded migrations: %w", err)
 	}
+
 	source, err := embeddedsrc.WithInstance(&embeddedsrc.AssetSource{
 		Names: names,
 		AssetFunc: func(name string) ([]byte, error) {
@@ -116,6 +122,7 @@ func newMigrationEngine(ctx context.Context, store *SQLStore, settings Settings,
 	if err != nil {
 		return nil, fmt.Errorf("construct migration source: %w", err)
 	}
+
 	driver, err := postgresdriver.WithInstance(store.GetMaster().DB().DB)
 	if err != nil {
 		return nil, fmt.Errorf("construct PostgreSQL migration driver: %w", err)
@@ -123,10 +130,12 @@ func newMigrationEngine(ctx context.Context, store *SQLStore, settings Settings,
 	if output == nil {
 		output = io.Discard
 	}
+
 	timeoutSeconds := int(settings.MigrationTimeout.Seconds())
 	if timeoutSeconds < 1 {
 		timeoutSeconds = 1
 	}
+
 	lockCtx, finishAcquisition, cancelLockContext := newMigrationLockContext(
 		ctx,
 		settings.MigrationTimeout,
@@ -145,6 +154,7 @@ func newMigrationEngine(ctx context.Context, store *SQLStore, settings Settings,
 		_ = driver.Close()
 		return nil, fmt.Errorf("construct migration engine: %w", err)
 	}
+
 	if acquisitionErr != nil {
 		closeErr := engine.Close()
 		cancelLockContext(context.Canceled)
@@ -153,6 +163,7 @@ func newMigrationEngine(ctx context.Context, store *SQLStore, settings Settings,
 			closeErr,
 		)
 	}
+
 	return &migrationEngine{
 		Morph:             engine,
 		cancelLockContext: cancelLockContext,

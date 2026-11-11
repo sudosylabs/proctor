@@ -167,7 +167,10 @@ type BrowserAuthenticationStore interface {
 	CreateDesktopReauthentication(context.Context, *DesktopReauthenticationCreation) (*DesktopAuthorizationCreated, error)
 	BindDesktopReauthentication(context.Context, *DesktopAuthorizationBinding) (*DesktopAuthorizationBound, error)
 	GetDesktopReauthenticationContext(context.Context, string) (*DesktopReauthenticationContext, error)
-	AuthenticateDesktopReauthentication(context.Context, *DesktopReauthenticationAuthentication) (*DesktopReauthenticationAuthenticationResult, error)
+	AuthenticateDesktopReauthentication(
+		context.Context,
+		*DesktopReauthenticationAuthentication,
+	) (*DesktopReauthenticationAuthenticationResult, error)
 	IssueDesktopReauthenticationCode(context.Context, *DesktopReauthenticationCodeIssue) (*DesktopAuthorizationCodeIssued, error)
 	CancelDesktopReauthentication(context.Context, *DesktopAuthorizationCancellation) error
 	CompleteDesktopReauthentication(context.Context, *DesktopReauthenticationCompletion) (*SessionReauthenticationResult, error)

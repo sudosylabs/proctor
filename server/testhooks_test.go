@@ -74,6 +74,21 @@ func (s *hookStore) ExamAuthoring() store.ExamAuthoringStore {
 func (s *hookStore) ExamAttempt() store.ExamAttemptStore {
 	return hookExamAttemptStore{}
 }
+func (s *hookStore) ExamFocusLoss() store.ExamFocusLossStore {
+	return hookExamFocusLossStore{}
+}
+func (s *hookStore) SecurityPreflight() store.SecurityPreflightStore {
+	return hookSecurityPreflightStore{}
+}
+func (s *hookStore) NativeDelivery() store.NativeDeliveryStore {
+	return hookNativeDeliveryStore{}
+}
+func (s *hookStore) BrowserDelivery() store.BrowserDeliveryStore {
+	return hookBrowserDeliveryStore{}
+}
+func (s *hookStore) DeliveryBudget() store.DeliveryBudgetStore {
+	return hookDeliveryBudgetStore{}
+}
 func (s *hookStore) ExamAttemptWorkspace() store.ExamAttemptWorkspaceStore {
 	return hookExamAttemptWorkspaceStore{}
 }
@@ -187,6 +202,11 @@ func (s *hookStore) Close() error {
 
 type hookExamAuthoringStore struct{ store.ExamAuthoringStore }
 type hookExamAttemptStore struct{ store.ExamAttemptStore }
+type hookExamFocusLossStore struct{ store.ExamFocusLossStore }
+type hookSecurityPreflightStore struct{ store.SecurityPreflightStore }
+type hookNativeDeliveryStore struct{ store.NativeDeliveryStore }
+type hookBrowserDeliveryStore struct{ store.BrowserDeliveryStore }
+type hookDeliveryBudgetStore struct{ store.DeliveryBudgetStore }
 type hookExamAttemptWorkspaceStore struct {
 	store.ExamAttemptWorkspaceStore
 }
@@ -310,6 +330,10 @@ type hookCluster struct {
 	startedCount atomic.Int64
 	closedCount  atomic.Int64
 	closeEvents  *hookCloseEvents
+	// registrationErr fails the registration of the named events.
+	registrationErr map[cluster.Event]error
+	mu              sync.Mutex
+	registrations   []cluster.Event
 }
 
 func (c *hookCluster) NodeID() string { return "hook-node" }
@@ -318,11 +342,19 @@ func (c *hookCluster) Start(context.Context) error {
 	return nil
 }
 func (c *hookCluster) Ping(context.Context) error { return nil }
-func (c *hookCluster) RegisterHandler(cluster.Event, cluster.Handler) error {
+func (c *hookCluster) RegisterHandler(event cluster.Event, _ cluster.Handler) error {
 	if c.cancel != nil {
 		c.cancel()
 	}
-	return nil
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.registrations = append(c.registrations, event)
+	return c.registrationErr[event]
+}
+func (c *hookCluster) registered() []cluster.Event {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.registrations)
 }
 func (c *hookCluster) Stop(context.Context) error {
 	c.closedCount.Add(1)
@@ -658,7 +690,7 @@ func TestRootComposesTimerOutsideRetry(t *testing.T) {
 		MaxAttempts:    3,
 		InitialBackoff: time.Nanosecond,
 		MaxBackoff:     time.Nanosecond,
-		IsTransient:    func(err error) bool { return err == transientErr },
+		IsTransient:    func(err error) bool { return errors.Is(err, transientErr) },
 	}
 	var observations atomic.Int64
 	overrides.StoreMetrics = timerlayer.RecorderFunc(func(
@@ -696,7 +728,7 @@ func TestNewForTestingServesTheProvidedBuildInfo(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = runtime.Server.Close() })
 
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/system/version", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/system/version", nil)
 	response := httptest.NewRecorder()
 	runtime.Handler.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, "version status")

@@ -41,6 +41,20 @@ type ExamExportSnapshot struct {
 	Files   []ExamExportFile
 }
 
+// BuildInputConsistent reports whether the snapshot is buildable: its
+// Examination Export is still queued, its frozen records are present and
+// within the snapshot size bound, and it lists exactly as many files as the
+// Export counted. It reads the Export without checking that it is present, so
+// it is asked only of a snapshot whose Export the caller has already
+// validated.
+func (s *ExamExportSnapshot) BuildInputConsistent() bool {
+	return !(s == nil ||
+		s.Export.State != model.ExamExportQueued ||
+		len(s.Records) < 1 ||
+		len(s.Records) > model.ExamExportMaximumSnapshotBytes ||
+		len(s.Files) != s.Export.FileCount)
+}
+
 type ExamExportArtifact struct {
 	ExportID  model.ExamExportID
 	AttemptID model.JobAttemptID
@@ -62,6 +76,23 @@ type ExamExportDownload struct {
 	Export      *model.ExamExport
 	Artifact    ExamExportArtifact
 	Submissions []ExamSubmissionAuthorization
+}
+
+// ConsistentWith reports whether the read result carries the valid Examination
+// Export that was asked for, on the given scope, requested by the given User.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (d *ExamExportDownload) ConsistentWith(
+	exportID model.ExamExportID,
+	scope model.RetentionHoldScope,
+	requesterID model.UserID,
+) bool {
+	return !(d == nil ||
+		d.Export.Validate() != nil ||
+		d.Export.ID != exportID ||
+		d.Export.Scope != scope ||
+		d.Export.RequesterUserID != requesterID)
 }
 
 // ExamExportStore freezes an authorized exact scope/category snapshot and

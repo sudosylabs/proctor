@@ -58,32 +58,48 @@ type userDisabledStatePlan struct {
 
 // planUserDisabledStateChange validates a disabled-state change and its prepared Notice mail.
 func planUserDisabledStateChange(input *store.UserDisabledStateChange) (userDisabledStatePlan, error) {
-	if input == nil || !input.ID.IsValid() || input.ExpectedRevision <= 0 ||
-		input.ChangedAt.IsZero() || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() ||
+	if input == nil ||
+		!input.ID.IsValid() ||
+		input.ExpectedRevision <= 0 ||
+		input.ChangedAt.IsZero() ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() ||
 		!validAccessDeploymentCapabilities(input.Capabilities) {
 		return userDisabledStatePlan{}, store.NewErrInvalidInput("user", "disabled_state_change", nil)
 	}
+
 	plan := userDisabledStatePlan{
 		revocationReason: model.SessionRevocationReason(model.SanitizeUnicode(string(input.RevocationReason))),
 	}
 	if input.Disabled && !plan.revocationReason.IsValid() {
 		return userDisabledStatePlan{}, store.NewErrInvalidInput("session", "revocation_reason", nil)
 	}
+
 	templateKey := model.MailTemplateIdentityAccountEnabled
 	if input.Disabled {
 		templateKey = model.MailTemplateIdentityAccountDisabled
 	}
+
 	plan.mailUnprepared = input.Occurrence == nil && input.Delivery == nil && input.DeliveryJob == nil
 	if plan.mailUnprepared && input.Command == nil {
 		return userDisabledStatePlan{}, store.NewErrInvalidInput("user", "disabled_state_notice", nil)
 	}
+
 	if !plan.mailUnprepared {
 		var err error
-		plan.payloadKeyID, err = validateSecurityNoticeMail(input.ID, input.Occurrence, input.Delivery, input.DeliveryJob, templateKey, input.ChangedAt)
+		plan.payloadKeyID, err = validateSecurityNoticeMail(
+			input.ID,
+			input.Occurrence,
+			input.Delivery,
+			input.DeliveryJob,
+			templateKey,
+			input.ChangedAt,
+		)
 		if err != nil {
 			return userDisabledStatePlan{}, err
 		}
 	}
+
 	return plan, nil
 }
 
@@ -93,40 +109,66 @@ func (s SQLUserStore) setDisabledIdempotently(
 	input *store.UserDisabledStateChange,
 	execute func(context.Context, *sqlxTxWrapper) (*userDisabledMutationResult, error),
 ) (*store.UserDisabledStateResult, error) {
-	result, err := runIdempotentMutation(ctx, s.SQLStore, "idempotent user disabled state change", idempotentMutation[*userDisabledMutationResult]{
-		command: input.Command, auditEventID: input.AuditEventID, execute: execute,
-		encode: encodeUserDisabledMutationOutcome, decode: decodeUserDisabledMutationOutcome,
-		onboardingOutcome: func(value *userDisabledMutationResult) (onboardingImportCommandResult, error) {
-			return administrativeOnboardingOutcome(value.Value.User.ID.String(), value.NoOp)
+	result, err := runIdempotentMutation(
+		ctx,
+		s.SQLStore,
+		"idempotent user disabled state change",
+		idempotentMutation[*userDisabledMutationResult]{
+			command:      input.Command,
+			auditEventID: input.AuditEventID,
+			execute:      execute,
+			encode:       encodeUserDisabledMutationOutcome,
+			decode:       decodeUserDisabledMutationOutcome,
+			onboardingOutcome: func(value *userDisabledMutationResult) (onboardingImportCommandResult, error) {
+				return administrativeOnboardingOutcome(value.Value.User.ID.String(), value.NoOp)
+			},
+			hydrateReplay: func(ctx context.Context, tx *sqlxTxWrapper, value *userDisabledMutationResult) (*userDisabledMutationResult, error) {
+				user, hydrateErr := getUserByID(ctx, tx, value.Value.User.ID.String())
+				if hydrateErr != nil {
+					return nil, hydrateErr
+				}
+
+				value.Value = &store.UserDisabledStateResult{User: user, RevokedSessions: []*model.Session{}, RevokedTokenHashes: []string{}}
+				return value, nil
+			},
+			completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, value *userDisabledMutationResult, original string) error {
+				return completeAdministrativeReplayAudit(
+					ctx,
+					tx,
+					input.AuditEventID,
+					input.AuditAt,
+					"user_id",
+					value.Value.User.ID.String(),
+					value.NoOp,
+					original,
+				)
+			},
 		},
-		hydrateReplay: func(ctx context.Context, tx *sqlxTxWrapper, value *userDisabledMutationResult) (*userDisabledMutationResult, error) {
-			user, hydrateErr := getUserByID(ctx, tx, value.Value.User.ID.String())
-			if hydrateErr != nil {
-				return nil, hydrateErr
-			}
-			value.Value = &store.UserDisabledStateResult{User: user, RevokedSessions: []*model.Session{}, RevokedTokenHashes: []string{}}
-			return value, nil
-		},
-		completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, value *userDisabledMutationResult, original string) error {
-			return completeAdministrativeReplayAudit(ctx, tx, input.AuditEventID, input.AuditAt, "user_id", value.Value.User.ID.String(), value.NoOp, original)
-		},
-	})
+	)
 	if err != nil {
 		return nil, err
 	}
+
 	input.Replayed, input.NoOp = result.Replayed, result.Value.NoOp
 	return result.Value.Value, nil
 }
 
 // changeUserDisabledState applies the disabled-state change inside its transaction.
-func changeUserDisabledState(ctx context.Context, tx *sqlxTxWrapper, input *store.UserDisabledStateChange, plan userDisabledStatePlan) (*userDisabledMutationResult, error) {
+func changeUserDisabledState(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.UserDisabledStateChange,
+	plan userDisabledStatePlan,
+) (*userDisabledMutationResult, error) {
 	if err := lockUserDisabledStatePaths(ctx, tx, input, plan.payloadKeyID); err != nil {
 		return nil, err
 	}
+
 	currentUser, err := getUserByID(ctx, tx, input.ID.String())
 	if err != nil {
 		return nil, err
 	}
+
 	if currentUser.DisabledAt.Valid == input.Disabled {
 		if input.Command == nil {
 			return nil, store.NewErrConflict("user", "disabled_state", nil)
@@ -134,11 +176,17 @@ func changeUserDisabledState(ctx context.Context, tx *sqlxTxWrapper, input *stor
 		if err = completeAdministrativeNoOpAudit(ctx, tx, input.AuditEventID, input.AuditAt, "user_id", currentUser.ID.String()); err != nil {
 			return nil, err
 		}
-		return &userDisabledMutationResult{Value: &store.UserDisabledStateResult{User: currentUser, RevokedSessions: []*model.Session{}, RevokedTokenHashes: []string{}}, NoOp: true}, nil
+
+		return &userDisabledMutationResult{
+			Value: &store.UserDisabledStateResult{User: currentUser, RevokedSessions: []*model.Session{}, RevokedTokenHashes: []string{}},
+			NoOp:  true,
+		}, nil
 	}
+
 	if plan.mailUnprepared {
 		return nil, store.NewErrInvalidInput("user", "disabled_state_notice", nil)
 	}
+
 	// Serialize disabling with login and refresh rotation before changing the
 	// user row. A login that commits first is included in the revocation; one
 	// that follows observes the disabled account.
@@ -147,10 +195,12 @@ func changeUserDisabledState(ctx context.Context, tx *sqlxTxWrapper, input *stor
 			return nil, err
 		}
 	}
+
 	user, err := persistUserDisabledState(ctx, tx, input)
 	if err != nil {
 		return nil, err
 	}
+
 	result := &store.UserDisabledStateResult{
 		User:               user,
 		RevokedSessions:    []*model.Session{},
@@ -161,12 +211,14 @@ func changeUserDisabledState(ctx context.Context, tx *sqlxTxWrapper, input *stor
 			return nil, err
 		}
 	}
+
 	if err = insertSecurityNoticeMail(ctx, tx, input.Occurrence, input.Delivery, input.DeliveryJob, plan.payloadKeyID); err != nil {
 		return nil, err
 	}
 	if err = completeUserDisabledStateAudit(ctx, tx, input, result.User); err != nil {
 		return nil, err
 	}
+
 	return &userDisabledMutationResult{Value: result}, nil
 }
 
@@ -193,7 +245,7 @@ func lockUserDisabledStatePaths(ctx context.Context, tx *sqlxTxWrapper, input *s
 		}
 	}
 	var lockedUserID string
-	if err := tx.Get(ctx, &lockedUserID, `SELECT id FROM users WHERE id=? AND archived_at IS NULL FOR UPDATE`, input.ID); err != nil {
+	if err := tx.Get(ctx, &lockedUserID, `SELECT id FROM users WHERE id = ? AND archived_at IS NULL FOR UPDATE`, input.ID); err != nil {
 		return translateError("user", input.ID.String(), err)
 	}
 	return nil
@@ -212,7 +264,11 @@ func requireRemainingSystemAdministrator(ctx context.Context, tx *sqlxTxWrapper,
 	}
 	if administrator {
 		remaining, pathErr := hasUsableSystemAdministratorAuthenticationPath(
-			ctx, tx, policy.Settings(), input.Capabilities, at,
+			ctx,
+			tx,
+			policy.Settings(),
+			input.Capabilities,
+			at,
 			systemAdministratorAuthenticationPathScope{ExcludedUserID: input.ID.String()},
 		)
 		if pathErr != nil {
@@ -251,8 +307,12 @@ func persistUserDisabledState(ctx context.Context, tx *sqlxTxWrapper, input *sto
 }
 
 // revokeDisabledUserSessions revokes every Session of a disabled User and records them on result.
-func revokeDisabledUserSessions(ctx context.Context, tx *sqlxTxWrapper, input *store.UserDisabledStateChange,
-	revocationReason model.SessionRevocationReason, result *store.UserDisabledStateResult,
+func revokeDisabledUserSessions(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.UserDisabledStateChange,
+	revocationReason model.SessionRevocationReason,
+	result *store.UserDisabledStateResult,
 ) error {
 	sessionRows, hashes, err := revokeAllUserSessions(
 		ctx,
@@ -335,21 +395,33 @@ func setUserDisabled(
 	updateAt time.Time,
 	mailEligibilityRevision int64,
 ) (*userRow, error) {
-	if expectedRevision <= 0 || updateAt.IsZero() ||
-		(!disabledAt.IsZero() && !disabledAt.Equal(updateAt)) || mailEligibilityRevision < 1 {
+	if expectedRevision <= 0 ||
+		updateAt.IsZero() ||
+		(!disabledAt.IsZero() && !disabledAt.Equal(updateAt)) ||
+		mailEligibilityRevision < 1 {
 		return nil, store.NewErrInvalidInput("user", "disabled_at", disabledAt)
 	}
+
 	updateTime := model.TimeUTC(updateAt)
 	// Users can carry PostgreSQL-timed or another node's lifecycle instants;
 	// the change never records a modification or disable before them.
-	result, err := tx.Exec(ctx, `
+	result, err := tx.Exec(
+		ctx,
+		`
 		UPDATE users
 		   SET updated_at = GREATEST(updated_at, ?),
 		       disabled_at = CASE WHEN ? THEN GREATEST(created_at, ?) END,
 		       mail_eligibility_revision = ?, revision = revision + 1
 		 WHERE id = ? AND archived_at IS NULL AND revision = ?
 		   AND ((? AND disabled_at IS NULL) OR (NOT ? AND disabled_at IS NOT NULL))`,
-		updateTime, !disabledAt.IsZero(), updateTime, mailEligibilityRevision, id, expectedRevision, !disabledAt.IsZero(), !disabledAt.IsZero(),
+		updateTime,
+		!disabledAt.IsZero(),
+		updateTime,
+		mailEligibilityRevision,
+		id,
+		expectedRevision,
+		!disabledAt.IsZero(),
+		!disabledAt.IsZero(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf(
@@ -357,13 +429,16 @@ func setUserDisabled(
 			translateError("user", id, err),
 		)
 	}
+
 	if err = requireUserRevisionAffected(ctx, tx, result, id); err != nil {
 		return nil, err
 	}
+
 	updated, err := getUserByID(ctx, tx, id)
 	if err != nil {
 		return nil, err
 	}
+
 	row := newUserRow(updated)
 	return &row, nil
 }

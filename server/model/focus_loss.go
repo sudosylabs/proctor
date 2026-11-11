@@ -32,8 +32,11 @@ const (
 
 func (s FocusLossSource) IsValid() bool {
 	switch s {
-	case "", FocusLossSourceWindowBlur, FocusLossSourceDocumentHidden,
-		FocusLossSourceApplicationBackgrounded, FocusLossSourceFullscreenExited:
+	case "",
+		FocusLossSourceWindowBlur,
+		FocusLossSourceDocumentHidden,
+		FocusLossSourceApplicationBackgrounded,
+		FocusLossSourceFullscreenExited:
 		return true
 	default:
 		return false
@@ -53,24 +56,45 @@ type FocusLossSignal struct {
 	ReceivedAt           time.Time
 }
 
-func NewFocusLossSignal(id FocusLossSignalID, attemptID ExamAttemptID, participationID AttemptParticipationID,
-	generation, sequence, durationMilliseconds int64, source FocusLossSource, receivedAt time.Time,
+func NewFocusLossSignal(
+	id FocusLossSignalID,
+	attemptID ExamAttemptID,
+	participationID AttemptParticipationID,
+	generation, sequence, durationMilliseconds int64,
+	source FocusLossSource,
+	receivedAt time.Time,
 ) (*FocusLossSignal, error) {
-	signal := &FocusLossSignal{ID: id, AttemptID: attemptID, ParticipationID: participationID,
-		Generation: generation, Sequence: sequence, DurationMilliseconds: durationMilliseconds,
-		Source: source, ReceivedAt: TimeUTC(receivedAt)}
+	signal := &FocusLossSignal{
+		ID:                   id,
+		AttemptID:            attemptID,
+		ParticipationID:      participationID,
+		Generation:           generation,
+		Sequence:             sequence,
+		DurationMilliseconds: durationMilliseconds,
+		Source:               source,
+		ReceivedAt:           TimeUTC(receivedAt),
+	}
 	if err := signal.Validate(); err != nil {
 		return nil, err
 	}
+
 	return signal, nil
 }
 
 func (s *FocusLossSignal) Validate() error {
-	if s == nil || !s.ID.IsValid() || !s.AttemptID.IsValid() || !s.ParticipationID.IsValid() ||
-		s.Generation < 1 || s.Sequence < 1 || s.DurationMilliseconds < 1 ||
-		s.DurationMilliseconds > FocusLossMaximumDurationMilliseconds || !s.Source.IsValid() || s.ReceivedAt.IsZero() {
+	if s == nil ||
+		!s.ID.IsValid() ||
+		!s.AttemptID.IsValid() ||
+		!s.ParticipationID.IsValid() ||
+		s.Generation < 1 ||
+		s.Sequence < 1 ||
+		s.DurationMilliseconds < 1 ||
+		s.DurationMilliseconds > FocusLossMaximumDurationMilliseconds ||
+		!s.Source.IsValid() ||
+		s.ReceivedAt.IsZero() {
 		return invalidModelError("FocusLossSignal.Validate", "focus_loss_signal", "", "invalid Focus Loss signal", "")
 	}
+
 	return nil
 }
 
@@ -78,7 +102,10 @@ func (s *FocusLossSignal) Validate() error {
 // owns the remaining policy decision while persistence applies its result
 // atomically under the retained sequence and window locks.
 func (s *FocusLossSignal) Qualifies(policy FocusLossPolicy) bool {
-	return s != nil && s.Validate() == nil && policy.Validate() == nil && policy.Enabled &&
+	return s != nil &&
+		s.Validate() == nil &&
+		policy.Validate() == nil &&
+		policy.Enabled &&
 		time.Duration(s.DurationMilliseconds)*time.Millisecond >= policy.MinimumDuration
 }
 
@@ -86,9 +113,13 @@ func (s *FocusLossSignal) Qualifies(policy FocusLossPolicy) bool {
 // server-proposed identity or receipt time cannot turn changed client input
 // into a duplicate.
 func (s *FocusLossSignal) SameClaim(other FocusLossSignal) bool {
-	return s != nil && s.AttemptID == other.AttemptID && s.ParticipationID == other.ParticipationID &&
-		s.Generation == other.Generation && s.Sequence == other.Sequence &&
-		s.DurationMilliseconds == other.DurationMilliseconds && s.Source == other.Source
+	return s != nil &&
+		s.AttemptID == other.AttemptID &&
+		s.ParticipationID == other.ParticipationID &&
+		s.Generation == other.Generation &&
+		s.Sequence == other.Sequence &&
+		s.DurationMilliseconds == other.DurationMilliseconds &&
+		s.Source == other.Source
 }
 
 // FocusLossEvaluationState is the locked retained state supplied to one pure
@@ -154,41 +185,86 @@ func (e FocusLossEvaluation) RetainInWindow() bool {
 }
 
 func (e FocusLossEvaluation) Decide(state FocusLossEvaluationState) (FocusLossEvaluationDecision, error) {
-	if e.policy.Validate() != nil || e.signal.Validate() != nil || state.AcceptedSequence < 0 ||
-		state.AcceptedSequence >= e.signal.Sequence || state.WindowIncidentCount < 0 ||
-		state.UnresolvedMissingCount < 0 || state.DiagnosticCount < 0 {
-		return FocusLossEvaluationDecision{}, invalidModelError("FocusLossEvaluation.Decide", "focus_loss_evaluation", "", "invalid Focus Loss evaluation state", "")
+	if e.policy.Validate() != nil ||
+		e.signal.Validate() != nil ||
+		state.AcceptedSequence < 0 ||
+		state.AcceptedSequence >= e.signal.Sequence ||
+		state.WindowIncidentCount < 0 ||
+		state.UnresolvedMissingCount < 0 ||
+		state.DiagnosticCount < 0 {
+		return FocusLossEvaluationDecision{}, invalidModelError(
+			"FocusLossEvaluation.Decide",
+			"focus_loss_evaluation",
+			"",
+			"invalid Focus Loss evaluation state",
+			"",
+		)
 	}
+
 	missingBefore := e.signal.Sequence - state.AcceptedSequence - 1
-	decision := FocusLossEvaluationDecision{CollectionEnabled: e.policy.Enabled,
-		Qualified: e.qualified, MissingBefore: missingBefore,
-		UnresolvedMissingCount: state.UnresolvedMissingCount, DiagnosticCount: state.DiagnosticCount,
-		WindowIncidentCount: state.WindowIncidentCount}
+	decision := FocusLossEvaluationDecision{
+		CollectionEnabled:      e.policy.Enabled,
+		Qualified:              e.qualified,
+		MissingBefore:          missingBefore,
+		UnresolvedMissingCount: state.UnresolvedMissingCount,
+		DiagnosticCount:        state.DiagnosticCount,
+		WindowIncidentCount:    state.WindowIncidentCount,
+	}
 	if !e.policy.Enabled {
 		if state.WindowIncidentCount != 0 {
-			return FocusLossEvaluationDecision{}, invalidModelError("FocusLossEvaluation.Decide", "focus_loss_evaluation", "", "disabled Focus Loss evaluation has a pending window", "")
+			return FocusLossEvaluationDecision{}, invalidModelError(
+				"FocusLossEvaluation.Decide",
+				"focus_loss_evaluation",
+				"",
+				"disabled Focus Loss evaluation has a pending window",
+				"",
+			)
 		}
+
 		decision.Qualified = false
 		if decision.DiagnosticCount < math.MaxInt64 {
 			decision.DiagnosticCount++
 		}
+
 		return decision, nil
 	}
+
 	if missingBefore > math.MaxInt64-state.UnresolvedMissingCount {
-		return FocusLossEvaluationDecision{}, invalidModelError("FocusLossEvaluation.Decide", "focus_loss_evaluation", "", "Focus Loss gap count overflows", "")
+		return FocusLossEvaluationDecision{}, invalidModelError(
+			"FocusLossEvaluation.Decide",
+			"focus_loss_evaluation",
+			"",
+			"Focus Loss gap count overflows",
+			"",
+		)
 	}
+
 	decision.UnresolvedMissingCount += missingBefore
 	if e.qualified {
 		if state.WindowIncidentCount < 1 || state.WindowIncidentCount > e.policy.IncidentCount {
-			return FocusLossEvaluationDecision{}, invalidModelError("FocusLossEvaluation.Decide", "focus_loss_evaluation", "", "qualifying Focus Loss signal has invalid window count", "")
+			return FocusLossEvaluationDecision{}, invalidModelError(
+				"FocusLossEvaluation.Decide",
+				"focus_loss_evaluation",
+				"",
+				"qualifying Focus Loss signal has invalid window count",
+				"",
+			)
 		}
 	} else if state.WindowIncidentCount >= e.policy.IncidentCount {
-		return FocusLossEvaluationDecision{}, invalidModelError("FocusLossEvaluation.Decide", "focus_loss_evaluation", "", "Focus Loss window crossed without the current signal", "")
+		return FocusLossEvaluationDecision{}, invalidModelError(
+			"FocusLossEvaluation.Decide",
+			"focus_loss_evaluation",
+			"",
+			"Focus Loss window crossed without the current signal",
+			"",
+		)
 	}
+
 	decision.ThresholdCrossed = e.qualified && state.WindowIncidentCount >= e.policy.IncidentCount
 	if !decision.ThresholdCrossed {
 		return decision, nil
 	}
+
 	decision.WindowIncidentCount = 0
 	decision.ConsumeWindow = true
 	decision.PolicyOutcome = e.policy.Outcome
@@ -204,14 +280,24 @@ func (e FocusLossEvaluation) Decide(state FocusLossEvaluationState) (FocusLossEv
 // domain values only after every ownership check and transition succeeds;
 // persistence remains responsible for committing them with the causal Flag,
 // Suspension, evidence, and audit record atomically.
-func SuspendExamAttemptForFocusLoss(attempt *ExamAttempt, participation *AttemptParticipation,
-	connection *AttemptConnection, at time.Time,
+func SuspendExamAttemptForFocusLoss(
+	attempt *ExamAttempt,
+	participation *AttemptParticipation,
+	connection *AttemptConnection,
+	at time.Time,
 ) error {
-	if attempt == nil || participation == nil || connection == nil || attempt.Validate() != nil ||
-		participation.Validate() != nil || connection.Validate() != nil || participation.AttemptID != attempt.ID ||
-		connection.AttemptID != attempt.ID || connection.ParticipationID != participation.ID {
+	if attempt == nil ||
+		participation == nil ||
+		connection == nil ||
+		attempt.Validate() != nil ||
+		participation.Validate() != nil ||
+		connection.Validate() != nil ||
+		participation.AttemptID != attempt.ID ||
+		connection.AttemptID != attempt.ID ||
+		connection.ParticipationID != participation.ID {
 		return invalidModelError("SuspendExamAttemptForFocusLoss", "focus_loss", "", "invalid Focus Loss suspension aggregate", "")
 	}
+
 	attemptCandidate, participationCandidate, connectionCandidate := *attempt, *participation, *connection
 	if err := attemptCandidate.Suspend(at); err != nil {
 		return err
@@ -222,6 +308,7 @@ func SuspendExamAttemptForFocusLoss(attempt *ExamAttempt, participation *Attempt
 	if err := connectionCandidate.Close(AttemptConnectionClosePolicySuspended, at); err != nil {
 		return err
 	}
+
 	*attempt, *participation, *connection = attemptCandidate, participationCandidate, connectionCandidate
 	return nil
 }
@@ -248,10 +335,22 @@ type FocusLossEvidenceOverflow struct {
 }
 
 func (s FocusLossEvidenceOverflow) Validate() error {
-	if !s.AttemptID.IsValid() || !s.ParticipationID.IsValid() || s.Generation < 1 ||
-		s.Count < 1 || s.FirstReceivedAt.IsZero() || s.LastReceivedAt.Before(s.FirstReceivedAt) ||
-		s.MaximumDurationMilliseconds < 1 || s.MaximumDurationMilliseconds > FocusLossMaximumDurationMilliseconds {
-		return invalidModelError("FocusLossEvidenceOverflow.Validate", "focus_loss_evidence_overflow", "", "invalid Focus Loss evidence overflow", "")
+	if !s.AttemptID.IsValid() ||
+		!s.ParticipationID.IsValid() ||
+		s.Generation < 1 ||
+		s.Count < 1 ||
+		s.FirstReceivedAt.IsZero() ||
+		s.LastReceivedAt.Before(s.FirstReceivedAt) ||
+		s.MaximumDurationMilliseconds < 1 ||
+		s.MaximumDurationMilliseconds > FocusLossMaximumDurationMilliseconds {
+		return invalidModelError(
+			"FocusLossEvidenceOverflow.Validate",
+			"focus_loss_evidence_overflow",
+			"",
+			"invalid Focus Loss evidence overflow",
+			"",
+		)
 	}
+
 	return nil
 }

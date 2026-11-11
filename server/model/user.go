@@ -208,6 +208,7 @@ func (u *User) Validate() error {
 	if !u.ID.IsValid() {
 		return invalidModelError(where, "user", "id", "must be a valid identifier", "")
 	}
+
 	details := "id=" + u.ID.String()
 	if u.CreatedAt.IsZero() || u.UpdatedAt.IsZero() {
 		return invalidModelError(where, "user", "created_at", "must be set", details)
@@ -275,6 +276,7 @@ func (u *User) Validate() error {
 	if u.ProfilePictureChangedAt.Valid && u.ProfilePictureChangedAt.Time.Before(u.CreatedAt) {
 		return invalidModelError(where, "user", "profile_picture_changed_at", "must not precede created_at", details)
 	}
+
 	return nil
 }
 

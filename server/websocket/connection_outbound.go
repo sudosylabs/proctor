@@ -38,10 +38,12 @@ func (c *connectionRuntime) writePump(ctx context.Context) {
 			} else {
 				err = c.socket.WriteJSON(message.response)
 			}
+
 			if c.recorder != nil {
 				kind, bytes := outboundMetric(message)
 				c.recorder.ObserveWebSocketMessage("outbound", kind, streamResult(err), bytes)
 			}
+
 			if err != nil {
 				c.closeTransport()
 				return
@@ -52,6 +54,7 @@ func (c *connectionRuntime) writePump(ctx context.Context) {
 			if c.recorder != nil {
 				c.recorder.ObserveWebSocketMessage("outbound", "ping", streamResult(err), 0)
 			}
+
 			if err != nil {
 				c.closeTransport()
 				return
@@ -75,15 +78,20 @@ func outboundMetric(message outboundMessage) (string, int) {
 
 func (c *connectionRuntime) enqueueHello(resumed, resyncRequired bool) {
 	data, _ := json.Marshal(Hello{
-		ConnectionID: c.id, NodeID: c.nodeID, Resumed: resumed,
+		ConnectionID: c.id,
+		NodeID:       c.nodeID,
+		Resumed:      resumed,
 	})
 	c.enqueueEvent(&Event{
-		ID: model.NewID(), Event: string(EventHello),
-		UserID: c.principal.UserID.String(), Data: data,
+		ID:     model.NewID(),
+		Event:  string(EventHello),
+		UserID: c.principal.UserID.String(),
+		Data:   data,
 	})
 	if resyncRequired {
 		c.enqueueEvent(&Event{
-			ID: model.NewID(), Event: string(EventResync),
+			ID:     model.NewID(),
+			Event:  string(EventResync),
 			UserID: c.principal.UserID.String(),
 		})
 	}
@@ -113,19 +121,23 @@ func (c *connectionRuntime) enqueueEvent(event *Event) {
 
 func (c *connectionRuntime) enqueueResponse(sequence int64, data json.RawMessage) {
 	response := &Response{
-		Status: "ok", Sequence: sequence, Data: append(json.RawMessage(nil), data...),
+		Status:   "ok",
+		Sequence: sequence,
+		Data:     append(json.RawMessage(nil), data...),
 	}
 	c.enqueueOutbound(outboundMessage{response: response})
 }
 
 func (c *connectionRuntime) enqueueError(sequence int64, code apperror.Code, presentation websocketErrorPresentation) {
 	response := &Response{
-		Status: "error", Sequence: sequence,
-		Error: &Error{Code: string(code), Message: localizedText(c.localizer, c.locale, websocketErrorMessage(presentation))},
+		Status:   "error",
+		Sequence: sequence,
+		Error:    &Error{Code: string(code), Message: localizedText(c.localizer, c.locale, websocketErrorMessage(presentation))},
 	}
 	if code == "exam.delivery.control_rate_limited" || code == "websocket.rate_limited" {
 		response.Error.RetryAfterSeconds = 1
 	}
+
 	c.enqueueOutbound(outboundMessage{response: response})
 }
 

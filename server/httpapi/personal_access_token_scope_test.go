@@ -20,8 +20,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/localization"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -29,15 +31,14 @@ import (
 type grantableScopesHTTPApplication struct {
 	PersonalAccessTokens
 
-	catalogue *app.PersonalAccessTokenGrantableScopes
+	catalogue *identity.PersonalAccessTokenGrantableScopes
 	calls     int
 }
 
 func (a *grantableScopesHTTPApplication) ListGrantablePersonalAccessTokenScopes(
 	context.Context,
 	invocation.Invocation,
-	app.ListGrantablePersonalAccessTokenScopesQuery,
-) (*app.PersonalAccessTokenGrantableScopes, error) {
+) (*identity.PersonalAccessTokenGrantableScopes, error) {
 	a.calls++
 	return a.catalogue, nil
 }
@@ -97,11 +98,11 @@ func TestPersonalAccessTokenScopeEnumMatchesEligibleActions(t *testing.T) {
 func TestGrantablePersonalAccessTokenScopesRouteLocalizesCopy(t *testing.T) {
 	t.Parallel()
 
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	now := time.Now()
 	unitID := model.NewAcademicUnitID()
-	application := &grantableScopesHTTPApplication{catalogue: &app.PersonalAccessTokenGrantableScopes{
-		Scopes: []app.PersonalAccessTokenGrantableScope{{
+	application := &grantableScopesHTTPApplication{catalogue: &identity.PersonalAccessTokenGrantableScopes{
+		Scopes: []identity.PersonalAccessTokenGrantableScope{{
 			Action: model.ActionExamView, ResourceTypes: []model.ResourceType{model.ResourceExam},
 			AcademicUnitIDs: []model.AcademicUnitID{unitID},
 		}},
@@ -115,11 +116,11 @@ func TestGrantablePersonalAccessTokenScopesRouteLocalizesCopy(t *testing.T) {
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		AuthenticatedAt: now, ClientType: model.SessionClientWeb,
 	}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, personalAccessTokenResource(application))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, personalAccessTokenResource(application))
 
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/me/tokens/grantable-scopes", nil)
 	request.Header.Set("Authorization", "Bearer credential")
-	request = request.WithContext(withRequestLocalization(request.Context(), repositoryLocalizer(t), "en"))
+	request = request.WithContext(route.WithLocalization(request.Context(), repositoryLocalizer(t), "en"))
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
@@ -145,7 +146,7 @@ func TestGrantablePersonalAccessTokenScopesResponseUsesEmptyCollections(t *testi
 
 	encoded, err := json.Marshal(personalAccessTokenGrantableScopesResponseFromApp(
 		httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil),
-		&app.PersonalAccessTokenGrantableScopes{Scopes: []app.PersonalAccessTokenGrantableScope{{Action: model.ActionAuditView, InstitutionWide: true}}},
+		&identity.PersonalAccessTokenGrantableScopes{Scopes: []identity.PersonalAccessTokenGrantableScope{{Action: model.ActionAuditView, InstitutionWide: true}}},
 	))
 	require.NoError(t, err)
 	require.JSONEq(t, `{"scopes":[{"name":"audit.view","title":"audit.view","description":"","resource_types":[],"institution_wide":true,"academic_unit_ids":[]}],"academic_units":[],"academic_units_has_more":false}`, string(encoded))

@@ -18,14 +18,15 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type retentionPolicyHTTPApplication struct {
 	policy  *model.RetentionPolicy
-	command app.ReplaceRetentionPolicyCommand
+	command administration.ReplaceRetentionPolicyCommand
 	calls   int
 }
 
@@ -35,7 +36,7 @@ func (a *retentionPolicyHTTPApplication) GetRetentionPolicy(context.Context, inv
 }
 
 func (a *retentionPolicyHTTPApplication) ReplaceRetentionPolicy(_ context.Context, _ invocation.Invocation,
-	command app.ReplaceRetentionPolicyCommand) (*model.RetentionPolicy, error) {
+	command administration.ReplaceRetentionPolicyCommand) (*model.RetentionPolicy, error) {
 	a.calls++
 	a.command = command
 	return a.policy, nil
@@ -43,7 +44,7 @@ func (a *retentionPolicyHTTPApplication) ReplaceRetentionPolicy(_ context.Contex
 
 func TestRetentionPolicyHTTPRequiresCompleteSettingsAndNeverEnablesDeletion(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
@@ -52,9 +53,9 @@ func TestRetentionPolicyHTTPRequiresCompleteSettingsAndNeverEnablesDeletion(t *t
 	}
 	policy := model.NewInitialRetentionPolicy(model.NewInstitutionID(), time.Now())
 	application := &retentionPolicyHTTPApplication{policy: policy}
-	api := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, retentionPolicyResource(application))
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, retentionPolicyResource(application))
 	serve := func(method, body string) *httptest.ResponseRecorder {
-		request := httptest.NewRequest(method, "/api/v1/retention-policy", strings.NewReader(body))
+		request := httptest.NewRequestWithContext(t.Context(), method, "/api/v1/retention-policy", strings.NewReader(body))
 		request.Header.Set("Authorization", "Bearer session")
 		request.Header.Set("Content-Type", "application/json")
 		if method == http.MethodPut {
@@ -104,9 +105,9 @@ func TestRetentionPolicyHTTPRequiresCompleteSettingsAndNeverEnablesDeletion(t *t
 				encoded, err := json.Marshal(body)
 				require.NoError(t, err)
 				before := application.calls
-				response := serve(http.MethodPut, string(encoded))
-				require.Equal(t, http.StatusBadRequest, response.Code, "invalid settings reached application: %d %s", response.Code, response.Body.String())
-				require.Equal(t, before, application.calls, "invalid settings reached application: %d %s", response.Code, response.Body.String())
+				invalidResponse := serve(http.MethodPut, string(encoded))
+				require.Equal(t, http.StatusBadRequest, invalidResponse.Code, "invalid settings reached application: %d %s", invalidResponse.Code, invalidResponse.Body.String())
+				require.Equal(t, before, application.calls, "invalid settings reached application: %d %s", invalidResponse.Code, invalidResponse.Body.String())
 			})
 		}
 	}

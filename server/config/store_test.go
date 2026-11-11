@@ -78,7 +78,7 @@ func TestEnvironmentOverridesAreEffectiveButNeverPersisted(t *testing.T) {
 	data, err := json.Marshal(initial)
 	require.NoError(t, err)
 	backing := NewMemoryStore(data)
-	environment := map[string]string{
+	environment := map[string]string{ //nolint:gosec // G101: a fixture DSN for an unreachable test host.
 		"PROCTOR_SERVER_LISTEN_ADDRESS":                              "127.0.0.1:9000",
 		"PROCTOR_LOG_LEVEL":                                          "debug",
 		"PROCTOR_DATABASE_DATA_SOURCE":                               "postgres://runtime:secret@db.example/proctor?sslmode=require",

@@ -17,41 +17,43 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type desktopReauthenticationHTTPApplication struct {
 	DesktopReauthentication
 	passwordBinding string
-	complete        app.CompleteDesktopReauthenticationCommand
+	complete        identity.CompleteDesktopReauthenticationCommand
 }
 
-func (a *desktopReauthenticationHTTPApplication) BindDesktopReauthentication(context.Context, invocation.Invocation, app.BindDesktopAuthorizationCommand) (*app.DesktopAuthorizationBinding, error) {
-	return &app.DesktopAuthorizationBinding{Binding: "reauthentication-binding", ExpiresAt: time.Now().Add(time.Minute).UnixMilli()}, nil
+func (a *desktopReauthenticationHTTPApplication) BindDesktopReauthentication(context.Context, invocation.Invocation, identity.BindDesktopAuthorizationCommand) (*identity.DesktopAuthorizationBinding, error) {
+	return &identity.DesktopAuthorizationBinding{Binding: "reauthentication-binding", ExpiresAt: time.Now().Add(time.Minute).UnixMilli()}, nil
 }
 
-func (a *desktopReauthenticationHTTPApplication) AuthenticateDesktopReauthenticationPassword(_ context.Context, _ invocation.Invocation, command app.AuthenticateDesktopReauthenticationPasswordCommand) (*app.DesktopReauthenticationBrowserContext, error) {
+func (a *desktopReauthenticationHTTPApplication) AuthenticateDesktopReauthenticationPassword(_ context.Context, _ invocation.Invocation, command identity.AuthenticateDesktopReauthenticationPasswordCommand) (*identity.DesktopReauthenticationBrowserContext, error) {
 	a.passwordBinding = command.Binding
-	return &app.DesktopReauthenticationBrowserContext{State: model.BrowserAuthenticationStateAuthenticated, DisplayName: "Ada Candidate",
+	return &identity.DesktopReauthenticationBrowserContext{State: model.BrowserAuthenticationStateAuthenticated, DisplayName: "Ada Candidate",
 		AuthenticationMethod: "password", ExpiresAt: time.Now().Add(time.Minute)}, nil
 }
 
-func (a *desktopReauthenticationHTTPApplication) CompleteDesktopReauthentication(_ context.Context, _ invocation.Invocation, command app.CompleteDesktopReauthenticationCommand) (*app.DesktopReauthenticationResult, error) {
+func (a *desktopReauthenticationHTTPApplication) CompleteDesktopReauthentication(_ context.Context, _ invocation.Invocation, command identity.CompleteDesktopReauthenticationCommand) (*identity.DesktopReauthenticationResult, error) {
 	a.complete = command
-	return &app.DesktopReauthenticationResult{RecentlyAuthenticatedUntil: time.Date(2026, 8, 1, 9, 17, 0, 0, time.UTC)}, nil
+	return &identity.DesktopReauthenticationResult{RecentlyAuthenticatedUntil: time.Date(2026, 8, 1, 9, 17, 0, 0, time.UTC)}, nil
 }
 
 func TestDesktopReauthenticationHTTPScopesItsBindingAndReturnsRecency(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	applicationFake := &desktopReauthenticationHTTPApplication{}
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now()}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal},
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal},
 		desktopReauthenticationResource(applicationFake, testDesktopAuthorizationCookies(t)))
 
 	bind := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/auth/desktop/reauthentications/bind",
@@ -62,7 +64,7 @@ func TestDesktopReauthenticationHTTPScopesItsBindingAndReturnsRecency(t *testing
 	require.Equal(t, http.StatusNoContent, response.Code, response.Body.String())
 	cookies := response.Result().Cookies()
 	require.Len(t, cookies, 1)
-	require.Equal(t, BrowserDesktopReauthenticationCookieName, cookies[0].Name)
+	require.Equal(t, route.BrowserDesktopReauthenticationCookieName, cookies[0].Name)
 	require.Equal(t, "/api/v1/auth/desktop/reauthentications", cookies[0].Path, "binding escaped its route family")
 	require.True(t, cookies[0].HttpOnly, "binding is readable by page script")
 	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
@@ -78,7 +80,7 @@ func TestDesktopReauthenticationHTTPScopesItsBindingAndReturnsRecency(t *testing
 	password = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/auth/desktop/reauthentications/authenticate/password",
 		strings.NewReader(`{"password":"synthetic-local-password"}`))
 	password.Header.Set("Content-Type", "application/json")
-	password.AddCookie(&http.Cookie{Name: BrowserDesktopReauthenticationCookieName, Value: "reauthentication-binding", HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
+	password.AddCookie(&http.Cookie{Name: route.BrowserDesktopReauthenticationCookieName, Value: "reauthentication-binding"})
 	response = httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, password)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
@@ -94,5 +96,5 @@ func TestDesktopReauthenticationHTTPScopesItsBindingAndReturnsRecency(t *testing
 	httpAPI.ServeHTTP(response, complete)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	require.JSONEq(t, `{"recently_authenticated_until":"2026-08-01T09:17:00Z"}`, response.Body.String())
-	require.Equal(t, app.CompleteDesktopReauthenticationCommand{Code: "code", CodeVerifier: "verifier", State: "state", Source: applicationFake.complete.Source}, applicationFake.complete)
+	require.Equal(t, identity.CompleteDesktopReauthenticationCommand{Code: "code", CodeVerifier: "verifier", State: "state", Source: applicationFake.complete.Source}, applicationFake.complete)
 }

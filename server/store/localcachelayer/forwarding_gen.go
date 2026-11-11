@@ -34,6 +34,16 @@ type localCacheStores struct {
 	examSittingOnce                sync.Once
 	examAttempt                    store.ExamAttemptStore
 	examAttemptOnce                sync.Once
+	examFocusLoss                  store.ExamFocusLossStore
+	examFocusLossOnce              sync.Once
+	securityPreflight              store.SecurityPreflightStore
+	securityPreflightOnce          sync.Once
+	nativeDelivery                 store.NativeDeliveryStore
+	nativeDeliveryOnce             sync.Once
+	browserDelivery                store.BrowserDeliveryStore
+	browserDeliveryOnce            sync.Once
+	deliveryBudget                 store.DeliveryBudgetStore
+	deliveryBudgetOnce             sync.Once
 	examAttemptWorkspace           store.ExamAttemptWorkspaceStore
 	examAttemptWorkspaceOnce       sync.Once
 	examSubmission                 store.ExamSubmissionStore
@@ -158,6 +168,31 @@ type examSittingStore struct {
 
 type examAttemptStore struct {
 	store.ExamAttemptStore
+	layer *Layer
+}
+
+type examFocusLossStore struct {
+	store.ExamFocusLossStore
+	layer *Layer
+}
+
+type securityPreflightStore struct {
+	store.SecurityPreflightStore
+	layer *Layer
+}
+
+type nativeDeliveryStore struct {
+	store.NativeDeliveryStore
+	layer *Layer
+}
+
+type browserDeliveryStore struct {
+	store.BrowserDeliveryStore
+	layer *Layer
+}
+
+type deliveryBudgetStore struct {
+	store.DeliveryBudgetStore
 	layer *Layer
 }
 
@@ -449,6 +484,56 @@ func (l *Layer) ExamAttempt() store.ExamAttemptStore {
 		}
 	})
 	return l.stores.examAttempt
+}
+
+func (l *Layer) ExamFocusLoss() store.ExamFocusLossStore {
+	l.stores.examFocusLossOnce.Do(func() {
+		next := l.Store.ExamFocusLoss()
+		if next != nil {
+			l.stores.examFocusLoss = &examFocusLossStore{ExamFocusLossStore: next, layer: l}
+		}
+	})
+	return l.stores.examFocusLoss
+}
+
+func (l *Layer) SecurityPreflight() store.SecurityPreflightStore {
+	l.stores.securityPreflightOnce.Do(func() {
+		next := l.Store.SecurityPreflight()
+		if next != nil {
+			l.stores.securityPreflight = &securityPreflightStore{SecurityPreflightStore: next, layer: l}
+		}
+	})
+	return l.stores.securityPreflight
+}
+
+func (l *Layer) NativeDelivery() store.NativeDeliveryStore {
+	l.stores.nativeDeliveryOnce.Do(func() {
+		next := l.Store.NativeDelivery()
+		if next != nil {
+			l.stores.nativeDelivery = &nativeDeliveryStore{NativeDeliveryStore: next, layer: l}
+		}
+	})
+	return l.stores.nativeDelivery
+}
+
+func (l *Layer) BrowserDelivery() store.BrowserDeliveryStore {
+	l.stores.browserDeliveryOnce.Do(func() {
+		next := l.Store.BrowserDelivery()
+		if next != nil {
+			l.stores.browserDelivery = &browserDeliveryStore{BrowserDeliveryStore: next, layer: l}
+		}
+	})
+	return l.stores.browserDelivery
+}
+
+func (l *Layer) DeliveryBudget() store.DeliveryBudgetStore {
+	l.stores.deliveryBudgetOnce.Do(func() {
+		next := l.Store.DeliveryBudget()
+		if next != nil {
+			l.stores.deliveryBudget = &deliveryBudgetStore{DeliveryBudgetStore: next, layer: l}
+		}
+	})
+	return l.stores.deliveryBudget
 }
 
 func (l *Layer) ExamAttemptWorkspace() store.ExamAttemptWorkspaceStore {
@@ -862,6 +947,11 @@ var (
 	_ store.ExamRevisionStore               = (*examRevisionStore)(nil)
 	_ store.ExamSittingStore                = (*examSittingStore)(nil)
 	_ store.ExamAttemptStore                = (*examAttemptStore)(nil)
+	_ store.ExamFocusLossStore              = (*examFocusLossStore)(nil)
+	_ store.SecurityPreflightStore          = (*securityPreflightStore)(nil)
+	_ store.NativeDeliveryStore             = (*nativeDeliveryStore)(nil)
+	_ store.BrowserDeliveryStore            = (*browserDeliveryStore)(nil)
+	_ store.DeliveryBudgetStore             = (*deliveryBudgetStore)(nil)
 	_ store.ExamAttemptWorkspaceStore       = (*examAttemptWorkspaceStore)(nil)
 	_ store.ExamSubmissionStore             = (*examSubmissionStore)(nil)
 	_ store.ExamIntegrityReviewStore        = (*examIntegrityReviewStore)(nil)

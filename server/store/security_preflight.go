@@ -8,6 +8,7 @@
 package store
 
 import (
+	"context"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -48,6 +49,20 @@ type SecurityPreflightPrepared struct {
 	FrozenAttemptConfiguration *model.AttemptConfiguration
 	Replayed                   bool
 }
+
+// ConsistentWith reports whether the prepared preflight carries a valid
+// challenge and a policy that is valid at the server time and resolved for the
+// given Sitting.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (p *SecurityPreflightPrepared) ConsistentWith(sittingID model.ExamSittingID) bool {
+	return !(p == nil ||
+		p.Challenge.Validate() != nil ||
+		p.Resolved.Policy.Validate(p.ServerTime) != nil ||
+		p.Resolved.Policy.SittingID != sittingID)
+}
+
 type SecurityPreflightReport struct {
 	Access       SecurityPreflightAccess
 	PreflightID  string
@@ -68,11 +83,44 @@ type SecurityPolicyRecovery struct {
 	FrozenAttemptConfiguration model.AttemptConfiguration
 }
 
-type ExamAttemptSecurityCoverageUpdate struct {
-	Access                             CandidateAttemptAccess
-	ParticipationID                    model.AttemptParticipationID
-	Generation                         int64
-	DesktopBuild                       model.DesktopBuildTuple
-	DesktopCompatibilityPolicyRevision int64
-	Coverage                           model.SecurityCoverageRenewal
+// ConsistentWith reports whether the recovery carries its server time, valid
+// security coverage, bounded and present source, coverage and reset receipt
+// lists, a valid admitted security posture bound to the given Attempt, and a
+// valid frozen Attempt configuration.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (r *SecurityPolicyRecovery) ConsistentWith(attemptID model.ExamAttemptID) bool {
+	return !(r == nil ||
+		r.ServerTime.IsZero() ||
+		r.SecurityCoverage.Validate() != nil ||
+		r.CurrentSources == nil ||
+		r.CurrentCoverage == nil ||
+		r.SourceResetReceipts == nil ||
+		len(r.CurrentSources) > 11 ||
+		len(r.CurrentCoverage) > 64 ||
+		len(r.SourceResetReceipts) > 11 ||
+		r.Security.Validate() != nil ||
+		r.Security.Policy.Scope.AttemptID != attemptID ||
+		r.FrozenAttemptConfiguration.Validate() != nil)
+}
+
+// SecurityPreflightStore persists the security preflight a Candidate's
+// Desktop completes before it connects to a Sitting, and the recovery of the
+// security policy an admitted Attempt runs under.
+type SecurityPreflightStore interface {
+	// PrepareSecurityPreflight issues the preflight challenge for the
+	// Candidate's Desktop build against the Sitting's current policy. A
+	// replayed command returns the original challenge.
+	PrepareSecurityPreflight(context.Context, *SecurityPreflightPrepare, *CommandIdempotency) (*SecurityPreflightPrepared, error)
+	// ResolveSecurityPreflightSitting returns the Sitting of a preflight this
+	// User and Session prepared.
+	ResolveSecurityPreflightSitting(context.Context, string, model.UserID, model.SessionID) (model.ExamSittingID, error)
+	// ReportSecurityPreflight evaluates the Desktop's report against the
+	// prepared challenge and records the result.
+	ReportSecurityPreflight(context.Context, *SecurityPreflightReport, *CommandIdempotency) (*model.SecurityPreflightResult, error)
+	// RecoverSecurityPolicy returns the admitted security policy, frozen
+	// Attempt Configuration and native control state of the Candidate's active
+	// Participation, for a Desktop that lost its Connect response.
+	RecoverSecurityPolicy(context.Context, SecurityPreflightAccess, model.ExamAttemptID) (*SecurityPolicyRecovery, error)
 }

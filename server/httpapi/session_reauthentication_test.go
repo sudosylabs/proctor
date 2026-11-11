@@ -17,30 +17,32 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type sessionReauthenticationHTTPFake struct {
-	calls      int
-	invocation invocation.Invocation
-	command    app.ReauthenticatePasswordCommand
+	calls   int
+	inv     invocation.Invocation
+	command identity.ReauthenticatePasswordCommand
 }
 
-func (f *sessionReauthenticationHTTPFake) ReauthenticatePassword(_ context.Context, invocation invocation.Invocation, command app.ReauthenticatePasswordCommand) (*model.Session, error) {
+func (f *sessionReauthenticationHTTPFake) ReauthenticatePassword(_ context.Context, inv invocation.Invocation, command identity.ReauthenticatePasswordCommand) (*model.Session, error) {
 	f.calls++
-	f.invocation = invocation
+	f.inv = inv
 	f.command = command
-	return &model.Session{ID: invocation.Principal().SessionID, ReauthenticatedAt: model.OptionalTimeFrom(time.Now())}, nil
+	return &model.Session{ID: inv.Principal().SessionID, ReauthenticatedAt: model.OptionalTimeFrom(time.Now())}, nil
 }
 
 func TestPasswordReauthenticationHTTPRejectsIdentitySelectionAndProtectsResponse(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now().Add(-time.Hour)}
 	fake := &sessionReauthenticationHTTPFake{}
-	api := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, sessionReauthenticationResource(fake, browserCookies{}))
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, sessionReauthenticationResource(fake, route.Cookies{}))
 	for _, test := range []struct {
 		body   string
 		status int
@@ -59,10 +61,10 @@ func TestPasswordReauthenticationHTTPRejectsIdentitySelectionAndProtectsResponse
 		})
 	}
 	require.Equal(t, 1, fake.calls, "transport did not bind the immutable current identity")
-	require.Equal(t, principal.UserID, fake.invocation.Principal().UserID, "transport did not bind the immutable current identity")
+	require.Equal(t, principal.UserID, fake.inv.Principal().UserID, "transport did not bind the immutable current identity")
 	require.Equal(t, "secret", fake.command.Password, "transport did not bind the immutable current identity")
 }
 
-func (*sessionReauthenticationHTTPFake) BeginExternalReauthentication(context.Context, invocation.Invocation, app.BeginExternalReauthenticationCommand) (*model.ExternalAuthenticationStart, error) {
+func (*sessionReauthenticationHTTPFake) BeginExternalReauthentication(context.Context, invocation.Invocation, identity.BeginExternalReauthenticationCommand) (*model.ExternalAuthenticationStart, error) {
 	return nil, nil
 }

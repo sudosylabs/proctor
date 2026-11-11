@@ -41,13 +41,19 @@ func NewInlineAssets(files fs.FS) (*InlineAssets, error) {
 	if files == nil {
 		return nil, errors.New("mail inline asset files are unavailable")
 	}
+
 	catalog := []struct {
 		filename string
 		digest   string
 		width    int
 		height   int
 	}{
-		{filename: "proctor-lockup-25d-v1.png", digest: "9867b48826bf314b6729f73941d053922d7baa7f5120894241ce197c219b8d66", width: 600, height: 118},
+		{
+			filename: "proctor-lockup-25d-v1.png",
+			digest:   "9867b48826bf314b6729f73941d053922d7baa7f5120894241ce197c219b8d66",
+			width:    600,
+			height:   118,
+		},
 	}
 	assets := &InlineAssets{byID: make(map[string]InlineAsset, len(catalog))}
 	for _, entry := range catalog {
@@ -55,17 +61,21 @@ func NewInlineAssets(files fs.FS) (*InlineAssets, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read mail inline asset %q: %w", entry.filename, err)
 		}
+
 		digest := sha256.Sum256(data)
 		if hex.EncodeToString(digest[:]) != entry.digest {
 			return nil, fmt.Errorf("mail inline asset %q has changed", entry.filename)
 		}
+
 		config, err := png.DecodeConfig(bytes.NewReader(data))
 		if err != nil || config.Width != entry.width || config.Height != entry.height {
 			return nil, fmt.Errorf("mail inline asset %q has invalid PNG dimensions", entry.filename)
 		}
+
 		id := "proctor-lockup-" + entry.digest + "@proctor"
 		assets.byID[id] = InlineAsset{Filename: entry.filename, ContentID: id, Data: data}
 	}
+
 	return assets, nil
 }
 
@@ -75,6 +85,7 @@ func (a *InlineAssets) ForHTML(body string) ([]InlineAsset, error) {
 	if a == nil {
 		return nil, errors.New("mail inline assets are unavailable")
 	}
+
 	var result []InlineAsset
 	seen := make(map[string]bool)
 	tokens := html.NewTokenizer(strings.NewReader(body))
@@ -90,25 +101,30 @@ func (a *InlineAssets) ForHTML(body string) ([]InlineAsset, error) {
 			if token.Data != "img" {
 				continue
 			}
+
 			var source string
 			count := 0
 			for _, attr := range token.Attr {
 				if attr.Key == "srcset" {
 					return nil, errors.New("mail image alternatives are not permitted")
 				}
+
 				if attr.Key == "src" {
 					source = attr.Val
 					count++
 				}
 			}
+
 			if count != 1 {
 				return nil, errors.New("mail image source is invalid")
 			}
+
 			id, ok := strings.CutPrefix(source, "cid:")
 			asset, exists := a.byID[id]
 			if !ok || !exists {
 				return nil, errors.New("mail image is not a released inline asset")
 			}
+
 			if !seen[id] {
 				asset.Data = bytes.Clone(asset.Data)
 				result = append(result, asset)

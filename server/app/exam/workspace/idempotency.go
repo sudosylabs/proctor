@@ -22,10 +22,17 @@ const (
 	idempotencyOperationRemoveEntry     = "exam.starter_workspace.entry.remove"
 )
 
-func prepareWorkspaceIdempotency(invocation invocation.Invocation, operation, key string, examID model.ExamID, revision int64,
-	expectedContentVersion model.WorkspaceContentVersion, entryID, path, mediaType string, size int64, sha256 string,
+func prepareWorkspaceIdempotency(
+	inv invocation.Invocation,
+	operation, key string,
+	examID model.ExamID,
+	revision int64,
+	expectedContentVersion model.WorkspaceContentVersion,
+	entryID, path, mediaType string,
+	size int64,
+	contentSHA256 string,
 ) (*store.CommandIdempotency, error) {
-	return idempotency.Require(invocation, operation, key, struct {
+	return idempotency.Require(inv, operation, key, struct {
 		ExamID                 string `json:"exam_id"`
 		ExpectedDraftRevision  int64  `json:"expected_draft_revision"`
 		ExpectedContentVersion string `json:"expected_content_version,omitempty"`
@@ -34,5 +41,5 @@ func prepareWorkspaceIdempotency(invocation invocation.Invocation, operation, ke
 		MediaType              string `json:"media_type,omitempty"`
 		Size                   int64  `json:"size,omitempty"`
 		SHA256                 string `json:"sha256,omitempty"`
-	}{examID.String(), revision, expectedContentVersion.String(), entryID, path, mediaType, size, sha256})
+	}{examID.String(), revision, expectedContentVersion.String(), entryID, path, mediaType, size, contentSHA256})
 }

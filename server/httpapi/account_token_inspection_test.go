@@ -17,40 +17,42 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type accountTokenInspectionHTTPApplication struct {
 	authenticationEntryApplication
-	commands []app.InspectAccountTokenCommand
+	commands []identity.InspectAccountTokenCommand
 	err      error
 }
 
-func (a *accountTokenInspectionHTTPApplication) InspectEmailVerification(_ context.Context, _ invocation.Invocation, command app.InspectAccountTokenCommand) (*app.EmailVerificationInspection, error) {
+func (a *accountTokenInspectionHTTPApplication) InspectEmailVerification(_ context.Context, _ invocation.Invocation, command identity.InspectAccountTokenCommand) (*identity.EmailVerificationInspection, error) {
 	a.commands = append(a.commands, command)
 	if a.err != nil {
 		return nil, a.err
 	}
-	return &app.EmailVerificationInspection{Email: "ada@example.edu"}, nil
+	return &identity.EmailVerificationInspection{Email: "ada@example.edu"}, nil
 }
 
-func (a *accountTokenInspectionHTTPApplication) InspectEmailChangeUndo(_ context.Context, _ invocation.Invocation, command app.InspectAccountTokenCommand) (*app.EmailChangeUndoInspection, error) {
+func (a *accountTokenInspectionHTTPApplication) InspectEmailChangeUndo(_ context.Context, _ invocation.Invocation, command identity.InspectAccountTokenCommand) (*identity.EmailChangeUndoInspection, error) {
 	a.commands = append(a.commands, command)
 	if a.err != nil {
 		return nil, a.err
 	}
-	return &app.EmailChangeUndoInspection{RestoredEmail: "ada.old@example.edu", MaskedCurrentEmail: "a***@example.org",
+	return &identity.EmailChangeUndoInspection{RestoredEmail: "ada.old@example.edu", MaskedCurrentEmail: "a***@example.org",
 		ChangedAt: time.Date(2026, 8, 18, 10, 0, 0, 0, time.UTC)}, nil
 }
 
 func TestAccountTokenInspectionHTTPReadsTheBodyTokenAndIsNotCached(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	application := &accountTokenInspectionHTTPApplication{}
-	api := newFocusedResourceAPI(t, logger, classRouteAuthenticator{}, authenticationResource(application, browserCookies{}))
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, authenticationResource(nil, application, route.Cookies{}))
 	token := model.NewCredentialToken()
 	post := func(path string) *httptest.ResponseRecorder {
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, strings.NewReader(`{"token":"`+token+`"}`))

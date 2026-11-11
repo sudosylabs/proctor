@@ -23,7 +23,9 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/cluster"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
@@ -84,22 +86,22 @@ func TestUserSettingsTwoNodePostgreSQLConvergencePublishesOnePrivateRefetchHint(
 	})
 	require.NoError(t, err)
 	const password = "correct horse battery staple"
-	user, err := primary.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
+	account, err := primary.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
 		Username: "settings-two-node-user", Email: "settings-two-node-user@example.edu",
 	}, Password: password})
 	require.NoError(t, err)
-	login, err := primary.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{
-		LoginID: user.Username, Password: password, ClientType: model.SessionClientWeb, Source: "127.0.0.1:1",
+	login, err := primary.App.Identity.Login(ctx, invocation.Invocation{}, identity.LoginCommand{
+		LoginID: account.Username, Password: password, ClientType: model.SessionClientWeb, Source: "127.0.0.1:1",
 	})
 	require.NoError(t, err)
-	principal, err := primary.App.AuthenticateAccess(ctx, login.Tokens.AccessToken)
+	principal, err := primary.App.Identity.AuthenticateAccess(ctx, login.Tokens.AccessToken)
 	require.NoError(t, err)
-	invocation := invocation.New(*principal, model.RequestMetadata{RequestID: "settings-two-node"})
-	before, err := primary.App.ReadOwnUserSettings(ctx, invocation)
+	inv := invocation.New(*principal, model.RequestMetadata{RequestID: "settings-two-node"})
+	before, err := primary.App.Users.ReadOwnUserSettings(ctx, inv)
 	require.NoError(t, err)
 
 	type outcome struct {
-		result app.UserSettingsReplacementResult
+		result user.UserSettingsReplacementResult
 		err    error
 	}
 	outcomes := make(chan outcome, 2)
@@ -116,14 +118,14 @@ func TestUserSettingsTwoNodePostgreSQLConvergencePublishesOnePrivateRefetchHint(
 			source string
 			key    string
 		}) {
-			result, replaceErr := candidate.app.ReplaceOwnUserSettings(ctx, invocation, app.ReplaceOwnUserSettingsCommand{
+			result, replaceErr := candidate.app.Users.ReplaceOwnUserSettings(ctx, inv, user.ReplaceOwnUserSettingsCommand{
 				Source: candidate.source, FormatVersion: 1,
 				ExpectedRevision: before.Revision, IdempotencyKey: candidate.key,
 			})
 			outcomes <- outcome{result: result, err: replaceErr}
 		}(candidate)
 	}
-	var winner app.UserSettingsReplacementResult
+	var winner user.UserSettingsReplacementResult
 	successes, conflicts := 0, 0
 	for range 2 {
 		completed := <-outcomes
@@ -140,9 +142,9 @@ func TestUserSettingsTwoNodePostgreSQLConvergencePublishesOnePrivateRefetchHint(
 	require.Equal(t, 1, successes, "concurrent outcomes success/conflict/winner = %d/%d/%#v", successes, conflicts, winner)
 	require.Equal(t, 1, conflicts, "concurrent outcomes success/conflict/winner = %d/%d/%#v", successes, conflicts, winner)
 	require.True(t, winner.Changed, "concurrent outcomes success/conflict/winner = %d/%d/%#v", successes, conflicts, winner)
-	primaryView, err := primary.App.ReadOwnUserSettings(ctx, invocation)
+	primaryView, err := primary.App.Users.ReadOwnUserSettings(ctx, inv)
 	require.NoError(t, err)
-	secondaryView, err := secondary.App.ReadOwnUserSettings(ctx, invocation)
+	secondaryView, err := secondary.App.Users.ReadOwnUserSettings(ctx, inv)
 	require.NoError(t, err)
 	require.Equal(t, winner.Revision, primaryView.Revision, "authoritative views diverged: primary=%#v secondary=%#v winner=%#v", primaryView, secondaryView, winner)
 	require.Equal(t, winner.Revision, secondaryView.Revision, "authoritative views diverged: primary=%#v secondary=%#v winner=%#v", primaryView, secondaryView, winner)
@@ -151,7 +153,7 @@ func TestUserSettingsTwoNodePostgreSQLConvergencePublishesOnePrivateRefetchHint(
 	require.Len(t, events, 1, "settings cluster events")
 	payload := events[0].Data
 	require.True(t, bytes.Contains(payload, []byte(winner.Revision.String())))
-	require.True(t, bytes.Contains(payload, []byte(user.ID.String())))
+	require.True(t, bytes.Contains(payload, []byte(account.ID.String())))
 	for _, forbidden := range []string{
 		"private-a", "private-b", "colorTheme", `"source":`, `"idempotency_key":`, `"session_id":`,
 	} {
@@ -202,39 +204,39 @@ func TestUserSettingsUnknownOutcomeReconcilesByReadWithoutContentLeak(t *testing
 	})
 	require.NoError(t, err)
 	const password = "correct horse battery staple"
-	user, err := helper.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
+	account, err := helper.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
 		Username: "settings-unknown-user", Email: "settings-unknown-user@example.edu",
 	}, Password: password})
 	require.NoError(t, err)
-	login, err := helper.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{
-		LoginID: user.Username, Password: password, ClientType: model.SessionClientWeb, Source: "127.0.0.1:1",
+	login, err := helper.App.Identity.Login(ctx, invocation.Invocation{}, identity.LoginCommand{
+		LoginID: account.Username, Password: password, ClientType: model.SessionClientWeb, Source: "127.0.0.1:1",
 	})
 	require.NoError(t, err)
-	principal, err := helper.App.AuthenticateAccess(ctx, login.Tokens.AccessToken)
+	principal, err := helper.App.Identity.AuthenticateAccess(ctx, login.Tokens.AccessToken)
 	require.NoError(t, err)
-	invocation := invocation.New(*principal, model.RequestMetadata{RequestID: "settings-unknown-outcome"})
-	before, err := helper.App.ReadOwnUserSettings(ctx, invocation)
+	inv := invocation.New(*principal, model.RequestMetadata{RequestID: "settings-unknown-outcome"})
+	before, err := helper.App.Users.ReadOwnUserSettings(ctx, inv)
 	require.NoError(t, err)
 	const source = "{\n  // private-comment-marker\n  \"private.visual.key\": \"private-value-marker\",\n}\n"
-	command := app.ReplaceOwnUserSettingsCommand{
+	command := user.ReplaceOwnUserSettingsCommand{
 		Source: source, FormatVersion: 1, ExpectedRevision: before.Revision,
 		IdempotencyKey: "private-idempotency-marker",
 	}
 	uncertain.failNext.Store(true)
-	_, err = helper.App.ReplaceOwnUserSettings(ctx, invocation, command)
+	_, err = helper.App.Users.ReplaceOwnUserSettings(ctx, inv, command)
 	require.True(t, apperror.Is(err, "user_settings.unavailable"), "unknown replacement outcome error = %v", err)
-	authoritative, err := helper.App.ReadOwnUserSettings(ctx, invocation)
+	authoritative, err := helper.App.Users.ReadOwnUserSettings(ctx, inv)
 	require.NoError(t, err)
 	require.Equal(t, source, authoritative.Source)
 	require.NotEqual(t, before.Revision, authoritative.Revision)
-	replayed, err := helper.App.ReplaceOwnUserSettings(ctx, invocation, command)
+	replayed, err := helper.App.Users.ReplaceOwnUserSettings(ctx, inv, command)
 	require.NoError(t, err, "retained replay = %#v", replayed)
 	require.True(t, replayed.Replayed, "retained replay = %#v", replayed)
 	require.Equal(t, authoritative.Revision, replayed.Revision, "retained replay = %#v", replayed)
 	var encodedOutcome string
 	require.NoError(t, persistence.GetMaster().Get(ctx, &encodedOutcome, `
 		SELECT outcome::text FROM command_outcomes
-		WHERE user_id = $1 AND operation = 'user_settings.replace'`, user.ID.String()))
+		WHERE user_id = $1 AND operation = 'user_settings.replace'`, account.ID.String()))
 	for _, surface := range []struct {
 		name  string
 		value string

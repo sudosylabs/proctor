@@ -5,33 +5,40 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package server is Proctor's sole composition root and Node Runtime lifecycle
-// owner. Business policy remains in the application layer.
+// Package server builds and runs one Proctor node. It is the only package that
+// picks concrete infrastructure (PostgreSQL, the file store, cache, mail and
+// cluster adapters) and wires it into the application and its transports.
+// Business rules live in package app, not here.
 //
-// New follows one ordered, inert recipe: acquire concrete infrastructure,
-// transfer it atomically to Platform, borrow a lifecycle-free construction
-// projection, assemble application and transport consumers, discard the
-// projection, and return one Server. Platform owns accepted infrastructure on
-// every acceptance outcome; the root never closes or navigates it afterward.
-// One validated configuration snapshot drives construction, while consumers
-// retain only focused immutable settings and capabilities.
+// New reads the configuration, acquires infrastructure, hands it to the
+// platform, and builds the application, the HTTP API and the WebSocket
+// transport. It never binds a listener or starts background work. Run starts
+// the platform, durable Jobs, WebSocket and HTTP serving in order, marks the
+// node ready, and blocks until shutdown or failure. Close, or a failure during
+// Run, marks the node unready, drains HTTP, and shuts each part down once.
 //
-// Run enters Platform, durable Jobs, WebSocket, listener ownership and HTTP
-// serving in order, publishes readiness, and blocks until shutdown or failure.
-// Failure and Close first make the node unready, drain HTTP when serving began,
-// and dispose Jobs, WebSocket, the HTTP transport and Platform exactly once.
-// The primary listener remains Server-owned until HTTP's first accept handoff;
-// the HTTP runtime owns any configured ACME challenge and forwarding listener.
-// Constructors never bind listeners or start background work.
+// Read these files first:
+//   - server.go: Server, New, Run and the startup order
+//   - infrastructure.go: acquiring concrete adapters and handing them to the platform
+//   - composition.go: the order in which the application and transports are built
+//   - application_dependencies.go: turning configuration into the application's policies and ports
+//   - shutdown.go: the one shutdown order every stop path takes
+//   - testhooks.go: NewForTesting, which builds the same graph with test substitutes
 //
-// NewForTesting uses that same private recipe with concrete adapter
-// substitutions. Its result exposes only Server, the application facade and an
-// HTTP handler; tests retain references to adapters they supplied when they
-// need lifecycle observations.
+// Most of the remaining files each hold one adapter and are named for the two
+// sides it joins: authentication_cache.go (platform cache to the identity
+// service), mail_sender.go (platform mailer to application mail),
+// external_identity_providers.go, realtime_cluster.go, store_cache_cluster.go,
+// cluster_discovery.go, cluster_logger.go, store_slow_operation_log.go,
+// metrics_recorders.go and tracing_adapters.go. An adapter lives here only
+// when the two packages it joins may not import each other. A wrapper that
+// only measures a port lives in package metrics instead (metrics.WrapCache
+// and its siblings).
 //
-// Add infrastructure by extending root acquisition, the ownership-taking
-// Platform contract and the lifecycle-free construction projection together.
-// Add runtime modules by placing construction in the ordered consumer recipe
-// and lifecycle entry/exit in Server. Do not add a second composition path,
-// Platform locator getter, phase override or hidden startup helper.
+// There is one way to build a node. Tests go through NewForTesting, and new
+// infrastructure or runtime modules join the existing construction and
+// startup order rather than adding a second path. The two host commands that
+// need the application, administrator recovery and administrator MFA reset,
+// build an inert node through New and close it. Commands that only read or
+// migrate an installation do not build a node; they live in package operator.
 package server

@@ -65,7 +65,8 @@ func (r SessionRevocationReason) IsValid() bool {
 		SessionRevocationAccountDisabled,
 		SessionRevocationPasswordRemoved,
 		SessionRevocationExternalIdentityUnlinked,
-		SessionRevocationMFAReset, SessionRevocationPasswordReset,
+		SessionRevocationMFAReset,
+		SessionRevocationPasswordReset,
 		SessionRevocationPasswordChanged,
 		SessionRevocationEmailChangeUndone,
 		SessionRevocationRefreshReplay,
@@ -113,7 +114,8 @@ func AllSessionRevocationReasons() []SessionRevocationReason {
 		SessionRevocationInactiveUser,
 		SessionRevocationPasswordChanged,
 		SessionRevocationPasswordRemoved,
-		SessionRevocationMFAReset, SessionRevocationPasswordReset,
+		SessionRevocationMFAReset,
+		SessionRevocationPasswordReset,
 		SessionRevocationRefreshReplay,
 		SessionRevocationUserAllSessions,
 		SessionRevocationUserLogout,
@@ -188,6 +190,7 @@ func (s *Session) PrepareCreate(id SessionID, at time.Time) {
 	if s == nil {
 		return
 	}
+
 	s.ID = id
 	at = TimeUTC(at)
 	s.CreatedAt = at
@@ -198,11 +201,13 @@ func (s *Session) PrepareCreate(id SessionID, at time.Time) {
 	} else {
 		s.AuthenticatedAt = TimeUTC(s.AuthenticatedAt)
 	}
+
 	if s.LastActivityAt.IsZero() || s.LastActivityAt.Before(at) {
 		s.LastActivityAt = at
 	} else {
 		s.LastActivityAt = TimeUTC(s.LastActivityAt)
 	}
+
 	s.IdleExpiresAt = TimeUTC(s.IdleExpiresAt)
 	s.ExpiresAt = TimeUTC(s.ExpiresAt)
 	if s.MFACompletedAt.Valid {
@@ -214,6 +219,7 @@ func (s *Session) PrepareCreate(id SessionID, at time.Time) {
 	if s.RevokedAt.Valid {
 		s.RevokedAt = s.RevokedAt.UTC()
 	}
+
 	s.DeviceID = SanitizeUnicode(s.DeviceID)
 	s.DeviceName = SanitizeUnicode(s.DeviceName)
 	s.AuthenticationMethod = SanitizeUnicode(s.AuthenticationMethod)
@@ -244,6 +250,7 @@ func (s *Session) Validate() error {
 	if !s.ID.IsValid() {
 		return invalidModelError(where, "session", "id", "must be a valid identifier", "")
 	}
+
 	details := "id=" + s.ID.String()
 	if s.CreatedAt.IsZero() || s.UpdatedAt.IsZero() {
 		return invalidModelError(where, "session", "created_at", "must be set", details)
@@ -263,16 +270,27 @@ func (s *Session) Validate() error {
 	if !s.ClientType.IsValid() {
 		return invalidModelError(where, "session", "client_type", "has an unknown value", details)
 	}
+
 	if s.ClientType == SessionClientDesktop {
-		if !s.DesktopRegistrationID.IsValid() || !IsValidDPoPKeyThumbprint(s.DPoPKeyThumbprint) ||
-			!IsValidDesktopRelease(s.DesktopRelease) || !IsValidDesktopBuildID(s.DesktopBuildID) ||
-			!s.DesktopPlatform.IsValid() || !s.DesktopArchitecture.IsValid() || s.DesktopRealtimeProtocol < 1 {
+		if !s.DesktopRegistrationID.IsValid() ||
+			!IsValidDPoPKeyThumbprint(s.DPoPKeyThumbprint) ||
+			!IsValidDesktopRelease(s.DesktopRelease) ||
+			!IsValidDesktopBuildID(s.DesktopBuildID) ||
+			!s.DesktopPlatform.IsValid() ||
+			!s.DesktopArchitecture.IsValid() ||
+			s.DesktopRealtimeProtocol < 1 {
 			return invalidModelError(where, "session", "desktop_registration", "is required and valid for a Desktop Session", details)
 		}
-	} else if !s.DesktopRegistrationID.IsZero() || s.DPoPKeyThumbprint != "" || s.DesktopRelease != "" ||
-		s.DesktopBuildID != "" || s.DesktopPlatform != "" || s.DesktopArchitecture != "" || s.DesktopRealtimeProtocol != 0 {
+	} else if !s.DesktopRegistrationID.IsZero() ||
+		s.DPoPKeyThumbprint != "" ||
+		s.DesktopRelease != "" ||
+		s.DesktopBuildID != "" ||
+		s.DesktopPlatform != "" ||
+		s.DesktopArchitecture != "" ||
+		s.DesktopRealtimeProtocol != 0 {
 		return invalidModelError(where, "session", "desktop_registration", "must be empty for a non-Desktop Session", details)
 	}
+
 	if len(s.DeviceID) > SessionDeviceIDMaxLength {
 		return invalidModelError(where, "session", "device_id", "is too long", details)
 	}
@@ -282,6 +300,7 @@ func (s *Session) Validate() error {
 	if err := s.validateAuthentication(details); err != nil {
 		return err
 	}
+
 	return s.validateLifecycle(details)
 }
 
@@ -293,6 +312,7 @@ func (s *Session) validateAuthentication(details string) error {
 		!validName.MatchString(s.AuthenticationMethod) {
 		return invalidModelError(where, "session", "authentication_method", "has an invalid format", details)
 	}
+
 	if s.AuthenticationProviderID == "" && s.AuthenticationMethod != "password" {
 		return invalidModelError(where, "session", "authentication_provider_id", "is required for an external authentication method", details)
 	}
@@ -311,10 +331,13 @@ func (s *Session) validateAuthentication(details string) error {
 	if s.AuthenticatedAt.IsZero() || s.AuthenticatedAt.After(s.CreatedAt) {
 		return invalidModelError(where, "session", "authenticated_at", "must be set and not follow create_at", details)
 	}
-	if s.ReauthenticatedAt.Valid && (s.ReauthenticatedAt.Time.Before(s.AuthenticatedAt) ||
-		s.ReauthenticatedAt.Time.After(s.UpdatedAt)) {
+
+	if s.ReauthenticatedAt.Valid &&
+		(s.ReauthenticatedAt.Time.Before(s.AuthenticatedAt) ||
+			s.ReauthenticatedAt.Time.After(s.UpdatedAt)) {
 		return invalidModelError(where, "session", "reauthenticated_at", "is inconsistent", details)
 	}
+
 	if s.AuthenticationStrength == AuthenticationMultiFactor {
 		if !s.MFACompletedAt.Valid ||
 			s.MFACompletedAt.Time.Before(s.AuthenticatedAt) ||
@@ -322,6 +345,7 @@ func (s *Session) validateAuthentication(details string) error {
 			return invalidModelError(where, "session", "mfa_completed_at", "is inconsistent", details)
 		}
 	}
+
 	if s.AuthenticationStrength == AuthenticationSingleFactor && s.MFACompletedAt.Valid {
 		return invalidModelError(
 			where,
@@ -331,6 +355,7 @@ func (s *Session) validateAuthentication(details string) error {
 			details,
 		)
 	}
+
 	return nil
 }
 
@@ -343,6 +368,7 @@ func (s *Session) validateLifecycle(details string) error {
 	if !s.ExpiresAt.After(s.CreatedAt) {
 		return invalidModelError(where, "session", "expires_at", "must be after create_at", details)
 	}
+
 	if !s.IdleExpiresAt.After(s.LastActivityAt) || s.IdleExpiresAt.After(s.ExpiresAt) {
 		return invalidModelError(
 			where,
@@ -352,6 +378,7 @@ func (s *Session) validateLifecycle(details string) error {
 			details,
 		)
 	}
+
 	if s.ArchivedAt.Valid && s.ArchivedAt.Time.Before(s.CreatedAt) {
 		return invalidModelError(where, "session", "archived_at", "must not precede created_at", details)
 	}
@@ -361,6 +388,7 @@ func (s *Session) validateLifecycle(details string) error {
 	if utf8.RuneCountInString(string(s.RevocationReason)) > SessionRevocationMaxRunes {
 		return invalidModelError(where, "session", "revocation_reason", "is too long", details)
 	}
+
 	if !s.RevokedAt.Valid && s.RevocationReason != "" {
 		return invalidModelError(
 			where,
@@ -370,6 +398,7 @@ func (s *Session) validateLifecycle(details string) error {
 			details,
 		)
 	}
+
 	if s.RevokedAt.Valid && !s.RevocationReason.IsValid() {
 		return invalidModelError(
 			where,
@@ -379,6 +408,7 @@ func (s *Session) validateLifecycle(details string) error {
 			details,
 		)
 	}
+
 	return nil
 }
 

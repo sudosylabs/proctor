@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -31,29 +32,38 @@ type browserActivityCursorWire struct {
 }
 
 func encodeBrowserActivityCursor(cursor browserActivityCursor) (string, error) {
-	return encodeOpaqueCursor(browserActivityCursorWire{
-		ReceivedAt: model.FormatRFC3339(cursor.ReceivedAt), SourceSessionID: string(cursor.SourceSessionID), Sequence: cursor.Sequence,
+	return route.EncodeCursor(browserActivityCursorWire{
+		ReceivedAt:      model.FormatRFC3339(cursor.ReceivedAt),
+		SourceSessionID: string(cursor.SourceSessionID),
+		Sequence:        cursor.Sequence,
 	}, browserActivityCursorSpec())
 }
 
 func decodeBrowserActivityCursor(raw string) (browserActivityCursor, error) {
-	wire, err := decodeOpaqueCursor(raw, browserActivityCursorSpec())
+	wire, err := route.DecodeCursor(raw, browserActivityCursorSpec())
 	if err != nil {
 		return browserActivityCursor{}, err
 	}
+
 	receivedAt, _ := model.ParseRFC3339(wire.ReceivedAt)
-	return browserActivityCursor{ReceivedAt: model.TimeUTC(receivedAt), SourceSessionID: model.BrowserSourceSessionID(wire.SourceSessionID), Sequence: wire.Sequence}, nil
+	return browserActivityCursor{
+		ReceivedAt:      model.TimeUTC(receivedAt),
+		SourceSessionID: model.BrowserSourceSessionID(wire.SourceSessionID),
+		Sequence:        wire.Sequence,
+	}, nil
 }
 
-func browserActivityCursorSpec() opaqueCursorSpec[browserActivityCursorWire] {
-	return opaqueCursorSpec[browserActivityCursorWire]{
-		label: "Browser Activity", maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members: []string{"received_at", "source_session_id", "sequence"},
-		validate: func(cursor browserActivityCursorWire) error {
+func browserActivityCursorSpec() route.CursorSpec[browserActivityCursorWire] {
+	return route.CursorSpec[browserActivityCursorWire]{
+		Label:                "Browser Activity",
+		MaximumEncodedLength: route.DefaultMaximumCursorLength,
+		Members:              []string{"received_at", "source_session_id", "sequence"},
+		Validate: func(cursor browserActivityCursorWire) error {
 			receivedAt, err := model.ParseRFC3339(cursor.ReceivedAt)
 			if err != nil || receivedAt.IsZero() || !model.BrowserSourceSessionID(cursor.SourceSessionID).IsValid() || cursor.Sequence < 1 {
 				return errors.New("invalid Browser Activity keyset")
 			}
+
 			return nil
 		},
 	}
@@ -71,12 +81,14 @@ type examAttemptManagerCursorWire struct {
 
 func encodeExamAttemptManagerCursor(cursor examAttemptManagerCursor) (string, error) {
 	wire := examAttemptManagerCursorWire{
-		CreatedAt: model.FormatRFC3339(cursor.CreatedAt), ID: cursor.ID.String()}
-	return encodeOpaqueCursor(wire, examAttemptManagerCursorSpec())
+		CreatedAt: model.FormatRFC3339(cursor.CreatedAt),
+		ID:        cursor.ID.String(),
+	}
+	return route.EncodeCursor(wire, examAttemptManagerCursorSpec())
 }
 
 func decodeExamAttemptManagerCursor(raw string) (examAttemptManagerCursor, error) {
-	wire, err := decodeOpaqueCursor(raw, examAttemptManagerCursorSpec())
+	wire, err := route.DecodeCursor(raw, examAttemptManagerCursorSpec())
 	if err != nil {
 		return examAttemptManagerCursor{}, err
 	}
@@ -85,15 +97,17 @@ func decodeExamAttemptManagerCursor(raw string) (examAttemptManagerCursor, error
 	return examAttemptManagerCursor{CreatedAt: model.TimeUTC(createdAt), ID: id}, nil
 }
 
-func examAttemptManagerCursorSpec() opaqueCursorSpec[examAttemptManagerCursorWire] {
-	return opaqueCursorSpec[examAttemptManagerCursorWire]{
-		label: "Exam Attempt", maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members: []string{"created_at", "id"},
-		validate: func(cursor examAttemptManagerCursorWire) error {
+func examAttemptManagerCursorSpec() route.CursorSpec[examAttemptManagerCursorWire] {
+	return route.CursorSpec[examAttemptManagerCursorWire]{
+		Label:                "Exam Attempt",
+		MaximumEncodedLength: route.DefaultMaximumCursorLength,
+		Members:              []string{"created_at", "id"},
+		Validate: func(cursor examAttemptManagerCursorWire) error {
 			createdAt, err := model.ParseRFC3339(cursor.CreatedAt)
 			if err != nil || createdAt.IsZero() || !model.ExamAttemptID(cursor.ID).IsValid() {
 				return errors.New("invalid Exam Attempt keyset")
 			}
+
 			return nil
 		},
 	}
@@ -133,13 +147,24 @@ func nativeSecuritySummaryFrom(value *model.NativeSecuritySummary) *nativeSecuri
 	if value == nil {
 		return nil
 	}
-	response := &nativeSecuritySummaryResponse{RetainedConditionRecords: value.RetainedConditionRecords, LiveCoverageAvailable: value.LiveCoverageAvailable}
+
+	response := &nativeSecuritySummaryResponse{
+		RetainedConditionRecords: value.RetainedConditionRecords,
+		LiveCoverageAvailable:    value.LiveCoverageAvailable,
+	}
 	if value.Sources != nil {
 		response.Sources = make([]nativeSourceHealthSummaryResponse, 0, len(value.Sources))
 	}
+
 	for _, source := range value.Sources {
-		response.Sources = append(response.Sources, nativeSourceHealthSummaryResponse{SourceID: source.SourceID, Health: source.Health, Permission: source.Permission, Complete: source.Complete})
+		response.Sources = append(response.Sources, nativeSourceHealthSummaryResponse{
+			SourceID:   source.SourceID,
+			Health:     source.Health,
+			Permission: source.Permission,
+			Complete:   source.Complete,
+		})
 	}
+
 	return response
 }
 
@@ -315,108 +340,157 @@ type endExamAttemptByManagerRequest struct {
 	Reason                  string `json:"reason"`
 }
 
-func (m examAttemptHTTPModule) endByManager(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) endByManager(request route.Request) (route.Result, error) {
 	examID, sittingID, attemptID, err := managedExamAttemptIDs(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	var body endExamAttemptByManagerRequest
 	if err = decodeCandidateWorkspaceJSON(request, &body); err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if body.ExpectedAttemptRevision < 1 {
-		return operationResult{}, invalidRequestError(errors.New("must be positive"))
+		return route.Result{}, route.InvalidRequest(errors.New("must be positive"))
 	}
-	receipt, err := m.application.EndExamAttemptByManager(request.context, request.invocation(),
-		attempt.ManagerEndCommand{ExamID: examID, SittingID: sittingID, AttemptID: attemptID,
-			ExpectedAttemptRevision: body.ExpectedAttemptRevision, PrivateReason: body.Reason,
-			IdempotencyKey: request.idempotencyKey})
+
+	receipt, err := h.app.EndExamAttemptByManager(
+		request.Context,
+		request.Invocation(),
+		attempt.ManagerEndCommand{
+			ExamID:                  examID,
+			SittingID:               sittingID,
+			AttemptID:               attemptID,
+			ExpectedAttemptRevision: body.ExpectedAttemptRevision,
+			PrivateReason:           body.Reason,
+			IdempotencyKey:          request.IdempotencyKey,
+		},
+	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	response := examSubmissionReceiptResponse{BrowserActivity: receipt.BrowserActivity, SubmissionID: receipt.SubmissionID.String(),
-		ReceiptCode: receipt.ReceiptCode.Display(), ExamAttemptID: receipt.AttemptID.String(), ExamRevisionID: receipt.ExamRevisionID.String(),
-		State: string(receipt.State), WorkspaceCursor: receipt.WorkspaceCursor,
-		ManifestDigest: receipt.ManifestDigest, SubmittedAt: model.FormatRFC3339(receipt.SubmittedAt)}
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+
+	response := examSubmissionReceiptResponse{
+		BrowserActivity: receipt.BrowserActivity,
+		SubmissionID:    receipt.SubmissionID.String(),
+		ReceiptCode:     receipt.ReceiptCode.Display(),
+		ExamAttemptID:   receipt.AttemptID.String(),
+		ExamRevisionID:  receipt.ExamRevisionID.String(),
+		State:           string(receipt.State),
+		WorkspaceCursor: receipt.WorkspaceCursor,
+		ManifestDigest:  receipt.ManifestDigest,
+		SubmittedAt:     model.FormatRFC3339(receipt.SubmittedAt),
+	}
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
-func (m examAttemptHTTPModule) listCandidateStatuses(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) listCandidateStatuses(request route.Request) (route.Result, error) {
 	examID, sittingID, err := managedExamAttemptScope(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	query := attempt.SittingCandidateStatusesQuery{ExamID: examID, SittingID: sittingID, Limit: 50}
-	values := request.request.URL.Query()
+	values := request.HTTP.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
 		query.Limit, err = strconv.Atoi(raw)
 		if err != nil || query.Limit < 1 || query.Limit > 200 {
-			return operationResult{}, invalidRequestError(errors.New("must be between 1 and 200"))
+			return route.Result{}, route.InvalidRequest(errors.New("must be between 1 and 200"))
 		}
 	}
+
 	if raw := values.Get("cursor"); raw != "" {
-		cursor, decodeErr := decodeOpaqueCursor(raw, sittingCandidateStatusCursorSpec())
+		cursor, decodeErr := route.DecodeCursor(raw, sittingCandidateStatusCursorSpec())
 		if decodeErr != nil {
-			return operationResult{}, invalidRequestError(decodeErr)
+			return route.Result{}, route.InvalidRequest(decodeErr)
 		}
+
 		query.AfterCandidateUserID = model.UserID(cursor.CandidateUserID)
 	}
-	page, err := m.application.ListSittingCandidateStatuses(request.context, request.invocation(), query)
+
+	page, err := h.app.ListSittingCandidateStatuses(request.Context, request.Invocation(), query)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	response := sittingCandidateStatusListResponse{ServerTime: model.FormatRFC3339(page.ServerTime),
-		ExamID: page.ExamID.String(), ExamSittingID: page.SittingID.String(), SittingState: page.SittingState,
-		SittingRevision: page.SittingRevision, Items: make([]sittingCandidateStatusItemResponse, 0, len(page.Items))}
+
+	response := sittingCandidateStatusListResponse{
+		ServerTime:      model.FormatRFC3339(page.ServerTime),
+		ExamID:          page.ExamID.String(),
+		ExamSittingID:   page.SittingID.String(),
+		SittingState:    page.SittingState,
+		SittingRevision: page.SittingRevision,
+		Items:           make([]sittingCandidateStatusItemResponse, 0, len(page.Items)),
+	}
 	for _, item := range page.Items {
-		mapped := sittingCandidateStatusItemResponse{Candidate: sittingCandidateIdentityResponse{UserID: item.Candidate.UserID.String(),
-			Username: item.Candidate.Username, DisplayName: item.Candidate.DisplayName},
-			CurrentClassMembership: item.CurrentClassMembership,
-			Presence:               sittingCandidatePresenceResponse{State: item.Presence.State},
-			NativeSecurity:         nativeSecuritySummaryFrom(item.NativeSecurity), IntegrityAttentionCount: item.IntegrityAttentionCount}
+		mapped := sittingCandidateStatusItemResponse{
+			Candidate: sittingCandidateIdentityResponse{
+				UserID:      item.Candidate.UserID.String(),
+				Username:    item.Candidate.Username,
+				DisplayName: item.Candidate.DisplayName,
+			},
+			CurrentClassMembership:  item.CurrentClassMembership,
+			Presence:                sittingCandidatePresenceResponse{State: item.Presence.State},
+			NativeSecurity:          nativeSecuritySummaryFrom(item.NativeSecurity),
+			IntegrityAttentionCount: item.IntegrityAttentionCount,
+		}
 		if item.Presence.LastLeaseRenewedAt.Valid {
 			value := model.FormatRFC3339(item.Presence.LastLeaseRenewedAt.Time)
 			mapped.Presence.LastLeaseRenewedAt = &value
 		}
+
 		if item.Presence.LeaseExpiresAt.Valid {
 			value := model.FormatRFC3339(item.Presence.LeaseExpiresAt.Time)
 			mapped.Presence.LeaseExpiresAt = &value
 		}
+
 		if item.Attempt != nil {
-			mapped.Attempt = &sittingCandidateAttemptResponse{ID: item.Attempt.ID.String(), State: item.Attempt.State,
-				Revision: item.Attempt.Revision, CreatedAt: model.FormatRFC3339(item.Attempt.CreatedAt),
-				UpdatedAt: model.FormatRFC3339(item.Attempt.UpdatedAt)}
+			mapped.Attempt = &sittingCandidateAttemptResponse{
+				ID:        item.Attempt.ID.String(),
+				State:     item.Attempt.State,
+				Revision:  item.Attempt.Revision,
+				CreatedAt: model.FormatRFC3339(item.Attempt.CreatedAt),
+				UpdatedAt: model.FormatRFC3339(item.Attempt.UpdatedAt),
+			}
 			if item.Attempt.Submission != nil {
 				mapped.Attempt.Submission = &sittingCandidateSubmissionResponse{ID: item.Attempt.Submission.ID.String(),
 					SubmittedAt: model.FormatRFC3339(item.Attempt.Submission.SubmittedAt),
 					Provenance:  item.Attempt.Submission.Provenance}
 			}
 		}
+
 		if item.Suspension != nil {
-			mapped.Suspension = &sittingCandidateSuspensionResponse{ID: item.Suspension.ID.String(),
-				CandidateReason: item.Suspension.CandidateReason, ReallowAvailable: item.Suspension.ReallowAvailable}
+			mapped.Suspension = &sittingCandidateSuspensionResponse{
+				ID:               item.Suspension.ID.String(),
+				CandidateReason:  item.Suspension.CandidateReason,
+				ReallowAvailable: item.Suspension.ReallowAvailable,
+			}
 		}
+
 		response.Items = append(response.Items, mapped)
 	}
+
 	if page.HasMore {
 		if len(page.Items) == 0 {
-			return operationResult{}, errUnpresentableResult
+			return route.Result{}, route.ErrUnpresentable
 		}
-		response.NextCursor, err = encodeOpaqueCursor(sittingCandidateStatusCursor{
-			Kind: sittingCandidateStatusCursorKind, CandidateUserID: page.Items[len(page.Items)-1].Candidate.UserID.String(),
+
+		response.NextCursor, err = route.EncodeCursor(sittingCandidateStatusCursor{
+			Kind:            sittingCandidateStatusCursorKind,
+			CandidateUserID: page.Items[len(page.Items)-1].Candidate.UserID.String(),
 		}, sittingCandidateStatusCursorSpec())
 		if err != nil {
-			return operationResult{}, unpresentableResult(err)
+			return route.Result{}, route.Unpresentable(err)
 		}
 	}
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
-func sittingCandidateStatusCursorSpec() opaqueCursorSpec[sittingCandidateStatusCursor] {
-	return opaqueCursorSpec[sittingCandidateStatusCursor]{label: "Sitting candidate status",
-		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members:              []string{"kind", "candidate_user_id"},
-		validate: func(cursor sittingCandidateStatusCursor) error {
+func sittingCandidateStatusCursorSpec() route.CursorSpec[sittingCandidateStatusCursor] {
+	return route.CursorSpec[sittingCandidateStatusCursor]{Label: "Sitting candidate status",
+		MaximumEncodedLength: route.DefaultMaximumCursorLength,
+		Members:              []string{"kind", "candidate_user_id"},
+		Validate: func(cursor sittingCandidateStatusCursor) error {
 			if cursor.Kind != sittingCandidateStatusCursorKind || !model.UserID(cursor.CandidateUserID).IsValid() {
 				return errors.New("invalid Sitting candidate-status keyset")
 			}
@@ -424,205 +498,272 @@ func sittingCandidateStatusCursorSpec() opaqueCursorSpec[sittingCandidateStatusC
 		}}
 }
 
-func (m examAttemptHTTPModule) reallow(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) reallow(request route.Request) (route.Result, error) {
 	examID, sittingID, attemptID, err := managedExamAttemptIDs(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	var body reallowExamAttemptRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
+
 	suspensionID, err := model.ParseAttemptSuspensionID(body.SuspensionID)
 	if err != nil {
-		return operationResult{}, invalidRequestError(err)
+		return route.Result{}, route.InvalidRequest(err)
 	}
-	result, err := m.application.ReallowExamAttempt(request.context, request.invocation(), attempt.ReallowCommand{
-		ExamID: examID, SittingID: sittingID, AttemptID: attemptID, SuspensionID: suspensionID,
-		ExpectedAttemptRevision: body.ExpectedAttemptRevision, PrivateReason: body.Reason, IdempotencyKey: request.idempotencyKey,
+
+	result, err := h.app.ReallowExamAttempt(request.Context, request.Invocation(), attempt.ReallowCommand{
+		ExamID:                  examID,
+		SittingID:               sittingID,
+		AttemptID:               attemptID,
+		SuspensionID:            suspensionID,
+		ExpectedAttemptRevision: body.ExpectedAttemptRevision,
+		PrivateReason:           body.Reason,
+		IdempotencyKey:          request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	response := examAttemptReallowResponse{ExamAttemptID: result.Attempt.ID.String(), ExamSittingID: result.SittingID.String(),
-		State: string(result.Attempt.State), AttemptRevision: result.Attempt.Revision, SuspensionID: result.Suspension.ID.String(),
-		SuspensionState: string(result.Suspension.State), CandidateReason: string(result.Suspension.CandidateReason),
-		ReallowedByUserID: result.Suspension.ReallowedByUserID.String()}
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+
+	response := examAttemptReallowResponse{
+		ExamAttemptID:     result.Attempt.ID.String(),
+		ExamSittingID:     result.SittingID.String(),
+		State:             string(result.Attempt.State),
+		AttemptRevision:   result.Attempt.Revision,
+		SuspensionID:      result.Suspension.ID.String(),
+		SuspensionState:   string(result.Suspension.State),
+		CandidateReason:   string(result.Suspension.CandidateReason),
+		ReallowedByUserID: result.Suspension.ReallowedByUserID.String(),
+	}
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
-func (m examAttemptHTTPModule) suspend(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) suspend(request route.Request) (route.Result, error) {
 	examID, sittingID, attemptID, err := managedExamAttemptIDs(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	var body suspendExamAttemptRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 	if body.ExpectedAttemptRevision < 1 {
-		return operationResult{}, invalidRequestError(errors.New("expected_revision must be positive"))
+		return route.Result{}, route.InvalidRequest(errors.New("expected_revision must be positive"))
 	}
-	result, err := m.application.SuspendExamAttempt(request.context, request.invocation(), attempt.ManualSuspensionCommand{
-		ExamID: examID, SittingID: sittingID, AttemptID: attemptID,
-		ExpectedAttemptRevision: body.ExpectedAttemptRevision, PrivateReason: body.Reason, IdempotencyKey: request.idempotencyKey,
+
+	result, err := h.app.SuspendExamAttempt(request.Context, request.Invocation(), attempt.ManualSuspensionCommand{
+		ExamID:                  examID,
+		SittingID:               sittingID,
+		AttemptID:               attemptID,
+		ExpectedAttemptRevision: body.ExpectedAttemptRevision,
+		PrivateReason:           body.Reason,
+		IdempotencyKey:          request.IdempotencyKey,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	response := examAttemptSuspendResponse{ExamAttemptID: result.Attempt.ID.String(), ExamSittingID: result.SittingID.String(),
-		State: string(result.Attempt.State), AttemptRevision: result.Attempt.Revision, SuspensionID: result.Suspension.ID.String(),
-		SuspensionState: string(result.Suspension.State), Source: string(result.Suspension.Source),
-		CandidateReason: string(result.Suspension.CandidateReason), SuspendedByUserID: result.Suspension.SuspendedByUserID.String(),
-		ConnectionClosed: result.ConnectionClosed}
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+
+	response := examAttemptSuspendResponse{
+		ExamAttemptID:     result.Attempt.ID.String(),
+		ExamSittingID:     result.SittingID.String(),
+		State:             string(result.Attempt.State),
+		AttemptRevision:   result.Attempt.Revision,
+		SuspensionID:      result.Suspension.ID.String(),
+		SuspensionState:   string(result.Suspension.State),
+		Source:            string(result.Suspension.Source),
+		CandidateReason:   string(result.Suspension.CandidateReason),
+		SuspendedByUserID: result.Suspension.SuspendedByUserID.String(),
+		ConnectionClosed:  result.ConnectionClosed,
+	}
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
-func (m examAttemptHTTPModule) getManaged(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) getManaged(request route.Request) (route.Result, error) {
 	examID, sittingID, attemptID, err := managedExamAttemptIDs(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	view, err := m.application.GetExamAttempt(request.context, request.invocation(), attempt.GetManagedAttemptQuery{
-		ExamID: examID, SittingID: sittingID, AttemptID: attemptID,
-	})
+
+	view, err := h.app.GetExamAttempt(request.Context, request.Invocation(), examID, sittingID, attemptID)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	response, err := examAttemptManagerResponseFromView(view)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
-func (m examAttemptHTTPModule) listManaged(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) listManaged(request route.Request) (route.Result, error) {
 	examID, sittingID, err := managedExamAttemptScope(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	query := attempt.ListManagedAttemptsQuery{ExamID: examID, SittingID: sittingID, Limit: 50}
-	values := request.request.URL.Query()
+	values := request.HTTP.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
 		query.Limit, err = strconv.Atoi(raw)
 		if err != nil || query.Limit < 1 || query.Limit > 200 {
-			return operationResult{}, invalidRequestError(errors.New("must be between 1 and 200"))
+			return route.Result{}, route.InvalidRequest(errors.New("must be between 1 and 200"))
 		}
 	}
+
 	seenStates := make(map[model.ExamAttemptState]struct{})
 	for _, raw := range values["state"] {
 		state := model.ExamAttemptState(raw)
 		switch state {
 		case model.ExamAttemptReady, model.ExamAttemptActive, model.ExamAttemptSuspended, model.ExamAttemptSubmitted:
 		default:
-			return operationResult{}, invalidRequestError(errors.New("is not supported"))
+			return route.Result{}, route.InvalidRequest(errors.New("is not supported"))
 		}
+
 		if _, duplicate := seenStates[state]; duplicate {
-			return operationResult{}, invalidRequestError(errors.New("must not contain duplicates"))
+			return route.Result{}, route.InvalidRequest(errors.New("must not contain duplicates"))
 		}
+
 		seenStates[state] = struct{}{}
 		query.States = append(query.States, state)
 	}
+
 	if raw := values.Get("cursor"); raw != "" {
 		cursor, decodeErr := decodeExamAttemptManagerCursor(raw)
 		if decodeErr != nil {
-			return operationResult{}, invalidRequestError(decodeErr)
+			return route.Result{}, route.InvalidRequest(decodeErr)
 		}
+
 		query.BeforeCreatedAt, query.BeforeAttemptID = cursor.CreatedAt, cursor.ID
 	}
-	page, err := m.application.ListExamAttempts(request.context, request.invocation(), query)
+
+	page, err := h.app.ListExamAttempts(request.Context, request.Invocation(), query)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	response := examAttemptManagerListResponse{Items: make([]examAttemptManagerResponse, 0, len(page.Items))}
 	for _, item := range page.Items {
 		mapped, mapErr := examAttemptManagerResponseFromView(item)
 		if mapErr != nil {
-			return operationResult{}, mapErr
+			return route.Result{}, mapErr
 		}
+
 		response.Items = append(response.Items, mapped)
 	}
+
 	if page.HasMore {
 		if len(page.Items) == 0 || page.Items[len(page.Items)-1].Attempt == nil {
-			return operationResult{}, errors.New("Exam Attempt application returned an invalid page")
+			return route.Result{}, errors.New("Exam Attempt application returned an invalid page")
 		}
+
 		last := page.Items[len(page.Items)-1].Attempt
 		response.NextCursor, err = encodeExamAttemptManagerCursor(examAttemptManagerCursor{CreatedAt: last.CreatedAt, ID: last.ID})
 		if err != nil {
-			return operationResult{}, unpresentableResult(err)
+			return route.Result{}, route.Unpresentable(err)
 		}
 	}
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
-func (m examAttemptHTTPModule) listBrowserActivity(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) listBrowserActivity(request route.Request) (route.Result, error) {
 	examID, sittingID, attemptID, err := managedExamAttemptIDs(request)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	query := attempt.BrowserActivityPageQuery{ExamID: examID, SittingID: sittingID, AttemptID: attemptID, Limit: 50}
-	values := request.request.URL.Query()
+	values := request.HTTP.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
 		query.Limit, err = strconv.Atoi(raw)
 		if err != nil || query.Limit < 1 || query.Limit > 200 {
-			return operationResult{}, invalidRequestError(errors.New("must be between 1 and 200"))
+			return route.Result{}, route.InvalidRequest(errors.New("must be between 1 and 200"))
 		}
 	}
+
 	if raw := values.Get("cursor"); raw != "" {
 		cursor, decodeErr := decodeBrowserActivityCursor(raw)
 		if decodeErr != nil {
-			return operationResult{}, invalidRequestError(decodeErr)
+			return route.Result{}, route.InvalidRequest(decodeErr)
 		}
+
 		query.AfterReceivedAt, query.AfterSourceID, query.AfterSequence = cursor.ReceivedAt, cursor.SourceSessionID, cursor.Sequence
 	}
-	page, err := m.application.ListExamAttemptBrowserActivity(request.context, request.invocation(), query)
+
+	page, err := h.app.ListExamAttemptBrowserActivity(request.Context, request.Invocation(), query)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	response := browserActivityListResponse{Items: make([]browserActivityItemResponse, 0, len(page.Items))}
 	for _, record := range page.Items {
 		event := record.Event
-		item := browserActivityItemResponse{RedirectFromSequence: event.RedirectFromSequence, SourceSessionID: string(record.SourceSessionID), Generation: record.Generation,
-			Sequence: event.Sequence, Kind: event.Kind, PolicyRevision: event.PolicyRevisionID.String(),
-			ClientOccurred: model.FormatRFC3339(event.ClientOccurredAt), MatchedRuleID: event.MatchedRuleID,
-			BlockReason: event.BlockReason, ReceivedAt: model.FormatRFC3339(event.ReceivedAt)}
-		if event.Location != nil {
-			item.Location = &browserActivityLocationResponse{Scheme: event.Location.Scheme, Host: event.Location.Host, Port: event.Location.Port, Path: event.Location.Path}
+		item := browserActivityItemResponse{
+			RedirectFromSequence: event.RedirectFromSequence,
+			SourceSessionID:      string(record.SourceSessionID),
+			Generation:           record.Generation,
+			Sequence:             event.Sequence,
+			Kind:                 event.Kind,
+			PolicyRevision:       event.PolicyRevisionID.String(),
+			ClientOccurred:       model.FormatRFC3339(event.ClientOccurredAt),
+			MatchedRuleID:        event.MatchedRuleID,
+			BlockReason:          event.BlockReason,
+			ReceivedAt:           model.FormatRFC3339(event.ReceivedAt),
 		}
+		if event.Location != nil {
+			item.Location = &browserActivityLocationResponse{
+				Scheme: event.Location.Scheme,
+				Host:   event.Location.Host,
+				Port:   event.Location.Port,
+				Path:   event.Location.Path,
+			}
+		}
+
 		response.Items = append(response.Items, item)
 	}
+
 	if page.HasMore {
 		if len(page.Items) == 0 {
-			return operationResult{}, errors.New("Browser Activity application returned an invalid page")
+			return route.Result{}, errors.New("Browser Activity application returned an invalid page")
 		}
+
 		last := page.Items[len(page.Items)-1]
-		response.NextCursor, err = encodeBrowserActivityCursor(browserActivityCursor{ReceivedAt: last.Event.ReceivedAt,
-			SourceSessionID: last.SourceSessionID, Sequence: last.Event.Sequence})
+		response.NextCursor, err = encodeBrowserActivityCursor(browserActivityCursor{
+			ReceivedAt:      last.Event.ReceivedAt,
+			SourceSessionID: last.SourceSessionID,
+			Sequence:        last.Event.Sequence,
+		})
 		if err != nil {
-			return operationResult{}, unpresentableResult(err)
+			return route.Result{}, route.Unpresentable(err)
 		}
 	}
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
-func managedExamAttemptScope(request operationRequest) (model.ExamID, model.ExamSittingID, error) {
-	examID, err := request.params.RequireExamID()
+func managedExamAttemptScope(request route.Request) (model.ExamID, model.ExamSittingID, error) {
+	examID, err := route.PathID[model.ExamID](request, "exam_id")
 	if err != nil {
 		return "", "", err
 	}
-	sittingID, err := request.params.RequireExamSittingID()
+	sittingID, err := route.PathID[model.ExamSittingID](request, "exam_sitting_id")
 	if err != nil {
 		return "", "", err
 	}
 	return examID, sittingID, nil
 }
 
-func managedExamAttemptIDs(request operationRequest) (model.ExamID, model.ExamSittingID, model.ExamAttemptID, error) {
+func managedExamAttemptIDs(request route.Request) (model.ExamID, model.ExamSittingID, model.ExamAttemptID, error) {
 	examID, sittingID, err := managedExamAttemptScope(request)
 	if err != nil {
 		return "", "", "", err
 	}
-	attemptID, err := request.params.RequireExamAttemptID()
+	attemptID, err := route.PathID[model.ExamAttemptID](request, "exam_attempt_id")
 	if err != nil {
 		return "", "", "", err
 	}
@@ -633,29 +774,65 @@ func examAttemptManagerResponseFromView(view store.ExamAttemptManagerSnapshot) (
 	if view.Attempt == nil || view.Workspace == nil {
 		return examAttemptManagerResponse{}, errors.New("Exam Attempt application returned an incomplete manager projection")
 	}
-	attempt, workspace := view.Attempt, view.Workspace
-	response := examAttemptManagerResponse{ID: attempt.ID.String(), ExamID: attempt.ExamID.String(), SittingID: attempt.SittingID.String(),
-		CandidateUserID: attempt.CandidateUserID.String(), AdmissionRevisionID: attempt.AdmissionRevisionID.String(), State: string(attempt.State),
-		CreatedAt: model.FormatRFC3339(attempt.CreatedAt), UpdatedAt: model.FormatRFC3339(attempt.UpdatedAt),
-		SubmittedAt: attempt.SubmittedAt.FormatRFC3339(), Revision: attempt.Revision,
-		Workspace: examAttemptWorkspaceResponse{ID: workspace.ID.String(), Cursor: workspace.Cursor,
-			CreatedAt: model.FormatRFC3339(workspace.CreatedAt), UpdatedAt: model.FormatRFC3339(workspace.UpdatedAt)}}
+
+	record, workspace := view.Attempt, view.Workspace
+	response := examAttemptManagerResponse{
+		ID:                  record.ID.String(),
+		ExamID:              record.ExamID.String(),
+		SittingID:           record.SittingID.String(),
+		CandidateUserID:     record.CandidateUserID.String(),
+		AdmissionRevisionID: record.AdmissionRevisionID.String(),
+		State:               string(record.State),
+		CreatedAt:           model.FormatRFC3339(record.CreatedAt),
+		UpdatedAt:           model.FormatRFC3339(record.UpdatedAt),
+		SubmittedAt:         record.SubmittedAt.FormatRFC3339(),
+		Revision:            record.Revision,
+		Workspace: examAttemptWorkspaceResponse{
+			ID:        workspace.ID.String(),
+			Cursor:    workspace.Cursor,
+			CreatedAt: model.FormatRFC3339(workspace.CreatedAt),
+			UpdatedAt: model.FormatRFC3339(workspace.UpdatedAt),
+		},
+	}
 	if participation := view.LatestParticipation; participation != nil {
-		response.LatestParticipation = &examAttemptParticipationResponse{ID: participation.ID.String(), State: string(participation.State),
-			Generation: participation.Generation, RenewalSequence: participation.RenewalSequence,
-			StartedAt: model.FormatRFC3339(participation.StartedAt), UpdatedAt: model.FormatRFC3339(participation.UpdatedAt),
-			LeaseExpiresAt: model.FormatRFC3339(participation.LeaseExpiresAt), EndedAt: participation.EndedAt.FormatRFC3339(), EndReason: string(participation.EndReason)}
+		response.LatestParticipation = &examAttemptParticipationResponse{
+			ID:              participation.ID.String(),
+			State:           string(participation.State),
+			Generation:      participation.Generation,
+			RenewalSequence: participation.RenewalSequence,
+			StartedAt:       model.FormatRFC3339(participation.StartedAt),
+			UpdatedAt:       model.FormatRFC3339(participation.UpdatedAt),
+			LeaseExpiresAt:  model.FormatRFC3339(participation.LeaseExpiresAt),
+			EndedAt:         participation.EndedAt.FormatRFC3339(),
+			EndReason:       string(participation.EndReason),
+		}
 	}
+
 	if connection := view.CurrentConnection; connection != nil {
-		response.CurrentConnection = &examAttemptConnectionResponse{ID: connection.ID.String(), State: string(connection.State),
-			OpenedAt: model.FormatRFC3339(connection.OpenedAt), ClosedAt: connection.ClosedAt.FormatRFC3339(), CloseReason: string(connection.CloseReason)}
+		response.CurrentConnection = &examAttemptConnectionResponse{
+			ID:          connection.ID.String(),
+			State:       string(connection.State),
+			OpenedAt:    model.FormatRFC3339(connection.OpenedAt),
+			ClosedAt:    connection.ClosedAt.FormatRFC3339(),
+			CloseReason: string(connection.CloseReason),
+		}
 	}
+
 	if suspension := view.ActiveSuspension; suspension != nil {
-		response.ActiveSuspension = &examAttemptSuspensionResponse{ID: suspension.ID.String(),
-			ParticipationID: suspension.ParticipationID.String(), FlagID: suspension.FlagID.String(), Generation: suspension.Generation,
-			State: string(suspension.State), Source: string(suspension.Source), CandidateReason: string(suspension.CandidateReason),
-			StartedAt: model.FormatRFC3339(suspension.StartedAt), EndedAt: suspension.EndedAt.FormatRFC3339(),
-			ReallowedByUserID: suspension.ReallowedByUserID.String(), SuspendedByUserID: suspension.SuspendedByUserID.String()}
+		response.ActiveSuspension = &examAttemptSuspensionResponse{
+			ID:                suspension.ID.String(),
+			ParticipationID:   suspension.ParticipationID.String(),
+			FlagID:            suspension.FlagID.String(),
+			Generation:        suspension.Generation,
+			State:             string(suspension.State),
+			Source:            string(suspension.Source),
+			CandidateReason:   string(suspension.CandidateReason),
+			StartedAt:         model.FormatRFC3339(suspension.StartedAt),
+			EndedAt:           suspension.EndedAt.FormatRFC3339(),
+			ReallowedByUserID: suspension.ReallowedByUserID.String(),
+			SuspendedByUserID: suspension.SuspendedByUserID.String(),
+		}
 	}
+
 	return response, nil
 }

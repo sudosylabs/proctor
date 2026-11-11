@@ -20,6 +20,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLExamRevisionStore implements store.ExamRevisionStore: it freezes a Draft's
+// resources and Starter Workspace into immutable exam_revisions history.
 type SQLExamRevisionStore struct{ *SQLStore }
 
 func newSQLExamRevisionStore(sqlStore *SQLStore) store.ExamRevisionStore {
@@ -97,15 +99,22 @@ type examRevisionPublicationOutcomeRow struct {
 
 func (examRevisionPublicationOutcomeRow) outcomeDocument() {}
 
-const examRevisionHeaderSelect = `SELECT id,exam_id,number,snapshot_schema_version,source_draft_revision,
-	title,instructions_markdown,policy_schema_version,policy_document,policy_canonical,policy_digest,
-	browser_policy_document,browser_policy_canonical,browser_policy_digest,
-	candidate_correction_summary,candidate_correction_changed_areas,candidate_correction_affected_capabilities,candidate_correction_acknowledgement_required,
-	exam_resource_max_count,exam_resource_max_bytes,exam_workspace_max_entries,exam_workspace_max_file_bytes,exam_workspace_max_total_bytes,
-	starter_workspace_digest,content_digest,resource_count,starter_entry_count,starter_total_bytes,
-	published_by_user_id,published_at,base_revision_id,publication_kind,sealed FROM exam_revisions`
+const examRevisionHeaderSelect = `SELECT id, exam_id, number, snapshot_schema_version,
+		source_draft_revision, title, instructions_markdown, policy_schema_version, policy_document,
+		policy_canonical, policy_digest, browser_policy_document, browser_policy_canonical,
+		browser_policy_digest, candidate_correction_summary, candidate_correction_changed_areas,
+		candidate_correction_affected_capabilities, candidate_correction_acknowledgement_required,
+		exam_resource_max_count, exam_resource_max_bytes, exam_workspace_max_entries,
+		exam_workspace_max_file_bytes, exam_workspace_max_total_bytes, starter_workspace_digest,
+		content_digest, resource_count, starter_entry_count, starter_total_bytes,
+		published_by_user_id, published_at, base_revision_id, publication_kind, sealed
+	FROM exam_revisions`
 
-func (s SQLExamRevisionStore) Publish(ctx context.Context, input *store.ExamRevisionPublication, command *store.CommandIdempotency) (*store.ExamRevisionPublicationResult, error) {
+func (s SQLExamRevisionStore) Publish(
+	ctx context.Context,
+	input *store.ExamRevisionPublication,
+	command *store.CommandIdempotency,
+) (*store.ExamRevisionPublicationResult, error) {
 	prepared, err := prepareExamRevisionPublication(input)
 	if err != nil || command == nil {
 		if err != nil {
@@ -113,8 +122,10 @@ func (s SQLExamRevisionStore) Publish(ctx context.Context, input *store.ExamRevi
 		}
 		return nil, store.NewErrInvalidInput("exam_revision", "idempotency", nil)
 	}
+
 	result, err := runIdempotentMutation(ctx, s.SQLStore, "exam revision publication", idempotentMutation[examRevisionPublicationOutcomeRow]{
-		command: command, auditEventID: prepared.AuditEventID,
+		command:      command,
+		auditEventID: prepared.AuditEventID,
 		execute: func(ctx context.Context, tx *sqlxTxWrapper) (examRevisionPublicationOutcomeRow, error) {
 			return publishExamRevision(ctx, tx, prepared)
 		},
@@ -124,41 +135,61 @@ func (s SQLExamRevisionStore) Publish(ctx context.Context, input *store.ExamRevi
 			if decodeErr := decodeOutcome(data, &outcome); decodeErr != nil {
 				return examRevisionPublicationOutcomeRow{}, decodeErr
 			}
+
 			return outcome, nil
 		},
 		completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, outcome examRevisionPublicationOutcomeRow, originalAuditID string) error {
-			data, err := model.EncodeAuditData(map[string]any{
-				"exam_id": outcome.ExamID, "exam_revision_id": outcome.RevisionID, "number": outcome.Number,
-				"policy_digest": outcome.PolicyDigest, "idempotency_replayed": true,
+			data, encodeErr := model.EncodeAuditData(map[string]any{
+				"exam_id":                 outcome.ExamID,
+				"exam_revision_id":        outcome.RevisionID,
+				"number":                  outcome.Number,
+				"policy_digest":           outcome.PolicyDigest,
+				"idempotency_replayed":    true,
 				"original_audit_event_id": originalAuditID,
 			})
-			if err != nil {
-				return err
+			if encodeErr != nil {
+				return encodeErr
 			}
-			_, err = completeAuditEvent(ctx, tx, prepared.AuditEventID, model.AuditStatusSuccess, "", data, prepared.AuditAt)
-			return err
+
+			_, encodeErr = completeAuditEvent(ctx, tx, prepared.AuditEventID, model.AuditStatusSuccess, "", data, prepared.AuditAt)
+			return encodeErr
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	revisionID, err := model.ParseExamRevisionID(result.Value.RevisionID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_revision", "outcome_revision_id", err)
 	}
+
 	summary, err := s.GetSummary(ctx, prepared.ExamID, revisionID)
 	if err != nil {
 		return nil, err
 	}
-	return &store.ExamRevisionPublicationResult{Revision: summary, ExamRevision: result.Value.ExamRevision, DraftRevision: result.Value.DraftRevision, Replayed: result.Replayed}, nil
+
+	return &store.ExamRevisionPublicationResult{
+		Revision:      summary,
+		ExamRevision:  result.Value.ExamRevision,
+		DraftRevision: result.Value.DraftRevision,
+		Replayed:      result.Replayed,
+	}, nil
 }
 
 func prepareExamRevisionPublication(input *store.ExamRevisionPublication) (*store.ExamRevisionPublication, error) {
-	if input == nil || !input.RevisionID.IsValid() || !input.ExamID.IsValid() || !input.ActorUserID.IsValid() ||
-		input.ExpectedDraftRevision < 1 || input.Kind != model.ExamRevisionPublicationStandard || input.PublishedAt.IsZero() ||
-		!input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+	if input == nil ||
+		!input.RevisionID.IsValid() ||
+		!input.ExamID.IsValid() ||
+		!input.ActorUserID.IsValid() ||
+		input.ExpectedDraftRevision < 1 ||
+		input.Kind != model.ExamRevisionPublicationStandard ||
+		input.PublishedAt.IsZero() ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("exam_revision", "publication", nil)
 	}
+
 	prepared := *input
 	prepared.PublishedAt = model.TimeUTC(input.PublishedAt)
 	return &prepared, nil
@@ -177,27 +208,36 @@ type examRevisionDraftRow struct {
 	DraftRevision        int64          `db:"draft_revision"`
 }
 
-func publishExamRevision(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamRevisionPublication) (examRevisionPublicationOutcomeRow, error) {
+func publishExamRevision(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.ExamRevisionPublication,
+) (examRevisionPublicationOutcomeRow, error) {
 	draft, err := lockExamRevisionDraft(ctx, tx, input)
 	if err != nil {
 		return examRevisionPublicationOutcomeRow{}, err
 	}
+
 	policy, err := model.CanonicalizeExamRevisionPolicy([]byte(draft.Policy))
 	if err != nil {
 		return examRevisionPublicationOutcomeRow{}, invalidPersistedState("exam_draft", "policy", err)
 	}
+
 	browserPolicy, err := model.ParseBrowserPolicyDocument([]byte(draft.BrowserPolicy))
 	if err != nil {
 		return examRevisionPublicationOutcomeRow{}, invalidPersistedState("exam_draft", "browser_policy", err)
 	}
+
 	capacity, err := currentExamCapacityPolicy(ctx, tx)
 	if err != nil {
 		return examRevisionPublicationOutcomeRow{}, err
 	}
+
 	resourceSnapshots, err := publishedExamResourceSnapshots(ctx, tx, input.ExamID)
 	if err != nil {
 		return examRevisionPublicationOutcomeRow{}, err
 	}
+
 	workspaceSnapshots, err := publishedStarterWorkspaceSnapshots(ctx, tx, input.ExamID)
 	if err != nil {
 		return examRevisionPublicationOutcomeRow{}, err
@@ -205,61 +245,117 @@ func publishExamRevision(ctx context.Context, tx *sqlxTxWrapper, input *store.Ex
 	if examRevisionCapacityExceeded(capacity, resourceSnapshots, workspaceSnapshots) {
 		return examRevisionPublicationOutcomeRow{}, store.NewErrConflict("exam_revision", "exam_revision_capacity", nil)
 	}
-	baseRevisionID, err := parseNullablePersistedID[model.ExamRevisionID]("exam_draft", "base_revision_id", draft.BaseRevisionID, model.ParseExamRevisionID)
+
+	baseRevisionID, err := parseNullablePersistedID[model.ExamRevisionID](
+		"exam_draft",
+		"base_revision_id",
+		draft.BaseRevisionID,
+		model.ParseExamRevisionID,
+	)
 	if err != nil {
 		return examRevisionPublicationOutcomeRow{}, err
 	}
+
 	var number int64
-	if err = tx.Get(ctx, &number, `SELECT COALESCE(MAX(number),0)+1 FROM exam_revisions WHERE exam_id=?`, input.ExamID.String()); err != nil {
+	if err = tx.Get(ctx, &number, `SELECT COALESCE(MAX(number), 0)+1
+		FROM exam_revisions
+		WHERE exam_id = ?`, input.ExamID.String()); err != nil {
 		return examRevisionPublicationOutcomeRow{}, err
 	}
 	if err = browserPolicy.ValidateInstitutionOrigin(input.InstitutionOrigin); err != nil {
 		return examRevisionPublicationOutcomeRow{}, store.NewErrInvalidInput("exam_revision", "browser_policy", nil).Wrap(err)
 	}
-	revision, err := model.NewExamRevision(model.ExamRevisionSpecification{ID: input.RevisionID, ExamID: input.ExamID,
-		Number: number, SourceDraftRevision: draft.DraftRevision, Title: draft.Title, InstructionsMarkdown: draft.InstructionsMarkdown,
-		Policy: policy, BrowserPolicy: browserPolicy, Capacity: capacity, Resources: resourceSnapshots, StarterWorkspace: workspaceSnapshots,
-		PublishedByUserID: input.ActorUserID, PublishedAt: input.PublishedAt, BaseRevisionID: baseRevisionID, Kind: input.Kind})
+
+	revision, err := model.NewExamRevision(model.ExamRevisionSpecification{
+		ID:                   input.RevisionID,
+		ExamID:               input.ExamID,
+		Number:               number,
+		SourceDraftRevision:  draft.DraftRevision,
+		Title:                draft.Title,
+		InstructionsMarkdown: draft.InstructionsMarkdown,
+		Policy:               policy,
+		BrowserPolicy:        browserPolicy,
+		Capacity:             capacity,
+		Resources:            resourceSnapshots,
+		StarterWorkspace:     workspaceSnapshots,
+		PublishedByUserID:    input.ActorUserID,
+		PublishedAt:          input.PublishedAt,
+		BaseRevisionID:       baseRevisionID,
+		Kind:                 input.Kind,
+	})
 	if err != nil {
 		return examRevisionPublicationOutcomeRow{}, invalidPersistedState("exam_revision", "snapshot", err)
 	}
+
 	if baseRevisionID.IsValid() {
 		var baseDigest string
-		if err = tx.Get(ctx, &baseDigest, `SELECT content_digest FROM exam_revisions WHERE exam_id=? AND id=?`, input.ExamID.String(), baseRevisionID.String()); err != nil {
+		if err = tx.Get(
+			ctx,
+			&baseDigest,
+			`SELECT content_digest FROM exam_revisions WHERE exam_id = ? AND id = ?`,
+			input.ExamID.String(),
+			baseRevisionID.String(),
+		); err != nil {
 			return examRevisionPublicationOutcomeRow{}, translateError("exam_revision", baseRevisionID.String(), err)
 		}
+
 		if baseDigest == revision.ContentDigest {
 			return examRevisionPublicationOutcomeRow{}, store.NewErrConflict("exam_revision", "exam_revision_no_changes", nil)
 		}
 	}
+
 	if err = recordExamRevisionPublication(ctx, tx, revision, draft); err != nil {
 		return examRevisionPublicationOutcomeRow{}, err
 	}
+
 	examRevision, draftRevision := draft.ExamRevision+1, draft.DraftRevision+1
-	auditData, err := model.EncodeAuditData(map[string]any{"exam_id": revision.ExamID.String(), "exam_revision_id": revision.ID.String(),
-		"number": revision.Number, "policy_digest": revision.PolicyDigest, "publication_kind": string(revision.Kind),
-		"published_at": model.MillisFromTime(revision.PublishedAt), "exam_revision": examRevision, "draft_revision": draftRevision})
+	auditData, err := model.EncodeAuditData(map[string]any{
+		"exam_id":          revision.ExamID.String(),
+		"exam_revision_id": revision.ID.String(),
+		"number":           revision.Number,
+		"policy_digest":    revision.PolicyDigest,
+		"publication_kind": string(revision.Kind),
+		"published_at":     model.MillisFromTime(revision.PublishedAt),
+		"exam_revision":    examRevision,
+		"draft_revision":   draftRevision,
+	})
 	if err != nil {
 		return examRevisionPublicationOutcomeRow{}, err
 	}
 	if _, err = completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", auditData, input.AuditAt); err != nil {
 		return examRevisionPublicationOutcomeRow{}, err
 	}
-	return examRevisionPublicationOutcomeRow{RevisionID: revision.ID.String(), ExamID: revision.ExamID.String(), Number: revision.Number,
-		ExamRevision: examRevision, DraftRevision: draftRevision, PolicyDigest: revision.PolicyDigest}, nil
+
+	return examRevisionPublicationOutcomeRow{
+		RevisionID:    revision.ID.String(),
+		ExamID:        revision.ExamID.String(),
+		Number:        revision.Number,
+		ExamRevision:  examRevision,
+		DraftRevision: draftRevision,
+		PolicyDigest:  revision.PolicyDigest,
+	}, nil
 }
 
 // lockExamRevisionDraft locks the Exam and its draft and requires a manager
 // (or override), an unarchived Exam and the expected draft revision.
 func lockExamRevisionDraft(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamRevisionPublication) (examRevisionDraftRow, error) {
 	var draft examRevisionDraftRow
-	if err := tx.Get(ctx, &draft, `SELECT e.academic_unit_id,e.archived_at,e.revision AS exam_revision,
-		EXISTS (SELECT 1 FROM exam_managers m WHERE m.exam_id=e.id AND m.user_id=?) AS actor_is_manager,
-		d.title,d.instructions_markdown,d.policy,d.browser_policy,d.base_revision_id,d.revision AS draft_revision
-		FROM exams e JOIN exam_drafts d ON d.exam_id=e.id WHERE e.id=? FOR UPDATE OF e,d`,
-		input.ActorUserID.String(), input.ExamID.String()); err != nil {
+	if err := tx.Get(
+		ctx,
+		&draft,
+		`SELECT e.academic_unit_id, e.archived_at, e.revision AS exam_revision,
+			`+examManagerExistsSQL+` AS actor_is_manager, d.title, d.instructions_markdown, d.policy, d.browser_policy,
+			d.base_revision_id, d.revision AS draft_revision
+		FROM exams e
+		JOIN exam_drafts d ON d.exam_id = e.id
+		WHERE e.id = ?
+		FOR UPDATE OF e, d`,
+		input.ActorUserID.String(),
+		input.ExamID.String(),
+	); err != nil {
 		return draft, translateError("exam", input.ExamID.String(), err)
 	}
+
 	if !draft.ActorIsManager && !input.ManagerOverride {
 		return draft, store.NewErrNotFound("exam_manager", input.ActorUserID.String())
 	}
@@ -269,6 +365,7 @@ func lockExamRevisionDraft(ctx context.Context, tx *sqlxTxWrapper, input *store.
 	if draft.DraftRevision != input.ExpectedDraftRevision {
 		return draft, store.NewErrConflict("exam_draft", "exam_draft_revision", nil)
 	}
+
 	return draft, nil
 }
 
@@ -279,50 +376,92 @@ func publishedExamResourceSnapshots(ctx context.Context, tx *sqlxTxWrapper, exam
 	if err != nil {
 		return nil, err
 	}
+
 	var activeResources, invalidPurpose int
-	if err = tx.Get(ctx, &activeResources, `SELECT COUNT(*) FROM exam_resources WHERE exam_id=? AND archived_at IS NULL`, examID.String()); err != nil {
+	if err = tx.Get(
+		ctx,
+		&activeResources,
+		`SELECT COUNT(*) FROM exam_resources WHERE exam_id = ? AND archived_at IS NULL`,
+		examID.String(),
+	); err != nil {
 		return nil, err
 	}
-	if err = tx.Get(ctx, &invalidPurpose, `SELECT COUNT(*) FROM exam_resources r JOIN file_entries e ON e.id=r.file_entry_id WHERE r.exam_id=? AND r.archived_at IS NULL AND e.purpose <> 'exam_resource'`, examID.String()); err != nil {
+
+	if err = tx.Get(
+		ctx,
+		&invalidPurpose,
+		`SELECT COUNT(*)
+		FROM exam_resources r
+		JOIN file_entries e ON e.id = r.file_entry_id
+		WHERE r.exam_id = ?
+			AND r.archived_at IS NULL
+			AND e.purpose <> 'exam_resource'`,
+		examID.String(),
+	); err != nil {
 		return nil, err
 	}
+
 	if activeResources != len(resources) || invalidPurpose != 0 {
 		return nil, invalidPersistedState("exam_revision", "resources", errors.New("resource selection is incomplete"))
 	}
+
 	resourceSnapshots := make([]model.ExamRevisionResource, len(resources))
 	for index, record := range resources {
-		resourceSnapshots[index] = model.ExamRevisionResource{ResourceID: record.Resource.ID, FileEntryID: record.Resource.FileEntryID,
-			FileRevisionID: record.Resource.SelectedFileRevisionID, RenditionID: record.Rendition.ID,
-			DisplayName: record.Resource.DisplayName, DescriptionMarkdown: record.Resource.DescriptionMarkdown,
-			Position: record.Resource.Position, MediaType: model.ExamResourceMediaType(record.Rendition.MediaType),
-			SizeBytes: record.Rendition.Size, SHA256: record.Rendition.SHA256}
+		resourceSnapshots[index] = model.ExamRevisionResource{
+			ResourceID:          record.Resource.ID,
+			FileEntryID:         record.Resource.FileEntryID,
+			FileRevisionID:      record.Resource.SelectedFileRevisionID,
+			RenditionID:         record.Rendition.ID,
+			DisplayName:         record.Resource.DisplayName,
+			DescriptionMarkdown: record.Resource.DescriptionMarkdown,
+			Position:            record.Resource.Position,
+			MediaType:           model.ExamResourceMediaType(record.Rendition.MediaType),
+			SizeBytes:           record.Rendition.Size,
+			SHA256:              record.Rendition.SHA256,
+		}
 	}
+
 	return resourceSnapshots, nil
 }
 
 // publishedStarterWorkspaceSnapshots snapshots the Exam's active Starter
 // Workspace entries for publication.
-func publishedStarterWorkspaceSnapshots(ctx context.Context, tx *sqlxTxWrapper, examID model.ExamID) ([]model.ExamRevisionStarterWorkspaceEntry, error) {
+func publishedStarterWorkspaceSnapshots(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	examID model.ExamID,
+) ([]model.ExamRevisionStarterWorkspaceEntry, error) {
 	var workspaceRows []starterWorkspaceRow
-	if err := tx.Select(ctx, &workspaceRows, starterWorkspaceSelect+` WHERE e.exam_id=? AND e.archived_at IS NULL LIMIT ?`, examID.String(), model.StarterWorkspaceMaximumEntries+1); err != nil {
+	if err := tx.Select(
+		ctx,
+		&workspaceRows,
+		starterWorkspaceSelect+` WHERE e.exam_id = ? AND e.archived_at IS NULL LIMIT ?`,
+		examID.String(),
+		model.StarterWorkspaceMaximumEntries+1,
+	); err != nil {
 		return nil, err
 	}
+
 	if len(workspaceRows) > model.StarterWorkspaceMaximumEntries {
 		return nil, invalidPersistedState("exam_revision", "starter_workspace", errors.New("entry limit exceeded"))
 	}
+
 	workspaceSnapshots := make([]model.ExamRevisionStarterWorkspaceEntry, len(workspaceRows))
 	for index, row := range workspaceRows {
 		item, itemErr := row.item()
 		if itemErr != nil {
 			return nil, invalidPersistedState("exam_revision", "starter_workspace", itemErr)
 		}
+
 		snapshot := model.ExamRevisionStarterWorkspaceEntry{EntryID: item.Entry.ID, Kind: item.Entry.Kind, Path: item.Entry.Path}
 		if item.Object != nil {
 			snapshot.ObjectID, snapshot.ContentVersion, snapshot.MediaType = item.Object.ID, item.Object.ContentVersion, item.Object.MediaType
 			snapshot.SizeBytes, snapshot.SHA256 = item.Object.SizeBytes, item.Object.SHA256
 		}
+
 		workspaceSnapshots[index] = snapshot
 	}
+
 	return workspaceSnapshots, nil
 }
 
@@ -332,36 +471,67 @@ func recordExamRevisionPublication(ctx context.Context, tx *sqlxTxWrapper, revis
 	if err := insertExamRevision(ctx, tx, revision); err != nil {
 		return err
 	}
-	examResult, err := tx.Exec(ctx, `UPDATE exams SET default_revision_id=?,updated_at=GREATEST(updated_at,?),revision=revision+1 WHERE id=? AND revision=?`, revision.ID.String(), revision.PublishedAt, revision.ExamID.String(), draft.ExamRevision)
+
+	examResult, err := tx.Exec(
+		ctx,
+		`UPDATE exams
+		SET default_revision_id = ?, updated_at = GREATEST(updated_at, ?), revision = revision+1
+		WHERE id = ?
+			AND revision = ?`,
+		revision.ID.String(),
+		revision.PublishedAt,
+		revision.ExamID.String(),
+		draft.ExamRevision,
+	)
 	if err != nil {
 		return err
 	}
 	if err = requireExamResourceAffected(examResult, 1, "exam_revision"); err != nil {
 		return err
 	}
-	draftResult, err := tx.Exec(ctx, `UPDATE exam_drafts SET base_revision_id=?,updated_at=GREATEST(updated_at,?),revision=revision+1 WHERE exam_id=? AND revision=?`, revision.ID.String(), revision.PublishedAt, revision.ExamID.String(), draft.DraftRevision)
+
+	draftResult, err := tx.Exec(
+		ctx,
+		`UPDATE exam_drafts
+		SET base_revision_id = ?, updated_at = GREATEST(updated_at, ?), revision = revision+1
+		WHERE exam_id = ?
+			AND revision = ?`,
+		revision.ID.String(),
+		revision.PublishedAt,
+		revision.ExamID.String(),
+		draft.DraftRevision,
+	)
 	if err != nil {
 		return err
 	}
+
 	return requireExamResourceAffected(draftResult, 1, "exam_draft_revision")
 }
 
-func examRevisionCapacityExceeded(capacity model.ExamCapacityPolicy, resources []model.ExamRevisionResource, workspace []model.ExamRevisionStarterWorkspaceEntry) bool {
+func examRevisionCapacityExceeded(
+	capacity model.ExamCapacityPolicy,
+	resources []model.ExamRevisionResource,
+	workspace []model.ExamRevisionStarterWorkspaceEntry,
+) bool {
 	if len(resources) > capacity.ResourceMaximumCount || len(workspace) > capacity.WorkspaceMaximumEntries {
 		return true
 	}
+
 	var workspaceBytes int64
 	for _, resource := range resources {
 		if resource.SizeBytes > capacity.ResourceMaximumBytes {
 			return true
 		}
 	}
+
 	for _, entry := range workspace {
 		if entry.SizeBytes > capacity.WorkspaceMaximumFileBytes {
 			return true
 		}
+
 		workspaceBytes += entry.SizeBytes
 	}
+
 	return workspaceBytes > capacity.WorkspaceMaximumTotalBytes
 }
 
@@ -370,10 +540,12 @@ func insertExamRevision(ctx context.Context, tx *sqlxTxWrapper, revision *model.
 	for _, entry := range revision.StarterWorkspace {
 		starterBytes += entry.SizeBytes
 	}
+
 	browserPolicy, err := model.EncodeBrowserPolicy(revision.BrowserPolicy)
 	if err != nil {
 		return fmt.Errorf("encode Exam Revision Browser Policy: %w", err)
 	}
+
 	var correctionSummary, correctionAreas, correctionCapabilities, correctionAcknowledgement any
 	if revision.CandidateCorrection != nil {
 		correctionSummary = revision.CandidateCorrection.Summary
@@ -381,58 +553,129 @@ func insertExamRevision(ctx context.Context, tx *sqlxTxWrapper, revision *model.
 		for index, area := range revision.CandidateCorrection.ChangedAreas {
 			areas[index] = string(area)
 		}
+
 		correctionAreas = pq.Array(areas)
 		correctionCapabilities = pq.Array(revision.CandidateCorrection.AffectedCapabilities)
 		correctionAcknowledgement = revision.CandidateCorrection.AcknowledgementRequired
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO exam_revisions (id,exam_id,number,snapshot_schema_version,source_draft_revision,
-		title,instructions_markdown,policy_schema_version,policy_document,policy_canonical,policy_digest,
-		browser_policy_document,browser_policy_canonical,browser_policy_digest,
-		candidate_correction_summary,candidate_correction_changed_areas,candidate_correction_affected_capabilities,candidate_correction_acknowledgement_required,
-		exam_resource_max_count,exam_resource_max_bytes,exam_workspace_max_entries,exam_workspace_max_file_bytes,exam_workspace_max_total_bytes,
-		starter_workspace_digest,content_digest,resource_count,starter_entry_count,starter_total_bytes,
-		published_by_user_id,published_at,base_revision_id,publication_kind)
+
+	if _, execErr := tx.Exec(
+		ctx,
+		`INSERT INTO exam_revisions (
+			id, exam_id, number, snapshot_schema_version, source_draft_revision, title,
+			instructions_markdown, policy_schema_version, policy_document, policy_canonical,
+			policy_digest, browser_policy_document, browser_policy_canonical, browser_policy_digest,
+			candidate_correction_summary, candidate_correction_changed_areas,
+			candidate_correction_affected_capabilities,
+			candidate_correction_acknowledgement_required, exam_resource_max_count,
+			exam_resource_max_bytes, exam_workspace_max_entries, exam_workspace_max_file_bytes,
+			exam_workspace_max_total_bytes, starter_workspace_digest, content_digest,
+			resource_count, starter_entry_count, starter_total_bytes, published_by_user_id,
+			published_at, base_revision_id, publication_kind
+		)
 		VALUES (
-			?,?,?,?,?,
-			?,?,?,?::jsonb,?,?,
-			?::jsonb,?,?,
-			?,?,?,?,
-			?,?,?,?,?,
-			?,?,?,?,?,
-			?,?,?,?
-		)`, revision.ID.String(), revision.ExamID.String(), revision.Number,
-		model.ExamRevisionSnapshotSchemaVersion, revision.SourceDraftRevision, revision.Title, revision.InstructionsMarkdown,
-		revision.Policy.SchemaVersion, string(revision.Policy.Bytes), revision.Policy.Bytes, revision.PolicyDigest,
-		string(browserPolicy), browserPolicy, revision.BrowserPolicyDigest,
-		correctionSummary, correctionAreas, correctionCapabilities, correctionAcknowledgement,
-		revision.Capacity.ResourceMaximumCount, revision.Capacity.ResourceMaximumBytes, revision.Capacity.WorkspaceMaximumEntries,
-		revision.Capacity.WorkspaceMaximumFileBytes, revision.Capacity.WorkspaceMaximumTotalBytes,
-		revision.StarterWorkspaceDigest, revision.ContentDigest, len(revision.Resources), len(revision.StarterWorkspace), starterBytes,
-		revision.PublishedByUserID.String(), revision.PublishedAt, nullableString(revision.BaseRevisionID.String()), string(revision.Kind)); err != nil {
-		return fmt.Errorf("insert Exam Revision: %w", translateError("exam_revision", revision.ID.String(), err))
+			?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+			?, ?, ?, ?, ?, ?, ?
+		)`,
+		revision.ID.String(),
+		revision.ExamID.String(),
+		revision.Number,
+		model.ExamRevisionSnapshotSchemaVersion,
+		revision.SourceDraftRevision,
+		revision.Title,
+		revision.InstructionsMarkdown,
+		revision.Policy.SchemaVersion,
+		string(revision.Policy.Bytes),
+		revision.Policy.Bytes,
+		revision.PolicyDigest,
+		string(browserPolicy),
+		browserPolicy,
+		revision.BrowserPolicyDigest,
+		correctionSummary,
+		correctionAreas,
+		correctionCapabilities,
+		correctionAcknowledgement,
+		revision.Capacity.ResourceMaximumCount,
+		revision.Capacity.ResourceMaximumBytes,
+		revision.Capacity.WorkspaceMaximumEntries,
+		revision.Capacity.WorkspaceMaximumFileBytes,
+		revision.Capacity.WorkspaceMaximumTotalBytes,
+		revision.StarterWorkspaceDigest,
+		revision.ContentDigest,
+		len(revision.Resources),
+		len(revision.StarterWorkspace),
+		starterBytes,
+		revision.PublishedByUserID.String(),
+		revision.PublishedAt,
+		nullableString(revision.BaseRevisionID.String()),
+		string(revision.Kind),
+	); execErr != nil {
+		return fmt.Errorf("insert Exam Revision: %w", translateError("exam_revision", revision.ID.String(), execErr))
 	}
+
 	for _, resource := range revision.Resources {
-		if _, err := tx.Exec(ctx, `INSERT INTO exam_revision_resources (exam_revision_id,exam_id,resource_id,file_entry_id,file_revision_id,rendition_id,
-			display_name,description_markdown,position,media_type,size_bytes,sha256) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-			revision.ID.String(), revision.ExamID.String(), resource.ResourceID.String(), resource.FileEntryID.String(), resource.FileRevisionID.String(), resource.RenditionID.String(),
-			resource.DisplayName, resource.DescriptionMarkdown, resource.Position, string(resource.MediaType), resource.SizeBytes, resource.SHA256); err != nil {
-			return fmt.Errorf("insert Exam Revision resource: %w", translateError("exam_revision_resource", resource.ResourceID.String(), err))
+		if _, execErr := tx.Exec(
+			ctx,
+			`INSERT INTO exam_revision_resources (
+				exam_revision_id, exam_id, resource_id, file_entry_id, file_revision_id,
+				rendition_id, display_name, description_markdown, position, media_type, size_bytes,
+				sha256
+			)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			revision.ID.String(),
+			revision.ExamID.String(),
+			resource.ResourceID.String(),
+			resource.FileEntryID.String(),
+			resource.FileRevisionID.String(),
+			resource.RenditionID.String(),
+			resource.DisplayName,
+			resource.DescriptionMarkdown,
+			resource.Position,
+			string(resource.MediaType),
+			resource.SizeBytes,
+			resource.SHA256,
+		); execErr != nil {
+			return fmt.Errorf("insert Exam Revision resource: %w", translateError("exam_revision_resource", resource.ResourceID.String(), execErr))
 		}
 	}
+
 	for _, entry := range revision.StarterWorkspace {
-		if _, err := tx.Exec(ctx, `INSERT INTO exam_revision_starter_workspace_entries (exam_revision_id,exam_id,entry_id,kind,path,object_id,content_version,media_type,size_bytes,sha256)
-			VALUES (?,?,?,?,?,?,?,?,?,?)`, revision.ID.String(), revision.ExamID.String(), entry.EntryID.String(), string(entry.Kind), entry.Path,
-			nullableString(entry.ObjectID.String()), nullableString(string(entry.ContentVersion)), nullableString(entry.MediaType), nullableInt64(entry.Kind == model.StarterWorkspaceEntryFile, entry.SizeBytes), nullableString(entry.SHA256)); err != nil {
-			return fmt.Errorf("insert Exam Revision Starter Workspace entry: %w", translateError("exam_revision_workspace", entry.EntryID.String(), err))
+		if _, execErr := tx.Exec(
+			ctx,
+			`INSERT INTO exam_revision_starter_workspace_entries (
+				exam_revision_id, exam_id, entry_id, kind, path, object_id, content_version,
+				media_type, size_bytes, sha256
+			)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			revision.ID.String(),
+			revision.ExamID.String(),
+			entry.EntryID.String(),
+			string(entry.Kind),
+			entry.Path,
+			nullableString(entry.ObjectID.String()),
+			nullableString(string(entry.ContentVersion)),
+			nullableString(entry.MediaType),
+			nullableInt64(entry.Kind == model.StarterWorkspaceEntryFile, entry.SizeBytes),
+			nullableString(entry.SHA256),
+		); execErr != nil {
+			return fmt.Errorf(
+				"insert Exam Revision Starter Workspace entry: %w",
+				translateError("exam_revision_workspace", entry.EntryID.String(), execErr),
+			)
 		}
 	}
-	sealed, err := tx.Exec(ctx, `UPDATE exam_revisions SET sealed=TRUE WHERE id=? AND sealed=FALSE`, revision.ID.String())
+
+	sealed, err := tx.Exec(ctx, `UPDATE exam_revisions
+		SET sealed = TRUE
+		WHERE id = ?
+			AND sealed = FALSE`, revision.ID.String())
 	if err != nil {
 		return fmt.Errorf("seal Exam Revision: %w", err)
 	}
 	if err = requireExamResourceAffected(sealed, 1, "exam_revision_seal"); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -443,166 +686,295 @@ func nullableInt64(valid bool, value int64) any {
 	return value
 }
 
-func (s SQLExamRevisionStore) GetSummary(ctx context.Context, examID model.ExamID, revisionID model.ExamRevisionID) (*store.ExamRevisionSummary, error) {
+func (s SQLExamRevisionStore) GetSummary(
+	ctx context.Context,
+	examID model.ExamID,
+	revisionID model.ExamRevisionID,
+) (*store.ExamRevisionSummary, error) {
 	if !examID.IsValid() || !revisionID.IsValid() {
 		return nil, store.NewErrInvalidInput("exam_revision", "identity", nil)
 	}
+
 	var row examRevisionHeaderRow
-	if err := s.GetMaster().Get(ctx, &row, examRevisionHeaderSelect+` WHERE exam_id=? AND id=?`, examID.String(), revisionID.String()); err != nil {
+	if err := s.GetMaster().Get(
+		ctx,
+		&row,
+		examRevisionHeaderSelect+` WHERE exam_id = ? AND id = ?`,
+		examID.String(),
+		revisionID.String(),
+	); err != nil {
 		return nil, translateError("exam_revision", revisionID.String(), err)
 	}
+
 	return row.summary()
 }
 
 func (s SQLExamRevisionStore) List(ctx context.Context, options store.ExamRevisionListOptions) ([]store.ExamRevisionSummary, error) {
-	if !options.ExamID.IsValid() || options.Limit < 1 || options.Limit > 201 || options.BeforeNumber < 0 ||
-		(options.BeforeNumber == 0) != options.BeforeRevisionID.IsZero() || !options.BeforeRevisionID.IsZero() && !options.BeforeRevisionID.IsValid() {
+	if !options.ExamID.IsValid() ||
+		options.Limit < 1 ||
+		options.Limit > 201 ||
+		options.BeforeNumber < 0 ||
+		(options.BeforeNumber == 0) != options.BeforeRevisionID.IsZero() ||
+		!options.BeforeRevisionID.IsZero() && !options.BeforeRevisionID.IsValid() {
 		return nil, store.NewErrInvalidInput("exam_revision", "list", nil)
 	}
-	query := examRevisionHeaderSelect + ` WHERE exam_id=?`
+
+	query := examRevisionHeaderSelect + ` WHERE exam_id = ?`
 	args := []any{options.ExamID.String()}
 	if options.BeforeNumber > 0 {
-		query += ` AND (number,id) < (?,?)`
+		query += ` AND (number, id) < (?, ?)`
 		args = append(args, options.BeforeNumber, options.BeforeRevisionID.String())
 	}
-	query += ` ORDER BY number DESC,id DESC LIMIT ?`
+
+	query += ` ORDER BY number DESC, id DESC LIMIT ?`
 	args = append(args, options.Limit)
 	var rows []examRevisionHeaderRow
 	if err := s.GetMaster().Select(ctx, &rows, query, args...); err != nil {
 		return nil, fmt.Errorf("list Exam Revisions: %w", err)
 	}
+
 	items := make([]store.ExamRevisionSummary, 0, len(rows))
 	for _, row := range rows {
 		summary, err := row.summary()
 		if err != nil {
 			return nil, err
 		}
+
 		items = append(items, *summary)
 	}
+
 	return items, nil
 }
 
-func (s SQLExamRevisionStore) GetSnapshot(ctx context.Context, examID model.ExamID, revisionID model.ExamRevisionID) (*model.ExamRevision, error) {
+func (s SQLExamRevisionStore) GetSnapshot(
+	ctx context.Context,
+	examID model.ExamID,
+	revisionID model.ExamRevisionID,
+) (*model.ExamRevision, error) {
 	if !examID.IsValid() || !revisionID.IsValid() {
 		return nil, store.NewErrInvalidInput("exam_revision", "identity", nil)
 	}
 	return getExamRevisionSnapshot(ctx, s.GetMaster(), examID, revisionID)
 }
 
-func getExamRevisionSnapshot(ctx context.Context, executor sqlxExecutor, examID model.ExamID, revisionID model.ExamRevisionID) (*model.ExamRevision, error) {
+func getExamRevisionSnapshot(
+	ctx context.Context,
+	executor sqlxExecutor,
+	examID model.ExamID,
+	revisionID model.ExamRevisionID,
+) (*model.ExamRevision, error) {
 	var header examRevisionHeaderRow
-	if err := executor.Get(ctx, &header, examRevisionHeaderSelect+` WHERE exam_id=? AND id=?`, examID.String(), revisionID.String()); err != nil {
+	if err := executor.Get(
+		ctx,
+		&header,
+		examRevisionHeaderSelect+` WHERE exam_id = ? AND id = ?`,
+		examID.String(),
+		revisionID.String(),
+	); err != nil {
 		return nil, translateError("exam_revision", revisionID.String(), err)
 	}
+
 	resources, err := getExamRevisionResourceSnapshots(ctx, executor, examID, revisionID)
 	if err != nil {
 		return nil, err
 	}
+
 	workspace, err := getExamRevisionWorkspaceSnapshots(ctx, executor, examID, revisionID)
 	if err != nil {
 		return nil, err
 	}
+
 	id, err := model.ParseExamRevisionID(header.ID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_revision", "id", err)
 	}
+
 	publisherID, err := model.ParseUserID(header.PublishedByUserID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_revision", "published_by_user_id", err)
 	}
-	baseID, err := parseNullablePersistedID[model.ExamRevisionID]("exam_revision", "base_revision_id", header.BaseRevisionID, model.ParseExamRevisionID)
+
+	baseID, err := parseNullablePersistedID[model.ExamRevisionID](
+		"exam_revision",
+		"base_revision_id",
+		header.BaseRevisionID,
+		model.ParseExamRevisionID,
+	)
 	if err != nil {
 		return nil, err
 	}
+
 	policy, browserPolicy, err := header.policies()
 	if err != nil {
 		return nil, err
 	}
+
 	correctionNotice, err := header.candidateCorrectionNotice()
 	if err != nil {
 		return nil, err
 	}
-	revision, err := model.NewExamRevision(model.ExamRevisionSpecification{ID: id, ExamID: examID, Number: header.Number,
-		SourceDraftRevision: header.SourceDraftRevision, Title: header.Title, InstructionsMarkdown: header.InstructionsMarkdown,
-		Policy: policy, BrowserPolicy: browserPolicy, Capacity: model.ExamCapacityPolicy{
-			ResourceMaximumCount: header.ResourceMaximumCount, ResourceMaximumBytes: header.ResourceMaximumBytes,
-			WorkspaceMaximumEntries: header.WorkspaceMaximumEntries, WorkspaceMaximumFileBytes: header.WorkspaceMaximumFileBytes,
+
+	revision, err := model.NewExamRevision(model.ExamRevisionSpecification{
+		ID:                   id,
+		ExamID:               examID,
+		Number:               header.Number,
+		SourceDraftRevision:  header.SourceDraftRevision,
+		Title:                header.Title,
+		InstructionsMarkdown: header.InstructionsMarkdown,
+		Policy:               policy,
+		BrowserPolicy:        browserPolicy,
+		Capacity: model.ExamCapacityPolicy{
+			ResourceMaximumCount:       header.ResourceMaximumCount,
+			ResourceMaximumBytes:       header.ResourceMaximumBytes,
+			WorkspaceMaximumEntries:    header.WorkspaceMaximumEntries,
+			WorkspaceMaximumFileBytes:  header.WorkspaceMaximumFileBytes,
 			WorkspaceMaximumTotalBytes: header.WorkspaceMaximumTotalBytes,
-		}, Resources: resources, StarterWorkspace: workspace, PublishedByUserID: publisherID,
-		PublishedAt: header.PublishedAt, BaseRevisionID: baseID, Kind: model.ExamRevisionPublicationKind(header.PublicationKind),
-		CandidateCorrection: correctionNotice})
+		},
+		Resources:           resources,
+		StarterWorkspace:    workspace,
+		PublishedByUserID:   publisherID,
+		PublishedAt:         header.PublishedAt,
+		BaseRevisionID:      baseID,
+		Kind:                model.ExamRevisionPublicationKind(header.PublicationKind),
+		CandidateCorrection: correctionNotice,
+	})
 	if err != nil {
 		return nil, invalidPersistedState("exam_revision", "snapshot", err)
 	}
+
 	var starterBytes int64
 	for _, entry := range workspace {
 		starterBytes += entry.SizeBytes
 	}
-	if !header.Sealed || header.SnapshotSchemaVersion != model.ExamRevisionSnapshotSchemaVersion || header.PolicySchemaVersion != policy.SchemaVersion ||
-		header.PolicyDigest != revision.PolicyDigest || header.BrowserPolicyDigest != revision.BrowserPolicyDigest || header.StarterWorkspaceDigest != revision.StarterWorkspaceDigest || header.ContentDigest != revision.ContentDigest ||
-		header.ResourceCount != len(resources) || header.StarterEntryCount != len(workspace) || header.StarterTotalBytes != starterBytes {
+
+	if !header.Sealed ||
+		header.SnapshotSchemaVersion != model.ExamRevisionSnapshotSchemaVersion ||
+		header.PolicySchemaVersion != policy.SchemaVersion ||
+		header.PolicyDigest != revision.PolicyDigest ||
+		header.BrowserPolicyDigest != revision.BrowserPolicyDigest ||
+		header.StarterWorkspaceDigest != revision.StarterWorkspaceDigest ||
+		header.ContentDigest != revision.ContentDigest ||
+		header.ResourceCount != len(resources) ||
+		header.StarterEntryCount != len(workspace) ||
+		header.StarterTotalBytes != starterBytes {
 		return nil, invalidPersistedState("exam_revision", "header", errors.New("snapshot metadata mismatch"))
 	}
+
 	return revision, nil
 }
 
 // getExamRevisionResourceSnapshots reads the revision's Resource snapshots
 // in position order.
-func getExamRevisionResourceSnapshots(ctx context.Context, executor sqlxExecutor, examID model.ExamID, revisionID model.ExamRevisionID) ([]model.ExamRevisionResource, error) {
+func getExamRevisionResourceSnapshots(
+	ctx context.Context,
+	executor sqlxExecutor,
+	examID model.ExamID,
+	revisionID model.ExamRevisionID,
+) ([]model.ExamRevisionResource, error) {
 	var resourceRows []examRevisionResourceRow
-	if err := executor.Select(ctx, &resourceRows, `SELECT resource_id,file_entry_id,file_revision_id,rendition_id,display_name,description_markdown,position,media_type,size_bytes,sha256
-		FROM exam_revision_resources WHERE exam_id=? AND exam_revision_id=? ORDER BY position`, examID.String(), revisionID.String()); err != nil {
+	if err := executor.Select(
+		ctx,
+		&resourceRows,
+		`SELECT resource_id, file_entry_id, file_revision_id, rendition_id, display_name,
+			description_markdown, position, media_type, size_bytes, sha256
+		FROM exam_revision_resources
+		WHERE exam_id = ?
+			AND exam_revision_id = ?
+		ORDER BY position`,
+		examID.String(),
+		revisionID.String(),
+	); err != nil {
 		return nil, err
 	}
+
 	resources := make([]model.ExamRevisionResource, len(resourceRows))
 	for index, row := range resourceRows {
 		resourceID, err := model.ParseExamResourceID(row.ResourceID)
 		if err != nil {
 			return nil, invalidPersistedState("exam_revision_resource", "resource_id", err)
 		}
+
 		entryID, err := model.ParseFileEntryID(row.FileEntryID)
 		if err != nil {
 			return nil, invalidPersistedState("exam_revision_resource", "file_entry_id", err)
 		}
+
 		fileRevisionID, err := model.ParseFileRevisionID(row.FileRevisionID)
 		if err != nil {
 			return nil, invalidPersistedState("exam_revision_resource", "file_revision_id", err)
 		}
+
 		renditionID, err := model.ParseFileRenditionID(row.RenditionID)
 		if err != nil {
 			return nil, invalidPersistedState("exam_revision_resource", "rendition_id", err)
 		}
-		resources[index] = model.ExamRevisionResource{ResourceID: resourceID, FileEntryID: entryID, FileRevisionID: fileRevisionID, RenditionID: renditionID,
-			DisplayName: row.DisplayName, DescriptionMarkdown: row.DescriptionMarkdown, Position: row.Position,
-			MediaType: model.ExamResourceMediaType(row.MediaType), SizeBytes: row.SizeBytes, SHA256: row.SHA256}
+
+		resources[index] = model.ExamRevisionResource{
+			ResourceID:          resourceID,
+			FileEntryID:         entryID,
+			FileRevisionID:      fileRevisionID,
+			RenditionID:         renditionID,
+			DisplayName:         row.DisplayName,
+			DescriptionMarkdown: row.DescriptionMarkdown,
+			Position:            row.Position,
+			MediaType:           model.ExamResourceMediaType(row.MediaType),
+			SizeBytes:           row.SizeBytes,
+			SHA256:              row.SHA256,
+		}
 	}
+
 	return resources, nil
 }
 
 // getExamRevisionWorkspaceSnapshots reads the revision's Starter Workspace
 // entry snapshots in path order.
-func getExamRevisionWorkspaceSnapshots(ctx context.Context, executor sqlxExecutor, examID model.ExamID, revisionID model.ExamRevisionID) ([]model.ExamRevisionStarterWorkspaceEntry, error) {
+func getExamRevisionWorkspaceSnapshots(
+	ctx context.Context,
+	executor sqlxExecutor,
+	examID model.ExamID,
+	revisionID model.ExamRevisionID,
+) ([]model.ExamRevisionStarterWorkspaceEntry, error) {
 	var workspaceRows []examRevisionWorkspaceRow
-	if err := executor.Select(ctx, &workspaceRows, `SELECT entry_id,kind,path,object_id,content_version,media_type,size_bytes,sha256
-		FROM exam_revision_starter_workspace_entries WHERE exam_id=? AND exam_revision_id=? ORDER BY convert_to(path,'UTF8'),entry_id`, examID.String(), revisionID.String()); err != nil {
+	if err := executor.Select(
+		ctx,
+		&workspaceRows,
+		`SELECT entry_id, kind, path, object_id, content_version, media_type, size_bytes, sha256
+		FROM exam_revision_starter_workspace_entries
+		WHERE exam_id = ?
+			AND exam_revision_id = ?
+		ORDER BY convert_to(path, 'UTF8'), entry_id`,
+		examID.String(),
+		revisionID.String(),
+	); err != nil {
 		return nil, err
 	}
+
 	workspace := make([]model.ExamRevisionStarterWorkspaceEntry, len(workspaceRows))
 	for index, row := range workspaceRows {
 		entryID, err := model.ParseStarterWorkspaceEntryID(row.EntryID)
 		if err != nil {
 			return nil, invalidPersistedState("exam_revision_workspace", "entry_id", err)
 		}
-		entry := model.ExamRevisionStarterWorkspaceEntry{EntryID: entryID, Kind: model.StarterWorkspaceEntryKind(row.Kind), Path: row.Path,
-			ContentVersion: model.WorkspaceContentVersion(row.ContentVersion.String), MediaType: row.MediaType.String, SizeBytes: row.SizeBytes.Int64, SHA256: row.SHA256.String}
+
+		entry := model.ExamRevisionStarterWorkspaceEntry{
+			EntryID:        entryID,
+			Kind:           model.StarterWorkspaceEntryKind(row.Kind),
+			Path:           row.Path,
+			ContentVersion: model.WorkspaceContentVersion(row.ContentVersion.String),
+			MediaType:      row.MediaType.String,
+			SizeBytes:      row.SizeBytes.Int64,
+			SHA256:         row.SHA256.String,
+		}
 		if row.ObjectID.Valid {
 			entry.ObjectID, err = model.ParseStarterWorkspaceObjectID(row.ObjectID.String)
 			if err != nil {
 				return nil, invalidPersistedState("exam_revision_workspace", "object_id", err)
 			}
 		}
+
 		workspace[index] = entry
 	}
+
 	return workspace, nil
 }
 
@@ -613,47 +985,76 @@ func (row examRevisionHeaderRow) policies() (model.ExamRevisionPolicy, model.Bro
 	if err != nil {
 		return model.ExamRevisionPolicy{}, model.BrowserPolicy{}, invalidPersistedState("exam_revision", "policy_canonical", err)
 	}
+
 	documentPolicy, err := model.CanonicalizeExamRevisionPolicy([]byte(row.PolicyDocument))
 	if err != nil || !bytes.Equal(documentPolicy.Bytes, policy.Bytes) {
-		return model.ExamRevisionPolicy{}, model.BrowserPolicy{}, invalidPersistedState("exam_revision", "policy_document", errors.New("canonical policy mismatch"))
+		return model.ExamRevisionPolicy{}, model.BrowserPolicy{}, invalidPersistedState(
+			"exam_revision",
+			"policy_document",
+			errors.New("canonical policy mismatch"),
+		)
 	}
+
 	browserPolicy, err := model.DecodeBrowserPolicy(row.BrowserPolicyCanonical)
 	if err != nil {
 		return model.ExamRevisionPolicy{}, model.BrowserPolicy{}, invalidPersistedState("exam_revision", "browser_policy_canonical", err)
 	}
+
 	documentBrowserPolicy, err := model.ParseBrowserPolicyDocument([]byte(row.BrowserPolicyDocument))
 	if err != nil {
 		return model.ExamRevisionPolicy{}, model.BrowserPolicy{}, invalidPersistedState("exam_revision", "browser_policy_document", err)
 	}
+
 	browserCanonical, _ := model.EncodeBrowserPolicy(browserPolicy)
 	documentBrowserCanonical, _ := model.EncodeBrowserPolicy(documentBrowserPolicy)
 	if !bytes.Equal(documentBrowserCanonical, browserCanonical) {
-		return model.ExamRevisionPolicy{}, model.BrowserPolicy{}, invalidPersistedState("exam_revision", "browser_policy_document", errors.New("canonical Browser Policy mismatch"))
+		return model.ExamRevisionPolicy{}, model.BrowserPolicy{}, invalidPersistedState(
+			"exam_revision",
+			"browser_policy_document",
+			errors.New("canonical Browser Policy mismatch"),
+		)
 	}
+
 	return policy, browserPolicy, nil
 }
 
 // candidateCorrectionNotice decodes the header row's Candidate Correction Notice,
 // which is either wholly absent or wholly present.
 func (row examRevisionHeaderRow) candidateCorrectionNotice() (*model.CandidateCorrectionNotice, error) {
-	if !row.CandidateCorrectionSummary.Valid && row.CandidateCorrectionAreas == nil && row.CandidateCorrectionCapabilities == nil && !row.CandidateCorrectionAck.Valid {
+	if !row.CandidateCorrectionSummary.Valid &&
+		row.CandidateCorrectionAreas == nil &&
+		row.CandidateCorrectionCapabilities == nil &&
+		!row.CandidateCorrectionAck.Valid {
 		return nil, nil
 	}
-	if !row.CandidateCorrectionSummary.Valid || row.CandidateCorrectionAreas == nil || row.CandidateCorrectionCapabilities == nil || !row.CandidateCorrectionAck.Valid {
+
+	if !row.CandidateCorrectionSummary.Valid ||
+		row.CandidateCorrectionAreas == nil ||
+		row.CandidateCorrectionCapabilities == nil ||
+		!row.CandidateCorrectionAck.Valid {
 		return nil, invalidPersistedState("exam_revision", "candidate_correction", errors.New("incomplete Candidate Correction Notice"))
 	}
+
 	areas := make([]model.ExamCorrectionChangedArea, len(row.CandidateCorrectionAreas))
 	for index, area := range row.CandidateCorrectionAreas {
 		areas[index] = model.ExamCorrectionChangedArea(area)
 	}
+
 	capabilities := make([]model.CandidateCapability, len(row.CandidateCorrectionCapabilities))
 	for index, capability := range row.CandidateCorrectionCapabilities {
 		capabilities[index] = model.CandidateCapability(capability)
 	}
-	correctionNotice, err := model.NewCandidateCorrectionNotice(row.CandidateCorrectionSummary.String, areas, capabilities, row.CandidateCorrectionAck.Bool)
+
+	correctionNotice, err := model.NewCandidateCorrectionNotice(
+		row.CandidateCorrectionSummary.String,
+		areas,
+		capabilities,
+		row.CandidateCorrectionAck.Bool,
+	)
 	if err != nil {
 		return nil, invalidPersistedState("exam_revision", "candidate_correction", err)
 	}
+
 	return correctionNotice, nil
 }
 
@@ -662,31 +1063,68 @@ func (row examRevisionHeaderRow) summary() (*store.ExamRevisionSummary, error) {
 	if err != nil {
 		return nil, invalidPersistedState("exam_revision", "id", err)
 	}
+
 	examID, err := model.ParseExamID(row.ExamID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_revision", "exam_id", err)
 	}
+
 	publisherID, err := model.ParseUserID(row.PublishedByUserID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_revision", "published_by_user_id", err)
 	}
-	baseID, err := parseNullablePersistedID[model.ExamRevisionID]("exam_revision", "base_revision_id", row.BaseRevisionID, model.ParseExamRevisionID)
+
+	baseID, err := parseNullablePersistedID[model.ExamRevisionID](
+		"exam_revision",
+		"base_revision_id",
+		row.BaseRevisionID,
+		model.ParseExamRevisionID,
+	)
 	if err != nil {
 		return nil, err
 	}
-	if !row.Sealed || row.SnapshotSchemaVersion != model.ExamRevisionSnapshotSchemaVersion || row.Number < 1 || row.SourceDraftRevision < 1 || row.PolicySchemaVersion < 1 ||
-		row.ResourceCount < 0 || row.ResourceCount > model.ExamResourceMaximumCount || row.StarterEntryCount < 0 || row.StarterEntryCount > model.StarterWorkspaceMaximumEntries ||
-		row.StarterTotalBytes < 0 || row.StarterTotalBytes > model.StarterWorkspaceMaximumTotalBytes || !model.ExamRevisionPublicationKind(row.PublicationKind).IsValid() {
+
+	if !row.Sealed ||
+		row.SnapshotSchemaVersion != model.ExamRevisionSnapshotSchemaVersion ||
+		row.Number < 1 ||
+		row.SourceDraftRevision < 1 ||
+		row.PolicySchemaVersion < 1 ||
+		row.ResourceCount < 0 ||
+		row.ResourceCount > model.ExamResourceMaximumCount ||
+		row.StarterEntryCount < 0 ||
+		row.StarterEntryCount > model.StarterWorkspaceMaximumEntries ||
+		row.StarterTotalBytes < 0 ||
+		row.StarterTotalBytes > model.StarterWorkspaceMaximumTotalBytes ||
+		!model.ExamRevisionPublicationKind(row.PublicationKind).IsValid() {
 		return nil, invalidPersistedState("exam_revision", "summary", errors.New("invalid summary"))
 	}
-	return &store.ExamRevisionSummary{ID: id, ExamID: examID, Number: row.Number, SourceDraftRevision: row.SourceDraftRevision, Title: row.Title,
-		PolicySchemaVersion: row.PolicySchemaVersion, PolicyDigest: row.PolicyDigest,
-		BrowserPolicyDigest: row.BrowserPolicyDigest, StarterWorkspaceDigest: row.StarterWorkspaceDigest,
-		Capacity: model.ExamCapacityPolicy{ResourceMaximumCount: row.ResourceMaximumCount, ResourceMaximumBytes: row.ResourceMaximumBytes,
-			WorkspaceMaximumEntries: row.WorkspaceMaximumEntries, WorkspaceMaximumFileBytes: row.WorkspaceMaximumFileBytes, WorkspaceMaximumTotalBytes: row.WorkspaceMaximumTotalBytes},
-		ContentDigest: row.ContentDigest, ResourceCount: row.ResourceCount, StarterWorkspaceEntries: row.StarterEntryCount,
-		StarterWorkspaceBytes: row.StarterTotalBytes, PublishedByUserID: publisherID, PublishedAt: model.TimeUTC(row.PublishedAt),
-		BaseRevisionID: baseID, Kind: model.ExamRevisionPublicationKind(row.PublicationKind)}, nil
+
+	return &store.ExamRevisionSummary{
+		ID:                     id,
+		ExamID:                 examID,
+		Number:                 row.Number,
+		SourceDraftRevision:    row.SourceDraftRevision,
+		Title:                  row.Title,
+		PolicySchemaVersion:    row.PolicySchemaVersion,
+		PolicyDigest:           row.PolicyDigest,
+		BrowserPolicyDigest:    row.BrowserPolicyDigest,
+		StarterWorkspaceDigest: row.StarterWorkspaceDigest,
+		Capacity: model.ExamCapacityPolicy{
+			ResourceMaximumCount:       row.ResourceMaximumCount,
+			ResourceMaximumBytes:       row.ResourceMaximumBytes,
+			WorkspaceMaximumEntries:    row.WorkspaceMaximumEntries,
+			WorkspaceMaximumFileBytes:  row.WorkspaceMaximumFileBytes,
+			WorkspaceMaximumTotalBytes: row.WorkspaceMaximumTotalBytes,
+		},
+		ContentDigest:           row.ContentDigest,
+		ResourceCount:           row.ResourceCount,
+		StarterWorkspaceEntries: row.StarterEntryCount,
+		StarterWorkspaceBytes:   row.StarterTotalBytes,
+		PublishedByUserID:       publisherID,
+		PublishedAt:             model.TimeUTC(row.PublishedAt),
+		BaseRevisionID:          baseID,
+		Kind:                    model.ExamRevisionPublicationKind(row.PublicationKind),
+	}, nil
 }
 
 var _ store.ExamRevisionStore = (*SQLExamRevisionStore)(nil)

@@ -70,15 +70,18 @@ func (c *Content) BuildExamExport(ctx context.Context, input exam.ExportArchiveI
 	if err := c.validateExamExportInput(input); err != nil {
 		return nil, err
 	}
+
 	release, err := c.beginWork(ctx)
 	if err != nil {
 		return nil, err
 	}
+
 	defer release()
 	spool, releaseSpool, err := createUnlinkedSpool("proctor-exam-export-*")
 	if err != nil {
 		return nil, sanitize("create Exam export spool", err)
 	}
+
 	defer releaseSpool()
 	bounded := &examExportBoundedWriter{writer: spool, remaining: model.ExamExportMaximumArchiveBytes}
 	if err = c.writeExamExportArchive(ctx, zip.NewWriter(bounded), input); err != nil {
@@ -87,45 +90,60 @@ func (c *Content) BuildExamExport(ctx context.Context, input exam.ExportArchiveI
 	if _, err = spool.Seek(0, io.SeekStart); err != nil {
 		return nil, sanitize("rewind Exam export spool", err)
 	}
+
 	hash := sha256.New()
 	size, err := io.CopyBuffer(hash, workReader{ctx: ctx, reader: spool}, make([]byte, 32<<10))
 	if err != nil {
 		return nil, sanitize("hash Exam export archive", err)
 	}
+
 	result := &exam.ExportArchiveContent{SizeBytes: size, SHA256: hex.EncodeToString(hash.Sum(nil))}
 	if !model.ValidExamExportContent(result.SizeBytes, result.SHA256) {
 		return nil, errors.New("invalid Exam export archive size")
 	}
+
 	return c.storeExamExport(ctx, examExportKey(input.ExportID, input.AttemptID), spool, result)
 }
 
 // validateExamExportInput rejects malformed records, foreign owners, invalid or duplicate files and oversized sources.
 func (c *Content) validateExamExportInput(input exam.ExportArchiveInput) error {
-	if c == nil || c.filesystem == nil || !input.ExportID.IsValid() || !input.AttemptID.IsValid() || len(input.Records) < 1 || len(input.Records) > model.ExamExportMaximumSnapshotBytes || !json.Valid(input.Records) || len(input.Files) > model.ExamExportMaximumEntries {
+	if c == nil ||
+		c.filesystem == nil ||
+		!input.ExportID.IsValid() ||
+		!input.AttemptID.IsValid() ||
+		len(input.Records) < 1 ||
+		len(input.Records) > model.ExamExportMaximumSnapshotBytes ||
+		!json.Valid(input.Records) ||
+		len(input.Files) > model.ExamExportMaximumEntries {
 		return errors.New("invalid Exam export input")
 	}
+
 	var envelope struct {
 		ExportID model.ExamExportID `json:"export_id"`
 	}
 	if json.Unmarshal(input.Records, &envelope) != nil || envelope.ExportID != input.ExportID {
 		return errors.New("invalid Exam export records owner")
 	}
+
 	seen := make(map[string]struct{}, len(input.Files))
 	var total int64
 	for _, f := range input.Files {
 		if !f.SubmissionID.IsValid() || f.Entry.Validate() != nil || f.Entry.Kind != model.StarterWorkspaceEntryFile {
 			return errors.New("invalid Exam export file")
 		}
+
 		name := examExportFileMember(f)
 		if _, exists := seen[name]; exists {
 			return errors.New("duplicate Exam export file")
 		}
+
 		seen[name] = struct{}{}
 		total += f.Entry.SizeBytes
 		if total > model.ExamExportMaximumSourceBytes {
 			return errors.New("Exam export exceeds byte limit")
 		}
 	}
+
 	return nil
 }
 
@@ -174,9 +192,11 @@ func (c *Content) copyExamExportFile(ctx context.Context, archive *zip.Writer, f
 	default:
 		return examExportManifestEntry{}, errors.New("invalid Exam export storage origin")
 	}
+
 	if err != nil {
 		return examExportManifestEntry{}, sanitize("open Exam export source", err)
 	}
+
 	size, digest, copyErr := writeExamExportMember(ctx, archive, examExportFileMember(f), body, f.Entry.SizeBytes)
 	closeErr := body.Close()
 	if copyErr != nil || closeErr != nil {
@@ -185,11 +205,25 @@ func (c *Content) copyExamExportFile(ctx context.Context, archive *zip.Writer, f
 	if size != f.Entry.SizeBytes || digest != f.Entry.SHA256 {
 		return examExportManifestEntry{}, errors.New("Exam export source verification failed")
 	}
-	return examExportManifestEntry{ArchivePath: examExportFileMember(f), SizeBytes: size, SHA256: digest, SubmissionID: f.SubmissionID, EntryID: f.Entry.EntryID, OriginalPath: f.Entry.Path, MediaType: f.Entry.MediaType}, nil
+
+	return examExportManifestEntry{
+		ArchivePath:  examExportFileMember(f),
+		SizeBytes:    size,
+		SHA256:       digest,
+		SubmissionID: f.SubmissionID,
+		EntryID:      f.Entry.EntryID,
+		OriginalPath: f.Entry.Path,
+		MediaType:    f.Entry.MediaType,
+	}, nil
 }
 
 // storeExamExport writes the spooled archive under key and publishes it only after an independent read verifies it.
-func (c *Content) storeExamExport(ctx context.Context, key string, spool *os.File, result *exam.ExportArchiveContent) (*exam.ExportArchiveContent, error) {
+func (c *Content) storeExamExport(
+	ctx context.Context,
+	key string,
+	spool *os.File,
+	result *exam.ExportArchiveContent,
+) (*exam.ExportArchiveContent, error) {
 	conditional := c.filesystem.Capabilities().ConditionalWrite
 	if !conditional {
 		matching, verifyErr := c.verifyExamExport(ctx, key, result)
@@ -199,13 +233,16 @@ func (c *Content) storeExamExport(ctx context.Context, key string, spool *os.Fil
 			}
 			return nil, errors.New("Exam export object conflict")
 		}
+
 		if !errors.Is(verifyErr, vfs.ErrNotFound) {
 			return nil, sanitize("inspect Exam export object", verifyErr)
 		}
 	}
+
 	if _, err := spool.Seek(0, io.SeekStart); err != nil {
 		return nil, sanitize("rewind Exam export spool", err)
 	}
+
 	size := result.SizeBytes
 	_, writeErr := c.filesystem.Write(ctx, key, workReader{ctx: ctx, reader: spool}, vfs.WriteOptions{Size: &size, NoOverwrite: conditional})
 	// An error acknowledgement can still mean the exact immutable write
@@ -218,8 +255,10 @@ func (c *Content) storeExamExport(ctx context.Context, key string, spool *os.Fil
 		if verifyErr != nil {
 			return nil, sanitize("verify Exam export archive", verifyErr)
 		}
+
 		return nil, errors.New("Exam export archive verification failed")
 	}
+
 	return result, nil
 }
 
@@ -234,14 +273,20 @@ func writeExamExportMember(ctx context.Context, archive *zip.Writer, name string
 	if err != nil {
 		return 0, "", err
 	}
+
 	hash := sha256.New()
-	size, err := io.CopyBuffer(io.MultiWriter(member, hash), io.LimitReader(workReader{ctx: ctx, reader: body}, expected+1), make([]byte, 32<<10))
+	size, err := io.CopyBuffer(
+		io.MultiWriter(member, hash),
+		io.LimitReader(workReader{ctx: ctx, reader: body}, expected+1),
+		make([]byte, 32<<10),
+	)
 	if err != nil {
 		return 0, "", err
 	}
 	if size != expected {
 		return 0, "", errors.New("Exam export member size mismatch")
 	}
+
 	return size, hex.EncodeToString(hash.Sum(nil)), nil
 }
 

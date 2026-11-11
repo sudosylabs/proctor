@@ -32,3 +32,27 @@ func (m *Module) WorkRejected(pool string) {
 }
 
 func validWorkPool(pool string) bool { return pool == "password" || pool == "file_content" }
+
+// WorkRecorder reports one of the fixed work pools to the consumer that runs
+// it. The pool is chosen by composition, never derived from requests or
+// errors.
+type WorkRecorder struct {
+	module *Module
+	pool   string
+}
+
+// WorkRecorder returns the recorder for pool.
+func (m *Module) WorkRecorder(pool string) WorkRecorder {
+	return WorkRecorder{module: m, pool: pool}
+}
+
+// Started records admission to the pool.
+func (r WorkRecorder) Started() { r.module.WorkStarted(r.pool) }
+
+// Finished records that admitted work returned after duration.
+func (r WorkRecorder) Finished(duration time.Duration) {
+	r.module.WorkFinished(r.pool, duration)
+}
+
+// Rejected records that the pool refused work.
+func (r WorkRecorder) Rejected() { r.module.WorkRejected(r.pool) }

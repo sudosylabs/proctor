@@ -29,14 +29,14 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
-	if err := validateDeclarations(declared, entityIDs); err != nil {
-		fatal(err)
+	if validateErr := validateDeclarations(declared, entityIDs); validateErr != nil {
+		fatal(validateErr)
 	}
 	generated, err := render(entityIDs)
 	if err != nil {
 		fatal(err)
 	}
-	if err := os.WriteFile(*output, generated, 0o644); err != nil {
+	if err := os.WriteFile(*output, generated, 0o644); err != nil { //nolint:gosec // G306: generated Go source checked into the repository.
 		fatal(fmt.Errorf("write %s: %w", *output, err))
 	}
 }

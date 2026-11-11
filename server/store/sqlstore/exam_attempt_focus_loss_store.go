@@ -20,6 +20,15 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLExamFocusLossStore is the PostgreSQL store.ExamFocusLossStore, which
+// evaluates live Focus Loss reports and retains reports that arrive after
+// sealing.
+type SQLExamFocusLossStore struct{ *SQLStore }
+
+func newSQLExamFocusLossStore(sqlStore *SQLStore) store.ExamFocusLossStore {
+	return &SQLExamFocusLossStore{SQLStore: sqlStore}
+}
+
 type focusLossAccessRow struct {
 	ExamID                 string         `db:"exam_id"`
 	SittingID              string         `db:"sitting_id"`
@@ -93,84 +102,149 @@ type focusLossEvaluationRow struct {
 	LastSuspensionID                sql.NullString `db:"last_suspension_id"`
 }
 
-const focusLossEvaluationColumns = `exam_attempt_id,participation_id,generation,accepted_sequence,last_signal_id,
-	last_connection_id,last_duration_milliseconds,last_source,last_received_at,last_collection_enabled,last_qualified,
-	last_missing_before,unresolved_missing_count,last_window_incident_count,last_threshold_crossed,last_policy_outcome,retained_evidence_count,
-	overflow_count,overflow_first_received_at,overflow_last_received_at,overflow_maximum_duration_milliseconds,
-	diagnostic_count,integrity_flag_id,warning_created,last_flag_returned,last_flag_created,last_warning_created,
-	last_manager_notification_required,last_connection_closed,last_suspension_id`
+const focusLossEvaluationColumns = `exam_attempt_id, participation_id, generation,
+		accepted_sequence, last_signal_id, last_connection_id, last_duration_milliseconds,
+		last_source, last_received_at, last_collection_enabled, last_qualified, last_missing_before,
+		unresolved_missing_count, last_window_incident_count, last_threshold_crossed,
+		last_policy_outcome, retained_evidence_count, overflow_count, overflow_first_received_at,
+		overflow_last_received_at, overflow_maximum_duration_milliseconds, diagnostic_count,
+		integrity_flag_id, warning_created, last_flag_returned, last_flag_created,
+		last_warning_created, last_manager_notification_required, last_connection_closed,
+		last_suspension_id`
 
 func validateFocusLossAccess(access store.ExamAttemptFocusLossAccess) error {
-	if !access.AttemptID.IsValid() || !access.ParticipationID.IsValid() || access.Generation < 1 ||
-		!access.CandidateUserID.IsValid() || !access.SessionID.IsValid() || !access.ConnectionID.IsValid() ||
+	if !access.AttemptID.IsValid() ||
+		!access.ParticipationID.IsValid() ||
+		access.Generation < 1 ||
+		!access.CandidateUserID.IsValid() ||
+		!access.SessionID.IsValid() ||
+		!access.ConnectionID.IsValid() ||
 		!model.IsValidTokenHash(access.ContinuityCredentialHash) {
 		return store.NewErrInvalidInput("focus_loss", "access", nil)
 	}
+
 	return nil
 }
 
 func validateFocusLossSignal(input *store.ExamAttemptFocusLossSignal) error {
-	if input == nil || validateFocusLossAccess(input.Access) != nil ||
-		!input.SignalID.IsValid() || !input.EvidenceID.IsValid() || !input.FlagID.IsValid() || !input.SuspensionID.IsValid() ||
-		input.Sequence < 1 || input.DurationMilliseconds < 1 ||
-		input.DurationMilliseconds > model.FocusLossMaximumDurationMilliseconds || !input.Source.IsValid() ||
-		!input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+	if input == nil ||
+		validateFocusLossAccess(input.Access) != nil ||
+		!input.SignalID.IsValid() ||
+		!input.EvidenceID.IsValid() ||
+		!input.FlagID.IsValid() ||
+		!input.SuspensionID.IsValid() ||
+		input.Sequence < 1 ||
+		input.DurationMilliseconds < 1 ||
+		input.DurationMilliseconds > model.FocusLossMaximumDurationMilliseconds ||
+		!input.Source.IsValid() ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() {
 		return store.NewErrInvalidInput("focus_loss", "signal", nil)
 	}
+
 	return nil
 }
 
-// ResolveFocusLossTarget implements store.ExamAttemptStore: it resolves the
+// ResolveFocusLossTarget implements store.ExamFocusLossStore: it resolves the
 // audit scope of a live Focus Loss report without evaluating or mutating
 // anything.
-func (s *SQLExamAttemptStore) ResolveFocusLossTarget(ctx context.Context, access store.ExamAttemptFocusLossAccess) (*store.ExamAttemptFocusLossTarget, error) {
+//
+// It resolves safe audit and effect scope after checking the established
+// access selector. It also resolves the exact retained policy_suspended causal
+// selector for duplicate-audit preflight only; it grants no new-claim
+// authority.
+func (s *SQLExamFocusLossStore) ResolveFocusLossTarget(
+	ctx context.Context,
+	access store.ExamAttemptFocusLossAccess,
+) (*store.ExamAttemptFocusLossTarget, error) {
 	if err := validateFocusLossAccess(access); err != nil {
 		return nil, err
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "resolve Focus Loss target", func(ctx context.Context, tx *sqlxTxWrapper) (*store.ExamAttemptFocusLossTarget, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "resolve Focus Loss target", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.ExamAttemptFocusLossTarget, error) {
 		row, err := lockFocusLossAccess(ctx, tx, access)
 		if err != nil {
 			return nil, err
 		}
+
 		if activeErr := requireActiveFocusLossAccess(row, access); activeErr != nil {
 			state, stateErr := lockFocusLossEvaluation(ctx, tx, access.AttemptID, access.Generation)
 			if stateErr != nil || requireFocusLossReplayAccess(row, state, access) != nil {
 				return nil, activeErr
 			}
 		}
+
 		return focusLossTarget(row)
 	})
 }
 
-// RecordFocusLoss implements store.ExamAttemptStore: it evaluates the next
+// RecordFocusLoss implements store.ExamFocusLossStore: it evaluates the next
 // Focus Loss sequence against the Exam policy using database time and applies
 // any Flag or suspension. Exact duplicates return the retained result; other
 // replays of an accepted sequence conflict.
-func (s *SQLExamAttemptStore) RecordFocusLoss(ctx context.Context, input *store.ExamAttemptFocusLossSignal) (*store.ExamAttemptFocusLossResult, error) {
+//
+// It is the single PostgreSQL-time evaluation operation. It atomically accepts
+// the next sequence, records gap uncertainty, evaluates and consumes the
+// rolling bucket, bounds evidence/overflow or disabled-policy diagnostics,
+// creates at most one Flag and warning per generation, applies the configured
+// suspension fence, and completes the supplied safe audit. Equal latest
+// sequence is a duplicate only when duration and source match; changed
+// equal-sequence or lower sequence conflicts as focus_loss_sequence. Exact
+// duplicates reauthorize and complete their new audit before returning the
+// retained result. A threshold-crossing FlagAndSuspend duplicate remains
+// replayable through its exact retained causal selector after that transition
+// closed the Participation and Connection; it cannot admit any different or
+// later claim through the closed selector. Stable access conflicts retain the
+// existing Attempt/Participation/Connection constraint vocabulary.
+func (s *SQLExamFocusLossStore) RecordFocusLoss(
+	ctx context.Context,
+	input *store.ExamAttemptFocusLossSignal,
+) (*store.ExamAttemptFocusLossResult, error) {
 	if err := validateFocusLossSignal(input); err != nil {
 		return nil, err
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "record Focus Loss", func(ctx context.Context, tx *sqlxTxWrapper) (*store.ExamAttemptFocusLossResult, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "record Focus Loss", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.ExamAttemptFocusLossResult, error) {
 		return recordFocusLoss(ctx, tx, input)
 	})
 }
 
 // recordFocusLoss evaluates and retains one Focus Loss signal inside the
 // caller's transaction.
-func recordFocusLoss(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamAttemptFocusLossSignal) (*store.ExamAttemptFocusLossResult, error) {
+func recordFocusLoss(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.ExamAttemptFocusLossSignal,
+) (*store.ExamAttemptFocusLossResult, error) {
 	access, err := lockFocusLossAccess(ctx, tx, input.Access)
 	if err != nil {
 		return nil, err
 	}
+
 	policySet, err := model.DecodeExamPolicySet(access.PolicyCanonical)
 	if err != nil {
 		return nil, invalidPersistedState("exam_revision", "policy_canonical", err)
 	}
-	if _, err = tx.Exec(ctx, `INSERT INTO exam_attempt_focus_loss_evaluations
-		(exam_attempt_id,participation_id,generation,updated_at) VALUES (?,?,?,?) ON CONFLICT DO NOTHING`,
-		input.Access.AttemptID.String(), input.Access.ParticipationID.String(), input.Access.Generation, access.DatabaseNow); err != nil {
+
+	if _, err = tx.Exec(
+		ctx,
+		`INSERT INTO exam_attempt_focus_loss_evaluations (
+			exam_attempt_id, participation_id, generation, updated_at
+		)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT DO NOTHING`,
+		input.Access.AttemptID.String(),
+		input.Access.ParticipationID.String(),
+		input.Access.Generation,
+		access.DatabaseNow,
+	); err != nil {
 		return nil, fmt.Errorf("initialize Focus Loss evaluation: %w", err)
 	}
+
 	state, err := lockFocusLossEvaluation(ctx, tx, input.Access.AttemptID, input.Access.Generation)
 	if err != nil {
 		return nil, err
@@ -189,6 +263,7 @@ func recordFocusLoss(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamAt
 	if err != nil {
 		return nil, err
 	}
+
 	connectionClosed, suspensionID, err := applyFocusLossDecision(ctx, tx, input, access, &state, decision)
 	if err != nil {
 		return nil, err
@@ -196,10 +271,12 @@ func recordFocusLoss(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamAt
 	if err = retainFocusLossOutcome(ctx, tx, input, access, state, decision, connectionClosed, suspensionID); err != nil {
 		return nil, err
 	}
+
 	state, err = lockFocusLossEvaluation(ctx, tx, input.Access.AttemptID, input.Access.Generation)
 	if err != nil {
 		return nil, err
 	}
+
 	result, err := loadFocusLossResult(ctx, tx, access, state, false)
 	if err != nil {
 		return nil, err
@@ -207,18 +284,26 @@ func recordFocusLoss(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamAt
 	if err = completeFocusLossAudit(ctx, tx, result, input.AuditEventID, input.AuditAt); err != nil {
 		return nil, err
 	}
+
 	return result, nil
 }
 
 // replayFocusLoss returns the retained result of an exact duplicate of the
 // accepted sequence and refuses any other replay.
-func replayFocusLoss(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamAttemptFocusLossSignal, access focusLossAccessRow, state focusLossEvaluationRow) (*store.ExamAttemptFocusLossResult, error) {
+func replayFocusLoss(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.ExamAttemptFocusLossSignal,
+	access focusLossAccessRow,
+	state focusLossEvaluationRow,
+) (*store.ExamAttemptFocusLossResult, error) {
 	if input.Sequence != state.AcceptedSequence || !sameRetainedFocusLossClaim(state, input) {
 		return nil, store.NewErrConflict("focus_loss", "focus_loss_sequence", nil)
 	}
 	if err := requireFocusLossReplayAccess(access, state, input.Access); err != nil {
 		return nil, err
 	}
+
 	result, loadErr := loadFocusLossResult(ctx, tx, access, state, true)
 	if loadErr != nil {
 		return nil, loadErr
@@ -226,88 +311,181 @@ func replayFocusLoss(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamAt
 	if auditErr := completeFocusLossAudit(ctx, tx, result, input.AuditEventID, input.AuditAt); auditErr != nil {
 		return nil, auditErr
 	}
+
 	return result, nil
 }
 
 // decideFocusLoss maintains the pending evaluation window for the signal and
 // decides its policy outcome.
-func decideFocusLoss(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamAttemptFocusLossSignal, access focusLossAccessRow, policySet model.ExamPolicySet, state focusLossEvaluationRow) (model.FocusLossEvaluationDecision, error) {
-	signal, err := model.NewFocusLossSignal(input.SignalID, input.Access.AttemptID, input.Access.ParticipationID,
-		input.Access.Generation, input.Sequence, input.DurationMilliseconds, input.Source, access.DatabaseNow)
+func decideFocusLoss(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.ExamAttemptFocusLossSignal,
+	access focusLossAccessRow,
+	policySet model.ExamPolicySet,
+	state focusLossEvaluationRow,
+) (model.FocusLossEvaluationDecision, error) {
+	signal, err := model.NewFocusLossSignal(
+		input.SignalID,
+		input.Access.AttemptID,
+		input.Access.ParticipationID,
+		input.Access.Generation,
+		input.Sequence,
+		input.DurationMilliseconds,
+		input.Source,
+		access.DatabaseNow,
+	)
 	if err != nil {
 		return model.FocusLossEvaluationDecision{}, store.NewErrInvalidInput("focus_loss", "signal", nil).Wrap(err)
 	}
+
 	evaluation, err := model.NewFocusLossEvaluation(policySet.FocusLoss, *signal)
 	if err != nil {
 		return model.FocusLossEvaluationDecision{}, invalidPersistedState("focus_loss", "evaluation", err)
 	}
-	if _, err = tx.Exec(ctx, `DELETE FROM exam_attempt_focus_loss_pending
-		WHERE exam_attempt_id=? AND generation=? AND received_at<?`, input.Access.AttemptID.String(), input.Access.Generation,
-		evaluation.WindowStartsAt()); err != nil {
+
+	if _, err = tx.Exec(
+		ctx,
+		`DELETE FROM exam_attempt_focus_loss_pending
+		WHERE exam_attempt_id = ?
+			AND generation = ?
+			AND received_at < ?`,
+		input.Access.AttemptID.String(),
+		input.Access.Generation,
+		evaluation.WindowStartsAt(),
+	); err != nil {
 		return model.FocusLossEvaluationDecision{}, fmt.Errorf("expire Focus Loss evaluation window: %w", err)
 	}
+
 	if evaluation.RetainInWindow() {
-		if _, err = tx.Exec(ctx, `INSERT INTO exam_attempt_focus_loss_pending
-			(exam_attempt_id,participation_id,generation,sequence,signal_id,evidence_id,duration_milliseconds,source,missing_before,received_at)
-			VALUES (?,?,?,?,?,?,?,?,0,?)`, input.Access.AttemptID.String(), input.Access.ParticipationID.String(), input.Access.Generation,
-			input.Sequence, input.SignalID.String(), input.EvidenceID.String(), input.DurationMilliseconds, nullableFocusLossSource(input.Source),
-			access.DatabaseNow); err != nil {
-			return model.FocusLossEvaluationDecision{}, fmt.Errorf("append Focus Loss pending claim: %w", translateError("focus_loss", input.SignalID.String(), err))
+		if _, err = tx.Exec(
+			ctx,
+			`INSERT INTO exam_attempt_focus_loss_pending (
+				exam_attempt_id, participation_id, generation, sequence, signal_id, evidence_id,
+					duration_milliseconds, source, missing_before, received_at
+			)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+			input.Access.AttemptID.String(),
+			input.Access.ParticipationID.String(),
+			input.Access.Generation,
+			input.Sequence,
+			input.SignalID.String(),
+			input.EvidenceID.String(),
+			input.DurationMilliseconds,
+			nullableFocusLossSource(input.Source),
+			access.DatabaseNow,
+		); err != nil {
+			return model.FocusLossEvaluationDecision{}, fmt.Errorf(
+				"append Focus Loss pending claim: %w",
+				translateError("focus_loss", input.SignalID.String(), err),
+			)
 		}
 	}
+
 	var windowCount int
-	if err = tx.Get(ctx, &windowCount, `SELECT count(*) FROM exam_attempt_focus_loss_pending
-		WHERE exam_attempt_id=? AND generation=?`, input.Access.AttemptID.String(), input.Access.Generation); err != nil {
+	if err = tx.Get(ctx, &windowCount, `SELECT count(*)
+		FROM exam_attempt_focus_loss_pending
+		WHERE exam_attempt_id = ?
+			AND generation = ?`, input.Access.AttemptID.String(), input.Access.Generation); err != nil {
 		return model.FocusLossEvaluationDecision{}, fmt.Errorf("count Focus Loss evaluation window: %w", err)
 	}
-	decision, err := evaluation.Decide(model.FocusLossEvaluationState{AcceptedSequence: state.AcceptedSequence,
-		WindowIncidentCount: windowCount, UnresolvedMissingCount: state.UnresolvedMissingCount,
-		DiagnosticCount: state.DiagnosticCount, HasOpenFlag: state.FlagID.Valid, CandidateWarningCreated: state.WarningCreated})
+
+	decision, err := evaluation.Decide(model.FocusLossEvaluationState{
+		AcceptedSequence:        state.AcceptedSequence,
+		WindowIncidentCount:     windowCount,
+		UnresolvedMissingCount:  state.UnresolvedMissingCount,
+		DiagnosticCount:         state.DiagnosticCount,
+		HasOpenFlag:             state.FlagID.Valid,
+		CandidateWarningCreated: state.WarningCreated,
+	})
 	if err != nil {
 		return model.FocusLossEvaluationDecision{}, invalidPersistedState("focus_loss", "evaluation_state", err)
 	}
+
 	if evaluation.RetainInWindow() {
-		updated, updateErr := tx.Exec(ctx, `UPDATE exam_attempt_focus_loss_pending SET missing_before=?
-			WHERE exam_attempt_id=? AND generation=? AND sequence=?`, decision.MissingBefore, input.Access.AttemptID.String(),
-			input.Access.Generation, input.Sequence)
+		updated, updateErr := tx.Exec(
+			ctx,
+			`UPDATE exam_attempt_focus_loss_pending
+			SET missing_before = ?
+			WHERE exam_attempt_id = ?
+				AND generation = ?
+				AND sequence = ?`,
+			decision.MissingBefore,
+			input.Access.AttemptID.String(),
+			input.Access.Generation,
+			input.Sequence,
+		)
 		if updateErr != nil {
 			return model.FocusLossEvaluationDecision{}, fmt.Errorf("retain Focus Loss gap uncertainty: %w", updateErr)
 		}
+
 		if affected, rowsErr := updated.RowsAffected(); rowsErr != nil || affected != 1 {
 			if rowsErr != nil {
 				return model.FocusLossEvaluationDecision{}, fmt.Errorf("inspect Focus Loss gap retention: %w", rowsErr)
 			}
-			return model.FocusLossEvaluationDecision{}, invalidPersistedState("focus_loss", "pending_signal", errors.New("current qualifying signal is missing"))
+			return model.FocusLossEvaluationDecision{}, invalidPersistedState(
+				"focus_loss",
+				"pending_signal",
+				errors.New("current qualifying signal is missing"),
+			)
 		}
 	}
+
 	return decision, nil
 }
 
 // applyFocusLossDecision creates the decided Flag, consumes the window and
 // applies any suspension, updating the evaluation state.
-func applyFocusLossDecision(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamAttemptFocusLossSignal, access focusLossAccessRow, state *focusLossEvaluationRow, decision model.FocusLossEvaluationDecision) (bool, sql.NullString, error) {
+func applyFocusLossDecision(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.ExamAttemptFocusLossSignal,
+	access focusLossAccessRow,
+	state *focusLossEvaluationRow,
+	decision model.FocusLossEvaluationDecision,
+) (bool, sql.NullString, error) {
 	if decision.CreateFlag {
-		flag, flagErr := model.NewIntegrityFlag(input.FlagID, input.Access.AttemptID, input.Access.Generation,
-			model.IntegrityPolicyFocusLoss, access.DatabaseNow)
+		flag, flagErr := model.NewIntegrityFlag(
+			input.FlagID,
+			input.Access.AttemptID,
+			input.Access.Generation,
+			model.IntegrityPolicyFocusLoss,
+			access.DatabaseNow,
+		)
 		if flagErr != nil {
 			return false, sql.NullString{}, flagErr
 		}
+
 		state.FlagID = sql.NullString{String: flag.ID.String(), Valid: true}
-		if _, err := tx.Exec(ctx, `INSERT INTO integrity_flags (id,exam_attempt_id,generation,policy_kind,state,created_at)
-			VALUES (?,?,?,?,?,?)`, flag.ID.String(), flag.AttemptID.String(), flag.Generation, flag.Kind, flag.State, flag.CreatedAt); err != nil {
+		if _, err := tx.Exec(
+			ctx,
+			`INSERT INTO integrity_flags (
+				id, exam_attempt_id, generation, policy_kind, state, created_at
+			)
+			VALUES (?, ?, ?, ?, ?, ?)`,
+			flag.ID.String(),
+			flag.AttemptID.String(),
+			flag.Generation,
+			flag.Kind,
+			flag.State,
+			flag.CreatedAt,
+		); err != nil {
 			return false, sql.NullString{}, fmt.Errorf("create Focus Loss Flag: %w", translateError("integrity_flag", input.FlagID.String(), err))
 		}
 	}
+
 	if decision.ConsumeWindow {
 		if err := consumeFocusLossBucket(ctx, tx, input.Access, state); err != nil {
 			return false, sql.NullString{}, err
 		}
 	}
+
 	state.UnresolvedMissingCount = decision.UnresolvedMissingCount
 	state.DiagnosticCount = decision.DiagnosticCount
 	if decision.CreateCandidateWarning {
 		state.WarningCreated = true
 	}
+
 	connectionClosed := false
 	var suspensionID sql.NullString
 	if decision.Suspend {
@@ -318,55 +496,122 @@ func applyFocusLossDecision(ctx context.Context, tx *sqlxTxWrapper, input *store
 			return false, sql.NullString{}, err
 		}
 	}
+
 	return connectionClosed, suspensionID, nil
 }
 
 // retainFocusLossOutcome writes the signal's decision and the updated
 // evaluation state.
-func retainFocusLossOutcome(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamAttemptFocusLossSignal, access focusLossAccessRow, state focusLossEvaluationRow, decision model.FocusLossEvaluationDecision, connectionClosed bool, suspensionID sql.NullString) error {
+func retainFocusLossOutcome(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.ExamAttemptFocusLossSignal,
+	access focusLossAccessRow,
+	state focusLossEvaluationRow,
+	decision model.FocusLossEvaluationDecision,
+	connectionClosed bool,
+	suspensionID sql.NullString,
+) error {
 	outcome := any(nil)
 	if decision.PolicyOutcome != "" {
 		outcome = string(decision.PolicyOutcome)
 	}
-	if _, err := tx.Exec(ctx, `UPDATE exam_attempt_focus_loss_evaluations SET
-		accepted_sequence=?,last_signal_id=?,last_connection_id=?,last_duration_milliseconds=?,last_source=?,last_received_at=?,
-		last_collection_enabled=?,last_qualified=?,last_missing_before=?,unresolved_missing_count=?,last_window_incident_count=?,last_threshold_crossed=?,
-		last_policy_outcome=?,retained_evidence_count=?,overflow_count=?,overflow_first_received_at=?,overflow_last_received_at=?,
-		overflow_maximum_duration_milliseconds=?,diagnostic_count=?,integrity_flag_id=?,warning_created=?,last_flag_returned=?,
-		last_flag_created=?,last_warning_created=?,last_manager_notification_required=?,last_connection_closed=?,last_suspension_id=?,updated_at=?
-		WHERE exam_attempt_id=? AND generation=?`, input.Sequence, input.SignalID.String(), input.Access.ConnectionID.String(),
-		input.DurationMilliseconds, nullableFocusLossSource(input.Source), access.DatabaseNow, decision.CollectionEnabled, decision.Qualified, decision.MissingBefore,
-		state.UnresolvedMissingCount, decision.WindowIncidentCount, decision.ThresholdCrossed, outcome, state.RetainedEvidenceCount, state.OverflowCount,
-		focusSQLNullableTime(state.OverflowFirstReceivedAt), focusSQLNullableTime(state.OverflowLastReceivedAt), focusSQLNullableInt64(state.OverflowMaximumDurationMillis),
-		state.DiagnosticCount, focusSQLNullableString(state.FlagID), state.WarningCreated, decision.ThresholdCrossed, decision.CreateFlag, decision.CreateCandidateWarning,
-		decision.NotifyManagers, connectionClosed, focusSQLNullableString(suspensionID), access.DatabaseNow,
-		input.Access.AttemptID.String(), input.Access.Generation); err != nil {
+
+	if _, err := tx.Exec(
+		ctx,
+		`UPDATE exam_attempt_focus_loss_evaluations
+		SET accepted_sequence = ?, last_signal_id = ?, last_connection_id = ?,
+			last_duration_milliseconds = ?, last_source = ?, last_received_at = ?,
+			last_collection_enabled = ?, last_qualified = ?, last_missing_before = ?,
+			unresolved_missing_count = ?, last_window_incident_count = ?,
+			last_threshold_crossed = ?, last_policy_outcome = ?, retained_evidence_count = ?,
+			overflow_count = ?, overflow_first_received_at = ?, overflow_last_received_at = ?,
+			overflow_maximum_duration_milliseconds = ?, diagnostic_count = ?, integrity_flag_id = ?,
+			warning_created = ?, last_flag_returned = ?, last_flag_created = ?,
+			last_warning_created = ?, last_manager_notification_required = ?,
+			last_connection_closed = ?, last_suspension_id = ?, updated_at = ?
+		WHERE exam_attempt_id = ?
+			AND generation = ?`,
+		input.Sequence,
+		input.SignalID.String(),
+		input.Access.ConnectionID.String(),
+		input.DurationMilliseconds,
+		nullableFocusLossSource(input.Source),
+		access.DatabaseNow,
+		decision.CollectionEnabled,
+		decision.Qualified,
+		decision.MissingBefore,
+		state.UnresolvedMissingCount,
+		decision.WindowIncidentCount,
+		decision.ThresholdCrossed,
+		outcome,
+		state.RetainedEvidenceCount,
+		state.OverflowCount,
+		focusSQLNullableTime(state.OverflowFirstReceivedAt),
+		focusSQLNullableTime(state.OverflowLastReceivedAt),
+		focusSQLNullableInt64(state.OverflowMaximumDurationMillis),
+		state.DiagnosticCount,
+		focusSQLNullableString(state.FlagID),
+		state.WarningCreated,
+		decision.ThresholdCrossed,
+		decision.CreateFlag,
+		decision.CreateCandidateWarning,
+		decision.NotifyManagers,
+		connectionClosed,
+		focusSQLNullableString(suspensionID),
+		access.DatabaseNow,
+		input.Access.AttemptID.String(),
+		input.Access.Generation,
+	); err != nil {
 		return fmt.Errorf("retain Focus Loss outcome: %w", err)
 	}
+
 	return nil
 }
 
 func lockFocusLossAccess(ctx context.Context, tx *sqlxTxWrapper, input store.ExamAttemptFocusLossAccess) (focusLossAccessRow, error) {
 	var zero focusLossAccessRow
 	var row focusLossAccessRow
-	err := tx.Get(ctx, &row, `SELECT a.exam_id,a.exam_sitting_id AS sitting_id,s.class_id,
-		a.candidate_user_id,a.id AS attempt_id,a.admission_revision_id,a.state AS attempt_state,
-		a.created_at AS attempt_created_at,a.updated_at AS attempt_updated_at,a.revision AS attempt_revision,a.submitted_at AS attempt_submitted_at,
-		p.id AS participation_id,p.state AS participation_state,p.generation,p.renewal_sequence,p.continuity_credential_hash,
-		p.started_at AS participation_started_at,p.updated_at AS participation_updated_at,p.lease_expires_at,
-		p.ended_at AS participation_ended_at,p.end_reason AS participation_end_reason,
-		co.id AS connection_id,co.session_id AS connection_session_id,co.state AS connection_state,co.opened_at AS connection_opened_at,
-		co.closed_at AS connection_closed_at,co.close_reason AS connection_close_reason,s.state AS sitting_state,s.scheduled_end_at,
-		r.policy_canonical,se.archived_at AS session_archived_at,se.revoked_at AS session_revoked_at,
-		se.idle_expires_at AS session_idle_expires_at,se.expires_at AS session_expires_at,
-		u.archived_at AS user_archived_at,u.disabled_at AS user_disabled_at
-		FROM exam_attempts a JOIN exam_sittings s ON s.id=a.exam_sitting_id AND s.exam_id=a.exam_id
-		JOIN exam_revisions r ON r.id=a.admission_revision_id AND r.sealed=true
-		JOIN exam_attempt_participations p ON p.id=? AND p.exam_attempt_id=a.id
-		JOIN exam_attempt_connections co ON co.id=? AND co.participation_id=p.id AND co.exam_attempt_id=a.id
-		JOIN sessions se ON se.id=co.session_id JOIN users u ON u.id=se.user_id
-		WHERE a.id=? AND a.candidate_user_id=? FOR UPDATE OF a,p,co FOR SHARE OF s,r,se,u`,
-		input.ParticipationID.String(), input.ConnectionID.String(), input.AttemptID.String(), input.CandidateUserID.String())
+	err := tx.Get(
+		ctx,
+		&row,
+		`SELECT a.exam_id, a.exam_sitting_id AS sitting_id, s.class_id, a.candidate_user_id,
+			a.id AS attempt_id, a.admission_revision_id, a.state AS attempt_state,
+			a.created_at AS attempt_created_at, a.updated_at AS attempt_updated_at,
+			a.revision AS attempt_revision, a.submitted_at AS attempt_submitted_at,
+			p.id AS participation_id, p.state AS participation_state, p.generation,
+			p.renewal_sequence, p.continuity_credential_hash,
+			p.started_at AS participation_started_at, p.updated_at AS participation_updated_at,
+			p.lease_expires_at, p.ended_at AS participation_ended_at,
+			p.end_reason AS participation_end_reason, co.id AS connection_id,
+			co.session_id AS connection_session_id, co.state AS connection_state,
+			co.opened_at AS connection_opened_at, co.closed_at AS connection_closed_at,
+			co.close_reason AS connection_close_reason, s.state AS sitting_state,
+			s.scheduled_end_at, r.policy_canonical, se.archived_at AS session_archived_at,
+			se.revoked_at AS session_revoked_at, se.idle_expires_at AS session_idle_expires_at,
+			se.expires_at AS session_expires_at, u.archived_at AS user_archived_at,
+			u.disabled_at AS user_disabled_at
+		FROM exam_attempts a
+		JOIN exam_sittings s ON s.id = a.exam_sitting_id
+			AND s.exam_id = a.exam_id
+		JOIN exam_revisions r ON r.id = a.admission_revision_id
+			AND r.sealed = true
+		JOIN exam_attempt_participations p ON p.id = ?
+			AND p.exam_attempt_id = a.id
+		JOIN exam_attempt_connections co ON co.id = ?
+			AND co.participation_id = p.id
+			AND co.exam_attempt_id = a.id
+		JOIN sessions se ON se.id = co.session_id
+		JOIN users u ON u.id = se.user_id
+		WHERE a.id = ?
+			AND a.candidate_user_id = ?
+		FOR UPDATE OF a, p, co
+		FOR SHARE OF s, r, se, u`,
+		input.ParticipationID.String(),
+		input.ConnectionID.String(),
+		input.AttemptID.String(),
+		input.CandidateUserID.String(),
+	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return zero, focusLossAccessDenied(input.AttemptID)
 	}
@@ -376,22 +621,30 @@ func lockFocusLossAccess(ctx context.Context, tx *sqlxTxWrapper, input store.Exa
 	if err = tx.Get(ctx, &row.DatabaseNow, `SELECT statement_timestamp()`); err != nil {
 		return zero, fmt.Errorf("read Focus Loss decision time: %w", err)
 	}
+
 	row.DatabaseNow = model.TimeUTC(row.DatabaseNow)
-	if row.ConnectionSessionID != input.SessionID.String() || row.SessionArchivedAt.Valid || row.SessionRevokedAt.Valid ||
-		!row.DatabaseNow.Before(row.SessionIdleExpiresAt) || !row.DatabaseNow.Before(row.SessionExpiresAt) ||
-		row.UserArchivedAt.Valid || row.UserDisabledAt.Valid {
+	if row.ConnectionSessionID != input.SessionID.String() ||
+		row.SessionArchivedAt.Valid ||
+		row.SessionRevokedAt.Valid ||
+		!row.DatabaseNow.Before(row.SessionIdleExpiresAt) ||
+		!row.DatabaseNow.Before(row.SessionExpiresAt) ||
+		row.UserArchivedAt.Valid ||
+		row.UserDisabledAt.Valid {
 		return zero, focusLossAccessDenied(input.AttemptID)
 	}
+
 	if subtle.ConstantTimeCompare([]byte(row.CredentialHash), []byte(input.ContinuityCredentialHash)) != 1 {
 		return zero, store.NewErrConflict("attempt_participation", "attempt_participation_credential", nil)
 	}
 	if row.Generation != input.Generation {
 		return zero, store.NewErrConflict("attempt_participation", "attempt_participation_generation", nil)
 	}
+
 	if (row.SittingState != string(model.ExamSittingOpen) && row.SittingState != string(model.ExamSittingPaused)) ||
 		!row.DatabaseNow.Before(row.ScheduledEndAt) {
 		return zero, store.NewErrConflict("exam_sitting", "exam_sitting_state", nil)
 	}
+
 	return row, nil
 }
 
@@ -416,13 +669,18 @@ func requireFocusLossReplayAccess(row focusLossAccessRow, state focusLossEvaluat
 	if activeErr == nil {
 		return nil
 	}
-	if !state.LastSuspensionID.Valid || !state.LastConnectionID.Valid || state.LastConnectionID.String != input.ConnectionID.String() ||
-		row.AttemptState != string(model.ExamAttemptSuspended) || row.ParticipationState != string(model.AttemptParticipationEnded) ||
+
+	if !state.LastSuspensionID.Valid ||
+		!state.LastConnectionID.Valid ||
+		state.LastConnectionID.String != input.ConnectionID.String() ||
+		row.AttemptState != string(model.ExamAttemptSuspended) ||
+		row.ParticipationState != string(model.AttemptParticipationEnded) ||
 		row.ParticipationEndReason.String != string(model.AttemptParticipationEndPolicySuspended) ||
 		row.ConnectionState != string(model.AttemptConnectionClosed) ||
 		row.ConnectionCloseReason.String != string(model.AttemptConnectionClosePolicySuspended) {
 		return activeErr
 	}
+
 	return nil
 }
 
@@ -435,41 +693,63 @@ func focusLossTarget(row focusLossAccessRow) (*store.ExamAttemptFocusLossTarget,
 	if err != nil {
 		return nil, invalidPersistedState("exam_attempt", "exam_id", err)
 	}
+
 	sittingID, err := model.ParseExamSittingID(row.SittingID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_attempt", "exam_sitting_id", err)
 	}
+
 	classID, err := model.ParseClassID(row.ClassID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_sitting", "class_id", err)
 	}
+
 	candidateID, err := model.ParseUserID(row.CandidateID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_attempt", "candidate_user_id", err)
 	}
+
 	attemptID, err := model.ParseExamAttemptID(row.AttemptID)
 	if err != nil {
 		return nil, invalidPersistedState("exam_attempt", "id", err)
 	}
+
 	participationID, err := model.ParseAttemptParticipationID(row.ParticipationID)
 	if err != nil {
 		return nil, invalidPersistedState("attempt_participation", "id", err)
 	}
-	return &store.ExamAttemptFocusLossTarget{ExamID: examID, SittingID: sittingID, ClassID: classID, CandidateUserID: candidateID,
-		AttemptID: attemptID, ParticipationID: participationID, Generation: row.Generation}, nil
+
+	return &store.ExamAttemptFocusLossTarget{
+		ExamID:          examID,
+		SittingID:       sittingID,
+		ClassID:         classID,
+		CandidateUserID: candidateID,
+		AttemptID:       attemptID,
+		ParticipationID: participationID,
+		Generation:      row.Generation,
+	}, nil
 }
 
-func lockFocusLossEvaluation(ctx context.Context, tx *sqlxTxWrapper, attemptID model.ExamAttemptID, generation int64) (focusLossEvaluationRow, error) {
+func lockFocusLossEvaluation(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	attemptID model.ExamAttemptID,
+	generation int64,
+) (focusLossEvaluationRow, error) {
 	var row focusLossEvaluationRow
 	if err := tx.Get(ctx, &row, `SELECT `+focusLossEvaluationColumns+` FROM exam_attempt_focus_loss_evaluations
-		WHERE exam_attempt_id=? AND generation=? FOR UPDATE`, attemptID.String(), generation); err != nil {
+		WHERE exam_attempt_id = ?
+			AND generation = ?
+		FOR UPDATE`, attemptID.String(), generation); err != nil {
 		return row, fmt.Errorf("lock Focus Loss evaluation: %w", err)
 	}
+
 	return row, nil
 }
 
 func sameRetainedFocusLossClaim(state focusLossEvaluationRow, input *store.ExamAttemptFocusLossSignal) bool {
-	return state.LastDurationMilliseconds.Valid && state.LastDurationMilliseconds.Int64 == input.DurationMilliseconds &&
+	return state.LastDurationMilliseconds.Valid &&
+		state.LastDurationMilliseconds.Int64 == input.DurationMilliseconds &&
 		state.LastSource.String == string(input.Source)
 }
 
@@ -483,49 +763,96 @@ type focusLossPendingRow struct {
 	ReceivedAt     time.Time      `db:"received_at"`
 }
 
-func consumeFocusLossBucket(ctx context.Context, tx *sqlxTxWrapper, access store.ExamAttemptFocusLossAccess, state *focusLossEvaluationRow) error {
+func consumeFocusLossBucket(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	access store.ExamAttemptFocusLossAccess,
+	state *focusLossEvaluationRow,
+) error {
 	var pending []focusLossPendingRow
-	if err := tx.Select(ctx, &pending, `SELECT signal_id,evidence_id,sequence,duration_milliseconds,source,missing_before,received_at
-		FROM exam_attempt_focus_loss_pending WHERE exam_attempt_id=? AND generation=? ORDER BY received_at,sequence`,
-		access.AttemptID.String(), access.Generation); err != nil {
+	if err := tx.Select(
+		ctx,
+		&pending,
+		`SELECT signal_id, evidence_id, sequence, duration_milliseconds, source, missing_before,
+			received_at
+		FROM exam_attempt_focus_loss_pending
+		WHERE exam_attempt_id = ?
+			AND generation = ?
+		ORDER BY received_at, sequence`,
+		access.AttemptID.String(),
+		access.Generation,
+	); err != nil {
 		return fmt.Errorf("load consumed Focus Loss bucket: %w", err)
 	}
+
 	for _, episode := range pending {
 		if state.RetainedEvidenceCount < model.FocusLossMaximumEvidenceEpisodes {
-			if _, err := tx.Exec(ctx, `INSERT INTO integrity_evidence
-				(id,exam_attempt_id,participation_id,integrity_flag_id,generation,policy_kind,focus_loss_signal_id,sequence,
-				duration_milliseconds,source,missing_before,observed_at,recorded_at)
-				VALUES (?,?,?,?,?,'focus_loss',?,?,?,?,?,?,statement_timestamp())`, episode.EvidenceID, access.AttemptID.String(),
-				access.ParticipationID.String(), state.FlagID.String, access.Generation, episode.SignalID, episode.Sequence,
-				episode.DurationMillis, focusSQLNullableString(episode.Source), episode.MissingBefore, episode.ReceivedAt); err != nil {
+			if _, err := tx.Exec(
+				ctx,
+				`INSERT INTO integrity_evidence (
+					id, exam_attempt_id, participation_id, integrity_flag_id, generation,
+						policy_kind, focus_loss_signal_id, sequence, duration_milliseconds, source,
+						missing_before, observed_at, recorded_at
+				)
+				VALUES (?, ?, ?, ?, ?, 'focus_loss', ?, ?, ?, ?, ?, ?, statement_timestamp())`,
+				episode.EvidenceID,
+				access.AttemptID.String(),
+				access.ParticipationID.String(),
+				state.FlagID.String,
+				access.Generation,
+				episode.SignalID,
+				episode.Sequence,
+				episode.DurationMillis,
+				focusSQLNullableString(episode.Source),
+				episode.MissingBefore,
+				episode.ReceivedAt,
+			); err != nil {
 				return fmt.Errorf("retain Focus Loss evidence: %w", translateError("integrity_evidence", episode.EvidenceID, err))
 			}
+
 			state.RetainedEvidenceCount++
 			continue
 		}
+
 		if state.OverflowCount < math.MaxInt64 {
 			state.OverflowCount++
 		}
 		if !state.OverflowFirstReceivedAt.Valid {
 			state.OverflowFirstReceivedAt = sql.NullTime{Time: episode.ReceivedAt, Valid: true}
 		}
+
 		state.OverflowLastReceivedAt = sql.NullTime{Time: episode.ReceivedAt, Valid: true}
 		if !state.OverflowMaximumDurationMillis.Valid || episode.DurationMillis > state.OverflowMaximumDurationMillis.Int64 {
 			state.OverflowMaximumDurationMillis = sql.NullInt64{Int64: episode.DurationMillis, Valid: true}
 		}
 	}
-	if _, err := tx.Exec(ctx, `DELETE FROM exam_attempt_focus_loss_pending WHERE exam_attempt_id=? AND generation=?`,
-		access.AttemptID.String(), access.Generation); err != nil {
+
+	if _, err := tx.Exec(
+		ctx,
+		`DELETE FROM exam_attempt_focus_loss_pending
+		WHERE exam_attempt_id = ?
+			AND generation = ?`,
+		access.AttemptID.String(),
+		access.Generation,
+	); err != nil {
 		return fmt.Errorf("consume Focus Loss bucket: %w", err)
 	}
+
 	return nil
 }
 
-func suspendForFocusLoss(ctx context.Context, tx *sqlxTxWrapper, row focusLossAccessRow, flagID string, suspensionID model.AttemptSuspensionID) (bool, error) {
+func suspendForFocusLoss(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	row focusLossAccessRow,
+	flagID string,
+	suspensionID model.AttemptSuspensionID,
+) (bool, error) {
 	attempt, participation, connection, err := row.enforcementDomain()
 	if err != nil {
 		return false, err
 	}
+
 	domainFlagID, err := model.ParseIntegrityFlagID(flagID)
 	if err != nil {
 		return false, invalidPersistedState("integrity_flag", "id", err)
@@ -533,45 +860,97 @@ func suspendForFocusLoss(ctx context.Context, tx *sqlxTxWrapper, row focusLossAc
 	if err = model.SuspendExamAttemptForFocusLoss(attempt, participation, connection, row.DatabaseNow); err != nil {
 		return false, fmt.Errorf("apply Focus Loss suspension: %w", err)
 	}
-	suspension, err := model.NewPolicyAttemptSuspension(suspensionID, attempt.ID, participation.ID, domainFlagID,
-		row.Generation, model.AttemptSuspensionCandidateReasonFocusLossPolicy, row.DatabaseNow)
+
+	suspension, err := model.NewPolicyAttemptSuspension(
+		suspensionID,
+		attempt.ID,
+		participation.ID,
+		domainFlagID,
+		row.Generation,
+		model.AttemptSuspensionCandidateReasonFocusLossPolicy,
+		row.DatabaseNow,
+	)
 	if err != nil {
 		return false, fmt.Errorf("construct Focus Loss Suspension: %w", err)
 	}
-	result, err := tx.Exec(ctx, `UPDATE exam_attempts SET state=?,updated_at=?,revision=?
-		WHERE id=? AND revision=? AND state=?`, attempt.State, attempt.UpdatedAt, attempt.Revision,
-		attempt.ID.String(), row.AttemptRevision, model.ExamAttemptActive)
+
+	result, err := tx.Exec(
+		ctx,
+		`UPDATE exam_attempts
+		SET state = ?, updated_at = ?, revision = ?
+		WHERE id = ?
+			AND revision = ?
+			AND state = ?`,
+		attempt.State,
+		attempt.UpdatedAt,
+		attempt.Revision,
+		attempt.ID.String(),
+		row.AttemptRevision,
+		model.ExamAttemptActive,
+	)
 	if err != nil {
 		return false, fmt.Errorf("suspend Exam Attempt for Focus Loss: %w", err)
 	}
+
 	if affected, rowsErr := result.RowsAffected(); rowsErr != nil || affected != 1 {
 		if rowsErr != nil {
 			return false, fmt.Errorf("inspect Focus Loss Attempt suspension: %w", rowsErr)
 		}
 		return false, store.NewErrConflict("exam_attempt", "exam_attempt_state", nil)
 	}
-	result, err = tx.Exec(ctx, `UPDATE exam_attempt_participations SET state=?,updated_at=?,ended_at=?,end_reason=?
-		WHERE id=? AND exam_attempt_id=? AND generation=? AND state=?`, participation.State, participation.UpdatedAt,
-		participation.EndedAt.Time, participation.EndReason, participation.ID.String(), attempt.ID.String(), participation.Generation,
-		model.AttemptParticipationActive)
+
+	result, err = tx.Exec(
+		ctx,
+		`UPDATE exam_attempt_participations
+		SET state = ?, updated_at = ?, ended_at = ?, end_reason = ?
+		WHERE id = ?
+			AND exam_attempt_id = ?
+			AND generation = ?
+			AND state = ?`,
+		participation.State,
+		participation.UpdatedAt,
+		participation.EndedAt.Time,
+		participation.EndReason,
+		participation.ID.String(),
+		attempt.ID.String(),
+		participation.Generation,
+		model.AttemptParticipationActive,
+	)
 	if err != nil {
 		return false, fmt.Errorf("end Attempt Participation for Focus Loss: %w", err)
 	}
+
 	if affected, rowsErr := result.RowsAffected(); rowsErr != nil || affected != 1 {
 		if rowsErr != nil {
 			return false, fmt.Errorf("inspect Focus Loss Participation end: %w", rowsErr)
 		}
 		return false, store.NewErrConflict("attempt_participation", "attempt_participation_expired", nil)
 	}
-	if err := closeNativeDelivery(ctx, tx, participation.ID, model.DeliveryClosedSuspension, participation.EndedAt.Time); err != nil {
-		return false, err
+
+	if closeErr := closeNativeDelivery(ctx, tx, participation.ID, model.DeliveryClosedSuspension, participation.EndedAt.Time); closeErr != nil {
+		return false, closeErr
 	}
-	result, err = tx.Exec(ctx, `UPDATE exam_attempt_connections SET state=?,closed_at=?,close_reason=?
-		WHERE id=? AND exam_attempt_id=? AND participation_id=? AND state=?`, connection.State, connection.ClosedAt.Time,
-		connection.CloseReason, connection.ID.String(), attempt.ID.String(), participation.ID.String(), model.AttemptConnectionOpen)
+
+	result, err = tx.Exec(
+		ctx,
+		`UPDATE exam_attempt_connections
+		SET state = ?, closed_at = ?, close_reason = ?
+		WHERE id = ?
+			AND exam_attempt_id = ?
+			AND participation_id = ?
+			AND state = ?`,
+		connection.State,
+		connection.ClosedAt.Time,
+		connection.CloseReason,
+		connection.ID.String(),
+		attempt.ID.String(),
+		participation.ID.String(),
+		model.AttemptConnectionOpen,
+	)
 	if err != nil {
 		return false, fmt.Errorf("close Attempt Connection for Focus Loss: %w", err)
 	}
+
 	affected, err := result.RowsAffected()
 	if err != nil || affected != 1 {
 		if err != nil {
@@ -579,13 +958,28 @@ func suspendForFocusLoss(ctx context.Context, tx *sqlxTxWrapper, row focusLossAc
 		}
 		return false, store.NewErrConflict("attempt_connection", "attempt_connection_open", nil)
 	}
-	if _, err = tx.Exec(ctx, `INSERT INTO exam_attempt_suspensions
-		(id,exam_attempt_id,participation_id,integrity_flag_id,generation,suspension_attempt_revision,state,source,candidate_reason,started_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?)`, suspension.ID.String(), suspension.AttemptID.String(), suspension.ParticipationID.String(),
-		suspension.FlagID.String(), suspension.Generation, row.AttemptRevision+1, suspension.State, suspension.Source,
-		suspension.CandidateReason, suspension.StartedAt); err != nil {
+
+	if _, err = tx.Exec(
+		ctx,
+		`INSERT INTO exam_attempt_suspensions (
+			id, exam_attempt_id, participation_id, integrity_flag_id, generation,
+				suspension_attempt_revision, state, source, candidate_reason, started_at
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		suspension.ID.String(),
+		suspension.AttemptID.String(),
+		suspension.ParticipationID.String(),
+		suspension.FlagID.String(),
+		suspension.Generation,
+		row.AttemptRevision+1,
+		suspension.State,
+		suspension.Source,
+		suspension.CandidateReason,
+		suspension.StartedAt,
+	); err != nil {
 		return false, fmt.Errorf("create Focus Loss Suspension: %w", translateError("attempt_suspension", suspensionID.String(), err))
 	}
+
 	return true, nil
 }
 
@@ -594,54 +988,90 @@ func (row focusLossAccessRow) enforcementDomain() (*model.ExamAttempt, *model.At
 	if err != nil {
 		return nil, nil, nil, invalidPersistedState("exam_attempt", "id", err)
 	}
+
 	examID, err := model.ParseExamID(row.ExamID)
 	if err != nil {
 		return nil, nil, nil, invalidPersistedState("exam_attempt", "exam_id", err)
 	}
+
 	sittingID, err := model.ParseExamSittingID(row.SittingID)
 	if err != nil {
 		return nil, nil, nil, invalidPersistedState("exam_attempt", "exam_sitting_id", err)
 	}
+
 	candidateID, err := model.ParseUserID(row.CandidateID)
 	if err != nil {
 		return nil, nil, nil, invalidPersistedState("exam_attempt", "candidate_user_id", err)
 	}
+
 	revisionID, err := model.ParseExamRevisionID(row.AdmissionRevisionID)
 	if err != nil {
 		return nil, nil, nil, invalidPersistedState("exam_attempt", "admission_revision_id", err)
 	}
-	attempt := &model.ExamAttempt{ID: attemptID, ExamID: examID, SittingID: sittingID, CandidateUserID: candidateID,
-		AdmissionRevisionID: revisionID, State: model.ExamAttemptState(row.AttemptState), CreatedAt: model.TimeUTC(row.AttemptCreatedAt),
-		UpdatedAt: model.TimeUTC(row.AttemptUpdatedAt), SubmittedAt: OptionalTimeFromNullTime(row.AttemptSubmittedAt), Revision: row.AttemptRevision}
+
+	attempt := &model.ExamAttempt{
+		ID:                  attemptID,
+		ExamID:              examID,
+		SittingID:           sittingID,
+		CandidateUserID:     candidateID,
+		AdmissionRevisionID: revisionID,
+		State:               model.ExamAttemptState(row.AttemptState),
+		CreatedAt:           model.TimeUTC(row.AttemptCreatedAt),
+		UpdatedAt:           model.TimeUTC(row.AttemptUpdatedAt),
+		SubmittedAt:         OptionalTimeFromNullTime(row.AttemptSubmittedAt),
+		Revision:            row.AttemptRevision,
+	}
 	if err = attempt.Validate(); err != nil {
 		return nil, nil, nil, invalidPersistedState("exam_attempt", "value", err)
 	}
+
 	participationID, err := model.ParseAttemptParticipationID(row.ParticipationID)
 	if err != nil {
 		return nil, nil, nil, invalidPersistedState("attempt_participation", "id", err)
 	}
+
 	sessionID, err := model.ParseSessionID(row.ConnectionSessionID)
 	if err != nil {
 		return nil, nil, nil, invalidPersistedState("attempt_connection", "session_id", err)
 	}
-	participation := &model.AttemptParticipation{ID: participationID, AttemptID: attemptID, SessionID: sessionID,
-		State: model.AttemptParticipationState(row.ParticipationState), Generation: row.Generation, RenewalSequence: row.RenewalSequence,
-		ContinuityCredentialHash: row.CredentialHash, StartedAt: model.TimeUTC(row.ParticipationStartedAt),
-		UpdatedAt: model.TimeUTC(row.ParticipationUpdatedAt), LeaseExpiresAt: model.TimeUTC(row.LeaseExpiresAt),
-		EndedAt: OptionalTimeFromNullTime(row.ParticipationEndedAt), EndReason: model.AttemptParticipationEndReason(row.ParticipationEndReason.String)}
+
+	participation := &model.AttemptParticipation{
+		ID:                       participationID,
+		AttemptID:                attemptID,
+		SessionID:                sessionID,
+		State:                    model.AttemptParticipationState(row.ParticipationState),
+		Generation:               row.Generation,
+		RenewalSequence:          row.RenewalSequence,
+		ContinuityCredentialHash: row.CredentialHash,
+		StartedAt:                model.TimeUTC(row.ParticipationStartedAt),
+		UpdatedAt:                model.TimeUTC(row.ParticipationUpdatedAt),
+		LeaseExpiresAt:           model.TimeUTC(row.LeaseExpiresAt),
+		EndedAt:                  OptionalTimeFromNullTime(row.ParticipationEndedAt),
+		EndReason:                model.AttemptParticipationEndReason(row.ParticipationEndReason.String),
+	}
 	if err = participation.Validate(); err != nil {
 		return nil, nil, nil, invalidPersistedState("attempt_participation", "value", err)
 	}
+
 	connectionID, err := model.ParseAttemptConnectionID(row.ConnectionID)
 	if err != nil {
 		return nil, nil, nil, invalidPersistedState("attempt_connection", "id", err)
 	}
-	connection := &model.AttemptConnection{ID: connectionID, AttemptID: attemptID, ParticipationID: participationID,
-		SessionID: sessionID, State: model.AttemptConnectionState(row.ConnectionState), OpenedAt: model.TimeUTC(row.ConnectionOpenedAt),
-		ClosedAt: OptionalTimeFromNullTime(row.ConnectionClosedAt), CloseReason: model.AttemptConnectionCloseReason(row.ConnectionCloseReason.String)}
+
+	connection := &model.AttemptConnection{
+		ID:              connectionID,
+		AttemptID:       attemptID,
+		ParticipationID: participationID,
+		SessionID:       sessionID,
+		State:           model.AttemptConnectionState(row.ConnectionState),
+		OpenedAt:        model.TimeUTC(row.ConnectionOpenedAt),
+		ClosedAt:        OptionalTimeFromNullTime(row.ConnectionClosedAt),
+		CloseReason:     model.AttemptConnectionCloseReason(row.ConnectionCloseReason.String),
+	}
 	if err = connection.Validate(); err != nil {
 		return nil, nil, nil, invalidPersistedState("attempt_connection", "value", err)
 	}
+
 	return attempt, participation, connection, nil
 }
 
@@ -673,47 +1103,90 @@ func focusSQLNullableInt64(value sql.NullInt64) any {
 	return value.Int64
 }
 
-func loadFocusLossResult(ctx context.Context, tx *sqlxTxWrapper, access focusLossAccessRow, state focusLossEvaluationRow, duplicate bool) (*store.ExamAttemptFocusLossResult, error) {
+func loadFocusLossResult(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	access focusLossAccessRow,
+	state focusLossEvaluationRow,
+	duplicate bool,
+) (*store.ExamAttemptFocusLossResult, error) {
 	target, err := focusLossTarget(access)
 	if err != nil {
 		return nil, err
 	}
+
 	signalID, err := model.ParseFocusLossSignalID(state.LastSignalID.String)
 	if err != nil {
 		return nil, invalidPersistedState("focus_loss", "signal_id", err)
 	}
-	signal, err := model.NewFocusLossSignal(signalID, target.AttemptID, target.ParticipationID, target.Generation,
-		state.AcceptedSequence, state.LastDurationMilliseconds.Int64, model.FocusLossSource(state.LastSource.String), state.LastReceivedAt.Time)
+
+	signal, err := model.NewFocusLossSignal(
+		signalID,
+		target.AttemptID,
+		target.ParticipationID,
+		target.Generation,
+		state.AcceptedSequence,
+		state.LastDurationMilliseconds.Int64,
+		model.FocusLossSource(state.LastSource.String),
+		state.LastReceivedAt.Time,
+	)
 	if err != nil {
 		return nil, invalidPersistedState("focus_loss", "signal", err)
 	}
-	result := &store.ExamAttemptFocusLossResult{ExamID: target.ExamID, SittingID: target.SittingID, ClassID: target.ClassID,
-		CandidateUserID: target.CandidateUserID, AttemptID: target.AttemptID, ParticipationID: target.ParticipationID,
-		Generation: target.Generation, Signal: signal, AcceptedSequence: state.AcceptedSequence, DatabaseTime: signal.ReceivedAt,
-		CollectionEnabled: state.LastCollectionEnabled, Qualified: state.LastQualified, MissingBefore: state.LastMissingBefore,
-		WindowIncidentCount: state.LastWindowIncidentCount, ThresholdCrossed: state.LastThresholdCrossed,
-		PolicyOutcome: model.IntegrityThresholdOutcome(state.LastPolicyOutcome.String), RetainedEvidenceCount: state.RetainedEvidenceCount,
-		DiagnosticCount: state.DiagnosticCount, FlagCreated: state.LastFlagCreated, CandidateWarningCreated: state.LastWarningCreated,
-		ManagerNotificationRequired: state.LastManagerNotificationRequired, ConnectionClosed: state.LastConnectionClosed, Duplicate: duplicate}
+
+	result := &store.ExamAttemptFocusLossResult{
+		ExamID:                      target.ExamID,
+		SittingID:                   target.SittingID,
+		ClassID:                     target.ClassID,
+		CandidateUserID:             target.CandidateUserID,
+		AttemptID:                   target.AttemptID,
+		ParticipationID:             target.ParticipationID,
+		Generation:                  target.Generation,
+		Signal:                      signal,
+		AcceptedSequence:            state.AcceptedSequence,
+		DatabaseTime:                signal.ReceivedAt,
+		CollectionEnabled:           state.LastCollectionEnabled,
+		Qualified:                   state.LastQualified,
+		MissingBefore:               state.LastMissingBefore,
+		WindowIncidentCount:         state.LastWindowIncidentCount,
+		ThresholdCrossed:            state.LastThresholdCrossed,
+		PolicyOutcome:               model.IntegrityThresholdOutcome(state.LastPolicyOutcome.String),
+		RetainedEvidenceCount:       state.RetainedEvidenceCount,
+		DiagnosticCount:             state.DiagnosticCount,
+		FlagCreated:                 state.LastFlagCreated,
+		CandidateWarningCreated:     state.LastWarningCreated,
+		ManagerNotificationRequired: state.LastManagerNotificationRequired,
+		ConnectionClosed:            state.LastConnectionClosed,
+		Duplicate:                   duplicate,
+	}
 	if state.OverflowCount > 0 {
-		result.Overflow = &model.FocusLossEvidenceOverflow{AttemptID: target.AttemptID, ParticipationID: target.ParticipationID,
-			Generation: target.Generation, Count: state.OverflowCount, FirstReceivedAt: model.TimeUTC(state.OverflowFirstReceivedAt.Time),
-			LastReceivedAt: model.TimeUTC(state.OverflowLastReceivedAt.Time), MaximumDurationMilliseconds: state.OverflowMaximumDurationMillis.Int64}
+		result.Overflow = &model.FocusLossEvidenceOverflow{
+			AttemptID:                   target.AttemptID,
+			ParticipationID:             target.ParticipationID,
+			Generation:                  target.Generation,
+			Count:                       state.OverflowCount,
+			FirstReceivedAt:             model.TimeUTC(state.OverflowFirstReceivedAt.Time),
+			LastReceivedAt:              model.TimeUTC(state.OverflowLastReceivedAt.Time),
+			MaximumDurationMilliseconds: state.OverflowMaximumDurationMillis.Int64,
+		}
 		if err = result.Overflow.Validate(); err != nil {
 			return nil, invalidPersistedState("focus_loss", "overflow", err)
 		}
 	}
+
 	if state.LastFlagReturned {
 		result.Flag, err = loadFocusLossFlag(ctx, tx, state.FlagID.String)
 		if err != nil {
 			return nil, err
 		}
 	}
+
 	if state.LastSuspensionID.Valid {
 		if err = loadFocusLossSuspensionResult(ctx, tx, access, state.LastSuspensionID.String, result); err != nil {
 			return nil, err
 		}
 	}
+
 	return result, nil
 }
 
@@ -726,22 +1199,35 @@ func loadFocusLossFlag(ctx context.Context, tx *sqlxTxWrapper, id string) (*mode
 		Generation int64     `db:"generation"`
 		CreatedAt  time.Time `db:"created_at"`
 	}
-	if err := tx.Get(ctx, &row, `SELECT id,exam_attempt_id AS attempt_id,generation,policy_kind AS kind,state,created_at
-		FROM integrity_flags WHERE id=?`, id); err != nil {
+	if err := tx.Get(ctx, &row, `SELECT id, exam_attempt_id AS attempt_id, generation,
+			policy_kind AS kind, state, created_at
+		FROM integrity_flags
+		WHERE id = ?`, id); err != nil {
 		return nil, fmt.Errorf("load Focus Loss Flag: %w", err)
 	}
+
 	flagID, err := model.ParseIntegrityFlagID(row.ID)
 	if err != nil {
 		return nil, invalidPersistedState("integrity_flag", "id", err)
 	}
+
 	attemptID, err := model.ParseExamAttemptID(row.AttemptID)
 	if err != nil {
 		return nil, invalidPersistedState("integrity_flag", "exam_attempt_id", err)
 	}
-	flag := &model.IntegrityFlag{ID: flagID, AttemptID: attemptID, Generation: row.Generation, Kind: model.IntegrityPolicyKind(row.Kind), State: model.IntegrityFlagState(row.State), CreatedAt: model.TimeUTC(row.CreatedAt)}
+
+	flag := &model.IntegrityFlag{
+		ID:         flagID,
+		AttemptID:  attemptID,
+		Generation: row.Generation,
+		Kind:       model.IntegrityPolicyKind(row.Kind),
+		State:      model.IntegrityFlagState(row.State),
+		CreatedAt:  model.TimeUTC(row.CreatedAt),
+	}
 	if err = flag.Validate(); err != nil {
 		return nil, invalidPersistedState("integrity_flag", "value", err)
 	}
+
 	return flag, nil
 }
 
@@ -775,118 +1261,224 @@ type focusLossSuspensionRow struct {
 	PrivateReason       sql.NullString `db:"private_reason"`
 }
 
-func loadFocusLossSuspensionResult(ctx context.Context, tx *sqlxTxWrapper, access focusLossAccessRow, suspensionID string, result *store.ExamAttemptFocusLossResult) error {
+func loadFocusLossSuspensionResult(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	access focusLossAccessRow,
+	suspensionID string,
+	result *store.ExamAttemptFocusLossResult,
+) error {
 	var row focusLossSuspensionRow
-	if err := tx.Get(ctx, &row, `SELECT a.admission_revision_id,a.state AS attempt_state,a.created_at AS attempt_created_at,
-		a.updated_at AS attempt_updated_at,a.revision AS attempt_revision,a.submitted_at,p.state AS participation_state,
-		p.renewal_sequence,p.started_at,p.updated_at AS participation_updated_at,p.lease_expires_at,p.ended_at,p.end_reason,
-		c.state AS connection_state,c.opened_at AS connection_opened_at,c.closed_at AS connection_closed_at,c.close_reason AS connection_reason,
-		su.integrity_flag_id AS flag_id,su.state AS suspension_state,su.source AS suspension_source,su.candidate_reason,
-		su.started_at AS suspension_started_at,su.ended_at AS suspension_ended_at,su.reallowed_by_user_id,su.private_reason
-		FROM exam_attempts a JOIN exam_attempt_participations p ON p.exam_attempt_id=a.id AND p.id=?
-		JOIN exam_attempt_connections c ON c.exam_attempt_id=a.id AND c.participation_id=p.id AND c.id=?
-		JOIN exam_attempt_suspensions su ON su.exam_attempt_id=a.id AND su.participation_id=p.id AND su.id=?
-		WHERE a.id=?`, result.ParticipationID.String(), access.ConnectionID, suspensionID, result.AttemptID.String()); err != nil {
+	if err := tx.Get(ctx, &row, `SELECT a.admission_revision_id, a.state AS attempt_state,
+			a.created_at AS attempt_created_at, a.updated_at AS attempt_updated_at,
+			a.revision AS attempt_revision, a.submitted_at, p.state AS participation_state,
+			p.renewal_sequence, p.started_at, p.updated_at AS participation_updated_at,
+			p.lease_expires_at, p.ended_at, p.end_reason, c.state AS connection_state,
+			c.opened_at AS connection_opened_at, c.closed_at AS connection_closed_at,
+			c.close_reason AS connection_reason, su.integrity_flag_id AS flag_id,
+			su.state AS suspension_state, su.source AS suspension_source, su.candidate_reason,
+			su.started_at AS suspension_started_at, su.ended_at AS suspension_ended_at,
+			su.reallowed_by_user_id, su.private_reason
+		FROM exam_attempts a
+		JOIN exam_attempt_participations p ON p.exam_attempt_id = a.id
+			AND p.id = ?
+		JOIN exam_attempt_connections c ON c.exam_attempt_id = a.id
+			AND c.participation_id = p.id
+			AND c.id = ?
+		JOIN exam_attempt_suspensions su ON su.exam_attempt_id = a.id
+			AND su.participation_id = p.id
+			AND su.id = ?
+		WHERE a.id = ?`, result.ParticipationID.String(), access.ConnectionID, suspensionID, result.AttemptID.String()); err != nil {
 		return fmt.Errorf("load Focus Loss suspension outcome: %w", err)
 	}
+
 	revisionID, err := model.ParseExamRevisionID(row.AdmissionRevisionID)
 	if err != nil {
 		return invalidPersistedState("exam_attempt", "admission_revision_id", err)
 	}
-	attempt := &model.ExamAttempt{ID: result.AttemptID, ExamID: result.ExamID, SittingID: result.SittingID, CandidateUserID: result.CandidateUserID,
-		AdmissionRevisionID: revisionID, State: model.ExamAttemptState(row.AttemptState), CreatedAt: model.TimeUTC(row.AttemptCreatedAt),
-		UpdatedAt: model.TimeUTC(row.AttemptUpdatedAt), SubmittedAt: OptionalTimeFromNullTime(row.SubmittedAt), Revision: row.AttemptRevision}
+
+	attempt := &model.ExamAttempt{
+		ID:                  result.AttemptID,
+		ExamID:              result.ExamID,
+		SittingID:           result.SittingID,
+		CandidateUserID:     result.CandidateUserID,
+		AdmissionRevisionID: revisionID,
+		State:               model.ExamAttemptState(row.AttemptState),
+		CreatedAt:           model.TimeUTC(row.AttemptCreatedAt),
+		UpdatedAt:           model.TimeUTC(row.AttemptUpdatedAt),
+		SubmittedAt:         OptionalTimeFromNullTime(row.SubmittedAt),
+		Revision:            row.AttemptRevision,
+	}
 	if err = attempt.Validate(); err != nil {
 		return invalidPersistedState("exam_attempt", "value", err)
 	}
+
 	participation, connection, err := focusLossSuspensionParticipation(access, row, result)
 	if err != nil {
 		return err
 	}
+
 	suspension, err := focusLossSuspensionView(row, suspensionID, result)
 	if err != nil {
 		return err
 	}
+
 	result.Attempt, result.Participation, result.Connection, result.Suspension = attempt, participation, connection, suspension
 	return nil
 }
 
 // focusLossSuspensionParticipation rebuilds and validates the suspended
 // Participation and Connection views.
-func focusLossSuspensionParticipation(access focusLossAccessRow, row focusLossSuspensionRow, result *store.ExamAttemptFocusLossResult) (*store.ExamAttemptParticipationView, *store.ExamAttemptManagerConnection, error) {
+func focusLossSuspensionParticipation(
+	access focusLossAccessRow,
+	row focusLossSuspensionRow,
+	result *store.ExamAttemptFocusLossResult,
+) (*store.ExamAttemptParticipationView, *store.ExamAttemptManagerConnection, error) {
 	sessionID, err := model.ParseSessionID(access.ConnectionSessionID)
 	if err != nil {
 		return nil, nil, invalidPersistedState("attempt_connection", "session_id", err)
 	}
-	domainParticipation := &model.AttemptParticipation{ID: result.ParticipationID, AttemptID: result.AttemptID, SessionID: sessionID,
-		State: model.AttemptParticipationState(row.ParticipationState), Generation: result.Generation, RenewalSequence: row.RenewalSequence,
-		ContinuityCredentialHash: access.CredentialHash, StartedAt: model.TimeUTC(row.StartedAt), UpdatedAt: model.TimeUTC(row.ParticipationAt),
-		LeaseExpiresAt: model.TimeUTC(row.LeaseExpiresAt), EndedAt: OptionalTimeFromNullTime(row.EndedAt),
-		EndReason: model.AttemptParticipationEndReason(row.EndReason.String)}
+
+	domainParticipation := &model.AttemptParticipation{
+		ID:                       result.ParticipationID,
+		AttemptID:                result.AttemptID,
+		SessionID:                sessionID,
+		State:                    model.AttemptParticipationState(row.ParticipationState),
+		Generation:               result.Generation,
+		RenewalSequence:          row.RenewalSequence,
+		ContinuityCredentialHash: access.CredentialHash,
+		StartedAt:                model.TimeUTC(row.StartedAt),
+		UpdatedAt:                model.TimeUTC(row.ParticipationAt),
+		LeaseExpiresAt:           model.TimeUTC(row.LeaseExpiresAt),
+		EndedAt:                  OptionalTimeFromNullTime(row.EndedAt),
+		EndReason:                model.AttemptParticipationEndReason(row.EndReason.String),
+	}
 	if err = domainParticipation.Validate(); err != nil {
 		return nil, nil, invalidPersistedState("attempt_participation", "value", err)
 	}
-	participation := &store.ExamAttemptParticipationView{ID: domainParticipation.ID, AttemptID: domainParticipation.AttemptID,
-		State: domainParticipation.State, Generation: domainParticipation.Generation, RenewalSequence: domainParticipation.RenewalSequence,
-		StartedAt: domainParticipation.StartedAt, UpdatedAt: domainParticipation.UpdatedAt, LeaseExpiresAt: domainParticipation.LeaseExpiresAt,
-		EndedAt: domainParticipation.EndedAt, EndReason: domainParticipation.EndReason}
+
+	participation := &store.ExamAttemptParticipationView{
+		ID:              domainParticipation.ID,
+		AttemptID:       domainParticipation.AttemptID,
+		State:           domainParticipation.State,
+		Generation:      domainParticipation.Generation,
+		RenewalSequence: domainParticipation.RenewalSequence,
+		StartedAt:       domainParticipation.StartedAt,
+		UpdatedAt:       domainParticipation.UpdatedAt,
+		LeaseExpiresAt:  domainParticipation.LeaseExpiresAt,
+		EndedAt:         domainParticipation.EndedAt,
+		EndReason:       domainParticipation.EndReason,
+	}
 	connectionID, err := model.ParseAttemptConnectionID(access.ConnectionID)
 	if err != nil {
 		return nil, nil, invalidPersistedState("attempt_connection", "id", err)
 	}
-	domainConnection := &model.AttemptConnection{ID: connectionID, AttemptID: result.AttemptID, ParticipationID: result.ParticipationID,
-		SessionID: sessionID, State: model.AttemptConnectionState(row.ConnectionState), OpenedAt: model.TimeUTC(row.ConnectionOpenedAt),
-		ClosedAt: OptionalTimeFromNullTime(row.ConnectionClosedAt), CloseReason: model.AttemptConnectionCloseReason(row.ConnectionReason.String)}
+
+	domainConnection := &model.AttemptConnection{
+		ID:              connectionID,
+		AttemptID:       result.AttemptID,
+		ParticipationID: result.ParticipationID,
+		SessionID:       sessionID,
+		State:           model.AttemptConnectionState(row.ConnectionState),
+		OpenedAt:        model.TimeUTC(row.ConnectionOpenedAt),
+		ClosedAt:        OptionalTimeFromNullTime(row.ConnectionClosedAt),
+		CloseReason:     model.AttemptConnectionCloseReason(row.ConnectionReason.String),
+	}
 	if err = domainConnection.Validate(); err != nil {
 		return nil, nil, invalidPersistedState("attempt_connection", "value", err)
 	}
-	connection := &store.ExamAttemptManagerConnection{ID: connectionID, State: domainConnection.State,
-		OpenedAt: domainConnection.OpenedAt, ClosedAt: domainConnection.ClosedAt, CloseReason: domainConnection.CloseReason}
+
+	connection := &store.ExamAttemptManagerConnection{
+		ID:          connectionID,
+		State:       domainConnection.State,
+		OpenedAt:    domainConnection.OpenedAt,
+		ClosedAt:    domainConnection.ClosedAt,
+		CloseReason: domainConnection.CloseReason,
+	}
 	return participation, connection, nil
 }
 
 // focusLossSuspensionView rebuilds and validates the Focus Loss suspension
 // view.
-func focusLossSuspensionView(row focusLossSuspensionRow, suspensionID string, result *store.ExamAttemptFocusLossResult) (*store.ExamAttemptSuspensionView, error) {
+func focusLossSuspensionView(
+	row focusLossSuspensionRow,
+	suspensionID string,
+	result *store.ExamAttemptFocusLossResult,
+) (*store.ExamAttemptSuspensionView, error) {
 	suspID, err := model.ParseAttemptSuspensionID(suspensionID)
 	if err != nil {
 		return nil, invalidPersistedState("attempt_suspension", "id", err)
 	}
+
 	flagID, err := model.ParseIntegrityFlagID(row.FlagID)
 	if err != nil {
 		return nil, invalidPersistedState("attempt_suspension", "integrity_flag_id", err)
 	}
-	domainSuspension := &model.AttemptSuspension{ID: suspID, AttemptID: result.AttemptID, ParticipationID: result.ParticipationID,
-		FlagID: flagID, Generation: result.Generation, State: model.AttemptSuspensionState(row.SuspensionState),
-		Source: model.AttemptSuspensionSource(row.SuspensionSource), CandidateReason: model.AttemptSuspensionCandidateReason(row.CandidateReason),
-		StartedAt: model.TimeUTC(row.SuspensionStartedAt), EndedAt: OptionalTimeFromNullTime(row.SuspensionEndedAt)}
+
+	domainSuspension := &model.AttemptSuspension{
+		ID:              suspID,
+		AttemptID:       result.AttemptID,
+		ParticipationID: result.ParticipationID,
+		FlagID:          flagID,
+		Generation:      result.Generation,
+		State:           model.AttemptSuspensionState(row.SuspensionState),
+		Source:          model.AttemptSuspensionSource(row.SuspensionSource),
+		CandidateReason: model.AttemptSuspensionCandidateReason(row.CandidateReason),
+		StartedAt:       model.TimeUTC(row.SuspensionStartedAt),
+		EndedAt:         OptionalTimeFromNullTime(row.SuspensionEndedAt),
+	}
 	if row.ReallowedBy.Valid {
 		domainSuspension.ReallowedByUserID, err = model.ParseUserID(row.ReallowedBy.String)
 		if err != nil {
 			return nil, invalidPersistedState("attempt_suspension", "reallowed_by_user_id", err)
 		}
 	}
+
 	if row.PrivateReason.Valid {
 		domainSuspension.PrivateReason = row.PrivateReason.String
 	}
 	if err = domainSuspension.Validate(); err != nil {
 		return nil, invalidPersistedState("attempt_suspension", "value", err)
 	}
-	return &store.ExamAttemptSuspensionView{ID: domainSuspension.ID, AttemptID: domainSuspension.AttemptID,
-		ParticipationID: domainSuspension.ParticipationID, FlagID: domainSuspension.FlagID, Generation: domainSuspension.Generation,
-		State: domainSuspension.State, Source: domainSuspension.Source, CandidateReason: domainSuspension.CandidateReason,
-		StartedAt: domainSuspension.StartedAt, EndedAt: domainSuspension.EndedAt, ReallowedByUserID: domainSuspension.ReallowedByUserID}, nil
+
+	return &store.ExamAttemptSuspensionView{
+		ID:                domainSuspension.ID,
+		AttemptID:         domainSuspension.AttemptID,
+		ParticipationID:   domainSuspension.ParticipationID,
+		FlagID:            domainSuspension.FlagID,
+		Generation:        domainSuspension.Generation,
+		State:             domainSuspension.State,
+		Source:            domainSuspension.Source,
+		CandidateReason:   domainSuspension.CandidateReason,
+		StartedAt:         domainSuspension.StartedAt,
+		EndedAt:           domainSuspension.EndedAt,
+		ReallowedByUserID: domainSuspension.ReallowedByUserID,
+	}, nil
 }
 
-func completeFocusLossAudit(ctx context.Context, tx *sqlxTxWrapper, result *store.ExamAttemptFocusLossResult, auditID model.AuditEventID, auditAt time.Time) error {
-	data, err := model.EncodeAuditData(map[string]any{"exam_id": result.ExamID.String(), "exam_sitting_id": result.SittingID.String(),
-		"exam_attempt_id": result.AttemptID.String(), "participation_id": result.ParticipationID.String(), "generation": result.Generation,
-		"signal_id": result.Signal.ID.String(), "accepted_sequence": result.AcceptedSequence, "replayed": result.Duplicate})
+func completeFocusLossAudit(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	result *store.ExamAttemptFocusLossResult,
+	auditID model.AuditEventID,
+	auditAt time.Time,
+) error {
+	data, err := model.EncodeAuditData(map[string]any{
+		"exam_id":           result.ExamID.String(),
+		"exam_sitting_id":   result.SittingID.String(),
+		"exam_attempt_id":   result.AttemptID.String(),
+		"participation_id":  result.ParticipationID.String(),
+		"generation":        result.Generation,
+		"signal_id":         result.Signal.ID.String(),
+		"accepted_sequence": result.AcceptedSequence,
+		"replayed":          result.Duplicate,
+	})
 	if err != nil {
 		return err
 	}
 	if _, err = completeAuditEvent(ctx, tx, auditID, model.AuditStatusSuccess, "", data, auditAt); err != nil {
 		return fmt.Errorf("complete Focus Loss audit: %w", err)
 	}
+
 	return nil
 }

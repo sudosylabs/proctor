@@ -94,7 +94,7 @@ func TestAdministratorRecoveryStore(t *testing.T, ss store.Store, probes ...Admi
 	before, err := ss.PasswordCredential().GetByUser(ctx, installed.Administrator.ID)
 	require.NoError(t, err)
 
-	input := &store.AdministratorRecovery{
+	input := &store.AdministratorRecovery{ //nolint:gosec // G101: fixture recovery input, not a credential.
 		InstitutionID:      installed.Institution.ID,
 		UserID:             installed.Administrator.ID,
 		RotatePasswordHash: "$argon2id$v=19$m=19456,t=2,p=1$YWJjZGVmZ2hpamtsbW5vcA$YWJjZGVmZ2hpamtsbW5vcA",
@@ -239,7 +239,7 @@ func TestAdministratorRecoveryStore(t *testing.T, ss store.Store, probes ...Admi
 		probes[0].WaitForBlockedTransactions(t, ctx, blockerPID, 1)
 		recoveryDone := make(chan error, 1)
 		go func() {
-			_, recoveryErr := ss.Installation().RecoverAdministratorAccess(ctx, &store.AdministratorRecovery{
+			_, recoveryErr := ss.Installation().RecoverAdministratorAccess(ctx, &store.AdministratorRecovery{ //nolint:gosec // G101: fixture recovery input, not a credential.
 				InstitutionID: installed.Institution.ID, UserID: installed.Administrator.ID,
 				RotatePasswordHash: "must-not-win-serving-lease-race",
 			})
@@ -255,7 +255,7 @@ func TestAdministratorRecoveryStore(t *testing.T, ss store.Store, probes ...Admi
 		blockerPID, release := probes[0].HoldAuthenticationPathFence(t, ctx)
 		done := make(chan error, 1)
 		go func() {
-			_, recoveryErr := ss.Installation().RecoverAdministratorAccess(ctx, &store.AdministratorRecovery{
+			_, recoveryErr := ss.Installation().RecoverAdministratorAccess(ctx, &store.AdministratorRecovery{ //nolint:gosec // G101: fixture recovery input, not a credential.
 				InstitutionID: installed.Institution.ID, UserID: installed.Administrator.ID,
 				RotatePasswordHash: "serialized-recovery-password-hash",
 			})

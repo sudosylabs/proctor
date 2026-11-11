@@ -14,27 +14,75 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/onboarding"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
+// InvitationApplication is the application port its handlers call; it issues
+// and accepts Invitations of each purpose and lists, resends, revokes,
+// replaces and batches them.
 type InvitationApplication interface {
-	IssueStudentClassInvitation(context.Context, invocation.Invocation, app.IssueStudentClassInvitationCommand) (app.InvitationView, error)
-	AcceptStudentClassInvitation(context.Context, invocation.Invocation, app.AcceptStudentClassInvitationCommand) (*app.InvitationAcceptanceView, error)
-	IssueTeacherAcademicUnitInvitation(context.Context, invocation.Invocation, app.IssueTeacherAcademicUnitInvitationCommand) (app.InvitationView, error)
-	AcceptTeacherAcademicUnitInvitation(context.Context, invocation.Invocation, app.AcceptTeacherAcademicUnitInvitationCommand) (*app.InvitationAcceptanceView, error)
-	IssueAcademicUnitRoleInvitation(context.Context, invocation.Invocation, app.IssueAcademicUnitRoleInvitationCommand) (app.InvitationView, error)
-	AcceptAcademicUnitRoleInvitation(context.Context, invocation.Invocation, app.AcceptAcademicUnitRoleInvitationCommand) (*app.InvitationAcceptanceView, error)
-	IssueInstitutionRoleInvitation(context.Context, invocation.Invocation, app.IssueInstitutionRoleInvitationCommand) (app.InvitationView, error)
-	AcceptInstitutionRoleInvitation(context.Context, invocation.Invocation, app.AcceptInstitutionRoleInvitationCommand) (*app.InvitationAcceptanceView, error)
-	ListInvitations(context.Context, invocation.Invocation, app.ListInvitationsQuery) (app.InvitationAdministrationPage, error)
-	GetInvitation(context.Context, invocation.Invocation, model.InvitationID) (app.InvitationAdministrationView, error)
-	ResendInvitation(context.Context, invocation.Invocation, app.ResendInvitationCommand) (app.InvitationAdministrationView, error)
-	RevokeInvitation(context.Context, invocation.Invocation, app.RevokeInvitationCommand) (app.InvitationAdministrationView, error)
-	ReplaceInvitation(context.Context, invocation.Invocation, app.ReplaceInvitationCommand) (app.InvitationAdministrationView, error)
-	RunInvitationBatch(context.Context, invocation.Invocation, app.RunInvitationBatchCommand) (app.InvitationBatchResult, error)
+	IssueStudentClassInvitation(
+		context.Context,
+		invocation.Invocation,
+		onboarding.IssueStudentClassInvitationCommand,
+	) (onboarding.InvitationView, error)
+	AcceptStudentClassInvitation(
+		context.Context,
+		invocation.Invocation,
+		onboarding.AcceptStudentClassInvitationCommand,
+	) (*onboarding.InvitationAcceptanceView, error)
+	IssueTeacherAcademicUnitInvitation(
+		context.Context,
+		invocation.Invocation,
+		onboarding.IssueTeacherAcademicUnitInvitationCommand,
+	) (onboarding.InvitationView, error)
+	AcceptTeacherAcademicUnitInvitation(
+		context.Context,
+		invocation.Invocation,
+		onboarding.AcceptTeacherAcademicUnitInvitationCommand,
+	) (*onboarding.InvitationAcceptanceView, error)
+	IssueAcademicUnitRoleInvitation(
+		context.Context,
+		invocation.Invocation,
+		onboarding.IssueAcademicUnitRoleInvitationCommand,
+	) (onboarding.InvitationView, error)
+	AcceptAcademicUnitRoleInvitation(
+		context.Context,
+		invocation.Invocation,
+		onboarding.AcceptAcademicUnitRoleInvitationCommand,
+	) (*onboarding.InvitationAcceptanceView, error)
+	IssueInstitutionRoleInvitation(
+		context.Context,
+		invocation.Invocation,
+		onboarding.IssueInstitutionRoleInvitationCommand,
+	) (onboarding.InvitationView, error)
+	AcceptInstitutionRoleInvitation(
+		context.Context,
+		invocation.Invocation,
+		onboarding.AcceptInstitutionRoleInvitationCommand,
+	) (*onboarding.InvitationAcceptanceView, error)
+	ListInvitations(context.Context, invocation.Invocation, onboarding.ListInvitationsQuery) (onboarding.InvitationAdministrationPage, error)
+	GetInvitation(context.Context, invocation.Invocation, model.InvitationID) (onboarding.InvitationAdministrationView, error)
+	ResendInvitation(
+		context.Context,
+		invocation.Invocation,
+		onboarding.ResendInvitationCommand,
+	) (onboarding.InvitationAdministrationView, error)
+	RevokeInvitation(
+		context.Context,
+		invocation.Invocation,
+		onboarding.RevokeInvitationCommand,
+	) (onboarding.InvitationAdministrationView, error)
+	ReplaceInvitation(
+		context.Context,
+		invocation.Invocation,
+		onboarding.ReplaceInvitationCommand,
+	) (onboarding.InvitationAdministrationView, error)
+	RunInvitationBatch(context.Context, invocation.Invocation, onboarding.RunInvitationBatchCommand) (onboarding.InvitationBatchResult, error)
 }
 
 type issueStudentClassInvitationRequest struct {
@@ -207,7 +255,7 @@ type invitationAdministrationResponse struct {
 }
 
 // invitationListResponse is the collection envelope; the first page also
-// carries the total (see countedListResponse).
+// carries the total (see route.CountedList).
 type invitationListResponse struct {
 	Items             []invitationAdministrationResponse `json:"items"`
 	NextCursor        string                             `json:"next_cursor,omitempty"`
@@ -220,245 +268,496 @@ type invitationCursor struct {
 	ID        string `json:"id"`
 }
 
-type invitationResourceModule struct{ invitations InvitationApplication }
+type invitationHandlers struct{ app InvitationApplication }
 
-type unavailableInvitationApplication struct{}
-
-func (unavailableInvitationApplication) IssueStudentClassInvitation(context.Context, invocation.Invocation, app.IssueStudentClassInvitationCommand) (app.InvitationView, error) {
-	return app.InvitationView{}, errUnpresentableResult
-}
-func (unavailableInvitationApplication) AcceptStudentClassInvitation(context.Context, invocation.Invocation, app.AcceptStudentClassInvitationCommand) (*app.InvitationAcceptanceView, error) {
-	return nil, errUnpresentableResult
-}
-func (unavailableInvitationApplication) IssueTeacherAcademicUnitInvitation(context.Context, invocation.Invocation, app.IssueTeacherAcademicUnitInvitationCommand) (app.InvitationView, error) {
-	return app.InvitationView{}, errUnpresentableResult
-}
-func (unavailableInvitationApplication) AcceptTeacherAcademicUnitInvitation(context.Context, invocation.Invocation, app.AcceptTeacherAcademicUnitInvitationCommand) (*app.InvitationAcceptanceView, error) {
-	return nil, errUnpresentableResult
-}
-func (unavailableInvitationApplication) IssueAcademicUnitRoleInvitation(context.Context, invocation.Invocation, app.IssueAcademicUnitRoleInvitationCommand) (app.InvitationView, error) {
-	return app.InvitationView{}, errUnpresentableResult
-}
-func (unavailableInvitationApplication) AcceptAcademicUnitRoleInvitation(context.Context, invocation.Invocation, app.AcceptAcademicUnitRoleInvitationCommand) (*app.InvitationAcceptanceView, error) {
-	return nil, errUnpresentableResult
-}
-func (unavailableInvitationApplication) IssueInstitutionRoleInvitation(context.Context, invocation.Invocation, app.IssueInstitutionRoleInvitationCommand) (app.InvitationView, error) {
-	return app.InvitationView{}, errUnpresentableResult
-}
-func (unavailableInvitationApplication) AcceptInstitutionRoleInvitation(context.Context, invocation.Invocation, app.AcceptInstitutionRoleInvitationCommand) (*app.InvitationAcceptanceView, error) {
-	return nil, errUnpresentableResult
-}
-func (unavailableInvitationApplication) ListInvitations(context.Context, invocation.Invocation, app.ListInvitationsQuery) (app.InvitationAdministrationPage, error) {
-	return app.InvitationAdministrationPage{}, errUnpresentableResult
-}
-func (unavailableInvitationApplication) GetInvitation(context.Context, invocation.Invocation, model.InvitationID) (app.InvitationAdministrationView, error) {
-	return app.InvitationAdministrationView{}, errUnpresentableResult
-}
-func (unavailableInvitationApplication) ResendInvitation(context.Context, invocation.Invocation, app.ResendInvitationCommand) (app.InvitationAdministrationView, error) {
-	return app.InvitationAdministrationView{}, errUnpresentableResult
-}
-func (unavailableInvitationApplication) RevokeInvitation(context.Context, invocation.Invocation, app.RevokeInvitationCommand) (app.InvitationAdministrationView, error) {
-	return app.InvitationAdministrationView{}, errUnpresentableResult
-}
-func (unavailableInvitationApplication) ReplaceInvitation(context.Context, invocation.Invocation, app.ReplaceInvitationCommand) (app.InvitationAdministrationView, error) {
-	return app.InvitationAdministrationView{}, errUnpresentableResult
-}
-func (unavailableInvitationApplication) RunInvitationBatch(context.Context, invocation.Invocation, app.RunInvitationBatchCommand) (app.InvitationBatchResult, error) {
-	return app.InvitationBatchResult{}, errUnpresentableResult
-}
-
-func invitationResource(invitations InvitationApplication) apiResource {
-	module := invitationResourceModule{invitations: invitations}
-	return newResource("invitations",
-		idempotentPrincipalRoute(IdempotencyRequired, http.MethodPost, apiPath(literal("invitation-batches")),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "authentication.strong_required", "authentication.reauthentication_required", "invitation.unavailable", "idempotency.key_required", "idempotency.key_invalid"}, module.batch),
-		principalRoute(http.MethodGet, apiPath(literal("invitations")),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "request.invalid", "resource.not_found", "invitation.query.invalid", "invitation.unavailable"}, module.list),
-		principalRoute(http.MethodGet, apiPath(literal("invitations"), canonicalID("invitation_id")),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "request.invalid", "resource.not_found", "invitation.unavailable"}, module.get),
-		principalRoute(http.MethodPost, apiPath(literal("invitations"), canonicalID("invitation_id"), literal("resend")),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "invitation.conflict", "invitation.mail_unavailable", "invitation.unavailable", "authentication.reauthentication_required", "authentication.strong_required", "onboarding_batch.duplicate"}, module.resend),
-		principalRoute(http.MethodPost, apiPath(literal("invitations"), canonicalID("invitation_id"), literal("revoke")),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "invitation.conflict", "invitation.mail_unavailable", "invitation.unavailable", "authentication.reauthentication_required", "authentication.strong_required", "onboarding_batch.duplicate"}, module.revoke),
-		principalRoute(http.MethodPost, apiPath(literal("invitations"), canonicalID("invitation_id"), literal("replacement")),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "invitation.invalid", "invitation.role_not_delegable", "invitation.conflict", "invitation.mail_unavailable", "invitation.unavailable", "authentication.strong_required", "authentication.reauthentication_required"}, module.replace),
-		principalRoute(http.MethodPost, apiPath(literal("classes"), canonicalID("class_id"), literal("invitations"), literal("student")),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "invitation.invalid", "invitation.class_period_conflict", "invitation.conflict", "invitation.mail_unavailable", "invitation.unavailable", "onboarding_batch.duplicate"}, module.issueStudentClass),
-		publicRoute(http.MethodPost, apiPath(literal("invitations"), literal("student-class"), literal("accept")),
-			[]string{"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "invitation.invalid", "invitation.user_invalid", "invitation.mail_unavailable", "invitation.unavailable", "authentication.password.invalid", "authentication.password.pattern_invalid", "authentication.password.common_invalid", "authentication.password.identity_invalid", "service.busy"}, module.acceptStudentClass),
-		principalRoute(http.MethodPost, apiPath(literal("academic-units"), canonicalID("academic_unit_id"), literal("invitations"), literal("teacher")),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "invitation.invalid", "invitation.role_not_delegable", "invitation.conflict", "invitation.mail_unavailable", "invitation.unavailable", "onboarding_batch.duplicate"}, module.issueTeacherAcademicUnit),
-		publicRoute(http.MethodPost, apiPath(literal("invitations"), literal("teacher-academic-unit"), literal("accept")),
-			[]string{"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "invitation.invalid", "invitation.user_invalid", "invitation.mail_unavailable", "invitation.unavailable", "authentication.password.invalid", "authentication.password.pattern_invalid", "authentication.password.common_invalid", "authentication.password.identity_invalid", "service.busy"}, module.acceptTeacherAcademicUnit),
-		principalRoute(http.MethodPost, apiPath(literal("academic-units"), canonicalID("academic_unit_id"), literal("invitations"), literal("role")),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "invitation.invalid", "invitation.role_not_delegable", "invitation.conflict", "invitation.mail_unavailable", "invitation.unavailable", "onboarding_batch.duplicate"}, module.issueAcademicUnitRole),
-		sessionRoute(http.MethodPost, apiPath(literal("invitations"), literal("academic-unit-role"), literal("accept")),
-			[]string{"authentication.rate_limited", "authentication.rate_limit_unavailable", "invitation.invalid", "audit.unavailable", "request.invalid"}, module.acceptAcademicUnitRole),
-		strongRecentSessionRoute(http.MethodPost, apiPath(literal("institutions"), canonicalID("institution_id"), literal("invitations"), literal("role")),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "invitation.invalid", "invitation.role_not_delegable", "invitation.conflict", "invitation.mail_unavailable", "invitation.unavailable", "onboarding_batch.duplicate"}, module.issueInstitutionRole),
-		sessionRoute(http.MethodPost, apiPath(literal("invitations"), literal("institution-role"), literal("accept")),
-			[]string{"authentication.rate_limited", "authentication.rate_limit_unavailable", "invitation.invalid", "audit.unavailable", "request.invalid"}, module.acceptInstitutionRole),
+func invitationResource(app InvitationApplication) route.Resource {
+	h := invitationHandlers{app: app}
+	return route.NewResource("invitations",
+		route.Endpoint{
+			Method:      http.MethodPost,
+			Path:        "/invitation-batches",
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"authentication.strong_required",
+				"authentication.reauthentication_required",
+				"invitation.unavailable",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+			},
+			Handle: h.batch,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/invitations",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"invitation.query.invalid",
+				"invitation.unavailable",
+			},
+			Handle: h.list,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/invitations/{invitation_id}",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"invitation.unavailable",
+			},
+			Handle: h.get,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/invitations/{invitation_id}/resend",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"invitation.conflict",
+				"invitation.mail_unavailable",
+				"invitation.unavailable",
+				"authentication.reauthentication_required",
+				"authentication.strong_required",
+				"onboarding_batch.duplicate",
+			},
+			Handle: h.resend,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/invitations/{invitation_id}/revoke",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"invitation.conflict",
+				"invitation.mail_unavailable",
+				"invitation.unavailable",
+				"authentication.reauthentication_required",
+				"authentication.strong_required",
+				"onboarding_batch.duplicate",
+			},
+			Handle: h.revoke,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/invitations/{invitation_id}/replacement",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"invitation.invalid",
+				"invitation.role_not_delegable",
+				"invitation.conflict",
+				"invitation.mail_unavailable",
+				"invitation.unavailable",
+				"authentication.strong_required",
+				"authentication.reauthentication_required",
+			},
+			Handle: h.replace,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/classes/{class_id}/invitations/student",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"invitation.invalid",
+				"invitation.class_period_conflict",
+				"invitation.conflict",
+				"invitation.mail_unavailable",
+				"invitation.unavailable",
+				"onboarding_batch.duplicate",
+			},
+			Handle: h.issueStudentClass,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/invitations/student-class/accept",
+			Auth:   route.AuthPublic,
+			Errors: []string{
+				"request.invalid",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"invitation.invalid",
+				"invitation.user_invalid",
+				"invitation.mail_unavailable",
+				"invitation.unavailable",
+				"authentication.password.invalid",
+				"authentication.password.pattern_invalid",
+				"authentication.password.common_invalid",
+				"authentication.password.identity_invalid",
+				"service.busy",
+			},
+			Handle: h.acceptStudentClass,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/academic-units/{academic_unit_id}/invitations/teacher",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"invitation.invalid",
+				"invitation.role_not_delegable",
+				"invitation.conflict",
+				"invitation.mail_unavailable",
+				"invitation.unavailable",
+				"onboarding_batch.duplicate",
+			},
+			Handle: h.issueTeacherAcademicUnit,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/invitations/teacher-academic-unit/accept",
+			Auth:   route.AuthPublic,
+			Errors: []string{
+				"request.invalid",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"invitation.invalid",
+				"invitation.user_invalid",
+				"invitation.mail_unavailable",
+				"invitation.unavailable",
+				"authentication.password.invalid",
+				"authentication.password.pattern_invalid",
+				"authentication.password.common_invalid",
+				"authentication.password.identity_invalid",
+				"service.busy",
+			},
+			Handle: h.acceptTeacherAcademicUnit,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/academic-units/{academic_unit_id}/invitations/role",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"invitation.invalid",
+				"invitation.role_not_delegable",
+				"invitation.conflict",
+				"invitation.mail_unavailable",
+				"invitation.unavailable",
+				"onboarding_batch.duplicate",
+			},
+			Handle: h.issueAcademicUnitRole,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/invitations/academic-unit-role/accept",
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"invitation.invalid",
+				"audit.unavailable",
+				"request.invalid",
+			},
+			Handle: h.acceptAcademicUnitRole,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/institutions/{institution_id}/invitations/role",
+			Auth:   route.AuthStrongRecentSessionRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"invitation.invalid",
+				"invitation.role_not_delegable",
+				"invitation.conflict",
+				"invitation.mail_unavailable",
+				"invitation.unavailable",
+				"onboarding_batch.duplicate",
+			},
+			Handle: h.issueInstitutionRole,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   "/invitations/institution-role/accept",
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"invitation.invalid",
+				"audit.unavailable",
+				"request.invalid",
+			},
+			Handle: h.acceptInstitutionRole,
+		},
 	)
 }
 
-func (m invitationResourceModule) batch(request operationRequest) (operationResult, error) {
+func (h invitationHandlers) batch(request route.Request) (route.Result, error) {
 	var body invitationBatchRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, invalidRequestError(err)
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, route.InvalidRequest(err)
 	}
-	items := make([]app.InvitationBatchItemCommand, 0, len(body.Items))
+
+	items := make([]onboarding.InvitationBatchItemCommand, 0, len(body.Items))
 	for _, item := range body.Items {
-		startAt, endAt, err := wireWindowMillis(item.StartAt, item.EndAt)
+		startAt, endAt, err := route.WireWindowMillis(item.StartAt, item.EndAt)
 		if err != nil {
-			return operationResult{}, err
+			return route.Result{}, err
 		}
-		items = append(items, app.InvitationBatchItemCommand{IdempotencyKey: item.Key, InvitationID: model.InvitationID(item.InvitationID),
-			ExpectedRevision: item.ExpectedRevision, TargetEmail: item.Email, RoleID: model.RoleID(item.RoleID),
-			IntendedStartsAt: startAt, IntendedEndsAt: endAt, SuggestedUsername: item.SuggestedUsername,
-			SuggestedDisplayName: item.SuggestedDisplayName, SuggestedFirstName: item.SuggestedFirstName,
-			SuggestedLastName: item.SuggestedLastName, SuggestedLocale: item.SuggestedLocale, SuggestedTimezone: item.SuggestedTimezone})
+
+		items = append(items, onboarding.InvitationBatchItemCommand{
+			IdempotencyKey:       item.Key,
+			InvitationID:         model.InvitationID(item.InvitationID),
+			ExpectedRevision:     item.ExpectedRevision,
+			TargetEmail:          item.Email,
+			RoleID:               model.RoleID(item.RoleID),
+			IntendedStartsAt:     startAt,
+			IntendedEndsAt:       endAt,
+			SuggestedUsername:    item.SuggestedUsername,
+			SuggestedDisplayName: item.SuggestedDisplayName,
+			SuggestedFirstName:   item.SuggestedFirstName,
+			SuggestedLastName:    item.SuggestedLastName,
+			SuggestedLocale:      item.SuggestedLocale,
+			SuggestedTimezone:    item.SuggestedTimezone,
+		})
 	}
-	result, err := m.invitations.RunInvitationBatch(request.context, request.invocation(), app.RunInvitationBatchCommand{
-		Operation: app.InvitationBatchOperation(body.Operation), ScopeType: model.RoleScopeType(body.ScopeType),
-		ScopeID: body.ScopeID, IdempotencyKey: request.idempotencyKey, Items: items,
+
+	result, err := h.app.RunInvitationBatch(request.Context, request.Invocation(), onboarding.RunInvitationBatchCommand{
+		Operation:      onboarding.InvitationBatchOperation(body.Operation),
+		ScopeType:      model.RoleScopeType(body.ScopeType),
+		ScopeID:        body.ScopeID,
+		IdempotencyKey: request.IdempotencyKey,
+		Items:          items,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	response := invitationBatchResponse{Operation: string(result.Operation), Items: make([]invitationBatchItemResponse, 0, len(result.Items)),
-		Succeeded: result.Succeeded, NoOp: result.NoOp, Failed: result.Failed}
+
+	response := invitationBatchResponse{
+		Operation: string(result.Operation),
+		Items:     make([]invitationBatchItemResponse, 0, len(result.Items)),
+		Succeeded: result.Succeeded,
+		NoOp:      result.NoOp,
+		Failed:    result.Failed,
+	}
 	for _, item := range result.Items {
-		response.Items = append(response.Items, invitationBatchItemResponse{Index: item.Index, Status: string(item.Status),
-			InvitationID: item.InvitationID.String(), ErrorCode: item.ErrorCode})
+		response.Items = append(response.Items, invitationBatchItemResponse{
+			Index:        item.Index,
+			Status:       string(item.Status),
+			InvitationID: item.InvitationID.String(),
+			ErrorCode:    item.ErrorCode,
+		})
 	}
-	return jsonResult(http.StatusOK, response), nil
+
+	return route.JSON(http.StatusOK, response), nil
 }
 
-func (m invitationResourceModule) list(request operationRequest) (operationResult, error) {
-	query, err := invitationListQuery(request.request)
+func (h invitationHandlers) list(request route.Request) (route.Result, error) {
+	query, err := invitationListQuery(request.HTTP)
 	if err != nil {
-		return operationResult{}, apperror.Invalid("request.invalid", "query").Wrap(err)
+		return route.Result{}, apperror.Invalid("request.invalid", "query").Wrap(err)
 	}
-	page, err := m.invitations.ListInvitations(request.context, request.invocation(), query)
+
+	page, err := h.app.ListInvitations(request.Context, request.Invocation(), query)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	response := invitationListResponse{Items: make([]invitationAdministrationResponse, 0, len(page.Items))}
 	for _, item := range page.Items {
 		response.Items = append(response.Items, invitationAdministrationResponseFromView(item))
 	}
+
 	if page.More && len(page.Items) == 0 {
-		return operationResult{}, unpresentableResult(errors.New("invitation page made no progress"))
+		return route.Result{}, route.Unpresentable(errors.New("invitation page made no progress"))
 	}
+
 	if page.More {
 		last := page.Items[len(page.Items)-1]
 		response.NextCursor, err = encodeInvitationCursor(invitationCursor{
-			CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String()})
+			CreatedAt: model.FormatRFC3339(last.CreatedAt),
+			ID:        last.ID.String(),
+		})
 		if err != nil {
-			return operationResult{}, unpresentableResult(err)
+			return route.Result{}, route.Unpresentable(err)
 		}
 	}
-	if response.Total, response.TotalIsLowerBound, err = pageTotalMembers(page.PageTotal, query.BeforeID.IsValid()); err != nil {
-		return operationResult{}, err
+
+	if response.Total, response.TotalIsLowerBound, err = route.PageTotal(page.Total, query.BeforeID.IsValid()); err != nil {
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
 }
 
-func (m invitationResourceModule) get(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireInvitationID()
+func (h invitationHandlers) get(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.InvitationID](request, "invitation_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	view, err := m.invitations.GetInvitation(request.context, request.invocation(), id)
+	view, err := h.app.GetInvitation(request.Context, request.Invocation(), id)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, invitationAdministrationResponseFromView(view)).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, invitationAdministrationResponseFromView(view)).WithHeaders(noStoreHeaders()), nil
 }
 
-func (m invitationResourceModule) resend(request operationRequest) (operationResult, error) {
-	return m.mutate(request, func(id model.InvitationID, revision int64) (app.InvitationAdministrationView, error) {
-		return m.invitations.ResendInvitation(request.context, request.invocation(), app.ResendInvitationCommand{ID: id, ExpectedRevision: revision})
+func (h invitationHandlers) resend(request route.Request) (route.Result, error) {
+	return h.mutate(request, func(id model.InvitationID, revision int64) (onboarding.InvitationAdministrationView, error) {
+		return h.app.ResendInvitation(
+			request.Context,
+			request.Invocation(),
+			onboarding.ResendInvitationCommand{ID: id, ExpectedRevision: revision},
+		)
 	})
 }
 
-func (m invitationResourceModule) revoke(request operationRequest) (operationResult, error) {
-	return m.mutate(request, func(id model.InvitationID, revision int64) (app.InvitationAdministrationView, error) {
-		return m.invitations.RevokeInvitation(request.context, request.invocation(), app.RevokeInvitationCommand{ID: id, ExpectedRevision: revision})
+func (h invitationHandlers) revoke(request route.Request) (route.Result, error) {
+	return h.mutate(request, func(id model.InvitationID, revision int64) (onboarding.InvitationAdministrationView, error) {
+		return h.app.RevokeInvitation(
+			request.Context,
+			request.Invocation(),
+			onboarding.RevokeInvitationCommand{ID: id, ExpectedRevision: revision},
+		)
 	})
 }
 
-func (m invitationResourceModule) mutate(request operationRequest, mutation func(model.InvitationID, int64) (app.InvitationAdministrationView, error)) (operationResult, error) {
-	id, err := request.params.RequireInvitationID()
+func (h invitationHandlers) mutate(
+	request route.Request,
+	mutation func(model.InvitationID, int64) (onboarding.InvitationAdministrationView, error),
+) (route.Result, error) {
+	id, err := route.PathID[model.InvitationID](request, "invitation_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	var body invitationMutationRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 	if body.ExpectedRevision < 1 {
-		return operationResult{}, invalidRequestError(errors.New("must be positive"))
+		return route.Result{}, route.InvalidRequest(errors.New("must be positive"))
 	}
+
 	view, err := mutation(id, body.ExpectedRevision)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, invitationAdministrationResponseFromView(view)).withHeaders(noStoreHeaders()), nil
+
+	return route.JSON(http.StatusOK, invitationAdministrationResponseFromView(view)).WithHeaders(noStoreHeaders()), nil
 }
 
-func (m invitationResourceModule) replace(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireInvitationID()
+func (h invitationHandlers) replace(request route.Request) (route.Result, error) {
+	id, err := route.PathID[model.InvitationID](request, "invitation_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	var body replaceInvitationRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 	if body.ExpectedRevision < 1 {
-		return operationResult{}, invalidRequestError(errors.New("must be positive"))
+		return route.Result{}, route.InvalidRequest(errors.New("must be positive"))
 	}
-	startAt, endAt, err := wireWindowMillis(body.StartAt, body.EndAt)
+
+	startAt, endAt, err := route.WireWindowMillis(body.StartAt, body.EndAt)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	view, err := m.invitations.ReplaceInvitation(request.context, request.invocation(), app.ReplaceInvitationCommand{
-		ID: id, ExpectedRevision: body.ExpectedRevision, Purpose: body.Purpose, TargetEmail: body.Email,
-		ClassID: model.ClassID(body.ClassID), AcademicUnitID: model.AcademicUnitID(body.AcademicUnitID), InstitutionID: model.InstitutionID(body.InstitutionID), RoleID: model.RoleID(body.RoleID),
-		IntendedStartsAt: startAt, IntendedEndsAt: endAt, SuggestedUsername: body.SuggestedUsername,
-		SuggestedDisplayName: body.SuggestedDisplayName, SuggestedFirstName: body.SuggestedFirstName,
-		SuggestedLastName: body.SuggestedLastName, SuggestedLocale: body.SuggestedLocale, SuggestedTimezone: body.SuggestedTimezone,
-		ExpiresInDays: body.ExpiresInDays,
+
+	view, err := h.app.ReplaceInvitation(request.Context, request.Invocation(), onboarding.ReplaceInvitationCommand{
+		ID:                   id,
+		ExpectedRevision:     body.ExpectedRevision,
+		Purpose:              body.Purpose,
+		TargetEmail:          body.Email,
+		ClassID:              model.ClassID(body.ClassID),
+		AcademicUnitID:       model.AcademicUnitID(body.AcademicUnitID),
+		InstitutionID:        model.InstitutionID(body.InstitutionID),
+		RoleID:               model.RoleID(body.RoleID),
+		IntendedStartsAt:     startAt,
+		IntendedEndsAt:       endAt,
+		SuggestedUsername:    body.SuggestedUsername,
+		SuggestedDisplayName: body.SuggestedDisplayName,
+		SuggestedFirstName:   body.SuggestedFirstName,
+		SuggestedLastName:    body.SuggestedLastName,
+		SuggestedLocale:      body.SuggestedLocale,
+		SuggestedTimezone:    body.SuggestedTimezone,
+		ExpiresInDays:        body.ExpiresInDays,
 	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusCreated, invitationAdministrationResponseFromView(view)).withHeaders(noStoreHeaders()), nil
+
+	return route.JSON(http.StatusCreated, invitationAdministrationResponseFromView(view)).WithHeaders(noStoreHeaders()), nil
 }
 
-func invitationListQuery(request *http.Request) (app.ListInvitationsQuery, error) {
+func invitationListQuery(request *http.Request) (onboarding.ListInvitationsQuery, error) {
 	values := request.URL.Query()
-	query := app.ListInvitationsQuery{Limit: 50, TargetEmail: values.Get("email"), TargetID: values.Get("target_id")}
+	query := onboarding.ListInvitationsQuery{Limit: 50, TargetEmail: values.Get("email"), TargetID: values.Get("target_id")}
 	if raw := values.Get("limit"); raw != "" {
 		limit, err := strconv.Atoi(raw)
 		if err != nil || limit < 1 || limit > 200 {
 			return query, errors.New("invalid Invitation limit")
 		}
+
 		query.Limit = limit
 	}
+
 	if raw := values.Get("purpose"); raw != "" {
 		query.Purpose = model.InvitationPurpose(raw)
 		if !query.Purpose.IsValid() {
 			return query, errors.New("invalid Invitation purpose")
 		}
 	}
+
 	if raw := values.Get("state"); raw != "" {
 		query.State = model.InvitationState(raw)
 		if !query.State.IsValid() {
 			return query, errors.New("invalid Invitation state")
 		}
 	}
+
 	var err error
 	if raw := values.Get("created_after"); raw != "" {
 		query.CreatedAfter, err = parseInvitationFilterTime(raw)
@@ -466,23 +765,28 @@ func invitationListQuery(request *http.Request) (app.ListInvitationsQuery, error
 			return query, err
 		}
 	}
+
 	if raw := values.Get("created_before"); raw != "" {
 		query.CreatedBefore, err = parseInvitationFilterTime(raw)
 		if err != nil {
 			return query, err
 		}
 	}
+
 	if !query.CreatedAfter.IsZero() && !query.CreatedBefore.IsZero() && !query.CreatedBefore.After(query.CreatedAfter) {
 		return query, errors.New("invalid Invitation time range")
 	}
+
 	if raw := values.Get("cursor"); raw != "" {
 		cursor, err := decodeInvitationCursor(raw)
 		if err != nil {
 			return query, err
 		}
+
 		query.BeforeCreatedAt, _ = model.ParseRFC3339(cursor.CreatedAt)
 		query.BeforeID = model.InvitationID(cursor.ID)
 	}
+
 	return query, nil
 }
 
@@ -495,183 +799,279 @@ func parseInvitationFilterTime(raw string) (time.Time, error) {
 }
 
 func encodeInvitationCursor(cursor invitationCursor) (string, error) {
-	return encodeOpaqueCursor(cursor, invitationCursorSpec())
+	return route.EncodeCursor(cursor, invitationCursorSpec())
 }
 
 func decodeInvitationCursor(raw string) (invitationCursor, error) {
-	return decodeOpaqueCursor(raw, invitationCursorSpec())
+	return route.DecodeCursor(raw, invitationCursorSpec())
 }
 
-func invitationCursorSpec() opaqueCursorSpec[invitationCursor] {
-	return opaqueCursorSpec[invitationCursor]{
-		label: "Invitation", maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members: []string{"created_at", "id"},
-		validate: func(cursor invitationCursor) error {
+func invitationCursorSpec() route.CursorSpec[invitationCursor] {
+	return route.CursorSpec[invitationCursor]{
+		Label:                "Invitation",
+		MaximumEncodedLength: route.DefaultMaximumCursorLength,
+		Members:              []string{"created_at", "id"},
+		Validate: func(cursor invitationCursor) error {
 			createdAt, err := model.ParseRFC3339(cursor.CreatedAt)
 			if err != nil || createdAt.IsZero() || !model.InvitationID(cursor.ID).IsValid() {
 				return errors.New("invalid Invitation keyset")
 			}
+
 			return nil
 		},
 	}
 }
 
-func (m invitationResourceModule) issueAcademicUnitRole(request operationRequest) (operationResult, error) {
-	unitID, err := request.params.RequireAcademicUnitID()
+func (h invitationHandlers) issueAcademicUnitRole(request route.Request) (route.Result, error) {
+	unitID, err := route.PathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	var body issueScopedRoleInvitationRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
-	startAt, endAt, err := wireWindowMillis(body.StartAt, body.EndAt)
+
+	startAt, endAt, err := route.WireWindowMillis(body.StartAt, body.EndAt)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	created, err := m.invitations.IssueAcademicUnitRoleInvitation(request.context, request.invocation(), app.IssueAcademicUnitRoleInvitationCommand{
-		TargetEmail: body.Email, AcademicUnitID: unitID, RoleID: model.RoleID(body.RoleID), IntendedStartsAt: startAt, IntendedEndsAt: endAt,
-		ExpiresInDays: body.ExpiresInDays,
-	})
+
+	created, err := h.app.IssueAcademicUnitRoleInvitation(
+		request.Context,
+		request.Invocation(),
+		onboarding.IssueAcademicUnitRoleInvitationCommand{
+			TargetEmail:      body.Email,
+			AcademicUnitID:   unitID,
+			RoleID:           model.RoleID(body.RoleID),
+			IntendedStartsAt: startAt,
+			IntendedEndsAt:   endAt,
+			ExpiresInDays:    body.ExpiresInDays,
+		},
+	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusCreated, invitationResponseFromView(created)), nil
+
+	return route.JSON(http.StatusCreated, invitationResponseFromView(created)), nil
 }
 
-func (m invitationResourceModule) issueInstitutionRole(request operationRequest) (operationResult, error) {
-	institutionID, err := request.params.RequireInstitutionID()
+func (h invitationHandlers) issueInstitutionRole(request route.Request) (route.Result, error) {
+	institutionID, err := route.PathID[model.InstitutionID](request, "institution_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	var body issueScopedRoleInvitationRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
-	startAt, endAt, err := wireWindowMillis(body.StartAt, body.EndAt)
+
+	startAt, endAt, err := route.WireWindowMillis(body.StartAt, body.EndAt)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	created, err := m.invitations.IssueInstitutionRoleInvitation(request.context, request.invocation(), app.IssueInstitutionRoleInvitationCommand{
-		TargetEmail: body.Email, InstitutionID: institutionID, RoleID: model.RoleID(body.RoleID), IntendedStartsAt: startAt, IntendedEndsAt: endAt,
-		ExpiresInDays: body.ExpiresInDays,
-	})
+
+	created, err := h.app.IssueInstitutionRoleInvitation(
+		request.Context,
+		request.Invocation(),
+		onboarding.IssueInstitutionRoleInvitationCommand{
+			TargetEmail:      body.Email,
+			InstitutionID:    institutionID,
+			RoleID:           model.RoleID(body.RoleID),
+			IntendedStartsAt: startAt,
+			IntendedEndsAt:   endAt,
+			ExpiresInDays:    body.ExpiresInDays,
+		},
+	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusCreated, invitationResponseFromView(created)), nil
+
+	return route.JSON(http.StatusCreated, invitationResponseFromView(created)), nil
 }
 
-func (m invitationResourceModule) acceptAcademicUnitRole(request operationRequest) (operationResult, error) {
+func (h invitationHandlers) acceptAcademicUnitRole(request route.Request) (route.Result, error) {
 	var body acceptScopedRoleInvitationRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
-	accepted, err := m.invitations.AcceptAcademicUnitRoleInvitation(request.context, request.invocation(), app.AcceptAcademicUnitRoleInvitationCommand{
-		Claim: body.Claim, Source: request.metadata.IPAddress,
-	})
+
+	accepted, err := h.app.AcceptAcademicUnitRoleInvitation(
+		request.Context,
+		request.Invocation(),
+		onboarding.AcceptAcademicUnitRoleInvitationCommand{
+			Claim:  body.Claim,
+			Source: request.Metadata.IPAddress,
+		},
+	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, invitationAcceptanceResponseFromView(accepted)), nil
+
+	return route.JSON(http.StatusOK, invitationAcceptanceResponseFromView(accepted)), nil
 }
 
-func (m invitationResourceModule) acceptInstitutionRole(request operationRequest) (operationResult, error) {
+func (h invitationHandlers) acceptInstitutionRole(request route.Request) (route.Result, error) {
 	var body acceptScopedRoleInvitationRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
-	accepted, err := m.invitations.AcceptInstitutionRoleInvitation(request.context, request.invocation(), app.AcceptInstitutionRoleInvitationCommand{
-		Claim: body.Claim, Source: request.metadata.IPAddress,
-	})
+
+	accepted, err := h.app.AcceptInstitutionRoleInvitation(
+		request.Context,
+		request.Invocation(),
+		onboarding.AcceptInstitutionRoleInvitationCommand{
+			Claim:  body.Claim,
+			Source: request.Metadata.IPAddress,
+		},
+	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, invitationAcceptanceResponseFromView(accepted)), nil
+
+	return route.JSON(http.StatusOK, invitationAcceptanceResponseFromView(accepted)), nil
 }
 
-func (m invitationResourceModule) issueTeacherAcademicUnit(request operationRequest) (operationResult, error) {
-	unitID, err := request.params.RequireAcademicUnitID()
+func (h invitationHandlers) issueTeacherAcademicUnit(request route.Request) (route.Result, error) {
+	unitID, err := route.PathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	var body issueTeacherAcademicUnitInvitationRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
-	startAt, endAt, err := wireWindowMillis(body.StartAt, body.EndAt)
+
+	startAt, endAt, err := route.WireWindowMillis(body.StartAt, body.EndAt)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	created, err := m.invitations.IssueTeacherAcademicUnitInvitation(request.context, request.invocation(), app.IssueTeacherAcademicUnitInvitationCommand{
-		TargetEmail: body.Email, AcademicUnitID: unitID, RoleID: model.RoleID(body.RoleID), IntendedStartsAt: startAt, IntendedEndsAt: endAt,
-		SuggestedUsername: body.SuggestedUsername, SuggestedDisplayName: body.SuggestedDisplayName,
-		SuggestedFirstName: body.SuggestedFirstName, SuggestedLastName: body.SuggestedLastName, SuggestedLocale: body.SuggestedLocale, SuggestedTimezone: body.SuggestedTimezone,
-		ExpiresInDays: body.ExpiresInDays,
-	})
+
+	created, err := h.app.IssueTeacherAcademicUnitInvitation(
+		request.Context,
+		request.Invocation(),
+		onboarding.IssueTeacherAcademicUnitInvitationCommand{
+			TargetEmail:          body.Email,
+			AcademicUnitID:       unitID,
+			RoleID:               model.RoleID(body.RoleID),
+			IntendedStartsAt:     startAt,
+			IntendedEndsAt:       endAt,
+			SuggestedUsername:    body.SuggestedUsername,
+			SuggestedDisplayName: body.SuggestedDisplayName,
+			SuggestedFirstName:   body.SuggestedFirstName,
+			SuggestedLastName:    body.SuggestedLastName,
+			SuggestedLocale:      body.SuggestedLocale,
+			SuggestedTimezone:    body.SuggestedTimezone,
+			ExpiresInDays:        body.ExpiresInDays,
+		},
+	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusCreated, invitationResponseFromView(created)), nil
+
+	return route.JSON(http.StatusCreated, invitationResponseFromView(created)), nil
 }
 
-func (m invitationResourceModule) acceptTeacherAcademicUnit(request operationRequest) (operationResult, error) {
+func (h invitationHandlers) acceptTeacherAcademicUnit(request route.Request) (route.Result, error) {
 	var body acceptTeacherAcademicUnitInvitationRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
-	accepted, err := m.invitations.AcceptTeacherAcademicUnitInvitation(request.context, request.invocation(), app.AcceptTeacherAcademicUnitInvitationCommand{
-		Claim: body.Claim, Password: body.Password, Username: body.Username, DisplayName: body.DisplayName,
-		FirstName: body.FirstName, LastName: body.LastName, Locale: body.Locale, Timezone: body.Timezone, Source: request.metadata.IPAddress,
-	})
+
+	accepted, err := h.app.AcceptTeacherAcademicUnitInvitation(
+		request.Context,
+		request.Invocation(),
+		onboarding.AcceptTeacherAcademicUnitInvitationCommand{
+			Claim:       body.Claim,
+			Password:    body.Password,
+			Username:    body.Username,
+			DisplayName: body.DisplayName,
+			FirstName:   body.FirstName,
+			LastName:    body.LastName,
+			Locale:      body.Locale,
+			Timezone:    body.Timezone,
+			Source:      request.Metadata.IPAddress,
+		},
+	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, invitationAcceptanceResponseFromView(accepted)), nil
+
+	return route.JSON(http.StatusOK, invitationAcceptanceResponseFromView(accepted)), nil
 }
 
-func (m invitationResourceModule) issueStudentClass(request operationRequest) (operationResult, error) {
-	classID, err := request.params.RequireClassID()
+func (h invitationHandlers) issueStudentClass(request route.Request) (route.Result, error) {
+	classID, err := route.PathID[model.ClassID](request, "class_id")
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	var body issueStudentClassInvitationRequest
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
-	startAt, endAt, err := wireWindowMillis(body.StartAt, body.EndAt)
+
+	startAt, endAt, err := route.WireWindowMillis(body.StartAt, body.EndAt)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	created, err := m.invitations.IssueStudentClassInvitation(request.context, request.invocation(), app.IssueStudentClassInvitationCommand{
-		TargetEmail: body.Email, ClassID: classID, IntendedStartsAt: startAt, IntendedEndsAt: endAt,
-		SuggestedUsername: body.SuggestedUsername, SuggestedDisplayName: body.SuggestedDisplayName,
-		SuggestedFirstName: body.SuggestedFirstName, SuggestedLastName: body.SuggestedLastName, SuggestedLocale: body.SuggestedLocale, SuggestedTimezone: body.SuggestedTimezone,
-		ExpiresInDays: body.ExpiresInDays,
-	})
+
+	created, err := h.app.IssueStudentClassInvitation(
+		request.Context,
+		request.Invocation(),
+		onboarding.IssueStudentClassInvitationCommand{
+			TargetEmail:          body.Email,
+			ClassID:              classID,
+			IntendedStartsAt:     startAt,
+			IntendedEndsAt:       endAt,
+			SuggestedUsername:    body.SuggestedUsername,
+			SuggestedDisplayName: body.SuggestedDisplayName,
+			SuggestedFirstName:   body.SuggestedFirstName,
+			SuggestedLastName:    body.SuggestedLastName,
+			SuggestedLocale:      body.SuggestedLocale,
+			SuggestedTimezone:    body.SuggestedTimezone,
+			ExpiresInDays:        body.ExpiresInDays,
+		},
+	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusCreated, invitationResponseFromView(created)), nil
+
+	return route.JSON(http.StatusCreated, invitationResponseFromView(created)), nil
 }
 
-func (m invitationResourceModule) acceptStudentClass(request operationRequest) (operationResult, error) {
+func (h invitationHandlers) acceptStudentClass(request route.Request) (route.Result, error) {
 	var body acceptStudentClassInvitationRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
-	accepted, err := m.invitations.AcceptStudentClassInvitation(request.context, request.invocation(), app.AcceptStudentClassInvitationCommand{
-		Claim: body.Claim, Password: body.Password, Username: body.Username, DisplayName: body.DisplayName,
-		FirstName: body.FirstName, LastName: body.LastName, Locale: body.Locale, Timezone: body.Timezone,
-		Source: request.metadata.IPAddress,
-	})
+
+	accepted, err := h.app.AcceptStudentClassInvitation(
+		request.Context,
+		request.Invocation(),
+		onboarding.AcceptStudentClassInvitationCommand{
+			Claim:       body.Claim,
+			Password:    body.Password,
+			Username:    body.Username,
+			DisplayName: body.DisplayName,
+			FirstName:   body.FirstName,
+			LastName:    body.LastName,
+			Locale:      body.Locale,
+			Timezone:    body.Timezone,
+			Source:      request.Metadata.IPAddress,
+		},
+	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, invitationAcceptanceResponseFromView(accepted)), nil
+
+	return route.JSON(http.StatusOK, invitationAcceptanceResponseFromView(accepted)), nil
 }
 
-func invitationAcceptanceResponseFromView(accepted *app.InvitationAcceptanceView) invitationAcceptanceResponse {
+func invitationAcceptanceResponseFromView(accepted *onboarding.InvitationAcceptanceView) invitationAcceptanceResponse {
 	response := invitationAcceptanceResponse{Replayed: accepted.Replayed}
 	if accepted.User != nil {
 		response.UserID = accepted.User.ID.String()
@@ -692,25 +1092,55 @@ func invitationAcceptanceResponseFromView(accepted *app.InvitationAcceptanceView
 	return response
 }
 
-func invitationResponseFromView(view app.InvitationView) invitationResponse {
-	return invitationResponse{ID: view.ID.String(), Purpose: string(view.Purpose), State: string(view.State), ClassID: view.ClassID.String(),
-		AcademicPeriodID: view.AcademicPeriodID.String(), AcademicUnitID: view.AcademicUnitID.String(), RoleID: view.RoleID.String(),
-		RoleActions: append([]string(nil), view.RoleActions...), StartAt: model.FormatRFC3339(view.IntendedStartsAt),
-		EndAt: view.IntendedEndsAt.FormatRFC3339(), ExpiresAt: model.FormatRFC3339(view.ExpiresAt)}
+func invitationResponseFromView(view onboarding.InvitationView) invitationResponse {
+	return invitationResponse{
+		ID:               view.ID.String(),
+		Purpose:          string(view.Purpose),
+		State:            string(view.State),
+		ClassID:          view.ClassID.String(),
+		AcademicPeriodID: view.AcademicPeriodID.String(),
+		AcademicUnitID:   view.AcademicUnitID.String(),
+		RoleID:           view.RoleID.String(),
+		RoleActions:      append([]string(nil), view.RoleActions...),
+		StartAt:          model.FormatRFC3339(view.IntendedStartsAt),
+		EndAt:            view.IntendedEndsAt.FormatRFC3339(),
+		ExpiresAt:        model.FormatRFC3339(view.ExpiresAt),
+	}
 }
 
-func invitationAdministrationResponseFromView(view app.InvitationAdministrationView) invitationAdministrationResponse {
+func invitationAdministrationResponseFromView(view onboarding.InvitationAdministrationView) invitationAdministrationResponse {
 	base := invitationResponseFromView(view.InvitationView)
-	response := invitationAdministrationResponse{ID: base.ID, Purpose: base.Purpose, State: base.State,
-		ClassID: base.ClassID, AcademicPeriodID: base.AcademicPeriodID, AcademicUnitID: base.AcademicUnitID,
-		RoleID: base.RoleID, RoleActions: base.RoleActions, StartAt: base.StartAt, EndAt: base.EndAt, ExpiresAt: base.ExpiresAt,
-		Email: view.TargetEmail, InviterUserID: view.InviterUserID.String(), AcceptedUserID: view.AcceptedUserID.String(),
-		CreatedAt: model.FormatRFC3339(view.CreatedAt), UpdatedAt: model.FormatRFC3339(view.UpdatedAt), Revision: view.Revision}
-	if view.Delivery != nil {
-		response.Delivery = &invitationDeliveryResponse{TemplateKey: string(view.Delivery.TemplateKey), State: string(view.Delivery.State),
-			MaskedRecipient: view.Delivery.MaskedRecipient, CreatedAt: model.FormatRFC3339(view.Delivery.CreatedAt),
-			UpdatedAt: model.FormatRFC3339(view.Delivery.UpdatedAt), Deadline: model.FormatRFC3339(view.Delivery.Deadline),
-			AcceptedAt: view.Delivery.AcceptedAt.FormatRFC3339(), PublicFailureCode: view.Delivery.PublicFailureCode}
+	response := invitationAdministrationResponse{
+		ID:               base.ID,
+		Purpose:          base.Purpose,
+		State:            base.State,
+		ClassID:          base.ClassID,
+		AcademicPeriodID: base.AcademicPeriodID,
+		AcademicUnitID:   base.AcademicUnitID,
+		RoleID:           base.RoleID,
+		RoleActions:      base.RoleActions,
+		StartAt:          base.StartAt,
+		EndAt:            base.EndAt,
+		ExpiresAt:        base.ExpiresAt,
+		Email:            view.TargetEmail,
+		InviterUserID:    view.InviterUserID.String(),
+		AcceptedUserID:   view.AcceptedUserID.String(),
+		CreatedAt:        model.FormatRFC3339(view.CreatedAt),
+		UpdatedAt:        model.FormatRFC3339(view.UpdatedAt),
+		Revision:         view.Revision,
 	}
+	if view.Delivery != nil {
+		response.Delivery = &invitationDeliveryResponse{
+			TemplateKey:       string(view.Delivery.TemplateKey),
+			State:             string(view.Delivery.State),
+			MaskedRecipient:   view.Delivery.MaskedRecipient,
+			CreatedAt:         model.FormatRFC3339(view.Delivery.CreatedAt),
+			UpdatedAt:         model.FormatRFC3339(view.Delivery.UpdatedAt),
+			Deadline:          model.FormatRFC3339(view.Delivery.Deadline),
+			AcceptedAt:        view.Delivery.AcceptedAt.FormatRFC3339(),
+			PublicFailureCode: view.Delivery.PublicFailureCode,
+		}
+	}
+
 	return response
 }

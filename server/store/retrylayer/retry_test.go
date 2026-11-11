@@ -48,6 +48,7 @@ type rootStub struct {
 	examAuthoring        store.ExamAuthoringStore
 	examSitting          store.ExamSittingStore
 	examAttempt          store.ExamAttemptStore
+	examFocusLoss        store.ExamFocusLossStore
 	examAttemptWorkspace store.ExamAttemptWorkspaceStore
 	personalAccessToken  store.PersonalAccessTokenStore
 	passwordCredential   store.PasswordCredentialStore
@@ -65,6 +66,9 @@ func (s *rootStub) ExamAuthoring() store.ExamAuthoringStore {
 }
 func (s *rootStub) ExamSitting() store.ExamSittingStore { return s.examSitting }
 func (s *rootStub) ExamAttempt() store.ExamAttemptStore { return s.examAttempt }
+func (s *rootStub) ExamFocusLoss() store.ExamFocusLossStore {
+	return s.examFocusLoss
+}
 func (s *rootStub) ExamAttemptWorkspace() store.ExamAttemptWorkspaceStore {
 	return s.examAttemptWorkspace
 }
@@ -174,14 +178,19 @@ type examAttemptRetryStub struct {
 	store.ExamAttemptStore
 	connectAttempts       int
 	renewAttempts         int
-	resolveFocusAttempts  int
-	recordFocusAttempts   int
 	resolveExpiryAttempts int
 	listExpiryAttempts    int
 	expireAttempts        int
 	reallowAttempts       int
 	closeAttempts         int
 	err                   error
+}
+
+type examFocusLossRetryStub struct {
+	store.ExamFocusLossStore
+	resolveFocusAttempts int
+	recordFocusAttempts  int
+	err                  error
 }
 
 type examAttemptWorkspaceRetryStub struct {
@@ -234,12 +243,12 @@ func (s *examAttemptRetryStub) RenewParticipation(context.Context, *store.ExamAt
 	return nil, s.err
 }
 
-func (s *examAttemptRetryStub) ResolveFocusLossTarget(context.Context, store.ExamAttemptFocusLossAccess) (*store.ExamAttemptFocusLossTarget, error) {
+func (s *examFocusLossRetryStub) ResolveFocusLossTarget(context.Context, store.ExamAttemptFocusLossAccess) (*store.ExamAttemptFocusLossTarget, error) {
 	s.resolveFocusAttempts++
 	return nil, s.err
 }
 
-func (s *examAttemptRetryStub) RecordFocusLoss(context.Context, *store.ExamAttemptFocusLossSignal) (*store.ExamAttemptFocusLossResult, error) {
+func (s *examFocusLossRetryStub) RecordFocusLoss(context.Context, *store.ExamAttemptFocusLossSignal) (*store.ExamAttemptFocusLossResult, error) {
 	s.recordFocusAttempts++
 	return nil, s.err
 }
@@ -295,7 +304,7 @@ func TestRetryAllowlistedReadPreservesEventualResult(t *testing.T) {
 		MaxAttempts:    3,
 		InitialBackoff: time.Nanosecond,
 		MaxBackoff:     time.Nanosecond,
-		IsTransient:    func(err error) bool { return err == transientErr },
+		IsTransient:    func(err error) bool { return errors.Is(err, transientErr) },
 	}, nil)
 	require.NoError(t, err)
 
@@ -419,15 +428,15 @@ func TestRetryExamAttemptRenewalExpiryAndReallowUseTheirDurableFences(t *testing
 func TestRetryReadsButDoesNotAutomaticallyRetryAuditedFocusLossMutation(t *testing.T) {
 	t.Parallel()
 	transientErr := errors.New("unknown focus loss outcome")
-	stub := &examAttemptRetryStub{err: transientErr}
-	layer, err := retrylayer.NewWithRecorder(&rootStub{examAttempt: stub}, retrylayer.Policy{
+	stub := &examFocusLossRetryStub{err: transientErr}
+	layer, err := retrylayer.NewWithRecorder(&rootStub{examFocusLoss: stub}, retrylayer.Policy{
 		MaxAttempts: 3, InitialBackoff: time.Nanosecond, MaxBackoff: time.Nanosecond,
 		IsTransient: func(error) bool { return true },
 	}, nil)
 	require.NoError(t, err)
 	ctx := context.Background()
-	_, _ = layer.ExamAttempt().ResolveFocusLossTarget(ctx, store.ExamAttemptFocusLossAccess{})
-	_, _ = layer.ExamAttempt().RecordFocusLoss(ctx, &store.ExamAttemptFocusLossSignal{})
+	_, _ = layer.ExamFocusLoss().ResolveFocusLossTarget(ctx, store.ExamAttemptFocusLossAccess{})
+	_, _ = layer.ExamFocusLoss().RecordFocusLoss(ctx, &store.ExamAttemptFocusLossSignal{})
 	require.Equal(t, 3, stub.resolveFocusAttempts, "Focus Loss attempts resolve/record")
 	require.Equal(t, 1, stub.recordFocusAttempts, "Focus Loss attempts resolve/record")
 }
@@ -501,7 +510,7 @@ func TestRetryExamAuthoringIdempotentCreateAndReads(t *testing.T) {
 	stub := &examAuthoringStub{err: transientErr}
 	layer, err := retrylayer.NewWithRecorder(&rootStub{examAuthoring: stub}, retrylayer.Policy{
 		MaxAttempts: 3, InitialBackoff: time.Nanosecond, MaxBackoff: time.Nanosecond,
-		IsTransient: func(err error) bool { return err == transientErr },
+		IsTransient: func(err error) bool { return errors.Is(err, transientErr) },
 	}, nil)
 	require.NoError(t, err)
 
@@ -559,7 +568,7 @@ func TestRetryReturnsExactTransientErrorAfterBoundedAttempts(t *testing.T) {
 
 	transientErr := errors.New("deadlock detected")
 	stub := &institutionStub{get: func() (*model.Institution, error) { return nil, transientErr }}
-	layer := newLayer(t, stub, func(err error) bool { return err == transientErr }, 3, time.Nanosecond)
+	layer := newLayer(t, stub, func(err error) bool { return errors.Is(err, transientErr) }, 3, time.Nanosecond)
 
 	_, gotErr := layer.Institution().Get(context.Background(), model.NewInstitutionID())
 	require.Equal(t, transientErr, gotErr, "Get() error")
@@ -638,7 +647,7 @@ func TestRetryGeneratedForwardingIsCurrent(t *testing.T) {
 
 	temporary := t.TempDir()
 	generatedPath := filepath.Join(temporary, "forwarding_gen.go")
-	command := exec.Command(
+	command := exec.CommandContext(t.Context(),
 		"go", "run", "../storetest/layergen", "-layer", "retry", "-source", "..", "-output", generatedPath,
 	)
 	command.Env = append(os.Environ(), "GOCACHE="+filepath.Join(temporary, "go-cache"))

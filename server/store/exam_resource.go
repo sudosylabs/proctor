@@ -23,6 +23,17 @@ type ExamResourceRecord struct {
 	DraftRevision int64
 }
 
+// Consistent reports whether the record carries both the Resource and its
+// current rendition.
+//
+// It is part of the Store contract: the conformance suite asserts it on
+// every real result.
+func (r *ExamResourceRecord) Consistent() bool {
+	return !(r == nil ||
+		r.Resource == nil ||
+		r.Rendition == nil)
+}
+
 type ExamResourceUploadReservation struct {
 	ExamID                model.ExamID
 	ActorUserID           model.UserID

@@ -18,58 +18,60 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type desktopAuthorizationHTTPApplication struct {
-	start    app.StartDesktopAuthorizationCommand
-	approve  app.ApproveDesktopAuthorizationCommand
-	cancel   app.ApproveDesktopAuthorizationCommand
-	exchange app.ExchangeDesktopAuthorizationCommand
+	start    identity.StartDesktopAuthorizationCommand
+	approve  identity.ApproveDesktopAuthorizationCommand
+	cancel   identity.ApproveDesktopAuthorizationCommand
+	exchange identity.ExchangeDesktopAuthorizationCommand
 	startErr error
 }
 
-func (a *desktopAuthorizationHTTPApplication) BindDesktopAuthorization(_ context.Context, _ invocation.Invocation, command app.BindDesktopAuthorizationCommand) (*app.DesktopAuthorizationBinding, error) {
-	return &app.DesktopAuthorizationBinding{Binding: "binding", ExpiresAt: time.Now().Add(time.Minute).UnixMilli()}, nil
+func (a *desktopAuthorizationHTTPApplication) BindDesktopAuthorization(_ context.Context, _ invocation.Invocation, command identity.BindDesktopAuthorizationCommand) (*identity.DesktopAuthorizationBinding, error) {
+	return &identity.DesktopAuthorizationBinding{Binding: "binding", ExpiresAt: time.Now().Add(time.Minute).UnixMilli()}, nil
 }
 
-func (a *desktopAuthorizationHTTPApplication) DesktopAuthorizationContext(context.Context, invocation.Invocation, string) (*app.DesktopAuthorizationBrowserContext, error) {
-	return &app.DesktopAuthorizationBrowserContext{State: model.BrowserAuthenticationStateBound, ExpiresAt: time.Now().Add(time.Minute).UnixMilli()}, nil
+func (a *desktopAuthorizationHTTPApplication) DesktopAuthorizationContext(context.Context, invocation.Invocation, string) (*identity.DesktopAuthorizationBrowserContext, error) {
+	return &identity.DesktopAuthorizationBrowserContext{State: model.BrowserAuthenticationStateBound, ExpiresAt: time.Now().Add(time.Minute).UnixMilli()}, nil
 }
 
-func (a *desktopAuthorizationHTTPApplication) AuthenticateDesktopAuthorizationSession(context.Context, invocation.Invocation, app.AuthenticateDesktopAuthorizationCommand) (*app.DesktopAuthorizationBrowserContext, error) {
-	return &app.DesktopAuthorizationBrowserContext{State: model.BrowserAuthenticationStateAuthenticated}, nil
+func (a *desktopAuthorizationHTTPApplication) AuthenticateDesktopAuthorizationSession(context.Context, invocation.Invocation, identity.AuthenticateDesktopAuthorizationCommand) (*identity.DesktopAuthorizationBrowserContext, error) {
+	return &identity.DesktopAuthorizationBrowserContext{State: model.BrowserAuthenticationStateAuthenticated}, nil
 }
 
-func (a *desktopAuthorizationHTTPApplication) AuthenticateDesktopAuthorizationLocally(context.Context, invocation.Invocation, app.AuthenticateDesktopAuthorizationLocallyCommand) (*app.DesktopAuthorizationBrowserContext, error) {
-	return &app.DesktopAuthorizationBrowserContext{State: model.BrowserAuthenticationStateAuthenticated}, nil
+func (a *desktopAuthorizationHTTPApplication) AuthenticateDesktopAuthorizationLocally(context.Context, invocation.Invocation, identity.AuthenticateDesktopAuthorizationLocallyCommand) (*identity.DesktopAuthorizationBrowserContext, error) {
+	return &identity.DesktopAuthorizationBrowserContext{State: model.BrowserAuthenticationStateAuthenticated}, nil
 }
 
 func (a *desktopAuthorizationHTTPApplication) ResetDesktopAuthorizationAccount(context.Context, invocation.Invocation, string) error {
 	return nil
 }
 
-func (a *desktopAuthorizationHTTPApplication) BeginDesktopExternalAuthentication(context.Context, invocation.Invocation, app.BeginDesktopExternalAuthenticationCommand) (*model.ExternalAuthenticationStart, error) {
+func (a *desktopAuthorizationHTTPApplication) BeginDesktopExternalAuthentication(context.Context, invocation.Invocation, identity.BeginDesktopExternalAuthenticationCommand) (*model.ExternalAuthenticationStart, error) {
 	return &model.ExternalAuthenticationStart{RedirectURL: "https://identity.example/login", Binding: "external-binding", ExpiresAt: time.Now().Add(time.Minute).UnixMilli()}, nil
 }
 
-func (a *desktopAuthorizationHTTPApplication) StartDesktopAuthorization(_ context.Context, _ invocation.Invocation, command app.StartDesktopAuthorizationCommand) (*app.DesktopAuthorizationStart, error) {
+func (a *desktopAuthorizationHTTPApplication) StartDesktopAuthorization(_ context.Context, _ invocation.Invocation, command identity.StartDesktopAuthorizationCommand) (*identity.DesktopAuthorizationStart, error) {
 	a.start = command
 	if a.startErr != nil {
 		return nil, a.startErr
 	}
-	return &app.DesktopAuthorizationStart{AuthorizationURL: "https://proctor.example.edu/authorize/desktop", ExpiresAt: 100}, nil
+	return &identity.DesktopAuthorizationStart{AuthorizationURL: "https://proctor.example.edu/authorize/desktop", ExpiresAt: 100}, nil
 }
 
 func TestDesktopAuthorizationHTTPExposesBoundedAttemptFailures(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	applicationFake := &desktopAuthorizationHTTPApplication{startErr: apperror.New("authentication.rate_limited")}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{}, desktopAuthorizationResource(applicationFake, testDesktopAuthorizationCookies(t)))
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/desktop/authorizations", strings.NewReader(
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, desktopAuthorizationResource(applicationFake, testDesktopAuthorizationCookies(t)))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/auth/desktop/authorizations", strings.NewReader(
 		`{"callback_url":"http://127.0.0.1:49152/random","state":"state","code_challenge":"challenge"}`))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
@@ -77,19 +79,19 @@ func TestDesktopAuthorizationHTTPExposesBoundedAttemptFailures(t *testing.T) {
 	require.Equal(t, http.StatusTooManyRequests, response.Code, "rate-limited start = %d: %s", response.Code, response.Body.String())
 }
 
-func (a *desktopAuthorizationHTTPApplication) ApproveDesktopAuthorization(_ context.Context, _ invocation.Invocation, command app.ApproveDesktopAuthorizationCommand) (*app.DesktopAuthorizationApproval, error) {
+func (a *desktopAuthorizationHTTPApplication) ApproveDesktopAuthorization(_ context.Context, _ invocation.Invocation, command identity.ApproveDesktopAuthorizationCommand) (*identity.DesktopAuthorizationApproval, error) {
 	a.approve = command
-	return &app.DesktopAuthorizationApproval{RedirectURL: "http://127.0.0.1:49152/callback?code=opaque&state=state", ExpiresAt: 90}, nil
+	return &identity.DesktopAuthorizationApproval{RedirectURL: "http://127.0.0.1:49152/callback?code=opaque&state=state", ExpiresAt: 90}, nil
 }
 
-func (a *desktopAuthorizationHTTPApplication) CancelDesktopAuthorization(_ context.Context, _ invocation.Invocation, command app.ApproveDesktopAuthorizationCommand) error {
+func (a *desktopAuthorizationHTTPApplication) CancelDesktopAuthorization(_ context.Context, _ invocation.Invocation, command identity.ApproveDesktopAuthorizationCommand) error {
 	a.cancel = command
 	return nil
 }
 
-func (a *desktopAuthorizationHTTPApplication) ExchangeDesktopAuthorization(_ context.Context, _ invocation.Invocation, command app.ExchangeDesktopAuthorizationCommand) (*app.DesktopAuthorizationExchangeResult, error) {
+func (a *desktopAuthorizationHTTPApplication) ExchangeDesktopAuthorization(_ context.Context, _ invocation.Invocation, command identity.ExchangeDesktopAuthorizationCommand) (*identity.DesktopAuthorizationExchangeResult, error) {
 	a.exchange = command
-	return &app.DesktopAuthorizationExchangeResult{
+	return &identity.DesktopAuthorizationExchangeResult{
 		Session: &model.Session{ID: model.NewSessionID(), UserID: model.NewUserID(), ClientType: model.SessionClientDesktop},
 		Tokens:  &model.AuthenticationTokens{AccessToken: "access", RefreshToken: "refresh"},
 	}, nil
@@ -97,13 +99,13 @@ func (a *desktopAuthorizationHTTPApplication) ExchangeDesktopAuthorization(_ con
 
 func TestDesktopAuthorizationHTTPMapsPublicClientProtocolAndDisablesCaching(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	applicationFake := &desktopAuthorizationHTTPApplication{}
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now()}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, desktopAuthorizationResource(applicationFake, testDesktopAuthorizationCookies(t)))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, desktopAuthorizationResource(applicationFake, testDesktopAuthorizationCookies(t)))
 
 	tests := []struct {
 		path, body, authorization string
@@ -119,7 +121,7 @@ func TestDesktopAuthorizationHTTPMapsPublicClientProtocolAndDisablesCaching(t *t
 			request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, test.path, strings.NewReader(test.body))
 			request.Header.Set("Content-Type", "application/json")
 			if strings.Contains(test.path, "/authorizations/") {
-				request.AddCookie(&http.Cookie{Name: BrowserDesktopAuthorizationCookieName, Value: "binding", Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode})
+				request.AddCookie(&http.Cookie{Name: route.BrowserDesktopAuthorizationCookieName, Value: "binding"})
 			}
 			if test.authorization != "" {
 				request.Header.Set("Authorization", test.authorization)
@@ -139,25 +141,25 @@ func TestDesktopAuthorizationHTTPMapsPublicClientProtocolAndDisablesCaching(t *t
 
 func TestDesktopAuthorizationHTTPExchangesFragmentProofForScopedCookies(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{},
+	logger, _ := routetest.NewLogger(t)
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{},
 		desktopAuthorizationResource(&desktopAuthorizationHTTPApplication{}, testDesktopAuthorizationCookies(t)))
 
-	bindRequest := httptest.NewRequest(http.MethodPost, "/api/v1/auth/desktop/authorizations/bind", strings.NewReader(
+	bindRequest := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/auth/desktop/authorizations/bind", strings.NewReader(
 		`{"handle":"handle","browser_proof":"proof","state":"state"}`))
 	bindRequest.Header.Set("Content-Type", "application/json")
 	bindResponse := httptest.NewRecorder()
 	httpAPI.ServeHTTP(bindResponse, bindRequest)
 	require.Equal(t, http.StatusNoContent, bindResponse.Code, "bind = %d cache=%q body=%s", bindResponse.Code, bindResponse.Header().Get("Cache-Control"), bindResponse.Body.String())
 	require.Equal(t, "no-store", bindResponse.Header().Get("Cache-Control"), "bind = %d cache=%q body=%s", bindResponse.Code, bindResponse.Header().Get("Cache-Control"), bindResponse.Body.String())
-	bindingCookie := responseCookie(t, bindResponse.Result().Cookies(), BrowserDesktopAuthorizationCookieName)
+	bindingCookie := responseCookie(t, bindResponse.Result().Cookies(), route.BrowserDesktopAuthorizationCookieName)
 	require.Equal(t, "binding", bindingCookie.Value)
 	require.Equal(t, "/api/v1/auth/desktop/authorizations", bindingCookie.Path)
 	require.True(t, bindingCookie.HttpOnly)
 	require.True(t, bindingCookie.Secure)
 	require.Equal(t, http.SameSiteLaxMode, bindingCookie.SameSite)
 
-	providerRequest := httptest.NewRequest(http.MethodGet,
+	providerRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet,
 		"/api/v1/auth/desktop/authorizations/authenticate/providers/provider/login?state=state", nil)
 	providerRequest.AddCookie(bindingCookie)
 	providerResponse := httptest.NewRecorder()
@@ -165,7 +167,7 @@ func TestDesktopAuthorizationHTTPExchangesFragmentProofForScopedCookies(t *testi
 	require.Equal(t, http.StatusSeeOther, providerResponse.Code, "provider start = %d location=%q cache=%q body=%s", providerResponse.Code, providerResponse.Header().Get("Location"), providerResponse.Header().Get("Cache-Control"), providerResponse.Body.String())
 	require.Equal(t, "https://identity.example/login", providerResponse.Header().Get("Location"), "provider start = %d location=%q cache=%q body=%s", providerResponse.Code, providerResponse.Header().Get("Location"), providerResponse.Header().Get("Cache-Control"), providerResponse.Body.String())
 	require.Equal(t, "no-store", providerResponse.Header().Get("Cache-Control"), "provider start = %d location=%q cache=%q body=%s", providerResponse.Code, providerResponse.Header().Get("Location"), providerResponse.Header().Get("Cache-Control"), providerResponse.Body.String())
-	externalCookie := responseCookie(t, providerResponse.Result().Cookies(), BrowserExternalLoginCookieName)
+	externalCookie := responseCookie(t, providerResponse.Result().Cookies(), route.BrowserExternalLoginCookieName)
 	require.Equal(t, "external-binding", externalCookie.Value)
 	require.Equal(t, "/api/v1/auth/providers/", externalCookie.Path)
 	require.True(t, externalCookie.HttpOnly)
@@ -184,9 +186,9 @@ func responseCookie(t *testing.T, cookies []*http.Cookie, name string) *http.Coo
 	return nil
 }
 
-func testDesktopAuthorizationCookies(t *testing.T) browserCookies {
+func testDesktopAuthorizationCookies(t *testing.T) route.Cookies {
 	t.Helper()
-	cookies, err := newBrowserCookies("https://proctor.example.edu")
+	cookies, err := route.NewCookies("https://proctor.example.edu")
 	require.NoError(t, err)
 	return cookies
 }
@@ -195,9 +197,9 @@ func TestDesktopAuthorizationContextResponseNamesAccountEmailAndRequestTime(t *t
 	t.Parallel()
 	requestedAt := time.Date(2026, 8, 18, 11, 58, 0, 0, time.UTC)
 	userID := model.NewUserID()
-	response := desktopAuthorizationContextResponseFromApplication(&app.DesktopAuthorizationBrowserContext{
+	response := desktopAuthorizationContextResponseFromApplication(&identity.DesktopAuthorizationBrowserContext{
 		State: model.BrowserAuthenticationStateAuthenticated, DeviceName: "Lab Mac",
-		Account:     &app.DesktopAuthorizationAccount{ID: userID, Username: "ada", DisplayName: "Ada Okafor", Email: "ada@example.edu"},
+		Account:     &identity.DesktopAuthorizationAccount{ID: userID, Username: "ada", DisplayName: "Ada Okafor", Email: "ada@example.edu"},
 		RequestedAt: requestedAt.UnixMilli(), ExpiresAt: requestedAt.Add(5 * time.Minute).UnixMilli(),
 	})
 	require.Equal(t, "2026-08-18T11:58:00Z", response.RequestedAt)

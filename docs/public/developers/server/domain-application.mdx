@@ -149,15 +149,20 @@ default.
 
 ## Use Application Child Packages Deliberately
 
-Most capabilities begin as cohesive files in `server/app`. A child package is
-justified when it owns substantial stable mechanics, has several collaborators,
-can expose a narrow facade, and can point inward without importing its parent.
+The parent `server/app` package only assembles the application: the `App`
+type, its construction, and the dependencies composition supplies. Behavior
+lives in child packages. A child package is justified when it owns substantial
+stable mechanics, has several collaborators, can expose a narrow facade, and
+can point inward without importing its parent.
 
 Current examples illustrate different reasons:
 
-- `app/job` owns a generic engine independent of domain handlers;
+- `app/job` owns a generic engine independent of domain handlers, and the
+  operator Job service built on it;
 - `app/realtime` owns transport-neutral event and propagation contracts;
-- `app/mail` owns product mail preparation and rendering contracts; and
+- `app/mail` owns product mail preparation and rendering contracts, and the
+  operator mail service;
+- `app/search` owns the one search across Exams, Classes, and Users; and
 - focused `app/exam` children own distinct examination mechanics.
 
 They are not a folder template. A new capability does not earn a child package

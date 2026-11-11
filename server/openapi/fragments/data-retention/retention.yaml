@@ -275,7 +275,7 @@ paths:
       parameters:
         - name: limit
           in: query
-          description: Maximum number of Submissions to assess; each contributes one work and one integrity record.
+          description: Maximum number of Submissions to assess; each contributes work, integrity, Browser Activity and security operational records.
           schema:
             type: integer
             minimum: 1

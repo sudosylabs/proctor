@@ -32,7 +32,7 @@ import (
 	"github.com/sudosylabs/proctor/packages/vfs"
 	"github.com/sudosylabs/proctor/packages/vfs/local"
 	"github.com/sudosylabs/proctor/packages/vfs/memory"
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/filecontent"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -170,7 +170,7 @@ func TestContentAcceptsSupportedProfilePictureFormatsAndRejectsOversizedDimensio
 			content, err := filecontent.New(memory.New(), filecontent.Policy{MaximumConcurrentOperations: 2}, nil)
 			require.NoError(t, err)
 			_, err = content.NormalizeAndStoreProfilePicture(context.Background(), model.NewFileRevisionID(), bytes.NewReader(input.Bytes()), int64(input.Len()), time.Unix(1, 0))
-			require.ErrorIs(t, err, app.ErrInvalidProfilePicture)
+			require.ErrorIs(t, err, user.ErrInvalidProfilePicture)
 		})
 	}
 
@@ -180,12 +180,12 @@ func TestContentAcceptsSupportedProfilePictureFormatsAndRejectsOversizedDimensio
 	content, err := filecontent.New(memory.New(), filecontent.Policy{MaximumConcurrentOperations: 2}, nil)
 	require.NoError(t, err)
 	_, err = content.NormalizeAndStoreProfilePicture(context.Background(), model.NewFileRevisionID(), bytes.NewReader(input.Bytes()), int64(input.Len()), time.Unix(1, 0))
-	require.ErrorIs(t, err, app.ErrInvalidProfilePicture)
+	require.ErrorIs(t, err, user.ErrInvalidProfilePicture)
 	tooLarge := bytes.Repeat([]byte{'x'}, (5<<20)+1)
 	_, err = content.NormalizeAndStoreProfilePicture(context.Background(), model.NewFileRevisionID(), bytes.NewReader(tooLarge), int64(len(tooLarge)), time.Unix(1, 0))
-	require.ErrorIs(t, err, app.ErrInvalidProfilePicture)
+	require.ErrorIs(t, err, user.ErrInvalidProfilePicture)
 	_, err = content.NormalizeAndStoreProfilePicture(context.Background(), model.NewFileRevisionID(), nil, -1, time.Unix(1, 0))
-	require.ErrorIs(t, err, app.ErrInvalidProfilePicture)
+	require.ErrorIs(t, err, user.ErrInvalidProfilePicture)
 }
 
 func TestContentAppliesEXIFOrientationBeforeProfilePictureCropping(t *testing.T) {
@@ -234,7 +234,7 @@ func jpegWithEXIFOrientation(t *testing.T, jpegBytes []byte, orientation uint16)
 	binary.LittleEndian.PutUint16(payload[18:20], 3)
 	binary.LittleEndian.PutUint32(payload[20:24], 1)
 	binary.LittleEndian.PutUint16(payload[24:26], orientation)
-	segment := []byte{0xff, 0xe1, 0, byte(len(payload) + 2)}
+	segment := []byte{0xff, 0xe1, 0, byte(len(payload) + 2)} //nolint:gosec // G115: the payload is a fixed 32 bytes.
 	segment = append(segment, payload...)
 	result := append([]byte(nil), jpegBytes[:2]...)
 	result = append(result, segment...)

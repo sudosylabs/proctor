@@ -101,6 +101,7 @@ func readObject(decoder *json.Decoder, depth int) ([]byte, error) {
 		if err != nil {
 			return nil, ErrInvalid
 		}
+
 		key, ok := token.(string)
 		if !ok || !ascii(key) {
 			return nil, ErrInvalid
@@ -108,26 +109,32 @@ func readObject(decoder *json.Decoder, depth int) ([]byte, error) {
 		if _, exists := values[key]; exists {
 			return nil, ErrInvalid
 		}
+
 		value, err := readValue(decoder, depth)
 		if err != nil {
 			return nil, err
 		}
+
 		keys = append(keys, key)
 		values[key] = value
 	}
+
 	if token, err := decoder.Token(); err != nil || token != json.Delim('}') {
 		return nil, ErrInvalid
 	}
+
 	slices.Sort(keys)
 	encoded := []byte{'{'}
 	for index, key := range keys {
 		if index > 0 {
 			encoded = append(encoded, ',')
 		}
+
 		encoded = appendString(encoded, key)
 		encoded = append(encoded, ':')
 		encoded = append(encoded, values[key]...)
 	}
+
 	return append(encoded, '}'), nil
 }
 
@@ -203,6 +210,7 @@ func validStringEscapes(document []byte) bool {
 			if !inside {
 				continue
 			}
+
 			index++
 			if index >= len(document) {
 				return false
@@ -210,10 +218,12 @@ func validStringEscapes(document []byte) bool {
 			if document[index] != 'u' {
 				continue
 			}
+
 			unit, ok := unicodeEscape(document[index+1:])
 			if !ok || unit >= 0xdc00 && unit <= 0xdfff {
 				return false
 			}
+
 			index += 4
 			if unit < 0xd800 || unit > 0xdbff {
 				continue
@@ -221,13 +231,16 @@ func validStringEscapes(document []byte) bool {
 			if len(document)-index < 7 || document[index+1] != '\\' || document[index+2] != 'u' {
 				return false
 			}
+
 			low, ok := unicodeEscape(document[index+3:])
 			if !ok || low < 0xdc00 || low > 0xdfff {
 				return false
 			}
+
 			index += 6
 		}
 	}
+
 	return true
 }
 

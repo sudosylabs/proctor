@@ -19,38 +19,41 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/onboarding"
+	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type studentProgressionApplicationFake struct {
-	view    app.OnboardingImportView
-	rows    []app.OnboardingImportRowView
-	command app.DryRunStudentProgressionCommand
+	view    onboarding.OnboardingImportView
+	rows    []onboarding.OnboardingImportRowView
+	command onboarding.DryRunStudentProgressionCommand
 	getID   string
 
-	listQuery *app.ListStudentProgressionsQuery
-	listPage  app.CountedPage[app.OnboardingImportView]
+	listQuery *onboarding.ListStudentProgressionsQuery
+	listPage  paging.Counted[onboarding.OnboardingImportView]
 }
 
-func (f *studentProgressionApplicationFake) ListStudentProgressions(_ context.Context, _ invocation.Invocation, query app.ListStudentProgressionsQuery) (app.CountedPage[app.OnboardingImportView], error) {
+func (f *studentProgressionApplicationFake) ListStudentProgressions(_ context.Context, _ invocation.Invocation, query onboarding.ListStudentProgressionsQuery) (paging.Counted[onboarding.OnboardingImportView], error) {
 	f.listQuery = &query
 	return f.listPage, nil
 }
 
-func (f *studentProgressionApplicationFake) DryRunStudentProgression(_ context.Context, _ invocation.Invocation, command app.DryRunStudentProgressionCommand) (app.OnboardingImportView, error) {
+func (f *studentProgressionApplicationFake) DryRunStudentProgression(_ context.Context, _ invocation.Invocation, command onboarding.DryRunStudentProgressionCommand) (onboarding.OnboardingImportView, error) {
 	f.command = command
 	return f.view, nil
 }
-func (f *studentProgressionApplicationFake) GetStudentProgression(_ context.Context, _ invocation.Invocation, id model.OnboardingImportID) (app.OnboardingImportView, []app.OnboardingImportRowView, error) {
+func (f *studentProgressionApplicationFake) GetStudentProgression(_ context.Context, _ invocation.Invocation, id model.OnboardingImportID) (onboarding.OnboardingImportView, []onboarding.OnboardingImportRowView, error) {
 	f.getID = id.String()
 	return f.view, f.rows, nil
 }
-func (f *studentProgressionApplicationFake) CommitStudentProgression(context.Context, invocation.Invocation, app.CommitStudentProgressionCommand) (app.OnboardingImportView, error) {
+func (f *studentProgressionApplicationFake) CommitStudentProgression(context.Context, invocation.Invocation, onboarding.CommitStudentProgressionCommand) (onboarding.OnboardingImportView, error) {
 	return f.view, nil
 }
-func (f *studentProgressionApplicationFake) CancelStudentProgression(context.Context, invocation.Invocation, model.OnboardingImportID) (app.OnboardingImportView, error) {
+func (f *studentProgressionApplicationFake) CancelStudentProgression(context.Context, invocation.Invocation, model.OnboardingImportID) (onboarding.OnboardingImportView, error) {
 	return f.view, nil
 }
 func (f *studentProgressionApplicationFake) StudentProgressionReport(context.Context, invocation.Invocation, model.OnboardingImportID, io.Writer) error {
@@ -58,18 +61,18 @@ func (f *studentProgressionApplicationFake) StudentProgressionReport(context.Con
 }
 
 func TestStudentProgressionHTTPRequiresRFC3339AndForwardsExactTargets(t *testing.T) {
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	at := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
 	sourcePeriodID, sourceClassID := model.NewAcademicPeriodID(), model.NewClassID()
 	destinationPeriodID, destinationClassID := model.NewAcademicPeriodID(), model.NewClassID()
-	fake := &studentProgressionApplicationFake{view: app.OnboardingImportView{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportStudentProgression,
+	fake := &studentProgressionApplicationFake{view: onboarding.OnboardingImportView{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportStudentProgression,
 		State: model.OnboardingImportParsing, ScopeType: model.RoleScopeClass, ScopeID: destinationClassID.String(), SourcePeriodID: sourcePeriodID,
 		SourceClassID: sourceClassID, DestinationPeriodID: destinationPeriodID, DestinationClassID: destinationClassID, EffectiveAt: at,
 		ParseJobID: model.NewJobID(), CreatedAt: at, UpdatedAt: at, ExpiresAt: at.Add(7 * 24 * time.Hour), Revision: 1}}
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: at}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, studentProgressionResource(fake))
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, studentProgressionResource(fake))
 	body := `{"source_period_id":"` + sourcePeriodID.String() + `","source_class_id":"` + sourceClassID.String() + `","destination_period_id":"` + destinationPeriodID.String() + `","destination_class_id":"` + destinationClassID.String() + `","effective_at":"` + at.Format(time.RFC3339Nano) + `"}`
 	request := newJSONRequest(http.MethodPost, "/api/v1/student-progressions", strings.NewReader(body))
 	request.Header.Set("Authorization", "Bearer session")
@@ -92,12 +95,12 @@ func TestStudentProgressionHTTPRequiresRFC3339AndForwardsExactTargets(t *testing
 func TestStudentProgressionResponseExposesOnlySafeExactTargetsAndRows(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 21, 9, 0, 0, 0, time.UTC)
-	view := app.OnboardingImportView{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportStudentProgression,
+	view := onboarding.OnboardingImportView{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportStudentProgression,
 		State: model.OnboardingImportPreviewReady, ScopeType: model.RoleScopeClass, ScopeID: model.NewClassID().String(),
 		SourcePeriodID: model.NewAcademicPeriodID(), SourceClassID: model.NewClassID(), DestinationPeriodID: model.NewAcademicPeriodID(),
 		DestinationClassID: model.NewClassID(), EffectiveAt: at.Add(24 * time.Hour), ParseJobID: model.NewJobID(),
 		CreatedAt: at, UpdatedAt: at, ExpiresAt: at.Add(7 * 24 * time.Hour), Revision: 2, TotalRows: 1, ValidRows: 1}
-	rows := []app.OnboardingImportRowView{{RowNumber: 1, Reference: "safe-membership-reference", Operation: "class.enroll", Status: model.OnboardingImportRowValid}}
+	rows := []onboarding.OnboardingImportRowView{{RowNumber: 1, Reference: "safe-membership-reference", Operation: "class.enroll", Status: model.OnboardingImportRowValid}}
 	encoded, err := json.Marshal(onboardingImportResponseFromView(view, rows))
 	require.NoError(t, err)
 	body := string(encoded)
@@ -112,16 +115,16 @@ func TestStudentProgressionListParsesFiltersAndPagesTheCountedEnvelope(t *testin
 	at := time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)
 	sourcePeriodID, sourceClassID := model.NewAcademicPeriodID(), model.NewClassID()
 	destinationPeriodID, destinationClassID := model.NewAcademicPeriodID(), model.NewClassID()
-	newest := app.OnboardingImportView{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportStudentProgression,
+	newest := onboarding.OnboardingImportView{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportStudentProgression,
 		State: model.OnboardingImportPreviewReady, ScopeType: model.RoleScopeClass, ScopeID: destinationClassID.String(),
 		SourcePeriodID: sourcePeriodID, SourceClassID: sourceClassID, DestinationPeriodID: destinationPeriodID, DestinationClassID: destinationClassID,
 		SourceClassName: "Year 1 Blue", DestinationClassName: "Year 2 Blue", EffectiveAt: at.Add(24 * time.Hour),
 		ParseJobID: model.NewJobID(), CreatedAt: at, UpdatedAt: at, ExpiresAt: at.Add(7 * 24 * time.Hour), Revision: 2}
 	older := newest
 	older.ID, older.CreatedAt = model.NewOnboardingImportID(), at.Add(-time.Minute)
-	fake := &studentProgressionApplicationFake{listPage: app.CountedPage[app.OnboardingImportView]{
-		Page:      app.Page[app.OnboardingImportView]{Items: []app.OnboardingImportView{newest, older}, HasMore: true},
-		PageTotal: app.PageTotal{Counted: true, Total: 3}}}
+	fake := &studentProgressionApplicationFake{listPage: paging.Counted[onboarding.OnboardingImportView]{
+		Page:  paging.Page[onboarding.OnboardingImportView]{Items: []onboarding.OnboardingImportView{newest, older}, HasMore: true},
+		Total: paging.Total{Counted: true, Total: 3}}}
 	httpAPI := studentProgressionListAPI(t, fake)
 
 	response := httptest.NewRecorder()
@@ -130,7 +133,7 @@ func TestStudentProgressionListParsesFiltersAndPagesTheCountedEnvelope(t *testin
 		"&destination_period_id="+destinationPeriodID.String()+"&destination_class_id="+destinationClassID.String()))
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
-	require.Equal(t, app.ListStudentProgressionsQuery{States: []model.OnboardingImportState{model.OnboardingImportPreviewReady, model.OnboardingImportFailed},
+	require.Equal(t, onboarding.ListStudentProgressionsQuery{States: []model.OnboardingImportState{model.OnboardingImportPreviewReady, model.OnboardingImportFailed},
 		SourcePeriodID: sourcePeriodID, SourceClassID: sourceClassID, DestinationPeriodID: destinationPeriodID, DestinationClassID: destinationClassID,
 		Limit: 2}, *fake.listQuery)
 	var page struct {
@@ -149,11 +152,11 @@ func TestStudentProgressionListParsesFiltersAndPagesTheCountedEnvelope(t *testin
 	require.Equal(t, 3, *page.Total)
 	require.False(t, *page.TotalIsLowerBound)
 
-	fake.listPage = app.CountedPage[app.OnboardingImportView]{Page: app.Page[app.OnboardingImportView]{Items: []app.OnboardingImportView{}}}
+	fake.listPage = paging.Counted[onboarding.OnboardingImportView]{Page: paging.Page[onboarding.OnboardingImportView]{Items: []onboarding.OnboardingImportView{}}}
 	response = httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, authenticatedCatalogRequest(http.MethodGet, "/api/v1/student-progressions?cursor="+page.NextCursor))
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	require.Equal(t, app.ListStudentProgressionsQuery{BeforeCreatedAt: older.CreatedAt, BeforeID: older.ID, Limit: 50}, *fake.listQuery)
+	require.Equal(t, onboarding.ListStudentProgressionsQuery{BeforeCreatedAt: older.CreatedAt, BeforeID: older.ID, Limit: 50}, *fake.listQuery)
 	require.JSONEq(t, `{"items":[]}`, response.Body.String(), "a later page carries no total")
 }
 
@@ -185,7 +188,7 @@ func TestStudentProgressionListRejectsMalformedParameters(t *testing.T) {
 func TestStudentProgressionReadNamesBothClasses(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)
-	fake := &studentProgressionApplicationFake{view: app.OnboardingImportView{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportStudentProgression,
+	fake := &studentProgressionApplicationFake{view: onboarding.OnboardingImportView{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportStudentProgression,
 		State: model.OnboardingImportPreviewReady, ScopeType: model.RoleScopeClass, ScopeID: model.NewClassID().String(),
 		SourceClassName: "Year 1 Blue", DestinationClassName: "Year 2 Blue", ParseJobID: model.NewJobID(),
 		CreatedAt: at, UpdatedAt: at, ExpiresAt: at.Add(7 * 24 * time.Hour), Revision: 2}}
@@ -196,17 +199,12 @@ func TestStudentProgressionReadNamesBothClasses(t *testing.T) {
 	require.Contains(t, response.Body.String(), `"destination_class_name":"Year 2 Blue"`)
 }
 
-func studentProgressionListAPI(t *testing.T, fake *studentProgressionApplicationFake) *API {
+func studentProgressionListAPI(t *testing.T, fake *studentProgressionApplicationFake) *route.API {
 	t.Helper()
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
 		AuthenticatedAt: time.Now().UTC(), MFACompletedAt: model.OptionalTimeFrom(time.Now().UTC()), ClientType: model.SessionClientWeb,
 	}
-	options := validHTTPOptions(t)
-	options.StudentProgressions = fake
-	options.Application.(*testHTTPApplication).principal = &principal
-	httpAPI, err := New(options)
-	require.NoError(t, err)
-	return httpAPI
+	return newResourceAPI(t, principal, studentProgressionResource(fake))
 }

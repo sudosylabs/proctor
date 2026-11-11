@@ -20,20 +20,48 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLSecurityPreflightStore is the PostgreSQL store.SecurityPreflightStore. It
+// serializes on the same Candidate eligibility locks as Attempt admission.
+type SQLSecurityPreflightStore struct{ *SQLStore }
+
+func newSQLSecurityPreflightStore(sqlStore *SQLStore) store.SecurityPreflightStore {
+	return &SQLSecurityPreflightStore{SQLStore: sqlStore}
+}
+
 func validSecurityPreflightAccess(access store.SecurityPreflightAccess) bool {
-	return access.SittingID.IsValid() && access.CandidateUserID.IsValid() && access.SessionID.IsValid() && access.DesktopRegistrationID.IsValid() && model.IsValidDPoPKeyThumbprint(access.DPoPKeyThumbprint) && access.DesktopBuild.Validate() == nil && access.DesktopBuild.NativeAgreement != nil && access.DesktopCompatibilityPolicyRevision > 0
+	return access.SittingID.IsValid() &&
+		access.CandidateUserID.IsValid() &&
+		access.SessionID.IsValid() &&
+		access.DesktopRegistrationID.IsValid() &&
+		model.IsValidDPoPKeyThumbprint(access.DPoPKeyThumbprint) &&
+		access.DesktopBuild.Validate() == nil &&
+		access.DesktopBuild.NativeAgreement != nil &&
+		access.DesktopCompatibilityPolicyRevision > 0
 }
 func preflightConnectSelector(access store.SecurityPreflightAccess) *store.ExamAttemptConnect {
-	return &store.ExamAttemptConnect{SittingID: access.SittingID, CandidateUserID: access.CandidateUserID, SessionID: access.SessionID, DesktopRegistrationID: access.DesktopRegistrationID, DPoPKeyThumbprint: access.DPoPKeyThumbprint, DesktopBuild: access.DesktopBuild, DesktopCompatibilityPolicyRevision: access.DesktopCompatibilityPolicyRevision, ConfigurationManifestFingerprint: access.DesktopBuild.AttemptConfigurationManifestFingerprint}
+	return &store.ExamAttemptConnect{
+		SittingID:                          access.SittingID,
+		CandidateUserID:                    access.CandidateUserID,
+		SessionID:                          access.SessionID,
+		DesktopRegistrationID:              access.DesktopRegistrationID,
+		DPoPKeyThumbprint:                  access.DPoPKeyThumbprint,
+		DesktopBuild:                       access.DesktopBuild,
+		DesktopCompatibilityPolicyRevision: access.DesktopCompatibilityPolicyRevision,
+		ConfigurationManifestFingerprint:   access.DesktopBuild.AttemptConfigurationManifestFingerprint,
+	}
 }
 func preflightConflict(reason string) error {
 	return store.NewErrConflict("security_preflight", reason, nil)
 }
-func (s *SQLExamAttemptStore) lockPreflightEligibility(ctx context.Context, tx *sqlxTxWrapper, access store.SecurityPreflightAccess) (examAttemptAdmissionGuard, error) {
+func (s *SQLSecurityPreflightStore) lockPreflightEligibility(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	access store.SecurityPreflightAccess,
+) (examAttemptAdmissionGuard, error) {
 	if err := requireDesktopCompatibilityPolicyRevision(ctx, tx, access.DesktopCompatibilityPolicyRevision); err != nil {
 		return examAttemptAdmissionGuard{}, err
 	}
-	return s.lockExamAttemptEligibility(ctx, tx, preflightConnectSelector(access), false)
+	return lockExamAttemptEligibility(ctx, tx, preflightConnectSelector(access), false)
 }
 
 // PrepareSecurityPreflight issues a security preflight challenge for the
@@ -41,15 +69,31 @@ func (s *SQLExamAttemptStore) lockPreflightEligibility(ctx context.Context, tx *
 // A replay returns the original challenge with a refreshed Browser Activity
 // disclosure, and a policy change since preparation is a policy_changed
 // conflict.
-func (s *SQLExamAttemptStore) PrepareSecurityPreflight(ctx context.Context, input *store.SecurityPreflightPrepare, command *store.CommandIdempotency) (*store.SecurityPreflightPrepared, error) {
-	if input == nil || command == nil || !validSecurityPreflightAccess(input.Access) || !model.IsValidAgreementID(input.PreflightID) || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() || input.AttemptID != "" && !input.AttemptID.IsValid() {
+func (s *SQLSecurityPreflightStore) PrepareSecurityPreflight(
+	ctx context.Context,
+	input *store.SecurityPreflightPrepare,
+	command *store.CommandIdempotency,
+) (*store.SecurityPreflightPrepared, error) {
+	if input == nil ||
+		command == nil ||
+		!validSecurityPreflightAccess(input.Access) ||
+		!model.IsValidAgreementID(input.PreflightID) ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() ||
+		input.AttemptID != "" && !input.AttemptID.IsValid() {
 		return nil, store.NewErrInvalidInput("security_preflight", "prepare", nil)
 	}
+
 	agreement := input.Access.DesktopBuild.NativeAgreement
-	if input.NativeRegistryDigest != agreement.RegistryDigest() || input.SourceManifestDigest != agreement.SourceManifestDigest() || input.ConfigurationManifestFingerprint != input.Access.DesktopBuild.ConfigurationManifest.Fingerprint() {
+	if input.NativeRegistryDigest != agreement.RegistryDigest() ||
+		input.SourceManifestDigest != agreement.SourceManifestDigest() ||
+		input.ConfigurationManifestFingerprint != input.Access.DesktopBuild.ConfigurationManifest.Fingerprint() {
 		return nil, preflightConflict("configuration_unsupported")
 	}
-	result, err := runIdempotentMutation(ctx, s.SQLStore, "prepare security preflight", idempotentMutation[*store.SecurityPreflightPrepared]{command: command, auditEventID: input.AuditEventID,
+
+	result, err := runIdempotentMutation(ctx, s.SQLStore, "prepare security preflight", idempotentMutation[*store.SecurityPreflightPrepared]{
+		command:      command,
+		auditEventID: input.AuditEventID,
 		execute: func(ctx context.Context, tx *sqlxTxWrapper) (*store.SecurityPreflightPrepared, error) {
 			return s.prepareSecurityPreflight(ctx, tx, input)
 		},
@@ -61,6 +105,7 @@ func (s *SQLExamAttemptStore) PrepareSecurityPreflight(ctx context.Context, inpu
 			if err != nil {
 				return nil, err
 			}
+
 			return &value, nil
 		},
 		completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, value *store.SecurityPreflightPrepared, original string) error {
@@ -68,6 +113,7 @@ func (s *SQLExamAttemptStore) PrepareSecurityPreflight(ctx context.Context, inpu
 			if err != nil {
 				return err
 			}
+
 			row, err := lockCurrentSecurityPreflight(ctx, tx, input.Access, value.Challenge.PreflightID)
 			if err != nil {
 				return err
@@ -75,15 +121,21 @@ func (s *SQLExamAttemptStore) PrepareSecurityPreflight(ctx context.Context, inpu
 			if row.RevisionID != guard.RevisionID {
 				return preflightConflict("policy_changed")
 			}
+
 			retention, err := getRetentionPolicy(ctx, tx, "FOR SHARE OF p")
 			if err != nil {
 				return err
 			}
+
 			// Refresh the separately revisioned notice without changing challenge or policy identity.
-			value.BrowserActivityDisclosure, err = model.NewBrowserActivityDisclosure(retention, value.BrowserActivityDisclosure.MayCreateIntegrityEvidence)
+			value.BrowserActivityDisclosure, err = model.NewBrowserActivityDisclosure(
+				retention,
+				value.BrowserActivityDisclosure.MayCreateIntegrityEvidence,
+			)
 			if err != nil {
 				return err
 			}
+
 			value.ServerTime = row.DatabaseNow
 			return completeSecurityPreflightAudit(ctx, tx, input.AuditEventID, input.AuditAt, value.Challenge.PreflightID, true)
 		},
@@ -91,73 +143,146 @@ func (s *SQLExamAttemptStore) PrepareSecurityPreflight(ctx context.Context, inpu
 	if err != nil {
 		return nil, err
 	}
+
 	result.Value.Replayed = result.Replayed
 	return result.Value, nil
 }
 
-func (s *SQLExamAttemptStore) prepareSecurityPreflight(ctx context.Context, tx *sqlxTxWrapper, input *store.SecurityPreflightPrepare) (*store.SecurityPreflightPrepared, error) {
+func (s *SQLSecurityPreflightStore) prepareSecurityPreflight(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.SecurityPreflightPrepare,
+) (*store.SecurityPreflightPrepared, error) {
 	access := input.Access
 	guard, err := s.lockPreflightEligibility(ctx, tx, access)
 	if err != nil {
 		return nil, err
 	}
+
 	now := guard.DatabaseNow.UTC().Truncate(time.Millisecond)
 	// Reclaim a bounded page of expired pending slots. Skip rows in concurrent
 	// admission/report transactions; immutable Connect provenance lives in its owner.
-	if _, err = tx.Exec(ctx, `DELETE FROM exam_security_preflights WHERE (session_id,sitting_id) IN (SELECT session_id,sitting_id FROM exam_security_preflights WHERE expires_at<=? ORDER BY expires_at LIMIT 128 FOR UPDATE SKIP LOCKED)`, now); err != nil {
+	if _, err = tx.Exec(
+		ctx,
+		`DELETE FROM exam_security_preflights
+		WHERE (session_id, sitting_id) IN (
+			SELECT session_id, sitting_id
+			FROM exam_security_preflights
+			WHERE expires_at <= ?
+			ORDER BY expires_at
+			LIMIT 128
+			FOR UPDATE SKIP LOCKED
+		)`,
+		now,
+	); err != nil {
 		return nil, err
 	}
+
 	var previous time.Time
-	err = tx.Get(ctx, &previous, `SELECT issued_at FROM exam_security_preflights WHERE session_id=? AND sitting_id=? FOR UPDATE`, access.SessionID.String(), access.SittingID.String())
+	err = tx.Get(
+		ctx,
+		&previous,
+		`SELECT issued_at FROM exam_security_preflights WHERE session_id = ? AND sitting_id = ? FOR UPDATE`,
+		access.SessionID.String(),
+		access.SittingID.String(),
+	)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("lock pending preflight: %w", err)
 	}
 	if err == nil && now.Sub(previous) < time.Second {
 		return nil, preflightConflict("preflight_rate_limited")
 	}
+
 	frozen, err := preflightFrozenConfiguration(ctx, tx, input)
 	if err != nil {
 		return nil, err
 	}
+
 	revision, resolved, err := resolvePreflightPolicy(ctx, tx, input, guard, now)
 	if err != nil {
 		return nil, err
 	}
+
 	retention, err := getRetentionPolicy(ctx, tx, "FOR SHARE OF p")
 	if err != nil {
 		return nil, err
 	}
+
 	disclosure, err := model.NewBrowserActivityDisclosure(retention, revision.BrowserPolicy.MayCreateIntegrityEvidence())
 	if err != nil {
 		return nil, err
 	}
-	prepared := &store.SecurityPreflightPrepared{ServerTime: now, BrowserActivityDisclosure: disclosure, Challenge: model.SecurityPreflightChallenge{PreflightID: input.PreflightID, Challenge: input.Challenge, IssuedAt: now, ExpiresAt: now.Add(model.SecurityPreflightLifetime)}, Resolved: resolved, FrozenAttemptConfiguration: frozen}
+
+	prepared := &store.SecurityPreflightPrepared{
+		ServerTime:                now,
+		BrowserActivityDisclosure: disclosure,
+		Challenge: model.SecurityPreflightChallenge{
+			PreflightID: input.PreflightID,
+			Challenge:   input.Challenge,
+			IssuedAt:    now,
+			ExpiresAt:   now.Add(model.SecurityPreflightLifetime),
+		},
+		Resolved:                   resolved,
+		FrozenAttemptConfiguration: frozen,
+	}
 	if prepared.Challenge.Validate() != nil {
 		return nil, store.NewErrInvalidInput("security_preflight", "challenge", nil)
 	}
+
 	document, err := encodePreparedSecurityPreflight(prepared)
 	if err != nil {
 		return nil, err
 	}
+
 	var attemptID any
 	if input.AttemptID.IsValid() {
 		attemptID = input.AttemptID.String()
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO exam_security_preflights(session_id,sitting_id,candidate_user_id,preflight_id,registration_id,key_thumbprint,build_id,exam_revision_id,attempt_id,prepared_canonical,issued_at,expires_at)
- VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(session_id,sitting_id) DO UPDATE SET
- candidate_user_id=EXCLUDED.candidate_user_id,preflight_id=EXCLUDED.preflight_id,registration_id=EXCLUDED.registration_id,key_thumbprint=EXCLUDED.key_thumbprint,build_id=EXCLUDED.build_id,exam_revision_id=EXCLUDED.exam_revision_id,attempt_id=EXCLUDED.attempt_id,prepared_canonical=EXCLUDED.prepared_canonical,issued_at=EXCLUDED.issued_at,expires_at=EXCLUDED.expires_at,report_canonical=NULL,result_canonical=NULL,reported_at=NULL,consumed_at=NULL`, access.SessionID.String(), access.SittingID.String(), access.CandidateUserID.String(), input.PreflightID, access.DesktopRegistrationID.String(), access.DPoPKeyThumbprint, access.DesktopBuild.DesktopBuildID, guard.RevisionID, attemptID, document, now, prepared.Challenge.ExpiresAt)
+
+	_, err = tx.Exec(
+		ctx,
+		`INSERT INTO exam_security_preflights(
+			session_id, sitting_id, candidate_user_id, preflight_id, registration_id, key_thumbprint,
+			build_id, exam_revision_id, attempt_id, prepared_canonical, issued_at, expires_at
+		)
+		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(session_id, sitting_id) DO UPDATE SET candidate_user_id = EXCLUDED.candidate_user_id,
+			preflight_id = EXCLUDED.preflight_id, registration_id = EXCLUDED.registration_id,
+			key_thumbprint = EXCLUDED.key_thumbprint, build_id = EXCLUDED.build_id,
+			exam_revision_id = EXCLUDED.exam_revision_id, attempt_id = EXCLUDED.attempt_id,
+			prepared_canonical = EXCLUDED.prepared_canonical, issued_at = EXCLUDED.issued_at,
+			expires_at = EXCLUDED.expires_at, report_canonical = NULL, result_canonical = NULL,
+			reported_at = NULL, consumed_at = NULL`,
+		access.SessionID.String(),
+		access.SittingID.String(),
+		access.CandidateUserID.String(),
+		input.PreflightID,
+		access.DesktopRegistrationID.String(),
+		access.DPoPKeyThumbprint,
+		access.DesktopBuild.DesktopBuildID,
+		guard.RevisionID,
+		attemptID,
+		document,
+		now,
+		prepared.Challenge.ExpiresAt,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("persist security preflight: %w", err)
 	}
 	if err = completeSecurityPreflightAudit(ctx, tx, input.AuditEventID, input.AuditAt, input.PreflightID, false); err != nil {
 		return nil, err
 	}
+
 	return prepared, nil
 }
 
 // preflightFrozenConfiguration returns the frozen configuration of the
 // Candidate's ready Attempt, or nil when the preflight precedes admission.
-func preflightFrozenConfiguration(ctx context.Context, tx *sqlxTxWrapper, input *store.SecurityPreflightPrepare) (*model.AttemptConfiguration, error) {
+func preflightFrozenConfiguration(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.SecurityPreflightPrepare,
+) (*model.AttemptConfiguration, error) {
 	access := input.Access
 	var existing struct {
 		ID            string `db:"id"`
@@ -165,17 +290,33 @@ func preflightFrozenConfiguration(ctx context.Context, tx *sqlxTxWrapper, input 
 		Configuration []byte `db:"attempt_configuration_canonical"`
 		Digest        string `db:"attempt_configuration_digest"`
 	}
-	err := tx.Get(ctx, &existing, `SELECT id,state,attempt_configuration_canonical,attempt_configuration_digest FROM exam_attempts WHERE exam_sitting_id=? AND candidate_user_id=? FOR SHARE`, access.SittingID.String(), access.CandidateUserID.String())
+	err := tx.Get(
+		ctx,
+		&existing,
+		`SELECT id, state, attempt_configuration_canonical, attempt_configuration_digest
+		FROM exam_attempts
+		WHERE exam_sitting_id = ?
+			AND candidate_user_id = ?
+		FOR SHARE`,
+		access.SittingID.String(),
+		access.CandidateUserID.String(),
+	)
 	var frozen *model.AttemptConfiguration
 	switch {
 	case err == nil:
 		if input.AttemptID.String() != existing.ID || existing.State != string(model.ExamAttemptReady) {
 			return nil, preflightConflict("attempt_not_ready")
 		}
-		configuration, decodeErr := validateExistingAttemptConfiguration(existing.Configuration, existing.Digest, preflightConnectSelector(access))
+
+		configuration, decodeErr := validateExistingAttemptConfiguration(
+			existing.Configuration,
+			existing.Digest,
+			preflightConnectSelector(access),
+		)
 		if decodeErr != nil {
 			return nil, decodeErr
 		}
+
 		frozen = &configuration
 	case errors.Is(err, sql.ErrNoRows):
 		if input.AttemptID != "" {
@@ -184,51 +325,85 @@ func preflightFrozenConfiguration(ctx context.Context, tx *sqlxTxWrapper, input 
 	default:
 		return nil, fmt.Errorf("inspect preflight Attempt: %w", err)
 	}
+
 	return frozen, nil
 }
 
 // resolvePreflightPolicy resolves the Sitting's current native policy for the
 // preflight's admission or Attempt scope and returns it with its revision.
-func resolvePreflightPolicy(ctx context.Context, tx *sqlxTxWrapper, input *store.SecurityPreflightPrepare, guard examAttemptAdmissionGuard, now time.Time) (*model.ExamRevision, model.ResolvedNativePolicy, error) {
+func resolvePreflightPolicy(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.SecurityPreflightPrepare,
+	guard examAttemptAdmissionGuard,
+	now time.Time,
+) (*model.ExamRevision, model.ResolvedNativePolicy, error) {
 	access := input.Access
 	examID, err := model.ParseExamID(guard.ExamID)
 	if err != nil {
 		return nil, model.ResolvedNativePolicy{}, err
 	}
+
 	revisionID, err := model.ParseExamRevisionID(guard.RevisionID)
 	if err != nil {
 		return nil, model.ResolvedNativePolicy{}, err
 	}
+
 	revision, err := getExamRevisionSnapshot(ctx, tx, examID, revisionID)
 	if err != nil {
 		return nil, model.ResolvedNativePolicy{}, err
 	}
+
 	selections, err := model.DecodeExamPolicySet(revision.Policy.Bytes)
 	if err != nil {
 		return nil, model.ResolvedNativePolicy{}, err
 	}
+
 	var institution string
-	if err = tx.Get(ctx, &institution, `SELECT institution_id FROM academic_units WHERE id=?`, guard.AcademicUnitID); err != nil {
+	if err = tx.Get(ctx, &institution, `SELECT institution_id FROM academic_units WHERE id = ?`, guard.AcademicUnitID); err != nil {
 		return nil, model.ResolvedNativePolicy{}, err
 	}
+
 	institutionID, err := model.ParseInstitutionID(institution)
 	if err != nil {
 		return nil, model.ResolvedNativePolicy{}, err
 	}
+
 	scope := model.SecurityPolicyScope{Kind: "admission", AdmissionScopeID: input.PreflightID}
 	if input.AttemptID.IsValid() {
 		scope = model.SecurityPolicyScope{Kind: "attempt", AttemptID: input.AttemptID}
 	}
+
 	ordinal := int64(1)
 	if input.AttemptID.IsValid() {
-		if err = tx.Get(ctx, &ordinal, `SELECT COALESCE(MAX(generation),0)+1 FROM exam_attempt_participations WHERE exam_attempt_id=?`, input.AttemptID.String()); err != nil {
+		if err = tx.Get(
+			ctx,
+			&ordinal,
+			`SELECT COALESCE(MAX(generation), 0)+1 FROM exam_attempt_participations WHERE exam_attempt_id = ?`,
+			input.AttemptID.String(),
+		); err != nil {
 			return nil, model.ResolvedNativePolicy{}, err
 		}
 	}
-	resolved, err := model.ResolveNativePolicy(model.NativePolicyResolution{PolicyID: model.NewID(), Revision: guard.RevisionID, Ordinal: ordinal, InstitutionID: institutionID, ExamRevisionID: revisionID, SittingID: access.SittingID, Scope: scope, IssuedAt: now, ActiveFrom: now, ActivationTime: now, Selections: selections, Build: access.DesktopBuild})
+
+	resolved, err := model.ResolveNativePolicy(model.NativePolicyResolution{
+		PolicyID:       model.NewID(),
+		Revision:       guard.RevisionID,
+		Ordinal:        ordinal,
+		InstitutionID:  institutionID,
+		ExamRevisionID: revisionID,
+		SittingID:      access.SittingID,
+		Scope:          scope,
+		IssuedAt:       now,
+		ActiveFrom:     now,
+		ActivationTime: now,
+		Selections:     selections,
+		Build:          access.DesktopBuild,
+	})
 	if err != nil {
 		return nil, model.ResolvedNativePolicy{}, err
 	}
+
 	return revision, resolved, nil
 }
 
@@ -276,9 +451,12 @@ type nativeCoverageRequirementDocument struct {
 
 func newResolvedNativePolicyDocument(resolved model.ResolvedNativePolicy) resolvedNativePolicyDocument {
 	document := resolvedNativePolicyDocument{
-		Policy: resolved.Policy, PolicyContentDigest: resolved.PolicyContentDigest,
-		CapabilityMatrixDigest: resolved.CapabilityMatrixDigest, CatalogBindings: resolved.CatalogBindings,
-		Sources: resolved.Sources, Categories: resolved.Categories,
+		Policy:                 resolved.Policy,
+		PolicyContentDigest:    resolved.PolicyContentDigest,
+		CapabilityMatrixDigest: resolved.CapabilityMatrixDigest,
+		CatalogBindings:        resolved.CatalogBindings,
+		Sources:                resolved.Sources,
+		Categories:             resolved.Categories,
 	}
 	if resolved.Requirements != nil {
 		// Keep an empty list distinct from an absent one: connection compares
@@ -287,8 +465,12 @@ func newResolvedNativePolicyDocument(resolved model.ResolvedNativePolicy) resolv
 	}
 	for _, requirement := range resolved.Requirements {
 		document.Requirements = append(document.Requirements, nativeCoverageRequirementDocument{
-			CoverageKey: requirement.CoverageKey, CapabilityID: requirement.CapabilityID, SourceID: requirement.SourceID,
-			RequiredClaim: requirement.RequiredClaim, Entry: requirement.Entry, Baseline: requirement.Baseline,
+			CoverageKey:   requirement.CoverageKey,
+			CapabilityID:  requirement.CapabilityID,
+			SourceID:      requirement.SourceID,
+			RequiredClaim: requirement.RequiredClaim,
+			Entry:         requirement.Entry,
+			Baseline:      requirement.Baseline,
 		})
 	}
 	return document
@@ -296,16 +478,24 @@ func newResolvedNativePolicyDocument(resolved model.ResolvedNativePolicy) resolv
 
 func (d resolvedNativePolicyDocument) model() model.ResolvedNativePolicy {
 	resolved := model.ResolvedNativePolicy{
-		Policy: d.Policy, PolicyContentDigest: d.PolicyContentDigest, CapabilityMatrixDigest: d.CapabilityMatrixDigest,
-		CatalogBindings: d.CatalogBindings, Sources: d.Sources, Categories: d.Categories,
+		Policy:                 d.Policy,
+		PolicyContentDigest:    d.PolicyContentDigest,
+		CapabilityMatrixDigest: d.CapabilityMatrixDigest,
+		CatalogBindings:        d.CatalogBindings,
+		Sources:                d.Sources,
+		Categories:             d.Categories,
 	}
 	if d.Requirements != nil {
 		resolved.Requirements = make([]model.NativeCoverageRequirement, 0, len(d.Requirements))
 	}
 	for _, requirement := range d.Requirements {
 		resolved.Requirements = append(resolved.Requirements, model.NativeCoverageRequirement{
-			CoverageKey: requirement.CoverageKey, CapabilityID: requirement.CapabilityID, SourceID: requirement.SourceID,
-			RequiredClaim: requirement.RequiredClaim, Entry: requirement.Entry, Baseline: requirement.Baseline,
+			CoverageKey:   requirement.CoverageKey,
+			CapabilityID:  requirement.CapabilityID,
+			SourceID:      requirement.SourceID,
+			RequiredClaim: requirement.RequiredClaim,
+			Entry:         requirement.Entry,
+			Baseline:      requirement.Baseline,
 		})
 	}
 	return resolved
@@ -313,8 +503,10 @@ func (d resolvedNativePolicyDocument) model() model.ResolvedNativePolicy {
 
 func encodePreparedSecurityPreflight(prepared *store.SecurityPreflightPrepared) ([]byte, error) {
 	return encodeOutcome(securityPreflightPreparedDocument{
-		ServerTime: prepared.ServerTime, BrowserActivityDisclosure: prepared.BrowserActivityDisclosure,
-		Challenge: prepared.Challenge, Resolved: newResolvedNativePolicyDocument(prepared.Resolved),
+		ServerTime:                 prepared.ServerTime,
+		BrowserActivityDisclosure:  prepared.BrowserActivityDisclosure,
+		Challenge:                  prepared.Challenge,
+		Resolved:                   newResolvedNativePolicyDocument(prepared.Resolved),
 		FrozenAttemptConfiguration: prepared.FrozenAttemptConfiguration,
 	})
 }
@@ -325,11 +517,17 @@ func decodePreparedSecurityPreflight(raw []byte, agreement *model.DesktopNativeA
 		return store.SecurityPreflightPrepared{}, invalidPersistedState("security_preflight", "prepared", err)
 	}
 	prepared := store.SecurityPreflightPrepared{
-		ServerTime: document.ServerTime, BrowserActivityDisclosure: document.BrowserActivityDisclosure,
-		Challenge: document.Challenge, Resolved: document.Resolved.model(),
+		ServerTime:                 document.ServerTime,
+		BrowserActivityDisclosure:  document.BrowserActivityDisclosure,
+		Challenge:                  document.Challenge,
+		Resolved:                   document.Resolved.model(),
 		FrozenAttemptConfiguration: document.FrozenAttemptConfiguration,
 	}
-	if prepared.Challenge.Validate() != nil || !prepared.ServerTime.Equal(prepared.Challenge.IssuedAt) || prepared.Resolved.Validate(agreement, prepared.ServerTime) != nil || prepared.BrowserActivityDisclosure.Validate() != nil || (prepared.FrozenAttemptConfiguration != nil && prepared.FrozenAttemptConfiguration.Validate() != nil) {
+	if prepared.Challenge.Validate() != nil ||
+		!prepared.ServerTime.Equal(prepared.Challenge.IssuedAt) ||
+		prepared.Resolved.Validate(agreement, prepared.ServerTime) != nil ||
+		prepared.BrowserActivityDisclosure.Validate() != nil ||
+		(prepared.FrozenAttemptConfiguration != nil && prepared.FrozenAttemptConfiguration.Validate() != nil) {
 		return prepared, invalidPersistedState("security_preflight", "prepared", model.ErrSecurityPreflightInvalid)
 	}
 	return prepared, nil
@@ -352,23 +550,47 @@ type securityPreflightRow struct {
 	DatabaseNow    time.Time      `db:"database_now"`
 }
 
-func lockCurrentSecurityPreflight(ctx context.Context, tx *sqlxTxWrapper, access store.SecurityPreflightAccess, id string) (securityPreflightRow, error) {
+func lockCurrentSecurityPreflight(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	access store.SecurityPreflightAccess,
+	id string,
+) (securityPreflightRow, error) {
 	var row securityPreflightRow
-	if err := tx.Get(ctx, &row, `SELECT preflight_id,candidate_user_id,registration_id,key_thumbprint,build_id,exam_revision_id,attempt_id,prepared_canonical,report_canonical,result_canonical,expires_at,reported_at,consumed_at FROM exam_security_preflights WHERE session_id=? AND sitting_id=? FOR UPDATE`, access.SessionID.String(), access.SittingID.String()); err != nil {
+	if err := tx.Get(
+		ctx,
+		&row,
+		`SELECT preflight_id, candidate_user_id, registration_id, key_thumbprint, build_id, exam_revision_id,
+			attempt_id, prepared_canonical, report_canonical, result_canonical, expires_at, reported_at,
+			consumed_at
+		FROM exam_security_preflights
+		WHERE session_id = ?
+			AND sitting_id = ?
+		FOR UPDATE`,
+		access.SessionID.String(),
+		access.SittingID.String(),
+	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return row, preflightConflict("preflight_superseded")
 		}
 		return row, err
 	}
+
 	if row.PreflightID != id {
 		return row, preflightConflict("preflight_superseded")
 	}
-	if row.CandidateID != access.CandidateUserID.String() || row.RegistrationID != access.DesktopRegistrationID.String() || row.KeyThumbprint != access.DPoPKeyThumbprint || row.BuildID != access.DesktopBuild.DesktopBuildID {
+
+	if row.CandidateID != access.CandidateUserID.String() ||
+		row.RegistrationID != access.DesktopRegistrationID.String() ||
+		row.KeyThumbprint != access.DPoPKeyThumbprint ||
+		row.BuildID != access.DesktopBuild.DesktopBuildID {
 		return row, preflightConflict("session_changed")
 	}
+
 	if err := tx.Get(ctx, &row.DatabaseNow, `SELECT statement_timestamp()`); err != nil {
 		return row, err
 	}
+
 	row.DatabaseNow = row.DatabaseNow.UTC().Truncate(time.Millisecond)
 	if !row.DatabaseNow.Before(row.ExpiresAt) {
 		return row, preflightConflict("preflight_expired")
@@ -376,22 +598,37 @@ func lockCurrentSecurityPreflight(ctx context.Context, tx *sqlxTxWrapper, access
 	if row.ConsumedAt.Valid {
 		return row, preflightConflict("preflight_consumed")
 	}
+
 	return row, nil
 }
 
 // ReportSecurityPreflight evaluates the desktop's report against the prepared
 // preflight challenge at database time and records the result under command. A
 // policy change since preparation is a policy_changed conflict.
-func (s *SQLExamAttemptStore) ReportSecurityPreflight(ctx context.Context, input *store.SecurityPreflightReport, command *store.CommandIdempotency) (*model.SecurityPreflightResult, error) {
-	if input == nil || command == nil || !validSecurityPreflightAccess(input.Access) || !model.IsValidAgreementID(input.PreflightID) || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() || input.Report.Validate() != nil {
+func (s *SQLSecurityPreflightStore) ReportSecurityPreflight(
+	ctx context.Context,
+	input *store.SecurityPreflightReport,
+	command *store.CommandIdempotency,
+) (*model.SecurityPreflightResult, error) {
+	if input == nil ||
+		command == nil ||
+		!validSecurityPreflightAccess(input.Access) ||
+		!model.IsValidAgreementID(input.PreflightID) ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() ||
+		input.Report.Validate() != nil {
 		return nil, store.NewErrInvalidInput("security_preflight", "report", nil)
 	}
-	result, err := runIdempotentMutation(ctx, s.SQLStore, "report security preflight", idempotentMutation[*model.SecurityPreflightResult]{command: command, auditEventID: input.AuditEventID,
+
+	result, err := runIdempotentMutation(ctx, s.SQLStore, "report security preflight", idempotentMutation[*model.SecurityPreflightResult]{
+		command:      command,
+		auditEventID: input.AuditEventID,
 		execute: func(ctx context.Context, tx *sqlxTxWrapper) (*model.SecurityPreflightResult, error) {
 			guard, err := s.lockPreflightEligibility(ctx, tx, input.Access)
 			if err != nil {
 				return nil, err
 			}
+
 			row, err := lockCurrentSecurityPreflight(ctx, tx, input.Access, input.PreflightID)
 			if err != nil {
 				return nil, err
@@ -399,6 +636,7 @@ func (s *SQLExamAttemptStore) ReportSecurityPreflight(ctx context.Context, input
 			if row.RevisionID != guard.RevisionID {
 				return nil, preflightConflict("policy_changed")
 			}
+
 			prepared, err := decodePreparedSecurityPreflight(row.Prepared, input.Access.DesktopBuild.NativeAgreement)
 			if err != nil {
 				return nil, err
@@ -406,26 +644,52 @@ func (s *SQLExamAttemptStore) ReportSecurityPreflight(ctx context.Context, input
 			if prepared.Challenge.PreflightID != row.PreflightID || !prepared.Challenge.ExpiresAt.Equal(row.ExpiresAt) {
 				return nil, invalidPersistedState("security_preflight", "prepared", model.ErrSecurityPreflightInvalid)
 			}
-			result, err := model.EvaluateSecurityPreflight(prepared.Challenge, prepared.Resolved, input.Access.DesktopBuild.NativeAgreement, input.Report, row.DatabaseNow)
+
+			result, err := model.EvaluateSecurityPreflight(
+				prepared.Challenge,
+				prepared.Resolved,
+				input.Access.DesktopBuild.NativeAgreement,
+				input.Report,
+				row.DatabaseNow,
+			)
 			if err != nil {
 				return nil, store.NewErrInvalidInput("security_preflight", "report", nil).Wrap(err)
 			}
+
 			document, err := input.Report.Canonical()
 			if err != nil {
 				return nil, err
 			}
+
 			outcome, err := canonicalPreflightValue(result)
 			if err != nil {
 				return nil, err
 			}
-			if _, err := tx.Exec(ctx, `UPDATE exam_security_preflights SET report_canonical=?,result_canonical=?,reported_at=? WHERE session_id=? AND sitting_id=? AND preflight_id=?`, document, outcome, row.DatabaseNow, input.Access.SessionID.String(), input.Access.SittingID.String(), input.PreflightID); err != nil {
+
+			if _, err := tx.Exec(
+				ctx,
+				`UPDATE exam_security_preflights
+				SET report_canonical = ?, result_canonical = ?, reported_at = ?
+				WHERE session_id = ?
+					AND sitting_id = ?
+					AND preflight_id = ?`,
+				document,
+				outcome,
+				row.DatabaseNow,
+				input.Access.SessionID.String(),
+				input.Access.SittingID.String(),
+				input.PreflightID,
+			); err != nil {
 				return nil, fmt.Errorf("persist security preflight report: %w", err)
 			}
+
 			if err := completeSecurityPreflightAudit(ctx, tx, input.AuditEventID, input.AuditAt, input.PreflightID, false); err != nil {
 				return nil, err
 			}
+
 			return &result, nil
-		}, encode: func(value *model.SecurityPreflightResult) ([]byte, error) {
+		},
+		encode: func(value *model.SecurityPreflightResult) ([]byte, error) {
 			return encodeOutcome(securityPreflightResultOutcome{Result: *value})
 		},
 		decode: func(raw []byte) (*model.SecurityPreflightResult, error) {
@@ -436,6 +700,7 @@ func (s *SQLExamAttemptStore) ReportSecurityPreflight(ctx context.Context, input
 			if err := outcome.Result.Validate(); err != nil {
 				return nil, invalidPersistedState("security_preflight", "result", err)
 			}
+
 			return &outcome.Result, nil
 		},
 		completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, value *model.SecurityPreflightResult, original string) error {
@@ -443,6 +708,7 @@ func (s *SQLExamAttemptStore) ReportSecurityPreflight(ctx context.Context, input
 			if err != nil {
 				return err
 			}
+
 			row, err := lockCurrentSecurityPreflight(ctx, tx, input.Access, value.PreflightID)
 			if err != nil {
 				return err
@@ -450,12 +716,14 @@ func (s *SQLExamAttemptStore) ReportSecurityPreflight(ctx context.Context, input
 			if row.RevisionID != guard.RevisionID {
 				return preflightConflict("policy_changed")
 			}
+
 			return completeSecurityPreflightAudit(ctx, tx, input.AuditEventID, input.AuditAt, input.PreflightID, true)
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	return result.Value, nil
 }
 func canonicalPreflightValue(value any) ([]byte, error) {
@@ -465,7 +733,14 @@ func canonicalPreflightValue(value any) ([]byte, error) {
 	}
 	return canonicaljson.Canonicalize(raw, 256*1024)
 }
-func completeSecurityPreflightAudit(ctx context.Context, tx *sqlxTxWrapper, id model.AuditEventID, at time.Time, preflight string, replayed bool) error {
+func completeSecurityPreflightAudit(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	id model.AuditEventID,
+	at time.Time,
+	preflight string,
+	replayed bool,
+) error {
 	data, err := model.EncodeAuditData(map[string]any{"preflight_id": preflight, "idempotency_replayed": replayed})
 	if err != nil {
 		return err
@@ -476,12 +751,24 @@ func completeSecurityPreflightAudit(ctx context.Context, tx *sqlxTxWrapper, id m
 
 // ResolveSecurityPreflightSitting reveals only a stable resource selector owned
 // by this User and Session. Reporting rechecks current eligibility and fences.
-func (s *SQLExamAttemptStore) ResolveSecurityPreflightSitting(ctx context.Context, id string, userID model.UserID, sessionID model.SessionID) (model.ExamSittingID, error) {
+func (s *SQLSecurityPreflightStore) ResolveSecurityPreflightSitting(
+	ctx context.Context,
+	id string,
+	userID model.UserID,
+	sessionID model.SessionID,
+) (model.ExamSittingID, error) {
 	if !model.IsValidAgreementID(id) || !userID.IsValid() || !sessionID.IsValid() {
 		return "", store.NewErrInvalidInput("security_preflight", "selector", nil)
 	}
 	var sitting string
-	if err := s.GetMaster().Get(ctx, &sitting, `SELECT sitting_id FROM exam_security_preflights WHERE preflight_id=? AND candidate_user_id=? AND session_id=?`, id, userID.String(), sessionID.String()); err != nil {
+	if err := s.GetMaster().Get(
+		ctx,
+		&sitting,
+		`SELECT sitting_id FROM exam_security_preflights WHERE preflight_id = ? AND candidate_user_id = ? AND session_id = ?`,
+		id,
+		userID.String(),
+		sessionID.String(),
+	); err != nil {
 		return "", translateError("security_preflight", id, err)
 	}
 	return model.ParseExamSittingID(sitting)

@@ -22,54 +22,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRealtimeContractsHaveOneProductionOwner(t *testing.T) {
-	t.Parallel()
-
-	parentContracts := map[string]bool{
-		"RealtimeEvent":         true,
-		"ConnectionCloseReason": true,
-		"RealtimeSink":          true,
-		"RealtimeClusterFanout": true,
-	}
-	parentMechanics := map[string]bool{
-		"realtimePublication":                 true,
-		"realtimeEventMessage":                true,
-		"sessionRevocationMessage":            true,
-		"authorizationInvalidationMessage":    true,
-		"handlePeerPublication":               true,
-		"handlePeerSessionRevocation":         true,
-		"handlePeerAuthorizationInvalidation": true,
-		"publishLocal":                        true,
-		"broadcastSecurityInvalidation":       true,
-		"applySessionRevocation":              true,
-		"applyAuthorizationInvalidation":      true,
-	}
-
-	files, err := filepath.Glob(filepath.Join("..", "app", "*.go"))
-	require.NoError(t, err)
-	for _, path := range files {
-		if strings.HasSuffix(path, "_test.go") {
-			continue
-		}
-		parsed, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
-		require.NoError(t, err, "parse %s", path)
-		for _, declaration := range parsed.Decls {
-			switch declaration := declaration.(type) {
-			case *ast.GenDecl:
-				for _, specification := range declaration.Specs {
-					typeSpec, ok := specification.(*ast.TypeSpec)
-					if ok {
-						assert.False(t, parentContracts[typeSpec.Name.Name], "parent app redeclares Realtime child contract in %s: %s", filepath.Base(path), typeSpec.Name.Name)
-						assert.False(t, parentMechanics[typeSpec.Name.Name], "parent app redeclares Realtime child mechanics in %s: %s", filepath.Base(path), typeSpec.Name.Name)
-					}
-				}
-			case *ast.FuncDecl:
-				assert.False(t, parentMechanics[declaration.Name.Name], "parent app redeclares Realtime child mechanic in")
-			}
-		}
-	}
-}
-
 func TestRealtimePeerContractsAreDeclaredOnlyByChild(t *testing.T) {
 	t.Parallel()
 

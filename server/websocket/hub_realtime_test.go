@@ -43,7 +43,7 @@ func TestEventFromRealtimePreservesWireFieldsAndClonesData(t *testing.T) {
 	t.Parallel()
 
 	data := json.RawMessage(`{"status":"ready"}`)
-	source := realtime.RealtimeEvent{
+	source := realtime.Event{
 		ID:     model.NewID(),
 		Name:   "academic_unit.updated",
 		UserID: model.UserID(model.NewID()),
@@ -78,7 +78,7 @@ func TestHubMetricsObserveBroadcastFanoutAndResumeOutcome(t *testing.T) {
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID()}
 	connection, _ := hub.register(newRuntimeTestSocket(), principal, model.RequestMetadata{}, "missing-resume", 0, "")
 	require.NotNil(t, connection, "register returned nil")
-	event := realtime.RealtimeEvent{ID: model.NewID(), Name: "academic_unit.updated", UserID: principal.UserID, Data: json.RawMessage(`{"updated":true}`)}
+	event := realtime.Event{ID: model.NewID(), Name: "academic_unit.updated", UserID: principal.UserID, Data: json.RawMessage(`{"updated":true}`)}
 	hub.PublishLocal(context.Background(), event)
 	require.Equal(t, "event", recorder.broadcastEvent, "broadcast metrics")
 	require.Equal(t, "published", recorder.broadcastOutcome, "broadcast metrics")

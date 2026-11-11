@@ -13,6 +13,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -32,130 +33,186 @@ type ManagerEndCommand struct {
 // manager's decision and seals its Submission, fenced by
 // ExpectedAttemptRevision. It authorizes Sitting management on the exact
 // Sitting before reading the Attempt so existence is not probeable.
-func (s *Service) EndExamAttemptByManager(ctx context.Context, invocation invocation.Invocation, command ManagerEndCommand) (_ store.ExamSubmissionReceipt, resultErr error) {
+func (s *Service) EndExamAttemptByManager(
+	ctx context.Context,
+	inv invocation.Invocation,
+	command ManagerEndCommand,
+) (_ store.ExamSubmissionReceipt, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	principal := invocation.Principal()
+	principal := inv.Principal()
 	if principal.Validate() != nil {
 		return store.ExamSubmissionReceipt{}, apperror.New("authentication.token_invalid")
 	}
-	if !command.ExamID.IsValid() || !command.SittingID.IsValid() || !command.AttemptID.IsValid() ||
-		command.ExpectedAttemptRevision < 1 || !validManagerEndReason(command.PrivateReason) {
+
+	if !command.ExamID.IsValid() ||
+		!command.SittingID.IsValid() ||
+		!command.AttemptID.IsValid() ||
+		command.ExpectedAttemptRevision < 1 ||
+		!validManagerEndReason(command.PrivateReason) {
 		return store.ExamSubmissionReceipt{}, apperror.Invalid("exam.attempt.invalid", "manager_end")
 	}
-	idempotency, err := prepareManagerEndIdempotency(invocation, command)
+
+	commandIdempotency, err := prepareManagerEndIdempotency(inv, command)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, err
 	}
+
 	// Authorize the exact Sitting before reading the Attempt so existence is
 	// not probeable; later exits complete the audit attempt as failed.
-	management, err := s.deps.Managers.AuthorizeSittingManage(ctx, invocation, command.SittingID)
+	management, err := s.managers.AuthorizeSittingManage(ctx, inv, command.SittingID)
 	override := management.Override
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, err
 	}
-	sitting, err := s.deps.Sittings.Resolve(ctx, command.SittingID)
+
+	sitting, err := s.sittings.Resolve(ctx, command.SittingID)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, storeError(storeErrors, err)
 	}
-	if sitting == nil || sitting.Sitting == nil || sitting.Sitting.ID != command.SittingID || !sitting.Sitting.ClassID.IsValid() {
-		return store.ExamSubmissionReceipt{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent manager-ended Sitting projection"))
-	}
+
 	action := model.ActionExamSittingManage
 	if override {
 		action = model.ActionExamSittingManageOverride
 	}
-	auditID, err := s.deps.Auditor.BeginAtScope(ctx, invocation, action,
-		model.Resource{Type: model.ResourceExamSitting, ID: command.SittingID.String()}, model.RoleScopeClass,
-		sitting.Sitting.ClassID.String(), store.ExamSubmissionManagerEndOperation,
-		map[string]any{"exam_id": command.ExamID.String(),
-			"exam_sitting_id": command.SittingID.String(), "exam_attempt_id": command.AttemptID.String(),
-			"expected_attempt_revision": command.ExpectedAttemptRevision}, nil)
+
+	auditID, err := s.auditor.Begin(ctx, access.Mutation{
+		Invocation: inv,
+		Action:     action,
+		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: command.SittingID.String()},
+		ScopeType:  model.RoleScopeClass,
+		ScopeID:    sitting.Sitting.ClassID.String(),
+		Operation:  store.ExamSubmissionManagerEndOperation,
+		Value: map[string]any{
+			"exam_id":                   command.ExamID.String(),
+			"exam_sitting_id":           command.SittingID.String(),
+			"exam_attempt_id":           command.AttemptID.String(),
+			"expected_attempt_revision": command.ExpectedAttemptRevision,
+		},
+	})
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, err
 	}
 	if sitting.Sitting.ExamID != command.ExamID {
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, apperror.New("exam.attempt.not_found"))
 	}
-	managerSnapshot, err := s.deps.Persistence.Get(ctx, command.ExamID, command.AttemptID)
+
+	managerSnapshot, err := s.attempts.Get(ctx, command.ExamID, command.AttemptID)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, err)
 	}
-	if managerSnapshot == nil || managerSnapshot.Attempt == nil || managerSnapshot.Attempt.Validate() != nil ||
-		managerSnapshot.Attempt.ExamID != command.ExamID ||
-		!validActiveSuspension(managerSnapshot.ActiveSuspension, managerSnapshot.Attempt.ID) {
-		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID,
-			apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent manager-ended Attempt projection")))
+
+	if !managerSnapshot.SuspensionActiveOrAbsent() {
+		return store.ExamSubmissionReceipt{}, s.failAudit(
+			ctx,
+			auditID,
+			apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent manager-ended Attempt projection")),
+		)
 	}
+
 	if managerSnapshot.Attempt.SittingID != command.SittingID || managerSnapshot.Attempt.CandidateUserID == principal.UserID {
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, apperror.New("exam.attempt.not_found"))
 	}
-	request := store.ExamSubmissionManagerEndRequest{ExamID: command.ExamID, SittingID: command.SittingID,
-		AttemptID: command.AttemptID, ActorUserID: principal.UserID, ManagerOverride: override,
-		ExpectedAttemptRevision: command.ExpectedAttemptRevision, PrivateReason: command.PrivateReason}
-	preparation, err := s.deps.Submissions.PrepareManagerEnd(ctx, request)
+
+	request := store.ExamSubmissionManagerEndRequest{
+		ExamID:                  command.ExamID,
+		SittingID:               command.SittingID,
+		AttemptID:               command.AttemptID,
+		ActorUserID:             principal.UserID,
+		ManagerOverride:         override,
+		ExpectedAttemptRevision: command.ExpectedAttemptRevision,
+		PrivateReason:           command.PrivateReason,
+	}
+	preparation, err := s.submissions.PrepareManagerEnd(ctx, request)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, storeError(storeErrors, err))
 	}
 	if err = checkManagerEndPreparation(preparation, command, managerSnapshot.Attempt.CandidateUserID, sitting.Sitting.ClassID); err != nil {
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, err)
 	}
-	proposed, receiptCode := s.deps.NewSubmission(), s.deps.NewReceiptCode()
+
+	proposed, receiptCode := s.newSubmissionID(), s.newReceiptCode()
 	if !proposed.IsValid() {
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, apperror.Invalid("exam.attempt.invalid", "submission_id"))
 	}
 	if !receiptCode.IsValid() {
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, apperror.Invalid("exam.attempt.invalid", "receipt_code"))
 	}
+
 	notice, expectedRecipientRevision, err := s.prepareManagerEndReceiptMail(ctx, preparation, proposed, receiptCode)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, err)
 	}
-	stored, err := s.deps.Submissions.EndByManager(ctx, &store.ExamSubmissionManagerEnd{Request: request,
-		Target: preparation.Target, SubmissionID: proposed, ReceiptCode: receiptCode, AuditEventID: auditID,
-		AuditAt: preparation.SealAt, Notice: notice,
-		ExpectedRecipientRevision: expectedRecipientRevision}, idempotency)
+
+	stored, err := s.submissions.EndByManager(ctx, &store.ExamSubmissionManagerEnd{
+		Request:                   request,
+		Target:                    preparation.Target,
+		SubmissionID:              proposed,
+		ReceiptCode:               receiptCode,
+		AuditEventID:              auditID,
+		AuditAt:                   preparation.SealAt,
+		Notice:                    notice,
+		ExpectedRecipientRevision: expectedRecipientRevision,
+	}, commandIdempotency)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, storeError(storeErrors, err))
 	}
-	result, err := projectManagerEndResult(stored, preparation.Target, command, proposed, receiptCode)
+
+	result, err := projectManagerEndResult(stored)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, err
 	}
+
 	if !result.Replayed {
-		if effectErr := s.deps.Effects.AttemptSubmitted(ctx, result); effectErr != nil {
-			s.deps.EffectFailures.Report(ctx, "exam_attempt_manager_ended", effectErr)
+		if effectErr := s.publishAttemptSubmitted(ctx, result); effectErr != nil {
+			s.publisher.Report(ctx, "exam_attempt_manager_ended", effectErr)
 		}
 	}
+
 	return result.Receipt, nil
 }
 
 // checkManagerEndPreparation requires the Submission preparation to target the commanded, already-verified Attempt.
-func checkManagerEndPreparation(preparation *store.ExamSubmissionManagerEndPreparation, command ManagerEndCommand,
-	candidateUserID model.UserID, classID model.ClassID,
+func checkManagerEndPreparation(
+	preparation *store.ExamSubmissionManagerEndPreparation,
+	command ManagerEndCommand,
+	candidateUserID model.UserID,
+	classID model.ClassID,
 ) error {
-	if preparation == nil || !validAutomaticSealTarget(preparation.Target, command.SittingID) ||
-		preparation.Target.ExamID != command.ExamID || preparation.Target.AttemptID != command.AttemptID ||
-		preparation.ExpectedAttemptRevision != command.ExpectedAttemptRevision || preparation.SealAt.IsZero() {
+	if preparation == nil ||
+		!validAutomaticSealTarget(preparation.Target, command.SittingID) ||
+		preparation.Target.ExamID != command.ExamID ||
+		preparation.Target.AttemptID != command.AttemptID ||
+		preparation.ExpectedAttemptRevision != command.ExpectedAttemptRevision ||
+		preparation.SealAt.IsZero() {
 		return apperror.New("exam.attempt.unavailable").Wrap(errors.New("invalid manager-ended Submission preparation"))
 	}
+
 	if preparation.Target.CandidateUserID != candidateUserID ||
 		preparation.Target.ClassID != classID {
 		return apperror.New("exam.attempt.unavailable").Wrap(errors.New("mismatched manager-ended Submission preparation"))
 	}
+
 	return nil
 }
 
 // prepareManagerEndReceiptMail prepares the candidate's Submission receipt mail unless the end is a replay.
-func (s *Service) prepareManagerEndReceiptMail(ctx context.Context, preparation *store.ExamSubmissionManagerEndPreparation,
-	proposed model.SubmissionID, receiptCode model.SubmissionReceiptCode,
+func (s *Service) prepareManagerEndReceiptMail(
+	ctx context.Context,
+	preparation *store.ExamSubmissionManagerEndPreparation,
+	proposed model.SubmissionID,
+	receiptCode model.SubmissionReceiptCode,
 ) (*store.PreparedMail, int64, error) {
 	var notice *store.PreparedMail
 	var expectedRecipientRevision int64
 	if !preparation.Replayed {
-		preparedMail, prepareErr := s.deps.Mail.PrepareSubmissionReceipt(ctx, SubmissionMailPreparation{
-			CandidateUserID: preparation.Target.CandidateUserID, ExamID: preparation.Target.ExamID,
-			SittingID: preparation.Target.SittingID, SubmissionID: proposed, ReceiptCode: receiptCode, SealedAt: preparation.SealAt,
-			Provenance: model.ExamSubmissionManagerEndedAttempt,
+		preparedMail, prepareErr := s.mail.PrepareSubmissionReceipt(ctx, SubmissionMailPreparation{
+			CandidateUserID: preparation.Target.CandidateUserID,
+			ExamID:          preparation.Target.ExamID,
+			SittingID:       preparation.Target.SittingID,
+			SubmissionID:    proposed,
+			ReceiptCode:     receiptCode,
+			SealedAt:        preparation.SealAt,
+			Provenance:      model.ExamSubmissionManagerEndedAttempt,
 		})
 		if prepareErr != nil || preparedMail == nil || preparedMail.Notice == nil || preparedMail.ExpectedRecipientRevision < 1 {
 			if prepareErr == nil {
@@ -163,33 +220,36 @@ func (s *Service) prepareManagerEndReceiptMail(ctx context.Context, preparation 
 			}
 			return nil, 0, apperror.New("exam.attempt.unavailable").Wrap(prepareErr)
 		}
+
 		notice, expectedRecipientRevision = preparedMail.Notice, preparedMail.ExpectedRecipientRevision
 	}
+
 	return notice, expectedRecipientRevision, nil
 }
 
 func validManagerEndReason(reason string) bool {
-	return utf8.ValidString(reason) && reason == strings.TrimSpace(reason) && utf8.RuneCountInString(reason) >= 1 &&
-		utf8.RuneCountInString(reason) <= 1000 && len(reason) <= 4000
+	return utf8.ValidString(reason) &&
+		reason == strings.TrimSpace(reason) &&
+		utf8.RuneCountInString(reason) >= 1 &&
+		utf8.RuneCountInString(reason) <= 1000 &&
+		len(reason) <= 4000
 }
 
-func projectManagerEndResult(stored *store.ExamSubmissionManagerEndResult,
-	target store.ExamSubmissionAutomaticSealTarget, command ManagerEndCommand, proposed model.SubmissionID,
-	proposedCode model.SubmissionReceiptCode,
-) (SubmissionResult, error) {
-	if stored == nil || stored.Receipt.State != model.ExamAttemptSubmitted || stored.Receipt.AttemptID != command.AttemptID ||
-		!stored.Receipt.ExamRevisionID.IsValid() || !stored.Receipt.SubmissionID.IsValid() || !stored.Receipt.ReceiptCode.IsValid() ||
-		stored.Receipt.WorkspaceCursor < 0 ||
-		!validWorkspaceSHA256(stored.Receipt.ManifestDigest) || stored.Receipt.SubmittedAt.IsZero() ||
-		stored.ExamID != command.ExamID || stored.SittingID != command.SittingID || stored.ClassID != target.ClassID ||
-		stored.CandidateUserID != target.CandidateUserID || stored.ParticipationID != target.ParticipationID ||
-		stored.Generation != target.Generation || stored.ConnectionID != target.ConnectionID ||
-		(!stored.Replayed && (stored.Receipt.SubmissionID != proposed || stored.Receipt.ReceiptCode != proposedCode)) ||
-		(stored.Replayed && stored.ConnectionClosed) {
+func projectManagerEndResult(stored *store.ExamSubmissionManagerEndResult) (SubmissionResult, error) {
+	if !stored.Ended() {
 		return SubmissionResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent manager-ended Submission result"))
 	}
-	return SubmissionResult{Receipt: stored.Receipt, Provenance: model.ExamSubmissionManagerEndedAttempt,
-		ExamID: stored.ExamID, SittingID: stored.SittingID, ClassID: stored.ClassID,
-		CandidateUserID: stored.CandidateUserID, ParticipationID: stored.ParticipationID,
-		Generation: stored.Generation, ConnectionID: stored.ConnectionID, Replayed: stored.Replayed}, nil
+
+	return SubmissionResult{
+		Receipt:         stored.Receipt,
+		Provenance:      model.ExamSubmissionManagerEndedAttempt,
+		ExamID:          stored.ExamID,
+		SittingID:       stored.SittingID,
+		ClassID:         stored.ClassID,
+		CandidateUserID: stored.CandidateUserID,
+		ParticipationID: stored.ParticipationID,
+		Generation:      stored.Generation,
+		ConnectionID:    stored.ConnectionID,
+		Replayed:        stored.Replayed,
+	}, nil
 }

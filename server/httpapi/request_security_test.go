@@ -19,6 +19,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 )
 
 // newJSONRequest keeps body-shape and use-case tests on the JSON protocol.
@@ -63,9 +65,9 @@ func TestPublicLoginRejectsUnsafeBrowserRequestsBeforeAuthentication(t *testing.
 		{name: "unsupported charset", contentType: []string{"application/json; charset=utf-16"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			logger, _ := newTestLogger(t)
+			logger, _ := routetest.NewLogger(t)
 			fake := &authenticationEntryHTTPApplication{loginError: apperror.New("authentication.credentials_invalid")}
-			api := newFocusedResourceAPI(t, logger, classRouteAuthenticator{}, authenticationResource(fake, browserCookies{}))
+			api := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, authenticationResource(fake, fake, route.Cookies{}))
 			request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/auth/login",
 				strings.NewReader(`{"login_id":"student","password":"test-password","client_type":"web"}`))
 			request.Host = "other.example"
@@ -92,33 +94,17 @@ func TestPublicLoginRejectsUnsafeBrowserRequestsBeforeAuthentication(t *testing.
 	}
 }
 
-func TestBrowserRequestPolicyPreservesProviderGETAndConfiguredOrigin(t *testing.T) {
-	t.Parallel()
-	policy, err := newBrowserRequestPolicy("https://Proctor.example:443/")
-	require.NoError(t, err)
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "http://internal-node/api/v1/auth/login", nil)
-	request.Header.Set("Origin", "https://proctor.example")
-	require.True(t, policy.allows(request), "canonical configured public origin rejected behind an internal proxy address")
-	for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodOptions} {
-		request := httptest.NewRequestWithContext(t.Context(), method, "/api/v1/auth/providers/campus/callback?code=example", nil)
-		request.Header.Set("Origin", "https://identity.example")
-		request.Header.Set("Sec-Fetch-Site", "cross-site")
-		require.True(t, policy.allows(request), "safe provider/navigation method %s rejected", method)
-	}
-}
-
 func TestProductionRoutesDeclareBrowserRequestRejection(t *testing.T) {
 	t.Parallel()
-	api, err := New(validHTTPOptions(t))
-	require.NoError(t, err)
-	for _, route := range api.Routes() {
-		if !requiresCSRF(route.Method) {
+	api := newProductionCatalogAPI(t)
+	for _, entry := range api.Routes() {
+		if !route.RequiresCSRF(entry.Method) {
 			continue
 		}
 		code := "authentication.csrf.invalid"
-		if route.Auth == AuthPublic {
+		if entry.Auth == route.AuthPublic {
 			code = "request.invalid"
 		}
-		assert.Contains(t, route.ErrorCodes, code, "%s %s omits", route.Method, route.Path)
+		assert.Contains(t, entry.ErrorCodes, code, "%s %s omits", entry.Method, entry.Path)
 	}
 }

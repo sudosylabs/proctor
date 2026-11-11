@@ -34,7 +34,7 @@ func TestRecursiveWorkspaceDeletionRequiresCandidateSnapshot(t *testing.T) {
 			command := DeleteWorkspaceEntryCommand{Access: validWorkspaceMutationAccess(f),
 				EntryID: model.NewAttemptWorkspaceEntryID(), ExpectedPath: "src", Recursive: true, ExpectedWorkspaceCursor: &cursor, IdempotencyKey: "recursive"}
 			test.configure(&command)
-			_, err := f.service.DeleteCandidateExamWorkspaceEntry(context.Background(), f.invocation, command)
+			_, err := f.service.DeleteCandidateExamWorkspaceEntry(context.Background(), f.inv, command)
 			require.Error(t, err)
 			require.Nil(t, f.workspace.mutation)
 		})
@@ -54,7 +54,7 @@ func TestRecursiveWorkspaceDeletionCarriesSnapshotAndSemanticIdentity(t *testing
 	cursor := int64(0)
 	command := DeleteWorkspaceEntryCommand{Access: validWorkspaceMutationAccess(f),
 		EntryID: entryID, ExpectedPath: "src", Recursive: true, ExpectedWorkspaceCursor: &cursor, IdempotencyKey: "recursive"}
-	result, err := f.service.DeleteCandidateExamWorkspaceEntry(context.Background(), f.invocation, command)
+	result, err := f.service.DeleteCandidateExamWorkspaceEntry(context.Background(), f.inv, command)
 	require.NoError(t, err, "result=%#v error=%v mutation", result, err)
 	require.True(t, result.Change.Recursive, "result=%#v error=%v mutation", result, err)
 	require.NotNil(t, f.workspace.mutation, "result=%#v error=%v mutation", result, err)
@@ -63,7 +63,7 @@ func TestRecursiveWorkspaceDeletionCarriesSnapshotAndSemanticIdentity(t *testing
 	require.Equal(t, int64(0), *f.workspace.mutation.ExpectedWorkspaceCursor, "result=%#v error=%v mutation", result, err)
 	first := *f.workspace.idempotency
 	cursor = 1
-	_, err = f.service.DeleteCandidateExamWorkspaceEntry(context.Background(), f.invocation, command)
+	_, err = f.service.DeleteCandidateExamWorkspaceEntry(context.Background(), f.inv, command)
 	require.NoError(t, err)
 	require.NotEqual(t, f.workspace.idempotency.Fingerprint, first.Fingerprint, "recursive snapshot was not part of the semantic fingerprint")
 	require.Equal(t, f.workspace.idempotency.KeyDigest, first.KeyDigest, "recursive snapshot was not part of the semantic fingerprint")

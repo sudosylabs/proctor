@@ -15,7 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server"
+	"github.com/sudosylabs/proctor/server/operator"
 )
 
 func TestConfigValidateUsesTheServerFacade(t *testing.T) {
@@ -65,9 +65,9 @@ func TestConfigShowPrintsTheRedactedEffectiveConfiguration(t *testing.T) {
 
 	document := []byte("{\n  \"Database\": {\n    \"DataSource\": \"[redacted]\",\n    \"MaxOpenConnections\": 20\n  },\n  \"Cluster\": {\n    \"Seeds\": [],\n    \"Enabled\": false\n  },\n  \"Hosts\": [\n    \"a\",\n    \"b\"\n  ]\n}")
 	execute := testExecutors()
-	execute.showConfig = func(_ context.Context, path string) (server.EffectiveConfiguration, error) {
+	execute.showConfig = func(_ context.Context, path string) (operator.EffectiveConfiguration, error) {
 		require.Equal(t, "/etc/proctor.json", path)
-		return server.EffectiveConfiguration{Document: document, EnvironmentOverrides: []string{"PROCTOR_DATABASE_DATA_SOURCE"}}, nil
+		return operator.EffectiveConfiguration{Document: document, EnvironmentOverrides: []string{"PROCTOR_DATABASE_DATA_SOURCE"}}, nil
 	}
 
 	tests := []struct {

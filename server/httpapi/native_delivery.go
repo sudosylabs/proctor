@@ -12,146 +12,349 @@ import (
 	"strconv"
 
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-func nativeDeliveryResource(application ExamAttemptApplication) apiResource {
-	m := examAttemptHTTPModule{application: application}
-	path := func(tail ...pathPart) routePath {
-		parts := []pathPart{literal("exam-attempts"), canonicalID("exam_attempt_id"), literal("security-streams"), canonicalID("stream_id")}
-		return apiPath(append(parts, tail...)...)
-	}
-	return newResource("native-delivery",
-		boundedNativeDeliveryRoute(262144, idempotentSessionRoute(IdempotencyRequired, http.MethodPost, apiPath(literal("exam-attempts"), canonicalID("exam_attempt_id"), literal("security-batches")), []string{"audit.unavailable", "request.invalid", "resource.not_found", "exam.attempt.invalid", "exam.attempt.registered_desktop_required", "exam.attempt.connection_closed", "exam.attempt.connection_lost", "exam.attempt.sitting_not_open", "exam.attempt.unavailable", "exam.delivery.upload_expired", "exam.delivery.declaration_conflict", "exam.delivery.sequence_limit", "exam.delivery.detail_budget_exhausted", "exam.delivery.metadata_capacity", "exam.delivery.summary_rate_limited", "idempotency.conflict", "idempotency.in_progress", "idempotency.key_required", "idempotency.key_invalid", "exam.delivery.batch_conflict", "exam.delivery.replay_window_exceeded", "exam.delivery.pending_capacity", "exam.delivery.append_rate_limited"}, m.appendNativeDelivery)),
-		sessionRoute(http.MethodGet, path(), []string{"exam.delivery.control_rate_limited", "request.invalid", "resource.not_found", "exam.attempt.invalid", "exam.attempt.registered_desktop_required", "exam.attempt.connection_closed", "exam.attempt.connection_lost", "exam.attempt.sitting_not_open", "exam.attempt.unavailable", "exam.delivery.upload_expired", "exam.delivery.declaration_conflict", "exam.delivery.sequence_limit", "exam.delivery.detail_budget_exhausted", "exam.delivery.metadata_capacity", "exam.delivery.summary_rate_limited", "idempotency.conflict", "idempotency.in_progress"}, m.nativeDeliveryStatus),
-		sessionRoute(http.MethodGet, path(literal("receipts"), positiveSequence("batch_sequence")), []string{"exam.delivery.control_rate_limited", "request.invalid", "resource.not_found", "exam.attempt.invalid", "exam.attempt.registered_desktop_required", "exam.attempt.connection_closed", "exam.attempt.connection_lost", "exam.attempt.sitting_not_open", "exam.attempt.unavailable", "exam.delivery.upload_expired", "exam.delivery.declaration_conflict", "exam.delivery.sequence_limit", "exam.delivery.detail_budget_exhausted", "exam.delivery.metadata_capacity", "exam.delivery.summary_rate_limited", "idempotency.conflict", "idempotency.in_progress"}, m.nativeDeliveryReceipt),
-		boundedNativeDeliveryRoute(8192, idempotentSessionRoute(IdempotencyRequired, http.MethodPost, path(literal("gaps")), []string{"audit.unavailable", "exam.delivery.control_rate_limited", "request.invalid", "resource.not_found", "exam.attempt.invalid", "exam.attempt.registered_desktop_required", "exam.attempt.connection_closed", "exam.attempt.connection_lost", "exam.attempt.sitting_not_open", "exam.attempt.unavailable", "exam.delivery.upload_expired", "exam.delivery.declaration_conflict", "exam.delivery.sequence_limit", "exam.delivery.detail_budget_exhausted", "exam.delivery.metadata_capacity", "exam.delivery.summary_rate_limited", "idempotency.conflict", "idempotency.in_progress", "idempotency.key_required", "idempotency.key_invalid"}, m.declareNativeDeliveryGaps)),
-		boundedNativeDeliveryRoute(2048, idempotentSessionRoute(IdempotencyRequired, http.MethodPost, path(literal("seal")), []string{"audit.unavailable", "exam.delivery.control_rate_limited", "request.invalid", "resource.not_found", "exam.attempt.invalid", "exam.attempt.registered_desktop_required", "exam.attempt.connection_closed", "exam.attempt.connection_lost", "exam.attempt.sitting_not_open", "exam.attempt.unavailable", "exam.delivery.upload_expired", "exam.delivery.declaration_conflict", "exam.delivery.sequence_limit", "exam.delivery.detail_budget_exhausted", "exam.delivery.metadata_capacity", "exam.delivery.summary_rate_limited", "idempotency.conflict", "idempotency.in_progress", "idempotency.key_required", "idempotency.key_invalid"}, m.sealNativeDelivery)),
-		boundedNativeDeliveryRoute(2048, idempotentSessionRoute(IdempotencyRequired, http.MethodPost, path(literal("summary")), []string{"audit.unavailable", "exam.delivery.control_rate_limited", "request.invalid", "resource.not_found", "exam.attempt.invalid", "exam.attempt.registered_desktop_required", "exam.attempt.connection_closed", "exam.attempt.connection_lost", "exam.attempt.sitting_not_open", "exam.attempt.unavailable", "exam.delivery.upload_expired", "exam.delivery.declaration_conflict", "exam.delivery.sequence_limit", "exam.delivery.detail_budget_exhausted", "exam.delivery.metadata_capacity", "exam.delivery.summary_rate_limited", "idempotency.conflict", "idempotency.in_progress", "idempotency.key_required", "idempotency.key_invalid"}, m.updateNativeDeliverySummary)))
+func nativeDeliveryResource(app ExamAttemptApplication) route.Resource {
+	h := examAttemptHandlers{app: app}
+	return route.NewResource(
+		"native-delivery",
+		route.Endpoint{
+			Method:       http.MethodPost,
+			Path:         "/exam-attempts/{exam_attempt_id}/security-batches",
+			Auth:         route.AuthSessionRequired,
+			Idempotency:  route.IdempotencyRequired,
+			MaxBodyBytes: 262144,
+			Errors: []string{
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.registered_desktop_required",
+				"exam.attempt.connection_closed",
+				"exam.attempt.connection_lost",
+				"exam.attempt.sitting_not_open",
+				"exam.attempt.unavailable",
+				"exam.delivery.upload_expired",
+				"exam.delivery.declaration_conflict",
+				"exam.delivery.sequence_limit",
+				"exam.delivery.detail_budget_exhausted",
+				"exam.delivery.metadata_capacity",
+				"exam.delivery.summary_rate_limited",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"exam.delivery.batch_conflict",
+				"exam.delivery.replay_window_exceeded",
+				"exam.delivery.pending_capacity",
+				"exam.delivery.append_rate_limited",
+			},
+			Handle: h.appendNativeDelivery,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/exam-attempts/{exam_attempt_id}/security-streams/{stream_id}",
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{
+				"exam.delivery.control_rate_limited",
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.registered_desktop_required",
+				"exam.attempt.connection_closed",
+				"exam.attempt.connection_lost",
+				"exam.attempt.sitting_not_open",
+				"exam.attempt.unavailable",
+				"exam.delivery.upload_expired",
+				"exam.delivery.declaration_conflict",
+				"exam.delivery.sequence_limit",
+				"exam.delivery.detail_budget_exhausted",
+				"exam.delivery.metadata_capacity",
+				"exam.delivery.summary_rate_limited",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+			},
+			Handle: h.nativeDeliveryStatus,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/exam-attempts/{exam_attempt_id}/security-streams/{stream_id}/receipts/{batch_sequence:sequence}",
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{
+				"exam.delivery.control_rate_limited",
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.registered_desktop_required",
+				"exam.attempt.connection_closed",
+				"exam.attempt.connection_lost",
+				"exam.attempt.sitting_not_open",
+				"exam.attempt.unavailable",
+				"exam.delivery.upload_expired",
+				"exam.delivery.declaration_conflict",
+				"exam.delivery.sequence_limit",
+				"exam.delivery.detail_budget_exhausted",
+				"exam.delivery.metadata_capacity",
+				"exam.delivery.summary_rate_limited",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+			},
+			Handle: h.nativeDeliveryReceipt,
+		},
+		route.Endpoint{
+			Method:       http.MethodPost,
+			Path:         "/exam-attempts/{exam_attempt_id}/security-streams/{stream_id}/gaps",
+			Auth:         route.AuthSessionRequired,
+			Idempotency:  route.IdempotencyRequired,
+			MaxBodyBytes: 8192,
+			Errors: []string{
+				"audit.unavailable",
+				"exam.delivery.control_rate_limited",
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.registered_desktop_required",
+				"exam.attempt.connection_closed",
+				"exam.attempt.connection_lost",
+				"exam.attempt.sitting_not_open",
+				"exam.attempt.unavailable",
+				"exam.delivery.upload_expired",
+				"exam.delivery.declaration_conflict",
+				"exam.delivery.sequence_limit",
+				"exam.delivery.detail_budget_exhausted",
+				"exam.delivery.metadata_capacity",
+				"exam.delivery.summary_rate_limited",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+			},
+			Handle: h.declareNativeDeliveryGaps,
+		},
+		route.Endpoint{
+			Method:       http.MethodPost,
+			Path:         "/exam-attempts/{exam_attempt_id}/security-streams/{stream_id}/seal",
+			Auth:         route.AuthSessionRequired,
+			Idempotency:  route.IdempotencyRequired,
+			MaxBodyBytes: 2048,
+			Errors: []string{
+				"audit.unavailable",
+				"exam.delivery.control_rate_limited",
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.registered_desktop_required",
+				"exam.attempt.connection_closed",
+				"exam.attempt.connection_lost",
+				"exam.attempt.sitting_not_open",
+				"exam.attempt.unavailable",
+				"exam.delivery.upload_expired",
+				"exam.delivery.declaration_conflict",
+				"exam.delivery.sequence_limit",
+				"exam.delivery.detail_budget_exhausted",
+				"exam.delivery.metadata_capacity",
+				"exam.delivery.summary_rate_limited",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+			},
+			Handle: h.sealNativeDelivery,
+		},
+		route.Endpoint{
+			Method:       http.MethodPost,
+			Path:         "/exam-attempts/{exam_attempt_id}/security-streams/{stream_id}/summary",
+			Auth:         route.AuthSessionRequired,
+			Idempotency:  route.IdempotencyRequired,
+			MaxBodyBytes: 2048,
+			Errors: []string{
+				"audit.unavailable",
+				"exam.delivery.control_rate_limited",
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.registered_desktop_required",
+				"exam.attempt.connection_closed",
+				"exam.attempt.connection_lost",
+				"exam.attempt.sitting_not_open",
+				"exam.attempt.unavailable",
+				"exam.delivery.upload_expired",
+				"exam.delivery.declaration_conflict",
+				"exam.delivery.sequence_limit",
+				"exam.delivery.detail_budget_exhausted",
+				"exam.delivery.metadata_capacity",
+				"exam.delivery.summary_rate_limited",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+			},
+			Handle: h.updateNativeDeliverySummary,
+		},
+	)
 }
 
-func nativeDeliveryQuery(request operationRequest) (attempt.NativeDeliveryQuery, error) {
-	attemptID, err := request.params.RequireExamAttemptID()
+// nativeDeliveryQuery builds the query for one delivery stream. streamID names
+// a delivery stream, Participation, or source session chosen by the Store, so
+// it stays an untyped opaque identifier.
+func nativeDeliveryQuery(request route.Request, streamID string) (attempt.NativeDeliveryQuery, error) {
+	attemptID, err := route.PathID[model.ExamAttemptID](request, "exam_attempt_id")
 	if err != nil {
 		return attempt.NativeDeliveryQuery{}, err
 	}
-	streamID, err := request.params.RequireNativeStreamID()
-	if err != nil {
-		return attempt.NativeDeliveryQuery{}, err
+
+	if !model.IsValidOpaqueID(streamID) {
+		return attempt.NativeDeliveryQuery{}, route.InvalidRequest(nil)
 	}
+
 	query := attempt.NativeDeliveryQuery{Access: attempt.CandidateAccess{AttemptID: attemptID}, StreamID: streamID}
 	// Omission does not select historical authority. The Store decides from the
 	// recorded source closure, and rejects omission for a live source.
-	if len(request.request.Header.Values(candidateAttemptCredentialHeader)) > 0 || len(request.request.Header.Values(candidateAttemptConnectionHeader)) > 0 {
-		headers, err := candidateAttemptAccessHeaders(request.request)
+	if len(request.HTTP.Header.Values(candidateAttemptCredentialHeader)) > 0 ||
+		len(request.HTTP.Header.Values(candidateAttemptConnectionHeader)) > 0 {
+		headers, err := candidateAttemptAccessHeaders(request.HTTP)
 		if err != nil {
-			return query, invalidRequestError(err)
+			return query, route.InvalidRequest(err)
 		}
+
 		query.Access.ConnectionID = headers.ConnectionID
 		query.Access.ContinuityCredential = headers.ContinuityCredential
 	}
+
 	return query, nil
 }
-func (m examAttemptHTTPModule) nativeDeliveryStatus(request operationRequest) (operationResult, error) {
-	query, err := nativeDeliveryQuery(request)
+func (h examAttemptHandlers) nativeDeliveryStatus(request route.Request) (route.Result, error) {
+	query, err := nativeDeliveryQuery(request, request.Params["stream_id"])
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	value, err := m.application.NativeDeliveryStatus(request.context, request.invocation(), query)
+	value, err := h.app.NativeDeliveryStatus(request.Context, request.Invocation(), query)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	return nativeDeliveryStatusResult(value)
 }
-func (m examAttemptHTTPModule) nativeDeliveryReceipt(request operationRequest) (operationResult, error) {
-	query, err := nativeDeliveryQuery(request)
+func (h examAttemptHandlers) nativeDeliveryReceipt(request route.Request) (route.Result, error) {
+	query, err := nativeDeliveryQuery(request, request.Params["stream_id"])
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	sequence, err := strconv.ParseInt(request.params.NativeBatchSequence, 10, 64)
+	sequence, err := strconv.ParseInt(request.Params["batch_sequence"], 10, 64)
 	if err != nil || sequence < 1 || sequence > model.NativeParticipationPositionLimit {
-		return operationResult{}, invalidRequestError(err)
+		return route.Result{}, route.InvalidRequest(err)
 	}
-	value, err := m.application.NativeDeliveryReceipt(request.context, request.invocation(), query, sequence)
+	value, err := h.app.NativeDeliveryReceipt(request.Context, request.Invocation(), query, sequence)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if value == nil || value.Validate() != nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
-	return jsonResult(http.StatusOK, value).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, value).WithHeaders(noStoreHeaders()), nil
 }
-func (m examAttemptHTTPModule) declareNativeDeliveryGaps(request operationRequest) (operationResult, error) {
-	query, err := nativeDeliveryQuery(request)
+func (h examAttemptHandlers) declareNativeDeliveryGaps(request route.Request) (route.Result, error) {
+	query, err := nativeDeliveryQuery(request, request.Params["stream_id"])
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	var body model.DeclareDeliveryGaps
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
-	value, err := m.application.DeclareNativeDeliveryGaps(request.context, request.invocation(), attempt.NativeDeliveryGapsCommand{Query: query, Declaration: body, IdempotencyKey: request.idempotencyKey})
+
+	value, err := h.app.DeclareNativeDeliveryGaps(request.Context, request.Invocation(), attempt.NativeDeliveryGapsCommand{
+		Query:          query,
+		Declaration:    body,
+		IdempotencyKey: request.IdempotencyKey,
+	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(http.StatusOK, value).withHeaders(noStoreHeaders()), nil
+
+	return route.JSON(http.StatusOK, value).WithHeaders(noStoreHeaders()), nil
 }
-func (m examAttemptHTTPModule) sealNativeDelivery(request operationRequest) (operationResult, error) {
-	query, err := nativeDeliveryQuery(request)
+func (h examAttemptHandlers) sealNativeDelivery(request route.Request) (route.Result, error) {
+	query, err := nativeDeliveryQuery(request, request.Params["stream_id"])
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	var body model.FinalDeliveryDeclaration
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
-	value, err := m.application.SealNativeDelivery(request.context, request.invocation(), attempt.NativeDeliveryFinalCommand{Query: query, Declaration: body, IdempotencyKey: request.idempotencyKey})
+
+	value, err := h.app.SealNativeDelivery(request.Context, request.Invocation(), attempt.NativeDeliveryFinalCommand{
+		Query:          query,
+		Declaration:    body,
+		IdempotencyKey: request.IdempotencyKey,
+	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	return nativeDeliveryStatusResult(value)
 }
-func (m examAttemptHTTPModule) updateNativeDeliverySummary(request operationRequest) (operationResult, error) {
-	query, err := nativeDeliveryQuery(request)
+func (h examAttemptHandlers) updateNativeDeliverySummary(request route.Request) (route.Result, error) {
+	query, err := nativeDeliveryQuery(request, request.Params["stream_id"])
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	var body model.UnretainedDeliverySummary
-	if err = request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
-	value, err := m.application.UpdateNativeDeliverySummary(request.context, request.invocation(), attempt.NativeDeliverySummaryCommand{Query: query, Summary: body, IdempotencyKey: request.idempotencyKey})
+
+	value, err := h.app.UpdateNativeDeliverySummary(request.Context, request.Invocation(), attempt.NativeDeliverySummaryCommand{
+		Query:          query,
+		Summary:        body,
+		IdempotencyKey: request.IdempotencyKey,
+	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
+
 	return nativeDeliveryStatusResult(value)
 }
-func nativeDeliveryStatusResult(value *model.NativeSecurityStreamStatus) (operationResult, error) {
+func nativeDeliveryStatusResult(value *model.NativeSecurityStreamStatus) (route.Result, error) {
 	if value == nil || value.Validate() != nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
-	return jsonResult(http.StatusOK, value).withHeaders(noStoreHeaders()), nil
+	return route.JSON(http.StatusOK, value).WithHeaders(noStoreHeaders()), nil
 }
 
-func (m examAttemptHTTPModule) appendNativeDelivery(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) appendNativeDelivery(request route.Request) (route.Result, error) {
 	var body model.NativeSecurityBatch
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
+
 	// The stream selector is in the closed batch envelope on this operation.
-	request.params.NativeStreamID = body.StreamID
-	query, err := nativeDeliveryQuery(request)
+	query, err := nativeDeliveryQuery(request, body.StreamID)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	value, err := m.application.AppendNativeDelivery(request.context, request.invocation(), attempt.NativeDeliveryAppendCommand{Query: query, Batch: body, IdempotencyKey: request.idempotencyKey})
+
+	value, err := h.app.AppendNativeDelivery(request.Context, request.Invocation(), attempt.NativeDeliveryAppendCommand{
+		Query:          query,
+		Batch:          body,
+		IdempotencyKey: request.IdempotencyKey,
+	})
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
 	if value == nil || value.Receipt.Validate() != nil {
-		return operationResult{}, errUnpresentableResult
+		return route.Result{}, route.ErrUnpresentable
 	}
-	return jsonResult(http.StatusOK, nativeDeliveryAcknowledgementResponse{Receipt: value.Receipt, NativeDeliveryProgress: value.NativeDeliveryProgress}).withHeaders(noStoreHeaders()), nil
+
+	return route.JSON(
+		http.StatusOK,
+		nativeDeliveryAcknowledgementResponse{Receipt: value.Receipt, NativeDeliveryProgress: value.NativeDeliveryProgress},
+	).WithHeaders(noStoreHeaders()), nil
 }
 
 // nativeDeliveryAcknowledgementResponse acknowledges one native security batch
@@ -159,9 +362,4 @@ func (m examAttemptHTTPModule) appendNativeDelivery(request operationRequest) (o
 type nativeDeliveryAcknowledgementResponse struct {
 	Receipt model.NativeBatchReceipt `json:"receipt"`
 	model.NativeDeliveryProgress
-}
-
-func boundedNativeDeliveryRoute(limit int64, definition routeDefinition) routeDefinition {
-	definition.maxBodyBytes = limit
-	return definition
 }

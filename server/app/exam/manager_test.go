@@ -17,6 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -31,7 +33,7 @@ func TestListManagersUsesManageAuthorizationAndBoundedCursor(t *testing.T) {
 		ExamID: fixture.examID, UserID: target, GrantedByUserID: fixture.userID, GrantedAt: grantedAt,
 	}, IsCreator: false, IsOwner: false}}
 
-	page, err := fixture.service.ListExamManagers(context.Background(), fixture.invocation, ListManagersQuery{
+	page, err := fixture.service.ListExamManagers(context.Background(), fixture.inv, ListManagersQuery{
 		ExamID: fixture.examID, BeforeGrantedAt: grantedAt.Add(time.Second), BeforeUserID: model.NewUserID(), Limit: 20,
 	})
 	require.NoError(t, err)
@@ -45,11 +47,11 @@ func TestListManagersUsesManageAuthorizationAndBoundedCursor(t *testing.T) {
 	fixture.persistence.managerSummaries = append(fixture.persistence.managerSummaries, store.ExamManagerSummary{Manager: model.ExamManager{
 		ExamID: fixture.examID, UserID: model.NewUserID(), GrantedByUserID: fixture.userID, GrantedAt: grantedAt.Add(-time.Second),
 	}})
-	page, err = fixture.service.ListExamManagers(context.Background(), fixture.invocation, ListManagersQuery{ExamID: fixture.examID, Limit: 2})
+	page, err = fixture.service.ListExamManagers(context.Background(), fixture.inv, ListManagersQuery{ExamID: fixture.examID, Limit: 2})
 	require.NoError(t, err)
 	require.Len(t, page.Items, 2)
 	require.False(t, page.HasMore, "an exactly full final page has no successor")
-	page, err = fixture.service.ListExamManagers(context.Background(), fixture.invocation, ListManagersQuery{ExamID: fixture.examID, Limit: 1})
+	page, err = fixture.service.ListExamManagers(context.Background(), fixture.inv, ListManagersQuery{ExamID: fixture.examID, Limit: 1})
 	require.NoError(t, err)
 	require.Len(t, page.Items, 1)
 	require.True(t, page.HasMore)
@@ -69,10 +71,10 @@ func TestAddManagerChecksEligibilityBeforeAuditedAtomicMutation(t *testing.T) {
 		fixture.userID.String(): {{AcademicUnitID: fixture.unitID}},
 		target.String():         {{AcademicUnitID: fixture.unitID}},
 	}
-	command := AddManagerCommand{ExamID: fixture.examID, UserID: target, ExpectedExamRevision: 1,
+	command := ManagerChangeCommand{ExamID: fixture.examID, UserID: target, ExpectedExamRevision: 1,
 		IdempotencyKey: "test-key"}
 
-	result, err := fixture.service.AddExamManager(context.Background(), fixture.invocation, command)
+	result, err := fixture.service.AddExamManager(context.Background(), fixture.inv, command)
 	require.NoError(t, err)
 	require.NotNil(t, result.Manager, "result/mutation = %#v/%#v", result, fixture.persistence.managerMutation)
 	require.Equal(t, target, result.Manager.UserID, "result/mutation = %#v/%#v", result, fixture.persistence.managerMutation)
@@ -90,13 +92,21 @@ func TestAddManagerChecksEligibilityBeforeAuditedAtomicMutation(t *testing.T) {
 	require.Equal(t, target, fixture.persistence.managerMutation.Notices[0].Delivery.TargetUserID)
 	assertStoreIdempotency(t, fixture.persistence.idempotency, fixture.userID, idempotencyOperationAddManager, "test-key",
 		fmt.Sprintf(`{"exam_id":%q,"user_id":%q,"expected_exam_revision":1}`, fixture.examID, target))
+	managerChanged, eventErr := realtime.NewExamManagerChangedEvent(fixture.examID, target, true, result.Exam.Revision, fixture.persistence.managerMutation.ChangedAt)
+	require.NoError(t, eventErr)
+	// Contract: the new manager's cached authorization is dropped before the
+	// Exam's viewers learn of the change.
+	require.Equal(t, []realtimetest.Call{
+		{Method: realtimetest.InvalidateAuthorization, UserID: target},
+		{Method: realtimetest.Publish, Event: managerChanged},
+	}, fixture.publisher.Calls())
 }
 
 func TestAddManagerUsesNativeMembershipDecisionAndMutationTime(t *testing.T) {
 	fixture := newAuthoringFixture(t)
 	decisionAt := time.Date(2026, 9, 5, 12, 0, 0, 123700789, time.FixedZone("offset", 3600))
 	boundary := model.TimeUTC(decisionAt)
-	fixture.service.deps.Now = func() time.Time { return decisionAt }
+	fixture.service.now = func() time.Time { return decisionAt }
 	fixture.persistence.actorIsManager = true
 	target := model.NewUserID()
 	fixture.users.user = activeTestUser(target)
@@ -120,7 +130,7 @@ func TestAddManagerUsesNativeMembershipDecisionAndMutationTime(t *testing.T) {
 		return nil, nil
 	}
 
-	_, err := fixture.service.AddExamManager(context.Background(), fixture.invocation, AddManagerCommand{
+	_, err := fixture.service.AddExamManager(context.Background(), fixture.inv, ManagerChangeCommand{
 		ExamID: fixture.examID, UserID: target, ExpectedExamRevision: 1, IdempotencyKey: "precise-manager-time",
 	})
 	require.NoError(t, err)
@@ -162,7 +172,7 @@ func TestAddManagerRejectsInactiveOrUnrelatedTargetBeforeAudit(t *testing.T) {
 			} else {
 				fixture.memberships.itemsByUser = map[string][]*model.AcademicUnitMember{target.String(): {}}
 			}
-			_, err := fixture.service.AddExamManager(context.Background(), fixture.invocation, AddManagerCommand{
+			_, err := fixture.service.AddExamManager(context.Background(), fixture.inv, ManagerChangeCommand{
 				ExamID: fixture.examID, UserID: target, ExpectedExamRevision: 1, IdempotencyKey: "test-key",
 			})
 			require.Equal(t, "exam.manager.ineligible", faultCode(err))
@@ -182,7 +192,7 @@ func TestManagerMailPreparationFailureStartsNoMutationAndFailsAudit(t *testing.T
 	fixture.memberships.itemsByUser = map[string][]*model.AcademicUnitMember{target.String(): {{AcademicUnitID: fixture.unitID}}}
 	fixture.mail.err = errors.New("render unavailable")
 
-	_, err := fixture.service.AddExamManager(context.Background(), fixture.invocation, AddManagerCommand{
+	_, err := fixture.service.AddExamManager(context.Background(), fixture.inv, ManagerChangeCommand{
 		ExamID: fixture.examID, UserID: target, ExpectedExamRevision: 1,
 		IdempotencyKey: "test-key",
 	})
@@ -196,7 +206,7 @@ func TestRemoveAndTransferPreserveStoreInvariantFailures(t *testing.T) {
 	fixture.persistence.actorIsManager = true
 	fixture.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: fixture.unitID}}
 	fixture.persistence.managerErr = store.NewErrConflict("exam_manager", "exam_owner_manager", nil)
-	_, err := fixture.service.RemoveExamManager(context.Background(), fixture.invocation, RemoveManagerCommand{
+	_, err := fixture.service.RemoveExamManager(context.Background(), fixture.inv, ManagerChangeCommand{
 		ExamID: fixture.examID, UserID: fixture.userID, ExpectedExamRevision: 1, IdempotencyKey: "test-key",
 	})
 	require.Equal(t, "exam.manager.owner_protected", faultCode(err), "remove owner error")
@@ -215,7 +225,7 @@ func TestRemoveAndTransferPreserveStoreInvariantFailures(t *testing.T) {
 		target.String():         fixture.users.user,
 	}
 	fixture.memberships.itemsByUser = map[string][]*model.AcademicUnitMember{target.String(): {{AcademicUnitID: fixture.unitID}}}
-	transferred, err := fixture.service.TransferExamOwnership(context.Background(), fixture.invocation, TransferOwnerCommand{
+	transferred, err := fixture.service.TransferExamOwnership(context.Background(), fixture.inv, ManagerChangeCommand{
 		ExamID: fixture.examID, UserID: target, ExpectedExamRevision: 1, IdempotencyKey: "test-key",
 	})
 	require.NoError(t, err, "transfer = %#v", transferred)
@@ -230,6 +240,11 @@ func TestRemoveAndTransferPreserveStoreInvariantFailures(t *testing.T) {
 	require.Equal(t, ManagerMailRelationshipOwner, fixture.mail.requests[1].Relationship)
 	assertStoreIdempotency(t, fixture.persistence.idempotency, fixture.userID, idempotencyOperationTransferOwner, "test-key",
 		fmt.Sprintf(`{"exam_id":%q,"user_id":%q,"expected_exam_revision":1}`, fixture.examID, target))
+	ownerTransferred, eventErr := realtime.NewExamOwnerTransferredEvent(fixture.examID, target, transferred.Exam.Revision, fixture.persistence.managerMutation.ChangedAt)
+	require.NoError(t, eventErr)
+	// Contract: an ownership transfer publishes exactly the new owner; no
+	// authorization cache is dropped.
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.Publish, Event: ownerTransferred}}, fixture.publisher.Calls())
 }
 
 func activeTestUser(id model.UserID) *model.User {

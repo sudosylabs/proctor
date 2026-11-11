@@ -8,7 +8,7 @@ use (
 )
 
 replace (
-	github.com/sudosylabs/proctor/packages/cache v0.0.0-20261106012608-7ca07fe32e5d => ./packages/cache
-	github.com/sudosylabs/proctor/packages/mail v0.0.0-20261105225246-102043a25f64 => ./packages/mail
-	github.com/sudosylabs/proctor/packages/vfs v0.0.0-20261107175823-6fb01c2d892e => ./packages/vfs
+	github.com/sudosylabs/proctor/packages/cache v0.0.0-20261111213109-79e3170a5027 => ./packages/cache
+	github.com/sudosylabs/proctor/packages/mail v0.0.0-20261111210501-268c5a24e5c4 => ./packages/mail
+	github.com/sudosylabs/proctor/packages/vfs v0.0.0-20261111210501-268c5a24e5c4 => ./packages/vfs
 )

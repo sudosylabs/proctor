@@ -17,12 +17,6 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-type handlerFunc func(context.Context, Execution) Outcome
-
-func (f handlerFunc) Run(ctx context.Context, execution Execution) Outcome {
-	return f(ctx, execution)
-}
-
 func TestRegistryIsClosedAndImmutable(t *testing.T) {
 	t.Parallel()
 	descriptor := testDescriptor(handlerFunc(func(context.Context, Execution) Outcome {

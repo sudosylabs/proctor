@@ -37,10 +37,10 @@ func TestRetainedDeliveryDeclarationValidation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			value := valid
 			tc.change(&value)
-			raw, err := json.Marshal(value)
-			require.NoError(t, err)
-			_, err = decodeDeliveryDeclarationRecord(raw)
-			require.ErrorIs(t, err, store.ErrInvalidState)
+			encoded, marshalErr := json.Marshal(value)
+			require.NoError(t, marshalErr)
+			_, marshalErr = decodeDeliveryDeclarationRecord(encoded)
+			require.ErrorIs(t, marshalErr, store.ErrInvalidState)
 		})
 	}
 	raw, err = json.Marshal(valid)
@@ -93,10 +93,10 @@ func TestRetainedNativeResetBinding(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			value := valid
 			tc.change(&value)
-			raw, err := json.Marshal(value)
-			require.NoError(t, err)
-			_, err = decodeNativeResetRecord(raw, part, reset.ResetID)
-			require.ErrorIs(t, err, store.ErrInvalidState)
+			raw, marshalErr := json.Marshal(value)
+			require.NoError(t, marshalErr)
+			_, marshalErr = decodeNativeResetRecord(raw, part, reset.ResetID)
+			require.ErrorIs(t, marshalErr, store.ErrInvalidState)
 		})
 	}
 	raw, err := json.Marshal(valid)

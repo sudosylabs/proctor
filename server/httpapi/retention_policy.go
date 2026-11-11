@@ -11,28 +11,33 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 // RetentionPolicyApplication is the transport's complete policy capability.
 type RetentionPolicyApplication interface {
 	GetRetentionPolicy(context.Context, invocation.Invocation) (*model.RetentionPolicy, error)
-	ReplaceRetentionPolicy(context.Context, invocation.Invocation, app.ReplaceRetentionPolicyCommand) (*model.RetentionPolicy, error)
+	ReplaceRetentionPolicy(
+		context.Context,
+		invocation.Invocation,
+		administration.ReplaceRetentionPolicyCommand,
+	) (*model.RetentionPolicy, error)
 }
 
 type retentionPolicyRequest struct {
-	ExpectedRevision                 int64          `json:"expected_revision"`
-	SubmissionRetentionDays          Optional[int]  `json:"submission_retention_days"`
-	IntegrityRetentionDays           Optional[int]  `json:"integrity_retention_days"`
-	BrowserActivityRetentionDays     Optional[int]  `json:"browser_activity_retention_days"`
-	SecurityOperationalRetentionDays Optional[int]  `json:"security_operational_retention_days"`
-	AuditRetentionDays               Optional[int]  `json:"audit_retention_days"`
-	ExportRetentionDays              Optional[int]  `json:"export_retention_days"`
-	DeletionGraceDays                Optional[int]  `json:"deletion_grace_days"`
-	CandidateNotices                 Optional[bool] `json:"candidate_notices"`
+	ExpectedRevision                 int64                `json:"expected_revision"`
+	SubmissionRetentionDays          route.Optional[int]  `json:"submission_retention_days"`
+	IntegrityRetentionDays           route.Optional[int]  `json:"integrity_retention_days"`
+	BrowserActivityRetentionDays     route.Optional[int]  `json:"browser_activity_retention_days"`
+	SecurityOperationalRetentionDays route.Optional[int]  `json:"security_operational_retention_days"`
+	AuditRetentionDays               route.Optional[int]  `json:"audit_retention_days"`
+	ExportRetentionDays              route.Optional[int]  `json:"export_retention_days"`
+	DeletionGraceDays                route.Optional[int]  `json:"deletion_grace_days"`
+	CandidateNotices                 route.Optional[bool] `json:"candidate_notices"`
 }
 
 type retentionPolicyResponse struct {
@@ -50,74 +55,97 @@ type retentionPolicyResponse struct {
 	UpdatedAt                        string `json:"updated_at"`
 }
 
-type retentionPolicyResourceModule struct {
-	application RetentionPolicyApplication
+type retentionPolicyHandlers struct {
+	app RetentionPolicyApplication
 }
 
-func retentionPolicyResource(application RetentionPolicyApplication) apiResource {
-	module := retentionPolicyResourceModule{application: application}
-	replace := strongRecentSessionRoute(
-		http.MethodPut,
-		apiPath(literal("retention-policy")),
-		[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress", "request.invalid", "retention_policy.invalid", "retention_policy.revision_conflict", "retention_policy.unavailable", "resource.not_found"},
-		module.replace,
-	)
-	replace.idempotency = IdempotencyRequired
-	return newResource(
+func retentionPolicyResource(app RetentionPolicyApplication) route.Resource {
+	h := retentionPolicyHandlers{app: app}
+	replace := route.Endpoint{
+		Method:      http.MethodPut,
+		Path:        "/retention-policy",
+		Auth:        route.AuthStrongRecentSessionRequired,
+		Idempotency: route.IdempotencyRequired,
+		Errors: []string{
+			"authorization.denied",
+			"authorization.request.invalid",
+			"authorization.unavailable",
+			"audit.unavailable",
+			"idempotency.key_required",
+			"idempotency.key_invalid",
+			"idempotency.conflict",
+			"idempotency.in_progress",
+			"request.invalid",
+			"retention_policy.invalid",
+			"retention_policy.revision_conflict",
+			"retention_policy.unavailable",
+			"resource.not_found",
+		},
+		Handle: h.replace,
+	}
+	return route.NewResource(
 		"retention-policy",
-		principalRoute(
-			http.MethodGet,
-			apiPath(literal("retention-policy")),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "retention_policy.unavailable", "resource.not_found", "retention_policy.revision_conflict"},
-			module.get,
-		),
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/retention-policy",
+			Auth:   route.AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"retention_policy.unavailable",
+				"resource.not_found",
+				"retention_policy.revision_conflict",
+			},
+			Handle: h.get,
+		},
 		replace,
 	)
 }
 
-func (m retentionPolicyResourceModule) get(
-	request operationRequest,
-) (operationResult, error) {
-	policy, err := m.application.GetRetentionPolicy(
-		request.context,
-		request.invocation(),
+func (h retentionPolicyHandlers) get(
+	request route.Request,
+) (route.Result, error) {
+	policy, err := h.app.GetRetentionPolicy(
+		request.Context,
+		request.Invocation(),
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(
+	return route.JSON(
 		http.StatusOK,
 		retentionPolicyResponseFromModel(policy),
-	).withHeaders(privateNoStoreHeaders()), nil
+	).WithHeaders(privateNoStoreHeaders()), nil
 }
 
-func (m retentionPolicyResourceModule) replace(
-	request operationRequest,
-) (operationResult, error) {
+func (h retentionPolicyHandlers) replace(
+	request route.Request,
+) (route.Result, error) {
 	var body retentionPolicyRequest
-	if err := request.decodeJSON(&body); err != nil {
-		return operationResult{}, err
+	if err := request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
 	}
 	settings, err := requiredRetentionPolicySettings(body)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	policy, err := m.application.ReplaceRetentionPolicy(
-		request.context,
-		request.invocation(),
-		app.ReplaceRetentionPolicyCommand{
+	policy, err := h.app.ReplaceRetentionPolicy(
+		request.Context,
+		request.Invocation(),
+		administration.ReplaceRetentionPolicyCommand{
 			ExpectedRevision: body.ExpectedRevision,
 			Settings:         settings,
-			IdempotencyKey:   request.idempotencyKey,
+			IdempotencyKey:   request.IdempotencyKey,
 		},
 	)
 	if err != nil {
-		return operationResult{}, err
+		return route.Result{}, err
 	}
-	return jsonResult(
+	return route.JSON(
 		http.StatusOK,
 		retentionPolicyResponseFromModel(policy),
-	).withHeaders(privateNoStoreHeaders()), nil
+	).WithHeaders(privateNoStoreHeaders()), nil
 }
 
 func requiredRetentionPolicySettings(body retentionPolicyRequest) (model.RetentionPolicySettings, error) {
@@ -130,7 +158,7 @@ func requiredRetentionPolicySettings(body retentionPolicyRequest) (model.Retenti
 	}
 	fields := []struct {
 		name        string
-		source      Optional[int]
+		source      route.Optional[int]
 		destination *int
 	}{
 		{"submission_retention_days", body.SubmissionRetentionDays, &settings.SubmissionRetentionDays},
@@ -156,13 +184,17 @@ func retentionPolicyResponseFromModel(policy *model.RetentionPolicy) retentionPo
 		return retentionPolicyResponse{}
 	}
 	return retentionPolicyResponse{
-		Revision:                policy.Revision,
-		SubmissionRetentionDays: policy.SubmissionRetentionDays, IntegrityRetentionDays: policy.IntegrityRetentionDays, BrowserActivityRetentionDays: policy.BrowserActivityRetentionDays, SecurityOperationalRetentionDays: policy.SecurityOperationalRetentionDays,
-		AuditRetentionDays: policy.AuditRetentionDays, ExportRetentionDays: policy.ExportRetentionDays,
-		DeletionGraceDays:        policy.DeletionGraceDays,
-		CandidateNotices:         policy.CandidateNotices,
-		AutomaticDeletionEnabled: policy.AutomaticDeletionEnabled,
-		CreatedAt:                model.FormatRFC3339(policy.CreatedAt),
-		UpdatedAt:                model.FormatRFC3339(policy.UpdatedAt),
+		Revision:                         policy.Revision,
+		SubmissionRetentionDays:          policy.SubmissionRetentionDays,
+		IntegrityRetentionDays:           policy.IntegrityRetentionDays,
+		BrowserActivityRetentionDays:     policy.BrowserActivityRetentionDays,
+		SecurityOperationalRetentionDays: policy.SecurityOperationalRetentionDays,
+		AuditRetentionDays:               policy.AuditRetentionDays,
+		ExportRetentionDays:              policy.ExportRetentionDays,
+		DeletionGraceDays:                policy.DeletionGraceDays,
+		CandidateNotices:                 policy.CandidateNotices,
+		AutomaticDeletionEnabled:         policy.AutomaticDeletionEnabled,
+		CreatedAt:                        model.FormatRFC3339(policy.CreatedAt),
+		UpdatedAt:                        model.FormatRFC3339(policy.UpdatedAt),
 	}
 }

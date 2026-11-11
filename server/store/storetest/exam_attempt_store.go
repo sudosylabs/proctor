@@ -28,7 +28,7 @@ type ExamAttemptSQLProbe struct {
 	UnresolvedFocusLossMissing   func(*testing.T, context.Context, model.ExamAttemptID, int64) int64
 	AgeFocusLossPending          func(*testing.T, context.Context, model.ExamAttemptID, int64, int64, time.Duration)
 	FocusLossPersistence         func(*testing.T, context.Context, model.ExamAttemptID, int64) FocusLossPersistenceProbe
-	ConcurrentExamAttempt        store.ExamAttemptStore
+	ConcurrentExamFocusLoss      store.ExamFocusLossStore
 	AssertFocusLossSchema        func(*testing.T, context.Context)
 	// LeadDatabaseClock moves one Session's node-clock instants after the
 	// database clock, as a creating node whose clock leads PostgreSQL does.
@@ -143,6 +143,9 @@ func TestExamAttemptStore(t *testing.T, ss store.Store, probes ...ExamAttemptSQL
 
 	connected, err := ss.ExamAttempt().Connect(ctx, input, command)
 	require.NoError(t, err)
+	require.True(t, connected.ConsistentWith(fixture.class.ID, fixture.candidate.ID, fixture.session.ID, fixture.sitting.ID), "Connect returned a result inconsistent with its request")
+	require.True(t, connected.RuntimeCapabilities.ConsistentWithBrowserPolicy(connected.BrowserPolicy), "Connect returned a result inconsistent with its request")
+	require.True(t, connected.RuntimeCapabilities.ConsistentWithLiveCorrections(connected.LiveCorrections), "Connect returned a result inconsistent with its request")
 	require.False(t, connected.Replayed)
 	require.True(t, connected.FirstAdmission)
 	require.True(t, connected.ConnectionOpened)
@@ -178,6 +181,7 @@ func TestExamAttemptStore(t *testing.T, ss store.Store, probes ...ExamAttemptSQL
 	replayInput.AuditEventID, replayInput.AuditAt = saveExamAttemptAudit(t, ctx, ss, fixture).ID, model.NowUTC()
 	replayed, err := ss.ExamAttempt().Connect(ctx, &replayInput, command)
 	require.NoError(t, err)
+	require.True(t, replayed.ConsistentWith(fixture.class.ID, fixture.candidate.ID, fixture.session.ID, fixture.sitting.ID), "Connect replay returned a result inconsistent with its request")
 	require.True(t, replayed.Replayed)
 	require.False(t, replayed.ConnectionOpened)
 	require.Equal(t, connected.Attempt.ID, replayed.Attempt.ID)
@@ -193,6 +197,9 @@ func TestExamAttemptStore(t *testing.T, ss store.Store, probes ...ExamAttemptSQL
 		DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint, ConnectionID: input.ConnectionID, ContinuityCredentialHash: credentialHash}
 	presentation, err := ss.ExamAttempt().GetCandidatePresentation(ctx, access)
 	require.NoError(t, err)
+	require.True(t, presentation.Consistent(), "GetCandidatePresentation returned a result inconsistent with its request")
+	require.True(t, presentation.RuntimeCapabilities.ConsistentWithBrowserPolicy(presentation.BrowserPolicy), "GetCandidatePresentation returned a result inconsistent with its request")
+	require.True(t, presentation.RuntimeCapabilities.ConsistentWithLiveCorrections(presentation.LiveCorrections), "GetCandidatePresentation returned a result inconsistent with its request")
 	require.Equal(t, input.AttemptID, presentation.AttemptID)
 	require.Equal(t, fixture.revisionID, presentation.RuntimeCapabilities.ExamRevision.AdmissionRevisionID)
 	require.Equal(t, fixture.revisionID, presentation.RuntimeCapabilities.ExamRevision.CurrentRevisionID)
@@ -202,6 +209,7 @@ func TestExamAttemptStore(t *testing.T, ss store.Store, probes ...ExamAttemptSQL
 	pausedFocusInput := testExamAttemptFocusLoss(t, ctx, ss, fixture, connected, credentialHash, probes...)
 	page, err := ss.ExamAttemptWorkspace().List(ctx, store.CandidateWorkspaceListOptions{Access: access, ExpectedCursor: -1, Limit: 200})
 	require.NoError(t, err)
+	require.True(t, page.Consistent(), "List returned a result inconsistent with its request")
 	require.False(t, page.HasMore)
 	require.Len(t, page.Items, 2)
 	require.Equal(t, "cmd", page.Items[0].Path)
@@ -219,10 +227,11 @@ func TestExamAttemptStore(t *testing.T, ss store.Store, probes ...ExamAttemptSQL
 		AuditEventID: saveExamSittingAudit(t, ctx, ss, fixture.manager.ID, fixture.examID, fixture.unitID).ID, AuditAt: model.NowUTC()},
 		examCommand(fixture.manager.ID, "exam.sitting.pause", "attempt-pause", "attempt-pause"))
 	require.NoError(t, err)
-	_, err = ss.ExamAttempt().GetCandidatePresentation(ctx, access)
+	pausedPresentation, err := ss.ExamAttempt().GetCandidatePresentation(ctx, access)
 	require.NoError(t, err)
+	require.True(t, pausedPresentation.Consistent(), "GetCandidatePresentation returned a result inconsistent with its request")
 	pausedFocusInput.AuditEventID, pausedFocusInput.AuditAt = saveExamAttemptAudit(t, ctx, ss, fixture).ID, model.NowUTC()
-	pausedFocus, err := ss.ExamAttempt().RecordFocusLoss(ctx, pausedFocusInput)
+	pausedFocus, err := ss.ExamFocusLoss().RecordFocusLoss(ctx, pausedFocusInput)
 	require.NoError(t, err)
 	require.Equal(t, pausedFocusInput.Sequence, pausedFocus.AcceptedSequence)
 	require.True(t, pausedFocus.Qualified)
@@ -235,6 +244,7 @@ func TestExamAttemptStore(t *testing.T, ss store.Store, probes ...ExamAttemptSQL
 	pausedReplayInput.AuditEventID, pausedReplayInput.AuditAt = saveExamAttemptAudit(t, ctx, ss, fixture).ID, model.NowUTC()
 	pausedReplay, err := ss.ExamAttempt().Connect(ctx, &pausedReplayInput, command)
 	require.NoError(t, err)
+	require.True(t, pausedReplay.ConsistentWith(fixture.class.ID, fixture.candidate.ID, fixture.session.ID, fixture.sitting.ID), "Connect replay returned a result inconsistent with its request")
 	require.True(t, pausedReplay.Replayed)
 	require.False(t, pausedReplay.ConnectionOpened)
 	require.Equal(t, connected.Connection.ID, pausedReplay.Connection.ID)
@@ -263,6 +273,7 @@ func TestExamAttemptStore(t *testing.T, ss store.Store, probes ...ExamAttemptSQL
 	convergedOpen, err := ss.ExamAttempt().Connect(ctx, &openConnectionInput,
 		examCommand(fixture.candidate.ID, store.ExamAttemptConnectOperation, "attempt-open-connection", "attempt-open-connection"))
 	require.NoError(t, err)
+	require.True(t, convergedOpen.ConsistentWith(fixture.class.ID, fixture.candidate.ID, fixture.session.ID, fixture.sitting.ID), "Connect returned a result inconsistent with its request")
 	require.False(t, convergedOpen.FirstAdmission)
 	require.False(t, convergedOpen.ConnectionOpened)
 	require.Equal(t, connected.Connection.ID, convergedOpen.Connection.ID)
@@ -286,12 +297,17 @@ func TestExamAttemptStore(t *testing.T, ss store.Store, probes ...ExamAttemptSQL
 
 	manager, err := ss.ExamAttempt().Get(ctx, fixture.examID, input.AttemptID)
 	require.NoError(t, err)
+	require.True(t, manager.ConsistentWith(fixture.examID), "Get returned a result inconsistent with its request")
+	require.True(t, manager.ConsistentWithExamAndSitting(fixture.examID, fixture.sitting.ID), "Get returned a result inconsistent with its request")
 	require.Equal(t, input.AttemptID, manager.Attempt.ID)
 	require.NotNil(t, manager.LatestParticipation)
 	require.NotNil(t, manager.CurrentConnection)
 	listed, err := ss.ExamAttempt().List(ctx, store.ExamAttemptManagerListOptions{ExamID: fixture.examID, SittingID: fixture.sitting.ID,
 		ExcludeCandidateUserID: fixture.manager.ID, Limit: 201})
 	require.NoError(t, err)
+	for _, row := range listed {
+		require.True(t, row.ConsistentWithExamAndSitting(fixture.examID, fixture.sitting.ID), "List returned a row inconsistent with its request")
+	}
 	require.Len(t, listed, 1)
 	require.Equal(t, input.AttemptID, listed[0].Attempt.ID)
 	activity, err := ss.ExamAttempt().ListCandidateActivity(ctx, store.CandidateExamActivityListOptions{
@@ -315,6 +331,7 @@ func TestExamAttemptStore(t *testing.T, ss store.Store, probes ...ExamAttemptSQL
 		ReallowAuthorized: true, Limit: 50,
 	})
 	require.NoError(t, err)
+	require.True(t, statuses.ConsistentWith(fixture.examID, fixture.sitting.ID), "ListSittingCandidateStatuses returned a result inconsistent with its request")
 	require.NotNil(t, statuses)
 	require.False(t, statuses.ServerTime.IsZero())
 	require.Equal(t, fixture.examID, statuses.ExamID)
@@ -339,11 +356,13 @@ func TestExamAttemptStore(t *testing.T, ss store.Store, probes ...ExamAttemptSQL
 	require.True(t, store.IsNotFound(err), "CloseConnection(foreign Session) error")
 	closed, err := ss.ExamAttempt().CloseConnection(ctx, closeInput)
 	require.NoError(t, err)
+	require.True(t, closed.ConsistentWith(input.AttemptID, fixture.sitting.ID, input.ConnectionID), "CloseConnection returned a result inconsistent with its request")
 	require.True(t, closed.Changed)
 	require.Equal(t, model.AttemptConnectionClosed, closed.Connection.State)
 	closeInput.AuditEventID, closeInput.AuditAt = saveExamAttemptAudit(t, ctx, ss, fixture).ID, model.NowUTC()
 	closedAgain, err := ss.ExamAttempt().CloseConnection(ctx, closeInput)
 	require.NoError(t, err)
+	require.True(t, closedAgain.ConsistentWith(input.AttemptID, fixture.sitting.ID, input.ConnectionID), "CloseConnection returned a result inconsistent with its request")
 	require.False(t, closedAgain.Changed)
 	require.Equal(t, model.AttemptConnectionCloseTransport, closedAgain.Connection.CloseReason)
 	wrongCredentialInput := *input
@@ -372,6 +391,7 @@ func TestExamAttemptStore(t *testing.T, ss store.Store, probes ...ExamAttemptSQL
 	reconnected, err := ss.ExamAttempt().Connect(ctx, &reconnectInput,
 		examCommand(fixture.candidate.ID, store.ExamAttemptConnectOperation, "attempt-reconnect", "attempt-reconnect"))
 	require.NoError(t, err)
+	require.True(t, reconnected.ConsistentWith(fixture.class.ID, fixture.candidate.ID, fixture.session.ID, fixture.sitting.ID), "Connect returned a result inconsistent with its request")
 	require.False(t, reconnected.FirstAdmission)
 	require.True(t, reconnected.ConnectionOpened)
 	require.Equal(t, connected.Attempt.ID, reconnected.Attempt.ID)
@@ -381,8 +401,9 @@ func TestExamAttemptStore(t *testing.T, ss store.Store, probes ...ExamAttemptSQL
 	require.Equal(t, reconnectInput.ConnectionID, reconnected.Connection.ID)
 	closeInput.ConnectionID = reconnected.Connection.ID
 	closeInput.AuditEventID, closeInput.AuditAt = saveExamAttemptAudit(t, ctx, ss, fixture).ID, model.NowUTC()
-	_, err = ss.ExamAttempt().CloseConnection(ctx, closeInput)
+	reconnectedClosed, err := ss.ExamAttempt().CloseConnection(ctx, closeInput)
 	require.NoError(t, err)
+	require.True(t, reconnectedClosed.ConsistentWith(input.AttemptID, fixture.sitting.ID, reconnected.Connection.ID), "CloseConnection returned a result inconsistent with its request")
 
 	endedAt := model.NowUTC()
 	endedMembership, err := ss.ClassMember().SeedEnd(ctx, &store.ClassMemberSeedEnd{ID: fixture.membership.ID, ExpectedRevision: fixture.membership.Revision, EndAt: endedAt})
@@ -411,6 +432,7 @@ func TestExamAttemptStore(t *testing.T, ss store.Store, probes ...ExamAttemptSQL
 	restoredConnection, err := ss.ExamAttempt().Connect(ctx, &restoredInput,
 		examCommand(fixture.candidate.ID, store.ExamAttemptConnectOperation, "attempt-restored", "attempt-restored"))
 	require.NoError(t, err)
+	require.True(t, restoredConnection.ConsistentWith(fixture.class.ID, fixture.candidate.ID, fixture.session.ID, fixture.sitting.ID), "Connect returned a result inconsistent with its request")
 	require.False(t, restoredConnection.FirstAdmission, "Connect(after membership restore) = %#v; ended membership=%#v", restoredConnection, endedMembership)
 	require.True(t, restoredConnection.ConnectionOpened, "Connect(after membership restore) = %#v; ended membership=%#v", restoredConnection, endedMembership)
 	require.Equal(t, connected.Participation.Generation, restoredConnection.Participation.Generation, "Connect(after membership restore) = %#v; ended membership=%#v", restoredConnection, endedMembership)
@@ -422,6 +444,7 @@ func TestExamAttemptStore(t *testing.T, ss store.Store, probes ...ExamAttemptSQL
 	closedReplayInput.AuditEventID, closedReplayInput.AuditAt = saveExamAttemptAudit(t, ctx, ss, fixture).ID, model.NowUTC()
 	closedReplay, err := ss.ExamAttempt().Connect(ctx, &closedReplayInput, command)
 	require.NoError(t, err)
+	require.True(t, closedReplay.ConsistentWith(fixture.class.ID, fixture.candidate.ID, fixture.session.ID, fixture.sitting.ID), "Connect replay returned a result inconsistent with its request")
 	require.True(t, closedReplay.Replayed)
 	require.False(t, closedReplay.ConnectionOpened)
 	require.Equal(t, model.AttemptConnectionClosed, closedReplay.Connection.State)
@@ -452,6 +475,7 @@ func TestExamAttemptStore(t *testing.T, ss store.Store, probes ...ExamAttemptSQL
 	}
 	currentSitting, err := ss.ExamSitting().Get(ctx, fixture.examID, fixture.sitting.ID)
 	require.NoError(t, err)
+	require.True(t, currentSitting.ConsistentAndValidWith(fixture.sitting.ID, fixture.examID), "Get returned a result inconsistent with its request")
 	closeAt := model.NowUTC()
 	closing, err := ss.ExamSitting().EarlyClose(ctx, &store.ExamSittingManagerTransition{ExamID: fixture.examID,
 		SittingID: fixture.sitting.ID, ActorUserID: fixture.manager.ID, ExpectedRevision: currentSitting.Sitting.Revision,
@@ -473,6 +497,19 @@ func TestExamAttemptStore(t *testing.T, ss store.Store, probes ...ExamAttemptSQL
 	if len(probes) != 0 && probes[0].FocusLossPersistence != nil {
 		testExamAttemptFocusLossPolicies(t, ctx, ss, probes[0])
 	}
+	t.Run("ResolveCandidateResource returns the requested Resource", func(t *testing.T) {
+		resourceFixture := newExamAttemptFixtureWithResource(t, ctx, ss)
+		resourceConnected, resourceFocus := connectFocusLossFixture(t, ctx, ss, resourceFixture, "attempt-resource-connect")
+		resourceAccess := store.CandidateAttemptAccess{AttemptID: resourceConnected.Attempt.ID, CandidateUserID: resourceFixture.candidate.ID,
+			SessionID: resourceFixture.session.ID, DesktopRegistrationID: resourceFixture.session.DesktopRegistrationID,
+			DPoPKeyThumbprint: resourceFixture.session.DPoPKeyThumbprint, ConnectionID: resourceConnected.Connection.ID,
+			ContinuityCredentialHash: resourceFocus.ContinuityCredentialHash}
+		content, resolveErr := ss.ExamAttempt().ResolveCandidateResource(ctx, resourceAccess, resourceFixture.resourceID)
+		require.NoError(t, resolveErr)
+		require.True(t, content.ConsistentWith(resourceFixture.resourceID), "ResolveCandidateResource returned a result inconsistent with its request")
+		_, resolveErr = ss.ExamAttempt().ResolveCandidateResource(ctx, resourceAccess, model.NewExamResourceID())
+		require.True(t, store.IsNotFound(resolveErr), "ResolveCandidateResource(unknown Resource) error")
+	})
 }
 
 func TestExamAttemptCompatibilityPolicySerialization(
@@ -571,6 +608,7 @@ func TestSessionRevocationAttemptFence(t *testing.T, ss store.Store) {
 		ReallowAuthorized: true, Limit: 50,
 	})
 	require.NoError(t, err)
+	require.True(t, statuses.ConsistentWith(fixture.examID, fixture.sitting.ID), "ListSittingCandidateStatuses returned a result inconsistent with its request")
 	require.Len(t, statuses.Items, 1)
 	require.NotNil(t, statuses.Items[0].Attempt)
 	require.Equal(t, model.ExamAttemptSuspended, statuses.Items[0].Attempt.State)
@@ -587,6 +625,7 @@ func TestSessionRevocationAttemptFence(t *testing.T, ss store.Store) {
 		AuditEventID:     reallowAudit.ID, AuditAt: model.NowUTC(),
 	}, examCommand(fixture.manager.ID, store.ExamAttemptReallowOperation, "session-fence-reallow", "session-fence-reallow"))
 	require.NoError(t, err)
+	require.True(t, reallowed.ConsistentWith(fixture.examID, fixture.sitting.ID, fixture.class.ID, connected.Attempt.ID, statuses.Items[0].Attempt.Revision, statuses.Items[0].Suspension.ID, fixture.manager.ID), "ReallowAttempt returned a result inconsistent with its request")
 	require.Equal(t, model.ExamAttemptReady, reallowed.Attempt.State)
 	require.Equal(t, model.AttemptSuspensionClosed, reallowed.Suspension.State)
 	// PostgreSQL time decides the re-allow; the caller supplies no clock.
@@ -629,6 +668,7 @@ func TestSessionExpiryAttemptFence(t *testing.T, ss store.Store) {
 		ReallowAuthorized: true, Limit: 50,
 	})
 	require.NoError(t, err)
+	require.True(t, statuses.ConsistentWith(fixture.examID, fixture.sitting.ID), "ListSittingCandidateStatuses returned a result inconsistent with its request")
 	require.Len(t, statuses.Items, 1)
 	require.NotNil(t, statuses.Items[0].Attempt)
 	require.Equal(t, connected.Attempt.ID, statuses.Items[0].Attempt.ID)
@@ -660,6 +700,7 @@ func testExamAttemptParticipationExpiry(t *testing.T, ctx context.Context, ss st
 	connected, err := ss.ExamAttempt().Connect(ctx, connect,
 		examCommand(candidate.ID, store.ExamAttemptConnectOperation, "attempt-expiry-connect", "attempt-expiry-connect"))
 	require.NoError(t, err)
+	require.True(t, connected.ConsistentWith(fixture.class.ID, candidate.ID, session.ID, fixture.sitting.ID), "Connect returned a result inconsistent with its request")
 	if probe.FenceRenewalPastDeadline != nil {
 		renewal := &store.ExamAttemptParticipationRenewal{DesktopCompatibilityPolicyRevision: 1, AttemptID: connected.Attempt.ID, ParticipationID: connected.Participation.ID,
 			ConnectionID: connected.Connection.ID, CandidateUserID: candidate.ID, SessionID: session.ID,
@@ -695,6 +736,8 @@ func testExamAttemptParticipationExpiry(t *testing.T, ctx context.Context, ss st
 	resolved, err := ss.ExamAttempt().ResolveParticipationExpiry(ctx, connected.Attempt.ID, connected.Participation.ID,
 		connected.Participation.Generation)
 	require.NoError(t, err)
+	require.True(t, resolved.ConsistentWith(connected.Attempt.ID, connected.Participation.ID, connected.Participation.Generation),
+		"ResolveParticipationExpiry returned a result inconsistent with its request")
 	require.Equal(t, selected.AttemptID, resolved.AttemptID, "ResolveParticipationExpiry() = %#v, listed = %#v", resolved, selected)
 	require.Equal(t, selected.ParticipationID, resolved.ParticipationID, "ResolveParticipationExpiry() = %#v, listed = %#v", resolved, selected)
 	require.Equal(t, selected.Generation, resolved.Generation, "ResolveParticipationExpiry() = %#v, listed = %#v", resolved, selected)
@@ -710,6 +753,7 @@ func testExamAttemptParticipationExpiry(t *testing.T, ctx context.Context, ss st
 	require.Error(t, err, "ExpireParticipation(with missing Audit) succeeded")
 	unchanged, err := ss.ExamAttempt().Get(ctx, fixture.examID, connected.Attempt.ID)
 	require.NoError(t, err)
+	require.True(t, unchanged.ConsistentWith(fixture.examID), "Get returned a result inconsistent with its request")
 	require.Equal(t, model.ExamAttemptActive, unchanged.Attempt.State)
 	require.Equal(t, connected.Attempt.Revision, unchanged.Attempt.Revision)
 	require.NotNil(t, unchanged.LatestParticipation)
@@ -744,11 +788,15 @@ func testExamAttemptParticipationExpiry(t *testing.T, ctx context.Context, ss st
 	require.Equal(t, second.Flag.ID, first.Flag.ID, "ExpireParticipation(concurrent) = %#v, %#v", first, second)
 	require.Equal(t, second.Suspension.ID, first.Suspension.ID, "ExpireParticipation(concurrent) = %#v, %#v", first, second)
 	require.True(t, first.DatabaseTime.Equal(second.DatabaseTime), "ExpireParticipation(concurrent) = %#v, %#v", first, second)
+	requireExpiryLinks(t, first, *resolved)
+	requireExpiryLinks(t, second, *resolved)
 	expired := first
 	if expired.Replayed {
 		expired = second
 	}
 	require.NotNil(t, expired)
+	require.True(t, expired.Participation.Consistent(), "ExpireParticipation returned a result inconsistent with its request")
+	require.True(t, expired.Suspension.ConsistentActiveOrAbsent(connected.Attempt.ID), "ExpireParticipation returned a result inconsistent with its request")
 	require.False(t, expired.Replayed)
 	require.NotNil(t, expired.Attempt)
 	require.NotNil(t, expired.Participation)
@@ -779,11 +827,16 @@ func testExamAttemptParticipationExpiry(t *testing.T, ctx context.Context, ss st
 	requireSuccessfulAudit(t, ctx, ss, concurrentAudit.ID)
 	managerSnapshot, err := ss.ExamAttempt().Get(ctx, fixture.examID, connected.Attempt.ID)
 	require.NoError(t, err)
+	require.True(t, managerSnapshot.ConsistentWith(fixture.examID), "Get returned a result inconsistent with its request")
+	require.True(t, managerSnapshot.ActiveSuspension.ConsistentActiveOrAbsent(connected.Attempt.ID), "Get returned a result inconsistent with its request")
 	require.NotNil(t, managerSnapshot.ActiveSuspension)
 	require.Equal(t, expired.Suspension.ID, managerSnapshot.ActiveSuspension.ID)
 	managerList, err := ss.ExamAttempt().List(ctx, store.ExamAttemptManagerListOptions{ExamID: fixture.examID,
 		SittingID: fixture.sitting.ID, ExcludeCandidateUserID: fixture.manager.ID, Limit: 201})
 	require.NoError(t, err)
+	for _, row := range managerList {
+		require.True(t, row.ConsistentWithExamAndSitting(fixture.examID, fixture.sitting.ID), "List returned a row inconsistent with its request")
+	}
 	foundActiveSuspension := false
 	for _, snapshot := range managerList {
 		if snapshot.Attempt.ID == connected.Attempt.ID && snapshot.ActiveSuspension != nil && snapshot.ActiveSuspension.ID == expired.Suspension.ID {
@@ -798,6 +851,7 @@ func testExamAttemptParticipationExpiry(t *testing.T, ctx context.Context, ss st
 	replayInput.AuditEventID, replayInput.AuditAt = replayAudit.ID, model.NowUTC()
 	replayed, err := ss.ExamAttempt().ExpireParticipation(ctx, &replayInput)
 	require.NoError(t, err)
+	require.True(t, replayed.Participation.Consistent(), "ExpireParticipation returned a result inconsistent with its request")
 	require.NotNil(t, replayed, "ExpireParticipation(replay) = %#v, first = %#v", replayed, expired)
 	require.True(t, replayed.Replayed, "ExpireParticipation(replay) = %#v, first = %#v", replayed, expired)
 	require.NotNil(t, replayed.Evidence, "ExpireParticipation(replay) = %#v, first = %#v", replayed, expired)
@@ -861,6 +915,8 @@ func testExamAttemptParticipationExpiry(t *testing.T, ctx context.Context, ss st
 		reallowAudit, reallowInput, reallowCommand = competingAudit, &competingInput, competingCommand
 	}
 	require.NotNil(t, reallowed)
+	require.True(t, reallowed.ConsistentWith(fixture.examID, fixture.sitting.ID, fixture.class.ID, expired.Attempt.ID, expired.Attempt.Revision, expired.Suspension.ID, fixture.manager.ID), "ReallowAttempt returned a result inconsistent with its request")
+	require.True(t, reallowed.Suspension.ConsistentClosedBy(expired.Attempt.ID, fixture.manager.ID), "ReallowAttempt returned a result inconsistent with its request")
 	require.False(t, reallowed.Replayed)
 	require.NotNil(t, reallowed.Attempt)
 	require.NotNil(t, reallowed.Suspension)
@@ -872,6 +928,7 @@ func testExamAttemptParticipationExpiry(t *testing.T, ctx context.Context, ss st
 	require.Equal(t, candidate.ID, reallowed.CandidateUserID)
 	managerSnapshot, err = ss.ExamAttempt().Get(ctx, fixture.examID, connected.Attempt.ID)
 	require.NoError(t, err)
+	require.True(t, managerSnapshot.ConsistentWith(fixture.examID), "Get returned a result inconsistent with its request")
 	require.Nil(t, managerSnapshot.ActiveSuspension)
 	reallowEvent, err := ss.Audit().Get(ctx, reallowAudit.ID)
 	require.NoError(t, err)
@@ -881,6 +938,7 @@ func testExamAttemptParticipationExpiry(t *testing.T, ctx context.Context, ss st
 	reallowReplay.AuditEventID, reallowReplay.AuditAt = reallowReplayAudit.ID, model.NowUTC()
 	replayedReallow, err := ss.ExamAttempt().ReallowAttempt(ctx, &reallowReplay, reallowCommand)
 	require.NoError(t, err)
+	require.True(t, replayedReallow.ConsistentWith(fixture.examID, fixture.sitting.ID, fixture.class.ID, expired.Attempt.ID, expired.Attempt.Revision, expired.Suspension.ID, fixture.manager.ID), "ReallowAttempt replay returned a result inconsistent with its request")
 	require.NotNil(t, replayedReallow)
 	require.True(t, replayedReallow.Replayed)
 	require.Equal(t, reallowed.Attempt.Revision, replayedReallow.Attempt.Revision)
@@ -892,6 +950,7 @@ func testExamAttemptParticipationExpiry(t *testing.T, ctx context.Context, ss st
 	expiryAfterReallow.AuditEventID, expiryAfterReallow.AuditAt = expiryAfterReallowAudit.ID, model.NowUTC()
 	retainedExpiry, err := ss.ExamAttempt().ExpireParticipation(ctx, &expiryAfterReallow)
 	require.NoError(t, err)
+	require.True(t, retainedExpiry.Participation.Consistent(), "ExpireParticipation returned a result inconsistent with its request")
 	require.NotNil(t, retainedExpiry, "ExpireParticipation(replay after re-allow) = %#v, first = %#v", retainedExpiry, expired)
 	require.True(t, retainedExpiry.Replayed, "ExpireParticipation(replay after re-allow) = %#v, first = %#v", retainedExpiry, expired)
 	require.Equal(t, model.ExamAttemptSuspended, retainedExpiry.Attempt.State, "ExpireParticipation(replay after re-allow) = %#v, first = %#v", retainedExpiry, expired)
@@ -920,6 +979,7 @@ func testExamAttemptParticipationExpiry(t *testing.T, ctx context.Context, ss st
 	next, err := ss.ExamAttempt().Connect(ctx, nextConnect,
 		examCommand(candidate.ID, store.ExamAttemptConnectOperation, "attempt-next-generation", "attempt-next-generation"))
 	require.NoError(t, err)
+	require.True(t, next.ConsistentWith(fixture.class.ID, candidate.ID, session.ID, fixture.sitting.ID), "Connect returned a result inconsistent with its request")
 	require.Equal(t, expired.Participation.Generation+1, next.Participation.Generation)
 	require.Equal(t, expired.Attempt.ID, next.Attempt.ID)
 	require.Equal(t, connected.Workspace.ID, next.Workspace.ID)
@@ -969,6 +1029,7 @@ func testExamAttemptParticipationRenewal(t *testing.T, ctx context.Context, ss s
 	prepareParticipationRenewalCoverage(t, ctx, ss, input)
 	renewed, err := ss.ExamAttempt().RenewParticipation(ctx, input)
 	require.NoError(t, err)
+	require.True(t, renewed.ConsistentWith(input.AttemptID, input.ParticipationID, fixture.candidate.ID, input.Generation, input.Sequence), "RenewParticipation returned a result inconsistent with its request")
 	require.NotNil(t, renewed)
 	require.Equal(t, input.AttemptID, renewed.AttemptID)
 	require.Equal(t, input.ParticipationID, renewed.ParticipationID)
@@ -980,6 +1041,7 @@ func testExamAttemptParticipationRenewal(t *testing.T, ctx context.Context, ss s
 
 	duplicate, err := ss.ExamAttempt().RenewParticipation(ctx, input)
 	require.NoError(t, err)
+	require.True(t, duplicate.ConsistentWith(input.AttemptID, input.ParticipationID, fixture.candidate.ID, input.Generation, input.Sequence), "RenewParticipation returned a result inconsistent with its request")
 	require.NotNil(t, duplicate, "RenewParticipation(duplicate) = %#v, first = %#v", duplicate, renewed)
 	require.True(t, duplicate.Duplicate, "RenewParticipation(duplicate) = %#v, first = %#v", duplicate, renewed)
 	require.Equal(t, renewed.AcceptedSequence, duplicate.AcceptedSequence, "RenewParticipation(duplicate) = %#v, first = %#v", duplicate, renewed)
@@ -989,6 +1051,7 @@ func testExamAttemptParticipationRenewal(t *testing.T, ctx context.Context, ss s
 	input.Sequence = 2
 	advanced, err := ss.ExamAttempt().RenewParticipation(ctx, input)
 	require.NoError(t, err)
+	require.True(t, advanced.ConsistentWith(input.AttemptID, input.ParticipationID, fixture.candidate.ID, input.Generation, input.Sequence), "RenewParticipation returned a result inconsistent with its request")
 	require.False(t, advanced.Duplicate, "RenewParticipation(advanced) = %#v, first = %#v", advanced, renewed)
 	require.Equal(t, int64(2), advanced.AcceptedSequence, "RenewParticipation(advanced) = %#v, first = %#v", advanced, renewed)
 	require.False(t, advanced.DatabaseTime.Before(renewed.DatabaseTime), "RenewParticipation(advanced) = %#v, first = %#v", advanced, renewed)
@@ -1017,6 +1080,8 @@ type examAttemptFixture struct {
 	unitID        model.AcademicUnitID
 	institutionID model.InstitutionID
 	membership    *model.ClassMember
+	// resourceID is the published Exam Resource of a fixture built with one.
+	resourceID model.ExamResourceID
 }
 
 func newExamAttemptFixture(t *testing.T, ctx context.Context, ss store.Store) examAttemptFixture {
@@ -1042,6 +1107,20 @@ func newExamAttemptFixtureWithPolicies(t *testing.T, ctx context.Context, ss sto
 
 func newExamAttemptFixtureWithCapacity(t *testing.T, ctx context.Context, ss store.Store, focus *model.FocusLossPolicy,
 	browser *model.BrowserPolicy, capacity model.ExamCapacityPolicy,
+) examAttemptFixture {
+	t.Helper()
+	return newExamAttemptFixtureWithOptions(t, ctx, ss, focus, browser, capacity, false)
+}
+
+// newExamAttemptFixtureWithResource publishes the fixture Revision with one
+// Exam Resource, whose identifier the fixture records.
+func newExamAttemptFixtureWithResource(t *testing.T, ctx context.Context, ss store.Store) examAttemptFixture {
+	t.Helper()
+	return newExamAttemptFixtureWithOptions(t, ctx, ss, nil, nil, model.ExamCapacityPolicy{}, true)
+}
+
+func newExamAttemptFixtureWithOptions(t *testing.T, ctx context.Context, ss store.Store, focus *model.FocusLossPolicy,
+	browser *model.BrowserPolicy, capacity model.ExamCapacityPolicy, withResource bool,
 ) examAttemptFixture {
 	t.Helper()
 	unit, programme := saveProgrammeParents(t, ctx, ss, "attempt-unit")
@@ -1079,6 +1158,16 @@ func newExamAttemptFixtureWithCapacity(t *testing.T, ctx context.Context, ss sto
 		}, examCommand(manager.ID, "exam.draft.browser_policy.configure", "attempt-browser-policy", "attempt-browser-policy"))
 		require.NoError(t, updateErr)
 		draftRevision = updated.Value.Draft.Revision
+	}
+	var resourceID model.ExamResourceID
+	if withResource {
+		resourceID = model.NewExamResourceID()
+		reserved := reserveExamResource(t, ctx, ss, created.Value.Exam.ID, manager.ID, resourceID, "Reference", 0, draftRevision,
+			now.Add(time.Millisecond), model.ExamResourceMediaText, nil)
+		finalized, finalizeErr := ss.ExamResource().FinalizeUpload(ctx, reserved.finalization,
+			examCommand(manager.ID, "exam.resource.add", "attempt-resource", "attempt-resource"))
+		require.NoError(t, finalizeErr)
+		draftRevision = finalized.Value.DraftRevision
 	}
 	directory := starterWorkspaceMutation(t, ctx, ss, created.Value.Exam.ID, manager.ID, programme.AcademicUnitID, draftRevision,
 		model.NewStarterWorkspaceEntryID(), "cmd", now.Add(time.Millisecond))
@@ -1130,7 +1219,7 @@ func newExamAttemptFixtureWithCapacity(t *testing.T, ctx context.Context, ss sto
 	session := saveRegisteredDesktopSession(t, ctx, ss, candidate.ID, unit.InstitutionID)
 	return examAttemptFixture{candidate: candidate, manager: manager, session: session, sitting: opened.Value.Sitting, class: class,
 		examID: created.Value.Exam.ID, revisionID: published.Revision.ID, unitID: programme.AcademicUnitID,
-		institutionID: unit.InstitutionID, membership: enrollment.Membership}
+		institutionID: unit.InstitutionID, membership: enrollment.Membership, resourceID: resourceID}
 }
 
 func saveRegisteredDesktopSession(t *testing.T, ctx context.Context, ss store.Store, userID model.UserID, institutionID model.InstitutionID) *model.Session {
@@ -1246,4 +1335,50 @@ func newExamAttemptAudit(fixture examAttemptFixture) *model.AuditEvent {
 	return &model.AuditEvent{ActorID: fixture.candidate.ID, Action: string(model.ActionExamSittingParticipate),
 		Resource: model.Resource{Type: model.ResourceExamSitting, ID: fixture.sitting.ID.String()}, ScopeType: model.RoleScopeClass,
 		ScopeID: fixture.class.ID.String(), Status: model.AuditStatusAttempt, NodeID: "test-node"}
+}
+
+// requireExpiryLinks asserts the scope and link facts of an expiry outcome
+// that the application does not re-check, against the due target it expired:
+// every part is present, names the target's scope, Attempt, Participation and
+// generation, is valid, and the evidence and Suspension link the outcome's
+// Flag.
+func requireExpiryLinks(t *testing.T, result *store.ExamAttemptParticipationExpiryResult, due store.ExamAttemptParticipationExpiryDue) {
+	t.Helper()
+	require.NotNil(t, result)
+	require.NotNil(t, result.Attempt)
+	require.NotNil(t, result.Participation)
+	require.NotNil(t, result.Connection)
+	require.NotNil(t, result.Evidence)
+	require.NotNil(t, result.Flag)
+	require.NotNil(t, result.Suspension)
+	require.Equal(t, due.ExamID, result.ExamID)
+	require.Equal(t, due.SittingID, result.SittingID)
+	require.Equal(t, due.ClassID, result.ClassID)
+	require.Equal(t, due.CandidateUserID, result.CandidateUserID)
+	require.NoError(t, result.Attempt.Validate())
+	require.Equal(t, due.AttemptID, result.Attempt.ID)
+	require.Equal(t, due.ExamID, result.Attempt.ExamID)
+	require.Equal(t, due.SittingID, result.Attempt.SittingID)
+	require.Equal(t, due.CandidateUserID, result.Attempt.CandidateUserID)
+	require.Equal(t, due.ParticipationID, result.Participation.ID)
+	require.Equal(t, due.AttemptID, result.Participation.AttemptID)
+	require.Equal(t, due.Generation, result.Participation.Generation)
+	require.True(t, result.Connection.ID.IsValid())
+	require.False(t, result.Connection.OpenedAt.IsZero())
+	require.True(t, result.Connection.CloseReason.IsValid())
+	require.NoError(t, result.Evidence.Validate())
+	require.NoError(t, result.Flag.Validate())
+	require.Equal(t, due.AttemptID, result.Evidence.AttemptID)
+	require.Equal(t, due.ParticipationID, result.Evidence.ParticipationID)
+	require.Equal(t, due.Generation, result.Evidence.Generation)
+	require.Equal(t, result.Flag.ID, result.Evidence.FlagID)
+	require.Equal(t, due.AttemptID, result.Flag.AttemptID)
+	require.Equal(t, due.Generation, result.Flag.Generation)
+	require.True(t, result.Suspension.ID.IsValid())
+	require.Equal(t, due.AttemptID, result.Suspension.AttemptID)
+	require.Equal(t, due.ParticipationID, result.Suspension.ParticipationID)
+	require.Equal(t, due.Generation, result.Suspension.Generation)
+	require.Equal(t, result.Flag.ID, result.Suspension.FlagID)
+	require.False(t, result.Suspension.StartedAt.IsZero())
+	require.False(t, result.DatabaseTime.IsZero())
 }

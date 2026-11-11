@@ -28,6 +28,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLAcademicPeriodStore implements store.AcademicPeriodStore on the
+// academic_periods table, reading owners through the academic_units tree.
 type SQLAcademicPeriodStore struct {
 	*SQLStore
 	academicPeriodsQuery sq.SelectBuilder
@@ -74,19 +76,37 @@ func (academicPeriodOutcome) outcomeDocument() {}
 func newAcademicPeriodOutcome(period *model.AcademicPeriod) academicPeriodOutcome {
 	row := newAcademicPeriodRow(period)
 	return academicPeriodOutcome{
-		ID: row.ID, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, ArchivedAt: OptionalTimeFromNullTime(row.ArchivedAt),
-		Revision: row.Revision, OwnerType: row.OwnerType, InstitutionID: outcomeString(row.InstitutionID),
-		AcademicUnitID: outcomeString(row.AcademicUnitID), Name: row.Name, DisplayName: row.DisplayName,
-		Description: row.Description, StartAt: row.StartAt, EndAt: row.EndAt,
+		ID:             row.ID,
+		CreatedAt:      row.CreatedAt,
+		UpdatedAt:      row.UpdatedAt,
+		ArchivedAt:     OptionalTimeFromNullTime(row.ArchivedAt),
+		Revision:       row.Revision,
+		OwnerType:      row.OwnerType,
+		InstitutionID:  outcomeString(row.InstitutionID),
+		AcademicUnitID: outcomeString(row.AcademicUnitID),
+		Name:           row.Name,
+		DisplayName:    row.DisplayName,
+		Description:    row.Description,
+		StartAt:        row.StartAt,
+		EndAt:          row.EndAt,
 	}
 }
 
 func (o academicPeriodOutcome) model() (*model.AcademicPeriod, error) {
 	return academicPeriodRow{
-		ID: o.ID, CreatedAt: o.CreatedAt, UpdatedAt: o.UpdatedAt, ArchivedAt: NullTimeFromOptional(o.ArchivedAt),
-		Revision: o.Revision, OwnerType: o.OwnerType, InstitutionID: outcomeNullString(o.InstitutionID),
-		AcademicUnitID: outcomeNullString(o.AcademicUnitID), Name: o.Name, DisplayName: o.DisplayName,
-		Description: o.Description, StartAt: o.StartAt, EndAt: o.EndAt,
+		ID:             o.ID,
+		CreatedAt:      o.CreatedAt,
+		UpdatedAt:      o.UpdatedAt,
+		ArchivedAt:     NullTimeFromOptional(o.ArchivedAt),
+		Revision:       o.Revision,
+		OwnerType:      o.OwnerType,
+		InstitutionID:  outcomeNullString(o.InstitutionID),
+		AcademicUnitID: outcomeNullString(o.AcademicUnitID),
+		Name:           o.Name,
+		DisplayName:    o.DisplayName,
+		Description:    o.Description,
+		StartAt:        o.StartAt,
+		EndAt:          o.EndAt,
 	}.model()
 }
 
@@ -123,19 +143,29 @@ func (s SQLAcademicPeriodStore) Create(ctx context.Context, input *store.Academi
 	if !input.Period.ID.IsValid() {
 		return nil, store.NewErrInvalidInput("academic_period", "id", input.Period.ID.String())
 	}
+
 	candidate := *input.Period
 	if err := candidate.Validate(); err != nil {
 		return nil, store.NewErrInvalidInput("academic_period", "value", nil).Wrap(err)
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "academic period creation", func(ctx context.Context, tx *sqlxTxWrapper) (*model.AcademicPeriod, error) {
+
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "academic period creation", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*model.AcademicPeriod, error) {
 		return createAcademicPeriod(ctx, tx, &candidate, &academicMutationAudit{eventID: input.AuditEventID, at: input.AuditAt})
 	})
 }
 
-func (s SQLAcademicPeriodStore) CreateIdempotently(ctx context.Context, input *store.AcademicPeriodCreation, command *store.CommandIdempotency) (*store.AcademicPeriodCommandResult, error) {
+func (s SQLAcademicPeriodStore) CreateIdempotently(
+	ctx context.Context,
+	input *store.AcademicPeriodCreation,
+	command *store.CommandIdempotency,
+) (*store.AcademicPeriodCommandResult, error) {
 	if input == nil || input.Period == nil || command == nil || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("academic_period", "idempotent_creation", nil)
 	}
+
 	candidate := *input.Period
 	if !candidate.ID.IsValid() {
 		return nil, store.NewErrInvalidInput("academic_period", "id", candidate.ID.String())
@@ -143,8 +173,10 @@ func (s SQLAcademicPeriodStore) CreateIdempotently(ctx context.Context, input *s
 	if err := candidate.Validate(); err != nil {
 		return nil, store.NewErrInvalidInput("academic_period", "value", nil).Wrap(err)
 	}
+
 	result, err := runIdempotentMutation(ctx, s.SQLStore, "idempotent academic period creation", idempotentMutation[*model.AcademicPeriod]{
-		command: command, auditEventID: input.AuditEventID,
+		command:      command,
+		auditEventID: input.AuditEventID,
 		execute: func(ctx context.Context, tx *sqlxTxWrapper) (*model.AcademicPeriod, error) {
 			return createAcademicPeriod(ctx, tx, &candidate, &academicMutationAudit{eventID: input.AuditEventID, at: input.AuditAt})
 		},
@@ -156,6 +188,7 @@ func (s SQLAcademicPeriodStore) CreateIdempotently(ctx context.Context, input *s
 			if err := decodeOutcome(data, &outcome); err != nil {
 				return nil, err
 			}
+
 			return outcome.model()
 		},
 		completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, period *model.AcademicPeriod, originalAuditID string) error {
@@ -166,6 +199,7 @@ func (s SQLAcademicPeriodStore) CreateIdempotently(ctx context.Context, input *s
 			if err != nil {
 				return err
 			}
+
 			_, err = completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", encoded, input.AuditAt)
 			return err
 		},
@@ -173,24 +207,33 @@ func (s SQLAcademicPeriodStore) CreateIdempotently(ctx context.Context, input *s
 	if err != nil {
 		return nil, err
 	}
+
 	return &store.AcademicPeriodCommandResult{Value: result.Value, Replayed: result.Replayed}, nil
 }
 
-func createAcademicPeriod(ctx context.Context, tx *sqlxTxWrapper, candidate *model.AcademicPeriod, audit *academicMutationAudit) (*model.AcademicPeriod, error) {
+func createAcademicPeriod(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	candidate *model.AcademicPeriod,
+	audit *academicMutationAudit,
+) (*model.AcademicPeriod, error) {
 	row := newAcademicPeriodRow(candidate)
 	if _, err := tx.NamedExec(ctx, `
-			INSERT INTO academic_periods (
-				id, created_at, updated_at, archived_at, revision, owner_type, institution_id, academic_unit_id,
-				name, display_name, description, start_at, end_at
-			) VALUES (
-				:id, :created_at, :updated_at, :archived_at, :revision, :owner_type, :institution_id, :academic_unit_id,
-				:name, :display_name, :description, :start_at, :end_at
-			)`, &row); err != nil {
+		INSERT INTO academic_periods (
+			id, created_at, updated_at, archived_at, revision, owner_type, institution_id,
+			academic_unit_id, name, display_name, description, start_at, end_at
+		)
+		VALUES (
+			:id, :created_at, :updated_at, :archived_at, :revision, :owner_type, :institution_id,
+			:academic_unit_id, :name, :display_name, :description, :start_at, :end_at
+		)`, &row); err != nil {
 		return nil, fmt.Errorf("create academic period: %w", translateError("academic_period", candidate.ID.String(), err))
 	}
+
 	if err := audit.complete(ctx, tx, candidate.Auditable()); err != nil {
 		return nil, err
 	}
+
 	return candidate, nil
 }
 
@@ -238,56 +281,94 @@ func (s SQLAcademicPeriodStore) ListVisible(
 	visibility store.AcademicPeriodVisibilityScope,
 	options store.AcademicPeriodListOptions,
 ) ([]*model.AcademicPeriod, error) {
-	if !visibility.InstitutionID.IsValid() || options.Limit < 1 || options.Limit > maximumAcademicPageProbe ||
-		options.AfterID.IsZero() != options.AfterStartAt.IsZero() || (!options.AfterID.IsZero() && !options.AfterID.IsValid()) ||
-		len(visibility.AcademicUnitRootIDs) > 256 || !validVisibilityIDs(visibility.AcademicUnitRootIDs) {
+	if !visibility.InstitutionID.IsValid() ||
+		options.Limit < 1 ||
+		options.Limit > maximumAcademicPageProbe ||
+		options.AfterID.IsZero() != options.AfterStartAt.IsZero() ||
+		(!options.AfterID.IsZero() && !options.AfterID.IsValid()) ||
+		len(visibility.AcademicUnitRootIDs) > 256 ||
+		!validVisibilityIDs(visibility.AcademicUnitRootIDs) {
 		return nil, store.NewErrInvalidInput("academic_period", "visibility", visibility)
 	}
+
 	query := s.academicPeriodsQuery.Where(sq.Eq{"academic_periods.archived_at": nil})
 	if visibility.InstitutionWide {
 		query = query.Where(`(
-			(academic_periods.owner_type = ? AND academic_periods.institution_id = ?)
-			OR (academic_periods.owner_type = ? AND academic_periods.academic_unit_id IN (
-				SELECT id FROM academic_units WHERE institution_id = ? AND archived_at IS NULL
-			))
-		)`, model.ResourceInstitution, visibility.InstitutionID, model.ResourceAcademicUnit, visibility.InstitutionID)
+				(academic_periods.owner_type = ? AND academic_periods.institution_id = ?)
+				OR (
+					academic_periods.owner_type = ?
+					AND academic_periods.academic_unit_id IN (
+						SELECT id
+						FROM academic_units
+						WHERE institution_id = ?
+							AND archived_at IS NULL
+					)
+				)
+			)`, model.ResourceInstitution, visibility.InstitutionID, model.ResourceAcademicUnit, visibility.InstitutionID)
 	} else if len(visibility.AcademicUnitRootIDs) > 0 {
-		query = query.Where(`(
-			(academic_periods.owner_type = ? AND academic_periods.institution_id = ?)
-			OR (academic_periods.owner_type = ? AND academic_periods.academic_unit_id IN (
-				WITH RECURSIVE visible_units AS (
-					SELECT id FROM academic_units WHERE id = ANY(?) AND institution_id = ? AND archived_at IS NULL
-					UNION ALL SELECT child.id FROM academic_units child
-					JOIN visible_units parent ON child.parent_id = parent.id
-					WHERE child.archived_at IS NULL
-				) SELECT id FROM visible_units
-			))
-		)`, model.ResourceInstitution, visibility.InstitutionID, model.ResourceAcademicUnit,
-			pq.Array(idStrings(visibility.AcademicUnitRootIDs)), visibility.InstitutionID)
+		query = query.Where(
+			`(
+				(academic_periods.owner_type = ? AND academic_periods.institution_id = ?)
+				OR (
+					academic_periods.owner_type = ?
+					AND academic_periods.academic_unit_id IN (
+						WITH RECURSIVE visible_units AS (
+							SELECT id
+							FROM academic_units
+							WHERE id = ANY(?)
+								AND institution_id = ?
+								AND archived_at IS NULL
+							UNION ALL
+							SELECT child.id
+							FROM academic_units child
+							JOIN visible_units parent ON child.parent_id = parent.id
+							WHERE child.archived_at IS NULL
+						)
+						SELECT id
+						FROM visible_units
+					)
+				)
+			)`,
+			model.ResourceInstitution,
+			visibility.InstitutionID,
+			model.ResourceAcademicUnit,
+			pq.Array(idStrings(visibility.AcademicUnitRootIDs)),
+			visibility.InstitutionID,
+		)
 	} else {
 		query = query.Where("FALSE")
 	}
+
 	if term := strings.TrimSpace(options.Term); term != "" {
 		pattern := directorySearchPattern(term)
 		query = query.Where("(academic_periods.name ILIKE ? ESCAPE '!' OR academic_periods.display_name ILIKE ? ESCAPE '!')", pattern, pattern)
 	}
+
 	if !options.AfterID.IsZero() {
-		query = query.Where("(academic_periods.start_at, academic_periods.name, academic_periods.id) > (?, ?, ?)",
-			model.TimeUTC(options.AfterStartAt), options.AfterName, options.AfterID)
+		query = query.Where(
+			"(academic_periods.start_at, academic_periods.name, academic_periods.id) > (?, ?, ?)",
+			model.TimeUTC(options.AfterStartAt),
+			options.AfterName,
+			options.AfterID,
+		)
 	}
+
 	query = query.OrderBy("academic_periods.start_at", "academic_periods.name", "academic_periods.id").Limit(uint64(options.Limit))
 	rows := []academicPeriodRow{}
 	if err := s.GetMaster().SelectBuilder(ctx, &rows, query); err != nil {
 		return nil, fmt.Errorf("list visible academic periods: %w", err)
 	}
+
 	result := make([]*model.AcademicPeriod, 0, len(rows))
 	for _, row := range rows {
 		period, err := row.model()
 		if err != nil {
 			return nil, err
 		}
+
 		result = append(result, period)
 	}
+
 	return result, nil
 }
 
@@ -305,23 +386,38 @@ func (s SQLAcademicPeriodStore) Update(ctx context.Context, input *store.Academi
 	return s.updateAcademicPeriod(ctx, &candidate, &academicMutationAudit{eventID: input.AuditEventID, at: input.AuditAt})
 }
 
-func (s SQLAcademicPeriodStore) updateAcademicPeriod(ctx context.Context, candidate *model.AcademicPeriod, audit *academicMutationAudit) (*model.AcademicPeriod, error) {
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "academic period update", func(ctx context.Context, tx *sqlxTxWrapper) (*model.AcademicPeriod, error) {
+func (s SQLAcademicPeriodStore) updateAcademicPeriod(
+	ctx context.Context,
+	candidate *model.AcademicPeriod,
+	audit *academicMutationAudit,
+) (*model.AcademicPeriod, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "academic period update", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*model.AcademicPeriod, error) {
 		row := newAcademicPeriodRow(candidate)
 		result, err := tx.NamedExec(ctx, `
 			UPDATE academic_periods
-			   SET updated_at = :updated_at, revision = :revision, name = :name, display_name = :display_name,
-			       description = :description, start_at = :start_at, end_at = :end_at
-			 WHERE id = :id AND owner_type = :owner_type
-			   AND institution_id IS NOT DISTINCT FROM :institution_id
-			   AND academic_unit_id IS NOT DISTINCT FROM :academic_unit_id
-			   AND archived_at IS NULL
-			   AND revision = :expected_revision`, map[string]any{
-			"id": candidate.ID.String(), "updated_at": row.UpdatedAt,
-			"revision": candidate.Revision, "owner_type": row.OwnerType,
-			"institution_id": row.InstitutionID, "academic_unit_id": row.AcademicUnitID,
-			"name": row.Name, "display_name": row.DisplayName, "description": row.Description,
-			"start_at": row.StartAt, "end_at": row.EndAt,
+			SET updated_at = :updated_at, revision = :revision, name = :name,
+				display_name = :display_name, description = :description, start_at = :start_at,
+				end_at = :end_at
+			WHERE id = :id
+				AND owner_type = :owner_type
+				AND institution_id IS NOT DISTINCT FROM :institution_id
+				AND academic_unit_id IS NOT DISTINCT FROM :academic_unit_id
+				AND archived_at IS NULL
+				AND revision = :expected_revision`, map[string]any{
+			"id":                candidate.ID.String(),
+			"updated_at":        row.UpdatedAt,
+			"revision":          candidate.Revision,
+			"owner_type":        row.OwnerType,
+			"institution_id":    row.InstitutionID,
+			"academic_unit_id":  row.AcademicUnitID,
+			"name":              row.Name,
+			"display_name":      row.DisplayName,
+			"description":       row.Description,
+			"start_at":          row.StartAt,
+			"end_at":            row.EndAt,
 			"expected_revision": candidate.Revision - 1,
 		})
 		if err != nil {
@@ -333,6 +429,7 @@ func (s SQLAcademicPeriodStore) updateAcademicPeriod(ctx context.Context, candid
 		if err := audit.complete(ctx, tx, candidate.Auditable()); err != nil {
 			return nil, err
 		}
+
 		return candidate, nil
 	})
 }
@@ -341,17 +438,39 @@ func (s SQLAcademicPeriodStore) updateAcademicPeriod(ctx context.Context, candid
 // positive ExpectedRevision must match the stored revision, and Classes or
 // Class Members still active in the period make it a conflict.
 func (s SQLAcademicPeriodStore) Archive(ctx context.Context, input *store.AcademicPeriodArchive) (*model.AcademicPeriod, error) {
-	if input == nil || !input.ID.IsValid() || input.ArchiveAt.IsZero() || input.ExpectedRevision < 0 || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+	if input == nil ||
+		!input.ID.IsValid() ||
+		input.ArchiveAt.IsZero() ||
+		input.ExpectedRevision < 0 ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("academic_period", "archive", nil)
 	}
-	return s.archiveAcademicPeriod(ctx, input.ID, input.ArchiveAt, input.ExpectedRevision, &academicMutationAudit{eventID: input.AuditEventID, at: input.AuditAt})
+
+	return s.archiveAcademicPeriod(
+		ctx,
+		input.ID,
+		input.ArchiveAt,
+		input.ExpectedRevision,
+		&academicMutationAudit{eventID: input.AuditEventID, at: input.AuditAt},
+	)
 }
 
-func (s SQLAcademicPeriodStore) archiveAcademicPeriod(ctx context.Context, id model.AcademicPeriodID, archiveAt time.Time, expectedRevision int64, audit *academicMutationAudit) (*model.AcademicPeriod, error) {
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "academic period archive", func(ctx context.Context, tx *sqlxTxWrapper) (*model.AcademicPeriod, error) {
+func (s SQLAcademicPeriodStore) archiveAcademicPeriod(
+	ctx context.Context,
+	id model.AcademicPeriodID,
+	archiveAt time.Time,
+	expectedRevision int64,
+	audit *academicMutationAudit,
+) (*model.AcademicPeriod, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "academic period archive", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*model.AcademicPeriod, error) {
 		if err := lockAcademicPeriodLifecycle(ctx, tx); err != nil {
 			return nil, err
 		}
+
 		var row academicPeriodRow
 		query := s.academicPeriodsQuery.Where(sq.Eq{"academic_periods.id": id, "academic_periods.archived_at": nil})
 		if err := tx.GetBuilder(ctx, &row, query); err != nil {
@@ -360,26 +479,49 @@ func (s SQLAcademicPeriodStore) archiveAcademicPeriod(ctx context.Context, id mo
 		if err := requireAcademicRevision("academic_period", expectedRevision, row.Revision); err != nil {
 			return nil, err
 		}
+
 		var dependent bool
 		if err := tx.Get(ctx, &dependent, `SELECT EXISTS (
-		SELECT 1 FROM classes WHERE academic_period_id = ? AND archived_at IS NULL
-		UNION ALL SELECT 1 FROM class_members WHERE academic_period_id = ? AND archived_at IS NULL
-	)`, id, id); err != nil {
+				SELECT 1
+				FROM classes
+				WHERE academic_period_id = ?
+					AND archived_at IS NULL
+				UNION ALL
+				SELECT 1
+				FROM class_members
+				WHERE academic_period_id = ?
+					AND archived_at IS NULL
+			)`, id, id); err != nil {
 			return nil, fmt.Errorf("check academic period archive dependencies: %w", err)
 		}
+
 		if dependent {
 			return nil, store.NewErrConflict("academic_period", "academic_period_has_active_dependents", nil)
 		}
-		result, err := tx.Exec(ctx, `UPDATE academic_periods SET updated_at = GREATEST(updated_at, ?), archived_at = GREATEST(created_at, ?), revision = revision + 1 WHERE id = ? AND archived_at IS NULL AND revision = ?`, model.TimeUTC(archiveAt), model.TimeUTC(archiveAt), id, row.Revision)
+
+		result, err := tx.Exec(
+			ctx,
+			`UPDATE academic_periods
+			SET updated_at = GREATEST(updated_at, ?), archived_at = GREATEST(created_at, ?),
+				revision = revision + 1
+			WHERE id = ?
+				AND archived_at IS NULL
+				AND revision = ?`,
+			model.TimeUTC(archiveAt),
+			model.TimeUTC(archiveAt),
+			id,
+			row.Revision,
+		)
 		if err != nil {
 			return nil, fmt.Errorf("archive academic period: %w", err)
 		}
 		if err = requireRevisionAffected(ctx, tx, result, "academic_period", "academic_periods", id.String()); err != nil {
 			return nil, err
 		}
-		if err := tx.GetBuilder(ctx, &row, s.academicPeriodsQuery.Where(sq.Eq{"academic_periods.id": id})); err != nil {
-			return nil, fmt.Errorf("read archived academic period: %w", err)
+		if getBuilderErr := tx.GetBuilder(ctx, &row, s.academicPeriodsQuery.Where(sq.Eq{"academic_periods.id": id})); getBuilderErr != nil {
+			return nil, fmt.Errorf("read archived academic period: %w", getBuilderErr)
 		}
+
 		period, err := row.model()
 		if err != nil {
 			return nil, err
@@ -387,6 +529,7 @@ func (s SQLAcademicPeriodStore) archiveAcademicPeriod(ctx context.Context, id mo
 		if err := audit.complete(ctx, tx, period.Auditable()); err != nil {
 			return nil, err
 		}
+
 		return period, nil
 	})
 }
@@ -426,29 +569,35 @@ func (row academicPeriodRow) model() (*model.AcademicPeriod, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	var owner model.AcademicPeriodOwner
 	switch model.ResourceType(row.OwnerType) {
 	case model.ResourceInstitution:
 		if !row.InstitutionID.Valid || row.AcademicUnitID.Valid {
 			return nil, invalidPersistedState("academic_period", "owner", errors.New("invalid institution owner"))
 		}
+
 		institutionID, err := parsePersistedID("academic_period", "institution_id", row.InstitutionID.String, model.ParseInstitutionID)
 		if err != nil {
 			return nil, err
 		}
+
 		owner = model.NewInstitutionAcademicPeriodOwner(institutionID)
 	case model.ResourceAcademicUnit:
 		if row.InstitutionID.Valid || !row.AcademicUnitID.Valid {
 			return nil, invalidPersistedState("academic_period", "owner", errors.New("invalid academic unit owner"))
 		}
+
 		unitID, err := parsePersistedID("academic_period", "academic_unit_id", row.AcademicUnitID.String, model.ParseAcademicUnitID)
 		if err != nil {
 			return nil, err
 		}
+
 		owner = model.NewAcademicUnitAcademicPeriodOwner(unitID)
 	default:
 		return nil, invalidPersistedState("academic_period", "owner_type", errors.New("invalid owner type"))
 	}
+
 	period := &model.AcademicPeriod{
 		ID:          id,
 		CreatedAt:   row.CreatedAt.UTC(),
@@ -465,6 +614,7 @@ func (row academicPeriodRow) model() (*model.AcademicPeriod, error) {
 	if err := validatePersistedModel("academic_period", period); err != nil {
 		return nil, err
 	}
+
 	return period, nil
 }
 

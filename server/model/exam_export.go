@@ -56,32 +56,52 @@ type ExamExport struct {
 }
 
 func ValidExamExportCategories(categories []RetentionCategory) bool {
-	return len(categories) == 1 && (categories[0] == RetentionCategoryWork || categories[0] == RetentionCategoryIntegrity || categories[0] == RetentionCategoryBrowserActivity) ||
+	return len(categories) == 1 &&
+		(categories[0] == RetentionCategoryWork ||
+			categories[0] == RetentionCategoryIntegrity ||
+			categories[0] == RetentionCategoryBrowserActivity) ||
 		len(categories) == 2 && categories[0] == RetentionCategoryWork && categories[1] == RetentionCategoryIntegrity
 }
 
 func (e *ExamExport) Validate() error {
-	if e == nil || !e.ID.IsValid() || e.Scope.Validate() != nil || !e.Scope.SittingID.IsValid() || !e.RequesterUserID.IsValid() ||
-		!ValidExamExportCategories(e.Categories) || e.PolicyRevision < 1 || e.CreatedAt.IsZero() ||
-		!e.ExpiresAt.After(e.CreatedAt) || e.ExpiresAt.After(e.CreatedAt.Add(ExamExportMaximumDays*24*time.Hour)) ||
-		!e.SourceExpiresAt.After(e.CreatedAt) || e.SourceExpiresAt.After(e.CreatedAt.Add(ExamExportSourceLifetime)) || e.SourceExpiresAt.After(e.ExpiresAt) ||
-		e.SubmissionCount < 1 || e.SubmissionCount > ExamExportMaximumSubmissions || e.FileCount < 0 || e.FileCount > ExamExportMaximumEntries ||
-		e.SourceBytes < 0 || e.SourceBytes > ExamExportMaximumSourceBytes {
+	if e == nil ||
+		!e.ID.IsValid() ||
+		e.Scope.Validate() != nil ||
+		!e.Scope.SittingID.IsValid() ||
+		!e.RequesterUserID.IsValid() ||
+		!ValidExamExportCategories(e.Categories) ||
+		e.PolicyRevision < 1 ||
+		e.CreatedAt.IsZero() ||
+		!e.ExpiresAt.After(e.CreatedAt) ||
+		e.ExpiresAt.After(e.CreatedAt.Add(ExamExportMaximumDays*24*time.Hour)) ||
+		!e.SourceExpiresAt.After(e.CreatedAt) ||
+		e.SourceExpiresAt.After(e.CreatedAt.Add(ExamExportSourceLifetime)) ||
+		e.SourceExpiresAt.After(e.ExpiresAt) ||
+		e.SubmissionCount < 1 ||
+		e.SubmissionCount > ExamExportMaximumSubmissions ||
+		e.FileCount < 0 ||
+		e.FileCount > ExamExportMaximumEntries ||
+		e.SourceBytes < 0 ||
+		e.SourceBytes > ExamExportMaximumSourceBytes {
 		return invalidModelError("ExamExport.Validate", "exam_export", "", "invalid Exam export", "")
 	}
+
 	switch e.State {
 	case ExamExportQueued, ExamExportFailed, ExamExportExpired:
 		if e.ArchiveSizeBytes != 0 || e.ArchiveSHA256 != "" || e.ReadyAt.Valid {
 			return invalidModelError("ExamExport.Validate", "exam_export", "", "unavailable Exam export contains archive metadata", "")
 		}
 	case ExamExportReady:
-		if !e.ReadyAt.Valid || e.ReadyAt.Time.Before(e.CreatedAt) || !e.ReadyAt.Time.Before(e.ExpiresAt) ||
+		if !e.ReadyAt.Valid ||
+			e.ReadyAt.Time.Before(e.CreatedAt) ||
+			!e.ReadyAt.Time.Before(e.ExpiresAt) ||
 			!ValidExamExportContent(e.ArchiveSizeBytes, e.ArchiveSHA256) {
 			return invalidModelError("ExamExport.Validate", "exam_export", "", "invalid ready Exam export", "")
 		}
 	default:
 		return invalidModelError("ExamExport.Validate", "exam_export", "", "invalid Exam export state", "")
 	}
+
 	return nil
 }
 

@@ -147,6 +147,8 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 		"workspace-create-file", "workspace-create-file")
 	created, err := workspace.ApplyMutation(ctx, mutation, command)
 	require.NoError(t, err)
+	require.True(t, created.ConsistentWith(target, mutation.Operation, mutation.EntryID), "ApplyMutation returned a result inconsistent with its request")
+	requireWorkspaceMutationEcho(t, created, mutation, model.StarterWorkspaceEntryFile, ready.ContentVersion)
 	require.NotNil(t, created)
 	require.False(t, created.Replayed)
 	require.Equal(t, fixture.sitting.ID, created.SittingID)
@@ -164,6 +166,8 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 	replayMutation.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
 	replayedMutation, err := workspace.ApplyMutation(ctx, &replayMutation, command)
 	require.NoError(t, err)
+	require.True(t, replayedMutation.ConsistentWith(target, replayMutation.Operation, replayMutation.EntryID), "ApplyMutation replay returned a result inconsistent with its request")
+	requireWorkspaceMutationEcho(t, replayedMutation, &replayMutation, model.StarterWorkspaceEntryFile, ready.ContentVersion)
 	require.NotNil(t, replayedMutation, "ApplyMutation(replay) = %#v, first = %#v", replayedMutation, created)
 	require.True(t, replayedMutation.Replayed, "ApplyMutation(replay) = %#v, first = %#v", replayedMutation, created)
 	require.Equal(t, created.Change.Cursor, replayedMutation.Change.Cursor, "ApplyMutation(replay) = %#v, first = %#v", replayedMutation, created)
@@ -176,6 +180,7 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 		Reason: model.AttemptConnectionCloseTransport, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC(),
 	})
 	require.NoError(t, err)
+	require.True(t, closed.ConsistentWith(access.AttemptID, fixture.sitting.ID, access.ConnectionID), "CloseConnection returned a result inconsistent with its request")
 	require.NotNil(t, closed)
 	require.True(t, closed.Changed)
 	_, err = workspace.List(ctx, store.CandidateWorkspaceListOptions{Access: journalAccess(access), ExpectedCursor: -1, Limit: 200})
@@ -193,6 +198,7 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 	reconnected, err := ss.ExamAttempt().Connect(ctx, reconnect,
 		examCommand(fixture.candidate.ID, store.ExamAttemptConnectOperation, "workspace-reconnect", "workspace-reconnect"))
 	require.NoError(t, err)
+	require.True(t, reconnected.ConsistentWith(fixture.class.ID, fixture.candidate.ID, fixture.session.ID, fixture.sitting.ID), "Connect returned a result inconsistent with its request")
 	require.NotNil(t, reconnected)
 	require.Equal(t, connected.Attempt.ID, reconnected.Attempt.ID)
 	require.Equal(t, connected.Workspace.ID, reconnected.Workspace.ID)
@@ -205,6 +211,8 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 	replayAfterReconnect.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
 	replayedAfterReconnect, err := workspace.ApplyMutation(ctx, &replayAfterReconnect, command)
 	require.NoError(t, err)
+	require.True(t, replayedAfterReconnect.ConsistentWith(target, replayAfterReconnect.Operation, replayAfterReconnect.EntryID), "ApplyMutation replay returned a result inconsistent with its request")
+	requireWorkspaceMutationEcho(t, replayedAfterReconnect, &replayAfterReconnect, model.StarterWorkspaceEntryFile, ready.ContentVersion)
 	require.NotNil(t, replayedAfterReconnect)
 	require.True(t, replayedAfterReconnect.Replayed)
 	require.Equal(t, created.Change.Cursor, replayedAfterReconnect.Change.Cursor)
@@ -215,6 +223,7 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 			DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint, ConnectionID: access.ConnectionID, ContinuityCredentialHash: access.ContinuityCredentialHash},
 		AfterCursor: 0, Limit: model.AttemptWorkspaceJournalReadMaximum})
 	require.NoError(t, err)
+	require.True(t, journal.ConsistentWith(0), "ListJournal returned a result inconsistent with its request")
 	require.NotNil(t, journal)
 	require.Equal(t, connected.Workspace.ID, journal.WorkspaceID)
 	require.Equal(t, int64(1), journal.CurrentCursor)
@@ -229,6 +238,7 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 		DesktopRegistrationID: fixture.session.DesktopRegistrationID, DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint,
 		ConnectionID: access.ConnectionID, ContinuityCredentialHash: access.ContinuityCredentialHash}, ExpectedCursor: -1, Limit: 200})
 	require.NoError(t, err)
+	require.True(t, manifest.Consistent(), "List returned a result inconsistent with its request")
 	require.NotNil(t, manifest)
 	require.Equal(t, connected.Workspace.ID, manifest.WorkspaceID)
 	require.Equal(t, int64(1), manifest.Cursor)
@@ -281,6 +291,7 @@ func TestExamAttemptWorkspaceStore(t *testing.T, ss store.Store, workspace store
 writesComplete:
 	journal, err = workspace.ListJournal(ctx, store.CandidateWorkspaceJournalOptions{Access: journalAccess(access), AfterCursor: 0, Limit: 1})
 	require.NoError(t, err)
+	require.True(t, journal.ConsistentWith(0), "ListJournal returned a result inconsistent with its request")
 	require.NotNil(t, journal)
 	require.True(t, journal.HasMore)
 	require.Len(t, journal.Entries, 1)
@@ -312,6 +323,9 @@ writesComplete:
 		input.EntryID, input.ExpectedPath, input.ExpectedContentVersion, input.ObjectID = entryID, mutation.DestinationPath, ready.ContentVersion, replacement.ID
 	})
 	require.NoError(t, err)
+	require.True(t, replaced.ConsistentWith(target, model.AttemptWorkspaceMutationReplaceFile, entryID), "ApplyMutation returned a result inconsistent with its request")
+	requireWorkspaceMutationEcho(t, replaced, &store.ExamAttemptWorkspaceMutation{Operation: model.AttemptWorkspaceMutationReplaceFile, EntryID: entryID},
+		model.StarterWorkspaceEntryFile, replacement.ContentVersion)
 	require.NotNil(t, replaced.Entry)
 	require.Equal(t, entryID, replaced.Entry.EntryID)
 	require.Equal(t, replacement.ContentVersion, replaced.Entry.ContentVersion)
@@ -430,6 +444,9 @@ writesComplete:
 	replayWinner.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
 	winnerReplay, err := workspace.ApplyMutation(ctx, &replayWinner, winner.command)
 	require.NoError(t, err)
+	require.True(t, winnerReplay.ConsistentWith(target, replayWinner.Operation, replayWinner.EntryID), "ApplyMutation replay returned a result inconsistent with its request")
+	requireWorkspaceMutationEcho(t, winner.result, winner.input, "", "")
+	requireWorkspaceMutationEcho(t, winnerReplay, &replayWinner, "", "")
 	require.NotNil(t, winnerReplay, "ApplyMutation(race winner replay) = %#v, winner = %#v", winnerReplay, winner.result)
 	require.True(t, winnerReplay.Replayed, "ApplyMutation(race winner replay) = %#v, winner = %#v", winnerReplay, winner.result)
 	require.Equal(t, winner.result.Change.Cursor, winnerReplay.Change.Cursor, "ApplyMutation(race winner replay) = %#v, winner = %#v", winnerReplay, winner.result)
@@ -444,8 +461,8 @@ writesComplete:
 			ObjectID: large.ID, ContentVersion: model.NewWorkspaceContentVersion(), Content: model.AttemptWorkspaceContent{
 				MediaType: "application/octet-stream", SizeBytes: admittedCapacity.WorkspaceMaximumFileBytes, SHA256: strings.Repeat("d", 64)}})
 		require.NoError(t, reserveErr)
-		_, reserveErr = apply(model.AttemptWorkspaceMutationCreateFile, "size-quota-"+string(rune('a'+index)), func(input *store.ExamAttemptWorkspaceMutation) {
-			input.DestinationPath, input.ObjectID = "large-"+string(rune('a'+index)), large.ID
+		_, reserveErr = apply(model.AttemptWorkspaceMutationCreateFile, "size-quota-"+string(rune('a'+index)), func(input *store.ExamAttemptWorkspaceMutation) { //nolint:gosec // G115: index ranges over 0..4.
+			input.DestinationPath, input.ObjectID = "large-"+string(rune('a'+index)), large.ID //nolint:gosec // G115: index ranges over 0..4.
 		})
 		if index < 4 {
 			require.NoError(t, reserveErr)
@@ -504,6 +521,7 @@ writesComplete:
 		probes[0].MakeJournalGap(t, ctx, connected.Workspace.ID)
 		journal, err = workspace.ListJournal(ctx, store.CandidateWorkspaceJournalOptions{Access: journalAccess(access), AfterCursor: 0, Limit: 200})
 		require.NoError(t, err)
+		require.True(t, journal.ConsistentWith(0), "ListJournal returned a result inconsistent with its request")
 		require.NotNil(t, journal)
 		require.True(t, journal.RefreshRequired)
 		require.Empty(t, journal.Entries)
@@ -628,4 +646,56 @@ func journalAccess(access store.ExamAttemptWorkspaceMutationAccess) store.Candid
 		SessionID: access.SessionID, DesktopRegistrationID: access.DesktopRegistrationID,
 		DPoPKeyThumbprint: access.DPoPKeyThumbprint, ConnectionID: access.ConnectionID,
 		ContinuityCredentialHash: access.ContinuityCredentialHash}
+}
+
+// requireWorkspaceMutationEcho asserts what the application no longer
+// re-checks on an Attempt Workspace mutation outcome, with the kind and
+// content version the application expects for the operation: a surviving
+// entry is present and well formed, agrees with the journal change, is the
+// proposed entry unless replayed, has the expected kind and, for a fresh
+// write, the staged content version, and the change repeats the requested
+// recursion.
+func requireWorkspaceMutationEcho(
+	t *testing.T,
+	result *store.ExamAttemptWorkspaceMutationResult,
+	mutation *store.ExamAttemptWorkspaceMutation,
+	expectedKind model.StarterWorkspaceEntryKind,
+	expectedVersion model.WorkspaceContentVersion,
+) {
+	t.Helper()
+	require.NotNil(t, result)
+	require.Equal(t, mutation.Recursive, result.Change.Recursive)
+	if mutation.Operation == model.AttemptWorkspaceMutationDeleteEntry {
+		return
+	}
+	require.NotNil(t, result.Entry)
+	entry := result.Entry
+	require.True(t, entry.EntryID.IsValid())
+	normalized, err := model.NormalizeAttemptWorkspacePath(entry.Path)
+	require.NoError(t, err)
+	require.Equal(t, normalized, entry.Path)
+	switch entry.Kind {
+	case model.StarterWorkspaceEntryDirectory:
+		require.True(t, entry.ContentVersion.IsZero())
+		require.Empty(t, entry.MediaType)
+		require.Zero(t, entry.SizeBytes)
+		require.Empty(t, entry.SHA256)
+	case model.StarterWorkspaceEntryFile:
+		require.True(t, entry.ContentVersion.IsValid())
+		require.NoError(t, model.AttemptWorkspaceContent{MediaType: entry.MediaType, SizeBytes: entry.SizeBytes, SHA256: entry.SHA256}.Validate())
+	default:
+		require.Failf(t, "unknown Workspace entry kind", "kind = %q", entry.Kind)
+	}
+	require.Equal(t, result.Change.EntryID, entry.EntryID)
+	require.Equal(t, result.Change.NewPath, entry.Path)
+	if !result.Replayed {
+		require.Equal(t, mutation.EntryID, entry.EntryID)
+	}
+	if expectedKind != "" {
+		require.Equal(t, expectedKind, entry.Kind)
+	}
+	if !result.Replayed && expectedVersion.IsValid() {
+		require.Equal(t, expectedVersion, entry.ContentVersion)
+		require.Equal(t, expectedVersion, result.Change.ContentVersion)
+	}
 }

@@ -18,6 +18,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/websocket"
 )
@@ -40,15 +41,29 @@ func (lifecycleApplication) ValidateWebSocketPrincipal(
 	return nil
 }
 
-type lifecycleLogger struct{}
-
-func (lifecycleLogger) WarnContext(context.Context, string, error) {}
+// newTestLogger returns a real logger writing to a buffer the test may read.
+func newTestLogger(tb testing.TB) (*logging.Logger, *logging.Buffer) {
+	tb.Helper()
+	var logs logging.Buffer
+	logger, err := logging.New()
+	require.NoError(tb, err)
+	tb.Cleanup(func() { _ = logger.Shutdown() })
+	require.NoError(tb, logger.Configure(logging.Config{
+		MaxFieldBytes: 1024,
+		Targets: []logging.Target{{
+			Name: "test", Type: "console", Level: "debug", Format: "json", Writer: &logs,
+		}},
+	}))
+	return logger, &logs
+}
 
 func newTestHub(t *testing.T) *websocket.Hub {
 	t.Helper()
+	logger, _ := newTestLogger(t)
 	hub, err := websocket.NewHub(
 		lifecycleApplication{},
-		lifecycleLogger{},
+		nil,
+		logger,
 		"https://proctor.example",
 		"node-a",
 		nil,
@@ -94,7 +109,7 @@ func TestHubAcceptRequiresStart(t *testing.T) {
 
 	hub := newTestHub(t)
 	t.Cleanup(func() { _ = hub.Close(context.Background()) })
-	request := httptest.NewRequest(http.MethodGet, "https://proctor.example/api/v1/websocket", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "https://proctor.example/api/v1/websocket", nil)
 	request.Header.Set("Origin", "https://proctor.example")
 	recorder := httptest.NewRecorder()
 	err := hub.Accept(
@@ -156,7 +171,8 @@ func TestHubOriginAllowedMatchesHTTPOriginNormalization(t *testing.T) {
 	t.Parallel()
 
 	for _, publicURL := range []string{"https://Proctor.Example:443/", "https://proctor.example", "HTTPS://PROCTOR.EXAMPLE"} {
-		hub, err := websocket.NewHub(lifecycleApplication{}, lifecycleLogger{}, publicURL, "node-a", nil)
+		logger, _ := newTestLogger(t)
+		hub, err := websocket.NewHub(lifecycleApplication{}, nil, logger, publicURL, "node-a", nil)
 		require.NoError(t, err, "NewHub(%q) error", publicURL)
 		t.Cleanup(func() { _ = hub.Close(context.Background()) })
 		for _, origin := range []string{"https://proctor.example", "https://PROCTOR.example", "https://proctor.example:443"} {

@@ -16,20 +16,47 @@ import (
 // the generation ends as kicked, and an open Connection, when present, closes
 // as kicked. A reconnecting candidate has no open Connection to close. No
 // input is mutated unless every ownership and transition check succeeds.
-func SuspendExamAttemptByManager(attempt *ExamAttempt, participation *AttemptParticipation,
-	connection *AttemptConnection, at time.Time,
+func SuspendExamAttemptByManager(
+	attempt *ExamAttempt,
+	participation *AttemptParticipation,
+	connection *AttemptConnection,
+	at time.Time,
 ) error {
-	if attempt == nil || participation == nil || attempt.Validate() != nil || participation.Validate() != nil ||
-		participation.AttemptID != attempt.ID || attempt.State != ExamAttemptActive || participation.State != AttemptParticipationActive ||
-		(connection != nil && (connection.Validate() != nil || connection.AttemptID != attempt.ID ||
-			connection.ParticipationID != participation.ID || connection.State != AttemptConnectionOpen)) {
-		return invalidModelError("SuspendExamAttemptByManager", "exam_attempt_manual_suspension", "", "invalid manual Exam Attempt suspension aggregate", "")
+	if attempt == nil ||
+		participation == nil ||
+		attempt.Validate() != nil ||
+		participation.Validate() != nil ||
+		participation.AttemptID != attempt.ID ||
+		attempt.State != ExamAttemptActive ||
+		participation.State != AttemptParticipationActive ||
+		(connection != nil &&
+			(connection.Validate() != nil ||
+				connection.AttemptID != attempt.ID ||
+				connection.ParticipationID != participation.ID ||
+				connection.State != AttemptConnectionOpen)) {
+		return invalidModelError(
+			"SuspendExamAttemptByManager",
+			"exam_attempt_manual_suspension",
+			"",
+			"invalid manual Exam Attempt suspension aggregate",
+			"",
+		)
 	}
+
 	at = TimeUTC(at)
-	if at.IsZero() || at.Before(attempt.UpdatedAt) || at.Before(participation.UpdatedAt) ||
+	if at.IsZero() ||
+		at.Before(attempt.UpdatedAt) ||
+		at.Before(participation.UpdatedAt) ||
 		(connection != nil && at.Before(connection.OpenedAt)) {
-		return invalidModelError("SuspendExamAttemptByManager", "exam_attempt_manual_suspension", "", "invalid manual Exam Attempt suspension time", "")
+		return invalidModelError(
+			"SuspendExamAttemptByManager",
+			"exam_attempt_manual_suspension",
+			"",
+			"invalid manual Exam Attempt suspension time",
+			"",
+		)
 	}
+
 	attemptCandidate, participationCandidate := *attempt, *participation
 	if err := attemptCandidate.Suspend(at); err != nil {
 		return err
@@ -37,6 +64,7 @@ func SuspendExamAttemptByManager(attempt *ExamAttempt, participation *AttemptPar
 	if err := participationCandidate.End(AttemptParticipationEndKicked, at); err != nil {
 		return err
 	}
+
 	var connectionCandidate AttemptConnection
 	if connection != nil {
 		connectionCandidate = *connection
@@ -44,9 +72,11 @@ func SuspendExamAttemptByManager(attempt *ExamAttempt, participation *AttemptPar
 			return err
 		}
 	}
+
 	*attempt, *participation = attemptCandidate, participationCandidate
 	if connection != nil {
 		*connection = connectionCandidate
 	}
+
 	return nil
 }

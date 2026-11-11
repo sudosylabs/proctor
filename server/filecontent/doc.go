@@ -5,39 +5,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package filecontent owns Proctor's backend-neutral storage mechanics for
-// immutable File Revision bytes. It derives private storage keys, stages and
-// opens exact stored renditions, and removes unreferenced or abandoned content
-// through domain identities and the reusable VFS contract. Purpose-specific
-// validation and rendition creation join this package with their working
-// pipelines; callers never receive raw VFS operations.
+// Package filecontent reads and writes the bytes of the files Proctor manages:
+// profile pictures, Exam Resources, Starter Workspace and Attempt Workspace
+// files, onboarding import uploads and Exam export archives. Content is its one
+// service, and each kind of file has its own source file (exam_resource.go,
+// profile_picture.go, ...).
 //
-// The package does not own File Entry or File Revision lifecycle,
-// authorization, audit, retention decisions, search eligibility, application
-// events, or live Attempt Workspace synchronization. PostgreSQL publication by
-// an owning application use case remains the only visibility boundary; a VFS
-// write alone never makes content discoverable.
+// Bytes go to the file store (packages/vfs) under private keys derived from
+// the record's ID; callers never see a key or a raw file-store call. The
+// package also validates or converts what it stores, such as checking an Exam
+// Resource or normalizing a profile picture. It does not decide who may read a
+// file or whether a file exists: an application use case records that in
+// PostgreSQL, and bytes written here are invisible until that record commits.
 //
-// The package depends on server/model, the consumer-owned application content
-// contracts, the reusable VFS contract, and the parsers and image codecs used
-// by its purpose-specific pipelines. Concrete VFS backends, persistence,
-// transports, platform service location, configuration, and Jobs remain
-// outside it.
-//
-// Content is safe for concurrent use. It owns one node-local admission limit
-// for resource validation and profile-picture processing, including generated
-// fallback rendering. Refusal is immediate, with no input reads or queued
-// work. The permit stays held until synchronous processing returns, including
-// after cancellation; the limit bounds operation count, not aggregate memory.
-// Resource validation checks cancellation between bounded spool reads and
-// rewinds. JSON syntax uses a fixed buffer and bounded nesting state, without
-// materializing authored values. Synchronous codec CPU work remains
-// non-interruptible; an observed cancellation returns no complete rendition.
-// Exact reads, deletion, and streaming Workspace or onboarding operations do
-// not consume this processing capacity. Content starts no goroutines and
-// never closes its VFS dependency. Small purpose-specific pipelines may
-// buffer input only behind an explicit bound; general file storage must stream.
-// Errors and public values never expose private keys or opaque backend
-// revisions. Cancellation or an uncertain backend acknowledgement may leave
-// invisible bytes that Upload Lease recovery removes after its safety window.
+// Validation and image work are limited to a fixed number of operations at a
+// time on each node. A call over the limit is refused at once, not queued
+// (work.go). Start with content.go.
 package filecontent

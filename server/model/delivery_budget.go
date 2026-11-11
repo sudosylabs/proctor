@@ -46,10 +46,17 @@ func ReserveDeliveryMetadata(used, required int64) (int64, error) {
 	if used < 0 || used > DeliveryMetadataLimitBytes || required <= 0 || required > DeliveryMetadataLimitBytes {
 		return used, invalidModelError("ReserveDeliveryMetadata", "delivery_budget", "", "delivery metadata reservation is invalid", "")
 	}
+
 	remaining := DeliveryMetadataLimitBytes - used
 	if required > remaining {
-		return used, &DeliveryMetadataCapacity{ControlMetadataBytes: used, ControlMetadataLimitBytes: DeliveryMetadataLimitBytes, RequiredReservationBytes: required, RemainingReservableBytes: remaining}
+		return used, &DeliveryMetadataCapacity{
+			ControlMetadataBytes:      used,
+			ControlMetadataLimitBytes: DeliveryMetadataLimitBytes,
+			RequiredReservationBytes:  required,
+			RemainingReservableBytes:  remaining,
+		}
 	}
+
 	return used + required, nil
 }
 
@@ -75,10 +82,15 @@ type DeliveryQuotaUsage struct {
 }
 
 func NewDeliveryQuotaUsage(native, attempt bool) DeliveryQuotaUsage {
-	usage := DeliveryQuotaUsage{RecordLimit: DeliveryParticipationRecordLimit, ByteLimit: DeliveryParticipationByteLimit, PositionLimit: BrowserParticipationPositionLimit}
+	usage := DeliveryQuotaUsage{
+		RecordLimit:   DeliveryParticipationRecordLimit,
+		ByteLimit:     DeliveryParticipationByteLimit,
+		PositionLimit: BrowserParticipationPositionLimit,
+	}
 	if native {
 		usage.PositionLimit = NativeParticipationPositionLimit
 	}
+
 	if attempt {
 		usage.RecordLimit = DeliveryAttemptRecordLimit
 		usage.ByteLimit = DeliveryAttemptByteLimit
@@ -87,12 +99,26 @@ func NewDeliveryQuotaUsage(native, attempt bool) DeliveryQuotaUsage {
 			usage.PositionLimit = NativeAttemptPositionLimit
 		}
 	}
+
 	return usage
 }
 func (q DeliveryQuotaUsage) Validate() error {
-	if !securitySafeInt(q.RetainedRecords) || !securitySafeInt(q.RetainedBytes) || !securitySafeInt(q.AllocatedPositions) || !securitySafeInt(q.RecordLimit) || !securitySafeInt(q.ByteLimit) || !securitySafeInt(q.PositionLimit) || q.RecordLimit < 1 || q.ByteLimit < 1 || q.PositionLimit < 1 || q.RetainedRecords > q.RecordLimit || q.RetainedBytes > q.ByteLimit || q.AllocatedPositions > q.PositionLimit || q.SummaryOnly != (q.StopReason != nil) {
+	if !securitySafeInt(q.RetainedRecords) ||
+		!securitySafeInt(q.RetainedBytes) ||
+		!securitySafeInt(q.AllocatedPositions) ||
+		!securitySafeInt(q.RecordLimit) ||
+		!securitySafeInt(q.ByteLimit) ||
+		!securitySafeInt(q.PositionLimit) ||
+		q.RecordLimit < 1 ||
+		q.ByteLimit < 1 ||
+		q.PositionLimit < 1 ||
+		q.RetainedRecords > q.RecordLimit ||
+		q.RetainedBytes > q.ByteLimit ||
+		q.AllocatedPositions > q.PositionLimit ||
+		q.SummaryOnly != (q.StopReason != nil) {
 		return invalidModelError("DeliveryQuotaUsage.Validate", "delivery_quota_usage", "", "delivery quota is invalid", "")
 	}
+
 	if q.StopReason != nil {
 		switch *q.StopReason {
 		case DeliveryStopRecords, DeliveryStopBytes, DeliveryStopPositions, DeliveryStopMetadata, DeliveryStopLocalLossInventory:
@@ -100,6 +126,7 @@ func (q DeliveryQuotaUsage) Validate() error {
 			return invalidModelError("DeliveryQuotaUsage.Validate", "delivery_quota_usage", "", "delivery stop reason is invalid", "")
 		}
 	}
+
 	return nil
 }
 
@@ -134,9 +161,15 @@ func (q DeliveryQuotaUsage) Charge(records, bytes, positions int64) (DeliveryQuo
 
 // Pending admission reserves repair headroom in both pending and retained pools.
 func CanRetainPendingDelivery(pending, retained, retainedLimit, bytes int64, repair, recoverableGap bool) bool {
-	if !securitySafeInt(pending) || !securitySafeInt(retained) || !securitySafeInt(retainedLimit) || !securitySafeInt(bytes) || pending > DeliveryPendingByteLimit || retained > retainedLimit {
+	if !securitySafeInt(pending) ||
+		!securitySafeInt(retained) ||
+		!securitySafeInt(retainedLimit) ||
+		!securitySafeInt(bytes) ||
+		pending > DeliveryPendingByteLimit ||
+		retained > retainedLimit {
 		return false
 	}
+
 	pendingLimit := DeliveryPendingByteLimit
 	if !repair {
 		pendingLimit -= DeliveryRepairReservationBytes
@@ -144,12 +177,20 @@ func CanRetainPendingDelivery(pending, retained, retainedLimit, bytes int64, rep
 			retainedLimit -= DeliveryRepairReservationBytes
 		}
 	}
+
 	return bytes <= pendingLimit-pending && bytes <= retainedLimit-retained
 }
 
 func (e DeliveryMetadataCapacity) Validate() error {
-	if e.ControlMetadataLimitBytes != DeliveryMetadataLimitBytes || e.ControlMetadataBytes < 0 || e.ControlMetadataBytes > DeliveryMetadataLimitBytes || e.RequiredReservationBytes <= 0 || e.RequiredReservationBytes > DeliveryMetadataLimitBytes || e.RemainingReservableBytes != DeliveryMetadataLimitBytes-e.ControlMetadataBytes || e.RequiredReservationBytes <= e.RemainingReservableBytes {
+	if e.ControlMetadataLimitBytes != DeliveryMetadataLimitBytes ||
+		e.ControlMetadataBytes < 0 ||
+		e.ControlMetadataBytes > DeliveryMetadataLimitBytes ||
+		e.RequiredReservationBytes <= 0 ||
+		e.RequiredReservationBytes > DeliveryMetadataLimitBytes ||
+		e.RemainingReservableBytes != DeliveryMetadataLimitBytes-e.ControlMetadataBytes ||
+		e.RequiredReservationBytes <= e.RemainingReservableBytes {
 		return invalidModelError("DeliveryMetadataCapacity.Validate", "delivery_metadata_capacity", "", "invalid metadata capacity refusal", "")
 	}
+
 	return nil
 }

@@ -22,6 +22,8 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/exam/review"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -32,7 +34,7 @@ func TestIntegrityReviewHTTPMapsStrictDecisionAndPrivateManagerProjection(t *tes
 	httpAPI := newExamIntegrityReviewFocusedAPI(t, fake)
 	path := "/api/v1/submissions/" + fake.submission.ID.String() + "/review/decisions/" + fake.flag.ID.String()
 	body := `{"expected_review_revision":2,"expected_revision":1,"outcome":"inconclusive","private_rationale":"Manager-only rationale."}`
-	request := httptest.NewRequest(http.MethodPut, path, strings.NewReader(body))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPut, path, strings.NewReader(body))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "decision-once")
@@ -49,7 +51,7 @@ func TestIntegrityReviewHTTPMapsStrictDecisionAndPrivateManagerProjection(t *tes
 	require.Equal(t, "decision-once", fake.decision.IdempotencyKey, "response=%d headers=%v command=%#v body=%s", response.Code, response.Header(), fake.decision, response.Body.String())
 	require.Contains(t, response.Body.String(), `"private_rationale":"Manager-only rationale."`)
 
-	duplicate := httptest.NewRequest(http.MethodPut, path,
+	duplicate := httptest.NewRequestWithContext(t.Context(), http.MethodPut, path,
 		strings.NewReader(`{"expected_review_revision":2,"expected_review_revision":3,"expected_revision":1,"outcome":"confirmed","private_rationale":"x"}`))
 	duplicate.Header.Set("Authorization", "Bearer credential")
 	duplicate.Header.Set("Content-Type", "application/json")
@@ -66,7 +68,7 @@ func TestIntegrityReviewHTTPUsesBoundedOpaqueEvidenceCursor(t *testing.T) {
 	fake.evidencePage.HasMore = true
 	httpAPI := newExamIntegrityReviewFocusedAPI(t, fake)
 	path := "/api/v1/submissions/" + fake.submission.ID.String() + "/integrity-flags/" + fake.flag.ID.String() + "/evidence?limit=1"
-	request := httptest.NewRequest(http.MethodGet, path, nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -125,14 +127,14 @@ func TestIntegrityReviewEndpointsForwardExactCursorsAndMapMalformedCursors(t *te
 		t.Run(test.name, func(t *testing.T) {
 			cursor, err := encodeExamIntegrityReviewCursor(test.kind, test.id)
 			require.NoError(t, err)
-			request := httptest.NewRequest(http.MethodGet, test.path+"?cursor="+url.QueryEscape(cursor), nil)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, test.path+"?cursor="+url.QueryEscape(cursor), nil)
 			request.Header.Set("Authorization", "Bearer credential")
 			response := httptest.NewRecorder()
 			httpAPI.ServeHTTP(response, request)
 			require.Equal(t, http.StatusOK, response.Code, "cursor response = %d: %s", response.Code, response.Body.String())
 			test.assert(t)
 
-			malformed := httptest.NewRequest(http.MethodGet, test.path+"?cursor=not-a-cursor", nil)
+			malformed := httptest.NewRequestWithContext(t.Context(), http.MethodGet, test.path+"?cursor=not-a-cursor", nil)
 			malformed.Header.Set("Authorization", "Bearer credential")
 			malformedResponse := httptest.NewRecorder()
 			httpAPI.ServeHTTP(malformedResponse, malformed)
@@ -146,7 +148,7 @@ func TestStudentResultHTTPExposesOnlyReleasedSanitizedProjection(t *testing.T) {
 	fake := newExamIntegrityReviewHTTPFake(t)
 	httpAPI := newExamIntegrityReviewFocusedAPI(t, fake)
 	path := "/api/v1/exam-attempts/" + fake.attemptID.String() + "/result"
-	request := httptest.NewRequest(http.MethodGet, path, nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -164,7 +166,7 @@ func TestIntegrityReviewHTTPListsBoundedLateDiscrepanciesWithoutConnectionSelect
 	fake := newExamIntegrityReviewHTTPFake(t)
 	httpAPI := newExamIntegrityReviewFocusedAPI(t, fake)
 	path := "/api/v1/submissions/" + fake.submission.ID.String() + "/integrity-discrepancies?limit=1"
-	request := httptest.NewRequest(http.MethodGet, path, nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
@@ -207,13 +209,13 @@ func newExamIntegrityReviewHTTPFake(t *testing.T) *examIntegrityReviewHTTPFake {
 		Provenance:      model.ExamSubmissionCandidateSubmitted, SubmittedAt: at})
 	require.NoError(t, err)
 	managerID := model.NewUserID()
-	review, err := model.NewSubmissionReview(model.NewSubmissionReviewID(), submissionID, managerID, at)
+	record, err := model.NewSubmissionReview(model.NewSubmissionReviewID(), submissionID, managerID, at)
 	require.NoError(t, err)
-	err = review.UpdateDraft(1, "Manager-only note.", "Approved **remarks**", at.Add(time.Second))
+	err = record.UpdateDraft(1, "Manager-only note.", "Approved **remarks**", at.Add(time.Second))
 	require.NoError(t, err)
 	flag, err := model.NewIntegrityFlag(model.NewIntegrityFlagID(), attemptID, 1, model.IntegrityPolicyConnectionLoss, at)
 	require.NoError(t, err)
-	decision, err := model.NewIntegrityReviewDecision(model.NewIntegrityReviewDecisionID(), review.ID, flag.ID,
+	decision, err := model.NewIntegrityReviewDecision(model.NewIntegrityReviewDecisionID(), record.ID, flag.ID,
 		model.IntegrityReviewInconclusive, managerID, "Manager-only rationale.", at.Add(time.Second))
 	require.NoError(t, err)
 	evidence, err := model.NewConnectionLossEvidence(model.NewIntegrityEvidenceID(), attemptID,
@@ -230,14 +232,14 @@ func newExamIntegrityReviewHTTPFake(t *testing.T) *examIntegrityReviewHTTPFake {
 	authorization := store.ExamIntegrityReviewAuthorization{SubmissionID: submissionID, ExamID: model.NewExamID(),
 		SittingID: model.NewExamSittingID(), AttemptID: attemptID, CandidateUserID: principal.UserID,
 		AcademicUnitID: model.NewAcademicUnitID()}
-	return &examIntegrityReviewHTTPFake{principal: principal, submission: submission, review: review,
+	return &examIntegrityReviewHTTPFake{principal: principal, submission: submission, review: record,
 		decisionValue: decision, flag: flag, evidence: evidence, discrepancy: discrepancy, attemptID: attemptID, authorization: authorization,
 		evidencePage: store.ExamIntegrityEvidencePage{Items: []model.IntegrityEvidence{*evidence}}}
 }
 
-func newExamIntegrityReviewFocusedAPI(t *testing.T, fake *examIntegrityReviewHTTPFake) *API {
+func newExamIntegrityReviewFocusedAPI(t *testing.T, fake *examIntegrityReviewHTTPFake) *route.API {
 	t.Helper()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	return newFocusedResourceAPI(t, logger, fake, examIntegrityReviewResource(fake))
 }
 
@@ -296,13 +298,13 @@ func (f *examIntegrityReviewHTTPFake) UpdateExamIntegrityReview(context.Context,
 }
 
 func (f *examIntegrityReviewHTTPFake) FinalizeExamIntegrityReview(context.Context, invocation.Invocation,
-	review.FinalizeCommand,
+	review.TerminalCommand,
 ) (review.Result, error) {
 	return review.Result{Authorization: f.authorization, Review: f.review}, nil
 }
 
 func (f *examIntegrityReviewHTTPFake) ReleaseStudentExamResult(context.Context, invocation.Invocation,
-	review.ReleaseCommand,
+	review.TerminalCommand,
 ) (review.Result, error) {
 	return review.Result{Authorization: f.authorization, Review: f.review}, nil
 }

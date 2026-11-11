@@ -99,8 +99,15 @@ func TestHasCurrentMembershipForwardsUserTimeAndContext(t *testing.T) {
 	require.True(t, member, "membership")
 }
 
-type membershipLookup func(context.Context, string, time.Time) ([]*model.AcademicUnitMember, error)
+type membershipLookupFake struct {
+	store.AcademicUnitMemberStore
+	lookup func(context.Context, string, time.Time) ([]*model.AcademicUnitMember, error)
+}
 
-func (l membershipLookup) ListActiveByUser(ctx context.Context, userID model.UserID, at time.Time) ([]*model.AcademicUnitMember, error) {
-	return l(ctx, userID.String(), at)
+func membershipLookup(lookup func(context.Context, string, time.Time) ([]*model.AcademicUnitMember, error)) membershipLookupFake {
+	return membershipLookupFake{lookup: lookup}
+}
+
+func (l membershipLookupFake) ListActiveByUser(ctx context.Context, userID model.UserID, at time.Time) ([]*model.AcademicUnitMember, error) {
+	return l.lookup(ctx, userID.String(), at)
 }

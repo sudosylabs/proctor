@@ -19,26 +19,27 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type desktopCompatibilityHTTPApplication struct {
-	query          app.DesktopCompatibilityQuery
+	query          identity.DesktopCompatibilityQuery
 	evaluations    int
-	evaluation     app.DesktopCompatibilityResult
+	evaluation     identity.DesktopCompatibilityResult
 	evaluationErr  error
 	policy         *model.DesktopCompatibilityPolicy
-	replaceCommand app.ReplaceDesktopCompatibilityPolicyCommand
+	replaceCommand identity.ReplaceDesktopCompatibilityPolicyCommand
 }
 
 func (a *desktopCompatibilityHTTPApplication) EvaluateDesktopCompatibility(
 	_ context.Context,
 	_ invocation.Invocation,
-	query app.DesktopCompatibilityQuery,
-) (app.DesktopCompatibilityResult, error) {
+	query identity.DesktopCompatibilityQuery,
+) (identity.DesktopCompatibilityResult, error) {
 	a.query = query
 	a.evaluations++
 	return a.evaluation, a.evaluationErr
@@ -54,7 +55,7 @@ func (a *desktopCompatibilityHTTPApplication) GetDesktopCompatibilityPolicy(
 func (a *desktopCompatibilityHTTPApplication) ReplaceDesktopCompatibilityPolicy(
 	_ context.Context,
 	_ invocation.Invocation,
-	command app.ReplaceDesktopCompatibilityPolicyCommand,
+	command identity.ReplaceDesktopCompatibilityPolicyCommand,
 ) (*model.DesktopCompatibilityPolicy, error) {
 	a.replaceCommand = command
 	return a.policy.Clone(), nil
@@ -62,12 +63,12 @@ func (a *desktopCompatibilityHTTPApplication) ReplaceDesktopCompatibilityPolicy(
 
 func TestSystemPingReturnsRequestSpecificNoStoreCompatibility(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	now := time.Date(2026, time.August, 28, 10, 11, 12, 345_000_000, time.UTC)
 	applicationFake := &desktopCompatibilityHTTPApplication{
-		evaluation: app.DesktopCompatibilityResult{
+		evaluation: identity.DesktopCompatibilityResult{
 			Availability:            model.DesktopAvailabilityReady,
-			Compatibility:           app.DesktopCompatibilityCompatible,
+			Compatibility:           identity.DesktopCompatibilityCompatible,
 			Reason:                  "compatible",
 			MinimumDesktopRelease:   "1.2.0",
 			MaximumDesktopRelease:   "1.4.0",
@@ -79,7 +80,7 @@ func TestSystemPingReturnsRequestSpecificNoStoreCompatibility(t *testing.T) {
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{},
+		routetest.Authenticator{},
 		systemResourceWithApplication(
 			systemHTTPHealth{live: true, ready: true},
 			BuildInfo{Version: "server-secret-not-for-ping"},
@@ -87,7 +88,7 @@ func TestSystemPingReturnsRequestSpecificNoStoreCompatibility(t *testing.T) {
 			func() time.Time { return now },
 		),
 	)
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
 		"/api/v1/system/ping?desktop_release=1.4.0&desktop_build_id=darwin-42&platform=darwin&architecture=arm64&realtime_protocol=2",
 		nil,
@@ -116,14 +117,14 @@ func TestSystemPingReturnsRequestSpecificNoStoreCompatibility(t *testing.T) {
 
 func TestSystemPingPublishesMaintenanceAvailabilityAndRetryTime(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	retryAt := time.Date(2026, time.August, 28, 11, 0, 0, 0, time.UTC)
 	serverTime := retryAt.Add(-time.Minute)
 	applicationFake := &desktopCompatibilityHTTPApplication{
-		evaluation: app.DesktopCompatibilityResult{
+		evaluation: identity.DesktopCompatibilityResult{
 			Availability:         model.DesktopAvailabilityMaintenance,
 			RetryAt:              model.OptionalTimeFrom(retryAt),
-			Compatibility:        app.DesktopCompatibilityCompatible,
+			Compatibility:        identity.DesktopCompatibilityCompatible,
 			Reason:               "compatible",
 			AdministratorMessage: "Scheduled maintenance is in progress.",
 		},
@@ -131,11 +132,11 @@ func TestSystemPingPublishesMaintenanceAvailabilityAndRetryTime(t *testing.T) {
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{},
+		routetest.Authenticator{},
 		systemResourceWithApplication(systemHTTPHealth{live: true, ready: true}, BuildInfo{}, applicationFake, func() time.Time { return serverTime }),
 	)
 	response := httptest.NewRecorder()
-	httpAPI.ServeHTTP(response, httptest.NewRequest(
+	httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
 		"/api/v1/system/ping?desktop_release=1.0.0&desktop_build_id=build&platform=darwin&architecture=arm64&realtime_protocol=1",
 		nil,
@@ -152,24 +153,24 @@ func TestSystemPingPublishesMaintenanceAvailabilityAndRetryTime(t *testing.T) {
 
 func TestSystemPingOmitsRetryTimeNotLaterThanItsServerTime(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	serverTime := time.Date(2026, time.August, 28, 11, 0, 0, 0, time.UTC)
 	applicationFake := &desktopCompatibilityHTTPApplication{
-		evaluation: app.DesktopCompatibilityResult{
+		evaluation: identity.DesktopCompatibilityResult{
 			Availability:  model.DesktopAvailabilityMaintenance,
 			RetryAt:       model.OptionalTimeFrom(serverTime),
-			Compatibility: app.DesktopCompatibilityCompatible,
+			Compatibility: identity.DesktopCompatibilityCompatible,
 			Reason:        "compatible",
 		},
 	}
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{},
+		routetest.Authenticator{},
 		systemResourceWithApplication(systemHTTPHealth{live: true, ready: true}, BuildInfo{}, applicationFake, func() time.Time { return serverTime }),
 	)
 	response := httptest.NewRecorder()
-	httpAPI.ServeHTTP(response, httptest.NewRequest(
+	httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
 		"/api/v1/system/ping?desktop_release=1.0.0&desktop_build_id=build&platform=darwin&architecture=arm64&realtime_protocol=1",
 		nil,
@@ -183,12 +184,12 @@ func TestSystemPingOmitsRetryTimeNotLaterThanItsServerTime(t *testing.T) {
 
 func TestSystemPingRejectsMalformedSelectorsWithoutEvaluation(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	applicationFake := &desktopCompatibilityHTTPApplication{}
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{},
+		routetest.Authenticator{},
 		systemResourceWithApplication(systemHTTPHealth{live: true, ready: true}, BuildInfo{}, applicationFake, time.Now),
 	)
 	for _, target := range []string{
@@ -198,7 +199,7 @@ func TestSystemPingRejectsMalformedSelectorsWithoutEvaluation(t *testing.T) {
 		"/api/v1/system/ping?desktop_release=1.0.0&desktop_release=1.1.0&desktop_build_id=build&platform=darwin&architecture=arm64&realtime_protocol=1",
 	} {
 		response := httptest.NewRecorder()
-		httpAPI.ServeHTTP(response, httptest.NewRequest(http.MethodGet, target, nil))
+		httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, target, nil))
 		require.Equal(t, http.StatusBadRequest, response.Code, "%s", target)
 		require.Contains(t, response.Body.String(), `"code":"request.invalid"`, "%s", target)
 	}
@@ -207,18 +208,18 @@ func TestSystemPingRejectsMalformedSelectorsWithoutEvaluation(t *testing.T) {
 
 func TestSystemPingFailsClosedInsideSuccessfulResponseWhenUnavailable(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	applicationFake := &desktopCompatibilityHTTPApplication{
 		evaluationErr: apperror.New("desktop_compatibility_policy.unavailable"),
 	}
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{},
+		routetest.Authenticator{},
 		systemResourceWithApplication(systemHTTPHealth{live: true}, BuildInfo{}, applicationFake, time.Now),
 	)
 	response := httptest.NewRecorder()
-	httpAPI.ServeHTTP(response, httptest.NewRequest(
+	httpAPI.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(),
 		http.MethodGet,
 		"/api/v1/system/ping?desktop_release=1.0.0&desktop_build_id=build&platform=darwin&architecture=arm64&realtime_protocol=1",
 		nil,
@@ -232,7 +233,7 @@ func TestSystemPingFailsClosedInsideSuccessfulResponseWhenUnavailable(t *testing
 
 func TestDesktopCompatibilityPolicyHTTPUsesCompleteReplacementAndNoStore(t *testing.T) {
 	t.Parallel()
-	logger, _ := newTestLogger(t)
+	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{
 		UserID:                 model.NewUserID(),
 		SessionID:              model.NewSessionID(),
@@ -249,10 +250,10 @@ func TestDesktopCompatibilityPolicyHTTPUsesCompleteReplacementAndNoStore(t *test
 	httpAPI := newFocusedResourceAPI(
 		t,
 		logger,
-		classRouteAuthenticator{principal: principal},
+		routetest.Authenticator{Principal: principal},
 		desktopCompatibilityPolicyResource(applicationFake),
 	)
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPut,
 		"/api/v1/desktop-compatibility-policy",
 		strings.NewReader(`{"expected_revision":1,"minimum_desktop_release":"1.2.0","revoked_desktop_build_ids":["build-7"],"administrator_message":"Update before the exam.","availability":"ready"}`),
@@ -277,7 +278,7 @@ func TestDesktopCompatibilityPolicyHTTPUsesCompleteReplacementAndNoStore(t *test
 		`{"expected_revision":1,"minimum_desktop_release":"","revoked_desktop_build_ids":[]}`,
 		`{"expected_revision":1,"minimum_desktop_release":"","revoked_desktop_build_ids":[],"administrator_message":"","availability":"ready","retry_at":null}`,
 	} {
-		invalid := httptest.NewRequest(http.MethodPut, "/api/v1/desktop-compatibility-policy", strings.NewReader(invalidBody))
+		invalid := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/desktop-compatibility-policy", strings.NewReader(invalidBody))
 		invalid.Header.Set("Authorization", "Bearer session")
 		invalid.Header.Set("Content-Type", "application/json")
 		invalid.Header.Set("Idempotency-Key", "desktop-policy-invalid")

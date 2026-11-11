@@ -32,11 +32,11 @@ func Run(t *testing.T, factory Factory) {
 		}
 	})
 
-	t.Run("cancelled context", func(t *testing.T) {
+	t.Run("canceled context", func(t *testing.T) {
 		sender := factory(t)
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		_, err := sender.Send(ctx, basicMessage("cancelled"))
+		_, err := sender.Send(ctx, basicMessage("canceled"))
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("Send() error = %v, want context.Canceled", err)
 		}

@@ -91,33 +91,33 @@ func TestStagingIsInvisibleThroughFilesystem(t *testing.T) {
 		run  func(string) error
 	}{
 		{"open", func(name string) error {
-			file, err := filesystem.Open(t.Context(), name, vfs.OpenOptions{})
+			file, openErr := filesystem.Open(t.Context(), name, vfs.OpenOptions{})
 			if file != nil {
 				_ = file.Body.Close()
 			}
-			return err
+			return openErr
 		}},
-		{"stat", func(name string) error { _, err := filesystem.Stat(t.Context(), name); return err }},
+		{"stat", func(name string) error { _, statErr := filesystem.Stat(t.Context(), name); return statErr }},
 		{"remove", func(name string) error { return filesystem.Remove(t.Context(), name, vfs.RemoveOptions{}) }},
 		{"write", func(name string) error {
-			_, err := filesystem.Write(t.Context(), name, strings.NewReader("replace staging"), vfs.WriteOptions{})
-			return err
+			_, writeErr := filesystem.Write(t.Context(), name, strings.NewReader("replace staging"), vfs.WriteOptions{})
+			return writeErr
 		}},
 		{"copy source", func(name string) error {
-			_, err := filesystem.Copy(t.Context(), name, "copied.txt", vfs.TransferOptions{})
-			return err
+			_, copyErr := filesystem.Copy(t.Context(), name, "copied.txt", vfs.TransferOptions{})
+			return copyErr
 		}},
 		{"copy destination", func(name string) error {
-			_, err := filesystem.Copy(t.Context(), "existing.txt", name, vfs.TransferOptions{})
-			return err
+			_, copyErr := filesystem.Copy(t.Context(), "existing.txt", name, vfs.TransferOptions{})
+			return copyErr
 		}},
 		{"move source", func(name string) error {
-			_, err := filesystem.Move(t.Context(), name, "moved.txt", vfs.TransferOptions{})
-			return err
+			_, moveErr := filesystem.Move(t.Context(), name, "moved.txt", vfs.TransferOptions{})
+			return moveErr
 		}},
 		{"move destination", func(name string) error {
-			_, err := filesystem.Move(t.Context(), "existing.txt", name, vfs.TransferOptions{})
-			return err
+			_, moveErr := filesystem.Move(t.Context(), "existing.txt", name, vfs.TransferOptions{})
+			return moveErr
 		}},
 	}
 	for _, operation := range operations {
@@ -127,10 +127,10 @@ func TestStagingIsInvisibleThroughFilesystem(t *testing.T) {
 	}
 	t.Run("filesystem case alias", func(t *testing.T) {
 		alias := strings.ToUpper(staged)
-		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(alias))); errors.Is(err, os.ErrNotExist) {
+		if _, statErr := os.Stat(filepath.Join(root, filepath.FromSlash(alias))); errors.Is(statErr, os.ErrNotExist) {
 			t.Skip("filesystem does not provide case aliases")
-		} else if err != nil {
-			require.NoError(t, err)
+		} else if statErr != nil {
+			require.NoError(t, statErr)
 		}
 		for _, operation := range operations {
 			t.Run(operation.name, func(t *testing.T) {
@@ -255,8 +255,8 @@ func TestWriteRejectsSymlinkIntroducedBeforePublication(t *testing.T) {
 	filesystem, err := local.New(root)
 	require.NoError(t, err)
 	write := startPausedWrite(t, filesystem, t.Context(), "target.txt", vfs.WriteOptions{})
-	if err := os.Symlink(outside, filepath.Join(root, "target.txt")); err != nil {
-		t.Skipf("symlinks unavailable: %v", err)
+	if symlinkErr := os.Symlink(outside, filepath.Join(root, "target.txt")); symlinkErr != nil {
+		t.Skipf("symlinks unavailable: %v", symlinkErr)
 	}
 	write.reader.resume()
 	require.ErrorIs(t, write.wait(), vfs.ErrInvalidPath, "publication error")
@@ -349,10 +349,10 @@ func TestConcurrentConditionalCopiesPreserveOneWinner(t *testing.T) {
 	for i := range copies {
 		go func() {
 			<-start
-			_, err := filesystem.Copy(t.Context(), fmt.Sprintf("source-%d.txt", i), "destination.txt", vfs.TransferOptions{
+			_, copyErr := filesystem.Copy(t.Context(), fmt.Sprintf("source-%d.txt", i), "destination.txt", vfs.TransferOptions{
 				DestinationRevision: destination.Revision,
 			})
-			results <- result{index: i, err: err}
+			results <- result{index: i, err: copyErr}
 		}()
 	}
 	close(start)

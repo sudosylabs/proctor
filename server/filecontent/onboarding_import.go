@@ -29,20 +29,33 @@ func (c *Content) IsOnboardingImportTooLarge(err error) bool {
 
 // StageOnboardingImport streams one private immutable CSV object. Callers must
 // provide the domain limit; an over-limit object is removed before returning.
-func (c *Content) StageOnboardingImport(ctx context.Context, id model.OnboardingImportID, body io.Reader, maximum int64) (string, int64, error) {
+func (c *Content) StageOnboardingImport(
+	ctx context.Context,
+	id model.OnboardingImportID,
+	body io.Reader,
+	maximum int64,
+) (string, int64, error) {
 	if c == nil || c.filesystem == nil || !id.IsValid() || body == nil || maximum < 1 {
 		return "", 0, errors.New("invalid onboarding import content")
 	}
+
 	hash := sha256.New()
 	limited := &io.LimitedReader{R: io.TeeReader(body, hash), N: maximum + 1}
-	info, err := c.filesystem.Write(ctx, onboardingImportKey(id), limited, vfs.WriteOptions{NoOverwrite: c.filesystem.Capabilities().ConditionalWrite})
+	info, err := c.filesystem.Write(
+		ctx,
+		onboardingImportKey(id),
+		limited,
+		vfs.WriteOptions{NoOverwrite: c.filesystem.Capabilities().ConditionalWrite},
+	)
 	if err != nil {
 		return "", 0, sanitize("stage onboarding import", err)
 	}
+
 	if info.Size > maximum {
 		_ = c.filesystem.Remove(ctx, onboardingImportKey(id), vfs.RemoveOptions{})
 		return "", info.Size, ErrOnboardingImportTooLarge
 	}
+
 	return hex.EncodeToString(hash.Sum(nil)), info.Size, nil
 }
 
@@ -71,25 +84,34 @@ func (c *Content) RemoveOnboardingImport(ctx context.Context, id model.Onboardin
 // ListOnboardingImportFiles pages private staged objects old enough for
 // orphan reconciliation. The caller checks PostgreSQL ownership before any
 // removal, so ordinary active uploads remain untouched.
-func (c *Content) ListOnboardingImportFiles(ctx context.Context, cursor string, limit int, before time.Time) ([]model.OnboardingImportID, string, error) {
+func (c *Content) ListOnboardingImportFiles(
+	ctx context.Context,
+	cursor string,
+	limit int,
+	before time.Time,
+) ([]model.OnboardingImportID, string, error) {
 	if c == nil || c.filesystem == nil || limit < 1 || limit > vfs.MaximumListLimit || before.IsZero() {
 		return nil, "", errors.New("invalid onboarding import listing")
 	}
+
 	page, err := c.filesystem.List(ctx, vfs.ListOptions{Prefix: "onboarding/imports/", Cursor: cursor, Limit: limit})
 	if err != nil {
 		return nil, "", sanitize("list onboarding imports", err)
 	}
+
 	result := make([]model.OnboardingImportID, 0, len(page.Entries))
 	for _, entry := range page.Entries {
 		if entry.IsDir || entry.ModifiedAt.After(before) || !strings.HasSuffix(entry.Path, ".csv") {
 			continue
 		}
+
 		name := entry.Path[strings.LastIndex(entry.Path, "/")+1:]
 		id := model.OnboardingImportID(strings.TrimSuffix(name, ".csv"))
 		if id.IsValid() {
 			result = append(result, id)
 		}
 	}
+
 	return result, page.NextCursor, nil
 }
 

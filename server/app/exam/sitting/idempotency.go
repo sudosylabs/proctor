@@ -26,8 +26,8 @@ const (
 	idempotencyOperationClose          = "exam.sitting.close"
 )
 
-func prepareScheduleIdempotency(invocation invocation.Invocation, command ScheduleCommand) (*store.CommandIdempotency, error) {
-	return idempotency.Require(invocation, idempotencyOperationSchedule, command.IdempotencyKey, struct {
+func prepareScheduleIdempotency(inv invocation.Invocation, command ScheduleCommand) (*store.CommandIdempotency, error) {
+	return idempotency.Require(inv, idempotencyOperationSchedule, command.IdempotencyKey, struct {
 		ExamID           model.ExamID         `json:"exam_id"`
 		ExamRevisionID   model.ExamRevisionID `json:"exam_revision_id"`
 		ClassID          model.ClassID        `json:"class_id"`
@@ -36,20 +36,37 @@ func prepareScheduleIdempotency(invocation invocation.Invocation, command Schedu
 	}{command.ExamID, command.ExamRevisionID, command.ClassID, command.ScheduledStartAt, command.ScheduledEndAt})
 }
 
-func prepareScheduleUpdateIdempotency(invocation invocation.Invocation, command UpdateScheduleCommand) (*store.CommandIdempotency, error) {
-	return idempotency.Require(invocation, idempotencyOperationUpdateSchedule, command.IdempotencyKey, struct {
-		ExamID           model.ExamID          `json:"exam_id"`
-		SittingID        model.ExamSittingID   `json:"exam_sitting_id"`
-		ExpectedRevision int64                 `json:"expected_revision"`
-		ExamRevisionID   *model.ExamRevisionID `json:"exam_revision_id,omitempty"`
-		ClassID          *model.ClassID        `json:"class_id,omitempty"`
-		ScheduledStartAt *time.Time            `json:"scheduled_start_at,omitempty"`
-		ScheduledEndAt   *time.Time            `json:"scheduled_end_at,omitempty"`
-	}{command.ExamID, command.SittingID, command.ExpectedRevision, command.ExamRevisionID, command.ClassID, command.ScheduledStartAt, command.ScheduledEndAt})
+func prepareScheduleUpdateIdempotency(inv invocation.Invocation, command UpdateScheduleCommand) (*store.CommandIdempotency, error) {
+	return idempotency.Require(
+		inv,
+		idempotencyOperationUpdateSchedule,
+		command.IdempotencyKey,
+		struct {
+			ExamID           model.ExamID          `json:"exam_id"`
+			SittingID        model.ExamSittingID   `json:"exam_sitting_id"`
+			ExpectedRevision int64                 `json:"expected_revision"`
+			ExamRevisionID   *model.ExamRevisionID `json:"exam_revision_id,omitempty"`
+			ClassID          *model.ClassID        `json:"class_id,omitempty"`
+			ScheduledStartAt *time.Time            `json:"scheduled_start_at,omitempty"`
+			ScheduledEndAt   *time.Time            `json:"scheduled_end_at,omitempty"`
+		}{
+			command.ExamID,
+			command.SittingID,
+			command.ExpectedRevision,
+			command.ExamRevisionID,
+			command.ClassID,
+			command.ScheduledStartAt,
+			command.ScheduledEndAt,
+		},
+	)
 }
 
-func prepareTransitionIdempotency(invocation invocation.Invocation, operation string, command PauseCommand) (*store.CommandIdempotency, error) {
-	return idempotency.Require(invocation, operation, command.IdempotencyKey, struct {
+func prepareTransitionIdempotency(
+	inv invocation.Invocation,
+	operation string,
+	command ManagerTransitionCommand,
+) (*store.CommandIdempotency, error) {
+	return idempotency.Require(inv, operation, command.IdempotencyKey, struct {
 		ExamID           model.ExamID        `json:"exam_id"`
 		SittingID        model.ExamSittingID `json:"exam_sitting_id"`
 		ExpectedRevision int64               `json:"expected_revision"`
@@ -57,8 +74,8 @@ func prepareTransitionIdempotency(invocation invocation.Invocation, operation st
 	}{command.ExamID, command.SittingID, command.ExpectedRevision, command.PrivateReason})
 }
 
-func prepareExtensionIdempotency(invocation invocation.Invocation, command ExtendCommand) (*store.CommandIdempotency, error) {
-	return idempotency.Require(invocation, idempotencyOperationExtend, command.IdempotencyKey, struct {
+func prepareExtensionIdempotency(inv invocation.Invocation, command ExtendCommand) (*store.CommandIdempotency, error) {
+	return idempotency.Require(inv, idempotencyOperationExtend, command.IdempotencyKey, struct {
 		ExamID           model.ExamID        `json:"exam_id"`
 		SittingID        model.ExamSittingID `json:"exam_sitting_id"`
 		ExpectedRevision int64               `json:"expected_revision"`

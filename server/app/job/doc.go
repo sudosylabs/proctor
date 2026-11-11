@@ -5,35 +5,23 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package job is the single generic engine for durable, finite application
-// Jobs and their runtime lifecycle. It owns immutable descriptor registration, database-backed claiming,
-// leases and heartbeats, fenced state transitions, checkpoints, work budgets,
-// retry and cancellation observation, recurrence timing, panic containment,
-// safe operator projections, non-overlapping periodic runtime maintenance, and
-// bounded shutdown. Periodic tasks create no Job, Job Attempt, or occurrence
-// ledger; their named application/Store operation owns cross-node convergence.
+// Package job runs Proctor's Jobs and lets operators inspect and control them.
 //
-// Execution is at-least-once. A successful claim is not an exactly-once
-// guarantee, so handlers must make their domain effects idempotent and rely on
-// the appropriate durable commit boundary. The engine owns execution
-// mechanics, not the meaning of a Job type, command, checkpoint, progress
-// stage, result, public error code, or recurring occurrence.
+// A Job is one finite piece of background work, stored durably so that it
+// outlives a restart and any node may run it. To add one: add its type to
+// model.JobType; write its Handler and Descriptor in a file of the sibling
+// package app/jobs, behind a constructor that returns a Registration; and
+// list that constructor in app/new_jobs.go.
 //
-// Domain-specific handlers, commands, and recurrence proposers live in the
-// sibling app/jobhandler package. Parent app supplies narrow use-case adapters and
-// constructs Engine from the immutable app/jobhandler catalog plus domain-owned
-// PeriodicTasks. The module-root
-// server retains the constructed Engine and owns when it starts and closes;
-// construction itself is inert.
+// The Engine runs a Job at least once, so handlers must be idempotent: a
+// claim is a lease the Engine renews while the handler runs, and a Job whose
+// lease expires is claimed again. One node holds a Job's claim at a time, and
+// the Job Store refuses a checkpoint or completion from a node that lost it.
+// A retryable failure, a handler panic or a timeout requeues the Job after a
+// delay that doubles per attempt up to the Descriptor's maximum. Every node
+// proposes each Recurrence at every interval boundary, and the proposer
+// deduplicates so that one Job is enqueued per occurrence.
 //
-// Operator inspection and descriptor-governed transition mechanics live here.
-// Actor-sensitive authorization, resource resolution, durable audit ordering,
-// and transport error translation remain in app. This package never imports
-// its parent, transports, platform services, or concrete persistence adapters;
-// it depends inward only on model and store.JobStore.
-//
-// Tests at this boundary cover registration, execution, fencing, recovery,
-// recurrence, projections, controls, races, and shutdown. Concrete handler
-// tests live in app/jobhandler, while PostgreSQL and root-lifecycle tests provide
-// cross-component recovery and wiring evidence.
+// Operations, in operations.go, is the operator service: it authorizes,
+// audits and translates errors around the Engine's list, cancel and retry.
 package job

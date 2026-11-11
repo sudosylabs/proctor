@@ -17,8 +17,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
-
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 	"github.com/sudosylabs/proctor/server/testlib"
@@ -29,7 +28,7 @@ func TestLocalUserCreationCommitsDefaultPictureIntent(t *testing.T) {
 	require.NotEmpty(t, dataSource, "PROCTOR_TEST_DATABASE_URL is not set")
 	persistence := openAuthenticationStore(t, dataSource)
 	helper := testlib.Setup(t, testlib.WithStore(persistence))
-	user, appErr := helper.App.CreateLocalUser(context.Background(), app.CreateLocalUserCommand{User: &model.User{
+	user, appErr := helper.App.Identity.CreateLocalUser(context.Background(), identity.CreateLocalUserCommand{User: &model.User{
 		Username: "default-intent-user", Email: "default-intent-user@example.edu",
 	}, Password: "correct horse battery staple"})
 	require.NoError(t, appErr)

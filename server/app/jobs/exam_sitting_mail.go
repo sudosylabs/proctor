@@ -1,0 +1,174 @@
+// ---------------------------------------------------------------------------------------------
+// Copyright (c) 2026 Sudosy Labs. All rights reserved.
+// Licensed under the GNU Affero General Public License, version 3 only.
+// See LICENSE in the server module root for license information.
+// SPDX-License-Identifier: AGPL-3.0-only
+// ---------------------------------------------------------------------------------------------
+
+package jobs
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"github.com/sudosylabs/proctor/server/app/job"
+	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
+)
+
+type sittingMailExpansionHandler struct {
+	sittings store.ExamSittingStore
+	mail     *mail.SittingComposer
+}
+
+func (h sittingMailExpansionHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
+	command, err := model.DecodeSittingMailExpansionCommand(execution.Job.Command)
+	if err != nil {
+		return job.PermanentFailure("job.command.invalid", err)
+	}
+	if h.sittings == nil || h.mail == nil {
+		return job.RetryableFailure("mail.sitting.unavailable", errors.New("Sitting mail expansion dependencies are unavailable"))
+	}
+
+	checkpoint := model.SittingMailExpansionCheckpoint{}
+	if len(execution.Job.Checkpoint) != 0 {
+		checkpoint, err = model.DecodeSittingMailExpansionCheckpoint(execution.Job.Checkpoint)
+		if err != nil {
+			return job.PermanentFailure("job.checkpoint.invalid", err)
+		}
+	}
+
+	fanout, err := h.sittings.GetMailFanout(ctx, command.OccurrenceID)
+	if err != nil {
+		return sittingMailExpansionDependencyOutcome(err)
+	}
+	if fanout.CompletedAt.Valid {
+		return sittingMailExpansionSucceeded(checkpoint)
+	}
+
+	bundle, err := h.mail.OpenBundle(fanout.Bundle)
+	if err != nil {
+		return job.RetryableFailure("mail.sitting.bundle_unavailable", err)
+	}
+
+	for {
+		page, pageErr := h.sittings.ListMailRecipients(ctx, store.ExamSittingMailRecipientPageRequest{
+			OccurrenceID: command.OccurrenceID,
+			AfterUserID:  checkpoint.AfterUserID,
+			Limit:        model.SittingMailExpansionPageSize,
+		})
+		if pageErr != nil {
+			return sittingMailExpansionDependencyOutcome(pageErr)
+		}
+
+		for index := range page.Recipients {
+			recipient := page.Recipients[index]
+			commit := &store.ExamSittingMailRecipientCommit{
+				OccurrenceID:    command.OccurrenceID,
+				SittingRevision: fanout.SittingRevision,
+				Recipient:       recipient.User,
+			}
+			if recipient.TemplateKey.IsValid() {
+				commit.Delivery, commit.DeliveryJob, err = h.mail.PrepareRecipient(fanout, recipient.User, recipient.TemplateKey, bundle)
+				if errors.Is(err, mail.ErrSittingMailRecipientInvalid) {
+					// One unaddressable account must not stop mail to every
+					// later recipient; it is counted in the Job result.
+					checkpoint.Undeliverable++
+					continue
+				}
+
+				if err != nil {
+					return job.RetryableFailure("mail.sitting.recipient_unavailable", err)
+				}
+			}
+
+			result, commitErr := h.sittings.CommitMailRecipient(ctx, commit)
+			if commitErr != nil {
+				if store.IsConflict(commitErr) || store.IsNotFound(commitErr) {
+					checkpoint.Suppressed++
+					continue
+				}
+
+				return sittingMailExpansionDependencyOutcome(commitErr)
+			}
+
+			if result.Inserted {
+				checkpoint.Expanded++
+			} else {
+				checkpoint.Suppressed++
+			}
+		}
+
+		if len(page.Recipients) != 0 {
+			checkpoint.AfterUserID = page.Recipients[len(page.Recipients)-1].User.ID
+			document, encodeErr := model.EncodeSittingMailExpansionCheckpoint(checkpoint)
+			if encodeErr != nil {
+				return job.PermanentFailure("job.checkpoint.invalid", encodeErr)
+			}
+
+			if checkpointErr := execution.Checkpoint(
+				ctx,
+				job.CheckpointValue{Progress: &model.JobProgress{
+					Current: checkpoint.Expanded + checkpoint.Suppressed + checkpoint.Undeliverable,
+					Total:   checkpoint.Expanded + checkpoint.Suppressed + checkpoint.Undeliverable,
+					Stage:   "expanding",
+				}, Document: document},
+			); checkpointErr != nil {
+				return job.RetryableFailure("mail.sitting.unavailable", checkpointErr)
+			}
+		}
+
+		if !page.More {
+			break
+		}
+	}
+
+	if _, err = h.sittings.CompleteMailExpansion(
+		ctx,
+		&store.ExamSittingMailExpansionCompletion{OccurrenceID: command.OccurrenceID},
+	); err != nil {
+		return sittingMailExpansionDependencyOutcome(err)
+	}
+
+	return sittingMailExpansionSucceeded(checkpoint)
+}
+
+func sittingMailExpansionSucceeded(checkpoint model.SittingMailExpansionCheckpoint) job.Outcome {
+	document, err := model.EncodeSittingMailExpansionResult(model.SittingMailExpansionResult{
+		Expanded:      checkpoint.Expanded,
+		Suppressed:    checkpoint.Suppressed,
+		Undeliverable: checkpoint.Undeliverable,
+	})
+	return job.Outcome{Kind: job.OutcomeSucceeded, Result: document, Err: err}
+}
+
+func sittingMailExpansionDependencyOutcome(err error) job.Outcome {
+	return job.RetryableFailure("mail.sitting.unavailable", err)
+}
+
+func sittingMailExpansionDescriptor(handler sittingMailExpansionHandler) job.Descriptor {
+	descriptor := job.NewDescriptor(model.JobTypeMailExpandSitting, handler)
+	descriptor.Checkpoints = true
+	descriptor.ProgressStages = []string{"expanding"}
+	descriptor.PublicErrorCodes = []string{
+		"mail.sitting.bundle_unavailable",
+		"mail.sitting.invalid",
+		"mail.sitting.recipient_unavailable",
+		"mail.sitting.unavailable",
+	}
+	descriptor.Timeout = 30 * time.Minute
+	descriptor.Concurrency = 2
+	descriptor.BaseRetryDelay = 30 * time.Second
+	descriptor.MaximumRetryDelay = 30 * time.Minute
+	descriptor.SuccessRetention = 90 * 24 * time.Hour
+	descriptor.FailureRetention = 180 * 24 * time.Hour
+	return descriptor
+}
+
+// NewSittingMailExpansion registers the expansion of a Sitting's
+// mail fan-out into individual deliveries.
+func NewSittingMailExpansion(sittings store.ExamSittingStore, composer *mail.SittingComposer) job.Registration {
+	return job.Registration{Descriptor: sittingMailExpansionDescriptor(sittingMailExpansionHandler{sittings: sittings, mail: composer})}
+}

@@ -20,7 +20,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/job"
-	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/jobs"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
@@ -45,7 +46,7 @@ func TestMFARekeyJobResealsEveryLiveSecretAndProvesRetirement(t *testing.T) {
 	for index := range 3 {
 		user := createMFARekeyIntegrationUser(t, ctx, persistence, fmt.Sprintf("mfa-rekey-user-%d", index), at)
 		secret := fmt.Sprintf("JBSWY3DPEHPK3PX%d", index)
-		envelope, sealErr := oldSealer.Seal(secretseal.Binding{Purpose: jobhandler.MFASealingPurpose, Owner: user.ID.String()}, []byte(secret))
+		envelope, sealErr := oldSealer.Seal(secretseal.Binding{Purpose: jobs.MFASealingPurpose, Owner: user.ID.String()}, []byte(secret))
 		require.NoError(t, sealErr)
 		encoded, encodeErr := json.Marshal(envelope)
 		require.NoError(t, encodeErr)
@@ -56,7 +57,7 @@ func TestMFARekeyJobResealsEveryLiveSecretAndProvesRetirement(t *testing.T) {
 		secrets[user.ID] = secret
 	}
 
-	command, err := json.Marshal(jobhandler.MFARekeyCommand{PrimaryKeyID: newSealer.PrimaryKeyID(), RetiringKeyID: oldSealer.PrimaryKeyID()})
+	command, err := json.Marshal(jobs.MFARekeyCommand{PrimaryKeyID: newSealer.PrimaryKeyID(), RetiringKeyID: oldSealer.PrimaryKeyID()})
 	require.NoError(t, err)
 	rekeyJob, err := model.NewJob(model.NewJobID(), model.JobTypeMFARekey, command,
 		"mfa-rekey:"+newSealer.PrimaryKeyID()+":"+oldSealer.PrimaryKeyID(), at, at, 10)
@@ -70,11 +71,9 @@ func TestMFARekeyJobResealsEveryLiveSecretAndProvesRetirement(t *testing.T) {
 		RetiringKeyID: oldSealer.PrimaryKeyID(), Job: rekeyJob, AuditEventID: attempt.ID, AuditAt: model.NowUTC()})
 	require.NoError(t, err)
 
-	descriptor := integrationJobDescriptor(t, jobhandler.NewCatalog(jobhandler.CatalogDependencies{
-		JobStore: persistence.Job(), MFARekey: persistence.MFA(), MFASealer: newSealer,
-	}), model.JobTypeMFARekey)
+	descriptor := jobs.NewMFARekey(persistence.MFA(), newSealer).Descriptor
 	node, err := job.New(job.Dependencies{Store: persistence.Job(), Descriptors: []job.Descriptor{descriptor},
-		NodeID: "mfa-rekey-node", Diagnostics: &integrationJobDiagnostics{}, Policy: job.Policy{PollInterval: 5 * time.Millisecond}})
+		NodeID: "mfa-rekey-node", Diagnostics: newDiscardLogger(t), Policy: job.Policy{PollInterval: 5 * time.Millisecond}})
 	require.NoError(t, err)
 	require.NoError(t, node.Start(ctx))
 	defer func() { _ = node.Close(context.Background()) }()
@@ -84,9 +83,9 @@ func TestMFARekeyJobResealsEveryLiveSecretAndProvesRetirement(t *testing.T) {
 
 	completed, err := persistence.Job().Get(ctx, rekeyJob.ID)
 	require.NoError(t, err)
-	result, err := jobhandler.DecodeMFARekeyResult(completed.Result)
+	result, err := jobs.DecodeMFARekeyResult(completed.Result)
 	require.NoError(t, err)
-	require.Equal(t, jobhandler.MFARekeyResult{PrimaryKeyID: newSealer.PrimaryKeyID(), RetiringKeyID: oldSealer.PrimaryKeyID(),
+	require.Equal(t, jobs.MFARekeyResult{PrimaryKeyID: newSealer.PrimaryKeyID(), RetiringKeyID: oldSealer.PrimaryKeyID(),
 		Processed: 3, Resealed: 3, RetirementSafe: true}, result)
 	for userID, secret := range secrets {
 		credential, getErr := persistence.MFA().GetByUser(ctx, userID)
@@ -96,7 +95,7 @@ func TestMFARekeyJobResealsEveryLiveSecretAndProvesRetirement(t *testing.T) {
 		require.NoError(t, json.Unmarshal([]byte(credential.EncryptedSecret), &envelope))
 		retiredRing, ringErr := secretseal.New(secretseal.Settings{EncryptionKey: newKey, MaximumPlaintext: 128})
 		require.NoError(t, ringErr)
-		plaintext, openErr := retiredRing.Open(secretseal.Binding{Purpose: jobhandler.MFASealingPurpose, Owner: userID.String()}, envelope)
+		plaintext, openErr := retiredRing.Open(secretseal.Binding{Purpose: jobs.MFASealingPurpose, Owner: userID.String()}, envelope)
 		require.NoError(t, openErr, "the secret opens without the retired key")
 		require.Equal(t, secret, string(plaintext))
 	}
@@ -108,11 +107,11 @@ func TestMFARekeyJobResealsEveryLiveSecretAndProvesRetirement(t *testing.T) {
 
 func createMFARekeyIntegrationUser(t *testing.T, ctx context.Context, persistence *sqlstore.SQLStore, username string, at time.Time) *model.User {
 	t.Helper()
-	user, defaultJob, err := prepareUserDefaultProfilePictureJob(&model.User{Username: username, Email: username + "@example.test"}, at)
+	account, defaultJob, err := prepareUserDefaultProfilePictureJob(&model.User{Username: username, Email: username + "@example.test"}, at)
 	require.NoError(t, err)
-	settings, err := prepareInitialUserSettingsDocument(user)
+	settings, err := user.PrepareInitialSettingsDocument(account)
 	require.NoError(t, err)
-	created, err := persistence.User().Create(ctx, &store.UserCreation{User: user, Settings: settings, DefaultProfilePictureJob: defaultJob})
+	created, err := persistence.User().Create(ctx, &store.UserCreation{User: account, Settings: settings, DefaultProfilePictureJob: defaultJob})
 	require.NoError(t, err)
 	return created.User
 }

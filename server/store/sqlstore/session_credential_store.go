@@ -24,6 +24,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLSessionCredentialStore implements store.SessionCredentialStore on
+// session_credentials, locking the presented credential row while a refresh
+// credential rotates, so a replayed refresh token is seen as used.
 type SQLSessionCredentialStore struct {
 	*SQLStore
 	credentialsQuery sq.SelectBuilder
@@ -82,7 +85,8 @@ func insertSessionCredential(
 			id, created_at, updated_at, archived_at, session_id, kind,
 			token_hash, family_id, parent_id, replaced_by_id, expires_at,
 			used_at, revoked_at
-		) VALUES (
+		)
+		VALUES (
 			:id, :created_at, :updated_at, :archived_at, :session_id, :kind,
 			:token_hash, :family_id, :parent_id, :replaced_by_id, :expires_at,
 			:used_at, :revoked_at
@@ -144,7 +148,10 @@ func (s SQLSessionCredentialStore) RotateRefresh(ctx context.Context, input *sto
 		return nil, store.NewErrInvalidInput("session_credential", "id", "must_be_empty")
 	}
 
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "refresh rotation", func(ctx context.Context, tx *sqlxTxWrapper) (*store.SessionRotation, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "refresh rotation", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.SessionRotation, error) {
 		return rotateRefreshCredential(ctx, tx, input.TokenHash, access, refresh, now, idleExpiresAt, input.MFARequiredByPolicy)
 	})
 }
@@ -153,8 +160,13 @@ func (s SQLSessionCredentialStore) RotateRefresh(ctx context.Context, input *sto
 // When the Access Policy requires the User to use two-step verification, a
 // single-factor Web Session becomes restricted to MFA enrollment and any other
 // single-factor Session is refused with store.ErrMFAEnrollmentRequired.
-func rotateRefreshCredential(ctx context.Context, tx *sqlxTxWrapper, tokenHash string, access, refresh *model.SessionCredential,
-	now, idleExpiresAt time.Time, mfaRequiredByPolicy bool,
+func rotateRefreshCredential(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	tokenHash string,
+	access, refresh *model.SessionCredential,
+	now, idleExpiresAt time.Time,
+	mfaRequiredByPolicy bool,
 ) (*store.SessionRotation, error) {
 	current, session, err := lockRefreshCredentialSession(ctx, tx, tokenHash)
 	if err != nil {
@@ -163,17 +175,20 @@ func rotateRefreshCredential(ctx context.Context, tx *sqlxTxWrapper, tokenHash s
 	if err = requireSessionAuthenticationGeneration(ctx, tx, session); err != nil {
 		return nil, err
 	}
+
 	if current.UsedAt.Valid || !current.ReplacedByID.IsZero() {
 		hashes, revokeErr := revokeReplayedSession(ctx, tx, session, now)
 		if revokeErr != nil {
 			return nil, revokeErr
 		}
+
 		return &store.SessionRotation{
 			Session:             session,
 			RevokedAccessHashes: hashes,
 			ReplayDetected:      true,
 		}, nil
 	}
+
 	if session.RevokedAt.Valid {
 		return nil, store.NewErrConflict("session_credential", "session_credentials_inactive", nil)
 	}
@@ -183,14 +198,17 @@ func rotateRefreshCredential(ctx context.Context, tx *sqlxTxWrapper, tokenHash s
 	if current.IsExpiredAt(now) {
 		return nil, store.NewErrConflict("session_credential", "session_credentials_inactive", nil)
 	}
+
 	restrict := mfaRequiredByPolicy && session.AuthenticationStrength != model.AuthenticationMultiFactor
 	if restrict && session.ClientType != model.SessionClientWeb {
 		return nil, store.ErrMFAEnrollmentRequired
 	}
+
 	newAccess, newRefresh, err := prepareRotatedSessionCredentials(access, refresh, current, session, now)
 	if err != nil {
 		return nil, err
 	}
+
 	revokedHashes, err := replaceRefreshCredential(ctx, tx, session, current, newAccess, newRefresh, now)
 	if err != nil {
 		return nil, err
@@ -198,6 +216,7 @@ func rotateRefreshCredential(ctx context.Context, tx *sqlxTxWrapper, tokenHash s
 	if err := touchRotatedSession(ctx, tx, session, idleExpiresAt, now, restrict); err != nil {
 		return nil, err
 	}
+
 	return &store.SessionRotation{
 		Session:             session,
 		AccessCredential:    newAccess,
@@ -207,9 +226,16 @@ func rotateRefreshCredential(ctx context.Context, tx *sqlxTxWrapper, tokenHash s
 }
 
 // lockRefreshCredentialSession locks the owner's Sessions, then the refresh credential and its Session.
-func lockRefreshCredentialSession(ctx context.Context, tx *sqlxTxWrapper, tokenHash string) (*model.SessionCredential, *model.Session, error) {
+func lockRefreshCredentialSession(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	tokenHash string,
+) (*model.SessionCredential, *model.Session, error) {
 	var userID string
-	if err := tx.Get(ctx, &userID, `
+	if err := tx.Get(
+		ctx,
+		&userID,
+		`
 		SELECT session.user_id
 		  FROM session_credentials credential
 		  JOIN sessions session ON session.id = credential.session_id
@@ -227,7 +253,10 @@ func lockRefreshCredentialSession(ctx context.Context, tx *sqlxTxWrapper, tokenH
 	}
 
 	var currentRow sessionCredentialRow
-	if err := tx.Get(ctx, &currentRow, `
+	if err := tx.Get(
+		ctx,
+		&currentRow,
+		`
 		SELECT id, created_at, updated_at, archived_at, session_id, kind,
 		       token_hash, family_id, parent_id, replaced_by_id, expires_at,
 		       used_at, revoked_at
@@ -245,17 +274,21 @@ func lockRefreshCredentialSession(ctx context.Context, tx *sqlxTxWrapper, tokenH
 	}
 
 	var lockedSessionRow sessionRow
-	if err = tx.Get(ctx, &lockedSessionRow, `
-		SELECT id, created_at, updated_at, archived_at, user_id, authentication_generation, mfa_recovery_required, mfa_enrollment_required, client_type,
-		       desktop_registration_id, dpop_key_thumbprint, desktop_release, desktop_build_id,
-		       desktop_platform, desktop_architecture, desktop_realtime_protocol,
-		       device_id, device_name, authentication_method, authentication_provider_id, external_identity_id,
-		       authentication_strength, authenticated_at, reauthenticated_at, mfa_completed_at,
-		       last_activity_at, idle_expires_at, expires_at, revoked_at,
-		       revocation_reason
-		  FROM sessions
-		 WHERE id = ? AND archived_at IS NULL
-		 FOR UPDATE`,
+	if err = tx.Get(
+		ctx,
+		&lockedSessionRow,
+		`
+		SELECT id, created_at, updated_at, archived_at, user_id, authentication_generation,
+			mfa_recovery_required, mfa_enrollment_required, client_type, desktop_registration_id,
+			dpop_key_thumbprint, desktop_release, desktop_build_id, desktop_platform, desktop_architecture,
+			desktop_realtime_protocol, device_id, device_name, authentication_method,
+			authentication_provider_id, external_identity_id, authentication_strength, authenticated_at,
+			reauthenticated_at, mfa_completed_at, last_activity_at, idle_expires_at, expires_at, revoked_at,
+			revocation_reason
+		FROM sessions
+		WHERE id = ?
+			AND archived_at IS NULL
+		FOR UPDATE`,
 		current.SessionID.String(),
 	); err != nil {
 		return nil, nil, translateError("session", current.SessionID.String(), err)
@@ -286,12 +319,18 @@ func expireRotatingSession(ctx context.Context, tx *sqlxTxWrapper, session *mode
 	session.RevokedAt = model.OptionalTimeFrom(latestTime(session.CreatedAt, now))
 	session.RevocationReason = model.SessionRevocationExpired
 	return &store.SessionRotation{
-		Session: session, RevokedAccessHashes: hashes, Expired: true,
+		Session:             session,
+		RevokedAccessHashes: hashes,
+		Expired:             true,
 	}, nil
 }
 
 // prepareRotatedSessionCredentials builds the replacement access and refresh credentials bounded by the Session lifetime.
-func prepareRotatedSessionCredentials(access, refresh, current *model.SessionCredential, session *model.Session, now time.Time) (*model.SessionCredential, *model.SessionCredential, error) {
+func prepareRotatedSessionCredentials(
+	access, refresh, current *model.SessionCredential,
+	session *model.Session,
+	now time.Time,
+) (*model.SessionCredential, *model.SessionCredential, error) {
 	newAccess := *access
 	newAccess.SessionID = session.ID
 	newAccess.Kind = model.SessionCredentialAccess
@@ -318,12 +357,21 @@ func prepareRotatedSessionCredentials(access, refresh, current *model.SessionCre
 }
 
 // replaceRefreshCredential revokes the Session's access credentials, inserts the replacements and marks the current refresh credential used.
-func replaceRefreshCredential(ctx context.Context, tx *sqlxTxWrapper, session *model.Session, current, newAccess, newRefresh *model.SessionCredential, now time.Time) ([]string, error) {
+func replaceRefreshCredential(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	session *model.Session,
+	current, newAccess, newRefresh *model.SessionCredential,
+	now time.Time,
+) ([]string, error) {
 	revokedHashes, err := selectActiveAccessHashes(ctx, tx, session.ID.String())
 	if err != nil {
 		return nil, err
 	}
-	if _, err := tx.Exec(ctx, `
+
+	if _, err := tx.Exec(
+		ctx,
+		`
 		UPDATE session_credentials
 		   SET updated_at = GREATEST(updated_at, ?), revoked_at = GREATEST(created_at, ?)
 		 WHERE session_id = ?
@@ -337,13 +385,17 @@ func replaceRefreshCredential(ctx context.Context, tx *sqlxTxWrapper, session *m
 	); err != nil {
 		return nil, fmt.Errorf("revoke replaced access credentials: %w", err)
 	}
+
 	if err := insertSessionCredential(ctx, tx, newAccess); err != nil {
 		return nil, err
 	}
 	if err := insertSessionCredential(ctx, tx, newRefresh); err != nil {
 		return nil, err
 	}
-	if _, err := tx.Exec(ctx, `
+
+	if _, err := tx.Exec(
+		ctx,
+		`
 		UPDATE session_credentials
 		   SET updated_at = GREATEST(updated_at, ?),
 		       used_at = GREATEST(created_at, ?),
@@ -356,13 +408,20 @@ func replaceRefreshCredential(ctx context.Context, tx *sqlxTxWrapper, session *m
 	); err != nil {
 		return nil, fmt.Errorf("mark refresh credential used: %w", err)
 	}
+
 	return revokedHashes, nil
 }
 
 // touchRotatedSession records the rotation as Session activity, extends its
 // idle expiry within the absolute lifetime, and, when restrict is set, limits
 // the Web Session to MFA enrollment. A restriction is never lifted here.
-func touchRotatedSession(ctx context.Context, tx *sqlxTxWrapper, session *model.Session, idleExpiresAt, now time.Time, restrict bool) error {
+func touchRotatedSession(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	session *model.Session,
+	idleExpiresAt, now time.Time,
+	restrict bool,
+) error {
 	idleAt := idleExpiresAt
 	if idleAt.After(session.ExpiresAt) {
 		idleAt = session.ExpiresAt
@@ -373,7 +432,9 @@ func touchRotatedSession(ctx context.Context, tx *sqlxTxWrapper, session *model.
 		session.UpdatedAt = now
 	}
 	session.MFAEnrollmentRequired = session.MFAEnrollmentRequired || restrict
-	if _, err := tx.Exec(ctx, `
+	if _, err := tx.Exec(
+		ctx,
+		`
 		UPDATE sessions
 		   SET updated_at = ?, last_activity_at = ?, idle_expires_at = ?, mfa_enrollment_required = ?
 		 WHERE id = ? AND revoked_at IS NULL`,
@@ -392,7 +453,9 @@ func touchRotatedSession(ctx context.Context, tx *sqlxTxWrapper, session *model.
 // backwards. It is not a profile change, so it bumps neither updated_at nor
 // the revision.
 func advanceUserActivity(ctx context.Context, executor sqlxExecutor, userID model.UserID, at time.Time) error {
-	if _, err := executor.Exec(ctx, `
+	if _, err := executor.Exec(
+		ctx,
+		`
 		UPDATE users
 		   SET last_activity_at = GREATEST(last_activity_at, created_at, ?)
 		 WHERE id = ? AND archived_at IS NULL`,
@@ -414,7 +477,10 @@ func revokeReplayedSession(
 	if err != nil {
 		return nil, err
 	}
-	if _, err := executor.Exec(ctx, `
+
+	if _, err := executor.Exec(
+		ctx,
+		`
 		UPDATE session_credentials
 		   SET updated_at = GREATEST(updated_at, ?), revoked_at = GREATEST(created_at, ?)
 		 WHERE session_id = ? AND archived_at IS NULL AND revoked_at IS NULL`,
@@ -424,7 +490,10 @@ func revokeReplayedSession(
 	); err != nil {
 		return nil, fmt.Errorf("revoke replayed credential family: %w", err)
 	}
-	if _, err := executor.Exec(ctx, `
+
+	if _, err := executor.Exec(
+		ctx,
+		`
 		UPDATE sessions
 		   SET updated_at = GREATEST(updated_at, ?),
 		       revoked_at = GREATEST(created_at, ?),
@@ -437,9 +506,11 @@ func revokeReplayedSession(
 	); err != nil {
 		return nil, fmt.Errorf("revoke replayed session: %w", err)
 	}
+
 	if session.UpdatedAt.Before(now) {
 		session.UpdatedAt = now
 	}
+
 	session.RevokedAt = model.OptionalTimeFrom(latestTime(session.CreatedAt, now))
 	session.RevocationReason = model.SessionRevocationRefreshReplay
 	return hashes, nil
@@ -451,7 +522,10 @@ func selectActiveAccessHashes(
 	sessionID string,
 ) ([]string, error) {
 	hashes := []string{}
-	if err := executor.Select(ctx, &hashes, `
+	if err := executor.Select(
+		ctx,
+		&hashes,
+		`
 		SELECT token_hash
 		  FROM session_credentials
 		 WHERE session_id = ?
@@ -490,18 +564,22 @@ func (row sessionCredentialRow) model() (*model.SessionCredential, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	sessionID, err := parsePersistedID("session_credential", "session_id", row.SessionID, model.ParseSessionID)
 	if err != nil {
 		return nil, err
 	}
+
 	parentID, err := parseNullablePersistedID("session_credential", "parent_id", row.ParentID, model.ParseSessionCredentialID)
 	if err != nil {
 		return nil, err
 	}
+
 	replacedByID, err := parseNullablePersistedID("session_credential", "replaced_by_id", row.ReplacedByID, model.ParseSessionCredentialID)
 	if err != nil {
 		return nil, err
 	}
+
 	credential := &model.SessionCredential{
 		ID:           id,
 		CreatedAt:    row.CreatedAt.UTC(),
@@ -520,6 +598,7 @@ func (row sessionCredentialRow) model() (*model.SessionCredential, error) {
 	if err := validatePersistedModel("session_credential", credential); err != nil {
 		return nil, err
 	}
+
 	return credential, nil
 }
 

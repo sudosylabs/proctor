@@ -79,7 +79,7 @@ func Default() Config {
 			ExportTimeout:   Duration{Duration: 10 * time.Second},
 			ShutdownTimeout: Duration{Duration: 5 * time.Second},
 		},
-		Database: Database{
+		Database: Database{ //nolint:gosec // G101: the development database the compose stack defines; deployments configure their own.
 			DataSource:            "postgres://proctor:proctor@127.0.0.1:15432/proctor?sslmode=disable",
 			MaxOpenConnections:    50,
 			MaxIdleConnections:    10,
@@ -171,6 +171,7 @@ func (c Config) Clone() Config {
 			c.Authentication.External.Providers...,
 		)
 	}
+
 	for index := range cloned.Authentication.External.Providers {
 		provider := &cloned.Authentication.External.Providers[index]
 		sourceProvider := c.Authentication.External.Providers[index]
@@ -181,22 +182,26 @@ func (c Config) Clone() Config {
 				source.AllowedHomeOrganizations...,
 			)
 		}
+
 		if source.MultiFactorValues != nil {
 			provider.Claims.MultiFactorValues = append(
 				make([]string, 0, len(source.MultiFactorValues)),
 				source.MultiFactorValues...,
 			)
 		}
+
 		if sourceProvider.CAS != nil {
 			cas := *sourceProvider.CAS
 			provider.CAS = &cas
 		}
+
 		if sourceProvider.OIDC != nil {
 			oidc := *sourceProvider.OIDC
 			oidc.Scopes = cloneSlice(sourceProvider.OIDC.Scopes)
 			provider.OIDC = &oidc
 		}
 	}
+
 	return cloned
 }
 
@@ -213,17 +218,20 @@ func (c Config) Redacted() Config {
 	if redacted.Database.DataSource != "" {
 		redacted.Database.DataSource = "[redacted]"
 	}
+
 	redacted.Cache.Redis.Password = redactSecret(redacted.Cache.Redis.Password)
 	redacted.Metrics.BearerToken = redactSecret(redacted.Metrics.BearerToken)
 	for name, value := range redacted.Tracing.Headers {
 		redacted.Tracing.Headers[name] = redactSecret(value)
 	}
+
 	redacted.Cluster.Memberlist.EncryptionKey = redactSecret(redacted.Cluster.Memberlist.EncryptionKey)
 	for index := range redacted.Cluster.Memberlist.DecryptionKeys {
 		redacted.Cluster.Memberlist.DecryptionKeys[index] = redactSecret(
 			redacted.Cluster.Memberlist.DecryptionKeys[index],
 		)
 	}
+
 	redacted.Mail.SMTP.Password = redactSecret(redacted.Mail.SMTP.Password)
 	redacted.Mail.SecretSealing.EncryptionKey = redactSecret(
 		redacted.Mail.SecretSealing.EncryptionKey,
@@ -233,6 +241,7 @@ func (c Config) Redacted() Config {
 			redacted.Mail.SecretSealing.DecryptionKeys[index],
 		)
 	}
+
 	redacted.VFS.S3.AccessKey = redactSecret(redacted.VFS.S3.AccessKey)
 	redacted.VFS.S3.SecretKey = redactSecret(redacted.VFS.S3.SecretKey)
 	redacted.VFS.S3.SessionToken = redactSecret(redacted.VFS.S3.SessionToken)
@@ -244,6 +253,7 @@ func (c Config) Redacted() Config {
 			redacted.Authentication.MFA.DecryptionKeys[index],
 		)
 	}
+
 	redacted.Authentication.Bootstrap.Secret = redactSecret(
 		redacted.Authentication.Bootstrap.Secret,
 	)
@@ -255,6 +265,7 @@ func (c Config) Redacted() Config {
 			)
 		}
 	}
+
 	return redacted
 }
 

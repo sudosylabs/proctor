@@ -29,28 +29,40 @@ type securityControlReceipt struct {
 }
 
 func (r securityControlReceipt) Validate() error {
-	if r.Sequence <= 0 || !securityControlSafeInt(r.Sequence) || !model.IsValidSHA256Fingerprint(r.Digest) || !slices.Contains([]string{"accepted", "reset_required", "reset_conflict"}, r.Result) || r.ResetIDs == nil || len(r.ResetIDs) > 11 || r.Rejections == nil || len(r.Rejections) > 50 {
+	if r.Sequence <= 0 ||
+		!securityControlSafeInt(r.Sequence) ||
+		!model.IsValidSHA256Fingerprint(r.Digest) ||
+		!slices.Contains([]string{"accepted", "reset_required", "reset_conflict"}, r.Result) ||
+		r.ResetIDs == nil ||
+		len(r.ResetIDs) > 11 ||
+		r.Rejections == nil ||
+		len(r.Rejections) > 50 {
 		return model.ErrSecurityControlInvalid
 	}
+
 	for i, id := range r.ResetIDs {
 		if !model.IsValidAgreementID(id) || slices.Contains(r.ResetIDs[:i], id) {
 			return model.ErrSecurityControlInvalid
 		}
 	}
+
 	for i, rejection := range r.Rejections {
 		if rejection[0] < 0 || rejection[0] > 49 || rejection[1] < 0 || rejection[1] > 1 {
 			return model.ErrSecurityControlInvalid
 		}
+
 		for _, prior := range r.Rejections[:i] {
 			if prior[0] == rejection[0] {
 				return model.ErrSecurityControlInvalid
 			}
 		}
 	}
+
 	raw, err := canonicalSecurityControlDocument(r)
 	if err != nil || len(raw) > model.SecurityControlReceiptMaxBytes {
 		return model.ErrSecurityControlInvalid
 	}
+
 	return nil
 }
 
@@ -74,7 +86,10 @@ func newNativeControlLedger() nativeControlLedger {
 }
 
 func (l nativeControlLedger) Validate() error {
-	if !securityControlSafeInt(l.ProcessedSequence) || l.Receipts == nil || len(l.Receipts) > model.SecurityControlReceiptLimit || (l.ProcessedSequence == 0) != (l.ProcessedDigest == nil) {
+	if !securityControlSafeInt(l.ProcessedSequence) ||
+		l.Receipts == nil ||
+		len(l.Receipts) > model.SecurityControlReceiptLimit ||
+		(l.ProcessedSequence == 0) != (l.ProcessedDigest == nil) {
 		return model.ErrSecurityControlInvalid
 	}
 	if l.ProcessedSequence == 0 {
@@ -125,7 +140,11 @@ func (l nativeControlLedger) Record(receipt securityControlReceipt) (nativeContr
 		return l, model.ErrSecurityControlInvalid
 	}
 	digest := receipt.Digest
-	next := nativeControlLedger{ProcessedSequence: receipt.Sequence, ProcessedDigest: &digest, Receipts: make([]securityControlReceipt, 0, model.SecurityControlReceiptLimit)}
+	next := nativeControlLedger{
+		ProcessedSequence: receipt.Sequence,
+		ProcessedDigest:   &digest,
+		Receipts:          make([]securityControlReceipt, 0, model.SecurityControlReceiptLimit),
+	}
 	start := 0
 	if len(l.Receipts) == model.SecurityControlReceiptLimit {
 		start = 1

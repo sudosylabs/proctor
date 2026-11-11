@@ -216,10 +216,15 @@ func newSharedMechanics(deps Dependencies) (sharedMechanics, error) {
 		return sharedMechanics{}, err
 	}
 
+	examAttempts := deps.Store.ExamAttempt()
+	if examAttempts == nil {
+		return sharedMechanics{}, errors.New("realtime publication requires the Exam Attempt store")
+	}
+
 	publication, err := realtime.New(realtime.Dependencies{
 		Delivery:    delivery,
 		Diagnostics: deps.RealtimeDiagnostics,
-		Attempts:    sessionAttemptTargets{attempts: deps.Store.ExamAttempt()},
+		Attempts:    sessionAttemptTargets{attempts: examAttempts},
 	})
 	if err != nil {
 		return sharedMechanics{}, err

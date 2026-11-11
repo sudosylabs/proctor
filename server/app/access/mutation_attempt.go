@@ -34,8 +34,8 @@ type Mutation struct {
 	Subject model.UserID
 	// At is the instant the mutation happens. RunAudited hands it to the named
 	// Store mutation as MutationReference.MutationAt, normalised to UTC
-	// microseconds with model.TimeUTC (a zero At stays zero), and reads no
-	// clock of its own.
+	// microseconds with model.TimeUTC, and reads no clock of its own. A zero
+	// At is a programming error: RunAudited refuses it before Begin.
 	At time.Time
 }
 
@@ -61,7 +61,8 @@ func RunAudited[T any](
 ) (T, error) {
 	var zero T
 	scoped := attempt.ScopeType != "" || attempt.ScopeID != ""
-	if !attempt.Subject.IsZero() && !attempt.Subject.IsValid() ||
+	if attempt.At.IsZero() ||
+		!attempt.Subject.IsZero() && !attempt.Subject.IsValid() ||
 		scoped && (!attempt.ScopeType.IsValid() || !model.IsValidOpaqueID(attempt.ScopeID)) {
 		return zero, apperror.New("audit.internal")
 	}

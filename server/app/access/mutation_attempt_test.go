@@ -92,6 +92,32 @@ func TestMutationAttemptBeginFailurePreventsMutation(t *testing.T) {
 	require.Equal(t, []string{"begin"}, events)
 }
 
+func TestMutationAttemptRejectsMutationWithoutTime(t *testing.T) {
+	t.Parallel()
+
+	events := []string{}
+	auditor := &mutationAttemptAuditorFake{events: &events, beginID: model.NewID()}
+	mutated := false
+	_, err := RunAudited(
+		context.Background(), auditor,
+		Mutation{
+			Action:    model.ActionAcademicUnitManage,
+			Resource:  model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewID()},
+			Operation: "create",
+		},
+		func(context.Context, MutationReference) (string, error) {
+			mutated = true
+			return "", nil
+		},
+		func(err error) error { return err },
+	)
+	var appErr *apperror.Error
+	require.ErrorAs(t, err, &appErr, "RunAudited() error")
+	require.Equal(t, "audit.internal", appErr.Code())
+	require.False(t, mutated, "named mutation ran without a mutation time")
+	require.Empty(t, events, "an audit was begun for a mutation without a time")
+}
+
 func TestMutationAttemptUsesIndependentAuditScope(t *testing.T) {
 	t.Parallel()
 

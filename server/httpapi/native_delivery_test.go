@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -24,6 +25,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
+	"github.com/sudosylabs/proctor/server/internal/errorcatalog"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -148,4 +150,26 @@ func TestNativeDeliveryAppendClosedBodyAndBounds(t *testing.T) {
 		require.Equal(t, want, response.Code, "invalid append reached application: %d %s", response.Code, response.Body.String())
 		require.Equal(t, before, f.calls, "invalid append reached application: %d %s", response.Code, response.Body.String())
 	}
+}
+
+// TestDeliveryRecoveryCodesAgreeWithTheErrorCatalog holds the routing kernel's
+// catalog-driven delivery member to the Attempt module's list: the kernel
+// presents recovery state for exactly the codes the application attaches it
+// to, which the WebSocket transport also reads.
+func TestDeliveryRecoveryCodesAgreeWithTheErrorCatalog(t *testing.T) {
+	source, err := os.ReadFile("route/error_catalog.yaml")
+	require.NoError(t, err)
+	catalog, err := errorcatalog.Parse(source)
+	require.NoError(t, err)
+	var catalogued, supported []string
+	for _, entry := range catalog.Entries {
+		if entry.Extension == "delivery" {
+			catalogued = append(catalogued, entry.Code)
+		}
+		if attempt.SupportsDeliveryRecovery(entry.Code) {
+			supported = append(supported, entry.Code)
+		}
+	}
+	require.NotEmpty(t, supported)
+	require.Equal(t, supported, catalogued)
 }

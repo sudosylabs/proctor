@@ -24,6 +24,12 @@
 #            code itself, as the fallback for a failure that carries no
 #            application error or as a concealing re-mapping.
 # problem:   the HTTP kernel writes the code directly as Problem Details.
+# retry_after: the HTTP kernel sends Retry-After with this many seconds; only
+#            for a 429 or 503 code.
+# extension: the one Problem Details extension member the code may carry,
+#            which the HTTP kernel adds when the error's cause chain supplies
+#            a valid value: `delivery` (delivery recovery state) or
+#            `delivery_metadata_capacity` (the metadata reservation bounds).
 conditions:
   invalid: 400
   denied: 403
@@ -361,28 +367,41 @@ codes:
   - code: exam.delivery.append_rate_limited
     description: "Too many delivery appends; retry after the `Retry-After` interval."
     websocket_fallback: true
+    retry_after: 1
+    extension: delivery
   - code: exam.delivery.batch_conflict
     description: "The delivery batch conflicts with an accepted batch at the same position."
   - code: exam.delivery.control_rate_limited
     description: "Too many delivery control requests; retry after the `Retry-After` interval."
+    retry_after: 1
   - code: exam.delivery.declaration_conflict
     description: "The delivery declaration conflicts with an accepted declaration."
+    extension: delivery
   - code: exam.delivery.detail_budget_exhausted
     description: "The Attempt exhausted its delivery detail budget; `delivery` carries the recovery state."
+    extension: delivery
   - code: exam.delivery.metadata_capacity
     description: "The delivery metadata reservation exceeds capacity; `delivery_metadata_capacity` carries the bounds."
+    extension: delivery_metadata_capacity
   - code: exam.delivery.pending_capacity
     status: 429
     reason: "Delivery backpressure: the client retries after the Retry-After interval."
     description: "Too many pending delivery records; retry after the `Retry-After` interval."
+    retry_after: 1
+    extension: delivery
   - code: exam.delivery.replay_window_exceeded
     description: "The delivery position is outside the replay window; `delivery` carries the recovery state."
+    extension: delivery
   - code: exam.delivery.sequence_limit
     description: "The delivery stream reached its sequence limit."
+    extension: delivery
   - code: exam.delivery.summary_rate_limited
     description: "Too many delivery summaries; retry after the `Retry-After` interval."
+    retry_after: 1
+    extension: delivery
   - code: exam.delivery.upload_expired
     description: "The delivery upload expired before it was committed."
+    extension: delivery
   - code: exam.draft.no_changes
     description: "The Draft update would not change the Draft."
   - code: exam.draft.revision_conflict
@@ -729,6 +748,7 @@ codes:
   - code: service.busy
     description: "The node is at capacity for expensive work; retry after the `Retry-After` interval."
     transport: true
+    retry_after: 1
   - code: session.id.invalid
     description: "The Session identifier is malformed."
   - code: session.not_found

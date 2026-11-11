@@ -24,7 +24,7 @@ import (
 )
 
 func TestLoginCapacityRefusalIsRetryableAndDoesNotIssueCredentials(t *testing.T) {
-	logger, _ := routetest.NewLogger(t)
+	logger, logs := routetest.NewLogger(t)
 	failure := apperror.New("service.busy").Wrap(errors.New("private capacity detail"))
 	fake := &authenticationEntryHTTPApplication{loginError: failure}
 	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, authenticationResource(fake, fake, route.Cookies{}))
@@ -39,8 +39,15 @@ func TestLoginCapacityRefusalIsRetryableAndDoesNotIssueCredentials(t *testing.T)
 	require.Equal(t, "no-store", response.Header().Get("Cache-Control"), "capacity refusal retried internally, issued cookies, or was cacheable")
 	require.Contains(t, response.Body.String(), `"code":"service.busy"`)
 	require.NotContains(t, response.Body.String(), "private capacity detail")
-	require.False(t, route.ErrorIsLogged(failure), "capacity refusals must use bounded counters rather than per-request error logging")
-	require.True(t, route.ErrorIsLogged(apperror.New("authentication.internal")), "unexpected failures lost their operator diagnostics")
+	require.NotContains(t, logs.String(), "application request failed", "capacity refusals must use bounded counters rather than per-request error logging")
+
+	fake.loginError = apperror.New("authentication.internal")
+	request = newJSONRequest(http.MethodPost, "/api/v1/auth/login",
+		strings.NewReader(`{"login_id":"student","password":"example-password","client_type":"web"}`))
+	response = httptest.NewRecorder()
+	api.ServeHTTP(response, request)
+	require.Equal(t, http.StatusInternalServerError, response.Code, "unexpected failure")
+	require.Contains(t, logs.String(), "application request failed", "unexpected failures lost their operator diagnostics")
 }
 
 func TestOnlyExpensiveWorkRoutesDeclareCapacityRefusal(t *testing.T) {

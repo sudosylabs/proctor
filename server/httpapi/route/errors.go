@@ -18,9 +18,9 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"strconv"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -52,7 +52,7 @@ func writeApplicationError(
 	logger *logging.Logger,
 	appErr error,
 ) {
-	if ErrorIsLogged(appErr) {
+	if errorIsLogged(appErr) {
 		logger.ErrorContext(
 			request.Context(),
 			"application request failed",
@@ -72,10 +72,10 @@ func applicationErrorCode(err error) string {
 	return serverInternalCode
 }
 
-// ErrorIsLogged reports whether the kernel writes an error record when an
+// errorIsLogged reports whether the kernel writes an error record when an
 // operation fails with err: every failure presented as a 5xx or without a
 // mapped code, except service.busy, which its work pool counts instead.
-func ErrorIsLogged(err error) bool {
+func errorIsLogged(err error) bool {
 	var failure applicationFailure
 	if errors.As(err, &failure) {
 		// Capacity refusals are expected overload outcomes counted by the owning
@@ -164,7 +164,27 @@ type applicationFailure interface {
 // generated from error_catalog.yaml into error_mapping.go.
 type applicationErrorMapping struct {
 	status int
+	// retryAfter is the Retry-After delay in seconds; zero sends none.
+	retryAfter int
+	// extension is the Problem Details extension member the code may carry.
+	extension problemExtension
 }
+
+// problemExtension names an optional Problem Details extension member. The
+// catalog grants one to a code; the kernel presents it only for that code and
+// only when the error's cause chain supplies a valid value.
+type problemExtension int
+
+const (
+	problemExtensionNone problemExtension = iota
+	// problemExtensionDelivery is the delivery member: a cause in the chain
+	// implements DeliveryRecovery() *model.DeliveryRecovery.
+	problemExtensionDelivery
+	// problemExtensionDeliveryMetadataCapacity is the
+	// delivery_metadata_capacity member: the chain holds a
+	// *model.DeliveryMetadataCapacity, which replaces the fields member.
+	problemExtensionDeliveryMetadataCapacity
+)
 
 func problemFromApplicationFailure(request *http.Request, failure applicationFailure) Problem {
 	mapping, ok := applicationErrorMappings[failure.Code()]
@@ -229,29 +249,30 @@ func WriteError(writer http.ResponseWriter, request *http.Request, err error) {
 
 	var failure applicationFailure
 	if errors.As(err, &failure) {
-		if failure.Code() == "service.busy" ||
-			failure.Code() == "exam.delivery.control_rate_limited" ||
-			failure.Code() == "exam.delivery.summary_rate_limited" ||
-			failure.Code() == "exam.delivery.append_rate_limited" ||
-			failure.Code() == "exam.delivery.pending_capacity" {
-			writer.Header().Set("Retry-After", "1")
+		mapping := applicationErrorMappings[failure.Code()]
+		if mapping.retryAfter > 0 {
+			writer.Header().Set("Retry-After", strconv.Itoa(mapping.retryAfter))
 		}
 
 		problem := problemFromApplicationFailure(request, failure)
-		var capacity *model.DeliveryMetadataCapacity
-		if failure.Code() == "exam.delivery.metadata_capacity" && errors.As(err, &capacity) && capacity.Validate() == nil {
-			value := *capacity
-			problem.DeliveryMetadataCapacity = &value
-			problem.Fields = nil
-		}
-
-		var recovery interface {
-			DeliveryRecovery() *model.DeliveryRecovery
-		}
-		if attempt.SupportsDeliveryRecovery(failure.Code()) && errors.As(err, &recovery) {
-			if value := recovery.DeliveryRecovery(); value != nil && value.Validate() == nil {
-				problem.Delivery = value
+		switch mapping.extension {
+		case problemExtensionDeliveryMetadataCapacity:
+			var capacity *model.DeliveryMetadataCapacity
+			if errors.As(err, &capacity) && capacity.Validate() == nil {
+				value := *capacity
+				problem.DeliveryMetadataCapacity = &value
+				problem.Fields = nil
 			}
+		case problemExtensionDelivery:
+			var recovery interface {
+				DeliveryRecovery() *model.DeliveryRecovery
+			}
+			if errors.As(err, &recovery) {
+				if value := recovery.DeliveryRecovery(); value != nil && value.Validate() == nil {
+					problem.Delivery = value
+				}
+			}
+		case problemExtensionNone:
 		}
 
 		writeProblem(writer, problem)

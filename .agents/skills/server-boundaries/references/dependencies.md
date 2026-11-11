@@ -35,7 +35,7 @@ logging ← {platform, app, app/job, app/realtime, app/identity, httpapi, websoc
 {config, internal/tlscert, store/timerlayer, store/localcachelayer, platform, cluster, packages/vfs, packages/mail} ← metrics ← server
 config ← tracing ← server
 app ← httpapi
-{model, logging, localization, internal/weborigin, app/apperror, app/invocation, app/paging, app/identity, app/exam/attempt} ← httpapi/route ← {httpapi, server}
+{model, logging, localization, internal/weborigin, app/apperror, app/invocation, app/paging} ← httpapi/route ← {httpapi, server}
 webui ← server
 model ← filecontent
 packages/vfs ← filecontent
@@ -64,11 +64,10 @@ The physical layout reflects that graph: `httpapi` sits beside `app` because it
 is an outer adapter depending inward on application capabilities. Its child
 `httpapi/route` is the routing kernel the resources in `httpapi` are written
 against: it knows no API area, so it may not import the parent `app`, an area
-package beyond the two functions named in the table, `store`, or `httpapi`
-itself. The module root names the kernel's ports and its `API` type directly
-when it composes the transport; `websocket`, `webui` and `cmd/ptool` do not
-import it. Packages
-inside `app/` are application-owned modules, not transports.
+package, `store`, or `httpapi` itself. The module root names the kernel's
+ports and its `API` type directly when it composes the transport;
+`websocket`, `webui` and `cmd/ptool` do not import it. Packages inside `app/`
+are application-owned modules, not transports.
 
 | Package | Allowed production dependencies | Forbidden examples |
 | --- | --- | --- |
@@ -104,7 +103,7 @@ inside `app/` are application-owned modules, not transports.
 | `app/onboarding` | `model`, `store`, `app/academic`, `app/access`, `app/administration`, `app/paging`, `app/apperror`, `app/invocation`, `app/idempotency`, `app/identity`, `app/internal/batchitem`, `app/jobs`, `app/mail`, `app/realtime`, `app/user`, standard library | parent `app`, `app/exam`, `app/job`, transports, platform, concrete adapters |
 | `app` | `model`, `store`, `logging`, `app/access`, `app/paging`, `app/academic`, `app/user`, `app/identity`, `app/administration`, `app/onboarding`, `app/apperror`, `app/invocation`, `app/idempotency`, `app/job`, `app/jobs`, `app/realtime`, `app/exam`, `app/mail`, `app/search`, consumer-owned ports | `platform`, `httpapi`, `sqlstore` |
 | `filecontent` | `model`, `app/user` content contracts, `app/exam` export archive types, `packages/vfs`, narrowly allowlisted content codecs | persistence, transports, platform service location, Jobs, configuration, concrete VFS backends |
-| `httpapi/route` | `model`, `logging`, `localization`, `internal/weborigin`, the application leaves `app/apperror`, `app/invocation` and `app/paging`, `app/identity` for the DPoP nonce challenge of a failed proof, `app/exam/attempt` for the predicate that says which failures carry delivery recovery context, HTTP libraries | parent `app`, every other area package and Exam child, `store`, the `httpapi` resources, `websocket`, `platform` |
+| `httpapi/route` | `model`, `logging`, `localization`, `internal/weborigin`, the application leaves `app/apperror`, `app/invocation` and `app/paging`, HTTP libraries; a DPoP nonce challenge and delivery recovery state are read through small interfaces on the error, and which codes advise `Retry-After` or carry an extension member comes from the generated error catalog | parent `app`, every area package and Exam child (`app/identity` and `app/exam/attempt` included), `store`, the `httpapi` resources, `websocket`, `platform` |
 | `httpapi` | `httpapi/route`, `app`, `logging`, `app/academic`, `app/administration`, `app/onboarding`, `app/user`, `app/identity`, `app/paging`, `app/apperror`, `app/invocation`, `app/job`, `app/mail` and `app/search` for the command, query and result types their services declare, `app/realtime`, `app/exam` and its children, `store` result types, `model`, `localization`, `internal/weborigin`, HTTP libraries | Store contracts and functions, `sqlstore`, `platform` |
 | `webui` | Standard-library HTTP and filesystem contracts | Application, domain, persistence, configuration, concrete filesystems, third-party libraries |
 | `websocket` | the `httpapi` allowance without `httpapi/route`, with WebSocket libraries in place of HTTP libraries | Store contracts and functions, the HTTP routing kernel, SQL and platform service location |

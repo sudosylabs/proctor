@@ -88,7 +88,7 @@ func TestDPoPProofRequiresAccessTokenHashAndFreshNonce(t *testing.T) {
 	)
 	var challenge *dpopChallengeError
 	require.ErrorAs(t, err, &challenge, "Verify() error")
-	require.NotEmpty(t, challenge.Nonce(), "Verify() error")
+	require.NotEmpty(t, challenge.DPoPNonce(), "Verify() error")
 }
 
 func testDPoPKey(t *testing.T) (*ecdsa.PrivateKey, model.DesktopPublicJWK) {

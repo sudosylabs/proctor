@@ -28,9 +28,13 @@
 // A handler returns the application's error unchanged. The kernel presents
 // it as Problem Details with the status error_catalog.yaml gives its code,
 // but only if the endpoint lists the code in Errors; anything else, and
-// ErrUnpresentable, becomes server.internal and is logged. The codes the
-// kernel can answer with itself (KernelErrorCodes) are added to every route
-// and are not listed. InvalidRequest is the transport's own failure.
+// ErrUnpresentable, becomes server.internal and is logged. The catalog also
+// says which codes advise Retry-After and which may carry an extension
+// member; the kernel reads the member's value, like a DPoP nonce challenge,
+// from the error through a small interface, so no area's rule lives here.
+// The codes the kernel can answer with itself (KernelErrorCodes) are added to
+// every route and are not listed. InvalidRequest is the transport's own
+// failure.
 //
 // Auth decides which credential the kernel extracts (cookie, bearer or
 // DPoP), whether a Personal Access Token may stand in for a Session, and the

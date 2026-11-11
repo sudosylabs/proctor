@@ -81,7 +81,10 @@ type dpopChallengeError struct {
 
 func (e *dpopChallengeError) Error() string { return "DPoP nonce is required" }
 func (e *dpopChallengeError) Unwrap() error { return e.cause }
-func (e *dpopChallengeError) Nonce() string { return e.nonce }
+
+// DPoPNonce returns the replacement nonce the client must sign its next
+// proof with. The HTTP kernel finds it through this method.
+func (e *dpopChallengeError) DPoPNonce() string { return e.nonce }
 
 // dpopSecurityDependencies are the collaborators of dpopSecurity;
 // newDPoPSecurity validates them once and dpopSecurity keeps them in deps.

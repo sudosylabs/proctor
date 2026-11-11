@@ -25,7 +25,7 @@ func DPoPChallengeNonce(err error) (string, bool) {
 	if !errors.As(err, &challenge) {
 		return "", false
 	}
-	return challenge.Nonce(), challenge.Nonce() != ""
+	return challenge.DPoPNonce(), challenge.DPoPNonce() != ""
 }
 
 // AuthenticateDPoP resolves a Desktop access credential and establishes the

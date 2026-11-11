@@ -144,8 +144,6 @@ var (
 	}
 )
 
-// dependencyRules is ordered from the most specific package boundary to the
-// broadest. The first matching rule owns a production package.
 // transportApplicationImports are the inward packages a transport may name:
 // the application surface, the area packages whose command, query and result
 // types it maps, and the domain and presentation leaves.
@@ -171,6 +169,8 @@ var transportApplicationImports = []pathPattern{
 	exact(serverModule + "/internal/weborigin"),
 }
 
+// dependencyRules is ordered from the most specific package boundary to the
+// broadest. The first matching rule owns a production package.
 var dependencyRules = []dependencyRule{
 	{
 		name: "reusable modules",
@@ -666,9 +666,10 @@ var dependencyRules = []dependencyRule{
 	},
 	{
 		// The routing kernel serves every resource and knows none. It reaches
-		// the application only for the error, invocation and paging leaves,
-		// the DPoP nonce challenge app/identity declares, and the delivery
-		// recovery predicate app/exam/attempt declares.
+		// the application only for the error, invocation and paging leaves;
+		// it reads a DPoP nonce challenge and delivery recovery state through
+		// small interfaces on the error, and which codes advise Retry-After or
+		// carry an extension member from its generated catalog.
 		name:           "HTTP routing kernel",
 		sources:        []pathPattern{exact(serverModule + "/httpapi/route")},
 		deniedStandard: standardInfrastructureExceptHTTP,
@@ -677,8 +678,6 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app/apperror"),
 			exact(serverModule+"/app/invocation"),
 			exact(serverModule+"/app/paging"),
-			exact(serverModule+"/app/identity"),
-			exact(serverModule+"/app/exam/attempt"),
 			exact(serverModule+"/model"),
 			exact(serverModule+"/localization"),
 			exact(serverModule+"/internal/weborigin"),

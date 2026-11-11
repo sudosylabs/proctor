@@ -15,12 +15,12 @@ package route
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -209,6 +209,14 @@ func DPoPProof(request *http.Request) (string, error) {
 	return values[0], nil
 }
 
+// dpopNonceChallenge is a DPoP authentication failure that asks the client to
+// sign its proof again with the server-issued nonce it carries (RFC 9449
+// section 8). The kernel answers it with DPoP-Nonce and use_dpop_nonce; any
+// other DPoP failure is invalid_dpop_proof.
+type dpopNonceChallenge interface {
+	DPoPNonce() string
+}
+
 func writeDPoPApplicationError(
 	writer http.ResponseWriter,
 	request *http.Request,
@@ -216,8 +224,9 @@ func writeDPoPApplicationError(
 	policy routeErrorPolicy,
 	err error,
 ) {
-	if nonce, ok := identity.DPoPChallengeNonce(err); ok {
-		writer.Header().Set("DPoP-Nonce", nonce)
+	var challenge dpopNonceChallenge
+	if errors.As(err, &challenge) && challenge.DPoPNonce() != "" {
+		writer.Header().Set("DPoP-Nonce", challenge.DPoPNonce())
 		writer.Header().Set("WWW-Authenticate", `DPoP error="use_dpop_nonce"`)
 	} else {
 		writer.Header().Set("WWW-Authenticate", `DPoP error="invalid_dpop_proof"`)

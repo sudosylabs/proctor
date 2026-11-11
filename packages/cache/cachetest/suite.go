@@ -49,7 +49,7 @@ func Run(t *testing.T, factory Factory) {
 		require.ErrorIs(t, store.Set(ctx, "key", "value", cache.SetOptions{TTL: -1}), cache.ErrInvalidTTL)
 	})
 
-	t.Run("cancelled context", func(t *testing.T) {
+	t.Run("canceled context", func(t *testing.T) {
 		store := factory(t)
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()

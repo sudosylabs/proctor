@@ -15,7 +15,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/invocation"
 )
 
-// AdministrationCountsApplication summarises the administration work waiting
+// AdministrationCountsApplication summarizes the administration work waiting
 // on the caller for navigation badges.
 type AdministrationCountsApplication interface {
 	AdministrationCounts(context.Context, invocation.Invocation) (administration.CountsResult, error)

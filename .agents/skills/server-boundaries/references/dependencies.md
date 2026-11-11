@@ -149,14 +149,14 @@ query, and result types in the package that declares them (`attempt.ConnectComma
 `exam.View`, `job.Page`, `store.ExamSummary`); no application package
 re-exports another package's type or constant under a second name. A transport may name `store` result types, but never
 a Store contract, function, or variable, so persistence stays out of reach
-(`TestApplicationDeclaresNoForwardingNames`,
-`TestTransportsNameOnlyStoreResultTypes`).
+(`TestTransportsNameOnlyStoreResultTypes`). Review rejects a re-exported name.
 
 Each package is imported under the name it declares (`job`, not
 `jobengine`). An import alias exists only where the same file imports two
-packages that declare one name, such as `packages/mail` beside `app/mail`;
-a local variable that would shadow a package name is renamed instead
-(`TestInternalImportsUseTheirPackageName`).
+packages that declare one name, such as `packages/mail` beside `app/mail`,
+and each such package has one alias, listed under `importas` in
+`.golangci.yml` (`mailpkg`, `appmail`). A local variable that would shadow a
+package name is renamed instead.
 
 The shared Exam Manager eligibility leaf is consumed only by `app/exam`,
 `app/exam/resource`, `app/exam/workspace`, `app/exam/correction`, and

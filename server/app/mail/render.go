@@ -29,8 +29,8 @@ import (
 const maxRenderedMessageBytes = 1 << 20
 
 // templateProperties is the complete typed model visible to presentation assets.
-// Every template shares one layout: copy, an optional emphasised hero detail,
-// labelled facts, an optional aside, and an optional action. It intentionally
+// Every template shares one layout: copy, an optional emphasized hero detail,
+// labeled facts, an optional aside, and an optional action. It intentionally
 // contains no arbitrary map and offers no template helpers.
 type templateProperties struct {
 	Copy       templateCopy

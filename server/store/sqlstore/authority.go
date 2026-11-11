@@ -831,7 +831,7 @@ func roleBindingGrantsExamManagementOverUnresolvedAttempt(
 // Binding of that unarchived Role, for a User who is neither archived nor
 // disabled. It reads the rows without locking them. Callers use it at their
 // decision time either to recheck an actor (retention policy and cleanup,
-// hold release, Desktop compatibility policy, MFA reset) or to recognise a
+// hold release, Desktop compatibility policy, MFA reset) or to recognize a
 // target User as a system administrator (disabling, administrator MFA
 // reset). For an actor it stands beside access.Authorizer.Authorize, which
 // evaluated the Action through the same Institution Role Binding.

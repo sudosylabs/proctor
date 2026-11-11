@@ -16,6 +16,7 @@ linters:
     - gocheckcompilerdirectives
     - gosec
     - govet
+    - importas
     - ineffassign
     - lll
     - misspell
@@ -34,8 +35,45 @@ linters:
       lines: -1
       statements: 80
       ignore-comments: true
+    # A repository package is imported under its own name. The packages
+    # listed first share their name with another package some file imports
+    # beside them (two mail packages, three memory packages, net/smtp, go-redis),
+    # so each has the one alias it takes when a file must tell them apart.
+    importas:
+      alias:
+        - pkg: github.com/sudosylabs/proctor/packages/cache/memory
+          alias: memorycache
+        - pkg: github.com/sudosylabs/proctor/packages/cache/redis
+          alias: rediscache
+        - pkg: github.com/sudosylabs/proctor/packages/mail
+          alias: mailpkg
+        - pkg: github.com/sudosylabs/proctor/packages/mail/memory
+          alias: memorymail
+        - pkg: github.com/sudosylabs/proctor/packages/mail/smtp
+          alias: mailsmtp
+        - pkg: github.com/sudosylabs/proctor/packages/vfs/local
+          alias: localvfs
+        - pkg: github.com/sudosylabs/proctor/packages/vfs/memory
+          alias: memoryvfs
+        - pkg: github.com/sudosylabs/proctor/server/app/mail
+          alias: appmail
+        - pkg: github.com/sudosylabs/proctor/(?:[\w/]+/)?(\w+)
+          alias: $1
     lll:
       line-length: 160
+    # US spelling in comments and strings ("canceled", "behavior").
+    # Programme is the glossary's term, catalogue is the spelling of the
+    # catalogue identifiers and file names, and dialogue is correct US usage.
+    misspell:
+      locale: US
+      ignore-rules:
+        - programme
+        - programmes
+        - catalogue
+        - catalogues
+        - catalogued
+        - uncatalogued
+        - dialogue
     govet:
       enable-all: true
       disable:
@@ -51,6 +89,15 @@ linters:
         - name: exported
           arguments:
             - disableStutteringCheck
+        # One receiver name per type, at most three letters, never self or
+        # this. staticcheck ST1016 reports mixed names as well.
+        - name: receiver-naming
+          arguments:
+            - max-length: 3
+        # Initialisms keep one case (userID, apiURL) and names carry no
+        # underscores. staticcheck ST1003 covers most declarations; this rule
+        # adds locals introduced with :=.
+        - name: var-naming
     staticcheck:
       checks:
         - all
@@ -77,10 +124,12 @@ linters:
       - linters:
           - staticcheck
         text: "(ST1000|ST1020|ST1021|ST1022)"
-      # Paths are relative to each module's go.mod.
+      # Paths are relative to each module's go.mod. The naming rules of
+      # revive apply everywhere; only its exported rule is scoped.
       - linters:
           - revive
         path-except: "^(app|httpapi|store/sqlstore)/"
+        text: "^exported: "
       # A doc comment is not required where it could only restate a name
       # documented elsewhere: a SQL Store method implements a method the
       # store contract documents, and a Command or Query type is the input

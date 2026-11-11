@@ -16,7 +16,7 @@
 // New, is the application's public surface: it names each service in its own
 // field and embeds none, so each use case is declared once, as a method on
 // its service, in the child package that owns it. A reader looking for
-// behaviour opens that child package; what is here is the App type, its
+// behavior opens that child package; what is here is the App type, its
 // construction and the Dependencies the server package supplies.
 //
 // Where to look:

@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------------------------
 
 // This file turns typed presentation details into the shared message layout:
-// an optional emphasised hero detail and an ordered list of labelled facts.
+// an optional emphasized hero detail and an ordered list of labeled facts.
 package mail
 
 import (
@@ -69,7 +69,7 @@ type heroProperties struct {
 	Struck    bool
 }
 
-// factProperties is one labelled row in the message's detail list.
+// factProperties is one labeled row in the message's detail list.
 type factProperties struct {
 	Label  string
 	Value  string

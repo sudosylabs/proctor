@@ -115,8 +115,8 @@ credential intervention require a strong recent interactive Session.
   name across ports and adapters: an adapter that forwards to another helper
   keeps that helper's name (`AuthorizeSittingView`, `AuthorizeExamView`,
   `AuthorizeSubmissionReview`), which also keeps two embedded services from
-  exporting the same ambiguous name. `TestAuthorizationHelpersShareOneShape`
-  enforces the shape and the naming.
+  exporting the same ambiguous name. Review holds new helpers to the shape
+  and the naming.
 - List/search queries constrain results by authorized scope in persistence;
   they do not fetch everything and filter in memory. The list helpers live on
   `access.Authorizer` beside one another (`AuthorizeExamList`,

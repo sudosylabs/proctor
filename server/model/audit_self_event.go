@@ -9,7 +9,7 @@ package model
 
 import "slices"
 
-// AuditSelfEvent is the stable, client-labelled name of one account-relevant
+// AuditSelfEvent is the stable, client-labeled name of one account-relevant
 // audit fact in a User's own history. An action name alone is too coarse to
 // label (session.manage covers revoking one, all, or the other Sessions), so
 // each name is derived from the recorded action, the operation the writer put

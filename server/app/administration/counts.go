@@ -32,7 +32,7 @@ type Count struct {
 	IsLowerBound bool
 }
 
-// CountsResult summarises the administration work waiting on the
+// CountsResult summarizes the administration work waiting on the
 // caller. A count is nil when the caller may not list that resource.
 type CountsResult struct {
 	// PendingInvitations are pending Invitations that have not expired,

@@ -40,11 +40,10 @@ a value `XListOptions` or scope struct. Inside inputs, audit is the field pair
 `AuditEventID` and `AuditAt` for an attempt, or the field `AuditEvent` for a
 draft; optimistic concurrency on the entity the operation acts on is
 `ExpectedRevision`, and a fence on a different resource (the recipient User,
-the Exam draft, the Sitting) is `Expected<Resource>Revision`; the architecture
-test `TestStoreRevisionFencesNameTheirResource` rejects a qualifier that
-repeats the input's own entity or says `Current`; `TestStoreMutationsTakeOneInput`
-rejects a mutation that takes more than one positional input; and a
-retryable operation takes a trailing `*CommandIdempotency` parameter. The older
+the Exam draft, the Sitting) is `Expected<Resource>Revision`, never a
+qualifier that repeats the input's own entity or says `Current`; and a
+retryable operation takes a trailing `*CommandIdempotency` parameter. Review
+holds new operations to these shapes; no test does. The older
 identity and membership operations that still carry `Command` and replay flags
 inside their input follow the same rule when next changed.
 
@@ -181,8 +180,7 @@ persisted document, outcome, or identifier: until the first supported release
 a format changes outright and development databases are recreated. Only
 contracts an external party negotiates keep a version (the `/api/v1` HTTP
 generation, the Desktop and cluster peer protocol ranges, and Desktop native
-agreement keys). The architecture test `TestNamesCarryNoVersionSuffix`
-enforces both rules.
+agreement keys). Review enforces both rules.
 PostgreSQL transaction-scoped coordination serializes the complete namespace;
 the named aggregate mutation, successful audit completion, and outcome insert
 commit together. Replaying identical input returns the recorded outcome after

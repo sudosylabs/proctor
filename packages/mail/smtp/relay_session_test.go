@@ -118,7 +118,7 @@ func serveSTARTTLSRejectingAuthentication(connection net.Conn, serverTLS *tls.Co
 		case command == "QUIT":
 			return writeSMTP(writer, "221 2.0.0 bye")
 		default:
-			err = writeSMTP(writer, "501 5.5.2 cancelled")
+			err = writeSMTP(writer, "501 5.5.2 canceled")
 		}
 		if err != nil {
 			return nil

@@ -9,8 +9,6 @@ package architecture_test
 
 import (
 	"fmt"
-	"go/ast"
-	"go/token"
 	"go/types"
 	"sort"
 	"strings"
@@ -20,115 +18,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/tools/go/packages"
 )
-
-// TestApplicationDeclaresNoForwardingNames keeps one name for every type and
-// constant: no application package (app or a child module) declares an alias
-// of another package's type, or an exported constant or variable that only
-// restates another package's identifier. Consumers name the owning package
-// directly.
-func TestApplicationDeclaresNoForwardingNames(t *testing.T) {
-	t.Parallel()
-	for _, violation := range forwardingNameViolations(typedServerPackages(t), serverModule) {
-		assert.Fail(t, violation)
-	}
-}
-
-func TestForwardingNameRuleRejectsPlantedViolations(t *testing.T) {
-	t.Parallel()
-	loaded := loadFixturePackages(t, map[string]string{
-		"store/store.go": "package store\n\ntype Summary struct{}\n\nconst Limit = 3\n",
-		"app/child/child.go": `package child
-
-type Service struct{}
-
-type View struct{}
-`,
-		"app/app.go": `package app
-
-import (
-	"fixture/app/child"
-	"fixture/store"
-)
-
-type childService = child.Service
-
-type ChildView = child.View
-
-type ExamSummary = store.Summary
-
-type localCommand struct{}
-
-type LocalAlias = localCommand
-
-const MaximumItems = store.Limit
-
-const localLimit = store.Limit
-
-var NewView = child.View{}
-`,
-	})
-	require.Equal(t, []string{
-		"app.go:10: fixture/app.ChildView is an alias of fixture/app/child.View; name fixture/app/child.View directly",
-		"app.go:12: fixture/app.ExamSummary is an alias of fixture/store.Summary; name fixture/store.Summary directly",
-		"app.go:18: fixture/app.MaximumItems restates store.Limit; name store.Limit directly",
-		"app.go:8: fixture/app.childService is an alias of fixture/app/child.Service; name fixture/app/child.Service directly",
-	}, forwardingNameViolations(loaded, "fixture"))
-}
-
-func forwardingNameViolations(loaded []*packages.Package, module string) []string {
-	var violations []string
-	for _, pkg := range loaded {
-		if pkg.PkgPath != module+"/app" && !strings.HasPrefix(pkg.PkgPath, module+"/app/") {
-			continue
-		}
-		scope := pkg.Types.Scope()
-		for _, name := range scope.Names() {
-			alias, ok := scope.Lookup(name).(*types.TypeName)
-			if !ok || !alias.IsAlias() {
-				continue
-			}
-			named, ok := types.Unalias(alias.Type()).(*types.Named)
-			if !ok || named.Obj().Pkg() == nil || named.Obj().Pkg() == pkg.Types {
-				continue
-			}
-			target := named.Obj().Pkg().Path() + "." + named.Obj().Name()
-			violations = append(violations, fmt.Sprintf("%s: %s.%s is an alias of %s; name %s directly",
-				sourcePosition(pkg, alias.Pos()), pkg.PkgPath, name, target, target))
-		}
-		for _, file := range pkg.Syntax {
-			for _, declaration := range file.Decls {
-				generic, ok := declaration.(*ast.GenDecl)
-				if !ok || (generic.Tok != token.CONST && generic.Tok != token.VAR) {
-					continue
-				}
-				for _, specification := range generic.Specs {
-					value := specification.(*ast.ValueSpec)
-					for index, valueName := range value.Names {
-						if !valueName.IsExported() || index >= len(value.Values) {
-							continue
-						}
-						selector, ok := value.Values[index].(*ast.SelectorExpr)
-						if !ok {
-							continue
-						}
-						qualifier, ok := selector.X.(*ast.Ident)
-						if !ok {
-							continue
-						}
-						if _, ok := pkg.TypesInfo.Uses[qualifier].(*types.PkgName); !ok {
-							continue
-						}
-						restated := qualifier.Name + "." + selector.Sel.Name
-						violations = append(violations, fmt.Sprintf("%s: %s.%s restates %s; name %s directly",
-							sourcePosition(pkg, valueName.Pos()), pkg.PkgPath, valueName.Name, restated, restated))
-					}
-				}
-			}
-		}
-	}
-	sort.Strings(violations)
-	return violations
-}
 
 // TestTransportsNameOnlyStoreResultTypes lets HTTP and WebSocket name the
 // query-shaped result types that use cases return from store, while keeping

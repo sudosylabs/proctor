@@ -78,7 +78,7 @@ type App struct {
 	// Search finds Exams, Classes and Users within the caller's own list
 	// visibility for each type.
 	Search *search.Service
-	// Counts summarises the administration work waiting on the caller:
+	// Counts summarizes the administration work waiting on the caller:
 	// pending Invitations, failed Jobs and mail deliveries, and open
 	// onboarding imports.
 	Counts *administration.Counts

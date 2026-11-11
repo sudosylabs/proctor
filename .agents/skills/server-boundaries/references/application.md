@@ -140,8 +140,8 @@ A service is a struct whose fields are its collaborators: the `store`
 contracts it calls, the area's `Authorizer` and `Auditor` (satisfied in
 production by `*access.Authorizer` and `*access.Auditor`), and whatever else it
 needs. Its constructor takes one `Dependencies` (or `<X>Dependencies`) struct
-declared beside it rather than positional collaborators
-(`TestServicesTakeOneDependencies`).
+declared beside it rather than positional collaborators; review holds new
+constructors to this.
 A service generates identifiers with one `NewID func() string` (or calls
 `model.NewID` directly) and reads time from one `Now func() time.Time`.
 

@@ -22,7 +22,7 @@
 //     Concealment.Present whose result is returned. A Definite code that is
 //     not declared would reach the client as an internal error.
 //
-// The apperror API is modelled rather than analyzed: Concealment.Conceal and
+// The apperror API is modeled rather than analyzed: Concealment.Conceal and
 // Present (also when deferred), StoreTable.Translate, and the *Error
 // decorators. A Code parameter passed to New is substituted with the
 // constant each caller passes.

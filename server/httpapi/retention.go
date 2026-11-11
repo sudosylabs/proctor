@@ -308,7 +308,10 @@ func (h retentionHandlers) records(request route.Request) (route.Result, error) 
 	if err != nil {
 		return route.Result{}, err
 	}
-	if page == nil || len(page.Items) > limit*2 || (page.HasMore && len(page.Items) == 0) {
+	if page == nil ||
+		len(page.Items) > model.RetentionRecordsPerSubmission*limit ||
+		len(page.Items)%model.RetentionRecordsPerSubmission != 0 ||
+		(page.HasMore && len(page.Items) == 0) {
 		return route.Result{}, route.ErrUnpresentable
 	}
 

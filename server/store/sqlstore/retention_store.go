@@ -661,7 +661,7 @@ const retentionFactsQuery = `SELECT sub.id AS submission_id, a.exam_id, a.exam_s
 	WHERE sub.sealed = true
 		AND u.institution_id = ?`
 
-func (r retentionFactsRow) records() [4]model.RetentionRecord {
+func (r retentionFactsRow) records() [model.RetentionRecordsPerSubmission]model.RetentionRecord {
 	base := model.RetentionRecord{
 		Scope: model.RetentionHoldScope{
 			ExamID:       model.ExamID(r.ExamID),
@@ -688,7 +688,7 @@ func (r retentionFactsRow) records() [4]model.RetentionRecord {
 	security.Category, security.ExportProtectedUntil, security.RetiredAt = model.RetentionCategorySecurityOperational, optionalTime(
 		r.SecurityProtection,
 	), optionalTime(r.SecurityRetiredAt)
-	return [4]model.RetentionRecord{work, integrity, browser, security}
+	return [model.RetentionRecordsPerSubmission]model.RetentionRecord{work, integrity, browser, security}
 }
 
 func countRetentionRecords(

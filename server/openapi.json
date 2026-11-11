@@ -45131,7 +45131,7 @@
         "operationId": "listRetentionRecords",
         "parameters": [
           {
-            "description": "Maximum number of Submissions to assess; each contributes one work and one integrity record.",
+            "description": "Maximum number of Submissions to assess; each contributes work, integrity, Browser Activity and security operational records.",
             "in": "query",
             "name": "limit",
             "schema": {

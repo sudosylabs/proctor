@@ -21362,7 +21362,7 @@ export interface operations {
     listRetentionRecords: {
         parameters: {
             query?: {
-                /** @description Maximum number of Submissions to assess; each contributes one work and one integrity record. */
+                /** @description Maximum number of Submissions to assess; each contributes work, integrity, Browser Activity and security operational records. */
                 limit?: number;
                 /** @description Opaque next_cursor from the preceding retention-record page; pass it unchanged. */
                 cursor?: string;

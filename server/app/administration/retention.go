@@ -279,7 +279,7 @@ func (s *Service) ListRetentionRecords(
 	if err != nil {
 		return nil, retentionError(err)
 	}
-	if stored == nil || stored.PolicyRevision < 1 || stored.AsOf.IsZero() || len(stored.Items) > 4*limit {
+	if stored == nil || stored.PolicyRevision < 1 || stored.AsOf.IsZero() || len(stored.Items) > model.RetentionRecordsPerSubmission*limit {
 		return nil, apperror.New("retention.unavailable")
 	}
 

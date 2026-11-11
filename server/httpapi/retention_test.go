@@ -162,3 +162,30 @@ func TestRetentionOpenAPIDocument(t *testing.T) {
 		require.Equal(t, "#/components/headers/PrivateNoStore", document.Components.Responses[name].Headers["Cache-Control"].Ref, "%s lacks no-store", name)
 	}
 }
+
+func TestRetentionHTTPRecordsPresentsFullPageOfSubmissions(t *testing.T) {
+	t.Parallel()
+	logger, _ := routetest.NewLogger(t)
+	categories := []model.RetentionCategory{model.RetentionCategoryWork, model.RetentionCategoryIntegrity, model.RetentionCategoryBrowserActivity, model.RetentionCategorySecurityOperational}
+	page := &administration.RetentionRecordPage{PolicyRevision: 3, AsOf: model.NowUTC(), HasMore: true}
+	var want []string
+	for range 6 {
+		scope := model.RetentionHoldScope{ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(), SubmissionID: model.NewSubmissionID()}
+		for _, category := range categories {
+			page.Items = append(page.Items, administration.RetentionRecordView{Record: model.RetentionRecord{Scope: scope, Category: category}})
+			want = append(want, scope.SubmissionID.String()+"/"+string(category))
+		}
+	}
+	application := &retentionHTTPFake{recordPage: page}
+	api := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: retentionHTTPPrincipal()}, retentionResource(application))
+	r := serveRetentionHTTP(api, "GET", "/api/v1/retention/records?limit=10", "", "")
+	require.Equal(t, 200, r.Code, "records=%d %s", r.Code, r.Body.String())
+	var response retentionRecordsResponse
+	require.NoError(t, json.Unmarshal(r.Body.Bytes(), &response))
+	got := make([]string, 0, len(response.Items))
+	for _, item := range response.Items {
+		got = append(got, item.SubmissionID+"/"+item.Category)
+	}
+	require.Equal(t, want, got)
+	require.NotEmpty(t, response.NextCursor)
+}

@@ -32,7 +32,7 @@ secretseal ← app
 {internal/openapidoc, internal/errorcatalog} ← cmd/ptool
 cmd/ptool/devseed ← cmd/ptool/commands
 logging ← {platform, app, app/job, app/realtime, app/identity, httpapi, websocket}
-{config, internal/tlscert, store/timerlayer, store/localcachelayer} ← metrics ← server
+{config, internal/tlscert, store/timerlayer, store/localcachelayer, platform, cluster, packages/vfs, packages/mail} ← metrics ← server
 config ← tracing ← server
 app ← httpapi
 webui ← server
@@ -40,12 +40,24 @@ model ← filecontent
 packages/vfs ← filecontent
 app ← filecontent
 {app, httpapi, app/realtime, websocket, filecontent} ← server ← cmd/proctor/commands ← cmd/proctor
+{config, model, store, store/sqlstore} ← operator ← cmd/proctor/commands
 {model, internal/canonicaljson} ← desktoprelease ← server
 internal/autocert ← server
 internal/tlscert ← {server, metrics}
 ~~~
 
 Infrastructure adapters sit to the side and point inward at their contracts. The root `server` package imports the components needed to assemble the graph.
+
+`platform` never imports `metrics`: the measuring wrappers decorate the
+platform ports, so that edge points one way.
+
+`operator` holds the offline host commands that read or migrate an
+installation without starting it (`config validate` and `show`, `migrate`,
+`jobs`, `cluster status`). It opens the configuration and the database itself
+and builds no node, so it may not import the module root, the application, or
+a transport. A host command that needs the application (administrator recovery,
+administrator MFA reset) stays in the module root and goes through
+`server.New`; moving it would give the CLI a second composition path.
 
 The physical layout reflects that graph: `httpapi` sits beside `app` because it
 is an outer adapter depending inward on application capabilities. Packages
@@ -77,7 +89,7 @@ inside `app/` are application-owned modules, not transports.
 | `secretseal` | Standard library cryptography and encoding | model, persistence, configuration, transports, concrete adapters |
 | `localization` | Standard library, caller-supplied catalog filesystems, and the CLDR-aware localization engine | application, domain, persistence, transports, concrete adapters |
 | `logging` | Standard library and the hidden logging engine/target implementation | domain, persistence, global logger state, and any import of application or transport packages |
-| `metrics` | `config`, `internal/tlscert`, narrow store recorder contracts, standard library, and Prometheus client libraries | application policy, platform service location, concrete infrastructure adapters, global Prometheus registry |
+| `metrics` | `config`, `internal/tlscert`, narrow store recorder contracts, the ports its measuring wrappers decorate (the `platform` Cache and Mailer, the `cluster` transport, and the `packages/vfs` and `packages/mail` contracts), standard library, and Prometheus client libraries | application policy (a recorder that needs an application type is an adapter in the module root), platform service location, concrete infrastructure adapters, global Prometheus registry |
 | `tracing` | `config`, standard library, and OpenTelemetry API, SDK, and OTLP/HTTP exporter libraries | application policy, transports, store contracts, platform service location, a process-global tracer provider |
 | `app/user` | `model`, `store`, `app/access`, `app/paging`, `app/apperror`, `app/invocation`, `app/idempotency`, `app/realtime`, standard library | parent `app`, `app/exam`, `app/job`, `app/jobs`, `app/mail`, transports, platform, concrete adapters |
 | `app/identity` | `model`, `store`, `secretseal`, `logging`, `app/access`, `app/paging`, `app/apperror`, `app/invocation`, `app/idempotency`, `app/internal/batchitem`, `app/job`, `app/jobs`, `app/mail`, `app/realtime`, `app/user`, the `app/exam/attempt` native-build contract, `golang.org/x/crypto/argon2`, standard library | parent `app`, `app/academic`, other `app/exam` modules, transports, platform, concrete adapters |
@@ -98,7 +110,8 @@ inside `app/` are application-owned modules, not transports.
 | `server` | Construction dependencies | Business rules |
 | `cmd/proctor-healthcheck` | Standard-library HTTP readiness probing | Server packages, application state, configuration, persistence, and third-party libraries |
 | `cmd/proctor` | `cmd/proctor/commands` and standard-library process lifecycle | Server, application, persistence, and concrete infrastructure |
-| `cmd/proctor/commands` | Module-root `server`, `localization`, Cobra, `golang.org/x/sys/unix` for the systemd notification clock, and standard-library presentation concerns | Application packages, persistence, platform, and independent infrastructure construction |
+| `operator` | `config`, `store/sqlstore` (the read-only store and the migrator), and the `model` and `store` vocabulary it reports; standard library | the module-root `server`, `app` and its children, transports, `platform`, `database/sql` and SQL drivers, third-party libraries |
+| `cmd/proctor/commands` | Module-root `server`, `operator`, `localization`, Cobra, `golang.org/x/sys/unix` for the systemd notification clock, and standard-library presentation concerns | Application packages, persistence, platform, and independent infrastructure construction |
 | `cmd/mailpreview` | `model`, `localization`, `app/mail`, standard library, and repository source assets | parent application, persistence, infrastructure adapters, mail delivery |
 | `cmd/ptool` | `localization` plus the consumer-owned localization definition registries in `app/mail`, `cmd/proctor/commands`, `httpapi`, and `websocket`; `internal/openapidoc` and `internal/errorcatalog` behind the local-filesystem build/check adapters, which also type-check production packages to inventory minted error codes | runtime composition and concrete infrastructure construction |
 | `cmd/ptool/devseed` | Standard-library HTTP, synthetic fixture construction, and private local journal I/O | Application packages, persistence, runtime composition, concrete server adapters |

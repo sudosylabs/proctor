@@ -19,11 +19,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sudosylabs/proctor/server"
+	"github.com/sudosylabs/proctor/server/operator"
 )
 
-type jobListExecutor func(context.Context, string, server.JobQuery) (server.JobList, error)
-type jobShowExecutor func(context.Context, string, string) (server.JobDetail, error)
+type jobListExecutor func(context.Context, string, operator.JobQuery) (operator.JobList, error)
+type jobShowExecutor func(context.Context, string, string) (operator.JobDetail, error)
 
 func newJobsCommand(list jobListExecutor, show jobShowExecutor, text commandText) *cobra.Command {
 	command := &cobra.Command{
@@ -49,7 +49,7 @@ func newJobsListCommand(list jobListExecutor, text commandText) *cobra.Command {
 		RunE: func(command *cobra.Command, _ []string) error {
 			if err := requireKnown(
 				types,
-				server.JobTypes(),
+				operator.JobTypes(),
 				"cli.jobs.error.unknown_type",
 				"unknown job type {{.Value}}; known types: {{.Known}}",
 				text,
@@ -59,7 +59,7 @@ func newJobsListCommand(list jobListExecutor, text commandText) *cobra.Command {
 
 			if err := requireKnown(
 				states,
-				server.JobStates(),
+				operator.JobStates(),
 				"cli.jobs.error.unknown_state",
 				"unknown job state {{.Value}}; known states: {{.Known}}",
 				text,
@@ -67,11 +67,11 @@ func newJobsListCommand(list jobListExecutor, text commandText) *cobra.Command {
 				return err
 			}
 
-			if limit < 1 || limit > server.JobListMaximumLimit {
+			if limit < 1 || limit > operator.JobListMaximumLimit {
 				return newUsageError(text.value(
 					"cli.jobs.error.limit",
 					"--limit must be between 1 and {{.Maximum}}",
-					map[string]any{"Maximum": server.JobListMaximumLimit},
+					map[string]any{"Maximum": operator.JobListMaximumLimit},
 				))
 			}
 
@@ -80,7 +80,7 @@ func newJobsListCommand(list jobListExecutor, text commandText) *cobra.Command {
 				return err
 			}
 
-			result, err := list(command.Context(), path, server.JobQuery{Types: types, States: states, Limit: limit})
+			result, err := list(command.Context(), path, operator.JobQuery{Types: types, States: states, Limit: limit})
 			if err != nil {
 				return err
 			}
@@ -107,7 +107,7 @@ func newJobsListCommand(list jobListExecutor, text commandText) *cobra.Command {
 	flags.IntVar(
 		&limit,
 		"limit",
-		server.JobListDefaultLimit,
+		operator.JobListDefaultLimit,
 		text.value("cli.jobs.list.flag.limit", "list at most this many Jobs (at most 200)", nil),
 	)
 	flags.BoolVar(&asJSON, "json", false, text.value("cli.jobs.flag.json", "write the result as JSON", nil))
@@ -150,7 +150,7 @@ func requireKnown(values, known []string, id, fallback string, text commandText)
 	return nil
 }
 
-func writeJobList(output io.Writer, list server.JobList, text commandText) error {
+func writeJobList(output io.Writer, list operator.JobList, text commandText) error {
 	if len(list.Jobs) == 0 {
 		_, err := fmt.Fprintln(output, text.value("cli.jobs.list.none", "no Jobs match", nil))
 		return err
@@ -185,7 +185,7 @@ func writeJobList(output io.Writer, list server.JobList, text commandText) error
 	return nil
 }
 
-func writeJobDetail(output io.Writer, job server.JobDetail, text commandText) error {
+func writeJobDetail(output io.Writer, job operator.JobDetail, text commandText) error {
 	table := tabwriter.NewWriter(output, 0, 4, 2, ' ', 0)
 	rows := [][2]string{
 		{text.value("cli.jobs.show.id", "ID", nil), job.ID},

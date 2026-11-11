@@ -15,12 +15,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server"
+	"github.com/sudosylabs/proctor/server/operator"
 )
 
-func jobSummaryFixture() server.JobSummary {
+func jobSummaryFixture() operator.JobSummary {
 	at := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
-	return server.JobSummary{
+	return operator.JobSummary{
 		ID: "job-1", Type: "mail.deliver", State: "queued", AttemptCount: 2, MaximumAttempts: 8,
 		LastErrorCode: "mail.smtp_unavailable", CreatedAt: at.Add(-time.Hour), UpdatedAt: at, AvailableAt: at.Add(time.Minute),
 	}
@@ -30,10 +30,10 @@ func TestJobsListPassesFiltersAndPrintsABoundedTable(t *testing.T) {
 	t.Parallel()
 
 	execute := testExecutors()
-	execute.listJobs = func(_ context.Context, path string, query server.JobQuery) (server.JobList, error) {
+	execute.listJobs = func(_ context.Context, path string, query operator.JobQuery) (operator.JobList, error) {
 		require.Equal(t, "/etc/proctor.json", path)
-		require.Equal(t, server.JobQuery{Types: []string{"mail.deliver", "mail.cleanup"}, States: []string{"queued", "failed"}, Limit: 5}, query)
-		return server.JobList{Jobs: []server.JobSummary{jobSummaryFixture()}, HasMore: true}, nil
+		require.Equal(t, operator.JobQuery{Types: []string{"mail.deliver", "mail.cleanup"}, States: []string{"queued", "failed"}, Limit: 5}, query)
+		return operator.JobList{Jobs: []operator.JobSummary{jobSummaryFixture()}, HasMore: true}, nil
 	}
 
 	code, stdout, stderr := executeForTest(context.Background(), []string{
@@ -51,9 +51,9 @@ func TestJobsListRejectsUnknownFiltersAsUsage(t *testing.T) {
 	t.Parallel()
 
 	execute := testExecutors()
-	execute.listJobs = func(context.Context, string, server.JobQuery) (server.JobList, error) {
+	execute.listJobs = func(context.Context, string, operator.JobQuery) (operator.JobList, error) {
 		require.FailNow(t, "an invalid query reached the database")
-		return server.JobList{}, nil
+		return operator.JobList{}, nil
 	}
 	tests := []struct {
 		name string
@@ -80,16 +80,16 @@ func TestJobsShowPrintsTheJobAndAttemptsWithoutPayloads(t *testing.T) {
 
 	at := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
 	completed := at.Add(time.Second)
-	detail := server.JobDetail{
+	detail := operator.JobDetail{
 		JobSummary: jobSummaryFixture(),
-		Attempts: []server.JobAttemptSummary{{
+		Attempts: []operator.JobAttemptSummary{{
 			Number: 2, State: "failed", NodeID: "node-a", StartedAt: at, HeartbeatAt: at, LeaseExpiresAt: at.Add(time.Minute),
 			CompletedAt: &completed, ErrorCode: "mail.smtp_unavailable",
 		}},
 		MoreAttempts: true,
 	}
 	execute := testExecutors()
-	execute.showJob = func(_ context.Context, path, id string) (server.JobDetail, error) {
+	execute.showJob = func(_ context.Context, path, id string) (operator.JobDetail, error) {
 		require.Equal(t, "/etc/proctor.json", path)
 		require.Equal(t, "job-1", id)
 		return detail, nil

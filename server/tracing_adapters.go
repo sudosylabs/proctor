@@ -12,7 +12,6 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/httpapi"
-	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store/timerlayer"
 	"github.com/sudosylabs/proctor/server/tracing"
@@ -50,18 +49,4 @@ func (t jobTracing) StartExecution(ctx context.Context, jobType model.JobType) (
 			outcome != job.ExecutionRelinquished &&
 			outcome != job.ExecutionShutdown)
 	}
-}
-
-// logCorrelationFields adds the request ID and the current trace and span IDs
-// to every context-carrying log record. They are server-assigned or
-// trusted-proxy correlation identifiers, never request content.
-func logCorrelationFields(ctx context.Context) []logging.Field {
-	var fields []logging.Field
-	if requestID := httpapi.RequestID(ctx); requestID != "" {
-		fields = append(fields, logging.String("request_id", requestID))
-	}
-	if traceID, spanID, ok := tracing.Correlation(ctx); ok {
-		fields = append(fields, logging.String("trace_id", traceID), logging.String("span_id", spanID))
-	}
-	return fields
 }

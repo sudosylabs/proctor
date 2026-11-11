@@ -54,6 +54,7 @@ Use this as an orientation map, not as a complete package inventory.
 | `server/websocket` | Connection protocol, sequencing, replay, liveness, and backpressure | Treating a socket as durable authority |
 | `server/platform` | Infrastructure lifecycle and health | Passing it into the application as a locator |
 | module-root `server` | Adapter selection, wiring, readiness, serving, and shutdown | Adding a second constructor path in a command or test |
+| `server/operator` | Offline host commands that read or migrate an installation without starting it | Importing the application or the module root to reach a use case |
 
 Selective child packages exist only where a responsibility has substantial
 structure and can still point inward without importing its parent. Do not
@@ -146,6 +147,13 @@ important ownership transfers are:
 
 Construction must unwind every acquired owner if a later step fails. A newly
 constructed server has no listener, worker, or maintenance goroutine running.
+
+The module-root package is about building and running one node. Start with
+`server.go`, `infrastructure.go`, `composition.go`,
+`application_dependencies.go`, and `shutdown.go`. Most of the other files hold
+one adapter each and are named for the two sides they join, such as
+`authentication_cache.go` or `mail_sender.go`. A wrapper that only measures a
+port, such as `metrics.WrapCache`, lives in `server/metrics` instead.
 
 ## Follow `app.New`
 

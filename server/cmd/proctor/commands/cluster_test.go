@@ -15,19 +15,19 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server"
+	"github.com/sudosylabs/proctor/server/operator"
 )
 
-func clusterStatusFixture() server.ClusterStatus {
+func clusterStatusFixture() operator.ClusterStatus {
 	at := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
-	return server.ClusterStatus{
+	return operator.ClusterStatus{
 		DatabaseTime: at,
-		Schema:       server.ClusterSchema{DatabaseVersion: 1, ServerVersion: 1},
-		ServingNodes: []server.ServingNode{
+		Schema:       operator.ClusterSchema{DatabaseVersion: 1, ServerVersion: 1},
+		ServingNodes: []operator.ServingNode{
 			{NodeID: "node-a", LeaseID: "lease-a", UpdatedAt: at.Add(-5 * time.Second), ExpiresAt: at.Add(15 * time.Second), Live: true},
 			{NodeID: "node-b", LeaseID: "lease-b", UpdatedAt: at.Add(-time.Hour), ExpiresAt: at.Add(-time.Minute)},
 		},
-		Discovery: []server.DiscoveryNode{
+		Discovery: []operator.DiscoveryNode{
 			{NodeID: "node-a", AdvertiseAddress: "10.0.0.1:7946", ServerVersion: "1.0.0", ProtocolMin: 1, ProtocolMax: 2, UpdatedAt: at, ExpiresAt: at.Add(time.Minute), Live: true},
 		},
 	}
@@ -37,7 +37,7 @@ func TestClusterStatusPrintsLeasesDiscoveryAndSchema(t *testing.T) {
 	t.Parallel()
 
 	execute := testExecutors()
-	execute.clusterStatus = func(_ context.Context, path string) (server.ClusterStatus, error) {
+	execute.clusterStatus = func(_ context.Context, path string) (operator.ClusterStatus, error) {
 		require.Equal(t, "/etc/proctor.json", path)
 		return clusterStatusFixture(), nil
 	}
@@ -62,7 +62,7 @@ func TestClusterStatusWritesJSON(t *testing.T) {
 	t.Parallel()
 
 	execute := testExecutors()
-	execute.clusterStatus = func(context.Context, string) (server.ClusterStatus, error) {
+	execute.clusterStatus = func(context.Context, string) (operator.ClusterStatus, error) {
 		return clusterStatusFixture(), nil
 	}
 
@@ -84,8 +84,8 @@ func TestClusterStatusReportsAnEmptySchema(t *testing.T) {
 	t.Parallel()
 
 	execute := testExecutors()
-	execute.clusterStatus = func(context.Context, string) (server.ClusterStatus, error) {
-		return server.ClusterStatus{Schema: server.ClusterSchema{ServerVersion: 1, PendingMigrations: 1}}, nil
+	execute.clusterStatus = func(context.Context, string) (operator.ClusterStatus, error) {
+		return operator.ClusterStatus{Schema: operator.ClusterSchema{ServerVersion: 1, PendingMigrations: 1}}, nil
 	}
 
 	code, stdout, stderr := executeForTest(context.Background(), []string{"cluster", "status"}, nil, execute)

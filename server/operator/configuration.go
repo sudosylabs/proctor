@@ -5,12 +5,25 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-package server
+package operator
 
 import (
 	"context"
 	"errors"
+
+	"github.com/sudosylabs/proctor/server/config"
 )
+
+// ValidateConfig loads and strictly validates the deployment configuration at
+// configPath, or the required configured/default file when configPath is
+// empty, without constructing any infrastructure.
+func ValidateConfig(ctx context.Context, configPath string) error {
+	configuration, err := config.Open(ctx, configPath)
+	if err != nil {
+		return err
+	}
+	return configuration.Close()
+}
 
 // EffectiveConfiguration is the redacted display of the configuration a node
 // would run with: built-in defaults, the required file, then the PROCTOR_
@@ -28,7 +41,7 @@ type EffectiveConfiguration struct {
 // like ValidateConfig and returns its redacted effective form. It constructs
 // no infrastructure and never writes the file.
 func ShowEffectiveConfiguration(ctx context.Context, configPath string) (_ EffectiveConfiguration, resultErr error) {
-	configuration, err := openConfiguration(ctx, configPath)
+	configuration, err := config.Open(ctx, configPath)
 	if err != nil {
 		return EffectiveConfiguration{}, err
 	}

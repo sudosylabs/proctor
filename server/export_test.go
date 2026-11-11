@@ -41,7 +41,7 @@ func NewForTestingObservingRelease(
 	}
 	return &TestingRuntime{
 		Server:      result.server,
-		Application: result.test.application,
-		Handler:     result.test.handler,
+		Application: result.application,
+		Handler:     result.handler,
 	}, releases, nil
 }

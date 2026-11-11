@@ -16,10 +16,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sudosylabs/proctor/server"
+	"github.com/sudosylabs/proctor/server/operator"
 )
 
-type migrateDownPlanExecutor func(context.Context, string, int) (server.MigrationRollbackPlan, error)
+type migrateDownPlanExecutor func(context.Context, string, int) (operator.MigrationRollbackPlan, error)
 type migrateDownExecutor func(context.Context, string, int) (int, error)
 
 func newMigrateDownCommand(plan migrateDownPlanExecutor, down migrateDownExecutor, text commandText) *cobra.Command {
@@ -93,7 +93,7 @@ func newMigrateDownCommand(plan migrateDownPlanExecutor, down migrateDownExecuto
 	return command
 }
 
-func writeRollbackPlan(output io.Writer, plan server.MigrationRollbackPlan, text commandText) error {
+func writeRollbackPlan(output io.Writer, plan operator.MigrationRollbackPlan, text commandText) error {
 	if _, err := fmt.Fprintln(output, text.value(
 		"cli.migrate.down.plan",
 		"database schema version {{.DatabaseVersion}}; reverting {{.Count}} migration(s) to version {{.TargetVersion}}:",

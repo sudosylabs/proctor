@@ -9,9 +9,11 @@
 // its lifecycle.
 //
 // The package excludes durable application settings and business policy. It
-// depends only on the Go standard library; the module-root composition code
-// selects configuration paths and projects validated values into runtime
-// policies and infrastructure adapters.
+// depends only on the Go standard library. Open resolves the configuration
+// path (an explicit path, then PROCTOR_CONFIG, then config/config.json) and
+// loads it; the module-root composition code and the offline operator commands
+// call it, and composition projects validated values into runtime policies and
+// infrastructure adapters.
 //
 // A Store loads defaults, overlays a typed backing, and finally applies active
 // PROCTOR_ environment settings. It keeps the validated backing snapshot

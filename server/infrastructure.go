@@ -61,13 +61,6 @@ const (
 	schemaRequireCurrent
 )
 
-func schemaPolicyFor(requireCurrent bool) schemaPolicy {
-	if requireCurrent {
-		return schemaRequireCurrent
-	}
-	return schemaMigrate
-}
-
 type schemaPersistence interface {
 	ApplyPendingMigrations(context.Context) (sqlstore.MigrationResult, error)
 	ValidateSchema(context.Context) error
@@ -97,20 +90,15 @@ func prepareSchema(ctx context.Context, persistence schemaPersistence, policy sc
 }
 
 // ownedInfrastructure is the sole owner of infrastructure while the root is
-// acquiring and decorating it. Ownership is transferred as one unit to the
-// Platform boundary; before then, release is the only cleanup path.
+// acquiring and decorating it. resources is exactly what transfers to the
+// Platform boundary, as one unit; the metrics and tracing modules stay with
+// the root, which closes them itself. Before the transfer, release is the
+// only cleanup path.
 type ownedInfrastructure struct {
-	configuration          *config.Store
-	logger                 *logging.Logger
-	persistence            store.Store
-	cache                  platform.Cache
-	cluster                platform.Cluster
-	mailer                 platform.Mailer
-	filesystem             vfs.FileSystem
-	externalAuthentication *externalauth.Registry
-	migration              *sqlstore.MigrationResult
-	metrics                *metrics.Module
-	tracing                *tracing.Module
+	resources platform.OwnedResources
+	migration *sqlstore.MigrationResult
+	metrics   *metrics.Module
+	tracing   *tracing.Module
 }
 
 // constructionCapabilities is a short-lived, non-owning projection used only
@@ -156,15 +144,15 @@ func openRuntimeInfrastructure(
 	overrides TestingOverrides,
 	schema schemaPolicy,
 ) (result ownedInfrastructure, resultErr error) {
-	result = ownedInfrastructure{
-		configuration: overrides.Configuration,
-		logger:        overrides.Logger,
-		persistence:   overrides.Persistence,
-		cache:         overrides.Cache,
-		cluster:       overrides.Cluster,
-		mailer:        overrides.Mailer,
-		filesystem:    overrides.Filesystem,
-	}
+	result = ownedInfrastructure{resources: platform.OwnedResources{
+		Configuration: overrides.Configuration,
+		Logger:        overrides.Logger,
+		Persistence:   overrides.Persistence,
+		Cache:         overrides.Cache,
+		Cluster:       overrides.Cluster,
+		Mailer:        overrides.Mailer,
+		VFS:           overrides.Filesystem,
+	}}
 	defer func() {
 		if resultErr != nil {
 			resultErr = errors.Join(resultErr, result.release())
@@ -177,7 +165,7 @@ func openRuntimeInfrastructure(
 	if err := result.acquireConfigurationAndLogger(ctx, configPath); err != nil {
 		return result, err
 	}
-	cfg := result.configuration.Get()
+	cfg := result.resources.Configuration.Get()
 	if err := result.acquirePersistence(ctx, cfg, schema); err != nil {
 		return result, err
 	}
@@ -201,7 +189,7 @@ func openRuntimeInfrastructure(
 	if err != nil {
 		return result, fmt.Errorf("construct external authentication registry: %w", err)
 	}
-	result.externalAuthentication = externalAuthentication
+	result.resources.ExternalAuthentication = externalAuthentication
 	if err := checkAcquisitionContext(ctx, "acquire external authentication registry"); err != nil {
 		return result, err
 	}
@@ -210,31 +198,31 @@ func openRuntimeInfrastructure(
 
 // acquireConfigurationAndLogger opens the configuration and then the logger unless overrides supplied them.
 func (i *ownedInfrastructure) acquireConfigurationAndLogger(ctx context.Context, configPath string) error {
-	if i.configuration == nil {
-		configuration, err := openConfiguration(ctx, configPath)
+	if i.resources.Configuration == nil {
+		configuration, err := config.Open(ctx, configPath)
 		if err != nil {
 			return fmt.Errorf("acquire configuration: %w", err)
 		}
-		i.configuration = configuration
+		i.resources.Configuration = configuration
 	}
 	if err := checkAcquisitionContext(ctx, "acquire configuration"); err != nil {
 		return err
 	}
 
-	if i.logger == nil {
+	if i.resources.Logger == nil {
 		logger, err := logging.New()
 		if err != nil {
 			return fmt.Errorf("create logger: %w", err)
 		}
-		i.logger = logger
+		i.resources.Logger = logger
 	}
-	i.logger.SetContextFields(logCorrelationFields)
+	i.resources.Logger.SetContextFields(logCorrelationFields)
 	return checkAcquisitionContext(ctx, "acquire logger")
 }
 
 // acquirePersistence opens the SQL store and prepares its schema unless overrides supplied a store.
 func (i *ownedInfrastructure) acquirePersistence(ctx context.Context, cfg config.Config, schema schemaPolicy) error {
-	if i.persistence == nil {
+	if i.resources.Persistence == nil {
 		persistence, err := sqlstore.New(ctx, sqlstore.SettingsFromConfig(cfg.Database))
 		if err != nil {
 			return fmt.Errorf("open database: %w", err)
@@ -244,7 +232,7 @@ func (i *ownedInfrastructure) acquirePersistence(ctx context.Context, cfg config
 			return errors.Join(err, persistence.Close())
 		}
 		i.migration = migration
-		i.persistence = persistence
+		i.resources.Persistence = persistence
 	}
 	return checkAcquisitionContext(ctx, "acquire persistence")
 }
@@ -252,7 +240,7 @@ func (i *ownedInfrastructure) acquirePersistence(ctx context.Context, cfg config
 // constructTelemetry builds the metrics and then the tracing module over the acquired store and logger and records each for release.
 func (i *ownedInfrastructure) constructTelemetry(cfg config.Config) (*metrics.Module, *tracing.Module, error) {
 	var databaseStats func() sql.DBStats
-	if source, ok := i.persistence.(interface{ Stats() sql.DBStats }); ok {
+	if source, ok := i.resources.Persistence.(interface{ Stats() sql.DBStats }); ok {
 		databaseStats = source.Stats
 	}
 
@@ -263,9 +251,9 @@ func (i *ownedInfrastructure) constructTelemetry(cfg config.Config) (*metrics.Mo
 		GoVersion: currentBuild.GoVersion,
 	}, metrics.Sources{
 		Database: databaseStats,
-		ErrorLog: i.logger.StdLogger(slog.LevelError),
+		ErrorLog: i.resources.Logger.StdLogger(slog.LevelError),
 		Logging: func() metrics.LogStats {
-			stats := i.logger.Stats()
+			stats := i.resources.Logger.Stats()
 			return metrics.LogStats{Dropped: stats.Dropped, InternalErrors: stats.InternalErrors}
 		},
 	})
@@ -277,7 +265,7 @@ func (i *ownedInfrastructure) constructTelemetry(cfg config.Config) (*metrics.Mo
 	tracingModule, err := tracing.New(cfg.Tracing, tracing.Identity{
 		Version: currentBuild.Version,
 		NodeID:  cfg.Cluster.NodeID,
-	}, i.logger.StdLogger(slog.LevelError))
+	}, i.resources.Logger.StdLogger(slog.LevelError))
 	if err != nil {
 		return nil, nil, fmt.Errorf("construct tracing module: %w", err)
 	}
@@ -304,12 +292,12 @@ func (i *ownedInfrastructure) decoratePersistenceWithRetryAndTiming(
 		storeRetryMetrics = metricsModule
 	}
 
-	retriedPersistence, err := retrylayer.NewWithRecorder(i.persistence, storeRetry, storeRetryMetrics)
+	retriedPersistence, err := retrylayer.NewWithRecorder(i.resources.Persistence, storeRetry, storeRetryMetrics)
 	if err != nil {
 		return fmt.Errorf("construct store retry layer: %w", err)
 	}
 
-	i.replacePersistence(retriedPersistence)
+	i.resources.Persistence = retriedPersistence
 	if err := checkAcquisitionContext(ctx, "decorate persistence with retry"); err != nil {
 		return err
 	}
@@ -325,66 +313,66 @@ func (i *ownedInfrastructure) decoratePersistenceWithRetryAndTiming(
 
 	timerOptions := timerlayer.Options{
 		SlowThreshold: cfg.Database.SlowOperationThreshold.Duration,
-		Slow:          slowStoreOperationLog{logger: i.logger},
+		Slow:          slowStoreOperationLog{logger: i.resources.Logger},
 	}
 	if tracingModule.Enabled() {
 		timerOptions.Tracer = storeTracing{tracing: tracingModule}
 	}
 
-	timedPersistence, err := timerlayer.New(i.persistence, storeMetrics, timerOptions)
+	timedPersistence, err := timerlayer.New(i.resources.Persistence, storeMetrics, timerOptions)
 	if err != nil {
 		return fmt.Errorf("construct store timing layer: %w", err)
 	}
 
-	i.replacePersistence(timedPersistence)
+	i.resources.Persistence = timedPersistence
 	return checkAcquisitionContext(ctx, "decorate persistence with timing")
 }
 
 // acquireCacheMailerAndVFS opens the cache, mail transport and VFS in order, measuring each when metrics are enabled.
 func (i *ownedInfrastructure) acquireCacheMailerAndVFS(ctx context.Context, cfg config.Config, metricsModule *metrics.Module) error {
-	if i.cache == nil {
+	if i.resources.Cache == nil {
 		cache, err := newCache(cfg.Cache)
 		if err != nil {
 			return fmt.Errorf("open cache: %w", err)
 		}
 
-		i.cache = cache
+		i.resources.Cache = cache
 	}
 
 	if metricsModule.Enabled() {
-		i.cache = &measuredCache{next: i.cache, backend: cfg.Cache.Backend, metrics: metricsModule}
+		i.resources.Cache = metrics.WrapCache(i.resources.Cache, cfg.Cache.Backend, metricsModule)
 	}
 	if err := checkAcquisitionContext(ctx, "acquire cache"); err != nil {
 		return err
 	}
 
-	if i.mailer == nil {
+	if i.resources.Mailer == nil {
 		mailer, err := newMailer(cfg.Mail)
 		if err != nil {
 			return fmt.Errorf("open mail transport: %w", err)
 		}
 
-		i.mailer = mailer
+		i.resources.Mailer = mailer
 	}
 
 	if metricsModule.Enabled() {
-		i.mailer = &measuredMailer{next: i.mailer, metrics: metricsModule}
+		i.resources.Mailer = metrics.WrapMailer(i.resources.Mailer, metricsModule)
 	}
 	if err := checkAcquisitionContext(ctx, "acquire mail transport"); err != nil {
 		return err
 	}
 
-	if i.filesystem == nil {
+	if i.resources.VFS == nil {
 		filesystem, err := newVFS(cfg.VFS)
 		if err != nil {
 			return fmt.Errorf("open VFS: %w", err)
 		}
 
-		i.filesystem = filesystem
+		i.resources.VFS = filesystem
 	}
 
 	if metricsModule.Enabled() {
-		i.filesystem = &measuredVFS{next: i.filesystem, backend: cfg.VFS.Backend, metrics: metricsModule}
+		i.resources.VFS = metrics.WrapVFS(i.resources.VFS, cfg.VFS.Backend, metricsModule)
 	}
 
 	return checkAcquisitionContext(ctx, "acquire VFS")
@@ -392,26 +380,26 @@ func (i *ownedInfrastructure) acquireCacheMailerAndVFS(ctx context.Context, cfg 
 
 // acquireCluster opens the cluster transport unless overrides supplied one, measuring it when metrics are enabled.
 func (i *ownedInfrastructure) acquireCluster(ctx context.Context, cfg config.Config, metricsModule *metrics.Module) error {
-	if i.cluster == nil {
+	if i.resources.Cluster == nil {
 		var discovery store.ClusterDiscoveryStore
-		if i.persistence != nil {
-			discovery = i.persistence.ClusterDiscovery()
+		if i.resources.Persistence != nil {
+			discovery = i.resources.Persistence.ClusterDiscovery()
 		}
 		var clusterMetrics cluster.Metrics
 		if metricsModule.Enabled() {
 			clusterMetrics = metricsModule
 		}
-		cluster, err := newCluster(cfg.Cluster, i.logger, discovery, app.Version, clusterMetrics)
+		cluster, err := newCluster(cfg.Cluster, i.resources.Logger, discovery, app.Version, clusterMetrics)
 		if err != nil {
 			return fmt.Errorf("open cluster transport: %w", err)
 		}
-		i.cluster = cluster
+		i.resources.Cluster = cluster
 	}
 	if metricsModule.Enabled() {
-		if peers, ok := i.cluster.(interface{ PeerCount() int }); ok {
+		if peers, ok := i.resources.Cluster.(interface{ PeerCount() int }); ok {
 			metricsModule.SetClusterPeerSource(peers.PeerCount)
 		}
-		i.cluster = &measuredCluster{next: i.cluster, metrics: metricsModule, events: make(map[cluster.Event]struct{})}
+		i.resources.Cluster = metrics.WrapCluster(i.resources.Cluster, metricsModule)
 	}
 	return checkAcquisitionContext(ctx, "acquire cluster transport")
 }
@@ -445,13 +433,13 @@ func (i *ownedInfrastructure) decoratePersistenceWithLocalCache(
 		}
 	}
 
-	cacheInvalidation, err := newLocalCacheClusterAdapter(i.cluster)
+	cacheInvalidation, err := newLocalCacheClusterAdapter(i.resources.Cluster)
 	if err != nil {
 		return fmt.Errorf("construct local-cache invalidation adapter: %w", err)
 	}
 
 	cachedPersistence, err := localcachelayer.New(
-		i.persistence,
+		i.resources.Persistence,
 		storeLocalCache,
 		storeCachePolicy,
 		storeCacheMetrics,
@@ -461,7 +449,7 @@ func (i *ownedInfrastructure) decoratePersistenceWithLocalCache(
 		return fmt.Errorf("construct local-cache store layer: %w", err)
 	}
 
-	i.replacePersistence(cachedPersistence)
+	i.resources.Persistence = cachedPersistence
 	return checkAcquisitionContext(ctx, "decorate persistence with local cache")
 }
 
@@ -518,32 +506,23 @@ func logStartupInfrastructure(
 func (i *ownedInfrastructure) acceptPlatform(
 	ctx context.Context,
 ) (*platform.Service, config.Config, constructionCapabilities, error) {
+	resources := i.resources
 	capabilities := constructionCapabilities{
-		logger:                 i.logger,
-		persistence:            i.persistence,
-		cache:                  i.cache,
-		cluster:                i.cluster,
-		mailer:                 i.mailer,
-		filesystem:             i.filesystem,
-		externalAuthentication: i.externalAuthentication,
+		logger:                 resources.Logger,
+		persistence:            resources.Persistence,
+		cache:                  resources.Cache,
+		cluster:                resources.Cluster,
+		mailer:                 resources.Mailer,
+		filesystem:             resources.VFS,
+		externalAuthentication: resources.ExternalAuthentication,
 		migration:              i.migration,
 		metrics:                i.metrics,
 		tracing:                i.tracing,
 	}
-	if i.cluster != nil {
-		capabilities.nodeID = i.cluster.NodeID()
+	if resources.Cluster != nil {
+		capabilities.nodeID = resources.Cluster.NodeID()
 	}
 
-	resources := platform.OwnedResources{
-		Configuration:          i.configuration,
-		Logger:                 i.logger,
-		Persistence:            i.persistence,
-		Cache:                  i.cache,
-		Cluster:                i.cluster,
-		Mailer:                 i.mailer,
-		VFS:                    i.filesystem,
-		ExternalAuthentication: i.externalAuthentication,
-	}
 	shutdownTimeout := i.shutdownTimeout()
 	*i = ownedInfrastructure{}
 	service, snapshot, err := platform.Accept(ctx, resources)
@@ -561,15 +540,11 @@ func (i *ownedInfrastructure) acceptPlatform(
 	return service, snapshot, capabilities, nil
 }
 
-func (i *ownedInfrastructure) replacePersistence(next store.Store) {
-	i.persistence = next
-}
-
 // shutdownTimeout is the configured Server.ShutdownTimeout, or its default
 // when no configuration has been loaded.
 func (i *ownedInfrastructure) shutdownTimeout() time.Duration {
-	if i.configuration != nil {
-		return i.configuration.Get().Server.ShutdownTimeout.Duration
+	if i.resources.Configuration != nil {
+		return i.resources.Configuration.Get().Server.ShutdownTimeout.Duration
 	}
 	return 15 * time.Second
 }
@@ -578,38 +553,38 @@ func (i *ownedInfrastructure) release() error {
 	stopCtx, cancelStop := context.WithTimeout(context.Background(), i.shutdownTimeout())
 	defer cancelStop()
 	var clusterErr error
-	if i.cluster != nil {
-		clusterErr = i.cluster.Stop(stopCtx)
+	if i.resources.Cluster != nil {
+		clusterErr = i.resources.Cluster.Stop(stopCtx)
 	}
 
 	var vfsErr error
-	if closer, ok := i.filesystem.(interface{ Close() error }); ok {
+	if closer, ok := i.resources.VFS.(interface{ Close() error }); ok {
 		vfsErr = closer.Close()
 	}
 
 	var mailErr error
-	if i.mailer != nil {
-		mailErr = i.mailer.Close()
+	if i.resources.Mailer != nil {
+		mailErr = i.resources.Mailer.Close()
 	}
 
 	var cacheErr error
-	if i.cache != nil {
-		cacheErr = i.cache.Close()
+	if i.resources.Cache != nil {
+		cacheErr = i.resources.Cache.Close()
 	}
 
 	var storeErr error
-	if i.persistence != nil {
-		storeErr = i.persistence.Close()
+	if i.resources.Persistence != nil {
+		storeErr = i.resources.Persistence.Close()
 	}
 
 	var loggerErr error
-	if i.logger != nil {
-		loggerErr = i.logger.Shutdown(stopCtx)
+	if i.resources.Logger != nil {
+		loggerErr = i.resources.Logger.Shutdown(stopCtx)
 	}
 
 	var configErr error
-	if i.configuration != nil {
-		configErr = i.configuration.Close()
+	if i.resources.Configuration != nil {
+		configErr = i.resources.Configuration.Close()
 	}
 
 	var metricsErr error
@@ -790,70 +765,6 @@ func newCluster(
 	default:
 		return nil, fmt.Errorf("unsupported cluster backend %q", settings.Backend)
 	}
-}
-
-// storeClusterDiscovery adapts store.ClusterDiscoveryStore to cluster.DiscoveryStore.
-type storeClusterDiscovery struct {
-	store store.ClusterDiscoveryStore
-}
-
-func (s storeClusterDiscovery) Upsert(ctx context.Context, node cluster.DiscoveryNode) error {
-	return s.store.Upsert(ctx, &store.ClusterDiscoveryNode{
-		NodeID:           node.NodeID,
-		AdvertiseAddress: node.AdvertiseAddress,
-		ServerVersion:    node.ServerVersion,
-		ProtocolMin:      node.ProtocolMin,
-		ProtocolMax:      node.ProtocolMax,
-		ExpiresAt:        node.ExpiresAt.UTC(),
-		UpdatedAt:        node.UpdatedAt.UTC(),
-	})
-}
-
-func (s storeClusterDiscovery) ListLive(ctx context.Context, now time.Time) ([]cluster.DiscoveryNode, error) {
-	rows, err := s.store.ListLive(ctx, now.UTC())
-	if err != nil {
-		return nil, err
-	}
-	result := make([]cluster.DiscoveryNode, 0, len(rows))
-	for _, row := range rows {
-		if row == nil {
-			continue
-		}
-		result = append(result, cluster.DiscoveryNode{
-			NodeID:           row.NodeID,
-			AdvertiseAddress: row.AdvertiseAddress,
-			ServerVersion:    row.ServerVersion,
-			ProtocolMin:      row.ProtocolMin,
-			ProtocolMax:      row.ProtocolMax,
-			ExpiresAt:        row.ExpiresAt.UTC(),
-			UpdatedAt:        row.UpdatedAt.UTC(),
-		})
-	}
-	return result, nil
-}
-
-func (s storeClusterDiscovery) Delete(ctx context.Context, nodeID string) error {
-	return s.store.Delete(ctx, nodeID)
-}
-
-func (s storeClusterDiscovery) DeleteExpired(ctx context.Context, now time.Time) (int64, error) {
-	return s.store.DeleteExpired(ctx, now.UTC())
-}
-
-// loggingClusterLogger adapts logging to cluster.Logger at the composition root.
-type loggingClusterLogger struct {
-	log *logging.Logger
-}
-
-func (l loggingClusterLogger) ErrorContext(ctx context.Context, message string, err error) {
-	if l.log == nil {
-		return
-	}
-	fields := []logging.Field{}
-	if err != nil {
-		fields = append(fields, logging.Err(err))
-	}
-	l.log.ErrorContext(ctx, message, fields...)
 }
 
 func newExternalAuthenticationRegistry() (*externalauth.Registry, error) {

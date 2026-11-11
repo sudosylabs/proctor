@@ -18,10 +18,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sudosylabs/proctor/server"
+	"github.com/sudosylabs/proctor/server/operator"
 )
 
-type clusterStatusExecutor func(context.Context, string) (server.ClusterStatus, error)
+type clusterStatusExecutor func(context.Context, string) (operator.ClusterStatus, error)
 
 func newClusterCommand(status clusterStatusExecutor, text commandText) *cobra.Command {
 	command := &cobra.Command{
@@ -59,7 +59,7 @@ func newClusterCommand(status clusterStatusExecutor, text commandText) *cobra.Co
 	return command
 }
 
-func writeClusterStatus(output io.Writer, status server.ClusterStatus, text commandText) error {
+func writeClusterStatus(output io.Writer, status operator.ClusterStatus, text commandText) error {
 	if _, err := fmt.Fprintln(output, text.value(
 		"cli.cluster.status.schema",
 		"database schema version {{.DatabaseVersion}}; server schema version {{.ServerVersion}}; pending migrations {{.PendingMigrations}}",

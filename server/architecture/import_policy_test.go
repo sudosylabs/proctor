@@ -685,11 +685,18 @@ var dependencyRules = []dependencyRule{
 	{
 		name:    "metrics",
 		sources: []pathPattern{exact(serverModule + "/metrics")},
+		// Beyond its recorder contracts, metrics names only the ports its
+		// measuring wrappers decorate: the platform Cache and Mailer, the
+		// cluster transport, and the reusable VFS and mail contracts.
 		project: only(
 			exact(serverModule+"/config"),
 			exact(serverModule+"/internal/tlscert"),
 			exact(serverModule+"/store/timerlayer"),
 			exact(serverModule+"/store/localcachelayer"),
+			exact(serverModule+"/platform"),
+			exact(serverModule+"/cluster"),
+			exact(repositoryModule+"/packages/vfs"),
+			exact(repositoryModule+"/packages/mail"),
 		),
 		thirdParty: only(subtree("github.com/prometheus/client_golang")),
 	},
@@ -720,6 +727,8 @@ var dependencyRules = []dependencyRule{
 			descendants(serverModule+"/cluster"),
 			descendants(serverModule+"/platform/externalauth"),
 			exact(serverModule+"/store/sqlstore"),
+			// metrics wraps the platform ports, so the edge points one way.
+			exact(serverModule+"/metrics"),
 			subtree(serverModule+"/app"),
 			subtree(serverModule+"/httpapi"),
 			subtree(serverModule+"/websocket"),
@@ -728,6 +737,19 @@ var dependencyRules = []dependencyRule{
 	{
 		name:    "healthcheck executable",
 		sources: []pathPattern{exact(serverModule + "/cmd/proctor-healthcheck")},
+	},
+	{
+		// Offline operator commands open the configuration and the database
+		// themselves; they never build a node.
+		name:           "offline operator commands",
+		sources:        []pathPattern{exact(serverModule + "/operator")},
+		deniedStandard: standardInfrastructure,
+		project: only(
+			exact(serverModule+"/config"),
+			exact(serverModule+"/model"),
+			exact(serverModule+"/store"),
+			exact(serverModule+"/store/sqlstore"),
+		),
 	},
 	{
 		name:    "operator executable",
@@ -741,6 +763,7 @@ var dependencyRules = []dependencyRule{
 		project: only(
 			exact(serverModule),
 			exact(serverModule+"/localization"),
+			exact(serverModule+"/operator"),
 		),
 		// x/sys/unix reads CLOCK_MONOTONIC for systemd reload notifications.
 		thirdParty: only(exact("github.com/spf13/cobra"), exact("golang.org/x/sys/unix")),
@@ -853,6 +876,7 @@ func TestDependencyRulePrecedence(t *testing.T) {
 		{packagePath: serverModule + "/internal/openapidoc", wantRule: "OpenAPI compiler"},
 		{packagePath: serverModule + "/internal/errorcatalog", wantRule: "error catalog compiler"},
 		{packagePath: serverModule + "/cmd/proctor-healthcheck", wantRule: "healthcheck executable"},
+		{packagePath: serverModule + "/operator", wantRule: "offline operator commands"},
 		{packagePath: serverModule + "/cmd/ptool/commands", wantRule: "ptool commands"},
 	}
 

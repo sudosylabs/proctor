@@ -97,7 +97,9 @@ overlap procedure in [runtime](runtime.md#cluster-transport).
 
 Normal startup requires one operator-owned JSON file and never creates it.
 Path precedence is an explicit CLI path, `PROCTOR_CONFIG`, then
-`config/config.json` relative to the process working directory. Release
+`config/config.json` relative to the process working directory; `config.Open`
+is the one implementation of that precedence, used by node construction and
+by the offline operator commands. Release
 bundles carry `config/config.example.json`; operators copy it to the active
 path and edit it. That canonical file renders every deployment field with its
 built-in default, including empty secret fields, so the supported schema is

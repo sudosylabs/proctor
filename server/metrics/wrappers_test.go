@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-package server
+package metrics
 
 import (
 	"bytes"
@@ -13,15 +13,12 @@ import (
 	"errors"
 	"io"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/packages/mail"
 	"github.com/sudosylabs/proctor/packages/vfs"
-	appmail "github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/cluster"
-	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/platform"
 )
 
@@ -56,20 +53,6 @@ func TestMeasuredClusterLabelsOnlyRegisteredEvents(t *testing.T) {
 	require.Equal(t, "registered.event", recorder.metricEvent("registered.event"))
 	require.Equal(t, "unregistered", recorder.metricEvent("peer.supplied"))
 	require.Equal(t, "none", recorder.metricEvent(""))
-}
-
-func TestMailQueueMetricsAggregateFailureBucketsAndExposeTruncation(t *testing.T) {
-	t.Parallel()
-
-	values := []appmail.QueueMetric{
-		{TemplateKey: model.MailTemplateSystemTest, State: model.MailDeliveryQueued, OutcomeCode: "temporary", Count: 2, OldestAge: time.Minute},
-		{TemplateKey: model.MailTemplateSystemTest, State: model.MailDeliveryQueued, OutcomeCode: "permanent", Count: 3, OldestAge: 2 * time.Minute, Truncated: true},
-	}
-	aggregates, truncated := aggregateMailQueueMetrics(values)
-	aggregate := aggregates[mailQueueMetricIdentity{template: model.MailTemplateSystemTest, state: model.MailDeliveryQueued}]
-	require.Equal(t, int64(5), aggregate.count, "aggregate = %#v truncated", aggregate)
-	require.Equal(t, 2*time.Minute, aggregate.oldestAge, "aggregate = %#v truncated", aggregate)
-	require.True(t, truncated, "aggregate = %#v truncated", aggregate)
 }
 
 func TestMeasuredReadCloserCountsBytesAndCompletesOnce(t *testing.T) {

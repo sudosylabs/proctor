@@ -19,8 +19,9 @@ return node.Run(ctx)
 to `platform.Service`, which owns its health and shutdown. It then builds the
 application (`app.App`) and the HTTP, WebSocket and Job runtimes on top.
 Construction starts nothing; `Run` starts serving. The `proctor` CLI under
-`cmd/proctor/commands` is a thin caller of this package, and `testlib` builds
-the same graph for tests.
+`cmd/proctor/commands` is a thin caller of this package and of `operator`,
+which holds the offline commands that read or migrate an installation without
+building a node. `testlib` builds the same graph for tests.
 
 To find your way around the code, start with the
 [server architecture guide](../docs/public/developers/server/architecture-composition.mdx).

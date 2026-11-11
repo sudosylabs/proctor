@@ -19,10 +19,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sudosylabs/proctor/server"
+	"github.com/sudosylabs/proctor/server/operator"
 )
 
-type configShowExecutor func(context.Context, string) (server.EffectiveConfiguration, error)
+type configShowExecutor func(context.Context, string) (operator.EffectiveConfiguration, error)
 
 func newConfigShowCommand(show configShowExecutor, text commandText) *cobra.Command {
 	var asJSON bool

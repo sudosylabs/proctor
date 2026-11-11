@@ -107,7 +107,11 @@ contract are accepted and implemented. */}
 ## Keep CLI Commands Thin
 
 The `proctor` command assembles its Cobra tree under
-`server/cmd/proctor/commands` and calls the module-root server facade. It may
+`server/cmd/proctor/commands`. A command that needs the application, such as
+`serve` or administrator recovery, calls the module-root server facade.
+A command that only reads or migrates an installation (`config`, `migrate`,
+`jobs`, `cluster status`) calls `server/operator`, which opens the
+configuration and the database without building a node. The command tree may
 parse flags, select an explicit configuration path, present safe output, and
 map process exit behavior. It must not construct PostgreSQL, application
 services, or platform adapters independently.

@@ -13,11 +13,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sudosylabs/proctor/server"
+	"github.com/sudosylabs/proctor/server/operator"
 )
 
 type migrateUpExecutor func(context.Context, string) (int, error)
-type migrateStatusExecutor func(context.Context, string) (server.MigrationStatus, error)
+type migrateStatusExecutor func(context.Context, string) (operator.MigrationStatus, error)
 
 func newMigrateCommand(
 	up migrateUpExecutor,

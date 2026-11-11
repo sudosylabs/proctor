@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/config"
+	"github.com/sudosylabs/proctor/server/operator"
 )
 
 func TestNewAutomaticallyMigratesAnEmptyDatabase(t *testing.T) {
@@ -43,7 +44,7 @@ func TestNewAutomaticallyMigratesAnEmptyDatabase(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.json")
 	require.NoError(t, os.WriteFile(configPath, data, 0o600))
 
-	before, err := MigrateStatus(ctx, configPath)
+	before, err := operator.MigrateStatus(ctx, configPath)
 	require.NoError(t, err)
 	require.Equal(t, 0, before.DatabaseVersion, "migration status before New = %#v, want empty database with pending migrations", before)
 	require.NotEqual(t, 0, before.PendingMigrations, "migration status before New = %#v, want empty database with pending migrations", before)
@@ -52,7 +53,7 @@ func TestNewAutomaticallyMigratesAnEmptyDatabase(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, node.Close())
 
-	after, err := MigrateStatus(ctx, configPath)
+	after, err := operator.MigrateStatus(ctx, configPath)
 	require.NoError(t, err)
 	require.Equal(t, after.ServerVersion, after.DatabaseVersion, "migration status after New = %#v, want converged schema", after)
 	require.Equal(t, 0, after.PendingMigrations, "migration status after New = %#v, want converged schema", after)

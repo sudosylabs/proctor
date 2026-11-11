@@ -122,13 +122,13 @@ func TestOwnedInfrastructureReleasesInReverseDependencyOrder(t *testing.T) {
 	t.Parallel()
 
 	events := []string{}
-	owned := ownedInfrastructure{
-		persistence: releaseStore{events: &events},
-		cache:       releaseCache{events: &events},
-		mailer:      releaseMailer{events: &events},
-		filesystem:  releaseVFS{events: &events},
-		cluster:     releaseCluster{events: &events},
-	}
+	owned := ownedInfrastructure{resources: platform.OwnedResources{
+		Persistence: releaseStore{events: &events},
+		Cache:       releaseCache{events: &events},
+		Mailer:      releaseMailer{events: &events},
+		VFS:         releaseVFS{events: &events},
+		Cluster:     releaseCluster{events: &events},
+	}}
 	require.NoError(t, owned.release())
 	want := []string{"cluster", "vfs", "mailer", "cache", "store"}
 	require.Len(t, events, len(want), "release order")
@@ -192,7 +192,7 @@ func TestRootComposesLocalCacheOutsideTiming(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = owner.release() })
 	for range 2 {
-		_, err := owner.persistence.AcademicPeriod().Get(context.Background(), period.ID)
+		_, err := owner.resources.Persistence.AcademicPeriod().Get(context.Background(), period.ID)
 		require.NoError(t, err)
 	}
 	require.Equal(t, int64(1), periods.reads.Load(), "authoritative reads")

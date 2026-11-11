@@ -5,12 +5,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-package server
+package operator
 
 import (
 	"context"
 	"errors"
 
+	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/store/sqlstore"
 )
 
@@ -19,7 +20,7 @@ import (
 // and it never migrates, takes the migration lock, or creates a table. The
 // returned closer releases the database and the configuration.
 func openReadOnlyDatabase(ctx context.Context, configPath string) (*sqlstore.SQLStore, func() error, error) {
-	configuration, err := openConfiguration(ctx, configPath)
+	configuration, err := config.Open(ctx, configPath)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -35,10 +35,10 @@ import (
 type compositionInput struct {
 	serviceEnvironment ServiceEnvironment
 	configPath         string
-	// requireCurrentSchema replaces startup migration with a strict schema
-	// version check for offline host commands.
-	requireCurrentSchema bool
-	overrides            TestingOverrides
+	// schema is schemaRequireCurrent for offline host commands, which replace
+	// startup migration with a strict schema version check.
+	schema    schemaPolicy
+	overrides TestingOverrides
 	// observeRelease receives the release record of a failed consumer
 	// composition before its owners are closed. The real hub and transport
 	// close without an observable effect, so
@@ -49,16 +49,13 @@ type compositionInput struct {
 
 var errDurableJobRuntimeUnavailable = errors.New("application Job runtime is unavailable")
 
-// testingProjection borrows behavioral handles from the completed graph. It
-// owns nothing and is discarded for production construction.
-type testingProjection struct {
+// compositionResult is the assembled node. server owns every lifecycle;
+// application and handler are borrowed behavioral handles that only
+// NewForTesting hands out, and production construction discards them.
+type compositionResult struct {
+	server      *Server
 	application *app.App
 	handler     http.Handler
-}
-
-type compositionResult struct {
-	server *Server
-	test   testingProjection
 }
 
 // composeNode is the sole construction recipe for production and tests. Each
@@ -70,7 +67,7 @@ func composeNode(ctx context.Context, input compositionInput) (*compositionResul
 	}
 
 	// 1. Acquire and decorate infrastructure under one temporary owner.
-	infrastructure, err := openRuntimeInfrastructure(ctx, input.configPath, input.overrides, schemaPolicyFor(input.requireCurrentSchema))
+	infrastructure, err := openRuntimeInfrastructure(ctx, input.configPath, input.overrides, input.schema)
 	if err != nil {
 		return nil, fmt.Errorf("acquire infrastructure: %w", err)
 	}
@@ -218,13 +215,7 @@ func composeConsumers(
 		listen:                net.Listen,
 		newHTTP:               newHTTPServer,
 	}}
-	return &compositionResult{
-		server: node,
-		test: testingProjection{
-			application: application,
-			handler:     rootTransport,
-		},
-	}, nil
+	return &compositionResult{server: node, application: application, handler: rootTransport}, nil
 }
 
 // composeLocalization opens the embedded catalogs and templates and constructs
@@ -267,7 +258,7 @@ func composeApplicationDependencies(
 ) (app.Dependencies, error) {
 	var contentRecorder filecontent.WorkRecorder
 	if capabilities.metrics.Enabled() {
-		contentRecorder = workMetricsRecorder{metrics: capabilities.metrics, pool: "file_content"}
+		contentRecorder = capabilities.metrics.WorkRecorder("file_content")
 	}
 	content, err := filecontent.New(
 		capabilities.filesystem,
@@ -310,21 +301,23 @@ func attachApplicationTelemetry(
 	if capabilities.metrics.Enabled() {
 		applicationDeps.JobRecorder = jobMetricsRecorder{metrics: capabilities.metrics}
 		applicationDeps.OperationalRecorder = applicationMetricsRecorder{metrics: capabilities.metrics}
-		applicationDeps.PasswordWorkRecorder = workMetricsRecorder{metrics: capabilities.metrics, pool: "password"}
+		applicationDeps.PasswordWorkRecorder = capabilities.metrics.WorkRecorder("password")
 	}
 	if capabilities.tracing.Enabled() {
 		applicationDeps.JobTracer = jobTracing{tracing: capabilities.tracing}
 	}
-	if capabilities.metrics.Enabled() {
-		prometheusMetrics := newPrometheusMailRecorder(capabilities.metrics)
-		if mailMetrics == nil {
-			mailMetrics = prometheusMetrics
-		} else {
-			mailMetrics = fanoutMailDeliveryRecorder{first: mailMetrics, second: prometheusMetrics}
-		}
-	}
+	// Mail observations go to the test recorder, then Prometheus, then the
+	// operational collector. With neither of the first two, the dependencies
+	// keep the operational collector applicationDependencies built.
+	var mailRecorders []mail.DeliveryRecorder
 	if mailMetrics != nil {
-		mailDeliveryRecorder, mailMetricsReader := newMailTelemetry(capabilities.logger, mailMetrics)
+		mailRecorders = append(mailRecorders, mailMetrics)
+	}
+	if capabilities.metrics.Enabled() {
+		mailRecorders = append(mailRecorders, newPrometheusMailRecorder(capabilities.metrics))
+	}
+	if len(mailRecorders) > 0 {
+		mailDeliveryRecorder, mailMetricsReader := newMailTelemetry(capabilities.logger, mailRecorders...)
 		applicationDeps.MailDeliveryRecorder = mailDeliveryRecorder
 		applicationDeps.MailMetricsReader = mailMetricsReader
 	}

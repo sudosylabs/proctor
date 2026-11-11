@@ -42,21 +42,15 @@ type OwnedResources struct {
 	ExternalAuthentication *externalauth.Registry
 }
 
+// Service owns the accepted resources from Accept until Close.
 type Service struct {
-	configStore            *config.Store
-	logger                 *logging.Logger
-	store                  store.Store
-	cache                  Cache
-	cluster                Cluster
-	mailer                 Mailer
-	vfs                    vfs.FileSystem
-	externalAuthentication *externalauth.Registry
-	clusterBackend         string
-	mailBackend            string
-	mailTestTimeout        time.Duration
-	configListeners        []string
-	shutdownOnce           sync.Once
-	shutdownErr            error
+	resources       OwnedResources
+	clusterBackend  string
+	mailBackend     string
+	mailTestTimeout time.Duration
+	configListeners []string
+	shutdownOnce    sync.Once
+	shutdownErr     error
 }
 
 // Accept takes ownership of resources at call entry. On success, the returned
@@ -132,36 +126,24 @@ func newService(
 		return nil, fmt.Errorf("validate database schema: %w", err)
 	}
 
-	cacheStore := resources.Cache
-	mailer := resources.Mailer
-	filesystem := resources.VFS
-	clusterTransport := resources.Cluster
-	externalAuthentication := resources.ExternalAuthentication
-	if err := externalAuthentication.Configure(
+	if err := resources.ExternalAuthentication.Configure(
 		snapshot.Authentication.External,
 	); err != nil {
 		return nil, err
 	}
 
 	service := &Service{
-		configStore:            resources.Configuration,
-		logger:                 logger,
-		store:                  persistence,
-		cache:                  cacheStore,
-		cluster:                clusterTransport,
-		mailer:                 mailer,
-		vfs:                    filesystem,
-		externalAuthentication: externalAuthentication,
-		clusterBackend:         snapshot.Cluster.Backend,
-		mailBackend:            snapshot.Mail.Backend,
-		mailTestTimeout:        snapshot.Mail.SMTP.Timeout.Duration,
+		resources:       resources,
+		clusterBackend:  snapshot.Cluster.Backend,
+		mailBackend:     snapshot.Mail.Backend,
+		mailTestTimeout: snapshot.Mail.SMTP.Timeout.Duration,
 	}
 	checkCtx, cancelCheck := context.WithTimeout(constructionCtx, 15*time.Second)
 	defer cancelCheck()
 	if err := service.CheckDependencies(checkCtx); err != nil {
 		return nil, fmt.Errorf("check platform dependencies: %w", err)
 	}
-	service.logger.Info("database ready", logging.String("backend", "postgresql"))
+	service.resources.Logger.Info("database ready", logging.String("backend", "postgresql"))
 	cacheFields := []logging.Field{logging.String("backend", snapshot.Cache.Backend)}
 	if snapshot.Cache.Backend == "memory" {
 		cacheFields = append(cacheFields,
@@ -173,29 +155,29 @@ func newService(
 	} else {
 		cacheFields = append(cacheFields, logging.String("scope", "installation_shared"))
 	}
-	service.logger.Info("application cache ready", cacheFields...)
-	service.logger.Info("filesystem ready", logging.String("backend", snapshot.VFS.Backend))
-	service.logger.Info(
+	service.resources.Logger.Info("application cache ready", cacheFields...)
+	service.resources.Logger.Info("filesystem ready", logging.String("backend", snapshot.VFS.Backend))
+	service.resources.Logger.Info(
 		"external authentication ready",
 		logging.Int("enabled_providers", enabledExternalAuthenticationProviders(snapshot)),
 	)
 	// The store applies these in order and restores every applied listener
 	// when a later one fails, so a reload is all-or-nothing.
 	service.configListeners = []string{
-		service.configStore.AddListener(func(old, current config.Config) error {
+		service.resources.Configuration.AddListener(func(old, current config.Config) error {
 			if reflect.DeepEqual(old.Authentication.External, current.Authentication.External) {
 				return nil
 			}
-			if err := service.externalAuthentication.Configure(current.Authentication.External); err != nil {
+			if err := service.resources.ExternalAuthentication.Configure(current.Authentication.External); err != nil {
 				return fmt.Errorf("reconfigure external authentication providers: %w", err)
 			}
 			return nil
 		}),
-		service.configStore.AddListener(func(old, current config.Config) error {
+		service.resources.Configuration.AddListener(func(old, current config.Config) error {
 			if !logConfigurationChanged(old, current) {
 				return nil
 			}
-			if err := configureLogger(service.logger, current.Log); err != nil &&
+			if err := configureLogger(service.resources.Logger, current.Log); err != nil &&
 				!errors.Is(err, logging.ErrConfigurationLocked) {
 				return fmt.Errorf("reconfigure logger: %w", err)
 			}
@@ -204,15 +186,15 @@ func newService(
 	}
 	if slices.Contains(service.configListeners, "") {
 		for _, id := range service.configListeners {
-			service.configStore.RemoveListener(id)
+			service.resources.Configuration.RemoveListener(id)
 		}
 		return nil, errors.New("register dynamic configuration listener: configuration store is closed")
 	}
-	service.logger.Info(
+	service.resources.Logger.Info(
 		"platform initialized",
 		logging.String("go_version", runtime.Version()),
-		logging.String("config_source", service.configStore.Describe()),
-		logging.String("node_id", service.cluster.NodeID()),
+		logging.String("config_source", service.resources.Configuration.Describe()),
+		logging.String("node_id", service.resources.Cluster.NodeID()),
 		logging.String("cluster_backend", snapshot.Cluster.Backend),
 	)
 	return service, nil
@@ -282,29 +264,29 @@ func shutdownTimeout(configuration *config.Store) time.Duration {
 }
 
 func (s *Service) Start(ctx context.Context) error {
-	if err := s.cluster.Start(ctx); err != nil {
+	if err := s.resources.Cluster.Start(ctx); err != nil {
 		return fmt.Errorf("start cluster transport: %w", err)
 	}
-	s.logger.Info(
+	s.resources.Logger.Info(
 		"cluster transport started",
-		logging.String("node_id", s.cluster.NodeID()),
+		logging.String("node_id", s.resources.Cluster.NodeID()),
 		logging.String("backend", s.clusterBackend),
 	)
-	if !s.mailer.Enabled() {
-		s.logger.Info("mail service disabled", logging.String("backend", s.mailBackend))
+	if !s.resources.Mailer.Enabled() {
+		s.resources.Logger.Info("mail service disabled", logging.String("backend", s.mailBackend))
 		return nil
 	}
 	testCtx, cancelTest := context.WithTimeout(ctx, s.mailTestTimeout)
 	defer cancelTest()
-	if err := s.mailer.Test(testCtx); err != nil {
-		s.logger.Warn(
+	if err := s.resources.Mailer.Test(testCtx); err != nil {
+		s.resources.Logger.Warn(
 			"mail connection test failed; mail delivery may be unavailable",
 			logging.String("backend", s.mailBackend),
 			logging.String("reason", mailTestFailureReason(err)),
 		)
 		return nil
 	}
-	s.logger.Info("mail service ready", logging.String("backend", s.mailBackend))
+	s.resources.Logger.Info("mail service ready", logging.String("backend", s.mailBackend))
 	return nil
 }
 
@@ -320,16 +302,16 @@ func mailTestFailureReason(err error) string {
 }
 
 func (s *Service) CheckDependencies(ctx context.Context) error {
-	if err := s.store.Ping(ctx); err != nil {
+	if err := s.resources.Persistence.Ping(ctx); err != nil {
 		return fmt.Errorf("database: %w", err)
 	}
-	if err := s.cache.Ping(ctx); err != nil {
+	if err := s.resources.Cache.Ping(ctx); err != nil {
 		return fmt.Errorf("cache: %w", err)
 	}
-	if err := s.cluster.Ping(ctx); err != nil {
+	if err := s.resources.Cluster.Ping(ctx); err != nil {
 		return fmt.Errorf("cluster: %w", err)
 	}
-	if err := checkVFS(ctx, s.vfs); err != nil {
+	if err := checkVFS(ctx, s.resources.VFS); err != nil {
 		return fmt.Errorf("vfs: %w", err)
 	}
 	return nil
@@ -342,7 +324,7 @@ func (s *Service) CheckDependencies(ctx context.Context) error {
 // settings keep their running values until restart and are reported in
 // RestartRequired.
 func (s *Service) ReloadConfiguration(ctx context.Context) (config.ReloadResult, error) {
-	return s.configStore.Reload(ctx)
+	return s.resources.Configuration.Reload(ctx)
 }
 
 // Close disposes every owned resource exactly once. ctx is the caller's
@@ -351,18 +333,10 @@ func (s *Service) ReloadConfiguration(ctx context.Context) (config.ReloadResult,
 func (s *Service) Close(ctx context.Context) error {
 	s.shutdownOnce.Do(func() {
 		for _, id := range s.configListeners {
-			s.configStore.RemoveListener(id)
+			s.resources.Configuration.RemoveListener(id)
 		}
 
-		s.shutdownErr = closeOwnedResources(ctx, OwnedResources{
-			Configuration: s.configStore,
-			Logger:        s.logger,
-			Persistence:   s.store,
-			Cache:         s.cache,
-			Cluster:       s.cluster,
-			Mailer:        s.mailer,
-			VFS:           s.vfs,
-		})
+		s.shutdownErr = closeOwnedResources(ctx, s.resources)
 	})
 	return s.shutdownErr
 }

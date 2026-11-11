@@ -13,7 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server"
+	"github.com/sudosylabs/proctor/server/operator"
 )
 
 const baselineRollbackPlan = "database schema version 1; reverting 1 migration(s) to version 0:\n" +
@@ -23,11 +23,11 @@ const baselineRollbackPlan = "database schema version 1; reverting 1 migration(s
 func migrateDownExecutors(t *testing.T, live []string, reverted *int) executors {
 	t.Helper()
 	execute := testExecutors()
-	execute.planMigrateDown = func(_ context.Context, path string, steps int) (server.MigrationRollbackPlan, error) {
+	execute.planMigrateDown = func(_ context.Context, path string, steps int) (operator.MigrationRollbackPlan, error) {
 		require.Equal(t, "/etc/proctor.json", path)
 		require.Equal(t, 1, steps)
-		return server.MigrationRollbackPlan{
-			DatabaseVersion: 1, Migrations: []server.RevertedMigration{{Version: 1, Name: "baseline"}}, LiveServingNodes: live,
+		return operator.MigrationRollbackPlan{
+			DatabaseVersion: 1, Migrations: []operator.RevertedMigration{{Version: 1, Name: "baseline"}}, LiveServingNodes: live,
 		}, nil
 	}
 	execute.migrateDown = func(_ context.Context, _ string, steps int) (int, error) {

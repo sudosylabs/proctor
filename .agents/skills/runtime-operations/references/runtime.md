@@ -307,7 +307,10 @@ discovery/rejoin, and admission; durable Job claim, queue, lease, checkpoint,
 completion, recurrence, and periodic work; VFS outcomes, sizes, streams, and bytes; shared-cache/Redis outcomes,
 latency, and bytes; SMTP stages and durable mail delivery/queue/health; and
 named authentication, authorization, realtime, and examination outcomes.
-Each subsystem owns a narrow recorder or transparent wrapper. The application
+Each subsystem owns a narrow recorder or transparent wrapper. The wrappers
+that time the cache, mail transport, VFS and cluster transport live in the
+`metrics` module (`metrics.WrapCache`, `WrapMailer`, `WrapVFS`, `WrapCluster`)
+and are applied by the composition root only when metrics are enabled. The application
 has no Prometheus dependency and there is no global telemetry service locator;
 its one-method recorder accepts only application-constructed bounded events.
 Labels come from sealed route templates, closed operation and outcome sets,

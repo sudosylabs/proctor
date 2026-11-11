@@ -25,24 +25,23 @@ import (
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/logging"
-	"github.com/sudosylabs/proctor/server/model"
 )
 
 type options struct {
 	configPath       string
 	readyNotifier    ReadyNotifier
 	stoppingNotifier StoppingNotifier
-	// requireCurrentSchema makes construction refuse an out-of-date schema
-	// instead of migrating it; offline host commands must not converge
-	// schema as a side effect.
-	requireCurrentSchema bool
+	// schema is schemaRequireCurrent when construction must refuse an
+	// out-of-date schema instead of migrating it; offline host commands must
+	// not converge schema as a side effect.
+	schema schemaPolicy
 }
 
 // withCurrentSchemaRequired constructs an inert graph that never applies
 // migrations and fails unless the database schema matches this build.
 func withCurrentSchemaRequired() Option {
 	return func(settings *options) error {
-		settings.requireCurrentSchema = true
+		settings.schema = schemaRequireCurrent
 		return nil
 	}
 }
@@ -308,20 +307,6 @@ type runtimeComponents struct {
 	newHTTP   func(httpServerSettings) httpRuntime
 }
 
-// AdministratorRecoveryCommand is the narrow module-root contract consumed by
-// the host CLI. Password must come from a private input channel, never argv.
-type AdministratorRecoveryCommand struct {
-	InstitutionID    string
-	UserID           string
-	EnableLocalLogin bool
-	Password         string
-}
-
-type AdministratorRecoveryResult struct {
-	LocalLoginEnabled bool
-	PasswordRotated   bool
-}
-
 // lifecycleMilestones records only stages that the node successfully entered.
 // It is private because callers need behavioral lifecycle operations, not a
 // second state-machine API.
@@ -373,43 +358,6 @@ type Server struct {
 	closeErr  error
 }
 
-// RecoverAdministratorAccess runs only while the constructed node remains
-// inert. Running the node permanently closes this host-only capability.
-func (s *Server) RecoverAdministratorAccess(
-	ctx context.Context,
-	command AdministratorRecoveryCommand,
-) (*AdministratorRecoveryResult, error) {
-	if s == nil {
-		return nil, errors.New("server is nil")
-	}
-
-	s.lifecycleMu.Lock()
-	defer s.lifecycleMu.Unlock()
-	if s.state != nodeInert {
-		return nil, errors.New("administrator recovery requires an inert server")
-	}
-
-	recovery := s.components.administratorRecovery
-	if recovery == nil {
-		return nil, errors.New("administrator recovery is unavailable")
-	}
-
-	result, err := recovery.RecoverAdministratorAccess(ctx, invocation.Task("administrator-recovery"), identity.AdministratorRecoveryCommand{
-		InstitutionID:    model.InstitutionID(command.InstitutionID),
-		UserID:           model.UserID(command.UserID),
-		EnableLocalLogin: command.EnableLocalLogin,
-		Password:         command.Password,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &AdministratorRecoveryResult{
-		LocalLoginEnabled: result.LocalLoginEnabled,
-		PasswordRotated:   result.PasswordRotated,
-	}, nil
-}
-
 // New constructs one Proctor server. It validates options and returns
 // configuration or infrastructure construction failures without a partially
 // usable Server.
@@ -433,9 +381,9 @@ func New(ctx context.Context, optionValues ...Option) (*Server, error) {
 	}
 
 	result, err := composeNode(ctx, compositionInput{
-		configPath:           settings.configPath,
-		serviceEnvironment:   environment,
-		requireCurrentSchema: settings.requireCurrentSchema,
+		configPath:         settings.configPath,
+		serviceEnvironment: environment,
+		schema:             settings.schema,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("construct server: %w", err)

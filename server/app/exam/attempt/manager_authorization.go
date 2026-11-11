@@ -115,6 +115,12 @@ func (a SittingManagerAuthorizer) AuthorizeSubmissionView(
 		return apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
+	// The Submission's Candidate is denied below, so the projection must be
+	// the requested Submission's, whatever the Store returned.
+	if !authorization.ConsistentWith(submissionID) {
+		return apperror.New("exam.attempt.unavailable").Wrap(errors.New("Submission authorization projection is incomplete"))
+	}
+
 	if authorization.CandidateUserID == inv.Principal().UserID {
 		if err = a.Audit.RecordAuthorizationDecision(
 			ctx,

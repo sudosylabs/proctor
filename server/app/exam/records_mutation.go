@@ -36,6 +36,12 @@ func (r *Records) authorizeScope(
 		return nil, "", examRecordsStoreErrors.Translate(err)
 	}
 
+	// The caller is authorized on scope, and the mutation is built from the
+	// resolved scope, so the two must be the same records.
+	if !resolved.ConsistentWith(scope) {
+		return nil, "", apperror.New("exam.unavailable").Wrap(errors.New("Exam records scope projection is incomplete"))
+	}
+
 	if excludeSelf && principal.UserID == resolved.CandidateUserID {
 		if err = r.authorizer.RecordDenial(ctx, inv, ordinary, scope.Resource(), resolved.AcademicUnitID); err != nil {
 			return nil, "", err

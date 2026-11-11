@@ -96,6 +96,21 @@ func TestExamAttemptSubmissionAuthorizationAuditsSelfDenialFailClosed(t *testing
 			Audit:       &submissionAuthorizationAuditFake{err: auditErr}}
 		require.ErrorIs(t, adapter.AuthorizeSubmissionView(context.Background(), invocation.New(principal, metadata), submissionID), auditErr, "AuthorizeSubmissionView() error")
 	})
+	t.Run("projection of another Submission is refused before self-denial", func(t *testing.T) {
+		t.Parallel()
+		other := *authorization
+		other.SubmissionID = model.NewSubmissionID()
+		audit := &submissionAuthorizationAuditFake{}
+		sittings := &submissionAuthorizationSittingFake{}
+		adapter := SittingManagerAuthorizer{Sittings: sittings,
+			Submissions: &submissionAuthorizationStoreFake{authorization: &other}, Audit: audit}
+		err := adapter.AuthorizeSubmissionView(context.Background(), invocation.New(principal, metadata), submissionID)
+		var fault *apperror.Error
+		require.ErrorAs(t, err, &fault, "AuthorizeSubmissionView() error")
+		require.Equal(t, "exam.attempt.unavailable", fault.Code(), "AuthorizeSubmissionView() error")
+		require.Empty(t, audit.action, "a decision was recorded on another Submission's projection")
+		require.True(t, sittings.submissionID.IsZero(), "the Manager decision was asked on another Submission's projection")
+	})
 }
 
 type submissionAuthorizationStoreFake struct {

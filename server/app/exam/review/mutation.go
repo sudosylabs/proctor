@@ -9,7 +9,9 @@ package review
 
 import (
 	"context"
+	"errors"
 
+	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -60,6 +62,12 @@ func (s *Service) resolveMutationAuthorization(
 	authorization, err := s.reviews.Resolve(ctx, submissionID)
 	if err != nil {
 		return false, nil, storeErrors.Translate(err)
+	}
+
+	// The Candidate was denied on this projection, so it must be the
+	// requested Submission's, whatever the Store returned.
+	if !authorization.ConsistentWith(submissionID) {
+		return false, nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("inconsistent Review authorization"))
 	}
 
 	return override, authorization, nil

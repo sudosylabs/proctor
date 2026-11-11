@@ -133,6 +133,12 @@ func (a SittingManagerAuthorizer) resolve(
 		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(err)
 	}
 
+	// Callers deny the Submission's Candidate, so the projection must be the
+	// requested Submission's, whatever the Store returned.
+	if !authorization.ConsistentWith(submissionID) {
+		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("Review authorization projection is incomplete"))
+	}
+
 	return authorization, nil
 }
 

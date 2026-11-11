@@ -16,7 +16,7 @@ import (
 )
 
 func TestPasswordCredentialRowConversion(t *testing.T) {
-	credential := &model.PasswordCredential{
+	credential := &model.PasswordCredential{ //nolint:gosec // G101: a fixture hash of no real password.
 		ID:        model.PasswordCredentialID(model.NewID()),
 		CreatedAt: model.TimeFromMillis(1), UpdatedAt: model.TimeFromMillis(2),
 		ArchivedAt: model.OptionalTimeFromMillis(3),
@@ -31,7 +31,7 @@ func TestPasswordCredentialRowConversion(t *testing.T) {
 
 func TestPasswordCredentialRowRehydrationRejectsInvalidPersistedState(t *testing.T) {
 	t.Parallel()
-	valid := passwordCredentialRow{
+	valid := passwordCredentialRow{ //nolint:gosec // G101: a fixture hash of no real password.
 		ID: model.NewPasswordCredentialID().String(), CreatedAt: model.TimeFromMillis(1),
 		UpdatedAt: model.TimeFromMillis(2), UserID: model.NewUserID().String(),
 		PasswordHash: "$argon2id$test", PasswordChangedAt: model.TimeFromMillis(2), Revision: 1,

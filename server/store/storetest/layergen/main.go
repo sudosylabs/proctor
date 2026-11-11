@@ -75,7 +75,7 @@ func main() {
 	if err != nil {
 		fatal(fmt.Errorf("format generated forwarding: %w\n%s", err, generated))
 	}
-	if err := os.WriteFile(*output, formatted, 0o644); err != nil {
+	if err := os.WriteFile(*output, formatted, 0o644); err != nil { //nolint:gosec // G306: generated Go source checked into the repository.
 		fatal(fmt.Errorf("write %s: %w", *output, err))
 	}
 }

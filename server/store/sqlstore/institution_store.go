@@ -25,6 +25,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLInstitutionStore implements store.InstitutionStore on the single
+// institutions row.
 type SQLInstitutionStore struct {
 	*SQLStore
 	institutionsQuery sq.SelectBuilder

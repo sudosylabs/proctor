@@ -22,6 +22,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLExternalIdentityStore implements store.ExternalIdentityStore on
+// external_identities; a first sign-in provisions the user and link together.
 type SQLExternalIdentityStore struct {
 	*SQLStore
 	identitiesQuery sq.SelectBuilder

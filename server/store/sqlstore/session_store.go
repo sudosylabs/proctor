@@ -26,6 +26,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLSessionStore implements store.SessionStore on sessions; revocation also
+// retires the Session's credentials.
 type SQLSessionStore struct {
 	*SQLStore
 	sessionsQuery sq.SelectBuilder

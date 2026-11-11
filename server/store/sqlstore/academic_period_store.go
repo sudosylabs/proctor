@@ -28,6 +28,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLAcademicPeriodStore implements store.AcademicPeriodStore on the
+// academic_periods table, reading owners through the academic_units tree.
 type SQLAcademicPeriodStore struct {
 	*SQLStore
 	academicPeriodsQuery sq.SelectBuilder

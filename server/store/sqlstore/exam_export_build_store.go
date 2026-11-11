@@ -255,8 +255,9 @@ func (s *SQLExamExportStore) Publish(ctx context.Context, input *store.ExamExpor
 	return err
 }
 
-// This exact attempt callback is intentionally independent of its expired claim:
-// it records only that its synchronous writer has returned, never publication.
+// FinishWriter records that the exact attempt's synchronous writer has
+// returned; it never publishes. It is intentionally independent of the
+// attempt's possibly expired claim.
 func (s *SQLExamExportStore) FinishWriter(ctx context.Context, a store.ExamExportArtifact) error {
 	if !a.ExportID.IsValid() || !a.AttemptID.IsValid() {
 		return store.NewErrInvalidInput("exam_export", "artifact", nil)

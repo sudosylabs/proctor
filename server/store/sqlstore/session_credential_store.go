@@ -24,6 +24,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLSessionCredentialStore implements store.SessionCredentialStore on
+// session_credentials, locking the presented credential row while a refresh
+// credential rotates, so a replayed refresh token is seen as used.
 type SQLSessionCredentialStore struct {
 	*SQLStore
 	credentialsQuery sq.SelectBuilder

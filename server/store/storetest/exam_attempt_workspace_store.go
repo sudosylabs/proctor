@@ -461,8 +461,8 @@ writesComplete:
 			ObjectID: large.ID, ContentVersion: model.NewWorkspaceContentVersion(), Content: model.AttemptWorkspaceContent{
 				MediaType: "application/octet-stream", SizeBytes: admittedCapacity.WorkspaceMaximumFileBytes, SHA256: strings.Repeat("d", 64)}})
 		require.NoError(t, reserveErr)
-		_, reserveErr = apply(model.AttemptWorkspaceMutationCreateFile, "size-quota-"+string(rune('a'+index)), func(input *store.ExamAttemptWorkspaceMutation) {
-			input.DestinationPath, input.ObjectID = "large-"+string(rune('a'+index)), large.ID
+		_, reserveErr = apply(model.AttemptWorkspaceMutationCreateFile, "size-quota-"+string(rune('a'+index)), func(input *store.ExamAttemptWorkspaceMutation) { //nolint:gosec // G115: index ranges over 0..4.
+			input.DestinationPath, input.ObjectID = "large-"+string(rune('a'+index)), large.ID //nolint:gosec // G115: index ranges over 0..4.
 		})
 		if index < 4 {
 			require.NoError(t, reserveErr)

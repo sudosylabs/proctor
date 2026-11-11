@@ -25,6 +25,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLPersonalAccessTokenStore implements store.PersonalAccessTokenStore on
+// personal_access_tokens, resolving a token by its hash.
 type SQLPersonalAccessTokenStore struct {
 	*SQLStore
 }

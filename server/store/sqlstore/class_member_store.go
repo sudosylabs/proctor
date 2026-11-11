@@ -26,6 +26,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLClassMemberStore implements store.ClassMemberStore. An enrollment change
+// locks the member's current enrollment row and advances each affected Class's
+// mail audience revision in the same transaction.
 type SQLClassMemberStore struct {
 	*SQLStore
 	query sq.SelectBuilder

@@ -24,6 +24,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLAffiliationStore implements store.AffiliationStore on the affiliations
+// table. It refuses to end a student Affiliation while the user still has an
+// active Class enrollment.
 type SQLAffiliationStore struct {
 	*SQLStore
 	query sq.SelectBuilder

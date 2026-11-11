@@ -27,7 +27,7 @@ func TestBrowserExhaustionSettlement(t *testing.T, ss store.Store, mode string, 
 	for i, source := range sources {
 		start := &store.BrowserActivitySourceStart{Access: access, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, SourceSessionID: source}
 		if i > 0 {
-			start.Transition = model.BrowserStartTransition{Kind: "runtime_reset", PredecessorSourceSessionID: sources[i-1], Reason: model.BrowserSourceResetCoordinatorRestarted}
+			start.Transition = model.BrowserStartTransition{Kind: "runtime_reset", PredecessorSourceSessionID: sources[i-1], Reason: model.BrowserSourceResetCoordinatorRestarted} //nolint:gosec // G602: guarded by i > 0.
 		}
 		_, err := startBrowserSourceFixture(t, ctx, ss, start)
 		require.NoError(t, err)

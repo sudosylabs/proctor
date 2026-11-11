@@ -24,6 +24,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLPasswordCredentialStore implements store.PasswordCredentialStore on
+// password_credentials; it stores encodings only and never sees a password.
 type SQLPasswordCredentialStore struct {
 	*SQLStore
 	credentialsQuery sq.SelectBuilder

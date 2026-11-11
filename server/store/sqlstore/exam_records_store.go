@@ -19,6 +19,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLExamRecordsStore implements store.ExamRecordsStore: records completion,
+// review waivers and retention holds for sealed Sittings.
 type SQLExamRecordsStore struct{ *SQLStore }
 
 func newSQLExamRecordsStore(s *SQLStore) store.ExamRecordsStore { return &SQLExamRecordsStore{s} }

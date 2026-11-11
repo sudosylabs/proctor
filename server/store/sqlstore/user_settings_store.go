@@ -20,6 +20,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLUserSettingsStore implements store.UserSettingsStore on
+// user_settings_documents, one revision-fenced document per user.
 type SQLUserSettingsStore struct {
 	*SQLStore
 	documentsQuery sq.SelectBuilder

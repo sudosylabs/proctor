@@ -21,6 +21,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLAccessPolicyStore implements store.AccessPolicyStore. A policy transition
+// and the Session and credential revocations it forces commit together.
 type SQLAccessPolicyStore struct{ *SQLStore }
 
 func newSQLAccessPolicyStore(sqlStore *SQLStore) store.AccessPolicyStore {

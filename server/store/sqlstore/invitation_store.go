@@ -19,6 +19,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLInvitationStore implements store.InvitationStore. Its issuance,
+// administration and acceptance operations live in the invitation_*_store.go
+// files.
 type SQLInvitationStore struct{ *SQLStore }
 
 const invitationTerminalRetention = 90 * 24 * time.Hour

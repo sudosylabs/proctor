@@ -26,7 +26,7 @@ func TestExternalIdentityStore(t *testing.T, ss store.Store) {
 	t.Run("ConcurrentSessionIssuanceCannotSurviveExactIdentityUnlink", func(t *testing.T) {
 		ctx := context.Background()
 		user := saveUser(t, ctx, ss)
-		_, err := ss.PasswordCredential().Save(ctx, &model.PasswordCredential{UserID: user.ID, PasswordHash: "$argon2id$concurrent-fallback"})
+		_, err := ss.PasswordCredential().Save(ctx, &model.PasswordCredential{UserID: user.ID, PasswordHash: "$argon2id$concurrent-fallback"}) //nolint:gosec // G101: a fixture hash of no real password.
 		require.NoError(t, err)
 		identity, err := ss.ExternalIdentity().Save(ctx, &model.ExternalIdentity{UserID: user.ID, Provider: "campus-cas",
 			Subject: "concurrent-session-" + model.NewID(), LastSeenAt: model.OptionalTimeFromMillis(model.GetMillis())})
@@ -612,7 +612,7 @@ func establishExternalAdmissionPolicyAdministrator(
 	institutionID model.InstitutionID,
 ) {
 	t.Helper()
-	_, err := ss.PasswordCredential().Save(ctx, &model.PasswordCredential{
+	_, err := ss.PasswordCredential().Save(ctx, &model.PasswordCredential{ //nolint:gosec // G101: a fixture hash of no real password.
 		UserID: userID, PasswordHash: "$argon2id$external-admission-policy-test",
 	})
 	require.NoError(t, err)

@@ -19,8 +19,14 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLExamIntegrityReviewStore implements store.ExamIntegrityReviewStore over
+// submission_reviews, integrity_review_decisions and their release
+// preparations.
 type SQLExamIntegrityReviewStore struct{ *SQLStore }
 
+// NewSQLExamIntegrityReviewStore returns the Integrity Review Store over
+// sqlStore. Integration tests build a second one over a peer connection to
+// race two transactions.
 func NewSQLExamIntegrityReviewStore(sqlStore *SQLStore) store.ExamIntegrityReviewStore {
 	return &SQLExamIntegrityReviewStore{SQLStore: sqlStore}
 }

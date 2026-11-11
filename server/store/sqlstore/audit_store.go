@@ -29,6 +29,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLAuditStore implements store.AuditStore on the append-oriented
+// audit_events table; scoped reads filter through role bindings and the
+// academic-unit tree.
 type SQLAuditStore struct {
 	*SQLStore
 	auditsQuery sq.SelectBuilder

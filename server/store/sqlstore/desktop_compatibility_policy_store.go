@@ -19,6 +19,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLDesktopCompatibilityPolicyStore implements
+// store.DesktopCompatibilityPolicyStore on the singleton
+// desktop_compatibility_policies row, fenced by its revision.
 type SQLDesktopCompatibilityPolicyStore struct {
 	*SQLStore
 }

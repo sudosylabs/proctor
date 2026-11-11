@@ -307,7 +307,7 @@ func testInstallationBootstrap(index int) *store.InstallationBootstrap {
 	}
 	required := model.AllActions()
 	permissions := append([]string{"future.unknown"}, required[1:]...)
-	return &store.InstallationBootstrap{
+	return &store.InstallationBootstrap{ //nolint:gosec // G101: fixture bootstrap input, not a credential.
 		BootstrapSecretDigest: sha256.Sum256([]byte(fmt.Sprintf("bootstrap-secret-%d", index))),
 		CommandFingerprint:    sha256.Sum256([]byte(fmt.Sprintf("bootstrap-command-%d", index))),
 		Institution:           institution, Administrator: creation.User, AdministratorSettings: creation.Settings,

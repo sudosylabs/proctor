@@ -33,6 +33,8 @@ import (
 
 const minimumPostgresVersion = 140000
 
+// Settings configure the PostgreSQL connection pool and its timeouts; New
+// rejects a pool smaller than the two connections a locked migration needs.
 type Settings struct {
 	DataSource            string
 	MaxOpenConnections    int
@@ -47,6 +49,8 @@ type Settings struct {
 	ReadOnly bool
 }
 
+// SettingsFromConfig copies the database configuration into Settings. ReadOnly
+// is never set from configuration; operator commands set it themselves.
 func SettingsFromConfig(cfg config.Database) Settings {
 	return Settings{
 		DataSource:            cfg.DataSource,
@@ -179,6 +183,8 @@ func sessionConnector(dataSource string, readOnly bool) (*pq.Connector, error) {
 	return pq.NewConnectorConfig(cfg)
 }
 
+// New opens the pool and verifies the server is at least PostgreSQL 14. It
+// validates settings first and applies no migration.
 func New(ctx context.Context, settings Settings) (*SQLStore, error) {
 	if err := settings.validate(); err != nil {
 		return nil, err

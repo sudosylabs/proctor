@@ -25,6 +25,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLProgrammeLevelStore implements store.ProgrammeLevelStore on
+// programme_levels. It refuses to archive a level that still has active
+// Classes.
 type SQLProgrammeLevelStore struct {
 	*SQLStore
 	programmeLevelsQuery sq.SelectBuilder

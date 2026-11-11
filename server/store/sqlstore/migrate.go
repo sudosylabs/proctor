@@ -29,6 +29,9 @@ import (
 	"github.com/sudosylabs/proctor/server/migrations"
 )
 
+// Migrator owns a store and a Morph engine for explicit migration commands and
+// tests. Close releases both; normal startup uses ApplyPendingMigrations on the
+// operational store instead.
 type Migrator struct {
 	store  *SQLStore
 	engine *migrationEngine
@@ -89,6 +92,8 @@ func (ss *SQLStore) ApplyPendingMigrations(ctx context.Context) (result Migratio
 	return result, nil
 }
 
+// NewMigrator opens a dedicated store from settings and prepares the migration
+// engine on it. It closes the store again if the engine cannot be prepared.
 func NewMigrator(ctx context.Context, settings Settings) (*Migrator, error) {
 	store, err := New(ctx, settings)
 	if err != nil {

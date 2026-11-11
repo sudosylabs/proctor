@@ -30,6 +30,9 @@ type commandOutcomeRow struct {
 	DuplicateOfDigest []byte         `db:"duplicate_of_key_digest"`
 }
 
+// SQLCommandOutcomeStore implements store.CommandOutcomeStore: it prunes
+// expired command_outcomes rows. Each aggregate mutation writes its own outcome
+// in its own transaction.
 type SQLCommandOutcomeStore struct{ *SQLStore }
 
 func newSQLCommandOutcomeStore(sqlStore *SQLStore) store.CommandOutcomeStore {

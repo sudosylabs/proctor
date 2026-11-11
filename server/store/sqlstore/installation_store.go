@@ -23,6 +23,9 @@ import (
 
 const installationBootstrapLock = "proctor:installation-bootstrap"
 
+// SQLInstallationStore implements store.InstallationStore: bootstrap writes
+// the institution, built-in roles, first administrator binding and initial
+// policies in one transaction.
 type SQLInstallationStore struct {
 	*SQLStore
 }

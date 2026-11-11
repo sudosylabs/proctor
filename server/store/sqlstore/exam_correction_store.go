@@ -21,6 +21,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLExamCorrectionStore implements store.ExamCorrectionStore: staged
+// correction resources, their uploads, and the live correction applied to one
+// Sitting.
 type SQLExamCorrectionStore struct{ *SQLStore }
 
 func newSQLExamCorrectionStore(sqlStore *SQLStore) store.ExamCorrectionStore {

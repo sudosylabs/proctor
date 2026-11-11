@@ -25,6 +25,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLProgrammeStore implements store.ProgrammeStore on programmes, each owned
+// by an academic unit.
 type SQLProgrammeStore struct {
 	*SQLStore
 	programmesQuery sq.SelectBuilder

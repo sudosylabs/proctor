@@ -22,6 +22,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLDesktopRegistrationStore implements store.DesktopRegistrationStore.
+// Revoking a registration also revokes its Sessions and their credentials in
+// the same transaction.
 type SQLDesktopRegistrationStore struct {
 	*SQLStore
 	query sq.SelectBuilder

@@ -22,6 +22,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLJobStore implements store.JobStore over jobs and job_attempts, fencing
+// every progress write by the attempt's claim token.
 type SQLJobStore struct{ *SQLStore }
 
 type permanentJobEnqueueOutcome struct {

@@ -29,6 +29,9 @@ type filePurgeCandidateRow struct {
 	RenditionIDs pq.StringArray `db:"rendition_ids"`
 }
 
+// SQLFileStore implements store.FileStore over file_entries, file_revisions,
+// file_renditions and upload_leases. It holds metadata only; bytes live in the
+// VFS.
 type SQLFileStore struct{ *SQLStore }
 
 type uploadLeaseRow struct {
@@ -706,7 +709,8 @@ func (s SQLFileStore) ClaimPurgeCandidate(ctx context.Context, candidate *store.
 		if _, err = tx.Exec(ctx, `UPDATE file_entries
 			SET purge_claimed = TRUE
 			WHERE id = ?`, candidate.EntryID.String()); err != nil {
-			if constraintError, ok := err.(*pq.Error); ok && constraintError.Code == "23503" {
+			var constraintError *pq.Error
+			if errors.As(err, &constraintError) && constraintError.Code == "23503" {
 				return nil, store.NewErrConflict("file_entry", "legally_held", err)
 			}
 			return nil, fmt.Errorf("tombstone file entry for purge: %w", err)

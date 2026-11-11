@@ -26,6 +26,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLRoleStore implements store.RoleStore on roles. It refuses to change the
+// permissions of a role that a live binding still grants.
 type SQLRoleStore struct {
 	*SQLStore
 	rolesQuery sq.SelectBuilder

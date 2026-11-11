@@ -24,6 +24,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLAcademicUnitMemberStore implements store.AcademicUnitMemberStore. A
+// membership change writes academic_unit_members and the role_bindings it
+// grants in one transaction.
 type SQLAcademicUnitMemberStore struct {
 	*SQLStore
 	query sq.SelectBuilder

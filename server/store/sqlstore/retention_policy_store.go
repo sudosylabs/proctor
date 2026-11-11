@@ -18,6 +18,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLRetentionPolicyStore implements store.RetentionPolicyStore on
+// retention_policies and retention_controls; it never deletes records.
 type SQLRetentionPolicyStore struct {
 	*SQLStore
 }

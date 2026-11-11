@@ -90,7 +90,7 @@ func TestPasswordCredentialStore(t *testing.T, ss store.Store) {
 		require.NoError(t, err)
 		attempt := saveAuthenticationMethodAuditAttempt(t, ctx, ss, user.ID.String(), "enroll_password")
 		result, err := ss.PasswordCredential().Enroll(ctx, &store.PasswordCredentialEnrollment{
-			Credential:   &model.PasswordCredential{UserID: user.ID, PasswordHash: "$argon2id$enrolled"},
+			Credential:   &model.PasswordCredential{UserID: user.ID, PasswordHash: "$argon2id$enrolled"}, //nolint:gosec // G101: a fixture hash of no real password.
 			Capabilities: store.AccessDeploymentCapabilities{Providers: map[string]store.AccessProviderCapability{}},
 			AuditEventID: attempt.ID, AuditAt: model.NowUTC(),
 		})
@@ -288,7 +288,7 @@ func TestPasswordCredentialStore(t *testing.T, ss store.Store) {
 
 	t.Run("ReferencesAndUniqueness", func(t *testing.T) {
 		ctx := context.Background()
-		_, err := ss.PasswordCredential().Save(ctx, &model.PasswordCredential{
+		_, err := ss.PasswordCredential().Save(ctx, &model.PasswordCredential{ //nolint:gosec // G101: a fixture hash of no real password.
 			UserID:       model.UserID(model.NewID()),
 			PasswordHash: "$argon2id$missing",
 		})
@@ -296,7 +296,7 @@ func TestPasswordCredentialStore(t *testing.T, ss store.Store) {
 		require.ErrorAs(t, err, &reference)
 		require.Equal(t, "password_credentials_user_id_fkey", reference.Constraint)
 		user := saveUser(t, ctx, ss)
-		first := &model.PasswordCredential{UserID: user.ID, PasswordHash: "$argon2id$first"}
+		first := &model.PasswordCredential{UserID: user.ID, PasswordHash: "$argon2id$first"} //nolint:gosec // G101: a fixture hash of no real password.
 		_, err = ss.PasswordCredential().Save(ctx, first)
 		require.NoError(t, err)
 		_, err = ss.PasswordCredential().Save(ctx, &model.PasswordCredential{

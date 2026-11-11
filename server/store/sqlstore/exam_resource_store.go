@@ -18,6 +18,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLExamResourceStore implements store.ExamResourceStore. A finalized upload
+// publishes its file revision, selects it on the Draft and records the outcome
+// in one transaction.
 type SQLExamResourceStore struct{ *SQLStore }
 
 func newSQLExamResourceStore(sqlStore *SQLStore) store.ExamResourceStore {

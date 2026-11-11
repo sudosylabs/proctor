@@ -24,6 +24,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLMailStore implements store.MailStore over mail_deliveries,
+// mail_occurrences and mail_payload_keys; queuing a delivery also enqueues its
+// Job.
 type SQLMailStore struct{ *SQLStore }
 
 type mailDeliveryRow struct {

@@ -20,6 +20,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLExamRevisionStore implements store.ExamRevisionStore: it freezes a Draft's
+// resources and Starter Workspace into immutable exam_revisions history.
 type SQLExamRevisionStore struct{ *SQLStore }
 
 func newSQLExamRevisionStore(sqlStore *SQLStore) store.ExamRevisionStore {

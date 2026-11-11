@@ -20,6 +20,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLRetentionStore implements store.RetentionStore: previews, notices, expiry
+// schedules and the retirements that alone remove sealed content.
 type SQLRetentionStore struct{ *SQLStore }
 
 func newSQLRetentionStore(s *SQLStore) store.RetentionStore { return &SQLRetentionStore{s} }

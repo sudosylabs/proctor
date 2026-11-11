@@ -21,6 +21,9 @@ import (
 
 const academicUnitHierarchyLock = "proctor:academic-unit-hierarchy"
 
+// SQLAcademicUnitStore implements store.AcademicUnitStore. Every hierarchy
+// change serializes on one advisory lock, so concurrent moves validate against
+// the same tree.
 type SQLAcademicUnitStore struct {
 	*SQLStore
 	academicUnitsQuery sq.SelectBuilder

@@ -27,6 +27,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLRoleBindingStore implements store.RoleBindingStore on role_bindings,
+// validating each scope reference inside the transaction.
 type SQLRoleBindingStore struct {
 	*SQLStore
 	bindingsQuery sq.SelectBuilder

@@ -494,7 +494,7 @@ func testExamCorrectionAcknowledgement(t *testing.T, ctx context.Context, ss sto
 		require.True(t, duplicateAcknowledgement.ConsistentWith(connected.Attempt.ID, first.Revision.ID, second.Revision.ID), "AcknowledgeCorrection returned a result inconsistent with its request")
 
 		replayInput := newAcknowledgement(first.Revision.ID, second.Revision.ID)
-		replayed, err := ss.ExamAttempt().AcknowledgeCorrection(ctx, replayInput, firstCommands[winnerIndex])
+		replayed, err := ss.ExamAttempt().AcknowledgeCorrection(ctx, replayInput, firstCommands[winnerIndex]) //nolint:gosec // G602: exactly one fresh outcome is required above, so winnerIndex is 0 or 1.
 		require.NoError(t, err)
 		require.True(t, replayed.ConsistentWith(connected.Attempt.ID, first.Revision.ID, second.Revision.ID), "AcknowledgeCorrection returned a result inconsistent with its request")
 		require.NotNil(t, replayed, "AcknowledgeCorrection(exact replay) = %#v, first=%#v", replayed, acknowledged)
@@ -564,7 +564,7 @@ func testExamCorrectionAcknowledgement(t *testing.T, ctx context.Context, ss sto
 		require.NoError(t, err)
 		require.True(t, third.ConsistentWith(fixture.examID, fixture.sitting.ID, second.Revision.ID, resumed.Value.Sitting.Revision), "Apply returned a result inconsistent with its request")
 		afterCorrectionReplay := newAcknowledgement(first.Revision.ID, second.Revision.ID)
-		replayed, err = ss.ExamAttempt().AcknowledgeCorrection(ctx, afterCorrectionReplay, firstCommands[winnerIndex])
+		replayed, err = ss.ExamAttempt().AcknowledgeCorrection(ctx, afterCorrectionReplay, firstCommands[winnerIndex]) //nolint:gosec // G602: exactly one fresh outcome is required above, so winnerIndex is 0 or 1.
 		require.NoError(t, err)
 		require.True(t, replayed.ConsistentWith(connected.Attempt.ID, first.Revision.ID, second.Revision.ID), "AcknowledgeCorrection returned a result inconsistent with its request")
 		require.NotNil(t, replayed)

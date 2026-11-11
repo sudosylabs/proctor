@@ -27,6 +27,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLClassStore implements store.ClassStore on the classes table, resolving
+// each Class's programme level, programme and academic-unit lineage.
 type SQLClassStore struct {
 	*SQLStore
 	classesQuery sq.SelectBuilder

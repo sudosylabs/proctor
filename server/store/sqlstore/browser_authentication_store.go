@@ -21,6 +21,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLBrowserAuthenticationStore implements store.BrowserAuthenticationStore on
+// browser_authentication_transactions, locking the authenticating user's row
+// while a step records its outcome.
 type SQLBrowserAuthenticationStore struct{ *SQLStore }
 
 type browserAuthenticationRow struct {

@@ -304,7 +304,7 @@ func TestRetryAllowlistedReadPreservesEventualResult(t *testing.T) {
 		MaxAttempts:    3,
 		InitialBackoff: time.Nanosecond,
 		MaxBackoff:     time.Nanosecond,
-		IsTransient:    func(err error) bool { return err == transientErr },
+		IsTransient:    func(err error) bool { return errors.Is(err, transientErr) },
 	}, nil)
 	require.NoError(t, err)
 
@@ -510,7 +510,7 @@ func TestRetryExamAuthoringIdempotentCreateAndReads(t *testing.T) {
 	stub := &examAuthoringStub{err: transientErr}
 	layer, err := retrylayer.NewWithRecorder(&rootStub{examAuthoring: stub}, retrylayer.Policy{
 		MaxAttempts: 3, InitialBackoff: time.Nanosecond, MaxBackoff: time.Nanosecond,
-		IsTransient: func(err error) bool { return err == transientErr },
+		IsTransient: func(err error) bool { return errors.Is(err, transientErr) },
 	}, nil)
 	require.NoError(t, err)
 
@@ -568,7 +568,7 @@ func TestRetryReturnsExactTransientErrorAfterBoundedAttempts(t *testing.T) {
 
 	transientErr := errors.New("deadlock detected")
 	stub := &institutionStub{get: func() (*model.Institution, error) { return nil, transientErr }}
-	layer := newLayer(t, stub, func(err error) bool { return err == transientErr }, 3, time.Nanosecond)
+	layer := newLayer(t, stub, func(err error) bool { return errors.Is(err, transientErr) }, 3, time.Nanosecond)
 
 	_, gotErr := layer.Institution().Get(context.Background(), model.NewInstitutionID())
 	require.Equal(t, transientErr, gotErr, "Get() error")

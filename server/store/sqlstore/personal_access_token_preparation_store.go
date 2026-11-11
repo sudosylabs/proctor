@@ -232,6 +232,7 @@ func (s SQLPersonalAccessTokenStore) MaintainMutationPreparations(
 	})
 }
 
+//nolint:gosec // G101: a column list, not a credential.
 const personalAccessTokenPreparationColumns = `id,created_at,expires_at,user_id,token_id,kind,
 	actor_id,session_id,action,resource_type,resource_id,scope_type,scope_id,
 	request_id,node_id,client_type,authentication_method,ip_address,user_agent,parameters,prior_state`

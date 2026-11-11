@@ -24,6 +24,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLMFAStore implements store.MFAStore over mfa_credentials and
+// mfa_recovery_codes, upgrading or revoking Sessions in the same transaction.
 type SQLMFAStore struct {
 	*SQLStore
 }
@@ -656,6 +658,7 @@ func (s SQLMFAStore) Disable(
 	})
 }
 
+//nolint:gosec // G101: a SELECT column list, not a credential.
 const mfaCredentialSelect = `
 	SELECT id, created_at, updated_at, archived_at, user_id, state,
 	       encrypted_secret, encryption_key_id, pending_expires_at,

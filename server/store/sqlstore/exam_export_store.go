@@ -22,6 +22,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLExamExportStore implements store.ExamExportStore over exam_exports and
+// the retention_source_protections that keep an export's sources alive until
+// it is published or fails.
 type SQLExamExportStore struct{ *SQLStore }
 
 // ListBuildTitles reads the sealed Exam revision title behind each given
@@ -82,6 +85,8 @@ func decodeExamExportOutcome(data []byte) (model.ExamExportID, error) {
 	return outcome.ExportID, nil
 }
 
+// NewSQLExamExportStore returns the export Store over s. New wires it; it is
+// exported so integration tests can build one over a second connection.
 func NewSQLExamExportStore(s *SQLStore) store.ExamExportStore { return &SQLExamExportStore{s} }
 
 const examExportColumns = `id, exam_id, exam_sitting_id, submission_id, requester_user_id,

@@ -18,6 +18,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLExamAuthoringStore implements store.ExamAuthoringStore over exams,
+// exam_drafts and exam_managers, locking the Exam and its Draft rows before any
+// change.
 type SQLExamAuthoringStore struct {
 	*SQLStore
 	catalogReader examCatalogReader

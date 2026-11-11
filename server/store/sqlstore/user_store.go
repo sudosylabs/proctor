@@ -28,6 +28,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLUserStore implements store.UserStore on users; credentials live in their
+// own Stores.
 type SQLUserStore struct {
 	*SQLStore
 	usersQuery sq.SelectBuilder
@@ -363,7 +365,7 @@ func (s SQLUserStore) List(
 			options.AfterID,
 		)
 	}
-	query = query.OrderBy("users.username", "users.id").Limit(uint64(options.Limit))
+	query = query.OrderBy("users.username", "users.id").Limit(uint64(options.Limit)) //nolint:gosec // G115: validUserListOptions bounds Limit to 1..201.
 	rows := []userRow{}
 	if err := s.GetMaster().SelectBuilder(ctx, &rows, query); err != nil {
 		return nil, fmt.Errorf("list users: %w", err)

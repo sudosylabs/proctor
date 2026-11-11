@@ -25,6 +25,9 @@ const (
 	externalLoginStateLifetimeMaximum = 30 * time.Minute
 )
 
+// SQLExternalLoginStateStore implements store.ExternalLoginStateStore on
+// external_login_states. Consumption is one conditional UPDATE of an
+// unconsumed, unexpired state, so a provider callback succeeds once.
 type SQLExternalLoginStateStore struct {
 	*SQLStore
 	statesQuery sq.SelectBuilder

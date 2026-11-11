@@ -24,6 +24,8 @@ import (
 // shared so they exclude recovery without serializing one another.
 const servingNodeLeaseFenceKey = "proctor:serving-node-lease-fence"
 
+// SQLServingNodeLeaseStore implements store.ServingNodeLeaseStore on
+// serving_node_leases.
 type SQLServingNodeLeaseStore struct{ *SQLStore }
 
 type servingNodeLeaseRow struct {

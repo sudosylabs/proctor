@@ -28,6 +28,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLUserTokenStore implements store.UserTokenStore on user_tokens; consuming a
+// token applies its account change in the same transaction.
 type SQLUserTokenStore struct {
 	*SQLStore
 	tokensQuery sq.SelectBuilder

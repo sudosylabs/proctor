@@ -19,6 +19,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SQLClusterDiscoveryStore implements store.ClusterDiscoveryStore on
+// cluster_discovery_nodes; rows are disposable bootstrap hints, never
+// authority.
 type SQLClusterDiscoveryStore struct {
 	*SQLStore
 }

@@ -24,7 +24,7 @@ func (s *Service) publishCandidateActivityChanged(ctx context.Context,
 	if err != nil {
 		return err
 	}
-	return s.deps.Publisher.PublishRealtimeEvent(ctx, event)
+	return s.deps.Publisher.Publish(ctx, event)
 }
 
 // publishOperationalInvalidations follows a change to what an Attempt may do,
@@ -63,7 +63,7 @@ func (s *Service) publishConnectionOpened(ctx context.Context, result Connection
 		return err
 	}
 
-	return errors.Join(s.deps.Publisher.PublishRealtimeEvent(ctx, event), s.publishOperationalInvalidations(
+	return errors.Join(s.deps.Publisher.Publish(ctx, event), s.publishOperationalInvalidations(
 		ctx,
 		result.Attempt.ExamID,
 		result.Attempt.SittingID,
@@ -86,7 +86,7 @@ func (s *Service) publishConnectionClosed(ctx context.Context, result Connection
 		return err
 	}
 
-	return errors.Join(s.deps.Publisher.PublishRealtimeEvent(ctx, event),
+	return errors.Join(s.deps.Publisher.Publish(ctx, event),
 		realtime.PublishSittingBoardChanged(ctx, s.deps.Publisher, result.ExamID, result.SittingID))
 }
 
@@ -127,8 +127,8 @@ func (s *Service) publishParticipationExpired(ctx context.Context, result Partic
 
 	if !result.ConnectionClosed {
 		return errors.Join(
-			s.deps.Publisher.PublishRealtimeEvent(ctx, managerEvent),
-			s.deps.Publisher.PublishRealtimeEvent(ctx, candidateEvent),
+			s.deps.Publisher.Publish(ctx, managerEvent),
+			s.deps.Publisher.Publish(ctx, candidateEvent),
 			s.publishOperationalInvalidations(ctx, result.ExamID, result.SittingID, result.CandidateUserID),
 		)
 	}
@@ -146,9 +146,9 @@ func (s *Service) publishParticipationExpired(ctx context.Context, result Partic
 	}
 
 	return errors.Join(
-		s.deps.Publisher.PublishRealtimeEvent(ctx, connectionEvent),
-		s.deps.Publisher.PublishRealtimeEvent(ctx, managerEvent),
-		s.deps.Publisher.PublishRealtimeEvent(ctx, candidateEvent),
+		s.deps.Publisher.Publish(ctx, connectionEvent),
+		s.deps.Publisher.Publish(ctx, managerEvent),
+		s.deps.Publisher.Publish(ctx, candidateEvent),
 		s.publishOperationalInvalidations(
 			ctx,
 			result.ExamID,
@@ -185,8 +185,8 @@ func (s *Service) publishAttemptReallowed(ctx context.Context, result ReallowRes
 	}
 
 	return errors.Join(
-		s.deps.Publisher.PublishRealtimeEvent(ctx, managerEvent),
-		s.deps.Publisher.PublishRealtimeEvent(ctx, candidateEvent),
+		s.deps.Publisher.Publish(ctx, managerEvent),
+		s.deps.Publisher.Publish(ctx, candidateEvent),
 		s.publishOperationalInvalidations(ctx, result.ExamID, result.SittingID, result.CandidateUserID),
 	)
 }
@@ -227,8 +227,8 @@ func (s *Service) publishAttemptSuspendedByManager(ctx context.Context, result M
 
 	if !result.ConnectionClosed || result.Connection == nil {
 		return errors.Join(
-			s.deps.Publisher.PublishRealtimeEvent(ctx, managerEvent),
-			s.deps.Publisher.PublishRealtimeEvent(ctx, candidateEvent),
+			s.deps.Publisher.Publish(ctx, managerEvent),
+			s.deps.Publisher.Publish(ctx, candidateEvent),
 			s.publishOperationalInvalidations(ctx, result.ExamID, result.SittingID, result.CandidateUserID),
 		)
 	}
@@ -246,9 +246,9 @@ func (s *Service) publishAttemptSuspendedByManager(ctx context.Context, result M
 	}
 
 	return errors.Join(
-		s.deps.Publisher.PublishRealtimeEvent(ctx, connectionEvent),
-		s.deps.Publisher.PublishRealtimeEvent(ctx, managerEvent),
-		s.deps.Publisher.PublishRealtimeEvent(ctx, candidateEvent),
+		s.deps.Publisher.Publish(ctx, connectionEvent),
+		s.deps.Publisher.Publish(ctx, managerEvent),
+		s.deps.Publisher.Publish(ctx, candidateEvent),
 		s.publishOperationalInvalidations(
 			ctx,
 			result.ExamID,
@@ -276,7 +276,7 @@ func (s *Service) publishWorkspaceChanged(ctx context.Context, result WorkspaceM
 		return err
 	}
 
-	return errors.Join(s.deps.Publisher.PublishRealtimeEvent(ctx, event))
+	return errors.Join(s.deps.Publisher.Publish(ctx, event))
 }
 
 // publishFocusLossEvaluated announces what one Focus Loss report caused. A
@@ -301,11 +301,11 @@ func (s *Service) publishFocusLossEvaluated(ctx context.Context, result FocusLos
 			return err
 		}
 
-		return errors.Join(s.deps.Publisher.PublishRealtimeEvent(ctx, event),
+		return errors.Join(s.deps.Publisher.Publish(ctx, event),
 			realtime.PublishSittingBoardChanged(ctx, s.deps.Publisher, result.ExamID, result.SittingID))
 	}
 
-	events := make([]realtime.RealtimeEvent, 0, 5)
+	events := make([]realtime.Event, 0, 5)
 	if result.ConnectionClosed {
 		event, err := realtime.NewExamAttemptConnectionClosedEvent(
 			result.SittingID,
@@ -386,7 +386,7 @@ func (s *Service) publishFocusLossEvaluated(ctx context.Context, result FocusLos
 
 	var joined error
 	for _, event := range events {
-		joined = errors.Join(joined, s.deps.Publisher.PublishRealtimeEvent(ctx, event))
+		joined = errors.Join(joined, s.deps.Publisher.Publish(ctx, event))
 	}
 
 	if result.GapDetected || result.FlagCreated || result.SuspensionCreated {
@@ -453,7 +453,7 @@ func (s *Service) publishSubmittedFacts(ctx context.Context,
 		return nil, err
 	}
 
-	return errors.Join(s.deps.Publisher.PublishRealtimeEvent(ctx, managerEvent), s.deps.Publisher.PublishRealtimeEvent(ctx, candidateEvent)), nil
+	return errors.Join(s.deps.Publisher.Publish(ctx, managerEvent), s.deps.Publisher.Publish(ctx, candidateEvent)), nil
 }
 
 // publishAttemptSealedForSittingClose announces a Submission sealed because
@@ -479,7 +479,7 @@ func (s *Service) publishAttemptSealedForSittingClose(ctx context.Context, resul
 			return eventErr
 		}
 
-		publishErr = errors.Join(publishErr, s.deps.Publisher.PublishRealtimeEvent(ctx, connectionEvent))
+		publishErr = errors.Join(publishErr, s.deps.Publisher.Publish(ctx, connectionEvent))
 	}
 
 	return errors.Join(publishErr, s.publishOperationalInvalidations(

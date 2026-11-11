@@ -33,8 +33,8 @@ func TestDuplicateSessionRevocationPropagationIsIdempotent(t *testing.T) {
 	sink := &recordingRealtimeSink{}
 	cluster := &recordingRealtimeCluster{}
 	realtime := newTestRealtimeService(t, cache)
-	require.NoError(t, realtime.AttachRealtimeClusterFanout(cluster))
-	require.NoError(t, realtime.AttachRealtimeSink(sink))
+	require.NoError(t, realtime.AttachClusterFanout(cluster))
+	require.NoError(t, realtime.AttachSink(sink))
 
 	userID := model.NewID()
 	sessionID := model.NewID()
@@ -132,11 +132,11 @@ func TestDuplicateRealtimePeerPublicationDoesNotRebroadcast(t *testing.T) {
 	sink := &recordingRealtimeSink{}
 	cluster := &recordingRealtimeCluster{}
 	service := newTestRealtimeService(t, noopAuthenticationCache{})
-	require.NoError(t, service.AttachRealtimeClusterFanout(cluster))
-	require.NoError(t, service.AttachRealtimeSink(sink))
+	require.NoError(t, service.AttachClusterFanout(cluster))
+	require.NoError(t, service.AttachSink(sink))
 
 	unitID := model.NewID()
-	event := realtime.RealtimeEvent{
+	event := realtime.Event{
 		Name:   "academic_unit_created",
 		Action: model.ActionAcademicUnitView,
 		Resource: model.Resource{
@@ -144,7 +144,7 @@ func TestDuplicateRealtimePeerPublicationDoesNotRebroadcast(t *testing.T) {
 			ID:   unitID,
 		},
 	}
-	require.NoError(t, service.PublishRealtimeEvent(context.Background(), event))
+	require.NoError(t, service.Publish(context.Background(), event))
 	require.Len(t, cluster.broadcasts, 1, "broadcasts")
 	payload := cluster.broadcasts[0].data
 

@@ -14,12 +14,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/internal/batchitem"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -46,19 +48,15 @@ func (s *accountStateStoreFake) SetDisabled(_ context.Context, input *store.User
 	return s.result, s.err
 }
 
-// accountStateEffectsFake stands in for the security effects; it records the
-// revocation it was asked to publish.
-type accountStateEffectsFake struct {
-	SecurityEffects
-	events     *[]string
-	userID     model.UserID
-	sessionIDs []model.SessionID
-	hashes     []string
-}
-
-func (e *accountStateEffectsFake) SessionsRevoked(_ context.Context, userID model.UserID, sessionIDs []model.SessionID, hashes []string) {
-	*e.events = append(*e.events, "publish-revocation")
-	e.userID, e.sessionIDs, e.hashes = userID, sessionIDs, hashes
+// accountStatePublisher returns a recording Publisher that also places each
+// revocation in the shared log as "publish-revocation". Account state changes
+// publish nothing else, so any other call fails the test.
+func accountStatePublisher(t *testing.T, events *[]string) *realtimetest.Publisher {
+	t.Helper()
+	return &realtimetest.Publisher{Observe: func(call realtimetest.Call) {
+		assert.Equal(t, realtimetest.SessionsRevoked, call.Method, "account state published another effect")
+		*events = append(*events, "publish-revocation")
+	}}
 }
 
 type securityNoticeMailerFake struct {
@@ -113,8 +111,8 @@ func TestAccountDisableCommitsBeforePublishingRevocation(t *testing.T) {
 		Descriptor: model.ExternalAuthenticationProvider{ID: "campus", Type: "oidc"},
 	}}}}
 	mailer := &securityNoticeMailerFake{events: &events}
-	effects := &accountStateEffectsFake{events: &events}
-	service := &Service{users: persistence, authorizer: &accountAuthorizerFake{events: &events}, capabilities: capabilities, auditor: auditor, mail: mailer, effects: effects, now: func() time.Time { return time.UnixMilli(500) }}
+	effects := accountStatePublisher(t, &events)
+	service := &Service{users: persistence, authorizer: &accountAuthorizerFake{events: &events}, capabilities: capabilities, auditor: auditor, mail: mailer, publisher: effects, now: func() time.Time { return time.UnixMilli(500) }}
 	result, err := service.SetUserEnabled(context.Background(), invocation.Invocation{}, SetUserEnabledCommand{ID: user.ID, Enabled: false})
 	require.NoError(t, err)
 	require.Equal(t, int64(500), result.DisabledAt.Millis(), "result/input = %#v / %#v", result, persistence.input)
@@ -131,9 +129,12 @@ func TestAccountDisableCommitsBeforePublishingRevocation(t *testing.T) {
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
 	require.Equal(t, []string{"authorize-manage", "get-user", "prepare-mail", "audit-begin", "store-set-disabled", "publish-revocation"}, events)
-	require.Equal(t, user.ID, effects.userID, "revocation is published for the disabled User")
-	require.Equal(t, []model.SessionID{revoked.ID}, effects.sessionIDs, "revocation names each revoked Session")
-	require.Equal(t, []string{"hash"}, effects.hashes, "revocation carries the revoked access token hashes")
+	// Contract: one revocation, published for the disabled User, naming each
+	// revoked Session and carrying the revoked access-token hashes.
+	require.Equal(t, []realtimetest.Call{{
+		Method: realtimetest.SessionsRevoked, UserID: user.ID,
+		SessionIDs: []model.SessionID{revoked.ID}, AccessTokenHashes: []string{"hash"},
+	}}, effects.Calls())
 }
 
 func TestAccountDisableRecordsTheTrimmedReasonOnlyInAuditParameters(t *testing.T) {
@@ -154,7 +155,7 @@ func TestAccountDisableRecordsTheTrimmedReasonOnlyInAuditParameters(t *testing.T
 			updated.DisabledAt = model.OptionalTimeFromMillis(500)
 			persistence := &accountStateStoreFake{events: &events, user: user, result: &store.UserDisabledStateResult{User: &updated}}
 			auditor := &institutionAuditorFake{events: &events, beginID: model.NewID()}
-			service := &Service{users: persistence, authorizer: &accountAuthorizerFake{events: &events}, capabilities: &accessPolicyCapabilitiesFake{}, auditor: auditor, mail: &securityNoticeMailerFake{events: &events}, effects: &accountStateEffectsFake{events: &events}, now: func() time.Time { return time.UnixMilli(500) }}
+			service := &Service{users: persistence, authorizer: &accountAuthorizerFake{events: &events}, capabilities: &accessPolicyCapabilitiesFake{}, auditor: auditor, mail: &securityNoticeMailerFake{events: &events}, publisher: accountStatePublisher(t, &events), now: func() time.Time { return time.UnixMilli(500) }}
 			_, err := service.SetUserEnabled(context.Background(), invocation.Invocation{}, SetUserEnabledCommand{ID: user.ID, Reason: test.reason})
 			require.NoError(t, err)
 			require.Len(t, auditor.values, 1)
@@ -184,7 +185,7 @@ func TestAccountDisableRejectsAnInvalidReasonBeforeAuthorization(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			events := []string{}
-			service := &Service{users: &accountStateStoreFake{events: &events}, authorizer: &accountAuthorizerFake{events: &events}, capabilities: &accessPolicyCapabilitiesFake{}, auditor: &institutionAuditorFake{events: &events}, mail: &securityNoticeMailerFake{events: &events}, effects: &accountStateEffectsFake{events: &events}, now: time.Now}
+			service := &Service{users: &accountStateStoreFake{events: &events}, authorizer: &accountAuthorizerFake{events: &events}, capabilities: &accessPolicyCapabilitiesFake{}, auditor: &institutionAuditorFake{events: &events}, mail: &securityNoticeMailerFake{events: &events}, publisher: accountStatePublisher(t, &events), now: time.Now}
 			_, err := service.SetUserEnabled(context.Background(), invocation.Invocation{}, SetUserEnabledCommand{ID: model.NewUserID(), Enabled: test.enabled, Reason: &test.reason})
 			var appErr *apperror.Error
 			require.ErrorAs(t, err, &appErr)
@@ -200,7 +201,7 @@ func TestAccountDisableFailurePublishesNoRevocation(t *testing.T) {
 	events := []string{}
 	user := &model.User{ID: model.NewUserID(), CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100), Revision: 3, Username: "student", Locale: "en", Timezone: "UTC"}
 	persistence := &accountStateStoreFake{events: &events, user: user, err: store.NewErrConflict("user", "users_revision", errors.New("stale"))}
-	service := &Service{users: persistence, authorizer: &accountAuthorizerFake{events: &events}, capabilities: &accessPolicyCapabilitiesFake{}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: &securityNoticeMailerFake{events: &events}, effects: &accountStateEffectsFake{events: &events}, now: time.Now}
+	service := &Service{users: persistence, authorizer: &accountAuthorizerFake{events: &events}, capabilities: &accessPolicyCapabilitiesFake{}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: &securityNoticeMailerFake{events: &events}, publisher: accountStatePublisher(t, &events), now: time.Now}
 	_, err := service.SetUserEnabled(context.Background(), invocation.Invocation{}, SetUserEnabledCommand{ID: user.ID, Enabled: false})
 	require.True(t, apperror.Is(err, "user.conflict"), "error = %v", err)
 	// Contract (guardrail 8): authorization precedes the audit, the audit begins
@@ -217,7 +218,7 @@ func TestAccountEnablePublishesNoRevocation(t *testing.T) {
 	updated.Revision++
 	persistence := &accountStateStoreFake{events: &events, user: user, result: &store.UserDisabledStateResult{User: &updated, RevokedSessions: []*model.Session{}, RevokedTokenHashes: []string{}}}
 	mailer := &securityNoticeMailerFake{events: &events}
-	service := &Service{users: persistence, authorizer: &accountAuthorizerFake{events: &events}, capabilities: &accessPolicyCapabilitiesFake{}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: mailer, effects: &accountStateEffectsFake{events: &events}, now: func() time.Time { return time.UnixMilli(500) }}
+	service := &Service{users: persistence, authorizer: &accountAuthorizerFake{events: &events}, capabilities: &accessPolicyCapabilitiesFake{}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: mailer, publisher: accountStatePublisher(t, &events), now: func() time.Time { return time.UnixMilli(500) }}
 	result, err := service.SetUserEnabled(context.Background(), invocation.Invocation{}, SetUserEnabledCommand{ID: user.ID, Enabled: true})
 	require.NoError(t, err)
 	require.False(t, result.DisabledAt.Valid, "result/input = %#v / %#v", result, persistence.input)
@@ -233,7 +234,7 @@ func TestAccountSelfDisableIsRejectedAfterAuthorization(t *testing.T) {
 	t.Parallel()
 	events := []string{}
 	userID := model.NewID()
-	service := &Service{users: &accountStateStoreFake{events: &events}, authorizer: &accountAuthorizerFake{events: &events}, capabilities: &accessPolicyCapabilitiesFake{}, auditor: &institutionAuditorFake{events: &events}, mail: &securityNoticeMailerFake{events: &events}, effects: &accountStateEffectsFake{events: &events}, now: time.Now}
+	service := &Service{users: &accountStateStoreFake{events: &events}, authorizer: &accountAuthorizerFake{events: &events}, capabilities: &accessPolicyCapabilitiesFake{}, auditor: &institutionAuditorFake{events: &events}, mail: &securityNoticeMailerFake{events: &events}, publisher: accountStatePublisher(t, &events), now: time.Now}
 	invocation := invocation.New(model.Principal{UserID: model.UserID(userID)}, model.RequestMetadata{})
 	_, err := service.SetUserEnabled(context.Background(), invocation, SetUserEnabledCommand{ID: model.UserID(userID), Enabled: false})
 	require.True(t, apperror.Is(err, "request.invalid"), "error = %v", err)
@@ -246,7 +247,7 @@ func TestAccountStateReplayDoesNotCreateAnotherNoticeOrAudit(t *testing.T) {
 	user := &model.User{ID: model.NewUserID(), CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100), Revision: 3,
 		Username: "student", Email: "student@example.edu", Locale: "en", Timezone: "UTC", DisabledAt: model.OptionalTimeFromMillis(200)}
 	mailer := &securityNoticeMailerFake{events: &events}
-	service := &Service{users: &accountStateStoreFake{events: &events, user: user}, authorizer: &accountAuthorizerFake{events: &events}, capabilities: &accessPolicyCapabilitiesFake{}, auditor: &institutionAuditorFake{events: &events}, mail: mailer, effects: &accountStateEffectsFake{events: &events}, now: time.Now}
+	service := &Service{users: &accountStateStoreFake{events: &events, user: user}, authorizer: &accountAuthorizerFake{events: &events}, capabilities: &accessPolicyCapabilitiesFake{}, auditor: &institutionAuditorFake{events: &events}, mail: mailer, publisher: accountStatePublisher(t, &events), now: time.Now}
 	result, err := service.SetUserEnabled(context.Background(), invocation.Invocation{}, SetUserEnabledCommand{ID: user.ID, Enabled: false})
 	require.NoError(t, err, "replay result/error/mail")
 	require.Same(t, user, result, "replay result/error/mail")
@@ -262,7 +263,7 @@ func TestAccountStateIdempotentNoOpPreparesNoticeForAuthoritativeRace(t *testing
 		Username: "student", Email: "student@example.edu", Locale: "en", Timezone: "UTC", DisabledAt: model.OptionalTimeFromMillis(200)}
 	persistence := &accountStateStoreFake{events: &events, user: user, result: &store.UserDisabledStateResult{User: user}}
 	mailer := &securityNoticeMailerFake{events: &events}
-	service := &Service{users: persistence, authorizer: &accountAuthorizerFake{events: &events}, capabilities: &accessPolicyCapabilitiesFake{}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: mailer, effects: &accountStateEffectsFake{events: &events}, now: time.Now}
+	service := &Service{users: persistence, authorizer: &accountAuthorizerFake{events: &events}, capabilities: &accessPolicyCapabilitiesFake{}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: mailer, publisher: accountStatePublisher(t, &events), now: time.Now}
 	result, err := service.SetUserEnabled(context.Background(), invocation.New(model.Principal{UserID: actor}, model.RequestMetadata{}),
 		SetUserEnabledCommand{ID: user.ID, Enabled: false, IdempotencyKey: "row"})
 	require.NoError(t, err, "idempotent no-op result")
@@ -282,7 +283,7 @@ func TestAccountStateRetainedOutcomeBypassesMailAfterLaterStateChange(t *testing
 	original.DisabledAt = model.OptionalTimeFromMillis(200)
 	persistence := &accountStateStoreFake{events: &events, user: current, result: &store.UserDisabledStateResult{User: &original}}
 	mailer := &securityNoticeMailerFake{events: &events, err: errors.New("mail unavailable")}
-	service := &Service{users: persistence, authorizer: &accountAuthorizerFake{events: &events}, capabilities: &accessPolicyCapabilitiesFake{}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: mailer, effects: &accountStateEffectsFake{events: &events}, now: time.Now}
+	service := &Service{users: persistence, authorizer: &accountAuthorizerFake{events: &events}, capabilities: &accessPolicyCapabilitiesFake{}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: mailer, publisher: accountStatePublisher(t, &events), now: time.Now}
 	result, err := service.SetUserEnabled(context.Background(), invocation.New(model.Principal{UserID: actor}, model.RequestMetadata{}),
 		SetUserEnabledCommand{ID: current.ID, Enabled: false, IdempotencyKey: "row", Batch: batchitem.New(batchitem.Fields{RetainedOutcome: true})})
 	require.NoError(t, err, "retained result=%#v error=%v mail", result, err)
@@ -295,7 +296,7 @@ func TestAccountStateMailPreparationFailureStartsNoMutation(t *testing.T) {
 	events := []string{}
 	user := &model.User{ID: model.NewUserID(), CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100), Revision: 3,
 		Username: "student", Email: "student@example.edu", Locale: "en", Timezone: "UTC"}
-	service := &Service{users: &accountStateStoreFake{events: &events, user: user}, authorizer: &accountAuthorizerFake{events: &events}, capabilities: &accessPolicyCapabilitiesFake{}, auditor: &institutionAuditorFake{events: &events}, mail: &securityNoticeMailerFake{events: &events, err: errors.New("render failed")}, effects: &accountStateEffectsFake{events: &events}, now: time.Now}
+	service := &Service{users: &accountStateStoreFake{events: &events, user: user}, authorizer: &accountAuthorizerFake{events: &events}, capabilities: &accessPolicyCapabilitiesFake{}, auditor: &institutionAuditorFake{events: &events}, mail: &securityNoticeMailerFake{events: &events, err: errors.New("render failed")}, publisher: accountStatePublisher(t, &events), now: time.Now}
 	_, err := service.SetUserEnabled(context.Background(), invocation.Invocation{}, SetUserEnabledCommand{ID: user.ID, Enabled: false})
 	require.True(t, apperror.Is(err, "administration.unavailable"), "error = %v", err)
 	require.Equal(t, []string{"authorize-manage", "get-user", "prepare-mail"}, events)

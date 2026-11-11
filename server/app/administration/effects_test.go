@@ -35,7 +35,7 @@ func TestAccessPolicyChangeRevokesSessionsBeforePublishingTheRevision(t *testing
 			{UserID: shortened, SessionIDs: []model.SessionID{model.NewSessionID()}, AccessTokenHashes: []string{"shortened-hash"}},
 		},
 	}
-	policyChanged := realtimetest.Call{Method: realtimetest.PublishRealtimeEvent, Event: realtime.RealtimeEvent{
+	policyChanged := realtimetest.Call{Method: realtimetest.Publish, Event: realtime.Event{
 		Name:     "access_policy_changed",
 		Action:   model.ActionAccessPolicyView,
 		Resource: model.Resource{Type: model.ResourceInstitution, ID: institutionID.String()},

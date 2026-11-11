@@ -532,7 +532,7 @@ func containsSensitiveText(value, sensitive string) bool {
 // settingsChangedCall is the publication of a committed settings replacement
 // at format version 1: the refetch hint addressed to the User.
 func settingsChangedCall(userID model.UserID, revision model.UserSettingsRevision, changedAt string) realtimetest.Call {
-	return realtimetest.Call{Method: realtimetest.PublishRealtimeEvent, Event: realtime.RealtimeEvent{
+	return realtimetest.Call{Method: realtimetest.Publish, Event: realtime.Event{
 		Name:   "user_settings_changed",
 		UserID: userID,
 		Data:   json.RawMessage(fmt.Sprintf(`{"revision":%q,"format_version":1,"changed_at":%q}`, revision, changedAt)),

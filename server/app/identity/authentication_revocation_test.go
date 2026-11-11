@@ -18,6 +18,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -124,7 +125,7 @@ func TestSessionRevocationRejectsAfterLocalCacheDeleteFailure(t *testing.T) {
 	persistence := newAuthenticationStoreFake()
 	cache := &failingAuthenticationCacheDelete{authenticationCacheFake: newAuthenticationCacheFake()}
 	service := newTestAuthenticationServiceWithCache(t, persistence, cache)
-	service.effects = newInvalidatingSecurityEffects(t, cache)
+	service.publisher = newInvalidatingPublisher(t, cache)
 	user, rawAccess := seedAuthenticatedSession(t, service)
 	hash := model.HashToken(rawAccess)
 	cacheLegacyAuthentication(t, cache, persistence.accessByHash[hash], persistence.sessionByCredential[hash], user)
@@ -140,25 +141,25 @@ func TestSessionRevocationRejectsAfterLocalCacheDeleteFailure(t *testing.T) {
 	require.True(t, apperror.Is(err, "authentication.token_invalid"), "authentication after committed logout = %#v, %v", principal, err)
 }
 
-// invalidatingSecurityEffects applies a revocation to the local cache the way
-// the realtime delivery does on this node: it deletes the cached access
-// credentials and Session activity through the CacheInvalidator.
-type invalidatingSecurityEffects struct{ invalidator *CacheInvalidator }
-
-func newInvalidatingSecurityEffects(t *testing.T, cache AuthenticationCache) invalidatingSecurityEffects {
+// newInvalidatingPublisher returns a recording Publisher that also applies a
+// revocation to the local cache the way the realtime delivery does on this
+// node: it deletes the cached access credentials and Session activity through
+// the CacheInvalidator.
+func newInvalidatingPublisher(t *testing.T, cache AuthenticationCache) *realtimetest.Publisher {
 	t.Helper()
 	invalidator, err := NewCacheInvalidator(CacheInvalidatorDependencies{Cache: cache, Diagnostics: newDiscardLogger(t)})
 	require.NoError(t, err)
-	return invalidatingSecurityEffects{invalidator: invalidator}
-}
-
-func (e invalidatingSecurityEffects) AuthenticationCacheInvalidated(ctx context.Context, _ model.UserID, hashes []string) {
-	e.invalidator.InvalidateAccessCredentials(ctx, hashes)
-}
-
-func (e invalidatingSecurityEffects) SessionsRevoked(ctx context.Context, _ model.UserID, sessionIDs []model.SessionID, hashes []string) {
-	e.invalidator.InvalidateAccessCredentials(ctx, hashes)
-	e.invalidator.InvalidateSessionActivity(ctx, sessionIDs)
+	return &realtimetest.Publisher{Observe: func(call realtimetest.Call) {
+		ctx := context.Background()
+		switch call.Method {
+		case realtimetest.AuthenticationCacheInvalidated:
+			invalidator.InvalidateAccessCredentials(ctx, call.AccessTokenHashes)
+		case realtimetest.SessionsRevoked:
+			invalidator.InvalidateAccessCredentials(ctx, call.AccessTokenHashes)
+			invalidator.InvalidateSessionActivity(ctx, call.SessionIDs)
+		default:
+		}
+	}}
 }
 
 type failingAuthenticationCacheDelete struct {

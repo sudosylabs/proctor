@@ -20,6 +20,8 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -557,7 +559,7 @@ func newTestAuthenticationServiceWithPorts(
 	now func() time.Time,
 ) *Service {
 	return newTestAuthenticationServiceWithEffects(
-		t, persistence, cache, discardAuthenticationSecurityEffects{}, mfaCredentials,
+		t, persistence, cache, &realtimetest.Publisher{}, mfaCredentials,
 		personalTokens, newCredential, now,
 	)
 }
@@ -566,7 +568,7 @@ func newTestAuthenticationServiceWithEffects(
 	t *testing.T,
 	persistence *authenticationStoreFake,
 	cache AuthenticationCache,
-	effects SecurityEffects,
+	effects realtime.Publisher,
 	mfaCredentials store.MFAStore,
 	personalTokens store.PersonalAccessTokenStore,
 	newCredential func() string,
@@ -583,7 +585,7 @@ func newTestAuthenticationServiceWithEffects(
 		accessPolicy: allowAllAuthenticationAccessPolicy(), dpop: testAuthenticationDPoP(t, cache), cache: cache,
 		attempts: mustAuthenticationAttemptAccounting(t, cache), hasher: hasher,
 		auditor:       &mutationAttemptAuditorFake{events: &[]string{}, beginID: model.NewID()},
-		securityAudit: &securityAuditorFake{}, effects: effects, mfaCredentials: mfaCredentials, mfa: mustTestMFAMechanics(t), diagnostics: newDiscardLogger(t),
+		securityAudit: &securityAuditorFake{}, publisher: effects, mfaCredentials: mfaCredentials, mfa: mustTestMFAMechanics(t), diagnostics: newDiscardLogger(t),
 		sessionPolicy: SessionPolicy{
 			AccessTTL:              time.Hour,
 			RefreshTTL:             24 * time.Hour,
@@ -659,7 +661,7 @@ func TestAuthenticationExpiryEnforcementClosesEstablishedWebSocketSession(t *tes
 	persistence := newAuthenticationStoreFake()
 	persistence.users[user.ID.String()] = user
 	persistence.sessions[session.ID.String()] = session
-	effects := &authenticationEffectsRecorder{}
+	effects := &realtimetest.Publisher{}
 	service := newTestAuthenticationServiceWithEffects(
 		t, persistence, newAuthenticationCacheFake(), effects,
 		&mfaApplicationStoreFake{}, discardPersonalAccessTokenStore{},
@@ -674,9 +676,10 @@ func TestAuthenticationExpiryEnforcementClosesEstablishedWebSocketSession(t *tes
 	}
 	err := service.validatePrincipal(context.Background(), principal)
 	require.True(t, apperror.Is(err, "authentication.token_invalid"), "ValidatePrincipal(expired) error = %v", err)
-	require.Equal(t, "sessions", effects.last, "expiry effects=%q session=%#v", effects.last, session)
-	require.True(t, session.RevokedAt.Valid, "expiry effects=%q session=%#v", effects.last, session)
-	require.Equal(t, model.SessionRevocationExpired, session.RevocationReason, "expiry effects=%q session=%#v", effects.last, session)
+	// Contract: the expiry publishes one Session revocation and nothing else.
+	require.Equal(t, []realtimetest.Method{realtimetest.SessionsRevoked}, publishedMethods(effects), "expiry session=%#v", session)
+	require.True(t, session.RevokedAt.Valid, "expiry effects=%q session=%#v", publishedMethods(effects), session)
+	require.Equal(t, model.SessionRevocationExpired, session.RevocationReason, "expiry effects=%q session=%#v", publishedMethods(effects), session)
 }
 
 func TestAuthenticationExpiryEnforcementRejectsHTTPAccessAndRefresh(t *testing.T) {
@@ -698,7 +701,7 @@ func TestAuthenticationExpiryEnforcementRejectsHTTPAccessAndRefresh(t *testing.T
 		Kind: model.SessionCredentialAccess, TokenHash: accessHash, ExpiresAt: at.Add(time.Hour),
 	}
 	persistence.sessionByCredential[accessHash] = accessSession
-	effects := &authenticationEffectsRecorder{}
+	effects := &realtimetest.Publisher{}
 	service := newTestAuthenticationServiceWithEffects(
 		t, persistence, newAuthenticationCacheFake(), effects,
 		&mfaApplicationStoreFake{}, discardPersonalAccessTokenStore{},
@@ -707,8 +710,9 @@ func TestAuthenticationExpiryEnforcementRejectsHTTPAccessAndRefresh(t *testing.T
 	principal, err := service.authenticateAccess(context.Background(), accessRaw)
 	require.Nil(t, principal, "authenticateAccess(expired) = %#v, %v", principal, err)
 	require.True(t, apperror.Is(err, "authentication.token_invalid"), "authenticateAccess(expired) = %#v, %v", principal, err)
-	require.Equal(t, "sessions", effects.last, "access expiry effects=%q session=%#v", effects.last, accessSession)
-	require.Equal(t, model.SessionRevocationExpired, accessSession.RevocationReason, "access expiry effects=%q session=%#v", effects.last, accessSession)
+	// Contract: the access expiry publishes one Session revocation and nothing else.
+	require.Equal(t, []realtimetest.Method{realtimetest.SessionsRevoked}, publishedMethods(effects), "access expiry session=%#v", accessSession)
+	require.Equal(t, model.SessionRevocationExpired, accessSession.RevocationReason, "access expiry effects=%q session=%#v", publishedMethods(effects), accessSession)
 
 	refreshSession := &model.Session{
 		ID: model.NewSessionID(), UserID: user.ID, ClientType: model.SessionClientWeb,
@@ -718,14 +722,15 @@ func TestAuthenticationExpiryEnforcementRejectsHTTPAccessAndRefresh(t *testing.T
 		Session: refreshSession, Expired: true,
 		RevokedAccessHashes: []string{model.HashToken(model.NewCredentialToken())},
 	}
-	effects.last = ""
 	session, tokens, err := service.RefreshSession(context.Background(), invocation.Invocation{}, RefreshSessionCommand{
 		RefreshToken: model.NewCredentialToken(),
 	})
 	require.Nil(t, session, "refresh(expired) = %#v, %#v, %v", session, tokens, err)
 	require.Nil(t, tokens, "refresh(expired) = %#v, %#v, %v", session, tokens, err)
 	require.True(t, apperror.Is(err, "authentication.token_invalid"), "refresh(expired) = %#v, %#v, %v", session, tokens, err)
-	require.Equal(t, "sessions", effects.last)
+	// Contract: the expired refresh publishes a second Session revocation after
+	// the access expiry's, and nothing else.
+	require.Equal(t, []realtimetest.Method{realtimetest.SessionsRevoked, realtimetest.SessionsRevoked}, publishedMethods(effects))
 }
 
 func TestAuthenticationAuthoritativeIdleExtensionOverridesStaleExpiredCache(t *testing.T) {
@@ -779,10 +784,10 @@ func TestAuthenticationRefreshUsesControlledRuntimeAndPreservesReplayEffects(t *
 		name       string
 		replay     bool
 		wantCode   string
-		wantEffect string
+		wantEffect realtimetest.Method
 	}{
-		{name: "success", wantEffect: "cache"},
-		{name: "replay", replay: true, wantCode: "authentication.token_invalid", wantEffect: "sessions"},
+		{name: "success", wantEffect: realtimetest.AuthenticationCacheInvalidated},
+		{name: "replay", replay: true, wantCode: "authentication.token_invalid", wantEffect: realtimetest.SessionsRevoked},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			persistence := newAuthenticationStoreFake()
@@ -791,7 +796,7 @@ func TestAuthenticationRefreshUsesControlledRuntimeAndPreservesReplayEffects(t *
 				Session: session, ReplayDetected: test.replay,
 				RevokedAccessHashes: []string{"old-access-hash"},
 			}
-			effects := &authenticationEffectsRecorder{}
+			effects := &realtimetest.Publisher{}
 			credentials := []string{access, refresh}
 			next := 0
 			service := newTestAuthenticationServiceWithEffects(
@@ -811,19 +816,10 @@ func TestAuthenticationRefreshUsesControlledRuntimeAndPreservesReplayEffects(t *
 			}
 			require.True(t, persistence.rotatedAt.Equal(at), "rotation time = %v idle = %v", persistence.rotatedAt, persistence.rotatedIdleExpiry)
 			require.True(t, persistence.rotatedIdleExpiry.Equal(at.Add(2*time.Hour)), "rotation time = %v idle = %v", persistence.rotatedAt, persistence.rotatedIdleExpiry)
-			require.Equal(t, test.wantEffect, effects.last, "effect")
+			// Contract: the rotation publishes exactly one effect.
+			require.Equal(t, []realtimetest.Method{test.wantEffect}, publishedMethods(effects), "effect")
 		})
 	}
-}
-
-type authenticationEffectsRecorder struct{ last string }
-
-func (e *authenticationEffectsRecorder) AuthenticationCacheInvalidated(context.Context, model.UserID, []string) {
-	e.last = "cache"
-}
-
-func (e *authenticationEffectsRecorder) SessionsRevoked(context.Context, model.UserID, []model.SessionID, []string) {
-	e.last = "sessions"
 }
 
 func TestAuthenticationUsesControlledClockAndCredentialGenerator(t *testing.T) {

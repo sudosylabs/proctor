@@ -28,7 +28,7 @@ func TestExamStarterWorkspaceRealtimeEffectContainsOnlySafeChangeMetadata(t *tes
 	require.NoError(t, service.publishChanged(context.Background(), examID, entryID, 4, ChangeFileReplaced, changedAt))
 	calls := publisher.Calls()
 	require.Len(t, calls, 1)
-	require.Equal(t, realtimetest.PublishRealtimeEvent, calls[0].Method)
+	require.Equal(t, realtimetest.Publish, calls[0].Method)
 	require.Equal(t, "exam_starter_workspace_changed", calls[0].Event.Name)
 	require.Equal(t, model.ActionExamView, calls[0].Event.Action)
 	require.Equal(t, model.Resource{Type: model.ResourceExam, ID: examID.String()}, calls[0].Event.Resource)

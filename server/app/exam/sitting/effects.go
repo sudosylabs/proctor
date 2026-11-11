@@ -88,8 +88,8 @@ func (s *Service) publishLifecycleChanged(
 	}
 
 	return errors.Join(
-		s.deps.Publisher.PublishRealtimeEvent(ctx, managerEvent),
-		s.deps.Publisher.PublishRealtimeEvent(ctx, candidateEvent),
+		s.deps.Publisher.Publish(ctx, managerEvent),
+		s.deps.Publisher.Publish(ctx, candidateEvent),
 		realtime.PublishSittingBoardChanged(ctx, s.deps.Publisher, sitting.ExamID, sitting.ID),
 		realtime.PublishCandidateActivityChangedForSitting(ctx, s.deps.Publisher, s.deps.Persistence, sitting.ID),
 	)
@@ -102,10 +102,10 @@ func (s *Service) publishLifecycleChanged(
 func (s *Service) publishWithInvalidations(
 	ctx context.Context,
 	sitting *model.ExamSitting,
-	event realtime.RealtimeEvent,
+	event realtime.Event,
 ) error {
 	return errors.Join(
-		s.deps.Publisher.PublishRealtimeEvent(ctx, event),
+		s.deps.Publisher.Publish(ctx, event),
 		realtime.PublishSittingBoardChanged(ctx, s.deps.Publisher, sitting.ExamID, sitting.ID),
 		realtime.PublishCandidateActivityChangedForSitting(ctx, s.deps.Publisher, s.deps.Persistence, sitting.ID),
 	)

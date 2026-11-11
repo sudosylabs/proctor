@@ -47,7 +47,7 @@ func TestCreateOwnsAuthorizationAuditPersistenceAndEffects(t *testing.T) {
 	created, eventErr := realtime.NewExamCreatedEvent(got.Exam.ID)
 	require.NoError(t, eventErr)
 	// Contract: creating an Exam publishes exactly its created fact.
-	require.Equal(t, []realtimetest.Call{{Method: realtimetest.PublishRealtimeEvent, Event: created}}, fixture.publisher.Calls())
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.Publish, Event: created}}, fixture.publisher.Calls())
 	require.Equal(t, fixture.persistence.creation.Draft.ExamID, fixture.persistence.creation.Exam.ID)
 	require.Equal(t, fixture.userID, fixture.persistence.creation.Manager.UserID)
 	require.True(t, fixture.persistence.creation.Draft.Policy.Equal(model.DefaultExamPolicySet()))
@@ -834,7 +834,7 @@ func publisherIn(order *[]string) *realtimetest.Publisher {
 		"exam_archived":      "effect.archived",
 	}
 	return &realtimetest.Publisher{Observe: func(call realtimetest.Call) {
-		if entry, ok := entries[call.Event.Name]; ok && call.Method == realtimetest.PublishRealtimeEvent {
+		if entry, ok := entries[call.Event.Name]; ok && call.Method == realtimetest.Publish {
 			*order = append(*order, entry)
 		}
 	}}
@@ -845,7 +845,7 @@ func draftUpdated(t *testing.T, examID model.ExamID, revision int64) realtimetes
 	t.Helper()
 	event, err := realtime.NewExamDraftUpdatedEvent(examID, revision)
 	require.NoError(t, err)
-	return realtimetest.Call{Method: realtimetest.PublishRealtimeEvent, Event: event}
+	return realtimetest.Call{Method: realtimetest.Publish, Event: event}
 }
 
 // sittingsFake answers the Sittings of an archived Exam and their candidates,

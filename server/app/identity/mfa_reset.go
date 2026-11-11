@@ -91,7 +91,7 @@ func (s *Service) ResetUserMFA(ctx context.Context, invocation invocation.Invoca
 		return authenticationUnavailable(errors.New("MFA reset returned no recovery state"))
 	}
 
-	s.effects.SessionsRevoked(ctx, command.UserID, mfaResetSessionIDs(result.Sessions), result.AccessTokenHashes)
+	s.publisher.SessionsRevoked(ctx, command.UserID, mfaResetSessionIDs(result.Sessions), result.AccessTokenHashes)
 	return nil
 }
 

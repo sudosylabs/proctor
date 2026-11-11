@@ -98,7 +98,7 @@ func TestAddManagerChecksEligibilityBeforeAuditedAtomicMutation(t *testing.T) {
 	// Exam's viewers learn of the change.
 	require.Equal(t, []realtimetest.Call{
 		{Method: realtimetest.InvalidateAuthorization, UserID: target},
-		{Method: realtimetest.PublishRealtimeEvent, Event: managerChanged},
+		{Method: realtimetest.Publish, Event: managerChanged},
 	}, fixture.publisher.Calls())
 }
 
@@ -244,7 +244,7 @@ func TestRemoveAndTransferPreserveStoreInvariantFailures(t *testing.T) {
 	require.NoError(t, eventErr)
 	// Contract: an ownership transfer publishes exactly the new owner; no
 	// authorization cache is dropped.
-	require.Equal(t, []realtimetest.Call{{Method: realtimetest.PublishRealtimeEvent, Event: ownerTransferred}}, fixture.publisher.Calls())
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.Publish, Event: ownerTransferred}}, fixture.publisher.Calls())
 }
 
 func activeTestUser(id model.UserID) *model.User {

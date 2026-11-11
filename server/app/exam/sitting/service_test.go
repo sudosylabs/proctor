@@ -888,7 +888,7 @@ func (f *auditorFake) Fail(_ context.Context, _ model.AuditEventID, code string)
 // candidates: the fact newEvent builds, then the Sitting board invalidation.
 func scheduleCalls(
 	t *testing.T,
-	newEvent func(model.ExamID, model.ExamSittingID, model.ExamSittingState, int64, time.Time) (realtime.RealtimeEvent, error),
+	newEvent func(model.ExamID, model.ExamSittingID, model.ExamSittingState, int64, time.Time) (realtime.Event, error),
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
 	state model.ExamSittingState,
@@ -901,8 +901,8 @@ func scheduleCalls(
 	board, err := realtime.NewManagerSittingBoardChangedEvent(examID, sittingID)
 	require.NoError(t, err)
 	return []realtimetest.Call{
-		{Method: realtimetest.PublishRealtimeEvent, Event: event},
-		{Method: realtimetest.PublishRealtimeEvent, Event: board},
+		{Method: realtimetest.Publish, Event: event},
+		{Method: realtimetest.Publish, Event: board},
 	}
 }
 
@@ -924,9 +924,9 @@ func lifecycleCalls(
 	board, err := realtime.NewManagerSittingBoardChangedEvent(sitting.ExamID, sitting.ID)
 	require.NoError(t, err)
 	return []realtimetest.Call{
-		{Method: realtimetest.PublishRealtimeEvent, Event: managerEvent},
-		{Method: realtimetest.PublishRealtimeEvent, Event: candidateEvent},
-		{Method: realtimetest.PublishRealtimeEvent, Event: board},
+		{Method: realtimetest.Publish, Event: managerEvent},
+		{Method: realtimetest.Publish, Event: candidateEvent},
+		{Method: realtimetest.Publish, Event: board},
 	}
 }
 

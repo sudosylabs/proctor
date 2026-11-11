@@ -52,13 +52,13 @@ func TestPublicationPublishesAfterCurrentManagerAuthorizationAndSuppressesReplay
 	require.NoError(t, eventErr)
 	// Contract: a fresh publication publishes exactly the Revision's published
 	// fact, and the replay below adds nothing to it.
-	require.Equal(t, []realtimetest.Call{{Method: realtimetest.PublishRealtimeEvent, Event: published}}, publisher.Calls())
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.Publish, Event: published}}, publisher.Calls())
 	assertStoreIdempotency(t, revisions.idempotency, f.userID, idempotencyOperationPublishRevision, "test-key",
 		fmt.Sprintf(`{"exam_id":%q,"expected_draft_revision":3}`, f.examID))
 	revisions.replayed = true
 	_, err = service.PublishExamRevision(context.Background(), f.invocation, command)
 	require.NoError(t, err)
-	require.Equal(t, []realtimetest.Call{{Method: realtimetest.PublishRealtimeEvent, Event: published}}, publisher.Calls(), "replay republished effect")
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.Publish, Event: published}}, publisher.Calls(), "replay republished effect")
 }
 
 func TestPublicationUsesOverrideForNonManager(t *testing.T) {

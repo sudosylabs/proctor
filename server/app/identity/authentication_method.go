@@ -53,7 +53,7 @@ func (s *Service) requireAuthenticationMethods() error {
 		s.capabilities == nil ||
 		s.hasher == nil ||
 		s.auditor == nil ||
-		s.effects == nil ||
+		s.publisher == nil ||
 		s.recentAuthenticationTTL <= 0 ||
 		s.now == nil {
 		return errors.New("authentication method service dependencies are required")
@@ -312,5 +312,5 @@ func (s *Service) publishAuthenticationMethodRevocations(
 		return
 	}
 
-	s.effects.SessionsRevoked(ctx, userID, sessionIDs(result.RevokedSessions), result.RevokedTokenHashes)
+	s.publisher.SessionsRevoked(ctx, userID, sessionIDs(result.RevokedSessions), result.RevokedTokenHashes)
 }

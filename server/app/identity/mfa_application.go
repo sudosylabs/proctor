@@ -36,7 +36,7 @@ func (s *Service) requireMFA() error {
 		return errors.New("MFA session store is required")
 	case s.institutions == nil:
 		return errors.New("MFA institution store is required")
-	case s.effects == nil:
+	case s.publisher == nil:
 		return errors.New("MFA effects are required")
 	case s.mail == nil:
 		return errors.New("MFA mail preparer is required")
@@ -281,7 +281,7 @@ func (s *Service) ActivateMFA(
 		return nil, s.failMFAMutation(ctx, auditID, err)
 	}
 
-	s.effects.SessionsRevoked(
+	s.publisher.SessionsRevoked(
 		ctx,
 		principal.UserID,
 		[]model.SessionID{principal.SessionID},
@@ -361,7 +361,7 @@ func (s *Service) ChallengeMFA(
 		return nil, authenticationUnavailable(errors.New("MFA challenge returned no Session"))
 	}
 
-	s.effects.SessionsRevoked(ctx, principal.UserID, []model.SessionID{principal.SessionID}, result.AccessTokenHashes)
+	s.publisher.SessionsRevoked(ctx, principal.UserID, []model.SessionID{principal.SessionID}, result.AccessTokenHashes)
 	return result.Session, nil
 }
 
@@ -483,7 +483,7 @@ func (s *Service) DisableMFA(
 		return s.failMFAMutation(ctx, auditID, err)
 	}
 
-	s.effects.SessionsRevoked(
+	s.publisher.SessionsRevoked(
 		ctx, principal.UserID, nil, result.AccessTokenHashes,
 	)
 	return nil

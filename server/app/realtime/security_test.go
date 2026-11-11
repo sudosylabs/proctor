@@ -288,7 +288,7 @@ type securityRecordingSink struct {
 	order    *orderedCalls
 }
 
-func (*securityRecordingSink) PublishLocal(context.Context, RealtimeEvent)           {}
+func (*securityRecordingSink) PublishLocal(context.Context, Event)                   {}
 func (*securityRecordingSink) UnbindExamAttemptConnection(model.AttemptConnectionID) {}
 
 func (s *securityRecordingSink) CloseSession(value string, _ ConnectionCloseReason) {

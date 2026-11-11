@@ -21,13 +21,6 @@ import (
 // writes positive entries in this namespace.
 const authenticationCachePrefix = "authentication/access/"
 
-// SecurityEffects publishes, after commit, that cached authentication state or
-// Sessions of a User no longer hold.
-type SecurityEffects interface {
-	AuthenticationCacheInvalidated(context.Context, model.UserID, []string)
-	SessionsRevoked(context.Context, model.UserID, []model.SessionID, []string)
-}
-
 // CacheInvalidatorDependencies are the collaborators of CacheInvalidator;
 // NewCacheInvalidator validates them once and CacheInvalidator keeps them in deps.
 type CacheInvalidatorDependencies struct {

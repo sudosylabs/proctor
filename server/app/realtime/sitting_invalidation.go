@@ -48,7 +48,7 @@ func PublishSittingBoardChanged(
 		return err
 	}
 
-	return publisher.PublishRealtimeEvent(ctx, event)
+	return publisher.Publish(ctx, event)
 }
 
 // PublishCandidateActivityChangedForSitting tells every candidate of a
@@ -81,7 +81,7 @@ func PublishCandidateActivityChangedForSitting(
 				continue
 			}
 
-			errs = append(errs, publisher.PublishRealtimeEvent(ctx, event))
+			errs = append(errs, publisher.Publish(ctx, event))
 		}
 
 		if len(candidateIDs) < sittingCandidatePage {

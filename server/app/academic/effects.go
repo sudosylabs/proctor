@@ -35,7 +35,7 @@ func (s *Service) publishAcademicUnitArchived(ctx context.Context, unitID model.
 // publishAcademicUnit publishes a payload-free event to everyone who may view
 // the Academic Unit.
 func (s *Service) publishAcademicUnit(ctx context.Context, name string, unitID model.AcademicUnitID) error {
-	return s.publisher.PublishRealtimeEvent(ctx, realtime.RealtimeEvent{
+	return s.publisher.Publish(ctx, realtime.Event{
 		Name:   name,
 		Action: model.ActionAcademicUnitView,
 		Resource: model.Resource{
@@ -70,7 +70,7 @@ func PublishClassMembershipChanged(
 		return err
 	}
 
-	errs := []error{publisher.PublishRealtimeEvent(ctx, candidateEvent),
+	errs := []error{publisher.Publish(ctx, candidateEvent),
 		publisher.InvalidateCurrentUserContext(ctx, candidateID)}
 	seen := make(map[model.ClassID]struct{}, len(classIDs))
 	for _, classID := range classIDs {
@@ -99,7 +99,7 @@ func PublishClassMembershipChanged(
 					continue
 				}
 
-				errs = append(errs, publisher.PublishRealtimeEvent(ctx, event))
+				errs = append(errs, publisher.Publish(ctx, event))
 			}
 
 			if len(targets) < classMembershipSittingPage {

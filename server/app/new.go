@@ -359,7 +359,7 @@ func newIdentity(
 		Authorizer:                authorizer,
 		Auditor:                   shared.audit,
 		Capabilities:              capabilities,
-		Effects:                   shared.realtime,
+		Publisher:                 shared.realtime,
 		Mail:                      shared.mail,
 		Hasher:                    shared.hasher,
 		Attempts:                  shared.attempts,

@@ -316,7 +316,7 @@ func (s *Service) requireSessionAuthentication() error {
 	if s.attempts == nil {
 		return errors.New("authentication attempt accounting is required")
 	}
-	if s.effects == nil {
+	if s.publisher == nil {
 		return errors.New("authentication security effects are required")
 	}
 	if s.auditor == nil {
@@ -1259,7 +1259,7 @@ func (s *Service) authenticationCacheInvalidated(
 	userID string,
 	hashes []string,
 ) {
-	s.effects.AuthenticationCacheInvalidated(ctx, model.UserID(userID), hashes)
+	s.publisher.AuthenticationCacheInvalidated(ctx, model.UserID(userID), hashes)
 }
 
 func (s *Service) sessionsRevoked(
@@ -1268,7 +1268,7 @@ func (s *Service) sessionsRevoked(
 	sessionIDs []model.SessionID,
 	hashes []string,
 ) {
-	s.effects.SessionsRevoked(ctx, userID, sessionIDs, hashes)
+	s.publisher.SessionsRevoked(ctx, userID, sessionIDs, hashes)
 }
 
 func (s *Service) enforceSessionExpiry(

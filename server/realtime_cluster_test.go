@@ -130,7 +130,7 @@ func TestRealtimeClusterAdapterPreservesSingleNodeLocalFirstPublication(t *testi
 		assert.NoError(t, transport.Stop(context.Background()))
 	})
 
-	require.NoError(t, service.Publish(context.Background(), realtime.RealtimeEvent{
+	require.NoError(t, service.Publish(context.Background(), realtime.Event{
 		Name:   "user.notification",
 		UserID: model.UserID(model.NewID()),
 	}))
@@ -142,7 +142,7 @@ type countingRealtimeSink struct {
 	published int
 }
 
-func (s *countingRealtimeSink) PublishLocal(context.Context, realtime.RealtimeEvent) {
+func (s *countingRealtimeSink) PublishLocal(context.Context, realtime.Event) {
 	s.mu.Lock()
 	s.published++
 	s.mu.Unlock()

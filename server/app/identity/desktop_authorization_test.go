@@ -18,6 +18,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -604,7 +605,7 @@ func newTestDesktopAuthorizationService(t *testing.T, transactions store.Browser
 	require.NoError(t, err)
 	service := &Service{
 		users: desktopAuthorizationUserStoreStub{}, sessions: &desktopAuthorizationSessionStoreStub{},
-		effects: discardAuthenticationSecurityEffects{}, securityAudit: &securityAuditorFake{}, dpop: security,
+		publisher: &realtimetest.Publisher{}, securityAudit: &securityAuditorFake{}, dpop: security,
 		attempts:       mustAuthenticationAttemptAccounting(t, newAuthenticationCacheFake()),
 		loginRateLimit: LoginRateLimitPolicy{Window: time.Minute, MaximumAttempts: 20, MaximumSourceAttempts: 100},
 		sessionPolicy:  testDesktopSessionPolicy(), newCredential: model.NewCredentialToken, now: now,

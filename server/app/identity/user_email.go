@@ -311,7 +311,7 @@ func (s *Service) CompleteEmailChangeUndo(
 		return accountRecoveryStoreFailure(err)
 	}
 
-	s.effects.SessionsRevoked(ctx, result.User.ID, sessionIDs(result.RevokedSessions), result.RevokedAccessHashes)
+	s.publisher.SessionsRevoked(ctx, result.User.ID, sessionIDs(result.RevokedSessions), result.RevokedAccessHashes)
 	return nil
 }
 

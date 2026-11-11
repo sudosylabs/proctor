@@ -24,8 +24,8 @@ import (
 // use case.
 var nonUseCaseSurface = map[string]string{
 	"JobEngine":                      "runtime handle that composition borrows",
-	"AttachRealtimeSink":             "composition attaches the WebSocket sink once before readiness",
-	"AttachRealtimeClusterFanout":    "composition attaches the cluster fan-out once before readiness",
+	"AttachSink":                     "composition attaches the WebSocket sink once before readiness",
+	"AttachClusterFanout":            "composition attaches the cluster fan-out once before readiness",
 	"AuthenticateAccess":             principalResolution,
 	"AuthenticateBearer":             principalResolution,
 	"AuthenticateDPoP":               principalResolution,
@@ -35,7 +35,7 @@ var nonUseCaseSurface = map[string]string{
 	"SessionsRevoked":                realtimePropagation,
 	"InvalidateAuthorization":        realtimePropagation,
 	"InvalidateCurrentUserContext":   realtimePropagation,
-	"PublishRealtimeEvent":           realtimePropagation,
+	"Publish":                        realtimePropagation,
 	"UnbindExamAttemptConnection":    realtimePropagation,
 	"Report":                         "realtime.Publisher's record of a post-commit effect that failed; the area use case that owns the Invocation calls it and still succeeds",
 	"ResolveAttemptDesktopBuild":     attemptPort,

@@ -41,13 +41,13 @@ func TestCorrectionEffectPublishesManagerAndCandidateRefetchFacts(t *testing.T) 
 	// fact, managers first; the Sitting board and each candidate's Exam
 	// activity are invalidated after it.
 	require.Equal(t, []realtimetest.Call{
-		{Method: realtimetest.PublishRealtimeEvent, Event: realtime.RealtimeEvent{
+		{Method: realtimetest.Publish, Event: realtime.Event{
 			Name: "exam_sitting_content_corrected", Action: model.ActionExamSittingView, Resource: sitting, Data: corrected}},
-		{Method: realtimetest.PublishRealtimeEvent, Event: realtime.RealtimeEvent{
+		{Method: realtimetest.Publish, Event: realtime.Event{
 			Name: "exam_sitting_content_corrected", Action: model.ActionExamSittingParticipate, Resource: sitting, Data: corrected}},
-		{Method: realtimetest.PublishRealtimeEvent, Event: realtime.RealtimeEvent{
+		{Method: realtimetest.Publish, Event: realtime.Event{
 			Name: "manager.sitting_board.changed", Action: model.ActionExamSittingView, Resource: sitting, Data: board}},
-		{Method: realtimetest.PublishRealtimeEvent, Event: realtime.RealtimeEvent{
+		{Method: realtimetest.Publish, Event: realtime.Event{
 			Name: "candidate.exam_activity.changed", UserID: candidateID, Data: json.RawMessage(`{"schema_version":1}`)}},
 	}, f.publisher.Calls())
 }

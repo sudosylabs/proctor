@@ -395,7 +395,7 @@ func newFixture(t *testing.T) *fixture {
 	f.memberships = &membershipFake{f: f}
 	f.auditor = &auditFake{f: f}
 	f.publisher = &realtimetest.Publisher{Observe: func(call realtimetest.Call) {
-		if call.Method == realtimetest.PublishRealtimeEvent {
+		if call.Method == realtimetest.Publish {
 			f.order = append(f.order, "effect")
 		}
 	}}
@@ -563,7 +563,7 @@ func draftUpdated(t *testing.T, examID model.ExamID, draftRevision int64) realti
 	t.Helper()
 	event, err := realtime.NewExamDraftUpdatedEvent(examID, draftRevision)
 	require.NoError(t, err)
-	return realtimetest.Call{Method: realtimetest.PublishRealtimeEvent, Event: event}
+	return realtimetest.Call{Method: realtimetest.Publish, Event: event}
 }
 
 type contentFake struct {

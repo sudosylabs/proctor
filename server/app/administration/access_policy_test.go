@@ -216,7 +216,7 @@ func TestAccessPolicyReplacementIsIdempotentAndPublishesOnlyCommittedRevision(t 
 	require.NoError(t, err)
 	// Contract: a replacement that revoked and shortened no Session publishes
 	// only the refetch signal of the committed revision, and reports nothing.
-	require.Equal(t, []realtimetest.Call{{Method: realtimetest.PublishRealtimeEvent, Event: policyChanged}}, publisher.Calls())
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.Publish, Event: policyChanged}}, publisher.Calls())
 }
 
 func TestAccessPolicyReplacementResolvesExactReplayBeforeRevisionPreflight(t *testing.T) {

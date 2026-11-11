@@ -114,6 +114,6 @@ func (s *Service) publishSessionsRevoked(
 	hashes []string,
 ) {
 	if len(sessions) != 0 {
-		s.effects.SessionsRevoked(ctx, model.UserID(userID), sessionIDs(sessions), hashes)
+		s.publisher.SessionsRevoked(ctx, model.UserID(userID), sessionIDs(sessions), hashes)
 	}
 }

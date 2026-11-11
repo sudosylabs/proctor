@@ -19,8 +19,8 @@ import (
 // production implementation and realtimetest.Publisher the recording one.
 // Every method is called only after the change it announces has committed.
 type Publisher interface {
-	// PublishRealtimeEvent delivers the event locally first, then to peers.
-	PublishRealtimeEvent(ctx context.Context, event RealtimeEvent) error
+	// Publish delivers the event locally first, then to peers.
+	Publish(ctx context.Context, event Event) error
 	// UnbindExamAttemptConnection unbinds one Attempt Connection on every
 	// node and leaves its WebSocket open.
 	UnbindExamAttemptConnection(ctx context.Context, connectionID model.AttemptConnectionID) error

@@ -23,7 +23,7 @@ type Method string
 
 // The Publisher methods, as a Call records them.
 const (
-	PublishRealtimeEvent           Method = "PublishRealtimeEvent"
+	Publish                        Method = "Publish"
 	UnbindExamAttemptConnection    Method = "UnbindExamAttemptConnection"
 	SessionsRevoked                Method = "SessionsRevoked"
 	AuthenticationCacheInvalidated Method = "AuthenticationCacheInvalidated"
@@ -37,8 +37,8 @@ const (
 // a whole expected call with a short literal.
 type Call struct {
 	Method Method
-	// Event is the argument of PublishRealtimeEvent.
-	Event realtime.RealtimeEvent
+	// Event is the argument of Publish.
+	Event realtime.Event
 	// ConnectionID is the argument of UnbindExamAttemptConnection.
 	ConnectionID model.AttemptConnectionID
 	// UserID is the User of SessionsRevoked, AuthenticationCacheInvalidated,
@@ -90,9 +90,9 @@ func (p *Publisher) record(call Call) error {
 	return nil
 }
 
-// PublishRealtimeEvent records the event.
-func (p *Publisher) PublishRealtimeEvent(_ context.Context, event realtime.RealtimeEvent) error {
-	return p.record(Call{Method: PublishRealtimeEvent, Event: event})
+// Publish records the event.
+func (p *Publisher) Publish(_ context.Context, event realtime.Event) error {
+	return p.record(Call{Method: Publish, Event: event})
 }
 
 // UnbindExamAttemptConnection records the Attempt Connection.

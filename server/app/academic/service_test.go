@@ -87,7 +87,7 @@ func academicUnitPublisherIn(events *[]string) *realtimetest.Publisher {
 // academicUnitEventCall is the publication of one Academic Unit event: a
 // payload-free event for everyone who may view the unit.
 func academicUnitEventCall(name string, unitID model.AcademicUnitID) realtimetest.Call {
-	return realtimetest.Call{Method: realtimetest.PublishRealtimeEvent, Event: realtime.RealtimeEvent{
+	return realtimetest.Call{Method: realtimetest.Publish, Event: realtime.Event{
 		Name:     name,
 		Action:   model.ActionAcademicUnitView,
 		Resource: model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()},

@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -64,7 +65,7 @@ func TestSessionCreationAndRefreshUseThePolicySessionLengths(t *testing.T) {
 	refreshing.users[user.ID.String()] = user
 	refreshing.rotation = &store.SessionRotation{Session: &model.Session{ID: model.NewSessionID(), UserID: user.ID, ClientType: model.SessionClientWeb,
 		AuthenticationStrength: model.AuthenticationMultiFactor}}
-	refresher := newTestAuthenticationServiceWithEffects(t, refreshing, newAuthenticationCacheFake(), &authenticationEffectsRecorder{},
+	refresher := newTestAuthenticationServiceWithEffects(t, refreshing, newAuthenticationCacheFake(), &realtimetest.Publisher{},
 		&mfaApplicationStoreFake{}, discardPersonalAccessTokenStore{}, model.NewCredentialToken, func() time.Time { return at })
 	refresher.accessPolicy = policy
 	_, _, err = refresher.RefreshSession(context.Background(), invocation.Invocation{}, RefreshSessionCommand{RefreshToken: model.NewCredentialToken()})

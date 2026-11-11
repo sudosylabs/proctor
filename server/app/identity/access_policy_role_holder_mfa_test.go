@@ -16,6 +16,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -100,7 +101,7 @@ func TestRefreshEnforcesRoleHolderMFARequirementBySessionKind(t *testing.T) {
 			persistence := newAuthenticationStoreFake()
 			persistence.users[user.ID.String()] = user
 			persistence.rotation = &store.SessionRotation{Session: session}
-			service := newTestAuthenticationServiceWithEffects(t, persistence, newAuthenticationCacheFake(), &authenticationEffectsRecorder{},
+			service := newTestAuthenticationServiceWithEffects(t, persistence, newAuthenticationCacheFake(), &realtimetest.Publisher{},
 				&mfaApplicationStoreFake{}, discardPersonalAccessTokenStore{}, model.NewCredentialToken, func() time.Time { return at })
 			service.accessPolicy = authenticationAccessPolicyFake{local: true, roleHolderMFA: map[model.UserID]bool{user.ID: test.covered}}
 			_, _, err := service.RefreshSession(context.Background(), invocation.Invocation{}, RefreshSessionCommand{RefreshToken: model.NewCredentialToken()})
@@ -165,7 +166,7 @@ func TestDesktopExchangeCarriesRoleHolderMFARequirementToTheStore(t *testing.T) 
 func TestMFAChallengeAdmitsEnrollmentRestrictionButNotRecovery(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 11, 9, 9, 0, 0, 0, time.UTC)
-	service := newTestMFAApplicationService(t, &mfaApplicationStoreFake{}, &securityAuditorFake{}, &mfaApplicationEffectsFake{}, at)
+	service := newTestMFAApplicationService(t, &mfaApplicationStoreFake{}, &securityAuditorFake{}, &realtimetest.Publisher{}, at)
 	base := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: at}
@@ -186,7 +187,7 @@ func TestMFADisableIsRefusedWhileThePolicyRequiresIt(t *testing.T) {
 	events := []string{}
 	audit := &securityAuditorFake{trace: &events}
 	persistence := &mfaApplicationStoreFake{}
-	service := newTestMFAApplicationService(t, persistence, audit, &mfaApplicationEffectsFake{}, at)
+	service := newTestMFAApplicationService(t, persistence, audit, &realtimetest.Publisher{}, at)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: at, MFACompletedAt: model.OptionalTimeFrom(at)}

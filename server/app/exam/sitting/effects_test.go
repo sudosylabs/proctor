@@ -39,14 +39,14 @@ func TestExamSittingLifecycleEffectPublishesOnlySafeBoundedMetadata(t *testing.T
 	// managers first; the Sitting board and then each candidate's Exam activity
 	// are invalidated after it.
 	require.Equal(t, []realtimetest.Call{
-		{Method: realtimetest.PublishRealtimeEvent, Event: realtime.RealtimeEvent{
+		{Method: realtimetest.Publish, Event: realtime.Event{
 			Name: "exam_sitting_lifecycle_changed", Action: model.ActionExamSittingView, Resource: sitting, Data: changed}},
-		{Method: realtimetest.PublishRealtimeEvent, Event: realtime.RealtimeEvent{
+		{Method: realtimetest.Publish, Event: realtime.Event{
 			Name: "exam_sitting_lifecycle_changed", Action: model.ActionExamSittingParticipate, Resource: sitting, Data: changed}},
-		{Method: realtimetest.PublishRealtimeEvent, Event: realtime.RealtimeEvent{
+		{Method: realtimetest.Publish, Event: realtime.Event{
 			Name: "manager.sitting_board.changed", Action: model.ActionExamSittingView, Resource: sitting,
 			Data: json.RawMessage(`{"schema_version":1,"exam_id":"` + fixture.examID.String() + `","exam_sitting_id":"` + fixture.sittingID.String() + `"}`)}},
-		{Method: realtimetest.PublishRealtimeEvent, Event: realtime.RealtimeEvent{
+		{Method: realtimetest.Publish, Event: realtime.Event{
 			Name: "candidate.exam_activity.changed", UserID: candidateID, Data: json.RawMessage(`{"schema_version":1}`)}},
 	}, fixture.publisher.Calls())
 }

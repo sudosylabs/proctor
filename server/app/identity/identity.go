@@ -14,11 +14,11 @@
 // Service holds every one of these use cases as its own methods. Its fields
 // are the Store contracts the use cases call and one of each collaborator:
 // one authorizer, one security auditor beside the mutation auditor, one mail
-// composer, one set of security effects, one password hasher and one attempt
-// accounting. When one flow needs another, such as external sign-in issuing a
-// Session or handing a proof to Desktop authorization, it calls the other
-// method directly. New builds the Service once and refuses it when a
-// collaborator is missing. Each concern keeps its methods in the file named
+// composer, one realtime.Publisher for the security effects that follow a
+// commit, one password hasher and one attempt accounting. When one flow needs
+// another, such as external sign-in issuing a Session or handing a proof to
+// Desktop authorization, it calls the other method directly. New builds the
+// Service once and refuses it when a collaborator is missing. Each concern keeps its methods in the file named
 // for it.
 //
 // The mechanics the flows share stay inside the package behind them: the
@@ -138,7 +138,7 @@ type Dependencies struct {
 	Authorizer   *access.Authorizer
 	Auditor      *access.Auditor
 	Capabilities AccessPolicyCapabilitySource
-	Effects      SecurityEffects
+	Publisher    realtime.Publisher
 	Mail         *mail.Composer
 	Hasher       *PasswordHasher
 	Attempts     *AttemptAccounting
@@ -301,7 +301,7 @@ type Service struct {
 	// audit unavailable.
 	securityAudit securityAuditor
 	mail          mailComposer
-	effects       SecurityEffects
+	publisher     realtime.Publisher
 	// invalidator is the shared *CacheInvalidator; external reauthentication
 	// drops the cached access credentials it replaces.
 	invalidator realtime.AuthenticationInvalidator
@@ -432,7 +432,7 @@ func (s *Service) constructSessionAuthentication(deps Dependencies, mfa *mfaMech
 		s.hasher = deps.Hasher
 	}
 
-	s.mail, s.effects, s.capabilities = deps.Mail, deps.Effects, deps.Capabilities
+	s.mail, s.publisher, s.capabilities = deps.Mail, deps.Publisher, deps.Capabilities
 	if deps.Auditor != nil {
 		s.securityAudit = deps.Auditor
 	}

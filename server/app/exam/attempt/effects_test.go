@@ -37,12 +37,12 @@ func publisherIn(order *[]string) *realtimetest.Publisher {
 
 // published returns a function that turns a constructed event into the call
 // that publishes it, failing the test when the event could not be built.
-func published(t *testing.T) func(realtime.RealtimeEvent, error) realtimetest.Call {
+func published(t *testing.T) func(realtime.Event, error) realtimetest.Call {
 	t.Helper()
-	return func(event realtime.RealtimeEvent, err error) realtimetest.Call {
+	return func(event realtime.Event, err error) realtimetest.Call {
 		t.Helper()
 		require.NoError(t, err)
-		return realtimetest.Call{Method: realtimetest.PublishRealtimeEvent, Event: event}
+		return realtimetest.Call{Method: realtimetest.Publish, Event: event}
 	}
 }
 

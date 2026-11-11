@@ -27,8 +27,8 @@ func TestRealtimePublishRequiresClusterFanout(t *testing.T) {
 	t.Parallel()
 
 	service := newTestRealtimeService(t, noopAuthenticationCache{})
-	_ = service.AttachRealtimeSink(&recordingRealtimeSink{})
-	err := service.PublishRealtimeEvent(context.Background(), realtime.RealtimeEvent{
+	_ = service.AttachSink(&recordingRealtimeSink{})
+	err := service.Publish(context.Background(), realtime.Event{
 		Name:   "user.notification",
 		UserID: model.UserID(model.NewID()),
 	})
@@ -40,7 +40,7 @@ func TestRealtimePublishMapsInvalidPublication(t *testing.T) {
 	t.Parallel()
 
 	service := newTestRealtimeService(t, noopAuthenticationCache{})
-	err := service.PublishRealtimeEvent(context.Background(), realtime.RealtimeEvent{Name: "missing.target"})
+	err := service.Publish(context.Background(), realtime.Event{Name: "missing.target"})
 	require.Error(t, err, "Publish() error")
 	require.True(t, apperror.Is(err, "websocket.request.invalid"), "Publish() error")
 }
@@ -58,8 +58,8 @@ func TestSessionRevocationPublishesAttemptProjectionInvalidations(t *testing.T) 
 	service := newTestRealtimeService(t, noopAuthenticationCache{})
 	service.attempts = attempts
 	sink := &recordingRealtimeSink{}
-	require.NoError(t, service.AttachRealtimeSink(sink))
-	require.NoError(t, service.AttachRealtimeClusterFanout(&recordingRealtimeCluster{}))
+	require.NoError(t, service.AttachSink(sink))
+	require.NoError(t, service.AttachClusterFanout(&recordingRealtimeCluster{}))
 
 	service.SessionsRevoked(
 		context.Background(), candidateID, []model.SessionID{sessionID}, nil,
@@ -122,7 +122,7 @@ func newTestRealtimeService(t *testing.T, cache identity.AuthenticationCache) *R
 
 type recordingRealtimeSink struct {
 	mu             sync.Mutex
-	events         []realtime.RealtimeEvent
+	events         []realtime.Event
 	sessionCloses  []closeRecord
 	userCloses     []closeRecord
 	allCloses      []realtime.ConnectionCloseReason
@@ -140,7 +140,7 @@ type closeRecord struct {
 	reason realtime.ConnectionCloseReason
 }
 
-func (s *recordingRealtimeSink) PublishLocal(_ context.Context, event realtime.RealtimeEvent) {
+func (s *recordingRealtimeSink) PublishLocal(_ context.Context, event realtime.Event) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.events = append(s.events, event.Clone())

@@ -657,7 +657,7 @@ func (u pictureUsers) Get(ctx context.Context, id model.UserID) (*model.User, er
 // change: the event addressed to the User, carrying the active File Entry and
 // the revision and change instant of the committed User.
 func profilePictureChangedCall(committed *model.User, userID model.UserID, active model.FileEntryID) realtimetest.Call {
-	return realtimetest.Call{Method: realtimetest.PublishRealtimeEvent, Event: realtime.RealtimeEvent{
+	return realtimetest.Call{Method: realtimetest.Publish, Event: realtime.Event{
 		Name:   "user_profile_picture_changed",
 		UserID: userID,
 		Data: json.RawMessage(fmt.Sprintf(

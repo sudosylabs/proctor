@@ -78,7 +78,7 @@ var typedIDAllowlist = map[string]string{
 	"app/administration.retentionJobAudit.BeginRetentionExpiry id": "retention record: RetentionExpiryKind chooses the entity",
 	"store.ExamAttemptStore.ResolveSecurityPreflightSitting id":    "Desktop agreement identifier (model.IsValidAgreementID)",
 	"app/identity.ExternalProviderSource.Provider id":              "operator-configured identity provider",
-	"app/realtime.RealtimeEvent ID":                                "runtime event identity for peer deduplication",
+	"app/realtime.Event ID":                                        "runtime event identity for peer deduplication",
 }
 
 // TestEntityIdentifiersAreTyped keeps entity identifiers typed at the Store

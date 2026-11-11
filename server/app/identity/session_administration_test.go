@@ -10,7 +10,6 @@ package identity
 import (
 	"context"
 	"errors"
-	"slices"
 	"testing"
 	"time"
 
@@ -19,6 +18,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/internal/batchitem"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -79,22 +79,21 @@ func (a *sessionAdministrationAuthorizerFake) Authorize(_ context.Context, _ inv
 	return nil
 }
 
-type sessionAdministrationEffectsFake struct {
-	events     *[]string
-	userID     model.UserID
-	sessionIDs []model.SessionID
-	hashes     []string
-}
-
-// AuthenticationCacheInvalidated records an invalidation, which Session
-// administration never publishes on its own.
-func (e *sessionAdministrationEffectsFake) AuthenticationCacheInvalidated(context.Context, model.UserID, []string) {
-	*e.events = append(*e.events, "invalidate-authentication-cache")
-}
-
-func (e *sessionAdministrationEffectsFake) SessionsRevoked(_ context.Context, userID model.UserID, sessionIDs []model.SessionID, hashes []string) {
-	*e.events = append(*e.events, "publish-revocation")
-	e.userID, e.sessionIDs, e.hashes = userID, sessionIDs, hashes
+// sessionAdministrationPublisher returns a recording Publisher that also
+// places each call in the shared log: a revocation as "publish-revocation",
+// and an authentication-cache invalidation, which Session administration never
+// publishes on its own, as "invalidate-authentication-cache".
+func sessionAdministrationPublisher(events *[]string) *realtimetest.Publisher {
+	return &realtimetest.Publisher{Observe: func(call realtimetest.Call) {
+		switch call.Method {
+		case realtimetest.SessionsRevoked:
+			*events = append(*events, "publish-revocation")
+		case realtimetest.AuthenticationCacheInvalidated:
+			*events = append(*events, "invalidate-authentication-cache")
+		default:
+			*events = append(*events, string(call.Method))
+		}
+	}}
 }
 
 type sessionAdministrationUserStoreFake struct {
@@ -121,7 +120,7 @@ func TestAdminSessionListAuthorizesThenReads(t *testing.T) {
 	session := &model.Session{ID: model.NewSessionID(), UserID: model.UserID(userID)}
 	at := time.Date(2026, 8, 12, 9, 30, 0, 123_456_789, time.FixedZone("offset", 7200))
 	persistence := &sessionAdministrationStoreFake{events: &events, list: []*model.Session{session}}
-	service := &Service{sessions: persistence, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events}, mail: &securityNoticeMailerFake{events: &events}, effects: &sessionAdministrationEffectsFake{events: &events}, now: func() time.Time { return at }}
+	service := &Service{sessions: persistence, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events}, mail: &securityNoticeMailerFake{events: &events}, publisher: sessionAdministrationPublisher(&events), now: func() time.Time { return at }}
 	got, err := service.ListUserSessions(context.Background(), invocation.Invocation{}, ListUserSessionsQuery{UserID: model.UserID(userID), Limit: 50})
 	require.NoError(t, err)
 	require.Len(t, got.Items, 1)
@@ -140,7 +139,7 @@ func TestAdminSessionHistoryIsPaged(t *testing.T) {
 	userID := model.NewUserID()
 	rows := []*model.Session{{ID: model.NewSessionID()}, {ID: model.NewSessionID()}, {ID: model.NewSessionID()}}
 	persistence := &sessionAdministrationStoreFake{events: &events, list: rows}
-	service := &Service{sessions: persistence, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID.String())}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events}, mail: &securityNoticeMailerFake{events: &events}, effects: &sessionAdministrationEffectsFake{events: &events}, now: time.Now}
+	service := &Service{sessions: persistence, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID.String())}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events}, mail: &securityNoticeMailerFake{events: &events}, publisher: sessionAdministrationPublisher(&events), now: time.Now}
 	before := time.Date(2026, 8, 12, 9, 30, 0, 0, time.UTC)
 	beforeID := model.NewSessionID()
 	page, err := service.ListUserSessions(context.Background(), invocation.Invocation{}, ListUserSessionsQuery{
@@ -186,7 +185,7 @@ func TestAdminSessionRevokeCommitsBeforePublishing(t *testing.T) {
 		},
 	}
 	mailer := &securityNoticeMailerFake{events: &events}
-	service := &Service{sessions: persistence, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: mailer, effects: &sessionAdministrationEffectsFake{events: &events}, now: func() time.Time { return time.UnixMilli(500) }}
+	service := &Service{sessions: persistence, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: mailer, publisher: sessionAdministrationPublisher(&events), now: func() time.Time { return time.UnixMilli(500) }}
 	require.NoError(t, service.RevokeUserSession(context.Background(), invocation.Invocation{}, RevokeUserSessionCommand{
 		UserID: model.UserID(userID), SessionID: session.ID,
 	}))
@@ -214,7 +213,7 @@ func TestAdminSessionRevokeFailurePublishesNoEffect(t *testing.T) {
 		events:    &events,
 		session:   session,
 		revokeErr: store.NewErrConflict("session", "busy", errors.New("busy")),
-	}, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: &securityNoticeMailerFake{events: &events}, effects: &sessionAdministrationEffectsFake{events: &events}, now: time.Now}
+	}, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: &securityNoticeMailerFake{events: &events}, publisher: sessionAdministrationPublisher(&events), now: time.Now}
 	err := service.RevokeUserSession(context.Background(), invocation.Invocation{}, RevokeUserSessionCommand{
 		UserID: model.UserID(userID), SessionID: session.ID,
 	})
@@ -235,7 +234,7 @@ func TestAdminSessionRevokeAllCommitsBeforePublishing(t *testing.T) {
 			Sessions: []*model.Session{session}, TokenHashes: []string{"hash"},
 		},
 	}
-	service := &Service{sessions: persistence, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: &securityNoticeMailerFake{events: &events}, effects: &sessionAdministrationEffectsFake{events: &events}, now: func() time.Time { return time.UnixMilli(500) }}
+	service := &Service{sessions: persistence, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: &securityNoticeMailerFake{events: &events}, publisher: sessionAdministrationPublisher(&events), now: func() time.Time { return time.UnixMilli(500) }}
 	require.NoError(t, service.RevokeUserSessions(context.Background(), invocation.Invocation{}, RevokeUserSessionsCommand{UserID: model.UserID(userID)}))
 	require.Equal(t, model.UserID(userID), persistence.revokeAllInput.UserID)
 	require.NotEmpty(t, persistence.revokeAllInput.AuditEventID)
@@ -252,7 +251,7 @@ func TestAdminSessionIdempotentNoOpPreparesNoticeForAuthoritativeRace(t *testing
 	persistence := &sessionAdministrationStoreFake{events: &events, list: []*model.Session{},
 		revokeAllResult: &store.UserSessionsRevocationResult{Sessions: []*model.Session{}, TokenHashes: []string{}}}
 	mailer := &securityNoticeMailerFake{events: &events}
-	service := &Service{sessions: persistence, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: mailer, effects: &sessionAdministrationEffectsFake{events: &events}, now: time.Now}
+	service := &Service{sessions: persistence, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: mailer, publisher: sessionAdministrationPublisher(&events), now: time.Now}
 	invocation := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
 	require.NoError(t, service.RevokeUserSessions(context.Background(), invocation, RevokeUserSessionsCommand{UserID: model.UserID(userID), IdempotencyKey: "row"}))
 	require.Len(t, mailer.requests, 1, "idempotent no-op mail")
@@ -268,7 +267,7 @@ func TestAdminSessionRetainedOutcomeBypassesMailAfterNewSession(t *testing.T) {
 		list:            []*model.Session{{ID: model.NewSessionID(), UserID: model.UserID(userID)}},
 		revokeAllResult: &store.UserSessionsRevocationResult{Sessions: []*model.Session{}, TokenHashes: []string{}}}
 	mailer := &securityNoticeMailerFake{events: &events, err: errors.New("mail unavailable")}
-	service := &Service{sessions: persistence, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: mailer, effects: &sessionAdministrationEffectsFake{events: &events}, now: time.Now}
+	service := &Service{sessions: persistence, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: mailer, publisher: sessionAdministrationPublisher(&events), now: time.Now}
 	invocation := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
 	require.NoError(t, service.RevokeUserSessions(context.Background(), invocation, RevokeUserSessionsCommand{UserID: model.UserID(userID), IdempotencyKey: "row", Batch: batchitem.New(batchitem.Fields{RetainedOutcome: true})}))
 	require.Empty(t, mailer.requests, "retained mail")
@@ -280,7 +279,7 @@ func TestAdminSessionCrossUserNotFound(t *testing.T) {
 	events := []string{}
 	userID := model.NewID()
 	session := &model.Session{ID: model.NewSessionID(), UserID: model.NewUserID()}
-	service := &Service{sessions: &sessionAdministrationStoreFake{events: &events, session: session}, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events}, mail: &securityNoticeMailerFake{events: &events}, effects: &sessionAdministrationEffectsFake{events: &events}, now: time.Now}
+	service := &Service{sessions: &sessionAdministrationStoreFake{events: &events, session: session}, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events}, mail: &securityNoticeMailerFake{events: &events}, publisher: sessionAdministrationPublisher(&events), now: time.Now}
 	err := service.RevokeUserSession(context.Background(), invocation.Invocation{}, RevokeUserSessionCommand{
 		UserID: model.UserID(userID), SessionID: session.ID,
 	})
@@ -315,8 +314,8 @@ func TestAdminSessionRevocationOutcomesPreserveAuditAndBatchResult(t *testing.T)
 					audit.failErr = apperror.New("audit.unavailable")
 				}
 			}
-			effects := &sessionAdministrationEffectsFake{events: &events}
-			service := &Service{sessions: persistence, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: audit, mail: &securityNoticeMailerFake{events: &events}, effects: effects, now: func() time.Time { return now }}
+			effects := sessionAdministrationPublisher(&events)
+			service := &Service{sessions: persistence, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: audit, mail: &securityNoticeMailerFake{events: &events}, publisher: effects, now: func() time.Time { return now }}
 			invocation := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
 			err := service.RevokeUserSessions(context.Background(), invocation, RevokeUserSessionsCommand{
 				UserID: model.UserID(userID), IdempotencyKey: "repeat-command", Batch: batchitem.New(batchitem.Fields{Replayed: &unchanged}),
@@ -350,9 +349,13 @@ func TestAdminSessionRevocationOutcomesPreserveAuditAndBatchResult(t *testing.T)
 			}
 			if outcome == "changed" {
 				want = append(want, "publish-revocation")
-				require.Equal(t, model.UserID(userID), effects.userID)
-				require.True(t, slices.Equal(effects.sessionIDs, sessionIDs(persistence.revokeAllResult.Sessions)))
-				require.True(t, slices.Equal(effects.hashes, persistence.revokeAllResult.TokenHashes))
+				// Contract: one revocation, for the User, of exactly the Sessions
+				// and access-token hashes the Store revoked.
+				require.Equal(t, []realtimetest.Call{{
+					Method: realtimetest.SessionsRevoked, UserID: model.UserID(userID),
+					SessionIDs:        sessionIDs(persistence.revokeAllResult.Sessions),
+					AccessTokenHashes: persistence.revokeAllResult.TokenHashes,
+				}}, effects.Calls())
 			}
 			if outcome == "commit unavailable" || outcome == "failure audit unavailable" {
 				want = append(want, "fail")

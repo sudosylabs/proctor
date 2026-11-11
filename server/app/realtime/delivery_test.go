@@ -27,7 +27,7 @@ import (
 func TestRealtimeEventValidateForPublish(t *testing.T) {
 	t.Parallel()
 
-	valid := RealtimeEvent{
+	valid := Event{
 		Name:   "academic_unit_created",
 		Action: model.ActionAcademicUnitView,
 		Resource: model.Resource{
@@ -36,15 +36,15 @@ func TestRealtimeEventValidateForPublish(t *testing.T) {
 		},
 	}
 	require.NoError(t, valid.ValidateForPublish())
-	require.NoError(t, (RealtimeEvent{Name: "user.notification", UserID: model.UserID(model.NewID())}).ValidateForPublish())
+	require.NoError(t, (Event{Name: "user.notification", UserID: model.UserID(model.NewID())}).ValidateForPublish())
 
 	tests := []struct {
 		name  string
-		event RealtimeEvent
+		event Event
 	}{
-		{name: "empty name", event: RealtimeEvent{UserID: model.UserID(model.NewID())}},
-		{name: "missing target", event: RealtimeEvent{Name: "orphan.event"}},
-		{name: "invalid data", event: RealtimeEvent{
+		{name: "empty name", event: Event{UserID: model.UserID(model.NewID())}},
+		{name: "missing target", event: Event{Name: "orphan.event"}},
+		{name: "invalid data", event: Event{
 			Name: "x", UserID: model.UserID(model.NewID()), Data: json.RawMessage(`{`),
 		}},
 	}
@@ -156,7 +156,7 @@ func TestPublishClonesGeneratesIDAndDeliversLocalFirst(t *testing.T) {
 	t.Parallel()
 
 	order := &orderedCalls{}
-	sink := &recordingSink{publish: func(event RealtimeEvent) {
+	sink := &recordingSink{publish: func(event Event) {
 		order.add("local")
 		if len(event.Data) != 0 {
 			event.Data[0] = '['
@@ -171,7 +171,7 @@ func TestPublishClonesGeneratesIDAndDeliversLocalFirst(t *testing.T) {
 	require.NoError(t, service.SetClusterFanout(fanout))
 
 	data := json.RawMessage(`{"ok":true}`)
-	event := RealtimeEvent{Name: "user.notification", UserID: model.UserID(model.NewID()), Data: data}
+	event := Event{Name: "user.notification", UserID: model.UserID(model.NewID()), Data: data}
 	require.NoError(t, service.Publish(context.Background(), event))
 	require.Empty(t, event.ID)
 	require.Equal(t, `{"ok":true}`, string(data), "caller data was mutated")
@@ -196,7 +196,7 @@ func TestPublishPreservesOrdinaryPeerWireFixtureAndDoesNotRebroadcast(t *testing
 	require.NoError(t, service.SetSink(sink))
 	require.NoError(t, service.SetClusterFanout(fanout))
 
-	event := RealtimeEvent{
+	event := Event{
 		ID:     eventID,
 		Name:   "user.notification",
 		UserID: userID,
@@ -299,7 +299,7 @@ func TestPublishMissingCollaboratorsAndTypedFailures(t *testing.T) {
 		fanout := &recordingFanout{}
 		require.NoError(t, service.SetSink(sink))
 		require.NoError(t, service.SetClusterFanout(fanout))
-		err := service.Publish(context.Background(), RealtimeEvent{Name: "missing.target"})
+		err := service.Publish(context.Background(), Event{Name: "missing.target"})
 		var invalid *InvalidPublicationError
 		require.ErrorAs(t, err, &invalid)
 		require.Empty(t, sink.events, "invalid publication effects: local")
@@ -362,8 +362,8 @@ func TestServiceHasNoBackgroundLifecycle(t *testing.T) {
 	}
 }
 
-func validUserEvent() RealtimeEvent {
-	return RealtimeEvent{Name: "user.notification", UserID: model.UserID(model.NewID())}
+func validUserEvent() Event {
+	return Event{Name: "user.notification", UserID: model.UserID(model.NewID())}
 }
 
 func newOrdinaryTestService(t *testing.T) *Service {
@@ -392,8 +392,8 @@ func (o *orderedCalls) snapshot() []string {
 
 type recordingSink struct {
 	mu      sync.Mutex
-	events  []RealtimeEvent
-	publish func(RealtimeEvent)
+	events  []Event
+	publish func(Event)
 	unbound []model.AttemptConnectionID
 	unbind  func(model.AttemptConnectionID)
 }
@@ -414,7 +414,7 @@ func (s *recordingSink) unboundCount() int {
 	return len(s.unbound)
 }
 
-func (s *recordingSink) PublishLocal(_ context.Context, event RealtimeEvent) {
+func (s *recordingSink) PublishLocal(_ context.Context, event Event) {
 	s.mu.Lock()
 	s.events = append(s.events, event.Clone())
 	publish := s.publish

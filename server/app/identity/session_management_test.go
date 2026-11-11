@@ -17,6 +17,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -33,8 +34,8 @@ func TestSelfSessionServiceUsesCallerOwnershipAndPostCommitEffects(t *testing.T)
 		session: session,
 		hashes:  []string{"access-hash"},
 	}
-	effects := &selfSessionEffectsFake{events: &events}
-	service := &Service{sessions: persistence, auditor: &mutationAttemptAuditorFake{events: &events, beginID: model.NewID()}, effects: effects, now: func() time.Time { return now }}
+	effects := revocationsIn(&events, "effects")
+	service := &Service{sessions: persistence, auditor: &mutationAttemptAuditorFake{events: &events, beginID: model.NewID()}, publisher: effects, now: func() time.Time { return now }}
 	invocation := invocation.New(principal, model.RequestMetadata{})
 	err := service.RevokeSession(
 		context.Background(),
@@ -47,9 +48,11 @@ func TestSelfSessionServiceUsesCallerOwnershipAndPostCommitEffects(t *testing.T)
 	require.Equal(t, []string{"get", "begin", "revoke", "effects"}, events)
 	require.Equal(t, principal.UserID.String(), persistence.revokedUserID, "revocation = user")
 	require.True(t, now.Equal(persistence.revokedAt), "revocation = user")
-	require.Equal(t, principal.UserID, effects.userID)
-	require.Equal(t, []model.SessionID{session.ID}, effects.sessionIDs)
-	require.Equal(t, []string{"access-hash"}, effects.hashes)
+	// Contract: one revocation, of the caller's Session and its access token.
+	require.Equal(t, []realtimetest.Call{{
+		Method: realtimetest.SessionsRevoked, UserID: principal.UserID,
+		SessionIDs: []model.SessionID{session.ID}, AccessTokenHashes: []string{"access-hash"},
+	}}, effects.Calls())
 }
 
 func TestSelfSessionServiceHidesAnotherUsersSession(t *testing.T) {
@@ -61,7 +64,7 @@ func TestSelfSessionServiceHidesAnotherUsersSession(t *testing.T) {
 		events:  &[]string{},
 		session: &model.Session{ID: model.NewSessionID(), UserID: model.NewUserID()},
 	}
-	service := &Service{sessions: persistence, auditor: &mutationAttemptAuditorFake{events: &[]string{}, beginID: model.NewID()}, effects: &selfSessionEffectsFake{}, now: func() time.Time { return now }}
+	service := &Service{sessions: persistence, auditor: &mutationAttemptAuditorFake{events: &[]string{}, beginID: model.NewID()}, publisher: &realtimetest.Publisher{}, now: func() time.Time { return now }}
 
 	err := service.RevokeSession(
 		context.Background(),
@@ -77,7 +80,7 @@ func TestSelfSessionListUsesNativeDecisionTime(t *testing.T) {
 	at := time.Date(2026, 8, 12, 9, 30, 0, 123_456_789, time.FixedZone("offset", 7200))
 	principal := selfSessionPrincipal(model.TimeUTC(at))
 	persistence := &selfSessionStoreFake{session: &model.Session{ID: principal.SessionID, UserID: principal.UserID}}
-	service := &Service{sessions: persistence, auditor: &mutationAttemptAuditorFake{events: &[]string{}, beginID: model.NewID()}, effects: &selfSessionEffectsFake{}, now: func() time.Time { return at }}
+	service := &Service{sessions: persistence, auditor: &mutationAttemptAuditorFake{events: &[]string{}, beginID: model.NewID()}, publisher: &realtimetest.Publisher{}, now: func() time.Time { return at }}
 	_, err := service.ListSessions(context.Background(), invocation.New(principal, model.RequestMetadata{}))
 	require.NoError(t, err)
 	require.True(t, persistence.listedAt.Equal(model.TimeUTC(at)), "active Session listing time = %v", persistence.listedAt)
@@ -94,7 +97,7 @@ func TestSelfSessionServiceRequiresFocusedDependencies(t *testing.T) {
 	service.sessions = nil
 	require.Error(t, service.requireSessionAuthentication(), "nil self-session store was accepted")
 	service = newTestAuthenticationService(t, newAuthenticationStoreFake())
-	service.effects = nil
+	service.publisher = nil
 	require.Error(t, service.requireSessionAuthentication(), "nil self-session effects were accepted")
 	service = newTestAuthenticationService(t, newAuthenticationStoreFake())
 	service.now = nil
@@ -112,14 +115,14 @@ func TestSelfSessionRevocationsRequireAuditBeforeMutationAndEffects(t *testing.T
 				persistence := &selfSessionStoreFake{events: &events,
 					session: &model.Session{ID: principal.SessionID, UserID: principal.UserID}, hashes: []string{"access-hash"}}
 				audit := &mutationAttemptAuditorFake{events: &events, beginID: model.NewID()}
-				effects := &selfSessionEffectsFake{events: &events}
+				effects := revocationsIn(&events, "effects")
 				if outcome == "attempt unavailable" {
 					audit.beginErr = apperror.New("audit.unavailable")
 				}
 				if outcome == "completion unavailable" {
 					persistence.revokeErr = errors.New("audit completion unavailable")
 				}
-				self := &Service{sessions: persistence, auditor: audit, effects: effects, now: func() time.Time { return now }}
+				self := &Service{sessions: persistence, auditor: audit, publisher: effects, now: func() time.Time { return now }}
 				var err error
 				invocation := invocation.New(principal, model.RequestMetadata{})
 				switch operation {
@@ -140,9 +143,9 @@ func TestSelfSessionRevocationsRequireAuditBeforeMutationAndEffects(t *testing.T
 					err = self.Logout(context.Background(), invocation)
 				}
 				if outcome != "success" {
-					require.Error(t, err, "failed audit allowed revocation/effect: error=%v session=%#v effects=%#v", err, persistence.session, effects)
-					require.False(t, persistence.session.RevokedAt.Valid, "failed audit allowed revocation/effect: error=%v session=%#v effects=%#v", err, persistence.session, effects)
-					require.Empty(t, effects.userID, "failed audit allowed revocation/effect: error=%v session=%#v effects=%#v", err, persistence.session, effects)
+					require.Error(t, err, "failed audit allowed revocation/effect: error=%v session=%#v effects=%#v", err, persistence.session, effects.Calls())
+					require.False(t, persistence.session.RevokedAt.Valid, "failed audit allowed revocation/effect: error=%v session=%#v effects=%#v", err, persistence.session, effects.Calls())
+					require.Empty(t, effects.Calls(), "failed audit allowed revocation/effect: error=%v session=%#v", err, persistence.session)
 					if outcome == "attempt unavailable" {
 						require.Equal(t, 0, persistence.revokeCalls, "Store mutation ran before durable attempt")
 					}
@@ -152,8 +155,12 @@ func TestSelfSessionRevocationsRequireAuditBeforeMutationAndEffects(t *testing.T
 					return
 				}
 				require.NoError(t, err)
-				require.True(t, persistence.session.RevokedAt.Valid, "revocation/effects = %#v / %#v", persistence.session, effects)
-				require.Equal(t, principal.UserID, effects.userID, "revocation/effects = %#v / %#v", persistence.session, effects)
+				require.True(t, persistence.session.RevokedAt.Valid, "revocation/effects = %#v / %#v", persistence.session, effects.Calls())
+				// Contract: one revocation, of the caller's Session and its access token.
+				require.Equal(t, []realtimetest.Call{{
+					Method: realtimetest.SessionsRevoked, UserID: principal.UserID,
+					SessionIDs: []model.SessionID{principal.SessionID}, AccessTokenHashes: []string{"access-hash"},
+				}}, effects.Calls())
 				// Contract (guardrails 8 and 14): the audit begins before the durable
 				// revocation, which commits before its effects. Revoking one Session
 				// first reads it to confirm the caller owns it.
@@ -196,8 +203,8 @@ func TestSelfSessionRevocationRepeatOutcomes(t *testing.T) {
 				ID: principal.SessionID, UserID: principal.UserID, RevokedAt: model.OptionalTimeFrom(now.Add(-time.Minute)),
 			}}
 			audit := &mutationAttemptAuditorFake{events: &events, beginID: model.NewID()}
-			effects := &selfSessionEffectsFake{events: &events}
-			self := &Service{sessions: persistence, auditor: audit, effects: effects, now: func() time.Time { return now }}
+			effects := revocationsIn(&events, "effects")
+			self := &Service{sessions: persistence, auditor: audit, publisher: effects, now: func() time.Time { return now }}
 			var err error
 			invocation := invocation.New(principal, model.RequestMetadata{})
 			switch operation {
@@ -219,7 +226,7 @@ func TestSelfSessionRevocationRepeatOutcomes(t *testing.T) {
 				require.NoError(t, err)
 			}
 			require.Equal(t, 1, persistence.revokeCalls)
-			require.Empty(t, effects.userID)
+			require.Empty(t, effects.Calls())
 		})
 	}
 }
@@ -292,23 +299,4 @@ func (s *selfSessionStoreFake) RevokeAllForUser(_ context.Context, input *store.
 	}
 	s.session.RevokedAt = model.OptionalTimeFrom(input.RevokedAt)
 	return &store.UserSessionsRevocationResult{Sessions: []*model.Session{s.session}, TokenHashes: append([]string(nil), s.hashes...)}, nil
-}
-
-type selfSessionEffectsFake struct {
-	events     *[]string
-	userID     model.UserID
-	sessionIDs []model.SessionID
-	hashes     []string
-}
-
-func (e *selfSessionEffectsFake) AuthenticationCacheInvalidated(context.Context, model.UserID, []string) {
-}
-
-func (e *selfSessionEffectsFake) SessionsRevoked(_ context.Context, userID model.UserID, sessionIDs []model.SessionID, hashes []string) {
-	if e.events != nil {
-		*e.events = append(*e.events, "effects")
-	}
-	e.userID = userID
-	e.sessionIDs = append([]model.SessionID(nil), sessionIDs...)
-	e.hashes = append([]string(nil), hashes...)
 }

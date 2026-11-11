@@ -20,6 +20,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -319,12 +321,7 @@ func TestCompletePasswordResetCommitsBeforeEffects(t *testing.T) {
 			}, nil
 		},
 	}
-	effects := &accountTokenEffectsFake{called: func(userID model.UserID, sessionIDs []model.SessionID, hashes []string) {
-		order = append(order, "effects")
-		require.Equal(t, user.ID, userID, "effects = user")
-		require.Equal(t, []model.SessionID{session.ID}, sessionIDs, "effects = user")
-		require.Equal(t, []string{"access-hash"}, hashes, "effects = user")
-	}}
+	effects := &realtimetest.Publisher{Observe: func(realtimetest.Call) { order = append(order, "effects") }}
 	app := newAccountTokenTestApp(t, accountTokenTestDependencies{
 		users: &accountTokenUserStoreFake{byID: user}, passwords: &accountTokenPasswordStoreFake{},
 		tokens: tokens, institution: &model.Institution{ID: model.NewInstitutionID()},
@@ -341,6 +338,11 @@ func TestCompletePasswordResetCommitsBeforeEffects(t *testing.T) {
 	require.Same(t, user, got, "complete password reset")
 	// Contract (guardrail 14): the reset commits before its effects.
 	require.Equal(t, []string{"commit", "effects"}, order)
+	// Contract: one revocation, of the User's revoked Session and its access token.
+	require.Equal(t, []realtimetest.Call{{
+		Method: realtimetest.SessionsRevoked, UserID: user.ID,
+		SessionIDs: []model.SessionID{session.ID}, AccessTokenHashes: []string{"access-hash"},
+	}}, effects.Calls())
 	require.Equal(t, []string{"new password"}, hashed, "the reset hashed another password")
 }
 
@@ -487,7 +489,7 @@ type accountTokenTestDependencies struct {
 	tokens       store.UserTokenStore
 	institution  *model.Institution
 	mailer       mailComposer
-	effects      SecurityEffects
+	effects      realtime.Publisher
 	hasher       passwordHasher
 	attempts     *AttemptAccounting
 	rateLimit    LoginRateLimitPolicy
@@ -498,7 +500,7 @@ type accountTokenTestDependencies struct {
 func newAccountTokenTestApp(t *testing.T, deps accountTokenTestDependencies) *Service {
 	t.Helper()
 	if deps.effects == nil {
-		deps.effects = &accountTokenEffectsFake{}
+		deps.effects = &realtimetest.Publisher{}
 	}
 	if deps.hasher == nil {
 		deps.hasher = accountTokenHasherFake{hash: "encoded-password"}
@@ -521,7 +523,7 @@ func newAccountTokenTestApp(t *testing.T, deps accountTokenTestDependencies) *Se
 	}
 	service := &Service{users: deps.users, passwords: deps.passwords, userTokens: deps.tokens, accessPolicy: deps.accessPolicy,
 		institutions: &accountTokenInstitutionStoreFake{institution: deps.institution}, mail: deps.mailer, attempts: deps.attempts,
-		hasher: deps.hasher, nodeID: "node-1", effects: deps.effects, recoveryDiagnostics: newDiscardLogger(t),
+		hasher: deps.hasher, nodeID: "node-1", publisher: deps.effects, recoveryDiagnostics: newDiscardLogger(t),
 		accountRecoveryPolicy: AccountRecoveryPolicy{
 			EmailVerificationTTL: 24 * time.Hour,
 			PasswordResetTTL:     45 * time.Minute,
@@ -704,24 +706,6 @@ func (accountTokenHasherFake) ReuseCheck(string) store.PasswordReuseCheck {
 	return store.PasswordReuseCheck{}
 }
 
-type accountTokenEffectsFake struct {
-	called func(model.UserID, []model.SessionID, []string)
-}
-
-func (*accountTokenEffectsFake) AuthenticationCacheInvalidated(context.Context, model.UserID, []string) {
-}
-
-func (f *accountTokenEffectsFake) SessionsRevoked(
-	_ context.Context,
-	userID model.UserID,
-	sessionIDs []model.SessionID,
-	hashes []string,
-) {
-	if f.called != nil {
-		f.called(userID, sessionIDs, hashes)
-	}
-}
-
 type accountTokenConstructorArgs struct {
 	users        store.UserStore
 	passwords    store.PasswordCredentialStore
@@ -731,7 +715,7 @@ type accountTokenConstructorArgs struct {
 	attempts     *AttemptAccounting
 	hasher       passwordHasher
 	nodeID       string
-	effects      SecurityEffects
+	effects      realtime.Publisher
 	diagnostics  *logging.Logger
 	newToken     func() string
 }
@@ -746,7 +730,7 @@ func validAccountTokenConstructorArgs(t testing.TB) accountTokenConstructorArgs 
 		attempts:     &AttemptAccounting{deps: AttemptAccountingDependencies{Cache: newExpiringAuthenticationAttemptCache(time.Now)}},
 		hasher:       accountTokenHasherFake{},
 		nodeID:       "node-1",
-		effects:      &accountTokenEffectsFake{},
+		effects:      &realtimetest.Publisher{},
 		diagnostics:  newDiscardLogger(t),
 		newToken:     func() string { return accountTokenTestRawToken },
 	}
@@ -764,7 +748,7 @@ func (a accountTokenConstructorArgs) build() *Service {
 		service.hasher = a.hasher
 	}
 	if a.effects != nil {
-		service.effects = a.effects
+		service.publisher = a.effects
 	}
 	return service
 }

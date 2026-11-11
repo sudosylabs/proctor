@@ -451,7 +451,7 @@ func starterWorkspaceChanged(
 	t.Helper()
 	event, err := realtime.NewExamStarterWorkspaceChangedEvent(examID, entryID, draftRevision, string(operation), changedAt)
 	require.NoError(t, err)
-	return realtimetest.Call{Method: realtimetest.PublishRealtimeEvent, Event: event}
+	return realtimetest.Call{Method: realtimetest.Publish, Event: event}
 }
 
 type fakeWorkspaceContent struct {

@@ -28,7 +28,7 @@ func (a *Authoring) publishExamCreated(ctx context.Context, examID model.ExamID)
 		return err
 	}
 
-	return a.deps.Publisher.PublishRealtimeEvent(ctx, event)
+	return a.deps.Publisher.Publish(ctx, event)
 }
 
 // publishDraftUpdated tells everyone who may view the Exam that its Draft
@@ -39,7 +39,7 @@ func (a *Authoring) publishDraftUpdated(ctx context.Context, examID model.ExamID
 		return err
 	}
 
-	return a.deps.Publisher.PublishRealtimeEvent(ctx, event)
+	return a.deps.Publisher.Publish(ctx, event)
 }
 
 // publishExamArchived announces the archive to the Exam's viewers, then
@@ -56,7 +56,7 @@ func (a *Authoring) publishExamArchived(
 		return err
 	}
 
-	return errors.Join(a.deps.Publisher.PublishRealtimeEvent(ctx, event), a.publishArchivedExamSittings(ctx, examID))
+	return errors.Join(a.deps.Publisher.Publish(ctx, event), a.publishArchivedExamSittings(ctx, examID))
 }
 
 // publishArchivedExamSittings walks the Sittings of an archived Exam in pages
@@ -132,7 +132,7 @@ func (a *Authoring) publishManagerChanged(
 	}
 
 	a.deps.Publisher.InvalidateAuthorization(ctx, userID)
-	return a.deps.Publisher.PublishRealtimeEvent(ctx, event)
+	return a.deps.Publisher.Publish(ctx, event)
 }
 
 // publishOwnerTransferred tells the Exam's viewers who its Exam Owner now is.
@@ -148,7 +148,7 @@ func (a *Authoring) publishOwnerTransferred(
 		return err
 	}
 
-	return a.deps.Publisher.PublishRealtimeEvent(ctx, event)
+	return a.deps.Publisher.Publish(ctx, event)
 }
 
 // publishRevisionPublished tells the Exam's viewers that a Draft was frozen
@@ -166,5 +166,5 @@ func (p *Publication) publishRevisionPublished(ctx context.Context, revision sto
 		return err
 	}
 
-	return p.deps.Publisher.PublishRealtimeEvent(ctx, event)
+	return p.deps.Publisher.Publish(ctx, event)
 }

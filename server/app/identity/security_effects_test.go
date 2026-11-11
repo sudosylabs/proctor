@@ -21,6 +21,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -49,7 +51,7 @@ func TestAuthenticationServiceRequiresSecurityDependencies(t *testing.T) {
 		sessionCredentials store.SessionCredentialStore
 		attempts           *AttemptAccounting
 		audit              access.MutationAuditor
-		effects            SecurityEffects
+		effects            realtime.Publisher
 		mfa                *mfaMechanics
 		personalTokens     store.PersonalAccessTokenStore
 		newCredential      func() string
@@ -59,7 +61,7 @@ func TestAuthenticationServiceRequiresSecurityDependencies(t *testing.T) {
 		sessions: persistence.Session(), sessionCredentials: persistence.SessionCredential(),
 		attempts: mustAuthenticationAttemptAccounting(t, cache),
 		audit:    &mutationAttemptAuditorFake{},
-		effects:  discardAuthenticationSecurityEffects{},
+		effects:  &realtimetest.Publisher{},
 		mfa:      mustTestMFAMechanics(t), personalTokens: discardPersonalAccessTokenStore{},
 		newCredential: model.NewCredentialToken,
 	}
@@ -68,7 +70,7 @@ func TestAuthenticationServiceRequiresSecurityDependencies(t *testing.T) {
 		service := &Service{users: deps.users, passwords: deps.passwords, sessions: deps.sessions, sessionCredentials: deps.sessionCredentials,
 			desktopRegistrations: authenticationDesktopRegistrationLookupFake{}, personalAccessTokens: deps.personalTokens,
 			accessPolicy: allowAllAuthenticationAccessPolicy(), dpop: dpop, cache: cache, attempts: deps.attempts, hasher: hasher,
-			auditor: deps.audit, securityAudit: &securityAuditorFake{}, effects: deps.effects, mfaCredentials: &mfaApplicationStoreFake{}, mfa: deps.mfa,
+			auditor: deps.audit, securityAudit: &securityAuditorFake{}, publisher: deps.effects, mfaCredentials: &mfaApplicationStoreFake{}, mfa: deps.mfa,
 			diagnostics: newDiscardLogger(t), newCredential: deps.newCredential, now: time.Now}
 		return service.requireSessionAuthentication()
 	}
@@ -286,19 +288,23 @@ func loggedErrors(records []loggedRecord) []string {
 	return texts
 }
 
-type discardAuthenticationSecurityEffects struct{}
-
-func (discardAuthenticationSecurityEffects) AuthenticationCacheInvalidated(
-	context.Context,
-	model.UserID,
-	[]string,
-) {
+// revocationsIn returns a recording Publisher that also places each
+// SessionsRevoked call in the log a test shares with its other fakes, under
+// the name that test's ordering contract uses.
+func revocationsIn(events *[]string, name string) *realtimetest.Publisher {
+	return &realtimetest.Publisher{Observe: func(call realtimetest.Call) {
+		if call.Method == realtimetest.SessionsRevoked {
+			*events = append(*events, name)
+		}
+	}}
 }
 
-func (discardAuthenticationSecurityEffects) SessionsRevoked(
-	context.Context,
-	model.UserID,
-	[]model.SessionID,
-	[]string,
-) {
+// publishedMethods lists the method of every call a Publisher recorded, in
+// order, for a test whose flow generates the access-token hashes it revokes.
+func publishedMethods(publisher *realtimetest.Publisher) []realtimetest.Method {
+	methods := []realtimetest.Method{}
+	for _, call := range publisher.Calls() {
+		methods = append(methods, call.Method)
+	}
+	return methods
 }

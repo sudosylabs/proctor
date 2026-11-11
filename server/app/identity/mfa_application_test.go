@@ -24,6 +24,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
@@ -49,7 +50,7 @@ func TestMFAChallengeRejectsReplayedRecoveryCodeAndPreservesEffectOrdering(t *te
 		hashes: []string{"access-hash"},
 	}
 	audit := &securityAuditorFake{trace: &events}
-	effects := &mfaApplicationEffectsFake{events: &events}
+	effects := revocationsIn(&events, "effects")
 	service := newTestMFAApplicationService(t, persistence, audit, effects, now)
 	application := service
 	invocation := invocation.New(principal, model.RequestMetadata{RequestID: "request-a"})
@@ -65,9 +66,11 @@ func TestMFAChallengeRejectsReplayedRecoveryCodeAndPreservesEffectOrdering(t *te
 	// the audit outcome follows the write, and the write commits before its
 	// effect.
 	require.Equal(t, []string{"institution", "audit_begin", "credential_get", "consume", "upgrade", "audit_success", "effects", "institution", "audit_begin", "credential_get", "consume", "audit_fail"}, events)
-	require.Equal(t, principal.UserID, effects.userID)
-	require.Equal(t, []model.SessionID{principal.SessionID}, effects.sessionIDs)
-	require.Equal(t, []string{"access-hash"}, effects.hashes)
+	// Contract: one revocation, of the upgraded Session and its access token.
+	require.Equal(t, []realtimetest.Call{{
+		Method: realtimetest.SessionsRevoked, UserID: principal.UserID,
+		SessionIDs: []model.SessionID{principal.SessionID}, AccessTokenHashes: []string{"access-hash"},
+	}}, effects.Calls())
 	// Self-service MFA is audited against the Institution with the acting
 	// User as its subject.
 	require.Len(t, audit.events, 2)
@@ -92,7 +95,7 @@ func TestMFASetupUsesControlledClockAndSecretGenerator(t *testing.T) {
 	persistence := &mfaApplicationStoreFake{events: &events}
 	audit := &securityAuditorFake{trace: &events}
 	service := newTestMFAApplicationService(
-		t, persistence, audit, &mfaApplicationEffectsFake{}, now,
+		t, persistence, audit, &realtimetest.Publisher{}, now,
 	)
 	const secret = "JBSWY3DPEHPK3PXP"
 	service.mfa.newSecret = func() (string, error) { return secret, nil }
@@ -162,7 +165,7 @@ func TestMFARecoveryCodeLoginConsumptionIsSerialized(t *testing.T) {
 		},
 	}
 	service := newTestMFAApplicationService(
-		t, persistence, &securityAuditorFake{}, &mfaApplicationEffectsFake{}, now,
+		t, persistence, &securityAuditorFake{}, &realtimetest.Publisher{}, now,
 	)
 	const contenders = 8
 	start := make(chan struct{})
@@ -207,7 +210,7 @@ func TestMFASecurityTransitionsPrepareOneOrdinaryNoticeWithoutSecrets(t *testing
 		session: &model.Session{ID: principal.SessionID, UserID: principal.UserID},
 	}
 	mailer := &mfaSecurityNoticeMailPreparerFake{}
-	service := newTestMFAApplicationService(t, persistence, &securityAuditorFake{}, &mfaApplicationEffectsFake{}, now)
+	service := newTestMFAApplicationService(t, persistence, &securityAuditorFake{}, &realtimetest.Publisher{}, now)
 	service.mail = mailer
 	application := service
 	invocation := invocation.New(principal, model.RequestMetadata{RequestID: "mfa-notices"})
@@ -254,7 +257,7 @@ func TestMFAApplicationServiceRequiresFocusedDependencies(t *testing.T) {
 		{"MFA store", func(s *Service) { s.mfaCredentials = nil }},
 		{"session store", func(s *Service) { s.sessions = nil }},
 		{"institution store", func(s *Service) { s.institutions = nil }},
-		{"effects", func(s *Service) { s.effects = nil }},
+		{"effects", func(s *Service) { s.publisher = nil }},
 		{"mail", func(s *Service) { s.mail = nil }},
 		{"mechanics", func(s *Service) { s.mfa = nil }},
 		{"role holder MFA policy", func(s *Service) { s.accessPolicy = nil }},
@@ -264,7 +267,7 @@ func TestMFAApplicationServiceRequiresFocusedDependencies(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			service := newTestMFAApplicationService(t, &mfaApplicationStoreFake{}, &securityAuditorFake{}, &mfaApplicationEffectsFake{}, now)
+			service := newTestMFAApplicationService(t, &mfaApplicationStoreFake{}, &securityAuditorFake{}, &realtimetest.Publisher{}, now)
 			test.mutate(service)
 			require.Error(t, service.requireMFA(), "nil dependency was accepted")
 		})
@@ -275,7 +278,7 @@ func TestMFAApplicationServiceRequiresFocusedDependencies(t *testing.T) {
 	t.Run("audit", func(t *testing.T) {
 		t.Parallel()
 		persistence := &mfaApplicationStoreFake{}
-		service := newTestMFAApplicationService(t, persistence, &securityAuditorFake{}, &mfaApplicationEffectsFake{}, now)
+		service := newTestMFAApplicationService(t, persistence, &securityAuditorFake{}, &realtimetest.Publisher{}, now)
 		service.securityAudit = nil
 		require.NoError(t, service.requireMFA())
 		_, err := service.SetupMFA(context.Background(), invocation.New(mfaTestPrincipal(now, model.AuthenticationSingleFactor), model.RequestMetadata{}), SetupMFACommand{})
@@ -288,14 +291,14 @@ func newTestMFAApplicationService(
 	t *testing.T,
 	persistence *mfaApplicationStoreFake,
 	audit *securityAuditorFake,
-	effects *mfaApplicationEffectsFake,
+	effects *realtimetest.Publisher,
 	now time.Time,
 ) *Service {
 	t.Helper()
 	service := &Service{
 		users: mfaApplicationUserStoreFake{}, mfaCredentials: persistence, passwords: mfaPasswordCredentialsFake{},
 		sessions: mfaApplicationSessionStoreFake{persistence: persistence}, institutions: mfaApplicationInstitutionStoreFake{persistence: persistence},
-		securityAudit: audit, effects: effects, mail: &mfaSecurityNoticeMailPreparerFake{}, mfa: mustTestMFAMechanics(t),
+		securityAudit: audit, publisher: effects, mail: &mfaSecurityNoticeMailPreparerFake{}, mfa: mustTestMFAMechanics(t),
 		authorizer: mfaResetAuthorizationFake{}, capabilities: &accessPolicyCapabilitiesFake{},
 		attempts:       &AttemptAccounting{deps: AttemptAccountingDependencies{Cache: newAuthenticationCacheFake()}},
 		loginRateLimit: LoginRateLimitPolicy{MaximumAttempts: 100, MaximumSourceAttempts: 1000, Window: time.Minute},
@@ -485,25 +488,6 @@ func (s mfaApplicationInstitutionStoreFake) GetSingleton(context.Context) (*mode
 	return &model.Institution{ID: model.NewInstitutionID()}, nil
 }
 
-type mfaApplicationEffectsFake struct {
-	events     *[]string
-	userID     model.UserID
-	sessionIDs []model.SessionID
-	hashes     []string
-}
-
-func (*mfaApplicationEffectsFake) AuthenticationCacheInvalidated(context.Context, model.UserID, []string) {
-}
-
-func (e *mfaApplicationEffectsFake) SessionsRevoked(_ context.Context, userID model.UserID, sessionIDs []model.SessionID, hashes []string) {
-	if e.events != nil {
-		*e.events = append(*e.events, "effects")
-	}
-	e.userID = userID
-	e.sessionIDs = append([]model.SessionID(nil), sessionIDs...)
-	e.hashes = append([]string(nil), hashes...)
-}
-
 type mfaResetAuthorizationFake struct {
 	resourceAuthorizer
 	err error
@@ -560,7 +544,7 @@ func TestMFAStatusReportsPasswordChangeRecoveryTotalAndRecentWindow(t *testing.T
 	now := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
 	changedAt := time.Date(2026, 7, 1, 9, 30, 0, 0, time.UTC)
 	principal := mfaTestPrincipal(now, model.AuthenticationSingleFactor) // authenticated one minute ago
-	service := newTestMFAApplicationService(t, &mfaApplicationStoreFake{}, &securityAuditorFake{}, &mfaApplicationEffectsFake{}, now)
+	service := newTestMFAApplicationService(t, &mfaApplicationStoreFake{}, &securityAuditorFake{}, &realtimetest.Publisher{}, now)
 	service.passwords = mfaPasswordCredentialsFake{credential: &model.PasswordCredential{UserID: principal.UserID, PasswordChangedAt: changedAt}}
 
 	status, err := service.GetMFAStatus(context.Background(), invocation.New(principal, model.RequestMetadata{}))
@@ -604,7 +588,7 @@ func TestMFAStatusReportsMethodActivationAndIssuedRecoverySet(t *testing.T) {
 		// Issued is the live set, not the configured count of 5.
 		recoveryCodes: &store.MFARecoveryCodeSummary{Remaining: 3, Issued: 8, GeneratedAt: generatedAt},
 	}
-	service := newTestMFAApplicationService(t, persistence, &securityAuditorFake{}, &mfaApplicationEffectsFake{}, now)
+	service := newTestMFAApplicationService(t, persistence, &securityAuditorFake{}, &realtimetest.Publisher{}, now)
 
 	status, err := service.GetMFAStatus(context.Background(), invocation.New(principal, model.RequestMetadata{}))
 	require.NoError(t, err)

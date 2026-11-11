@@ -595,7 +595,7 @@ func (s *Service) CompleteDesktopReauthentication(
 		return nil, authenticationUnavailable(errors.New("desktop reauthentication returned no Session"))
 	}
 
-	s.effects.AuthenticationCacheInvalidated(ctx, principal.UserID, result.AccessTokenHashes)
+	s.publisher.AuthenticationCacheInvalidated(ctx, principal.UserID, result.AccessTokenHashes)
 	latest := result.Session.AuthenticatedAt
 	if result.Session.ReauthenticatedAt.Time.After(latest) {
 		latest = result.Session.ReauthenticatedAt.Time

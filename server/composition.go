@@ -136,7 +136,7 @@ func composeConsumers(
 	if err != nil {
 		return nil, fmt.Errorf("construct realtime cluster adapter: %w", err)
 	}
-	if err = application.Realtime.AttachRealtimeClusterFanout(clusterFanout); err != nil {
+	if err = application.Realtime.AttachClusterFanout(clusterFanout); err != nil {
 		return nil, fmt.Errorf("attach realtime cluster fan-out: %w", err)
 	}
 
@@ -165,7 +165,7 @@ func composeConsumers(
 		}
 	}
 
-	if err = application.Realtime.AttachRealtimeSink(webSocketHub); err != nil {
+	if err = application.Realtime.AttachSink(webSocketHub); err != nil {
 		return nil, fmt.Errorf("attach realtime sink: %w", err)
 	}
 

@@ -56,7 +56,7 @@ func activityCalls(t *testing.T, candidates ...model.UserID) []realtimetest.Call
 	for _, candidateID := range candidates {
 		event, err := realtime.NewCandidateExamActivityChangedEvent(candidateID)
 		require.NoError(t, err)
-		calls = append(calls, realtimetest.Call{Method: realtimetest.PublishRealtimeEvent, Event: event})
+		calls = append(calls, realtimetest.Call{Method: realtimetest.Publish, Event: event})
 	}
 	return calls
 }
@@ -114,5 +114,5 @@ func TestSittingInvalidationsRequireTheirCollaborators(t *testing.T) {
 	require.NoError(t, realtime.PublishSittingBoardChanged(context.Background(), publisher, examID, sittingID))
 	board, err := realtime.NewManagerSittingBoardChangedEvent(examID, sittingID)
 	require.NoError(t, err)
-	require.Equal(t, []realtimetest.Call{{Method: realtimetest.PublishRealtimeEvent, Event: board}}, publisher.Calls())
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.Publish, Event: board}}, publisher.Calls())
 }

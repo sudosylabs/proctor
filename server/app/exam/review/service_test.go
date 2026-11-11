@@ -116,10 +116,10 @@ func TestFinalizeAndReleaseUseDistinctAuthorizationAndEffects(t *testing.T) {
 	// managers before the candidate, then the candidate's Exam activity and
 	// the Sitting board are invalidated.
 	require.Equal(t, append(finalizedCalls,
-		realtimetest.Call{Method: realtimetest.PublishRealtimeEvent, Event: managerRelease},
-		realtimetest.Call{Method: realtimetest.PublishRealtimeEvent, Event: candidateRelease},
-		realtimetest.Call{Method: realtimetest.PublishRealtimeEvent, Event: activity},
-		realtimetest.Call{Method: realtimetest.PublishRealtimeEvent, Event: board},
+		realtimetest.Call{Method: realtimetest.Publish, Event: managerRelease},
+		realtimetest.Call{Method: realtimetest.Publish, Event: candidateRelease},
+		realtimetest.Call{Method: realtimetest.Publish, Event: activity},
+		realtimetest.Call{Method: realtimetest.Publish, Event: board},
 	), f.publisher.Calls())
 	wantRelease, prepareErr := prepareTerminalIdempotency(f.invocation, store.ExamIntegrityReviewReleaseOperation,
 		"test-key", f.submissionID, f.reviewID, 3)
@@ -353,7 +353,7 @@ func reviewFact(result Result) realtime.ExamIntegrityReviewEventFact {
 // invalidation.
 func reviewCalls(
 	t *testing.T,
-	newEvent func(realtime.ExamIntegrityReviewEventFact) (realtime.RealtimeEvent, error),
+	newEvent func(realtime.ExamIntegrityReviewEventFact) (realtime.Event, error),
 	result Result,
 ) []realtimetest.Call {
 	t.Helper()
@@ -362,8 +362,8 @@ func reviewCalls(
 	board, err := realtime.NewManagerSittingBoardChangedEvent(result.Authorization.ExamID, result.Authorization.SittingID)
 	require.NoError(t, err)
 	return []realtimetest.Call{
-		{Method: realtimetest.PublishRealtimeEvent, Event: event},
-		{Method: realtimetest.PublishRealtimeEvent, Event: board},
+		{Method: realtimetest.Publish, Event: event},
+		{Method: realtimetest.Publish, Event: board},
 	}
 }
 

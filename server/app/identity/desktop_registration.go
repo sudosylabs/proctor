@@ -25,7 +25,7 @@ type RevokeDesktopRegistrationCommand struct {
 // requireDesktopRegistration refuses a Service whose Desktop Registration
 // collaborators are incomplete. New calls it once, with the account services.
 func (s *Service) requireDesktopRegistration() error {
-	if s.desktopRegistrations == nil || s.auditor == nil || s.effects == nil || s.recentAuthenticationTTL <= 0 || s.now == nil {
+	if s.desktopRegistrations == nil || s.auditor == nil || s.publisher == nil || s.recentAuthenticationTTL <= 0 || s.now == nil {
 		return errors.New("Desktop Registration dependencies are invalid")
 	}
 	return nil
@@ -92,7 +92,7 @@ func (s *Service) RevokeDesktopRegistration(
 	}
 
 	if !result.AlreadyRevoked && len(result.Sessions) > 0 {
-		s.effects.SessionsRevoked(
+		s.publisher.SessionsRevoked(
 			ctx, principal.UserID, sessionIDs(result.Sessions), result.TokenHashes,
 		)
 	}

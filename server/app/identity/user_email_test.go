@@ -20,6 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -106,11 +107,11 @@ func TestEmailChangeUndoRestoresThroughTheStoreAndRevokesAfterCommit(t *testing.
 	revoked := &model.Session{ID: model.NewSessionID(), UserID: userID}
 	tokens := &emailChangeUndoStoreFake{result: &store.EmailChangeUndoResult{User: &model.User{ID: userID},
 		RevokedSessions: []*model.Session{revoked}, RevokedAccessHashes: []string{"access-hash"}}}
-	var effects []model.SessionID
+	effects := &realtimetest.Publisher{}
 	institution := &model.Institution{ID: model.NewInstitutionID()}
 	application := newAccountTokenTestApp(t, accountTokenTestDependencies{users: &accountTokenUserStoreFake{}, passwords: &accountTokenPasswordStoreFake{},
 		tokens: tokens, institution: institution, mailer: &accountTokenMailerFake{enabled: true},
-		effects: &accountTokenEffectsFake{called: func(_ model.UserID, ids []model.SessionID, _ []string) { effects = ids }}})
+		effects: effects})
 
 	err := application.CompleteEmailChangeUndo(context.Background(), invocation.Invocation{}, CompleteEmailChangeUndoCommand{Token: accountTokenTestRawToken, Source: "192.0.2.10"})
 	require.NoError(t, err)
@@ -118,7 +119,11 @@ func TestEmailChangeUndoRestoresThroughTheStoreAndRevokesAfterCommit(t *testing.
 	require.Equal(t, model.SessionRevocationEmailChangeUndone, tokens.input.RevocationReason)
 	require.Equal(t, string(model.ActionAuthenticationEmailChangeUndo), tokens.input.AuditEvent.Action)
 	require.Equal(t, institution.ID.String(), tokens.input.AuditEvent.ScopeID)
-	require.Equal(t, []model.SessionID{revoked.ID}, effects)
+	// Contract: one revocation, of the User's revoked Session and its access token.
+	require.Equal(t, []realtimetest.Call{{
+		Method: realtimetest.SessionsRevoked, UserID: userID,
+		SessionIDs: []model.SessionID{revoked.ID}, AccessTokenHashes: []string{"access-hash"},
+	}}, effects.Calls())
 }
 
 func TestEmailChangeUndoConcealsUnknownTokensAndNamesAnAddressConflict(t *testing.T) {

@@ -206,10 +206,10 @@ func TestApplyPublishesOnlyAfterCommitAndReportsTransientFailure(t *testing.T) {
 	// and candidate activity invalidations follow, every publication is
 	// attempted despite the failures, and the joined failure is reported once.
 	require.Equal(t, []realtimetest.Call{
-		{Method: realtimetest.PublishRealtimeEvent, Event: managerEvent},
-		{Method: realtimetest.PublishRealtimeEvent, Event: candidateEvent},
-		{Method: realtimetest.PublishRealtimeEvent, Event: boardEvent},
-		{Method: realtimetest.PublishRealtimeEvent, Event: activityEvent},
+		{Method: realtimetest.Publish, Event: managerEvent},
+		{Method: realtimetest.Publish, Event: candidateEvent},
+		{Method: realtimetest.Publish, Event: boardEvent},
+		{Method: realtimetest.Publish, Event: activityEvent},
 		{Method: realtimetest.Report, Operation: "exam_sitting_content_corrected", Err: errors.Join(unavailable, unavailable, unavailable, errors.Join(unavailable))},
 	}, f.publisher.Calls())
 }
@@ -254,7 +254,7 @@ func newCorrectionFixture(t *testing.T) *correctionFixture {
 	f.authorizer = &correctionAuthorizerFake{f: f}
 	f.auditor = &correctionAuditFake{f: f}
 	f.publisher = &realtimetest.Publisher{Observe: func(call realtimetest.Call) {
-		if call.Method == realtimetest.PublishRealtimeEvent {
+		if call.Method == realtimetest.Publish {
 			f.order = append(f.order, "effect")
 		}
 	}}

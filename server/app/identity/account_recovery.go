@@ -107,7 +107,7 @@ func (s *Service) requireAccountTokens() error {
 		{s.attempts == nil, "authentication attempt accounting"},
 		{s.hasher == nil, "password hasher"},
 		{s.nodeID == "", "account recovery audit"},
-		{s.effects == nil, "account recovery effects"},
+		{s.publisher == nil, "account recovery effects"},
 		{s.recoveryDiagnostics == nil, "account recovery diagnostics"},
 		{s.newCredential == nil, "account token generator"},
 		{s.now == nil, "account token clock"},
@@ -490,7 +490,7 @@ func (s *Service) CompletePasswordReset(
 		return nil, accountRecoveryStoreFailure(err)
 	}
 
-	s.effects.SessionsRevoked(
+	s.publisher.SessionsRevoked(
 		ctx,
 		result.User.ID,
 		sessionIDs(result.RevokedSessions),

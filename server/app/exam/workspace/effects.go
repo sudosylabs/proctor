@@ -31,5 +31,5 @@ func (s *Service) publishChanged(
 		return err
 	}
 
-	return s.deps.Publisher.PublishRealtimeEvent(ctx, event)
+	return s.deps.Publisher.Publish(ctx, event)
 }

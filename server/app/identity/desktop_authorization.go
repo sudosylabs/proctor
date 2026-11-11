@@ -907,7 +907,7 @@ func (s *Service) withdrawUndisclosedDesktopSession(
 		return apperror.New("authentication.desktop_authorization.unavailable").Wrap(errors.Join(nonceErr, revokeErr, auditErr))
 	}
 
-	s.effects.SessionsRevoked(
+	s.publisher.SessionsRevoked(
 		revokeCtx,
 		result.Session.UserID,
 		[]model.SessionID{result.Session.ID},

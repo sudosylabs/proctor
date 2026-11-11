@@ -495,7 +495,7 @@ func (h *Hub) unregister(connection *connectionRuntime) {
 }
 
 // PublishLocal implements realtime.Sink using transport-neutral events.
-func (h *Hub) PublishLocal(_ context.Context, event realtime.RealtimeEvent) {
+func (h *Hub) PublishLocal(_ context.Context, event realtime.Event) {
 	h.publishWire(eventFromRealtime(event))
 }
 
@@ -595,7 +595,7 @@ func (h *Hub) CloseAll(reason realtime.ConnectionCloseReason) {
 	h.closeMatching(code, text, func(*connectionRuntime) bool { return true })
 }
 
-func eventFromRealtime(event realtime.RealtimeEvent) *Event {
+func eventFromRealtime(event realtime.Event) *Event {
 	return &Event{
 		ID:       event.ID,
 		Event:    event.Name,

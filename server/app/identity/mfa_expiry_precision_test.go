@@ -16,6 +16,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -39,7 +40,7 @@ func TestMFAActivationUsesNativeExclusiveDeadline(t *testing.T) {
 			persistence := &mfaApplicationStoreFake{
 				session: &model.Session{ID: principal.SessionID, UserID: principal.UserID},
 			}
-			service := newTestMFAApplicationService(t, persistence, &securityAuditorFake{}, &mfaApplicationEffectsFake{}, now)
+			service := newTestMFAApplicationService(t, persistence, &securityAuditorFake{}, &realtimetest.Publisher{}, now)
 			mailer := &mfaSecurityNoticeMailPreparerFake{}
 			service.mail = mailer
 			const secret = "JBSWY3DPEHPK3PXP" // #nosec G101 -- Public synthetic TOTP seed for expiry-boundary tests.

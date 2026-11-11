@@ -16,6 +16,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -25,23 +26,25 @@ type authenticationMethodPasswordStoreFake struct {
 	enroll *store.PasswordCredentialEnrollment
 	remove *store.PasswordCredentialRemoval
 	change *store.PasswordCredentialChange
+	// revoked is the Session the last Change reported as revoked.
+	revoked *model.Session
 }
 
 func (s *authenticationMethodPasswordStoreFake) Change(_ context.Context, input *store.PasswordCredentialChange) (*store.AuthenticationMethodMutationResult, error) {
 	s.change = input
-	revoked := &model.Session{ID: model.NewSessionID(), UserID: input.UserID}
-	return &store.AuthenticationMethodMutationResult{RevokedSessions: []*model.Session{revoked}, RevokedTokenHashes: []string{"revoked-hash"}}, nil
+	s.revoked = &model.Session{ID: model.NewSessionID(), UserID: input.UserID}
+	return &store.AuthenticationMethodMutationResult{RevokedSessions: []*model.Session{s.revoked}, RevokedTokenHashes: []string{"revoked-hash"}}, nil
 }
 
 func TestPasswordChangeKeepsTheCallingSessionAndPublishesOtherRevocations(t *testing.T) {
 	now := time.UnixMilli(30_000)
 	passwords := &authenticationMethodPasswordStoreFake{}
 	audit := &accessPolicyAuditFake{beginID: model.NewAuditEventID().String()}
-	effects := &authenticationMethodEffectsFake{}
+	effects := &realtimetest.Publisher{}
 	hasher, err := NewPasswordHasher(PasswordHasherDependencies{Settings: testPasswordPolicy(), Recorder: nil})
 	require.NoError(t, err)
 	user := &model.User{ID: model.NewUserID(), Username: "marie.curie", Email: "marie@example.edu", DisplayName: "Marie Curie"}
-	service := &Service{users: &accountTokenUserStoreFake{byID: user}, mail: &accountTokenMailerFake{enabled: true}, passwords: passwords, externalIdentities: &authenticationMethodIdentityStoreFake{}, externalProviders: externalProviderSourceSet{}, capabilities: &accessPolicyCapabilitiesFake{}, hasher: hasher, auditor: audit, effects: effects, recentAuthenticationTTL: 15 * time.Minute, now: func() time.Time { return now }}
+	service := &Service{users: &accountTokenUserStoreFake{byID: user}, mail: &accountTokenMailerFake{enabled: true}, passwords: passwords, externalIdentities: &authenticationMethodIdentityStoreFake{}, externalProviders: externalProviderSourceSet{}, capabilities: &accessPolicyCapabilitiesFake{}, hasher: hasher, auditor: audit, publisher: effects, recentAuthenticationTTL: 15 * time.Minute, now: func() time.Time { return now }}
 	require.NoError(t, service.requireAuthenticationMethods())
 	principal := userSettingsSessionPrincipal(now)
 	principal.UserID = user.ID
@@ -59,8 +62,12 @@ func TestPasswordChangeKeepsTheCallingSessionAndPublishesOtherRevocations(t *tes
 	require.Equal(t, model.MailTemplateIdentityPasswordChanged, passwords.change.Occurrence.TemplateKey)
 	require.Equal(t, model.AuditEventID(audit.beginID), passwords.change.AuditEventID)
 	require.Equal(t, "change_password", audit.attempt.Operation)
-	require.Equal(t, user.ID, effects.userID)
-	require.Equal(t, []string{"revoked-hash"}, effects.hashes)
+	// Contract: one revocation, of the Session the change revoked and its
+	// access token.
+	require.Equal(t, []realtimetest.Call{{
+		Method: realtimetest.SessionsRevoked, UserID: user.ID,
+		SessionIDs: []model.SessionID{passwords.revoked.ID}, AccessTokenHashes: []string{"revoked-hash"},
+	}}, effects.Calls())
 }
 
 func TestPasswordChangeAppliesThePolicyBeforeWork(t *testing.T) {
@@ -70,7 +77,7 @@ func TestPasswordChangeAppliesThePolicyBeforeWork(t *testing.T) {
 	hasher, err := NewPasswordHasher(PasswordHasherDependencies{Settings: testPasswordPolicy(), Recorder: nil})
 	require.NoError(t, err)
 	user := &model.User{ID: model.NewUserID(), Username: "marie.curie", Email: "marie@example.edu", DisplayName: "Marie Curie"}
-	service := &Service{users: &accountTokenUserStoreFake{byID: user}, mail: &accountTokenMailerFake{enabled: true}, passwords: passwords, externalIdentities: &authenticationMethodIdentityStoreFake{}, externalProviders: externalProviderSourceSet{}, capabilities: &accessPolicyCapabilitiesFake{}, hasher: hasher, auditor: audit, effects: &authenticationMethodEffectsFake{}, recentAuthenticationTTL: 15 * time.Minute, now: func() time.Time { return now }}
+	service := &Service{users: &accountTokenUserStoreFake{byID: user}, mail: &accountTokenMailerFake{enabled: true}, passwords: passwords, externalIdentities: &authenticationMethodIdentityStoreFake{}, externalProviders: externalProviderSourceSet{}, capabilities: &accessPolicyCapabilitiesFake{}, hasher: hasher, auditor: audit, publisher: &realtimetest.Publisher{}, recentAuthenticationTTL: 15 * time.Minute, now: func() time.Time { return now }}
 	require.NoError(t, service.requireAuthenticationMethods())
 	principal := userSettingsSessionPrincipal(now)
 	principal.UserID = user.ID
@@ -111,25 +118,13 @@ func (s *authenticationMethodIdentityStoreFake) Unlink(_ context.Context, input 
 	return &store.AuthenticationMethodMutationResult{}, nil
 }
 
-type authenticationMethodEffectsFake struct {
-	userID     model.UserID
-	sessionIDs []model.SessionID
-	hashes     []string
-}
-
-func (e *authenticationMethodEffectsFake) AuthenticationCacheInvalidated(context.Context, model.UserID, []string) {
-}
-func (e *authenticationMethodEffectsFake) SessionsRevoked(_ context.Context, userID model.UserID, sessionIDs []model.SessionID, hashes []string) {
-	e.userID, e.sessionIDs, e.hashes = userID, sessionIDs, hashes
-}
-
 func TestAuthenticationMethodEnrollmentRequiresStrongRecentAndPreparesHashOnly(t *testing.T) {
 	now := time.UnixMilli(10_000)
 	passwords := &authenticationMethodPasswordStoreFake{}
 	audit := &accessPolicyAuditFake{beginID: model.NewAuditEventID().String()}
 	hasher, err := NewPasswordHasher(PasswordHasherDependencies{Settings: testPasswordPolicy(), Recorder: nil})
 	require.NoError(t, err)
-	service := &Service{users: &accountTokenUserStoreFake{byID: &model.User{ID: model.NewUserID(), Username: "student", Email: "student@example.edu"}}, mail: &accountTokenMailerFake{enabled: true}, passwords: passwords, externalIdentities: &authenticationMethodIdentityStoreFake{}, externalProviders: externalProviderSourceSet{}, capabilities: &accessPolicyCapabilitiesFake{}, hasher: hasher, auditor: audit, effects: &authenticationMethodEffectsFake{}, recentAuthenticationTTL: 15 * time.Minute, now: func() time.Time { return now }}
+	service := &Service{users: &accountTokenUserStoreFake{byID: &model.User{ID: model.NewUserID(), Username: "student", Email: "student@example.edu"}}, mail: &accountTokenMailerFake{enabled: true}, passwords: passwords, externalIdentities: &authenticationMethodIdentityStoreFake{}, externalProviders: externalProviderSourceSet{}, capabilities: &accessPolicyCapabilitiesFake{}, hasher: hasher, auditor: audit, publisher: &realtimetest.Publisher{}, recentAuthenticationTTL: 15 * time.Minute, now: func() time.Time { return now }}
 	require.NoError(t, service.requireAuthenticationMethods())
 	principal := userSettingsSessionPrincipal(now)
 	principal.AuthenticationStrength = model.AuthenticationMultiFactor
@@ -156,7 +151,7 @@ func TestPasswordEnrollmentRejectsWorkBeforeAuditAndPersistence(t *testing.T) {
 	audit := &accessPolicyAuditFake{beginID: model.NewAuditEventID().String()}
 	hasher, err := NewPasswordHasher(PasswordHasherDependencies{Settings: testPasswordPolicy(), Recorder: nil})
 	require.NoError(t, err)
-	service := &Service{users: &accountTokenUserStoreFake{byID: &model.User{ID: model.NewUserID(), Username: "student", Email: "student@example.edu"}}, mail: &accountTokenMailerFake{enabled: true}, passwords: passwords, externalIdentities: &authenticationMethodIdentityStoreFake{}, externalProviders: externalProviderSourceSet{}, capabilities: &accessPolicyCapabilitiesFake{}, hasher: hasher, auditor: audit, effects: &authenticationMethodEffectsFake{}, recentAuthenticationTTL: 15 * time.Minute, now: func() time.Time { return now }}
+	service := &Service{users: &accountTokenUserStoreFake{byID: &model.User{ID: model.NewUserID(), Username: "student", Email: "student@example.edu"}}, mail: &accountTokenMailerFake{enabled: true}, passwords: passwords, externalIdentities: &authenticationMethodIdentityStoreFake{}, externalProviders: externalProviderSourceSet{}, capabilities: &accessPolicyCapabilitiesFake{}, hasher: hasher, auditor: audit, publisher: &realtimetest.Publisher{}, recentAuthenticationTTL: 15 * time.Minute, now: func() time.Time { return now }}
 	require.NoError(t, service.requireAuthenticationMethods())
 	principal := userSettingsSessionPrincipal(now)
 	principal.AuthenticationStrength = model.AuthenticationMultiFactor
@@ -180,7 +175,7 @@ func TestAuthenticationMethodRemovalPassesCapabilitiesAndExactIdentity(t *testin
 	audit := &accessPolicyAuditFake{beginID: model.NewAuditEventID().String()}
 	hasher, _ := NewPasswordHasher(PasswordHasherDependencies{Settings: testPasswordPolicy(), Recorder: nil})
 	capabilities := &accessPolicyCapabilitiesFake{snapshot: AccessPolicyCapabilitySnapshot{Providers: []AccessPolicyProviderCapability{{Descriptor: model.ExternalAuthenticationProvider{ID: "campus"}}}}}
-	service := &Service{users: &accountTokenUserStoreFake{byID: &model.User{ID: model.NewUserID(), Username: "student", Email: "student@example.edu"}}, mail: &accountTokenMailerFake{enabled: true}, passwords: &authenticationMethodPasswordStoreFake{}, externalIdentities: identities, externalProviders: externalProviderSourceSet{}, capabilities: capabilities, hasher: hasher, auditor: audit, effects: &authenticationMethodEffectsFake{}, recentAuthenticationTTL: 15 * time.Minute, now: func() time.Time { return now }}
+	service := &Service{users: &accountTokenUserStoreFake{byID: &model.User{ID: model.NewUserID(), Username: "student", Email: "student@example.edu"}}, mail: &accountTokenMailerFake{enabled: true}, passwords: &authenticationMethodPasswordStoreFake{}, externalIdentities: identities, externalProviders: externalProviderSourceSet{}, capabilities: capabilities, hasher: hasher, auditor: audit, publisher: &realtimetest.Publisher{}, recentAuthenticationTTL: 15 * time.Minute, now: func() time.Time { return now }}
 	require.NoError(t, service.requireAuthenticationMethods())
 	principal := userSettingsSessionPrincipal(now)
 	principal.AuthenticationStrength = model.AuthenticationMultiFactor

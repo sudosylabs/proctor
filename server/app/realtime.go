@@ -12,7 +12,6 @@ import (
 	"errors"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
@@ -48,23 +47,23 @@ func newRealtimeServiceWithDelivery(deps realtimeServiceDependencies) (*Realtime
 	return &RealtimeService{deps: deps}, nil
 }
 
-// AttachRealtimeClusterFanout wires the composition-owned cluster adapter and
+// AttachClusterFanout wires the composition-owned cluster adapter and
 // registers peer handlers. It must be called once before the node becomes
 // ready. Peer handlers apply only local effects so Broadcast never loops.
-func (s *RealtimeService) AttachRealtimeClusterFanout(fanout realtime.ClusterFanout) error {
+func (s *RealtimeService) AttachClusterFanout(fanout realtime.ClusterFanout) error {
 	return s.deps.Delivery.SetClusterFanout(fanout)
 }
 
-// AttachRealtimeSink wires the composition-owned local WebSocket sink. It must
+// AttachSink wires the composition-owned local WebSocket sink. It must
 // be called once before the node becomes ready.
-func (s *RealtimeService) AttachRealtimeSink(sink realtime.Sink) error {
+func (s *RealtimeService) AttachSink(sink realtime.Sink) error {
 	return s.deps.Delivery.SetSink(sink)
 }
 
-// PublishRealtimeEvent delivers a transport-neutral event locally first, then
+// Publish delivers a transport-neutral event locally first, then
 // fans it out to peers best-effort. Callers must invoke this only after
 // durable commit.
-func (s *RealtimeService) PublishRealtimeEvent(ctx context.Context, event realtime.RealtimeEvent) error {
+func (s *RealtimeService) Publish(ctx context.Context, event realtime.Event) error {
 	err := s.deps.Delivery.Publish(ctx, event)
 	if err == nil {
 		return nil
@@ -143,10 +142,10 @@ func (s *RealtimeService) SessionsRevoked(
 		managerEvent, managerErr := realtime.NewManagerSittingBoardChangedEvent(target.ExamID, target.SittingID)
 		publishErr := errors.Join(candidateErr, managerErr)
 		if candidateErr == nil {
-			publishErr = errors.Join(publishErr, s.PublishRealtimeEvent(ctx, candidateEvent))
+			publishErr = errors.Join(publishErr, s.Publish(ctx, candidateEvent))
 		}
 		if managerErr == nil {
-			publishErr = errors.Join(publishErr, s.PublishRealtimeEvent(ctx, managerEvent))
+			publishErr = errors.Join(publishErr, s.Publish(ctx, managerEvent))
 		}
 
 		publishErr = errors.Join(publishErr, s.InvalidateCurrentUserContext(ctx, target.CandidateUserID))
@@ -179,7 +178,7 @@ func (s *RealtimeService) InvalidateAuthorization(ctx context.Context, userID mo
 		candidateEvent, candidateErr := realtime.NewCandidateExamActivityChangedEvent(parsed)
 		err = errors.Join(candidateErr, s.InvalidateCurrentUserContext(ctx, parsed))
 		if candidateErr == nil {
-			err = errors.Join(err, s.PublishRealtimeEvent(ctx, candidateEvent))
+			err = errors.Join(err, s.Publish(ctx, candidateEvent))
 		}
 	}
 	if err != nil {
@@ -194,13 +193,10 @@ func (s *RealtimeService) InvalidateCurrentUserContext(ctx context.Context, user
 	if err != nil {
 		return err
 	}
-	return s.PublishRealtimeEvent(ctx, event)
+	return s.Publish(ctx, event)
 }
 
-var (
-	_ realtime.Publisher       = (*RealtimeService)(nil)
-	_ identity.SecurityEffects = (*RealtimeService)(nil)
-)
+var _ realtime.Publisher = (*RealtimeService)(nil)
 
 func invalidRealtimeRequest(field string) error {
 	return apperror.New("websocket.request.invalid").WithField("field", field)

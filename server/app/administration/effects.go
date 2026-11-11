@@ -36,5 +36,5 @@ func (s *Service) publishAccessPolicyChanged(
 	if err != nil {
 		return err
 	}
-	return s.publisher.PublishRealtimeEvent(ctx, event)
+	return s.publisher.Publish(ctx, event)
 }

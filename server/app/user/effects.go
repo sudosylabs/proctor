@@ -32,7 +32,7 @@ func (s *Service) publishSettingsChanged(
 	if err != nil {
 		return err
 	}
-	return s.publisher.PublishRealtimeEvent(ctx, event)
+	return s.publisher.Publish(ctx, event)
 }
 
 // publishProfilePictureChanged tells the User's live sessions which File
@@ -56,7 +56,7 @@ func (s *Service) publishProfilePictureChanged(
 		return err
 	}
 
-	return s.publisher.PublishRealtimeEvent(ctx, realtime.RealtimeEvent{
+	return s.publisher.Publish(ctx, realtime.Event{
 		Name:   "user_profile_picture_changed",
 		UserID: user.ID,
 		Data:   data,

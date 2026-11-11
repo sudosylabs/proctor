@@ -26,7 +26,7 @@ func TestRealtimeContractsHaveOneProductionOwner(t *testing.T) {
 	t.Parallel()
 
 	parentContracts := map[string]bool{
-		"RealtimeEvent":         true,
+		"Event":                 true,
 		"ConnectionCloseReason": true,
 		"RealtimeSink":          true,
 		"RealtimeClusterFanout": true,

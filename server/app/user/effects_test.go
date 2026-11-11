@@ -31,7 +31,7 @@ func TestProfilePictureRealtimeEffectContainsOnlySafeChangeMetadata(t *testing.T
 	require.NoError(t, service.publishProfilePictureChanged(context.Background(), changed, active))
 	calls := publisher.Calls()
 	require.Len(t, calls, 1)
-	require.Equal(t, realtimetest.PublishRealtimeEvent, calls[0].Method)
+	require.Equal(t, realtimetest.Publish, calls[0].Method)
 	require.Equal(t, "user_profile_picture_changed", calls[0].Event.Name)
 	require.Equal(t, changed.ID, calls[0].Event.UserID)
 	require.Empty(t, calls[0].Event.Action)

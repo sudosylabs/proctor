@@ -59,7 +59,7 @@ func TestArchiveOwnsAuthorizationAuditPersistenceAndSafeEffect(t *testing.T) {
 	require.NoError(t, eventErr)
 	// Contract: the archive publishes the archived fact at the committed
 	// revision; this Exam has no Sitting, so nothing else is invalidated.
-	require.Equal(t, []realtimetest.Call{{Method: realtimetest.PublishRealtimeEvent, Event: archived}}, fixture.publisher.Calls())
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.Publish, Event: archived}}, fixture.publisher.Calls())
 	require.Equal(t, model.ActionExamManage, fixture.authorizer.action, "authorization/audit")
 	require.Len(t, fixture.auditor.value, 3, "authorization/audit")
 	require.Equal(t, fixture.examID.String(), fixture.auditor.value["exam_id"], "authorization/audit")

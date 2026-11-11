@@ -49,7 +49,7 @@ func (s *Service) publishReviewChanged(ctx context.Context, result Result) error
 		return err
 	}
 
-	return errors.Join(s.deps.Publisher.PublishRealtimeEvent(ctx, event), s.publishSittingBoardChanged(ctx, result))
+	return errors.Join(s.deps.Publisher.Publish(ctx, event), s.publishSittingBoardChanged(ctx, result))
 }
 
 // publishReviewFinalized tells managers that a Review was finalized, then
@@ -60,7 +60,7 @@ func (s *Service) publishReviewFinalized(ctx context.Context, result Result) err
 		return err
 	}
 
-	return errors.Join(s.deps.Publisher.PublishRealtimeEvent(ctx, event), s.publishSittingBoardChanged(ctx, result))
+	return errors.Join(s.deps.Publisher.Publish(ctx, event), s.publishSittingBoardChanged(ctx, result))
 }
 
 // publishResultReleased announces a released student result, in this order:
@@ -86,9 +86,9 @@ func (s *Service) publishResultReleased(ctx context.Context, result Result) erro
 	}
 
 	return errors.Join(
-		s.deps.Publisher.PublishRealtimeEvent(ctx, manager),
-		s.deps.Publisher.PublishRealtimeEvent(ctx, candidate),
-		s.deps.Publisher.PublishRealtimeEvent(ctx, activity),
+		s.deps.Publisher.Publish(ctx, manager),
+		s.deps.Publisher.Publish(ctx, candidate),
+		s.deps.Publisher.Publish(ctx, activity),
 		s.publishSittingBoardChanged(ctx, result),
 	)
 }

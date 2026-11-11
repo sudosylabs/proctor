@@ -35,7 +35,7 @@ const (
 // Sink delivers already-authorized events and connection closes to the local
 // socket boundary. It deliberately contains no WebSocket wire types.
 type Sink interface {
-	PublishLocal(context.Context, RealtimeEvent)
+	PublishLocal(context.Context, Event)
 	UnbindExamAttemptConnection(model.AttemptConnectionID)
 	CloseSession(string, ConnectionCloseReason)
 	CloseUser(string, ConnectionCloseReason)
@@ -218,7 +218,7 @@ func decodeStrictPayload(data []byte, target any) error {
 
 // Publish delivers a clone locally first and then fans out the stable peer
 // payload. Callers must invoke it only after durable commit.
-func (s *Service) Publish(ctx context.Context, event RealtimeEvent) error {
+func (s *Service) Publish(ctx context.Context, event Event) error {
 	candidate := event.Clone()
 	if candidate.ID == "" {
 		candidate.ID = model.NewID()
@@ -241,7 +241,7 @@ func (s *Service) Publish(ctx context.Context, event RealtimeEvent) error {
 	return nil
 }
 
-func (s *Service) publishLocal(ctx context.Context, event RealtimeEvent) {
+func (s *Service) publishLocal(ctx context.Context, event Event) {
 	s.mu.RLock()
 	sink := s.sink
 	s.mu.RUnlock()
@@ -281,7 +281,7 @@ type realtimePublication struct {
 }
 
 // realtimeEventMessage is the explicit cluster-wire projection of a
-// transport-neutral RealtimeEvent. It preserves the established snake_case
+// transport-neutral Event. It preserves the established snake_case
 // payload independently of domain-model field names.
 type realtimeEventMessage struct {
 	ID       string                  `json:"id"`
@@ -297,7 +297,7 @@ type realtimeResourceMessage struct {
 	ID   string             `json:"id"`
 }
 
-func realtimeEventMessageFromModel(event RealtimeEvent) realtimeEventMessage {
+func realtimeEventMessageFromModel(event Event) realtimeEventMessage {
 	return realtimeEventMessage{
 		ID:       event.ID,
 		Name:     event.Name,
@@ -308,8 +308,8 @@ func realtimeEventMessageFromModel(event RealtimeEvent) realtimeEventMessage {
 	}
 }
 
-func (m realtimeEventMessage) toModel() RealtimeEvent {
-	return RealtimeEvent{
+func (m realtimeEventMessage) toModel() Event {
+	return Event{
 		ID:       m.ID,
 		Name:     m.Name,
 		UserID:   model.UserID(m.UserID),

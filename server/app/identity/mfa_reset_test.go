@@ -17,6 +17,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -24,7 +25,9 @@ import (
 type assistedResetStoreFake struct {
 	*mfaApplicationStoreFake
 	input *store.MFAAssistedReset
-	err   error
+	// revoked is the Session the last Reset reported as revoked.
+	revoked *model.Session
+	err     error
 }
 
 func (s *assistedResetStoreFake) Reset(_ context.Context, input *store.MFAAssistedReset) (*store.MFAResetResult, error) {
@@ -32,7 +35,8 @@ func (s *assistedResetStoreFake) Reset(_ context.Context, input *store.MFAAssist
 	if s.err != nil {
 		return nil, s.err
 	}
-	return &store.MFAResetResult{Recovery: &model.UserMFARecovery{UserID: input.UserID, Generation: 1, ReenrollmentRequired: true}, Sessions: []*model.Session{{ID: model.NewSessionID(), UserID: input.UserID}}, AccessTokenHashes: []string{"retired-hash"}}, nil
+	s.revoked = &model.Session{ID: model.NewSessionID(), UserID: input.UserID}
+	return &store.MFAResetResult{Recovery: &model.UserMFARecovery{UserID: input.UserID, Generation: 1, ReenrollmentRequired: true}, Sessions: []*model.Session{s.revoked}, AccessTokenHashes: []string{"retired-hash"}}, nil
 }
 
 func TestMFAAssistedResetRequiresIndependentVerifiedAdministrator(t *testing.T) {
@@ -42,7 +46,7 @@ func TestMFAAssistedResetRequiresIndependentVerifiedAdministrator(t *testing.T) 
 			principal := mfaTestPrincipal(now, model.AuthenticationMultiFactor)
 			base := &mfaApplicationStoreFake{}
 			persistence := &assistedResetStoreFake{mfaApplicationStoreFake: base}
-			effects := &mfaApplicationEffectsFake{}
+			effects := &realtimetest.Publisher{}
 			audit := &securityAuditorFake{}
 			service := newTestMFAApplicationService(t, base, audit, effects, now)
 			service.mfaCredentials = persistence
@@ -75,7 +79,7 @@ func TestMFAAssistedResetRequiresIndependentVerifiedAdministrator(t *testing.T) 
 			err := service.ResetUserMFA(context.Background(), invocation.New(principal, model.RequestMetadata{}), command)
 			if name != "success" {
 				require.Error(t, err, "failed reset returned success or emitted post-commit effects")
-				require.Empty(t, effects.userID, "failed reset returned success or emitted post-commit effects")
+				require.Empty(t, effects.Calls(), "failed reset returned success or emitted post-commit effects")
 				if name != "commit failure" {
 					require.Nil(t, persistence.input, "invalid reset reached durable mutation")
 				}
@@ -87,7 +91,12 @@ func TestMFAAssistedResetRequiresIndependentVerifiedAdministrator(t *testing.T) 
 			require.Equal(t, command.UserID, persistence.input.UserID, "assisted reset lost its exact actor, target, attestation, notice or post-commit effects")
 			require.True(t, persistence.input.IdentityVerified, "assisted reset lost its exact actor, target, attestation, notice or post-commit effects")
 			require.Equal(t, model.MailTemplateIdentityMFAReset, persistence.input.Notice.Occurrence.TemplateKey, "assisted reset lost its exact actor, target, attestation, notice or post-commit effects")
-			require.Equal(t, command.UserID, effects.userID, "assisted reset lost its exact actor, target, attestation, notice or post-commit effects")
+			// Contract: one revocation, for the User whose MFA was reset, of the
+			// Session the reset retired and its access token.
+			require.Equal(t, []realtimetest.Call{{
+				Method: realtimetest.SessionsRevoked, UserID: command.UserID,
+				SessionIDs: []model.SessionID{persistence.revoked.ID}, AccessTokenHashes: []string{"retired-hash"},
+			}}, effects.Calls(), "assisted reset lost its exact actor, target, attestation, notice or post-commit effects")
 			// The reset is audited against the target User, which is its own
 			// subject, with the attestation as its prior state.
 			require.Len(t, audit.events, 1)
@@ -107,7 +116,7 @@ func TestMFARestrictedContextSurvivesDisabledService(t *testing.T) {
 	principal.AuthenticationGeneration = 2
 	principal.MFARecoveryRequired = true
 	base := &mfaApplicationStoreFake{}
-	service := newTestMFAApplicationService(t, base, &securityAuditorFake{}, &mfaApplicationEffectsFake{}, now)
+	service := newTestMFAApplicationService(t, base, &securityAuditorFake{}, &realtimetest.Publisher{}, now)
 	service.mfa.deps.Settings.Enabled = false
 	status, err := service.GetMFAStatus(context.Background(), invocation.New(principal, model.RequestMetadata{}))
 	require.NoError(t, err)
@@ -124,7 +133,7 @@ func TestMFAFactorAttemptsAreBoundedBeforeVerification(t *testing.T) {
 	now := time.Now()
 	principal := mfaTestPrincipal(now, model.AuthenticationSingleFactor)
 	base := &mfaApplicationStoreFake{}
-	service := newTestMFAApplicationService(t, base, &securityAuditorFake{}, &mfaApplicationEffectsFake{}, now)
+	service := newTestMFAApplicationService(t, base, &securityAuditorFake{}, &realtimetest.Publisher{}, now)
 	service.loginRateLimit.MaximumAttempts = 1
 	invocation := invocation.New(principal, model.RequestMetadata{IPAddress: "127.0.0.1"})
 	_, _ = service.ChallengeMFA(context.Background(), invocation, ChallengeMFACommand{Code: "000000"})

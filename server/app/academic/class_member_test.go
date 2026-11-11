@@ -142,9 +142,9 @@ func TestClassMemberEnrollUsesDestinationPeriodAndAtomicStore(t *testing.T) {
 	// and current-user context changed, then the managers of each Sitting of
 	// the Class are told to refresh their board; nothing is reported.
 	require.Equal(t, []realtimetest.Call{
-		{Method: realtimetest.PublishRealtimeEvent, Event: candidateEvent},
+		{Method: realtimetest.Publish, Event: candidateEvent},
 		{Method: realtimetest.InvalidateCurrentUserContext, UserID: model.UserID(userID)},
-		{Method: realtimetest.PublishRealtimeEvent, Event: boardEvent},
+		{Method: realtimetest.Publish, Event: boardEvent},
 	}, publisher.Calls())
 	require.Equal(t, []model.ClassID{model.ClassID(classID)}, sittings.listed)
 }

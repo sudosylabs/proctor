@@ -72,7 +72,7 @@ func TestUserSettingsChangedEventRejectsInvalidMetadata(t *testing.T) {
 func TestUserSettingsChangedEventUsesExistingLocalFirstClusterPathWithoutLooping(t *testing.T) {
 	t.Parallel()
 	order := &orderedCalls{}
-	sink := &recordingSink{publish: func(event RealtimeEvent) {
+	sink := &recordingSink{publish: func(event Event) {
 		require.Equal(t, "user_settings_changed", event.Name)
 		order.add("local")
 	}}

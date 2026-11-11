@@ -23,5 +23,5 @@ func (s *Service) publishDraftUpdated(ctx context.Context, examID model.ExamID, 
 		return err
 	}
 
-	return s.deps.Publisher.PublishRealtimeEvent(ctx, event)
+	return s.deps.Publisher.Publish(ctx, event)
 }

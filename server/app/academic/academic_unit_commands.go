@@ -122,8 +122,8 @@ func (s *Service) CreateAcademicUnit(
 			Resource:   authorized,
 			Operation:  "create",
 			Value:      candidate.Auditable(),
+			At:         s.now(),
 		},
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.AcademicUnitCommandResult, error) {
 			input := &store.AcademicUnitCreation{
 				Unit:         candidate,
@@ -238,8 +238,8 @@ func (s *Service) UpdateAcademicUnit(
 			Operation:  "patch",
 			Value:      candidate.Auditable(),
 			Prior:      current.Auditable(),
+			At:         s.now(),
 		},
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.AcademicUnit, error) {
 			return s.academicUnits.Update(ctx, &store.AcademicUnitUpdate{
 				Unit:         &candidate,
@@ -297,8 +297,8 @@ func (s *Service) ArchiveAcademicUnit(
 			Operation:  "archive",
 			Value:      map[string]any{"id": command.ID},
 			Prior:      current.Auditable(),
+			At:         s.now(),
 		},
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.AcademicUnit, error) {
 			return s.academicUnits.Archive(ctx, &store.AcademicUnitArchive{
 				ExpectedRevision: current.Revision,

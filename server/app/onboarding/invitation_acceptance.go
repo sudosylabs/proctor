@@ -415,7 +415,8 @@ func (s *Service) acceptScopedRoleByClaimHash(
 		Operation:  "accept_scoped_role_invitation",
 		Value:      invitation.Auditable(),
 		Subject:    principal.UserID,
-	}, s.now, func(ctx context.Context, attempt access.MutationReference) (*store.ScopedRoleInvitationAcceptanceResult, error) {
+		At:         s.now(),
+	}, func(ctx context.Context, attempt access.MutationReference) (*store.ScopedRoleInvitationAcceptanceResult, error) {
 		return s.invitations.AcceptScopedRole(ctx, &store.ScopedRoleInvitationAcceptance{
 			ClaimHash:          claimHash,
 			UserID:             principal.UserID,

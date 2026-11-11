@@ -9,7 +9,6 @@ package identity
 
 import (
 	"context"
-	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/model"
@@ -19,21 +18,19 @@ import (
 // revokeSession, revokeAllSessions and revokeAllSessionsCounted commit an
 // already-authorized revocation and publish only its new durable effects.
 // Callers retain ownership checks, audit intent, public errors,
-// administrative mail and command preparation, and pass the clock the
-// mutation audit is stamped with. Account and password transitions keep their
+// administrative mail and command preparation, and set the attempt's At, the
+// instant the mutation audit is stamped with. Account and password transitions keep their
 // separate atomic Store operations.
 func (s *Service) revokeSession(
 	ctx context.Context,
 	attempt access.Mutation,
 	input *store.SessionRevocation,
 	mapError func(error) error,
-	now func() time.Time,
 ) error {
 	result, err := access.RunAudited(
 		ctx,
 		s.auditor,
 		attempt,
-		now,
 		func(ctx context.Context, reference access.MutationReference) (*store.SessionRevocationResult, error) {
 			input.RevokedAt = reference.MutationAt
 			input.AuditEventID, input.AuditAt = reference.ID, reference.MutationAt
@@ -60,9 +57,8 @@ func (s *Service) revokeAllSessions(
 	input *store.UserSessionsRevocation,
 	mapError func(error) error,
 	unchanged *bool,
-	now func() time.Time,
 ) error {
-	_, err := s.revokeAllSessionsCounted(ctx, attempt, input, mapError, unchanged, now)
+	_, err := s.revokeAllSessionsCounted(ctx, attempt, input, mapError, unchanged)
 	return err
 }
 
@@ -75,13 +71,11 @@ func (s *Service) revokeAllSessionsCounted(
 	input *store.UserSessionsRevocation,
 	mapError func(error) error,
 	unchanged *bool,
-	now func() time.Time,
 ) (int, error) {
 	result, err := access.RunAudited(
 		ctx,
 		s.auditor,
 		attempt,
-		now,
 		func(ctx context.Context, reference access.MutationReference) (*store.UserSessionsRevocationResult, error) {
 			input.RevokedAt = reference.MutationAt
 			input.AuditEventID, input.AuditAt = reference.ID, reference.MutationAt

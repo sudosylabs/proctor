@@ -11,7 +11,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"slices"
-	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -102,6 +101,7 @@ func (s *Service) commitImport(
 			"valid_rows":           current.ValidRows,
 			"invalid_rows":         current.InvalidRows,
 		},
+		At: at,
 	}
 	persist := func(
 		ctx context.Context,
@@ -144,7 +144,6 @@ func (s *Service) commitImport(
 			ctx,
 			s.auditor,
 			attempt,
-			func() time.Time { return at },
 			func(ctx context.Context, reference access.MutationReference) (*store.OnboardingImport, error) {
 				return persist(ctx, reference, "")
 			},
@@ -206,6 +205,7 @@ func (s *Service) cancelImport(
 		ScopeID:    current.ScopeID,
 		Operation:  auditOperation,
 		Value:      map[string]any{"onboarding_import_id": id, "state": current.State},
+		At:         at,
 	}
 	persist := func(
 		ctx context.Context,
@@ -243,7 +243,6 @@ func (s *Service) cancelImport(
 			ctx,
 			s.auditor,
 			attempt,
-			func() time.Time { return at },
 			func(ctx context.Context, reference access.MutationReference) (*store.OnboardingImport, error) {
 				return persist(ctx, reference, "")
 			},

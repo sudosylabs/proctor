@@ -296,8 +296,8 @@ func (s *Service) ReplaceDesktopCompatibilityPolicy(
 				"availability":              command.Settings.Availability,
 				"retry_at_set":              command.Settings.RetryAt.Valid,
 			},
+			At: s.now(),
 		},
-		s.now,
 		func(
 			ctx context.Context,
 			reference access.MutationReference,

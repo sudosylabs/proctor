@@ -206,11 +206,11 @@ func (s *Service) ResendInvitation(
 		return InvitationAdministrationView{InvitationView: view}, duplicateErr
 	}
 
+	attempt.At = s.now()
 	result, err := access.RunAudited(
 		ctx,
 		s.auditor,
 		attempt,
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.InvitationAdministrationCommandResult, error) {
 			if commandIdempotency != nil {
 				replayed, replayErr := s.invitations.ReplayAdministration(
@@ -358,11 +358,11 @@ func (s *Service) RevokeInvitation(
 		return InvitationAdministrationView{InvitationView: view}, duplicateErr
 	}
 
+	attempt.At = s.now()
 	result, err := access.RunAudited(
 		ctx,
 		s.auditor,
 		attempt,
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.InvitationAdministrationCommandResult, error) {
 			if commandIdempotency != nil {
 				replayed, replayErr := s.invitations.ReplayAdministration(

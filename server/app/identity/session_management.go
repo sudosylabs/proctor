@@ -87,6 +87,7 @@ func (s *Service) RevokeSession(
 			Resource:   model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
 			Operation:  "revoke_own_session",
 			Value:      map[string]any{"session_id": session.ID.String()},
+			At:         s.now(),
 		},
 		&store.SessionRevocation{
 			SessionID: session.ID,
@@ -94,7 +95,6 @@ func (s *Service) RevokeSession(
 			Reason:    model.SessionRevocationUserSession,
 		},
 		selfSessionRevocationStoreErrors.Translate,
-		s.now,
 	)
 }
 
@@ -115,6 +115,7 @@ func (s *Service) RevokeAllSessions(
 			Action:     model.ActionSessionManage,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
 			Operation:  "revoke_own_sessions",
+			At:         s.now(),
 		},
 		&store.UserSessionsRevocation{
 			UserID: principal.UserID,
@@ -122,7 +123,6 @@ func (s *Service) RevokeAllSessions(
 		},
 		authenticationUnavailable,
 		nil,
-		s.now,
 	)
 }
 
@@ -146,6 +146,7 @@ func (s *Service) RevokeOtherSessions(
 			Resource:   model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
 			Operation:  "revoke_other_sessions",
 			Value:      map[string]any{"kept_session_id": principal.SessionID.String()},
+			At:         s.now(),
 		},
 		&store.UserSessionsRevocation{
 			UserID:        principal.UserID,
@@ -154,7 +155,6 @@ func (s *Service) RevokeOtherSessions(
 		},
 		selfOtherSessionsRevocationStoreErrors.Translate,
 		nil,
-		s.now,
 	)
 	if err != nil {
 		return nil, err

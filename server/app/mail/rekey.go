@@ -134,8 +134,8 @@ func (s *Operations) StartMailRekey(ctx context.Context, inv invocation.Invocati
 			ScopeID:    resource.ID,
 			Operation:  "start_rekey",
 			Value:      map[string]any{"job_id": job.ID.String(), "primary_key_id": primaryKeyID, "retiring_key_id": retiringKeyID},
+			At:         s.deps.Now(),
 		},
-		s.deps.Now,
 		func(ctx context.Context, reference access.MutationReference) (*store.MailRekeyOperation, error) {
 			return s.deps.Mail.StartRekey(ctx, &store.MailRekeyStart{
 				PrimaryKeyID:  primaryKeyID,

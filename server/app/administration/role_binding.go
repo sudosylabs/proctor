@@ -196,8 +196,8 @@ func (s *Service) CreateRoleBinding(
 			Operation:  "create_binding",
 			Value:      candidate.Auditable(),
 			Subject:    candidate.UserID,
+			At:         mailAt,
 		},
-		func() time.Time { return mailAt },
 		func(ctx context.Context, reference access.MutationReference) (*model.RoleBinding, error) {
 			input := &store.RoleBindingCreation{
 				Binding:                   candidate,
@@ -391,8 +391,8 @@ func (s *Service) EndRoleBinding(
 			Value:      map[string]any{"role_binding_id": id},
 			Prior:      current.Auditable(),
 			Subject:    current.UserID,
+			At:         mailAt,
 		},
-		func() time.Time { return mailAt },
 		func(ctx context.Context, reference access.MutationReference) (*model.RoleBinding, error) {
 			input := &store.RoleBindingEnd{
 				ID:                        id,

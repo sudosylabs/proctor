@@ -143,8 +143,8 @@ func (s *Service) EnrollPassword(ctx context.Context, inv invocation.Invocation,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: userID.String()},
 			Operation:  "enroll_password",
 			Value:      map[string]any{"method": "password"},
+			At:         s.now(),
 		},
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.AuthenticationMethodMutationResult, error) {
 			return s.passwords.Enroll(ctx, &store.PasswordCredentialEnrollment{
 				Credential:   &model.PasswordCredential{UserID: userID, PasswordHash: hash},
@@ -196,8 +196,8 @@ func (s *Service) ChangePassword(ctx context.Context, inv invocation.Invocation,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: user.ID.String()},
 			Operation:  "change_password",
 			Value:      map[string]any{"method": "password"},
+			At:         s.now(),
 		},
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.AuthenticationMethodMutationResult, error) {
 			return s.passwords.Change(ctx, &store.PasswordCredentialChange{
 				UserID:           user.ID,
@@ -239,8 +239,8 @@ func (s *Service) RemovePassword(ctx context.Context, inv invocation.Invocation)
 			Resource:   model.Resource{Type: model.ResourceUser, ID: userID.String()},
 			Operation:  "remove_password",
 			Value:      map[string]any{"method": "password"},
+			At:         s.now(),
 		},
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.AuthenticationMethodMutationResult, error) {
 			return s.passwords.Remove(ctx, &store.PasswordCredentialRemoval{
 				UserID:           userID,
@@ -281,8 +281,8 @@ func (s *Service) UnlinkExternalIdentity(ctx context.Context, inv invocation.Inv
 			Resource:   model.Resource{Type: model.ResourceUser, ID: userID.String()},
 			Operation:  "unlink_provider",
 			Value:      map[string]any{"identity_id": id.String()},
+			At:         s.now(),
 		},
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.AuthenticationMethodMutationResult, error) {
 			return s.externalIdentities.Unlink(ctx, &store.ExternalIdentityUnlink{
 				ID:               id,

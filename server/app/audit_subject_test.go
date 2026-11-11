@@ -65,6 +65,7 @@ func TestAuditedMutationPersistsItsSubjectAndRefusesMalformedSubjectOrScope(t *t
 			Resource:   model.Resource{Type: model.ResourceInstitution, ID: model.NewID()},
 			Operation:  "create_binding",
 			Subject:    model.NewUserID(),
+			At:         time.Now(),
 		}
 	}
 	unmapped := func(err error) error { return err }
@@ -85,7 +86,7 @@ func TestAuditedMutationPersistsItsSubjectAndRefusesMalformedSubjectOrScope(t *t
 
 			var durable *model.AuditEvent
 			var reference access.MutationReference
-			_, err := access.RunAudited(context.Background(), auditor, attempt, time.Now,
+			_, err := access.RunAudited(context.Background(), auditor, attempt,
 				func(_ context.Context, given access.MutationReference) (struct{}, error) {
 					audits.events = append(audits.events, "mutate")
 					durable, reference = audits.saved, given
@@ -120,7 +121,7 @@ func TestAuditedMutationPersistsItsSubjectAndRefusesMalformedSubjectOrScope(t *t
 			attempt := bindingMutation()
 			test.malform(&attempt)
 
-			_, err := access.RunAudited(context.Background(), auditor, attempt, time.Now,
+			_, err := access.RunAudited(context.Background(), auditor, attempt,
 				func(context.Context, access.MutationReference) (struct{}, error) {
 					audits.events = append(audits.events, "mutate")
 					return struct{}{}, nil

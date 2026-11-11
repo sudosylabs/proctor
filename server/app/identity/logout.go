@@ -39,6 +39,7 @@ func (s *Service) Logout(ctx context.Context, inv invocation.Invocation) (result
 			Resource:   model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
 			Operation:  "logout",
 			Value:      map[string]any{"session_id": principal.SessionID.String()},
+			At:         s.now(),
 		},
 		&store.SessionRevocation{
 			SessionID: principal.SessionID,
@@ -46,6 +47,5 @@ func (s *Service) Logout(ctx context.Context, inv invocation.Invocation) (result
 			Reason:    model.SessionRevocationUserLogout,
 		},
 		authenticationUnavailable,
-		s.now,
 	)
 }

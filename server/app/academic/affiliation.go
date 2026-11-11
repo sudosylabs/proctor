@@ -10,7 +10,6 @@ package academic
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -115,8 +114,8 @@ func (s *Service) CreateAffiliation(
 			Resource:   resource,
 			Operation:  "create",
 			Value:      candidate.Auditable(),
+			At:         at,
 		},
-		func() time.Time { return at },
 		func(ctx context.Context, reference access.MutationReference) (*model.Affiliation, error) {
 			input := &store.AffiliationCreation{
 				Affiliation:  candidate,
@@ -204,8 +203,8 @@ func (s *Service) EndAffiliation(
 			Resource:   resource,
 			Operation:  "end",
 			Prior:      current.Auditable(),
+			At:         s.now(),
 		},
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.Affiliation, error) {
 			input := &store.AffiliationEnd{
 				ID:               id,

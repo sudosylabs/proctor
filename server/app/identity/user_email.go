@@ -99,8 +99,8 @@ func (s *Service) ChangeUserEmail(
 			Operation:  "change_email",
 			Value:      map[string]any{"email_changed": true, "email_verified": false},
 			Prior:      current.Auditable(),
+			At:         at,
 		},
-		func() time.Time { return at },
 		func(ctx context.Context, reference access.MutationReference) (*UserEmailState, error) {
 			updated, err := s.changeUserEmail(ctx, current, newEmail, at, reference)
 			return userEmailState(updated), err
@@ -157,8 +157,8 @@ func (s *Service) VerifyUserEmailPrivileged(
 			Operation:  "verify_email_privileged",
 			Value:      map[string]any{"email_verified": true},
 			Prior:      current.Auditable(),
+			At:         at,
 		},
-		func() time.Time { return at },
 		func(ctx context.Context, reference access.MutationReference) (*UserEmailState, error) {
 			updated, err := s.verifyUserEmailPrivileged(ctx, current, at, reference)
 			return userEmailState(updated), err

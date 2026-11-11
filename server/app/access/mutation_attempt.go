@@ -32,6 +32,11 @@ type Mutation struct {
 	// Subject names the User the mutation concerns when Resource is not that
 	// User, such as the bound User of a Role Binding or the member of a Class.
 	Subject model.UserID
+	// At is the instant the mutation happens. RunAudited hands it to the named
+	// Store mutation as MutationReference.MutationAt, normalised to UTC
+	// microseconds with model.TimeUTC (a zero At stays zero), and reads no
+	// clock of its own.
+	At time.Time
 }
 
 // MutationReference is the complete audit input a named Store mutation
@@ -51,7 +56,6 @@ func RunAudited[T any](
 	ctx context.Context,
 	auditor MutationAuditor,
 	attempt Mutation,
-	now func() time.Time,
 	mutate func(context.Context, MutationReference) (T, error),
 	mapError func(error) error,
 ) (T, error) {
@@ -69,7 +73,7 @@ func RunAudited[T any](
 
 	result, err := mutate(ctx, MutationReference{
 		ID:         auditID,
-		MutationAt: model.TimeUTC(now()),
+		MutationAt: model.TimeUTC(attempt.At),
 	})
 	if err == nil {
 		return result, nil

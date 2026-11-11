@@ -96,7 +96,8 @@ func (s *Service) ReauthenticatePassword(
 		Resource:   model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
 		Operation:  "password",
 		Value:      map[string]any{"session_id": principal.SessionID.String()},
-	}, s.now, func(ctx context.Context, reference access.MutationReference) (*store.SessionReauthenticationResult, error) {
+		At:         s.now(),
+	}, func(ctx context.Context, reference access.MutationReference) (*store.SessionReauthenticationResult, error) {
 		auditID := reference.ID
 		credentialID, err := model.ParseSessionCredentialID(principal.CredentialID.String())
 		if err != nil {

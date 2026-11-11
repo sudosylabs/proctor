@@ -383,12 +383,12 @@ func runProgressionAudited[T any](
 		ScopeID:    destinationClassID.String(),
 		Operation:  operation,
 		Value:      map[string]any{"student_progression_id": progressionID, "class_id": destinationClassID.String()},
+		At:         at,
 	}
 	return access.RunAudited(
 		ctx,
 		audit,
 		destination,
-		func() time.Time { return at },
 		func(ctx context.Context, destinationReference access.MutationReference) (T, error) {
 			source := access.Mutation{
 				Invocation: inv,
@@ -398,12 +398,12 @@ func runProgressionAudited[T any](
 				ScopeID:    sourceClassID.String(),
 				Operation:  operation,
 				Value:      map[string]any{"student_progression_id": progressionID, "class_id": sourceClassID.String()},
+				At:         model.TimeUTC(destinationReference.MutationAt),
 			}
 			return access.RunAudited(
 				ctx,
 				audit,
 				source,
-				func() time.Time { return model.TimeUTC(destinationReference.MutationAt) },
 				func(ctx context.Context, sourceReference access.MutationReference) (T, error) {
 					return mutate(ctx, destinationReference, sourceReference)
 				},

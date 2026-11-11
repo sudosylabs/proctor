@@ -172,8 +172,8 @@ func (s *Service) CreateAcademicPeriod(
 			ScopeID:    candidate.Owner.ID(),
 			Operation:  "create",
 			Value:      candidate.Auditable(),
+			At:         s.now(),
 		},
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.AcademicPeriodCommandResult, error) {
 			input := &store.AcademicPeriodCreation{
 				Period:       candidate,
@@ -254,8 +254,8 @@ func (s *Service) UpdateAcademicPeriod(
 			Operation:  "patch",
 			Value:      candidate.Auditable(),
 			Prior:      current.Auditable(),
+			At:         s.now(),
 		},
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.AcademicPeriod, error) {
 			return s.academicPeriods.Update(ctx, &store.AcademicPeriodUpdate{
 				Period:       &candidate,
@@ -298,8 +298,8 @@ func (s *Service) ArchiveAcademicPeriod(ctx context.Context, inv invocation.Invo
 			ScopeID:    current.Owner.ID(),
 			Operation:  "archive",
 			Prior:      current.Auditable(),
+			At:         s.now(),
 		},
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.AcademicPeriod, error) {
 			return s.academicPeriods.Archive(ctx, &store.AcademicPeriodArchive{
 				ExpectedRevision: current.Revision,

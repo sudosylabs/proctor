@@ -61,7 +61,8 @@ func TestAuditWritersNameTheSubjectUser(t *testing.T) {
 	_, err = access.RunAudited(context.Background(), service.MutationAudit(), access.Mutation{
 		Invocation: caller, Action: model.ActionClassMembersManage,
 		Resource: model.Resource{Type: model.ResourceClass, ID: classID.String()}, Operation: "enroll", Subject: member,
-	}, time.Now, func(context.Context, access.MutationReference) (struct{}, error) { return struct{}{}, nil },
+		At: time.Now(),
+	}, func(context.Context, access.MutationReference) (struct{}, error) { return struct{}{}, nil },
 		func(err error) error { return err })
 	require.NoError(t, err)
 	require.Equal(t, member, audits.saved.SubjectUserID)

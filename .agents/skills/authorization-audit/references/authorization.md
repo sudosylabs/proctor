@@ -358,7 +358,10 @@ the pending state:
   `AuditEventID` and `AuditAt`. The operation completes the attempt as
   `success` in the transaction that commits the state, Session issuance
   included; on any failure the application completes it as `fail` with the
-  public error code (`access.RunAudited` owns this for ordinary mutations).
+  public error code (`access.RunAudited` owns this for ordinary mutations;
+  the use case sets the instant as `access.Mutation.At`, which reaches the
+  Store as `MutationReference.MutationAt` in UTC, and the runner reads no
+  clock).
   Actor work begins from the Principal (or, for a handoff with no Principal
   yet, the proved account); trusted durable work begins an actorless system
   attempt and never fabricates a User. Exam Jobs and runtime tasks begin

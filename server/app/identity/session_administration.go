@@ -138,6 +138,7 @@ func (s *Service) RevokeUserSession(
 			Operation:  "revoke_session",
 			Value:      map[string]any{"user_id": userID, "session_id": sessionID},
 			Prior:      session.Auditable(),
+			At:         now,
 		},
 		&store.SessionRevocation{
 			SessionID:   sessionID,
@@ -148,7 +149,6 @@ func (s *Service) RevokeUserSession(
 			Reason:      model.SessionRevocationAdministratorSession,
 		},
 		sessionAdministrationStoreErrors.Translate,
-		func() time.Time { return now },
 	)
 }
 
@@ -208,6 +208,7 @@ func (s *Service) RevokeUserSessions(
 			Resource:   model.Resource{Type: model.ResourceUser, ID: userID.String()},
 			Operation:  "revoke_sessions",
 			Value:      map[string]any{"user_id": userID},
+			At:         now,
 		},
 		&store.UserSessionsRevocation{
 			UserID:      userID,
@@ -219,7 +220,6 @@ func (s *Service) RevokeUserSessions(
 		},
 		sessionAdministrationStoreErrors.Translate,
 		batch.Replayed,
-		func() time.Time { return now },
 	)
 }
 

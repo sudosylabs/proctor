@@ -160,8 +160,8 @@ func (s *Service) UploadOnboardingImport(
 			ScopeID:    command.ScopeID,
 			Operation:  "onboarding_import.upload",
 			Value:      map[string]any{"mode": command.Mode, "scope_type": command.ScopeType, "scope_id": command.ScopeID},
+			At:         at,
 		},
-		func() time.Time { return at },
 		func(ctx context.Context, reference access.MutationReference) (*store.OnboardingImport, error) {
 			id := model.NewOnboardingImportID()
 			if _, _, stageErr := s.content.StageOnboardingImport(ctx, id, command.Body, store.OnboardingImportMaximumBytes); stageErr != nil {

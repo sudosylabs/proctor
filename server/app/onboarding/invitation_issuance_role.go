@@ -10,7 +10,6 @@ package onboarding
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -293,11 +292,11 @@ func (s *Service) issueAuthorizedScopedRole(
 	}
 
 	attempt.Value = invitation.Auditable()
+	attempt.At = issuedAt
 	created, err := access.RunAudited(
 		ctx,
 		s.auditor,
 		attempt,
-		func() time.Time { return issuedAt },
 		func(ctx context.Context, reference access.MutationReference) (*store.InvitationCommandResult, error) {
 			input := &store.ScopedRoleInvitationIssue{
 				Invitation:   invitation,

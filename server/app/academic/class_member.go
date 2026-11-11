@@ -228,8 +228,8 @@ func (s *Service) enrollRetainedClassMember(
 			Operation:  "enroll",
 			Value:      candidate.Auditable(),
 			Subject:    candidate.UserID,
+			At:         at,
 		},
-		func() time.Time { return at },
 		func(ctx context.Context, reference access.MutationReference) (*store.ClassEnrollmentResult, error) {
 			execute := func(ctx context.Context, sourceAuditID model.AuditEventID) (*store.ClassEnrollmentResult, error) {
 				input := &store.ClassMemberEnrollment{
@@ -262,12 +262,12 @@ func (s *Service) enrollRetainedClassMember(
 				Operation:  "transfer_out",
 				Prior:      retainedPrevious.Auditable(),
 				Subject:    retainedPrevious.UserID,
+				At:         at,
 			}
 			return access.RunAudited(
 				ctx,
 				s.auditor,
 				sourceAttempt,
-				func() time.Time { return at },
 				func(ctx context.Context, sourceReference access.MutationReference) (*store.ClassEnrollmentResult, error) {
 					return execute(ctx, sourceReference.ID)
 				},
@@ -437,6 +437,7 @@ func (s *Service) runClassEnrollment(
 		Operation:  "enroll",
 		Value:      candidate.Auditable(),
 		Subject:    candidate.UserID,
+		At:         at,
 	}
 	if previous != nil {
 		destinationAttempt.Operation = "transfer_in"
@@ -447,7 +448,6 @@ func (s *Service) runClassEnrollment(
 		ctx,
 		s.auditor,
 		destinationAttempt,
-		func() time.Time { return at },
 		func(ctx context.Context, destinationReference access.MutationReference) (*store.ClassEnrollmentResult, error) {
 			var expectedPreviousID model.ClassMemberID
 			if previous == nil {
@@ -480,12 +480,12 @@ func (s *Service) runClassEnrollment(
 				Operation:  "transfer_out",
 				Prior:      previous.Auditable(),
 				Subject:    previous.UserID,
+				At:         model.TimeUTC(destinationReference.MutationAt),
 			}
 			return access.RunAudited(
 				ctx,
 				s.auditor,
 				sourceAttempt,
-				func() time.Time { return model.TimeUTC(destinationReference.MutationAt) },
 				func(ctx context.Context, sourceReference access.MutationReference) (*store.ClassEnrollmentResult, error) {
 					var notice *store.PreparedMail
 					if prepared != nil {
@@ -602,8 +602,8 @@ func (s *Service) EndClassMember(
 			Operation:  "end",
 			Prior:      current.Auditable(),
 			Subject:    current.UserID,
+			At:         at,
 		},
-		func() time.Time { return at },
 		func(ctx context.Context, reference access.MutationReference) (*model.ClassMember, error) {
 			input := &store.ClassMemberEnd{
 				ID:                        id,
@@ -681,8 +681,8 @@ func (s *Service) endRetainedClassMember(
 			Action:     model.ActionClassMembersManage,
 			Resource:   model.Resource{Type: model.ResourceClass, ID: strings.TrimSpace(command.BatchScopeID)},
 			Operation:  "end",
+			At:         at,
 		},
-		func() time.Time { return at },
 		func(ctx context.Context, reference access.MutationReference) (*model.ClassMember, error) {
 			input := &store.ClassMemberEnd{
 				ID:                        command.ID,

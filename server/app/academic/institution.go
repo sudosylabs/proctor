@@ -97,8 +97,8 @@ func (s *Service) UpdateInstitution(
 			Operation:  "patch",
 			Value:      candidate.Auditable(),
 			Prior:      current.Auditable(),
+			At:         s.now(),
 		},
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.Institution, error) {
 			return s.institutions.Update(ctx, &store.InstitutionUpdate{
 				Institution:  &candidate,

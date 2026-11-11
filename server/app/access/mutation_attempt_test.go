@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -78,8 +79,8 @@ func TestMutationAttemptBeginFailurePreventsMutation(t *testing.T) {
 			Action:    model.ActionAcademicUnitManage,
 			Resource:  model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewID()},
 			Operation: "create",
+			At:        time.Now(),
 		},
-		time.Now,
 		func(context.Context, MutationReference) (string, error) {
 			mutated = true
 			return "", nil
@@ -105,8 +106,8 @@ func TestMutationAttemptUsesIndependentAuditScope(t *testing.T) {
 			Action: model.ActionAcademicPeriodManage, Resource: resource,
 			ScopeType: model.RoleScopeAcademicUnit, ScopeID: scopeID,
 			Operation: "create",
+			At:        time.Now(),
 		},
-		time.Now,
 		func(_ context.Context, reference MutationReference) (string, error) {
 			events = append(events, "mutate")
 			return reference.ID.String(), nil
@@ -137,8 +138,8 @@ func TestMutationAttemptMapsStoreFailureBeforeCompletingAttempt(t *testing.T) {
 			Action:    model.ActionAcademicUnitManage,
 			Resource:  model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewID()},
 			Operation: "patch",
+			At:        at,
 		},
-		func() time.Time { return at },
 		func(_ context.Context, reference MutationReference) (string, error) {
 			events = append(events, "mutate")
 			require.Equal(t, model.AuditEventID(auditID), reference.ID)
@@ -174,8 +175,8 @@ func TestMutationAttemptFailureCompletionErrorJoinsOriginalFailure(t *testing.T)
 			Action:    model.ActionAcademicUnitManage,
 			Resource:  model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewID()},
 			Operation: "archive",
+			At:        time.Now(),
 		},
-		time.Now,
 		func(context.Context, MutationReference) (struct{}, error) {
 			return struct{}{}, storeErr
 		},
@@ -206,8 +207,8 @@ func TestMutationAttemptRejectsInvalidMappedError(t *testing.T) {
 					Action:    model.ActionAcademicUnitManage,
 					Resource:  model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewID()},
 					Operation: "create",
+					At:        time.Now(),
 				},
-				time.Now,
 				func(context.Context, MutationReference) (struct{}, error) {
 					return struct{}{}, errors.New("store failed")
 				},
@@ -234,8 +235,8 @@ func TestMutationAttemptPreservesMappedErrorWrapper(t *testing.T) {
 			Action:    model.ActionRoleManage,
 			Resource:  model.Resource{Type: model.ResourceInstitution, ID: model.NewID()},
 			Operation: "patch",
+			At:        time.Now(),
 		},
-		time.Now,
 		func(context.Context, MutationReference) (struct{}, error) {
 			return struct{}{}, errors.New("store failed")
 		},
@@ -255,7 +256,9 @@ func TestMutationAttemptReturnsSuccessWithoutCompletingIt(t *testing.T) {
 	prior := map[string]any{"name": "computing"}
 	inv := invocation.Invocation{}
 	auditor := &mutationAttemptAuditorFake{events: &events, beginID: auditID}
-	clockCalls := 0
+	// A local, sub-microsecond instant far from the wall clock: only the given
+	// At, normalised, can reach the mutation reference.
+	at := time.UnixMilli(500).Add(789 * time.Nanosecond).In(time.FixedZone("WAT", 3600))
 	got, err := RunAudited(
 		context.Background(), auditor,
 		Mutation{
@@ -265,15 +268,12 @@ func TestMutationAttemptReturnsSuccessWithoutCompletingIt(t *testing.T) {
 			Operation:  "patch",
 			Value:      value,
 			Prior:      prior,
-		},
-		func() time.Time {
-			clockCalls++
-			return time.UnixMilli(500)
+			At:         at,
 		},
 		func(_ context.Context, reference MutationReference) (string, error) {
 			events = append(events, "mutate")
 			require.Equal(t, model.AuditEventID(auditID), reference.ID)
-			require.True(t, time.UnixMilli(500).UTC().Equal(reference.MutationAt))
+			require.Equal(t, time.UnixMilli(500).UTC(), reference.MutationAt)
 			return "saved", nil
 		},
 		func(error) error {
@@ -289,7 +289,12 @@ func TestMutationAttemptReturnsSuccessWithoutCompletingIt(t *testing.T) {
 	require.Equal(t, "patch", auditor.attempt.Operation)
 	require.Equal(t, value, auditor.attempt.Value)
 	require.Equal(t, prior, auditor.attempt.Prior)
-	require.Equal(t, 1, clockCalls, "clock calls")
+	require.Equal(t, at, auditor.attempt.At)
+	// RunAudited reads no clock: no parameter can supply one.
+	runner := reflect.TypeOf(RunAudited[string])
+	for i := range runner.NumIn() {
+		require.NotEqual(t, reflect.TypeFor[func() time.Time](), runner.In(i), "RunAudited parameter %d", i)
+	}
 	// Contract (guardrail 8): the audit begins before the durable write.
 	require.Equal(t, []string{"begin", "mutate"}, events)
 }

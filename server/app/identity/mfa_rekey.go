@@ -198,7 +198,8 @@ func (s *Service) StartMFARekey(ctx context.Context, inv invocation.Invocation, 
 		ScopeID:    resource.ID,
 		Operation:  "start_rekey",
 		Value:      map[string]any{"job_id": job.ID.String(), "primary_key_id": primaryKeyID, "retiring_key_id": command.RetiringKeyID},
-	}, s.now, func(ctx context.Context, reference access.MutationReference) (*store.MFARekeyOperation, error) {
+		At:         s.now(),
+	}, func(ctx context.Context, reference access.MutationReference) (*store.MFARekeyOperation, error) {
 		return s.mfaCredentials.StartRekey(ctx, &store.MFARekeyStart{
 			PrimaryKeyID:  primaryKeyID,
 			RetiringKeyID: command.RetiringKeyID,

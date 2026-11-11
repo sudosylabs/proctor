@@ -149,8 +149,8 @@ func (s *Service) CreateProgramme(
 			ScopeID:    scopeID,
 			Operation:  "create",
 			Value:      candidate.Auditable(),
+			At:         s.now(),
 		},
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.Programme, error) {
 			return s.programmes.Create(ctx, &store.ProgrammeCreation{
 				Programme:    candidate,
@@ -205,8 +205,8 @@ func (s *Service) UpdateProgramme(
 			Operation:  "patch",
 			Value:      candidate.Auditable(),
 			Prior:      current.Auditable(),
+			At:         s.now(),
 		},
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.Programme, error) {
 			return s.programmes.Update(ctx, &store.ProgrammeUpdate{
 				Programme:    &candidate,
@@ -240,8 +240,8 @@ func (s *Service) ArchiveProgramme(ctx context.Context, inv invocation.Invocatio
 			ScopeID:    scopeID,
 			Operation:  "archive",
 			Prior:      current.Auditable(),
+			At:         s.now(),
 		},
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.Programme, error) {
 			return s.programmes.Archive(ctx, &store.ProgrammeArchive{
 				ExpectedRevision: current.Revision,

@@ -113,8 +113,8 @@ func (s *Service) CreateAcademicUnitMember(
 			Operation:  "create_member",
 			Value:      candidate.Auditable(),
 			Subject:    candidate.UserID,
+			At:         at,
 		},
-		func() time.Time { return at },
 		func(ctx context.Context, reference access.MutationReference) (*model.AcademicUnitMember, error) {
 			input := &store.AcademicUnitMemberCreation{
 				Member:                    candidate,
@@ -216,8 +216,8 @@ func (s *Service) EndAcademicUnitMember(
 			Operation:  "end_member",
 			Prior:      current.Auditable(),
 			Subject:    current.UserID,
+			At:         at,
 		},
-		func() time.Time { return at },
 		func(ctx context.Context, reference access.MutationReference) (*model.AcademicUnitMember, error) {
 			input := &store.AcademicUnitMemberEnd{
 				ID:                        id,

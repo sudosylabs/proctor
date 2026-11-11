@@ -196,8 +196,8 @@ func (s *Service) CreateClass(ctx context.Context, inv invocation.Invocation, co
 			ScopeID:    scopeID,
 			Operation:  "create",
 			Value:      candidate.Auditable(),
+			At:         s.now(),
 		},
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.Class, error) {
 			return s.classes.Create(ctx, &store.ClassCreation{
 				Class:        candidate,
@@ -290,8 +290,8 @@ func (s *Service) UpdateClass(ctx context.Context, inv invocation.Invocation, co
 			Operation:  "patch",
 			Value:      candidate.Auditable(),
 			Prior:      current.Auditable(),
+			At:         s.now(),
 		},
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.Class, error) {
 			return s.classes.Update(ctx, &store.ClassUpdate{
 				Class:                  &candidate,
@@ -330,6 +330,11 @@ func (s *Service) ArchiveClass(ctx context.Context, inv invocation.Invocation, c
 		return err
 	}
 
+	at := s.now()
+	if !at.After(current.UpdatedAt) {
+		at = current.UpdatedAt.Add(time.Millisecond)
+	}
+
 	_, err = access.RunAudited(
 		ctx,
 		s.auditor,
@@ -339,14 +344,7 @@ func (s *Service) ArchiveClass(ctx context.Context, inv invocation.Invocation, c
 			Resource:   resource,
 			Operation:  "archive",
 			Prior:      current.Auditable(),
-		},
-		func() time.Time {
-			at := s.now()
-			if !at.After(current.UpdatedAt) {
-				return current.UpdatedAt.Add(time.Millisecond)
-			}
-
-			return at
+			At:         at,
 		},
 		func(ctx context.Context, reference access.MutationReference) (*model.Class, error) {
 			return s.classes.Archive(ctx, &store.ClassArchive{

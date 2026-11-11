@@ -137,8 +137,8 @@ func (s *Service) CreateRetentionPreview(
 			ScopeID:    inst.ID.String(),
 			Operation:  "preview",
 			Value:      map[string]any{"policy_revision": command.ExpectedPolicyRevision},
+			At:         s.now(),
 		},
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.RetentionPreview, error) {
 			return s.retention.CreatePreview(ctx, &store.RetentionPreviewCreation{
 				RetentionMutation: store.RetentionMutation{
@@ -228,8 +228,8 @@ func (s *Service) ChangeRetentionControl(
 				"control_revision": command.ExpectedRevision,
 				"state":            string(command.State),
 			},
+			At: s.now(),
 		},
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.RetentionControlResult, error) {
 			return s.retention.ChangeControl(
 				ctx,

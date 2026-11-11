@@ -178,8 +178,8 @@ func (s *Service) ReplaceAccessPolicy(
 			ScopeID:    institution.ID.String(),
 			Operation:  "replace",
 			Value:      accessPolicyReplacementAuditValue(command),
+			At:         s.now(),
 		},
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.AccessPolicyReplacementResult, error) {
 			return s.accessPolicies.Replace(ctx, &store.AccessPolicyReplacement{
 				Preflight:    *input,

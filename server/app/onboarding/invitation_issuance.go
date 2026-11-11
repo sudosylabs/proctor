@@ -60,11 +60,11 @@ func (s *Service) completeOnboardingInvitationNoOp(
 	}
 
 	attempt.Value = candidate.Auditable()
+	attempt.At = candidate.CreatedAt
 	created, err := access.RunAudited(
 		ctx,
 		s.auditor,
 		attempt,
-		func() time.Time { return candidate.CreatedAt },
 		func(ctx context.Context, reference access.MutationReference) (*store.InvitationCommandResult, error) {
 			switch candidate.Purpose {
 			case model.InvitationPurposeStudentClass:

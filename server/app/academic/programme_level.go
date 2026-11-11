@@ -160,8 +160,8 @@ func (s *Service) CreateProgrammeLevel(
 			ScopeID:    scopeID,
 			Operation:  "create",
 			Value:      candidate.Auditable(),
+			At:         s.now(),
 		},
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.ProgrammeLevel, error) {
 			return s.programmeLevels.Create(ctx, &store.ProgrammeLevelCreation{
 				Level:        candidate,
@@ -217,8 +217,8 @@ func (s *Service) UpdateProgrammeLevel(
 			Operation:  "patch",
 			Value:      candidate.Auditable(),
 			Prior:      current.Auditable(),
+			At:         s.now(),
 		},
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.ProgrammeLevel, error) {
 			return s.programmeLevels.Update(ctx, &store.ProgrammeLevelUpdate{
 				Level:        &candidate,
@@ -252,8 +252,8 @@ func (s *Service) ArchiveProgrammeLevel(ctx context.Context, inv invocation.Invo
 			ScopeID:    scopeID,
 			Operation:  "archive",
 			Prior:      current.Auditable(),
+			At:         s.now(),
 		},
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.ProgrammeLevel, error) {
 			return s.programmeLevels.Archive(ctx, &store.ProgrammeLevelArchive{
 				ExpectedRevision: current.Revision,

@@ -11,7 +11,6 @@ import (
 	"context"
 	"errors"
 	"slices"
-	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -414,8 +413,8 @@ func (s *Service) UpdateUserProfile(
 			Operation:  "update_profile",
 			Value:      candidate.Auditable(),
 			Prior:      current.Auditable(),
+			At:         at,
 		},
-		func() time.Time { return at },
 		func(ctx context.Context, reference access.MutationReference) (*model.User, error) {
 			return s.users.UpdateProfile(ctx, &store.UserProfileUpdate{
 				UserID:           current.ID,

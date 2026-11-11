@@ -209,11 +209,11 @@ func (s *Service) recordInvitationCommandDuplicate(
 	attempt access.Mutation,
 	input store.InvitationBatchDuplicate,
 ) (*store.InvitationBatchCommandResult, error) {
+	attempt.At = s.now()
 	return access.RunAudited(
 		ctx,
 		s.auditor,
 		attempt,
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.InvitationBatchCommandResult, error) {
 			input.AuditEventID, input.AuditAt = reference.ID, reference.MutationAt
 			return s.invitations.RecordBatchDuplicate(ctx, &input, commandIdempotency)
@@ -267,11 +267,11 @@ func (s *Service) recoverInvitationIssueOutcome(
 		attempt.Value = found.Invitation.Auditable()
 	}
 
+	attempt.At = s.now()
 	replayed, err := access.RunAudited(
 		ctx,
 		s.auditor,
 		attempt,
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.InvitationCommandResult, error) {
 			value, replayErr := s.invitations.ReplayIssue(
 				ctx,
@@ -312,11 +312,11 @@ func (s *Service) recoverInvitationAdministrationOutcome(
 		attempt.Value = found.Invitation.Auditable()
 	}
 
+	attempt.At = s.now()
 	replayed, err := access.RunAudited(
 		ctx,
 		s.auditor,
 		attempt,
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.InvitationAdministrationCommandResult, error) {
 			value, replayErr := s.invitations.ReplayAdministration(
 				ctx,

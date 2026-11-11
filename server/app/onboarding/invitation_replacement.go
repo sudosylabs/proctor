@@ -76,27 +76,27 @@ func (s *Service) ReplaceInvitation(
 		ScopeID:    current.Invitation.ScopeID,
 		Operation:  "supersede",
 		Value:      current.Invitation.Auditable(),
-	}
-	replacementAttempt := access.Mutation{
-		Invocation: inv,
-		Action:     model.ActionInvitationCreate,
-		Resource:   invitationResource(replacement),
-		ScopeType:  replacement.ScopeType,
-		ScopeID:    replacement.ScopeID,
-		Operation:  "replacement_issue",
-		Value:      replacement.Auditable(),
+		At:         s.now(),
 	}
 	result, err := access.RunAudited(
 		ctx,
 		s.auditor,
 		currentAttempt,
-		s.now,
 		func(ctx context.Context, currentReference access.MutationReference) (*store.InvitationAdministrationRecord, error) {
+			replacementAttempt := access.Mutation{
+				Invocation: inv,
+				Action:     model.ActionInvitationCreate,
+				Resource:   invitationResource(replacement),
+				ScopeType:  replacement.ScopeType,
+				ScopeID:    replacement.ScopeID,
+				Operation:  "replacement_issue",
+				Value:      replacement.Auditable(),
+				At:         model.TimeUTC(currentReference.MutationAt),
+			}
 			return access.RunAudited(
 				ctx,
 				s.auditor,
 				replacementAttempt,
-				func() time.Time { return model.TimeUTC(currentReference.MutationAt) },
 				func(ctx context.Context, replacementReference access.MutationReference) (*store.InvitationAdministrationRecord, error) {
 					return s.invitations.Replace(ctx, &store.InvitationReplacement{
 						CurrentID:               id,

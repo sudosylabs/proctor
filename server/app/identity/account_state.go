@@ -10,7 +10,6 @@ package identity
 import (
 	"context"
 	"strings"
-	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -141,8 +140,8 @@ func (s *Service) SetUserEnabled(
 			Operation:  operation,
 			Value:      parameters,
 			Prior:      current.Auditable(),
+			At:         now,
 		},
-		func() time.Time { return now },
 		func(ctx context.Context, reference access.MutationReference) (*store.UserDisabledStateResult, error) {
 			input := &store.UserDisabledStateChange{
 				ID:               userID,

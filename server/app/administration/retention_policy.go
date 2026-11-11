@@ -112,8 +112,8 @@ func (s *Service) ReplaceRetentionPolicy(
 				"deletion_grace_days":                 command.Settings.DeletionGraceDays,
 				"candidate_notices":                   command.Settings.CandidateNotices,
 			},
+			At: s.now(),
 		},
-		s.now,
 		func(
 			ctx context.Context,
 			reference access.MutationReference,

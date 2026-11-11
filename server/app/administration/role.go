@@ -101,8 +101,8 @@ func (s *Service) CreateRole(ctx context.Context, inv invocation.Invocation, com
 			Resource:   resource,
 			Operation:  "create",
 			Value:      candidate.Auditable(),
+			At:         s.now(),
 		},
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.Role, error) {
 			return s.roles.Save(ctx, &store.RoleCreation{
 				Role:         candidate,
@@ -173,8 +173,8 @@ func (s *Service) UpdateRole(ctx context.Context, inv invocation.Invocation, com
 			Operation:  "patch",
 			Value:      map[string]any{"role_id": id},
 			Prior:      current.Auditable(),
+			At:         s.now(),
 		},
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.Role, error) {
 			return s.roles.Update(ctx, &store.RoleUpdate{
 				Role:         candidate,
@@ -236,8 +236,8 @@ func (s *Service) ArchiveRole(ctx context.Context, inv invocation.Invocation, id
 			Operation:  "archive",
 			Value:      map[string]any{"role_id": id},
 			Prior:      current.Auditable(),
+			At:         s.now(),
 		},
-		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.Role, error) {
 			return s.roles.Archive(ctx, &store.RoleArchive{
 				ID:           id,

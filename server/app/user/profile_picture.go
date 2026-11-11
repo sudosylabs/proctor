@@ -292,8 +292,8 @@ func (s *Service) publishProfilePicture(
 			Operation:  "set_profile_picture",
 			Value:      map[string]any{"user_id": current.ID.String(), "active_file_entry_id": entryID.String()},
 			Prior:      map[string]any{"user": current.Auditable(), "active_file_entry_id": current.CustomProfilePictureFileID.String()},
+			At:         changedAt,
 		},
-		func() time.Time { return changedAt },
 		func(ctx context.Context, reference access.MutationReference) (*store.ProfilePicturePublicationResult, error) {
 			return s.files.PublishProfilePicture(ctx, &store.ProfilePicturePublication{
 				ActorID:              inv.Principal().UserID,
@@ -404,7 +404,7 @@ func (s *Service) RemoveProfilePicture(
 		action = model.ActionUserProfilePictureManage
 	}
 
-	var changedAt time.Time
+	changedAt := model.TimeUTC(s.now())
 	updated, err := access.RunAudited(
 		ctx,
 		s.auditor,
@@ -415,10 +415,7 @@ func (s *Service) RemoveProfilePicture(
 			Operation:  "remove_profile_picture",
 			Value:      map[string]any{"user_id": current.ID.String()},
 			Prior:      map[string]any{"user": current.Auditable(), "active_file_entry_id": current.CustomProfilePictureFileID.String()},
-		},
-		func() time.Time {
-			changedAt = model.TimeUTC(s.now())
-			return changedAt
+			At:         changedAt,
 		},
 		func(ctx context.Context, reference access.MutationReference) (*model.User, error) {
 			return s.files.RemoveProfilePicture(ctx, &store.ProfilePictureRemoval{

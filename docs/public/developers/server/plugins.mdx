@@ -50,15 +50,20 @@ same contract.
 | Lifecycle | built | Activate and deactivate, with deadlines, containment and metrics |
 | Sign-in protocols, export formats, domain events | built | Offer an identity provider type or export encoding, or react to committed events |
 | Installation settings | built | Have settings an administrator changes at runtime, applied on every node |
-| Integrity outcomes | planned | Reach a decision that the core applies as flag, warn or suspend |
+| Integrity outcomes | built for core policies | Reach a decision that the core applies as flag, warn or suspend |
 | Capability registry | pending Desktop work | Declare a native capability that Desktop activates only when the agreement names it |
 | Exam policy sections | pending Desktop work | Add a policy section the exam author sets, frozen into the Exam Revision and its digest |
 | Admission gates | pending Desktop work | Decide admit, deny or admit-and-flag before an Attempt starts, from a report Desktop attests |
 | Signal verdicts | pending Desktop work | Interpret native signals during an Attempt and return a verdict |
-| Evidence kinds | planned | Declare evidence the core stores, seals, exports and shows in review |
+| Evidence kinds | storage built | Declare evidence the core stores, seals, exports and shows in review |
 
 The pending seams depend on what Desktop reports and when. They will be
-designed once the Desktop native capability work settles.
+designed once the Desktop native capability work settles. Connection loss,
+focus loss and browser navigation already write their flags, evidence and
+suspensions through the code a plugin's decision will use, and connection
+loss and focus loss publish what they caused the same way. A plugin cannot
+reach that code yet, and its evidence is stored but not yet sealed, exported
+or shown in review.
 
 ## How a capability decides
 

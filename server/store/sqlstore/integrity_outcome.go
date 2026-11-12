@@ -20,7 +20,8 @@ import (
 // evidence and every policy Suspension has one shape whichever policy wrote
 // it. Each policy still owns when it may create a Flag, how much evidence it
 // retains, and how the Attempt, Participation and Connection it suspends
-// change state.
+// change state. The session-revocation fence in the baseline schema writes
+// Connection Loss records itself, in SQL, in the same shape.
 
 // insertIntegrityFlag writes a new open Flag.
 func insertIntegrityFlag(ctx context.Context, tx *sqlxTxWrapper, flag *model.IntegrityFlag) error {

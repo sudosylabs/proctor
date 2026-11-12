@@ -9,11 +9,9 @@ package sqlstore
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"time"
 
-	"github.com/sudosylabs/proctor/server/internal/canonicaljson"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -134,20 +132,20 @@ func retainBrowserIntegrity(
 			return invalidateDeliveryReviewInventory(ctx, tx, attempt)
 		}
 
-		group.Flag = model.NewIntegrityFlagID().String()
-		if _, err = tx.Exec(
-			ctx,
-			`INSERT INTO integrity_flags(
-				id, exam_attempt_id, generation, policy_kind, state, created_at
-			)
-			VALUES(?, ?, ?, 'browser_navigation', 'open', ?)`,
-			group.Flag,
-			attempt.String(),
+		flag, flagErr := model.NewIntegrityFlag(
+			model.NewIntegrityFlagID(),
+			attempt,
 			owner.Generation,
+			model.IntegrityPolicyBrowserNavigation,
 			budget.Now,
-		); err != nil {
+		)
+		if flagErr != nil {
+			return flagErr
+		}
+		if err = insertIntegrityFlag(ctx, tx, flag); err != nil {
 			return err
 		}
+		group.Flag = flag.ID.String()
 
 		if _, err = tx.Exec(
 			ctx,
@@ -189,40 +187,19 @@ func retainBrowserIntegrity(
 		RuleID:           rule.RuleID,
 		Event:            event,
 	}
-	if validateErr := detail.Validate(); validateErr != nil {
-		return validateErr
-	}
-
-	raw, err := json.Marshal(detail)
-	if err == nil {
-		raw, err = canonicaljson.Canonicalize(raw, model.BrowserIntegrityEvidenceMaxBytes)
-	}
+	raw, err := canonicalBrowserIntegrityEvidence(detail)
 	if err != nil {
 		return err
-	}
-	if len(raw) > model.BrowserIntegrityEvidenceMaxBytes {
-		return model.ErrDeliveryInvalid
 	}
 
 	if group.Details < 100 &&
 		budget.Records < model.BrowserEvidenceRecordLimit &&
 		budget.Bytes+int64(len(raw)) <= model.BrowserEvidenceByteLimit {
-		if _, err = tx.Exec(
-			ctx,
-			`INSERT INTO integrity_evidence(
-				id, exam_attempt_id, participation_id, integrity_flag_id, generation, policy_kind,
-				observed_at, recorded_at, browser_detail_canonical
-			)
-			VALUES(?, ?, ?, ?, ?, 'browser_navigation', ?, ?, ?)`,
-			model.NewIntegrityEvidenceID().String(),
-			attempt.String(),
-			owner.Part,
-			group.Flag,
-			owner.Generation,
-			receivedAt,
-			budget.Now,
-			raw,
-		); err != nil {
+		evidence, evidenceErr := browserIntegrityEvidence(attempt, owner.Part, group.Flag, owner.Generation, detail, receivedAt, budget.Now)
+		if evidenceErr != nil {
+			return evidenceErr
+		}
+		if err = insertIntegrityEvidence(ctx, tx, evidence); err != nil {
 			return err
 		}
 
@@ -264,4 +241,35 @@ func retainBrowserIntegrity(
 	}
 
 	return staleBrowserGroupDecision(ctx, tx, attempt, group.Flag)
+}
+
+// browserIntegrityEvidence is one retained Browser navigation as evidence for
+// its group's Flag.
+func browserIntegrityEvidence(
+	attempt model.ExamAttemptID,
+	participation, flag string,
+	generation int64,
+	detail model.BrowserIntegrityEvidence,
+	receivedAt, recordedAt time.Time,
+) (*model.IntegrityEvidence, error) {
+	participationID, err := model.ParseAttemptParticipationID(participation)
+	if err != nil {
+		return nil, invalidPersistedState("browser_activity_source", "participation_id", err)
+	}
+	flagID, err := model.ParseIntegrityFlagID(flag)
+	if err != nil {
+		return nil, invalidPersistedState("browser_integrity_group", "integrity_flag_id", err)
+	}
+
+	return &model.IntegrityEvidence{
+		Browser:         &detail,
+		ID:              model.NewIntegrityEvidenceID(),
+		AttemptID:       attempt,
+		ParticipationID: participationID,
+		FlagID:          flagID,
+		Generation:      generation,
+		Kind:            model.IntegrityPolicyBrowserNavigation,
+		ObservedAt:      model.TimeUTC(receivedAt),
+		RecordedAt:      model.TimeUTC(recordedAt),
+	}, nil
 }

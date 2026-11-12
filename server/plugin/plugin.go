@@ -87,4 +87,8 @@ type Host interface {
 	// configuration section, or nil when none is configured. The plugin
 	// decodes and validates it; invalid settings should fail Activate.
 	Settings() json.RawMessage
+	// AddIdentityProviderType offers a sign-in protocol. It fails when
+	// another plugin already offers the same Type, or after Activate has
+	// returned.
+	AddIdentityProviderType(IdentityProviderType) error
 }

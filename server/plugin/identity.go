@@ -9,6 +9,7 @@ package plugin
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -42,6 +43,29 @@ type IdentityProvider interface {
 	Begin(context.Context, BeginRequest) (BeginResponse, error)
 	State(Callback) (string, error)
 	Complete(context.Context, CompleteRequest) (Assertion, error)
+}
+
+// IdentityProviderType builds the identity providers of one sign-in
+// protocol. A plugin registers it with Host.AddIdentityProviderType; each
+// configured provider whose Type matches is then built with New, again
+// whenever the configuration is reloaded.
+type IdentityProviderType interface {
+	// Type is the protocol name a configured provider selects, for example
+	// "oidc". It is unique among the compiled-in plugins.
+	Type() string
+	// New builds the provider definition describes. It validates the
+	// settings it reads and fails rather than guess.
+	New(definition IdentityProviderDefinition) (IdentityProvider, error)
+}
+
+// IdentityProviderDefinition is one configured identity provider.
+type IdentityProviderDefinition struct {
+	// ID is the provider's configured identifier.
+	ID string
+	// Settings is the provider's configuration document, as it appears in
+	// the server's external authentication settings. Its shape belongs to
+	// the protocol.
+	Settings json.RawMessage
 }
 
 // BeginRequest asks a provider to start authentication.

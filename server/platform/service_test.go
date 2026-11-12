@@ -28,6 +28,8 @@ import (
 	"github.com/sudosylabs/proctor/server/platform/externalauth"
 	"github.com/sudosylabs/proctor/server/platform/externalauth/cas"
 	"github.com/sudosylabs/proctor/server/platform/externalauth/oidc"
+	"github.com/sudosylabs/proctor/server/plugin"
+	"github.com/sudosylabs/proctor/server/pluginhost"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
@@ -91,10 +93,15 @@ func completeOwnedResources(t *testing.T, configuration *config.Store) OwnedReso
 	t.Helper()
 	logger, err := logging.New()
 	require.NoError(t, err)
-	providers, err := externalauth.NewRegistry(
-		cas.NewFactory(),
-		oidc.NewFactory(),
-	)
+	plugins, err := pluginhost.Activate(context.Background(), pluginhost.Dependencies{
+		Plugins: []plugin.Plugin{cas.NewPlugin(), oidc.NewPlugin()},
+		Logger:  logger.Slog(),
+	})
+	if err != nil {
+		_ = logger.Shutdown()
+		require.NoError(t, err)
+	}
+	providers, err := externalauth.NewRegistry(plugins.IdentityProviderTypes()...)
 	if err != nil {
 		_ = logger.Shutdown()
 		require.NoError(t, err)

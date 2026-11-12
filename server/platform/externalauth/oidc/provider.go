@@ -40,10 +40,6 @@ func NewFactory() Factory {
 	return Factory{}
 }
 
-func (Factory) Type() string {
-	return config.ExternalAuthenticationTypeOIDC
-}
-
 func (Factory) New(
 	settings config.ExternalAuthenticationProvider,
 ) (plugin.IdentityProvider, error) {
@@ -491,6 +487,7 @@ func validProviderEndpoint(value string) bool {
 }
 
 var (
-	_ externalauth.Factory    = Factory{}
-	_ plugin.IdentityProvider = (*Provider)(nil)
+	_ plugin.Plugin               = Plugin{}
+	_ plugin.IdentityProviderType = providerType{}
+	_ plugin.IdentityProvider     = (*Provider)(nil)
 )

@@ -228,7 +228,10 @@ func TestRootSelectsLocalDevelopmentInfrastructure(t *testing.T) {
 	t.Cleanup(func() { _ = cluster.Stop(context.Background()) })
 	require.Equal(t, settings.Cluster.NodeID, cluster.NodeID(), "cluster node ID")
 
-	providers, err := newExternalAuthenticationRegistry()
+	plugins, err := activatePlugins(context.Background(), settings, logger, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = plugins.Close(context.Background()) })
+	providers, err := newExternalAuthenticationRegistry(plugins)
 	require.NoError(t, err)
 	require.NoError(t, providers.Configure(settings.Authentication.External))
 }
@@ -250,7 +253,13 @@ func TestRootSelectsConfiguredSMTPVFSAndIdentityAdapters(t *testing.T) {
 	_, err = newVFS(settings.VFS)
 	require.NoError(t, err)
 
-	providers, err := newExternalAuthenticationRegistry()
+	logger, err := logging.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = logger.Shutdown() })
+	plugins, err := activatePlugins(context.Background(), settings, logger, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = plugins.Close(context.Background()) })
+	providers, err := newExternalAuthenticationRegistry(plugins)
 	require.NoError(t, err)
 	external := settings.Authentication.External
 	external.Providers = []config.ExternalAuthenticationProvider{

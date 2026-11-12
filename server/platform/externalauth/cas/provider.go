@@ -34,10 +34,6 @@ func NewFactory() Factory {
 	return Factory{}
 }
 
-func (Factory) Type() string {
-	return config.ExternalAuthenticationTypeCAS
-}
-
 func (Factory) New(
 	settings config.ExternalAuthenticationProvider,
 ) (plugin.IdentityProvider, error) {
@@ -332,6 +328,7 @@ type attribute struct {
 }
 
 var (
-	_ externalauth.Factory    = Factory{}
-	_ plugin.IdentityProvider = (*Provider)(nil)
+	_ plugin.Plugin               = Plugin{}
+	_ plugin.IdentityProviderType = providerType{}
+	_ plugin.IdentityProvider     = (*Provider)(nil)
 )

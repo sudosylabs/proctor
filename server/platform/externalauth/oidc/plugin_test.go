@@ -1,0 +1,54 @@
+// ---------------------------------------------------------------------------------------------
+// Copyright (c) 2026 Sudosy Labs. All rights reserved.
+// Licensed under the GNU Affero General Public License, version 3 only.
+// See LICENSE in the server module root for license information.
+// SPDX-License-Identifier: AGPL-3.0-only
+// ---------------------------------------------------------------------------------------------
+
+package oidc
+
+import (
+	"context"
+	"encoding/json"
+	"log/slog"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/sudosylabs/proctor/server/plugin"
+)
+
+// recordingHost keeps what a plugin registers.
+type recordingHost struct {
+	types []plugin.IdentityProviderType
+}
+
+func (*recordingHost) Logger() *slog.Logger      { return slog.New(slog.DiscardHandler) }
+func (*recordingHost) Settings() json.RawMessage { return nil }
+func (h *recordingHost) AddIdentityProviderType(providerType plugin.IdentityProviderType) error {
+	h.types = append(h.types, providerType)
+	return nil
+}
+
+func TestPluginOffersTheProviderTypeThatBuildsConfiguredProviders(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, plugin.Manifest{ID: "oidc", Name: "OpenID Connect", EnabledByDefault: true}, NewPlugin().Manifest())
+	require.NoError(t, NewPlugin().Manifest().Validate())
+
+	host := &recordingHost{}
+	require.NoError(t, NewPlugin().Activate(context.Background(), host))
+	require.Len(t, host.types, 1)
+	require.Equal(t, "oidc", host.types[0].Type())
+
+	settings := testSettings("https://oidc.example.test")
+	encoded, err := json.Marshal(settings)
+	require.NoError(t, err)
+	built, err := host.types[0].New(plugin.IdentityProviderDefinition{ID: settings.ID, Settings: encoded})
+	require.NoError(t, err)
+	require.IsType(t, &Provider{}, built)
+
+	_, err = host.types[0].New(plugin.IdentityProviderDefinition{ID: "another", Settings: encoded})
+	require.EqualError(t, err, "provider settings name a different provider")
+	require.NoError(t, NewPlugin().Deactivate(context.Background()))
+}

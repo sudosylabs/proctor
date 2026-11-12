@@ -13,6 +13,8 @@ import (
 
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/logging"
+	"github.com/sudosylabs/proctor/server/platform/externalauth/cas"
+	"github.com/sudosylabs/proctor/server/platform/externalauth/oidc"
 	"github.com/sudosylabs/proctor/server/plugin"
 	"github.com/sudosylabs/proctor/server/pluginhost"
 )
@@ -20,7 +22,10 @@ import (
 // builtinPlugins are the plugins compiled into the server, in activation
 // order. This is the one place a plugin is named.
 func builtinPlugins() []plugin.Plugin {
-	return []plugin.Plugin{}
+	return []plugin.Plugin{
+		cas.NewPlugin(),
+		oidc.NewPlugin(),
+	}
 }
 
 // activatePlugins activates the built-in plugins, then any a test adds, with

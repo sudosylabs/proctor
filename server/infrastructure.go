@@ -36,8 +36,6 @@ import (
 	"github.com/sudosylabs/proctor/server/metrics"
 	"github.com/sudosylabs/proctor/server/platform"
 	"github.com/sudosylabs/proctor/server/platform/externalauth"
-	"github.com/sudosylabs/proctor/server/platform/externalauth/cas"
-	"github.com/sudosylabs/proctor/server/platform/externalauth/oidc"
 	"github.com/sudosylabs/proctor/server/pluginhost"
 	"github.com/sudosylabs/proctor/server/store"
 	"github.com/sudosylabs/proctor/server/store/localcachelayer"
@@ -197,7 +195,7 @@ func openRuntimeInfrastructure(
 	if err = result.decoratePersistenceWithLocalCache(ctx, overrides, metricsModule); err != nil {
 		return result, err
 	}
-	externalAuthentication, err := newExternalAuthenticationRegistry()
+	externalAuthentication, err := newExternalAuthenticationRegistry(result.plugins)
 	if err != nil {
 		return result, fmt.Errorf("construct external authentication registry: %w", err)
 	}
@@ -785,9 +783,8 @@ func newCluster(
 	}
 }
 
-func newExternalAuthenticationRegistry() (*externalauth.Registry, error) {
-	return externalauth.NewRegistry(
-		cas.NewFactory(),
-		oidc.NewFactory(),
-	)
+// newExternalAuthenticationRegistry builds the provider registry on the
+// sign-in protocols the active plugins offer.
+func newExternalAuthenticationRegistry(plugins *pluginhost.Host) (*externalauth.Registry, error) {
+	return externalauth.NewRegistry(plugins.IdentityProviderTypes()...)
 }

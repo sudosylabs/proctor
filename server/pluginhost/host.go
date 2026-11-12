@@ -89,6 +89,9 @@ type Host struct {
 	timeout time.Duration
 	entries []*entry
 
+	mu            sync.Mutex
+	identityTypes []*guardedIdentityProviderType
+
 	closeOnce sync.Once
 	closeErr  error
 }
@@ -165,9 +168,12 @@ func (h *Host) activate(ctx context.Context, e *entry, settings json.RawMessage)
 	activationCtx, cancel := context.WithTimeout(ctx, h.timeout)
 	defer cancel()
 
-	registration := &registrar{entry: e, settings: settings, open: true}
+	registration := &registrar{host: h, entry: e, settings: settings, open: true}
 	err := e.call("activate", func() error { return e.plugin.Activate(activationCtx, registration) })
 	registration.close()
+	if err != nil {
+		h.discardRegistrations(e)
+	}
 
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -178,6 +184,14 @@ func (h *Host) activate(ctx context.Context, e *entry, settings json.RawMessage)
 	}
 	e.state = StateActive
 	e.logger.Info("plugin activated")
+}
+
+// discardRegistrations forgets what a plugin registered before its
+// activation failed.
+func (h *Host) discardRegistrations(e *entry) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.identityTypes = slices.DeleteFunc(h.identityTypes, func(t *guardedIdentityProviderType) bool { return t.entry == e })
 }
 
 // Statuses reports every compiled-in plugin, in activation order.
@@ -234,6 +248,7 @@ func (e *entry) currentState() State {
 // registrar is the plugin.Host one plugin's Activate receives. It accepts
 // registrations only while Activate runs.
 type registrar struct {
+	host     *Host
 	entry    *entry
 	settings json.RawMessage
 

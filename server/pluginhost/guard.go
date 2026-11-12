@@ -44,3 +44,12 @@ func (e *entry) recordPanic() {
 		e.logger.Error("plugin failed after repeated panics", slog.Int("panics", e.panics))
 	}
 }
+
+// serve runs fn, a call into one of the plugin's capabilities. When the
+// plugin has failed it returns plugin.ErrUnavailable without calling it.
+func (e *entry) serve(operation string, fn func() error) error {
+	if e.currentState() != StateActive {
+		return fmt.Errorf("plugin %q: %w", e.manifest.ID, plugin.ErrUnavailable)
+	}
+	return e.call(operation, fn)
+}

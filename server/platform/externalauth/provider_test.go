@@ -52,9 +52,9 @@ func (f fakeFactory) Type() string {
 }
 
 func (f fakeFactory) New(
-	settings config.ExternalAuthenticationProvider,
+	definition plugin.IdentityProviderDefinition,
 ) (plugin.IdentityProvider, error) {
-	if settings.ID == "" {
+	if definition.ID == "" {
 		return nil, errors.New("missing id")
 	}
 	return fakeProvider{}, nil

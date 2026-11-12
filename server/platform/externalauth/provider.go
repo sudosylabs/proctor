@@ -16,6 +16,7 @@ package externalauth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -74,24 +75,20 @@ type Provider interface {
 	) (*model.ExternalAuthenticationAssertion, error)
 }
 
-// Factory constructs one protocol integration as a plugin.IdentityProvider.
-// Factories are registered on an instance Registry at the platform
-// composition root; there is no process-wide mutable provider map or
-// init-time side effect. The Registry wraps each provider with NewProvider.
-type Factory interface {
-	Type() string
-	New(config.ExternalAuthenticationProvider) (plugin.IdentityProvider, error)
-}
-
+// Registry holds the configured providers, built from the sign-in protocols
+// the plugins offer. Configure rebuilds them from configuration, including on
+// reload; there is no process-wide provider map or init-time side effect.
 type Registry struct {
 	mutex     sync.RWMutex
-	factories map[string]Factory
+	factories map[string]plugin.IdentityProviderType
 	providers map[string]Provider
 }
 
-func NewRegistry(factories ...Factory) (*Registry, error) {
+// NewRegistry returns a Registry that builds providers with factories, one
+// per protocol Type.
+func NewRegistry(factories ...plugin.IdentityProviderType) (*Registry, error) {
 	registry := &Registry{
-		factories: make(map[string]Factory, len(factories)),
+		factories: make(map[string]plugin.IdentityProviderType, len(factories)),
 		providers: make(map[string]Provider),
 	}
 	for _, factory := range factories {
@@ -131,7 +128,16 @@ func (r *Registry) Configure(
 			)
 		}
 
-		provider, err := factory.New(definition)
+		settings, err := json.Marshal(definition)
+		if err != nil {
+			return fmt.Errorf(
+				"encode external authentication provider %q settings: %w",
+				definition.ID,
+				err,
+			)
+		}
+
+		provider, err := factory.New(plugin.IdentityProviderDefinition{ID: definition.ID, Settings: settings})
 		if err != nil {
 			return fmt.Errorf(
 				"configure external authentication provider %q: %w",

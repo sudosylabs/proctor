@@ -123,15 +123,19 @@ func composeConsumers(
 		return nil, err
 	}
 
-	pluginReconciler := newOptionalPluginReconciler(
-		capabilities.persistence.PluginSettings(), capabilities.plugins, snapshot,
-		capabilities.logger, capabilities.pluginSettingsCount,
-	)
+	// A lifecycle-only graph without persistence has no saved settings to
+	// follow.
+	var reconciler *pluginReconciler
+	if saved := capabilities.persistence.PluginSettings(); saved != nil {
+		reconciler = newPluginReconciler(
+			saved, capabilities.plugins, snapshot, capabilities.logger, capabilities.pluginSettingsCount,
+		)
+	}
 	applicationDeps, err := composeApplicationDependencies(ctx, snapshot, capabilities, input, mailRenderer)
 	if err != nil {
 		return nil, err
 	}
-	applicationDeps.Plugins = pluginCatalog{host: capabilities.plugins, reconciler: pluginReconciler}
+	applicationDeps.Plugins = pluginCatalog{host: capabilities.plugins, reconciler: reconciler}
 
 	application, err := app.New(applicationDeps)
 	if err != nil {
@@ -219,7 +223,7 @@ func composeConsumers(
 		transport:             rootTransport,
 		websocket:             webSocketHub,
 		plugins:               capabilities.plugins,
-		pluginReconciler:      pluginReconciler,
+		pluginReconciler:      reconciler,
 		metrics:               capabilities.metrics,
 		tracing:               capabilities.tracing,
 		readiness:             readiness,

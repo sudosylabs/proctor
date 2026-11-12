@@ -109,6 +109,7 @@ DROP TABLE IF EXISTS exam_attempt_focus_loss_pending;
 DROP TABLE IF EXISTS exam_attempt_focus_loss_evaluations;
 DROP TABLE IF EXISTS exam_attempt_screen_clip_chunks;
 DROP TABLE IF EXISTS exam_attempt_screen_clips;
+DROP FUNCTION IF EXISTS fail_untaken_screen_clips() CASCADE;
 DROP TABLE IF EXISTS exam_attempt_suspensions;
 DROP FUNCTION IF EXISTS guard_exam_attempt_suspension_mutation();
 DROP TABLE IF EXISTS integrity_evidence;

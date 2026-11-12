@@ -42,6 +42,10 @@ func TestExamAttemptScreenClipStore(t *testing.T, ss store.Store) {
 		requireConflictConstraint(t, err, "screen_recording_disabled")
 	})
 
+	t.Run("IncidentClip", func(t *testing.T) {
+		testIncidentScreenClip(t, ctx, ss)
+	})
+
 	fixture := newExamAttemptFixtureWithScreenRecording(t, ctx, ss)
 	connected, access := connectScreenClipAttempt(t, ctx, ss, fixture, "on")
 
@@ -245,4 +249,101 @@ func storetestDesktopSignature(t *testing.T, message []byte) string {
 	r, s, err := ecdsa.Sign(rand.Reader, key, digest[:])
 	require.NoError(t, err)
 	return base64.RawURLEncoding.EncodeToString(append(r.FillBytes(make([]byte, 32)), s.FillBytes(make([]byte, 32))...))
+}
+
+// testIncidentScreenClip checks that a Flag on a recording Attempt asks for
+// the minute either side of it, linked to the Flag, and that a second
+// occurrence on the same Flag asks for nothing more.
+func testIncidentScreenClip(t *testing.T, ctx context.Context, ss store.Store) {
+	t.Helper()
+	fixture := newExamAttemptFixtureWithScreenRecording(t, ctx, ss)
+	credential := model.HashToken(model.NewCredentialToken())
+	input := &store.ExamAttemptConnect{
+		SittingID: fixture.sitting.ID, CandidateUserID: fixture.candidate.ID,
+		SessionID: fixture.session.ID, DesktopRegistrationID: fixture.session.DesktopRegistrationID,
+		DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint, AttemptID: model.NewExamAttemptID(),
+		WorkspaceID: model.NewExamAttemptWorkspaceID(), ParticipationID: model.NewAttemptParticipationID(),
+		ConnectionID: model.NewAttemptConnectionID(), ContinuityCredentialHash: credential,
+		AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC(),
+	}
+	prepareExamAttemptConnect(t, ctx, ss, input)
+	connected, err := ss.ExamAttempt().Connect(ctx, input,
+		examCommand(fixture.candidate.ID, store.ExamAttemptConnectOperation, "incident-connect", "incident-connect"))
+	require.NoError(t, err)
+	access := store.CandidateAttemptAccess{
+		AttemptID: connected.Attempt.ID, ConnectionID: input.ConnectionID, ContinuityCredentialHash: credential,
+		CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID,
+		DesktopRegistrationID: fixture.session.DesktopRegistrationID, DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint,
+	}
+	delivery := store.NativeDeliveryAccess{Access: access, StreamID: connected.Security.DeliveryStreamID,
+		ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation}
+	at := model.NowUTC().Truncate(time.Millisecond)
+	appendRecords := func(sequence int64, records ...model.NativeRecord) *store.NativeDeliveryAppended {
+		batch := model.NativeSecurityBatch{StreamID: delivery.StreamID, BatchSequence: sequence, ParticipationID: delivery.ParticipationID,
+			Generation: delivery.Generation, SecuritySessionID: connected.Security.SecuritySessionID, PolicyDigest: connected.Security.Policy.Digest,
+			ApplicationReleaseID: connected.Security.Policy.ApplicationReleaseID, MatrixID: connected.Security.Policy.MatrixID, Records: records}
+		raw, canonicalErr := batch.Canonical()
+		require.NoError(t, canonicalErr)
+		key := fmt.Sprintf("incident-%d", sequence)
+		appended, appendErr := ss.NativeDelivery().AppendNativeDelivery(ctx, &store.NativeDeliveryAppend{Access: delivery, Batch: batch,
+			DesktopBuild: input.DesktopBuild, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()},
+			examCommand(fixture.candidate.ID, store.NativeDeliveryAppendOperation, key, model.SHA256Fingerprint(raw)))
+		require.NoError(t, appendErr)
+		return appended
+	}
+
+	flagged := appendRecords(1, secondDisplay(2, at)).Flagged
+	require.Len(t, flagged, 1)
+	pending, err := ss.ExamAttempt().ListPendingScreenClips(ctx, access)
+	require.NoError(t, err)
+	require.Len(t, pending, 1, "the Flag asks for an incident clip")
+	require.Equal(t, model.ScreenClipSourceIncident, pending[0].Source)
+	require.Equal(t, flagged[0].FlagID, pending[0].FlagID)
+	require.Equal(t, 2*model.ScreenClipIncidentMargin, pending[0].Range.End.Sub(pending[0].Range.Start))
+
+	time.Sleep(time.Second) // Allow the real shared append allowance to refill.
+	later := at.Add(5 * time.Second)
+	again := appendRecords(2, singleDisplay(3, later), secondDisplay(4, later.Add(2*time.Second)))
+	require.Len(t, again.Flagged, 1, "a new occurrence adds evidence to the same Flag")
+	require.Equal(t, flagged[0].FlagID, again.Flagged[0].FlagID)
+	pending, err = ss.ExamAttempt().ListPendingScreenClips(ctx, access)
+	require.NoError(t, err)
+	require.Len(t, pending, 1, "only a new Flag asks for a clip")
+	incident := pending[0].ID
+
+	// A manager clip Desktop took before submission may finish uploading
+	// after it, without the Connection; one never taken fails.
+	taken := screenClipRequest(t, ctx, ss, fixture, connected.Attempt.ID)
+	_, err = ss.ExamAttempt().RequestScreenClip(ctx, taken,
+		examCommand(fixture.manager.ID, store.ExamAttemptScreenClipRequestOperation, "incident-manager", "incident-manager"))
+	require.NoError(t, err)
+	_, err = ss.ExamAttempt().DeliverScreenClip(ctx, &store.ExamAttemptScreenClipDelivery{Access: access, ClipID: taken.Clip.ID})
+	require.NoError(t, err)
+	seal := &store.ExamSubmissionSeal{SubmissionID: model.NewSubmissionID(), ReceiptCode: model.NewSubmissionReceiptCode(), Access: store.ExamSubmissionSealAccess{AttemptID: connected.Attempt.ID, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, ConnectionID: connected.Connection.ID, CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID, ContinuityCredentialHash: credential, ExpectedCurrentRevisionID: fixture.revisionID, ExpectedWorkspaceCursor: connected.Workspace.Cursor}, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
+	attachSubmissionReceipt(t, ctx, ss, fixture.candidate, seal)
+	_, err = ss.ExamSubmission().Seal(ctx, seal, examCommand(fixture.candidate.ID, store.ExamSubmissionSealOperation, "incident-submit", "incident-submit"))
+	require.NoError(t, err)
+
+	clips, err := ss.ExamAttempt().ListAttemptScreenClips(ctx, fixture.examID, fixture.sitting.ID, connected.Attempt.ID)
+	require.NoError(t, err)
+	states := map[model.ScreenClipID]store.ExamAttemptScreenClipView{}
+	for _, clip := range clips {
+		states[clip.ID] = clip
+	}
+	require.Equal(t, model.ScreenClipFailed, states[incident].State, "a request never taken fails at submission")
+	require.Equal(t, model.ScreenClipFailureAttemptEnded, states[incident].Failure)
+	require.Equal(t, model.ScreenClipRecording, states[taken.Clip.ID].State, "a taken clip is still owed")
+
+	closed := access
+	closed.ConnectionID, closed.ContinuityCredentialHash = "", ""
+	upload := &model.ScreenClipUpload{MediaType: "video/mp4", SizeBytes: 10, ChunkSHA256: []string{strings.Repeat("a", 64)}}
+	begun, err := ss.ExamAttempt().BeginScreenClipUpload(ctx, &store.ExamAttemptScreenClipUploadBegin{Access: closed, ClipID: taken.Clip.ID, Upload: upload})
+	require.NoError(t, err, "the upload continues after submission")
+	require.Equal(t, model.ScreenClipUploading, begun.State)
+	other := closed
+	other.DPoPKeyThumbprint = strings.Repeat("A", len(closed.DPoPKeyThumbprint))
+	_, err = ss.ExamAttempt().BeginScreenClipUpload(ctx, &store.ExamAttemptScreenClipUploadBegin{Access: other, ClipID: taken.Clip.ID, Upload: upload})
+	require.Error(t, err, "only the Desktop that took the clip continues it")
+	_, err = ss.ExamAttempt().BeginScreenClipUpload(ctx, &store.ExamAttemptScreenClipUploadBegin{Access: closed, ClipID: incident, Upload: upload})
+	require.Error(t, err, "a failed clip takes no upload")
 }

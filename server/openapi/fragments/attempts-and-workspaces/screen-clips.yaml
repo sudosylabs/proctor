@@ -339,7 +339,9 @@ paths:
         Declares a taken clip's media type, exact size and the SHA-256 of every chunk in order. Every chunk is
         chunk_bytes long except the last, which holds the rest. The clip's content digest is the SHA-256 of that
         manifest. A clip that would take the Attempt's clips past 6 GiB is refused. Declaring the same clip again
-        returns it unchanged.
+        returns it unchanged. Once the Participation that took the clip has closed, as at submission, Desktop
+        continues the upload without the Attempt credential and Connection headers until that Participation's upload
+        deadline; a clip not complete by then fails with upload_deadline.
       x-proctor-auth: session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -365,8 +367,8 @@ paths:
         - sessionCookie: []
           csrfToken: []
       parameters:
-        - $ref: '#/components/parameters/CandidateAttemptCredential'
-        - $ref: '#/components/parameters/CandidateAttemptConnectionID'
+        - $ref: '#/components/parameters/NativeDeliveryCredential'
+        - $ref: '#/components/parameters/NativeDeliveryConnectionID'
       requestBody:
         $ref: '#/components/requestBodies/BeginCandidateScreenClipUpload'
       responses:
@@ -416,8 +418,8 @@ paths:
         - dpopAuth: []
         - sessionCookie: []
       parameters:
-        - $ref: '#/components/parameters/CandidateAttemptCredential'
-        - $ref: '#/components/parameters/CandidateAttemptConnectionID'
+        - $ref: '#/components/parameters/NativeDeliveryCredential'
+        - $ref: '#/components/parameters/NativeDeliveryConnectionID'
       responses:
         '200':
           $ref: '#/components/responses/ScreenClipUploadOK'
@@ -479,8 +481,8 @@ paths:
         - sessionCookie: []
           csrfToken: []
       parameters:
-        - $ref: '#/components/parameters/CandidateAttemptCredential'
-        - $ref: '#/components/parameters/CandidateAttemptConnectionID'
+        - $ref: '#/components/parameters/NativeDeliveryCredential'
+        - $ref: '#/components/parameters/NativeDeliveryConnectionID'
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -550,8 +552,8 @@ paths:
         - sessionCookie: []
           csrfToken: []
       parameters:
-        - $ref: '#/components/parameters/CandidateAttemptCredential'
-        - $ref: '#/components/parameters/CandidateAttemptConnectionID'
+        - $ref: '#/components/parameters/NativeDeliveryCredential'
+        - $ref: '#/components/parameters/NativeDeliveryConnectionID'
       requestBody:
         $ref: '#/components/requestBodies/CompleteCandidateScreenClipUpload'
       responses:

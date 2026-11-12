@@ -318,6 +318,37 @@ func requestScreenClip(
 	}, nil
 }
 
+// requestIncidentScreenClip asks Desktop for the minute either side of the
+// moment a Flag opened, when the Attempt's policy records the screen. Focus
+// Loss, Connection Loss and native Flags qualify; at most
+// model.ScreenClipIncidentRequestLimit are asked for per Attempt, and any
+// further Flag goes without one.
+func requestIncidentScreenClip(ctx context.Context, tx *sqlxTxWrapper, flag *model.IntegrityFlag) error {
+	if flag.Kind == model.IntegrityPolicyBrowserNavigation {
+		return nil
+	}
+	var attempt struct {
+		Recording bool `db:"recording"`
+		Incidents int  `db:"incidents"`
+	}
+	if err := tx.Get(ctx, &attempt, `SELECT
+			COALESCE((r.policy_document #>> '{native,screen_recording,enabled}')::boolean, false) AS recording,
+			(SELECT count(*) FROM exam_attempt_screen_clips c WHERE c.exam_attempt_id = a.id AND c.source = ?) AS incidents
+		FROM exam_attempts a
+		JOIN exam_revisions r ON r.id = a.admission_revision_id
+		WHERE a.id = ?`, model.ScreenClipSourceIncident, flag.AttemptID.String()); err != nil {
+		return translateError("exam_attempt", flag.AttemptID.String(), err)
+	}
+	if !attempt.Recording || attempt.Incidents >= model.ScreenClipIncidentRequestLimit {
+		return nil
+	}
+	clip, err := model.NewIncidentScreenClip(model.NewScreenClipID(), flag.AttemptID, flag.ID, flag.CreatedAt)
+	if err != nil {
+		return err
+	}
+	return insertScreenClip(ctx, tx, clip)
+}
+
 func insertScreenClip(ctx context.Context, tx *sqlxTxWrapper, clip *model.ScreenClip) error {
 	if err := clip.Validate(); err != nil {
 		return err
@@ -412,6 +443,9 @@ func lockLiveScreenClip(
 	access store.CandidateAttemptAccess,
 	clipID model.ScreenClipID,
 ) (*model.ScreenClip, model.AttemptParticipationID, error) {
+	if access.ConnectionID == "" && access.ContinuityCredentialHash == "" {
+		return lockClosedScreenClip(ctx, tx, access, clipID)
+	}
 	if _, err := lockCandidateGuard(ctx, tx, access); err != nil {
 		return nil, "", err
 	}
@@ -440,6 +474,96 @@ func lockLiveScreenClip(
 		return nil, "", err
 	}
 	return clip, participationID, nil
+}
+
+// lockClosedScreenClip locks a clip whose upload continues after the
+// Participation that took it closed. The candidate's registered Desktop
+// Session must be the one that held that Participation, and its upload
+// deadline must not have passed.
+func lockClosedScreenClip(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	access store.CandidateAttemptAccess,
+	clipID model.ScreenClipID,
+) (*model.ScreenClip, model.AttemptParticipationID, error) {
+	var owner struct {
+		StreamID      string       `db:"delivery_stream_id"`
+		Participation string       `db:"participation_id"`
+		Registration  string       `db:"registration_id"`
+		Thumbprint    string       `db:"key_thumbprint"`
+		UploadExpires sql.NullTime `db:"upload_expires_at"`
+	}
+	err := tx.Get(ctx, &owner, `SELECT o.delivery_stream_id, o.participation_id, o.registration_id, o.key_thumbprint,
+			o.upload_expires_at
+		FROM exam_attempt_screen_clips c
+		JOIN exam_attempt_security_owners o ON o.participation_id = c.delivered_participation_id
+		WHERE c.id = ? AND c.exam_attempt_id = ?`, clipID.String(), access.AttemptID.String())
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, "", store.NewErrNotFound("screen_clip", clipID.String())
+	}
+	if err != nil {
+		return nil, "", fmt.Errorf("read screen clip owner: %w", err)
+	}
+	if err = lockNativeDeliveryAccess(ctx, tx, store.NativeDeliveryAccess{Access: access, StreamID: owner.StreamID}); err != nil {
+		return nil, "", err
+	}
+	if owner.Registration != access.DesktopRegistrationID.String() || owner.Thumbprint != access.DPoPKeyThumbprint {
+		return nil, "", store.NewErrNotFound("screen_clip", clipID.String())
+	}
+	if !owner.UploadExpires.Valid {
+		// The Participation is still live, so the upload needs its credential.
+		return nil, "", store.NewErrInvalidInput("exam_attempt", "candidate_access", nil)
+	}
+
+	var row screenClipRow
+	if err = tx.Get(ctx, &row, `SELECT `+screenClipColumns+` FROM exam_attempt_screen_clips
+		WHERE id = ? AND exam_attempt_id = ?
+		FOR UPDATE`, clipID.String(), access.AttemptID.String()); err != nil {
+		return nil, "", fmt.Errorf("lock screen clip: %w", err)
+	}
+	clip, err := row.model()
+	if err != nil {
+		return nil, "", err
+	}
+	now, err := databaseTime(ctx, tx)
+	if err != nil {
+		return nil, "", err
+	}
+	if !now.Before(owner.UploadExpires.Time) {
+		// The delivery expiry pass fails the clip itself.
+		return nil, "", model.ErrDeliveryExpired
+	}
+	participationID, err := model.ParseAttemptParticipationID(owner.Participation)
+	if err != nil {
+		return nil, "", invalidPersistedState("attempt_participation", "id", err)
+	}
+	return clip, participationID, nil
+}
+
+// failExpiredScreenClipUploads fails the clips a Participation took and did
+// not finish uploading before its upload deadline. The delivery expiry pass
+// calls it when that deadline passes.
+func failExpiredScreenClipUploads(ctx context.Context, tx *sqlxTxWrapper, participation model.AttemptParticipationID, now time.Time) error {
+	var rows []screenClipRow
+	if err := tx.Select(ctx, &rows, `SELECT `+screenClipColumns+` FROM exam_attempt_screen_clips
+		WHERE delivered_participation_id = ? AND state IN ('recording', 'uploading')
+		ORDER BY id
+		FOR UPDATE`, participation.String()); err != nil {
+		return fmt.Errorf("lock unfinished screen clips: %w", err)
+	}
+	for _, row := range rows {
+		clip, err := row.model()
+		if err != nil {
+			return err
+		}
+		if err = clip.Fail(model.ScreenClipFailureUploadDeadline, model.TimeUTC(now)); err != nil {
+			return err
+		}
+		if _, err = updateScreenClip(ctx, tx, clip); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func databaseTime(ctx context.Context, tx *sqlxTxWrapper) (time.Time, error) {

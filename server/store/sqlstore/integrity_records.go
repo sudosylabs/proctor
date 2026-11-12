@@ -23,7 +23,8 @@ import (
 // change state. The session-revocation fence in the baseline schema writes
 // Connection Loss records itself, in SQL, in the same shape.
 
-// insertIntegrityFlag writes a new open Flag.
+// insertIntegrityFlag writes a new open Flag, and asks for an incident screen
+// clip around it when the Attempt records its screen.
 func insertIntegrityFlag(ctx context.Context, tx *sqlxTxWrapper, flag *model.IntegrityFlag) error {
 	if err := flag.Validate(); err != nil {
 		return err
@@ -45,7 +46,7 @@ func insertIntegrityFlag(ctx context.Context, tx *sqlxTxWrapper, flag *model.Int
 		return translateError("integrity_flag", flag.ID.String(), err)
 	}
 
-	return nil
+	return requestIncidentScreenClip(ctx, tx, flag)
 }
 
 // insertIntegrityEvidence writes one piece of evidence for an open Flag. Only

@@ -268,6 +268,10 @@ func expireDeliveryOwner(ctx context.Context, tx *sqlxTxWrapper, d store.Deliver
 				return false, err
 			}
 
+			if err := failExpiredScreenClipUploads(ctx, tx, d.ParticipationID, now); err != nil {
+				return false, err
+			}
+
 			if _, err := advanceNativeInterpretation(ctx, tx, nativeDeliveryOwner{
 				Binding:         binding,
 				ParticipationID: d.ParticipationID.String(),

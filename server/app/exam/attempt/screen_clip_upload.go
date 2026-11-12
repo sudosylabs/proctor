@@ -39,7 +39,7 @@ func (s *Service) BeginScreenClipUpload(
 	upload model.ScreenClipUpload,
 ) (_ store.ExamAttemptScreenClipView, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	selector, err := candidateSelector(inv, candidateAccess)
+	selector, err := screenClipUploadSelector(inv, candidateAccess)
 	if err != nil {
 		return store.ExamAttemptScreenClipView{}, err
 	}
@@ -67,7 +67,7 @@ func (s *Service) ScreenClipUploadStatus(
 	clipID model.ScreenClipID,
 ) (_ store.ExamAttemptScreenClipUploadStatus, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	selector, err := candidateSelector(inv, candidateAccess)
+	selector, err := screenClipUploadSelector(inv, candidateAccess)
 	if err != nil {
 		return store.ExamAttemptScreenClipUploadStatus{}, err
 	}
@@ -94,7 +94,7 @@ func (s *Service) UploadScreenClipChunk(
 	command ScreenClipChunkCommand,
 ) (resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	selector, err := candidateSelector(inv, command.Access)
+	selector, err := screenClipUploadSelector(inv, command.Access)
 	if err != nil {
 		return err
 	}
@@ -145,7 +145,7 @@ func (s *Service) CompleteScreenClipUpload(
 	command ScreenClipCompletion,
 ) (_ store.ExamAttemptScreenClipView, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	selector, err := candidateSelector(inv, command.Access)
+	selector, err := screenClipUploadSelector(inv, command.Access)
 	if err != nil {
 		return store.ExamAttemptScreenClipView{}, err
 	}

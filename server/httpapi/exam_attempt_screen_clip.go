@@ -176,7 +176,7 @@ type screenClipChunkResponse struct {
 }
 
 func (h examAttemptHandlers) beginScreenClipUpload(request route.Request) (route.Result, error) {
-	access, err := candidateAccess(request)
+	access, err := screenClipUploadAccess(request)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -200,7 +200,7 @@ func (h examAttemptHandlers) beginScreenClipUpload(request route.Request) (route
 }
 
 func (h examAttemptHandlers) screenClipUploadStatus(request route.Request) (route.Result, error) {
-	access, err := candidateAccess(request)
+	access, err := screenClipUploadAccess(request)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -216,7 +216,7 @@ func (h examAttemptHandlers) screenClipUploadStatus(request route.Request) (rout
 }
 
 func (h examAttemptHandlers) uploadScreenClipChunk(request route.Request) (route.ProtocolResult, error) {
-	access, err := candidateAccess(request)
+	access, err := screenClipUploadAccess(request)
 	if err != nil {
 		return route.ProtocolResult{}, err
 	}
@@ -238,7 +238,7 @@ func (h examAttemptHandlers) uploadScreenClipChunk(request route.Request) (route
 }
 
 func (h examAttemptHandlers) completeScreenClipUpload(request route.Request) (route.Result, error) {
-	access, err := candidateAccess(request)
+	access, err := screenClipUploadAccess(request)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -339,4 +339,25 @@ func (h examAttemptHandlers) playScreenClip(request route.Request) (route.Protoc
 		return route.PartialDownload(opened.Body, opened.Start, opened.Length, opened.SizeBytes).WithHeaders(headers), nil
 	}
 	return route.BinaryDownload(opened.Body, opened.Length).WithHeaders(headers), nil
+}
+
+// screenClipUploadAccess reads the candidate access of an upload. The Attempt
+// credential and Connection headers come together while the Participation
+// that took the clip is live; after it closes they are omitted, and the Store
+// decides from the recorded closure whether the upload may continue.
+func screenClipUploadAccess(request route.Request) (attempt.CandidateAccess, error) {
+	attemptID, err := route.PathID[model.ExamAttemptID](request, "exam_attempt_id")
+	if err != nil {
+		return attempt.CandidateAccess{}, err
+	}
+	access := attempt.CandidateAccess{AttemptID: attemptID}
+	if len(request.HTTP.Header.Values(candidateAttemptCredentialHeader)) > 0 ||
+		len(request.HTTP.Header.Values(candidateAttemptConnectionHeader)) > 0 {
+		headers, headerErr := candidateAttemptAccessHeaders(request.HTTP)
+		if headerErr != nil {
+			return access, route.InvalidRequest(headerErr)
+		}
+		access.ConnectionID, access.ContinuityCredential = headers.ConnectionID, headers.ContinuityCredential
+	}
+	return access, nil
 }

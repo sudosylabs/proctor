@@ -2613,6 +2613,22 @@ CREATE INDEX exam_attempt_screen_clips_flag_idx ON exam_attempt_screen_clips (in
 CREATE INDEX exam_attempt_screen_clips_participation_idx ON exam_attempt_screen_clips (delivered_participation_id)
     WHERE delivered_participation_id IS NOT NULL;
 
+-- A request Desktop never took can no longer be recorded once the Attempt is
+-- submitted, whichever path submitted it. Requests already taken may finish
+-- uploading until their Participation's upload deadline.
+CREATE FUNCTION fail_untaken_screen_clips() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    UPDATE exam_attempt_screen_clips
+    SET state = 'failed', failure = 'attempt_ended',
+        updated_at = GREATEST(statement_timestamp(), requested_at), revision = revision + 1
+    WHERE exam_attempt_id = NEW.id AND state = 'requested';
+    RETURN NEW;
+END $$;
+CREATE TRIGGER exam_attempts_fail_untaken_screen_clips
+    AFTER UPDATE OF state ON exam_attempts
+    FOR EACH ROW WHEN (NEW.state = 'submitted' AND OLD.state IS DISTINCT FROM 'submitted')
+    EXECUTE FUNCTION fail_untaken_screen_clips();
+
 ALTER TABLE exam_attempt_focus_loss_evaluations
     ADD CONSTRAINT exam_attempt_focus_loss_evaluations_suspension_fkey
     FOREIGN KEY (last_suspension_id, exam_attempt_id, participation_id, generation)

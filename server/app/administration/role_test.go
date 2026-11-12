@@ -78,7 +78,17 @@ type roleAuthorizerFake struct {
 	err           error
 	delegationErr error
 	bindingScope  store.UserVisibilityScope
-	decisions     []recordedDecision
+	// noBindingScope makes the caller hold role_binding.view nowhere;
+	// otherwise an empty bindingScope stands for Institution-wide.
+	noBindingScope bool
+	// roleViewDenied makes the caller lack Institution-wide role.view.
+	roleViewDenied bool
+	decisions      []recordedDecision
+}
+
+func (a *roleAuthorizerFake) CanViewRoles(context.Context, invocation.Invocation) (bool, error) {
+	*a.events = append(*a.events, "can-view-roles")
+	return !a.roleViewDenied, nil
 }
 
 func (a *roleAuthorizerFake) Authorize(_ context.Context, _ invocation.Invocation, action model.Action, _ model.Resource) error {
@@ -93,6 +103,9 @@ func (a *roleAuthorizerFake) Authorize(_ context.Context, _ invocation.Invocatio
 func (a *roleAuthorizerFake) GrantedScopes(context.Context, model.Principal, model.Action, model.ResourceType) (access.AuthorizedScopeConstraint, error) {
 	*a.events = append(*a.events, "authorize-binding-list")
 	scope := a.bindingScope
+	if a.noBindingScope {
+		return access.AuthorizedScopeConstraint{}, a.err
+	}
 	if !scope.InstitutionWide && len(scope.AcademicUnitRootIDs) == 0 && len(scope.ClassIDs) == 0 {
 		scope = store.UserVisibilityScope{InstitutionWide: true}
 	}

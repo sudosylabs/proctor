@@ -4482,8 +4482,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List Role Bindings by user or scope
-         * @description Lists current and historical Role Bindings authorized for the caller, optionally narrowed to one User or exact scope. A Binding is an effective-dated permission grant; membership or affiliation alone is not returned as authority. The first page, read without a cursor, also reports `total`: the Role Bindings the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
+         * List Role Bindings by user, scope, or Role
+         * @description Lists the Role Bindings authorized for the caller in exactly one of three forms; combining them is `request.invalid`. `user_id` lists one User's current and historical Bindings inside the caller's role_binding.view scopes, and `scope_type` with `scope_id` lists every Binding at one exact scope the caller may view; both read the whole set in creation order, newest first. Repeatable `role_id` (up to 16 Roles) lists who holds those Roles now: the current Bindings of any listed Role, effective at the request time on an unarchived Role and scope, inside the caller's role_binding.view scopes, newest first by `created_at` then `id`. It needs Institution-wide role.view, through which Roles are seen: without it, and for a Role that does not exist or is archived, the request is `request.invalid` on `role_id` alike. Its cursor continues only the same set of Roles. A Binding is an effective-dated permission grant; membership or affiliation alone is not returned as authority. The first page, read without a cursor, also reports `total`: the Role Bindings the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
          */
         get: operations["listRoleBindings"];
         put?: never;
@@ -4530,7 +4530,7 @@ export interface paths {
         };
         /**
          * List Roles
-         * @description Lists built-in and custom Roles visible to the authorized caller. Role definitions name permissions only; effective access also requires a current scoped Role Binding and terminal authorization against current durable state.
+         * @description Lists built-in and custom Roles visible to the authorized caller, ascending by `name` then `id`. Role definitions name permissions only; effective access also requires a current scoped Role Binding and terminal authorization against current durable state. Each item carries `holders`, the current Role Bindings of that Role the caller can see through role_binding.view, counted for the whole page in one read; `holders` is omitted for a caller who holds role_binding.view nowhere.
          */
         get: operations["listRoles"];
         put?: never;
@@ -4557,7 +4557,7 @@ export interface paths {
         };
         /**
          * Get a Role
-         * @description Returns one built-in or custom Role visible to the caller, including its current permission set and built-in protection flag. The response does not imply that any User currently holds the Role.
+         * @description Returns one built-in or custom Role visible to the caller, including its current permission set and built-in protection flag. `holders` counts the current Role Bindings of the Role the caller can see through role_binding.view, and is omitted for a caller who holds role_binding.view nowhere; the Role definition alone does not imply that any User holds it.
          */
         get: operations["getRole"];
         put?: never;
@@ -10672,6 +10672,21 @@ export interface components {
             updated_at: string;
             user_id: components["schemas"]["ID"];
         };
+        /** @description Who holds a Role now, among the Role Bindings the caller can see: the current Bindings of the Role, effective at the request time on an unarchived scope, inside the caller's role_binding.view scopes. Present on Role reads only, and only for a caller holding role_binding.view somewhere. Each count stops at 10,000; `users` and `scopes` are counted among the Bindings counted, so all three are lower bounds when `bindings` reaches the bound. */
+        RoleHolders: {
+            /** @description Current Role Bindings of the Role the caller can see. */
+            bindings: number;
+            /** @description True when `bindings` reached the 10,000 bound and there may be more. */
+            bindings_is_lower_bound: boolean;
+            /** @description Distinct scopes (scope type and identity) of those Bindings. */
+            scopes: number;
+            /** @description True when `scopes` may be more than reported, because the Bindings count reached its bound. */
+            scopes_is_lower_bound: boolean;
+            /** @description Distinct Users holding those Bindings. */
+            users: number;
+            /** @description True when `users` may be more than reported, because the Bindings count reached its bound. */
+            users_is_lower_bound: boolean;
+        };
         /** @description Roles visible to the authorized caller. */
         RoleListResponse: {
             items: components["schemas"]["RoleResponse"][];
@@ -10695,6 +10710,7 @@ export interface components {
             description: string;
             /** @description Human-facing Role name. */
             display_name: string;
+            holders?: components["schemas"]["RoleHolders"];
             id: components["schemas"]["ID"];
             /** @description Immutable canonical machine name for the Role. */
             name: string;
@@ -22081,6 +22097,8 @@ export interface operations {
                 scope_type?: string;
                 /** @description Return only Bindings for this exact scope identity. */
                 scope_id?: components["schemas"]["ID"];
+                /** @description Return the current Bindings of any listed Role inside the caller's role_binding.view scopes. Repeat the parameter for up to 16 Roles; repeats count once. Requires Institution-wide role.view, and every Role must exist and be unarchived, or the request is `request.invalid` on `role_id`. Cannot be combined with `user_id`, `scope_type`, or `scope_id`. */
+                role_id?: components["schemas"]["ID"][];
                 /** @description Maximum number of items in the page. */
                 limit?: components["parameters"]["PageLimit"];
                 /** @description Opaque next_cursor from the previous page, returned unchanged; omit it for the first page. */

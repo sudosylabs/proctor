@@ -277,6 +277,21 @@ module when a change is not server-only. No module has been released yet.
   `authorization.request.invalid` and `resource.not_found`. Mail delivery
   reads carry `recipient_display_name` beside `target_user_id`, only while
   the viewer can see that User; the address stays masked.
+- Server: who holds a Role. `GET /api/v1/role-bindings` takes repeatable
+  `role_id` (at most 16) as a third form beside `user_id` and
+  `scope_type`/`scope_id`, and combining forms is `request.invalid`. It pages
+  the current Role Bindings of those Roles inside the caller's
+  `role_binding.view` scopes, newest first, with a first-page `total` and a
+  cursor that continues only the same Roles; it needs Institution-wide
+  `role.view`, and an unknown or archived Role is `request.invalid` on
+  `role_id`. `GET /api/v1/roles` and `GET /api/v1/roles/{role_id}` items carry
+  `holders` (`bindings`, `users`, `scopes`, each stopped at 10,000 with its
+  `*_is_lower_bound` flag), counted for the whole page in one read inside the
+  same scopes and omitted for a caller without `role_binding.view`; the Role
+  list cursor now records the last Role's name and is not compatible with
+  earlier cursors. The baseline replaces `role_bindings_role_id_idx` with
+  `role_bindings_role_id_created_at_idx`. Existing development databases must
+  be recreated.
 - Server: live updates for the administration views, as refetch signals over
   `/api/v1/websocket`. `job.changed` (`job_id`, `type`, `status`, and
   `progress` for a type that reports it) reaches `job.view` subscribers on the

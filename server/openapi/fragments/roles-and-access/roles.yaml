@@ -16,7 +16,7 @@ paths:
       tags:
         - Roles and access
       description: >-
-        Lists built-in and custom Roles visible to the authorized caller. Role definitions name permissions only; effective access also requires a current scoped Role Binding and terminal authorization against current durable state.
+        Lists built-in and custom Roles visible to the authorized caller, ascending by `name` then `id`. Role definitions name permissions only; effective access also requires a current scoped Role Binding and terminal authorization against current durable state. Each item carries `holders`, the current Role Bindings of that Role the caller can see through role_binding.view, counted for the whole page in one read; `holders` is omitted for a caller who holds role_binding.view nowhere.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -113,7 +113,7 @@ paths:
       tags:
         - Roles and access
       description: >-
-        Returns one built-in or custom Role visible to the caller, including its current permission set and built-in protection flag. The response does not imply that any User currently holds the Role.
+        Returns one built-in or custom Role visible to the caller, including its current permission set and built-in protection flag. `holders` counts the current Role Bindings of the Role the caller can see through role_binding.view, and is omitted for a caller who holds role_binding.view nowhere; the Role definition alone does not imply that any User holds it.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:

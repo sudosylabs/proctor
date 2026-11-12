@@ -1107,6 +1107,31 @@ func (s *roleBindingStore) ListByScope(ctx context.Context, scopeType model.Role
 		return s.RoleBindingStore.ListByScope(ctx, scopeType, scopeID)
 	})
 }
+func (s *roleBindingStore) ListCurrentByRoles(
+	ctx context.Context,
+	options store.RoleBindingRoleListOptions,
+) ([]*model.RoleBinding, error) {
+	return retryCall1(ctx, s.layer, func() ([]*model.RoleBinding, error) {
+		return s.RoleBindingStore.ListCurrentByRoles(ctx, options)
+	})
+}
+func (s *roleBindingStore) CountCurrentByRoles(
+	ctx context.Context,
+	options store.RoleBindingRoleListOptions,
+	maximum int,
+) (int, error) {
+	return retryCall1(ctx, s.layer, func() (int, error) {
+		return s.RoleBindingStore.CountCurrentByRoles(ctx, options, maximum)
+	})
+}
+func (s *roleBindingStore) CountHoldersByRoles(
+	ctx context.Context,
+	options store.RoleHolderCountOptions,
+) ([]store.RoleHolderCount, error) {
+	return retryCall1(ctx, s.layer, func() ([]store.RoleHolderCount, error) {
+		return s.RoleBindingStore.CountHoldersByRoles(ctx, options)
+	})
+}
 func (s *roleBindingStore) ListActiveByUser(ctx context.Context, userID model.UserID, at time.Time) ([]*model.RoleBinding, error) {
 	return retryCall1(ctx, s.layer, func() ([]*model.RoleBinding, error) {
 		return s.RoleBindingStore.ListActiveByUser(ctx, userID, at)

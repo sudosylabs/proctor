@@ -632,6 +632,29 @@ Affiliation history may be read only after the same contextual User check.
 Per-User Role Binding history is filtered to authorized Academic Unit
 descendants and Classes; Institution and sibling bindings are omitted.
 
+`GET /api/v1/role-bindings` takes exactly one of three forms, and any mix is
+`request.invalid` on `scope`: `user_id`, `scope_type` with `scope_id`, or a
+repeatable `role_id` (at most 16, repeats counted once). The first two return
+the whole set, paged on the wire. The Role form answers who holds those Roles
+now: the current Role Bindings of any listed Role (effective at the request
+instant, on an unarchived Role and scope) inside the caller's
+`role_binding.view` scopes, the same visibility as the per-User history,
+recording one `role_binding.view` decision. It is a keyset page newest first
+by `created_at` then `id` with a capped first-page `total`, and its cursor
+carries a digest of the requested Role set, so a cursor presented with other
+Roles is `request.invalid`. Roles are seen through Institution-wide
+`role.view`: without it, or for an unknown or archived Role, the request is
+`request.invalid` on `role_id` alike, as the User directory's `role_id` filter
+is. `GET /api/v1/roles` (ascending by `name` then `id`) and
+`GET /api/v1/roles/{role_id}` add `holders` to each Role: the same current
+bindings counted inside the caller's `role_binding.view` scopes, as
+`bindings`, distinct `users` and distinct `scopes`, in one grouped read per
+page. Each Role's count reads at most 10,000 bindings; `users` and `scopes`
+are counted among them, so all three `*_is_lower_bound` flags are set when
+`bindings` reaches the bound. The holder scope only narrows the authorized
+Role read and records no decision of its own; a caller without
+`role_binding.view` anywhere receives no `holders` member.
+
 `GET /api/v1/audits` preserves full installation history for institution-wide
 `audit.view`. `academic_audit.view` instead constrains the query in PostgreSQL
 to academic, Invitation, onboarding-batch, Role Binding, and User-visibility
@@ -1109,8 +1132,8 @@ order, and limit, so a total can never count rows the caller could not page
 to. The User directory, Invitations, Jobs, audit Events, mail deliveries,
 Academic Unit and Class members, Role Bindings, the Programmes, Classes, and
 Programme Levels of an academic listing, and the User's own account history
-count this way; a collection the application returns whole (Role Bindings)
-counts its length with the same bound. A total never comes with offset paging.
+count this way; a collection the application returns whole (a User's or a
+scope's Role Bindings) counts its length with the same bound. A total never comes with offset paging.
 `TestOpenAPIListOperationsUseOneEnvelope` enforces the idiom over the reviewed
 OpenAPI document.
 

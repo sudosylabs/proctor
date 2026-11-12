@@ -158,8 +158,8 @@ type countedRoleBindingApplication struct {
 	bindings []*model.RoleBinding
 }
 
-func (a *countedRoleBindingApplication) ListRoleBindings(context.Context, invocation.Invocation, administration.ListRoleBindingsQuery) ([]*model.RoleBinding, error) {
-	return a.bindings, nil
+func (a *countedRoleBindingApplication) ListRoleBindings(context.Context, invocation.Invocation, administration.ListRoleBindingsQuery) (paging.Counted[*model.RoleBinding], error) {
+	return paging.Counted[*model.RoleBinding]{Page: paging.Page[*model.RoleBinding]{Items: a.bindings}}, nil
 }
 
 // TestRoleBindingListCountsItsFirstPage pins the holders total: the first

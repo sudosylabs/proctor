@@ -3723,6 +3723,24 @@ func (s *timedRoleBindingStore) ListByScope(arg0 context.Context, arg1 model.Rol
 	})
 }
 
+func (s *timedRoleBindingStore) ListCurrentByRoles(arg0 context.Context, arg1 store.RoleBindingRoleListOptions) ([]*model.RoleBinding, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRoleBinding, methodListCurrentByRoles), func(callCtx context.Context) ([]*model.RoleBinding, error) {
+		return s.next.ListCurrentByRoles(callCtx, arg1)
+	})
+}
+
+func (s *timedRoleBindingStore) CountCurrentByRoles(arg0 context.Context, arg1 store.RoleBindingRoleListOptions, arg2 int) (int, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRoleBinding, methodCountCurrentByRoles), func(callCtx context.Context) (int, error) {
+		return s.next.CountCurrentByRoles(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedRoleBindingStore) CountHoldersByRoles(arg0 context.Context, arg1 store.RoleHolderCountOptions) ([]store.RoleHolderCount, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRoleBinding, methodCountHoldersByRoles), func(callCtx context.Context) ([]store.RoleHolderCount, error) {
+		return s.next.CountHoldersByRoles(callCtx, arg1)
+	})
+}
+
 func (s *timedRoleBindingStore) ListActiveByUser(arg0 context.Context, arg1 model.UserID, arg2 time.Time) ([]*model.RoleBinding, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRoleBinding, methodListActiveByUser), func(callCtx context.Context) ([]*model.RoleBinding, error) {
 		return s.next.ListActiveByUser(callCtx, arg1, arg2)

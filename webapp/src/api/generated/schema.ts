@@ -8025,6 +8025,8 @@ export interface components {
         };
         /** @description Frozen native semantics for a Participation. issued_at and active_from use millisecond UTC precision, with issued_at <= active_from <= activation time. There is no policy expiry; the renewable Participation lease is the sole live authority. The digest excludes only digest; scope rebinding preserves the separately computed content digest. */
         EffectiveExamSecurityPolicy: {
+            /** @description The capabilities Desktop runs for this policy, with the sub-categories each selects. */
+            activations: components["schemas"]["NativeActivation"][];
             /** Format: date-time */
             active_from: string;
             application_release_id: string;
@@ -8087,11 +8089,13 @@ export interface components {
             ordinal: number;
             policy_id: string;
             /** @constant */
-            registry_digest: "sha256:9dfdf6c8fa531de0417f28f7819946edefb892c3a41fe50f97eeed39cda73732";
+            registry_digest: "sha256:ab9b69b4bf137b4d646e0b4a0386005e09bd4403614e9f380cbc073bb03ef053";
             resolved_exception_refs: string[];
             /** @constant */
             retention_class_id: "native_minimized";
             revision: string;
+            /** @description The compiled native rules: the release's baseline, unchanged, then the rules compiled from the Exam's family selections. Desktop evaluates them on the device; the server evaluates them again on the same facts. */
+            rules: components["schemas"]["NativeRule"][];
             scope: {
                 admission_scope_id: string;
                 /** @constant */
@@ -9867,6 +9871,11 @@ export interface components {
             expected_revision: number;
             path: components["schemas"]["StarterWorkspacePath"];
         };
+        NativeActivation: {
+            capability: string;
+            /** @description The sub-categories the capability runs; empty means every registered one. */
+            categories: string[];
+        };
         NativeBaselineReport: {
             /** @enum {string} */
             constrained_window: "verified" | "unavailable";
@@ -9882,6 +9891,49 @@ export interface components {
             received_at: string;
             request_digest: string;
             stream_id: string;
+        };
+        NativeCapabilityReadiness: {
+            capability: string;
+            /** @enum {string} */
+            certainty: "complete" | "partial" | "unknown";
+            /** @enum {string} */
+            health: "unsupported" | "healthy" | "degraded" | "failed" | "stopped";
+            /** @enum {string} */
+            permission: "not_determined" | "granted" | "denied" | "restricted" | "unavailable";
+            /**
+             * Format: int64
+             * @description The sequence the capability's event stream continues from.
+             */
+            sequence: number;
+            source_instance_id: string;
+            /** @description The capability's minimized full state, as its published fact schema describes it, at most 16 KiB. It never holds what must not leave the device. */
+            state: Record<string, never>;
+        };
+        NativeCatalogApplications: {
+            /** @description Catalog application IDs in ASCII order. */
+            catalog_app_ids: string[];
+        };
+        /** @description Exactly one of a comparison of a registered field with a typed value, a combination of conditions, or an application condition matched on the device. Nesting is at most three deep. */
+        NativeCondition: {
+            Compare: {
+                field: string;
+                /** @enum {string} */
+                op: "eq" | "ne" | "lt" | "le" | "gt" | "ge" | "in" | "not_in";
+                /** @description A whole number, one of an enumerated field's values, a boolean, or a list of them for in and not_in. */
+                value: unknown;
+            };
+        } | {
+            All: components["schemas"]["NativeConditionList"];
+        } | {
+            Any: components["schemas"]["NativeConditionList"];
+        } | {
+            Not: {
+                condition: components["schemas"]["NativeCondition"];
+            };
+        } | {
+            AppsAbsent: components["schemas"]["NativeCatalogApplications"];
+        } | {
+            AppsOnly: components["schemas"]["NativeCatalogApplications"];
         };
         NativeConditionEvidence: {
             application_release_id: string;
@@ -9909,6 +9961,9 @@ export interface components {
             digest: string;
             /** Format: int64 */
             records: number;
+        };
+        NativeConditionList: {
+            conditions: components["schemas"]["NativeCondition"][];
         };
         NativeConditionListResponse: {
             items: components["schemas"]["NativeConditionEvidence"][];
@@ -9963,6 +10018,28 @@ export interface components {
             status: "opened" | "repeated" | "recovered";
         };
         NativeRecord: components["schemas"]["NativeOccurrence"] | components["schemas"]["NativeCoverageTransition"] | components["schemas"]["NativeSourceReset"] | components["schemas"]["NativeSourceGap"];
+        /** @description One requirement, in the rule grammar Desktop publishes. */
+        NativeRule: {
+            capability: string;
+            /** @enum {string} */
+            mode: "enforce" | "observe";
+            /** @enum {string} */
+            phase: "readiness" | "participation" | "both";
+            /** @description A reason registered for the capability; Desktop owns its localized text. */
+            reason: string;
+            requirement: components["schemas"]["NativeCondition"];
+            rule_id: string;
+        };
+        NativeRuleReport: {
+            rule_id: string;
+            /** @enum {string} */
+            status: "met" | "not_met" | "unknown";
+            /**
+             * @description Why the rule is unknown; present only when status is unknown.
+             * @enum {string}
+             */
+            unknown_cause?: "unavailable" | "gap" | "unhealthy" | "permission" | "partial" | "checking";
+        };
         /** @description Whether Desktop records the candidate's screen on the device for the whole session, uploading only the ranges the server requests. Off by default; the candidate is told before the Attempt starts. */
         NativeScreenRecordingPolicy: {
             enabled: boolean;
@@ -10043,7 +10120,7 @@ export interface components {
                 }
             ];
             /** @constant */
-            registry_digest: "sha256:9dfdf6c8fa531de0417f28f7819946edefb892c3a41fe50f97eeed39cda73732";
+            registry_digest: "sha256:ab9b69b4bf137b4d646e0b4a0386005e09bd4403614e9f380cbc073bb03ef053";
             screen_recording: components["schemas"]["NativeScreenRecordingPolicy"];
         };
         NativeSecurityStreamStatus: {
@@ -11176,6 +11253,8 @@ export interface components {
         /** @description Minimized assertions, at most 64 KiB. Source order and categories must match the resolved policy; coverage keys are sorted and exact. No inventories, media, clipboard bytes, OS errors or arbitrary details are accepted. The server computes the report digest. Client reported_at is provenance; server time controls challenge expiry and admission freshness. */
         SecurityPreflightReport: {
             baseline: components["schemas"]["NativeBaselineReport"];
+            /** @description Every activated capability's full state at Start, in the policy's activation order. */
+            capabilities: components["schemas"]["NativeCapabilityReadiness"][];
             capability_matrix_digest: string;
             challenge: string;
             coverage: components["schemas"]["NativeCoverageClaim"][];
@@ -11185,6 +11264,8 @@ export interface components {
             posture: "compliant" | "degraded" | "contained" | "failed";
             /** Format: date-time */
             reported_at: string;
+            /** @description Desktop's own status for every readiness rule. */
+            rules: components["schemas"]["NativeRuleReport"][];
             security_session_id: string;
             selected_source_categories: ("os-clipboard-change" | "removable-block-storage" | "portable-mtp" | "system-proxy-state" | "os-managed-vpn-state" | "tunnel-interface-state" | "route-change" | "network-source-health" | "camera" | "microphone")[];
             source_manifest_digest: string;
@@ -11196,8 +11277,10 @@ export interface components {
             /** Format: date-time */
             expires_at: string;
             preflight_id: string;
-            reason_codes: ("policy_changed" | "unsupported_capability" | "source_unavailable" | "permission_required" | "baseline_unavailable" | "preflight_expired" | "preflight_superseded" | "posture_blocked" | "configuration_unsupported" | "session_changed")[];
+            reason_codes: ("policy_changed" | "unsupported_capability" | "source_unavailable" | "permission_required" | "baseline_unavailable" | "preflight_expired" | "preflight_superseded" | "posture_blocked" | "configuration_unsupported" | "session_changed" | "native_rule_unmet")[];
             report_digest: string;
+            /** @description The server's own status for every readiness rule, evaluated on the reported state. Where it differs from Desktop's, the server's decides admission. */
+            rules: components["schemas"]["NativeRuleReport"][];
             /** Format: date-time */
             server_time: string;
         };
@@ -15401,7 +15484,7 @@ export interface components {
                  *             "mode": "disabled"
                  *           }
                  *         ],
-                 *         "registry_digest": "sha256:9dfdf6c8fa531de0417f28f7819946edefb892c3a41fe50f97eeed39cda73732",
+                 *         "registry_digest": "sha256:ab9b69b4bf137b4d646e0b4a0386005e09bd4403614e9f380cbc073bb03ef053",
                  *         "screen_recording": {
                  *           "enabled": true
                  *         }
@@ -16058,7 +16141,7 @@ export interface components {
                 /**
                  * @example {
                  *       "configuration_manifest_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                 *       "native_registry_digest": "sha256:9dfdf6c8fa531de0417f28f7819946edefb892c3a41fe50f97eeed39cda73732",
+                 *       "native_registry_digest": "sha256:ab9b69b4bf137b4d646e0b4a0386005e09bd4403614e9f380cbc073bb03ef053",
                  *       "source_manifest_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                  *     }
                  */
@@ -16424,6 +16507,7 @@ export interface components {
                  *         "content_protection": "unavailable",
                  *         "single_physical_display": "unavailable"
                  *       },
+                 *       "capabilities": [],
                  *       "capability_matrix_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                  *       "challenge": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                  *       "coverage": [],
@@ -16431,6 +16515,7 @@ export interface components {
                  *       "policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                  *       "posture": "failed",
                  *       "reported_at": "2026-09-08T08:00:00.000Z",
+                 *       "rules": [],
                  *       "security_session_id": "synthetic-security-session",
                  *       "selected_source_categories": [],
                  *       "source_manifest_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

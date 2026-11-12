@@ -40,6 +40,9 @@ const (
 	SecurityReasonPostureBlocked           SecurityReasonCode = "posture_blocked"
 	SecurityReasonConfigurationUnsupported SecurityReasonCode = "configuration_unsupported"
 	SecurityReasonSessionChanged           SecurityReasonCode = "session_changed"
+	// SecurityReasonNativeRuleUnmet: an enforced native rule is not met, or
+	// cannot be checked, on the state Desktop reported at Start.
+	SecurityReasonNativeRuleUnmet SecurityReasonCode = "native_rule_unmet"
 )
 
 func (s SecurityReasonCode) IsValid() bool {
@@ -55,6 +58,7 @@ func (s SecurityReasonCode) IsValid() bool {
 			SecurityReasonPostureBlocked,
 			SecurityReasonConfigurationUnsupported,
 			SecurityReasonSessionChanged,
+			SecurityReasonNativeRuleUnmet,
 		},
 		s,
 	)
@@ -118,7 +122,12 @@ type SecurityPreflightReport struct {
 	Coverage                 []NativeCoverageClaim  `json:"coverage"`
 	Baseline                 NativeBaselineReport   `json:"baseline"`
 	Posture                  string                 `json:"posture"`
-	ReportedAt               time.Time              `json:"reported_at"`
+	// Capabilities is every activated capability's state at Start, in the
+	// policy's activation order, and Rules is Desktop's own status for every
+	// readiness rule.
+	Capabilities []NativeCapabilityReadiness `json:"capabilities"`
+	Rules        []NativeRuleReport          `json:"rules"`
+	ReportedAt   time.Time                   `json:"reported_at"`
 }
 
 type SecurityPreflightResult struct {
@@ -126,8 +135,11 @@ type SecurityPreflightResult struct {
 	ReportDigest string               `json:"report_digest"`
 	Admission    string               `json:"admission"`
 	ReasonCodes  []SecurityReasonCode `json:"reason_codes"`
-	ServerTime   time.Time            `json:"server_time"`
-	ExpiresAt    time.Time            `json:"expires_at"`
+	// Rules is the server's own status for every readiness rule, evaluated on
+	// the reported state. Where it differs from Desktop's, the server's wins.
+	Rules      []NativeRuleReport `json:"rules"`
+	ServerTime time.Time          `json:"server_time"`
+	ExpiresAt  time.Time          `json:"expires_at"`
 }
 
 func (r SecurityPreflightResult) Validate() error {
@@ -136,7 +148,9 @@ func (r SecurityPreflightResult) Validate() error {
 		!securityInstant(r.ServerTime) ||
 		!securityInstant(r.ExpiresAt) ||
 		r.ReasonCodes == nil ||
-		len(r.ReasonCodes) > 10 ||
+		len(r.ReasonCodes) > 11 ||
+		r.Rules == nil ||
+		len(r.Rules) > NativeRuleLimit ||
 		(r.Admission != "eligible" && r.Admission != "blocked") ||
 		(r.Admission == "eligible") != (len(r.ReasonCodes) == 0) {
 		return ErrSecurityPreflightInvalid
@@ -177,6 +191,20 @@ func (r SecurityPreflightReport) Validate() error {
 
 	for _, status := range []string{r.Baseline.ConstrainedWindow, r.Baseline.SinglePhysicalDisplay, r.Baseline.ContentProtection} {
 		if status != "verified" && status != "unavailable" {
+			return ErrSecurityPreflightInvalid
+		}
+	}
+
+	if r.Capabilities == nil || len(r.Capabilities) > nativeReadinessCapabilityMax || r.Rules == nil || len(r.Rules) > NativeRuleLimit {
+		return ErrSecurityPreflightInvalid
+	}
+	for _, capability := range r.Capabilities {
+		if !capability.validate() {
+			return ErrSecurityPreflightInvalid
+		}
+	}
+	for _, rule := range r.Rules {
+		if !rule.validate() {
 			return ErrSecurityPreflightInvalid
 		}
 	}
@@ -239,6 +267,7 @@ func EvaluateSecurityPreflight(
 		ReportDigest: SHA256Fingerprint(document),
 		Admission:    "eligible",
 		ReasonCodes:  []SecurityReasonCode{},
+		Rules:        []NativeRuleReport{},
 		ServerTime:   now,
 		ExpiresAt:    challenge.ExpiresAt,
 	}
@@ -263,6 +292,16 @@ func EvaluateSecurityPreflight(
 		if status != "verified" {
 			block(SecurityReasonBaselineUnavailable)
 		}
+	}
+
+	statuses, unmet, ok := evaluateNativeReadiness(agreement.CapabilityRegistry(), resolved.Policy.Activations,
+		resolved.Policy.Rules, report.Capabilities)
+	if !ok {
+		return SecurityPreflightResult{}, ErrSecurityPreflightInvalid
+	}
+	result.Rules = statuses
+	if unmet {
+		block(SecurityReasonNativeRuleUnmet)
 	}
 
 	reasons, err := EvaluateNativeCoverage(resolved, report.Sources, report.Coverage, report.Posture)

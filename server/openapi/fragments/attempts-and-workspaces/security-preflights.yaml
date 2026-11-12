@@ -260,7 +260,7 @@ components:
           schema:
             $ref: '#/components/schemas/PrepareSecurityPreflightRequest'
           example:
-            native_registry_digest: sha256:9dfdf6c8fa531de0417f28f7819946edefb892c3a41fe50f97eeed39cda73732
+            native_registry_digest: sha256:ab9b69b4bf137b4d646e0b4a0386005e09bd4403614e9f380cbc073bb03ef053
             source_manifest_digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
             configuration_manifest_fingerprint: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
     SecurityPreflightReport:
@@ -285,6 +285,8 @@ components:
               single_physical_display: unavailable
               content_protection: unavailable
             posture: failed
+            capabilities: []
+            rules: []
             reported_at: '2026-09-08T08:00:00.000Z'
   responses:
     SecurityPolicyResponseOK:
@@ -386,7 +388,23 @@ components:
         - retention_class_id
         - capabilities
         - screen_recording
+        - activations
+        - rules
       properties:
+        activations:
+          type: array
+          maxItems: 32
+          description: The capabilities Desktop runs for this policy, with the sub-categories each selects.
+          items:
+            $ref: '#/components/schemas/NativeActivation'
+        rules:
+          type: array
+          maxItems: 64
+          description: >-
+            The compiled native rules: the release's baseline, unchanged, then the rules compiled from the Exam's
+            family selections. Desktop evaluates them on the device; the server evaluates them again on the same facts.
+          items:
+            $ref: '#/components/schemas/NativeRule'
         policy_id:
           type: string
           minLength: 1
@@ -473,7 +491,7 @@ components:
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         registry_digest:
           type: string
-          const: sha256:9dfdf6c8fa531de0417f28f7819946edefb892c3a41fe50f97eeed39cda73732
+          const: sha256:ab9b69b4bf137b4d646e0b4a0386005e09bd4403614e9f380cbc073bb03ef053
         focus_loss_mode:
           type: string
           enum:
@@ -1034,6 +1052,7 @@ components:
         with issued_at <= active_from <= activation time. There is no policy expiry; the renewable
         Participation lease is the sole live authority. The digest excludes only digest; scope rebinding
         preserves the separately computed content digest.
+
     SecurityCatalogBinding:
       type: object
       additionalProperties: false
@@ -1338,8 +1357,22 @@ components:
         - coverage
         - baseline
         - posture
+        - capabilities
+        - rules
         - reported_at
       properties:
+        capabilities:
+          type: array
+          maxItems: 32
+          description: Every activated capability's full state at Start, in the policy's activation order.
+          items:
+            $ref: '#/components/schemas/NativeCapabilityReadiness'
+        rules:
+          type: array
+          maxItems: 64
+          description: Desktop's own status for every readiness rule.
+          items:
+            $ref: '#/components/schemas/NativeRuleReport'
         challenge:
           type: string
           minLength: 43
@@ -1409,6 +1442,7 @@ components:
         coverage keys are sorted and exact. No inventories, media, clipboard bytes, OS errors or arbitrary
         details are accepted. The server computes the report digest. Client reported_at is provenance; server
         time controls challenge expiry and admission freshness.
+
     SecurityPreflightResult:
       type: object
       additionalProperties: false
@@ -1417,9 +1451,18 @@ components:
         - report_digest
         - admission
         - reason_codes
+        - rules
         - server_time
         - expires_at
       properties:
+        rules:
+          type: array
+          maxItems: 64
+          description: >-
+            The server's own status for every readiness rule, evaluated on the reported state. Where it differs from
+            Desktop's, the server's decides admission.
+          items:
+            $ref: '#/components/schemas/NativeRuleReport'
         preflight_id:
           type: string
           minLength: 1
@@ -1450,6 +1493,7 @@ components:
               - posture_blocked
               - configuration_unsupported
               - session_changed
+              - native_rule_unmet
           uniqueItems: true
         server_time:
           type: string
@@ -1457,6 +1501,7 @@ components:
         expires_at:
           type: string
           format: date-time
+
     AdmittedSecurity:
       type: object
       additionalProperties: false
@@ -1620,3 +1665,236 @@ components:
           maxItems: 50
           items:
             $ref: '#/components/schemas/DeliveryWatermarkRejection'
+    NativeActivation:
+      type: object
+      additionalProperties: false
+      required:
+        - capability
+        - categories
+      properties:
+        capability:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,63}$
+        categories:
+          type: array
+          maxItems: 16
+          description: The sub-categories the capability runs; empty means every registered one.
+          items:
+            type: string
+            pattern: ^[a-z][a-z0-9_]{0,63}$
+    NativeRule:
+      type: object
+      additionalProperties: false
+      description: One requirement, in the rule grammar Desktop publishes.
+      required:
+        - rule_id
+        - capability
+        - mode
+        - phase
+        - reason
+        - requirement
+      properties:
+        rule_id:
+          type: string
+          maxLength: 128
+          pattern: ^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$
+        capability:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,63}$
+        mode:
+          type: string
+          enum:
+            - enforce
+            - observe
+        phase:
+          type: string
+          enum:
+            - readiness
+            - participation
+            - both
+        reason:
+          type: string
+          maxLength: 128
+          description: A reason registered for the capability; Desktop owns its localized text.
+        requirement:
+          $ref: '#/components/schemas/NativeCondition'
+    NativeCondition:
+      description: >-
+        Exactly one of a comparison of a registered field with a typed value, a combination of conditions, or an
+        application condition matched on the device. Nesting is at most three deep.
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required:
+            - Compare
+          properties:
+            Compare:
+              type: object
+              additionalProperties: false
+              required:
+                - field
+                - op
+                - value
+              properties:
+                field:
+                  type: string
+                  maxLength: 128
+                op:
+                  type: string
+                  enum:
+                    - eq
+                    - ne
+                    - lt
+                    - le
+                    - gt
+                    - ge
+                    - in
+                    - not_in
+                value:
+                  description: A whole number, one of an enumerated field's values, a boolean, or a list of them for in and not_in.
+        - type: object
+          additionalProperties: false
+          required:
+            - All
+          properties:
+            All:
+              $ref: '#/components/schemas/NativeConditionList'
+        - type: object
+          additionalProperties: false
+          required:
+            - Any
+          properties:
+            Any:
+              $ref: '#/components/schemas/NativeConditionList'
+        - type: object
+          additionalProperties: false
+          required:
+            - Not
+          properties:
+            Not:
+              type: object
+              additionalProperties: false
+              required:
+                - condition
+              properties:
+                condition:
+                  $ref: '#/components/schemas/NativeCondition'
+        - type: object
+          additionalProperties: false
+          required:
+            - AppsAbsent
+          properties:
+            AppsAbsent:
+              $ref: '#/components/schemas/NativeCatalogApplications'
+        - type: object
+          additionalProperties: false
+          required:
+            - AppsOnly
+          properties:
+            AppsOnly:
+              $ref: '#/components/schemas/NativeCatalogApplications'
+    NativeConditionList:
+      type: object
+      additionalProperties: false
+      required:
+        - conditions
+      properties:
+        conditions:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items:
+            $ref: '#/components/schemas/NativeCondition'
+    NativeCatalogApplications:
+      type: object
+      additionalProperties: false
+      required:
+        - catalog_app_ids
+      properties:
+        catalog_app_ids:
+          type: array
+          minItems: 1
+          maxItems: 256
+          description: Catalog application IDs in ASCII order.
+          items:
+            type: string
+            pattern: ^[a-z][a-z0-9_]{0,63}$
+    NativeCapabilityReadiness:
+      type: object
+      additionalProperties: false
+      required:
+        - capability
+        - source_instance_id
+        - sequence
+        - permission
+        - health
+        - certainty
+        - state
+      properties:
+        capability:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,63}$
+        source_instance_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
+        sequence:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 9007199254740991
+          description: The sequence the capability's event stream continues from.
+        permission:
+          type: string
+          enum:
+            - not_determined
+            - granted
+            - denied
+            - restricted
+            - unavailable
+        health:
+          type: string
+          enum:
+            - unsupported
+            - healthy
+            - degraded
+            - failed
+            - stopped
+        certainty:
+          type: string
+          enum:
+            - complete
+            - partial
+            - unknown
+        state:
+          type: object
+          description: >-
+            The capability's minimized full state, as its published fact schema describes it, at most 16 KiB. It
+            never holds what must not leave the device.
+    NativeRuleReport:
+      type: object
+      additionalProperties: false
+      required:
+        - rule_id
+        - status
+      properties:
+        rule_id:
+          type: string
+          maxLength: 128
+        status:
+          type: string
+          enum:
+            - met
+            - not_met
+            - unknown
+        unknown_cause:
+          type: string
+          description: Why the rule is unknown; present only when status is unknown.
+          enum:
+            - unavailable
+            - gap
+            - unhealthy
+            - permission
+            - partial
+            - checking

@@ -120,6 +120,12 @@ type DesktopNativeAgreement struct {
 	capabilities *NativeCapabilityRegistry
 }
 
+// CapabilityRegistry is the release's parsed capability registry, or nil for
+// an agreement built without one.
+func (a *DesktopNativeAgreement) CapabilityRegistry() *NativeCapabilityRegistry {
+	return a.capabilities
+}
+
 // WithCapabilityRegistry returns the agreement carrying the release's parsed
 // capability registry. The registry's bytes are the ones RegistryDigest
 // names; the caller verified them.

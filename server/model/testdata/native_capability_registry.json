@@ -1,6 +1,104 @@
 {
   "description": "Proctor native capability registry: capabilities, typed rule fields, reasons, baseline rules and fact schemas, generated from the Rust types.",
   "fact_schemas": {
+    "candidate_window": {
+      "state": {
+        "$defs": {
+          "Focus": {
+            "enum": [
+              "focused",
+              "not_focused",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "Occlusion": {
+            "enum": [
+              "none",
+              "covered",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "Placement": {
+            "enum": [
+              "maximized",
+              "normal",
+              "minimized",
+              "fullscreen",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "Presence": {
+            "enum": [
+              "present",
+              "absent"
+            ],
+            "type": "string"
+          },
+          "Protection": {
+            "enum": [
+              "verified",
+              "failed",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "Visibility": {
+            "enum": [
+              "visible",
+              "hidden",
+              "unknown"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "close_attempts": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "content_protection": {
+            "$ref": "#/$defs/Protection"
+          },
+          "focus": {
+            "$ref": "#/$defs/Focus"
+          },
+          "occlusion": {
+            "$ref": "#/$defs/Occlusion"
+          },
+          "placement": {
+            "$ref": "#/$defs/Placement"
+          },
+          "presence": {
+            "$ref": "#/$defs/Presence"
+          },
+          "visibility": {
+            "$ref": "#/$defs/Visibility"
+          }
+        },
+        "required": [
+          "presence",
+          "focus",
+          "visibility",
+          "placement",
+          "content_protection",
+          "occlusion",
+          "close_attempts"
+        ],
+        "title": "CandidateWindowState",
+        "type": "object"
+      },
+      "summary": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      }
+    },
     "display": {
       "state": {
         "$defs": {
@@ -166,6 +264,83 @@
         "title": "DisplaySummary",
         "type": "object"
       }
+    },
+    "interactive_session": {
+      "state": {
+        "$defs": {
+          "ConsoleOwner": {
+            "enum": [
+              "candidate",
+              "other_human",
+              "none",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "Coverage": {
+            "enum": [
+              "full_lifecycle",
+              "snapshot_only",
+              "unavailable"
+            ],
+            "type": "string"
+          },
+          "Lock": {
+            "enum": [
+              "unlocked",
+              "locked",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "RemoteAttachment": {
+            "enum": [
+              "absent",
+              "present",
+              "unknown"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "console_owner": {
+            "$ref": "#/$defs/ConsoleOwner"
+          },
+          "coverage": {
+            "$ref": "#/$defs/Coverage"
+          },
+          "lock": {
+            "$ref": "#/$defs/Lock"
+          },
+          "other_human_sessions": {
+            "description": "`None` when the platform cannot count other sessions.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "remote_attachment": {
+            "$ref": "#/$defs/RemoteAttachment"
+          }
+        },
+        "required": [
+          "coverage",
+          "console_owner",
+          "lock",
+          "remote_attachment"
+        ],
+        "title": "InteractiveSessionState",
+        "type": "object"
+      },
+      "summary": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      }
     }
   },
   "registry": {
@@ -196,6 +371,81 @@
           }
         },
         "rule_id": "baseline.single_display"
+      },
+      {
+        "capability": "candidate_window",
+        "mode": "enforce",
+        "phase": "participation",
+        "reason": "candidate_window.window_required",
+        "requirement": {
+          "All": {
+            "conditions": [
+              {
+                "Compare": {
+                  "field": "candidate_window.presence",
+                  "op": "eq",
+                  "value": "present"
+                }
+              },
+              {
+                "Compare": {
+                  "field": "candidate_window.placement",
+                  "op": "eq",
+                  "value": "maximized"
+                }
+              },
+              {
+                "Compare": {
+                  "field": "candidate_window.content_protection",
+                  "op": "eq",
+                  "value": "verified"
+                }
+              }
+            ]
+          }
+        },
+        "rule_id": "baseline.window"
+      },
+      {
+        "capability": "interactive_session",
+        "mode": "enforce",
+        "phase": "both",
+        "reason": "interactive_session.single_session_required",
+        "requirement": {
+          "All": {
+            "conditions": [
+              {
+                "Compare": {
+                  "field": "interactive_session.console_owner",
+                  "op": "eq",
+                  "value": "candidate"
+                }
+              },
+              {
+                "Compare": {
+                  "field": "interactive_session.lock",
+                  "op": "eq",
+                  "value": "unlocked"
+                }
+              },
+              {
+                "Compare": {
+                  "field": "interactive_session.remote_attachment",
+                  "op": "eq",
+                  "value": "absent"
+                }
+              },
+              {
+                "Compare": {
+                  "field": "interactive_session.other_human_sessions",
+                  "op": "eq",
+                  "value": 0
+                }
+              }
+            ]
+          }
+        },
+        "rule_id": "baseline.session"
       }
     ],
     "capabilities": [
@@ -256,6 +506,127 @@
         ],
         "sensitive": false,
         "stability_ms": 1000
+      },
+      {
+        "app_conditions": false,
+        "categories": [],
+        "fields": [
+          {
+            "name": "candidate_window.presence",
+            "type": "symbol",
+            "values": [
+              "present",
+              "absent"
+            ]
+          },
+          {
+            "name": "candidate_window.focus",
+            "type": "symbol",
+            "values": [
+              "focused",
+              "not_focused",
+              "unknown"
+            ]
+          },
+          {
+            "name": "candidate_window.visibility",
+            "type": "symbol",
+            "values": [
+              "visible",
+              "hidden",
+              "unknown"
+            ]
+          },
+          {
+            "name": "candidate_window.placement",
+            "type": "symbol",
+            "values": [
+              "maximized",
+              "normal",
+              "minimized",
+              "fullscreen",
+              "unknown"
+            ]
+          },
+          {
+            "name": "candidate_window.content_protection",
+            "type": "symbol",
+            "values": [
+              "verified",
+              "failed",
+              "unknown"
+            ]
+          },
+          {
+            "name": "candidate_window.occlusion",
+            "type": "symbol",
+            "values": [
+              "none",
+              "covered",
+              "unknown"
+            ]
+          },
+          {
+            "max": 1000000,
+            "name": "candidate_window.close_attempts",
+            "type": "count"
+          }
+        ],
+        "id": "candidate_window",
+        "permission_prompt": false,
+        "reasons": [
+          "candidate_window.window_required",
+          "candidate_window.covered",
+          "candidate_window.focus_lost"
+        ],
+        "sensitive": false,
+        "stability_ms": 1000
+      },
+      {
+        "app_conditions": false,
+        "categories": [],
+        "fields": [
+          {
+            "name": "interactive_session.console_owner",
+            "type": "symbol",
+            "values": [
+              "candidate",
+              "other_human",
+              "none",
+              "unknown"
+            ]
+          },
+          {
+            "name": "interactive_session.lock",
+            "type": "symbol",
+            "values": [
+              "unlocked",
+              "locked",
+              "unknown"
+            ]
+          },
+          {
+            "name": "interactive_session.remote_attachment",
+            "type": "symbol",
+            "values": [
+              "absent",
+              "present",
+              "unknown"
+            ]
+          },
+          {
+            "max": 1024,
+            "name": "interactive_session.other_human_sessions",
+            "type": "count"
+          }
+        ],
+        "id": "interactive_session",
+        "permission_prompt": false,
+        "reasons": [
+          "interactive_session.single_session_required"
+        ],
+        "sensitive": true,
+        "stability_ms": 2000
       }
     ]
   }

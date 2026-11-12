@@ -19,8 +19,8 @@ import (
 
 // nativeCapabilityRegistryDigest pins the registry Desktop generates from its
 // Rust types (proctor-desktop native/crates/prctr-capabilities/registry/
-// registry.json, commit 976deaf). A new file is copied in, never edited.
-const nativeCapabilityRegistryDigest = "sha256:9dfdf6c8fa531de0417f28f7819946edefb892c3a41fe50f97eeed39cda73732"
+// registry.json, commit 53d3628). A new file is copied in, never edited.
+const nativeCapabilityRegistryDigest = "sha256:ab9b69b4bf137b4d646e0b4a0386005e09bd4403614e9f380cbc073bb03ef053"
 
 func readNativeCapabilityRegistry(t *testing.T) []byte {
 	t.Helper()
@@ -46,11 +46,28 @@ func TestDesktopsCapabilityRegistryParses(t *testing.T) {
 	require.Equal(t, NativeFieldCount, field.Type)
 	require.Equal(t, int64(32), field.Max)
 
-	require.Len(t, registry.baseline, 1)
-	require.Equal(t, "baseline.single_display", registry.baseline[0].RuleID)
-	require.Equal(t, NativeRuleEnforce, registry.baseline[0].Mode)
-	require.Contains(t, registry.factSchemas["display"], "state")
-	require.Contains(t, registry.factSchemas["display"], "summary")
+	baseline := map[string]NativeRule{}
+	for _, rule := range registry.baseline {
+		require.Equal(t, NativeRuleEnforce, rule.Mode, rule.RuleID)
+		baseline[rule.RuleID] = rule
+	}
+	require.Len(t, baseline, 3)
+	require.Equal(t, NativeRuleBoth, baseline["baseline.single_display"].Phase)
+	require.Equal(t, NativeRuleParticipation, baseline["baseline.window"].Phase, "the window does not exist during readiness")
+	require.Equal(t, NativeCapabilityID("interactive_session"), baseline["baseline.session"].Capability)
+
+	session, ok := registry.Capability("interactive_session")
+	require.True(t, ok)
+	require.True(t, session.Sensitive)
+	require.Equal(t, 2*time.Second, session.Stability)
+	placement, _, ok := registry.Field("candidate_window.placement")
+	require.True(t, ok)
+	require.Equal(t, NativeFieldEnum, placement.Type, "Desktop's symbol fields are the server's enums")
+	require.Contains(t, placement.Values, "maximized")
+	for _, capability := range []NativeCapabilityID{"display", "candidate_window", "interactive_session"} {
+		require.Contains(t, registry.factSchemas[capability], "state", capability)
+		require.Contains(t, registry.factSchemas[capability], "summary", capability)
+	}
 }
 
 func TestCapabilityRegistryRefusesWhatItDoesNotModel(t *testing.T) {

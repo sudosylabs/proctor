@@ -1023,7 +1023,7 @@
                     "mode": "disabled"
                   }
                 ],
-                "registry_digest": "sha256:9dfdf6c8fa531de0417f28f7819946edefb892c3a41fe50f97eeed39cda73732",
+                "registry_digest": "sha256:ab9b69b4bf137b4d646e0b4a0386005e09bd4403614e9f380cbc073bb03ef053",
                 "screen_recording": {
                   "enabled": true
                 }
@@ -1826,7 +1826,7 @@
           "application/json": {
             "example": {
               "configuration_manifest_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              "native_registry_digest": "sha256:9dfdf6c8fa531de0417f28f7819946edefb892c3a41fe50f97eeed39cda73732",
+              "native_registry_digest": "sha256:ab9b69b4bf137b4d646e0b4a0386005e09bd4403614e9f380cbc073bb03ef053",
               "source_manifest_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
             "schema": {
@@ -2270,6 +2270,7 @@
                 "content_protection": "unavailable",
                 "single_physical_display": "unavailable"
               },
+              "capabilities": [],
               "capability_matrix_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
               "challenge": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
               "coverage": [],
@@ -2277,6 +2278,7 @@
               "policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
               "posture": "failed",
               "reported_at": "2026-09-08T08:00:00.000Z",
+              "rules": [],
               "security_session_id": "synthetic-security-session",
               "selected_source_categories": [],
               "source_manifest_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -13602,6 +13604,14 @@
         "additionalProperties": false,
         "description": "Frozen native semantics for a Participation. issued_at and active_from use millisecond UTC precision, with issued_at \u003c= active_from \u003c= activation time. There is no policy expiry; the renewable Participation lease is the sole live authority. The digest excludes only digest; scope rebinding preserves the separately computed content digest.",
         "properties": {
+          "activations": {
+            "description": "The capabilities Desktop runs for this policy, with the sub-categories each selects.",
+            "items": {
+              "$ref": "#/components/schemas/NativeActivation"
+            },
+            "maxItems": 32,
+            "type": "array"
+          },
           "active_from": {
             "format": "date-time",
             "type": "string"
@@ -14522,7 +14532,7 @@
             "type": "string"
           },
           "registry_digest": {
-            "const": "sha256:9dfdf6c8fa531de0417f28f7819946edefb892c3a41fe50f97eeed39cda73732",
+            "const": "sha256:ab9b69b4bf137b4d646e0b4a0386005e09bd4403614e9f380cbc073bb03ef053",
             "type": "string"
           },
           "resolved_exception_refs": {
@@ -14545,6 +14555,14 @@
             "minLength": 1,
             "pattern": "^[ -~]+$",
             "type": "string"
+          },
+          "rules": {
+            "description": "The compiled native rules: the release's baseline, unchanged, then the rules compiled from the Exam's family selections. Desktop evaluates them on the device; the server evaluates them again on the same facts.",
+            "items": {
+              "$ref": "#/components/schemas/NativeRule"
+            },
+            "maxItems": 64,
+            "type": "array"
           },
           "scope": {
             "oneOf": [
@@ -14632,7 +14650,9 @@
           "visibility_class_id",
           "retention_class_id",
           "capabilities",
-          "screen_recording"
+          "screen_recording",
+          "activations",
+          "rules"
         ],
         "type": "object"
       },
@@ -20474,6 +20494,29 @@
         ],
         "type": "object"
       },
+      "NativeActivation": {
+        "additionalProperties": false,
+        "properties": {
+          "capability": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "categories": {
+            "description": "The sub-categories the capability runs; empty means every registered one.",
+            "items": {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": "array"
+          }
+        },
+        "required": [
+          "capability",
+          "categories"
+        ],
+        "type": "object"
+      },
       "NativeBaselineReport": {
         "additionalProperties": false,
         "properties": {
@@ -20537,6 +20580,203 @@
           "received_at"
         ],
         "type": "object"
+      },
+      "NativeCapabilityReadiness": {
+        "additionalProperties": false,
+        "properties": {
+          "capability": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "certainty": {
+            "enum": [
+              "complete",
+              "partial",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "health": {
+            "enum": [
+              "unsupported",
+              "healthy",
+              "degraded",
+              "failed",
+              "stopped"
+            ],
+            "type": "string"
+          },
+          "permission": {
+            "enum": [
+              "not_determined",
+              "granted",
+              "denied",
+              "restricted",
+              "unavailable"
+            ],
+            "type": "string"
+          },
+          "sequence": {
+            "description": "The sequence the capability's event stream continues from.",
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source_instance_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "type": "string"
+          },
+          "state": {
+            "description": "The capability's minimized full state, as its published fact schema describes it, at most 16 KiB. It never holds what must not leave the device.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "capability",
+          "source_instance_id",
+          "sequence",
+          "permission",
+          "health",
+          "certainty",
+          "state"
+        ],
+        "type": "object"
+      },
+      "NativeCatalogApplications": {
+        "additionalProperties": false,
+        "properties": {
+          "catalog_app_ids": {
+            "description": "Catalog application IDs in ASCII order.",
+            "items": {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "catalog_app_ids"
+        ],
+        "type": "object"
+      },
+      "NativeCondition": {
+        "description": "Exactly one of a comparison of a registered field with a typed value, a combination of conditions, or an application condition matched on the device. Nesting is at most three deep.",
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "Compare": {
+                "additionalProperties": false,
+                "properties": {
+                  "field": {
+                    "maxLength": 128,
+                    "type": "string"
+                  },
+                  "op": {
+                    "enum": [
+                      "eq",
+                      "ne",
+                      "lt",
+                      "le",
+                      "gt",
+                      "ge",
+                      "in",
+                      "not_in"
+                    ],
+                    "type": "string"
+                  },
+                  "value": {
+                    "description": "A whole number, one of an enumerated field's values, a boolean, or a list of them for in and not_in."
+                  }
+                },
+                "required": [
+                  "field",
+                  "op",
+                  "value"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "Compare"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "All": {
+                "$ref": "#/components/schemas/NativeConditionList"
+              }
+            },
+            "required": [
+              "All"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "Any": {
+                "$ref": "#/components/schemas/NativeConditionList"
+              }
+            },
+            "required": [
+              "Any"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "Not": {
+                "additionalProperties": false,
+                "properties": {
+                  "condition": {
+                    "$ref": "#/components/schemas/NativeCondition"
+                  }
+                },
+                "required": [
+                  "condition"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "Not"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "AppsAbsent": {
+                "$ref": "#/components/schemas/NativeCatalogApplications"
+              }
+            },
+            "required": [
+              "AppsAbsent"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "AppsOnly": {
+                "$ref": "#/components/schemas/NativeCatalogApplications"
+              }
+            },
+            "required": [
+              "AppsOnly"
+            ],
+            "type": "object"
+          }
+        ]
       },
       "NativeConditionEvidence": {
         "additionalProperties": false,
@@ -20654,6 +20894,23 @@
         "required": [
           "records",
           "digest"
+        ],
+        "type": "object"
+      },
+      "NativeConditionList": {
+        "additionalProperties": false,
+        "properties": {
+          "conditions": {
+            "items": {
+              "$ref": "#/components/schemas/NativeCondition"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "conditions"
         ],
         "type": "object"
       },
@@ -20882,6 +21139,87 @@
             "$ref": "#/components/schemas/NativeSourceGap"
           }
         ]
+      },
+      "NativeRule": {
+        "additionalProperties": false,
+        "description": "One requirement, in the rule grammar Desktop publishes.",
+        "properties": {
+          "capability": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "enforce",
+              "observe"
+            ],
+            "type": "string"
+          },
+          "phase": {
+            "enum": [
+              "readiness",
+              "participation",
+              "both"
+            ],
+            "type": "string"
+          },
+          "reason": {
+            "description": "A reason registered for the capability; Desktop owns its localized text.",
+            "maxLength": 128,
+            "type": "string"
+          },
+          "requirement": {
+            "$ref": "#/components/schemas/NativeCondition"
+          },
+          "rule_id": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rule_id",
+          "capability",
+          "mode",
+          "phase",
+          "reason",
+          "requirement"
+        ],
+        "type": "object"
+      },
+      "NativeRuleReport": {
+        "additionalProperties": false,
+        "properties": {
+          "rule_id": {
+            "maxLength": 128,
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "met",
+              "not_met",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "unknown_cause": {
+            "description": "Why the rule is unknown; present only when status is unknown.",
+            "enum": [
+              "unavailable",
+              "gap",
+              "unhealthy",
+              "permission",
+              "partial",
+              "checking"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "rule_id",
+          "status"
+        ],
+        "type": "object"
       },
       "NativeScreenRecordingPolicy": {
         "additionalProperties": false,
@@ -21885,7 +22223,7 @@
             "type": "array"
           },
           "registry_digest": {
-            "const": "sha256:9dfdf6c8fa531de0417f28f7819946edefb892c3a41fe50f97eeed39cda73732",
+            "const": "sha256:ab9b69b4bf137b4d646e0b4a0386005e09bd4403614e9f380cbc073bb03ef053",
             "type": "string"
           },
           "screen_recording": {
@@ -25713,6 +26051,14 @@
           "baseline": {
             "$ref": "#/components/schemas/NativeBaselineReport"
           },
+          "capabilities": {
+            "description": "Every activated capability's full state at Start, in the policy's activation order.",
+            "items": {
+              "$ref": "#/components/schemas/NativeCapabilityReadiness"
+            },
+            "maxItems": 32,
+            "type": "array"
+          },
           "capability_matrix_digest": {
             "pattern": "^sha256:[0-9a-f]{64}$",
             "type": "string"
@@ -25751,6 +26097,14 @@
           "reported_at": {
             "format": "date-time",
             "type": "string"
+          },
+          "rules": {
+            "description": "Desktop's own status for every readiness rule.",
+            "items": {
+              "$ref": "#/components/schemas/NativeRuleReport"
+            },
+            "maxItems": 64,
+            "type": "array"
           },
           "security_session_id": {
             "maxLength": 128,
@@ -25804,6 +26158,8 @@
           "coverage",
           "baseline",
           "posture",
+          "capabilities",
+          "rules",
           "reported_at"
         ],
         "type": "object"
@@ -25840,7 +26196,8 @@
                 "preflight_superseded",
                 "posture_blocked",
                 "configuration_unsupported",
-                "session_changed"
+                "session_changed",
+                "native_rule_unmet"
               ],
               "type": "string"
             },
@@ -25853,6 +26210,14 @@
             "pattern": "^sha256:[0-9a-f]{64}$",
             "type": "string"
           },
+          "rules": {
+            "description": "The server's own status for every readiness rule, evaluated on the reported state. Where it differs from Desktop's, the server's decides admission.",
+            "items": {
+              "$ref": "#/components/schemas/NativeRuleReport"
+            },
+            "maxItems": 64,
+            "type": "array"
+          },
           "server_time": {
             "format": "date-time",
             "type": "string"
@@ -25863,6 +26228,7 @@
           "report_digest",
           "admission",
           "reason_codes",
+          "rules",
           "server_time",
           "expires_at"
         ],

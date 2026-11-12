@@ -71,6 +71,10 @@ type EffectiveExamSecurityPolicy struct {
 	// ScreenRecording tells Desktop whether to run its screen evidence
 	// recorder for this Exam.
 	ScreenRecording NativeScreenRecordingPolicy `json:"screen_recording"`
+	// Activations and Rules are the compiled native policy Desktop evaluates
+	// on the device, and the server evaluates again on the same facts.
+	Activations []NativeActivation `json:"activations"`
+	Rules       []NativeRule       `json:"rules"`
 }
 
 type SecurityCatalogBinding struct {
@@ -170,6 +174,7 @@ func ResolveNativePolicy(input NativePolicyResolution) (ResolvedNativePolicy, er
 		Capabilities:          slices.Clone(input.Selections.Native.Families),
 		ScreenRecording:       input.Selections.Native.ScreenRecording,
 	}
+	policy.Activations, policy.Rules = compileNativePolicy(agreement.capabilities)
 	if input.Selections.FocusLoss.Enabled {
 		policy.FocusLossMode = NativeModeObserve
 		if input.Selections.FocusLoss.Outcome == IntegrityOutcomeFlagAndSuspend {

@@ -11,7 +11,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strconv"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -20,8 +19,6 @@ import (
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
-
-const defaultJobPageSize = 50
 
 // JobOperationsApplication is the application port its handlers call; it lists
 // Jobs and their attempts for operators and cancels or retries a Job.
@@ -279,16 +276,12 @@ func (h jobHandlers) retry(request route.Request) (route.Result, error) {
 	return route.JSON(http.StatusOK, jobResponseFromApplication(view)), nil
 }
 func listJobsQuery(r *http.Request) (job.ListQuery, error) {
-	limit := defaultJobPageSize
-	if raw := r.URL.Query().Get("limit"); raw != "" {
-		value, err := strconv.Atoi(raw)
-		if err != nil || value < 1 || value > 200 {
-			return job.ListQuery{}, err
-		}
-		limit = value
+	page, err := route.ParsePage(r)
+	if err != nil {
+		return job.ListQuery{}, err
 	}
-	query := job.ListQuery{Limit: limit}
-	if raw := r.URL.Query().Get("cursor"); raw != "" {
+	query := job.ListQuery{Limit: page.Limit}
+	if raw := page.Cursor; raw != "" {
 		cursor, err := decodeJobCursor(raw)
 		if err != nil {
 			return query, err
@@ -302,16 +295,12 @@ func listJobsQuery(r *http.Request) (job.ListQuery, error) {
 	return query, nil
 }
 func attemptPagination(r *http.Request) (int, int, error) {
-	limit := defaultJobPageSize
-	var err error
-	if raw := r.URL.Query().Get("limit"); raw != "" {
-		limit, err = strconv.Atoi(raw)
-		if err != nil || limit < 1 || limit > 200 {
-			return 0, 0, err
-		}
+	page, err := route.ParsePage(r)
+	if err != nil {
+		return 0, 0, err
 	}
-	before := 0
-	if raw := r.URL.Query().Get("cursor"); raw != "" {
+	limit, before := page.Limit, 0
+	if raw := page.Cursor; raw != "" {
 		before, err = decodeJobAttemptCursor(raw)
 		if err != nil {
 			return 0, 0, err

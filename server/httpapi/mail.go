@@ -12,7 +12,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -21,8 +20,6 @@ import (
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
-
-const defaultMailDeliveryPageSize = 50
 
 type mailRekeyRequest struct {
 	RetiringKeyID string `json:"retiring_key_id"`
@@ -489,19 +486,14 @@ func requireEmptyMailBody(request *http.Request) error {
 }
 
 func listMailDeliveriesQuery(request *http.Request) (mail.ListDeliveriesQuery, error) {
-	query := mail.ListDeliveriesQuery{Limit: defaultMailDeliveryPageSize}
-	if raw := request.URL.Query().Get("limit"); raw != "" {
-		limit, err := strconv.Atoi(raw)
-		if err != nil || limit < 1 || limit > 200 {
-			return query, errors.New("invalid mail delivery limit")
-		}
-
-		query.Limit = limit
+	page, err := route.ParsePage(request)
+	if err != nil {
+		return mail.ListDeliveriesQuery{}, err
 	}
-
-	if raw := request.URL.Query().Get("cursor"); raw != "" {
-		cursor, err := decodeMailDeliveryCursor(raw)
-		if err != nil {
+	query := mail.ListDeliveriesQuery{Limit: page.Limit}
+	if raw := page.Cursor; raw != "" {
+		var cursor mailDeliveryCursor
+		if cursor, err = decodeMailDeliveryCursor(raw); err != nil {
 			return query, err
 		}
 
@@ -539,7 +531,6 @@ func listMailDeliveriesQuery(request *http.Request) (mail.ListDeliveriesQuery, e
 		return query, errors.New("too many mail template keys")
 	}
 
-	var err error
 	if raw := request.URL.Query().Get("created_after"); raw != "" {
 		query.CreatedAfter, err = parseMailFilterTime(raw)
 		if err != nil {

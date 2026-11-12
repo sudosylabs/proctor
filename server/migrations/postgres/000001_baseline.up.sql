@@ -206,6 +206,7 @@ CREATE UNIQUE INDEX jobs_permanent_type_dedupe_key_idx ON jobs (type, dedupe_key
     WHERE dedupe_policy = 'permanent';
 -- The administration summary counts recent failures without scanning history.
 CREATE INDEX jobs_failed_updated_at_idx ON jobs (updated_at DESC) WHERE status = 'failed';
+CREATE INDEX jobs_created_at_id_idx ON jobs (created_at DESC, id DESC);
 
 -- Permanent occurrence keys deliberately outlive retained Job history. The
 -- referenced Job ID is informational rather than a foreign key so cleanup can

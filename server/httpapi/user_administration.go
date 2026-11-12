@@ -166,18 +166,12 @@ func (h userAdministrationHandlers) listSessions(request route.Request) (route.R
 		return route.Result{}, apperror.New("request.invalid").WithField("field", "include_revoked")
 	}
 
-	query := identity.ListUserSessionsQuery{UserID: userID, IncludeRevoked: includeRevoked, Limit: defaultSessionPageSize}
-	values := request.HTTP.URL.Query()
-	if raw := values.Get("limit"); raw != "" {
-		limit, parseErr := strconv.Atoi(raw)
-		if parseErr != nil || limit < 1 || limit > maximumSessionPageSize {
-			return route.Result{}, apperror.Invalid("request.invalid", "limit")
-		}
-
-		query.Limit = limit
+	pageRequest, err := request.Page()
+	if err != nil {
+		return route.Result{}, err
 	}
-
-	if raw := values.Get("cursor"); raw != "" {
+	query := identity.ListUserSessionsQuery{UserID: userID, IncludeRevoked: includeRevoked, Limit: pageRequest.Limit}
+	if raw := pageRequest.Cursor; raw != "" {
 		cursor, decodeErr := decodeSessionCursor(raw)
 		if decodeErr != nil {
 			return route.Result{}, apperror.Invalid("request.invalid", "cursor")
@@ -211,11 +205,6 @@ func (h userAdministrationHandlers) listSessions(request route.Request) (route.R
 
 	return route.JSON(http.StatusOK, response), nil
 }
-
-const (
-	defaultSessionPageSize = 50
-	maximumSessionPageSize = 200
-)
 
 // sessionAdministrationListResponse is one page of a User's Sessions, newest
 // first.

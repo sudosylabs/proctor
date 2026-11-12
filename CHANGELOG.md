@@ -17,6 +17,12 @@ module when a change is not server-only. No module has been released yet.
 
 ### Changed
 
+- Server: `GET /api/v1/audits`, `GET /api/v1/jobs` and
+  `GET /api/v1/jobs/{job_id}/attempts` reject an out-of-range, empty or
+  repeated `limit` or `cursor` with `request.invalid`. They had silently read
+  the default page without their filters or cursor. Every list now shares one
+  page rule. The baseline adds `jobs_created_at_id_idx` for the Job list order.
+  Existing development databases must be recreated.
 - Server: the baseline adds `access_policies.role_holder_mfa_required`,
   `session_idle_minutes` and `session_absolute_minutes` and
   `sessions.mfa_enrollment_required`, and admits those three policy fields

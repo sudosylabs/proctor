@@ -11,7 +11,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -733,16 +732,12 @@ func (h invitationHandlers) replace(request route.Request) (route.Result, error)
 }
 
 func invitationListQuery(request *http.Request) (onboarding.ListInvitationsQuery, error) {
-	values := request.URL.Query()
-	query := onboarding.ListInvitationsQuery{Limit: 50, TargetEmail: values.Get("email"), TargetID: values.Get("target_id")}
-	if raw := values.Get("limit"); raw != "" {
-		limit, err := strconv.Atoi(raw)
-		if err != nil || limit < 1 || limit > 200 {
-			return query, errors.New("invalid Invitation limit")
-		}
-
-		query.Limit = limit
+	page, err := route.ParsePage(request)
+	if err != nil {
+		return onboarding.ListInvitationsQuery{}, err
 	}
+	values := request.URL.Query()
+	query := onboarding.ListInvitationsQuery{Limit: page.Limit, TargetEmail: values.Get("email"), TargetID: values.Get("target_id")}
 
 	if raw := values.Get("purpose"); raw != "" {
 		query.Purpose = model.InvitationPurpose(raw)
@@ -758,7 +753,6 @@ func invitationListQuery(request *http.Request) (onboarding.ListInvitationsQuery
 		}
 	}
 
-	var err error
 	if raw := values.Get("created_after"); raw != "" {
 		query.CreatedAfter, err = parseInvitationFilterTime(raw)
 		if err != nil {

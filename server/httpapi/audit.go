@@ -15,7 +15,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strconv"
 
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -24,8 +23,6 @@ import (
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
-
-const defaultAuditPageSize = 50
 
 type auditCursor struct {
 	CreatedAt string `json:"created_at"`
@@ -146,21 +143,16 @@ func (h auditHandlers) list(request route.Request) (route.Result, error) {
 }
 
 func auditQueryFromRequest(request *http.Request) (administration.ListAuditEventsQuery, error) {
-	query := administration.ListAuditEventsQuery{Limit: defaultAuditPageSize}
-	values := request.URL.Query()
-	if raw := values.Get("limit"); raw != "" {
-		limit, err := strconv.Atoi(raw)
-		if err != nil || limit < 1 || limit > 200 {
-			return query, err
-		}
-
-		query.Limit = limit
+	page, err := route.ParsePage(request)
+	if err != nil {
+		return administration.ListAuditEventsQuery{}, err
 	}
-
-	if raw := values.Get("cursor"); raw != "" {
-		cursor, err := decodeAuditCursor(raw)
-		if err != nil {
-			return query, err
+	query := administration.ListAuditEventsQuery{Limit: page.Limit}
+	values := request.URL.Query()
+	if raw := page.Cursor; raw != "" {
+		cursor, decodeErr := decodeAuditCursor(raw)
+		if decodeErr != nil {
+			return query, decodeErr
 		}
 
 		createdAt, _ := model.ParseRFC3339(cursor.CreatedAt)
@@ -174,7 +166,6 @@ func auditQueryFromRequest(request *http.Request) (administration.ListAuditEvent
 		}
 	}
 
-	var err error
 	if query.Since, err = optionalAuditTime(values, "created_after"); err != nil {
 		return query, err
 	}

@@ -9,7 +9,6 @@ package httpapi
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
@@ -26,14 +25,11 @@ func membershipPageQuery(request *http.Request, scope model.Resource) (academic.
 		}
 	}
 
-	if values.Has("limit") {
-		limit, err := strconv.Atoi(values.Get("limit"))
-		if err != nil || limit < 1 || limit > 200 {
-			return query, cursor, route.InvalidRequest(err)
-		}
-
-		query.Limit = limit
+	page, err := route.ParsePage(request)
+	if err != nil {
+		return query, cursor, err
 	}
+	query.Limit = page.Limit
 
 	if values.Has("active_at") {
 		parsed, err := model.ParseRFC3339(values.Get("active_at"))

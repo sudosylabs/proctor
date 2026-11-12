@@ -23,6 +23,7 @@ type attemptStoreFake struct {
 	screenClipReplayed              bool
 	screenClipUpload                *store.ExamAttemptScreenClipUploadStatus
 	overview                        *store.SecurityPolicyOverview
+	attemptScreenClip               *store.ExamAttemptScreenClipView
 	overviewErr                     error
 	overviewAccess                  *store.SecurityPreflightAccess
 	screenClipChunk                 *store.ExamAttemptScreenClipChunk
@@ -230,6 +231,24 @@ func (f *attemptStoreFake) RecordScreenClipChunk(_ context.Context, input *store
 
 func (f *attemptStoreFake) CompleteScreenClipUpload(_ context.Context, input *store.ExamAttemptScreenClipCompletion) (*store.ExamAttemptScreenClipView, error) {
 	return nil, store.NewErrNotFound("screen_clip", input.ClipID.String())
+}
+
+func (f *attemptStoreFake) ListAttemptScreenClips(context.Context, model.ExamID, model.ExamSittingID, model.ExamAttemptID) ([]store.ExamAttemptScreenClipView, error) {
+	return []store.ExamAttemptScreenClipView{}, nil
+}
+
+func (f *attemptStoreFake) GetAttemptScreenClip(
+	_ context.Context,
+	_ model.ExamID,
+	_ model.ExamSittingID,
+	_ model.ExamAttemptID,
+	clipID model.ScreenClipID,
+) (*store.ExamAttemptScreenClipView, error) {
+	if f.attemptScreenClip == nil {
+		return nil, store.NewErrNotFound("screen_clip", clipID.String())
+	}
+	clip := *f.attemptScreenClip
+	return &clip, nil
 }
 
 func (f *attemptStoreFake) DeliverScreenClip(_ context.Context, input *store.ExamAttemptScreenClipDelivery) (*store.ExamAttemptScreenClipView, error) {

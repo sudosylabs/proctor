@@ -181,6 +181,14 @@ type ExamAttemptApplication interface {
 		model.ScreenClipID,
 	) (store.ExamAttemptScreenClipUploadStatus, error)
 	UploadScreenClipChunk(context.Context, invocation.Invocation, attempt.ScreenClipChunkCommand) error
+	ListScreenClips(context.Context, invocation.Invocation, attempt.ManagedScreenClipQuery) ([]store.ExamAttemptScreenClipView, error)
+	SizeOfScreenClip(
+		context.Context,
+		invocation.Invocation,
+		attempt.ManagedScreenClipQuery,
+		model.ScreenClipID,
+	) (store.ExamAttemptScreenClipView, error)
+	OpenScreenClip(context.Context, invocation.Invocation, attempt.OpenScreenClipQuery) (attempt.OpenedScreenClip, error)
 	CompleteScreenClipUpload(context.Context, invocation.Invocation, attempt.ScreenClipCompletion) (store.ExamAttemptScreenClipView, error)
 	SubmitExamAttempt(context.Context, invocation.Invocation, attempt.SubmitCommand) (store.ExamSubmissionReceipt, error)
 	GetExamSubmission(context.Context, invocation.Invocation, attempt.GetSubmissionQuery) (attempt.ManagedSubmission, error)
@@ -402,6 +410,44 @@ func examAttemptResource(app ExamAttemptApplication) route.Resource {
 				"exam.sitting.unavailable",
 			},
 			Handle: h.requestScreenClip,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   screenClips,
+			Auth:   route.AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.unavailable",
+				"exam.delivery.metadata_capacity",
+				"exam.sitting.invalid",
+				"exam.sitting.unavailable",
+			},
+			Handle: h.listScreenClips,
+		},
+		route.Endpoint{
+			Method:       http.MethodGet,
+			Path:         screenClips + "/{screen_clip_id}/content",
+			Auth:         route.AuthPrincipalRequired,
+			ProtocolName: "exam-attempt-screen-clip-content",
+			ProtocolKind: route.ProtocolBinaryDownload,
+			Errors: []string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.state_conflict",
+				"exam.attempt.unavailable",
+				"exam.delivery.metadata_capacity",
+				"exam.sitting.invalid",
+				"exam.sitting.unavailable",
+			},
+			Protocol: h.playScreenClip,
 		},
 		route.Endpoint{
 			Method: http.MethodGet,

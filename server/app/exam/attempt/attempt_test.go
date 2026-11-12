@@ -378,6 +378,10 @@ type contentFake struct {
 	clipChunkErr    error
 }
 
+func (f *contentFake) OpenScreenClipChunk(context.Context, model.ScreenClipID, int, int64, int64) (io.ReadCloser, error) {
+	return io.NopCloser(strings.NewReader("")), nil
+}
+
 func (f *contentFake) StageScreenClipChunk(_ context.Context, _ model.ScreenClipID, _ int, body io.Reader, _ int64, expected string) error {
 	f.f.order = append(f.f.order, "content.stage_clip_chunk")
 	f.clipChunkSHA256 = expected

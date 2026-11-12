@@ -271,3 +271,72 @@ func screenClipUploadResponseFrom(status store.ExamAttemptScreenClipUploadStatus
 	}
 	return response
 }
+
+func managedScreenClipQuery(request route.Request) (attempt.ManagedScreenClipQuery, error) {
+	examID, sittingID, attemptID, err := managedExamAttemptIDs(request)
+	if err != nil {
+		return attempt.ManagedScreenClipQuery{}, err
+	}
+	return attempt.ManagedScreenClipQuery{ExamID: examID, SittingID: sittingID, AttemptID: attemptID}, nil
+}
+
+func (h examAttemptHandlers) listScreenClips(request route.Request) (route.Result, error) {
+	query, err := managedScreenClipQuery(request)
+	if err != nil {
+		return route.Result{}, err
+	}
+	clips, err := h.app.ListScreenClips(request.Context, request.Invocation(), query)
+	if err != nil {
+		return route.Result{}, err
+	}
+	response, err := route.BoundedList(
+		request,
+		"screen_clip",
+		clips,
+		func(clip store.ExamAttemptScreenClipView) route.BoundedKey {
+			return route.BoundedKey{At: clip.RequestedAt, ID: clip.ID.String()}
+		},
+		screenClipResponseFromView,
+	)
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusOK, response).WithHeaders(noStoreHeaders()), nil
+}
+
+// playScreenClip serves a ready clip, whole or by one byte range, so a
+// player can seek without downloading the clip first.
+func (h examAttemptHandlers) playScreenClip(request route.Request) (route.ProtocolResult, error) {
+	query, err := managedScreenClipQuery(request)
+	if err != nil {
+		return route.ProtocolResult{}, err
+	}
+	clipID, err := route.PathID[model.ScreenClipID](request, "screen_clip_id")
+	if err != nil {
+		return route.ProtocolResult{}, err
+	}
+	clip, err := h.app.SizeOfScreenClip(request.Context, request.Invocation(), query, clipID)
+	if err != nil {
+		return route.ProtocolResult{}, err
+	}
+	size := clip.Upload.SizeBytes
+	byteRange, partial, err := route.ParseByteRange(request.HTTP.Header.Get("Range"), size)
+	if err != nil {
+		return route.ProtocolResult{}, route.InvalidRequest(err)
+	}
+	opened, err := h.app.OpenScreenClip(request.Context, request.Invocation(), attempt.OpenScreenClipQuery{
+		ManagedScreenClipQuery: query, ClipID: clipID, Start: byteRange.Start, Length: byteRange.Length,
+	})
+	if err != nil {
+		return route.ProtocolResult{}, err
+	}
+	headers := http.Header{
+		"Content-Type":  {opened.MediaType},
+		"Cache-Control": {"private, no-store"},
+		"Accept-Ranges": {"bytes"},
+	}
+	if partial {
+		return route.PartialDownload(opened.Body, opened.Start, opened.Length, opened.SizeBytes).WithHeaders(headers), nil
+	}
+	return route.BinaryDownload(opened.Body, opened.Length).WithHeaders(headers), nil
+}

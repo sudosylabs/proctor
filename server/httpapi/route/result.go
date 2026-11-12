@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -70,8 +71,12 @@ type ProtocolResult struct {
 	location      string
 	body          io.ReadCloser
 	contentLength int64
-	jsonBody      any
-	headers       http.Header
+	// rangeStart and rangeTotal describe a partial download: contentLength
+	// bytes from rangeStart of a representation of rangeTotal bytes.
+	rangeStart int64
+	rangeTotal int64
+	jsonBody   any
+	headers    http.Header
 }
 
 // Redirect answers 303 See Other to location.
@@ -84,6 +89,71 @@ func Redirect(location string) ProtocolResult {
 // closes body.
 func BinaryDownload(body io.ReadCloser, contentLength int64) ProtocolResult {
 	return ProtocolResult{kind: ProtocolBinaryDownload, status: http.StatusOK, body: body, contentLength: contentLength}
+}
+
+// PartialDownload streams length bytes of body, the bytes from start of a
+// representation of total bytes, with status 206 Partial Content. The kernel
+// sets Content-Range and Content-Length and closes body.
+func PartialDownload(body io.ReadCloser, start, length, total int64) ProtocolResult {
+	return ProtocolResult{
+		kind: ProtocolBinaryDownload, status: http.StatusPartialContent, body: body,
+		contentLength: length, rangeStart: start, rangeTotal: total,
+	}
+}
+
+// ByteRange is one satisfiable range of a representation.
+type ByteRange struct {
+	Start  int64
+	Length int64
+}
+
+// ErrRangeNotSatisfiable means a Range header names no byte of the
+// representation, or more than one range.
+var ErrRangeNotSatisfiable = errors.New("range is not satisfiable")
+
+// ParseByteRange reads a Range header for a representation of total bytes.
+// It accepts one range, "bytes=first-last", "bytes=first-" or "bytes=-suffix",
+// and reports partial false when there is no Range header. Multiple ranges
+// are refused rather than served as multipart.
+func ParseByteRange(header string, total int64) (ByteRange, bool, error) {
+	if header == "" {
+		return ByteRange{Start: 0, Length: total}, false, nil
+	}
+	spec, ok := strings.CutPrefix(header, "bytes=")
+	if !ok || strings.Contains(spec, ",") || total < 1 {
+		return ByteRange{}, false, ErrRangeNotSatisfiable
+	}
+	first, last, ok := strings.Cut(spec, "-")
+	if !ok {
+		return ByteRange{}, false, ErrRangeNotSatisfiable
+	}
+	parse := func(value string) (int64, bool) {
+		number, err := strconv.ParseInt(value, 10, 64)
+		return number, err == nil && number >= 0 && strconv.FormatInt(number, 10) == value
+	}
+	switch {
+	case first == "":
+		suffix, valid := parse(last)
+		if !valid || suffix == 0 {
+			return ByteRange{}, false, ErrRangeNotSatisfiable
+		}
+		suffix = min(suffix, total)
+		return ByteRange{Start: total - suffix, Length: suffix}, true, nil
+	default:
+		start, valid := parse(first)
+		if !valid || start >= total {
+			return ByteRange{}, false, ErrRangeNotSatisfiable
+		}
+		end := total - 1
+		if last != "" {
+			stop, stopValid := parse(last)
+			if !stopValid || stop < start {
+				return ByteRange{}, false, ErrRangeNotSatisfiable
+			}
+			end = min(stop, total-1)
+		}
+		return ByteRange{Start: start, Length: end - start + 1}, true, nil
+	}
 }
 
 // NotModified answers 304 to a conditional download whose representation of
@@ -223,6 +293,11 @@ func validateProtocolResult(expected ProtocolKind, result ProtocolResult) error 
 		if result.status == http.StatusNotModified {
 			if result.body != nil || result.contentLength < 0 {
 				return errors.New("not-modified binary result contains a body")
+			}
+		} else if result.status == http.StatusPartialContent {
+			if result.body == nil || result.contentLength < 1 || result.rangeStart < 0 ||
+				result.rangeStart+result.contentLength > result.rangeTotal {
+				return errors.New("partial binary result is invalid")
 			}
 		} else if result.status != http.StatusOK || result.body == nil || result.contentLength < 0 {
 			return errors.New("binary protocol result is invalid")

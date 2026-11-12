@@ -1369,6 +1369,18 @@ type ExamAttemptStore interface {
 	// verifies with the key of the Desktop registration uploading it.
 	// Completing it again returns it unchanged.
 	CompleteScreenClipUpload(context.Context, *ExamAttemptScreenClipCompletion) (*ExamAttemptScreenClipView, error)
+	// ListAttemptScreenClips returns, newest first, every clip requested for
+	// an Attempt of the exact Exam and Sitting. Private reasons are cleared.
+	ListAttemptScreenClips(context.Context, model.ExamID, model.ExamSittingID, model.ExamAttemptID) ([]ExamAttemptScreenClipView, error)
+	// GetAttemptScreenClip returns one clip of an Attempt of the exact Exam
+	// and Sitting.
+	GetAttemptScreenClip(
+		context.Context,
+		model.ExamID,
+		model.ExamSittingID,
+		model.ExamAttemptID,
+		model.ScreenClipID,
+	) (*ExamAttemptScreenClipView, error)
 
 	// ResolveCorrectionAcknowledgementTarget validates an acknowledgement and
 	// returns the scope its audit is recorded under. It changes nothing.

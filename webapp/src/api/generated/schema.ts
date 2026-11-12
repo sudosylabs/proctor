@@ -3165,13 +3165,46 @@ export interface paths {
             };
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List an Attempt's screen clips
+         * @description Lists, newest first, every clip requested for the Attempt, manager and incident alike, with its state: requested, recording the future part of its range, uploading, ready or failed. Managers' reasons are never returned.
+         */
+        get: operations["listExamAttemptScreenClips"];
         put?: never;
         /**
          * Request a range of a candidate's recorded screen
          * @description An Exam Manager's request for part of the screen Desktop records on the candidate's device, for an Exam whose native policy turns the screen recorder on. The range is either from the start of the session or an explicit start and end of at most six hours; it may end up to ten minutes after the request, and Desktop waits for that part before cutting the clip. A request made while the Attempt is suspended waits until the candidate resumes. The manager's reason is required, audited as an attempt, and stored with the request; it is never returned. An Attempt takes at most ten manager requests. Requests stop once the Attempt has ended.
          */
         post: operations["requestExamAttemptScreenClip"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips/{screen_clip_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam identifier. */
+                exam_id: components["parameters"]["ExamID"];
+                /** @description The Exam Sitting identifier. */
+                exam_sitting_id: components["parameters"]["ExamSittingID"];
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+                /** @description The screen clip identifier. */
+                screen_clip_id: components["parameters"]["ScreenClipID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Play a ready screen clip
+         * @description Streams a ready clip to one of the Sitting's Exam Managers, whole or by one byte range so a player can seek. Each playback, a request from the clip's first byte, is audited. Multiple ranges, or a range past the clip's end, are refused.
+         */
+        get: operations["playExamAttemptScreenClip"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -14556,6 +14589,32 @@ export interface components {
                 "application/json": components["schemas"]["ScreenClipChunkResponse"];
             };
         };
+        /** @description The whole clip */
+        ScreenClipContent: {
+            headers: {
+                "Accept-Ranges"?: "bytes";
+                "Cache-Control"?: "private, no-store";
+                [name: string]: unknown;
+            };
+            content: {
+                "video/mp4": string;
+                "video/webm": string;
+            };
+        };
+        /** @description One byte range of the clip */
+        ScreenClipPartialContent: {
+            headers: {
+                "Accept-Ranges"?: "bytes";
+                "Cache-Control"?: "private, no-store";
+                /** @description The range served, as bytes first-last/size. */
+                "Content-Range"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "video/mp4": string;
+                "video/webm": string;
+            };
+        };
         /** @description The requests waiting for the candidate's Desktop */
         ScreenClipRequestListOK: {
             headers: {
@@ -20966,6 +21025,51 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    listExamAttemptScreenClips: {
+        parameters: {
+            query?: {
+                /** @description Maximum number of items in the page. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Opaque next_cursor from the previous page, returned unchanged; omit it for the first page. */
+                cursor?: components["parameters"]["PageCursor"];
+            };
+            header?: never;
+            path: {
+                /** @description The Exam identifier. */
+                exam_id: components["parameters"]["ExamID"];
+                /** @description The Exam Sitting identifier. */
+                exam_sitting_id: components["parameters"]["ExamSittingID"];
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The Attempt's screen clips */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "items": []
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ScreenClipListResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     requestExamAttemptScreenClip: {
         parameters: {
             query?: never;
@@ -20987,6 +21091,38 @@ export interface operations {
         responses: {
             200: components["responses"]["ExamAttemptScreenClipOK"];
             201: components["responses"]["ExamAttemptScreenClipOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    playExamAttemptScreenClip: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description One byte range, such as bytes=0-1048575, bytes=1048576- or bytes=-4096. */
+                Range?: string;
+            };
+            path: {
+                /** @description The Exam identifier. */
+                exam_id: components["parameters"]["ExamID"];
+                /** @description The Exam Sitting identifier. */
+                exam_sitting_id: components["parameters"]["ExamSittingID"];
+                /** @description The Exam Attempt identifier. */
+                exam_attempt_id: components["parameters"]["ExamAttemptID"];
+                /** @description The screen clip identifier. */
+                screen_clip_id: components["parameters"]["ScreenClipID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ScreenClipContent"];
+            206: components["responses"]["ScreenClipPartialContent"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];

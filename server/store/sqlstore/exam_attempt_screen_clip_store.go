@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/lib/pq"
@@ -28,6 +29,9 @@ const screenClipMaxFuture = 10 * time.Minute
 const screenClipColumns = `id, exam_attempt_id, source, requested_by_user_id, private_reason, integrity_flag_id,
 	range_from_session_start, range_start, range_end, state, failure, delivered_participation_id,
 	media_type, size_bytes, chunk_sha256, content_digest, content_signature, requested_at, updated_at, revision`
+
+// prefixedScreenClipColumns are screenClipColumns read through the alias c.
+var prefixedScreenClipColumns = "c." + strings.ReplaceAll(strings.Join(strings.Fields(screenClipColumns), " "), ", ", ", c.")
 
 type screenClipRow struct {
 	ID                       string         `db:"id"`
@@ -633,4 +637,64 @@ func (s *SQLExamAttemptStore) CompleteScreenClipUpload(
 		}
 		return updateScreenClip(ctx, tx, clip)
 	})
+}
+
+// ListAttemptScreenClips returns every clip requested for an Attempt.
+func (s *SQLExamAttemptStore) ListAttemptScreenClips(
+	ctx context.Context,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+) ([]store.ExamAttemptScreenClipView, error) {
+	if !examID.IsValid() || !sittingID.IsValid() || !attemptID.IsValid() {
+		return nil, store.NewErrInvalidInput("screen_clip", "attempt", nil)
+	}
+	var rows []screenClipRow
+	if err := s.GetMaster().Select(ctx, &rows, `SELECT `+prefixedScreenClipColumns+`
+		FROM exam_attempt_screen_clips c
+		JOIN exam_attempts a ON a.id = c.exam_attempt_id
+		WHERE a.id = ? AND a.exam_id = ? AND a.exam_sitting_id = ?
+		ORDER BY c.requested_at DESC, c.id DESC
+		LIMIT ?`,
+		attemptID.String(), examID.String(), sittingID.String(),
+		model.ScreenClipManagerRequestLimit+model.ScreenClipIncidentRequestLimit); err != nil {
+		return nil, fmt.Errorf("list Attempt screen clips: %w", err)
+	}
+	clips := make([]store.ExamAttemptScreenClipView, 0, len(rows))
+	for _, row := range rows {
+		clip, err := row.model()
+		if err != nil {
+			return nil, err
+		}
+		clips = append(clips, store.NewExamAttemptScreenClipView(clip))
+	}
+	return clips, nil
+}
+
+// GetAttemptScreenClip returns one clip of an Attempt.
+func (s *SQLExamAttemptStore) GetAttemptScreenClip(
+	ctx context.Context,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+	clipID model.ScreenClipID,
+) (*store.ExamAttemptScreenClipView, error) {
+	if !examID.IsValid() || !sittingID.IsValid() || !attemptID.IsValid() || !clipID.IsValid() {
+		return nil, store.NewErrInvalidInput("screen_clip", "id", nil)
+	}
+	var row screenClipRow
+	err := s.GetMaster().Get(ctx, &row, `SELECT `+prefixedScreenClipColumns+`
+		FROM exam_attempt_screen_clips c
+		JOIN exam_attempts a ON a.id = c.exam_attempt_id
+		WHERE c.id = ? AND a.id = ? AND a.exam_id = ? AND a.exam_sitting_id = ?`,
+		clipID.String(), attemptID.String(), examID.String(), sittingID.String())
+	if err != nil {
+		return nil, translateError("screen_clip", clipID.String(), err)
+	}
+	clip, err := row.model()
+	if err != nil {
+		return nil, err
+	}
+	view := store.NewExamAttemptScreenClipView(clip)
+	return &view, nil
 }

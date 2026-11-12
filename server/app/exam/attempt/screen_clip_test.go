@@ -114,3 +114,44 @@ func TestScreenClipChunksAreStagedAgainstTheirDeclaredHashThenRecorded(t *testin
 	f.persistence.screenClipUpload.Clip.State = model.ScreenClipReady
 	require.True(t, apperror.Is(chunk(1, 3), "exam.attempt.state_conflict"), "a finished clip takes no more chunks")
 }
+
+func TestScreenClipPlaybackIsAuditedFromItsFirstByteOnly(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	useManagerCall(f)
+	clipID := model.NewScreenClipID()
+	upload := &model.ScreenClipUpload{MediaType: "video/webm", SizeBytes: 100, ChunkSHA256: []string{strings.Repeat("a", 64)}}
+	f.persistence.attemptScreenClip = &store.ExamAttemptScreenClipView{ID: clipID, AttemptID: f.attemptID,
+		State: model.ScreenClipReady, Upload: upload, Signature: strings.Repeat("s", model.DesktopSignatureLength)}
+	query := func(start, length int64) OpenScreenClipQuery {
+		return OpenScreenClipQuery{ManagedScreenClipQuery: ManagedScreenClipQuery{
+			ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID,
+		}, ClipID: clipID, Start: start, Length: length}
+	}
+
+	opened, err := f.service.OpenScreenClip(context.Background(), f.inv, query(0, 100))
+	require.NoError(t, err)
+	require.NoError(t, opened.Body.Close())
+	require.Equal(t, "video/webm", opened.MediaType)
+	require.Equal(t, ScreenClipPlaybackOperation, f.audit.operation, "starting a playback is audited")
+	require.Equal(t, []string{"manager.manage", "sitting", "audit", "audit.complete"}, f.order,
+		"the Sitting is authorized before the playback is audited")
+
+	f.order, f.audit.operation = nil, ""
+	_, err = f.service.OpenScreenClip(context.Background(), f.inv, query(40, 10))
+	require.NoError(t, err)
+	require.Empty(t, f.audit.operation, "the ranges a player reads after the start are not audited again")
+
+	for name, q := range map[string]OpenScreenClipQuery{
+		"past the end": query(95, 10),
+		"empty":        query(0, 0),
+		"negative":     query(-1, 5),
+	} {
+		_, err = f.service.OpenScreenClip(context.Background(), f.inv, q)
+		require.True(t, apperror.Is(err, "exam.attempt.invalid"), name)
+	}
+
+	f.persistence.attemptScreenClip.State = model.ScreenClipUploading
+	_, err = f.service.OpenScreenClip(context.Background(), f.inv, query(0, 100))
+	require.True(t, apperror.Is(err, "exam.attempt.state_conflict"), "only a ready clip plays")
+}

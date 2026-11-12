@@ -3127,6 +3127,17 @@ export const searchEntries = [
     "searchText": "reallowexamattempt re-allow one exact suspended exam attempt closes only the identified active suspension episode and moves the attempt to ready. it preserves integrity evidence and creates no continuity credential, participation, session binding, or connection; the candidate must rejoin through full admission validation. attempts and workspaces post /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/reallow principal_required required authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found exam.attempt.invalid exam.attempt.revision_conflict exam.attempt.suspension_conflict exam.attempt.state_conflict exam.attempt.sitting_not_open exam.attempt.conflict exam.attempt.unavailable idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress exam.delivery.metadata_capacity exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
   },
   {
+    "id": "operation:listExamAttemptScreenClips",
+    "kind": "endpoint",
+    "group": "Attempts and workspaces",
+    "title": "List an Attempt's screen clips",
+    "description": "Lists, newest first, every clip requested for the Attempt, manager and incident alike, with its state: requested, recording the future part of its range, uploading, ready or failed. Managers' reasons are never returned.",
+    "href": "/api/reference/list-exam-attempt-screen-clips",
+    "method": "GET",
+    "path": "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips",
+    "searchText": "listexamattemptscreenclips list an attempt's screen clips lists, newest first, every clip requested for the attempt, manager and incident alike, with its state: requested, recording the future part of its range, uploading, ready or failed. managers' reasons are never returned. attempts and workspaces get /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips principal_required none authorization.request.invalid authorization.unavailable request.invalid resource.not_found exam.attempt.invalid exam.attempt.unavailable exam.delivery.metadata_capacity exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
     "id": "operation:requestExamAttemptScreenClip",
     "kind": "endpoint",
     "group": "Attempts and workspaces",
@@ -3136,6 +3147,17 @@ export const searchEntries = [
     "method": "POST",
     "path": "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips",
     "searchText": "requestexamattemptscreenclip request a range of a candidate's recorded screen an exam manager's request for part of the screen desktop records on the candidate's device, for an exam whose native policy turns the screen recorder on. the range is either from the start of the session or an explicit start and end of at most six hours; it may end up to ten minutes after the request, and desktop waits for that part before cutting the clip. a request made while the attempt is suspended waits until the candidate resumes. the manager's reason is required, audited as an attempt, and stored with the request; it is never returned. an attempt takes at most ten manager requests. requests stop once the attempt has ended. attempts and workspaces post /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips principal_required required authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found exam.attempt.invalid exam.attempt.state_conflict exam.attempt.screen_recording_off exam.attempt.screen_clip_limit_reached exam.attempt.unavailable idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress exam.delivery.metadata_capacity exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
+  },
+  {
+    "id": "operation:playExamAttemptScreenClip",
+    "kind": "endpoint",
+    "group": "Attempts and workspaces",
+    "title": "Play a ready screen clip",
+    "description": "Streams a ready clip to one of the Sitting's Exam Managers, whole or by one byte range so a player can seek. Each playback, a request from the clip's first byte, is audited. Multiple ranges, or a range past the clip's end, are refused.",
+    "href": "/api/reference/play-exam-attempt-screen-clip",
+    "method": "GET",
+    "path": "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips/{screen_clip_id}/content",
+    "searchText": "playexamattemptscreenclip play a ready screen clip streams a ready clip to one of the sitting's exam managers, whole or by one byte range so a player can seek. each playback, a request from the clip's first byte, is audited. multiple ranges, or a range past the clip's end, are refused. attempts and workspaces get /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips/{screen_clip_id}/content principal_required none authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found exam.attempt.invalid exam.attempt.state_conflict exam.attempt.unavailable exam.delivery.metadata_capacity exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:getExamSubmission",

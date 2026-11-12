@@ -97,6 +97,17 @@ func TestExamAttemptScreenClipStore(t *testing.T, ss store.Store) {
 
 	testScreenClipUpload(t, ctx, ss, access, first.Clip.ID)
 
+	listed, err := ss.ExamAttempt().ListAttemptScreenClips(ctx, fixture.examID, fixture.sitting.ID, connected.Attempt.ID)
+	require.NoError(t, err)
+	require.Len(t, listed, 1)
+	require.Equal(t, first.Clip.ID, listed[0].ID)
+	played, err := ss.ExamAttempt().GetAttemptScreenClip(ctx, fixture.examID, fixture.sitting.ID, connected.Attempt.ID, first.Clip.ID)
+	require.NoError(t, err)
+	require.Equal(t, model.ScreenClipReady, played.State)
+	require.NotEmpty(t, played.Signature)
+	_, err = ss.ExamAttempt().GetAttemptScreenClip(ctx, fixture.examID, model.NewExamSittingID(), connected.Attempt.ID, first.Clip.ID)
+	require.True(t, store.IsNotFound(err), "a clip is read only through its own Exam, Sitting and Attempt")
+
 	_, err = ss.ExamAttempt().DeliverScreenClip(ctx, &store.ExamAttemptScreenClipDelivery{Access: access, ClipID: model.NewScreenClipID()})
 	require.True(t, store.IsNotFound(err))
 

@@ -1585,6 +1585,18 @@ func (s *timedExamAttemptStore) CompleteScreenClipUpload(arg0 context.Context, a
 	})
 }
 
+func (s *timedExamAttemptStore) ListAttemptScreenClips(arg0 context.Context, arg1 model.ExamID, arg2 model.ExamSittingID, arg3 model.ExamAttemptID) ([]store.ExamAttemptScreenClipView, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodListAttemptScreenClips), func(callCtx context.Context) ([]store.ExamAttemptScreenClipView, error) {
+		return s.next.ListAttemptScreenClips(callCtx, arg1, arg2, arg3)
+	})
+}
+
+func (s *timedExamAttemptStore) GetAttemptScreenClip(arg0 context.Context, arg1 model.ExamID, arg2 model.ExamSittingID, arg3 model.ExamAttemptID, arg4 model.ScreenClipID) (*store.ExamAttemptScreenClipView, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodGetAttemptScreenClip), func(callCtx context.Context) (*store.ExamAttemptScreenClipView, error) {
+		return s.next.GetAttemptScreenClip(callCtx, arg1, arg2, arg3, arg4)
+	})
+}
+
 func (s *timedExamAttemptStore) ResolveCorrectionAcknowledgementTarget(arg0 context.Context, arg1 store.ExamAttemptCorrectionAcknowledgement) (*store.ExamAttemptCorrectionAcknowledgementTarget, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodResolveCorrectionAcknowledgementTarget), func(callCtx context.Context) (*store.ExamAttemptCorrectionAcknowledgementTarget, error) {
 		return s.next.ResolveCorrectionAcknowledgementTarget(callCtx, arg1)

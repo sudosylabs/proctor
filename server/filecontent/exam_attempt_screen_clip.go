@@ -89,6 +89,24 @@ func (c *Content) screenClipChunkMatches(ctx context.Context, key string, size i
 	return fmt.Sprintf("%x", digest.Sum(nil)) == expectedSHA256, nil
 }
 
+// OpenScreenClipChunk opens length bytes of one stored chunk from offset.
+// Persistence decides which chunk a viewer may reach; this only reads bytes.
+func (c *Content) OpenScreenClipChunk(
+	ctx context.Context,
+	clipID model.ScreenClipID,
+	index int,
+	offset, length int64,
+) (io.ReadCloser, error) {
+	if c == nil || c.filesystem == nil || !clipID.IsValid() || index < 0 || offset < 0 || length < 1 {
+		return nil, errors.New("invalid screen clip chunk")
+	}
+	file, err := c.filesystem.Open(ctx, screenClipChunkKey(clipID, index), vfs.OpenOptions{Offset: offset, Length: length})
+	if err != nil {
+		return nil, sanitize("open screen clip chunk", err)
+	}
+	return file.Body, nil
+}
+
 func screenClipChunkKey(clipID model.ScreenClipID, index int) string {
 	id := clipID.String()
 	return fmt.Sprintf("exam-screen-clips/%s/%s/%s/chunks/%03d", id[:2], id[2:4], id, index)

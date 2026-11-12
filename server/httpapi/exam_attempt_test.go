@@ -679,6 +679,44 @@ func TestCandidateScreenClipChunksAreNumberedFromOneOnTheWire(t *testing.T) {
 	require.Contains(t, completed.Body.String(), `"state":"ready"`)
 }
 
+func TestManagersPlayScreenClipsByRange(t *testing.T) {
+	t.Parallel()
+	fake := newExamAttemptHTTPFake(t)
+	fake.clipContent = "0123456789abcdefghij"
+	httpAPI := newExamAttemptFocusedAPI(t, fake)
+	path := "/api/v1/exams/" + fake.attempt.ExamID.String() + "/sittings/" + fake.attempt.SittingID.String() +
+		"/attempts/" + fake.attempt.ID.String() + "/screen-clips/" + model.NewScreenClipID().String() + "/content"
+	play := func(rangeHeader string) *httptest.ResponseRecorder {
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
+		request.Header.Set("Authorization", "Bearer credential")
+		if rangeHeader != "" {
+			request.Header.Set("Range", rangeHeader)
+		}
+		response := httptest.NewRecorder()
+		httpAPI.ServeHTTP(response, request)
+		return response
+	}
+
+	whole := play("")
+	require.Equal(t, http.StatusOK, whole.Code, "body=%s", whole.Body.String())
+	require.Equal(t, fake.clipContent, whole.Body.String())
+	require.Equal(t, "bytes", whole.Header().Get("Accept-Ranges"))
+	require.Equal(t, "video/mp4", whole.Header().Get("Content-Type"))
+
+	part := play("bytes=10-14")
+	require.Equal(t, http.StatusPartialContent, part.Code, "body=%s", part.Body.String())
+	require.Equal(t, "abcde", part.Body.String())
+	require.Equal(t, "bytes 10-14/20", part.Header().Get("Content-Range"))
+	require.Equal(t, "5", part.Header().Get("Content-Length"))
+
+	tail := play("bytes=-3")
+	require.Equal(t, http.StatusPartialContent, tail.Code)
+	require.Equal(t, "hij", tail.Body.String())
+
+	require.Equal(t, http.StatusBadRequest, play("bytes=30-").Code, "a range past the end is refused")
+	require.Equal(t, http.StatusBadRequest, play("bytes=0-1,4-5").Code, "multiple ranges are refused")
+}
+
 func TestManagerEndExamAttemptUsesRevisionFenceAndReturnsOnlySafeReceipt(t *testing.T) {
 	t.Parallel()
 	fake := newExamAttemptHTTPFake(t)
@@ -970,6 +1008,7 @@ type examAttemptHTTPFake struct {
 	clipChunk               attempt.ScreenClipChunkCommand
 	clipChunkBytes          []byte
 	clipCompletion          attempt.ScreenClipCompletion
+	clipContent             string
 	journalQuery            attempt.WorkspaceJournalQuery
 	journalPage             attempt.WorkspaceJournalPage
 	workspaceDirectory      attempt.CreateWorkspaceDirectoryCommand
@@ -1225,6 +1264,26 @@ func (f *examAttemptHTTPFake) CompleteScreenClipUpload(
 	clip, err := f.BeginScreenClipUpload(ctx, inv, command.Access, command.ClipID, f.clipUpload)
 	clip.State, clip.Signature = model.ScreenClipReady, command.Signature
 	return clip, err
+}
+
+func (f *examAttemptHTTPFake) ListScreenClips(context.Context, invocation.Invocation, attempt.ManagedScreenClipQuery) ([]store.ExamAttemptScreenClipView, error) {
+	return []store.ExamAttemptScreenClipView{}, nil
+}
+
+func (f *examAttemptHTTPFake) SizeOfScreenClip(
+	_ context.Context,
+	_ invocation.Invocation,
+	query attempt.ManagedScreenClipQuery,
+	clipID model.ScreenClipID,
+) (store.ExamAttemptScreenClipView, error) {
+	return store.ExamAttemptScreenClipView{ID: clipID, AttemptID: query.AttemptID, State: model.ScreenClipReady,
+		Upload: &model.ScreenClipUpload{MediaType: "video/mp4", SizeBytes: int64(len(f.clipContent))}}, nil
+}
+
+func (f *examAttemptHTTPFake) OpenScreenClip(_ context.Context, _ invocation.Invocation, query attempt.OpenScreenClipQuery) (attempt.OpenedScreenClip, error) {
+	content := f.clipContent[query.Start : query.Start+query.Length]
+	return attempt.OpenedScreenClip{Body: io.NopCloser(strings.NewReader(content)), MediaType: "video/mp4",
+		SizeBytes: int64(len(f.clipContent)), Start: query.Start, Length: query.Length}, nil
 }
 
 func (f *examAttemptHTTPFake) SuspendExamAttempt(_ context.Context, inv invocation.Invocation, command attempt.ManualSuspensionCommand) (attempt.ManualSuspensionResult, error) {

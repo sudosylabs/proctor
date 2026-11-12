@@ -342,6 +342,8 @@ const (
 	methodRecordScreenClipChunk                     methodName = "record_screen_clip_chunk"
 	methodCompleteScreenClipUpload                  methodName = "complete_screen_clip_upload"
 	methodReadSecurityPolicyOverview                methodName = "read_security_policy_overview"
+	methodListAttemptScreenClips                    methodName = "list_attempt_screen_clips"
+	methodGetAttemptScreenClip                      methodName = "get_attempt_screen_clip"
 	methodResolveOrProvision                        methodName = "resolve_or_provision"
 	methodLink                                      methodName = "link"
 	methodUnlink                                    methodName = "unlink"

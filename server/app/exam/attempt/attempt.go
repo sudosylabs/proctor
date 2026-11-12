@@ -76,6 +76,8 @@ type Content interface {
 	// StageScreenClipChunk stores one chunk of a screen clip if its bytes are
 	// the given size and match the given hash.
 	StageScreenClipChunk(context.Context, model.ScreenClipID, int, io.Reader, int64, string) error
+	// OpenScreenClipChunk opens length bytes of one stored chunk from offset.
+	OpenScreenClipChunk(context.Context, model.ScreenClipID, int, int64, int64) (io.ReadCloser, error)
 }
 
 // SubmissionMailPreparation contains only the safe identity needed to freeze

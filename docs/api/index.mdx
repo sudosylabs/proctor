@@ -7,6 +7,8 @@ slug: /
 hide_title: true
 ---
 
+import Link from '@docusaurus/Link';
+
 <ApiOverviewHero />
 
 <Maturity state="preview">
@@ -25,7 +27,10 @@ second source of route behavior.
 
 Browse the endpoint groups in the sidebar. Every endpoint page is generated
 from the same contract and displays its authentication, idempotency, and stable
-error-code declarations before the request and response schemas.
+error-code declarations before the request and response schemas. The
+<Link to="/api/reference/realtime-protocol/">Realtime Protocol</Link>
+reference is generated the same way from the reviewed AsyncAPI contract for the
+WebSocket frames.
 
 If this is your first integration, begin with [Getting Started](./guides/getting-started.mdx),
 then read [Authentication and Assurance](./guides/authentication.mdx) and

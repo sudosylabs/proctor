@@ -260,6 +260,7 @@ cache module.
 | Server unit tests, race tests, vet, or build | `make -C server test`, `test-race`, `vet`, or `build` |
 | Rerun every server code generator (error mapping, OpenAPI artifact, typed IDs, Store layers) | `make -C server generate` |
 | Rebuild or verify the OpenAPI artifact | `make -C server openapi-build` or `openapi-check` |
+| Rebuild or verify the realtime AsyncAPI artifact | `make -C server asyncapi-build` or `asyncapi-check` |
 | Regenerate or verify the HTTP error mapping | `make -C server errors-generate` or `errors-check` |
 | Verify server translation catalogs | `make -C server i18n-check` |
 | Verify the OpenAPI artifact and route agreement | `make -C server openapi-agreement` |

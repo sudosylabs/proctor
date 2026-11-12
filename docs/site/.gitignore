@@ -1,3 +1,4 @@
 .docusaurus/
 build/
 static/openapi/openapi.json
+static/asyncapi/asyncapi.json

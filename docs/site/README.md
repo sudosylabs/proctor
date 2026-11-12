@@ -179,6 +179,17 @@ candidate multipart upload, submission, and WebSocket upgrade. Representative
 success and redaction-safe Problem Details examples exist across every
 applicable product area.
 
+`scripts/generate-asyncapi-reference.mjs` renders the realtime protocol from
+the reviewed `server/asyncapi.json` into the ignored
+`docs/api/reference/realtime-protocol/` directory: an overview of the event frame,
+commands, and close codes, one page per message, and the sidebar that
+`sidebars.api.ts` places under "Realtime Reference". It also copies the
+artifact to the ignored `static/asyncapi/asyncapi.json` download path. The
+search index reads the same artifact. Run `make -C server asyncapi-build`
+after changing `server/asyncapi/` or `server/schemas/realtime/`;
+`npm run test:asyncapi-reference` checks that every message has one page and
+one sidebar entry.
+
 The reference UI deliberately disables request sending. It documents the
 contract and produces client-ready examples without turning a documentation
 deployment into a credential-bearing API console.

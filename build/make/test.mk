@@ -37,7 +37,7 @@ docs-start: docs-install ## Preview the public documentation site.
 	cd "$(DOCS_SITE_DIR)" && $(NPM) start
 
 docs-check: docs-install ## Validate and build the public documentation site.
-	$(MAKE) -C "$(SERVER_DIR)" openapi-check
+	$(MAKE) -C "$(SERVER_DIR)" openapi-check asyncapi-check
 	cd "$(DOCS_SITE_DIR)" && $(NPM) run check
 
 mail-templates-install:

@@ -2,6 +2,7 @@ import {readFile, readdir} from 'node:fs/promises';
 import {dirname, extname, relative, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {audienceLabels} from '../navigation.mjs';
+import {messageSlug, referenceRoute} from '../scripts/asyncapi-reference.mjs';
 
 const moduleRoot = dirname(fileURLToPath(import.meta.url));
 const defaultRepoRoot = resolve(moduleRoot, '../../..');
@@ -152,10 +153,47 @@ async function openAPIEntries(repoRoot) {
   return entries;
 }
 
+async function asyncAPIEntries(repoRoot) {
+  const specification = JSON.parse(
+    await readFile(resolve(repoRoot, 'server/asyncapi.json'), 'utf8'),
+  );
+  const channel = specification.channels.websocket;
+  const entries = [
+    {
+      id: 'realtime:overview',
+      kind: 'realtime-message',
+      group: 'Realtime',
+      title: 'Realtime Protocol',
+      description: compact(channel.summary ?? ''),
+      href: `${referenceRoute}/`,
+      path: channel.address,
+      searchText: compact(`realtime protocol websocket ${channel.address} ${channel.description ?? ''}`).toLowerCase(),
+    },
+  ];
+  for (const ref of Object.values(channel.messages)) {
+    const key = ref.$ref.split('/').pop();
+    const message = specification.components.messages[key];
+    const tags = (message.tags ?? []).map((tag) => tag.name);
+    entries.push({
+      id: `realtime:${key}`,
+      kind: 'realtime-message',
+      group: 'Realtime',
+      title: message.title ?? key,
+      description: compact(message.summary ?? ''),
+      href: `${referenceRoute}/${messageSlug(key)}`,
+      searchText: compact(
+        `${message.name} ${key} ${message.title ?? ''} ${message.description ?? message.summary ?? ''} ${tags.join(' ')}`,
+      ).toLowerCase(),
+    });
+  }
+  return entries;
+}
+
 export async function buildSearchIndex({repoRoot = defaultRepoRoot} = {}) {
   const entries = [
     ...(await authoredEntries(repoRoot)),
     ...(await openAPIEntries(repoRoot)),
+    ...(await asyncAPIEntries(repoRoot)),
   ];
   const ids = new Set();
   const hrefs = new Set();
@@ -173,7 +211,7 @@ export async function buildSearchIndex({repoRoot = defaultRepoRoot} = {}) {
 }
 
 export function renderSearchData(entries) {
-  return `// Generated from public MDX and server/openapi.json. Do not edit by hand.\n\nexport type SearchEntry = {\n  id: string;\n  kind: 'guide' | 'glossary' | 'product-area' | 'endpoint';\n  group: string;\n  title: string;\n  description: string;\n  href: string;\n  searchText: string;\n  method?: string;\n  path?: string;\n};\n\nexport const searchEntries = ${JSON.stringify(entries, null, 2)} satisfies readonly SearchEntry[];\n`;
+  return `// Generated from public MDX, server/openapi.json and server/asyncapi.json. Do not edit by hand.\n\nexport type SearchEntry = {\n  id: string;\n  kind: 'guide' | 'glossary' | 'product-area' | 'endpoint' | 'realtime-message';\n  group: string;\n  title: string;\n  description: string;\n  href: string;\n  searchText: string;\n  method?: string;\n  path?: string;\n};\n\nexport const searchEntries = ${JSON.stringify(entries, null, 2)} satisfies readonly SearchEntry[];\n`;
 }
 
 export async function auditSearchIndex({repoRoot = defaultRepoRoot} = {}) {

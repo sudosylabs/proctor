@@ -27,8 +27,18 @@ separately. Candidate admission additionally requires the registered-key
 Desktop Session and the exact Desktop compatibility inputs enforced by the
 Attempt protocol.
 
-See <Link to="/api/reference/connect-web-socket">Connect WebSocket</Link> for the current
-handshake parameters and protocol schemas.
+See <Link to="/api/reference/connect-web-socket">Connect WebSocket</Link> for the
+handshake parameters. The <Link to="/api/reference/realtime-protocol/">Realtime Protocol</Link>
+reference describes every frame after the upgrade: the event frame, the
+commands and their replies, the close codes, and each event with its data.
+
+## Unknown Events
+
+The server sends only the events its reference lists, but the list grows.
+Ignore an event whose name you do not recognize instead of treating it as an
+error, and keep processing the events that follow. Before the first supported
+release an event's data may change in place, together with the reference, as
+the HTTP contract may.
 
 ## Resume After Disconnect
 

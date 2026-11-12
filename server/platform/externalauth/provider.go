@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -79,53 +80,57 @@ type Provider interface {
 // the plugins offer. Configure rebuilds them from configuration, including on
 // reload; there is no process-wide provider map or init-time side effect.
 type Registry struct {
-	mutex     sync.RWMutex
-	factories map[string]plugin.IdentityProviderType
-	providers map[string]Provider
+	mutex       sync.RWMutex
+	types       map[string]plugin.IdentityProviderType
+	providers   map[string]Provider
+	unavailable []string
 }
 
-// NewRegistry returns a Registry that builds providers with factories, one
-// per protocol Type.
-func NewRegistry(factories ...plugin.IdentityProviderType) (*Registry, error) {
+// NewRegistry returns a Registry that builds providers with types, one per
+// protocol Type.
+func NewRegistry(types ...plugin.IdentityProviderType) (*Registry, error) {
 	registry := &Registry{
-		factories: make(map[string]plugin.IdentityProviderType, len(factories)),
+		types:     make(map[string]plugin.IdentityProviderType, len(types)),
 		providers: make(map[string]Provider),
 	}
-	for _, factory := range factories {
-		if factory == nil {
-			return nil, errors.New("external authentication factory is nil")
+	for _, providerType := range types {
+		if providerType == nil {
+			return nil, errors.New("external authentication provider type is nil")
 		}
-		providerType := strings.TrimSpace(factory.Type())
-		if providerType == "" {
-			return nil, errors.New("external authentication factory type is empty")
+		name := strings.TrimSpace(providerType.Type())
+		if name == "" {
+			return nil, errors.New("external authentication provider type name is empty")
 		}
-		if _, exists := registry.factories[providerType]; exists {
+		if _, exists := registry.types[name]; exists {
 			return nil, fmt.Errorf(
-				"external authentication factory %q is duplicated",
-				providerType,
+				"external authentication provider type %q is duplicated",
+				name,
 			)
 		}
-		registry.factories[providerType] = factory
+		registry.types[name] = providerType
 	}
 	return registry, nil
 }
 
+// Configure rebuilds the providers from settings. A provider whose protocol
+// no active plugin offers, because its plugin is turned off or has failed,
+// is left out and reported by Unavailable: sign-in through it is unavailable
+// while the server and every other provider keep working. Any other problem
+// with a provider fails Configure and keeps the previous providers.
 func (r *Registry) Configure(
 	settings config.ExternalAuthentication,
 ) error {
 	configured := make(map[string]Provider)
+	var unavailable []string
 	for _, definition := range settings.Providers {
 		if !definition.Enabled {
 			continue
 		}
 
-		factory, exists := r.factories[definition.Type]
+		providerType, exists := r.types[definition.Type]
 		if !exists {
-			return fmt.Errorf(
-				"external authentication provider %q uses unregistered type %q",
-				definition.ID,
-				definition.Type,
-			)
+			unavailable = append(unavailable, definition.ID)
+			continue
 		}
 
 		settings, err := json.Marshal(definition)
@@ -137,7 +142,11 @@ func (r *Registry) Configure(
 			)
 		}
 
-		provider, err := factory.New(plugin.IdentityProviderDefinition{ID: definition.ID, Settings: settings})
+		provider, err := providerType.New(plugin.IdentityProviderDefinition{ID: definition.ID, Settings: settings})
+		if errors.Is(err, plugin.ErrUnavailable) {
+			unavailable = append(unavailable, definition.ID)
+			continue
+		}
 		if err != nil {
 			return fmt.Errorf(
 				"configure external authentication provider %q: %w",
@@ -165,8 +174,18 @@ func (r *Registry) Configure(
 
 	r.mutex.Lock()
 	r.providers = configured
+	r.unavailable = unavailable
 	r.mutex.Unlock()
 	return nil
+}
+
+// Unavailable returns the IDs of the enabled providers the last Configure
+// left out because their protocol's plugin is turned off or has failed, in
+// configuration order.
+func (r *Registry) Unavailable() []string {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+	return slices.Clone(r.unavailable)
 }
 
 func (r *Registry) Provider(id string) (Provider, bool) {

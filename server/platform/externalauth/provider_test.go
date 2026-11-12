@@ -36,15 +36,39 @@ func TestRegistryIsInstanceScopedAndRejectsInvalidFactories(t *testing.T) {
 		fakeFactory{providerType: "duplicate"},
 	)
 	require.Error(t, err, "duplicate factory was accepted")
-	require.Error(t, first.Configure(config.ExternalAuthentication{
-		Providers: []config.ExternalAuthenticationProvider{{
-			ID: "unknown", Type: "missing", Enabled: true,
-		}},
-	}), "unregistered provider type was accepted")
+	require.NoError(t, first.Configure(config.ExternalAuthentication{
+		Providers: []config.ExternalAuthenticationProvider{
+			{ID: "unknown", Type: "missing", Enabled: true},
+			{ID: "kept", Type: "first", Enabled: true},
+		},
+	}), "a provider whose protocol plugin is off does not fail the others")
+	_, exists = first.Provider("unknown")
+	require.False(t, exists, "a provider without its protocol is left out")
+	_, exists = first.Provider("kept")
+	require.True(t, exists)
+	require.Equal(t, []string{"unknown"}, first.Unavailable())
+}
+
+func TestRegistryLeavesOutAProviderWhosePluginHasFailed(t *testing.T) {
+	registry, err := NewRegistry(fakeFactory{providerType: "first", err: plugin.ErrUnavailable})
+	require.NoError(t, err)
+	require.NoError(t, registry.Configure(config.ExternalAuthentication{
+		Providers: []config.ExternalAuthenticationProvider{{ID: "campus", Type: "first", Enabled: true}},
+	}))
+	_, exists := registry.Provider("campus")
+	require.False(t, exists)
+	require.Equal(t, []string{"campus"}, registry.Unavailable())
+
+	broken, err := NewRegistry(fakeFactory{providerType: "first", err: errors.New("bad issuer")})
+	require.NoError(t, err)
+	require.ErrorContains(t, broken.Configure(config.ExternalAuthentication{
+		Providers: []config.ExternalAuthenticationProvider{{ID: "campus", Type: "first", Enabled: true}},
+	}), "bad issuer", "a provider that cannot be built from its settings still fails Configure")
 }
 
 type fakeFactory struct {
 	providerType string
+	err          error
 }
 
 func (f fakeFactory) Type() string {
@@ -54,6 +78,9 @@ func (f fakeFactory) Type() string {
 func (f fakeFactory) New(
 	definition plugin.IdentityProviderDefinition,
 ) (plugin.IdentityProvider, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
 	if definition.ID == "" {
 		return nil, errors.New("missing id")
 	}

@@ -342,7 +342,7 @@ func TestAcceptClosesOwnedResourcesOnProviderConfigurationFailure(t *testing.T) 
 	_, _, err = configuration.Set(context.Background(), settings)
 	require.NoError(t, err)
 	resources := completeOwnedResources(t, configuration)
-	providers, err := externalauth.NewRegistry()
+	providers, err := externalauth.NewRegistry(failingProviderType{})
 	require.NoError(t, err)
 	persistence := &trackedStore{}
 	resources.Persistence = persistence
@@ -350,8 +350,40 @@ func TestAcceptClosesOwnedResourcesOnProviderConfigurationFailure(t *testing.T) 
 	service, _, err := Accept(context.Background(), resources)
 	require.Nil(t, service, "Accept(provider failure)")
 	require.Error(t, err, "Accept(provider failure)")
-	require.Contains(t, err.Error(), "unregistered type", "Accept(provider failure)")
+	require.Contains(t, err.Error(), "configure external authentication provider \"missing-factory\": settings rejected", "Accept(provider failure)")
 	require.True(t, persistence.closed.Load(), "provider configuration failure did not close accepted Store")
+}
+
+func TestAcceptStartsWithoutAProviderWhosePluginIsOff(t *testing.T) {
+	t.Parallel()
+
+	configuration, err := config.NewStore(
+		context.Background(), config.NewMemoryStore(nil), config.StoreOptions{},
+	)
+	require.NoError(t, err)
+	settings := configuration.Get()
+	settings.Authentication.External.Providers = []config.ExternalAuthenticationProvider{{
+		ID: "campus-cas", Type: config.ExternalAuthenticationTypeCAS,
+		DisplayName: "Campus", Enabled: true,
+		CAS: &config.CASProvider{
+			BaseURL: "https://cas.example.test", ValidationPath: "/p3/serviceValidate",
+			Timeout: config.Duration{Duration: 5 * time.Second}, MaxResponseBytes: 64 << 10,
+		},
+		Claims: config.ExternalClaimMapping{Subject: "user"},
+	}}
+	_, _, err = configuration.Set(context.Background(), settings)
+	require.NoError(t, err)
+	resources := completeOwnedResources(t, configuration)
+	providers, err := externalauth.NewRegistry()
+	require.NoError(t, err)
+	resources.ExternalAuthentication = providers
+
+	service, _, err := Accept(context.Background(), resources)
+	require.NoError(t, err, "a sign-in provider whose plugin is off does not stop the platform")
+	t.Cleanup(func() { _ = service.Close(context.Background()) })
+	_, exists := providers.Provider("campus-cas")
+	require.False(t, exists)
+	require.Equal(t, []string{"campus-cas"}, providers.Unavailable())
 }
 
 func TestAcceptRejectsClosedConfigurationListenerRegistration(t *testing.T) {
@@ -775,4 +807,14 @@ func TestServiceReloadRollsBackEveryConsumerWhenOneCannotApply(t *testing.T) {
 		require.True(t, configuration.Get().Authentication.External.Providers[0].Enabled)
 		require.Len(t, providers.Descriptors(), 1, "external providers were not restored")
 	}
+}
+
+// failingProviderType offers the CAS protocol but rejects every provider's
+// settings, as a protocol does when it cannot build a configured provider.
+type failingProviderType struct{}
+
+func (failingProviderType) Type() string { return config.ExternalAuthenticationTypeCAS }
+
+func (failingProviderType) New(plugin.IdentityProviderDefinition) (plugin.IdentityProvider, error) {
+	return nil, errors.New("settings rejected")
 }

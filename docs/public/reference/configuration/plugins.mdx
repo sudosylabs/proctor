@@ -25,9 +25,12 @@ need a restart.
 | The OpenID Connect sign-in protocol for [external authentication providers](./authentication.mdx) | `oidc` | On |
 | The zip encoding of Exam exports | `export.zip` | On |
 
-Turning off `cas` or `oidc` makes a configured provider of that type invalid,
-as if its type were unknown. Turning off `export.zip` leaves Exam exports
-unavailable, and the server logs a warning when it starts.
+When `cas` or `oidc` is turned off or fails, the server still starts. Each
+configured provider of that type is left out of sign-in, and a warning naming
+the provider is logged at startup and on every reload. Every other provider,
+and local sign-in, keep working. If the Access Policy turns local sign-in off
+and the only provider is affected, nobody can sign in until the plugin is
+back. Use `proctor administrator recover` on the host in that case.
 
 ```json
 {

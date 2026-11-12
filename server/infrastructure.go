@@ -98,9 +98,12 @@ type ownedInfrastructure struct {
 	migration *sqlstore.MigrationResult
 	metrics   *metrics.Module
 	tracing   *tracing.Module
-	// plugins are activated right after configuration and logging, so that
+	// plugins are activated once persistence and telemetry exist, so that
 	// what they register is ready before anything that uses it is built.
 	plugins *pluginhost.Host
+	// pluginSettingsCount is the saved-settings change count the plugins
+	// were activated with; the reconciler continues from it.
+	pluginSettingsCount int64
 }
 
 // constructionCapabilities is a short-lived, non-owning projection used only
@@ -121,7 +124,8 @@ type constructionCapabilities struct {
 	tracing                *tracing.Module
 	// plugins, like metrics and tracing, passes to compositionRelease and
 	// then to the Server, which deactivates it.
-	plugins *pluginhost.Host
+	plugins             *pluginhost.Host
+	pluginSettingsCount int64
 }
 
 type borrowedCache interface {
@@ -180,7 +184,10 @@ func openRuntimeInfrastructure(
 	}
 	// Plugins activate once metrics exist, so their first calls are
 	// recorded, and before anything that consumes what they register.
-	result.plugins, err = activatePlugins(ctx, cfg, result.resources.Logger, pluginRecorder(metricsModule), overrides.Plugins)
+	result.plugins, result.pluginSettingsCount, err = activatePlugins(
+		ctx, cfg, result.resources.Persistence.PluginSettings(), result.resources.Logger,
+		pluginRecorder(metricsModule), overrides.Plugins,
+	)
 	if err != nil {
 		return result, err
 	}
@@ -200,6 +207,7 @@ func openRuntimeInfrastructure(
 	if err != nil {
 		return result, fmt.Errorf("construct external authentication registry: %w", err)
 	}
+	followSignInPlugins(result.plugins, externalAuthentication, result.resources.Configuration, result.resources.Logger)
 	result.resources.ExternalAuthentication = externalAuthentication
 	if err := checkAcquisitionContext(ctx, "acquire external authentication registry"); err != nil {
 		return result, err
@@ -530,6 +538,7 @@ func (i *ownedInfrastructure) acceptPlatform(
 		metrics:                i.metrics,
 		tracing:                i.tracing,
 		plugins:                i.plugins,
+		pluginSettingsCount:    i.pluginSettingsCount,
 	}
 	if resources.Cluster != nil {
 		capabilities.nodeID = resources.Cluster.NodeID()
@@ -788,4 +797,25 @@ func newCluster(
 // sign-in protocols the active plugins offer.
 func newExternalAuthenticationRegistry(plugins *pluginhost.Host) (*externalauth.Registry, error) {
 	return externalauth.NewRegistry(plugins.IdentityProviderTypes()...)
+}
+
+// followSignInPlugins rebuilds the configured providers whenever plugins
+// change, so turning a sign-in plugin on or off applies without a restart.
+// A failure keeps the previous providers and is logged.
+func followSignInPlugins(
+	plugins *pluginhost.Host,
+	registry *externalauth.Registry,
+	configuration *config.Store,
+	logger *logging.Logger,
+) {
+	plugins.AddChangeListener(func() {
+		if err := registry.Reload(configuration.Get().Authentication.External, plugins.IdentityProviderTypes()...); err != nil {
+			logger.Error("could not rebuild external authentication providers after a plugin change", logging.Err(err))
+			return
+		}
+		for _, id := range registry.Unavailable() {
+			logger.Warn("external authentication provider is unavailable: its sign-in plugin is turned off or has failed",
+				logging.String("provider_id", id))
+		}
+	})
 }

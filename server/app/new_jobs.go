@@ -71,10 +71,7 @@ func newJobRuntime(
 
 	// With no subscriptions an event is offered to nobody and its outbox row
 	// is retired.
-	domainEvents, err := events.NewDispatcher(deps.EventSubscriptions...)
-	if err != nil {
-		return jobRuntime{}, err
-	}
+	domainEvents := events.NewDispatcher(deps.EventSubscriptions)
 	definitions := buildApplicationJobDefinitions(deps, shared, exams, users, defaultPictureJobs, onboardingPorts, mailHealth, domainEvents)
 	engine, err := job.New(job.Dependencies{
 		Store:         deps.Store.Job(),

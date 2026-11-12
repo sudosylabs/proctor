@@ -31,17 +31,18 @@ type Content struct {
 	filesystem       vfs.FileSystem
 	work             chan struct{}
 	recorder         WorkRecorder
-	examExportFormat plugin.ExportFormat
+	examExportFormat func() plugin.ExportFormat
 }
 
 // Policy bounds expensive content processing within one application node.
 // It limits concurrent operations, not their aggregate memory consumption.
 type Policy struct {
 	MaximumConcurrentOperations int
-	// ExamExportFormat encodes Exam exports, normally the zip format the
-	// built-in export.zip plugin offers. When it is nil, building an Exam
+	// ExamExportFormat returns the format that encodes Exam exports,
+	// normally the zip format the built-in export.zip plugin offers, looked
+	// up on each export. When it or its result is nil, building an Exam
 	// export fails as unavailable.
-	ExamExportFormat plugin.ExportFormat
+	ExamExportFormat func() plugin.ExportFormat
 }
 
 // WorkRecorder receives bounded node-local processing measurements. Methods

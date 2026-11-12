@@ -45,6 +45,7 @@ type formatRecordingHost struct {
 
 func (*formatRecordingHost) Logger() *slog.Logger      { return slog.New(slog.DiscardHandler) }
 func (*formatRecordingHost) Settings() json.RawMessage { return nil }
+func (*formatRecordingHost) Secrets() json.RawMessage  { return nil }
 func (*formatRecordingHost) AddIdentityProviderType(plugin.IdentityProviderType) error {
 	return errors.New("not offered")
 }

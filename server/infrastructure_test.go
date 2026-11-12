@@ -9,6 +9,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync/atomic"
 	"testing"
@@ -147,6 +148,7 @@ type layerOrderStore struct {
 
 func (s layerOrderStore) AcademicPeriod() store.AcademicPeriodStore   { return s.periods }
 func (layerOrderStore) ClusterDiscovery() store.ClusterDiscoveryStore { return nil }
+func (layerOrderStore) PluginSettings() store.PluginSettingsStore     { return nil }
 func (layerOrderStore) Close() error                                  { return nil }
 
 type layerOrderPeriods struct {
@@ -231,7 +233,7 @@ func TestRootSelectsLocalDevelopmentInfrastructure(t *testing.T) {
 	t.Cleanup(func() { _ = cluster.Stop(context.Background()) })
 	require.Equal(t, settings.Cluster.NodeID, cluster.NodeID(), "cluster node ID")
 
-	plugins, err := activatePlugins(context.Background(), settings, logger, nil, nil)
+	plugins, _, err := activatePlugins(context.Background(), settings, nil, logger, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = plugins.Close(context.Background()) })
 	providers, err := newExternalAuthenticationRegistry(plugins)
@@ -259,7 +261,7 @@ func TestRootSelectsConfiguredSMTPVFSAndIdentityAdapters(t *testing.T) {
 	logger, err := logging.New()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = logger.Shutdown() })
-	plugins, err := activatePlugins(context.Background(), settings, logger, nil, nil)
+	plugins, _, err := activatePlugins(context.Background(), settings, nil, logger, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = plugins.Close(context.Background()) })
 	providers, err := newExternalAuthenticationRegistry(plugins)
@@ -296,10 +298,8 @@ func TestActivePluginSummariesListOnlyActivePlugins(t *testing.T) {
 	logger, err := logging.New()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = logger.Shutdown() })
-	disabled := false
-	settings := config.Default()
-	settings.Plugins = map[string]config.Plugin{"cas": {Enable: &disabled}}
-	plugins, err := activatePlugins(context.Background(), settings, logger, nil, nil)
+	saved := savedPluginSettings{rows: []*model.PluginSettings{pluginSettingsRow(t, "cas", false)}}
+	plugins, _, err := activatePlugins(context.Background(), config.Default(), saved, logger, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = plugins.Close(context.Background()) })
 
@@ -341,7 +341,7 @@ func TestPluginEventSubscriptionsAndDegradedReadiness(t *testing.T) {
 	logger, err := logging.New()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = logger.Shutdown() })
-	plugins, err := activatePlugins(context.Background(), config.Default(), logger, nil, []plugin.Plugin{
+	plugins, _, err := activatePlugins(context.Background(), config.Default(), nil, logger, nil, []plugin.Plugin{
 		eventPlugin{id: "mirror"},
 		eventPlugin{id: "broken", activateErr: errors.New("unreachable")},
 	})
@@ -353,4 +353,25 @@ func TestPluginEventSubscriptionsAndDegradedReadiness(t *testing.T) {
 	require.Equal(t, "mirror:exam.attempt.submitted", subscriptions[0].Key, "the key names the plugin and topic")
 	require.Equal(t, plugin.TopicExamAttemptSubmitted, subscriptions[0].Topic)
 	require.True(t, pluginDirectory{host: plugins}.Degraded(), "a failed plugin degrades readiness")
+}
+
+// pluginSettingsRow is a saved row turning plugin id on or off.
+func pluginSettingsRow(t *testing.T, id model.PluginID, enabled bool) *model.PluginSettings {
+	t.Helper()
+	row, err := model.NewPluginSettings(id, model.PluginSettingsChange{Enabled: enabled, Settings: json.RawMessage(`{}`)}, time.Now())
+	require.NoError(t, err)
+	return row
+}
+
+// savedPluginSettings is a fixed list of saved plugin settings.
+type savedPluginSettings struct {
+	store.PluginSettingsStore
+	rows []*model.PluginSettings
+}
+
+func (s savedPluginSettings) List(context.Context) ([]*model.PluginSettings, error) {
+	return s.rows, nil
+}
+func (s savedPluginSettings) ChangeCount(context.Context) (int64, error) {
+	return int64(len(s.rows)), nil
 }

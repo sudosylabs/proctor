@@ -106,3 +106,26 @@ func (fakeProvider) Complete(
 ) (plugin.Assertion, error) {
 	return plugin.Assertion{}, plugin.ErrAuthenticationRejected
 }
+
+func TestRegistryReloadTakesTheProtocolsPluginsNowOffer(t *testing.T) {
+	registry, err := NewRegistry()
+	require.NoError(t, err)
+	settings := config.ExternalAuthentication{
+		Providers: []config.ExternalAuthenticationProvider{{ID: "campus", Type: "first", Enabled: true}},
+	}
+	require.NoError(t, registry.Configure(settings))
+	require.Equal(t, []string{"campus"}, registry.Unavailable(), "no plugin offers the protocol yet")
+
+	require.NoError(t, registry.Reload(settings, fakeFactory{providerType: "first"}))
+	_, exists := registry.Provider("campus")
+	require.True(t, exists, "the protocol a plugin now offers builds the provider")
+	require.Empty(t, registry.Unavailable())
+
+	require.NoError(t, registry.Configure(settings), "a later configuration reload keeps the new protocols")
+	_, exists = registry.Provider("campus")
+	require.True(t, exists)
+
+	require.Error(t, registry.Reload(settings, fakeFactory{providerType: "first"}, fakeFactory{providerType: "first"}))
+	_, exists = registry.Provider("campus")
+	require.True(t, exists, "a rejected reload keeps the previous providers")
+}

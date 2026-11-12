@@ -37,7 +37,11 @@ func (c *Content) BuildExamExport(ctx context.Context, input exam.ExportArchiveI
 	if c == nil || c.examExportFormat == nil {
 		return nil, errExamExportFormatUnavailable
 	}
-	return c.buildExamExport(ctx, input, c.examExportFormat)
+	format := c.examExportFormat()
+	if format == nil {
+		return nil, errExamExportFormatUnavailable
+	}
+	return c.buildExamExport(ctx, input, format)
 }
 
 // errExamExportFormatUnavailable is returned when no plugin offers the Exam

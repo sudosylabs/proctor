@@ -94,8 +94,7 @@ func (f *domainEventDispatchFixture) run(t *testing.T, handlerErrors ...error) j
 		subscriptions = append(subscriptions, events.Subscription{Key: name, Topic: plugin.TopicExamAttemptSubmitted,
 			Handler: eventHandlerFake{name: name, err: handlerErr, calls: &f.calls, received: &f.received}})
 	}
-	dispatcher, err := events.NewDispatcher(subscriptions...)
-	require.NoError(t, err)
+	dispatcher := events.NewDispatcher(func() []events.Subscription { return subscriptions })
 	descriptor := NewDomainEventDispatch(f.outbox, dispatcher).Descriptor
 	checkpoint := func(_ context.Context, value job.CheckpointValue) error {
 		f.calls = append(f.calls, "checkpoint")

@@ -78,8 +78,13 @@ type Provider interface {
 
 // Registry holds the configured providers, built from the sign-in protocols
 // the plugins offer. Configure rebuilds them from configuration, including on
-// reload; there is no process-wide provider map or init-time side effect.
+// reload, and Reload also takes a new set of protocols when plugins change;
+// there is no process-wide provider map or init-time side effect.
 type Registry struct {
+	// rebuild serializes Configure and Reload, so a slower rebuild cannot
+	// overwrite a newer one.
+	rebuild sync.Mutex
+
 	mutex       sync.RWMutex
 	types       map[string]plugin.IdentityProviderType
 	providers   map[string]Provider
@@ -89,10 +94,15 @@ type Registry struct {
 // NewRegistry returns a Registry that builds providers with types, one per
 // protocol Type.
 func NewRegistry(types ...plugin.IdentityProviderType) (*Registry, error) {
-	registry := &Registry{
-		types:     make(map[string]plugin.IdentityProviderType, len(types)),
-		providers: make(map[string]Provider),
+	byName, err := typesByName(types)
+	if err != nil {
+		return nil, err
 	}
+	return &Registry{types: byName, providers: make(map[string]Provider)}, nil
+}
+
+func typesByName(types []plugin.IdentityProviderType) (map[string]plugin.IdentityProviderType, error) {
+	byName := make(map[string]plugin.IdentityProviderType, len(types))
 	for _, providerType := range types {
 		if providerType == nil {
 			return nil, errors.New("external authentication provider type is nil")
@@ -101,15 +111,28 @@ func NewRegistry(types ...plugin.IdentityProviderType) (*Registry, error) {
 		if name == "" {
 			return nil, errors.New("external authentication provider type name is empty")
 		}
-		if _, exists := registry.types[name]; exists {
+		if _, exists := byName[name]; exists {
 			return nil, fmt.Errorf(
 				"external authentication provider type %q is duplicated",
 				name,
 			)
 		}
-		registry.types[name] = providerType
+		byName[name] = providerType
 	}
-	return registry, nil
+	return byName, nil
+}
+
+// Reload takes the protocols the plugins now offer and rebuilds the
+// providers from settings, as Configure does. A failure keeps the previous
+// protocols and providers.
+func (r *Registry) Reload(settings config.ExternalAuthentication, types ...plugin.IdentityProviderType) error {
+	byName, err := typesByName(types)
+	if err != nil {
+		return err
+	}
+	r.rebuild.Lock()
+	defer r.rebuild.Unlock()
+	return r.configure(settings, byName)
 }
 
 // Configure rebuilds the providers from settings. A provider whose protocol
@@ -120,6 +143,20 @@ func NewRegistry(types ...plugin.IdentityProviderType) (*Registry, error) {
 func (r *Registry) Configure(
 	settings config.ExternalAuthentication,
 ) error {
+	r.rebuild.Lock()
+	defer r.rebuild.Unlock()
+	r.mutex.RLock()
+	types := r.types
+	r.mutex.RUnlock()
+	return r.configure(settings, types)
+}
+
+// configure builds the providers with types and installs both; r.rebuild is
+// held.
+func (r *Registry) configure(
+	settings config.ExternalAuthentication,
+	types map[string]plugin.IdentityProviderType,
+) error {
 	configured := make(map[string]Provider)
 	var unavailable []string
 	for _, definition := range settings.Providers {
@@ -127,7 +164,7 @@ func (r *Registry) Configure(
 			continue
 		}
 
-		providerType, exists := r.types[definition.Type]
+		providerType, exists := types[definition.Type]
 		if !exists {
 			unavailable = append(unavailable, definition.ID)
 			continue
@@ -173,6 +210,7 @@ func (r *Registry) Configure(
 	}
 
 	r.mutex.Lock()
+	r.types = types
 	r.providers = configured
 	r.unavailable = unavailable
 	r.mutex.Unlock()

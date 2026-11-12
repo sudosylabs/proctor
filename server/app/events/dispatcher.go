@@ -36,15 +36,26 @@ type Subscription struct {
 	Handler plugin.EventHandler
 }
 
-// Dispatcher offers domain events to a fixed, ordered list of subscriptions.
+// Dispatcher offers domain events to the subscriptions its source reports,
+// read again for every event so it follows plugins being turned on and off.
 type Dispatcher struct {
-	subscriptions []Subscription
+	source func() []Subscription
 }
 
-// NewDispatcher returns a Dispatcher that offers events to subscriptions in
-// the order given. A subscription without a key or handler, or a repeated
-// key, is rejected.
-func NewDispatcher(subscriptions ...Subscription) (*Dispatcher, error) {
+// NewDispatcher returns a Dispatcher that offers each event to the
+// subscriptions source returns at that moment, in order. A nil source means
+// no subscriptions.
+func NewDispatcher(source func() []Subscription) *Dispatcher {
+	return &Dispatcher{source: source}
+}
+
+// subscriptions reads the source and rejects a subscription without a key
+// or handler, or a repeated key.
+func (d *Dispatcher) subscriptions() ([]Subscription, error) {
+	if d.source == nil {
+		return nil, nil
+	}
+	subscriptions := d.source()
 	seen := make(map[string]struct{}, len(subscriptions))
 	for _, subscription := range subscriptions {
 		if subscription.Key == "" || subscription.Handler == nil {
@@ -55,7 +66,7 @@ func NewDispatcher(subscriptions ...Subscription) (*Dispatcher, error) {
 		}
 		seen[subscription.Key] = struct{}{}
 	}
-	return &Dispatcher{subscriptions: slices.Clone(subscriptions)}, nil
+	return subscriptions, nil
 }
 
 // Dispatch offers event to every subscription to its topic whose key is not
@@ -68,9 +79,13 @@ func (d *Dispatcher) Dispatch(ctx context.Context, event *model.DomainEvent, del
 	if err != nil {
 		return delivered, err
 	}
+	subscriptions, err := d.subscriptions()
+	if err != nil {
+		return delivered, err
+	}
 	accepted := slices.Clone(delivered)
 	var failures error
-	for _, subscription := range d.subscriptions {
+	for _, subscription := range subscriptions {
 		if subscription.Topic != offered.Topic || slices.Contains(accepted, subscription.Key) {
 			continue
 		}

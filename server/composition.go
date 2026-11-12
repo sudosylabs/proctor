@@ -214,11 +214,15 @@ func composeConsumers(
 		transport:             rootTransport,
 		websocket:             webSocketHub,
 		plugins:               capabilities.plugins,
-		metrics:               capabilities.metrics,
-		tracing:               capabilities.tracing,
-		readiness:             readiness,
-		listen:                net.Listen,
-		newHTTP:               newHTTPServer,
+		pluginReconciler: newOptionalPluginReconciler(
+			capabilities.persistence.PluginSettings(), capabilities.plugins, snapshot,
+			capabilities.logger, capabilities.pluginSettingsCount,
+		),
+		metrics:   capabilities.metrics,
+		tracing:   capabilities.tracing,
+		readiness: readiness,
+		listen:    net.Listen,
+		newHTTP:   newHTTPServer,
 	}}
 	return &compositionResult{server: node, application: application, handler: rootTransport}, nil
 }
@@ -265,15 +269,14 @@ func composeApplicationDependencies(
 	if capabilities.metrics.Enabled() {
 		contentRecorder = capabilities.metrics.WorkRecorder("file_content")
 	}
-	examExportFormat, offered := capabilities.plugins.ExportFormat(zipexport.MediaType)
-	if !offered {
+	if _, offered := capabilities.plugins.ExportFormat(zipexport.MediaType); !offered {
 		capabilities.logger.Warn("Exam exports are unavailable: no active plugin offers the zip export format")
 	}
 	content, err := filecontent.New(
 		capabilities.filesystem,
 		filecontent.Policy{
 			MaximumConcurrentOperations: snapshot.FileContent.MaximumConcurrentOperations,
-			ExamExportFormat:            examExportFormat,
+			ExamExportFormat:            liveExportFormat(capabilities.plugins, zipexport.MediaType),
 		},
 		contentRecorder,
 	)

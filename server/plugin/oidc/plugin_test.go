@@ -26,6 +26,7 @@ type recordingHost struct {
 
 func (*recordingHost) Logger() *slog.Logger      { return slog.New(slog.DiscardHandler) }
 func (*recordingHost) Settings() json.RawMessage { return nil }
+func (*recordingHost) Secrets() json.RawMessage  { return nil }
 func (h *recordingHost) AddIdentityProviderType(providerType plugin.IdentityProviderType) error {
 	h.types = append(h.types, providerType)
 	return nil

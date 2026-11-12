@@ -64,11 +64,10 @@ func TestDispatchOffersTheEventToEachSubscriptionInOrder(t *testing.T) {
 	event, _ := newSubmittedEvent(t)
 	var calls []string
 	var received []plugin.Event
-	dispatcher, err := NewDispatcher(
+	dispatcher := NewDispatcher(fixed(
 		subscription("first", recordingHandler{name: "first", calls: &calls, events: &received}),
 		subscription("second", recordingHandler{name: "second", calls: &calls, events: &received}),
-	)
-	require.NoError(t, err)
+	))
 	delivered, err := dispatcher.Dispatch(context.Background(), event, nil)
 	require.NoError(t, err)
 	require.Equal(t, []string{"first", "second"}, delivered)
@@ -83,11 +82,10 @@ func TestDispatchOffersTheEventToTheRestWhenOneFails(t *testing.T) {
 	var calls []string
 	var received []plugin.Event
 	failure := errors.New("handler unavailable")
-	dispatcher, err := NewDispatcher(
+	dispatcher := NewDispatcher(fixed(
 		subscription("first", recordingHandler{name: "first", calls: &calls, events: &received, err: failure}),
 		subscription("second", recordingHandler{name: "second", calls: &calls, events: &received}),
-	)
-	require.NoError(t, err)
+	))
 	delivered, err := dispatcher.Dispatch(context.Background(), event, nil)
 	require.ErrorIs(t, err, failure)
 	require.EqualError(t, err, `domain event subscription "first": handler unavailable`)
@@ -102,12 +100,11 @@ func TestDispatchSkipsDeliveredSubscriptionsAndOtherTopics(t *testing.T) {
 	var received []plugin.Event
 	otherTopic := subscription("elsewhere", recordingHandler{name: "elsewhere", calls: &calls, events: &received})
 	otherTopic.Topic = "exam.attempt.suspended"
-	dispatcher, err := NewDispatcher(
+	dispatcher := NewDispatcher(fixed(
 		subscription("first", recordingHandler{name: "first", calls: &calls, events: &received}),
 		otherTopic,
 		subscription("second", recordingHandler{name: "second", calls: &calls, events: &received}),
-	)
-	require.NoError(t, err)
+	))
 	previously := []string{"first"}
 	delivered, err := dispatcher.Dispatch(context.Background(), event, previously)
 	require.NoError(t, err)
@@ -122,10 +119,9 @@ func TestDispatchIsolatesEachHandlersData(t *testing.T) {
 	original := append(json.RawMessage(nil), event.Data...)
 	var calls []string
 	var received []plugin.Event
-	dispatcher, err := NewDispatcher(subscription("mutating", mutatingHandler{}),
-		subscription("after", recordingHandler{name: "after", calls: &calls, events: &received}))
-	require.NoError(t, err)
-	_, err = dispatcher.Dispatch(context.Background(), event, nil)
+	dispatcher := NewDispatcher(fixed(subscription("mutating", mutatingHandler{}),
+		subscription("after", recordingHandler{name: "after", calls: &calls, events: &received})))
+	_, err := dispatcher.Dispatch(context.Background(), event, nil)
 	require.NoError(t, err)
 	require.Equal(t, original, event.Data, "a handler cannot change the stored event")
 	require.Len(t, received, 1)
@@ -143,8 +139,7 @@ func (mutatingHandler) HandleEvent(_ context.Context, event plugin.Event) error 
 
 func TestDispatchWithoutSubscriptionsSucceeds(t *testing.T) {
 	event, _ := newSubmittedEvent(t)
-	dispatcher, err := NewDispatcher()
-	require.NoError(t, err)
+	dispatcher := NewDispatcher(nil)
 	delivered, err := dispatcher.Dispatch(context.Background(), event, nil)
 	require.NoError(t, err)
 	require.Empty(t, delivered)
@@ -153,19 +148,47 @@ func TestDispatchWithoutSubscriptionsSucceeds(t *testing.T) {
 func TestDispatchRejectsAnInvalidEvent(t *testing.T) {
 	var calls []string
 	var received []plugin.Event
-	dispatcher, err := NewDispatcher(subscription("first", recordingHandler{name: "first", calls: &calls, events: &received}))
-	require.NoError(t, err)
-	_, err = dispatcher.Dispatch(context.Background(), &model.DomainEvent{}, nil)
+	dispatcher := NewDispatcher(fixed(subscription("first", recordingHandler{name: "first", calls: &calls, events: &received})))
+	_, err := dispatcher.Dispatch(context.Background(), &model.DomainEvent{}, nil)
 	require.Error(t, err)
 	require.Empty(t, calls)
 }
 
-func TestNewDispatcherRejectsAnIncompleteOrRepeatedSubscription(t *testing.T) {
-	handler := recordingHandler{name: "x", calls: &[]string{}, events: &[]plugin.Event{}}
-	_, err := NewDispatcher(subscription("missing-handler", nil))
-	require.EqualError(t, err, "domain event subscription needs a key and a handler")
-	_, err = NewDispatcher(subscription("", handler))
-	require.EqualError(t, err, "domain event subscription needs a key and a handler")
-	_, err = NewDispatcher(subscription("twice", handler), subscription("twice", handler))
-	require.EqualError(t, err, `domain event subscription "twice" is repeated`)
+func TestDispatchRejectsAnIncompleteOrRepeatedSubscription(t *testing.T) {
+	event, _ := newSubmittedEvent(t)
+	calls := []string{}
+	handler := recordingHandler{name: "x", calls: &calls, events: &[]plugin.Event{}}
+	for name, test := range map[string]struct {
+		subscriptions []Subscription
+		want          string
+	}{
+		"missing handler": {subscriptions: []Subscription{subscription("missing-handler", nil)}, want: "domain event subscription needs a key and a handler"},
+		"missing key":     {subscriptions: []Subscription{subscription("", handler)}, want: "domain event subscription needs a key and a handler"},
+		"repeated key":    {subscriptions: []Subscription{subscription("twice", handler), subscription("twice", handler)}, want: `domain event subscription "twice" is repeated`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := NewDispatcher(fixed(test.subscriptions...)).Dispatch(context.Background(), event, nil)
+			require.EqualError(t, err, test.want)
+		})
+	}
+	require.Empty(t, calls, "nothing is offered while the subscriptions are wrong")
+}
+
+func TestDispatchReadsTheSubscriptionsAgainForEveryEvent(t *testing.T) {
+	event, _ := newSubmittedEvent(t)
+	var calls []string
+	var received []plugin.Event
+	var current []Subscription
+	dispatcher := NewDispatcher(func() []Subscription { return current })
+	_, err := dispatcher.Dispatch(context.Background(), event, nil)
+	require.NoError(t, err)
+	current = []Subscription{subscription("late", recordingHandler{name: "late", calls: &calls, events: &received})}
+	delivered, err := dispatcher.Dispatch(context.Background(), event, nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{"late"}, delivered, "a plugin turned on later receives the next event")
+}
+
+// fixed returns a source that always reports subscriptions.
+func fixed(subscriptions ...Subscription) func() []Subscription {
+	return func() []Subscription { return subscriptions }
 }

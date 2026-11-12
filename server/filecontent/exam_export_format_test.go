@@ -33,7 +33,7 @@ import (
 // an Attempt-origin file, a Starter-origin file and an empty file.
 func goldenExportFixture(t *testing.T) (*Content, exam.ExportArchiveInput) {
 	t.Helper()
-	content, err := New(memory.New(), Policy{MaximumConcurrentOperations: 1, ExamExportFormat: zipFormat(t)}, nil)
+	content, err := New(memory.New(), Policy{MaximumConcurrentOperations: 1, ExamExportFormat: fixedFormat(zipFormat(t))}, nil)
 	require.NoError(t, err)
 	ctx := context.Background()
 	attemptBody := []byte("original answer bytes\x00\n")
@@ -180,6 +180,7 @@ type formatRecordingHost struct {
 
 func (*formatRecordingHost) Logger() *slog.Logger      { return slog.New(slog.DiscardHandler) }
 func (*formatRecordingHost) Settings() json.RawMessage { return nil }
+func (*formatRecordingHost) Secrets() json.RawMessage  { return nil }
 func (*formatRecordingHost) AddIdentityProviderType(plugin.IdentityProviderType) error {
 	return errors.New("not offered")
 }
@@ -199,4 +200,9 @@ func zipFormat(t *testing.T) plugin.ExportFormat {
 	require.NoError(t, zipexport.NewPlugin().Activate(context.Background(), host))
 	require.Len(t, host.formats, 1)
 	return host.formats[0]
+}
+
+// fixedFormat returns format on every lookup.
+func fixedFormat(format plugin.ExportFormat) func() plugin.ExportFormat {
+	return func() plugin.ExportFormat { return format }
 }

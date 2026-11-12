@@ -34,6 +34,15 @@ type Plugin interface {
 	Deactivate(ctx context.Context) error
 }
 
+// Reconfigurer is implemented by a plugin that can take new settings while
+// it runs. When an administrator changes the settings of an active plugin,
+// the server calls Reconfigure with a Host that carries them and accepts no
+// registrations. A plugin that is not a Reconfigurer, or whose Reconfigure
+// fails, is deactivated and activated again instead.
+type Reconfigurer interface {
+	Reconfigure(ctx context.Context, host Host) error
+}
+
 // Manifest names a plugin.
 type Manifest struct {
 	// ID is the plugin's stable identifier and its key in the Plugins
@@ -89,10 +98,15 @@ type Host interface {
 	// Logger writes to the server log, with every record labeled with the
 	// plugin's ID.
 	Logger() *slog.Logger
-	// Settings is the plugin's Settings document from the Plugins
-	// configuration section, or nil when none is configured. The plugin
-	// decodes and validates it; invalid settings should fail Activate.
+	// Settings is the plugin's settings document, which an administrator
+	// changes through the plugin administration API, or nil when none is
+	// saved. The plugin decodes and validates it; invalid settings should
+	// fail Activate.
 	Settings() json.RawMessage
+	// Secrets is the plugin's secrets document from the Plugins section of
+	// the configuration file, or nil when none is configured. It never goes
+	// through the API and is never shown.
+	Secrets() json.RawMessage
 	// AddIdentityProviderType offers a sign-in protocol. It fails when
 	// another plugin already offers the same Type, or after Activate has
 	// returned.

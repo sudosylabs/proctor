@@ -24,23 +24,23 @@ func TestValidatePlugins(t *testing.T) {
 		want    []FieldError
 	}{
 		{name: "none"},
-		{name: "enable only", plugins: map[string]Plugin{"oidc": {Enable: new(bool)}}},
-		{name: "null settings", plugins: map[string]Plugin{"oidc": {Settings: json.RawMessage(`null`)}}},
-		{name: "object settings", plugins: map[string]Plugin{"code-run": {Settings: json.RawMessage(` {"endpoint":"x"}`)}}},
+		{name: "no secrets", plugins: map[string]Plugin{"oidc": {}}},
+		{name: "null secrets", plugins: map[string]Plugin{"oidc": {Secrets: json.RawMessage(`null`)}}},
+		{name: "object secrets", plugins: map[string]Plugin{"code-run": {Secrets: json.RawMessage(` {"token":"x"}`)}}},
 		{
 			name:    "invalid id",
 			plugins: map[string]Plugin{"Code_Run": {}},
 			want:    []FieldError{{Field: `plugins["Code_Run"]`, Message: "must be 1-64 lowercase letters, digits, dots or hyphens, starting with a letter"}},
 		},
 		{
-			name:    "settings that are not an object",
-			plugins: map[string]Plugin{"oidc": {Settings: json.RawMessage(`["x"]`)}},
-			want:    []FieldError{{Field: `plugins["oidc"].settings`, Message: "must be a JSON object"}},
+			name:    "secrets that are not an object",
+			plugins: map[string]Plugin{"oidc": {Secrets: json.RawMessage(`["x"]`)}},
+			want:    []FieldError{{Field: `plugins["oidc"].secrets`, Message: "must be a JSON object"}},
 		},
 		{
-			name:    "settings too large",
-			plugins: map[string]Plugin{"oidc": {Settings: json.RawMessage(`{"x":"` + strings.Repeat("a", maxPluginSettingsBytes) + `"}`)}},
-			want:    []FieldError{{Field: `plugins["oidc"].settings`, Message: "must be at most 65536 bytes"}},
+			name:    "secrets too large",
+			plugins: map[string]Plugin{"oidc": {Secrets: json.RawMessage(`{"x":"` + strings.Repeat("a", maxPluginSecretsBytes) + `"}`)}},
+			want:    []FieldError{{Field: `plugins["oidc"].secrets`, Message: "must be at most 65536 bytes"}},
 		},
 	}
 	for _, test := range tests {
@@ -56,25 +56,22 @@ func TestValidatePlugins(t *testing.T) {
 	}
 }
 
-func TestPluginsCloneDeeplyAndRedactSettings(t *testing.T) {
+func TestPluginsCloneDeeplyAndRedactSecrets(t *testing.T) {
 	t.Parallel()
 
-	enable := true
 	cfg := Default()
 	cfg.Plugins = map[string]Plugin{
-		"code-run": {Enable: &enable, Settings: json.RawMessage(`{"token":"plugin-secret-token"}`)},
-		"oidc":     {Enable: &enable},
+		"code-run": {Secrets: json.RawMessage(`{"token":"plugin-secret-token"}`)},
+		"oidc":     {},
 	}
 
 	cloned := cfg.Clone()
-	*cloned.Plugins["code-run"].Enable = false
-	cloned.Plugins["code-run"].Settings[2] = 'X'
-	require.True(t, *cfg.Plugins["code-run"].Enable, "the clone shares Enable")
-	require.JSONEq(t, `{"token":"plugin-secret-token"}`, string(cfg.Plugins["code-run"].Settings), "the clone shares Settings")
+	cloned.Plugins["code-run"].Secrets[2] = 'X'
+	require.JSONEq(t, `{"token":"plugin-secret-token"}`, string(cfg.Plugins["code-run"].Secrets), "the clone shares Secrets")
 
 	data, err := cfg.RedactedJSON()
 	require.NoError(t, err)
 	require.NotContains(t, string(data), "plugin-secret-token")
-	require.Contains(t, string(data), `"Settings": "[redacted]"`)
-	require.JSONEq(t, `{"token":"plugin-secret-token"}`, string(cfg.Plugins["code-run"].Settings), "redaction changes only the copy")
+	require.Contains(t, string(data), `"Secrets": "[redacted]"`)
+	require.JSONEq(t, `{"token":"plugin-secret-token"}`, string(cfg.Plugins["code-run"].Secrets), "redaction changes only the copy")
 }

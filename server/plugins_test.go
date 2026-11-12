@@ -9,16 +9,20 @@ package server_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/logging"
+	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/plugin"
+	"github.com/sudosylabs/proctor/server/testlib"
 )
 
 // lifecyclePlugin records its lifecycle calls through the real server graph.
@@ -96,7 +100,7 @@ func TestServerRefusesSettingsForAPluginThatIsNotCompiledIn(t *testing.T) {
 	overrides, persistence, _, _ := newHookOverrides(t)
 	configuration, err := config.NewStore(
 		context.Background(),
-		config.NewMemoryStore([]byte(`{"Plugins":{"missing":{"Enable":true,"Settings":null}}}`)),
+		config.NewMemoryStore([]byte(`{"Plugins":{"missing":{"Secrets":{"token":"x"}}}}`)),
 		config.StoreOptions{LookupEnv: func(string) (string, bool) { return "", false }},
 	)
 	require.NoError(t, err)
@@ -104,7 +108,7 @@ func TestServerRefusesSettingsForAPluginThatIsNotCompiledIn(t *testing.T) {
 
 	runtime, err := server.NewForTesting(context.Background(), overrides)
 	require.Nil(t, runtime)
-	require.ErrorContains(t, err, `plugin settings name "missing", which is not compiled in`)
+	require.ErrorContains(t, err, `plugin secrets name "missing", which is not compiled in`)
 	require.True(t, persistence.closed.Load(), "the refused construction released its infrastructure")
 }
 
@@ -154,14 +158,14 @@ func (panickingType) New(plugin.IdentityProviderDefinition) (plugin.IdentityProv
 	panic("cannot build a provider")
 }
 
-// casProviderConfiguration turns the built-in cas plugin off and configures
-// one CAS provider, so the fixture plugin alone offers the protocol.
+// casProviderConfiguration configures one CAS provider. Tests turn the
+// built-in cas plugin off with saved settings, so the fixture plugin alone
+// offers the protocol.
 func casProviderConfiguration(t *testing.T) *config.Store {
 	t.Helper()
 	configuration, err := config.NewStore(
 		context.Background(),
 		config.NewMemoryStore([]byte(`{
-			"Plugins": {"cas": {"Enable": false, "Settings": null}},
 			"Authentication": {"External": {"LoginStateTTL": "10m", "Providers": [{
 				"ID": "campus-cas", "Type": "cas", "DisplayName": "Campus", "Enabled": true, "AutoProvision": false,
 				"Claims": {"Subject": "user"},
@@ -177,8 +181,9 @@ func casProviderConfiguration(t *testing.T) *config.Store {
 func TestServerStartsWhenAPluginPanicsWhileActivating(t *testing.T) {
 	t.Parallel()
 
-	overrides, _, _, _ := newHookOverrides(t)
+	overrides, persistence, _, _ := newHookOverrides(t)
 	overrides.Configuration = casProviderConfiguration(t)
+	persistence.pluginSettings = testlib.NewSavedPluginSettings(savedPluginRow(t, "cas", false))
 	faulty := &panickingProtocol{panicOnActivate: true}
 	overrides.Plugins = []plugin.Plugin{faulty}
 	logs := captureLogs(t, overrides)
@@ -196,8 +201,9 @@ func TestServerStartsWhenAPluginPanicsWhileActivating(t *testing.T) {
 func TestServerStartsWhenASignInProtocolPanicsBuildingAProvider(t *testing.T) {
 	t.Parallel()
 
-	overrides, _, _, _ := newHookOverrides(t)
+	overrides, persistence, _, _ := newHookOverrides(t)
 	overrides.Configuration = casProviderConfiguration(t)
+	persistence.pluginSettings = testlib.NewSavedPluginSettings(savedPluginRow(t, "cas", false))
 	faulty := &panickingProtocol{}
 	overrides.Plugins = []plugin.Plugin{faulty}
 	logs := captureLogs(t, overrides)
@@ -222,4 +228,12 @@ func captureLogs(t *testing.T, overrides server.TestingOverrides) *logging.Buffe
 	// Keep the platform from replacing these targets with the configured ones.
 	overrides.Logger.LockConfiguration()
 	return logs
+}
+
+// savedPluginRow is a saved row turning plugin id on or off.
+func savedPluginRow(t *testing.T, id model.PluginID, enabled bool) *model.PluginSettings {
+	t.Helper()
+	row, err := model.NewPluginSettings(id, model.PluginSettingsChange{Enabled: enabled, Settings: json.RawMessage(`{}`)}, time.Now())
+	require.NoError(t, err)
+	return row
 }

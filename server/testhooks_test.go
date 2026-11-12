@@ -39,18 +39,19 @@ import (
 // graph construction.
 type hookStore struct {
 	store.Store
-	closed       atomic.Bool
-	pingAttempts atomic.Int64
-	ping         func(int64) error
-	validateErr  error
-	closedCount  atomic.Int64
-	closeEvents  *hookCloseEvents
-	closeErr     error
+	pluginSettings store.PluginSettingsStore
+	closed         atomic.Bool
+	pingAttempts   atomic.Int64
+	ping           func(int64) error
+	validateErr    error
+	closedCount    atomic.Int64
+	closeEvents    *hookCloseEvents
+	closeErr       error
 }
 
-func (s *hookStore) Institution() store.InstitutionStore   { return hookInstitutionStore{} }
-func (s *hookStore) AccessPolicy() store.AccessPolicyStore { return hookAccessPolicyStore{} }
-func (s *hookStore) PluginSettings() store.PluginSettingsStore { return nil }
+func (s *hookStore) Institution() store.InstitutionStore       { return hookInstitutionStore{} }
+func (s *hookStore) AccessPolicy() store.AccessPolicyStore     { return hookAccessPolicyStore{} }
+func (s *hookStore) PluginSettings() store.PluginSettingsStore { return s.pluginSettings }
 func (s *hookStore) DesktopCompatibilityPolicy() store.DesktopCompatibilityPolicyStore {
 	return hookDesktopCompatibilityPolicyStore{}
 }

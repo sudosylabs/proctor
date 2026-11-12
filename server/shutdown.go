@@ -80,6 +80,12 @@ func (s *Server) runShutdown(plan stopPlan, endRun context.CancelFunc) error {
 		draining(s.components.jobs),
 		draining(s.components.websocket),
 		closing(s.components.transport),
+		func(ctx context.Context) error {
+			if s.components.pluginReconciler == nil {
+				return nil
+			}
+			return s.components.pluginReconciler.Close(ctx)
+		},
 		draining(s.components.plugins),
 		closing(s.components.servingLease),
 		draining(s.components.metrics),

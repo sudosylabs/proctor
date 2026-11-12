@@ -307,7 +307,7 @@ func TestActivateGivesUpOnAPluginThatDoesNotReturnInTime(t *testing.T) {
 	require.Equal(t, []string{"activate:hanging", "activate:healthy", "deactivate:healthy"}, log.all())
 }
 
-func TestARequiredPluginRunsAndCannotBeTurnedOff(t *testing.T) {
+func TestARequiredPluginRunsEvenWhenTurnedOff(t *testing.T) {
 	t.Parallel()
 
 	log := &callLog{}
@@ -319,13 +319,11 @@ func TestARequiredPluginRunsAndCannotBeTurnedOff(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, pluginhost.StateActive, host.Statuses()[0].State, "a required plugin runs without being enabled")
+	require.True(t, host.Statuses()[0].Required)
 
-	_, err = pluginhost.Activate(context.Background(), pluginhost.Dependencies{
-		Plugins:  []plugin.Plugin{required},
-		Settings: map[string]pluginhost.Settings{"required": {Enable: boolPointer(false)}},
-		Logger:   discardLogger(),
-	})
-	require.EqualError(t, err, `plugin "required" is required and cannot be turned off`)
+	host.Reconcile(context.Background(), map[string]pluginhost.Settings{"required": {Enable: boolPointer(false)}})
+	require.Equal(t, pluginhost.StateActive, host.Statuses()[0].State, "turning a required plugin off leaves it on")
+	require.Equal(t, []string{"activate:required"}, log.all(), "it is not restarted either")
 }
 
 func TestRecorderSeesEveryCallAndStateChange(t *testing.T) {
@@ -347,7 +345,7 @@ func TestRecorderSeesEveryCallAndStateChange(t *testing.T) {
 		"off disabled",
 		"failing activate error", "failing failed", "failing deactivate ok",
 		"on activate ok", "on active",
-		"on deactivate ok",
+		"on disabled", "on deactivate ok",
 	}, recorder.calls())
 }
 

@@ -59,3 +59,30 @@ func TestScreenClipChunksAreKeptOnlyWhenTheyMatchTheirHash(t *testing.T) {
 		})
 	}
 }
+
+func TestARetiredScreenClipIsPurgedChunkByChunk(t *testing.T) {
+	t.Parallel()
+
+	for _, backend := range contentTestBackends() {
+		t.Run(backend.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			filesystem := backend.open(t)
+			content, err := New(filesystem, Policy{MaximumConcurrentOperations: 2}, nil)
+			require.NoError(t, err)
+			clipID := model.NewScreenClipID()
+			for index, body := range []string{"first chunk", "second chunk"} {
+				require.NoError(t, content.StageScreenClipChunk(ctx, clipID, index, strings.NewReader(body), int64(len(body)), chunkSHA256(body)))
+			}
+
+			// Three declared chunks, of which only two arrived.
+			require.NoError(t, content.PurgeRetiredScreenClip(ctx, clipID, 3))
+			for index := range 3 {
+				_, statErr := filesystem.Stat(ctx, screenClipChunkKey(clipID, index))
+				require.ErrorIs(t, statErr, vfs.ErrNotFound, "chunk %d", index)
+			}
+			require.NoError(t, content.PurgeRetiredScreenClip(ctx, clipID, 3), "a purge repeats safely")
+			require.Error(t, content.PurgeRetiredScreenClip(ctx, clipID, 0))
+		})
+	}
+}

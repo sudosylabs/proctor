@@ -81,11 +81,13 @@ func TestTheServerTracksParticipationRulesOnTheFactStream(t *testing.T) {
 
 	state = roundTrip(t, state)
 	require.Len(t, state.ApplyGap(policy.Rules, "display", start.Add(3*time.Second)), 1)
+	displayRule := state.Standings()[1]
 	require.Equal(t, NativeRuleStanding{
-		Rule:           NativeRuleReport{RuleID: "baseline.single_display", Status: NativeRuleUnknown, UnknownCause: NativeUnknownGap},
+		Rule:       NativeRuleReport{RuleID: "baseline.single_display", Status: NativeRuleUnknown, UnknownCause: NativeUnknownGap},
+		Capability: "display", Mode: NativeRuleEnforce, Reason: displayRule.Reason,
 		OpenOccurrence: 1, Occurrences: 1,
-	}, state.Standings(policy.Rules)[0], "an unknown stretch keeps the occurrence open")
-	require.Len(t, state.Standings(policy.Rules), 3)
+	}, displayRule, "an unknown stretch keeps the occurrence open")
+	require.Len(t, state.Standings(), 3)
 
 	definition, _ := registry.Capability("display")
 	require.Positive(t, definition.Stability)
@@ -95,16 +97,17 @@ func TestTheServerTracksParticipationRulesOnTheFactStream(t *testing.T) {
 	state = roundTrip(t, state)
 	early := NativeRuleStatusReport{Kind: "rule_status", RuleID: "baseline.single_display", Status: NativeRuleMet, Contained: false, ObservedAt: metAgain}
 	require.Empty(t, state.ApplyDesktopStatus(policy.Rules, early))
-	require.Equal(t, int64(1), state.Standings(policy.Rules)[0].Discrepancies, "Desktop said met while the server still waits")
+	require.Equal(t, int64(1), state.Standings()[1].Discrepancies, "Desktop said met while the server still waits")
 
 	late := NativeRuleStatusReport{Kind: "rule_status", RuleID: "baseline.single_display", Status: NativeRuleMet, Contained: true, ObservedAt: metAgain.Add(definition.Stability)}
 	changes = state.ApplyDesktopStatus(policy.Rules, late)
 	require.Len(t, changes, 1)
 	require.Equal(t, NativeOccurrenceClosed, changes[0].Event, "the stability time passed, so the rule recovers")
 	require.Equal(t, NativeRuleStanding{
-		Rule:        NativeRuleReport{RuleID: "baseline.single_display", Status: NativeRuleMet},
+		Rule:       NativeRuleReport{RuleID: "baseline.single_display", Status: NativeRuleMet},
+		Capability: "display", Mode: NativeRuleEnforce, Reason: displayRule.Reason,
 		Occurrences: 1, Contained: true, Discrepancies: 1,
-	}, state.Standings(policy.Rules)[0])
+	}, state.Standings()[1])
 
 	changes = state.Interrupt(policy.Rules, start)
 	require.Len(t, changes, 3, "lost delivery makes every rule unknown")
@@ -120,8 +123,9 @@ func TestStoredInterpretationIsChecked(t *testing.T) {
 	for name, raw := range map[string]string{
 		"no rules":         `{"capabilities":{},"phase":"readiness","at":"2026-11-13T09:00:00Z"}`,
 		"no phase":         `{"capabilities":{},"rules":{},"at":"2026-11-13T09:00:00Z"}`,
-		"open without one": `{"capabilities":{},"rules":{"r1":{"tracker":{"observed":false},"occurrences":0,"open":true,"contained":false,"discrepancies":0}},"phase":"readiness","at":"2026-11-13T09:00:00Z"}`,
-		"bad status":       `{"capabilities":{},"rules":{"r1":{"tracker":{"status":"fine","observed":true},"occurrences":0,"open":false,"contained":false,"discrepancies":0}},"phase":"readiness","at":"2026-11-13T09:00:00Z"}`,
+		"open without one": `{"capabilities":{},"rules":{"r1":{"capability":"display","mode":"enforce","reason":"display.r","tracker":{"observed":false},"occurrences":0,"open":true,"contained":false,"discrepancies":0}},"phase":"readiness","at":"2026-11-13T09:00:00Z"}`,
+		"bad status":       `{"capabilities":{},"rules":{"r1":{"capability":"display","mode":"enforce","reason":"display.r","tracker":{"status":"fine","observed":true},"occurrences":0,"open":false,"contained":false,"discrepancies":0}},"phase":"readiness","at":"2026-11-13T09:00:00Z"}`,
+		"no mode":          `{"capabilities":{},"rules":{"r1":{"capability":"display","reason":"display.r","tracker":{"observed":false},"occurrences":0,"open":false,"contained":false,"discrepancies":0}},"phase":"readiness","at":"2026-11-13T09:00:00Z"}`,
 		"long stability":   `{"capabilities":{"display":{"source_instance_id":"a","sequence":1,"stability_ms":60001}},"rules":{},"phase":"participation","at":"2026-11-13T09:00:00Z"}`,
 	} {
 		var state NativeInterpretation

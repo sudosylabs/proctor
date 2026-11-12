@@ -59,6 +59,9 @@
         "exam_attempt_reallowed": {
           "$ref": "#/components/messages/exam_attempt_reallowed"
         },
+        "exam_attempt_screen_clips_requested": {
+          "$ref": "#/components/messages/exam_attempt_screen_clips_requested"
+        },
         "exam_attempt_submitted": {
           "$ref": "#/components/messages/exam_attempt_submitted"
         },
@@ -1188,6 +1191,70 @@
           }
         ],
         "title": "Attempt re-allowed"
+      },
+      "exam_attempt_screen_clips_requested": {
+        "description": "Tells the candidate's Desktop that its Attempt has screen clip requests it has not taken, after a manager asked for a clip or a Flag asked for an incident clip. Desktop then lists its pending requests; the event carries none of them. Delivered to the addressed User's connections that subscribe to exam.sitting.participate on the exam sitting.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.sitting.participate",
+              "data": {
+                "changed_at": "2026-08-01T09:31:00Z",
+                "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8"
+              },
+              "event": "exam_attempt_screen_clips_requested",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "type": "exam_sitting"
+              },
+              "sequence": 48,
+              "user_id": "qtwz47ydgjcx1ia56br8kpous3"
+            }
+          }
+        ],
+        "name": "exam_attempt_screen_clips_requested",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.sitting.participate",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_screen_clips_requested"
+                },
+                "event": {
+                  "const": "exam_attempt_screen_clips_requested",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "user_id",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Tells the candidate's Desktop that its Attempt has screen clip requests to take.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Attempts"
+          }
+        ],
+        "title": "Screen clips requested"
       },
       "exam_attempt_submitted": {
         "description": "An Attempt was submitted. Sent to Sitting viewers. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
@@ -3836,6 +3903,28 @@
         "title": "Attempt re-allowed",
         "type": "object"
       },
+      "exam_attempt_screen_clips_requested": {
+        "additionalProperties": false,
+        "description": "Tells the candidate's Desktop that its Attempt has screen clip requests it has not taken, so it reads them now instead of at its next poll. Neither the requests nor who made them are included.",
+        "properties": {
+          "changed_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "exam_sitting_id",
+          "exam_attempt_id",
+          "changed_at"
+        ],
+        "title": "Screen clips requested",
+        "type": "object"
+      },
       "exam_attempt_submitted": {
         "additionalProperties": false,
         "description": "A submitted Attempt for Sitting viewers, with who or what submitted it.",
@@ -4997,6 +5086,9 @@
         },
         {
           "$ref": "#/channels/websocket/messages/exam_attempt_focus_warning"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt_screen_clips_requested"
         },
         {
           "$ref": "#/channels/websocket/messages/exam_attempt_integrity_flagged"

@@ -280,3 +280,18 @@ func TestExamAttemptSuspendedEventsValidateProvenancePerSource(t *testing.T) {
 		})
 	}
 }
+
+func TestTheScreenClipHintReachesOnlyTheCandidateAndCarriesNoRequest(t *testing.T) {
+	t.Parallel()
+	sittingID, attemptID, candidateID := model.NewExamSittingID(), model.NewExamAttemptID(), model.NewUserID()
+	at := time.Date(2026, time.November, 13, 9, 5, 0, 0, time.UTC)
+	hint, err := NewCandidateScreenClipsRequestedEvent(sittingID, attemptID, candidateID, at)
+	require.NoError(t, err)
+	require.Equal(t, "exam_attempt_screen_clips_requested", hint.Name)
+	require.Equal(t, candidateID, hint.UserID)
+	require.Equal(t, model.ActionExamSittingParticipate, hint.Action)
+	require.JSONEq(t, `{"exam_sitting_id":"`+sittingID.String()+`","exam_attempt_id":"`+attemptID.String()+`","changed_at":"2026-11-13T09:05:00Z"}`,
+		string(hint.Data))
+	_, err = NewCandidateScreenClipsRequestedEvent(sittingID, attemptID, "", at)
+	require.Error(t, err)
+}

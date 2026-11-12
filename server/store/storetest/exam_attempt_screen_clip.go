@@ -294,6 +294,7 @@ func testIncidentScreenClip(t *testing.T, ctx context.Context, ss store.Store) {
 
 	flagged := appendRecords(1, secondDisplay(2, at)).Flagged
 	require.Len(t, flagged, 1)
+	require.True(t, flagged[0].ScreenClipRequested, "the append says it asked for a clip")
 	pending, err := ss.ExamAttempt().ListPendingScreenClips(ctx, access)
 	require.NoError(t, err)
 	require.Len(t, pending, 1, "the Flag asks for an incident clip")
@@ -306,6 +307,7 @@ func testIncidentScreenClip(t *testing.T, ctx context.Context, ss store.Store) {
 	again := appendRecords(2, singleDisplay(3, later), secondDisplay(4, later.Add(2*time.Second)))
 	require.Len(t, again.Flagged, 1, "a new occurrence adds evidence to the same Flag")
 	require.Equal(t, flagged[0].FlagID, again.Flagged[0].FlagID)
+	require.False(t, again.Flagged[0].ScreenClipRequested)
 	pending, err = ss.ExamAttempt().ListPendingScreenClips(ctx, access)
 	require.NoError(t, err)
 	require.Len(t, pending, 1, "only a new Flag asks for a clip")

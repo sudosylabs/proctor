@@ -53,6 +53,7 @@ const (
 type NativeDeliveryTarget struct {
 	Security     model.AdmittedSecurity
 	MatrixDigest string
+	ExamID       model.ExamID
 	SittingID    model.ExamSittingID
 	ClassID      model.ClassID
 }
@@ -90,6 +91,9 @@ type NativeIntegrityFlagged struct {
 	FlagID           model.IntegrityFlagID
 	Kind             model.IntegrityPolicyKind
 	RetainedEvidence int
+	// ScreenClipRequested reports that the new Flag asked Desktop for an
+	// incident clip.
+	ScreenClipRequested bool
 }
 
 type NativeDeliveryStore interface {

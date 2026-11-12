@@ -109,6 +109,15 @@ func TestNativeDeliveryAppendStore(t *testing.T, ss store.Store, probes ...Nativ
 			require.Equal(t, int64(7), candidate.NativeSecurity.RetainedConditionRecords, "manager board lacks bounded native coverage summary")
 			require.True(t, candidate.NativeSecurity.LiveCoverageAvailable, "manager board lacks bounded native coverage summary")
 			require.NotEmpty(t, candidate.NativeSecurity.Sources, "manager board lacks bounded native coverage summary")
+			rules := candidate.NativeSecurity.Rules
+			require.Len(t, rules, 3, "the board shows every enforce rule of the live Participation")
+			for _, rule := range rules {
+				require.Equal(t, model.NativeRuleUnknown, rule.Rule.Status, "the lost batch left %s unknown", rule.Rule.RuleID)
+			}
+			require.Equal(t, "baseline.single_display", rules[1].Rule.RuleID)
+			require.Equal(t, int64(1), rules[1].OpenOccurrence, "the second display's occurrence is still open")
+			require.True(t, candidate.NativeSecurity.Contained, "Desktop said it contains the window")
+			require.Equal(t, model.ScreenClipCounts{}, candidate.NativeSecurity.ScreenClips)
 		}
 	}
 	require.True(t, found, "candidate absent from board")

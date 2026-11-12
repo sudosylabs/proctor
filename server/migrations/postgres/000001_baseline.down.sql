@@ -26,6 +26,7 @@ DROP FUNCTION IF EXISTS guard_delivery_retirement_marker();
 
 DROP FUNCTION IF EXISTS retention_allows_integrity_delete(varchar);
 DROP TABLE IF EXISTS user_mfa_recovery;
+DROP TABLE IF EXISTS retention_purge_screen_clips;
 DROP TABLE IF EXISTS retention_purge_objects;
 DROP TABLE IF EXISTS exam_export_artifacts;
 DROP TABLE IF EXISTS exam_export_submissions;

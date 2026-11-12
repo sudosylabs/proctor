@@ -128,6 +128,7 @@ var baselineTables = []string{
 	"retention_policies",
 	"retention_previews",
 	"retention_purge_objects",
+	"retention_purge_screen_clips",
 	"retention_retirements",
 	"retention_source_protections",
 	"role_bindings",

@@ -5038,6 +5038,19 @@ CREATE TABLE retention_purge_objects (
 );
 CREATE INDEX retention_purge_objects_pending_idx ON retention_purge_objects (verify_after, retirement_id, object_id) WHERE absence_verified_at IS NULL;
 
+-- The screen clips an integrity retirement removed, whose chunk keys File
+-- Content purges and then observes absent.
+CREATE TABLE retention_purge_screen_clips (
+    retirement_id varchar(26) NOT NULL REFERENCES retention_retirements(id),
+    screen_clip_id varchar(26) NOT NULL,
+    chunk_count smallint NOT NULL CHECK (chunk_count BETWEEN 1 AND 384),
+    absence_verified_at timestamptz,
+    verify_after timestamptz NOT NULL DEFAULT '-infinity',
+    PRIMARY KEY (retirement_id, screen_clip_id)
+);
+CREATE INDEX retention_purge_screen_clips_pending_idx ON retention_purge_screen_clips (verify_after, retirement_id, screen_clip_id)
+    WHERE absence_verified_at IS NULL;
+
 CREATE FUNCTION retention_allows_integrity_delete(attempt_id varchar) RETURNS boolean
 LANGUAGE sql STABLE AS $$
     SELECT EXISTS(SELECT 1 FROM retention_retirements r JOIN exam_submissions sub ON sub.id=r.submission_id

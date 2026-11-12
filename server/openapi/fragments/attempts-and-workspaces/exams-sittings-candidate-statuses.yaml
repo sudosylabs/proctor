@@ -260,13 +260,95 @@ components:
       type: object
       additionalProperties: false
       description: >-
-        Content-free native condition count and currently live source health. Contains no detector, occurrence
-        or source-instance identities and makes no misconduct finding.
+        The candidate's live native standing: how many rule status changes are kept, the live Participation's source
+        health and each enforce rule's status as the server evaluates it, whether Desktop is containing the
+        candidate window, and the Attempt's screen clips by state. It contains no facts, source-instance or
+        application identities, and an application outside the catalog is never named. A rule that is not met is
+        not a misconduct finding; its Flag is reviewed like any other.
       required:
         - retained_condition_records
         - live_coverage_available
         - sources
+        - rules
+        - contained
+        - screen_clips
       properties:
+        rules:
+          type: array
+          maxItems: 64
+          description: The live Participation's enforce rules, by rule ID; empty when nothing is live.
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - rule_id
+              - capability
+              - reason
+              - status
+              - occurrences
+            properties:
+              rule_id:
+                type: string
+                maxLength: 128
+              capability:
+                type: string
+                pattern: ^[a-z][a-z0-9_]{0,63}$
+              reason:
+                type: string
+                maxLength: 128
+                description: The registry's reason ID for the rule, such as display.single_display_required.
+              status:
+                type: string
+                enum:
+                  - met
+                  - not_met
+                  - unknown
+              unknown_cause:
+                type: string
+                enum:
+                  - unavailable
+                  - gap
+                  - unhealthy
+                  - permission
+                  - partial
+                  - checking
+              open_occurrence:
+                type: integer
+                format: int64
+                minimum: 1
+                description: The occurrence open now, counted from 1 in this Participation; absent when none is open.
+              occurrences:
+                type: integer
+                format: int64
+                minimum: 0
+        contained:
+          type: boolean
+          description: Whether Desktop reports it is containing the candidate window right now.
+        screen_clips:
+          type: object
+          additionalProperties: false
+          required:
+            - requested
+            - recording
+            - uploading
+            - ready
+            - failed
+          properties:
+            requested:
+              type: integer
+              minimum: 0
+            recording:
+              type: integer
+              minimum: 0
+            uploading:
+              type: integer
+              minimum: 0
+            ready:
+              type: integer
+              minimum: 0
+            failed:
+              type: integer
+              minimum: 0
         retained_condition_records:
           type: integer
           format: int64

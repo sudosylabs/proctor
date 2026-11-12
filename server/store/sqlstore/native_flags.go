@@ -70,6 +70,7 @@ func (r *nativeFlagRaiser) raise(ctx context.Context, tx *sqlxTxWrapper, transit
 			kind,
 		)
 		var flagID model.IntegrityFlagID
+		clipRequested := false
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
 			flag, flagErr := model.NewIntegrityFlag(model.NewIntegrityFlagID(), attempt, security.Generation, kind, r.owner.Now)
@@ -80,6 +81,11 @@ func (r *nativeFlagRaiser) raise(ctx context.Context, tx *sqlxTxWrapper, transit
 				return flagErr
 			}
 			flagID = flag.ID
+			if flagErr = tx.Get(ctx, &clipRequested, `SELECT EXISTS(
+					SELECT 1 FROM exam_attempt_screen_clips WHERE integrity_flag_id = ?
+				)`, flag.ID.String()); flagErr != nil {
+				return flagErr
+			}
 		case err != nil:
 			return err
 		default:
@@ -100,7 +106,7 @@ func (r *nativeFlagRaiser) raise(ctx context.Context, tx *sqlxTxWrapper, transit
 			}
 			retained++
 		}
-		r.note(store.NativeIntegrityFlagged{FlagID: flagID, Kind: kind, RetainedEvidence: retained})
+		r.note(store.NativeIntegrityFlagged{FlagID: flagID, Kind: kind, RetainedEvidence: retained, ScreenClipRequested: clipRequested})
 	}
 	return nil
 }
@@ -108,6 +114,7 @@ func (r *nativeFlagRaiser) raise(ctx context.Context, tx *sqlxTxWrapper, transit
 // note keeps the latest notice of each Flag.
 func (r *nativeFlagRaiser) note(flagged store.NativeIntegrityFlagged) {
 	if i := slices.IndexFunc(r.flagged, func(f store.NativeIntegrityFlagged) bool { return f.FlagID == flagged.FlagID }); i >= 0 {
+		flagged.ScreenClipRequested = flagged.ScreenClipRequested || r.flagged[i].ScreenClipRequested
 		r.flagged[i] = flagged
 		return
 	}

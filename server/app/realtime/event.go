@@ -268,6 +268,12 @@ type candidateExamAttemptWorkspaceChangedData struct {
 	ChangedAt     string `json:"changed_at"`
 }
 
+type candidateScreenClipsRequestedData struct {
+	ExamSittingID string `json:"exam_sitting_id"`
+	ExamAttemptID string `json:"exam_attempt_id"`
+	ChangedAt     string `json:"changed_at"`
+}
+
 type candidateExamAttemptFocusLossWarningData struct {
 	ExamSittingID string `json:"exam_sitting_id"`
 	ExamAttemptID string `json:"exam_attempt_id"`
@@ -618,6 +624,38 @@ func NewCandidateExamAttemptFocusLossWarningEvent(
 
 	return Event{
 		Name:     examAttemptFocusWarningMessage.name,
+		UserID:   candidateID,
+		Action:   model.ActionExamSittingParticipate,
+		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
+		Data:     data,
+	}, nil
+}
+
+// NewCandidateScreenClipsRequestedEvent tells the candidate's Desktop that
+// its Attempt has screen clip requests to take. It carries none of them:
+// Desktop lists its pending requests, which only its live Participation
+// sees.
+func NewCandidateScreenClipsRequestedEvent(
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+	candidateID model.UserID,
+	changedAt time.Time,
+) (Event, error) {
+	if !sittingID.IsValid() || !attemptID.IsValid() || !candidateID.IsValid() || changedAt.IsZero() {
+		return Event{}, errors.New("candidate screen clip request hint requires valid bounded metadata")
+	}
+
+	data, err := json.Marshal(candidateScreenClipsRequestedData{
+		ExamSittingID: sittingID.String(),
+		ExamAttemptID: attemptID.String(),
+		ChangedAt:     model.FormatRFC3339(changedAt),
+	})
+	if err != nil {
+		return Event{}, err
+	}
+
+	return Event{
+		Name:     examAttemptScreenClipsRequestedMessage.name,
 		UserID:   candidateID,
 		Action:   model.ActionExamSittingParticipate,
 		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},

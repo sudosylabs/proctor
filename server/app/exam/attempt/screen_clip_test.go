@@ -16,6 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -41,8 +43,11 @@ func TestScreenClipRequestAuthorizesFirstAndKeepsItsReasonPrivate(t *testing.T) 
 	require.NotContains(t, fmt.Sprintf("%#v", f.audit.values), reason, "the audit carries no reason")
 	require.Equal(t, model.ActionExamSittingManage, f.audit.action)
 	require.Equal(t, store.ExamAttemptScreenClipRequestOperation, f.audit.operation)
-	require.Equal(t, []string{"manager.manage", "sitting", "audit", "screen_clip"}, f.order,
-		"authorization precedes the audit, which precedes the request")
+	require.Equal(t, []string{"manager.manage", "sitting", "audit", "screen_clip", "effects"}, f.order,
+		"authorization precedes the audit, which precedes the request; the candidate is told after it")
+	require.Equal(t, []realtimetest.Call{published(t)(realtime.NewCandidateScreenClipsRequestedEvent(
+		f.sitting.ID, f.attemptID, f.userID, input.Clip.RequestedAt))}, f.publisher.Calls(),
+		"the candidate's Desktop is told to read its requests, and nothing more")
 }
 
 func TestScreenClipRequestValidatesBeforeAuthorizationAndTranslatesRefusals(t *testing.T) {

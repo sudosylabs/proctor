@@ -107,6 +107,30 @@ func (c *Content) OpenScreenClipChunk(
 	return file.Body, nil
 }
 
+// PurgeRetiredScreenClip removes every chunk key of a retired clip, then
+// observes each absent. A backend acknowledgement alone is not reported as a
+// verified purge.
+func (c *Content) PurgeRetiredScreenClip(ctx context.Context, clipID model.ScreenClipID, chunks int) error {
+	if c == nil || c.filesystem == nil || !clipID.IsValid() || chunks < 1 || chunks > model.ScreenClipMaxChunks {
+		return errors.New("invalid screen clip identity")
+	}
+	for index := range chunks {
+		key := screenClipChunkKey(clipID, index)
+		if err := c.filesystem.Remove(ctx, key, vfs.RemoveOptions{}); err != nil && !errors.Is(err, vfs.ErrNotFound) {
+			return sanitize("remove screen clip chunk", err)
+		}
+		_, err := c.filesystem.Stat(ctx, key)
+		if errors.Is(err, vfs.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return sanitize("verify retired screen clip chunk absence", err)
+		}
+		return errors.New("retired screen clip chunk remains present")
+	}
+	return nil
+}
+
 func screenClipChunkKey(clipID model.ScreenClipID, index int) string {
 	id := clipID.String()
 	return fmt.Sprintf("exam-screen-clips/%s/%s/%s/chunks/%03d", id[:2], id[2:4], id, index)

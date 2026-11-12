@@ -102,17 +102,23 @@ type nativeCapabilityTrack struct {
 }
 
 type nativeRuleTrack struct {
-	Tracker       NativeRuleTracker `json:"tracker"`
-	Occurrences   int64             `json:"occurrences"`
-	Open          bool              `json:"open"`
-	Desktop       *NativeRuleReport `json:"desktop,omitempty"`
-	Contained     bool              `json:"contained"`
-	Discrepancies int64             `json:"discrepancies"`
+	Capability    NativeCapabilityID `json:"capability"`
+	Mode          NativeRuleMode     `json:"mode"`
+	Reason        string             `json:"reason"`
+	Tracker       NativeRuleTracker  `json:"tracker"`
+	Occurrences   int64              `json:"occurrences"`
+	Open          bool               `json:"open"`
+	Desktop       *NativeRuleReport  `json:"desktop,omitempty"`
+	Contained     bool               `json:"contained"`
+	Discrepancies int64              `json:"discrepancies"`
 }
 
 // NativeRuleStanding is a rule's current standing for the board.
 type NativeRuleStanding struct {
 	Rule           NativeRuleReport
+	Capability     NativeCapabilityID
+	Mode           NativeRuleMode
+	Reason         string
 	OpenOccurrence int64 // 0 when none is open
 	Occurrences    int64
 	Contained      bool
@@ -232,17 +238,14 @@ func (s *NativeInterpretation) ApplyDesktopStatus(rules []NativeRule, report Nat
 	return transitions
 }
 
-// Standings returns each tracked rule's standing, in policy order.
-func (s *NativeInterpretation) Standings(rules []NativeRule) []NativeRuleStanding {
-	standings := []NativeRuleStanding{}
-	for _, rule := range rules {
-		track, ok := s.rules[rule.RuleID]
-		if !ok {
-			continue
-		}
+// Standings returns each tracked rule's standing, by rule ID.
+func (s *NativeInterpretation) Standings() []NativeRuleStanding {
+	standings := make([]NativeRuleStanding, 0, len(s.rules))
+	for id, track := range s.rules {
 		status := track.Tracker.Status()
 		standing := NativeRuleStanding{
-			Rule:        NativeRuleReport{RuleID: rule.RuleID, Status: status.Status, UnknownCause: status.Cause},
+			Rule:       NativeRuleReport{RuleID: id, Status: status.Status, UnknownCause: status.Cause},
+			Capability: track.Capability, Mode: track.Mode, Reason: track.Reason,
 			Occurrences: track.Occurrences, Contained: track.Contained, Discrepancies: track.Discrepancies,
 		}
 		if track.Open {
@@ -250,6 +253,7 @@ func (s *NativeInterpretation) Standings(rules []NativeRule) []NativeRuleStandin
 		}
 		standings = append(standings, standing)
 	}
+	slices.SortFunc(standings, func(a, b NativeRuleStanding) int { return strings.Compare(a.Rule.RuleID, b.Rule.RuleID) })
 	return standings
 }
 
@@ -290,7 +294,7 @@ func (s *NativeInterpretation) evaluate(rules []NativeRule) []NativeRuleTransiti
 			status := track.Tracker.Status()
 			before = &status
 		} else {
-			track = &nativeRuleTrack{}
+			track = &nativeRuleTrack{Capability: rule.Capability, Mode: rule.Mode, Reason: rule.Reason}
 			s.rules[rule.RuleID] = track
 		}
 		var facts *NativeCapabilityFacts
@@ -362,6 +366,8 @@ func (s *NativeInterpretation) UnmarshalJSON(raw []byte) error {
 	}
 	for id, track := range wire.Rules {
 		if track == nil || !isNativeRuleID(id) || track.Occurrences < 0 || track.Discrepancies < 0 ||
+			!isNativeIdentifier(string(track.Capability)) || track.Mode != NativeRuleEnforce && track.Mode != NativeRuleObserve ||
+			!isNativeReasonID(track.Reason) ||
 			track.Open && track.Occurrences == 0 || track.Desktop != nil && !track.Desktop.validate() {
 			return ErrNativeDeliveryInvalid
 		}

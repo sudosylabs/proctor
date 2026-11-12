@@ -22572,8 +22572,12 @@
       },
       "NativeSecuritySummary": {
         "additionalProperties": false,
-        "description": "Content-free native condition count and currently live source health. Contains no detector, occurrence or source-instance identities and makes no misconduct finding.",
+        "description": "The candidate's live native standing: how many rule status changes are kept, the live Participation's source health and each enforce rule's status as the server evaluates it, whether Desktop is containing the candidate window, and the Attempt's screen clips by state. It contains no facts, source-instance or application identities, and an application outside the catalog is never named. A rule that is not met is not a misconduct finding; its Flag is reviewed like any other.",
         "properties": {
+          "contained": {
+            "description": "Whether Desktop reports it is containing the candidate window right now.",
+            "type": "boolean"
+          },
           "live_coverage_available": {
             "type": "boolean"
           },
@@ -22582,6 +22586,100 @@
             "maximum": 200000,
             "minimum": 0,
             "type": "integer"
+          },
+          "rules": {
+            "description": "The live Participation's enforce rules, by rule ID; empty when nothing is live.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "capability": {
+                  "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                  "type": "string"
+                },
+                "occurrences": {
+                  "format": "int64",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "open_occurrence": {
+                  "description": "The occurrence open now, counted from 1 in this Participation; absent when none is open.",
+                  "format": "int64",
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "reason": {
+                  "description": "The registry's reason ID for the rule, such as display.single_display_required.",
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                "rule_id": {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                "status": {
+                  "enum": [
+                    "met",
+                    "not_met",
+                    "unknown"
+                  ],
+                  "type": "string"
+                },
+                "unknown_cause": {
+                  "enum": [
+                    "unavailable",
+                    "gap",
+                    "unhealthy",
+                    "permission",
+                    "partial",
+                    "checking"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "rule_id",
+                "capability",
+                "reason",
+                "status",
+                "occurrences"
+              ],
+              "type": "object"
+            },
+            "maxItems": 64,
+            "type": "array"
+          },
+          "screen_clips": {
+            "additionalProperties": false,
+            "properties": {
+              "failed": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "ready": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "recording": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "requested": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "uploading": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "requested",
+              "recording",
+              "uploading",
+              "ready",
+              "failed"
+            ],
+            "type": "object"
           },
           "sources": {
             "items": {
@@ -22630,7 +22728,10 @@
         "required": [
           "retained_condition_records",
           "live_coverage_available",
-          "sources"
+          "sources",
+          "rules",
+          "contained",
+          "screen_clips"
         ],
         "type": "object"
       },

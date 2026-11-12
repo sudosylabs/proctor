@@ -15,6 +15,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -117,7 +118,29 @@ func (s *Service) RequestScreenClip(
 	if stored == nil || stored.Clip.ID != clip.ID && !stored.Replayed || stored.Clip.AttemptID != command.AttemptID {
 		return ScreenClipRequestResult{}, apperror.New("exam.attempt.unavailable")
 	}
+	if !stored.Replayed {
+		s.publishScreenClipsRequested(ctx, stored.SittingID, stored.Clip.AttemptID, stored.CandidateUserID, stored.Clip.RequestedAt)
+	}
 	return ScreenClipRequestResult{Clip: stored.Clip, Replayed: stored.Replayed}, nil
+}
+
+// publishScreenClipsRequested tells the candidate's Desktop to read its
+// pending clip requests now. It is a hint: Desktop also polls, so a lost hint
+// only delays the request, and a hint with nothing pending is harmless.
+func (s *Service) publishScreenClipsRequested(
+	ctx context.Context,
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+	candidateID model.UserID,
+	at time.Time,
+) {
+	event, err := realtime.NewCandidateScreenClipsRequestedEvent(sittingID, attemptID, candidateID, at)
+	if err == nil {
+		err = s.publisher.Publish(ctx, event)
+	}
+	if err != nil {
+		s.publisher.Report(ctx, "exam_attempt_screen_clips_requested", err)
+	}
 }
 
 // PendingScreenClips returns the requests the candidate's Desktop has not

@@ -30,6 +30,7 @@ type retentionJobStoreFake struct {
 	fail                          error
 	completeFailFor               model.AttemptWorkspaceObjectID
 	completedObjects              []model.AttemptWorkspaceObjectID
+	completedClips                []model.ScreenClipID
 	beginPurge                    func(context.Context, int) ([]store.RetentionPurgeObject, error)
 }
 
@@ -53,6 +54,10 @@ func (s *retentionJobStoreFake) BeginPurgeBatch(ctx context.Context, limit int) 
 }
 func (s *retentionJobStoreFake) CompletePurge(_ context.Context, input *store.RetentionPurgeCompletion) error {
 	s.completed++
+	if input.ScreenClipID != "" {
+		s.completedClips = append(s.completedClips, input.ScreenClipID)
+		return s.fail
+	}
 	if input.ObjectID == s.completeFailFor {
 		return errors.New("completion outcome unavailable")
 	}
@@ -80,6 +85,11 @@ type retentionJobPurgerFake struct {
 }
 
 func (p *retentionJobPurgerFake) PurgeRetiredAttemptWorkspaceObject(context.Context, model.AttemptWorkspaceObjectID) error {
+	p.calls++
+	return p.err
+}
+
+func (p *retentionJobPurgerFake) PurgeRetiredScreenClip(context.Context, model.ScreenClipID, int) error {
 	p.calls++
 	return p.err
 }
@@ -215,8 +225,9 @@ func reserveRetentionWork(record *model.Job) func(context.Context, int, int) (bo
 }
 
 type selectiveRetentionPurger struct {
-	fail model.AttemptWorkspaceObjectID
-	seen []model.AttemptWorkspaceObjectID
+	fail  model.AttemptWorkspaceObjectID
+	seen  []model.AttemptWorkspaceObjectID
+	clips []purgedClip
 }
 
 func (p *selectiveRetentionPurger) PurgeRetiredAttemptWorkspaceObject(_ context.Context, id model.AttemptWorkspaceObjectID) error {
@@ -225,6 +236,36 @@ func (p *selectiveRetentionPurger) PurgeRetiredAttemptWorkspaceObject(_ context.
 		return errors.New("private backend object unavailable")
 	}
 	return nil
+}
+
+func (p *selectiveRetentionPurger) PurgeRetiredScreenClip(_ context.Context, id model.ScreenClipID, chunks int) error {
+	p.clips = append(p.clips, purgedClip{id, chunks})
+	return nil
+}
+
+type purgedClip struct {
+	id     model.ScreenClipID
+	chunks int
+}
+
+func TestRetentionPurgeRemovesARetiredClipsChunks(t *testing.T) {
+	record, persistence, enqueuer := retentionJobFixture(t, model.JobTypeRetentionPurge, 2)
+	clip := store.RetentionPurgeObject{RetirementID: model.NewRetentionRetirementID(), ScreenClipID: model.NewScreenClipID(), ChunkCount: 3}
+	persistence.purges = append(persistence.purges, clip)
+	content := &selectiveRetentionPurger{}
+	handler := retentionHandler{records: persistence, content: content, jobs: enqueuer, now: model.NowUTC, purge: true}
+	outcome := handler.Run(context.Background(), testJobExecution(record, reserveRetentionWork(record), keepRetentionCheckpoint(record)))
+	require.NotEqual(t, job.OutcomeRetryableFailure, outcome.Kind)
+	require.Equal(t, []purgedClip{{clip.ScreenClipID, 3}}, content.clips, "every chunk key of the clip is purged")
+	require.Equal(t, []model.ScreenClipID{clip.ScreenClipID}, persistence.completedClips)
+
+	record, persistence, enqueuer = retentionJobFixture(t, model.JobTypeRetentionPurge, 2)
+	persistence.purges = []store.RetentionPurgeObject{{RetirementID: clip.RetirementID, ScreenClipID: clip.ScreenClipID}}
+	content = &selectiveRetentionPurger{}
+	handler = retentionHandler{records: persistence, content: content, jobs: enqueuer, now: model.NowUTC, purge: true}
+	outcome = handler.Run(context.Background(), testJobExecution(record, reserveRetentionWork(record), keepRetentionCheckpoint(record)))
+	require.Equal(t, job.OutcomeRetryableFailure, outcome.Kind, "a clip with no chunk count is refused")
+	require.Empty(t, content.clips)
 }
 
 func TestRetentionPurgeFailureDoesNotStarveFollowingObject(t *testing.T) {

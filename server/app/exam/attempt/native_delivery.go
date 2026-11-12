@@ -16,6 +16,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -456,9 +457,16 @@ func (s *Service) AppendNativeDelivery(
 				Outcome:          model.IntegrityOutcomeFlag,
 				RetainedEvidence: flagged.RetainedEvidence,
 			},
+			Invalidate: func() error {
+				return realtime.PublishSittingBoardChanged(ctx, s.publisher, target.ExamID, target.SittingID)
+			},
 		}); effectErr != nil {
 			s.publisher.Report(ctx, "exam_attempt_native_flagged", effectErr)
 		}
+	}
+	if slices.ContainsFunc(value.Flagged, func(f store.NativeIntegrityFlagged) bool { return f.ScreenClipRequested }) {
+		s.publishScreenClipsRequested(ctx, target.SittingID, deliveryAccess.Access.AttemptID,
+			deliveryAccess.Access.CandidateUserID, value.Acknowledgement.Receipt.ReceivedAt)
 	}
 
 	return value.Acknowledgement, nil

@@ -40,6 +40,8 @@ const (
 	// holds the rest. Chunks are stored as they arrive and never joined, so a
 	// byte range maps straight onto them.
 	ScreenClipChunkBytes int64 = 8 << 20
+	// ScreenClipMaxChunks is how many chunks the largest clip has.
+	ScreenClipMaxChunks = int((ScreenClipMaxBytes + ScreenClipChunkBytes - 1) / ScreenClipChunkBytes)
 )
 
 // ErrScreenClipChunkInvalid means a chunk's bytes were not its declared size

@@ -91,6 +91,8 @@ channels:
         $ref: '#/components/messages/exam_attempt_workspace_changed'
       exam_attempt_focus_warning:
         $ref: '#/components/messages/exam_attempt_focus_warning'
+      exam_attempt_screen_clips_requested:
+        $ref: '#/components/messages/exam_attempt_screen_clips_requested'
       exam_attempt_integrity_flagged:
         $ref: '#/components/messages/exam_attempt_integrity_flagged'
       exam_attempt_submitted:
@@ -191,6 +193,7 @@ operations:
       - $ref: '#/channels/websocket/messages/exam_attempt_access_reallowed'
       - $ref: '#/channels/websocket/messages/exam_attempt_workspace_changed'
       - $ref: '#/channels/websocket/messages/exam_attempt_focus_warning'
+      - $ref: '#/channels/websocket/messages/exam_attempt_screen_clips_requested'
       - $ref: '#/channels/websocket/messages/exam_attempt_integrity_flagged'
       - $ref: '#/channels/websocket/messages/exam_attempt_submitted'
       - $ref: '#/channels/websocket/messages/exam_attempt_submitted_for_candidate'

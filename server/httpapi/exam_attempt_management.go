@@ -128,12 +128,35 @@ type sittingCandidateStatusListResponse struct {
 	NextCursor      string                               `json:"next_cursor,omitempty"`
 }
 
-// nativeSecuritySummaryResponse presents a Candidate's live native coverage
-// to the Sitting manager without detector or occurrence identities.
+// nativeSecuritySummaryResponse presents a Candidate's live native standing
+// to the Sitting manager without facts or application identities.
 type nativeSecuritySummaryResponse struct {
 	RetainedConditionRecords int64                               `json:"retained_condition_records"`
 	LiveCoverageAvailable    bool                                `json:"live_coverage_available"`
 	Sources                  []nativeSourceHealthSummaryResponse `json:"sources"`
+	Rules                    []nativeRuleStandingResponse        `json:"rules"`
+	Contained                bool                                `json:"contained"`
+	ScreenClips              screenClipCountsResponse            `json:"screen_clips"`
+}
+
+// nativeRuleStandingResponse is one enforce rule's live status. Reason is
+// the registry's reason ID, which the client words.
+type nativeRuleStandingResponse struct {
+	RuleID         string                   `json:"rule_id"`
+	Capability     model.NativeCapabilityID `json:"capability"`
+	Reason         string                   `json:"reason"`
+	Status         model.NativeRuleStatus   `json:"status"`
+	UnknownCause   model.NativeUnknownCause `json:"unknown_cause,omitempty"`
+	OpenOccurrence int64                    `json:"open_occurrence,omitempty"`
+	Occurrences    int64                    `json:"occurrences"`
+}
+
+type screenClipCountsResponse struct {
+	Requested int `json:"requested"`
+	Recording int `json:"recording"`
+	Uploading int `json:"uploading"`
+	Ready     int `json:"ready"`
+	Failed    int `json:"failed"`
 }
 
 type nativeSourceHealthSummaryResponse struct {
@@ -151,6 +174,16 @@ func nativeSecuritySummaryFrom(value *model.NativeSecuritySummary) *nativeSecuri
 	response := &nativeSecuritySummaryResponse{
 		RetainedConditionRecords: value.RetainedConditionRecords,
 		LiveCoverageAvailable:    value.LiveCoverageAvailable,
+		Rules:                    make([]nativeRuleStandingResponse, 0, len(value.Rules)),
+		Contained:                value.Contained,
+		ScreenClips:              screenClipCountsResponse(value.ScreenClips),
+	}
+	for _, rule := range value.Rules {
+		response.Rules = append(response.Rules, nativeRuleStandingResponse{
+			RuleID: rule.Rule.RuleID, Capability: rule.Capability, Reason: rule.Reason,
+			Status: rule.Rule.Status, UnknownCause: rule.Rule.UnknownCause,
+			OpenOccurrence: rule.OpenOccurrence, Occurrences: rule.Occurrences,
+		})
 	}
 	if value.Sources != nil {
 		response.Sources = make([]nativeSourceHealthSummaryResponse, 0, len(value.Sources))

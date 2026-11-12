@@ -82,6 +82,7 @@ var (
 	examAttemptAccessReallowedMessage         = declare("exam_attempt_access_reallowed", "exam_attempt_access_reallowed")
 	examAttemptWorkspaceChangedMessage        = declare("exam_attempt_workspace_changed", "exam_attempt_workspace_changed")
 	examAttemptFocusWarningMessage            = declare("exam_attempt_focus_warning", "exam_attempt_focus_warning")
+	examAttemptScreenClipsRequestedMessage    = declare("exam_attempt_screen_clips_requested", "exam_attempt_screen_clips_requested")
 	examAttemptIntegrityFlaggedMessage        = declare("exam_attempt_integrity_flagged", "exam_attempt_integrity_flagged")
 	examAttemptSubmittedMessage               = declare("exam_attempt_submitted", "exam_attempt_submitted")
 	candidateExamAttemptSubmittedMessage      = declare("exam_attempt_submitted_for_candidate", "exam_attempt_submitted")

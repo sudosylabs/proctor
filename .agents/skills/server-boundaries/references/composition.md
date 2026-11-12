@@ -76,6 +76,29 @@ errors are operational diagnostics. The CLI uses this seam to emit systemd's
 `READY=1` datagram without making the module-root server depend on environment
 variables or a supervisor-specific implementation.
 
+## Plugins
+
+Plugins are first-party Go packages compiled into the server; Proctor never
+loads outside code. `server/plugin` holds their contracts and imports only the
+standard library. `pluginhost` runs them and imports only `server/plugin`. The
+root names every built-in in `builtinPlugins()`, the one place a plugin is
+listed.
+
+- Activate plugins right after configuration and logging, before anything
+  that consumes what they register. A plugin that fails to activate is left
+  out and never fails construction. Only a configuration mistake does, such
+  as settings for a plugin that is not compiled in.
+- Hand what plugins registered to its consumer from the root, as plain
+  contracts: identity provider types to `externalauth`, the export format to
+  `filecontent`, event subscriptions to `app/events`. The host wraps each one
+  so that a panic is contained and a failed plugin answers
+  `plugin.ErrUnavailable`. Consumers never see the host.
+- Add a capability as one typed `Host` method with a contained wrapper, and
+  only when a plugin needs it. Plugins get no broad API, store contract or
+  `platform.Service`.
+- Deactivate plugins once nothing can call them: after Jobs and transports
+  stop, or when a failed construction is released.
+
 ## Module placement
 
 - Keep Proctor domains in one `server` module — identity, authorization, academics, exams, WebSocket, clustering stay in `server`; extract `packages/*` only with a Proctor-independent contract and external consumers.

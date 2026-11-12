@@ -1,0 +1,46 @@
+---
+title: Plugins Configuration
+description: Turn Proctor's compiled-in plugins on or off and hand each one its settings.
+audience: operator
+maturity: preview
+slug: /reference/configuration/plugins/
+---
+
+# Plugins Configuration
+
+A plugin is an optional feature compiled into the Proctor server. Proctor
+never loads plugins from outside its own binary. The `Plugins` section only
+decides which built-in plugins run and gives each one its settings. Changes
+need a restart.
+
+| Path and default | Meaning and accepted value |
+| --- | --- |
+| `Plugins`<br />Default: `{}` | Settings for each plugin, keyed by its ID: 1–64 lowercase letters, digits, dots or hyphens, starting with a letter. Each value is an object with `Enable` and `Settings`. `Enable` is `true` or `false`. When it is absent or `null`, the plugin's default applies. `Settings` is the plugin's own JSON object of at most 64 KiB, or `null`. The plugin validates `Settings` when it starts, and `proctor config show` always redacts it, because it may hold secrets. A key that names no compiled-in plugin stops the server from starting. |
+
+## Built-in plugins
+
+| Plugin | ID | Default |
+| --- | --- | --- |
+| The CAS sign-in protocol for [external authentication providers](./authentication.mdx) | `cas` | On |
+| The OpenID Connect sign-in protocol for [external authentication providers](./authentication.mdx) | `oidc` | On |
+| The zip encoding of Exam exports | `export.zip` | On |
+
+Turning off `cas` or `oidc` makes a configured provider of that type invalid,
+as if its type were unknown. Turning off `export.zip` leaves Exam exports
+unavailable, and the server logs a warning when it starts.
+
+```json
+{
+  "Plugins": {
+    "cas": {"Enable": false, "Settings": null}
+  }
+}
+```
+
+## When a plugin fails
+
+A plugin that fails to start is left out, and the server starts and serves
+without it. After a plugin panics three times, Proctor stops calling it until
+the next restart. Either way the reason is in the server log, labeled with
+the plugin's ID. Signed-in clients can list the plugins that are active with
+`GET /api/v1/system/plugins`.

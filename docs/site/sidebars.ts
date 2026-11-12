@@ -385,6 +385,11 @@ const sidebars: SidebarsConfig = {
               id: 'reference/configuration/localization-and-logging',
               label: 'Localization and Logging',
             },
+            {
+              type: 'doc',
+              id: 'reference/configuration/plugins',
+              label: 'Plugins',
+            },
           ],
         },
         {type: 'doc', id: 'reference/environment-variables', label: 'Environment Variables'},

@@ -706,13 +706,13 @@ func prepareParticipationExpiry(
 		return change, err
 	}
 
-	if change.suspension, err = model.NewPolicyAttemptSuspension(
+	if change.suspension, err = model.NewIntegrityPolicySuspension(
 		input.SuspensionID,
 		input.AttemptID,
 		input.ParticipationID,
 		input.FlagID,
 		input.Generation,
-		model.AttemptSuspensionCandidateReasonSecureContinuityLost,
+		model.IntegrityPolicyConnectionLoss,
 		row.DatabaseNow,
 	); err != nil {
 		return change, err
@@ -773,63 +773,14 @@ func persistParticipationExpiry(
 		return fmt.Errorf("close expired Attempt Connection: %w", err)
 	}
 
-	if _, err := tx.Exec(
-		ctx,
-		`INSERT INTO integrity_flags (
-			id, exam_attempt_id, generation, policy_kind, state, created_at
-		)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		flag.ID.String(),
-		flag.AttemptID.String(),
-		flag.Generation,
-		flag.Kind,
-		flag.State,
-		flag.CreatedAt,
-	); err != nil {
-		return translateError("integrity_flag", flag.ID.String(), err)
+	if err := insertIntegrityFlag(ctx, tx, flag); err != nil {
+		return err
+	}
+	if err := insertIntegrityEvidence(ctx, tx, evidence); err != nil {
+		return err
 	}
 
-	if _, err := tx.Exec(
-		ctx,
-		`INSERT INTO integrity_evidence (
-			id, exam_attempt_id, participation_id, integrity_flag_id, generation, policy_kind,
-				observed_at, recorded_at
-		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		evidence.ID.String(),
-		evidence.AttemptID.String(),
-		evidence.ParticipationID.String(),
-		evidence.FlagID.String(),
-		evidence.Generation,
-		evidence.Kind,
-		evidence.ObservedAt,
-		evidence.RecordedAt,
-	); err != nil {
-		return translateError("integrity_evidence", evidence.ID.String(), err)
-	}
-
-	if _, err := tx.Exec(
-		ctx,
-		`INSERT INTO exam_attempt_suspensions (
-			id, exam_attempt_id, participation_id, integrity_flag_id, generation,
-				suspension_attempt_revision, state, source, candidate_reason, started_at
-		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		suspension.ID.String(),
-		suspension.AttemptID.String(),
-		suspension.ParticipationID.String(),
-		suspension.FlagID.String(),
-		suspension.Generation,
-		attempt.Revision,
-		suspension.State,
-		suspension.Source,
-		suspension.CandidateReason,
-		suspension.StartedAt,
-	); err != nil {
-		return translateError("attempt_suspension", suspension.ID.String(), err)
-	}
-
-	return nil
+	return insertPolicySuspension(ctx, tx, suspension, attempt.Revision)
 }
 
 func lockParticipationExpiry(

@@ -101,64 +101,26 @@ func (s *Service) publishConnectionClosed(ctx context.Context, result Connection
 // no second close and nothing to unbind. Nothing is published unless every
 // event can be built.
 func (s *Service) publishParticipationExpired(ctx context.Context, result ParticipationExpiry) error {
-	managerEvent, err := realtime.NewExamAttemptPolicySuspendedEvent(
-		result.SittingID,
-		result.Attempt.ID,
-		result.CandidateUserID,
-		result.Connection.ID,
-		result.Flag.ID,
-		result.Suspension.ID,
-		result.Attempt.Revision,
-		result.DatabaseTime,
-	)
-	if err != nil {
-		return err
+	outcome := integrityOutcome{
+		SittingID:       result.SittingID,
+		AttemptID:       result.Attempt.ID,
+		CandidateUserID: result.CandidateUserID,
+		At:              result.DatabaseTime,
+		Suspension: &integritySuspensionNotice{
+			ConnectionID:    result.Connection.ID,
+			FlagID:          result.Flag.ID,
+			Suspension:      result.Suspension,
+			AttemptRevision: result.Attempt.Revision,
+		},
+		Invalidate: func() error {
+			return s.publishOperationalInvalidations(ctx, result.ExamID, result.SittingID, result.CandidateUserID)
+		},
+	}
+	if result.ConnectionClosed {
+		outcome.ClosedConnection = &result.Connection
 	}
 
-	candidateEvent, err := realtime.NewCandidateExamAttemptSuspendedEvent(
-		result.SittingID,
-		result.Attempt.ID,
-		result.CandidateUserID,
-		result.Suspension.Source,
-		result.Suspension.CandidateReason,
-		result.DatabaseTime,
-	)
-	if err != nil {
-		return err
-	}
-
-	if !result.ConnectionClosed {
-		return errors.Join(
-			s.publisher.Publish(ctx, managerEvent),
-			s.publisher.Publish(ctx, candidateEvent),
-			s.publishOperationalInvalidations(ctx, result.ExamID, result.SittingID, result.CandidateUserID),
-		)
-	}
-
-	connectionEvent, err := realtime.NewExamAttemptConnectionClosedEvent(
-		result.SittingID,
-		result.Attempt.ID,
-		result.CandidateUserID,
-		result.Connection.ID,
-		result.Connection.CloseReason,
-		result.Connection.ClosedAt.Time,
-	)
-	if err != nil {
-		return err
-	}
-
-	return errors.Join(
-		s.publisher.Publish(ctx, connectionEvent),
-		s.publisher.Publish(ctx, managerEvent),
-		s.publisher.Publish(ctx, candidateEvent),
-		s.publishOperationalInvalidations(
-			ctx,
-			result.ExamID,
-			result.SittingID,
-			result.CandidateUserID,
-		),
-		s.publisher.UnbindExamAttemptConnection(ctx, result.Connection.ID),
-	)
+	return s.publishIntegrityOutcome(ctx, outcome)
 }
 
 // publishAttemptReallowed tells managers and then the candidate that a

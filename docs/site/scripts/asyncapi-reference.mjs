@@ -24,8 +24,10 @@ function text(value) {
   return collapse(value).replace(/[\\{}<>]/g, (character) => `\\${character}`);
 }
 
+// cell escapes like text and also a pipe, in the same pass, so the table row
+// keeps its cells.
 function cell(value) {
-  return text(value).replace(/\|/g, '\\|');
+  return collapse(value).replace(/[\\{}<>|]/g, (character) => `\\${character}`);
 }
 
 function code(value) {

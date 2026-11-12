@@ -96,7 +96,7 @@ func eventSubscriptions(host *pluginhost.Host) []events.Subscription {
 	var subscriptions []events.Subscription
 	for _, subscription := range host.EventSubscriptions() {
 		subscriptions = append(subscriptions, events.Subscription{
-			Key:     subscription.Key,
+			Key:     subscription.Plugin + ":" + string(subscription.Topic),
 			Topic:   subscription.Topic,
 			Handler: subscription.Handler,
 		})

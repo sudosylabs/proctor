@@ -100,11 +100,9 @@ func (f *guardedExportFormat) Write(ctx context.Context, archive plugin.ExportAr
 	return f.entry.serve("write export", func() error { return f.inner.Write(ctx, archive, w) })
 }
 
-// EventSubscription is one plugin's handler for one topic.
+// EventSubscription is one plugin's handler for one topic. A plugin has at
+// most one per topic, so the plugin and topic identify it.
 type EventSubscription struct {
-	// Key identifies the subscription across deliveries: the plugin ID and
-	// the topic.
-	Key     string
 	Plugin  string
 	Topic   plugin.EventTopic
 	Handler plugin.EventHandler
@@ -119,16 +117,14 @@ func (r *registrar) AddEventHandler(topic plugin.EventTopic, handler plugin.Even
 	if topic == "" {
 		return errors.New("event topic is empty")
 	}
-	key := r.entry.manifest.ID + ":" + string(topic)
 	subscription := EventSubscription{
-		Key:     key,
 		Plugin:  r.entry.manifest.ID,
 		Topic:   topic,
 		Handler: guardedEventHandler{entry: r.entry, inner: handler},
 	}
 	return r.register("event handlers", func(c *contributions) error {
 		for _, existing := range c.eventHandlers {
-			if existing.Key == key {
+			if existing.Plugin == subscription.Plugin && existing.Topic == topic {
 				return fmt.Errorf("plugin %q already handles topic %q", r.entry.manifest.ID, topic)
 			}
 		}

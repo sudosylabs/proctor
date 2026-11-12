@@ -111,6 +111,17 @@ func (e *entry) serve(operation string, fn func() error) error {
 	return e.call(operation, fn)
 }
 
+// serveValue is serve for a call that returns a value as well as an error.
+func serveValue[T any](e *entry, operation string, fn func() (T, error)) (T, error) {
+	var value T
+	err := e.serve(operation, func() error {
+		var callErr error
+		value, callErr = fn()
+		return callErr
+	})
+	return value, err
+}
+
 // discardRecorder is the Recorder when Dependencies leaves it unset.
 type discardRecorder struct{}
 

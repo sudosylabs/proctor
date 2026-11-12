@@ -888,7 +888,7 @@ var dependencyRules = []dependencyRule{
 	{
 		name:       "configuration",
 		sources:    []pathPattern{exact(serverModule + "/config")},
-		project:    only(exact(serverModule + "/model")),
+		project:    only(exact(serverModule+"/model"), exact(serverModule+"/plugin")),
 		thirdParty: allImports(),
 	},
 	{

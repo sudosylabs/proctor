@@ -109,7 +109,7 @@ func (w *stringWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func TestEventSubscriptionsAreKeyedByPluginAndTopicAndGuarded(t *testing.T) {
+func TestEventSubscriptionsNameTheirPluginAndTopicAndAreGuarded(t *testing.T) {
 	t.Parallel()
 
 	var auditCalls, brokenCalls int
@@ -132,10 +132,9 @@ func TestEventSubscriptionsAreKeyedByPluginAndTopicAndGuarded(t *testing.T) {
 
 	subscriptions := host.EventSubscriptions()
 	require.Len(t, subscriptions, 2, "what the failed plugin registered is discarded")
-	require.Equal(t, "audit-mirror:exam.attempt.submitted", subscriptions[0].Key)
 	require.Equal(t, "audit-mirror", subscriptions[0].Plugin)
 	require.Equal(t, plugin.TopicExamAttemptSubmitted, subscriptions[0].Topic)
-	require.Equal(t, "broken:exam.attempt.submitted", subscriptions[1].Key)
+	require.Equal(t, "broken", subscriptions[1].Plugin)
 
 	require.ErrorIs(t, subscriptions[0].Handler.HandleEvent(context.Background(), plugin.Event{}), failure)
 	for range pluginhost.PanicLimit {

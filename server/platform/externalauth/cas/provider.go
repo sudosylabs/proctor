@@ -327,8 +327,4 @@ type attribute struct {
 	Value   string `xml:",chardata"`
 }
 
-var (
-	_ plugin.Plugin               = Plugin{}
-	_ plugin.IdentityProviderType = providerType{}
-	_ plugin.IdentityProvider     = (*Provider)(nil)
-)
+var _ plugin.IdentityProvider = (*Provider)(nil)

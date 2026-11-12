@@ -26,8 +26,8 @@ const TopicExamAttemptSubmitted EventTopic = "exam.attempt.submitted"
 //
 // Proctor delivers an event at least once. A handler must treat a repeated
 // ID as the same event. An event never carries answers, Workspace content or
-// integrity evidence; a handler that needs more asks Proctor for it, within
-// the permissions it has been granted.
+// integrity evidence. No capability yet lets a handler read more; one that
+// does will authorize and audit each read.
 type Event struct {
 	ID         string
 	Topic      EventTopic

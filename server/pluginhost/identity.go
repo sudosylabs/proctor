@@ -69,11 +69,8 @@ type guardedIdentityProviderType struct {
 func (t *guardedIdentityProviderType) Type() string { return t.name }
 
 func (t *guardedIdentityProviderType) New(definition plugin.IdentityProviderDefinition) (plugin.IdentityProvider, error) {
-	var provider plugin.IdentityProvider
-	err := t.entry.serve("build identity provider", func() error {
-		var buildErr error
-		provider, buildErr = t.inner.New(definition)
-		return buildErr
+	provider, err := serveValue(t.entry, "build identity provider", func() (plugin.IdentityProvider, error) {
+		return t.inner.New(definition)
 	})
 	if err != nil {
 		return nil, err
@@ -92,31 +89,22 @@ type guardedIdentityProvider struct {
 }
 
 func (p *guardedIdentityProvider) Begin(ctx context.Context, request plugin.BeginRequest) (plugin.BeginResponse, error) {
-	var response plugin.BeginResponse
-	err := p.entry.serve("begin authentication", func() error {
-		var beginErr error
-		response, beginErr = p.inner.Begin(ctx, request)
-		return beginErr
+	response, err := serveValue(p.entry, "begin authentication", func() (plugin.BeginResponse, error) {
+		return p.inner.Begin(ctx, request)
 	})
 	return response, providerFailure(err)
 }
 
 func (p *guardedIdentityProvider) State(callback plugin.Callback) (string, error) {
-	var state string
-	err := p.entry.serve("read authentication state", func() error {
-		var stateErr error
-		state, stateErr = p.inner.State(callback)
-		return stateErr
+	state, err := serveValue(p.entry, "read authentication state", func() (string, error) {
+		return p.inner.State(callback)
 	})
 	return state, providerFailure(err)
 }
 
 func (p *guardedIdentityProvider) Complete(ctx context.Context, request plugin.CompleteRequest) (plugin.Assertion, error) {
-	var assertion plugin.Assertion
-	err := p.entry.serve("complete authentication", func() error {
-		var completeErr error
-		assertion, completeErr = p.inner.Complete(ctx, request)
-		return completeErr
+	assertion, err := serveValue(p.entry, "complete authentication", func() (plugin.Assertion, error) {
+		return p.inner.Complete(ctx, request)
 	})
 	return assertion, providerFailure(err)
 }

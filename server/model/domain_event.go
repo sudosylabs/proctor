@@ -133,7 +133,7 @@ func EncodeDomainEventDispatchCommand(command DomainEventDispatchCommand) (json.
 // DecodeDomainEventDispatchCommand strictly decodes a dispatch Job payload.
 func DecodeDomainEventDispatchCommand(raw json.RawMessage) (DomainEventDispatchCommand, error) {
 	var command DomainEventDispatchCommand
-	if len(raw) == 0 || !decodeStrictDomainEventData(raw, &command) || !command.EventID.IsValid() {
+	if len(raw) == 0 || DecodeStrictJobDocument(raw, &command) != nil || !command.EventID.IsValid() {
 		return DomainEventDispatchCommand{}, invalidModelError(
 			"DecodeDomainEventDispatchCommand", "domain_event_job", "", "invalid domain event dispatch command", "")
 	}

@@ -14,6 +14,8 @@ import (
 	"maps"
 	"slices"
 	"sort"
+
+	"github.com/sudosylabs/proctor/server/plugin"
 )
 
 // maxPluginSettingsBytes bounds one plugin's Settings document.
@@ -49,7 +51,7 @@ func validatePlugins(plugins map[string]Plugin, add func(string, string)) {
 	sort.Strings(ids)
 	for _, id := range ids {
 		prefix := fmt.Sprintf("plugins[%q]", id)
-		if !validPluginID(id) {
+		if !plugin.IsValidID(id) {
 			add(prefix, "must be 1-64 lowercase letters, digits, dots or hyphens, starting with a letter")
 		}
 		settings := plugins[id].SettingsDocument()
@@ -62,20 +64,6 @@ func validatePlugins(plugins map[string]Plugin, add func(string, string)) {
 			add(prefix+".settings", "must be a JSON object")
 		}
 	}
-}
-
-// validPluginID mirrors plugin.IsValidID; config does not import the plugin
-// contracts.
-func validPluginID(id string) bool {
-	if id == "" || len(id) > 64 || id[0] < 'a' || id[0] > 'z' {
-		return false
-	}
-	for _, r := range id {
-		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '.' && r != '-' {
-			return false
-		}
-	}
-	return true
 }
 
 func clonePlugins(plugins map[string]Plugin) map[string]Plugin {

@@ -114,7 +114,7 @@ exists.
 | development seed HTTP client | `cmd/ptool/devseed` | none | none | none |
 | unknown ptool children | below `cmd/ptool` | none | none | all |
 | mail preview executable | `cmd/mailpreview` | `app/mail`, `localization`, `model` | none | none |
-| configuration | `config` | `model` | any | none |
+| configuration | `config` | `model`, `plugin` | any | none |
 | leaf infrastructure | `logging`, `migrations` | none | any | none |
 
 <!-- End of generated dependency rules. -->

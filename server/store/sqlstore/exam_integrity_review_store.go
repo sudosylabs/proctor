@@ -451,7 +451,7 @@ func (s *SQLExamIntegrityReviewStore) ListEvidence(
 	query := `SELECT ev.id, ev.exam_attempt_id, ev.participation_id, ev.integrity_flag_id,
 			ev.generation, ev.policy_kind, ev.focus_loss_signal_id, ev.sequence,
 			ev.duration_milliseconds, ev.source, ev.missing_before, ev.observed_at, ev.recorded_at,
-			ev.browser_detail_canonical
+			ev.browser_detail_canonical, ev.detail
 		FROM exam_submissions sub
 		JOIN integrity_evidence ev ON ev.exam_attempt_id = sub.exam_attempt_id
 		WHERE sub.id = ?
@@ -491,6 +491,7 @@ func (s *SQLExamIntegrityReviewStore) ListEvidence(
 
 type examIntegrityEvidenceRow struct {
 	BrowserDetail        []byte         `db:"browser_detail_canonical"`
+	Detail               []byte         `db:"detail"`
 	ID                   string         `db:"id"`
 	AttemptID            string         `db:"exam_attempt_id"`
 	ParticipationID      string         `db:"participation_id"`
@@ -557,6 +558,9 @@ func (row examIntegrityEvidenceRow) value() (*model.IntegrityEvidence, error) {
 		}
 
 		evidence.Browser = &detail
+	}
+	if row.Detail != nil {
+		evidence.Detail = json.RawMessage(row.Detail)
 	}
 
 	if err = evidence.Validate(); err != nil {

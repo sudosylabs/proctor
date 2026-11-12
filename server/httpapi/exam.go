@@ -769,7 +769,7 @@ func (h examHandlers) configureDraftFocusLoss(request route.Request) (route.Resu
 		return route.Result{}, route.InvalidRequest(errors.New("must be between 10000 and 14400000 and at least minimum_duration_milliseconds"))
 	}
 
-	outcome := model.IntegrityThresholdOutcome(body.Outcome)
+	outcome := model.IntegrityOutcome(body.Outcome)
 	switch outcome {
 	case model.IntegrityOutcomeFlag, model.IntegrityOutcomeFlagAndWarn, model.IntegrityOutcomeFlagAndSuspend:
 	default:

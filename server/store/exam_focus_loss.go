@@ -105,7 +105,7 @@ type ExamAttemptFocusLossResult struct {
 	MissingBefore               int64
 	WindowIncidentCount         int
 	ThresholdCrossed            bool
-	PolicyOutcome               model.IntegrityThresholdOutcome
+	PolicyOutcome               model.IntegrityOutcome
 	RetainedEvidenceCount       int
 	Overflow                    *model.FocusLossEvidenceOverflow
 	DiagnosticCount             int64

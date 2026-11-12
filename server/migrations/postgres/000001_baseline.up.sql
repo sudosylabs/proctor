@@ -2340,12 +2340,17 @@ CREATE TRIGGER sessions_fence_active_attempt
 
 -- Integrity records are append-preserving facts. A Suspension is the one
 -- mutable enforcement episode: only its active-to-closed re-allow transition
--- may add the manager actor and private reason.
+-- may add the manager actor and private reason. policy_kind is a core policy
+-- or a capability's "<plugin-id>.<kind>"; a capability's evidence is its own
+-- bounded detail object, which the core stores but does not read.
 CREATE TABLE integrity_flags (
     id varchar(26) PRIMARY KEY,
     exam_attempt_id varchar(26) NOT NULL REFERENCES exam_attempts(id),
     generation bigint NOT NULL CHECK (generation > 0),
-    policy_kind varchar(32) NOT NULL CHECK (policy_kind IN ('connection_loss', 'focus_loss', 'browser_navigation')),
+    policy_kind varchar(97) NOT NULL CHECK (
+        policy_kind IN ('connection_loss', 'focus_loss', 'browser_navigation') OR
+        policy_kind ~ '^[a-z][a-z0-9.-]{0,63}\.[a-z][a-z0-9_]{0,31}$'
+    ),
     state varchar(16) NOT NULL CHECK (state = 'open'),
     created_at timestamptz NOT NULL,
 
@@ -2358,7 +2363,10 @@ CREATE TABLE integrity_evidence (
     participation_id varchar(26) NOT NULL,
     integrity_flag_id varchar(26) NOT NULL,
     generation bigint NOT NULL CHECK (generation > 0),
-    policy_kind varchar(32) NOT NULL CHECK (policy_kind IN ('connection_loss', 'focus_loss', 'browser_navigation')),
+    policy_kind varchar(97) NOT NULL CHECK (
+        policy_kind IN ('connection_loss', 'focus_loss', 'browser_navigation') OR
+        policy_kind ~ '^[a-z][a-z0-9.-]{0,63}\.[a-z][a-z0-9_]{0,31}$'
+    ),
     focus_loss_signal_id varchar(26),
     sequence bigint,
     duration_milliseconds bigint,
@@ -2380,13 +2388,22 @@ CREATE TABLE integrity_evidence (
          duration_milliseconds BETWEEN 1 AND 86400000 AND
          (source IS NULL OR source IN ('window_blur', 'document_hidden', 'application_backgrounded', 'fullscreen_exited')) AND
          missing_before >= 0) OR
-        (policy_kind = 'browser_navigation' AND browser_detail_canonical IS NOT NULL AND focus_loss_signal_id IS NULL AND sequence IS NULL AND duration_milliseconds IS NULL AND source IS NULL AND missing_before IS NULL)
+        (policy_kind = 'browser_navigation' AND browser_detail_canonical IS NOT NULL AND focus_loss_signal_id IS NULL AND sequence IS NULL AND duration_milliseconds IS NULL AND source IS NULL AND missing_before IS NULL) OR
+        (policy_kind NOT IN ('connection_loss', 'focus_loss', 'browser_navigation') AND detail IS NOT NULL AND
+         browser_detail_canonical IS NULL AND focus_loss_signal_id IS NULL AND sequence IS NULL AND
+         duration_milliseconds IS NULL AND source IS NULL AND missing_before IS NULL)
     ),
-    browser_detail_canonical bytea CHECK(browser_detail_canonical IS NULL OR octet_length(browser_detail_canonical) BETWEEN 1 AND 262656)
+    CONSTRAINT integrity_evidence_detail_check CHECK (
+        detail IS NULL OR
+        (policy_kind NOT IN ('connection_loss', 'focus_loss', 'browser_navigation') AND
+         jsonb_typeof(detail) = 'object' AND octet_length(detail::text) <= 65536)
+    ),
+    browser_detail_canonical bytea CHECK(browser_detail_canonical IS NULL OR octet_length(browser_detail_canonical) BETWEEN 1 AND 262656),
+    detail jsonb
 );
 
-CREATE UNIQUE INDEX integrity_flags_legacy_group_idx ON integrity_flags(exam_attempt_id,generation,policy_kind) WHERE policy_kind <> 'browser_navigation';
-CREATE UNIQUE INDEX integrity_evidence_legacy_sequence_idx ON integrity_evidence(exam_attempt_id,generation,policy_kind,sequence) WHERE policy_kind <> 'browser_navigation';
+CREATE UNIQUE INDEX integrity_flags_legacy_group_idx ON integrity_flags(exam_attempt_id,generation,policy_kind) WHERE policy_kind IN ('connection_loss', 'focus_loss');
+CREATE UNIQUE INDEX integrity_evidence_legacy_sequence_idx ON integrity_evidence(exam_attempt_id,generation,policy_kind,sequence) WHERE policy_kind IN ('connection_loss', 'focus_loss');
 
 -- One bounded mutable evaluator exists per Participation generation. It keeps
 -- only the latest accepted outcome needed for natural sequence replay, bounded

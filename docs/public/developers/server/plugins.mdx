@@ -50,7 +50,7 @@ same contract.
 | Lifecycle | built | Activate and deactivate, with deadlines, containment and metrics |
 | Sign-in protocols, export formats, domain events | built | Offer an identity provider type or export encoding, or react to committed events |
 | Installation settings | built | Have settings an administrator changes at runtime, applied on every node |
-| Integrity outcomes | planned | Reach a decision that the core applies as record, flag, warn or suspend |
+| Integrity outcomes | planned | Reach a decision that the core applies as flag, warn or suspend |
 | Capability registry | pending Desktop work | Declare a native capability that Desktop activates only when the agreement names it |
 | Exam policy sections | pending Desktop work | Add a policy section the exam author sets, frozen into the Exam Revision and its digest |
 | Admission gates | pending Desktop work | Decide admit, deny or admit-and-flag before an Attempt starts, from a report Desktop attests |
@@ -67,10 +67,15 @@ Every integrity capability, built in or plugin, follows one template:
 1. A signal arrives over a core transport.
 2. The core stores it as evidence before anything interprets it.
 3. A rule decides, from the policy frozen into the Exam Revision.
-4. The rule returns an outcome from a closed list: record, flag,
-   flag and warn, or flag and suspend.
+4. The rule returns no outcome, which leaves the evidence recorded, or one
+   from a closed list: flag, flag and warn, or flag and suspend.
 5. The core applies the outcome through the same audited code a manager's
    action uses, attributed to the policy or plugin that decided.
+
+A capability's flags and evidence carry a policy kind named
+`<plugin-id>.<kind>`, such as `display.second_screen`, so they never collide
+with the core's `connection_loss`, `focus_loss` and `browser_navigation`. Its
+evidence is one JSON object of at most 64 KiB that the core stores as given.
 
 Each capability also declares what happens when it cannot run during an
 Attempt. `contain` keeps the Attempt from continuing until the capability

@@ -8238,8 +8238,8 @@ export interface components {
             /** Format: date-time */
             observed_at: string;
             participation_id: components["schemas"]["ID"];
-            /** @enum {string} */
-            policy_kind: "connection_loss" | "focus_loss" | "browser_navigation";
+            /** @description The policy that raised the flag: a core policy (connection_loss, focus_loss or browser_navigation) or a capability's "<plugin-id>.<kind>". Treat an unknown kind as opaque. */
+            policy_kind: string;
             /** Format: date-time */
             recorded_at: string;
             /** Format: int64 */
@@ -8269,8 +8269,8 @@ export interface components {
             /** Format: int64 */
             generation: number;
             id: components["schemas"]["ID"];
-            /** @enum {string} */
-            policy_kind: "connection_loss" | "focus_loss" | "browser_navigation";
+            /** @description The policy that raised the flag: a core policy (connection_loss, focus_loss or browser_navigation) or a capability's "<plugin-id>.<kind>". Treat an unknown kind as opaque. */
+            policy_kind: string;
             /** @enum {string} */
             state: "open" | "closed";
             /**

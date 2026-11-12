@@ -1150,7 +1150,7 @@ func loadFocusLossResult(
 		MissingBefore:               state.LastMissingBefore,
 		WindowIncidentCount:         state.LastWindowIncidentCount,
 		ThresholdCrossed:            state.LastThresholdCrossed,
-		PolicyOutcome:               model.IntegrityThresholdOutcome(state.LastPolicyOutcome.String),
+		PolicyOutcome:               model.IntegrityOutcome(state.LastPolicyOutcome.String),
 		RetainedEvidenceCount:       state.RetainedEvidenceCount,
 		DiagnosticCount:             state.DiagnosticCount,
 		FlagCreated:                 state.LastFlagCreated,

@@ -185,10 +185,12 @@ components:
           minimum: 1
         policy_kind:
           type: string
-          enum:
-            - connection_loss
-            - focus_loss
-            - browser_navigation
+          description: >-
+            The policy that raised the flag: a core policy (connection_loss,
+            focus_loss or browser_navigation) or a capability's
+            "<plugin-id>.<kind>". Treat an unknown kind as opaque.
+          maxLength: 97
+          pattern: ^(connection_loss|focus_loss|browser_navigation|[a-z][a-z0-9.-]{0,63}\.[a-z][a-z0-9_]{0,31})$
         state:
           type: string
           enum:
@@ -259,10 +261,12 @@ components:
           minimum: 1
         policy_kind:
           type: string
-          enum:
-            - connection_loss
-            - focus_loss
-            - browser_navigation
+          description: >-
+            The policy that raised the flag: a core policy (connection_loss,
+            focus_loss or browser_navigation) or a capability's
+            "<plugin-id>.<kind>". Treat an unknown kind as opaque.
+          maxLength: 97
+          pattern: ^(connection_loss|focus_loss|browser_navigation|[a-z][a-z0-9.-]{0,63}\.[a-z][a-z0-9_]{0,31})$
         signal_id:
           $ref: '#/components/schemas/ID'
         sequence:

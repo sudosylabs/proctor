@@ -416,8 +416,7 @@ func (v *ExamAttemptSuspensionView) validProvenance() bool {
 // may re-allow. Active and closed validation share it so the post-commit
 // check cannot reject an outcome the Store deliberately committed.
 func reallowableSuspensionReason(reason model.AttemptSuspensionCandidateReason) bool {
-	return reason == model.AttemptSuspensionCandidateReasonSecureContinuityLost ||
-		reason == model.AttemptSuspensionCandidateReasonFocusLossPolicy
+	return reason.IsPolicy()
 }
 
 // ExamAttemptParticipationExpiryResult is the retained, safe committed

@@ -635,7 +635,7 @@ func NewExamAttemptIntegrityFlaggedEvent(
 	attemptID model.ExamAttemptID,
 	candidateID model.UserID,
 	flagID model.IntegrityFlagID,
-	outcome model.IntegrityThresholdOutcome,
+	outcome model.IntegrityOutcome,
 	retainedEvidence int,
 	evidenceOverflow int64,
 	changedAt time.Time,

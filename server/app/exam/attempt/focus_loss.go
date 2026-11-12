@@ -53,7 +53,7 @@ type FocusLossEvaluation struct {
 	PolicyDisabled              bool
 	Qualified                   bool
 	ThresholdCrossed            bool
-	PolicyOutcome               model.IntegrityThresholdOutcome
+	PolicyOutcome               model.IntegrityOutcome
 	RetainedEvidenceCount       int
 	EvidenceOverflowCount       int64
 	Flag                        model.IntegrityFlag

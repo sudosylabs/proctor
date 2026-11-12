@@ -225,12 +225,8 @@ func (f *attemptStoreFake) RecordScreenClipChunk(_ context.Context, input *store
 	return nil
 }
 
-func (f *attemptStoreFake) CompleteScreenClipUpload(
-	_ context.Context,
-	_ store.CandidateAttemptAccess,
-	clipID model.ScreenClipID,
-) (*store.ExamAttemptScreenClipView, error) {
-	return nil, store.NewErrNotFound("screen_clip", clipID.String())
+func (f *attemptStoreFake) CompleteScreenClipUpload(_ context.Context, input *store.ExamAttemptScreenClipCompletion) (*store.ExamAttemptScreenClipView, error) {
+	return nil, store.NewErrNotFound("screen_clip", input.ClipID.String())
 }
 
 func (f *attemptStoreFake) DeliverScreenClip(_ context.Context, input *store.ExamAttemptScreenClipDelivery) (*store.ExamAttemptScreenClipView, error) {

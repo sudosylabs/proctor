@@ -213,7 +213,12 @@ type ScreenClip struct {
 	// request.
 	DeliveredParticipationID AttemptParticipationID
 	// Upload is Desktop's declaration, set once it starts uploading.
-	Upload    *ScreenClipUpload
+	Upload *ScreenClipUpload
+	// Signature is the installation key's ES256 signature over the upload's
+	// content digest, set when the clip is complete. With the clip's chunks
+	// and record alone, a reviewer can check later that the clip is the one
+	// that installation recorded.
+	Signature string
 	UpdatedAt time.Time
 	Revision  int64
 }
@@ -271,8 +276,10 @@ func (c *ScreenClip) validState() bool {
 		return !delivered && c.Failure == "" && c.Upload == nil
 	case ScreenClipRecording:
 		return delivered && c.Failure == "" && c.Upload == nil
-	case ScreenClipUploading, ScreenClipReady:
-		return delivered && c.Failure == "" && c.Upload.Validate() == nil
+	case ScreenClipUploading:
+		return delivered && c.Failure == "" && c.Upload.Validate() == nil && c.Signature == ""
+	case ScreenClipReady:
+		return delivered && c.Failure == "" && c.Upload.Validate() == nil && len(c.Signature) == DesktopSignatureLength
 	case ScreenClipFailed:
 		return c.Failure.IsValid() && (delivered || c.Failure == ScreenClipFailureAttemptEnded)
 	default:
@@ -312,13 +319,14 @@ func (c *ScreenClip) BeginUpload(upload *ScreenClipUpload, at time.Time) error {
 	return c.advance(func(next *ScreenClip) { next.State, next.Upload = ScreenClipUploading, upload.Clone() }, at)
 }
 
-// Complete makes an uploaded clip ready to play. The caller has checked
-// every chunk arrived.
-func (c *ScreenClip) Complete(at time.Time) error {
-	if c.State != ScreenClipUploading {
+// Complete makes an uploaded clip ready to play, with the installation's
+// signature over its content digest. The caller has checked every chunk
+// arrived and the signature verifies.
+func (c *ScreenClip) Complete(signature string, at time.Time) error {
+	if c.State != ScreenClipUploading || len(signature) != DesktopSignatureLength {
 		return invalidModelError("ScreenClip.Complete", "screen_clip", "state", "is not uploading", "")
 	}
-	return c.advance(func(next *ScreenClip) { next.State = ScreenClipReady }, at)
+	return c.advance(func(next *ScreenClip) { next.State, next.Signature = ScreenClipReady, signature }, at)
 }
 
 // Fail ends the clip with a reason. A final clip cannot fail.

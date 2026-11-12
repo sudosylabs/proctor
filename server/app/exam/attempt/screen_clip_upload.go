@@ -128,20 +128,34 @@ func (s *Service) UploadScreenClipChunk(
 	return nil
 }
 
+// ScreenClipCompletion finishes an upload: the clip's content digest and the
+// installation key's ES256 signature over it.
+type ScreenClipCompletion struct {
+	Access        CandidateAccess
+	ClipID        model.ScreenClipID
+	ContentDigest string
+	Signature     string
+}
+
 // CompleteScreenClipUpload makes a clip whose every chunk arrived ready to
-// play.
+// play, once the installation's signature over its content digest verifies.
 func (s *Service) CompleteScreenClipUpload(
 	ctx context.Context,
 	inv invocation.Invocation,
-	candidateAccess CandidateAccess,
-	clipID model.ScreenClipID,
+	command ScreenClipCompletion,
 ) (_ store.ExamAttemptScreenClipView, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	selector, err := candidateSelector(inv, candidateAccess)
+	selector, err := candidateSelector(inv, command.Access)
 	if err != nil {
 		return store.ExamAttemptScreenClipView{}, err
 	}
-	clip, err := s.attempts.CompleteScreenClipUpload(ctx, selector, clipID)
+	clipID := command.ClipID
+	if !clipID.IsValid() || len(command.ContentDigest) != 64 || len(command.Signature) != model.DesktopSignatureLength {
+		return store.ExamAttemptScreenClipView{}, apperror.Invalid("exam.attempt.invalid", "screen_clip_completion")
+	}
+	clip, err := s.attempts.CompleteScreenClipUpload(ctx, &store.ExamAttemptScreenClipCompletion{
+		Access: selector, ClipID: clipID, ContentDigest: command.ContentDigest, Signature: command.Signature,
+	})
 	if err != nil {
 		return store.ExamAttemptScreenClipView{}, storeError(storeErrors, err)
 	}

@@ -1993,7 +1993,7 @@ export interface paths {
         put?: never;
         /**
          * Finish a screen clip upload
-         * @description Makes a clip whose every chunk arrived ready to play. Completing it again returns it unchanged.
+         * @description Makes a clip whose every chunk arrived ready to play. The body carries the clip's content digest and the installation key's ES256 signature over the exact bytes of that digest (its 64 lowercase hexadecimal characters), raw r and s in unpadded base64url. The signature must verify with the key of the Desktop registration uploading the clip; it is stored with the clip so a reviewer can check the clip later from the clip and its record alone. Completing it again returns it unchanged.
          */
         post: operations["completeCandidateScreenClipUpload"];
         delete?: never;
@@ -7428,6 +7428,12 @@ export interface components {
             revision: number;
             /** Format: date-time */
             updated_at: string;
+        };
+        CompleteCandidateScreenClipUploadRequest: {
+            /** @description The clip's content digest, as the upload status reports it. */
+            content_digest: string;
+            /** @description The installation key's ES256 signature over the content digest, raw r and s in unpadded base64url. */
+            signature: string;
         };
         CompleteExamRecordsRequest: {
             /** Format: int64 */
@@ -15252,6 +15258,18 @@ export interface components {
                 "application/json": components["schemas"]["StudentProgressionCommitRequest"];
             };
         };
+        /** @description The clip's content digest and the installation key's signature over it. */
+        CompleteCandidateScreenClipUpload: {
+            content: {
+                /**
+                 * @example {
+                 *       "content_digest": "7d1a54127b222502f5b79b5fb0803061152a44f92b37e23c6527baf665d4da9a",
+                 *       "signature": "IcHJ1bNctXFVhTF0-ay6LIFS44MN3zPJw36YbQsF8C0haUjE4cuDhg0o1daUkq3Rf_VIJ_Me5s6cnjdzIYeWdQ"
+                 *     }
+                 */
+                "application/json": components["schemas"]["CompleteCandidateScreenClipUploadRequest"];
+            };
+        };
         /** @description Supplies the one-time email-verification token delivered through the configured mail channel. */
         CompleteEmailVerification: {
             content: {
@@ -19141,7 +19159,7 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: components["requestBodies"]["CompleteCandidateScreenClipUpload"];
         responses: {
             200: components["responses"]["CandidateScreenClipOK"];
             400: components["responses"]["BadRequest"];

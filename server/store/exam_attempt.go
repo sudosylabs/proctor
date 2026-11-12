@@ -1365,8 +1365,10 @@ type ExamAttemptStore interface {
 	// hash. Recording it again changes nothing.
 	RecordScreenClipChunk(context.Context, *ExamAttemptScreenClipChunk) error
 	// CompleteScreenClipUpload makes a clip whose every chunk arrived ready to
-	// play. Completing it again returns it unchanged.
-	CompleteScreenClipUpload(context.Context, CandidateAttemptAccess, model.ScreenClipID) (*ExamAttemptScreenClipView, error)
+	// play, once the installation's signature over its content digest
+	// verifies with the key of the Desktop registration uploading it.
+	// Completing it again returns it unchanged.
+	CompleteScreenClipUpload(context.Context, *ExamAttemptScreenClipCompletion) (*ExamAttemptScreenClipView, error)
 
 	// ResolveCorrectionAcknowledgementTarget validates an acknowledgement and
 	// returns the scope its audit is recorded under. It changes nothing.

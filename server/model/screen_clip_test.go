@@ -138,8 +138,11 @@ func TestScreenClipUploadsOnlyAfterRecordingAndCompletesOnce(t *testing.T) {
 	require.Equal(t, ScreenClipUploading, clip.State)
 	upload.ChunkSHA256[0] = strings.Repeat("f", 64)
 	require.NotEqual(t, upload.ChunkSHA256[0], clip.Upload.ChunkSHA256[0], "the clip keeps its own copy")
-	require.NoError(t, clip.Complete(clipAt))
+	require.Error(t, clip.Complete("short", clipAt), "a ready clip carries a whole signature")
+	signature := strings.Repeat("s", DesktopSignatureLength)
+	require.NoError(t, clip.Complete(signature, clipAt))
 	require.Equal(t, ScreenClipReady, clip.State)
-	require.Error(t, clip.Complete(clipAt))
+	require.Equal(t, signature, clip.Signature)
+	require.Error(t, clip.Complete(signature, clipAt))
 	require.Error(t, clip.Fail(ScreenClipFailureRejected, clipAt), "a ready clip is final")
 }

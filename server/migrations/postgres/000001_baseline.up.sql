@@ -2561,6 +2561,7 @@ CREATE TABLE exam_attempt_screen_clips (
     size_bytes bigint CHECK (size_bytes BETWEEN 1 AND 3221225472),
     chunk_sha256 text[] CHECK (cardinality(chunk_sha256) BETWEEN 1 AND 384),
     content_digest char(64) CHECK (content_digest ~ '^[0-9a-f]{64}$'),
+    content_signature varchar(86) CHECK (content_signature ~ '^[A-Za-z0-9_-]{86}$'),
     requested_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL CHECK (updated_at >= requested_at),
     revision bigint NOT NULL CHECK (revision > 0),
@@ -2583,10 +2584,11 @@ CREATE TABLE exam_attempt_screen_clips (
     ),
     CONSTRAINT exam_attempt_screen_clips_upload_check CHECK (
         (state IN ('requested', 'recording') AND media_type IS NULL AND size_bytes IS NULL AND
-         chunk_sha256 IS NULL AND content_digest IS NULL) OR
+         chunk_sha256 IS NULL AND content_digest IS NULL AND content_signature IS NULL) OR
         (state IN ('uploading', 'ready') AND media_type IS NOT NULL AND size_bytes IS NOT NULL AND
          chunk_sha256 IS NOT NULL AND content_digest IS NOT NULL AND
-         cardinality(chunk_sha256) = (size_bytes + 8388607) / 8388608) OR
+         cardinality(chunk_sha256) = (size_bytes + 8388607) / 8388608 AND
+         (content_signature IS NOT NULL) = (state = 'ready')) OR
         state = 'failed'
     )
 );

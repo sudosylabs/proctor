@@ -164,6 +164,13 @@ type screenClipUploadResponse struct {
 	ContentDigest  string             `json:"content_digest"`
 }
 
+// completeScreenClipUploadRequest finishes an upload with the installation
+// key's signature over the clip's content digest.
+type completeScreenClipUploadRequest struct {
+	ContentDigest string `json:"content_digest"`
+	Signature     string `json:"signature"`
+}
+
 type screenClipChunkResponse struct {
 	Chunk int `json:"chunk"`
 }
@@ -239,7 +246,13 @@ func (h examAttemptHandlers) completeScreenClipUpload(request route.Request) (ro
 	if err != nil {
 		return route.Result{}, err
 	}
-	clip, err := h.app.CompleteScreenClipUpload(request.Context, request.Invocation(), access, clipID)
+	var body completeScreenClipUploadRequest
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
+	}
+	clip, err := h.app.CompleteScreenClipUpload(request.Context, request.Invocation(), attempt.ScreenClipCompletion{
+		Access: access, ClipID: clipID, ContentDigest: body.ContentDigest, Signature: body.Signature,
+	})
 	if err != nil {
 		return route.Result{}, err
 	}

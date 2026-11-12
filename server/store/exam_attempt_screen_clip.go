@@ -53,6 +53,7 @@ type ExamAttemptScreenClipView struct {
 	RequestedAt              time.Time
 	DeliveredParticipationID model.AttemptParticipationID
 	Upload                   *model.ScreenClipUpload
+	Signature                string
 	UpdatedAt                time.Time
 	Revision                 int64
 }
@@ -63,7 +64,7 @@ func NewExamAttemptScreenClipView(clip *model.ScreenClip) ExamAttemptScreenClipV
 		ID: clip.ID, AttemptID: clip.AttemptID, Source: clip.Source, RequestedByUserID: clip.RequestedByUserID,
 		FlagID: clip.FlagID, Range: clip.Range, State: clip.State, Failure: clip.Failure,
 		RequestedAt: clip.RequestedAt, DeliveredParticipationID: clip.DeliveredParticipationID,
-		Upload: clip.Upload.Clone(), UpdatedAt: clip.UpdatedAt, Revision: clip.Revision,
+		Upload: clip.Upload.Clone(), Signature: clip.Signature, UpdatedAt: clip.UpdatedAt, Revision: clip.Revision,
 	}
 }
 
@@ -97,4 +98,13 @@ type ExamAttemptScreenClipChunk struct {
 type ExamAttemptScreenClipUploadStatus struct {
 	Clip     ExamAttemptScreenClipView
 	Received []int
+}
+
+// ExamAttemptScreenClipCompletion finishes an upload with the installation's
+// signature over the clip's content digest.
+type ExamAttemptScreenClipCompletion struct {
+	Access        CandidateAttemptAccess
+	ClipID        model.ScreenClipID
+	ContentDigest string
+	Signature     string
 }

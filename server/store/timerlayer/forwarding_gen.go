@@ -1579,9 +1579,9 @@ func (s *timedExamAttemptStore) RecordScreenClipChunk(arg0 context.Context, arg1
 	})
 }
 
-func (s *timedExamAttemptStore) CompleteScreenClipUpload(arg0 context.Context, arg1 store.CandidateAttemptAccess, arg2 model.ScreenClipID) (*store.ExamAttemptScreenClipView, error) {
+func (s *timedExamAttemptStore) CompleteScreenClipUpload(arg0 context.Context, arg1 *store.ExamAttemptScreenClipCompletion) (*store.ExamAttemptScreenClipView, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodCompleteScreenClipUpload), func(callCtx context.Context) (*store.ExamAttemptScreenClipView, error) {
-		return s.next.CompleteScreenClipUpload(callCtx, arg1, arg2)
+		return s.next.CompleteScreenClipUpload(callCtx, arg1)
 	})
 }
 

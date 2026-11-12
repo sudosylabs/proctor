@@ -863,6 +863,21 @@
         "description": "Exact immutable preview revision and digest to apply transactionally.",
         "required": true
       },
+      "CompleteCandidateScreenClipUpload": {
+        "content": {
+          "application/json": {
+            "example": {
+              "content_digest": "7d1a54127b222502f5b79b5fb0803061152a44f92b37e23c6527baf665d4da9a",
+              "signature": "IcHJ1bNctXFVhTF0-ay6LIFS44MN3zPJw36YbQsF8C0haUjE4cuDhg0o1daUkq3Rf_VIJ_Me5s6cnjdzIYeWdQ"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/CompleteCandidateScreenClipUploadRequest"
+            }
+          }
+        },
+        "description": "The clip's content digest and the installation key's signature over it.",
+        "required": true
+      },
       "CompleteEmailVerification": {
         "content": {
           "application/json": {
@@ -11499,6 +11514,26 @@
           "name",
           "display_name",
           "description"
+        ],
+        "type": "object"
+      },
+      "CompleteCandidateScreenClipUploadRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "content_digest": {
+            "description": "The clip's content digest, as the upload status reports it.",
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "signature": {
+            "description": "The installation key's ES256 signature over the content digest, raw r and s in unpadded base64url.",
+            "pattern": "^[A-Za-z0-9_-]{86}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content_digest",
+          "signature"
         ],
         "type": "object"
       },
@@ -35799,7 +35834,7 @@
         }
       ],
       "post": {
-        "description": "Makes a clip whose every chunk arrived ready to play. Completing it again returns it unchanged.",
+        "description": "Makes a clip whose every chunk arrived ready to play. The body carries the clip's content digest and the installation key's ES256 signature over the exact bytes of that digest (its 64 lowercase hexadecimal characters), raw r and s in unpadded base64url. The signature must verify with the key of the Desktop registration uploading the clip; it is stored with the clip so a reviewer can check the clip later from the clip and its record alone. Completing it again returns it unchanged.",
         "operationId": "completeCandidateScreenClipUpload",
         "parameters": [
           {
@@ -35809,6 +35844,9 @@
             "$ref": "#/components/parameters/CandidateAttemptConnectionID"
           }
         ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CompleteCandidateScreenClipUpload"
+        },
         "responses": {
           "200": {
             "$ref": "#/components/responses/CandidateScreenClipOK"
@@ -35850,12 +35888,6 @@
         "summary": "Finish a screen clip upload",
         "tags": [
           "Attempts and workspaces"
-        ],
-        "x-codeSamples": [
-          {
-            "lang": "Shell",
-            "source": "curl --fail-with-body \\\n  --request POST \\\n  --url 'https://proctor.example.edu/api/v1/exam-attempts/dgjcx1ia56br8kpous3h9nfemq/screen-clip-requests/twz47ydgjcx1ia56br8kpous3h/upload/complete' \\\n  --header 'Authorization: DPoP \u003cregistered-desktop-session-access-token\u003e' \\\n  --header 'DPoP: \u003cproof\u003e' \\\n  --header 'X-Proctor-Attempt-Credential: \u003cattempt-continuity-credential\u003e' \\\n  --header 'X-Proctor-Attempt-Connection-ID: \u003cattempt-connection-id\u003e'"
-          }
         ],
         "x-proctor-auth": "session_required",
         "x-proctor-error-codes": [

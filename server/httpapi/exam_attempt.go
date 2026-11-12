@@ -180,12 +180,7 @@ type ExamAttemptApplication interface {
 		model.ScreenClipID,
 	) (store.ExamAttemptScreenClipUploadStatus, error)
 	UploadScreenClipChunk(context.Context, invocation.Invocation, attempt.ScreenClipChunkCommand) error
-	CompleteScreenClipUpload(
-		context.Context,
-		invocation.Invocation,
-		attempt.CandidateAccess,
-		model.ScreenClipID,
-	) (store.ExamAttemptScreenClipView, error)
+	CompleteScreenClipUpload(context.Context, invocation.Invocation, attempt.ScreenClipCompletion) (store.ExamAttemptScreenClipView, error)
 	SubmitExamAttempt(context.Context, invocation.Invocation, attempt.SubmitCommand) (store.ExamSubmissionReceipt, error)
 	GetExamSubmission(context.Context, invocation.Invocation, attempt.GetSubmissionQuery) (attempt.ManagedSubmission, error)
 	ListExamSubmissionManifest(

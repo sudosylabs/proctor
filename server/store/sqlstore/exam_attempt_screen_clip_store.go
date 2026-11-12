@@ -10,6 +10,7 @@ package sqlstore
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -26,7 +27,7 @@ const screenClipMaxFuture = 10 * time.Minute
 
 const screenClipColumns = `id, exam_attempt_id, source, requested_by_user_id, private_reason, integrity_flag_id,
 	range_from_session_start, range_start, range_end, state, failure, delivered_participation_id,
-	media_type, size_bytes, chunk_sha256, content_digest, requested_at, updated_at, revision`
+	media_type, size_bytes, chunk_sha256, content_digest, content_signature, requested_at, updated_at, revision`
 
 type screenClipRow struct {
 	ID                       string         `db:"id"`
@@ -45,6 +46,7 @@ type screenClipRow struct {
 	SizeBytes                sql.NullInt64  `db:"size_bytes"`
 	ChunkSHA256              pq.StringArray `db:"chunk_sha256"`
 	ContentDigest            sql.NullString `db:"content_digest"`
+	ContentSignature         sql.NullString `db:"content_signature"`
 	RequestedAt              time.Time      `db:"requested_at"`
 	UpdatedAt                time.Time      `db:"updated_at"`
 	Revision                 int64          `db:"revision"`
@@ -69,6 +71,7 @@ func (row screenClipRow) model() (*model.ScreenClip, error) {
 			End:              model.TimeUTC(row.RangeEnd),
 		},
 		State:       model.ScreenClipState(row.State),
+		Signature:   row.ContentSignature.String,
 		Failure:     model.ScreenClipFailure(row.Failure.String),
 		RequestedAt: model.TimeUTC(row.RequestedAt),
 		UpdatedAt:   model.TimeUTC(row.UpdatedAt),
@@ -320,7 +323,7 @@ func insertScreenClip(ctx context.Context, tx *sqlxTxWrapper, clip *model.Screen
 		rangeStart = clip.Range.Start
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO exam_attempt_screen_clips (`+screenClipColumns+`)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?, ?)`,
 		clip.ID.String(), clip.AttemptID.String(), clip.Source,
 		nullableString(clip.RequestedByUserID.String()), nullableString(clip.PrivateReason), nullableString(clip.FlagID.String()),
 		clip.Range.FromSessionStart, rangeStart, clip.Range.End, clip.State,
@@ -452,10 +455,10 @@ func updateScreenClip(ctx context.Context, tx *sqlxTxWrapper, clip *model.Screen
 	}
 	result, err := tx.Exec(ctx, `UPDATE exam_attempt_screen_clips
 		SET state = ?, failure = ?, delivered_participation_id = ?, media_type = ?, size_bytes = ?,
-			chunk_sha256 = ?, content_digest = ?, updated_at = ?, revision = ?
+			chunk_sha256 = ?, content_digest = ?, content_signature = ?, updated_at = ?, revision = ?
 		WHERE id = ? AND revision = ?`,
 		clip.State, nullableString(string(clip.Failure)), nullableString(clip.DeliveredParticipationID.String()),
-		mediaType, size, chunks, digest, clip.UpdatedAt, clip.Revision, clip.ID.String(), clip.Revision-1)
+		mediaType, size, chunks, digest, nullableString(clip.Signature), clip.UpdatedAt, clip.Revision, clip.ID.String(), clip.Revision-1)
 	if err != nil {
 		return nil, translateError("screen_clip", clip.ID.String(), err)
 	}
@@ -575,12 +578,12 @@ func (s *SQLExamAttemptStore) RecordScreenClipChunk(ctx context.Context, input *
 // CompleteScreenClipUpload makes a clip whose every chunk arrived ready.
 func (s *SQLExamAttemptStore) CompleteScreenClipUpload(
 	ctx context.Context,
-	access store.CandidateAttemptAccess,
-	clipID model.ScreenClipID,
+	input *store.ExamAttemptScreenClipCompletion,
 ) (*store.ExamAttemptScreenClipView, error) {
-	if !clipID.IsValid() {
-		return nil, store.NewErrInvalidInput("screen_clip", "id", nil)
+	if input == nil || !input.ClipID.IsValid() || len(input.Signature) != model.DesktopSignatureLength {
+		return nil, store.NewErrInvalidInput("screen_clip", "completion", nil)
 	}
+	access, clipID := input.Access, input.ClipID
 	return runSQLTransaction(ctx, s.GetMaster().Begin, "complete screen clip upload", func(
 		ctx context.Context,
 		tx *sqlxTxWrapper,
@@ -604,11 +607,28 @@ func (s *SQLExamAttemptStore) CompleteScreenClipUpload(
 		if received != clip.Upload.ChunkCount() {
 			return nil, store.NewErrConflict("screen_clip", "screen_clip_incomplete", nil)
 		}
+		digest := clip.Upload.Digest()
+		if input.ContentDigest != digest {
+			return nil, store.NewErrInvalidInput("screen_clip", "content_digest", nil)
+		}
+		var key []byte
+		if err = tx.Get(ctx, &key, `SELECT public_jwk FROM desktop_registrations
+			WHERE id = ? AND user_id = ? AND revoked_at IS NULL`,
+			access.DesktopRegistrationID.String(), access.CandidateUserID.String()); err != nil {
+			return nil, translateError("desktop_registration", access.DesktopRegistrationID.String(), err)
+		}
+		var publicKey model.DesktopPublicJWK
+		if err = json.Unmarshal(key, &publicKey); err != nil {
+			return nil, invalidPersistedState("desktop_registration", "public_jwk", err)
+		}
+		if !publicKey.VerifySignature([]byte(digest), input.Signature) {
+			return nil, store.NewErrInvalidInput("screen_clip", "signature", nil)
+		}
 		now, err := databaseTime(ctx, tx)
 		if err != nil {
 			return nil, err
 		}
-		if err = clip.Complete(now); err != nil {
+		if err = clip.Complete(input.Signature, now); err != nil {
 			return nil, store.NewErrInvalidInput("screen_clip", "complete", nil).Wrap(err)
 		}
 		return updateScreenClip(ctx, tx, clip)

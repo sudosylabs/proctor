@@ -9,7 +9,13 @@ package storetest
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
+	"math/big"
 	"strings"
 	"testing"
 	"time"
@@ -187,18 +193,45 @@ func testScreenClipUpload(t *testing.T, ctx context.Context, ss store.Store, acc
 	require.NoError(t, chunk(1, strings.Repeat("b", 64), 10))
 	require.NoError(t, chunk(1, strings.Repeat("b", 64), 10), "recording a chunk again changes nothing")
 
-	_, err = ss.ExamAttempt().CompleteScreenClipUpload(ctx, access, clipID)
+	digest := upload.Digest()
+	complete := func(contentDigest, signature string) (*store.ExamAttemptScreenClipView, error) {
+		return ss.ExamAttempt().CompleteScreenClipUpload(ctx, &store.ExamAttemptScreenClipCompletion{
+			Access: access, ClipID: clipID, ContentDigest: contentDigest, Signature: signature,
+		})
+	}
+	_, err = complete(digest, storetestDesktopSignature(t, []byte(digest)))
 	requireConflictConstraint(t, err, "screen_clip_incomplete")
 	status, err := ss.ExamAttempt().GetScreenClipUpload(ctx, access, clipID)
 	require.NoError(t, err)
 	require.Equal(t, []int{1}, status.Received, "Desktop resumes with what is missing")
 
 	require.NoError(t, chunk(0, strings.Repeat("a", 64), model.ScreenClipChunkBytes))
-	ready, err := ss.ExamAttempt().CompleteScreenClipUpload(ctx, access, clipID)
+	_, err = complete(strings.Repeat("0", 64), storetestDesktopSignature(t, []byte(strings.Repeat("0", 64))))
+	require.ErrorAs(t, err, &invalid, "the digest must be the clip's own")
+	require.Equal(t, "content_digest", invalid.Field)
+	_, err = complete(digest, storetestDesktopSignature(t, []byte("something else")))
+	require.ErrorAs(t, err, &invalid, "the signature must sign the clip's digest with the installation's key")
+	require.Equal(t, "signature", invalid.Field)
+
+	signature := storetestDesktopSignature(t, []byte(digest))
+	ready, err := complete(digest, signature)
 	require.NoError(t, err)
 	require.Equal(t, model.ScreenClipReady, ready.State)
-	readyAgain, err := ss.ExamAttempt().CompleteScreenClipUpload(ctx, access, clipID)
+	require.Equal(t, signature, ready.Signature, "the signature is kept with the clip")
+	readyAgain, err := complete(digest, signature)
 	require.NoError(t, err)
 	require.Equal(t, ready.Revision, readyAgain.Revision, "completing again changes nothing")
 	requireConflictConstraint(t, chunk(0, strings.Repeat("a", 64), model.ScreenClipChunkBytes), "screen_clip_state")
+}
+
+// storetestDesktopSignature signs message as the storetest Desktop key, whose
+// public point is the P-256 base point and whose private scalar is therefore 1.
+func storetestDesktopSignature(t *testing.T, message []byte) string {
+	t.Helper()
+	curve := elliptic.P256()
+	key := &ecdsa.PrivateKey{PublicKey: ecdsa.PublicKey{Curve: curve, X: curve.Params().Gx, Y: curve.Params().Gy}, D: big.NewInt(1)}
+	digest := sha256.Sum256(message)
+	r, s, err := ecdsa.Sign(rand.Reader, key, digest[:])
+	require.NoError(t, err)
+	return base64.RawURLEncoding.EncodeToString(append(r.FillBytes(make([]byte, 32)), s.FillBytes(make([]byte, 32))...))
 }

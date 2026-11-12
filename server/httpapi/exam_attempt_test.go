@@ -669,6 +669,14 @@ func TestCandidateScreenClipChunksAreNumberedFromOneOnTheWire(t *testing.T) {
 
 	require.Equal(t, http.StatusNotFound, send(http.MethodPut, base+"/chunks/0", strings.NewReader("x")).Code,
 		"there is no chunk 0")
+
+	signature := strings.Repeat("s", model.DesktopSignatureLength)
+	completed := send(http.MethodPost, base+"/complete",
+		strings.NewReader(`{"content_digest":"`+strings.Repeat("d", 64)+`","signature":"`+signature+`"}`))
+	require.Equal(t, http.StatusOK, completed.Code, "body=%s", completed.Body.String())
+	require.Equal(t, strings.Repeat("d", 64), fake.clipCompletion.ContentDigest)
+	require.Equal(t, signature, fake.clipCompletion.Signature)
+	require.Contains(t, completed.Body.String(), `"state":"ready"`)
 }
 
 func TestManagerEndExamAttemptUsesRevisionFenceAndReturnsOnlySafeReceipt(t *testing.T) {
@@ -961,6 +969,7 @@ type examAttemptHTTPFake struct {
 	clipUpload              model.ScreenClipUpload
 	clipChunk               attempt.ScreenClipChunkCommand
 	clipChunkBytes          []byte
+	clipCompletion          attempt.ScreenClipCompletion
 	journalQuery            attempt.WorkspaceJournalQuery
 	journalPage             attempt.WorkspaceJournalPage
 	workspaceDirectory      attempt.CreateWorkspaceDirectoryCommand
@@ -1210,11 +1219,11 @@ func (f *examAttemptHTTPFake) UploadScreenClipChunk(_ context.Context, _ invocat
 func (f *examAttemptHTTPFake) CompleteScreenClipUpload(
 	ctx context.Context,
 	inv invocation.Invocation,
-	access attempt.CandidateAccess,
-	clipID model.ScreenClipID,
+	command attempt.ScreenClipCompletion,
 ) (store.ExamAttemptScreenClipView, error) {
-	clip, err := f.BeginScreenClipUpload(ctx, inv, access, clipID, f.clipUpload)
-	clip.State = model.ScreenClipReady
+	f.clipCompletion = command
+	clip, err := f.BeginScreenClipUpload(ctx, inv, command.Access, command.ClipID, f.clipUpload)
+	clip.State, clip.Signature = model.ScreenClipReady, command.Signature
 	return clip, err
 }
 

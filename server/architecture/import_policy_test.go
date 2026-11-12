@@ -179,6 +179,14 @@ var dependencyRules = []dependencyRule{
 		sources: []pathPattern{exact(serverModule + "/plugin")},
 	},
 	{
+		// The host runs plugins and knows nothing of the application: the
+		// composition root hands what plugins register to their consumers.
+		name:           "plugin host",
+		sources:        []pathPattern{exact(serverModule + "/pluginhost")},
+		deniedStandard: standardInfrastructure,
+		project:        only(exact(serverModule + "/plugin")),
+	},
+	{
 		name:    "model build tools",
 		sources: []pathPattern{subtree(serverModule + "/model/internal/idgen")},
 	},

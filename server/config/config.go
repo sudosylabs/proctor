@@ -57,6 +57,9 @@ type Config struct {
 	Authentication Authentication `json:"Authentication"`
 	Localization   Localization   `json:"Localization"`
 	Log            Log            `json:"Log"`
+	// Plugins configures the plugins compiled into the server, keyed by
+	// plugin ID.
+	Plugins map[string]Plugin `json:"Plugins"`
 }
 
 func Default() Config {
@@ -152,6 +155,7 @@ func Default() Config {
 				QueueSize: 256,
 			}},
 		},
+		Plugins: map[string]Plugin{},
 	}
 }
 
@@ -165,6 +169,7 @@ func (c Config) Clone() Config {
 	cloned.Mail.SecretSealing.DecryptionKeys = cloneSlice(c.Mail.SecretSealing.DecryptionKeys)
 	cloned.Authentication.MFA.DecryptionKeys = cloneSlice(c.Authentication.MFA.DecryptionKeys)
 	cloned.Tracing.Headers = maps.Clone(c.Tracing.Headers)
+	cloned.Plugins = clonePlugins(c.Plugins)
 	if c.Authentication.External.Providers != nil {
 		cloned.Authentication.External.Providers = append(
 			make([]ExternalAuthenticationProvider, 0, len(c.Authentication.External.Providers)),
@@ -233,6 +238,7 @@ func (c Config) Redacted() Config {
 	}
 
 	redacted.Mail.SMTP.Password = redactSecret(redacted.Mail.SMTP.Password)
+	redactPlugins(redacted.Plugins)
 	redacted.Mail.SecretSealing.EncryptionKey = redactSecret(
 		redacted.Mail.SecretSealing.EncryptionKey,
 	)
@@ -344,6 +350,7 @@ func (c Config) Validate() error {
 	}
 
 	validateLog(c.Log, add)
+	validatePlugins(c.Plugins, add)
 
 	if len(fields) != 0 {
 		return &ValidationError{Fields: fields}

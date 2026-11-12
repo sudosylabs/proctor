@@ -28,6 +28,7 @@ import (
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/platform"
+	"github.com/sudosylabs/proctor/server/pluginhost"
 	"github.com/sudosylabs/proctor/server/tracing"
 	"github.com/sudosylabs/proctor/server/websocket"
 	"github.com/sudosylabs/proctor/server/webui"
@@ -93,6 +94,7 @@ func composeNode(ctx context.Context, input compositionInput) (*compositionResul
 		shutdownTimeout: snapshot.Server.ShutdownTimeout.Duration,
 		metrics:         capabilities.metrics,
 		tracing:         capabilities.tracing,
+		plugins:         capabilities.plugins,
 	}
 	result, err := composeConsumers(ctx, applicationPlatform, snapshot, capabilities, input, &release)
 	if err != nil {
@@ -210,6 +212,7 @@ func composeConsumers(
 		servingLease:          servingLease,
 		transport:             rootTransport,
 		websocket:             webSocketHub,
+		plugins:               capabilities.plugins,
 		metrics:               capabilities.metrics,
 		tracing:               capabilities.tracing,
 		readiness:             readiness,
@@ -435,6 +438,7 @@ type compositionRelease struct {
 	tracing         *tracing.Module
 	transport       func() error
 	websocket       func(context.Context) error
+	plugins         *pluginhost.Host
 }
 
 // fail joins cause with the release of every owner built so far, closing the
@@ -450,11 +454,12 @@ func (r compositionRelease) fail(cause error) error {
 	if r.websocket != nil {
 		websocketErr = r.websocket(budget)
 	}
+	pluginsErr := r.plugins.Close(budget)
 	if r.metrics != nil {
 		metricsErr = r.metrics.Close(budget)
 	}
 	if r.tracing != nil {
 		tracingErr = r.tracing.Close(budget)
 	}
-	return errors.Join(cause, transportErr, websocketErr, errors.Join(metricsErr, tracingErr, r.platform.Close(budget)))
+	return errors.Join(cause, transportErr, websocketErr, pluginsErr, errors.Join(metricsErr, tracingErr, r.platform.Close(budget)))
 }

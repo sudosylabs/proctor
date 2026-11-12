@@ -23,6 +23,7 @@ import (
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/platform"
+	"github.com/sudosylabs/proctor/server/plugin"
 	"github.com/sudosylabs/proctor/server/store"
 	"github.com/sudosylabs/proctor/server/store/localcachelayer"
 	"github.com/sudosylabs/proctor/server/store/retrylayer"
@@ -60,6 +61,8 @@ type TestingOverrides struct {
 	// DesktopBuildCatalog replaces the immutable compiled catalog only for the
 	// test graph. Production never accepts catalog entries from configuration.
 	DesktopBuildCatalog []model.DesktopBuildTuple
+	// Plugins are activated after the built-in plugins, as if compiled in.
+	Plugins []plugin.Plugin
 	// AllowMissingJobs is an explicit lifecycle-only test policy. Production
 	// construction always requires durable Job persistence and a Job runtime.
 	AllowMissingJobs bool

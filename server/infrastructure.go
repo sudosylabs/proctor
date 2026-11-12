@@ -38,6 +38,7 @@ import (
 	"github.com/sudosylabs/proctor/server/platform/externalauth"
 	"github.com/sudosylabs/proctor/server/platform/externalauth/cas"
 	"github.com/sudosylabs/proctor/server/platform/externalauth/oidc"
+	"github.com/sudosylabs/proctor/server/pluginhost"
 	"github.com/sudosylabs/proctor/server/store"
 	"github.com/sudosylabs/proctor/server/store/localcachelayer"
 	"github.com/sudosylabs/proctor/server/store/retrylayer"
@@ -99,6 +100,9 @@ type ownedInfrastructure struct {
 	migration *sqlstore.MigrationResult
 	metrics   *metrics.Module
 	tracing   *tracing.Module
+	// plugins are activated right after configuration and logging, so that
+	// what they register is ready before anything that uses it is built.
+	plugins *pluginhost.Host
 }
 
 // constructionCapabilities is a short-lived, non-owning projection used only
@@ -117,6 +121,9 @@ type constructionCapabilities struct {
 	migration              *sqlstore.MigrationResult
 	metrics                *metrics.Module
 	tracing                *tracing.Module
+	// plugins, like metrics and tracing, passes to compositionRelease and
+	// then to the Server, which deactivates it.
+	plugins *pluginhost.Host
 }
 
 type borrowedCache interface {
@@ -166,6 +173,11 @@ func openRuntimeInfrastructure(
 		return result, err
 	}
 	cfg := result.resources.Configuration.Get()
+	plugins, pluginsErr := activatePlugins(ctx, cfg, result.resources.Logger, overrides.Plugins)
+	if pluginsErr != nil {
+		return result, pluginsErr
+	}
+	result.plugins = plugins
 	if err := result.acquirePersistence(ctx, cfg, schema); err != nil {
 		return result, err
 	}
@@ -518,6 +530,7 @@ func (i *ownedInfrastructure) acceptPlatform(
 		migration:              i.migration,
 		metrics:                i.metrics,
 		tracing:                i.tracing,
+		plugins:                i.plugins,
 	}
 	if resources.Cluster != nil {
 		capabilities.nodeID = resources.Cluster.NodeID()
@@ -532,6 +545,7 @@ func (i *ownedInfrastructure) acceptPlatform(
 		defer cancel()
 		return nil, config.Config{}, constructionCapabilities{}, errors.Join(
 			err,
+			capabilities.plugins.Close(budget),
 			capabilities.metrics.Close(budget),
 			capabilities.tracing.Close(budget),
 		)
@@ -552,6 +566,9 @@ func (i *ownedInfrastructure) shutdownTimeout() time.Duration {
 func (i *ownedInfrastructure) release() error {
 	stopCtx, cancelStop := context.WithTimeout(context.Background(), i.shutdownTimeout())
 	defer cancelStop()
+	// Plugins deactivate first: they may still use the infrastructure below.
+	pluginsErr := i.plugins.Close(stopCtx)
+
 	var clusterErr error
 	if i.resources.Cluster != nil {
 		clusterErr = i.resources.Cluster.Stop(stopCtx)
@@ -598,6 +615,7 @@ func (i *ownedInfrastructure) release() error {
 	}
 
 	return errors.Join(
+		pluginsErr,
 		metricsErr,
 		tracingErr,
 		clusterErr,

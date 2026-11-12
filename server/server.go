@@ -299,7 +299,9 @@ type runtimeComponents struct {
 	logger                *logging.Logger
 	jobs                  runtimeComponent
 	servingLease          monitoredRuntimeComponent
-	metrics               runtimeMetrics
+	// plugins deactivates the plugins once nothing can call into them.
+	plugins interface{ Close(context.Context) error }
+	metrics runtimeMetrics
 	// tracing flushes and stops span export; nil when tracing was never built.
 	tracing   runtimeTracing
 	transport runtimeTransport

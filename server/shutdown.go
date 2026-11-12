@@ -80,6 +80,7 @@ func (s *Server) runShutdown(plan stopPlan, endRun context.CancelFunc) error {
 		draining(s.components.jobs),
 		draining(s.components.websocket),
 		closing(s.components.transport),
+		draining(s.components.plugins),
 		closing(s.components.servingLease),
 		draining(s.components.metrics),
 		// Tracing closes after every span producer so their final spans are

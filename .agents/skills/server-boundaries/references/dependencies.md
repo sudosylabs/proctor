@@ -53,6 +53,7 @@ exists.
 | reusable modules | `packages/cache` and below, `packages/mail` and below, `packages/vfs` and below | any except `server` and below | any | none |
 | composition root | `server` | any | any | none |
 | plugin contracts | `plugin` | none | none | none |
+| plugin host | `pluginhost` | `plugin` | none | infrastructure |
 | model build tools | `model/internal/idgen` and below | none | none | none |
 | route error-code analysis for tests | `internal/errorflow` | none | `golang.org/x/tools/go` and below | none |
 | static TLS key pair files | `internal/tlscert` | none | none | none |

@@ -306,6 +306,17 @@ type AcademicAdministrationPreviewGroup struct {
 	Rows   int
 }
 
+// AcademicAdministrationPreviewGroupCountOptions selects the rows of one
+// academic administration filter preview a group count counts. A nil
+// Visibility counts every frozen row, as the batch-level audit entry records
+// them; a set Visibility counts only the rows ListAcademicAdministrationPreviewRows
+// shows through it, so a reader's summary never counts a User the reader no
+// longer sees.
+type AcademicAdministrationPreviewGroupCountOptions struct {
+	ImportID   model.OnboardingImportID
+	Visibility *UserVisibilityScope
+}
+
 // AcademicAdministrationPreviewRowListOptions selects up to Limit (1..201)
 // rows of one academic administration filter preview in row order after
 // AfterRowNumber, keeping only rows of Class (and of Reason when set, for
@@ -371,8 +382,11 @@ type OnboardingImportStore interface {
 	ListOnboardingImportRows(context.Context, model.OnboardingImportID, int, int) (*OnboardingImportPage, error)
 	// CountAcademicAdministrationPreviewGroups counts the rows of one
 	// academic administration filter preview by class and reason, ordered
-	// by class then reason.
-	CountAcademicAdministrationPreviewGroups(context.Context, model.OnboardingImportID) ([]AcademicAdministrationPreviewGroup, error)
+	// by class then reason (see AcademicAdministrationPreviewGroupCountOptions).
+	CountAcademicAdministrationPreviewGroups(
+		context.Context,
+		AcademicAdministrationPreviewGroupCountOptions,
+	) ([]AcademicAdministrationPreviewGroup, error)
 	// ListAcademicAdministrationPreviewRows reads one page of a filter
 	// preview's rows whose User the reader may see (see
 	// AcademicAdministrationPreviewRowListOptions).

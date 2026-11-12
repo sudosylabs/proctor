@@ -280,36 +280,38 @@ const academicAdministrationPreviewClassSQL = `CASE
 	END`
 
 // CountAcademicAdministrationPreviewGroups counts one filter preview's rows
-// by class and, for skipped rows, reason.
+// by class and, for skipped rows, reason: every frozen row, or through a
+// Visibility only the rows ListAcademicAdministrationPreviewRows would show.
 func (s SQLInvitationStore) CountAcademicAdministrationPreviewGroups(
 	ctx context.Context,
-	id model.OnboardingImportID,
+	options store.AcademicAdministrationPreviewGroupCountOptions,
 ) ([]store.AcademicAdministrationPreviewGroup, error) {
-	if !id.IsValid() {
-		return nil, store.NewErrInvalidInput("academic_administration_preview", "id", nil)
+	if !options.ImportID.IsValid() || (options.Visibility != nil && !validAcademicAdministrationPreviewVisibility(*options.Visibility)) {
+		return nil, store.NewErrInvalidInput("academic_administration_preview", "group_count_options", nil)
 	}
+
+	query := s.getQueryBuilder().
+		Select(academicAdministrationPreviewClassSQL + " AS class").
+		Column(sq.Expr("CASE WHEN r.preview_status = 'valid' OR r.preview_code = ? THEN '' ELSE r.preview_code END AS reason",
+			store.AcademicAdministrationPreviewNoChange)).
+		Column("count(*) AS rows").
+		From("onboarding_import_rows r").
+		Join("onboarding_imports oi ON oi.id = r.import_id AND oi.mode = 'academic_administration_filter'").
+		Where(sq.Eq{"r.import_id": options.ImportID.String()})
+	if options.Visibility != nil {
+		var err error
+		if query, err = filterAcademicAdministrationPreviewRowVisibility(query, *options.Visibility); err != nil {
+			return nil, err
+		}
+	}
+	query = query.GroupBy("1", "2").OrderBy("1", "2")
+
 	rows := []struct {
 		Class  string `db:"class"`
 		Reason string `db:"reason"`
 		Rows   int    `db:"rows"`
 	}{}
-	if err := s.GetMaster().Select(
-		ctx,
-		&rows,
-		`SELECT grouped.class, grouped.reason, count(*) AS rows
-		FROM (
-			SELECT `+academicAdministrationPreviewClassSQL+` AS class,
-				CASE WHEN r.preview_status = 'valid' OR r.preview_code = ? THEN '' ELSE r.preview_code END AS reason
-			FROM onboarding_import_rows r
-			JOIN onboarding_imports oi ON oi.id = r.import_id
-			WHERE r.import_id = ?
-				AND oi.mode = 'academic_administration_filter'
-		) grouped
-		GROUP BY grouped.class, grouped.reason
-		ORDER BY grouped.class, grouped.reason`,
-		store.AcademicAdministrationPreviewNoChange,
-		id.String(),
-	); err != nil {
+	if err := s.GetMaster().SelectBuilder(ctx, &rows, query); err != nil {
 		return nil, fmt.Errorf("count academic administration preview groups: %w", err)
 	}
 	groups := make([]store.AcademicAdministrationPreviewGroup, 0, len(rows))
@@ -339,10 +341,7 @@ func (s SQLInvitationStore) ListAcademicAdministrationPreviewRows(
 		options.AfterRowNumber < 0 ||
 		options.Limit < 1 ||
 		options.Limit > store.OnboardingImportListMaximum ||
-		len(visibility.ClassIDs)+len(visibility.AcademicUnitRootIDs)+len(visibility.ClassMemberAcademicUnitRootIDs) > 256 ||
-		!validVisibilityIDs(visibility.ClassIDs) ||
-		!validVisibilityIDs(visibility.AcademicUnitRootIDs) ||
-		!validVisibilityIDs(visibility.ClassMemberAcademicUnitRootIDs) {
+		!validAcademicAdministrationPreviewVisibility(visibility) {
 		return nil, store.NewErrInvalidInput("academic_administration_preview", "row_list_options", nil)
 	}
 
@@ -354,17 +353,13 @@ func (s SQLInvitationStore) ListAcademicAdministrationPreviewRows(
 		).
 		From("onboarding_import_rows r").
 		Join("onboarding_imports oi ON oi.id = r.import_id AND oi.mode = 'academic_administration_filter'").
-		Join("users ON users.id = r.user_id").
-		Where(sq.Eq{"r.import_id": options.ImportID.String(), "users.archived_at": nil}).
+		Where(sq.Eq{"r.import_id": options.ImportID.String()}).
 		Where(sq.Gt{"r.row_number": options.AfterRowNumber}).
 		Where(academicAdministrationPreviewClassSQL+" = ?", string(options.Class))
 	if options.Reason != "" {
 		query = query.Where(sq.Eq{"r.preview_code": options.Reason})
 	}
-	if !visibility.InstitutionWide {
-		query = query.Where(sq.Eq{"users.disabled_at": nil})
-	}
-	query, err := filterUserListVisibility(query, visibility)
+	query, err := filterAcademicAdministrationPreviewRowVisibility(query, visibility)
 	if err != nil {
 		return nil, err
 	}
@@ -402,4 +397,29 @@ func (s SQLInvitationStore) ListAcademicAdministrationPreviewRows(
 		values = append(values, value)
 	}
 	return values, nil
+}
+
+// validAcademicAdministrationPreviewVisibility reports whether a reader's
+// User directory visibility is bounded and well formed.
+func validAcademicAdministrationPreviewVisibility(visibility store.UserVisibilityScope) bool {
+	return len(visibility.ClassIDs)+len(visibility.AcademicUnitRootIDs)+len(visibility.ClassMemberAcademicUnitRootIDs) <= 256 &&
+		validVisibilityIDs(visibility.ClassIDs) &&
+		validVisibilityIDs(visibility.AcademicUnitRootIDs) &&
+		validVisibilityIDs(visibility.ClassMemberAcademicUnitRootIDs)
+}
+
+// filterAcademicAdministrationPreviewRowVisibility keeps only the filter
+// preview rows (aliased r) whose User the reader's directory shows now: an
+// unarchived User, enabled unless the visibility is Institution-wide, inside
+// the User directory's own visibility predicate. The rows read and the
+// summary count apply the same filter, so the counts match the rows shown.
+func filterAcademicAdministrationPreviewRowVisibility(
+	query sq.SelectBuilder,
+	visibility store.UserVisibilityScope,
+) (sq.SelectBuilder, error) {
+	query = query.Join("users ON users.id = r.user_id").Where(sq.Eq{"users.archived_at": nil})
+	if !visibility.InstitutionWide {
+		query = query.Where(sq.Eq{"users.disabled_at": nil})
+	}
+	return filterUserListVisibility(query, visibility)
 }

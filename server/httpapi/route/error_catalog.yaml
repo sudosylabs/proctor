@@ -43,6 +43,8 @@ conditions:
   busy: 503
 default_status: 409
 codes:
+  - code: academic_administration_preview.authorization_lost
+    description: "The creator's User directory no longer admits the preview's filter, for example an activity or Role filter after Institution-wide visibility was lost; create a new preview."
   - code: academic_administration_preview.conflict
     description: "The academic administration preview is not ready to commit, or its revision or digest no longer match."
   - code: academic_administration_preview.expired

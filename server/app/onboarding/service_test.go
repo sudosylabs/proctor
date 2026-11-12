@@ -198,6 +198,10 @@ type authorizerFake struct {
 	userVisibility     *store.UserVisibilityScope
 	userSearchErr      error
 	userSearches       int
+	// classMembersVisible are the Classes whose members the caller sees;
+	// classMemberViews records each Class asked about.
+	classMembersVisible map[model.ClassID]bool
+	classMemberViews    []model.Resource
 }
 
 // authorizationDecision is one scoped decision the Service recorded.
@@ -249,6 +253,13 @@ func (f *authorizerFake) AuthorizeUserSearch(context.Context, invocation.Invocat
 		return store.UserVisibilityScope{InstitutionWide: true}, nil
 	}
 	return *f.userVisibility, nil
+}
+
+// CanViewClassMembers grants class.members.view on exactly the Classes in
+// f.classMembersVisible.
+func (f *authorizerFake) CanViewClassMembers(_ context.Context, _ invocation.Invocation, resource model.Resource) (bool, error) {
+	f.classMemberViews = append(f.classMemberViews, resource)
+	return f.classMembersVisible[model.ClassID(resource.ID)], f.err
 }
 
 func (f *authorizerFake) Institution(context.Context) (*model.Institution, error) {

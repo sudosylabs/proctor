@@ -16,9 +16,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -64,6 +66,31 @@ type academicAdministrationPreviewRowWire struct {
 	PublicCode string `json:"public_code"`
 }
 
+// hiddenRoleBindingStore hides, while hidden names a User, that User's Role
+// Bindings from the application's ListActiveByUser reads. A test uses it to
+// get a row past the application's own System Administrator check, so the
+// row's transaction is what refuses it.
+type hiddenRoleBindingStore struct {
+	store.Store
+	hidden atomic.Value
+}
+
+func (s *hiddenRoleBindingStore) RoleBinding() store.RoleBindingStore {
+	return hiddenRoleBindings{RoleBindingStore: s.Store.RoleBinding(), owner: s}
+}
+
+type hiddenRoleBindings struct {
+	store.RoleBindingStore
+	owner *hiddenRoleBindingStore
+}
+
+func (s hiddenRoleBindings) ListActiveByUser(ctx context.Context, userID model.UserID, at time.Time) ([]*model.RoleBinding, error) {
+	if hidden, _ := s.owner.hidden.Load().(model.UserID); hidden != "" && hidden == userID {
+		return nil, nil
+	}
+	return s.RoleBindingStore.ListActiveByUser(ctx, userID, at)
+}
+
 // TestAcademicAdministrationPreviewIntegration runs bulk changes by filter
 // end to end against PostgreSQL: the preview freezes the matching Users
 // under the caller's visibility, skips the caller and System
@@ -74,7 +101,8 @@ func TestAcademicAdministrationPreviewIntegration(t *testing.T) {
 	dataSource := os.Getenv("PROCTOR_TEST_DATABASE_URL")
 	require.NotEmpty(t, dataSource, "PROCTOR_TEST_DATABASE_URL is not set")
 	persistence := openAuthenticationStore(t, dataSource)
-	helper := testlib.Setup(t, testlib.WithStore(persistence), testlib.WithConfig(func(cfg *config.Config) {
+	roleBindings := &hiddenRoleBindingStore{Store: persistence}
+	helper := testlib.Setup(t, testlib.WithStore(roleBindings), testlib.WithConfig(func(cfg *config.Config) {
 		cfg.Server.ListenAddress = "127.0.0.1:0"
 		cfg.Authentication.MFA.Enabled = true
 		cfg.Authentication.MFA.EncryptionKey = base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
@@ -197,6 +225,12 @@ func TestAcademicAdministrationPreviewIntegration(t *testing.T) {
 	})
 
 	disable = waitForAcademicAdministrationPreview(t, handler, owner, disable.ID, "completed")
+	t.Run("ReplaysTheCommittedSnapshot", func(t *testing.T) {
+		require.Equal(t, "executing", commitView.State, "the commit answers with the snapshot it committed")
+		replayed := performIdempotentJSONRequest(handler, commitPath, commitBody, owner, "preview-commit")
+		require.Equal(t, http.StatusAccepted, replayed.Code, replayed.Body.String())
+		require.JSONEq(t, committed.Body.String(), replayed.Body.String(), "a replay after execution returns the same commit")
+	})
 	t.Run("ExecutesOnlyTheFrozenList", func(t *testing.T) {
 		require.Equal(t, 2, disable.SucceededRows)
 		require.Equal(t, 2, disable.SkippedRows)
@@ -259,6 +293,50 @@ func TestAcademicAdministrationPreviewIntegration(t *testing.T) {
 		value, getErr := persistence.User().Get(ctx, charlie.ID)
 		require.NoError(t, getErr)
 		require.False(t, value.DisabledAt.Valid, "a System Administrator was disabled by filter")
+	})
+
+	t.Run("NamesThePreviewInTheAuditOfARowItsTransactionRefuses", func(t *testing.T) {
+		foxtrot := createIntegrationUser(t, helper, "preview-foxtrot", password)
+		preview := createAcademicAdministrationPreview(t, handler, owner, map[string]any{
+			"operation": "user.disable", "scope_type": "institution", "scope_id": institutionID,
+			"filter": map[string]any{"q": "preview-foxtrot"},
+		})
+		preview = waitForAcademicAdministrationPreview(t, handler, owner, preview.ID, "preview_ready")
+		require.Equal(t, []string{foxtrot.ID.String()}, academicAdministrationPreviewRowUsers(t, handler, owner, preview.ID, "group=will_change"))
+		_, bindErr := storetest.SaveRoleBinding(ctx, persistence, &model.RoleBinding{UserID: foxtrot.ID, RoleID: systemAdministrator.ID,
+			ScopeType: model.RoleScopeInstitution, ScopeID: institutionID, StartsAt: model.TimeFromMillis(now - 60_000)})
+		require.NoError(t, bindErr)
+		// The application's own check no longer sees the new binding, so the
+		// row's transaction is what refuses the System Administrator.
+		roleBindings.hidden.Store(foxtrot.ID)
+		t.Cleanup(func() { roleBindings.hidden.Store(model.UserID("")) })
+
+		response := performIdempotentJSONRequest(handler, "/api/v1/academic-administration-previews/"+preview.ID+"/commit", map[string]any{
+			"expected_revision": preview.Revision, "preview_digest": preview.PreviewDigest,
+		}, owner, "preview-transaction-refusal-commit")
+		require.Equal(t, http.StatusAccepted, response.Code, response.Body.String())
+		preview = waitForAcademicAdministrationPreview(t, handler, owner, preview.ID, "completed_with_errors")
+		value, getErr := persistence.User().Get(ctx, foxtrot.ID)
+		require.NoError(t, getErr)
+		require.False(t, value.DisabledAt.Valid, "a System Administrator was disabled by filter")
+
+		events, listErr := persistence.Audit().List(ctx, store.AuditListOptions{Actions: []string{string(model.ActionUserManage)},
+			ActorID: ownerID, Limit: 200, Visibility: store.AuditVisibilityScope{InstitutionWide: true}})
+		require.NoError(t, listErr)
+		var failed []map[string]any
+		for _, event := range events {
+			if event.Status != model.AuditStatusFail || event.Resource.ID != foxtrot.ID.String() {
+				continue
+			}
+			var parameters struct {
+				Value map[string]any `json:"value"`
+			}
+			require.NoError(t, json.Unmarshal(event.Parameters, &parameters))
+			failed = append(failed, parameters.Value)
+		}
+		require.Len(t, failed, 1, "the refused row leaves one failed attempt")
+		require.Equal(t, preview.ID, failed[0]["onboarding_import_id"], "the failed row's audit names its preview")
+		require.Equal(t, float64(1), failed[0]["onboarding_import_row"], "the failed row's audit names its row")
 	})
 
 	t.Run("RefusesACommitAfterTheDeadline", func(t *testing.T) {
@@ -352,6 +430,9 @@ func TestAcademicAdministrationPreviewIntegration(t *testing.T) {
 		require.Equal(t, http.StatusOK, ended.Code, ended.Body.String())
 		require.Empty(t, academicAdministrationPreviewRowUsers(t, handler, scopedToken, preview.ID, "group=will_change"),
 			"a User the reader no longer sees is not shown")
+		summary := waitForAcademicAdministrationPreview(t, handler, scopedToken, preview.ID, "preview_ready")
+		require.NotNil(t, summary.Summary)
+		require.Equal(t, 0, summary.Summary.WillChange, "a User the reader no longer sees is not counted")
 
 		response := performIdempotentJSONRequest(handler, "/api/v1/academic-administration-previews/"+preview.ID+"/commit", map[string]any{
 			"expected_revision": preview.Revision, "preview_digest": preview.PreviewDigest,
@@ -366,6 +447,53 @@ func TestAcademicAdministrationPreviewIntegration(t *testing.T) {
 		memberships, memberErr := persistence.ClassMember().ListByUser(ctx, delta.ID)
 		require.NoError(t, memberErr)
 		require.Empty(t, memberships, "the refused row enrolled nobody")
+	})
+
+	t.Run("RefusesAFilterTheCreatorMayNoLongerApply", func(t *testing.T) {
+		onboardingRole, roleErr := storetest.SaveRole(ctx, persistence, &model.Role{Name: "institution-onboarding", DisplayName: "Institution onboarding",
+			Permissions: []string{string(model.ActionOnboardingBatchManage), string(model.ActionOnboardingBatchView), string(model.ActionUserManage)}})
+		require.NoError(t, roleErr)
+		directoryRole, roleErr := storetest.SaveRole(ctx, persistence, &model.Role{Name: "institution-directory", DisplayName: "Institution directory",
+			Permissions: []string{string(model.ActionUserView)}})
+		require.NoError(t, roleErr)
+		golf := createIntegrationUser(t, helper, "preview-golf", password)
+		for _, binding := range []*model.RoleBinding{
+			{RoleID: onboardingRole.ID, ScopeType: model.RoleScopeInstitution, ScopeID: institutionID},
+			{RoleID: directoryRole.ID, ScopeType: model.RoleScopeAcademicUnit, ScopeID: unit.ID.String()},
+		} {
+			binding.UserID, binding.StartsAt = golf.ID, model.TimeFromMillis(now-60_000)
+			_, bindErr := storetest.SaveRoleBinding(ctx, persistence, binding)
+			require.NoError(t, bindErr)
+		}
+		institutionDirectory := createIntegrationResource[membershipWire](t, handler, http.MethodPost, "/api/v1/role-bindings", map[string]any{
+			"user_id": golf.ID.String(), "role_id": directoryRole.ID.String(), "scope_type": model.RoleScopeInstitution, "scope_id": institutionID,
+			"start_at": integrationWireTime(model.GetMillis()),
+		}, owner)
+		golfToken := strongIntegrationSession(t, handler, "preview-golf", password, "preview-golf-cli")
+
+		preview := createAcademicAdministrationPreview(t, handler, golfToken, map[string]any{
+			"operation": "user.disable", "scope_type": "institution", "scope_id": institutionID,
+			"filter": map[string]any{"never_signed_in": true},
+		})
+		preview = waitForAcademicAdministrationPreview(t, handler, golfToken, preview.ID, "preview_ready")
+
+		ended := performJSONRequest(handler, http.MethodDelete, "/api/v1/role-bindings/"+institutionDirectory.ID, nil, owner)
+		require.Equal(t, http.StatusOK, ended.Code, ended.Body.String())
+
+		previewPath := "/api/v1/academic-administration-previews/" + preview.ID
+		for name, response := range map[string]*httptest.ResponseRecorder{
+			"summary": performJSONRequest(handler, http.MethodGet, previewPath, nil, golfToken),
+			"rows":    performJSONRequest(handler, http.MethodGet, previewPath+"/rows?group=will_change", nil, golfToken),
+			"commit": performIdempotentJSONRequest(handler, previewPath+"/commit", map[string]any{
+				"expected_revision": preview.Revision, "preview_digest": preview.PreviewDigest,
+			}, golfToken, "preview-lost-commit"),
+		} {
+			require.Equal(t, http.StatusConflict, response.Code, "%s: %s", name, response.Body.String())
+			require.Contains(t, response.Body.String(), "academic_administration_preview.authorization_lost", name)
+		}
+		current, getErr := persistence.OnboardingImport().GetOnboardingImport(ctx, model.OnboardingImportID(preview.ID))
+		require.NoError(t, getErr)
+		require.Equal(t, model.OnboardingImportPreviewReady, current.State, "the refused commit queued nothing")
 	})
 }
 

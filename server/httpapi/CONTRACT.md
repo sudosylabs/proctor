@@ -936,7 +936,10 @@ viewer may apply; `q` is at most 256 characters. The operation union is the
 JSON batch union without `class.transfer`, which names the exact membership it
 replaces. The route and the use case require a strong, recent interactive
 Session and `onboarding_batch.manage` plus the operation's own action at the
-exact scope; the request changes nothing and queues one preview Job.
+exact scope. A creating operation's `end_at` must be after its effective
+start, `start_at` or the preview's creation when `start_at` is omitted, or the
+request is refused with `request.invalid` on `end_at`. The request changes
+nothing and queues one preview Job.
 
 The preview Job resolves the filter under the creator's visibility at that
 moment and freezes the ordered User list (username order) as at most 10,000
@@ -944,26 +947,52 @@ rows; more matching Users fail the preview with
 `academic_administration_preview.too_many_users`. Each row is `will_change`,
 `no_op`, or `skipped` with a closed reason: the creator's own account is
 always skipped, and a disable or Session revocation also skips System
-Administrators. `GET .../{id}` returns the summary by class and skip reason,
-and `GET .../{id}/rows?group=` pages one group. Only the creator reads a
-preview, through onboarding batch visibility at its scope, and a row is shown
-only while the creator's directory shows its User now. The generic onboarding
-import routes treat a filter preview as absent and never list or count it.
+Administrators. A Class enrollment skips a User enrolled in another Class of
+the Period (`enrollment_conflict`) only when the creator may see that Class's
+members (Institution-wide `user.view` or `class.members.view` on it), and a
+User without a student Affiliation (`student_affiliation_required`) only for
+an Institution-wide viewer; otherwise the row will change and its execution
+refuses the enrollment as an ordinary batch item does, so a preview reveals
+nothing the creator could not already see. `GET .../{id}` returns the summary
+by class and skip reason, and `GET .../{id}/rows?group=` pages one group. Only
+the creator reads a preview, through onboarding batch visibility at its
+scope; any other User reads it as `resource.not_found`. A row is shown, and
+counted in the summary, only while the creator's directory shows its User
+now. The generic onboarding import routes treat a filter preview as absent
+and never list or count it.
+
+Every read, the commit, and each execution page admit the stored filter again
+through the creator's User directory, as the directory admits its own query.
+Once the directory would refuse it, such as an activity filter after
+Institution-wide `user.view` is lost or a Role filter after `role.view` is
+lost, reads and the commit are refused with
+`academic_administration_preview.authorization_lost` (`409`) and every
+remaining row fails with `authorization.denied`.
 
 `POST .../{id}/commit` requires an `Idempotency-Key` and the exact digest and
 revision, and is refused with `academic_administration_preview.expired`
 (`410`) once PostgreSQL time passes `preview_expires_at`, 15 minutes after the
 preview became ready. It queues one execution Job over the frozen rows, never
-the filter again. Each row is checked again when it runs: a User the
+the filter again, and answers with the committed preview as the commit
+recorded it, so a replay with the same key returns the same body; the summary
+counts in that answer are best effort and omitted if they cannot be read. Each row is checked again when it runs: a User the
 creator's directory no longer shows fails with `authorization.denied`, a
 disable or Session revocation of a User who became a System Administrator
 fails with `academic_administration_preview.system_administrator`, and the
 row's own named transaction re-resolves the actor's authority in PostgreSQL
 and refuses the creator's own account and System Administrators again. The
 first commit records one batch-level audit entry (operation, filter without
-the search term, counts, preview ID); each row's audit entry names the
-preview in its parameters. `POST .../{id}/cancel` stops later rows. Every
-response is `no-store`.
+the search term, counts of every frozen row, preview ID). A row that reaches
+its operation begins its own audit attempt with `onboarding_import_id` and
+`onboarding_import_row` in its value, so the entry names the preview and row
+whether the row succeeds or its transaction refuses it. A row the execution
+check refuses before its operation runs (the creator's own account, a User
+the directory no longer shows or a filter it no longer admits, a System
+Administrator, an enrollment conflict) begins no attempt: nothing was
+attempted, the page's directory decision is recorded once, and the batch
+entry plus the row's recorded outcome and public code account for it.
+`POST .../{id}/cancel` stops later rows and answers with the canceled
+preview. Every response is `no-store`.
 
 ## CSV onboarding imports
 

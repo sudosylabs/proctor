@@ -877,10 +877,24 @@ Administrators. Only its creator reads it, rows are shown only while the
 creator's directory shows their User, and the generic import surface never
 shows, lists, or counts it. Preview and commit require a strong recent
 Session; the commit expires 15 minutes after the preview became ready, by
-PostgreSQL time. Execution runs the frozen list, never the filter, and each
-row rechecks the User's visibility and System Administrator status before its
-named transaction re-resolves authority. The first commit records one
-batch-level audit entry, and each import row's audit entry names its import.
+PostgreSQL time. Every read, the commit and each execution page admit the
+stored filter again through the creator's directory: a filter the directory
+would now refuse (Institution-wide-only or Role filters after that authority
+is lost) refuses reads and the commit with
+`academic_administration_preview.authorization_lost` and fails every
+remaining row. Classification never reveals what the creator could not
+already see: a Class enrollment is skipped for an enrollment conflict only
+when the creator sees the conflicting Class's members, and for a missing
+student Affiliation only for an Institution-wide viewer. Summary counts, like
+rows, cover only the Users the reader's directory shows now. Execution runs
+the frozen list, never the filter, and each row rechecks the User's
+visibility and System Administrator status before its named transaction
+re-resolves authority. The first commit records one batch-level audit entry.
+Each import row whose operation runs, from any import source, begins its own
+audit attempt with the import and row in its value, so a refused row's
+`fail` entry names them too; a row refused by the execution check before any
+operation runs begins no attempt and is accounted for by the batch entry, the
+page's recorded directory decision and the row's outcome.
 
 Student progression names exact source/destination Periods and Classes, dry
 runs every student conflict, preserves historical membership, and commits each

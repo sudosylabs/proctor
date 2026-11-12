@@ -57,6 +57,7 @@ type resourceAuthorizer interface {
 	CanDelegateActionsAtScope(context.Context, model.Principal, []string, model.RoleScopeType, string) (bool, error)
 	GrantedScopes(context.Context, model.Principal, model.Action, model.ResourceType) (access.AuthorizedScopeConstraint, error)
 	AuthorizeUserSearch(context.Context, invocation.Invocation) (store.UserVisibilityScope, error)
+	CanViewClassMembers(context.Context, invocation.Invocation, model.Resource) (bool, error)
 	Institution(context.Context) (*model.Institution, error)
 	RecordAuthorizationDecision(
 		context.Context,

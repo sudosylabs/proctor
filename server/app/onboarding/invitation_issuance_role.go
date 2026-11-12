@@ -175,11 +175,11 @@ func (s *Service) issueAuthorizedScopedRole(
 		ScopeType:  issue.scopeType,
 		ScopeID:    issue.scopeID,
 		Operation:  issue.operation,
-		Value: map[string]any{
+		Value: batchitem.ImportAuditValue(map[string]any{
 			"purpose":          issue.purpose,
 			"academic_unit_id": issue.academicUnitID.String(),
 			"role_id":          issue.role.ID.String(),
-		},
+		}, issue.onboardingImportID, issue.onboardingImportRowNumber),
 	}
 	if recovered, ok, recoverErr := s.recoverInvitationIssueOutcome(ctx, issue.idempotency, attempt); ok {
 		return recovered, recoverErr

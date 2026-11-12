@@ -14,6 +14,7 @@ import "net/http"
 // applicationErrorMappings is the exhaustive HTTP status table for public
 // application and kernel error codes, generated from error_catalog.yaml.
 var applicationErrorMappings = map[string]applicationErrorMapping{
+	"academic_administration_preview.authorization_lost":          {status: http.StatusConflict},
 	"academic_administration_preview.conflict":                    {status: http.StatusConflict},
 	"academic_administration_preview.expired":                     {status: http.StatusGone},
 	"academic_administration_preview.target_conflict":             {status: http.StatusConflict},

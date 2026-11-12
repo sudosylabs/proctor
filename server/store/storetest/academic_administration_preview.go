@@ -175,7 +175,8 @@ func testAcademicAdministrationFilterPreview(t *testing.T, ss store.Store) {
 		require.Equal(t, 2, ready.InvalidRows)
 	})
 	t.Run("CountsRowsByClassAndReason", func(t *testing.T) {
-		groups, countErr := ss.OnboardingImport().CountAcademicAdministrationPreviewGroups(ctx, created.ID)
+		groups, countErr := ss.OnboardingImport().CountAcademicAdministrationPreviewGroups(ctx,
+			store.AcademicAdministrationPreviewGroupCountOptions{ImportID: created.ID})
 		require.NoError(t, countErr)
 		require.Equal(t, []store.AcademicAdministrationPreviewGroup{
 			{Class: store.AcademicAdministrationPreviewNoOp, Rows: 1},
@@ -206,6 +207,16 @@ func testAcademicAdministrationFilterPreview(t *testing.T, ss store.Store) {
 			"a roster viewer sees the Class member")
 		require.Empty(t, read(store.AcademicAdministrationPreviewWillChange, "", roster), "a roster viewer never sees a User outside the roster")
 		require.Empty(t, read(store.AcademicAdministrationPreviewNoOp, "", store.UserVisibilityScope{}), "an empty visibility sees no row")
+		groups, countErr := ss.OnboardingImport().CountAcademicAdministrationPreviewGroups(ctx,
+			store.AcademicAdministrationPreviewGroupCountOptions{ImportID: created.ID, Visibility: &roster})
+		require.NoError(t, countErr)
+		require.Equal(t, []store.AcademicAdministrationPreviewGroup{{Class: store.AcademicAdministrationPreviewNoOp, Rows: 1}}, groups,
+			"a roster viewer's counts hold only the rows it sees")
+		empty := store.UserVisibilityScope{}
+		groups, countErr = ss.OnboardingImport().CountAcademicAdministrationPreviewGroups(ctx,
+			store.AcademicAdministrationPreviewGroupCountOptions{ImportID: created.ID, Visibility: &empty})
+		require.NoError(t, countErr)
+		require.Empty(t, groups, "an empty visibility counts no row")
 		_, listErr := ss.OnboardingImport().ListAcademicAdministrationPreviewRows(ctx, store.AcademicAdministrationPreviewRowListOptions{
 			ImportID: created.ID, Class: store.AcademicAdministrationPreviewNoOp, Reason: "academic_administration_preview.self", Limit: 10,
 			Visibility: institution})

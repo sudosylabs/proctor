@@ -134,7 +134,8 @@ func (s *Service) CreateAcademicAdministrationPreview(
 	command CreateAcademicAdministrationPreviewCommand,
 ) (AcademicAdministrationPreviewView, error) {
 	command.ScopeID = strings.TrimSpace(command.ScopeID)
-	filter, err := academicAdministrationPreviewFilter(command)
+	at := model.TimeUTC(s.now())
+	filter, err := academicAdministrationPreviewFilter(command, at)
 	if err != nil {
 		return AcademicAdministrationPreviewView{}, err
 	}
@@ -166,7 +167,6 @@ func (s *Service) CreateAcademicAdministrationPreview(
 		return AcademicAdministrationPreviewView{}, err
 	}
 
-	at := model.TimeUTC(s.now())
 	created, err := access.RunAudited(
 		ctx,
 		s.auditor,
@@ -221,7 +221,9 @@ func (s *Service) CreateAcademicAdministrationPreview(
 }
 
 // GetAcademicAdministrationPreview reads the creator's own filter preview
-// with its row counts by class and skip reason.
+// while the creator's directory still admits its filter, with its row counts
+// by class and skip reason. The counts hold only the rows whose User the
+// creator's directory shows now, as the rows read does.
 func (s *Service) GetAcademicAdministrationPreview(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -231,21 +233,22 @@ func (s *Service) GetAcademicAdministrationPreview(
 	if err != nil {
 		return AcademicAdministrationPreviewView{}, err
 	}
-
-	var groups []store.AcademicAdministrationPreviewGroup
-	if value.PreviewDigest != "" {
-		if groups, err = s.imports.CountAcademicAdministrationPreviewGroups(ctx, id); err != nil {
-			return AcademicAdministrationPreviewView{}, academicAdministrationPreviewStoreErrors.Translate(err)
-		}
+	if err = s.admitAcademicAdministrationFilter(ctx, inv, value); err != nil {
+		return AcademicAdministrationPreviewView{}, err
 	}
 
+	groups, err := s.countVisibleAcademicAdministrationPreviewGroups(ctx, inv, value)
+	if err != nil {
+		return AcademicAdministrationPreviewView{}, err
+	}
 	return academicAdministrationPreviewView(value, groups), nil
 }
 
 // ListAcademicAdministrationPreviewRows pages the rows of one class of the
-// creator's own filter preview, showing only the rows whose User the
-// caller's User directory shows now: a viewer whose visibility narrowed
-// since the preview froze no longer sees the Users it lost.
+// creator's own filter preview while the creator's directory still admits
+// its filter, showing only the rows whose User the caller's User directory
+// shows now: a viewer whose visibility narrowed since the preview froze no
+// longer sees the Users it lost.
 func (s *Service) ListAcademicAdministrationPreviewRows(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -266,7 +269,11 @@ func (s *Service) ListAcademicAdministrationPreviewRows(
 		return paging.Page[store.AcademicAdministrationPreviewRow]{}, apperror.Invalid("request.invalid", "cursor")
 	}
 
-	if _, err = s.readAcademicAdministrationPreview(ctx, inv, query.ID); err != nil {
+	current, err := s.readAcademicAdministrationPreview(ctx, inv, query.ID)
+	if err != nil {
+		return paging.Page[store.AcademicAdministrationPreviewRow]{}, err
+	}
+	if err = s.admitAcademicAdministrationFilter(ctx, inv, current); err != nil {
 		return paging.Page[store.AcademicAdministrationPreviewRow]{}, err
 	}
 	visibility, err := s.authorizer.AuthorizeUserSearch(ctx, inv)
@@ -292,8 +299,11 @@ func (s *Service) ListAcademicAdministrationPreviewRows(
 // CommitAcademicAdministrationPreview commits the creator's ready filter
 // preview whose digest and revision still match, within 15 minutes of it
 // becoming ready, and proposes the one execution Job over its frozen rows.
-// It requires a strong, recent Session, and its first commit records the
-// batch-level audit entry.
+// It requires a strong, recent Session and a filter the creator's directory
+// still admits, reads a preview another User created as absent, and its
+// first commit records the batch-level audit entry. The result is the
+// committed snapshot the Store recorded, so an idempotent replay returns it
+// again.
 func (s *Service) CommitAcademicAdministrationPreview(
 	ctx context.Context,
 	inv invocation.Invocation,
@@ -306,7 +316,15 @@ func (s *Service) CommitAcademicAdministrationPreview(
 		return AcademicAdministrationPreviewView{}, err
 	}
 
-	view, err := s.commitImport(
+	current, err := s.readAcademicAdministrationPreview(ctx, inv, command.ID)
+	if err != nil {
+		return AcademicAdministrationPreviewView{}, err
+	}
+	if err = s.admitAcademicAdministrationFilter(ctx, inv, current); err != nil {
+		return AcademicAdministrationPreviewView{}, err
+	}
+
+	committed, err := s.commitImport(
 		ctx,
 		inv,
 		CommitOnboardingImportCommand{
@@ -321,8 +339,7 @@ func (s *Service) CommitAcademicAdministrationPreview(
 	if err != nil {
 		return AcademicAdministrationPreviewView{}, err
 	}
-
-	return s.GetAcademicAdministrationPreview(ctx, inv, view.ID)
+	return s.academicAdministrationPreviewResult(ctx, inv, committed), nil
 }
 
 // CancelAcademicAdministrationPreview cancels the creator's unfinished
@@ -335,10 +352,81 @@ func (s *Service) CancelAcademicAdministrationPreview(
 	if _, err := s.readAcademicAdministrationPreview(ctx, inv, id); err != nil {
 		return AcademicAdministrationPreviewView{}, err
 	}
-	if _, err := s.cancelImport(ctx, inv, id, model.OnboardingImportAcademicAdministrationFilter); err != nil {
+	canceled, err := s.cancelImport(ctx, inv, id, model.OnboardingImportAcademicAdministrationFilter)
+	if err != nil {
 		return AcademicAdministrationPreviewView{}, err
 	}
-	return s.GetAcademicAdministrationPreview(ctx, inv, id)
+	return s.academicAdministrationPreviewResult(ctx, inv, canceled), nil
+}
+
+// academicAdministrationPreviewResult is the view a committed or canceled
+// preview answers with: the snapshot the Store returned and, best effort,
+// its row counts. The change already happened, so a failed count, or a
+// filter the creator's directory no longer admits, omits the counts rather
+// than turning the change into an error.
+func (s *Service) academicAdministrationPreviewResult(
+	ctx context.Context,
+	inv invocation.Invocation,
+	value *store.OnboardingImport,
+) AcademicAdministrationPreviewView {
+	var groups []store.AcademicAdministrationPreviewGroup
+	if s.admitAcademicAdministrationFilter(ctx, inv, value) == nil {
+		if counted, err := s.countVisibleAcademicAdministrationPreviewGroups(ctx, inv, value); err == nil {
+			groups = counted
+		}
+	}
+	return academicAdministrationPreviewView(value, groups)
+}
+
+// countVisibleAcademicAdministrationPreviewGroups counts a resolved
+// preview's rows by class and reason through the caller's User directory
+// visibility now, the visibility its rows are read through; a preview not
+// yet resolved has no counts.
+func (s *Service) countVisibleAcademicAdministrationPreviewGroups(
+	ctx context.Context,
+	inv invocation.Invocation,
+	value *store.OnboardingImport,
+) ([]store.AcademicAdministrationPreviewGroup, error) {
+	if value.PreviewDigest == "" {
+		return nil, nil
+	}
+	visibility, err := s.authorizer.AuthorizeUserSearch(ctx, inv)
+	if err != nil {
+		return nil, err
+	}
+	groups, err := s.imports.CountAcademicAdministrationPreviewGroups(ctx, store.AcademicAdministrationPreviewGroupCountOptions{
+		ImportID:   value.ID,
+		Visibility: &visibility,
+	})
+	if err != nil {
+		return nil, academicAdministrationPreviewStoreErrors.Translate(err)
+	}
+	return groups, nil
+}
+
+// admitAcademicAdministrationFilter asks the User directory, as the caller
+// now, whether it still admits the preview's stored filter, through the same
+// validation the directory applies to its own query. A filter only an
+// Institution-wide viewer may apply (an activity filter) or one needing
+// role.view (a Role filter) stops admitting a creator who lost that
+// authority since the preview was asked for, and any read, commit or row
+// execution of the preview is then refused with
+// academic_administration_preview.authorization_lost.
+func (s *Service) admitAcademicAdministrationFilter(
+	ctx context.Context,
+	inv invocation.Invocation,
+	value *store.OnboardingImport,
+) error {
+	if value == nil || value.Filter == nil {
+		return apperror.New("onboarding_import.unavailable")
+	}
+	if _, err := s.directory.SearchUserPage(ctx, inv, academicAdministrationDirectoryQuery(*value.Filter, 1)); err != nil {
+		if academicAdministrationFilterAuthorizationLost(err) {
+			return apperror.New("academic_administration_preview.authorization_lost").Wrap(err)
+		}
+		return err
+	}
+	return nil
 }
 
 // readAcademicAdministrationPreview reads a filter preview the caller may
@@ -458,12 +546,17 @@ func (s *Service) authorizeAcademicAdministrationAction(
 	return nil
 }
 
-// academicAdministrationPreviewFilter validates a preview request and
-// returns the filter the preview keeps: a supported operation at a scope it
-// applies at, exactly the operation fields it owns, and a well-formed
-// bounded directory filter. Whether the caller may apply the directory
-// filter is the directory's own decision.
-func academicAdministrationPreviewFilter(command CreateAcademicAdministrationPreviewCommand) (store.AcademicAdministrationFilter, error) {
+// academicAdministrationPreviewFilter validates a preview request created
+// at createdAt and returns the filter the preview keeps: a supported
+// operation at a scope it applies at, exactly the operation fields it owns,
+// an end after the effective start (start_at, or createdAt when it is
+// omitted, the start every row then takes), and a well-formed bounded
+// directory filter. Whether the caller may apply the directory filter is the
+// directory's own decision.
+func academicAdministrationPreviewFilter(
+	command CreateAcademicAdministrationPreviewCommand,
+	createdAt time.Time,
+) (store.AcademicAdministrationFilter, error) {
 	operation := command.Operation
 	if !slices.Contains(AcademicAdministrationPreviewOperations(), operation) {
 		return store.AcademicAdministrationFilter{}, apperror.Invalid("request.invalid", "operation")
@@ -477,10 +570,14 @@ func academicAdministrationPreviewFilter(command CreateAcademicAdministrationPre
 	ends := creates && operation != AcademicAdministrationAcademicUnitMemberAdd
 	affiliation := operation == AcademicAdministrationAffiliationAdd || operation == AcademicAdministrationAffiliationEnd
 	roleBinding := operation == AcademicAdministrationRoleBindingCreate || operation == AcademicAdministrationRoleBindingEnd
+	effectiveStart := createdAt
+	if command.StartAt.Valid {
+		effectiveStart = command.StartAt.Time
+	}
 	switch {
 	case command.StartAt.Valid && !creates:
 		return store.AcademicAdministrationFilter{}, apperror.Invalid("request.invalid", "start_at")
-	case command.EndAt.Valid && (!ends || (command.StartAt.Valid && !command.EndAt.Time.After(command.StartAt.Time))):
+	case command.EndAt.Valid && (!ends || !command.EndAt.Time.After(effectiveStart)):
 		return store.AcademicAdministrationFilter{}, apperror.Invalid("request.invalid", "end_at")
 	case affiliation != command.AffiliationKind.IsValid() || (!affiliation && command.AffiliationKind != ""):
 		return store.AcademicAdministrationFilter{}, apperror.Invalid("request.invalid", "affiliation_kind")
@@ -642,7 +739,7 @@ func (s *Service) prepareAcademicAdministrationBatchAudit(
 	if current == nil || current.Filter == nil || s.drafts == nil {
 		return nil, apperror.New("onboarding_import.unavailable")
 	}
-	groups, err := s.imports.CountAcademicAdministrationPreviewGroups(ctx, current.ID)
+	groups, err := s.imports.CountAcademicAdministrationPreviewGroups(ctx, store.AcademicAdministrationPreviewGroupCountOptions{ImportID: current.ID})
 	if err != nil {
 		return nil, academicAdministrationPreviewStoreErrors.Translate(err)
 	}

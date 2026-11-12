@@ -75,7 +75,7 @@ paths:
       tags:
         - Membership and progression
       description: >-
-        Reads the caller's own preview: its lifecycle state, operation, filter, digest and revision, and once ready its `summary` of rows by class with skipped rows counted by reason. After commit the row counts report execution outcomes. Only the User who created a preview, holding onboarding batch visibility at its scope, can read it: a caller without that visibility is denied, and any other User reads it as not found.
+        Reads the caller's own preview: its lifecycle state, operation, filter, digest and revision, and once ready its `summary` of rows by class with skipped rows counted by reason. The summary counts only the rows whose User the caller's User directory shows now, the rows the rows listing shows. After commit the row counts report execution outcomes. Only the User who created a preview, holding onboarding batch visibility at its scope, can read it: a caller without that visibility is denied, and any other User reads it as not found. Once the caller's directory would refuse the preview's filter (an activity filter after Institution-wide `user.view` is lost, a Role filter after `role.view` is lost), the read is refused with `academic_administration_preview.authorization_lost`.
       x-proctor-auth: session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -84,6 +84,8 @@ paths:
         - authorization.unavailable
         - request.invalid
         - resource.not_found
+        - academic_administration_preview.authorization_lost
+        - administration.unavailable
         - onboarding_import.unavailable
         - invitation.unavailable
         - authentication.required
@@ -108,6 +110,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         "404":
           $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
         "500":
           $ref: '#/components/responses/InternalError'
         "503":
@@ -121,7 +125,7 @@ paths:
       tags:
         - Membership and progression
       description: >-
-        Pages the frozen rows of one class of the caller's own preview in row order, each naming its User and, after commit, its outcome. A row appears only while the caller's User directory shows its User now, so a viewer whose visibility narrowed since the preview froze no longer sees the Users it lost. A cursor continues only the group and reason it was issued for.
+        Pages the frozen rows of one class of the caller's own preview in row order, each naming its User and, after commit, its outcome. A row appears only while the caller's User directory shows its User now, so a viewer whose visibility narrowed since the preview froze no longer sees the Users it lost, and the read is refused with `academic_administration_preview.authorization_lost` once the caller's directory would refuse the preview's filter. A cursor continues only the group and reason it was issued for.
       x-proctor-auth: session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -130,6 +134,8 @@ paths:
         - authorization.unavailable
         - request.invalid
         - resource.not_found
+        - academic_administration_preview.authorization_lost
+        - administration.unavailable
         - onboarding_import.unavailable
         - invitation.unavailable
         - authentication.required
@@ -173,6 +179,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         "404":
           $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
         "500":
           $ref: '#/components/responses/InternalError'
         "503":
@@ -186,8 +194,8 @@ paths:
       tags:
         - Membership and progression
       description: >-
-        Commits the caller's own ready preview when its revision and digest still match, within 15 minutes of it becoming ready as PostgreSQL measures it; after that the commit is refused with `academic_administration_preview.expired` and a new preview is needed.
-        One execution Job then runs the frozen rows, never the filter again, so a User who starts matching after the preview is not changed. Every row is authorized again in PostgreSQL when it runs, and a row whose User the caller's directory no longer shows fails with `authorization.denied`. The first commit records one batch-level audit entry with the operation, filter, counts and preview identity; each row's own audit entry names the preview. Repeating the request with the same Idempotency-Key returns the same commit. Requires a strong, recent interactive Session.
+        Commits the caller's own ready preview when its revision and digest still match, within 15 minutes of it becoming ready as PostgreSQL measures it; after that the commit is refused with `academic_administration_preview.expired` and a new preview is needed. A preview another User created reads as not found, and a commit is refused with `academic_administration_preview.authorization_lost` once the caller's User directory would refuse the preview's filter.
+        One execution Job then runs the frozen rows, never the filter again, so a User who starts matching after the preview is not changed. Every row is authorized again in PostgreSQL when it runs, a row whose User the caller's directory no longer shows fails with `authorization.denied`, and every remaining row fails with `authorization.denied` once the caller's directory would refuse the filter. The first commit records one batch-level audit entry with the operation, filter, counts and preview identity; each row's own audit entry names the preview and row, whether the row succeeds or fails. The response is the committed preview as the commit recorded it, and repeating the request with the same Idempotency-Key returns that same commit. Requires a strong, recent interactive Session.
       x-proctor-auth: strong_recent_session_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -197,6 +205,7 @@ paths:
         - audit.unavailable
         - request.invalid
         - resource.not_found
+        - academic_administration_preview.authorization_lost
         - academic_administration_preview.conflict
         - academic_administration_preview.expired
         - administration.unavailable
@@ -468,9 +477,11 @@ components:
             - staff
             - external
         start_at:
+          description: When the relationship a creating operation makes starts; omitted, every row starts when the preview is created.
           type: string
           format: date-time
         end_at:
+          description: When the relationship a creating operation makes ends; it must be after `start_at`, or after the preview's creation when `start_at` is omitted, or the request is refused with `request.invalid` on `end_at`.
           type: string
           format: date-time
     AcademicAdministrationPreviewCommitRequest:

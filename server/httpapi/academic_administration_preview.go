@@ -171,6 +171,8 @@ var academicAdministrationPreviewReadErrors = []string{
 	"authorization.unavailable",
 	"request.invalid",
 	"resource.not_found",
+	"academic_administration_preview.authorization_lost",
+	"administration.unavailable",
 	"onboarding_import.unavailable",
 	"invitation.unavailable",
 }
@@ -225,6 +227,7 @@ func academicAdministrationPreviewResource(app AcademicAdministrationPreviewAppl
 				"audit.unavailable",
 				"request.invalid",
 				"resource.not_found",
+				"academic_administration_preview.authorization_lost",
 				"academic_administration_preview.conflict",
 				"academic_administration_preview.expired",
 				"administration.unavailable",

@@ -956,6 +956,7 @@ components:
       description: >-
         Stable public problem code. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
       enum:
+        - academic_administration_preview.authorization_lost
         - academic_administration_preview.conflict
         - academic_administration_preview.expired
         - academic_administration_preview.target_conflict

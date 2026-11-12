@@ -24,14 +24,18 @@ import (
 )
 
 // userDirectoryFake serves pages of matching Users, total in all, in pages of
-// the query's limit, and records each query.
+// the query's limit, and records each query; a set err refuses every query.
 type userDirectoryFake struct {
 	total   int
 	queries []user.SearchUsersQuery
+	err     error
 }
 
 func (f *userDirectoryFake) SearchUserPage(_ context.Context, _ invocation.Invocation, query user.SearchUsersQuery) (paging.Page[*model.User], error) {
 	f.queries = append(f.queries, query)
+	if f.err != nil {
+		return paging.Page[*model.User]{}, f.err
+	}
 	served := 0
 	for _, previous := range f.queries[:len(f.queries)-1] {
 		served += previous.Limit
@@ -94,7 +98,7 @@ func TestAcademicAdministrationPreviewFilterAdmitsOnlyTheOperationsOwnFields(t *
 	valid := CreateAcademicAdministrationPreviewCommand{Operation: AcademicAdministrationClassEnroll, ScopeType: model.RoleScopeClass, ScopeID: classID,
 		StartAt: model.OptionalTimeFrom(at), EndAt: model.OptionalTimeFrom(at.Add(time.Hour)),
 		Filter: AcademicAdministrationUserFilter{Affiliations: []model.AffiliationKind{model.AffiliationStudent, model.AffiliationStudent}}}
-	filter, err := academicAdministrationPreviewFilter(valid)
+	filter, err := academicAdministrationPreviewFilter(valid, at)
 	require.NoError(t, err)
 	require.Equal(t, []model.AffiliationKind{model.AffiliationStudent}, filter.Affiliations, "repeats are dropped")
 
@@ -114,6 +118,12 @@ func TestAcademicAdministrationPreviewFilterAdmitsOnlyTheOperationsOwnFields(t *
 		}, "start_at"},
 		"end before start": {func(command *CreateAcademicAdministrationPreviewCommand) {
 			command.EndAt = model.OptionalTimeFrom(at.Add(-time.Hour))
+		}, "end_at"},
+		"end before creation without a start": {func(command *CreateAcademicAdministrationPreviewCommand) {
+			command.StartAt, command.EndAt = model.OptionalTime{}, model.OptionalTimeFrom(at.Add(-time.Minute))
+		}, "end_at"},
+		"end at creation without a start": {func(command *CreateAcademicAdministrationPreviewCommand) {
+			command.StartAt, command.EndAt = model.OptionalTime{}, model.OptionalTimeFrom(at)
 		}, "end_at"},
 		"affiliation kind on an enrollment": {func(command *CreateAcademicAdministrationPreviewCommand) {
 			command.AffiliationKind = model.AffiliationStudent
@@ -139,7 +149,7 @@ func TestAcademicAdministrationPreviewFilterAdmitsOnlyTheOperationsOwnFields(t *
 			command := valid
 			command.Filter.RoleIDs = nil
 			test.mutate(&command)
-			_, filterErr := academicAdministrationPreviewFilter(command)
+			_, filterErr := academicAdministrationPreviewFilter(command, at)
 			failure, ok := apperror.As(filterErr)
 			require.True(t, ok, "error = %v", filterErr)
 			require.Equal(t, "request.invalid", failure.Code())
@@ -207,16 +217,61 @@ func TestAcademicAdministrationPreviewIsReadOnlyByItsCreatorThroughItsOwnSurface
 		State: model.OnboardingImportPreviewReady, ScopeType: model.RoleScopeInstitution, ScopeID: model.NewInstitutionID().String(),
 		ActorUserID: creator.UserID, Principal: creator, Filter: &store.AcademicAdministrationFilter{Operation: "user.disable"}}
 	service := &Service{imports: previewImportStoreFake{value: value}, directory: &userDirectoryFake{}, drafts: auditDrafterFake{},
-		authorizer: &authorizerFake{}, now: func() time.Time { return now }}
+		authorizer: &authorizerFake{}, identity: &academicAdministrationBatchCommandsFake{}, recentAuthenticationTTL: 15 * time.Minute,
+		now: func() time.Time { return now }}
 
 	other := invocation.New(previewPrincipal(model.AuthenticationMultiFactor, now), model.RequestMetadata{})
 	_, err := service.readAcademicAdministrationPreview(context.Background(), other, value.ID)
 	require.True(t, apperror.Is(err, "resource.not_found"), "another User reads the preview as absent: %v", err)
+	_, err = service.CommitAcademicAdministrationPreview(context.Background(), other, CommitAcademicAdministrationPreviewCommand{
+		ID: value.ID, ExpectedRevision: 1, PreviewDigest: strings.Repeat("a", 64), IdempotencyKey: "commit"})
+	require.True(t, apperror.Is(err, "resource.not_found"), "another User's commit finds no preview, as its reads do: %v", err)
 	_, _, err = service.GetOnboardingImport(context.Background(), invocation.New(creator, model.RequestMetadata{}), value.ID)
 	require.True(t, apperror.Is(err, "resource.not_found"), "the onboarding import surface never shows a filter preview: %v", err)
 	read, err := service.readAcademicAdministrationPreview(context.Background(), invocation.New(creator, model.RequestMetadata{}), value.ID)
 	require.NoError(t, err)
 	require.Equal(t, value.ID, read.ID)
+}
+
+// TestAcademicAdministrationPreviewRefusesAFilterTheCreatorMayNoLongerApply
+// re-admits the stored filter through the User directory whenever the
+// creator acts on the preview: once the directory refuses it (here an
+// activity filter after Institution-wide user.view was lost), every read and
+// the commit are refused, and execution leaves no row to run.
+func TestAcademicAdministrationPreviewRefusesAFilterTheCreatorMayNoLongerApply(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
+	creator := previewPrincipal(model.AuthenticationMultiFactor, now)
+	value := &store.OnboardingImport{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportAcademicAdministrationFilter,
+		State: model.OnboardingImportPreviewReady, ScopeType: model.RoleScopeInstitution, ScopeID: model.NewInstitutionID().String(),
+		ActorUserID: creator.UserID, Principal: creator, PreviewDigest: strings.Repeat("a", 64), Revision: 2,
+		Filter: &store.AcademicAdministrationFilter{Operation: string(AcademicAdministrationUserDisable), NeverSignedIn: true}}
+	directory := &userDirectoryFake{err: apperror.Invalid("request.invalid", "never_signed_in")}
+	service := &Service{imports: previewImportStoreFake{value: value}, directory: directory, drafts: auditDrafterFake{},
+		authorizer: &authorizerFake{}, identity: &academicAdministrationBatchCommandsFake{}, recentAuthenticationTTL: 15 * time.Minute,
+		now: func() time.Time { return now }}
+	inv := invocation.New(creator, model.RequestMetadata{})
+	lost := apperror.Code("academic_administration_preview.authorization_lost")
+
+	_, err := service.GetAcademicAdministrationPreview(context.Background(), inv, value.ID)
+	require.True(t, apperror.Is(err, lost), "summary read: %v", err)
+	_, err = service.ListAcademicAdministrationPreviewRows(context.Background(), inv, ListAcademicAdministrationPreviewRowsQuery{
+		ID: value.ID, Class: store.AcademicAdministrationPreviewWillChange, Limit: 10})
+	require.True(t, apperror.Is(err, lost), "rows read: %v", err)
+	_, err = service.CommitAcademicAdministrationPreview(context.Background(), inv, CommitAcademicAdministrationPreviewCommand{
+		ID: value.ID, ExpectedRevision: value.Revision, PreviewDigest: value.PreviewDigest, IdempotencyKey: "commit"})
+	require.True(t, apperror.Is(err, lost), "commit: %v", err)
+
+	guard, err := service.newAcademicAdministrationFilterRowGuard(context.Background(), inv, value)
+	require.NoError(t, err)
+	code, err := service.checkAcademicAdministrationFilterRow(context.Background(), value, guard,
+		store.OnboardingImportRow{UserID: model.NewUserID(), Operation: value.Filter.Operation})
+	require.NoError(t, err)
+	require.Equal(t, "authorization.denied", code, "a remaining row fails once the filter is no longer admitted")
+	for _, query := range directory.queries {
+		require.True(t, query.NeverSignedIn, "the stored filter itself is admitted")
+		require.Equal(t, 1, query.Limit)
+	}
 }
 
 func TestAcademicAdministrationFilterRowCheckRefusesWhatThePreviewWouldNotAdmitNow(t *testing.T) {
@@ -299,6 +354,80 @@ func TestAcademicAdministrationPreviewEndingClassification(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, test.reason, reason)
 			require.Equal(t, test.relationship, relationship)
+		})
+	}
+}
+
+// previewClassMemberFake answers a User's current Class memberships.
+type previewClassMemberFake struct {
+	store.ClassMemberStore
+	members map[model.UserID][]*model.ClassMember
+}
+
+func (f previewClassMemberFake) ListActiveByUser(_ context.Context, userID model.UserID, _ time.Time) ([]*model.ClassMember, error) {
+	return f.members[userID], nil
+}
+
+// previewAffiliationFake answers a User's current Affiliations.
+type previewAffiliationFake struct {
+	store.AffiliationStore
+	affiliations map[model.UserID][]*model.Affiliation
+}
+
+func (f previewAffiliationFake) ListActiveByUser(_ context.Context, userID model.UserID, _ time.Time) ([]*model.Affiliation, error) {
+	return f.affiliations[userID], nil
+}
+
+// TestAcademicAdministrationPreviewEnrollmentSkipsOnlyWhatTheCallerSees
+// keeps a Class enrollment preview from telling a Class-scoped caller that a
+// User is enrolled in a Class whose members it may not see, or lacks a
+// student Affiliation it cannot see: such a row will change, and its
+// execution refuses the enrollment as an ordinary batch item does.
+func TestAcademicAdministrationPreviewEnrollmentSkipsOnlyWhatTheCallerSees(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
+	actor := previewPrincipal(model.AuthenticationMultiFactor, now)
+	period := model.NewAcademicPeriodID()
+	target, seenClass, hiddenClass := model.NewClassID(), model.NewClassID(), model.NewClassID()
+	inSeenClass, inHiddenClass, withoutStudent := model.NewUserID(), model.NewUserID(), model.NewUserID()
+	classMembers := previewClassMemberFake{members: map[model.UserID][]*model.ClassMember{
+		inSeenClass:   {{ClassID: seenClass, AcademicPeriodID: period}},
+		inHiddenClass: {{ClassID: hiddenClass, AcademicPeriodID: period}},
+	}}
+	student := []*model.Affiliation{{Kind: model.AffiliationStudent}}
+	affiliations := previewAffiliationFake{affiliations: map[model.UserID][]*model.Affiliation{
+		inSeenClass: student, inHiddenClass: student, withoutStudent: {{Kind: model.AffiliationStaff}},
+	}}
+	current := &store.OnboardingImport{ScopeType: model.RoleScopeClass, ScopeID: target.String(), Principal: actor, ActorUserID: actor.UserID}
+
+	for name, test := range map[string]struct {
+		institutionUsers bool
+		want             map[model.UserID]string
+	}{
+		"Institution-wide viewer": {true, map[model.UserID]string{
+			inSeenClass:    academicAdministrationPreviewEnrollmentConflict,
+			inHiddenClass:  academicAdministrationPreviewEnrollmentConflict,
+			withoutStudent: academicAdministrationPreviewStudentAffiliationRequired,
+		}},
+		"Class-scoped viewer": {false, map[model.UserID]string{
+			inSeenClass:    academicAdministrationPreviewEnrollmentConflict,
+			inHiddenClass:  "",
+			withoutStudent: "",
+		}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			authorizer := &authorizerFake{classMembersVisible: map[model.ClassID]bool{seenClass: true}}
+			service := &Service{classMembers: classMembers, affiliations: affiliations, authorizer: authorizer, now: func() time.Time { return now }}
+			classifier := &academicAdministrationPreviewClassifier{service: service, current: current, period: period,
+				institutionUsers: test.institutionUsers, classMembersVisible: map[model.ClassID]bool{}}
+			got := map[model.UserID]string{}
+			for userID := range test.want {
+				reason, relationship, err := classifier.classEnrollment(context.Background(), userID, now)
+				require.NoError(t, err)
+				require.Empty(t, relationship)
+				got[userID] = reason
+			}
+			require.Equal(t, test.want, got)
 		})
 	}
 }

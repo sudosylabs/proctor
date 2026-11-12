@@ -291,16 +291,24 @@ module when a change is not server-only. No module has been released yet.
   (`academic_administration_preview.resolve`) freezes at most 10,000 matching
   Users in username order and classifies each as `will_change`, `no_op` or
   `skipped` with a closed reason; the caller's own account is always skipped
-  and a disable or Session revocation skips System Administrators. More
-  matching Users fail with `academic_administration_preview.too_many_users`.
-  `GET .../{id}` returns the counts and `GET .../{id}/rows?group=` shows who,
+  and a disable or Session revocation skips System Administrators. A Class
+  enrollment is skipped for an enrollment conflict or a missing student
+  Affiliation only when the caller could already see it. More matching Users
+  fail with `academic_administration_preview.too_many_users`. `GET .../{id}`
+  returns the counts and `GET .../{id}/rows?group=` shows who, both
   filtered by the reader's visibility now. `POST .../{id}/commit` takes the
   digest, revision and an `Idempotency-Key` within 15 minutes of the preview
-  becoming ready (`academic_administration_preview.expired` after), and runs
-  one execution Job over the frozen list, every row authorized again.
-  Preview and commit require a strong, recent Session. The first commit
-  writes one batch-level audit entry, and every import row's audit entry now
-  names its import and row. The baseline adds the
+  becoming ready (`academic_administration_preview.expired` after), runs one
+  execution Job over the frozen list, every row authorized again, and
+  answers with the committed preview, the same on a replay. Only the creator
+  reads or commits a preview; anyone else finds none. Reads, the commit and
+  execution admit the stored filter again, and once the creator's directory
+  would refuse it they are refused with
+  `academic_administration_preview.authorization_lost` and the remaining
+  rows fail. Preview and commit require a strong, recent Session. The first
+  commit writes one batch-level audit entry, and every import row's audit
+  attempt now names its import and row from the start, so a refused row's
+  entry names them too. The baseline adds the
   `academic_administration_filter` import mode and its `filter` and
   `preview_expires_at` columns; existing development databases must be
   recreated.

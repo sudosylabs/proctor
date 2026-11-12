@@ -173,6 +173,12 @@ type academicAdministrationPreviewClassifier struct {
 	systemAdministratorRoleID model.RoleID
 	// period is the Academic Period of the Class a Class enrollment targets.
 	period model.AcademicPeriodID
+	// institutionUsers reports, for a Class enrollment, whether the caller
+	// holds Institution-wide user.view, and so already sees every User's
+	// Affiliations and Class memberships; classMembersVisible caches, per
+	// other Class, whether the caller may see that Class's members.
+	institutionUsers    bool
+	classMembersVisible map[model.ClassID]bool
 }
 
 func (s *Service) newAcademicAdministrationPreviewClassifier(
@@ -200,6 +206,12 @@ func (s *Service) newAcademicAdministrationPreviewClassifier(
 			return nil, apperror.New("academic_administration_preview.target_conflict").Wrap(err)
 		}
 		classifier.period = class.AcademicPeriodID
+		users, err := s.authorizer.GrantedScopes(ctx, current.Principal, model.ActionUserView, model.ResourceUser)
+		if err != nil {
+			return nil, err
+		}
+		classifier.institutionUsers = users.InstitutionWide
+		classifier.classMembersVisible = map[model.ClassID]bool{}
 	case AcademicAdministrationRoleBindingCreate:
 		role, err := s.roles.Get(ctx, classifier.filter.RoleID)
 		if err != nil {
@@ -395,7 +407,12 @@ func (c *academicAdministrationPreviewClassifier) userEnabledChange(ctx context.
 
 // classEnrollment classifies a Class enrollment: no change for a current
 // member of the Class, and skipped for a User without a current student
-// Affiliation or enrolled in another Class of the same Period.
+// Affiliation or enrolled in another Class of the same Period. A skip is
+// shown only to a caller who could already see its reason, so a preview
+// never tells a Class-scoped caller about a membership in a Class whose
+// members it may not see, or about an Affiliation outside its sight: such a
+// row will change, and its execution refuses the enrollment as an ordinary
+// batch item does.
 func (c *academicAdministrationPreviewClassifier) classEnrollment(
 	ctx context.Context,
 	userID model.UserID,
@@ -411,10 +428,17 @@ func (c *academicAdministrationPreviewClassifier) classEnrollment(
 			return store.AcademicAdministrationPreviewNoChange, "", nil
 		}
 		if member.AcademicPeriodID == c.period {
+			visible, visibleErr := c.seesClassMembers(ctx, member.ClassID)
+			if visibleErr != nil || !visible {
+				return "", "", visibleErr
+			}
 			return academicAdministrationPreviewEnrollmentConflict, "", nil
 		}
 	}
 
+	if !c.institutionUsers {
+		return "", "", nil
+	}
 	affiliations, err := s.affiliations.ListActiveByUser(ctx, userID, startAt)
 	if err != nil {
 		return "", "", err
@@ -425,6 +449,25 @@ func (c *academicAdministrationPreviewClassifier) classEnrollment(
 		}
 	}
 	return academicAdministrationPreviewStudentAffiliationRequired, "", nil
+}
+
+// seesClassMembers reports whether the caller may already see who is
+// enrolled in the Class: Institution-wide user.view, or class.members.view
+// on the Class itself, evaluated once per Class without recording a decision.
+func (c *academicAdministrationPreviewClassifier) seesClassMembers(ctx context.Context, classID model.ClassID) (bool, error) {
+	if c.institutionUsers {
+		return true, nil
+	}
+	if visible, known := c.classMembersVisible[classID]; known {
+		return visible, nil
+	}
+	inv := invocation.New(c.current.Principal, model.RequestMetadata{})
+	visible, err := c.service.authorizer.CanViewClassMembers(ctx, inv, model.Resource{Type: model.ResourceClass, ID: classID.String()})
+	if err != nil {
+		return false, err
+	}
+	c.classMembersVisible[classID] = visible
+	return visible, nil
 }
 
 func noChangeWhen(holds bool) string {
@@ -459,12 +502,21 @@ type academicAdministrationFilterRowGuard struct {
 
 // newAcademicAdministrationFilterRowGuard resolves, and records as one
 // decision, the frozen caller's directory visibility for one page of rows.
+// A caller whose directory no longer admits the preview's filter is left no
+// visibility, so every remaining row fails with authorization.denied.
 func (s *Service) newAcademicAdministrationFilterRowGuard(
 	ctx context.Context,
 	inv invocation.Invocation,
 	current *store.OnboardingImport,
 ) (*academicAdministrationFilterRowGuard, error) {
 	guard := &academicAdministrationFilterRowGuard{}
+	if err := s.admitAcademicAdministrationFilter(ctx, inv, current); err != nil {
+		if apperror.Is(err, "academic_administration_preview.authorization_lost") {
+			guard.denied = true
+			return guard, nil
+		}
+		return nil, err
+	}
 	visibility, err := s.authorizer.AuthorizeUserSearch(ctx, inv)
 	if err != nil {
 		if failure, ok := apperror.As(err); ok && failure.Code() == "authorization.denied" {

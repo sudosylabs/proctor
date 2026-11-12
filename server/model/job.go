@@ -53,6 +53,9 @@ const (
 	JobTypeOnboardingImportParse         JobType = "onboarding_import.parse"
 	JobTypeOnboardingImportExecute       JobType = "onboarding_import.execute"
 	JobTypeStudentProgressionPreview     JobType = "student_progression.preview"
+	// JobTypeAcademicAdministrationPreviewResolve resolves the Users an
+	// academic administration filter matches into a frozen preview.
+	JobTypeAcademicAdministrationPreviewResolve JobType = "academic_administration_preview.resolve"
 
 	JobStatusQueued          JobStatus = "queued"
 	JobStatusRunning         JobStatus = "running"
@@ -496,6 +499,7 @@ var jobTypes = []JobType{
 	JobTypeOnboardingImportParse,
 	JobTypeOnboardingImportExecute,
 	JobTypeStudentProgressionPreview,
+	JobTypeAcademicAdministrationPreviewResolve,
 	JobTypeExamExportBuild,
 	JobTypeExamExportCleanup,
 }

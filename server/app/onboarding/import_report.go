@@ -51,8 +51,8 @@ func (s *Service) reportImport(
 	if err = s.authorizeImport(ctx, inv, current, false); err != nil {
 		return err
 	}
-	if expectedMode != "" && current.Mode != expectedMode {
-		return apperror.New("resource.not_found").WithField("resource", "student_progression")
+	if err = requireImportMode(current, expectedMode); err != nil {
+		return err
 	}
 
 	if current.State != model.OnboardingImportCompleted &&

@@ -62,6 +62,8 @@ type onboardingImportRow struct {
 	ExecutionJobID            sql.NullString `db:"execution_job_id"`
 	FailureCode               string         `db:"failure_code"`
 	FileName                  sql.NullString `db:"file_name"`
+	Filter                    []byte         `db:"filter"`
+	PreviewExpiresAt          sql.NullTime   `db:"preview_expires_at"`
 	CreatedAt                 time.Time      `db:"created_at"`
 	UpdatedAt                 time.Time      `db:"updated_at"`
 	ExpiresAt                 time.Time      `db:"expires_at"`
@@ -74,7 +76,8 @@ const onboardingImportColumns = `id, mode, state, scope_type, scope_id, role_id,
 		effective_at, actor_user_id, principal, preview_digest, ignored_headers, total_rows,
 		valid_rows, invalid_rows, succeeded_rows, no_op_rows, failed_rows, skipped_rows,
 		commit_policy, commit_expected_revision, commit_at, commit_key_digest, parse_job_id,
-		execution_job_id, failure_code, file_name, created_at, updated_at, expires_at, revision`
+		execution_job_id, failure_code, file_name, filter, preview_expires_at, created_at, updated_at,
+		expires_at, revision`
 
 type onboardingImportDetailRow struct {
 	ImportID                        string                          `db:"import_id"`
@@ -128,8 +131,7 @@ func (s SQLInvitationStore) CreateOnboardingImport(
 		!validOnboardingImport(input.Import) ||
 		input.Import.State != model.OnboardingImportParsing ||
 		input.Import.ParseJobID != input.ParseJob.ID ||
-		(input.Import.Mode == model.OnboardingImportStudentProgression) != (input.ParseJob.Type == model.JobTypeStudentProgressionPreview) ||
-		(input.Import.Mode != model.OnboardingImportStudentProgression && input.ParseJob.Type != model.JobTypeOnboardingImportParse) ||
+		input.ParseJob.Type != onboardingImportPreviewJobType(input.Import.Mode) ||
 		!input.AuditEventID.IsValid() ||
 		!validOnboardingImportSourceAudit(input.Import.Mode, input.AuditEventID, input.SourceAuditEventID) ||
 		input.AuditAt.IsZero() {
@@ -145,6 +147,10 @@ func (s SQLInvitationStore) CreateOnboardingImport(
 	var effectiveAt any
 	if !value.EffectiveAt.IsZero() {
 		effectiveAt = value.EffectiveAt
+	}
+	filter, err := encodeAcademicAdministrationFilter(value.Filter)
+	if err != nil {
+		return nil, err
 	}
 
 	auditData, err := model.EncodeAuditData(map[string]any{
@@ -177,7 +183,7 @@ func (s SQLInvitationStore) CreateOnboardingImport(
 			ctx,
 			`INSERT INTO onboarding_imports (`+onboardingImportColumns+`)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', 0, 0, 0, 0, 0, 0, 0,
-				NULL, NULL, NULL, NULL, ?, NULL, '', ?, ?, ?, ?, 1)`,
+				NULL, NULL, NULL, NULL, ?, NULL, '', ?, ?, NULL, ?, ?, ?, 1)`,
 			value.ID.String(),
 			string(value.Mode),
 			string(value.State),
@@ -198,6 +204,7 @@ func (s SQLInvitationStore) CreateOnboardingImport(
 			"",
 			value.ParseJobID.String(),
 			sql.NullString{String: value.FileName, Valid: value.FileName != ""},
+			filter,
 			value.CreatedAt,
 			value.UpdatedAt,
 			value.ExpiresAt,
@@ -246,7 +253,32 @@ func validOnboardingImport(value *store.OnboardingImport) bool {
 		validOnboardingImportProgressionPackage(value) &&
 		((value.Mode == model.OnboardingImportStudentProgression && value.FileName == "") ||
 			(value.Mode != model.OnboardingImportStudentProgression &&
-				(value.FileName == "" || model.ValidOnboardingImportFileName(value.FileName))))
+				(value.FileName == "" || model.ValidOnboardingImportFileName(value.FileName)))) &&
+		validOnboardingImportFilterPackage(value)
+}
+
+// onboardingImportPreviewJobType is the Job type that turns an import of the
+// mode into its preview: the progression preview, the filter resolution, or
+// the CSV parse.
+func onboardingImportPreviewJobType(mode model.OnboardingImportMode) model.JobType {
+	switch mode {
+	case model.OnboardingImportStudentProgression:
+		return model.JobTypeStudentProgressionPreview
+	case model.OnboardingImportAcademicAdministrationFilter:
+		return model.JobTypeAcademicAdministrationPreviewResolve
+	default:
+		return model.JobTypeOnboardingImportParse
+	}
+}
+
+// validOnboardingImportFilterPackage reports whether exactly the academic
+// administration filter mode carries a filter, no file name and no ready
+// deadline at creation.
+func validOnboardingImportFilterPackage(value *store.OnboardingImport) bool {
+	if value.Mode != model.OnboardingImportAcademicAdministrationFilter {
+		return value.Filter == nil && !value.PreviewExpiresAt.Valid
+	}
+	return value.FileName == "" && !value.PreviewExpiresAt.Valid && validAcademicAdministrationFilter(value.ScopeType, value.Filter)
 }
 
 func validOnboardingImportProgressionPackage(value *store.OnboardingImport) bool {
@@ -328,7 +360,7 @@ func (s SQLInvitationStore) ListOnboardingImports(
 		return nil, store.NewErrInvalidInput("onboarding_import", "list_options", nil)
 	}
 
-	conditions := []string{"oi.mode<>'student_progression'", "oi.expires_at>CURRENT_TIMESTAMP"}
+	conditions := []string{"oi.mode NOT IN ('student_progression', 'academic_administration_filter')", "oi.expires_at>CURRENT_TIMESTAMP"}
 	args := []any{}
 	if !visibility.InstitutionWide {
 		parts := []string{}
@@ -406,7 +438,7 @@ func (s SQLInvitationStore) ListOnboardingImports(
 }
 
 // CountOpenOnboardingImports counts unexpired, non-terminal administrative
-// imports within the visibility, reading at most one row past maximum. The
+// imports within the visibility, never a filter preview, reading at most one row past maximum. The
 // expiry test matches GetOnboardingImport, so a counted import can be read.
 func (s SQLInvitationStore) CountOpenOnboardingImports(
 	ctx context.Context,
@@ -422,7 +454,7 @@ func (s SQLInvitationStore) CountOpenOnboardingImports(
 	}
 
 	conditions := []string{
-		`mode<>'student_progression'`,
+		`mode NOT IN ('student_progression', 'academic_administration_filter')`,
 		`state IN ('uploading', 'parsing', 'preview_ready', 'executing')`,
 		`expires_at>CURRENT_TIMESTAMP`,
 	}
@@ -578,6 +610,14 @@ func (row onboardingImportRow) value() (*store.OnboardingImport, error) {
 	if row.FileName.Valid {
 		value.FileName = row.FileName.String
 	}
+	if row.Filter != nil {
+		filter, err := decodeAcademicAdministrationFilter(model.RoleScopeType(row.ScopeType), row.Filter)
+		if err != nil {
+			return nil, err
+		}
+		value.Filter = filter
+	}
+	value.PreviewExpiresAt = OptionalTimeFromNullTime(row.PreviewExpiresAt)
 
 	return value, nil
 }
@@ -632,6 +672,10 @@ func (s SQLInvitationStore) CompleteOnboardingImportPreview(
 
 		if current.State != string(model.OnboardingImportParsing) || current.Revision != input.ExpectedRevision {
 			return nil, store.NewErrConflict("onboarding_import", "preview_changed", nil)
+		}
+		if projectedValue.Mode == model.OnboardingImportAcademicAdministrationFilter &&
+			!validAcademicAdministrationFilterRows(projectedValue, input.Rows) {
+			return nil, store.NewErrInvalidInput("academic_administration_preview_row", "preview", nil)
 		}
 
 		valid, invalid := 0, 0
@@ -709,7 +753,9 @@ func (s SQLInvitationStore) CompleteOnboardingImportPreview(
 			&updated,
 			`UPDATE onboarding_imports
 			SET state = 'preview_ready', preview_digest = ?, ignored_headers = ?, total_rows = ?,
-				valid_rows = ?, invalid_rows = ?, updated_at = ?, revision = revision+1
+				valid_rows = ?, invalid_rows = ?, updated_at = ?, revision = revision+1,
+				preview_expires_at = CASE WHEN mode = 'academic_administration_filter'
+					THEN statement_timestamp() + make_interval(secs => ?) END
 			WHERE id = ?
 				AND revision = ?
 			RETURNING `+onboardingImportColumns,
@@ -719,6 +765,7 @@ func (s SQLInvitationStore) CompleteOnboardingImportPreview(
 			valid,
 			invalid,
 			input.At,
+			store.AcademicAdministrationPreviewLifetime.Seconds(),
 			input.ID.String(),
 			input.ExpectedRevision,
 		); err != nil {
@@ -748,7 +795,9 @@ func (s SQLInvitationStore) CommitOnboardingImport(
 		!input.AuditEventID.IsValid() ||
 		(input.SourceAuditEventID != "" && !input.SourceAuditEventID.IsValid()) ||
 		input.SourceAuditEventID == input.AuditEventID ||
-		input.AuditAt.IsZero() {
+		input.AuditAt.IsZero() ||
+		(input.BatchAuditEvent != nil &&
+			(!input.BatchAuditEvent.ID.IsZero() || input.BatchAuditEvent.Status != model.AuditStatusAttempt)) {
 		return nil, store.NewErrInvalidInput("onboarding_import", "commit", nil)
 	}
 
@@ -784,7 +833,8 @@ func (s SQLInvitationStore) CommitOnboardingImport(
 		if err = validateStudentProgressionTargets(ctx, tx, value); err != nil {
 			return nil, err
 		}
-		if !validOnboardingImportSourceAudit(value.Mode, input.AuditEventID, input.SourceAuditEventID) {
+		if !validOnboardingImportSourceAudit(value.Mode, input.AuditEventID, input.SourceAuditEventID) ||
+			(value.Mode == model.OnboardingImportAcademicAdministrationFilter) != (input.BatchAuditEvent != nil) {
 			return nil, store.NewErrInvalidInput("onboarding_import", "commit_audit", nil)
 		}
 
@@ -805,7 +855,12 @@ func (s SQLInvitationStore) CommitOnboardingImport(
 				current.CommitExpectedRevision.Valid &&
 				current.CommitExpectedRevision.Int64 == input.ExpectedRevision &&
 				current.State != string(model.OnboardingImportPreviewReady) {
-				committed, snapshotErr := onboardingImportCommittedSnapshot(current)
+				noOpRows, countErr := countOnboardingImportNoChangeRows(ctx, tx, input.ID)
+				if countErr != nil {
+					return nil, countErr
+				}
+
+				committed, snapshotErr := onboardingImportCommittedSnapshot(current, noOpRows)
 				if snapshotErr != nil {
 					return nil, snapshotErr
 				}
@@ -849,20 +904,49 @@ func (s SQLInvitationStore) CommitOnboardingImport(
 		if input.Policy == model.OnboardingImportRequireAllValid && current.InvalidRows != 0 {
 			return nil, store.NewErrConflict("onboarding_import", "invalid_rows", nil)
 		}
+		filterMode := current.Mode == string(model.OnboardingImportAcademicAdministrationFilter)
+		if filterMode {
+			var admitted bool
+			if getErr := tx.Get(
+				ctx,
+				&admitted,
+				`SELECT preview_expires_at > statement_timestamp() FROM onboarding_imports WHERE id = ?`,
+				input.ID.String(),
+			); getErr != nil {
+				return nil, translateError("onboarding_import", input.ID.String(), getErr)
+			}
+			if !admitted {
+				return nil, store.NewErrConflict("onboarding_import", "preview_expired", nil)
+			}
+		}
 		if _, insertErr := insertQueuedJob(ctx, tx, input.ExecutionJob, false); insertErr != nil {
 			return nil, translateError("job", input.ExecutionJob.ID.String(), insertErr)
 		}
 
+		// A filter preview row whose change already holds is recorded as a
+		// no-op rather than executed; every other row not admitted to
+		// execution is skipped.
 		if _, execErr := tx.Exec(
 			ctx,
 			`UPDATE onboarding_import_rows
-			SET status = CASE WHEN preview_status = 'valid' THEN 'pending' ELSE 'skipped' END,
+			SET status = CASE
+					WHEN preview_status = 'valid' THEN 'pending'
+					WHEN ? AND preview_code = ? THEN 'no_op'
+					ELSE 'skipped'
+				END,
 				updated_at = ?
 			WHERE import_id = ?`,
+			filterMode,
+			store.AcademicAdministrationPreviewNoChange,
 			input.At,
 			input.ID.String(),
 		); execErr != nil {
 			return nil, execErr
+		}
+
+		noOpRows, err := countOnboardingImportNoChangeRows(ctx, tx, input.ID)
+		if err != nil {
+			return nil, err
 		}
 
 		var updated onboardingImportRow
@@ -872,7 +956,7 @@ func (s SQLInvitationStore) CommitOnboardingImport(
 			`UPDATE onboarding_imports
 			SET state = 'executing', principal = ?, commit_policy = ?, commit_expected_revision = ?,
 				commit_at = ?, commit_key_digest = ?, execution_job_id = ?,
-				skipped_rows = invalid_rows, updated_at = ?, revision = revision+1
+				no_op_rows = ?, skipped_rows = invalid_rows - ?, updated_at = ?, revision = revision+1
 			WHERE id = ?
 			RETURNING `+onboardingImportColumns,
 			principal,
@@ -881,6 +965,8 @@ func (s SQLInvitationStore) CommitOnboardingImport(
 			input.At,
 			input.IdempotencyKey[:],
 			input.ExecutionJob.ID.String(),
+			noOpRows,
+			noOpRows,
 			input.At,
 			input.ID.String(),
 		); getErr != nil {
@@ -893,6 +979,15 @@ func (s SQLInvitationStore) CommitOnboardingImport(
 		}
 		if _, err = completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", auditData, input.AuditAt); err != nil {
 			return nil, fmt.Errorf("complete onboarding import commit audit: %w", err)
+		}
+		if input.BatchAuditEvent != nil {
+			batchAudit, insertErr := insertAuditEventAt(ctx, tx, input.BatchAuditEvent, input.AuditAt)
+			if insertErr != nil {
+				return nil, insertErr
+			}
+			if _, err = completeAuditEvent(ctx, tx, batchAudit.ID, model.AuditStatusSuccess, "", auditData, input.AuditAt); err != nil {
+				return nil, fmt.Errorf("complete academic administration preview batch audit: %w", err)
+			}
 		}
 		if err = completeOnboardingImportSourceAudit(ctx, tx, updated, input.SourceAuditEventID, input.AuditAt); err != nil {
 			return nil, err
@@ -1261,6 +1356,11 @@ func lockOnboardingImportCommand(ctx context.Context, tx *sqlxTxWrapper, command
 	case model.OnboardingImportRowPending:
 		if value.State != model.OnboardingImportExecuting {
 			return store.NewErrConflict("onboarding_import", "canceled", nil)
+		}
+		if value.Mode == model.OnboardingImportAcademicAdministrationFilter {
+			if err = requireAcademicAdministrationFilterRowTarget(ctx, tx, value.Principal, row, at); err != nil {
+				return err
+			}
 		}
 		if err = validateOnboardingImportFrozenTarget(ctx, tx, row); err != nil {
 			return err
@@ -2013,14 +2113,17 @@ func completeOnboardingImportSourceAudit(
 	return nil
 }
 
-func onboardingImportCommittedSnapshot(current onboardingImportRow) (onboardingImportRow, error) {
-	if !current.CommitExpectedRevision.Valid || !current.CommitAt.Valid || !current.ExecutionJobID.Valid {
+// onboardingImportCommittedSnapshot is the import as its first commit
+// returned it; noOpRows is the count of rows that commit recorded as no-ops.
+func onboardingImportCommittedSnapshot(current onboardingImportRow, noOpRows int) (onboardingImportRow, error) {
+	if !current.CommitExpectedRevision.Valid || !current.CommitAt.Valid || !current.ExecutionJobID.Valid ||
+		noOpRows < 0 || noOpRows > current.InvalidRows {
 		return onboardingImportRow{}, store.NewErrInvalidInput("onboarding_import", "commit_snapshot", nil)
 	}
 	committed := current
 	committed.State = string(model.OnboardingImportExecuting)
-	committed.SucceededRows, committed.NoOpRows, committed.FailedRows = 0, 0, 0
-	committed.SkippedRows = committed.InvalidRows
+	committed.SucceededRows, committed.NoOpRows, committed.FailedRows = 0, noOpRows, 0
+	committed.SkippedRows = committed.InvalidRows - noOpRows
 	committed.FailureCode = ""
 	committed.UpdatedAt = committed.CommitAt.Time
 	committed.Revision = committed.CommitExpectedRevision.Int64 + 1

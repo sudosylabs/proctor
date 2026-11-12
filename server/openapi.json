@@ -31,6 +31,15 @@
       }
     },
     "parameters": {
+      "AcademicAdministrationPreviewID": {
+        "description": "The academic administration preview identifier.",
+        "in": "path",
+        "name": "academic_administration_preview_id",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/ID"
+        }
+      },
       "AcademicPeriodID": {
         "description": "The Academic Period identifier.",
         "in": "path",
@@ -770,6 +779,21 @@
         "description": "Exact current Sitting revision and private rationale for manager-initiated early closure.",
         "required": true
       },
+      "CommitAcademicAdministrationPreview": {
+        "content": {
+          "application/json": {
+            "example": {
+              "expected_revision": 2,
+              "preview_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/AcademicAdministrationPreviewCommitRequest"
+            }
+          }
+        },
+        "description": "Exact immutable preview revision and digest to commit.",
+        "required": true
+      },
       "CommitOnboardingImport": {
         "content": {
           "application/json": {
@@ -955,6 +979,28 @@
           }
         },
         "description": "Supplies the expected Draft revision and the complete replacement native security policy.",
+        "required": true
+      },
+      "CreateAcademicAdministrationPreview": {
+        "content": {
+          "application/json": {
+            "example": {
+              "filter": {
+                "affiliation": [
+                  "student"
+                ],
+                "never_signed_in": true
+              },
+              "operation": "user.disable",
+              "scope_id": "ybndrfg8ejkmcpqxot1uwisza3",
+              "scope_type": "institution"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/AcademicAdministrationPreviewRequest"
+            }
+          }
+        },
+        "description": "One operation, its exact scope and fields, and the User directory filter whose matching Users it applies to.",
         "required": true
       },
       "CreateAcademicPeriod": {
@@ -2480,6 +2526,51 @@
           }
         },
         "description": "Ordered bounded per-item existing-User academic administration outcomes",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
+      "AcademicAdministrationPreviewAccepted": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AcademicAdministrationPreviewResponse"
+            }
+          }
+        },
+        "description": "The preview whose resolution or execution Job was queued.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
+      "AcademicAdministrationPreviewOK": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AcademicAdministrationPreviewResponse"
+            }
+          }
+        },
+        "description": "The caller's own academic administration preview.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
+      "AcademicAdministrationPreviewRowsOK": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AcademicAdministrationPreviewRowListResponse"
+            }
+          }
+        },
+        "description": "One page of the preview's rows the caller's directory shows.",
         "headers": {
           "Cache-Control": {
             "$ref": "#/components/headers/NoStore"
@@ -6345,6 +6436,454 @@
           "succeeded",
           "no_op",
           "failed"
+        ],
+        "type": "object"
+      },
+      "AcademicAdministrationPreviewCommitRequest": {
+        "additionalProperties": false,
+        "description": "Revision and SHA-256 digest fencing a commit to the reviewed preview.",
+        "properties": {
+          "expected_revision": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "preview_digest": {
+            "description": "SHA-256 digest of the exact immutable preview, encoded as lowercase hexadecimal.",
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "preview_digest"
+        ],
+        "type": "object"
+      },
+      "AcademicAdministrationPreviewFilter": {
+        "additionalProperties": false,
+        "description": "The User directory filter of a preview, spelled as the directory's query parameters are; each member narrows the caller's visibility and none widens it. `q` is at most 256 characters.",
+        "properties": {
+          "academic_unit_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "affiliation": {
+            "items": {
+              "enum": [
+                "student",
+                "teacher",
+                "staff",
+                "external"
+              ],
+              "type": "string"
+            },
+            "maxItems": 4,
+            "type": "array"
+          },
+          "last_active_after": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "last_active_before": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "never_signed_in": {
+            "type": "boolean"
+          },
+          "q": {
+            "description": "Literal case-insensitive substring matched against visible User directory fields.",
+            "maxLength": 256,
+            "type": "string"
+          },
+          "role_id": {
+            "items": {
+              "$ref": "#/components/schemas/ID"
+            },
+            "maxItems": 16,
+            "type": "array"
+          },
+          "state": {
+            "enum": [
+              "active",
+              "disabled"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AcademicAdministrationPreviewOperation": {
+        "description": "The one existing-User academic administration operation a preview applies.",
+        "enum": [
+          "affiliation.add",
+          "affiliation.end",
+          "academic_unit_member.add",
+          "academic_unit_member.end",
+          "class.enroll",
+          "class.end",
+          "role_binding.create",
+          "role_binding.end",
+          "user.enable",
+          "user.disable",
+          "user_sessions.revoke"
+        ],
+        "type": "string"
+      },
+      "AcademicAdministrationPreviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "affiliation_kind": {
+            "enum": [
+              "student",
+              "teacher",
+              "staff",
+              "external"
+            ],
+            "type": "string"
+          },
+          "end_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "filter": {
+            "$ref": "#/components/schemas/AcademicAdministrationPreviewFilter"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/AcademicAdministrationPreviewOperation"
+          },
+          "role_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "scope_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "scope_type": {
+            "enum": [
+              "institution",
+              "academic_unit",
+              "class"
+            ],
+            "type": "string"
+          },
+          "start_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "scope_type",
+          "scope_id",
+          "filter"
+        ],
+        "type": "object"
+      },
+      "AcademicAdministrationPreviewResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "affiliation_kind": {
+            "enum": [
+              "student",
+              "teacher",
+              "staff",
+              "external"
+            ],
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "end_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "execution_job_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "expires_at": {
+            "description": "When the preview and its rows are removed, seven days after creation.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "failed_rows": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "failure_code": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OnboardingImportFailureCode"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "string"
+          },
+          "filter": {
+            "$ref": "#/components/schemas/AcademicAdministrationPreviewFilter"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "no_op_rows": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/AcademicAdministrationPreviewOperation"
+          },
+          "preview_digest": {
+            "description": "Present once the preview is ready.",
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "preview_expires_at": {
+            "description": "When the ready preview stops admitting its commit, 15 minutes after it became ready.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "preview_job_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "revision": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "role_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "scope_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "scope_type": {
+            "enum": [
+              "institution",
+              "academic_unit",
+              "class"
+            ],
+            "type": "string"
+          },
+          "skipped_rows": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "start_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "parsing",
+              "preview_ready",
+              "executing",
+              "completed",
+              "completed_with_errors",
+              "canceled",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "succeeded_rows": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/AcademicAdministrationPreviewSummary"
+          },
+          "total_rows": {
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "operation",
+          "scope_type",
+          "scope_id",
+          "filter",
+          "total_rows",
+          "succeeded_rows",
+          "no_op_rows",
+          "failed_rows",
+          "skipped_rows",
+          "preview_job_id",
+          "created_at",
+          "updated_at",
+          "expires_at",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "AcademicAdministrationPreviewRowListResponse": {
+        "additionalProperties": false,
+        "description": "One page of preview rows in row order.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AcademicAdministrationPreviewRowResponse"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "next_cursor": {
+            "description": "Opaque continuation for the next page, omitted after the final page.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "AcademicAdministrationPreviewRowResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "group": {
+            "enum": [
+              "will_change",
+              "no_op",
+              "skipped"
+            ],
+            "type": "string"
+          },
+          "public_code": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OnboardingImportRowCode"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AcademicAdministrationPreviewSkipReason"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "string"
+          },
+          "resource_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "row": {
+            "maximum": 10000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "valid",
+              "invalid",
+              "pending",
+              "succeeded",
+              "no_op",
+              "failed",
+              "skipped",
+              "canceled"
+            ],
+            "type": "string"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "row",
+          "user_id",
+          "username",
+          "display_name",
+          "group",
+          "status"
+        ],
+        "type": "object"
+      },
+      "AcademicAdministrationPreviewSkipReason": {
+        "description": "Why a preview skips a row: the caller's own account, a System Administrator from a disable or Session revocation, a Class enrollment of a User enrolled in another Class of the same Period or without a current student Affiliation, or an end of a User holding several current relationships it could end. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.",
+        "enum": [
+          "academic_administration_preview.ambiguous",
+          "academic_administration_preview.enrollment_conflict",
+          "academic_administration_preview.self",
+          "academic_administration_preview.student_affiliation_required",
+          "academic_administration_preview.system_administrator"
+        ],
+        "type": "string"
+      },
+      "AcademicAdministrationPreviewSummary": {
+        "additionalProperties": false,
+        "description": "A ready preview's rows by class, and its skipped rows by reason.",
+        "properties": {
+          "no_op": {
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "skip_reasons": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "reason": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/AcademicAdministrationPreviewSkipReason"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ],
+                  "type": "string"
+                },
+                "rows": {
+                  "maximum": 10000,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "reason",
+                "rows"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "skipped": {
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "will_change": {
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "will_change",
+          "no_op",
+          "skipped",
+          "skip_reasons"
         ],
         "type": "object"
       },
@@ -13913,6 +14452,10 @@
       "ErrorCode": {
         "description": "Stable public problem code. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.",
         "enum": [
+          "academic_administration_preview.conflict",
+          "academic_administration_preview.expired",
+          "academic_administration_preview.target_conflict",
+          "academic_administration_preview.too_many_users",
           "academic_period.conflict",
           "academic_period.invalid",
           "academic_unit.conflict",
@@ -18247,6 +18790,9 @@
       "JobErrorCode": {
         "description": "Stable safe failure category of a Job or Job Attempt. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.",
         "enum": [
+          "academic_administration_preview.authorization_lost",
+          "academic_administration_preview.target_conflict",
+          "academic_administration_preview.too_many_users",
           "database.unavailable",
           "dependency.unavailable",
           "exam.export.expired",
@@ -18494,6 +19040,7 @@
       "JobType": {
         "description": "Stable type of a background Job. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.",
         "enum": [
+          "academic_administration_preview.resolve",
           "audit.attempt_sweep",
           "command_outcome.cleanup",
           "exam_export.build",
@@ -21544,8 +22091,11 @@
         "type": "object"
       },
       "OnboardingImportFailureCode": {
-        "description": "Why a failed onboarding import or student progression failed: a lost credential or authority, an unreadable file, a target that no longer validates, or a progression preview failure. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.",
+        "description": "Why a failed onboarding import, student progression, or academic administration preview failed: a lost credential or authority, an unreadable file, a target that no longer validates, a progression preview failure, or a preview filter that matched too many Users. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.",
         "enum": [
+          "academic_administration_preview.authorization_lost",
+          "academic_administration_preview.target_conflict",
+          "academic_administration_preview.too_many_users",
           "administration.unavailable",
           "audit.unavailable",
           "authentication.reauthentication_required",
@@ -21595,8 +22145,14 @@
         "type": "object"
       },
       "OnboardingImportPreviewCode": {
-        "description": "Why a preview row is invalid, duplicate, or annotated: a malformed or duplicate CSV row, a target that does not resolve, or a student progression outcome such as an ineligible student or an existing destination enrollment. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.",
+        "description": "Why a preview row is invalid, duplicate, or annotated: a malformed or duplicate CSV row, a target that does not resolve, a student progression outcome such as an ineligible student or an existing destination enrollment, or an academic administration preview skip reason or no-change marker. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.",
         "enum": [
+          "academic_administration_preview.ambiguous",
+          "academic_administration_preview.enrollment_conflict",
+          "academic_administration_preview.no_change",
+          "academic_administration_preview.self",
+          "academic_administration_preview.student_affiliation_required",
+          "academic_administration_preview.system_administrator",
           "administration.unavailable",
           "audit.unavailable",
           "authentication.reauthentication_required",
@@ -21818,8 +22374,9 @@
         "type": "object"
       },
       "OnboardingImportRowCode": {
-        "description": "Why an executed onboarding import or student progression row failed, as the Invitation or academic administration operation that ran it reported. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.",
+        "description": "Why an executed onboarding import, student progression, or academic administration preview row failed, as the Invitation or academic administration operation that ran it reported, or because a preview row reached a User who became a System Administrator after the preview froze. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.",
         "enum": [
+          "academic_administration_preview.system_administrator",
           "academic_unit_member.conflict",
           "academic_unit_member.invalid",
           "administration.unavailable",
@@ -26995,6 +27552,427 @@
         ],
         "x-proctor-idempotency": "required"
       }
+    },
+    "/api/v1/academic-administration-previews": {
+      "post": {
+        "description": "Proposes applying one existing-User academic administration operation to every User the User directory filter matches. The filter takes exactly the User directory's filter fields with the same validation and visibility rules, including those only an Institution-wide viewer may apply, and the request is refused as the directory would refuse it. Nothing changes yet: a preview Job resolves the filter under the caller's visibility at that moment, freezes the ordered list of matching Users, and classifies each row as `will_change`, `no_op`, or `skipped` with a closed reason. The caller's own account is always skipped, and a disable or Session revocation also skips System Administrators. More than 10,000 matching Users fails the preview with `academic_administration_preview.too_many_users`; narrow the filter. Poll the preview until it is `preview_ready` or `failed`. `class.transfer` is not offered: a transfer names the exact membership it replaces, which Student Progression chooses instead. Requires a strong, recent interactive Session.",
+        "operationId": "createAcademicAdministrationPreview",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CreateAcademicAdministrationPreview"
+        },
+        "responses": {
+          "202": {
+            "$ref": "#/components/responses/AcademicAdministrationPreviewAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Preview one academic administration operation over the Users a directory filter matches",
+        "tags": [
+          "Membership and progression"
+        ],
+        "x-proctor-auth": "strong_recent_session_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "administration.unavailable",
+          "authentication.mfa.unavailable",
+          "invitation.unavailable",
+          "onboarding_import.file_invalid",
+          "onboarding_import.unavailable",
+          "student_progression.conflict",
+          "student_progression.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid",
+          "authentication.strong_required",
+          "authentication.reauthentication_required"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/academic-administration-previews/{academic_administration_preview_id}": {
+      "get": {
+        "description": "Reads the caller's own preview: its lifecycle state, operation, filter, digest and revision, and once ready its `summary` of rows by class with skipped rows counted by reason. After commit the row counts report execution outcomes. Only the User who created a preview, holding onboarding batch visibility at its scope, can read it: a caller without that visibility is denied, and any other User reads it as not found.",
+        "operationId": "getAcademicAdministrationPreview",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/AcademicAdministrationPreviewOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Read one academic administration preview and its counts",
+        "tags": [
+          "Membership and progression"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "onboarding_import.unavailable",
+          "invitation.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/AcademicAdministrationPreviewID"
+        }
+      ]
+    },
+    "/api/v1/academic-administration-previews/{academic_administration_preview_id}/cancel": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/AcademicAdministrationPreviewID"
+        }
+      ],
+      "post": {
+        "description": "Cancels the caller's own preview before it finishes. Rows not yet run are canceled; a row already committing finishes, and completed rows are never rolled back.",
+        "operationId": "cancelAcademicAdministrationPreview",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/AcademicAdministrationPreviewOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Cancel one unfinished academic administration preview",
+        "tags": [
+          "Membership and progression"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "source": "curl --fail-with-body \\\n  --request POST \\\n  --url 'https://proctor.example.edu/api/v1/academic-administration-previews/ybndrfg8ejkmcpqxot1uwisza3/cancel' \\\n  --header 'Authorization: Bearer \u003csession-access-token\u003e'"
+          }
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "invitation.unavailable",
+          "onboarding_import.conflict",
+          "onboarding_import.file_invalid",
+          "onboarding_import.unavailable",
+          "student_progression.conflict",
+          "student_progression.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/academic-administration-previews/{academic_administration_preview_id}/commit": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/AcademicAdministrationPreviewID"
+        }
+      ],
+      "post": {
+        "description": "Commits the caller's own ready preview when its revision and digest still match, within 15 minutes of it becoming ready as PostgreSQL measures it; after that the commit is refused with `academic_administration_preview.expired` and a new preview is needed. One execution Job then runs the frozen rows, never the filter again, so a User who starts matching after the preview is not changed. Every row is authorized again in PostgreSQL when it runs, and a row whose User the caller's directory no longer shows fails with `authorization.denied`. The first commit records one batch-level audit entry with the operation, filter, counts and preview identity; each row's own audit entry names the preview. Repeating the request with the same Idempotency-Key returns the same commit. Requires a strong, recent interactive Session.",
+        "operationId": "commitAcademicAdministrationPreview",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CommitAcademicAdministrationPreview"
+        },
+        "responses": {
+          "202": {
+            "$ref": "#/components/responses/AcademicAdministrationPreviewAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "410": {
+            "$ref": "#/components/responses/Gone"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Commit one exact academic administration preview",
+        "tags": [
+          "Membership and progression"
+        ],
+        "x-proctor-auth": "strong_recent_session_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "academic_administration_preview.conflict",
+          "academic_administration_preview.expired",
+          "administration.unavailable",
+          "authentication.mfa.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "invitation.unavailable",
+          "onboarding_import.file_invalid",
+          "onboarding_import.unavailable",
+          "student_progression.conflict",
+          "student_progression.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid",
+          "authentication.strong_required",
+          "authentication.reauthentication_required"
+        ],
+        "x-proctor-idempotency": "required"
+      }
+    },
+    "/api/v1/academic-administration-previews/{academic_administration_preview_id}/rows": {
+      "get": {
+        "description": "Pages the frozen rows of one class of the caller's own preview in row order, each naming its User and, after commit, its outcome. A row appears only while the caller's User directory shows its User now, so a viewer whose visibility narrowed since the preview froze no longer sees the Users it lost. A cursor continues only the group and reason it was issued for.",
+        "operationId": "listAcademicAdministrationPreviewRows",
+        "parameters": [
+          {
+            "description": "The preview class whose rows to list.",
+            "in": "query",
+            "name": "group",
+            "required": true,
+            "schema": {
+              "enum": [
+                "will_change",
+                "no_op",
+                "skipped"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only with `group=skipped`, keep the rows skipped for this reason.",
+            "in": "query",
+            "name": "reason",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/AcademicAdministrationPreviewSkipReason"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageCursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/AcademicAdministrationPreviewRowsOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Show who is in one group of an academic administration preview",
+        "tags": [
+          "Membership and progression"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "onboarding_import.unavailable",
+          "invitation.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/AcademicAdministrationPreviewID"
+        }
+      ]
     },
     "/api/v1/academic-periods": {
       "get": {

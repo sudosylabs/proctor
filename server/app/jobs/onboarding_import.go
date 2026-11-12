@@ -28,10 +28,11 @@ type onboardingImportJobCommand struct {
 }
 
 // OnboardingImportService is the onboarding import use cases the import Jobs
-// run: parse, preview a Student progression, execute, read and fail an
-// import.
+// run: parse, preview a Student progression, resolve an academic
+// administration filter preview, execute, read and fail an import.
 type OnboardingImportService interface {
 	PreviewProgression(context.Context, model.OnboardingImportID) (string, error)
+	ResolveAcademicAdministrationPreview(context.Context, model.OnboardingImportID) (string, error)
 	Parse(context.Context, model.OnboardingImportID) (string, error)
 	Get(context.Context, model.OnboardingImportID) (*store.OnboardingImport, error)
 	Execute(context.Context, model.OnboardingImportID, int, func(int, int) error) error
@@ -48,6 +49,33 @@ func (h studentProgressionPreviewHandler) Run(ctx context.Context, execution job
 		return job.PermanentFailure("job.command.invalid", errors.New("student progression preview command is invalid"))
 	}
 	terminalCode, err := h.service.PreviewProgression(ctx, model.OnboardingImportID(command.ImportID))
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return job.Canceled("job.canceled")
+		}
+		if terminalCode != "" {
+			if failErr := h.service.Fail(ctx, model.OnboardingImportID(command.ImportID), terminalCode); failErr != nil {
+				return job.RetryableFailure("dependency.unavailable", failErr)
+			}
+			return job.PermanentFailure(terminalCode, err)
+		}
+		return job.RetryableFailure("dependency.unavailable", err)
+	}
+	return job.Outcome{Kind: job.OutcomeSucceeded, Result: json.RawMessage(`{"preview_ready":true}`)}
+}
+
+type academicAdministrationPreviewResolveHandler struct{ service OnboardingImportService }
+
+// Run resolves an academic administration filter preview. A terminal
+// failure (lost authority, a changed target, too many matching Users) fails
+// the preview with its code so its creator reads why; any other failure is
+// retried.
+func (h academicAdministrationPreviewResolveHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
+	command, err := decodeOnboardingImportJob(execution, model.JobTypeAcademicAdministrationPreviewResolve)
+	if err != nil || h.service == nil {
+		return job.PermanentFailure("job.command.invalid", errors.New("academic administration preview command is invalid"))
+	}
+	terminalCode, err := h.service.ResolveAcademicAdministrationPreview(ctx, model.OnboardingImportID(command.ImportID))
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			return job.Canceled("job.canceled")
@@ -145,6 +173,13 @@ func studentProgressionPreviewDescriptor(handler job.Handler) job.Descriptor {
 	return descriptor
 }
 
+func academicAdministrationPreviewResolveDescriptor(handler job.Handler) job.Descriptor {
+	descriptor := onboardingImportDescriptor(model.JobTypeAcademicAdministrationPreviewResolve, handler, true)
+	descriptor.PublicErrorCodes = append(descriptor.PublicErrorCodes, model.AcademicAdministrationPreviewFailureCodes()...)
+	descriptor.Timeout = 10 * time.Minute
+	return descriptor
+}
+
 func onboardingImportExecuteDescriptor(handler job.Handler) job.Descriptor {
 	descriptor := onboardingImportDescriptor(model.JobTypeOnboardingImportExecute, handler, true)
 	descriptor.Checkpoints = true
@@ -163,6 +198,13 @@ func NewOnboardingImportParse(service OnboardingImportService) job.Registration 
 // through the onboarding import use case.
 func NewStudentProgressionPreview(service OnboardingImportService) job.Registration {
 	return job.Registration{Descriptor: studentProgressionPreviewDescriptor(studentProgressionPreviewHandler{service: service})}
+}
+
+// NewAcademicAdministrationPreviewResolve registers the resolution of an
+// academic administration filter preview through the onboarding import use
+// case.
+func NewAcademicAdministrationPreviewResolve(service OnboardingImportService) job.Registration {
+	return job.Registration{Descriptor: academicAdministrationPreviewResolveDescriptor(academicAdministrationPreviewResolveHandler{service: service})}
 }
 
 // NewOnboardingImportExecute registers execution of a confirmed onboarding

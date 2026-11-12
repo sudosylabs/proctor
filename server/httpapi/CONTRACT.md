@@ -924,6 +924,47 @@ never rolls back completed rows; compensation is an explicit inverse ordinary
 operation (for example membership end or User enable), never an implicit Job
 rollback.
 
+## Academic administration previews by filter
+
+`POST /api/v1/academic-administration-previews` applies one existing-User
+academic administration operation to the Users a User directory filter
+matches. Its `filter` takes exactly the directory's filter fields (`q`,
+`affiliation`, `academic_unit_id`, `role_id`, `state`, `never_signed_in`,
+`last_active_after`, `last_active_before`) with the directory's own
+validation and visibility rules, including those only an Institution-wide
+viewer may apply; `q` is at most 256 characters. The operation union is the
+JSON batch union without `class.transfer`, which names the exact membership it
+replaces. The route and the use case require a strong, recent interactive
+Session and `onboarding_batch.manage` plus the operation's own action at the
+exact scope; the request changes nothing and queues one preview Job.
+
+The preview Job resolves the filter under the creator's visibility at that
+moment and freezes the ordered User list (username order) as at most 10,000
+rows; more matching Users fail the preview with
+`academic_administration_preview.too_many_users`. Each row is `will_change`,
+`no_op`, or `skipped` with a closed reason: the creator's own account is
+always skipped, and a disable or Session revocation also skips System
+Administrators. `GET .../{id}` returns the summary by class and skip reason,
+and `GET .../{id}/rows?group=` pages one group. Only the creator reads a
+preview, through onboarding batch visibility at its scope, and a row is shown
+only while the creator's directory shows its User now. The generic onboarding
+import routes treat a filter preview as absent and never list or count it.
+
+`POST .../{id}/commit` requires an `Idempotency-Key` and the exact digest and
+revision, and is refused with `academic_administration_preview.expired`
+(`410`) once PostgreSQL time passes `preview_expires_at`, 15 minutes after the
+preview became ready. It queues one execution Job over the frozen rows, never
+the filter again. Each row is checked again when it runs: a User the
+creator's directory no longer shows fails with `authorization.denied`, a
+disable or Session revocation of a User who became a System Administrator
+fails with `academic_administration_preview.system_administrator`, and the
+row's own named transaction re-resolves the actor's authority in PostgreSQL
+and refuses the creator's own account and System Administrators again. The
+first commit records one batch-level audit entry (operation, filter without
+the search term, counts, preview ID); each row's audit entry names the
+preview in its parameters. `POST .../{id}/cancel` stops later rows. Every
+response is `no-store`.
+
 ## CSV onboarding imports
 
 `POST /api/v1/onboarding-imports` is a bounded streaming `text/csv` upload for

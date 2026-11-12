@@ -74,6 +74,7 @@ func productionResources(
 		onboardingImportResource(application.Onboarding),
 		studentProgressionResource(application.Onboarding),
 		academicAdministrationBatchResource(application.Onboarding),
+		academicAdministrationPreviewResource(application.Onboarding),
 		roleResource(application.Administration),
 		roleBindingResource(application.Administration),
 		auditResource(application.Administration),

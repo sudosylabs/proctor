@@ -50,6 +50,7 @@ func testRegistrations(onboarding OnboardingImportService) []job.Registration {
 		registrations = append(registrations,
 			NewOnboardingImportParse(onboarding),
 			NewStudentProgressionPreview(onboarding),
+			NewAcademicAdministrationPreviewResolve(onboarding),
 			NewOnboardingImportExecute(onboarding),
 		)
 	}

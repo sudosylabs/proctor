@@ -195,6 +195,9 @@ type authorizerFake struct {
 	institution        *model.Institution
 	decisions          []authorizationDecision
 	err                error
+	userVisibility     *store.UserVisibilityScope
+	userSearchErr      error
+	userSearches       int
 }
 
 // authorizationDecision is one scoped decision the Service recorded.
@@ -233,6 +236,19 @@ func (f *authorizerFake) GrantedScopes(_ context.Context, _ model.Principal, act
 	}
 	return access.AuthorizedScopeConstraint{InstitutionWide: f.visibility.InstitutionWide,
 		AcademicUnitRootIDs: f.visibility.AcademicUnitRootIDs, ClassIDs: f.visibility.ClassIDs}, nil
+}
+
+// AuthorizeUserSearch grants f.userVisibility, or the whole Institution
+// when it is nil, and refuses with f.userSearchErr.
+func (f *authorizerFake) AuthorizeUserSearch(context.Context, invocation.Invocation) (store.UserVisibilityScope, error) {
+	f.userSearches++
+	if f.userSearchErr != nil {
+		return store.UserVisibilityScope{}, f.userSearchErr
+	}
+	if f.userVisibility == nil {
+		return store.UserVisibilityScope{InstitutionWide: true}, nil
+	}
+	return *f.userVisibility, nil
 }
 
 func (f *authorizerFake) Institution(context.Context) (*model.Institution, error) {

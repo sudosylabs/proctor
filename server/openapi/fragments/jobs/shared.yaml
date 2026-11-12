@@ -19,6 +19,7 @@ components:
       description: >-
         Stable type of a background Job. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
       enum:
+        - academic_administration_preview.resolve
         - audit.attempt_sweep
         - command_outcome.cleanup
         - exam_export.build
@@ -63,6 +64,9 @@ components:
       description: >-
         Stable safe failure category of a Job or Job Attempt. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
       enum:
+        - academic_administration_preview.authorization_lost
+        - academic_administration_preview.target_conflict
+        - academic_administration_preview.too_many_users
         - database.unavailable
         - dependency.unavailable
         - exam.export.expired

@@ -65,8 +65,8 @@ func (s *Service) commitImport(
 	if err = s.authorizeImport(ctx, inv, current, true); err != nil {
 		return OnboardingImportView{}, err
 	}
-	if expectedMode != "" && current.Mode != expectedMode {
-		return OnboardingImportView{}, apperror.New("resource.not_found").WithField("resource", "student_progression")
+	if err = requireImportMode(current, expectedMode); err != nil {
+		return OnboardingImportView{}, err
 	}
 	if err = s.validatePrincipal(ctx, inv.Principal()); err != nil {
 		return OnboardingImportView{}, err
@@ -83,8 +83,16 @@ func (s *Service) commitImport(
 
 	digest := sha256.Sum256([]byte(command.IdempotencyKey))
 	auditAction, auditOperation := model.ActionOnboardingBatchManage, "onboarding_import.commit"
-	if current.Mode == model.OnboardingImportStudentProgression {
+	storeErrors := onboardingImportStoreErrors
+	var batchAudit *model.AuditEvent
+	switch current.Mode {
+	case model.OnboardingImportStudentProgression:
 		auditAction, auditOperation = model.ActionAcademicProgressionManage, "student_progression.commit"
+	case model.OnboardingImportAcademicAdministrationFilter:
+		auditOperation, storeErrors = "academic_administration_preview.commit", academicAdministrationPreviewStoreErrors
+		if batchAudit, err = s.prepareAcademicAdministrationBatchAudit(ctx, inv, current); err != nil {
+			return OnboardingImportView{}, err
+		}
 	}
 
 	attempt := access.Mutation{
@@ -121,6 +129,7 @@ func (s *Service) commitImport(
 			AuditEventID:       reference.ID,
 			SourceAuditEventID: sourceAuditID,
 			AuditAt:            reference.MutationAt,
+			BatchAuditEvent:    batchAudit,
 		})
 	}
 	var committed *store.OnboardingImport
@@ -147,7 +156,7 @@ func (s *Service) commitImport(
 			func(ctx context.Context, reference access.MutationReference) (*store.OnboardingImport, error) {
 				return persist(ctx, reference, "")
 			},
-			onboardingImportStoreErrors.Translate,
+			storeErrors.Translate,
 		)
 	}
 
@@ -187,8 +196,8 @@ func (s *Service) cancelImport(
 	if err = s.authorizeImport(ctx, inv, current, true); err != nil {
 		return OnboardingImportView{}, err
 	}
-	if expectedMode != "" && current.Mode != expectedMode {
-		return OnboardingImportView{}, apperror.New("resource.not_found").WithField("resource", "student_progression")
+	if err = requireImportMode(current, expectedMode); err != nil {
+		return OnboardingImportView{}, err
 	}
 
 	at := model.TimeUTC(s.now())

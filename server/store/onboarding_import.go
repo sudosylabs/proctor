@@ -24,6 +24,18 @@ const (
 	// OnboardingImportListMaximum bounds one listing read: a 200-item page
 	// plus the probe item that reports whether another page follows.
 	OnboardingImportListMaximum = 201
+	// AcademicAdministrationPreviewMaximumRows bounds the Users one
+	// academic administration filter preview freezes: the capped count of
+	// every list (MaximumListCount).
+	AcademicAdministrationPreviewMaximumRows = MaximumListCount
+	// AcademicAdministrationPreviewLifetime is how long a ready academic
+	// administration filter preview admits its commit, measured by
+	// PostgreSQL from the instant the preview became ready.
+	AcademicAdministrationPreviewLifetime = 15 * time.Minute
+	// AcademicAdministrationPreviewNoChange is the preview code of a filter
+	// preview row whose change already holds; a commit records the row as
+	// no_op instead of executing it.
+	AcademicAdministrationPreviewNoChange = "academic_administration_preview.no_change"
 )
 
 // OnboardingImport is the safe aggregate projection. Recipient data and the
@@ -67,6 +79,38 @@ type OnboardingImport struct {
 	// empty when none was given; a student progression has none.
 	FileName  string
 	Principal model.Principal
+	// Filter is the operation and User directory filter of an academic
+	// administration filter preview, and nil for every other mode.
+	Filter *AcademicAdministrationFilter
+	// PreviewExpiresAt is when a ready academic administration filter
+	// preview stops admitting its commit; PostgreSQL sets it when the
+	// preview becomes ready. It is absent for every other mode.
+	PreviewExpiresAt model.OptionalTime
+}
+
+// AcademicAdministrationFilter is what an academic administration filter
+// preview was asked for: one academic administration operation applied to
+// every User the User directory filter matches, with the operation's own
+// fields. The directory fields mean what the User directory query of the
+// same name means, and the same visibility rules admit them.
+type AcademicAdministrationFilter struct {
+	Operation        string
+	Query            string
+	Affiliations     []model.AffiliationKind
+	AcademicUnitID   model.AcademicUnitID
+	RoleIDs          []model.RoleID
+	State            string
+	NeverSignedIn    bool
+	LastActiveAfter  time.Time
+	LastActiveBefore time.Time
+	// RoleID is the Role a role_binding.create or role_binding.end applies.
+	RoleID model.RoleID
+	// AffiliationKind is the kind an affiliation.add or affiliation.end
+	// applies.
+	AffiliationKind model.AffiliationKind
+	// StartAt and EndAt bound a created relationship.
+	StartAt model.OptionalTime
+	EndAt   model.OptionalTime
 }
 
 // OnboardingImportRow is the detailed seven-day preview/report row. Command
@@ -136,6 +180,12 @@ type OnboardingImportCommit struct {
 	AuditEventID       model.AuditEventID
 	SourceAuditEventID model.AuditEventID
 	AuditAt            time.Time
+	// BatchAuditEvent is the draft of the one batch-level audit entry of an
+	// academic administration filter preview, required for that mode and
+	// refused for every other. The first commit inserts and completes it
+	// with the frozen counts in the same transaction; a replay inserts none,
+	// so the batch is recorded exactly once.
+	BatchAuditEvent *model.AuditEvent
 }
 
 type OnboardingImportCancellation struct {
@@ -172,6 +222,9 @@ type OnboardingImportVisibilityScope struct {
 // unexpired administrative imports inside Visibility, newest first (oldest
 // first when Ascending) by creation instant then identity. Student progression aggregates are never listed: they
 // authorize through Class progression authority, not onboarding_batch.view.
+// Academic administration filter previews are never listed either: their
+// rows name Users and are read only by their creator through their own
+// surface.
 // An empty States matches every state; BeforeCreatedAt and BeforeID are the
 // keyset of the previous page's last item, both set or both zero. An empty
 // Visibility is invalid input.
@@ -229,6 +282,60 @@ type OnboardingImportPage struct {
 	More bool
 }
 
+// AcademicAdministrationPreviewClass is the preview class of one filter
+// preview row: it will change, its change already holds, or it is skipped.
+type AcademicAdministrationPreviewClass string
+
+const (
+	AcademicAdministrationPreviewWillChange AcademicAdministrationPreviewClass = "will_change"
+	AcademicAdministrationPreviewNoOp       AcademicAdministrationPreviewClass = "no_op"
+	AcademicAdministrationPreviewSkipped    AcademicAdministrationPreviewClass = "skipped"
+)
+
+// IsValid reports whether c is a known preview class.
+func (c AcademicAdministrationPreviewClass) IsValid() bool {
+	return c == AcademicAdministrationPreviewWillChange || c == AcademicAdministrationPreviewNoOp || c == AcademicAdministrationPreviewSkipped
+}
+
+// AcademicAdministrationPreviewGroup counts the rows of one preview class
+// and reason. Reason is the skip reason of a skipped group and empty for
+// the other classes.
+type AcademicAdministrationPreviewGroup struct {
+	Class  AcademicAdministrationPreviewClass
+	Reason string
+	Rows   int
+}
+
+// AcademicAdministrationPreviewRowListOptions selects up to Limit (1..201)
+// rows of one academic administration filter preview in row order after
+// AfterRowNumber, keeping only rows of Class (and of Reason when set, for
+// the skipped class) whose User lies inside Visibility. Visibility is the
+// reader's User directory visibility, evaluated at its ActiveAt as the
+// directory evaluates it, with disabled Users included only for an
+// InstitutionWide visibility; an empty Visibility matches no row.
+type AcademicAdministrationPreviewRowListOptions struct {
+	ImportID       model.OnboardingImportID
+	Class          AcademicAdministrationPreviewClass
+	Reason         string
+	AfterRowNumber int
+	Limit          int
+	Visibility     UserVisibilityScope
+}
+
+// AcademicAdministrationPreviewRow is one frozen filter preview row with the
+// public directory identity of its User and the row's execution outcome.
+type AcademicAdministrationPreviewRow struct {
+	RowNumber   int
+	UserID      model.UserID
+	Username    string
+	DisplayName string
+	Class       AcademicAdministrationPreviewClass
+	Reason      string
+	Status      model.OnboardingImportRowStatus
+	PublicCode  string
+	ResourceID  string
+}
+
 // OnboardingImportStore owns seven-day administrative import and progression
 // aggregates, frozen private rows, execution fences, and retention.
 type OnboardingImportStore interface {
@@ -236,7 +343,8 @@ type OnboardingImportStore interface {
 	GetOnboardingImport(context.Context, model.OnboardingImportID) (*OnboardingImport, error)
 	ListOnboardingImports(context.Context, OnboardingImportListOptions) ([]*OnboardingImport, error)
 	// CountOpenOnboardingImports counts the unexpired administrative imports,
-	// every mode but student progression, that are not yet in a terminal
+	// every mode but student progression and the academic administration
+	// filter preview, that are not yet in a terminal
 	// state (uploading, parsing, preview_ready, or executing) and whose
 	// scope lies within the visibility. It stops at maximum (see
 	// MaximumListCount).
@@ -248,9 +356,30 @@ type OnboardingImportStore interface {
 	// MaximumListCount).
 	CountStudentProgressions(context.Context, StudentProgressionListOptions, int) (int, error)
 	ListStudentProgressionRoster(context.Context, model.ClassID, time.Time, int) ([]*model.ClassMember, error)
+	// CompleteOnboardingImportPreview freezes the rows of a parsing import.
+	// For an academic administration filter preview it also refuses more
+	// than AcademicAdministrationPreviewMaximumRows rows or a row outside
+	// the preview's operation and scope, and sets PreviewExpiresAt to
+	// AcademicAdministrationPreviewLifetime after the PostgreSQL instant the
+	// preview became ready.
 	CompleteOnboardingImportPreview(context.Context, *OnboardingImportPreviewCompletion) (*OnboardingImport, error)
+	// CommitOnboardingImport queues the one execution Job of a ready
+	// preview. An academic administration filter preview is refused with a
+	// conflict on preview_expired once PostgreSQL time reaches its
+	// PreviewExpiresAt, and its first commit inserts BatchAuditEvent.
 	CommitOnboardingImport(context.Context, *OnboardingImportCommit) (*OnboardingImport, error)
 	ListOnboardingImportRows(context.Context, model.OnboardingImportID, int, int) (*OnboardingImportPage, error)
+	// CountAcademicAdministrationPreviewGroups counts the rows of one
+	// academic administration filter preview by class and reason, ordered
+	// by class then reason.
+	CountAcademicAdministrationPreviewGroups(context.Context, model.OnboardingImportID) ([]AcademicAdministrationPreviewGroup, error)
+	// ListAcademicAdministrationPreviewRows reads one page of a filter
+	// preview's rows whose User the reader may see (see
+	// AcademicAdministrationPreviewRowListOptions).
+	ListAcademicAdministrationPreviewRows(
+		context.Context,
+		AcademicAdministrationPreviewRowListOptions,
+	) ([]AcademicAdministrationPreviewRow, error)
 	CompleteOnboardingImportRow(context.Context, *OnboardingImportRowCompletion) (*OnboardingImport, error)
 	FinishOnboardingImport(context.Context, *OnboardingImportFinish) (*OnboardingImport, error)
 	CancelOnboardingImport(context.Context, *OnboardingImportCancellation) (*OnboardingImport, error)

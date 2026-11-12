@@ -58,6 +58,15 @@ func (s *Service) executeImport(ctx context.Context, id model.OnboardingImportID
 			return pageErr
 		}
 
+		// A filter preview's rows are checked against the frozen caller's
+		// directory visibility, resolved once for each page it executes.
+		var guard *academicAdministrationFilterRowGuard
+		if current.Mode == model.OnboardingImportAcademicAdministrationFilter {
+			if guard, err = s.newAcademicAdministrationFilterRowGuard(ctx, actorInvocation, current); err != nil {
+				return err
+			}
+		}
+
 		for _, row := range page.Rows {
 			after = row.RowNumber
 			if row.Status != model.OnboardingImportRowPending {
@@ -81,7 +90,7 @@ func (s *Service) executeImport(ctx context.Context, id model.OnboardingImportID
 				return store.NewErrConflict("onboarding_import", "state", nil)
 			}
 
-			status, invitationID, resourceID, code, executeErr := s.executeImportRow(ctx, actorInvocation, latest, row)
+			status, invitationID, resourceID, code, executeErr := s.executeImportRow(ctx, actorInvocation, latest, row, guard)
 			if executeErr != nil {
 				return executeErr
 			}
@@ -119,17 +128,33 @@ func (s *Service) executeImport(ctx context.Context, id model.OnboardingImportID
 	}
 }
 
+// executeImportRow runs one pending row. guard is the page's filter row
+// guard for an academic administration filter preview and nil otherwise.
 func (s *Service) executeImportRow(
 	ctx context.Context,
 	inv invocation.Invocation,
 	current *store.OnboardingImport,
 	row store.OnboardingImportRow,
+	guard *academicAdministrationFilterRowGuard,
 ) (model.OnboardingImportRowStatus, model.InvitationID, string, string, error) {
 	if err := s.validatePrincipal(ctx, inv.Principal()); err != nil {
 		if onboardingImportRetryableError(err) {
 			return "", "", "", "", err
 		}
 		return model.OnboardingImportRowFailed, "", "", "authentication.token_invalid", nil
+	}
+
+	filterMode := current != nil && current.Mode == model.OnboardingImportAcademicAdministrationFilter
+	if filterMode {
+		// Every failure of the check is a dependency failure, so the row is
+		// retried rather than recorded.
+		code, err := s.checkAcademicAdministrationFilterRow(ctx, current, guard, row)
+		if err != nil {
+			return "", "", "", "", err
+		}
+		if code != "" {
+			return model.OnboardingImportRowFailed, "", "", code, nil
+		}
 	}
 
 	if current == nil || current.Mode != model.OnboardingImportStudentProgression {
@@ -150,6 +175,19 @@ func (s *Service) executeImportRow(
 			relationshipID = ""
 		}
 
+		batchItem := AcademicAdministrationBatchItemCommand{
+			IdempotencyKey:  strconv.Itoa(row.RowNumber),
+			UserID:          row.UserID,
+			RelationshipID:  relationshipID,
+			RoleID:          row.RoleID,
+			AffiliationKind: row.AffiliationKind,
+			StartAt:         row.StartsAt.Millis(),
+			EndAt:           row.EndsAt.Millis(),
+		}
+		if filterMode {
+			batchItem = academicAdministrationFilterRowItem(row)
+		}
+
 		run := func(ctx context.Context, sourceAuditID, destinationAuditID model.AuditEventID) (AcademicAdministrationBatchResult, error) {
 			if progression {
 				if err := s.authorizeImport(ctx, inv, current, true); err != nil {
@@ -167,15 +205,7 @@ func (s *Service) executeImportRow(
 				progression:                   progression,
 				progressionSourceAuditID:      sourceAuditID,
 				progressionDestinationAuditID: destinationAuditID,
-				Items: []AcademicAdministrationBatchItemCommand{{
-					IdempotencyKey:  strconv.Itoa(row.RowNumber),
-					UserID:          row.UserID,
-					RelationshipID:  relationshipID,
-					RoleID:          row.RoleID,
-					AffiliationKind: row.AffiliationKind,
-					StartAt:         row.StartsAt.Millis(),
-					EndAt:           row.EndsAt.Millis(),
-				}},
+				Items:                         []AcademicAdministrationBatchItemCommand{batchItem},
 			})
 		}
 		var result AcademicAdministrationBatchResult

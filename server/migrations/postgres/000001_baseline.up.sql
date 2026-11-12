@@ -475,7 +475,7 @@ CREATE INDEX invitations_state_created_at_idx ON invitations (state, created_at 
 -- recipient data remains in these domain-owned tables and is removed with it.
 CREATE TABLE onboarding_imports (
     id varchar(26) PRIMARY KEY,
-    mode varchar(32) NOT NULL CHECK (mode IN ('student_class', 'teacher_academic_unit', 'institution', 'academic_administration', 'student_progression')),
+    mode varchar(32) NOT NULL CHECK (mode IN ('student_class', 'teacher_academic_unit', 'institution', 'academic_administration', 'student_progression', 'academic_administration_filter')),
     state varchar(32) NOT NULL CHECK (state IN ('uploading', 'parsing', 'preview_ready', 'executing', 'completed', 'completed_with_errors', 'canceled', 'failed')),
     scope_type varchar(32) NOT NULL CHECK (scope_type IN ('class', 'academic_unit', 'institution')),
     scope_id varchar(26) NOT NULL,
@@ -509,7 +509,13 @@ CREATE TABLE onboarding_imports (
     failure_code varchar(128) NOT NULL DEFAULT '',
     -- The uploaded file's base name as the uploader gave it; never set for a
     -- student progression, which has no file.
-    file_name varchar(255) CHECK (file_name IS NULL OR (char_length(file_name) BETWEEN 1 AND 255 AND mode <> 'student_progression')),
+    file_name varchar(255) CHECK (file_name IS NULL OR (char_length(file_name) BETWEEN 1 AND 255 AND mode NOT IN ('student_progression', 'academic_administration_filter'))),
+    -- An academic administration filter preview keeps the operation and the
+    -- User directory filter it was asked for, and PostgreSQL decides when
+    -- its frozen preview stops admitting a commit: 15 minutes after it
+    -- became ready. Neither is ever set for another mode.
+    filter jsonb CHECK (filter IS NULL OR (jsonb_typeof(filter) = 'object' AND octet_length(filter::text) <= 8192)),
+    preview_expires_at timestamptz,
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL,
     expires_at timestamptz NOT NULL,
@@ -519,6 +525,7 @@ CREATE TABLE onboarding_imports (
         (mode = 'teacher_academic_unit' AND scope_type = 'academic_unit' AND role_id IS NOT NULL) OR
         (mode = 'institution' AND scope_type = 'institution' AND role_id IS NULL) OR
         (mode = 'academic_administration' AND scope_type IN ('institution', 'academic_unit', 'class') AND role_id IS NULL) OR
+        (mode = 'academic_administration_filter' AND scope_type IN ('institution', 'academic_unit', 'class') AND role_id IS NULL) OR
         (mode = 'student_progression' AND scope_type = 'class' AND role_id IS NULL AND
          source_period_id IS NOT NULL AND source_class_id IS NOT NULL AND destination_period_id IS NOT NULL AND
          destination_class_id = scope_id AND effective_at IS NOT NULL AND source_period_revision > 0 AND
@@ -529,6 +536,14 @@ CREATE TABLE onboarding_imports (
         (mode <> 'student_progression' AND source_period_id IS NULL AND source_class_id IS NULL AND
          destination_period_id IS NULL AND destination_class_id IS NULL AND effective_at IS NULL AND
          source_period_revision = 0 AND source_class_revision = 0 AND destination_period_revision = 0 AND destination_class_revision = 0)
+    ),
+    CONSTRAINT onboarding_imports_filter_package_check CHECK (
+        (mode = 'academic_administration_filter') = (filter IS NOT NULL) AND
+        (mode = 'academic_administration_filter' OR preview_expires_at IS NULL) AND
+        (mode <> 'academic_administration_filter' OR total_rows <= 10000) AND
+        (mode <> 'academic_administration_filter' OR
+         state NOT IN ('preview_ready', 'executing', 'completed', 'completed_with_errors') OR
+         preview_expires_at IS NOT NULL)
     ),
     CONSTRAINT onboarding_imports_counts_check CHECK (
         valid_rows + invalid_rows = total_rows AND

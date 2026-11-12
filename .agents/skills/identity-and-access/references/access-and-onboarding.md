@@ -865,6 +865,23 @@ error code; downloads reauthorize and escape spreadsheet formulas. Audit,
 logs, metrics, and generic Job projections contain only safe IDs, counts,
 timing, and closed codes, never recipient lists or rows.
 
+An academic administration preview by filter is the third preview source,
+beside CSV and progression, and the same onboarding import aggregate with its
+own mode. It applies one batch operation (not `class.transfer`) to the Users a
+User directory filter matches, admitting exactly the filters the caller's
+directory admits. Its preview Job freezes the ordered User list under the
+caller's visibility at that moment, at most 10,000 rows, classifying each row
+as will change, no-op, or skipped with a closed reason; the caller's own
+account is always skipped, and disable and Session revocation skip System
+Administrators. Only its creator reads it, rows are shown only while the
+creator's directory shows their User, and the generic import surface never
+shows, lists, or counts it. Preview and commit require a strong recent
+Session; the commit expires 15 minutes after the preview became ready, by
+PostgreSQL time. Execution runs the frozen list, never the filter, and each
+row rechecks the User's visibility and System Administrator status before its
+named transaction re-resolves authority. The first commit records one
+batch-level audit entry, and each import row's audit entry names its import.
+
 Student progression names exact source/destination Periods and Classes, dry
 runs every student conflict, preserves historical membership, and commits each
 student independently. Same-Period transfer ends and replaces enrollment

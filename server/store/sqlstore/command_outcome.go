@@ -159,6 +159,9 @@ func runIdempotentMutationInTransaction[T any](
 	if err := lockIdempotentCommand(ctx, tx, command); err != nil {
 		return nil, err
 	}
+	if err := recordOnboardingImportRowAudit(ctx, tx, command, mutation.auditEventID); err != nil {
+		return nil, err
+	}
 
 	var row commandOutcomeRow
 	err := tx.Get(
@@ -204,6 +207,36 @@ func lockIdempotentCommand(ctx context.Context, tx *sqlxTxWrapper, command *stor
 		return err
 	}
 	return lockCommandAuthorization(ctx, tx, command.Authorization)
+}
+
+// recordOnboardingImportRowAudit names, in the parameters of the row's own
+// audit attempt, the onboarding import and row a batch row command runs
+// for, in the transaction that completes that attempt, so every row's entry
+// names its batch. A command outside an import, or an attempt already
+// completed, is left alone.
+func recordOnboardingImportRowAudit(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	command *store.CommandIdempotency,
+	auditEventID model.AuditEventID,
+) error {
+	if command == nil || !command.OnboardingImportID.IsValid() || command.OnboardingImportRowNumber < 1 || !auditEventID.IsValid() {
+		return nil
+	}
+	if _, err := tx.Exec(
+		ctx,
+		`UPDATE audit_events
+		SET parameters = COALESCE(parameters, '{}'::jsonb) ||
+			jsonb_build_object('onboarding_import_id', ?::text, 'onboarding_import_row', ?::integer)
+		WHERE id = ?
+			AND status = 'attempt'`,
+		command.OnboardingImportID.String(),
+		command.OnboardingImportRowNumber,
+		auditEventID.String(),
+	); err != nil {
+		return fmt.Errorf("record onboarding import row audit: %w", err)
+	}
+	return nil
 }
 
 // replayRecordedOutcome checks that the recorded outcome belongs to the same

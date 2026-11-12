@@ -285,6 +285,11 @@ execution but keep their own preview, scope, row, and report state; generic Job
 payloads are not the product API. Upload creates no domain effects. A bounded
 parse Job produces a content-digested immutable preview, explicit commit creates
 one execution Job, and each row runs one named atomic aggregate transaction.
+Three sources produce the preview: a CSV parse Job, the student progression
+preview Job, and the academic administration filter preview Job
+(`academic_administration_preview.resolve`), which freezes the Users a
+directory filter matches and fails the preview rather than truncate past
+10,000 rows. All three commit to the same execution Job.
 
 Submission and every row reauthorize against current actor, target, scope, and
 credential type. Cancellation prevents new row claims, lets a committing row

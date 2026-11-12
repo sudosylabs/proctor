@@ -275,8 +275,8 @@ func (s *Service) getImport(
 	if err = s.authorizeImport(ctx, inv, value, false); err != nil {
 		return OnboardingImportView{}, nil, err
 	}
-	if expectedMode != "" && value.Mode != expectedMode {
-		return OnboardingImportView{}, nil, apperror.New("resource.not_found").WithField("resource", "student_progression")
+	if err = requireImportMode(value, expectedMode); err != nil {
+		return OnboardingImportView{}, nil, err
 	}
 
 	rows := make([]OnboardingImportRowView, 0, value.TotalRows)
@@ -399,6 +399,28 @@ func (s *Service) authorizeImport(
 	}
 
 	return nil
+}
+
+// requireImportMode refuses an import reached through the surface of another
+// mode, as if it did not exist. The onboarding import surface (expected "")
+// serves every mode but the academic administration filter, whose rows name
+// Users and so are shown only through its own visibility-filtered surface.
+func requireImportMode(value *store.OnboardingImport, expected model.OnboardingImportMode) error {
+	if value == nil {
+		return apperror.New("request.invalid")
+	}
+	if value.Mode == expected || (expected == "" && value.Mode != model.OnboardingImportAcademicAdministrationFilter) {
+		return nil
+	}
+
+	resource := "student_progression"
+	switch expected {
+	case "":
+		resource = "onboarding_import"
+	case model.OnboardingImportAcademicAdministrationFilter:
+		resource = "academic_administration_preview"
+	}
+	return apperror.New("resource.not_found").WithField("resource", resource)
 }
 
 func onboardingImportView(value *store.OnboardingImport) OnboardingImportView {

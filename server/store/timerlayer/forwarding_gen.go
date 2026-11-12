@@ -3123,6 +3123,18 @@ func (s *timedOnboardingImportStore) ListOnboardingImportRows(arg0 context.Conte
 	})
 }
 
+func (s *timedOnboardingImportStore) CountAcademicAdministrationPreviewGroups(arg0 context.Context, arg1 model.OnboardingImportID) ([]store.AcademicAdministrationPreviewGroup, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateOnboardingImport, methodCountAcademicAdministrationPreviewGroups), func(callCtx context.Context) ([]store.AcademicAdministrationPreviewGroup, error) {
+		return s.next.CountAcademicAdministrationPreviewGroups(callCtx, arg1)
+	})
+}
+
+func (s *timedOnboardingImportStore) ListAcademicAdministrationPreviewRows(arg0 context.Context, arg1 store.AcademicAdministrationPreviewRowListOptions) ([]store.AcademicAdministrationPreviewRow, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateOnboardingImport, methodListAcademicAdministrationPreviewRows), func(callCtx context.Context) ([]store.AcademicAdministrationPreviewRow, error) {
+		return s.next.ListAcademicAdministrationPreviewRows(callCtx, arg1)
+	})
+}
+
 func (s *timedOnboardingImportStore) CompleteOnboardingImportRow(arg0 context.Context, arg1 *store.OnboardingImportRowCompletion) (*store.OnboardingImport, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateOnboardingImport, methodCompleteOnboardingImportRow), func(callCtx context.Context) (*store.OnboardingImport, error) {
 		return s.next.CompleteOnboardingImportRow(callCtx, arg1)

@@ -221,6 +221,11 @@ const sidebars: SidebarsConfig = {
             },
             {
               type: 'doc',
+              id: 'developers/server/plugins',
+              label: 'Plugins',
+            },
+            {
+              type: 'doc',
               id: 'developers/server/user-settings-slice',
               label: 'Complete Vertical Slice',
             },

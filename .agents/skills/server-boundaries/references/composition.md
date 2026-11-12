@@ -79,7 +79,9 @@ variables or a supervisor-specific implementation.
 ## Plugins
 
 Plugins are first-party Go packages compiled into the server; Proctor never
-loads outside code. `server/plugin` holds their contracts and imports only the
+loads outside code. The developer guide
+[`docs/public/developers/server/plugins.mdx`](../../../../docs/public/developers/server/plugins.mdx)
+describes the seams and the guarantees the core keeps. `server/plugin` holds their contracts and imports only the
 standard library. `pluginhost` runs them and imports only `server/plugin`. The
 root names every built-in in `builtinPlugins()`, the one place a plugin is
 listed.

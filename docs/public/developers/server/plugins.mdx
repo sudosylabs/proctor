@@ -1,0 +1,107 @@
+---
+title: Build Plugins
+description: How Proctor's first-party plugins add capabilities the core works without, which seams they plug into, and which guarantees the core keeps.
+audience: developer
+maturity: preview
+slug: /developers/server/plugins/
+---
+
+# Build Plugins
+
+A plugin adds a capability that Proctor works without and that not every
+institution wants. Examples are a display-topology check, a virtualization
+gate, or a recording of the last minutes of a session. Plugins are
+first-party: they are compiled into the server, and into Proctor Desktop when
+they need it, and stay dormant until an administrator turns them on. Proctor
+never loads code from outside its own binaries.
+
+The aim is the Mattermost experience: a plugin can do nearly anything a
+built-in feature can, from one folder, without editing the core. The core
+gets there by offering seams, the points where a plugin can join core logic.
+A new capability should then touch only its plugin folders.
+
+## Two kinds of capability
+
+**Core policies** are built in, because every exam needs them. Connection
+loss and focus loss are core policies. They can flag and suspend an Attempt
+on their own.
+
+**Capability plugins** are everything else. Each one is compiled in on both
+sides but does nothing until it is enabled. While it is disabled, Desktop
+never activates the capability and no event for it ever flows.
+
+## Where a plugin lives
+
+Each plugin has one folder, `server/plugin/<name>/`, holding its code and,
+as the seams grow, its migrations, API fragments, translations and docs. The
+contracts it implements are in `server/plugin`. A plugin may import the
+contracts, `model`, `config`, its own dependencies, and the support packages
+named for it, such as `platform/externalauth` for sign-in protocols. Only the
+module-root `server` package imports a plugin, and `builtinPlugins()` lists
+them all. The architecture gate enforces both rules.
+
+A plugin that needs Desktop has a matching folder there, built against the
+same contract.
+
+## Seams
+
+| Seam | Status | What it lets a plugin do |
+| --- | --- | --- |
+| Lifecycle | built | Activate and deactivate, with deadlines, containment and metrics |
+| Sign-in protocols, export formats, domain events | built | Offer an identity provider type or export encoding, or react to committed events |
+| Installation settings | planned | Have settings an administrator changes at runtime, applied on every node |
+| Integrity outcomes | planned | Reach a decision that the core applies as record, flag, warn or suspend |
+| Capability registry | pending Desktop work | Declare a native capability that Desktop activates only when the agreement names it |
+| Exam policy sections | pending Desktop work | Add a policy section the exam author sets, frozen into the Exam Revision and its digest |
+| Admission gates | pending Desktop work | Decide admit, deny or admit-and-flag before an Attempt starts, from a report Desktop attests |
+| Signal verdicts | pending Desktop work | Interpret native signals during an Attempt and return a verdict |
+| Evidence kinds | planned | Declare evidence the core stores, seals, exports and shows in review |
+
+The pending seams depend on what Desktop reports and when. They will be
+designed once the Desktop native capability work settles.
+
+## How a capability decides
+
+Every integrity capability, built in or plugin, follows one template:
+
+1. A signal arrives over a core transport.
+2. The core stores it as evidence before anything interprets it.
+3. A rule decides, from the policy frozen into the Exam Revision.
+4. The rule returns an outcome from a closed list: record, flag,
+   flag and warn, or flag and suspend.
+5. The core applies the outcome through the same audited code a manager's
+   action uses, attributed to the policy or plugin that decided.
+
+Each capability also declares what happens when it cannot run during an
+Attempt. `contain` keeps the Attempt from continuing until the capability
+recovers or a manager decides. `record_gap` records the missing coverage and
+lets the Attempt go on.
+
+## Guarantees the core keeps
+
+- **The core owns the trusted path.** Transport, ordering, storage, sealing,
+  digests and audit stay in the core. A plugin cannot lose or rewrite
+  evidence.
+- **Plugins decide, the core acts.** Outcomes come from a closed list, and
+  each one is audited with the policy that produced it.
+- **Nothing is enabled by surprise.** Desktop activates only what the
+  agreement it signed names, and candidates see which capabilities are on
+  before an Attempt starts.
+- **A broken plugin never takes exams down.** Panics are contained, calls are
+  bounded, and a failed plugin is reported in readiness and metrics while the
+  node keeps serving. The capability's declared fail mode decides what that
+  means for an Attempt in progress.
+
+## Settings
+
+This section describes the planned settings seam.
+
+An administrator turns a plugin on or off and edits its settings through the
+plugin administration API. Each plugin publishes a settings schema that a UI
+draws its form from, and validates a document before it is saved. A change
+is audited and applied live: every node converges within a few seconds. A
+required plugin, such as the zip export, cannot be turned off.
+
+Secrets never go through the API. They stay in the configuration file under
+`Plugins.<id>.Secrets`, which is always redacted. See
+[Plugins configuration](../../reference/configuration/plugins.mdx).

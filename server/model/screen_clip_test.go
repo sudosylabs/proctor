@@ -88,3 +88,58 @@ func TestScreenClipManagerRequestsNameTheirManagerAndABoundedReason(t *testing.T
 	clip.FlagID = NewIntegrityFlagID()
 	require.Error(t, clip.Validate(), "a manager request names no Flag")
 }
+
+func screenClipUpload(size int64) *ScreenClipUpload {
+	upload := &ScreenClipUpload{MediaType: "video/mp4", SizeBytes: size}
+	for i := range upload.ChunkCount() {
+		upload.ChunkSHA256 = append(upload.ChunkSHA256, strings.Repeat(string(rune('a'+i%6)), 64))
+	}
+	return upload
+}
+
+func TestScreenClipUploadsAreChunkedAndDigestedByTheirManifest(t *testing.T) {
+	t.Parallel()
+
+	upload := screenClipUpload(2*ScreenClipChunkBytes + 5)
+	require.NoError(t, upload.Validate())
+	require.Equal(t, 3, upload.ChunkCount())
+	require.Equal(t, ScreenClipChunkBytes, upload.ChunkSize(0))
+	require.Equal(t, int64(5), upload.ChunkSize(2), "the last chunk holds the rest")
+	require.Zero(t, upload.ChunkSize(3))
+	require.Equal(t, 1, screenClipUpload(ScreenClipChunkBytes).ChunkCount(), "an exact multiple has no empty chunk")
+
+	digest := upload.Digest()
+	require.Len(t, digest, 64)
+	reordered := upload.Clone()
+	reordered.ChunkSHA256[0], reordered.ChunkSHA256[1] = reordered.ChunkSHA256[1], reordered.ChunkSHA256[0]
+	require.NotEqual(t, digest, reordered.Digest(), "the digest binds chunk order")
+
+	for name, change := range map[string]func(*ScreenClipUpload){
+		"empty":          func(u *ScreenClipUpload) { u.SizeBytes = 0 },
+		"too large":      func(u *ScreenClipUpload) { u.SizeBytes = ScreenClipMaxBytes + 1 },
+		"missing hash":   func(u *ScreenClipUpload) { u.ChunkSHA256 = u.ChunkSHA256[:2] },
+		"upper-case hex": func(u *ScreenClipUpload) { u.ChunkSHA256[0] = strings.Repeat("A", 64) },
+		"other media":    func(u *ScreenClipUpload) { u.MediaType = "image/png" },
+	} {
+		changed := upload.Clone()
+		change(changed)
+		require.Error(t, changed.Validate(), name)
+	}
+}
+
+func TestScreenClipUploadsOnlyAfterRecordingAndCompletesOnce(t *testing.T) {
+	t.Parallel()
+
+	clip := managerClip(t, ScreenClipRange{FromSessionStart: true, End: clipAt})
+	upload := screenClipUpload(ScreenClipChunkBytes + 1)
+	require.Error(t, clip.BeginUpload(upload, clipAt), "a request Desktop has not taken cannot upload")
+	require.NoError(t, clip.Deliver(NewAttemptParticipationID(), clipAt))
+	require.NoError(t, clip.BeginUpload(upload, clipAt))
+	require.Equal(t, ScreenClipUploading, clip.State)
+	upload.ChunkSHA256[0] = strings.Repeat("f", 64)
+	require.NotEqual(t, upload.ChunkSHA256[0], clip.Upload.ChunkSHA256[0], "the clip keeps its own copy")
+	require.NoError(t, clip.Complete(clipAt))
+	require.Equal(t, ScreenClipReady, clip.State)
+	require.Error(t, clip.Complete(clipAt))
+	require.Error(t, clip.Fail(ScreenClipFailureRejected, clipAt), "a ready clip is final")
+}

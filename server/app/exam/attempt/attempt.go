@@ -73,6 +73,9 @@ type Content interface {
 		string,
 	) (*model.AttemptWorkspaceContent, error)
 	OpenAttemptWorkspaceObject(context.Context, model.AttemptWorkspaceObjectID) (io.ReadCloser, error)
+	// StageScreenClipChunk stores one chunk of a screen clip if its bytes are
+	// the given size and match the given hash.
+	StageScreenClipChunk(context.Context, model.ScreenClipID, int, io.Reader, int64, string) error
 }
 
 // SubmissionMailPreparation contains only the safe identity needed to freeze

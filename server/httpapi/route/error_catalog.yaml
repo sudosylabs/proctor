@@ -347,8 +347,12 @@ codes:
     description: "The participation renewal is out of sequence."
   - code: exam.attempt.revision_conflict
     description: "The Attempt changed since it was read."
+  - code: exam.attempt.screen_clip_incomplete
+    description: "Not every chunk of the screen clip has arrived; upload the missing chunks the upload status lists."
   - code: exam.attempt.screen_clip_limit_reached
     description: "The Attempt already has as many manager screen clip requests as it may have."
+  - code: exam.attempt.screen_clip_too_large
+    description: "The screen clip would take the Attempt's clips past their combined size limit."
   - code: exam.attempt.screen_recording_off
     description: "The Exam does not record the candidate's screen, so no clip can be requested."
   - code: exam.attempt.sitting_not_open

@@ -8,6 +8,11 @@
 package model
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -31,7 +36,96 @@ const (
 	ScreenClipIncidentMargin = time.Minute
 	// ScreenClipPrivateReasonMaximumRunes bounds a manager's reason.
 	ScreenClipPrivateReasonMaximumRunes = 1000
+	// ScreenClipChunkBytes is the size of every chunk but the last, which
+	// holds the rest. Chunks are stored as they arrive and never joined, so a
+	// byte range maps straight onto them.
+	ScreenClipChunkBytes int64 = 8 << 20
 )
+
+// ErrScreenClipChunkInvalid means a chunk's bytes were not its declared size
+// or did not match its declared hash. Nothing of it is kept.
+var ErrScreenClipChunkInvalid = errors.New("screen clip chunk is invalid")
+
+// screenClipMediaTypes are the containers Desktop may upload a clip in.
+var screenClipMediaTypes = []string{"video/mp4", "video/webm"}
+
+// ScreenClipUpload is what Desktop declares before uploading a clip: its
+// media type, its exact size, and the SHA-256 of every chunk in order. Each
+// chunk is checked against its hash as it arrives, so a clip is whole once
+// every chunk is in.
+type ScreenClipUpload struct {
+	MediaType   string
+	SizeBytes   int64
+	ChunkSHA256 []string
+}
+
+// Validate checks the declaration is bounded and has one hash per chunk.
+func (u *ScreenClipUpload) Validate() error {
+	if u == nil || !slices.Contains(screenClipMediaTypes, u.MediaType) ||
+		u.SizeBytes < 1 || u.SizeBytes > ScreenClipMaxBytes || len(u.ChunkSHA256) != u.ChunkCount() {
+		return invalidModelError("ScreenClipUpload.Validate", "screen_clip", "upload", "is invalid", "")
+	}
+	for _, chunk := range u.ChunkSHA256 {
+		if !isLowerHexSHA256(chunk) {
+			return invalidModelError("ScreenClipUpload.Validate", "screen_clip", "chunk_sha256", "is invalid", "")
+		}
+	}
+	return nil
+}
+
+// ChunkCount is how many chunks the clip has.
+func (u *ScreenClipUpload) ChunkCount() int {
+	return int((u.SizeBytes + ScreenClipChunkBytes - 1) / ScreenClipChunkBytes)
+}
+
+// ChunkSize is the size of chunk index, or 0 for an index outside the clip.
+func (u *ScreenClipUpload) ChunkSize(index int) int64 {
+	count := u.ChunkCount()
+	switch {
+	case index < 0 || index >= count:
+		return 0
+	case index < count-1:
+		return ScreenClipChunkBytes
+	default:
+		return u.SizeBytes - int64(count-1)*ScreenClipChunkBytes
+	}
+}
+
+// Digest is the clip's content digest: the SHA-256 of its manifest, the media
+// type, size, chunk size and chunk hashes in order, one per line. It binds
+// every byte of the clip without reading it again.
+func (u *ScreenClipUpload) Digest() string {
+	var manifest strings.Builder
+	fmt.Fprintf(&manifest, "proctor-screen-clip-v1\n%s\n%d\n%d\n", u.MediaType, u.SizeBytes, ScreenClipChunkBytes)
+	for _, chunk := range u.ChunkSHA256 {
+		manifest.WriteString(chunk)
+		manifest.WriteString("\n")
+	}
+	sum := sha256.Sum256([]byte(manifest.String()))
+	return hex.EncodeToString(sum[:])
+}
+
+// Clone isolates the chunk list.
+func (u *ScreenClipUpload) Clone() *ScreenClipUpload {
+	if u == nil {
+		return nil
+	}
+	clone := *u
+	clone.ChunkSHA256 = slices.Clone(u.ChunkSHA256)
+	return &clone
+}
+
+func isLowerHexSHA256(value string) bool {
+	if len(value) != 64 {
+		return false
+	}
+	for _, r := range value {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return false
+		}
+	}
+	return true
+}
 
 // ScreenClipSource is why a clip was requested.
 type ScreenClipSource string
@@ -118,8 +212,10 @@ type ScreenClip struct {
 	// DeliveredParticipationID is the Participation whose Desktop took the
 	// request.
 	DeliveredParticipationID AttemptParticipationID
-	UpdatedAt                time.Time
-	Revision                 int64
+	// Upload is Desktop's declaration, set once it starts uploading.
+	Upload    *ScreenClipUpload
+	UpdatedAt time.Time
+	Revision  int64
 }
 
 // NewManagerScreenClip records an Exam Manager's request.
@@ -172,9 +268,11 @@ func (c *ScreenClip) validState() bool {
 	delivered := c.DeliveredParticipationID.IsValid()
 	switch c.State {
 	case ScreenClipRequested:
-		return !delivered && c.Failure == ""
-	case ScreenClipRecording, ScreenClipUploading, ScreenClipReady:
-		return delivered && c.Failure == ""
+		return !delivered && c.Failure == "" && c.Upload == nil
+	case ScreenClipRecording:
+		return delivered && c.Failure == "" && c.Upload == nil
+	case ScreenClipUploading, ScreenClipReady:
+		return delivered && c.Failure == "" && c.Upload.Validate() == nil
 	case ScreenClipFailed:
 		return c.Failure.IsValid() && (delivered || c.Failure == ScreenClipFailureAttemptEnded)
 	default:
@@ -204,6 +302,23 @@ func (c *ScreenClip) Deliver(participationID AttemptParticipationID, at time.Tim
 	return c.advance(func(next *ScreenClip) {
 		next.State, next.DeliveredParticipationID = ScreenClipRecording, participationID
 	}, at)
+}
+
+// BeginUpload records Desktop's declaration and starts the upload.
+func (c *ScreenClip) BeginUpload(upload *ScreenClipUpload, at time.Time) error {
+	if c.State != ScreenClipRecording || upload.Validate() != nil {
+		return invalidModelError("ScreenClip.BeginUpload", "screen_clip", "state", "is not recording", "")
+	}
+	return c.advance(func(next *ScreenClip) { next.State, next.Upload = ScreenClipUploading, upload.Clone() }, at)
+}
+
+// Complete makes an uploaded clip ready to play. The caller has checked
+// every chunk arrived.
+func (c *ScreenClip) Complete(at time.Time) error {
+	if c.State != ScreenClipUploading {
+		return invalidModelError("ScreenClip.Complete", "screen_clip", "state", "is not uploading", "")
+	}
+	return c.advance(func(next *ScreenClip) { next.State = ScreenClipReady }, at)
 }
 
 // Fail ends the clip with a reason. A final clip cannot fail.

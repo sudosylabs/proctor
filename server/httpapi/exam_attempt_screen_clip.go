@@ -10,6 +10,7 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
@@ -144,4 +145,116 @@ func (h examAttemptHandlers) takeScreenClip(request route.Request) (route.Result
 		return route.Result{}, err
 	}
 	return route.JSON(http.StatusOK, screenClipResponseFromView(clip)).WithHeaders(privateNoStoreHeaders()), nil
+}
+
+// beginScreenClipUploadRequest declares the clip Desktop is about to upload.
+type beginScreenClipUploadRequest struct {
+	MediaType   string   `json:"media_type"`
+	SizeBytes   int64    `json:"size_bytes"`
+	ChunkSHA256 []string `json:"chunk_sha256"`
+}
+
+// screenClipUploadResponse is where an upload stands. Chunks are numbered
+// from 1; received_chunks lists the ones that arrived, in order.
+type screenClipUploadResponse struct {
+	Clip           screenClipResponse `json:"clip"`
+	ChunkBytes     int64              `json:"chunk_bytes"`
+	ChunkCount     int                `json:"chunk_count"`
+	ReceivedChunks []int              `json:"received_chunks"`
+	ContentDigest  string             `json:"content_digest"`
+}
+
+type screenClipChunkResponse struct {
+	Chunk int `json:"chunk"`
+}
+
+func (h examAttemptHandlers) beginScreenClipUpload(request route.Request) (route.Result, error) {
+	access, err := candidateAccess(request)
+	if err != nil {
+		return route.Result{}, err
+	}
+	clipID, err := route.PathID[model.ScreenClipID](request, "screen_clip_id")
+	if err != nil {
+		return route.Result{}, err
+	}
+	var body beginScreenClipUploadRequest
+	if err = request.DecodeJSON(&body); err != nil {
+		return route.Result{}, err
+	}
+	clip, err := h.app.BeginScreenClipUpload(request.Context, request.Invocation(), access, clipID, model.ScreenClipUpload{
+		MediaType: body.MediaType, SizeBytes: body.SizeBytes, ChunkSHA256: body.ChunkSHA256,
+	})
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusOK, screenClipUploadResponseFrom(store.ExamAttemptScreenClipUploadStatus{
+		Clip: clip, Received: []int{},
+	})).WithHeaders(privateNoStoreHeaders()), nil
+}
+
+func (h examAttemptHandlers) screenClipUploadStatus(request route.Request) (route.Result, error) {
+	access, err := candidateAccess(request)
+	if err != nil {
+		return route.Result{}, err
+	}
+	clipID, err := route.PathID[model.ScreenClipID](request, "screen_clip_id")
+	if err != nil {
+		return route.Result{}, err
+	}
+	status, err := h.app.ScreenClipUploadStatus(request.Context, request.Invocation(), access, clipID)
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusOK, screenClipUploadResponseFrom(status)).WithHeaders(privateNoStoreHeaders()), nil
+}
+
+func (h examAttemptHandlers) uploadScreenClipChunk(request route.Request) (route.ProtocolResult, error) {
+	access, err := candidateAccess(request)
+	if err != nil {
+		return route.ProtocolResult{}, err
+	}
+	clipID, err := route.PathID[model.ScreenClipID](request, "screen_clip_id")
+	if err != nil {
+		return route.ProtocolResult{}, err
+	}
+	number, err := strconv.Atoi(request.Params["chunk"])
+	if err != nil || number < 1 || request.HTTP == nil || request.HTTP.Body == nil ||
+		request.HTTP.ContentLength < 1 || request.HTTP.ContentLength > model.ScreenClipChunkBytes {
+		return route.ProtocolResult{}, route.InvalidRequest(errors.New("a chunk number and its exact Content-Length are required"))
+	}
+	if err = h.app.UploadScreenClipChunk(request.Context, request.Invocation(), attempt.ScreenClipChunkCommand{
+		Access: access, ClipID: clipID, Index: number - 1, Body: request.HTTP.Body, Size: request.HTTP.ContentLength,
+	}); err != nil {
+		return route.ProtocolResult{}, err
+	}
+	return route.StreamingUpload(http.StatusOK, screenClipChunkResponse{Chunk: number}).WithHeaders(privateNoStoreHeaders()), nil
+}
+
+func (h examAttemptHandlers) completeScreenClipUpload(request route.Request) (route.Result, error) {
+	access, err := candidateAccess(request)
+	if err != nil {
+		return route.Result{}, err
+	}
+	clipID, err := route.PathID[model.ScreenClipID](request, "screen_clip_id")
+	if err != nil {
+		return route.Result{}, err
+	}
+	clip, err := h.app.CompleteScreenClipUpload(request.Context, request.Invocation(), access, clipID)
+	if err != nil {
+		return route.Result{}, err
+	}
+	return route.JSON(http.StatusOK, screenClipResponseFromView(clip)).WithHeaders(privateNoStoreHeaders()), nil
+}
+
+func screenClipUploadResponseFrom(status store.ExamAttemptScreenClipUploadStatus) screenClipUploadResponse {
+	upload := status.Clip.Upload
+	response := screenClipUploadResponse{
+		Clip: screenClipResponseFromView(status.Clip), ChunkBytes: model.ScreenClipChunkBytes,
+		ChunkCount: upload.ChunkCount(), ReceivedChunks: make([]int, 0, len(status.Received)),
+		ContentDigest: upload.Digest(),
+	}
+	for _, index := range status.Received {
+		response.ReceivedChunks = append(response.ReceivedChunks, index+1)
+	}
+	return response
 }

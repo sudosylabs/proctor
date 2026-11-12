@@ -10,6 +10,7 @@ package attempt
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -69,4 +70,47 @@ func TestScreenClipRequestValidatesBeforeAuthorizationAndTranslatesRefusals(t *t
 		})
 		require.True(t, apperror.Is(err, code), "%s: err=%v", constraint, err)
 	}
+}
+
+func TestScreenClipChunksAreStagedAgainstTheirDeclaredHashThenRecorded(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	access := CandidateAccess{AttemptID: f.attemptID, ConnectionID: f.connectionID, ContinuityCredential: model.NewCredentialToken()}
+	clipID := model.NewScreenClipID()
+	upload := &model.ScreenClipUpload{MediaType: "video/mp4", SizeBytes: model.ScreenClipChunkBytes + 3,
+		ChunkSHA256: []string{strings.Repeat("a", 64), strings.Repeat("b", 64)}}
+	f.persistence.screenClipUpload = &store.ExamAttemptScreenClipUploadStatus{Clip: store.ExamAttemptScreenClipView{
+		ID: clipID, AttemptID: f.attemptID, State: model.ScreenClipUploading, Upload: upload,
+	}}
+	chunk := func(index int, size int64) error {
+		return f.service.UploadScreenClipChunk(context.Background(), f.inv, ScreenClipChunkCommand{
+			Access: access, ClipID: clipID, Index: index, Body: strings.NewReader(strings.Repeat("x", int(size))), Size: size,
+		})
+	}
+
+	require.NoError(t, chunk(1, 3))
+	require.Equal(t, strings.Repeat("b", 64), f.content.clipChunkSHA256, "the chunk is checked against its own declared hash")
+	require.NotNil(t, f.persistence.screenClipChunk)
+	require.Equal(t, 1, f.persistence.screenClipChunk.Index)
+	require.Equal(t, int64(3), f.persistence.screenClipChunk.SizeBytes)
+
+	for name, test := range map[string]struct {
+		index int
+		size  int64
+	}{
+		"wrong size":   {1, 4},
+		"past the end": {2, 3},
+		"negative":     {-1, 3},
+	} {
+		require.True(t, apperror.Is(chunk(test.index, test.size), "exam.attempt.invalid"), name)
+	}
+
+	f.persistence.screenClipChunk = nil
+	f.content.clipChunkErr = model.ErrScreenClipChunkInvalid
+	require.True(t, apperror.Is(chunk(1, 3), "exam.attempt.invalid"), "bytes that miss their hash are invalid")
+	require.Nil(t, f.persistence.screenClipChunk, "an invalid chunk is never recorded")
+
+	f.content.clipChunkErr = nil
+	f.persistence.screenClipUpload.Clip.State = model.ScreenClipReady
+	require.True(t, apperror.Is(chunk(1, 3), "exam.attempt.state_conflict"), "a finished clip takes no more chunks")
 }

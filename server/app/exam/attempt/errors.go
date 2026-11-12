@@ -51,6 +51,8 @@ var storeErrors = apperror.StoreTable{
 		"exam_attempt_state":                       "exam.attempt.state_conflict",
 		"screen_recording_disabled":                "exam.attempt.screen_recording_off",
 		"screen_clip_limit":                        "exam.attempt.screen_clip_limit_reached",
+		"screen_clip_bytes":                        "exam.attempt.screen_clip_too_large",
+		"screen_clip_incomplete":                   "exam.attempt.screen_clip_incomplete",
 		"screen_clip_state":                        "exam.attempt.state_conflict",
 		"exam_attempt_management_authority":        "exam.attempt.management_authority_conflict",
 		"desktop_compatibility_policy_revision":    "exam.attempt.desktop_incompatible",

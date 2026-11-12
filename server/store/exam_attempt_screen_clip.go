@@ -52,6 +52,7 @@ type ExamAttemptScreenClipView struct {
 	Failure                  model.ScreenClipFailure
 	RequestedAt              time.Time
 	DeliveredParticipationID model.AttemptParticipationID
+	Upload                   *model.ScreenClipUpload
 	UpdatedAt                time.Time
 	Revision                 int64
 }
@@ -62,7 +63,7 @@ func NewExamAttemptScreenClipView(clip *model.ScreenClip) ExamAttemptScreenClipV
 		ID: clip.ID, AttemptID: clip.AttemptID, Source: clip.Source, RequestedByUserID: clip.RequestedByUserID,
 		FlagID: clip.FlagID, Range: clip.Range, State: clip.State, Failure: clip.Failure,
 		RequestedAt: clip.RequestedAt, DeliveredParticipationID: clip.DeliveredParticipationID,
-		UpdatedAt: clip.UpdatedAt, Revision: clip.Revision,
+		Upload: clip.Upload.Clone(), UpdatedAt: clip.UpdatedAt, Revision: clip.Revision,
 	}
 }
 
@@ -71,4 +72,29 @@ func NewExamAttemptScreenClipView(clip *model.ScreenClip) ExamAttemptScreenClipV
 type ExamAttemptScreenClipDelivery struct {
 	Access CandidateAttemptAccess
 	ClipID model.ScreenClipID
+}
+
+// ExamAttemptScreenClipUploadBegin is Desktop declaring the clip it is about
+// to upload, through its live Connection.
+type ExamAttemptScreenClipUploadBegin struct {
+	Access CandidateAttemptAccess
+	ClipID model.ScreenClipID
+	Upload *model.ScreenClipUpload
+}
+
+// ExamAttemptScreenClipChunk is one chunk whose bytes are stored and match
+// the hash the clip declared for it.
+type ExamAttemptScreenClipChunk struct {
+	Access    CandidateAttemptAccess
+	ClipID    model.ScreenClipID
+	Index     int
+	SHA256    string
+	SizeBytes int64
+}
+
+// ExamAttemptScreenClipUploadStatus is where an upload stands: the clip and
+// the chunks that have arrived, in order, so Desktop resumes with the rest.
+type ExamAttemptScreenClipUploadStatus struct {
+	Clip     ExamAttemptScreenClipView
+	Received []int
 }

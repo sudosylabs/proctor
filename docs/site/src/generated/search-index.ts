@@ -2434,6 +2434,50 @@ export const searchEntries = [
     "searchText": "takecandidatescreencliprequest take one screen clip request records that the candidate's desktop took a request and is recording what remains of its range. the request then belongs to the participation that took it. taking it again through the same participation returns it unchanged. attempts and workspaces post /api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests/{screen_clip_id}/take session_required none request.invalid resource.not_found exam.attempt.invalid exam.attempt.state_conflict exam.attempt.unavailable exam.attempt.registered_desktop_required exam.delivery.metadata_capacity authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
   },
   {
+    "id": "operation:getCandidateScreenClipUpload",
+    "kind": "endpoint",
+    "group": "Attempts and workspaces",
+    "title": "Read where a screen clip upload stands",
+    "description": "Returns the clip and the numbers of the chunks that arrived, so Desktop resumes an interrupted upload with the rest.",
+    "href": "/api/reference/get-candidate-screen-clip-upload",
+    "method": "GET",
+    "path": "/api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests/{screen_clip_id}/upload",
+    "searchText": "getcandidatescreenclipupload read where a screen clip upload stands returns the clip and the numbers of the chunks that arrived, so desktop resumes an interrupted upload with the rest. attempts and workspaces get /api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests/{screen_clip_id}/upload session_required none request.invalid resource.not_found exam.attempt.invalid exam.attempt.state_conflict exam.attempt.unavailable exam.attempt.registered_desktop_required exam.delivery.metadata_capacity authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
+    "id": "operation:beginCandidateScreenClipUpload",
+    "kind": "endpoint",
+    "group": "Attempts and workspaces",
+    "title": "Declare the screen clip about to be uploaded",
+    "description": "Declares a taken clip's media type, exact size and the SHA-256 of every chunk in order. Every chunk is chunk_bytes long except the last, which holds the rest. The clip's content digest is the SHA-256 of that manifest. A clip that would take the Attempt's clips past 6 GiB is refused. Declaring the same clip again returns it unchanged.",
+    "href": "/api/reference/begin-candidate-screen-clip-upload",
+    "method": "POST",
+    "path": "/api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests/{screen_clip_id}/upload",
+    "searchText": "begincandidatescreenclipupload declare the screen clip about to be uploaded declares a taken clip's media type, exact size and the sha-256 of every chunk in order. every chunk is chunk_bytes long except the last, which holds the rest. the clip's content digest is the sha-256 of that manifest. a clip that would take the attempt's clips past 6 gib is refused. declaring the same clip again returns it unchanged. attempts and workspaces post /api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests/{screen_clip_id}/upload session_required none request.invalid resource.not_found exam.attempt.invalid exam.attempt.state_conflict exam.attempt.unavailable exam.attempt.registered_desktop_required exam.delivery.metadata_capacity exam.attempt.screen_clip_too_large authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
+  },
+  {
+    "id": "operation:uploadCandidateScreenClipChunk",
+    "kind": "endpoint",
+    "group": "Attempts and workspaces",
+    "title": "Upload one chunk of a screen clip",
+    "description": "Streams one chunk as the raw request body, with its exact Content-Length. The bytes are checked against the hash the clip declared for that chunk and kept only if they match. Sending a stored chunk again changes nothing, so a chunk whose response was lost can be sent again.",
+    "href": "/api/reference/upload-candidate-screen-clip-chunk",
+    "method": "PUT",
+    "path": "/api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests/{screen_clip_id}/upload/chunks/{chunk}",
+    "searchText": "uploadcandidatescreenclipchunk upload one chunk of a screen clip streams one chunk as the raw request body, with its exact content-length. the bytes are checked against the hash the clip declared for that chunk and kept only if they match. sending a stored chunk again changes nothing, so a chunk whose response was lost can be sent again. attempts and workspaces put /api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests/{screen_clip_id}/upload/chunks/{chunk} session_required none request.invalid resource.not_found exam.attempt.invalid exam.attempt.state_conflict exam.attempt.unavailable exam.attempt.registered_desktop_required exam.delivery.metadata_capacity authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
+  },
+  {
+    "id": "operation:completeCandidateScreenClipUpload",
+    "kind": "endpoint",
+    "group": "Attempts and workspaces",
+    "title": "Finish a screen clip upload",
+    "description": "Makes a clip whose every chunk arrived ready to play. Completing it again returns it unchanged.",
+    "href": "/api/reference/complete-candidate-screen-clip-upload",
+    "method": "POST",
+    "path": "/api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests/{screen_clip_id}/upload/complete",
+    "searchText": "completecandidatescreenclipupload finish a screen clip upload makes a clip whose every chunk arrived ready to play. completing it again returns it unchanged. attempts and workspaces post /api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests/{screen_clip_id}/upload/complete session_required none request.invalid resource.not_found exam.attempt.invalid exam.attempt.state_conflict exam.attempt.unavailable exam.attempt.registered_desktop_required exam.delivery.metadata_capacity exam.attempt.screen_clip_incomplete authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
+  },
+  {
     "id": "operation:appendNativeDelivery",
     "kind": "endpoint",
     "group": "Attempts and workspaces",

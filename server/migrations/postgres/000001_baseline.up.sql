@@ -2557,6 +2557,10 @@ CREATE TABLE exam_attempt_screen_clips (
     state varchar(16) NOT NULL CHECK (state IN ('requested', 'recording', 'uploading', 'ready', 'failed')),
     failure varchar(32) CHECK (failure IN ('attempt_ended', 'not_recorded', 'upload_deadline', 'rejected')),
     delivered_participation_id varchar(26) REFERENCES exam_attempt_participations(id),
+    media_type varchar(32) CHECK (media_type IN ('video/mp4', 'video/webm')),
+    size_bytes bigint CHECK (size_bytes BETWEEN 1 AND 3221225472),
+    chunk_sha256 text[] CHECK (cardinality(chunk_sha256) BETWEEN 1 AND 384),
+    content_digest char(64) CHECK (content_digest ~ '^[0-9a-f]{64}$'),
     requested_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL CHECK (updated_at >= requested_at),
     revision bigint NOT NULL CHECK (revision > 0),
@@ -2576,7 +2580,27 @@ CREATE TABLE exam_attempt_screen_clips (
         (state IN ('recording', 'uploading', 'ready') AND delivered_participation_id IS NOT NULL AND failure IS NULL) OR
         (state = 'failed' AND failure IS NOT NULL AND
          (delivered_participation_id IS NOT NULL OR failure = 'attempt_ended'))
+    ),
+    CONSTRAINT exam_attempt_screen_clips_upload_check CHECK (
+        (state IN ('requested', 'recording') AND media_type IS NULL AND size_bytes IS NULL AND
+         chunk_sha256 IS NULL AND content_digest IS NULL) OR
+        (state IN ('uploading', 'ready') AND media_type IS NOT NULL AND size_bytes IS NOT NULL AND
+         chunk_sha256 IS NOT NULL AND content_digest IS NOT NULL AND
+         cardinality(chunk_sha256) = (size_bytes + 8388607) / 8388608) OR
+        state = 'failed'
     )
+);
+
+-- The chunks of a clip that have arrived. Each was checked against the hash
+-- its clip declared before its row was written, so a clip whose chunks are
+-- all here is whole.
+CREATE TABLE exam_attempt_screen_clip_chunks (
+    screen_clip_id varchar(26) NOT NULL REFERENCES exam_attempt_screen_clips(id),
+    chunk_index integer NOT NULL CHECK (chunk_index BETWEEN 0 AND 383),
+    sha256 char(64) NOT NULL CHECK (sha256 ~ '^[0-9a-f]{64}$'),
+    size_bytes bigint NOT NULL CHECK (size_bytes BETWEEN 1 AND 8388608),
+    received_at timestamptz NOT NULL,
+    PRIMARY KEY (screen_clip_id, chunk_index)
 );
 
 CREATE INDEX exam_attempt_screen_clips_attempt_idx ON exam_attempt_screen_clips (exam_attempt_id, requested_at);

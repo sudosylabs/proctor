@@ -10,6 +10,7 @@ package storetest
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -88,6 +89,8 @@ func TestExamAttemptScreenClipStore(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	require.Empty(t, pending, "a taken request is no longer pending")
 
+	testScreenClipUpload(t, ctx, ss, access, first.Clip.ID)
+
 	_, err = ss.ExamAttempt().DeliverScreenClip(ctx, &store.ExamAttemptScreenClipDelivery{Access: access, ClipID: model.NewScreenClipID()})
 	require.True(t, store.IsNotFound(err))
 
@@ -145,4 +148,57 @@ func screenClipRequest(
 		ExamID: fixture.examID, SittingID: fixture.sitting.ID, Clip: clip,
 		AuditEventID: saveExamAttemptReallowAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC(),
 	}
+}
+
+// testScreenClipUpload verifies a taken clip's upload: declared once,
+// bounded by the Attempt's byte limit, chunk by chunk against the declared
+// hashes, and ready only once whole.
+func testScreenClipUpload(t *testing.T, ctx context.Context, ss store.Store, access store.CandidateAttemptAccess, clipID model.ScreenClipID) {
+	t.Helper()
+	tooLarge := &model.ScreenClipUpload{MediaType: "video/mp4", SizeBytes: model.ScreenClipMaxBytes}
+	for range tooLarge.ChunkCount() {
+		tooLarge.ChunkSHA256 = append(tooLarge.ChunkSHA256, strings.Repeat("c", 64))
+	}
+	require.NoError(t, tooLarge.Validate())
+
+	upload := &model.ScreenClipUpload{MediaType: "video/webm", SizeBytes: model.ScreenClipChunkBytes + 10,
+		ChunkSHA256: []string{strings.Repeat("a", 64), strings.Repeat("b", 64)}}
+	begun, err := ss.ExamAttempt().BeginScreenClipUpload(ctx, &store.ExamAttemptScreenClipUploadBegin{Access: access, ClipID: clipID, Upload: upload})
+	require.NoError(t, err)
+	require.Equal(t, model.ScreenClipUploading, begun.State)
+	require.Equal(t, upload.Digest(), begun.Upload.Digest())
+	again, err := ss.ExamAttempt().BeginScreenClipUpload(ctx, &store.ExamAttemptScreenClipUploadBegin{Access: access, ClipID: clipID, Upload: upload})
+	require.NoError(t, err)
+	require.Equal(t, begun.Revision, again.Revision, "declaring the same clip again changes nothing")
+	changed := upload.Clone()
+	changed.MediaType = "video/mp4"
+	_, err = ss.ExamAttempt().BeginScreenClipUpload(ctx, &store.ExamAttemptScreenClipUploadBegin{Access: access, ClipID: clipID, Upload: changed})
+	requireConflictConstraint(t, err, "screen_clip_state")
+
+	chunk := func(index int, sha string, size int64) error {
+		return ss.ExamAttempt().RecordScreenClipChunk(ctx, &store.ExamAttemptScreenClipChunk{
+			Access: access, ClipID: clipID, Index: index, SHA256: sha, SizeBytes: size,
+		})
+	}
+	var invalid *store.ErrInvalidInput
+	require.ErrorAs(t, chunk(0, strings.Repeat("b", 64), model.ScreenClipChunkBytes), &invalid, "a chunk must match its declared hash")
+	require.ErrorAs(t, chunk(1, strings.Repeat("b", 64), 11), &invalid, "a chunk must be its declared size")
+	require.ErrorAs(t, chunk(2, strings.Repeat("b", 64), 10), &invalid, "a chunk must be inside the clip")
+	require.NoError(t, chunk(1, strings.Repeat("b", 64), 10))
+	require.NoError(t, chunk(1, strings.Repeat("b", 64), 10), "recording a chunk again changes nothing")
+
+	_, err = ss.ExamAttempt().CompleteScreenClipUpload(ctx, access, clipID)
+	requireConflictConstraint(t, err, "screen_clip_incomplete")
+	status, err := ss.ExamAttempt().GetScreenClipUpload(ctx, access, clipID)
+	require.NoError(t, err)
+	require.Equal(t, []int{1}, status.Received, "Desktop resumes with what is missing")
+
+	require.NoError(t, chunk(0, strings.Repeat("a", 64), model.ScreenClipChunkBytes))
+	ready, err := ss.ExamAttempt().CompleteScreenClipUpload(ctx, access, clipID)
+	require.NoError(t, err)
+	require.Equal(t, model.ScreenClipReady, ready.State)
+	readyAgain, err := ss.ExamAttempt().CompleteScreenClipUpload(ctx, access, clipID)
+	require.NoError(t, err)
+	require.Equal(t, ready.Revision, readyAgain.Revision, "completing again changes nothing")
+	requireConflictConstraint(t, chunk(0, strings.Repeat("a", 64), model.ScreenClipChunkBytes), "screen_clip_state")
 }

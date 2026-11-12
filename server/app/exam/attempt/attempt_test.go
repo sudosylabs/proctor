@@ -374,6 +374,15 @@ type contentFake struct {
 	attemptContent  *model.AttemptWorkspaceContent
 	openAttemptID   model.AttemptWorkspaceObjectID
 	openAttemptBody string
+	clipChunkSHA256 string
+	clipChunkErr    error
+}
+
+func (f *contentFake) StageScreenClipChunk(_ context.Context, _ model.ScreenClipID, _ int, body io.Reader, _ int64, expected string) error {
+	f.f.order = append(f.f.order, "content.stage_clip_chunk")
+	f.clipChunkSHA256 = expected
+	_, _ = io.Copy(io.Discard, body)
+	return f.clipChunkErr
 }
 
 func (f *contentFake) StageAttemptWorkspaceObject(_ context.Context, id model.AttemptWorkspaceObjectID, _ io.Reader, _ int64, _ string) (*model.AttemptWorkspaceContent, error) {

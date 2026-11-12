@@ -1561,6 +1561,30 @@ func (s *timedExamAttemptStore) DeliverScreenClip(arg0 context.Context, arg1 *st
 	})
 }
 
+func (s *timedExamAttemptStore) BeginScreenClipUpload(arg0 context.Context, arg1 *store.ExamAttemptScreenClipUploadBegin) (*store.ExamAttemptScreenClipView, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodBeginScreenClipUpload), func(callCtx context.Context) (*store.ExamAttemptScreenClipView, error) {
+		return s.next.BeginScreenClipUpload(callCtx, arg1)
+	})
+}
+
+func (s *timedExamAttemptStore) GetScreenClipUpload(arg0 context.Context, arg1 store.CandidateAttemptAccess, arg2 model.ScreenClipID) (*store.ExamAttemptScreenClipUploadStatus, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodGetScreenClipUpload), func(callCtx context.Context) (*store.ExamAttemptScreenClipUploadStatus, error) {
+		return s.next.GetScreenClipUpload(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedExamAttemptStore) RecordScreenClipChunk(arg0 context.Context, arg1 *store.ExamAttemptScreenClipChunk) error {
+	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateExamAttempt, methodRecordScreenClipChunk), func(callCtx context.Context) error {
+		return s.next.RecordScreenClipChunk(callCtx, arg1)
+	})
+}
+
+func (s *timedExamAttemptStore) CompleteScreenClipUpload(arg0 context.Context, arg1 store.CandidateAttemptAccess, arg2 model.ScreenClipID) (*store.ExamAttemptScreenClipView, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodCompleteScreenClipUpload), func(callCtx context.Context) (*store.ExamAttemptScreenClipView, error) {
+		return s.next.CompleteScreenClipUpload(callCtx, arg1, arg2)
+	})
+}
+
 func (s *timedExamAttemptStore) ResolveCorrectionAcknowledgementTarget(arg0 context.Context, arg1 store.ExamAttemptCorrectionAcknowledgement) (*store.ExamAttemptCorrectionAcknowledgementTarget, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodResolveCorrectionAcknowledgementTarget), func(callCtx context.Context) (*store.ExamAttemptCorrectionAcknowledgementTarget, error) {
 		return s.next.ResolveCorrectionAcknowledgementTarget(callCtx, arg1)

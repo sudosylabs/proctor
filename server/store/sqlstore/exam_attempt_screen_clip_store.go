@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lib/pq"
+
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -24,7 +26,7 @@ const screenClipMaxFuture = 10 * time.Minute
 
 const screenClipColumns = `id, exam_attempt_id, source, requested_by_user_id, private_reason, integrity_flag_id,
 	range_from_session_start, range_start, range_end, state, failure, delivered_participation_id,
-	requested_at, updated_at, revision`
+	media_type, size_bytes, chunk_sha256, content_digest, requested_at, updated_at, revision`
 
 type screenClipRow struct {
 	ID                       string         `db:"id"`
@@ -39,6 +41,10 @@ type screenClipRow struct {
 	State                    string         `db:"state"`
 	Failure                  sql.NullString `db:"failure"`
 	DeliveredParticipationID sql.NullString `db:"delivered_participation_id"`
+	MediaType                sql.NullString `db:"media_type"`
+	SizeBytes                sql.NullInt64  `db:"size_bytes"`
+	ChunkSHA256              pq.StringArray `db:"chunk_sha256"`
+	ContentDigest            sql.NullString `db:"content_digest"`
 	RequestedAt              time.Time      `db:"requested_at"`
 	UpdatedAt                time.Time      `db:"updated_at"`
 	Revision                 int64          `db:"revision"`
@@ -84,6 +90,14 @@ func (row screenClipRow) model() (*model.ScreenClip, error) {
 	if row.DeliveredParticipationID.Valid {
 		if clip.DeliveredParticipationID, err = model.ParseAttemptParticipationID(row.DeliveredParticipationID.String); err != nil {
 			return nil, invalidPersistedState("screen_clip", "delivered_participation_id", err)
+		}
+	}
+	if row.MediaType.Valid {
+		clip.Upload = &model.ScreenClipUpload{
+			MediaType: row.MediaType.String, SizeBytes: row.SizeBytes.Int64, ChunkSHA256: []string(row.ChunkSHA256),
+		}
+		if clip.Upload.Validate() != nil || clip.Upload.Digest() != row.ContentDigest.String {
+			return nil, invalidPersistedState("screen_clip", "upload", nil)
 		}
 	}
 	if err = clip.Validate(); err != nil {
@@ -306,7 +320,7 @@ func insertScreenClip(ctx context.Context, tx *sqlxTxWrapper, clip *model.Screen
 		rangeStart = clip.Range.Start
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO exam_attempt_screen_clips (`+screenClipColumns+`)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?, ?)`,
 		clip.ID.String(), clip.AttemptID.String(), clip.Source,
 		nullableString(clip.RequestedByUserID.String()), nullableString(clip.PrivateReason), nullableString(clip.FlagID.String()),
 		clip.Range.FromSessionStart, rangeStart, clip.Range.End, clip.State,
@@ -360,30 +374,7 @@ func (s *SQLExamAttemptStore) DeliverScreenClip(
 		ctx context.Context,
 		tx *sqlxTxWrapper,
 	) (*store.ExamAttemptScreenClipView, error) {
-		if _, err := lockCandidateGuard(ctx, tx, input.Access); err != nil {
-			return nil, err
-		}
-		var participation string
-		if err := tx.Get(ctx, &participation, `SELECT participation_id FROM exam_attempt_connections
-			WHERE id = ? AND exam_attempt_id = ?`, input.Access.ConnectionID.String(), input.Access.AttemptID.String()); err != nil {
-			return nil, translateError("attempt_connection", input.Access.ConnectionID.String(), err)
-		}
-		participationID, err := model.ParseAttemptParticipationID(participation)
-		if err != nil {
-			return nil, invalidPersistedState("attempt_connection", "participation_id", err)
-		}
-
-		var row screenClipRow
-		err = tx.Get(ctx, &row, `SELECT `+screenClipColumns+` FROM exam_attempt_screen_clips
-			WHERE id = ? AND exam_attempt_id = ?
-			FOR UPDATE`, input.ClipID.String(), input.Access.AttemptID.String())
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, store.NewErrNotFound("screen_clip", input.ClipID.String())
-		}
-		if err != nil {
-			return nil, fmt.Errorf("lock screen clip: %w", err)
-		}
-		clip, err := row.model()
+		clip, participationID, err := lockLiveScreenClip(ctx, tx, input.Access, input.ClipID)
 		if err != nil {
 			return nil, err
 		}
@@ -395,21 +386,231 @@ func (s *SQLExamAttemptStore) DeliverScreenClip(
 			return nil, store.NewErrConflict("screen_clip", "screen_clip_state", nil)
 		}
 
-		var databaseNow time.Time
-		if err = tx.Get(ctx, &databaseNow, `SELECT statement_timestamp()`); err != nil {
-			return nil, fmt.Errorf("read screen clip delivery time: %w", err)
+		now, err := databaseTime(ctx, tx)
+		if err != nil {
+			return nil, err
 		}
-		if err = clip.Deliver(participationID, databaseNow); err != nil {
+		if err = clip.Deliver(participationID, now); err != nil {
 			return nil, store.NewErrInvalidInput("screen_clip", "delivery", nil).Wrap(err)
 		}
-		if _, err = tx.Exec(ctx, `UPDATE exam_attempt_screen_clips
-			SET state = ?, delivered_participation_id = ?, updated_at = ?, revision = ?
-			WHERE id = ? AND revision = ?`,
-			clip.State, clip.DeliveredParticipationID.String(), clip.UpdatedAt, clip.Revision,
-			clip.ID.String(), clip.Revision-1); err != nil {
-			return nil, translateError("screen_clip", clip.ID.String(), err)
+		return updateScreenClip(ctx, tx, clip)
+	})
+}
+
+// lockLiveScreenClip locks a clip of the Attempt the live Connection serves,
+// and returns the Participation that Connection belongs to.
+func lockLiveScreenClip(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	access store.CandidateAttemptAccess,
+	clipID model.ScreenClipID,
+) (*model.ScreenClip, model.AttemptParticipationID, error) {
+	if _, err := lockCandidateGuard(ctx, tx, access); err != nil {
+		return nil, "", err
+	}
+	var participation string
+	if err := tx.Get(ctx, &participation, `SELECT participation_id FROM exam_attempt_connections
+		WHERE id = ? AND exam_attempt_id = ?`, access.ConnectionID.String(), access.AttemptID.String()); err != nil {
+		return nil, "", translateError("attempt_connection", access.ConnectionID.String(), err)
+	}
+	participationID, err := model.ParseAttemptParticipationID(participation)
+	if err != nil {
+		return nil, "", invalidPersistedState("attempt_connection", "participation_id", err)
+	}
+
+	var row screenClipRow
+	err = tx.Get(ctx, &row, `SELECT `+screenClipColumns+` FROM exam_attempt_screen_clips
+		WHERE id = ? AND exam_attempt_id = ?
+		FOR UPDATE`, clipID.String(), access.AttemptID.String())
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, "", store.NewErrNotFound("screen_clip", clipID.String())
+	}
+	if err != nil {
+		return nil, "", fmt.Errorf("lock screen clip: %w", err)
+	}
+	clip, err := row.model()
+	if err != nil {
+		return nil, "", err
+	}
+	return clip, participationID, nil
+}
+
+func databaseTime(ctx context.Context, tx *sqlxTxWrapper) (time.Time, error) {
+	var now time.Time
+	if err := tx.Get(ctx, &now, `SELECT statement_timestamp()`); err != nil {
+		return time.Time{}, fmt.Errorf("read screen clip time: %w", err)
+	}
+	return model.TimeUTC(now), nil
+}
+
+// updateScreenClip writes a clip's next revision behind its previous one.
+func updateScreenClip(ctx context.Context, tx *sqlxTxWrapper, clip *model.ScreenClip) (*store.ExamAttemptScreenClipView, error) {
+	var mediaType, size, chunks, digest any
+	if clip.Upload != nil {
+		mediaType, size = clip.Upload.MediaType, clip.Upload.SizeBytes
+		chunks, digest = pq.StringArray(clip.Upload.ChunkSHA256), clip.Upload.Digest()
+	}
+	result, err := tx.Exec(ctx, `UPDATE exam_attempt_screen_clips
+		SET state = ?, failure = ?, delivered_participation_id = ?, media_type = ?, size_bytes = ?,
+			chunk_sha256 = ?, content_digest = ?, updated_at = ?, revision = ?
+		WHERE id = ? AND revision = ?`,
+		clip.State, nullableString(string(clip.Failure)), nullableString(clip.DeliveredParticipationID.String()),
+		mediaType, size, chunks, digest, clip.UpdatedAt, clip.Revision, clip.ID.String(), clip.Revision-1)
+	if err != nil {
+		return nil, translateError("screen_clip", clip.ID.String(), err)
+	}
+	if affected, rowsErr := result.RowsAffected(); rowsErr != nil || affected != 1 {
+		return nil, store.NewErrConflict("screen_clip", "screen_clip_state", rowsErr)
+	}
+	view := store.NewExamAttemptScreenClipView(clip)
+	return &view, nil
+}
+
+// BeginScreenClipUpload records the clip Desktop is about to upload.
+func (s *SQLExamAttemptStore) BeginScreenClipUpload(
+	ctx context.Context,
+	input *store.ExamAttemptScreenClipUploadBegin,
+) (*store.ExamAttemptScreenClipView, error) {
+	if input == nil || !input.ClipID.IsValid() || input.Upload.Validate() != nil {
+		return nil, store.NewErrInvalidInput("screen_clip", "upload", nil)
+	}
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "begin screen clip upload", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.ExamAttemptScreenClipView, error) {
+		clip, _, err := lockLiveScreenClip(ctx, tx, input.Access, input.ClipID)
+		if err != nil {
+			return nil, err
 		}
-		view := store.NewExamAttemptScreenClipView(clip)
-		return &view, nil
+		if clip.State == model.ScreenClipUploading && clip.Upload.Digest() == input.Upload.Digest() {
+			view := store.NewExamAttemptScreenClipView(clip)
+			return &view, nil
+		}
+		if clip.State != model.ScreenClipRecording {
+			return nil, store.NewErrConflict("screen_clip", "screen_clip_state", nil)
+		}
+
+		var stored int64
+		if err = tx.Get(ctx, &stored, `SELECT COALESCE(sum(size_bytes), 0) FROM exam_attempt_screen_clips
+			WHERE exam_attempt_id = ? AND state IN ('uploading', 'ready')`, clip.AttemptID.String()); err != nil {
+			return nil, fmt.Errorf("sum screen clip bytes: %w", err)
+		}
+		if stored+input.Upload.SizeBytes > model.ScreenClipAttemptMaxBytes {
+			return nil, store.NewErrConflict("screen_clip", "screen_clip_bytes", nil)
+		}
+
+		now, err := databaseTime(ctx, tx)
+		if err != nil {
+			return nil, err
+		}
+		if err = clip.BeginUpload(input.Upload, now); err != nil {
+			return nil, store.NewErrInvalidInput("screen_clip", "upload", nil).Wrap(err)
+		}
+		return updateScreenClip(ctx, tx, clip)
+	})
+}
+
+// GetScreenClipUpload returns a clip and the chunks of it that arrived.
+func (s *SQLExamAttemptStore) GetScreenClipUpload(
+	ctx context.Context,
+	access store.CandidateAttemptAccess,
+	clipID model.ScreenClipID,
+) (*store.ExamAttemptScreenClipUploadStatus, error) {
+	if !clipID.IsValid() {
+		return nil, store.NewErrInvalidInput("screen_clip", "id", nil)
+	}
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "get screen clip upload", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.ExamAttemptScreenClipUploadStatus, error) {
+		clip, _, err := lockLiveScreenClip(ctx, tx, access, clipID)
+		if err != nil {
+			return nil, err
+		}
+		received := []int{}
+		if err = tx.Select(ctx, &received, `SELECT chunk_index FROM exam_attempt_screen_clip_chunks
+			WHERE screen_clip_id = ? ORDER BY chunk_index`, clipID.String()); err != nil {
+			return nil, fmt.Errorf("list screen clip chunks: %w", err)
+		}
+		return &store.ExamAttemptScreenClipUploadStatus{Clip: store.NewExamAttemptScreenClipView(clip), Received: received}, nil
+	})
+}
+
+// RecordScreenClipChunk records a stored chunk that matches its declared hash.
+func (s *SQLExamAttemptStore) RecordScreenClipChunk(ctx context.Context, input *store.ExamAttemptScreenClipChunk) error {
+	if input == nil || !input.ClipID.IsValid() {
+		return store.NewErrInvalidInput("screen_clip", "chunk", nil)
+	}
+	_, err := runSQLTransaction(ctx, s.GetMaster().Begin, "record screen clip chunk", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (struct{}, error) {
+		clip, _, err := lockLiveScreenClip(ctx, tx, input.Access, input.ClipID)
+		if err != nil {
+			return struct{}{}, err
+		}
+		if clip.State != model.ScreenClipUploading {
+			return struct{}{}, store.NewErrConflict("screen_clip", "screen_clip_state", nil)
+		}
+		if input.Index < 0 || input.Index >= clip.Upload.ChunkCount() ||
+			input.SHA256 != clip.Upload.ChunkSHA256[input.Index] || input.SizeBytes != clip.Upload.ChunkSize(input.Index) {
+			return struct{}{}, store.NewErrInvalidInput("screen_clip", "chunk", nil)
+		}
+		now, err := databaseTime(ctx, tx)
+		if err != nil {
+			return struct{}{}, err
+		}
+		if _, err = tx.Exec(ctx, `INSERT INTO exam_attempt_screen_clip_chunks
+			(screen_clip_id, chunk_index, sha256, size_bytes, received_at)
+			VALUES (?, ?, ?, ?, ?)
+			ON CONFLICT (screen_clip_id, chunk_index) DO NOTHING`,
+			input.ClipID.String(), input.Index, input.SHA256, input.SizeBytes, now); err != nil {
+			return struct{}{}, translateError("screen_clip_chunk", input.ClipID.String(), err)
+		}
+		return struct{}{}, nil
+	})
+	return err
+}
+
+// CompleteScreenClipUpload makes a clip whose every chunk arrived ready.
+func (s *SQLExamAttemptStore) CompleteScreenClipUpload(
+	ctx context.Context,
+	access store.CandidateAttemptAccess,
+	clipID model.ScreenClipID,
+) (*store.ExamAttemptScreenClipView, error) {
+	if !clipID.IsValid() {
+		return nil, store.NewErrInvalidInput("screen_clip", "id", nil)
+	}
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "complete screen clip upload", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.ExamAttemptScreenClipView, error) {
+		clip, _, err := lockLiveScreenClip(ctx, tx, access, clipID)
+		if err != nil {
+			return nil, err
+		}
+		if clip.State == model.ScreenClipReady {
+			view := store.NewExamAttemptScreenClipView(clip)
+			return &view, nil
+		}
+		if clip.State != model.ScreenClipUploading {
+			return nil, store.NewErrConflict("screen_clip", "screen_clip_state", nil)
+		}
+		var received int
+		if err = tx.Get(ctx, &received, `SELECT count(*) FROM exam_attempt_screen_clip_chunks
+			WHERE screen_clip_id = ?`, clipID.String()); err != nil {
+			return nil, fmt.Errorf("count screen clip chunks: %w", err)
+		}
+		if received != clip.Upload.ChunkCount() {
+			return nil, store.NewErrConflict("screen_clip", "screen_clip_incomplete", nil)
+		}
+		now, err := databaseTime(ctx, tx)
+		if err != nil {
+			return nil, err
+		}
+		if err = clip.Complete(now); err != nil {
+			return nil, store.NewErrInvalidInput("screen_clip", "complete", nil).Wrap(err)
+		}
+		return updateScreenClip(ctx, tx, clip)
 	})
 }

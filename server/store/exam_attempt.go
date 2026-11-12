@@ -1355,6 +1355,18 @@ type ExamAttemptStore interface {
 	// request. Taking it again through the same Participation returns it
 	// unchanged.
 	DeliverScreenClip(context.Context, *ExamAttemptScreenClipDelivery) (*ExamAttemptScreenClipView, error)
+	// BeginScreenClipUpload records the clip Desktop is about to upload. It
+	// refuses a clip beyond the Attempt's byte limit. Declaring the same clip
+	// again returns it unchanged.
+	BeginScreenClipUpload(context.Context, *ExamAttemptScreenClipUploadBegin) (*ExamAttemptScreenClipView, error)
+	// GetScreenClipUpload returns a clip and the chunks of it that arrived.
+	GetScreenClipUpload(context.Context, CandidateAttemptAccess, model.ScreenClipID) (*ExamAttemptScreenClipUploadStatus, error)
+	// RecordScreenClipChunk records a stored chunk that matches its declared
+	// hash. Recording it again changes nothing.
+	RecordScreenClipChunk(context.Context, *ExamAttemptScreenClipChunk) error
+	// CompleteScreenClipUpload makes a clip whose every chunk arrived ready to
+	// play. Completing it again returns it unchanged.
+	CompleteScreenClipUpload(context.Context, CandidateAttemptAccess, model.ScreenClipID) (*ExamAttemptScreenClipView, error)
 
 	// ResolveCorrectionAcknowledgementTarget validates an acknowledgement and
 	// returns the scope its audit is recorded under. It changes nothing.

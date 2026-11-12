@@ -166,6 +166,26 @@ type ExamAttemptApplication interface {
 		attempt.CandidateAccess,
 		model.ScreenClipID,
 	) (store.ExamAttemptScreenClipView, error)
+	BeginScreenClipUpload(
+		context.Context,
+		invocation.Invocation,
+		attempt.CandidateAccess,
+		model.ScreenClipID,
+		model.ScreenClipUpload,
+	) (store.ExamAttemptScreenClipView, error)
+	ScreenClipUploadStatus(
+		context.Context,
+		invocation.Invocation,
+		attempt.CandidateAccess,
+		model.ScreenClipID,
+	) (store.ExamAttemptScreenClipUploadStatus, error)
+	UploadScreenClipChunk(context.Context, invocation.Invocation, attempt.ScreenClipChunkCommand) error
+	CompleteScreenClipUpload(
+		context.Context,
+		invocation.Invocation,
+		attempt.CandidateAccess,
+		model.ScreenClipID,
+	) (store.ExamAttemptScreenClipView, error)
 	SubmitExamAttempt(context.Context, invocation.Invocation, attempt.SubmitCommand) (store.ExamSubmissionReceipt, error)
 	GetExamSubmission(context.Context, invocation.Invocation, attempt.GetSubmissionQuery) (attempt.ManagedSubmission, error)
 	ListExamSubmissionManifest(
@@ -415,6 +435,71 @@ func examAttemptResource(app ExamAttemptApplication) route.Resource {
 				"exam.delivery.metadata_capacity",
 			},
 			Handle: h.takeScreenClip,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   screenClipRequests + "/{screen_clip_id}/upload",
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.state_conflict",
+				"exam.attempt.unavailable",
+				"exam.attempt.registered_desktop_required",
+				"exam.delivery.metadata_capacity",
+				"exam.attempt.screen_clip_too_large",
+			},
+			Handle: h.beginScreenClipUpload,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   screenClipRequests + "/{screen_clip_id}/upload",
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.state_conflict",
+				"exam.attempt.unavailable",
+				"exam.attempt.registered_desktop_required",
+				"exam.delivery.metadata_capacity",
+			},
+			Handle: h.screenClipUploadStatus,
+		},
+		route.Endpoint{
+			Method:       http.MethodPut,
+			Path:         screenClipRequests + "/{screen_clip_id}/upload/chunks/{chunk:sequence}",
+			Auth:         route.AuthSessionRequired,
+			MaxBodyBytes: model.ScreenClipChunkBytes,
+			ProtocolName: "candidate-screen-clip-chunk-upload",
+			ProtocolKind: route.ProtocolStreamingUpload,
+			Errors: []string{
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.state_conflict",
+				"exam.attempt.unavailable",
+				"exam.attempt.registered_desktop_required",
+				"exam.delivery.metadata_capacity",
+			},
+			Protocol: h.uploadScreenClipChunk,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   screenClipRequests + "/{screen_clip_id}/upload/complete",
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.state_conflict",
+				"exam.attempt.unavailable",
+				"exam.attempt.registered_desktop_required",
+				"exam.delivery.metadata_capacity",
+				"exam.attempt.screen_clip_incomplete",
+			},
+			Handle: h.completeScreenClipUpload,
 		},
 		route.Endpoint{
 			Method: http.MethodGet,

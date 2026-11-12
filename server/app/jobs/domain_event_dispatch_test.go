@@ -21,7 +21,6 @@ import (
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/plugin"
-	"github.com/sudosylabs/proctor/server/pluginhost"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
@@ -89,10 +88,10 @@ func newDomainEventDispatchFixture(t *testing.T) *domainEventDispatchFixture {
 
 func (f *domainEventDispatchFixture) run(t *testing.T, handlerErrors ...error) job.Outcome {
 	t.Helper()
-	subscriptions := make([]pluginhost.EventSubscription, 0, len(handlerErrors))
+	subscriptions := make([]events.Subscription, 0, len(handlerErrors))
 	for index, handlerErr := range handlerErrors {
 		name := fmt.Sprint(index)
-		subscriptions = append(subscriptions, pluginhost.EventSubscription{Key: name, Plugin: name, Topic: plugin.TopicExamAttemptSubmitted,
+		subscriptions = append(subscriptions, events.Subscription{Key: name, Topic: plugin.TopicExamAttemptSubmitted,
 			Handler: eventHandlerFake{name: name, err: handlerErr, calls: &f.calls, received: &f.received}})
 	}
 	dispatcher, err := events.NewDispatcher(subscriptions...)

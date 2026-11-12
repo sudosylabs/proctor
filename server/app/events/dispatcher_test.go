@@ -19,7 +19,6 @@ import (
 
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/plugin"
-	"github.com/sudosylabs/proctor/server/pluginhost"
 )
 
 type recordingHandler struct {
@@ -57,8 +56,8 @@ func TestExamAttemptSubmittedDataDecodesAsThePluginDocument(t *testing.T) {
 	require.Equal(t, string(plugin.TopicExamAttemptSubmitted), string(model.DomainEventTopicExamAttemptSubmitted))
 }
 
-func subscription(key string, handler plugin.EventHandler) pluginhost.EventSubscription {
-	return pluginhost.EventSubscription{Key: key, Plugin: key, Topic: plugin.TopicExamAttemptSubmitted, Handler: handler}
+func subscription(key string, handler plugin.EventHandler) Subscription {
+	return Subscription{Key: key, Topic: plugin.TopicExamAttemptSubmitted, Handler: handler}
 }
 
 func TestDispatchOffersTheEventToEachSubscriptionInOrder(t *testing.T) {

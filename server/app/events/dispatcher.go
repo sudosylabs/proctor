@@ -14,8 +14,7 @@
 // its own delivery: the Job remembers which subscriptions accepted the event
 // and offers it again only to the others.
 //
-// The package is a leaf: it imports only model, the plugin contracts and the
-// plugin host's subscription type.
+// The package is a leaf: it imports only model and the plugin contracts.
 package events
 
 import (
@@ -26,18 +25,26 @@ import (
 
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/plugin"
-	"github.com/sudosylabs/proctor/server/pluginhost"
 )
+
+// Subscription is one plugin's handler for one topic.
+type Subscription struct {
+	// Key identifies the subscription across deliveries, so a retry can skip
+	// the subscriptions that already accepted an event.
+	Key     string
+	Topic   plugin.EventTopic
+	Handler plugin.EventHandler
+}
 
 // Dispatcher offers domain events to a fixed, ordered list of subscriptions.
 type Dispatcher struct {
-	subscriptions []pluginhost.EventSubscription
+	subscriptions []Subscription
 }
 
 // NewDispatcher returns a Dispatcher that offers events to subscriptions in
 // the order given. A subscription without a key or handler, or a repeated
 // key, is rejected.
-func NewDispatcher(subscriptions ...pluginhost.EventSubscription) (*Dispatcher, error) {
+func NewDispatcher(subscriptions ...Subscription) (*Dispatcher, error) {
 	seen := make(map[string]struct{}, len(subscriptions))
 	for _, subscription := range subscriptions {
 		if subscription.Key == "" || subscription.Handler == nil {

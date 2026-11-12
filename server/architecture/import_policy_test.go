@@ -335,7 +335,6 @@ var dependencyRules = []dependencyRule{
 		project: only(
 			exact(serverModule+"/model"),
 			exact(serverModule+"/plugin"),
-			exact(serverModule+"/pluginhost"),
 		),
 	},
 	{
@@ -669,7 +668,6 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app/job"),
 			exact(serverModule+"/app/jobs"),
 			exact(serverModule+"/app/events"),
-			exact(serverModule+"/pluginhost"),
 			exact(serverModule+"/app/realtime"),
 			exact(serverModule+"/app/mail"),
 			exact(serverModule+"/app/search"),

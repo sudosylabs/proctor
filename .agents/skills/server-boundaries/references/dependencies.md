@@ -70,7 +70,7 @@ exists.
 | generic store layers | `store/timerlayer` and below, `store/retrylayer` and below | `model`, `store` | none | infrastructure |
 | concrete jobs | `app/jobs` and below | `model`, `store`, `secretseal`, `app/invocation`, `app/job`, `app/mail`, `app/user`, `app/exam`, `app/exam/attempt`, `app/exam/sitting`, `app/events` | none | infrastructure |
 | job engine | `app/job` and below | `logging`, `model`, `store`, `app/access`, `app/apperror`, `app/invocation` | none | infrastructure |
-| domain event dispatch | `app/events` and below | `model`, `plugin`, `pluginhost` | none | infrastructure |
+| domain event dispatch | `app/events` and below | `model`, `plugin` | none | infrastructure |
 | realtime application | `app/realtime` and below | `logging`, `model`, `app/apperror` | none | infrastructure |
 | mail application | `app/mail` and below | `model`, `store`, `secretseal`, `app/exam`, `localization`, `app/access`, `app/apperror`, `app/invocation`, `app/paging` | `golang.org/x/net/html` | infrastructure except `io/fs` |
 | application error vocabulary | `app/apperror` | `model`, `store` | none | infrastructure |
@@ -94,7 +94,7 @@ exists.
 | onboarding application | `app/onboarding` | `app/academic`, `app/access`, `app/administration`, `app/apperror`, `app/idempotency`, `app/identity`, `app/internal/batchitem`, `app/invocation`, `app/jobs`, `app/mail`, `app/paging`, `app/realtime`, `app/user`, `model`, `store` | none | infrastructure |
 | search application | `app/search` | `app/access`, `app/apperror`, `app/exam`, `app/invocation`, `app/paging`, `app/user`, `model`, `store` | none | infrastructure |
 | batch item context | `app/internal/batchitem` | `model`, `store` | none | infrastructure |
-| application | `app` | `logging`, `app/academic`, `app/access`, `app/administration`, `app/identity`, `app/onboarding`, `app/user`, `app/apperror`, `app/invocation`, `model`, `store`, `app/job`, `app/jobs`, `app/events`, `pluginhost`, `app/realtime`, `app/mail`, `app/search`, `secretseal`, `app/exam` and below | none | infrastructure |
+| application | `app` | `logging`, `app/academic`, `app/access`, `app/administration`, `app/identity`, `app/onboarding`, `app/user`, `app/apperror`, `app/invocation`, `model`, `store`, `app/job`, `app/jobs`, `app/events`, `app/realtime`, `app/mail`, `app/search`, `secretseal`, `app/exam` and below | none | infrastructure |
 | hosted webapp transport | `webui` | none | none | none |
 | HTTP routing kernel | `httpapi/route` | `logging`, `app/apperror`, `app/invocation`, `app/paging`, `model`, `localization`, `internal/weborigin` | below `github.com/gorilla` | infrastructure except `net/http` |
 | HTTP resources | `httpapi` and below | `httpapi/route`, `logging`, `app`, `app/academic`, `app/administration`, `app/apperror`, `app/identity`, `app/invocation`, `app/job`, `app/mail`, `app/onboarding`, `app/paging`, `app/search`, `app/user`, `app/exam` and below, `model`, `store`, `localization` | none | infrastructure except `net/http` |

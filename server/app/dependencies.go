@@ -10,6 +10,8 @@ package app
 import (
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/events"
+
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/exam/correction"
@@ -23,7 +25,6 @@ import (
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
-	"github.com/sudosylabs/proctor/server/pluginhost"
 	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -72,7 +73,7 @@ type Dependencies struct {
 	FileContent      FileContent
 	// EventSubscriptions are the plugins' domain-event handlers. The
 	// domain-event dispatch Job offers each committed event to them.
-	EventSubscriptions []pluginhost.EventSubscription
+	EventSubscriptions []events.Subscription
 	// DesktopBuildCatalog is the immutable verified build catalog embedded by
 	// the server release. An empty catalog admits no released builds.
 	DesktopBuildCatalog []model.DesktopBuildTuple

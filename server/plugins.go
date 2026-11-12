@@ -9,7 +9,10 @@ package server
 
 import (
 	"context"
+
 	"fmt"
+
+	"github.com/sudosylabs/proctor/server/app/events"
 
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/filecontent"
@@ -68,4 +71,18 @@ func activePluginSummaries(host *pluginhost.Host) httpapi.ActivePlugins {
 		}
 		return summaries
 	}
+}
+
+// eventSubscriptions hands the plugins' guarded event handlers to the
+// domain-event dispatcher.
+func eventSubscriptions(host *pluginhost.Host) []events.Subscription {
+	var subscriptions []events.Subscription
+	for _, subscription := range host.EventSubscriptions() {
+		subscriptions = append(subscriptions, events.Subscription{
+			Key:     subscription.Key,
+			Topic:   subscription.Topic,
+			Handler: subscription.Handler,
+		})
+	}
+	return subscriptions
 }

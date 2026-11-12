@@ -79,7 +79,10 @@ Every integrity capability, built in or plugin, follows one template:
 
 A capability's flags and evidence carry a policy kind named
 `<plugin-id>.<kind>`, such as `display.second_screen`, so they never collide
-with the core's `connection_loss`, `focus_loss` and `browser_navigation`. Its
+with the core's `connection_loss`, `focus_loss` and `browser_navigation`. The
+core owns `native.<capability>`, such as `native.display_topology`, for
+Desktop's native capabilities, so no plugin may take the ID `native` or one
+under it. Its
 evidence is one JSON object of at most 64 KiB that the core stores as given.
 
 Each capability also declares what happens when it cannot run during an

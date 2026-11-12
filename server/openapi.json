@@ -10281,6 +10281,7 @@
             "enum": [
               "secure_connectivity_lost",
               "focus_policy_review_required",
+              "native_policy_review_required",
               "manager_suspended",
               null
             ],
@@ -15067,6 +15068,7 @@
             "enum": [
               "secure_connectivity_lost",
               "focus_policy_review_required",
+              "native_policy_review_required",
               "manager_suspended"
             ],
             "type": "string"
@@ -15176,6 +15178,7 @@
             "enum": [
               "secure_connectivity_lost",
               "focus_policy_review_required",
+              "native_policy_review_required",
               "manager_suspended"
             ],
             "type": "string"
@@ -26188,6 +26191,7 @@
             "enum": [
               "secure_connectivity_lost",
               "focus_policy_review_required",
+              "native_policy_review_required",
               "manager_suspended"
             ],
             "type": "string"

@@ -161,3 +161,26 @@ func TestIntegrityPolicySuspensionTakesThePolicysReason(t *testing.T) {
 	_, err = open("display.second_screen")
 	require.Error(t, err, "a capability's reasons are not registered yet")
 }
+
+func TestNativeCapabilityPoliciesContainAndSuspendWithTheNativeReason(t *testing.T) {
+	t.Parallel()
+
+	policy, ok := integrityPolicy("native.display_topology")
+	require.True(t, ok)
+	require.Equal(t, IntegrityFailContain, policy.FailMode)
+	require.Equal(t, AttemptSuspensionCandidateReasonNativePolicy, policy.SuspensionReason)
+	require.True(t, IntegrityPolicyKind("native.display_topology").IsValid())
+	require.False(t, IntegrityPolicyKind("native.display_topology").IsCore(), "native kinds are capability kinds")
+
+	for _, kind := range []IntegrityPolicyKind{"native.", "native.display.topology", "native.Display", "display.second_screen"} {
+		_, ok = integrityPolicy(kind)
+		require.False(t, ok, kind)
+	}
+
+	suspension, err := NewIntegrityPolicySuspension(NewAttemptSuspensionID(), NewExamAttemptID(), NewAttemptParticipationID(),
+		NewIntegrityFlagID(), 1, "native.process_application", time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+	require.Equal(t, AttemptSuspensionCandidateReasonNativePolicy, suspension.CandidateReason)
+	require.True(t, AttemptSuspensionCandidateReasonNativePolicy.IsPolicy(), "a native suspension can be re-allowed")
+	require.True(t, AttemptSuspensionCandidateReasonNativePolicy.IsValid())
+}

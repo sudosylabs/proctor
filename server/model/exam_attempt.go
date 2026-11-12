@@ -638,6 +638,9 @@ type AttemptSuspensionCandidateReason string
 const (
 	AttemptSuspensionCandidateReasonSecureContinuityLost AttemptSuspensionCandidateReason = "secure_connectivity_lost"
 	AttemptSuspensionCandidateReasonFocusLossPolicy      AttemptSuspensionCandidateReason = "focus_policy_review_required"
+	// AttemptSuspensionCandidateReasonNativePolicy is a native capability's
+	// enforced rule that stayed not met.
+	AttemptSuspensionCandidateReasonNativePolicy AttemptSuspensionCandidateReason = "native_policy_review_required"
 	// AttemptSuspensionCandidateReasonManagerSuspended is the only safe
 	// candidate explanation of a manual suspension; the manager's private
 	// reason is never shown to the candidate.

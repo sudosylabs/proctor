@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -53,6 +54,11 @@ const (
 	IntegrityPolicyBrowserNavigation IntegrityPolicyKind = "browser_navigation"
 )
 
+// NativeIntegrityPolicyNamespace prefixes the policy kinds of Desktop native
+// capabilities, as in native.display_topology. The core owns the namespace,
+// so no plugin may use it as its ID.
+const NativeIntegrityPolicyNamespace = "native"
+
 // IntegrityPolicyKindMaxLength bounds a kind: a 64-character plugin ID, a
 // dot, and a 32-character name. The SQL schema uses the same bound.
 const IntegrityPolicyKindMaxLength = 97
@@ -71,8 +77,16 @@ func (k IntegrityPolicyKind) IsCore() bool {
 }
 
 // IsCapability reports whether the kind is spelled as a capability's kind.
+// Native capabilities' kinds are capability kinds too.
 func (k IntegrityPolicyKind) IsCapability() bool {
 	return capabilityPolicyKind.MatchString(string(k))
+}
+
+// nativeCapability returns the native capability a native.<capability> kind
+// names.
+func (k IntegrityPolicyKind) nativeCapability() (NativeCapabilityID, bool) {
+	capability, native := strings.CutPrefix(string(k), NativeIntegrityPolicyNamespace+".")
+	return NativeCapabilityID(capability), native && isNativeIdentifier(capability)
 }
 
 // IntegrityPolicy is what the core knows about a built-in policy.
@@ -101,11 +115,32 @@ var coreIntegrityPolicies = map[IntegrityPolicyKind]IntegrityPolicy{
 	},
 }
 
-// integrityPolicySuspends reports whether some built-in policy suspends with
-// the reason.
+// integrityPolicy returns the policy the core applies for a kind: a built-in
+// policy, or a native capability's. Every native capability's policy
+// contains on failure, since Desktop's enforce rules contain the window when
+// a capability cannot be observed, and suspends with the native reason.
+func integrityPolicy(kind IntegrityPolicyKind) (IntegrityPolicy, bool) {
+	if policy, ok := coreIntegrityPolicies[kind]; ok {
+		return policy, true
+	}
+	if _, native := kind.nativeCapability(); native {
+		return IntegrityPolicy{
+			Kind:             kind,
+			FailMode:         IntegrityFailContain,
+			SuspensionReason: AttemptSuspensionCandidateReasonNativePolicy,
+		}, true
+	}
+	return IntegrityPolicy{}, false
+}
+
+// integrityPolicySuspends reports whether some policy the core applies
+// suspends with the reason.
 func integrityPolicySuspends(reason AttemptSuspensionCandidateReason) bool {
 	if reason == "" {
 		return false
+	}
+	if reason == AttemptSuspensionCandidateReasonNativePolicy {
+		return true
 	}
 	for _, policy := range coreIntegrityPolicies {
 		if policy.SuspensionReason == reason {
@@ -139,7 +174,7 @@ func NewIntegrityPolicySuspension(
 	kind IntegrityPolicyKind,
 	at time.Time,
 ) (*AttemptSuspension, error) {
-	policy, ok := coreIntegrityPolicies[kind]
+	policy, ok := integrityPolicy(kind)
 	if !ok || policy.SuspensionReason == "" {
 		return nil, invalidModelError("NewIntegrityPolicySuspension", "attempt_suspension", "", "the policy does not suspend", "")
 	}

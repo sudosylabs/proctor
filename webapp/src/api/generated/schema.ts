@@ -6975,7 +6975,7 @@ export interface components {
             /** @enum {string} */
             state: "ready" | "active" | "suspended" | "submitted";
             /** @enum {string|null} */
-            suspension_reason_code: "secure_connectivity_lost" | "focus_policy_review_required" | "manager_suspended" | null;
+            suspension_reason_code: "secure_connectivity_lost" | "focus_policy_review_required" | "native_policy_review_required" | "manager_suspended" | null;
         };
         CandidateExamActivityItemResponse: {
             academic_unit: components["schemas"]["CandidateExamActivityRelationResponse"];
@@ -8039,7 +8039,7 @@ export interface components {
             /** Format: int64 */
             attempt_revision: number;
             /** @enum {string} */
-            candidate_reason: "secure_connectivity_lost" | "focus_policy_review_required" | "manager_suspended";
+            candidate_reason: "secure_connectivity_lost" | "focus_policy_review_required" | "native_policy_review_required" | "manager_suspended";
             exam_attempt_id: components["schemas"]["ID"];
             exam_sitting_id: components["schemas"]["ID"];
             reallowed_by_user_id: components["schemas"]["ID"];
@@ -8072,7 +8072,7 @@ export interface components {
         /** @description One suspension episode. A policy episode links its Integrity Flag in integrity_flag_id; a manual episode (an Exam Manager's kick) links no Flag and names its manager in suspended_by_user_id. */
         ExamAttemptSuspensionResponse: {
             /** @enum {string} */
-            candidate_reason: "secure_connectivity_lost" | "focus_policy_review_required" | "manager_suspended";
+            candidate_reason: "secure_connectivity_lost" | "focus_policy_review_required" | "native_policy_review_required" | "manager_suspended";
             /** Format: date-time */
             ended_at?: string;
             /** Format: int64 */
@@ -11176,7 +11176,7 @@ export interface components {
         };
         SittingCandidateSuspensionResponse: {
             /** @enum {string} */
-            candidate_reason: "secure_connectivity_lost" | "focus_policy_review_required" | "manager_suspended";
+            candidate_reason: "secure_connectivity_lost" | "focus_policy_review_required" | "native_policy_review_required" | "manager_suspended";
             id: components["schemas"]["ID"];
             reallow_available: boolean;
         };

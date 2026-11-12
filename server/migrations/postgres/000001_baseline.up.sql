@@ -2506,7 +2506,7 @@ CREATE TABLE exam_attempt_suspensions (
     suspension_attempt_revision bigint NOT NULL CHECK (suspension_attempt_revision > 1),
     state varchar(16) NOT NULL CHECK (state IN ('active', 'closed')),
     source varchar(16) NOT NULL CHECK (source IN ('policy', 'manual')),
-    candidate_reason varchar(64) NOT NULL CHECK (candidate_reason IN ('secure_connectivity_lost', 'focus_policy_review_required', 'manager_suspended')),
+    candidate_reason varchar(64) NOT NULL CHECK (candidate_reason IN ('secure_connectivity_lost', 'focus_policy_review_required', 'native_policy_review_required', 'manager_suspended')),
     started_at timestamptz NOT NULL,
     ended_at timestamptz,
     reallowed_by_user_id varchar(26) REFERENCES users(id),
@@ -2516,7 +2516,7 @@ CREATE TABLE exam_attempt_suspensions (
     UNIQUE (id, exam_attempt_id, participation_id, generation),
     CONSTRAINT exam_attempt_suspensions_provenance_check CHECK (
         (source = 'policy' AND integrity_flag_id IS NOT NULL AND suspended_by_user_id IS NULL AND
-         suspension_private_reason IS NULL AND candidate_reason IN ('secure_connectivity_lost', 'focus_policy_review_required')) OR
+         suspension_private_reason IS NULL AND candidate_reason IN ('secure_connectivity_lost', 'focus_policy_review_required', 'native_policy_review_required')) OR
         (source = 'manual' AND integrity_flag_id IS NULL AND suspended_by_user_id IS NOT NULL AND
          candidate_reason = 'manager_suspended' AND suspension_private_reason = btrim(suspension_private_reason) AND
          char_length(suspension_private_reason) BETWEEN 1 AND 1000 AND octet_length(suspension_private_reason) <= 4000)

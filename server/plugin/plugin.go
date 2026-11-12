@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"strings"
 )
 
 // Plugin is one optional feature compiled into the server.
@@ -83,7 +84,7 @@ const maxSettingsSchemaBytes = 64 << 10
 // Validate reports whether m has a valid ID, a name, and a SettingsSchema
 // that is absent or a JSON object.
 func (m Manifest) Validate() error {
-	if !IsValidID(m.ID) || m.Name == "" || len(m.Name) > 128 {
+	if !IsValidID(m.ID) || reservedID(m.ID) || m.Name == "" || len(m.Name) > 128 {
 		return ErrInvalidManifest
 	}
 	if m.SettingsSchema != nil {
@@ -93,6 +94,12 @@ func (m Manifest) Validate() error {
 		}
 	}
 	return nil
+}
+
+// reservedID reports whether the core owns id: native, and anything under
+// native., name the integrity policies of Desktop native capabilities.
+func reservedID(id string) bool {
+	return id == "native" || strings.HasPrefix(id, "native.")
 }
 
 // IsValidID reports whether id is a valid plugin ID.

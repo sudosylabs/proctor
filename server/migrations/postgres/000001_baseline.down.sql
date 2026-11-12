@@ -108,6 +108,7 @@ DROP FUNCTION IF EXISTS guard_exam_submission_mutation();
 DROP FUNCTION IF EXISTS guard_exam_submission_manifest_object();
 DROP TABLE IF EXISTS exam_attempt_focus_loss_pending;
 DROP TABLE IF EXISTS exam_attempt_focus_loss_evaluations;
+DROP TABLE IF EXISTS exam_attempt_screen_clips;
 DROP TABLE IF EXISTS exam_attempt_suspensions;
 DROP FUNCTION IF EXISTS guard_exam_attempt_suspension_mutation();
 DROP TABLE IF EXISTS integrity_evidence;

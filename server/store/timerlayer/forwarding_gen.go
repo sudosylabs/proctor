@@ -1543,6 +1543,24 @@ func (s *timedExamAttemptStore) ReallowAttempt(arg0 context.Context, arg1 *store
 	})
 }
 
+func (s *timedExamAttemptStore) RequestScreenClip(arg0 context.Context, arg1 *store.ExamAttemptScreenClipRequest, arg2 *store.CommandIdempotency) (*store.ExamAttemptScreenClipResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodRequestScreenClip), func(callCtx context.Context) (*store.ExamAttemptScreenClipResult, error) {
+		return s.next.RequestScreenClip(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedExamAttemptStore) ListPendingScreenClips(arg0 context.Context, arg1 store.CandidateAttemptAccess) ([]store.ExamAttemptScreenClipView, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodListPendingScreenClips), func(callCtx context.Context) ([]store.ExamAttemptScreenClipView, error) {
+		return s.next.ListPendingScreenClips(callCtx, arg1)
+	})
+}
+
+func (s *timedExamAttemptStore) DeliverScreenClip(arg0 context.Context, arg1 *store.ExamAttemptScreenClipDelivery) (*store.ExamAttemptScreenClipView, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodDeliverScreenClip), func(callCtx context.Context) (*store.ExamAttemptScreenClipView, error) {
+		return s.next.DeliverScreenClip(callCtx, arg1)
+	})
+}
+
 func (s *timedExamAttemptStore) ResolveCorrectionAcknowledgementTarget(arg0 context.Context, arg1 store.ExamAttemptCorrectionAcknowledgement) (*store.ExamAttemptCorrectionAcknowledgementTarget, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodResolveCorrectionAcknowledgementTarget), func(callCtx context.Context) (*store.ExamAttemptCorrectionAcknowledgementTarget, error) {
 		return s.next.ResolveCorrectionAcknowledgementTarget(callCtx, arg1)

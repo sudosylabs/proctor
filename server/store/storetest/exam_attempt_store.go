@@ -1119,8 +1119,20 @@ func newExamAttemptFixtureWithResource(t *testing.T, ctx context.Context, ss sto
 	return newExamAttemptFixtureWithOptions(t, ctx, ss, nil, nil, model.ExamCapacityPolicy{}, true)
 }
 
+// examAttemptFixtureNative sets the native policy the fixture Revision
+// freezes, for tests that need the screen recorder or a native family on.
+type examAttemptFixtureNative func(*model.NativeSecurityPolicy)
+
+// newExamAttemptFixtureWithScreenRecording publishes the fixture Revision with
+// the screen evidence recorder on.
+func newExamAttemptFixtureWithScreenRecording(t *testing.T, ctx context.Context, ss store.Store) examAttemptFixture {
+	t.Helper()
+	return newExamAttemptFixtureWithOptions(t, ctx, ss, nil, nil, model.ExamCapacityPolicy{}, false,
+		func(native *model.NativeSecurityPolicy) { native.ScreenRecording.Enabled = true })
+}
+
 func newExamAttemptFixtureWithOptions(t *testing.T, ctx context.Context, ss store.Store, focus *model.FocusLossPolicy,
-	browser *model.BrowserPolicy, capacity model.ExamCapacityPolicy, withResource bool,
+	browser *model.BrowserPolicy, capacity model.ExamCapacityPolicy, withResource bool, natives ...examAttemptFixtureNative,
 ) examAttemptFixture {
 	t.Helper()
 	unit, programme := saveProgrammeParents(t, ctx, ss, "attempt-unit")
@@ -1156,6 +1168,17 @@ func newExamAttemptFixtureWithOptions(t *testing.T, ctx context.Context, ss stor
 			Policy: browser.Clone(), UpdatedAt: now.Add(time.Millisecond),
 			AuditEventID: audit.ID, AuditAt: model.NowUTC(),
 		}, examCommand(manager.ID, "exam.draft.browser_policy.configure", "attempt-browser-policy", "attempt-browser-policy"))
+		require.NoError(t, updateErr)
+		draftRevision = updated.Value.Draft.Revision
+	}
+	if len(natives) > 0 {
+		native := model.DefaultNativeSecurityPolicy()
+		for _, change := range natives {
+			change(&native)
+		}
+		updated, updateErr := ss.ExamAuthoring().UpdateDraftNativePolicy(ctx,
+			newExamDraftNativePolicyUpdate(t, ctx, ss, created.Value.Exam.ID, manager.ID, draftRevision, native, now.Add(time.Millisecond)),
+			examCommand(manager.ID, "exam.draft.native_policy.configure", "attempt-native-policy", "attempt-native-policy"))
 		require.NoError(t, updateErr)
 		draftRevision = updated.Value.Draft.Revision
 	}

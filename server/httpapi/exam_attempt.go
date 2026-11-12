@@ -158,6 +158,14 @@ type ExamAttemptApplication interface {
 	OpenCandidateExamWorkspaceFile(context.Context, invocation.Invocation, attempt.OpenWorkspaceFileQuery) (attempt.OpenedContent, error)
 	ReallowExamAttempt(context.Context, invocation.Invocation, attempt.ReallowCommand) (attempt.ReallowResult, error)
 	SuspendExamAttempt(context.Context, invocation.Invocation, attempt.ManualSuspensionCommand) (attempt.ManualSuspensionResult, error)
+	RequestScreenClip(context.Context, invocation.Invocation, attempt.ScreenClipRequestCommand) (attempt.ScreenClipRequestResult, error)
+	PendingScreenClips(context.Context, invocation.Invocation, attempt.CandidateAccess) ([]store.ExamAttemptScreenClipView, error)
+	TakeScreenClip(
+		context.Context,
+		invocation.Invocation,
+		attempt.CandidateAccess,
+		model.ScreenClipID,
+	) (store.ExamAttemptScreenClipView, error)
 	SubmitExamAttempt(context.Context, invocation.Invocation, attempt.SubmitCommand) (store.ExamSubmissionReceipt, error)
 	GetExamSubmission(context.Context, invocation.Invocation, attempt.GetSubmissionQuery) (attempt.ManagedSubmission, error)
 	ListExamSubmissionManifest(
@@ -195,6 +203,8 @@ func examAttemptResource(app ExamAttemptApplication) route.Resource {
 	managerSubmissionContent := managerSubmission + "/files/{attempt_workspace_entry_id}/content"
 	reallow := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/reallow"
 	suspend := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/suspend"
+	screenClips := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips"
+	screenClipRequests := "/exam-attempts/{exam_attempt_id}/screen-clip-requests"
 	return route.NewResource("exam-attempts",
 		route.Endpoint{
 			Method: http.MethodGet,
@@ -350,6 +360,61 @@ func examAttemptResource(app ExamAttemptApplication) route.Resource {
 				"exam.sitting.unavailable",
 			},
 			Handle: h.suspend,
+		},
+		route.Endpoint{
+			Method:      http.MethodPost,
+			Path:        screenClips,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
+			Errors: []string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.state_conflict",
+				"exam.attempt.screen_recording_off",
+				"exam.attempt.screen_clip_limit_reached",
+				"exam.attempt.unavailable",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+				"exam.delivery.metadata_capacity",
+				"exam.sitting.invalid",
+				"exam.sitting.unavailable",
+			},
+			Handle: h.requestScreenClip,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   screenClipRequests,
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.unavailable",
+				"exam.attempt.registered_desktop_required",
+				"exam.delivery.metadata_capacity",
+			},
+			Handle: h.pendingScreenClips,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   screenClipRequests + "/{screen_clip_id}/take",
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.state_conflict",
+				"exam.attempt.unavailable",
+				"exam.attempt.registered_desktop_required",
+				"exam.delivery.metadata_capacity",
+			},
+			Handle: h.takeScreenClip,
 		},
 		route.Endpoint{
 			Method: http.MethodGet,

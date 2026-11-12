@@ -2538,6 +2538,55 @@ CREATE TABLE exam_attempt_suspensions (
 CREATE UNIQUE INDEX exam_attempt_suspensions_one_active_key
     ON exam_attempt_suspensions (exam_attempt_id) WHERE state = 'active';
 
+-- A screen clip is one requested range of a candidate's screen, which
+-- Desktop records on the device for the whole session. A request waits as
+-- requested until the Desktop of a current Participation takes it, so a
+-- request made while the Attempt is suspended is queued. A manager's request
+-- keeps its private reason here and nowhere else; an incident's names the
+-- Flag it is about.
+CREATE TABLE exam_attempt_screen_clips (
+    id varchar(26) PRIMARY KEY,
+    exam_attempt_id varchar(26) NOT NULL REFERENCES exam_attempts(id),
+    source varchar(16) NOT NULL CHECK (source IN ('manager', 'incident')),
+    requested_by_user_id varchar(26) REFERENCES users(id),
+    private_reason text,
+    integrity_flag_id varchar(26) REFERENCES integrity_flags(id),
+    range_from_session_start boolean NOT NULL,
+    range_start timestamptz,
+    range_end timestamptz NOT NULL,
+    state varchar(16) NOT NULL CHECK (state IN ('requested', 'recording', 'uploading', 'ready', 'failed')),
+    failure varchar(32) CHECK (failure IN ('attempt_ended', 'not_recorded', 'upload_deadline', 'rejected')),
+    delivered_participation_id varchar(26) REFERENCES exam_attempt_participations(id),
+    requested_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL CHECK (updated_at >= requested_at),
+    revision bigint NOT NULL CHECK (revision > 0),
+    CONSTRAINT exam_attempt_screen_clips_provenance_check CHECK (
+        (source = 'manager' AND requested_by_user_id IS NOT NULL AND integrity_flag_id IS NULL AND
+         private_reason = btrim(private_reason) AND char_length(private_reason) BETWEEN 1 AND 1000 AND
+         octet_length(private_reason) <= 4000) OR
+        (source = 'incident' AND integrity_flag_id IS NOT NULL AND requested_by_user_id IS NULL AND
+         private_reason IS NULL AND NOT range_from_session_start)
+    ),
+    CONSTRAINT exam_attempt_screen_clips_range_check CHECK (
+        (range_from_session_start AND range_start IS NULL) OR
+        (NOT range_from_session_start AND range_start < range_end AND range_end - range_start <= interval '6 hours')
+    ),
+    CONSTRAINT exam_attempt_screen_clips_lifecycle_check CHECK (
+        (state = 'requested' AND delivered_participation_id IS NULL AND failure IS NULL) OR
+        (state IN ('recording', 'uploading', 'ready') AND delivered_participation_id IS NOT NULL AND failure IS NULL) OR
+        (state = 'failed' AND failure IS NOT NULL AND
+         (delivered_participation_id IS NOT NULL OR failure = 'attempt_ended'))
+    )
+);
+
+CREATE INDEX exam_attempt_screen_clips_attempt_idx ON exam_attempt_screen_clips (exam_attempt_id, requested_at);
+CREATE INDEX exam_attempt_screen_clips_requested_by_idx ON exam_attempt_screen_clips (requested_by_user_id)
+    WHERE requested_by_user_id IS NOT NULL;
+CREATE INDEX exam_attempt_screen_clips_flag_idx ON exam_attempt_screen_clips (integrity_flag_id)
+    WHERE integrity_flag_id IS NOT NULL;
+CREATE INDEX exam_attempt_screen_clips_participation_idx ON exam_attempt_screen_clips (delivered_participation_id)
+    WHERE delivered_participation_id IS NOT NULL;
+
 ALTER TABLE exam_attempt_focus_loss_evaluations
     ADD CONSTRAINT exam_attempt_focus_loss_evaluations_suspension_fkey
     FOREIGN KEY (last_suspension_id, exam_attempt_id, participation_id, generation)

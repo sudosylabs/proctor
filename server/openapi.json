@@ -449,6 +449,15 @@
           "$ref": "#/components/schemas/ID"
         }
       },
+      "ScreenClipID": {
+        "description": "The screen clip identifier.",
+        "in": "path",
+        "name": "screen_clip_id",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/ID"
+        }
+      },
       "SecurityPreflightID": {
         "description": "Server-issued canonical preflight transaction ID returned by preparation.",
         "in": "path",
@@ -2064,6 +2073,23 @@
         "description": "Complete settings JSON source, its supported format version, and the exact current revision to replace.",
         "required": true
       },
+      "RequestExamAttemptScreenClip": {
+        "content": {
+          "application/json": {
+            "example": {
+              "end": "2026-11-12T10:00:00Z",
+              "from_session_start": false,
+              "reason": "The candidate seemed to read from a second screen.",
+              "start": "2026-11-12T09:58:00Z"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/RequestExamAttemptScreenClipRequest"
+            }
+          }
+        },
+        "description": "The range to cut, either from the start of the session or from an explicit start, and the manager's private reason.",
+        "required": true
+      },
       "RequestPasswordReset": {
         "content": {
           "application/json": {
@@ -3189,6 +3215,21 @@
           }
         }
       },
+      "CandidateScreenClipOK": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ScreenClipResponse"
+            }
+          }
+        },
+        "description": "The request the candidate's Desktop took",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/PrivateNoStore"
+          }
+        }
+      },
       "CandidateWorkspaceJournalOK": {
         "content": {
           "application/json": {
@@ -3685,6 +3726,21 @@
           }
         },
         "description": "Exam Attempt suspension re-allowed without exposing the private manager reason",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
+      "ExamAttemptScreenClipOK": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ScreenClipResponse"
+            }
+          }
+        },
+        "description": "The saved request, without the manager's reason; 201 when created, 200 when replayed",
         "headers": {
           "Cache-Control": {
             "$ref": "#/components/headers/NoStore"
@@ -5829,6 +5885,24 @@
           }
         },
         "description": "Role"
+      },
+      "ScreenClipRequestListOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "items": []
+            },
+            "schema": {
+              "$ref": "#/components/schemas/ScreenClipListResponse"
+            }
+          }
+        },
+        "description": "The requests waiting for the candidate's Desktop",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/PrivateNoStore"
+          }
+        }
       },
       "SearchOK": {
         "content": {
@@ -14681,6 +14755,8 @@
           "exam.attempt.registered_desktop_required",
           "exam.attempt.renewal_conflict",
           "exam.attempt.revision_conflict",
+          "exam.attempt.screen_clip_limit_reached",
+          "exam.attempt.screen_recording_off",
           "exam.attempt.sitting_not_open",
           "exam.attempt.state_conflict",
           "exam.attempt.suspension_conflict",
@@ -23827,6 +23903,37 @@
         ],
         "type": "object"
       },
+      "RequestExamAttemptScreenClipRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "end": {
+            "description": "The range's end, at most ten minutes after the request.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "from_session_start": {
+            "description": "True for a range from the moment the candidate window opened; start is then omitted.",
+            "type": "boolean"
+          },
+          "reason": {
+            "description": "The manager's private reason. It is stored with the request and never returned.",
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "start": {
+            "description": "The range's start, required unless from_session_start is true, and omitted then.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from_session_start",
+          "end",
+          "reason"
+        ],
+        "type": "object"
+      },
       "ResetUserMFARequest": {
         "additionalProperties": false,
         "properties": {
@@ -24957,6 +25064,111 @@
           "class_id",
           "scheduled_start_at",
           "scheduled_end_at"
+        ],
+        "type": "object"
+      },
+      "ScreenClipListResponse": {
+        "additionalProperties": false,
+        "description": "One page of the collection in its stable order.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ScreenClipResponse"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "$ref": "#/components/schemas/NextCursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ScreenClipRange": {
+        "additionalProperties": false,
+        "properties": {
+          "end": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "from_session_start": {
+            "type": "boolean"
+          },
+          "start": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from_session_start",
+          "end"
+        ],
+        "type": "object"
+      },
+      "ScreenClipResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "failure": {
+            "description": "Why the clip failed; present only when state is failed.",
+            "enum": [
+              "attempt_ended",
+              "not_recorded",
+              "upload_deadline",
+              "rejected"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "range": {
+            "$ref": "#/components/schemas/ScreenClipRange"
+          },
+          "requested_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "source": {
+            "enum": [
+              "manager",
+              "incident"
+            ],
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "requested",
+              "recording",
+              "uploading",
+              "ready",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "exam_attempt_id",
+          "source",
+          "state",
+          "range",
+          "requested_at",
+          "updated_at",
+          "revision"
         ],
         "type": "object"
       },
@@ -35007,6 +35219,178 @@
         }
       ]
     },
+    "/api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests": {
+      "get": {
+        "description": "Lists, newest first, the screen clip requests waiting for the candidate's Desktop, after validating the Session-bound Attempt credential and open Connection. Requests queued while the Attempt was suspended appear once the candidate resumes. Each item carries the range to cut; never who asked or why.",
+        "operationId": "listCandidateScreenClipRequests",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageCursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ScreenClipRequestListOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List the screen clip requests the candidate's Desktop has not taken",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        }
+      ]
+    },
+    "/api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests/{screen_clip_id}/take": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        },
+        {
+          "$ref": "#/components/parameters/ScreenClipID"
+        }
+      ],
+      "post": {
+        "description": "Records that the candidate's Desktop took a request and is recording what remains of its range. The request then belongs to the Participation that took it. Taking it again through the same Participation returns it unchanged.",
+        "operationId": "takeCandidateScreenClipRequest",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CandidateScreenClipOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Take one screen clip request",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "source": "curl --fail-with-body \\\n  --request POST \\\n  --url 'https://proctor.example.edu/api/v1/exam-attempts/dgjcx1ia56br8kpous3h9nfemq/screen-clip-requests/twz47ydgjcx1ia56br8kpous3h/take' \\\n  --header 'Authorization: DPoP \u003cregistered-desktop-session-access-token\u003e' \\\n  --header 'DPoP: \u003cproof\u003e' \\\n  --header 'X-Proctor-Attempt-Credential: \u003cattempt-continuity-credential\u003e' \\\n  --header 'X-Proctor-Attempt-Connection-ID: \u003cattempt-connection-id\u003e'"
+          }
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.state_conflict",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "exam.delivery.metadata_capacity",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
     "/api/v1/exam-attempts/{exam_attempt_id}/security-batches": {
       "parameters": [
         {
@@ -40517,6 +40901,105 @@
           "exam.attempt.state_conflict",
           "exam.attempt.sitting_not_open",
           "exam.attempt.conflict",
+          "exam.attempt.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "idempotency.conflict",
+          "idempotency.in_progress",
+          "exam.delivery.metadata_capacity",
+          "exam.sitting.invalid",
+          "exam.sitting.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "required"
+      }
+    },
+    "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamID"
+        },
+        {
+          "$ref": "#/components/parameters/ExamSittingID"
+        },
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        }
+      ],
+      "post": {
+        "description": "An Exam Manager's request for part of the screen Desktop records on the candidate's device, for an Exam whose native policy turns the screen recorder on. The range is either from the start of the session or an explicit start and end of at most six hours; it may end up to ten minutes after the request, and Desktop waits for that part before cutting the clip. A request made while the Attempt is suspended waits until the candidate resumes. The manager's reason is required, audited as an attempt, and stored with the request; it is never returned. An Attempt takes at most ten manager requests. Requests stop once the Attempt has ended.",
+        "operationId": "requestExamAttemptScreenClip",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/RequestExamAttemptScreenClip"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ExamAttemptScreenClipOK"
+          },
+          "201": {
+            "$ref": "#/components/responses/ExamAttemptScreenClipOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Request a range of a candidate's recorded screen",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.state_conflict",
+          "exam.attempt.screen_recording_off",
+          "exam.attempt.screen_clip_limit_reached",
           "exam.attempt.unavailable",
           "idempotency.key_required",
           "idempotency.key_invalid",

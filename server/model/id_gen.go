@@ -97,6 +97,9 @@ func NewIntegrityDiscrepancyID() IntegrityDiscrepancyID { return IntegrityDiscre
 // NewAttemptSuspensionID returns a freshly generated attempt-suspension identifier.
 func NewAttemptSuspensionID() AttemptSuspensionID { return AttemptSuspensionID(NewID()) }
 
+// NewScreenClipID returns a freshly generated screen-clip identifier.
+func NewScreenClipID() ScreenClipID { return ScreenClipID(NewID()) }
+
 // NewAttemptWorkspaceEntryID returns a freshly generated attempt-workspace-entry identifier.
 func NewAttemptWorkspaceEntryID() AttemptWorkspaceEntryID { return AttemptWorkspaceEntryID(NewID()) }
 
@@ -337,6 +340,11 @@ func ParseIntegrityDiscrepancyID(value string) (IntegrityDiscrepancyID, error) {
 // ParseAttemptSuspensionID validates and converts the shared identifier representation.
 func ParseAttemptSuspensionID(value string) (AttemptSuspensionID, error) {
 	return parseID[AttemptSuspensionID](value, "attempt_suspension_id")
+}
+
+// ParseScreenClipID validates and converts the shared identifier representation.
+func ParseScreenClipID(value string) (ScreenClipID, error) {
+	return parseID[ScreenClipID](value, "screen_clip_id")
 }
 
 // ParseAttemptWorkspaceEntryID validates and converts the shared identifier representation.
@@ -583,6 +591,9 @@ func (id IntegrityDiscrepancyID) IsZero() bool { return id == "" }
 // IsZero reports whether the attempt-suspension is the empty zero value.
 func (id AttemptSuspensionID) IsZero() bool { return id == "" }
 
+// IsZero reports whether the screen-clip is the empty zero value.
+func (id ScreenClipID) IsZero() bool { return id == "" }
+
 // IsZero reports whether the attempt-workspace-entry is the empty zero value.
 func (id AttemptWorkspaceEntryID) IsZero() bool { return id == "" }
 
@@ -762,6 +773,9 @@ func (id IntegrityDiscrepancyID) IsValid() bool { return IsValidOpaqueID(string(
 
 // IsValid reports whether the attempt-suspension is a canonical non-zero ID.
 func (id AttemptSuspensionID) IsValid() bool { return IsValidOpaqueID(string(id)) }
+
+// IsValid reports whether the screen-clip is a canonical non-zero ID.
+func (id ScreenClipID) IsValid() bool { return IsValidOpaqueID(string(id)) }
 
 // IsValid reports whether the attempt-workspace-entry is a canonical non-zero ID.
 func (id AttemptWorkspaceEntryID) IsValid() bool { return IsValidOpaqueID(string(id)) }
@@ -943,6 +957,9 @@ func (id IntegrityDiscrepancyID) String() string { return string(id) }
 // String returns the attempt-suspension wire/database representation.
 func (id AttemptSuspensionID) String() string { return string(id) }
 
+// String returns the screen-clip wire/database representation.
+func (id ScreenClipID) String() string { return string(id) }
+
 // String returns the attempt-workspace-entry wire/database representation.
 func (id AttemptWorkspaceEntryID) String() string { return string(id) }
 
@@ -1122,6 +1139,9 @@ func (id IntegrityDiscrepancyID) MarshalText() ([]byte, error) { return marshalI
 
 // MarshalText encodes the attempt-suspension as its canonical string.
 func (id AttemptSuspensionID) MarshalText() ([]byte, error) { return marshalID(id) }
+
+// MarshalText encodes the screen-clip as its canonical string.
+func (id ScreenClipID) MarshalText() ([]byte, error) { return marshalID(id) }
 
 // MarshalText encodes the attempt-workspace-entry as its canonical string.
 func (id AttemptWorkspaceEntryID) MarshalText() ([]byte, error) { return marshalID(id) }
@@ -1357,6 +1377,11 @@ func (id *IntegrityDiscrepancyID) UnmarshalText(data []byte) error {
 // UnmarshalText decodes and validates the attempt-suspension when non-empty.
 func (id *AttemptSuspensionID) UnmarshalText(data []byte) error {
 	return unmarshalID(id, data, ParseAttemptSuspensionID)
+}
+
+// UnmarshalText decodes and validates the screen-clip when non-empty.
+func (id *ScreenClipID) UnmarshalText(data []byte) error {
+	return unmarshalID(id, data, ParseScreenClipID)
 }
 
 // UnmarshalText decodes and validates the attempt-workspace-entry when non-empty.
@@ -1603,6 +1628,9 @@ func (id IntegrityDiscrepancyID) MarshalJSON() ([]byte, error) { return marshalI
 // MarshalJSON encodes the attempt-suspension as a JSON string.
 func (id AttemptSuspensionID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
 
+// MarshalJSON encodes the screen-clip as a JSON string.
+func (id ScreenClipID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
+
 // MarshalJSON encodes the attempt-workspace-entry as a JSON string.
 func (id AttemptWorkspaceEntryID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
 
@@ -1837,6 +1865,11 @@ func (id *IntegrityDiscrepancyID) UnmarshalJSON(data []byte) error {
 // UnmarshalJSON decodes a JSON string into the attempt-suspension.
 func (id *AttemptSuspensionID) UnmarshalJSON(data []byte) error {
 	return unmarshalIDJSON(id, data, ParseAttemptSuspensionID)
+}
+
+// UnmarshalJSON decodes a JSON string into the screen-clip.
+func (id *ScreenClipID) UnmarshalJSON(data []byte) error {
+	return unmarshalIDJSON(id, data, ParseScreenClipID)
 }
 
 // UnmarshalJSON decodes a JSON string into the attempt-workspace-entry.

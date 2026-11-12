@@ -1077,6 +1077,8 @@ components:
         - exam.attempt.registered_desktop_required
         - exam.attempt.renewal_conflict
         - exam.attempt.revision_conflict
+        - exam.attempt.screen_clip_limit_reached
+        - exam.attempt.screen_recording_off
         - exam.attempt.sitting_not_open
         - exam.attempt.state_conflict
         - exam.attempt.suspension_conflict

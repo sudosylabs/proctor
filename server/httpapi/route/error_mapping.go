@@ -135,6 +135,8 @@ var applicationErrorMappings = map[string]applicationErrorMapping{
 	"exam.attempt.registered_desktop_required":                    {status: http.StatusForbidden},
 	"exam.attempt.renewal_conflict":                               {status: http.StatusConflict},
 	"exam.attempt.revision_conflict":                              {status: http.StatusConflict},
+	"exam.attempt.screen_clip_limit_reached":                      {status: http.StatusConflict},
+	"exam.attempt.screen_recording_off":                           {status: http.StatusConflict},
 	"exam.attempt.sitting_not_open":                               {status: http.StatusConflict},
 	"exam.attempt.state_conflict":                                 {status: http.StatusConflict},
 	"exam.attempt.suspension_conflict":                            {status: http.StatusConflict},

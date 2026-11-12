@@ -1432,6 +1432,10 @@ func TestExamAttemptManualSuspensionStore(t *testing.T) {
 	StoreTestWithAuthenticationPolicy(t, nil, storetest.TestExamAttemptManualSuspensionStore)
 }
 
+func TestExamAttemptScreenClipStore(t *testing.T) {
+	StoreTestWithAuthenticationPolicy(t, nil, storetest.TestExamAttemptScreenClipStore)
+}
+
 func TestExamAttemptManagementLockAdmitsSittingRenewals(t *testing.T) {
 	StoreTestWithAuthenticationPolicy(t, nil, func(t *testing.T, ss store.Store) {
 		sqlStore, ok := ss.(*SQLStore)

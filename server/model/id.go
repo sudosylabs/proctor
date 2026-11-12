@@ -105,6 +105,9 @@ type IntegrityDiscrepancyID string
 // AttemptSuspensionID identifies one reversible Attempt suspension episode.
 type AttemptSuspensionID string
 
+// ScreenClipID identifies one requested range of a candidate's recorded screen.
+type ScreenClipID string
+
 // AttemptWorkspaceEntryID identifies one logical path in an Attempt Workspace.
 type AttemptWorkspaceEntryID string
 

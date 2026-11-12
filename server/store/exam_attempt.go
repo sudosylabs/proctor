@@ -1342,6 +1342,20 @@ type ExamAttemptStore interface {
 	// from. It keeps all evidence and creates no Participation.
 	ReallowAttempt(context.Context, *ExamAttemptReallow, *CommandIdempotency) (*ExamAttemptReallowResult, error)
 
+	// RequestScreenClip saves an Exam Manager's request for a range of the
+	// candidate's recorded screen. It refuses a request when the Exam does not
+	// record the screen, when the Attempt has ended, and beyond the per-Attempt
+	// limit. A request made while the Attempt is suspended waits until the
+	// candidate resumes.
+	RequestScreenClip(context.Context, *ExamAttemptScreenClipRequest, *CommandIdempotency) (*ExamAttemptScreenClipResult, error)
+	// ListPendingScreenClips returns, oldest first, the requests the Desktop of
+	// the live Connection has not taken yet. Private reasons are cleared.
+	ListPendingScreenClips(context.Context, CandidateAttemptAccess) ([]ExamAttemptScreenClipView, error)
+	// DeliverScreenClip records that the Desktop of the live Connection took a
+	// request. Taking it again through the same Participation returns it
+	// unchanged.
+	DeliverScreenClip(context.Context, *ExamAttemptScreenClipDelivery) (*ExamAttemptScreenClipView, error)
+
 	// ResolveCorrectionAcknowledgementTarget validates an acknowledgement and
 	// returns the scope its audit is recorded under. It changes nothing.
 	ResolveCorrectionAcknowledgementTarget(

@@ -2412,6 +2412,28 @@ export const searchEntries = [
     "searchText": "getstudentexamresult get only the explicitly released candidate result projection returns the narrow candidate-facing result only after an authorized manager has finalized review and explicitly released it. private notes, manager rationale, integrity evidence, decisions, and unreleased grading data remain concealed. submissions get /api/v1/exam-attempts/{exam_attempt_id}/result session_required none authentication.required authentication.token_invalid authentication.credential_ambiguous request.invalid resource.not_found exam.integrity_review.invalid exam.integrity_review.unavailable authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
+    "id": "operation:listCandidateScreenClipRequests",
+    "kind": "endpoint",
+    "group": "Attempts and workspaces",
+    "title": "List the screen clip requests the candidate's Desktop has not taken",
+    "description": "Lists, newest first, the screen clip requests waiting for the candidate's Desktop, after validating the Session-bound Attempt credential and open Connection. Requests queued while the Attempt was suspended appear once the candidate resumes. Each item carries the range to cut; never who asked or why.",
+    "href": "/api/reference/list-candidate-screen-clip-requests",
+    "method": "GET",
+    "path": "/api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests",
+    "searchText": "listcandidatescreencliprequests list the screen clip requests the candidate's desktop has not taken lists, newest first, the screen clip requests waiting for the candidate's desktop, after validating the session-bound attempt credential and open connection. requests queued while the attempt was suspended appear once the candidate resumes. each item carries the range to cut; never who asked or why. attempts and workspaces get /api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests session_required none request.invalid resource.not_found exam.attempt.invalid exam.attempt.unavailable exam.attempt.registered_desktop_required exam.delivery.metadata_capacity authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
+    "id": "operation:takeCandidateScreenClipRequest",
+    "kind": "endpoint",
+    "group": "Attempts and workspaces",
+    "title": "Take one screen clip request",
+    "description": "Records that the candidate's Desktop took a request and is recording what remains of its range. The request then belongs to the Participation that took it. Taking it again through the same Participation returns it unchanged.",
+    "href": "/api/reference/take-candidate-screen-clip-request",
+    "method": "POST",
+    "path": "/api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests/{screen_clip_id}/take",
+    "searchText": "takecandidatescreencliprequest take one screen clip request records that the candidate's desktop took a request and is recording what remains of its range. the request then belongs to the participation that took it. taking it again through the same participation returns it unchanged. attempts and workspaces post /api/v1/exam-attempts/{exam_attempt_id}/screen-clip-requests/{screen_clip_id}/take session_required none request.invalid resource.not_found exam.attempt.invalid exam.attempt.state_conflict exam.attempt.unavailable exam.attempt.registered_desktop_required exam.delivery.metadata_capacity authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
+  },
+  {
     "id": "operation:appendNativeDelivery",
     "kind": "endpoint",
     "group": "Attempts and workspaces",
@@ -3048,6 +3070,17 @@ export const searchEntries = [
     "method": "POST",
     "path": "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/reallow",
     "searchText": "reallowexamattempt re-allow one exact suspended exam attempt closes only the identified active suspension episode and moves the attempt to ready. it preserves integrity evidence and creates no continuity credential, participation, session binding, or connection; the candidate must rejoin through full admission validation. attempts and workspaces post /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/reallow principal_required required authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found exam.attempt.invalid exam.attempt.revision_conflict exam.attempt.suspension_conflict exam.attempt.state_conflict exam.attempt.sitting_not_open exam.attempt.conflict exam.attempt.unavailable idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress exam.delivery.metadata_capacity exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
+  },
+  {
+    "id": "operation:requestExamAttemptScreenClip",
+    "kind": "endpoint",
+    "group": "Attempts and workspaces",
+    "title": "Request a range of a candidate's recorded screen",
+    "description": "An Exam Manager's request for part of the screen Desktop records on the candidate's device, for an Exam whose native policy turns the screen recorder on. The range is either from the start of the session or an explicit start and end of at most six hours; it may end up to ten minutes after the request, and Desktop waits for that part before cutting the clip. A request made while the Attempt is suspended waits until the candidate resumes. The manager's reason is required, audited as an attempt, and stored with the request; it is never returned. An Attempt takes at most ten manager requests. Requests stop once the Attempt has ended.",
+    "href": "/api/reference/request-exam-attempt-screen-clip",
+    "method": "POST",
+    "path": "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips",
+    "searchText": "requestexamattemptscreenclip request a range of a candidate's recorded screen an exam manager's request for part of the screen desktop records on the candidate's device, for an exam whose native policy turns the screen recorder on. the range is either from the start of the session or an explicit start and end of at most six hours; it may end up to ten minutes after the request, and desktop waits for that part before cutting the clip. a request made while the attempt is suspended waits until the candidate resumes. the manager's reason is required, audited as an attempt, and stored with the request; it is never returned. an attempt takes at most ten manager requests. requests stop once the attempt has ended. attempts and workspaces post /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips principal_required required authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found exam.attempt.invalid exam.attempt.state_conflict exam.attempt.screen_recording_off exam.attempt.screen_clip_limit_reached exam.attempt.unavailable idempotency.key_required idempotency.key_invalid idempotency.conflict idempotency.in_progress exam.delivery.metadata_capacity exam.sitting.invalid exam.sitting.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
   },
   {
     "id": "operation:getExamSubmission",

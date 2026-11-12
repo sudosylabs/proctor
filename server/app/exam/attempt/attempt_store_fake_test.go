@@ -18,6 +18,9 @@ import (
 
 type attemptStoreFake struct {
 	f                               *fixture
+	screenClipRequest               *store.ExamAttemptScreenClipRequest
+	screenClipErr                   error
+	screenClipReplayed              bool
 	connect                         *store.ExamAttemptConnect
 	connectErr                      error
 	getErr                          error
@@ -180,6 +183,28 @@ func (f *attemptStoreFake) SuspendAttempt(_ context.Context, input *store.ExamAt
 	f.f.order = append(f.f.order, "suspend")
 	f.manualSuspension, f.idempotency = input, command
 	return f.manualSuspensionResult, f.manualSuspensionErr
+}
+
+func (f *attemptStoreFake) RequestScreenClip(
+	_ context.Context,
+	input *store.ExamAttemptScreenClipRequest,
+	command *store.CommandIdempotency,
+) (*store.ExamAttemptScreenClipResult, error) {
+	f.f.order = append(f.f.order, "screen_clip")
+	f.screenClipRequest, f.idempotency = input, command
+	if f.screenClipErr != nil {
+		return nil, f.screenClipErr
+	}
+	return &store.ExamAttemptScreenClipResult{ExamID: input.ExamID, SittingID: input.SittingID, CandidateUserID: f.f.userID,
+		Clip: store.NewExamAttemptScreenClipView(input.Clip), Replayed: f.screenClipReplayed}, nil
+}
+
+func (f *attemptStoreFake) ListPendingScreenClips(context.Context, store.CandidateAttemptAccess) ([]store.ExamAttemptScreenClipView, error) {
+	return []store.ExamAttemptScreenClipView{}, nil
+}
+
+func (f *attemptStoreFake) DeliverScreenClip(_ context.Context, input *store.ExamAttemptScreenClipDelivery) (*store.ExamAttemptScreenClipView, error) {
+	return nil, store.NewErrNotFound("screen_clip", input.ClipID.String())
 }
 
 func (f *attemptStoreFake) CloseConnection(_ context.Context, input *store.ExamAttemptConnectionClose) (*store.ExamAttemptConnectionCloseResult, error) {

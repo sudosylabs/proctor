@@ -589,6 +589,47 @@ func TestManagerSuspendExamAttemptUsesRevisionFenceAndNeverReturnsPrivateReason(
 	require.Equal(t, http.StatusBadRequest, invalid.Code, "invalid revision status = %d body=%s", invalid.Code, invalid.Body.String())
 }
 
+func TestManagerScreenClipRequestNeverReturnsItsPrivateReason(t *testing.T) {
+	t.Parallel()
+	fake := newExamAttemptHTTPFake(t)
+	httpAPI := newExamAttemptFocusedAPI(t, fake)
+	path := "/api/v1/exams/" + fake.attempt.ExamID.String() + "/sittings/" + fake.attempt.SittingID.String() +
+		"/attempts/" + fake.attempt.ID.String() + "/screen-clips"
+	send := func(body, key string) *httptest.ResponseRecorder {
+		request := newJSONRequest(http.MethodPost, path, strings.NewReader(body))
+		request.Header.Set("Authorization", "Bearer credential")
+		request.Header.Set("Idempotency-Key", key)
+		response := httptest.NewRecorder()
+		httpAPI.ServeHTTP(response, request)
+		return response
+	}
+
+	response := send(`{"from_session_start":true,"end":"2026-11-12T10:00:00Z","reason":"second voice heard"}`, "clip-once")
+	require.Equal(t, http.StatusCreated, response.Code, "body=%s", response.Body.String())
+	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+	require.True(t, fake.screenClip.Range.FromSessionStart)
+	require.Equal(t, "second voice heard", fake.screenClip.PrivateReason)
+	require.Equal(t, "clip-once", fake.screenClip.IdempotencyKey)
+	body := response.Body.String()
+	require.NotContains(t, body, "second voice heard")
+	require.NotContains(t, body, "reason")
+	require.Contains(t, body, `"state":"requested"`)
+	require.Contains(t, body, `"from_session_start":true`)
+
+	response = send(`{"from_session_start":false,"start":"2026-11-12T09:58:00Z","end":"2026-11-12T10:00:00Z","reason":"r"}`, "clip-range")
+	require.Equal(t, http.StatusCreated, response.Code, "body=%s", response.Body.String())
+	require.False(t, fake.screenClip.Range.FromSessionStart)
+	require.Equal(t, time.Date(2026, 11, 12, 9, 58, 0, 0, time.UTC), fake.screenClip.Range.Start)
+
+	for name, body := range map[string]string{
+		"both start forms": `{"from_session_start":true,"start":"2026-11-12T09:58:00Z","end":"2026-11-12T10:00:00Z","reason":"r"}`,
+		"no start":         `{"from_session_start":false,"end":"2026-11-12T10:00:00Z","reason":"r"}`,
+		"bad end":          `{"from_session_start":true,"end":"soon","reason":"r"}`,
+	} {
+		require.Equal(t, http.StatusBadRequest, send(body, "clip-bad").Code, name)
+	}
+}
+
 func TestManagerEndExamAttemptUsesRevisionFenceAndReturnsOnlySafeReceipt(t *testing.T) {
 	t.Parallel()
 	fake := newExamAttemptHTTPFake(t)
@@ -874,6 +915,8 @@ type examAttemptHTTPFake struct {
 	workspaceOpen           attempt.OpenWorkspaceFileQuery
 	reallow                 attempt.ReallowCommand
 	suspend                 attempt.ManualSuspensionCommand
+	screenClip              attempt.ScreenClipRequestCommand
+	takenClip               model.ScreenClipID
 	journalQuery            attempt.WorkspaceJournalQuery
 	journalPage             attempt.WorkspaceJournalPage
 	workspaceDirectory      attempt.CreateWorkspaceDirectoryCommand
@@ -1056,6 +1099,35 @@ func (f *examAttemptHTTPFake) ReallowExamAttempt(_ context.Context, inv invocati
 			State: model.AttemptSuspensionClosed, Source: model.AttemptSuspensionSourcePolicy,
 			CandidateReason: model.AttemptSuspensionCandidateReasonSecureContinuityLost, StartedAt: examAttempt.CreatedAt,
 			EndedAt: model.OptionalTimeFrom(examAttempt.UpdatedAt), ReallowedByUserID: inv.Principal().UserID}}, nil
+}
+
+func (f *examAttemptHTTPFake) RequestScreenClip(_ context.Context, inv invocation.Invocation, command attempt.ScreenClipRequestCommand) (attempt.ScreenClipRequestResult, error) {
+	f.screenClip = command
+	at := f.attempt.UpdatedAt
+	return attempt.ScreenClipRequestResult{Clip: store.ExamAttemptScreenClipView{
+		ID: model.NewScreenClipID(), AttemptID: command.AttemptID, Source: model.ScreenClipSourceManager,
+		RequestedByUserID: inv.Principal().UserID, Range: command.Range, State: model.ScreenClipRequested,
+		RequestedAt: at, UpdatedAt: at, Revision: 1,
+	}}, nil
+}
+
+func (f *examAttemptHTTPFake) PendingScreenClips(context.Context, invocation.Invocation, attempt.CandidateAccess) ([]store.ExamAttemptScreenClipView, error) {
+	return []store.ExamAttemptScreenClipView{}, nil
+}
+
+func (f *examAttemptHTTPFake) TakeScreenClip(
+	_ context.Context,
+	_ invocation.Invocation,
+	access attempt.CandidateAccess,
+	clipID model.ScreenClipID,
+) (store.ExamAttemptScreenClipView, error) {
+	f.takenClip = clipID
+	at := f.attempt.UpdatedAt
+	return store.ExamAttemptScreenClipView{
+		ID: clipID, AttemptID: access.AttemptID, Source: model.ScreenClipSourceManager,
+		Range: model.ScreenClipRange{FromSessionStart: true, End: at}, State: model.ScreenClipRecording,
+		DeliveredParticipationID: model.NewAttemptParticipationID(), RequestedAt: at, UpdatedAt: at, Revision: 2,
+	}, nil
 }
 
 func (f *examAttemptHTTPFake) SuspendExamAttempt(_ context.Context, inv invocation.Invocation, command attempt.ManualSuspensionCommand) (attempt.ManualSuspensionResult, error) {

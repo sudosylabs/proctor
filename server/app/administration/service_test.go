@@ -30,6 +30,7 @@ type catalogFake struct {
 	accessPolicies    store.AccessPolicyStore
 	retentionPolicies store.RetentionPolicyStore
 	retention         store.RetentionStore
+	pluginSettings    store.PluginSettingsStore
 }
 
 func (c *catalogFake) Role() store.RoleStore                       { return c.roles }
@@ -40,6 +41,7 @@ func (c *catalogFake) Audit() store.AuditStore                     { return c.au
 func (c *catalogFake) AccessPolicy() store.AccessPolicyStore       { return c.accessPolicies }
 func (c *catalogFake) RetentionPolicy() store.RetentionPolicyStore { return c.retentionPolicies }
 func (c *catalogFake) Retention() store.RetentionStore             { return c.retention }
+func (c *catalogFake) PluginSettings() store.PluginSettingsStore   { return c.pluginSettings }
 
 // dependenciesOf rebuilds the Dependencies a Service was built from, so a
 // construction test can omit one collaborator at a time.

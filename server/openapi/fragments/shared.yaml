@@ -1235,6 +1235,11 @@ components:
         - personal_access_token.invalid
         - personal_access_token.maximum_reached
         - personal_access_token.unavailable
+        - plugin.invalid
+        - plugin.not_found
+        - plugin.required
+        - plugin.revision_conflict
+        - plugin.unavailable
         - profile_picture.invalid
         - profile_picture.unavailable
         - programme.conflict

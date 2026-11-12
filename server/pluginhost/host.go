@@ -85,10 +85,12 @@ type Dependencies struct {
 
 // Status is what the server reports about one plugin.
 type Status struct {
-	ID       string
-	Name     string
-	State    State
-	Required bool
+	ID               string
+	Name             string
+	State            State
+	Required         bool
+	EnabledByDefault bool
+	SettingsSchema   json.RawMessage
 }
 
 // Host holds the compiled-in plugins and what the active ones registered.
@@ -348,13 +350,37 @@ func (h *Host) Statuses() []Status {
 	statuses := make([]Status, 0, len(h.entries))
 	for _, e := range h.entries {
 		statuses = append(statuses, Status{
-			ID:       e.manifest.ID,
-			Name:     e.manifest.Name,
-			State:    e.currentState(),
-			Required: e.manifest.Required,
+			ID:               e.manifest.ID,
+			Name:             e.manifest.Name,
+			State:            e.currentState(),
+			Required:         e.manifest.Required,
+			EnabledByDefault: e.manifest.EnabledByDefault,
+			SettingsSchema:   slices.Clone(e.manifest.SettingsSchema),
 		})
 	}
 	return statuses
+}
+
+// ErrUnknownPlugin is returned for a plugin ID that is not compiled in.
+var ErrUnknownPlugin = errors.New("plugin is not compiled in")
+
+// ValidateSettings asks the plugin whether settings are acceptable, under
+// the host's timeout and containing a panic. A plugin that is not a
+// plugin.SettingsValidator accepts any document.
+func (h *Host) ValidateSettings(ctx context.Context, id string, settings json.RawMessage) error {
+	for _, e := range h.entries {
+		if e.manifest.ID != id {
+			continue
+		}
+		validator, ok := e.plugin.(plugin.SettingsValidator)
+		if !ok {
+			return nil
+		}
+		return e.callWithin(ctx, h.timeout, "validate settings", func(bounded context.Context) error {
+			return validator.ValidateSettings(bounded, slices.Clone(settings))
+		})
+	}
+	return ErrUnknownPlugin
 }
 
 // Close deactivates every plugin that activated, in reverse order, each

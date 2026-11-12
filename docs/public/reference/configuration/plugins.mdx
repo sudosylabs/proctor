@@ -12,9 +12,13 @@ A plugin is an optional feature compiled into the Proctor server. Proctor
 never loads plugins from outside its own binary.
 
 Whether a plugin runs, and its settings, are not configuration. A System
-Administrator changes them while the server runs, and every node applies the
-change within about five seconds, without a restart. A plugin nobody has
-configured keeps its built-in default.
+Administrator changes them while the server runs, with
+`PUT /api/v1/plugins/{plugin_id}/settings`, and every node applies the
+change within about five seconds, without a restart. `GET /api/v1/plugins`
+lists every compiled-in plugin with its state, its saved settings and the
+JSON Schema its settings form is drawn from. Both are audited and closed to
+Personal Access Tokens. A plugin nobody has configured keeps its built-in
+default.
 
 The configuration file holds only what must not go through an API: each
 plugin's secrets, such as a service token. Changing them needs a restart.

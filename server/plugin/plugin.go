@@ -8,6 +8,7 @@
 package plugin
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -34,6 +35,14 @@ type Plugin interface {
 	Deactivate(ctx context.Context) error
 }
 
+// SettingsValidator is implemented by a plugin that checks a settings
+// document before an administrator's change is saved. An error refuses the
+// change; its text is not shown to the administrator. A plugin that is not
+// a SettingsValidator accepts any JSON object.
+type SettingsValidator interface {
+	ValidateSettings(ctx context.Context, settings json.RawMessage) error
+}
+
 // Reconfigurer is implemented by a plugin that can take new settings while
 // it runs. When an administrator changes the settings of an active plugin,
 // the server calls Reconfigure with a Host that carries them and accepts no
@@ -55,18 +64,33 @@ type Manifest struct {
 	// say otherwise.
 	EnabledByDefault bool
 	// Required marks a plugin the server always runs, such as the Exam
-	// export format. Configuration cannot turn it off; if it fails to
+	// export format. An administrator cannot turn it off; if it fails to
 	// activate, the server still starts without it.
 	Required bool
+	// SettingsSchema is a JSON Schema object describing the plugin's
+	// settings document, from which an administration UI draws its form.
+	// The server serves it unchanged; ValidateSettings, not the schema,
+	// decides what is accepted. Nil means the plugin has no settings.
+	SettingsSchema json.RawMessage
 }
 
 // ErrInvalidManifest is returned by Manifest.Validate.
 var ErrInvalidManifest = errors.New("plugin manifest is invalid")
 
-// Validate reports whether m has a valid ID and a name.
+// maxSettingsSchemaBytes bounds a manifest's SettingsSchema.
+const maxSettingsSchemaBytes = 64 << 10
+
+// Validate reports whether m has a valid ID, a name, and a SettingsSchema
+// that is absent or a JSON object.
 func (m Manifest) Validate() error {
 	if !IsValidID(m.ID) || m.Name == "" || len(m.Name) > 128 {
 		return ErrInvalidManifest
+	}
+	if m.SettingsSchema != nil {
+		trimmed := bytes.TrimSpace(m.SettingsSchema)
+		if len(m.SettingsSchema) > maxSettingsSchemaBytes || !json.Valid(trimmed) || !bytes.HasPrefix(trimmed, []byte("{")) {
+			return ErrInvalidManifest
+		}
 	}
 	return nil
 }

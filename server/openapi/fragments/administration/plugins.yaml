@@ -1,0 +1,250 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+paths:
+  /api/v1/plugins:
+    get:
+      operationId: listPlugins
+      summary: List the plugins compiled into the server
+      tags:
+        - Administration
+      description: >-
+        Lists every plugin compiled into the server, ordered by name, with its state on the serving node, whether it should run, its saved settings and the JSON Schema an administration UI draws its settings form from. A Session with plugin.manage is required; Personal Access Tokens cannot read it. Plugin secrets never appear: they stay in the configuration file. A plugin nobody configured shows its default and revision 0.
+      parameters:
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - plugin.unavailable
+        - request.invalid
+        - resource.not_found
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      responses:
+        "200":
+          $ref: '#/components/responses/PluginListOK'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "500":
+          $ref: '#/components/responses/InternalError'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/plugins/{plugin_id}/settings:
+    parameters:
+      - $ref: '#/components/parameters/PluginID'
+    put:
+      operationId: replacePluginSettings
+      summary: Save a plugin's settings
+      tags:
+        - Administration
+      description: >-
+        Turns one plugin on or off and replaces its settings document, under an optimistic revision fence. Requires a strong recent interactive system-administrator Session, an Idempotency-Key, and durable audit; the audit records the plugin and whether it is enabled, never setting values. Use expected_revision 0 for a plugin nobody has configured. The plugin checks the settings before they are saved and may refuse them with plugin.invalid. A required plugin cannot be turned off. A saved change applies on every node within about five seconds, without a restart, and plugin_settings_changed tells administrators' clients to refetch. A no-op keeps the revision.
+      x-proctor-auth: strong_recent_session_required
+      x-proctor-idempotency: required
+      x-proctor-error-codes:
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - audit.unavailable
+        - idempotency.key_required
+        - idempotency.key_invalid
+        - idempotency.conflict
+        - idempotency.in_progress
+        - plugin.invalid
+        - plugin.not_found
+        - plugin.required
+        - plugin.revision_conflict
+        - plugin.unavailable
+        - request.invalid
+        - resource.not_found
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+        - authentication.strong_required
+        - authentication.reauthentication_required
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        $ref: '#/components/requestBodies/ReplacePluginSettings'
+      responses:
+        "200":
+          $ref: '#/components/responses/PluginOK'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+        "500":
+          $ref: '#/components/responses/InternalError'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+components:
+  parameters:
+    PluginID:
+      name: plugin_id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: ^[a-z][a-z0-9.-]{0,63}$
+      description: The plugin's ID, for example display-topology.
+  requestBodies:
+    ReplacePluginSettings:
+      required: true
+      description: Whether the plugin runs and its complete settings document. Every member is required.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PluginSettingsRequest'
+          example:
+            expected_revision: 0
+            enabled: true
+            settings: '{"mode":"observe"}'
+  responses:
+    PluginListOK:
+      description: One page of the compiled-in plugins.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/PrivateNoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PluginListResponse'
+    PluginOK:
+      description: The plugin with its saved settings.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/PrivateNoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PluginResponse'
+          example:
+            id: oidc
+            name: OpenID Connect
+            state: active
+            required: false
+            enabled_by_default: true
+            enabled: true
+            settings: '{}'
+            revision: 2
+  schemas:
+    PluginSettingsRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_revision
+        - enabled
+        - settings
+      properties:
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 0
+          description: The settings revision the editor read, 0 when nothing is saved. A stale revision cannot overwrite newer settings.
+        enabled:
+          type: boolean
+          description: Whether the plugin should run. A required plugin cannot be turned off.
+        settings:
+          type: string
+          maxLength: 65536
+          description: The plugin's settings document as JSON text, a JSON object of at most 64 KiB, as its settings_schema describes.
+    PluginListResponse:
+      description: One page of the collection in its stable order.
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PluginResponse'
+        next_cursor:
+          $ref: '#/components/schemas/NextCursor'
+    PluginResponse:
+      description: One compiled-in plugin as an administrator sees it.
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - state
+        - required
+        - enabled_by_default
+        - enabled
+        - settings
+        - revision
+      properties:
+        id:
+          type: string
+          pattern: ^[a-z][a-z0-9.-]{0,63}$
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        state:
+          type: string
+          enum:
+            - disabled
+            - active
+            - failed
+          description: The plugin's state on the serving node.
+        required:
+          type: boolean
+          description: A required plugin always runs.
+        enabled_by_default:
+          type: boolean
+          description: Whether the plugin runs when nobody has configured it.
+        enabled:
+          type: boolean
+          description: Whether the plugin should run, from its saved settings or its default.
+        settings:
+          type: string
+          description: The saved settings document as JSON text, or "{}" when nothing is saved.
+        settings_schema:
+          type: string
+          description: The JSON Schema of the plugin's settings as JSON text, absent when the plugin has none.
+        revision:
+          type: integer
+          format: int64
+          minimum: 0
+          description: The saved settings revision, 0 when nothing is saved.

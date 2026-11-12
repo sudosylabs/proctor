@@ -59,6 +59,9 @@ func conformanceConstructors() map[string]func() (Event, error) {
 		"access_policy_changed": func() (Event, error) {
 			return NewAccessPolicyChangedEvent(model.NewInstitutionID(), 7)
 		},
+		"plugin_settings_changed": func() (Event, error) {
+			return NewPluginSettingsChangedEvent(model.NewInstitutionID(), "display-topology", 3)
+		},
 		"academic_unit_created":  func() (Event, error) { return NewAcademicUnitCreatedEvent(model.NewAcademicUnitID()) },
 		"academic_unit_updated":  func() (Event, error) { return NewAcademicUnitUpdatedEvent(model.NewAcademicUnitID()) },
 		"academic_unit_archived": func() (Event, error) { return NewAcademicUnitArchivedEvent(model.NewAcademicUnitID()) },

@@ -120,8 +120,8 @@ func TestIdentityProviderTypeIsOfferedByOnePluginOnly(t *testing.T) {
 		&identityPlugin{id: "second", providerType: "oidc", provider: &panickingProvider{}},
 	)
 	require.Equal(t, []pluginhost.Status{
-		{ID: "first", Name: "Identity first", State: pluginhost.StateActive},
-		{ID: "second", Name: "Identity second", State: pluginhost.StateFailed},
+		{ID: "first", Name: "Identity first", State: pluginhost.StateActive, EnabledByDefault: true},
+		{ID: "second", Name: "Identity second", State: pluginhost.StateFailed, EnabledByDefault: true},
 	}, host.Statuses())
 	require.Equal(t, []string{"oidc"}, typeNames(host.IdentityProviderTypes()))
 }

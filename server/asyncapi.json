@@ -146,6 +146,9 @@
         "ping": {
           "$ref": "#/components/messages/ping"
         },
+        "plugin_settings_changed": {
+          "$ref": "#/components/messages/plugin_settings_changed"
+        },
         "pong": {
           "$ref": "#/components/messages/pong"
         },
@@ -3036,6 +3039,67 @@
         ],
         "title": "Ping"
       },
+      "plugin_settings_changed": {
+        "description": "Refetch the plugins; the event names the plugin and its new settings revision, never setting values. Delivered to connections that subscribe to plugin.manage on the institution.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "plugin.manage",
+              "data": {
+                "plugin_id": "display-topology",
+                "revision": 3
+              },
+              "event": "plugin_settings_changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "ous3h9nfemqtwz47ydgjcx1ia5",
+                "type": "institution"
+              },
+              "sequence": 41
+            }
+          }
+        ],
+        "name": "plugin_settings_changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "plugin.manage",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/plugin_settings_changed"
+                },
+                "event": {
+                  "const": "plugin_settings_changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch the plugins; the event names the plugin and its new settings revision.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Institution"
+          }
+        ],
+        "title": "Plugin settings changed"
+      },
       "pong": {
         "examples": [
           {
@@ -4535,6 +4599,26 @@
         "title": "Onboarding import changed",
         "type": "object"
       },
+      "plugin_settings_changed": {
+        "additionalProperties": false,
+        "description": "The plugin whose settings an administrator changed, and their revision after the committed change. No setting values are included.",
+        "properties": {
+          "plugin_id": {
+            "pattern": "^[a-z][a-z0-9.-]{0,63}$",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "plugin_id",
+          "revision"
+        ],
+        "title": "Plugin settings changed",
+        "type": "object"
+      },
       "pong": {
         "additionalProperties": false,
         "description": "The reply to ping.",
@@ -4815,6 +4899,9 @@
         },
         {
           "$ref": "#/channels/websocket/messages/access_policy_changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/plugin_settings_changed"
         },
         {
           "$ref": "#/channels/websocket/messages/job.changed"

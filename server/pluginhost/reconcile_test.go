@@ -155,3 +155,43 @@ func TestReconcileIgnoresUnknownPluginsAndStopsAfterClose(t *testing.T) {
 	require.Empty(t, log.all(), "a closed host activates nothing")
 	require.Equal(t, int32(0), changes.Load())
 }
+
+// validatingPlugin refuses settings without a mode.
+type validatingPlugin struct {
+	*fixturePlugin
+	panics bool
+}
+
+func (p *validatingPlugin) ValidateSettings(_ context.Context, settings json.RawMessage) error {
+	if p.panics {
+		panic("validator exploded")
+	}
+	var document struct {
+		Mode string `json:"mode"`
+	}
+	if err := json.Unmarshal(settings, &document); err != nil || document.Mode == "" {
+		return errors.New("mode is required")
+	}
+	return nil
+}
+
+func TestValidateSettingsAsksThePluginAndContainsAPanic(t *testing.T) {
+	t.Parallel()
+
+	log := &callLog{}
+	strict := &validatingPlugin{fixturePlugin: newFixture(log, "strict", false)}
+	explosive := &validatingPlugin{fixturePlugin: newFixture(log, "explosive", false), panics: true}
+	lenient := newFixture(log, "lenient", false)
+	host, err := pluginhost.Activate(context.Background(), pluginhost.Dependencies{
+		Plugins: []plugin.Plugin{strict, explosive, lenient},
+		Logger:  discardLogger(),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, host.ValidateSettings(context.Background(), "strict", json.RawMessage(`{"mode":"observe"}`)))
+	require.EqualError(t, host.ValidateSettings(context.Background(), "strict", json.RawMessage(`{}`)), "mode is required")
+	require.ErrorIs(t, host.ValidateSettings(context.Background(), "explosive", json.RawMessage(`{}`)), plugin.ErrUnavailable)
+	require.NoError(t, host.ValidateSettings(context.Background(), "lenient", json.RawMessage(`{"anything":1}`)),
+		"a plugin without a validator accepts any document")
+	require.ErrorIs(t, host.ValidateSettings(context.Background(), "missing", json.RawMessage(`{}`)), pluginhost.ErrUnknownPlugin)
+}

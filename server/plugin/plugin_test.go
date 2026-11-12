@@ -34,6 +34,9 @@ func TestManifestValidate(t *testing.T) {
 		{name: "underscore", manifest: plugin.Manifest{ID: "code_run", Name: "Code"}},
 		{name: "missing name", manifest: plugin.Manifest{ID: "oidc"}},
 		{name: "name too long", manifest: plugin.Manifest{ID: "oidc", Name: strings.Repeat("n", 129)}},
+		{name: "settings schema", manifest: plugin.Manifest{ID: "display", Name: "Display", SettingsSchema: []byte(`{"type":"object"}`)}, valid: true},
+		{name: "schema not an object", manifest: plugin.Manifest{ID: "display", Name: "Display", SettingsSchema: []byte(`["type"]`)}},
+		{name: "schema not JSON", manifest: plugin.Manifest{ID: "display", Name: "Display", SettingsSchema: []byte(`{type}`)}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

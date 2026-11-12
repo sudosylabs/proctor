@@ -362,6 +362,16 @@
           "$ref": "#/components/schemas/ID"
         }
       },
+      "PluginID": {
+        "description": "The plugin's ID, for example display-topology.",
+        "in": "path",
+        "name": "plugin_id",
+        "required": true,
+        "schema": {
+          "pattern": "^[a-z][a-z0-9.-]{0,63}$",
+          "type": "string"
+        }
+      },
       "ProgrammeID": {
         "description": "The Programme identifier.",
         "in": "path",
@@ -1996,6 +2006,22 @@
           }
         },
         "description": "Exact pending revision and complete immutable package for the replacement Invitation.",
+        "required": true
+      },
+      "ReplacePluginSettings": {
+        "content": {
+          "application/json": {
+            "example": {
+              "enabled": true,
+              "expected_revision": 0,
+              "settings": "{\"mode\":\"observe\"}"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/PluginSettingsRequest"
+            }
+          }
+        },
+        "description": "Whether the plugin runs and its complete settings document. Every member is required.",
         "required": true
       },
       "ReplaceRetentionPolicy": {
@@ -5322,6 +5348,46 @@
         "headers": {
           "Cache-Control": {
             "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
+      "PluginListOK": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PluginListResponse"
+            }
+          }
+        },
+        "description": "One page of the compiled-in plugins.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/PrivateNoStore"
+          }
+        }
+      },
+      "PluginOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "enabled": true,
+              "enabled_by_default": true,
+              "id": "oidc",
+              "name": "OpenID Connect",
+              "required": false,
+              "revision": 2,
+              "settings": "{}",
+              "state": "active"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/PluginResponse"
+            }
+          }
+        },
+        "description": "The plugin with its saved settings.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/PrivateNoStore"
           }
         }
       },
@@ -14765,6 +14831,11 @@
           "personal_access_token.invalid",
           "personal_access_token.maximum_reached",
           "personal_access_token.unavailable",
+          "plugin.invalid",
+          "plugin.not_found",
+          "plugin.required",
+          "plugin.revision_conflict",
+          "plugin.unavailable",
           "profile_picture.invalid",
           "profile_picture.unavailable",
           "programme.conflict",
@@ -22844,6 +22915,112 @@
           "user.view"
         ],
         "type": "string"
+      },
+      "PluginListResponse": {
+        "additionalProperties": false,
+        "description": "One page of the collection in its stable order.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PluginResponse"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "$ref": "#/components/schemas/NextCursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "PluginResponse": {
+        "additionalProperties": false,
+        "description": "One compiled-in plugin as an administrator sees it.",
+        "properties": {
+          "enabled": {
+            "description": "Whether the plugin should run, from its saved settings or its default.",
+            "type": "boolean"
+          },
+          "enabled_by_default": {
+            "description": "Whether the plugin runs when nobody has configured it.",
+            "type": "boolean"
+          },
+          "id": {
+            "pattern": "^[a-z][a-z0-9.-]{0,63}$",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "required": {
+            "description": "A required plugin always runs.",
+            "type": "boolean"
+          },
+          "revision": {
+            "description": "The saved settings revision, 0 when nothing is saved.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "settings": {
+            "description": "The saved settings document as JSON text, or \"{}\" when nothing is saved.",
+            "type": "string"
+          },
+          "settings_schema": {
+            "description": "The JSON Schema of the plugin's settings as JSON text, absent when the plugin has none.",
+            "type": "string"
+          },
+          "state": {
+            "description": "The plugin's state on the serving node.",
+            "enum": [
+              "disabled",
+              "active",
+              "failed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "state",
+          "required",
+          "enabled_by_default",
+          "enabled",
+          "settings",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "PluginSettingsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "description": "Whether the plugin should run. A required plugin cannot be turned off.",
+            "type": "boolean"
+          },
+          "expected_revision": {
+            "description": "The settings revision the editor read, 0 when nothing is saved. A stale revision cannot overwrite newer settings.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "settings": {
+            "description": "The plugin's settings document as JSON text, a JSON object of at most 64 KiB, as its settings_schema describes.",
+            "maxLength": 65536,
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "enabled",
+          "settings"
+        ],
+        "type": "object"
       },
       "PrepareSecurityPreflightRequest": {
         "additionalProperties": false,
@@ -45472,6 +45649,165 @@
           "$ref": "#/components/parameters/OnboardingImportID"
         }
       ]
+    },
+    "/api/v1/plugins": {
+      "get": {
+        "description": "Lists every plugin compiled into the server, ordered by name, with its state on the serving node, whether it should run, its saved settings and the JSON Schema an administration UI draws its settings form from. A Session with plugin.manage is required; Personal Access Tokens cannot read it. Plugin secrets never appear: they stay in the configuration file. A plugin nobody configured shows its default and revision 0.",
+        "operationId": "listPlugins",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageCursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PluginListOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List the plugins compiled into the server",
+        "tags": [
+          "Administration"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "plugin.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/plugins/{plugin_id}/settings": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PluginID"
+        }
+      ],
+      "put": {
+        "description": "Turns one plugin on or off and replaces its settings document, under an optimistic revision fence. Requires a strong recent interactive system-administrator Session, an Idempotency-Key, and durable audit; the audit records the plugin and whether it is enabled, never setting values. Use expected_revision 0 for a plugin nobody has configured. The plugin checks the settings before they are saved and may refuse them with plugin.invalid. A required plugin cannot be turned off. A saved change applies on every node within about five seconds, without a restart, and plugin_settings_changed tells administrators' clients to refetch. A no-op keeps the revision.",
+        "operationId": "replacePluginSettings",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ReplacePluginSettings"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PluginOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Save a plugin's settings",
+        "tags": [
+          "Administration"
+        ],
+        "x-proctor-auth": "strong_recent_session_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "idempotency.conflict",
+          "idempotency.in_progress",
+          "plugin.invalid",
+          "plugin.not_found",
+          "plugin.required",
+          "plugin.revision_conflict",
+          "plugin.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid",
+          "authentication.strong_required",
+          "authentication.reauthentication_required"
+        ],
+        "x-proctor-idempotency": "required"
+      }
     },
     "/api/v1/programme-levels/{programme_level_id}": {
       "delete": {

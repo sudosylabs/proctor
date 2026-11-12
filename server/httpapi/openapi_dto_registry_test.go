@@ -84,6 +84,9 @@ var openAPIDTOs = map[string]reflect.Type{
 	"BrowserReceiptPage":                             reflect.TypeOf(route.List[model.BrowserEventReceipt]{}),
 	"BrowserSourceStatus":                            reflect.TypeOf(model.BrowserSourceStatus{}),
 	"BuildInfoResponse":                              reflect.TypeOf(BuildInfo{}),
+	"PluginSettingsRequest":                          reflect.TypeOf(pluginSettingsRequest{}),
+	"PluginListResponse":                             reflect.TypeOf(route.List[pluginResponse]{}),
+	"PluginResponse":                                 reflect.TypeOf(pluginResponse{}),
 	"SystemPluginsResponse":                          reflect.TypeOf(route.List[PluginSummary]{}),
 	"SystemPlugin":                                   reflect.TypeOf(PluginSummary{}),
 	"CancelExamSittingRequest":                       reflect.TypeOf(cancelExamSittingRequest{}),
@@ -432,6 +435,7 @@ var openAPIDTOExceptions = map[string]dtoSchemaException{
 		Required:    []string{"minimum_desktop_release", "revoked_desktop_build_ids", "administrator_message", "availability"},
 		NonNullable: []string{"retry_at"},
 	},
+	"PluginSettingsRequest": {Required: []string{"enabled", "settings"}},
 	"RetentionPolicyRequest": {
 		Required: []string{
 			"submission_retention_days", "integrity_retention_days", "browser_activity_retention_days",

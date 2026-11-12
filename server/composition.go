@@ -123,10 +123,15 @@ func composeConsumers(
 		return nil, err
 	}
 
+	pluginReconciler := newOptionalPluginReconciler(
+		capabilities.persistence.PluginSettings(), capabilities.plugins, snapshot,
+		capabilities.logger, capabilities.pluginSettingsCount,
+	)
 	applicationDeps, err := composeApplicationDependencies(ctx, snapshot, capabilities, input, mailRenderer)
 	if err != nil {
 		return nil, err
 	}
+	applicationDeps.Plugins = pluginCatalog{host: capabilities.plugins, reconciler: pluginReconciler}
 
 	application, err := app.New(applicationDeps)
 	if err != nil {
@@ -214,15 +219,12 @@ func composeConsumers(
 		transport:             rootTransport,
 		websocket:             webSocketHub,
 		plugins:               capabilities.plugins,
-		pluginReconciler: newOptionalPluginReconciler(
-			capabilities.persistence.PluginSettings(), capabilities.plugins, snapshot,
-			capabilities.logger, capabilities.pluginSettingsCount,
-		),
-		metrics:   capabilities.metrics,
-		tracing:   capabilities.tracing,
-		readiness: readiness,
-		listen:    net.Listen,
-		newHTTP:   newHTTPServer,
+		pluginReconciler:      pluginReconciler,
+		metrics:               capabilities.metrics,
+		tracing:               capabilities.tracing,
+		readiness:             readiness,
+		listen:                net.Listen,
+		newHTTP:               newHTTPServer,
 	}}
 	return &compositionResult{server: node, application: application, handler: rootTransport}, nil
 }

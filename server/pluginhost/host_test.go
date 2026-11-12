@@ -101,8 +101,8 @@ func TestActivateRunsEnabledPluginsInOrderAndCloseReversesThem(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, []pluginhost.Status{
-		{ID: "first", Name: "Fixture first", State: pluginhost.StateActive},
-		{ID: "second", Name: "Fixture second", State: pluginhost.StateActive},
+		{ID: "first", Name: "Fixture first", State: pluginhost.StateActive, EnabledByDefault: true},
+		{ID: "second", Name: "Fixture second", State: pluginhost.StateActive, EnabledByDefault: true},
 	}, host.Statuses())
 
 	require.NoError(t, host.Close(context.Background()))
@@ -129,9 +129,9 @@ func TestActivateHonoursEnableAndDefaults(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, []pluginhost.Status{
-		{ID: "default-on", Name: "Fixture default-on", State: pluginhost.StateActive},
+		{ID: "default-on", Name: "Fixture default-on", State: pluginhost.StateActive, EnabledByDefault: true},
 		{ID: "default-off", Name: "Fixture default-off", State: pluginhost.StateDisabled},
-		{ID: "turned-off", Name: "Fixture turned-off", State: pluginhost.StateDisabled},
+		{ID: "turned-off", Name: "Fixture turned-off", State: pluginhost.StateDisabled, EnabledByDefault: true},
 		{ID: "turned-on", Name: "Fixture turned-on", State: pluginhost.StateActive},
 	}, host.Statuses())
 
@@ -155,9 +155,9 @@ func TestActivateContainsAFailedOrPanickingPlugin(t *testing.T) {
 	})
 	require.NoError(t, err, "a plugin that fails to activate does not fail the host")
 	require.Equal(t, []pluginhost.Status{
-		{ID: "failing", Name: "Fixture failing", State: pluginhost.StateFailed},
-		{ID: "panicking", Name: "Fixture panicking", State: pluginhost.StateFailed},
-		{ID: "healthy", Name: "Fixture healthy", State: pluginhost.StateActive},
+		{ID: "failing", Name: "Fixture failing", State: pluginhost.StateFailed, EnabledByDefault: true},
+		{ID: "panicking", Name: "Fixture panicking", State: pluginhost.StateFailed, EnabledByDefault: true},
+		{ID: "healthy", Name: "Fixture healthy", State: pluginhost.StateActive, EnabledByDefault: true},
 	}, host.Statuses())
 
 	require.NoError(t, host.Close(context.Background()))

@@ -91,7 +91,10 @@ type Dependencies struct {
 	// Sessions are the deployment Session lifetimes that bound the Access
 	// Policy's Session lengths.
 	Sessions identity.SessionPolicy
-	Now      func() time.Time
+	// Plugins describes and validates the compiled-in plugins. Nil makes
+	// plugin administration unavailable.
+	Plugins PluginCatalog
+	Now     func() time.Time
 }
 
 // Service holds every administration use case. Its fields are the Store
@@ -105,12 +108,14 @@ type Service struct {
 	accessPolicies    store.AccessPolicyStore
 	retentionPolicies store.RetentionPolicyStore
 	retention         store.RetentionStore
+	pluginSettings    store.PluginSettingsStore
 
 	authorizer   Authorizer
 	auditor      access.MutationAuditor
 	publisher    realtime.Publisher
 	mail         Mail
 	capabilities identity.AccessPolicyCapabilitySource
+	plugins      PluginCatalog
 
 	// canonicalOrigin, supportAddress and passwordMinimumLength are the
 	// operator-owned facts access discovery publishes unchanged.
@@ -167,12 +172,14 @@ func New(deps Dependencies) (*Service, error) {
 		audits:                  catalog.Audit(),
 		accessPolicies:          catalog.AccessPolicy(),
 		retentionPolicies:       catalog.RetentionPolicy(),
+		pluginSettings:          catalog.PluginSettings(),
 		retention:               catalog.Retention(),
 		authorizer:              deps.Authorizer,
 		auditor:                 deps.Auditor,
 		publisher:               deps.Publisher,
 		mail:                    deps.Mail,
 		capabilities:            deps.Capabilities,
+		plugins:                 deps.Plugins,
 		canonicalOrigin:         deps.CanonicalOrigin,
 		supportAddress:          supportAddress,
 		passwordMinimumLength:   deps.PasswordMinimumLength,

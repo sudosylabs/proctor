@@ -46,6 +46,7 @@ func isDeclaredName(name string) bool {
 
 var (
 	accessPolicyChangedMessage                = declare("access_policy_changed", "access_policy_changed")
+	pluginSettingsChangedMessage              = declare("plugin_settings_changed", "plugin_settings_changed")
 	academicUnitCreatedMessage                = declare("academic_unit_created", "academic_unit_created")
 	academicUnitUpdatedMessage                = declare("academic_unit_updated", "academic_unit_updated")
 	academicUnitArchivedMessage               = declare("academic_unit_archived", "academic_unit_archived")

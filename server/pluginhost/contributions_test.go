@@ -81,10 +81,10 @@ func TestExportFormatsAreLookedUpByMediaTypeAndGuarded(t *testing.T) {
 		}},
 	)
 	require.Equal(t, []pluginhost.Status{
-		{ID: "zip", Name: "Offering zip", State: pluginhost.StateActive},
-		{ID: "copycat", Name: "Offering copycat", State: pluginhost.StateFailed},
-		{ID: "broken", Name: "Offering broken", State: pluginhost.StateActive},
-		{ID: "nameless", Name: "Offering nameless", State: pluginhost.StateFailed},
+		{ID: "zip", Name: "Offering zip", State: pluginhost.StateActive, EnabledByDefault: true},
+		{ID: "copycat", Name: "Offering copycat", State: pluginhost.StateFailed, EnabledByDefault: true},
+		{ID: "broken", Name: "Offering broken", State: pluginhost.StateActive, EnabledByDefault: true},
+		{ID: "nameless", Name: "Offering nameless", State: pluginhost.StateFailed, EnabledByDefault: true},
 	}, host.Statuses(), "a repeated media type or a bad extension fails the plugin that offers it")
 
 	format, ok := host.ExportFormat("application/zip")

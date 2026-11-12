@@ -10,6 +10,7 @@ package app
 import (
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/events"
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
@@ -70,6 +71,9 @@ type Dependencies struct {
 	MailSecretSealer *secretseal.Sealer
 	Registry         identity.ExternalProviderSource
 	FileContent      FileContent
+	// Plugins describes and validates the compiled-in plugins for plugin
+	// administration; nil makes it unavailable.
+	Plugins administration.PluginCatalog
 	// EventSubscriptions reports the plugins' domain-event handlers at the
 	// moment it is called. The domain-event dispatch Job offers each
 	// committed event to them.

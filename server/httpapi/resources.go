@@ -31,6 +31,7 @@ func productionResources(
 		accessPolicyResource(application.Administration),
 		desktopCompatibilityPolicyResource(application.Identity),
 		retentionPolicyResource(application.Administration),
+		pluginAdministrationResource(application.Administration),
 		retentionResource(application.Administration),
 		examRecordsResource(application.ExamRecords),
 		examExportsResource(application.ExamExports),

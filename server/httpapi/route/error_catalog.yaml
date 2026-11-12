@@ -695,6 +695,16 @@ codes:
     description: "The account reached its maximum number of Personal Access Tokens."
   - code: personal_access_token.unavailable
     description: "The Personal Access Token operation failed; retry later."
+  - code: plugin.invalid
+    description: "The plugin settings are not a JSON object of at most 64 KiB, or the plugin refused them."
+  - code: plugin.not_found
+    description: "No plugin with that ID is compiled into the server."
+  - code: plugin.required
+    description: "The plugin is required and cannot be turned off."
+  - code: plugin.revision_conflict
+    description: "The supplied plugin settings revision is stale; `fields.current_revision` carries the current revision, 0 when nothing is saved."
+  - code: plugin.unavailable
+    description: "Plugin administration could not read or save plugin settings; retry later."
   - code: profile_picture.invalid
     description: "The profile picture upload is not an accepted image."
   - code: profile_picture.unavailable

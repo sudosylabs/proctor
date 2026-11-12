@@ -90,7 +90,7 @@ type Host struct {
 	entries []*entry
 
 	mu            sync.Mutex
-	identityTypes []*guardedIdentityProviderType
+	contributions contributions
 
 	closeOnce sync.Once
 	closeErr  error
@@ -191,7 +191,7 @@ func (h *Host) activate(ctx context.Context, e *entry, settings json.RawMessage)
 func (h *Host) discardRegistrations(e *entry) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.identityTypes = slices.DeleteFunc(h.identityTypes, func(t *guardedIdentityProviderType) bool { return t.entry == e })
+	h.contributions.discard(e)
 }
 
 // Statuses reports every compiled-in plugin, in activation order.

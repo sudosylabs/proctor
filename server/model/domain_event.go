@@ -134,7 +134,8 @@ func EncodeDomainEventDispatchCommand(command DomainEventDispatchCommand) (json.
 func DecodeDomainEventDispatchCommand(raw json.RawMessage) (DomainEventDispatchCommand, error) {
 	var command DomainEventDispatchCommand
 	if len(raw) == 0 || !decodeStrictDomainEventData(raw, &command) || !command.EventID.IsValid() {
-		return DomainEventDispatchCommand{}, invalidModelError("DecodeDomainEventDispatchCommand", "domain_event_job", "", "invalid domain event dispatch command", "")
+		return DomainEventDispatchCommand{}, invalidModelError(
+			"DecodeDomainEventDispatchCommand", "domain_event_job", "", "invalid domain event dispatch command", "")
 	}
 	return command, nil
 }
@@ -151,4 +152,57 @@ func NewDomainEventDispatchJob(id JobID, event *DomainEvent) (*Job, error) {
 	}
 	return NewJob(id, JobTypeDomainEventDispatch, command, event.ID.String(), event.OccurredAt, event.OccurredAt,
 		DomainEventDispatchMaximumAttempts)
+}
+
+// DomainEventDispatchMaximumSubscriptions bounds the subscriptions one
+// dispatch checkpoint records.
+const DomainEventDispatchMaximumSubscriptions = 64
+
+// DomainEventDispatchCheckpoint is what a dispatch Job remembers between
+// attempts: the keys of the plugin subscriptions that already accepted the
+// event, so a retry offers it only to the others.
+type DomainEventDispatchCheckpoint struct {
+	Delivered []string `json:"delivered"`
+}
+
+// EncodeDomainEventDispatchCheckpoint returns the checkpoint document.
+func EncodeDomainEventDispatchCheckpoint(checkpoint DomainEventDispatchCheckpoint) (json.RawMessage, error) {
+	if !checkpoint.valid() {
+		return nil, invalidModelError("EncodeDomainEventDispatchCheckpoint", "domain_event_job", "", "invalid domain event dispatch checkpoint", "")
+	}
+	if checkpoint.Delivered == nil {
+		checkpoint.Delivered = []string{}
+	}
+	return json.Marshal(checkpoint)
+}
+
+// DecodeDomainEventDispatchCheckpoint strictly decodes a dispatch Job
+// checkpoint. An absent checkpoint is an empty one.
+func DecodeDomainEventDispatchCheckpoint(raw json.RawMessage) (DomainEventDispatchCheckpoint, error) {
+	var checkpoint DomainEventDispatchCheckpoint
+	if len(raw) == 0 {
+		return checkpoint, nil
+	}
+	if DecodeStrictJobDocument(raw, &checkpoint) != nil || !checkpoint.valid() {
+		return DomainEventDispatchCheckpoint{}, invalidModelError(
+			"DecodeDomainEventDispatchCheckpoint", "domain_event_job", "", "invalid domain event dispatch checkpoint", "")
+	}
+	return checkpoint, nil
+}
+
+func (c DomainEventDispatchCheckpoint) valid() bool {
+	if len(c.Delivered) > DomainEventDispatchMaximumSubscriptions {
+		return false
+	}
+	seen := make(map[string]struct{}, len(c.Delivered))
+	for _, key := range c.Delivered {
+		if key == "" || len(key) > 192 {
+			return false
+		}
+		if _, repeated := seen[key]; repeated {
+			return false
+		}
+		seen[key] = struct{}{}
+	}
+	return true
 }

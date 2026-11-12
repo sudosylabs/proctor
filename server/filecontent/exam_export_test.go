@@ -30,7 +30,7 @@ import (
 
 func exportContentFixture(t *testing.T, filesystem vfs.FileSystem) (*Content, exam.ExportArchiveInput) {
 	t.Helper()
-	content, err := New(filesystem, Policy{MaximumConcurrentOperations: 1}, nil)
+	content, err := New(filesystem, Policy{MaximumConcurrentOperations: 1, ExamExportFormat: zipExportFormat{}}, nil)
 	require.NoError(t, err)
 	objectID := model.NewAttemptWorkspaceObjectID()
 	original := []byte("original answer bytes\x00\n")

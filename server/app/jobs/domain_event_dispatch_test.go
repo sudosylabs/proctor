@@ -21,6 +21,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/plugin"
+	"github.com/sudosylabs/proctor/server/pluginhost"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
@@ -64,11 +65,13 @@ func (h eventHandlerFake) HandleEvent(_ context.Context, event plugin.Event) err
 }
 
 type domainEventDispatchFixture struct {
-	event    *model.DomainEvent
-	record   *model.Job
-	outbox   *domainEventOutboxFake
-	calls    []string
-	received []plugin.Event
+	event         *model.DomainEvent
+	record        *model.Job
+	outbox        *domainEventOutboxFake
+	calls         []string
+	received      []plugin.Event
+	checkpoints   []json.RawMessage
+	checkpointErr error
 }
 
 func newDomainEventDispatchFixture(t *testing.T) *domainEventDispatchFixture {
@@ -86,14 +89,21 @@ func newDomainEventDispatchFixture(t *testing.T) *domainEventDispatchFixture {
 
 func (f *domainEventDispatchFixture) run(t *testing.T, handlerErrors ...error) job.Outcome {
 	t.Helper()
-	handlers := make([]plugin.EventHandler, 0, len(handlerErrors))
+	subscriptions := make([]pluginhost.EventSubscription, 0, len(handlerErrors))
 	for index, handlerErr := range handlerErrors {
-		handlers = append(handlers, eventHandlerFake{name: fmt.Sprint(index), err: handlerErr, calls: &f.calls, received: &f.received})
+		name := fmt.Sprint(index)
+		subscriptions = append(subscriptions, pluginhost.EventSubscription{Key: name, Plugin: name, Topic: plugin.TopicExamAttemptSubmitted,
+			Handler: eventHandlerFake{name: name, err: handlerErr, calls: &f.calls, received: &f.received}})
 	}
-	dispatcher, err := events.NewDispatcher(handlers...)
+	dispatcher, err := events.NewDispatcher(subscriptions...)
 	require.NoError(t, err)
 	descriptor := NewDomainEventDispatch(f.outbox, dispatcher).Descriptor
-	return descriptor.Handler.Run(context.Background(), job.NewExecution(f.record, nil, nil, nil))
+	checkpoint := func(_ context.Context, value job.CheckpointValue) error {
+		f.calls = append(f.calls, "checkpoint")
+		f.checkpoints = append(f.checkpoints, value.Document)
+		return f.checkpointErr
+	}
+	return descriptor.Handler.Run(context.Background(), job.NewExecution(f.record, nil, checkpoint, nil))
 }
 
 func dispatchResult(t *testing.T, outcome job.Outcome) DomainEventDispatchResult {
@@ -121,17 +131,58 @@ func TestDomainEventDispatchWithoutHandlersDeletes(t *testing.T) {
 	outcome := f.run(t)
 	require.Equal(t, job.OutcomeSucceeded, outcome.Kind, "outcome=%#v", outcome)
 	id := f.event.ID.String()
-	// With no plugin host the event is retired without a delivery.
+	// With no subscriptions the event is retired without a delivery.
 	require.Equal(t, []string{"get:" + id, "delete:" + id}, f.calls)
 }
 
-func TestDomainEventDispatchHandlerErrorRetriesAndKeepsTheRow(t *testing.T) {
+func TestDomainEventDispatchRemembersWhoAcceptedAndRetriesTheRest(t *testing.T) {
 	f := newDomainEventDispatchFixture(t)
 	outcome := f.run(t, errors.New("plugin unavailable"), nil)
 	require.Equal(t, job.OutcomeRetryableFailure, outcome.Kind, "outcome=%#v", outcome)
 	require.Equal(t, "dependency.unavailable", outcome.PublicErrorCode)
-	// The failing handler stops this delivery and the row is not deleted.
+	// Every subscription is offered the event; the one that accepted is
+	// checkpointed and the row is kept for the retry.
+	require.Equal(t, []string{"get:" + f.event.ID.String(), "handle:0", "handle:1", "checkpoint"}, f.calls)
+	require.Len(t, f.checkpoints, 1)
+	require.JSONEq(t, `{"delivered":["1"]}`, string(f.checkpoints[0]))
+}
+
+func TestDomainEventDispatchRetryOffersTheEventOnlyToThoseThatHaveNotAccepted(t *testing.T) {
+	f := newDomainEventDispatchFixture(t)
+	f.record.Checkpoint = json.RawMessage(`{"delivered":["1"]}`)
+	outcome := f.run(t, nil, nil)
+	require.Equal(t, job.OutcomeSucceeded, outcome.Kind, "outcome=%#v", outcome)
+	id := f.event.ID.String()
+	// Subscription 1 accepted on an earlier attempt and is not offered the
+	// event again; once 0 accepts, the row is deleted.
+	require.Equal(t, []string{"get:" + id, "handle:0", "delete:" + id}, f.calls)
+}
+
+func TestDomainEventDispatchKeepsTheCheckpointWhenNobodyNewAccepted(t *testing.T) {
+	f := newDomainEventDispatchFixture(t)
+	f.record.Checkpoint = json.RawMessage(`{"delivered":["1"]}`)
+	outcome := f.run(t, errors.New("still unavailable"), nil)
+	require.Equal(t, job.OutcomeRetryableFailure, outcome.Kind, "outcome=%#v", outcome)
+	// Nothing new accepted, so the earlier checkpoint stands as it is.
 	require.Equal(t, []string{"get:" + f.event.ID.String(), "handle:0"}, f.calls)
+}
+
+func TestDomainEventDispatchRetriesWhenTheCheckpointCannotBeSaved(t *testing.T) {
+	f := newDomainEventDispatchFixture(t)
+	f.checkpointErr = errors.New("claim lost")
+	outcome := f.run(t, errors.New("plugin unavailable"), nil)
+	require.Equal(t, job.OutcomeRetryableFailure, outcome.Kind, "outcome=%#v", outcome)
+	require.Equal(t, "dependency.unavailable", outcome.PublicErrorCode)
+	require.ErrorIs(t, outcome.Err, f.checkpointErr)
+}
+
+func TestDomainEventDispatchRejectsAnInvalidCheckpoint(t *testing.T) {
+	f := newDomainEventDispatchFixture(t)
+	f.record.Checkpoint = json.RawMessage(`{"delivered":["1","1"]}`)
+	outcome := f.run(t, nil)
+	require.Equal(t, job.OutcomePermanentFailure, outcome.Kind, "outcome=%#v", outcome)
+	require.Equal(t, "job.checkpoint.invalid", outcome.PublicErrorCode)
+	require.Empty(t, f.calls)
 }
 
 func TestDomainEventDispatchMissingEventSucceeds(t *testing.T) {
@@ -179,7 +230,8 @@ func TestDomainEventDispatchRejectsAnInvalidCommand(t *testing.T) {
 func TestDomainEventDispatchDescriptorPolicy(t *testing.T) {
 	descriptor := NewDomainEventDispatch(nil, nil).Descriptor
 	require.Equal(t, model.JobTypeDomainEventDispatch, descriptor.Type)
-	require.Equal(t, []string{"dependency.unavailable", "job.command.invalid", "job.invariant_failed"}, descriptor.PublicErrorCodes)
+	require.Equal(t, []string{"dependency.unavailable", "job.checkpoint.invalid", "job.command.invalid", "job.invariant_failed"}, descriptor.PublicErrorCodes)
+	require.True(t, descriptor.Checkpoints, "a retry resumes from the subscriptions that accepted")
 	require.Equal(t, job.VisibilityOperator, descriptor.Visibility)
 	require.False(t, descriptor.Cancelable)
 }

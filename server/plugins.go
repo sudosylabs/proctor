@@ -12,6 +12,7 @@ import (
 	"fmt"
 
 	"github.com/sudosylabs/proctor/server/config"
+	"github.com/sudosylabs/proctor/server/filecontent"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/platform/externalauth/cas"
 	"github.com/sudosylabs/proctor/server/platform/externalauth/oidc"
@@ -25,6 +26,7 @@ func builtinPlugins() []plugin.Plugin {
 	return []plugin.Plugin{
 		cas.NewPlugin(),
 		oidc.NewPlugin(),
+		filecontent.NewZipExportPlugin(),
 	}
 }
 

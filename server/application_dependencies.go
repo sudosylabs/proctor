@@ -66,6 +66,7 @@ func applicationDependencies(
 	}
 
 	return app.Dependencies{
+		EventSubscriptions:      capabilities.plugins.EventSubscriptions(),
 		Store:                   capabilities.persistence,
 		Cache:                   cache,
 		MailDeliverySender:      mailer,

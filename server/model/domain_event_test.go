@@ -137,3 +137,47 @@ func TestNewDomainEventDispatchJobQueuesTheEvent(t *testing.T) {
 	_, err = NewDomainEventDispatchJob(jobID, &DomainEvent{})
 	require.Error(t, err)
 }
+
+func TestDomainEventDispatchCheckpointRoundTrips(t *testing.T) {
+	t.Parallel()
+
+	empty, err := DecodeDomainEventDispatchCheckpoint(nil)
+	require.NoError(t, err)
+	require.Equal(t, DomainEventDispatchCheckpoint{}, empty, "an absent checkpoint is empty")
+
+	document, err := EncodeDomainEventDispatchCheckpoint(DomainEventDispatchCheckpoint{})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"delivered":[]}`, string(document))
+
+	document, err = EncodeDomainEventDispatchCheckpoint(DomainEventDispatchCheckpoint{Delivered: []string{"oidc:exam.attempt.submitted"}})
+	require.NoError(t, err)
+	decoded, err := DecodeDomainEventDispatchCheckpoint(document)
+	require.NoError(t, err)
+	require.Equal(t, DomainEventDispatchCheckpoint{Delivered: []string{"oidc:exam.attempt.submitted"}}, decoded)
+}
+
+func TestDomainEventDispatchCheckpointRejectsInvalidDocuments(t *testing.T) {
+	t.Parallel()
+
+	tooMany := make([]string, 0, DomainEventDispatchMaximumSubscriptions+1)
+	for index := range DomainEventDispatchMaximumSubscriptions + 1 {
+		tooMany = append(tooMany, strings.Repeat("k", index+1))
+	}
+	_, err := EncodeDomainEventDispatchCheckpoint(DomainEventDispatchCheckpoint{Delivered: tooMany})
+	require.Error(t, err, "too many subscriptions")
+
+	for name, raw := range map[string]string{
+		"not an object":  `["oidc"]`,
+		"unknown member": `{"delivered":[],"extra":true}`,
+		"repeated key":   `{"delivered":["oidc","oidc"]}`,
+		"empty key":      `{"delivered":[""]}`,
+		"key too long":   `{"delivered":["` + strings.Repeat("k", 193) + `"]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			_, decodeErr := DecodeDomainEventDispatchCheckpoint(json.RawMessage(raw))
+			require.Error(t, decodeErr)
+		})
+	}
+}

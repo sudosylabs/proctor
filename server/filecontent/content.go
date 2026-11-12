@@ -17,6 +17,7 @@ import (
 
 	"github.com/sudosylabs/proctor/packages/vfs"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/plugin"
 )
 
 const maximumRevisionObjects = 100
@@ -27,15 +28,20 @@ var ErrPurgeLimit = errors.New("file content: abandoned revision exceeds purge l
 
 // Content stores and opens immutable File Revision renditions over VFS.
 type Content struct {
-	filesystem vfs.FileSystem
-	work       chan struct{}
-	recorder   WorkRecorder
+	filesystem       vfs.FileSystem
+	work             chan struct{}
+	recorder         WorkRecorder
+	examExportFormat plugin.ExportFormat
 }
 
 // Policy bounds expensive content processing within one application node.
 // It limits concurrent operations, not their aggregate memory consumption.
 type Policy struct {
 	MaximumConcurrentOperations int
+	// ExamExportFormat encodes Exam exports, normally the zip format the
+	// built-in export.zip plugin offers. When it is nil, building an Exam
+	// export fails as unavailable.
+	ExamExportFormat plugin.ExportFormat
 }
 
 // WorkRecorder receives bounded node-local processing measurements. Methods
@@ -55,7 +61,12 @@ func New(filesystem vfs.FileSystem, policy Policy, recorder WorkRecorder) (*Cont
 	if policy.MaximumConcurrentOperations <= 0 {
 		return nil, errors.New("file content maximum concurrent operations must be positive")
 	}
-	return &Content{filesystem: filesystem, work: make(chan struct{}, policy.MaximumConcurrentOperations), recorder: recorder}, nil
+	return &Content{
+		filesystem:       filesystem,
+		work:             make(chan struct{}, policy.MaximumConcurrentOperations),
+		recorder:         recorder,
+		examExportFormat: policy.ExamExportFormat,
+	}, nil
 }
 
 func (c *Content) storeRendition(

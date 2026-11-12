@@ -12,7 +12,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"io"
+	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -29,7 +32,7 @@ import (
 // an Attempt-origin file, a Starter-origin file and an empty file.
 func goldenExportFixture(t *testing.T) (*Content, exam.ExportArchiveInput) {
 	t.Helper()
-	content, err := New(memory.New(), Policy{MaximumConcurrentOperations: 1}, nil)
+	content, err := New(memory.New(), Policy{MaximumConcurrentOperations: 1, ExamExportFormat: zipExportFormat{}}, nil)
 	require.NoError(t, err)
 	ctx := context.Background()
 	attemptBody := []byte("original answer bytes\x00\n")
@@ -163,4 +166,45 @@ func TestZipExportFormatStopsAtAnAlteredFile(t *testing.T) {
 	result, err := content.BuildExamExport(context.Background(), input)
 	require.EqualError(t, err, "Exam export source verification failed")
 	require.Nil(t, result)
+}
+
+func TestZipExportPluginOffersTheZipFormat(t *testing.T) {
+	t.Parallel()
+
+	manifest := NewZipExportPlugin().Manifest()
+	require.Equal(t, plugin.Manifest{ID: "export.zip", Name: "Zip export", EnabledByDefault: true}, manifest)
+	require.NoError(t, manifest.Validate())
+
+	host := &formatRecordingHost{}
+	require.NoError(t, NewZipExportPlugin().Activate(context.Background(), host))
+	require.Equal(t, []plugin.ExportFormat{zipExportFormat{}}, host.formats)
+	require.Equal(t, ZipExportMediaType, host.formats[0].MediaType())
+	require.NoError(t, NewZipExportPlugin().Deactivate(context.Background()))
+}
+
+func TestBuildExamExportWithoutAFormatIsUnavailable(t *testing.T) {
+	t.Parallel()
+
+	content, err := New(memory.New(), Policy{MaximumConcurrentOperations: 1}, nil)
+	require.NoError(t, err)
+	_, err = content.BuildExamExport(context.Background(), exam.ExportArchiveInput{})
+	require.ErrorIs(t, err, errExamExportFormatUnavailable)
+}
+
+// formatRecordingHost keeps the export formats a plugin offers.
+type formatRecordingHost struct {
+	formats []plugin.ExportFormat
+}
+
+func (*formatRecordingHost) Logger() *slog.Logger      { return slog.New(slog.DiscardHandler) }
+func (*formatRecordingHost) Settings() json.RawMessage { return nil }
+func (*formatRecordingHost) AddIdentityProviderType(plugin.IdentityProviderType) error {
+	return errors.New("not offered")
+}
+func (h *formatRecordingHost) AddExportFormat(format plugin.ExportFormat) error {
+	h.formats = append(h.formats, format)
+	return nil
+}
+func (*formatRecordingHost) AddEventHandler(plugin.EventTopic, plugin.EventHandler) error {
+	return errors.New("not offered")
 }

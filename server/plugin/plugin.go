@@ -91,4 +91,11 @@ type Host interface {
 	// another plugin already offers the same Type, or after Activate has
 	// returned.
 	AddIdentityProviderType(IdentityProviderType) error
+	// AddExportFormat offers an encoding for Exam exports. It fails when
+	// another plugin already offers the same media type, or after Activate
+	// has returned.
+	AddExportFormat(ExportFormat) error
+	// AddEventHandler subscribes handler to topic. A plugin subscribes at
+	// most one handler to each topic, during Activate.
+	AddEventHandler(topic EventTopic, handler EventHandler) error
 }

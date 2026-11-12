@@ -10,6 +10,7 @@ package cas
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"testing"
 
@@ -28,6 +29,14 @@ func (*recordingHost) Settings() json.RawMessage { return nil }
 func (h *recordingHost) AddIdentityProviderType(providerType plugin.IdentityProviderType) error {
 	h.types = append(h.types, providerType)
 	return nil
+}
+
+func (*recordingHost) AddExportFormat(plugin.ExportFormat) error {
+	return errors.New("not offered")
+}
+
+func (*recordingHost) AddEventHandler(plugin.EventTopic, plugin.EventHandler) error {
+	return errors.New("not offered")
 }
 
 func TestPluginOffersTheProviderTypeThatBuildsConfiguredProviders(t *testing.T) {

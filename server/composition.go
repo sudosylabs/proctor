@@ -264,9 +264,16 @@ func composeApplicationDependencies(
 	if capabilities.metrics.Enabled() {
 		contentRecorder = capabilities.metrics.WorkRecorder("file_content")
 	}
+	examExportFormat, offered := capabilities.plugins.ExportFormat(filecontent.ZipExportMediaType)
+	if !offered {
+		capabilities.logger.Warn("Exam exports are unavailable: no active plugin offers the zip export format")
+	}
 	content, err := filecontent.New(
 		capabilities.filesystem,
-		filecontent.Policy{MaximumConcurrentOperations: snapshot.FileContent.MaximumConcurrentOperations},
+		filecontent.Policy{
+			MaximumConcurrentOperations: snapshot.FileContent.MaximumConcurrentOperations,
+			ExamExportFormat:            examExportFormat,
+		},
 		contentRecorder,
 	)
 	if err != nil {

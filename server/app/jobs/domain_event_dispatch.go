@@ -30,9 +30,11 @@ type domainEventDispatchHandler struct {
 	dispatcher *events.Dispatcher
 }
 
-// Run loads the outbox row named by the Job, dispatches it and deletes it.
-// The row lives until delivery succeeds, so a crash after dispatch delivers
-// the event again, which the plugin contract allows.
+// Run loads the outbox row named by the Job and offers it to every plugin
+// subscription that has not accepted it yet. When some fail, it records the
+// ones that accepted in the Job's checkpoint and retries; once every
+// subscription has accepted, it deletes the row. The row lives until then,
+// so a crash offers the event again, which the plugin contract allows.
 func (h domainEventDispatchHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
 	if execution.Job == nil {
 		return job.PermanentFailure("job.command.invalid", errors.New("domain event dispatch job is missing"))
@@ -40,6 +42,10 @@ func (h domainEventDispatchHandler) Run(ctx context.Context, execution job.Execu
 	command, err := model.DecodeDomainEventDispatchCommand(execution.Job.Command)
 	if err != nil {
 		return job.PermanentFailure("job.command.invalid", err)
+	}
+	checkpoint, err := model.DecodeDomainEventDispatchCheckpoint(execution.Job.Checkpoint)
+	if err != nil {
+		return job.PermanentFailure("job.checkpoint.invalid", err)
 	}
 	if h.outbox == nil || h.dispatcher == nil {
 		return job.RetryableFailure("dependency.unavailable", errors.New("domain event dispatch dependencies are unavailable"))
@@ -54,8 +60,19 @@ func (h domainEventDispatchHandler) Run(ctx context.Context, execution job.Execu
 	if err != nil {
 		return job.RetryableFailure("dependency.unavailable", err)
 	}
-	if err = h.dispatcher.Dispatch(ctx, event); err != nil {
-		return job.RetryableFailure("dependency.unavailable", err)
+
+	delivered, dispatchErr := h.dispatcher.Dispatch(ctx, event, checkpoint.Delivered)
+	if dispatchErr != nil {
+		if len(delivered) > len(checkpoint.Delivered) {
+			document, encodeErr := model.EncodeDomainEventDispatchCheckpoint(model.DomainEventDispatchCheckpoint{Delivered: delivered})
+			if encodeErr != nil {
+				return job.PermanentFailure("job.invariant_failed", encodeErr)
+			}
+			if saveErr := execution.Checkpoint(ctx, job.CheckpointValue{Document: document}); saveErr != nil {
+				return job.RetryableFailure("dependency.unavailable", errors.Join(dispatchErr, saveErr))
+			}
+		}
+		return job.RetryableFailure("dependency.unavailable", dispatchErr)
 	}
 	if err = h.outbox.Delete(ctx, command.EventID); err != nil {
 		return job.RetryableFailure("dependency.unavailable", err)
@@ -70,7 +87,8 @@ func domainEventDispatchSucceeded(delivered bool) job.Outcome {
 
 func domainEventDispatchDescriptor(handler job.Handler) job.Descriptor {
 	descriptor := job.NewDescriptor(model.JobTypeDomainEventDispatch, handler)
-	descriptor.PublicErrorCodes = []string{"dependency.unavailable", "job.command.invalid", "job.invariant_failed"}
+	descriptor.Checkpoints = true
+	descriptor.PublicErrorCodes = []string{"dependency.unavailable", "job.checkpoint.invalid", "job.command.invalid", "job.invariant_failed"}
 	descriptor.Timeout = 30 * time.Second
 	descriptor.Concurrency = 4
 	descriptor.MaximumRetryDelay = 5 * time.Minute

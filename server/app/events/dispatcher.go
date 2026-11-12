@@ -9,12 +9,13 @@
 //
 // A domain event is written to the outbox in the same transaction as the fact
 // it describes; the domain-event dispatch Job then loads it and hands it to a
-// Dispatcher, which presents it to every registered plugin.EventHandler. The
-// handler list is fixed when the Dispatcher is built. In production it is
-// empty, because no plugin host exists yet: an event is dispatched to nobody
-// and its outbox row is deleted.
+// Dispatcher, which offers it to every plugin subscribed to its topic. Each
+// subscription accepts or fails on its own, so a failing plugin delays only
+// its own delivery: the Job remembers which subscriptions accepted the event
+// and offers it again only to the others.
 //
-// The package is a leaf: it imports only model and the plugin contracts.
+// The package is a leaf: it imports only model, the plugin contracts and the
+// plugin host's subscription type.
 package events
 
 import (
@@ -25,38 +26,56 @@ import (
 
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/plugin"
+	"github.com/sudosylabs/proctor/server/pluginhost"
 )
 
-// Dispatcher presents domain events to a fixed, ordered list of handlers.
+// Dispatcher offers domain events to a fixed, ordered list of subscriptions.
 type Dispatcher struct {
-	handlers []plugin.EventHandler
+	subscriptions []pluginhost.EventSubscription
 }
 
-// NewDispatcher returns a Dispatcher that calls handlers in the order given.
-// A nil handler is rejected.
-func NewDispatcher(handlers ...plugin.EventHandler) (*Dispatcher, error) {
-	if slices.Contains(handlers, nil) {
-		return nil, errors.New("domain event handler is nil")
-	}
-	return &Dispatcher{handlers: slices.Clone(handlers)}, nil
-}
-
-// Dispatch converts event into a plugin.Event and calls each handler in
-// order. It stops at the first handler error and returns it, so the event is
-// delivered again later; handlers already called see the same event ID again.
-func (d *Dispatcher) Dispatch(ctx context.Context, event *model.DomainEvent) error {
-	delivered, err := pluginEvent(event)
-	if err != nil {
-		return err
-	}
-	for index, handler := range d.handlers {
-		copied := delivered
-		copied.Data = slices.Clone(delivered.Data)
-		if err = handler.HandleEvent(ctx, copied); err != nil {
-			return fmt.Errorf("domain event handler %d: %w", index, err)
+// NewDispatcher returns a Dispatcher that offers events to subscriptions in
+// the order given. A subscription without a key or handler, or a repeated
+// key, is rejected.
+func NewDispatcher(subscriptions ...pluginhost.EventSubscription) (*Dispatcher, error) {
+	seen := make(map[string]struct{}, len(subscriptions))
+	for _, subscription := range subscriptions {
+		if subscription.Key == "" || subscription.Handler == nil {
+			return nil, errors.New("domain event subscription needs a key and a handler")
 		}
+		if _, repeated := seen[subscription.Key]; repeated {
+			return nil, fmt.Errorf("domain event subscription %q is repeated", subscription.Key)
+		}
+		seen[subscription.Key] = struct{}{}
 	}
-	return nil
+	return &Dispatcher{subscriptions: slices.Clone(subscriptions)}, nil
+}
+
+// Dispatch offers event to every subscription to its topic whose key is not
+// in delivered, in order, each with its own copy of the data. It offers it to
+// all of them even when one fails, and returns delivered extended with the
+// keys that accepted it, together with every failure. A subscription that
+// failed sees the same event ID again when it is offered next.
+func (d *Dispatcher) Dispatch(ctx context.Context, event *model.DomainEvent, delivered []string) ([]string, error) {
+	offered, err := pluginEvent(event)
+	if err != nil {
+		return delivered, err
+	}
+	accepted := slices.Clone(delivered)
+	var failures error
+	for _, subscription := range d.subscriptions {
+		if subscription.Topic != offered.Topic || slices.Contains(accepted, subscription.Key) {
+			continue
+		}
+		copied := offered
+		copied.Data = slices.Clone(offered.Data)
+		if handleErr := subscription.Handler.HandleEvent(ctx, copied); handleErr != nil {
+			failures = errors.Join(failures, fmt.Errorf("domain event subscription %q: %w", subscription.Key, handleErr))
+			continue
+		}
+		accepted = append(accepted, subscription.Key)
+	}
+	return accepted, failures
 }
 
 func pluginEvent(event *model.DomainEvent) (plugin.Event, error) {

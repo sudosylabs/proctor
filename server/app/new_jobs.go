@@ -69,9 +69,9 @@ func newJobRuntime(
 		mailHealth = mail.NewHealth(deps.MailDeliverySender != nil && deps.MailDeliverySender.Enabled())
 	}
 
-	// No plugin host exists yet, so the dispatcher has no handlers: a domain
-	// event is delivered to nobody and its outbox row is retired.
-	domainEvents, err := events.NewDispatcher()
+	// With no subscriptions an event is offered to nobody and its outbox row
+	// is retired.
+	domainEvents, err := events.NewDispatcher(deps.EventSubscriptions...)
 	if err != nil {
 		return jobRuntime{}, err
 	}

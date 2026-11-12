@@ -30,12 +30,19 @@ func (e *uncertainExamExportWrite) Unwrap() error           { return e.cause }
 func (*uncertainExamExportWrite) ExamExportWriteUncertain() {}
 
 // BuildExamExport writes only the pre-registered opaque attempt identity. It
-// verifies every original file while the zip format reads it, closes the ZIP,
+// verifies every original file while the configured export format reads it,
 // then reopens and hashes the managed object before returning verified
-// publication metadata.
+// publication metadata. It fails when no export format is configured.
 func (c *Content) BuildExamExport(ctx context.Context, input exam.ExportArchiveInput) (*exam.ExportArchiveContent, error) {
-	return c.buildExamExport(ctx, input, zipExportFormat{})
+	if c == nil || c.examExportFormat == nil {
+		return nil, errExamExportFormatUnavailable
+	}
+	return c.buildExamExport(ctx, input, c.examExportFormat)
 }
+
+// errExamExportFormatUnavailable is returned when no plugin offers the Exam
+// export format, because the plugin is turned off or has failed.
+var errExamExportFormatUnavailable = errors.New("Exam export format is unavailable")
 
 // buildExamExport owns everything around format: validation, the work
 // budget, the private spool and its size bound, per-file verification,

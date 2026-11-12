@@ -33,26 +33,16 @@ func (r *registrar) AddIdentityProviderType(providerType plugin.IdentityProvider
 		return errors.New("identity provider type name is empty")
 	}
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if !r.open {
-		return errors.New("identity provider types are added during Activate")
-	}
-	return r.host.claimIdentityProviderType(name, &guardedIdentityProviderType{entry: r.entry, name: name, inner: providerType})
-}
-
-// claimIdentityProviderType keeps providerType unless another plugin already
-// offers name.
-func (h *Host) claimIdentityProviderType(name string, providerType *guardedIdentityProviderType) error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	for _, existing := range h.identityTypes {
-		if existing.name == name {
-			return fmt.Errorf("identity provider type %q is already offered by plugin %q", name, existing.entry.manifest.ID)
+	guarded := &guardedIdentityProviderType{entry: r.entry, name: name, inner: providerType}
+	return r.register("identity provider types", func(c *contributions) error {
+		for _, existing := range c.identityTypes {
+			if existing.name == name {
+				return fmt.Errorf("identity provider type %q is already offered by plugin %q", name, existing.entry.manifest.ID)
+			}
 		}
-	}
-	h.identityTypes = append(h.identityTypes, providerType)
-	return nil
+		c.identityTypes = append(c.identityTypes, guarded)
+		return nil
+	})
 }
 
 // IdentityProviderTypes returns the sign-in protocols that active plugins
@@ -61,8 +51,8 @@ func (h *Host) claimIdentityProviderType(name string, providerType *guardedIdent
 func (h *Host) IdentityProviderTypes() []plugin.IdentityProviderType {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	types := make([]plugin.IdentityProviderType, 0, len(h.identityTypes))
-	for _, providerType := range h.identityTypes {
+	types := make([]plugin.IdentityProviderType, 0, len(h.contributions.identityTypes))
+	for _, providerType := range h.contributions.identityTypes {
 		if providerType.entry.currentState() == StateActive {
 			types = append(types, providerType)
 		}

@@ -175,6 +175,24 @@ func TestDomainEventDispatchRetriesWhenTheCheckpointCannotBeSaved(t *testing.T) 
 	require.ErrorIs(t, outcome.Err, f.checkpointErr)
 }
 
+func TestDomainEventDispatchRemembersEveryoneWhenTheRowCannotBeDeleted(t *testing.T) {
+	f := newDomainEventDispatchFixture(t)
+	f.outbox.deleteErr = errors.New("connection reset")
+	outcome := f.run(t, nil, nil)
+	require.Equal(t, job.OutcomeRetryableFailure, outcome.Kind, "outcome=%#v", outcome)
+	id := f.event.ID.String()
+	// Both subscriptions accepted before the delete failed; they are
+	// checkpointed so the retry only deletes the row.
+	require.Equal(t, []string{"get:" + id, "handle:0", "handle:1", "delete:" + id, "checkpoint"}, f.calls)
+	require.JSONEq(t, `{"delivered":["0","1"]}`, string(f.checkpoints[0]))
+
+	f.calls, f.outbox.deleteErr = nil, nil
+	f.record.Checkpoint = f.checkpoints[0]
+	outcome = f.run(t, nil, nil)
+	require.Equal(t, job.OutcomeSucceeded, outcome.Kind, "outcome=%#v", outcome)
+	require.Equal(t, []string{"get:" + id, "delete:" + id}, f.calls, "the retry offers the event to nobody again")
+}
+
 func TestDomainEventDispatchRejectsAnInvalidCheckpoint(t *testing.T) {
 	f := newDomainEventDispatchFixture(t)
 	f.record.Checkpoint = json.RawMessage(`{"delivered":["1","1"]}`)

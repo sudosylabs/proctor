@@ -62,22 +62,24 @@ func (h domainEventDispatchHandler) Run(ctx context.Context, execution job.Execu
 	}
 
 	delivered, dispatchErr := h.dispatcher.Dispatch(ctx, event, checkpoint.Delivered)
-	if dispatchErr != nil {
-		if len(delivered) > len(checkpoint.Delivered) {
-			document, encodeErr := model.EncodeDomainEventDispatchCheckpoint(model.DomainEventDispatchCheckpoint{Delivered: delivered})
-			if encodeErr != nil {
-				return job.PermanentFailure("job.invariant_failed", encodeErr)
-			}
-			if saveErr := execution.Checkpoint(ctx, job.CheckpointValue{Document: document}); saveErr != nil {
-				return job.RetryableFailure("dependency.unavailable", errors.Join(dispatchErr, saveErr))
-			}
+	if dispatchErr == nil {
+		dispatchErr = h.outbox.Delete(ctx, command.EventID)
+		if dispatchErr == nil {
+			return domainEventDispatchSucceeded(true)
 		}
-		return job.RetryableFailure("dependency.unavailable", dispatchErr)
 	}
-	if err = h.outbox.Delete(ctx, command.EventID); err != nil {
-		return job.RetryableFailure("dependency.unavailable", err)
+	// Some subscription failed, or the row could not be deleted: remember who
+	// accepted, so the retry offers the event only to the rest.
+	if len(delivered) > len(checkpoint.Delivered) {
+		document, encodeErr := model.EncodeDomainEventDispatchCheckpoint(model.DomainEventDispatchCheckpoint{Delivered: delivered})
+		if encodeErr != nil {
+			return job.PermanentFailure("job.invariant_failed", encodeErr)
+		}
+		if saveErr := execution.Checkpoint(ctx, job.CheckpointValue{Document: document}); saveErr != nil {
+			return job.RetryableFailure("dependency.unavailable", errors.Join(dispatchErr, saveErr))
+		}
 	}
-	return domainEventDispatchSucceeded(true)
+	return job.RetryableFailure("dependency.unavailable", dispatchErr)
 }
 
 func domainEventDispatchSucceeded(delivered bool) job.Outcome {

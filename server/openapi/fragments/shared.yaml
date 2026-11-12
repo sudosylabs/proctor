@@ -565,6 +565,48 @@ components:
         built_in:
           type: boolean
           description: True when installation invariants protect the Role from ordinary update or deletion.
+        holders:
+          $ref: '#/components/schemas/RoleHolders'
+    RoleHolders:
+      description: >-
+        Who holds a Role now, among the Role Bindings the caller can see: the current Bindings of the Role, effective at
+        the request time on an unarchived scope, inside the caller's role_binding.view scopes. Present on Role reads only,
+        and only for a caller holding role_binding.view somewhere. Each count stops at 10,000; `users` and `scopes` are
+        counted among the Bindings counted, so all three are lower bounds when `bindings` reaches the bound.
+      type: object
+      additionalProperties: false
+      required:
+        - bindings
+        - users
+        - scopes
+        - bindings_is_lower_bound
+        - users_is_lower_bound
+        - scopes_is_lower_bound
+      properties:
+        bindings:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: Current Role Bindings of the Role the caller can see.
+        users:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: Distinct Users holding those Bindings.
+        scopes:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: Distinct scopes (scope type and identity) of those Bindings.
+        bindings_is_lower_bound:
+          type: boolean
+          description: True when `bindings` reached the 10,000 bound and there may be more.
+        users_is_lower_bound:
+          type: boolean
+          description: True when `users` may be more than reported, because the Bindings count reached its bound.
+        scopes_is_lower_bound:
+          type: boolean
+          description: True when `scopes` may be more than reported, because the Bindings count reached its bound.
     RoleBindingResponse:
       description: Effective-dated grant of one Role to one User in one exact scope.
       type: object

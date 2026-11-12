@@ -632,6 +632,29 @@ Affiliation history may be read only after the same contextual User check.
 Per-User Role Binding history is filtered to authorized Academic Unit
 descendants and Classes; Institution and sibling bindings are omitted.
 
+`GET /api/v1/role-bindings` takes exactly one of three forms, and any mix is
+`request.invalid` on `scope`: `user_id`, `scope_type` with `scope_id`, or a
+repeatable `role_id` (at most 16, repeats counted once). The first two return
+the whole set, paged on the wire. The Role form answers who holds those Roles
+now: the current Role Bindings of any listed Role (effective at the request
+instant, on an unarchived Role and scope) inside the caller's
+`role_binding.view` scopes, the same visibility as the per-User history,
+recording one `role_binding.view` decision. It is a keyset page newest first
+by `created_at` then `id` with a capped first-page `total`, and its cursor
+carries a digest of the requested Role set, so a cursor presented with other
+Roles is `request.invalid`. Roles are seen through Institution-wide
+`role.view`: without it, or for an unknown or archived Role, the request is
+`request.invalid` on `role_id` alike, as the User directory's `role_id` filter
+is. `GET /api/v1/roles` (ascending by `name` then `id`) and
+`GET /api/v1/roles/{role_id}` add `holders` to each Role: the same current
+bindings counted inside the caller's `role_binding.view` scopes, as
+`bindings`, distinct `users` and distinct `scopes`, in one grouped read per
+page. Each Role's count reads at most 10,000 bindings; `users` and `scopes`
+are counted among them, so all three `*_is_lower_bound` flags are set when
+`bindings` reaches the bound. The holder scope only narrows the authorized
+Role read and records no decision of its own; a caller without
+`role_binding.view` anywhere receives no `holders` member.
+
 `GET /api/v1/audits` preserves full installation history for institution-wide
 `audit.view`. `academic_audit.view` instead constrains the query in PostgreSQL
 to academic, Invitation, onboarding-batch, Role Binding, and User-visibility
@@ -644,11 +667,18 @@ and security events are always excluded. The response also omits Session,
 request, node, authentication, IP-address, User-Agent, and private audit-value
 metadata.
 The listing filters `actor_id`, `subject_user_id` (the User an Event is about),
-`status=attempt|success|fail`, a resource, a creation range and repeatable
+`status=attempt|success|fail`, a resource, a creation range, repeatable
 `action` (at most 32, each from the audit action catalog, else
-`audit.query.invalid`) apply inside that visibility, so an academic auditor
-naming an action outside its catalog or a User outside its subtrees reads
-nothing more.
+`audit.query.invalid`) and `kind=change|read` apply inside that visibility, so
+an academic auditor naming an action outside its catalog or a User outside its
+subtrees reads nothing more. `kind` reads the closed classification
+`model.AuditActionKind`, which places every audit action, event-only ones
+included, in exactly one kind: a `read` only looks (a view, a search, a list,
+or an export that copies records out), and a `change` mutates state,
+authenticates someone (a sign-in or second factor, even a failed one),
+issues or revokes a credential, or sends mail. It narrows `action` and the
+academic catalog rather than adding to them. Account history has no `kind`,
+because every event in its catalogue is a change.
 
 Each `GET /api/v1/audits` and `GET /api/v1/users/me/audits` item carries a
 `summary`: one sentence written by the server in the locale `Accept-Language`
@@ -666,11 +696,24 @@ the self-history catalogue distinguishes operations; an academic auditor's
 redacted row has no parameters, so its summary names only the action, actor,
 and resource and never the operation or the User the Event is about. Account
 history keeps its actor mask ("An administrator gave you the Teacher role in
-Mathematics"): it never names another person, names an Academic Unit or Class
-only where the item's resource identity appears, and names a Role only when the
-event bound it to the caller. An unfinished or failed row says so. Runs of
-similar rows are not folded on the server, because folding across pages would
-break cursors and totals.
+Mathematics"): it never names the person who acted on the caller, names an
+Academic Unit or Class only where the item's resource identity appears, and
+names a Role only when the event bound it to the caller. When the caller acted
+on another User ("You disabled the account of Bo Student"), that User is named
+only while the caller can see them through the User directory's visibility, as
+on the institution list, and is otherwise "a user". An unfinished or failed row
+says so.
+
+Account history also returns `runs`: each stretch of two or more consecutive
+items on the page with the same actor kind, event, recorded operation, status,
+and relation, as `{start, length, summary}` with a plural sentence counted by
+its items ("You changed 5 profile pictures"). The server finds runs inside the
+page only, so items, cursors, and totals are unchanged; a stretch cut by the
+page edge reads as two runs, and each run's count is exact for the items it
+covers. A run sentence names no person or resource, because its items may
+differ in both. Events that cannot follow one another (turning on two-step
+verification, undoing an email change, offline administrator recovery, and
+signing out the other Sessions) never form a run.
 
 ## Public local registration
 
@@ -1089,8 +1132,8 @@ order, and limit, so a total can never count rows the caller could not page
 to. The User directory, Invitations, Jobs, audit Events, mail deliveries,
 Academic Unit and Class members, Role Bindings, the Programmes, Classes, and
 Programme Levels of an academic listing, and the User's own account history
-count this way; a collection the application returns whole (Role Bindings)
-counts its length with the same bound. A total never comes with offset paging.
+count this way; a collection the application returns whole (a User's or a
+scope's Role Bindings) counts its length with the same bound. A total never comes with offset paging.
 `TestOpenAPIListOperationsUseOneEnvelope` enforces the idiom over the reviewed
 OpenAPI document.
 
@@ -1784,6 +1827,18 @@ projection through a bounded, opaque-cursor collection. Repeated `state` and
 recipient User (never an address; Invitation deliveries have none), and
 optional RFC 3339 `created_after` and `created_before` bounds are applied in
 persistence; `limit` defaults to 50 and is bounded at 200. Authorization completes before any delivery is inspected.
+
+Both reads name a Delivery's recipient User with `recipient_display_name`
+beside `target_user_id`, read once per page from the live `users` table and
+only inside the viewer's current User directory visibility (`user.view` and
+`class.members.view`), as audit summaries are. `mail.view` shows that a
+Delivery exists and its masked address; it does not by itself reveal whose
+it is, so a scoped viewer sees no name it could not read in the directory,
+and a scoped visibility never names a disabled User. The name is the
+account's current display name, never the address the mail went to: no read
+decrypts the recipient envelope, and the full address is never returned.
+Invitation deliveries have no User and no name. The test, cancel, and retry
+responses carry no name.
 
 `GET /api/v1/mail/metrics` requires `mail.view` and returns only bounded
 template/state/public-outcome aggregates, attempts, latency, queue count and

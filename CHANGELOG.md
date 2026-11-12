@@ -265,6 +265,33 @@ module when a change is not server-only. No module has been released yet.
 
 ### Added
 
+- Server: audit and mail follow-ups for the desktop. `GET /api/v1/audits`
+  takes `kind=change|read`, read from a closed classification of every audit
+  action (sign-ins and other authentication count as changes); it narrows
+  `action` and an academic auditor's catalog rather than adding to them.
+  `GET /api/v1/users/me/audits` names the User the caller acted on in
+  `summary` while the caller can still see them, and returns `runs`
+  (`start`, `length`, and a plural `summary` such as "You changed 5 profile
+  pictures") for consecutive items on the page that read as one line; runs
+  never cross pages. It may now also answer `authorization.unavailable`,
+  `authorization.request.invalid` and `resource.not_found`. Mail delivery
+  reads carry `recipient_display_name` beside `target_user_id`, only while
+  the viewer can see that User; the address stays masked.
+- Server: who holds a Role. `GET /api/v1/role-bindings` takes repeatable
+  `role_id` (at most 16) as a third form beside `user_id` and
+  `scope_type`/`scope_id`, and combining forms is `request.invalid`. It pages
+  the current Role Bindings of those Roles inside the caller's
+  `role_binding.view` scopes, newest first, with a first-page `total` and a
+  cursor that continues only the same Roles; it needs Institution-wide
+  `role.view`, and an unknown or archived Role is `request.invalid` on
+  `role_id`. `GET /api/v1/roles` and `GET /api/v1/roles/{role_id}` items carry
+  `holders` (`bindings`, `users`, `scopes`, each stopped at 10,000 with its
+  `*_is_lower_bound` flag), counted for the whole page in one read inside the
+  same scopes and omitted for a caller without `role_binding.view`; the Role
+  list cursor now records the last Role's name and is not compatible with
+  earlier cursors. The baseline replaces `role_bindings_role_id_idx` with
+  `role_bindings_role_id_created_at_idx`. Existing development databases must
+  be recreated.
 - Server: live updates for the administration views, as refetch signals over
   `/api/v1/websocket`. `job.changed` (`job_id`, `type`, `status`, and
   `progress` for a type that reports it) reaches `job.view` subscribers on the

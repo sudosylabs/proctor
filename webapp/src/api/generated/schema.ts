@@ -3888,7 +3888,7 @@ export interface paths {
         };
         /**
          * List safe mail delivery metadata
-         * @description Lists authorized durable delivery metadata for the allowlisted template and filters, most recently updated first unless `sort` and `dir` choose another order. Recipient addresses remain masked and the response never exposes encrypted payloads, rendered message bodies, SMTP credentials, or provider diagnostics. The first page, read without a cursor, also reports `total`: the mail deliveries the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
+         * @description Lists authorized durable delivery metadata for the allowlisted template and filters, most recently updated first unless `sort` and `dir` choose another order. Recipient addresses remain masked and the response never exposes encrypted payloads, rendered message bodies, SMTP credentials, or provider diagnostics. A delivery addressed to a User carries `recipient_display_name` only when the caller can see that User now; the page's names are read once. The first page, read without a cursor, also reports `total`: the mail deliveries the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
          */
         get: operations["listMailDeliveries"];
         put?: never;
@@ -3911,7 +3911,7 @@ export interface paths {
         };
         /**
          * Get one safe mail delivery status
-         * @description Returns safe lifecycle metadata for one authorized durable delivery. The projection keeps the recipient masked and omits payload ciphertext, plaintext message content, SMTP response detail, and encryption-key material.
+         * @description Returns safe lifecycle metadata for one authorized durable delivery. The projection keeps the recipient masked and omits payload ciphertext, plaintext message content, SMTP response detail, and encryption-key material. It names the recipient User with `recipient_display_name` only when the caller can see that User now.
          */
         get: operations["getMailDelivery"];
         put?: never;
@@ -4482,8 +4482,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List Role Bindings by user or scope
-         * @description Lists current and historical Role Bindings authorized for the caller, optionally narrowed to one User or exact scope. A Binding is an effective-dated permission grant; membership or affiliation alone is not returned as authority. The first page, read without a cursor, also reports `total`: the Role Bindings the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
+         * List Role Bindings by user, scope, or Role
+         * @description Lists the Role Bindings authorized for the caller in exactly one of three forms; combining them is `request.invalid`. `user_id` lists one User's current and historical Bindings inside the caller's role_binding.view scopes, and `scope_type` with `scope_id` lists every Binding at one exact scope the caller may view; both read the whole set in creation order, newest first. Repeatable `role_id` (up to 16 Roles) lists who holds those Roles now: the current Bindings of any listed Role, effective at the request time on an unarchived Role and scope, inside the caller's role_binding.view scopes, newest first by `created_at` then `id`. It needs Institution-wide role.view, through which Roles are seen: without it, and for a Role that does not exist or is archived, the request is `request.invalid` on `role_id` alike. Its cursor continues only the same set of Roles. A Binding is an effective-dated permission grant; membership or affiliation alone is not returned as authority. The first page, read without a cursor, also reports `total`: the Role Bindings the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
          */
         get: operations["listRoleBindings"];
         put?: never;
@@ -4530,7 +4530,7 @@ export interface paths {
         };
         /**
          * List Roles
-         * @description Lists built-in and custom Roles visible to the authorized caller. Role definitions name permissions only; effective access also requires a current scoped Role Binding and terminal authorization against current durable state.
+         * @description Lists built-in and custom Roles visible to the authorized caller, ascending by `name` then `id`. Role definitions name permissions only; effective access also requires a current scoped Role Binding and terminal authorization against current durable state. Each item carries `holders`, the current Role Bindings of that Role the caller can see through role_binding.view, counted for the whole page in one read; `holders` is omitted for a caller who holds role_binding.view nowhere.
          */
         get: operations["listRoles"];
         put?: never;
@@ -4557,7 +4557,7 @@ export interface paths {
         };
         /**
          * Get a Role
-         * @description Returns one built-in or custom Role visible to the caller, including its current permission set and built-in protection flag. The response does not imply that any User currently holds the Role.
+         * @description Returns one built-in or custom Role visible to the caller, including its current permission set and built-in protection flag. `holders` counts the current Role Bindings of the Role the caller can see through role_binding.view, and is omitted for a caller who holds role_binding.view nowhere; the Role definition alone does not imply that any User holds it.
          */
         get: operations["getRole"];
         put?: never;
@@ -5016,7 +5016,7 @@ export interface paths {
         };
         /**
          * List the current User's own account history
-         * @description Returns one page of the current Session User's own account history, newest first unless `order=asc` asks for oldest first. The first page, read without a cursor, also carries `total`: the number of events the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's. Reading the first page oldest first reaches the end of the history without counting pages. The history holds events about the User's account, whoever performed them, and account-relevant events the User performed on anything else. Each item carries a stable `event` name from a closed catalogue, which clients label themselves; rows outside the catalogue and unfinished attempts are never returned. Another person is never named: the actor is only `self`, `administrator`, or `system`, and the IP address and user agent appear only on the User's own actions. A resource identity appears only when the resource is the User, the Institution, or an Academic Unit or Class the User has or had a membership or Role Binding at. Each item also carries a `summary` sentence in the language `Accept-Language` selects, falling back to the installation language and then English. It keeps the same mask: the actor is "you", "an administrator", or "the system", and no other person is ever named. It names an Academic Unit or Class only where the resource identity appears, and a Role only when the event bound it to the User; otherwise it uses a generic noun such as "a class". Personal Access Tokens cannot read this history. Reading it records no authorization decision.
+         * @description Returns one page of the current Session User's own account history, newest first unless `order=asc` asks for oldest first. The first page, read without a cursor, also carries `total`: the number of events the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's. Reading the first page oldest first reaches the end of the history without counting pages. The history holds events about the User's account, whoever performed them, and account-relevant events the User performed on anything else. Each item carries a stable `event` name from a closed catalogue, which clients label themselves; rows outside the catalogue and unfinished attempts are never returned. No item carries another person's identity: the actor is only `self`, `administrator`, or `system`, and the IP address and user agent appear only on the User's own actions. A resource identity appears only when the resource is the User, the Institution, or an Academic Unit or Class the User has or had a membership or Role Binding at. Each item also carries a `summary` sentence in the language `Accept-Language` selects, falling back to the installation language and then English. It keeps the same mask: the actor is "you", "an administrator", or "the system", and whoever acted on the User is never named. When the User acted on another User, the sentence names that User only while the User can see them now through the User directory's visibility, as the institution audit list does, and otherwise says "a user". It names an Academic Unit or Class only where the resource identity appears, and a Role only when the event bound it to the User; otherwise it uses a generic noun such as "a class". The page also carries `runs`: each stretch of two or more consecutive items on the page with the same actor kind, event, recorded operation, status, and relation, with a plural `summary` such as "You changed 5 profile pictures". Items stay unchanged and individually addressable. A run never reaches past the page, so a stretch the page edge cuts reads as two runs, or the client fetches the next page before folding the last one; each run's count is exact for the items it covers. Events that cannot follow one another, such as turning on two-step verification, never form a run. Personal Access Tokens cannot read this history. Reading it records no authorization decision.
          */
         get: operations["listCurrentUserAuditEvents"];
         put?: never;
@@ -9475,6 +9475,8 @@ export interface components {
             occurrence_id: components["schemas"]["ID"];
             /** @description Stable safe failure category; raw SMTP or infrastructure errors are never exposed. */
             public_failure_code?: string | components["schemas"]["MailFailureCode"];
+            /** @description Current name of the User target_user_id identifies, present when the mail delivery is read (listed or fetched by ID) and only while the caller can see that User now through the User directory's visibility (`user.view` or `class.members.view`); `mail.view` alone does not reveal it. Absent for Invitation mail, for a User the caller cannot see, and on the responses of sending a test, canceling, or retrying. It is the account's display name, not the address the mail went to, which stays masked. */
+            recipient_display_name?: string;
             state: components["schemas"]["MailDeliveryState"];
             /** @description Invitation the mail is addressed to, present instead of target_user_id for Invitation mail. */
             target_invitation_id?: components["schemas"]["ID"];
@@ -10670,6 +10672,21 @@ export interface components {
             updated_at: string;
             user_id: components["schemas"]["ID"];
         };
+        /** @description Who holds a Role now, among the Role Bindings the caller can see: the current Bindings of the Role, effective at the request time on an unarchived scope, inside the caller's role_binding.view scopes. Present on Role reads only, and only for a caller holding role_binding.view somewhere. Each count stops at 10,000; `users` and `scopes` are counted among the Bindings counted, so all three are lower bounds when `bindings` reaches the bound. */
+        RoleHolders: {
+            /** @description Current Role Bindings of the Role the caller can see. */
+            bindings: number;
+            /** @description True when `bindings` reached the 10,000 bound and there may be more. */
+            bindings_is_lower_bound: boolean;
+            /** @description Distinct scopes (scope type and identity) of those Bindings. */
+            scopes: number;
+            /** @description True when `scopes` may be more than reported, because the Bindings count reached its bound. */
+            scopes_is_lower_bound: boolean;
+            /** @description Distinct Users holding those Bindings. */
+            users: number;
+            /** @description True when `users` may be more than reported, because the Bindings count reached its bound. */
+            users_is_lower_bound: boolean;
+        };
         /** @description Roles visible to the authorized caller. */
         RoleListResponse: {
             items: components["schemas"]["RoleResponse"][];
@@ -10693,6 +10710,7 @@ export interface components {
             description: string;
             /** @description Human-facing Role name. */
             display_name: string;
+            holders?: components["schemas"]["RoleHolders"];
             id: components["schemas"]["ID"];
             /** @description Immutable canonical machine name for the Role. */
             name: string;
@@ -10899,7 +10917,7 @@ export interface components {
              * @enum {string}
              */
             status: "success" | "fail";
-            /** @description One sentence describing the event in the negotiated language, for display only; clients that need to reason about the event read its codes. It never names another person, and a failed event says so. */
+            /** @description One sentence describing the event in the negotiated language, for display only; clients that need to reason about the event read its codes. It never names who acted on the User; it names a User the User acted on only while the User can see them now, and a failed event says so. */
             summary: string;
             /** @description User agent of the User's own action; omitted for anyone else's. */
             user_agent?: string;
@@ -10909,10 +10927,21 @@ export interface components {
             items: components["schemas"]["SelfAuditEventResponse"][];
             /** @description Opaque continuation for the next page, omitted after the final page. */
             next_cursor?: string;
+            /** @description Stretches of two or more consecutive items on this page that read as one line, in page order and never overlapping. Omitted when the page has none. */
+            runs?: components["schemas"]["SelfAuditRun"][];
             /** @description Events matching the filters across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true. */
             total?: number;
             /** @description True when `total` reached the 10,000 bound and the history may be longer. Present with `total`. */
             total_is_lower_bound?: boolean;
+        };
+        /** @description Consecutive items on one page with the same actor kind, event, recorded operation, status, and relation. */
+        SelfAuditRun: {
+            /** @description Number of items the run covers, starting at `start`. */
+            length: number;
+            /** @description Index in `items` of the run's first item. */
+            start: number;
+            /** @description One plural sentence for the whole run in the negotiated language, counted by its items, such as "You changed 5 profile pictures". It names no person or resource, and a failed run says so. */
+            summary: string;
         };
         SequenceRange: {
             /** Format: int64 */
@@ -14117,9 +14146,50 @@ export interface components {
                  *           },
                  *           "status": "success",
                  *           "summary": "An administrator reset two-step verification for your account"
+                 *         },
+                 *         {
+                 *           "actor": {
+                 *             "kind": "self"
+                 *           },
+                 *           "client_type": "web",
+                 *           "created_at": "2026-07-29T11:00:00Z",
+                 *           "event": "profile_picture.changed",
+                 *           "id": "ybndrfg8ejkmcpqxot1uwisza6",
+                 *           "ip_address": "192.0.2.10",
+                 *           "relation": "actor",
+                 *           "resource": {
+                 *             "type": "user"
+                 *           },
+                 *           "status": "success",
+                 *           "summary": "You changed the profile picture of Bo Student",
+                 *           "user_agent": "Mozilla/5.0"
+                 *         },
+                 *         {
+                 *           "actor": {
+                 *             "kind": "self"
+                 *           },
+                 *           "client_type": "web",
+                 *           "created_at": "2026-07-29T10:59:00Z",
+                 *           "event": "profile_picture.changed",
+                 *           "id": "ybndrfg8ejkmcpqxot1uwisza7",
+                 *           "ip_address": "192.0.2.10",
+                 *           "relation": "actor",
+                 *           "resource": {
+                 *             "type": "user"
+                 *           },
+                 *           "status": "success",
+                 *           "summary": "You changed the profile picture of a user",
+                 *           "user_agent": "Mozilla/5.0"
                  *         }
                  *       ],
                  *       "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wNy0zMFQxNDowNTowMFoifQ",
+                 *       "runs": [
+                 *         {
+                 *           "length": 2,
+                 *           "start": 2,
+                 *           "summary": "You changed 2 profile pictures"
+                 *         }
+                 *       ],
                  *       "total": 248,
                  *       "total_is_lower_bound": false
                  *     }
@@ -16943,6 +17013,8 @@ export interface operations {
                 action?: components["schemas"]["AuditAction"][];
                 /** @description Return only Events in this durable outcome state: an `attempt` whose outcome is not yet recorded, a `success`, or a `fail`. */
                 status?: "attempt" | "success" | "fail";
+                /** @description Return only Events whose action changes something (`change`: a mutation, a sign-in or other authentication, a credential issued or revoked, mail sent) or only looks (`read`: a view, a search, a list, or an export). Every audit action is one of the two. It narrows `action` and the caller's visibility rather than adding to them, so an Academic Unit auditor still reads only its own academic actions. */
+                kind?: "change" | "read";
                 /** @description Exact resource type to filter; resource_id is required when present. */
                 resource_type?: components["schemas"]["ResourceType"];
                 /** @description Exact resource identity to filter; resource_type is required when present. */
@@ -22025,6 +22097,8 @@ export interface operations {
                 scope_type?: string;
                 /** @description Return only Bindings for this exact scope identity. */
                 scope_id?: components["schemas"]["ID"];
+                /** @description Return the current Bindings of any listed Role inside the caller's role_binding.view scopes. Repeat the parameter for up to 16 Roles; repeats count once. Requires Institution-wide role.view, and every Role must exist and be unarchived, or the request is `request.invalid` on `role_id`. Cannot be combined with `user_id`, `scope_type`, or `scope_id`. */
+                role_id?: components["schemas"]["ID"][];
                 /** @description Maximum number of items in the page. */
                 limit?: components["parameters"]["PageLimit"];
                 /** @description Opaque next_cursor from the previous page, returned unchanged; omit it for the first page. */
@@ -22750,6 +22824,7 @@ export interface operations {
             200: components["responses"]["SelfAuditListOK"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };

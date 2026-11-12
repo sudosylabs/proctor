@@ -104,3 +104,46 @@ func TestSelfAuditResourceParsesFiltersAndPagesPrivately(t *testing.T) {
 	malformed := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/users/me/audits?cursor=not-a-cursor", "", true)
 	assertHTTPProblem(t, malformed, http.StatusBadRequest, "request.invalid")
 }
+
+// TestSelfAuditResourceWritesRunSummaries presents the page's runs with a
+// plural sentence each, omits runs from a page that has none, and refuses a
+// run the page cannot hold.
+func TestSelfAuditResourceWritesRunSummaries(t *testing.T) {
+	t.Parallel()
+	logger, _ := routetest.NewLogger(t)
+	principal := operatorTestPrincipal()
+	at := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
+	picture := func(offset time.Duration, name string) administration.SelfAuditEvent {
+		return administration.SelfAuditEvent{
+			ID: model.NewAuditEventID(), CreatedAt: at.Add(-offset), Event: model.AuditSelfEventProfilePictureChanged,
+			Status: model.AuditStatusSuccess, Relation: store.AuditSelfRelationActor, ActorKind: administration.SelfAuditActorSelf,
+			Resource: model.Resource{Type: model.ResourceUser}, SubjectName: name,
+		}
+	}
+	audits := &focusedAuditApplication{
+		self:     []administration.SelfAuditEvent{picture(0, "Bo Student"), picture(time.Minute, ""), picture(2*time.Minute, "")},
+		selfRuns: []administration.SelfAuditRun{{Start: 0, Length: 3}},
+	}
+	httpAPI := newFocusedResourceAPI(t, logger, &academicUnitHTTPApplication{principal: principal}, auditResource(audits))
+
+	response := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/users/me/audits", "", true)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	var page selfAuditListResponse
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
+	require.Equal(t, []selfAuditRunResponse{{Start: 0, Length: 3, Summary: "You changed 3 profile pictures"}}, page.Runs)
+	require.Equal(t, "You changed the profile picture of Bo Student", page.Items[0].Summary, "a visible User is named")
+	require.Equal(t, "You changed the profile picture of a user", page.Items[1].Summary, "rows stay individually summarized")
+
+	audits.selfRuns = nil
+	response = serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/users/me/audits", "", true)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &raw))
+	require.NotContains(t, raw, "runs", "a page without runs omits them")
+
+	for _, run := range []administration.SelfAuditRun{{Start: 2, Length: 2}, {Start: 0, Length: 1}, {Start: -1, Length: 2}} {
+		audits.selfRuns = []administration.SelfAuditRun{run}
+		response = serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/users/me/audits", "", true)
+		require.Equal(t, http.StatusInternalServerError, response.Code, "%+v: %s", run, response.Body.String())
+	}
+}

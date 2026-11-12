@@ -10,6 +10,7 @@ package mail
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
@@ -30,7 +31,10 @@ const (
 
 // DeliveryView is the safe operator projection of one mail delivery: its
 // identity, template, masked recipient, state and timings, never its
-// recipient address or content.
+// recipient address or content. RecipientDisplayName is the current name of
+// the User the delivery is addressed to, present on reads only while the
+// viewer can see that User through the User directory's visibility; an
+// Invitation delivery has no User and so no name.
 type DeliveryView struct {
 	ID                                          model.MailDeliveryID
 	OccurrenceID                                model.MailOccurrenceID
@@ -45,6 +49,7 @@ type DeliveryView struct {
 	AttemptCount                                int
 	AcceptedAt, FailedAt                        model.OptionalTime
 	PublicFailureCode                           string
+	RecipientDisplayName                        string
 }
 
 // DeliveryPage is one page of mail deliveries; HasMore reports that
@@ -105,11 +110,23 @@ func (a InstitutionAuthorization) AuthorizeInstitution(
 	return resource, nil
 }
 
+// GrantedUserVisibility reports the Users the principal can see now, as the
+// User directory applies it, without recording a decision.
+func (a InstitutionAuthorization) GrantedUserVisibility(ctx context.Context, principal model.Principal) (store.UserVisibilityScope, error) {
+	if a.Authorizer == nil {
+		return store.UserVisibilityScope{}, apperror.New("mail.unavailable")
+	}
+	return a.Authorizer.GrantedUserVisibility(ctx, principal)
+}
+
 // institutionAuthorizer authorizes an Action on the installation's singleton
-// Institution and returns that Resource for the caller's audit. Production
-// passes InstitutionAuthorization; the tests substitute a fake.
+// Institution and returns that Resource for the caller's audit, and reports
+// the Users the caller can see so a delivery names its recipient only inside
+// that visibility. Production passes InstitutionAuthorization; the tests
+// substitute a fake.
 type institutionAuthorizer interface {
 	AuthorizeInstitution(context.Context, invocation.Invocation, model.Action) (model.Resource, error)
+	GrantedUserVisibility(context.Context, model.Principal) (store.UserVisibilityScope, error)
 }
 
 // testLimiter counts one operator test mail for a User and reports whether
@@ -307,7 +324,11 @@ func (s *Operations) GetMailDelivery(
 		return DeliveryView{}, storeErrors.Translate(err)
 	}
 
-	return deliveryView(delivery), nil
+	views := []DeliveryView{deliveryView(delivery)}
+	if err = s.nameRecipients(ctx, principal, views); err != nil {
+		return DeliveryView{}, err
+	}
+	return views[0], nil
 }
 
 // ListMailDeliveries lists one page of mail deliveries.
@@ -369,7 +390,44 @@ func (s *Operations) ListMailDeliveries(
 	}
 
 	page.Total = total
+	if err = s.nameRecipients(ctx, inv.Principal(), page.Items); err != nil {
+		return DeliveryPage{}, err
+	}
 	return page, nil
+}
+
+// nameRecipients names, in one bounded read, the Users the deliveries are
+// addressed to, each only while the viewer can see that User now. Holding
+// mail.view shows that a delivery exists and its masked address; it does not
+// by itself reveal whose it is. The name never comes from the delivery's own
+// encrypted address, and no address is read.
+func (s *Operations) nameRecipients(ctx context.Context, principal model.Principal, views []DeliveryView) error {
+	var recipients []model.UserID
+	for _, view := range views {
+		if !view.TargetUserID.IsZero() && !slices.Contains(recipients, view.TargetUserID) {
+			recipients = append(recipients, view.TargetUserID)
+		}
+	}
+	if len(recipients) == 0 {
+		return nil
+	}
+
+	visibility, err := s.deps.Authorization.GrantedUserVisibility(ctx, principal)
+	if err != nil {
+		return err
+	}
+	names, err := s.deps.Users.ListVisibleDisplayNames(ctx, recipients, visibility)
+	if err != nil {
+		return apperror.New("mail.unavailable").Wrap(err)
+	}
+	byUser := make(map[model.UserID]string, len(names))
+	for _, name := range names {
+		byUser[name.UserID] = name.DisplayName
+	}
+	for index := range views {
+		views[index].RecipientDisplayName = byUser[views[index].TargetUserID]
+	}
+	return nil
 }
 
 // CountFailedMailDeliveries counts the deliveries in the failed terminal

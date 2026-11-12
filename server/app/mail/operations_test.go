@@ -101,6 +101,29 @@ func (s *mailStoreFake) RetryDelivery(_ context.Context, input *store.MailDelive
 type mailUserStoreFake struct {
 	store.UserStore
 	user *model.User
+	// visible answers ListVisibleDisplayNames inside the visibility it is
+	// given, and names records each read.
+	visible map[model.UserID]string
+	names   *[]mailNameRead
+}
+
+// mailNameRead is one ListVisibleDisplayNames call.
+type mailNameRead struct {
+	ids        []model.UserID
+	visibility store.UserVisibilityScope
+}
+
+func (s mailUserStoreFake) ListVisibleDisplayNames(_ context.Context, ids []model.UserID, visibility store.UserVisibilityScope) ([]store.UserDisplayName, error) {
+	if s.names != nil {
+		*s.names = append(*s.names, mailNameRead{ids: ids, visibility: visibility})
+	}
+	var names []store.UserDisplayName
+	for _, id := range ids {
+		if name, visible := s.visible[id]; visible {
+			names = append(names, store.UserDisplayName{UserID: id, DisplayName: name})
+		}
+	}
+	return names, nil
 }
 
 func (s mailUserStoreFake) Get(context.Context, model.UserID) (*model.User, error) {
@@ -114,6 +137,14 @@ func (s mailUserStoreFake) Get(context.Context, model.UserID) (*model.User, erro
 type mailAuthorizerFake struct {
 	actions []model.Action
 	err     error
+	// users answers GrantedUserVisibility; visibilityReads counts the calls.
+	users           store.UserVisibilityScope
+	visibilityReads int
+}
+
+func (a *mailAuthorizerFake) GrantedUserVisibility(context.Context, model.Principal) (store.UserVisibilityScope, error) {
+	a.visibilityReads++
+	return a.users, nil
 }
 
 func (a *mailAuthorizerFake) AuthorizeInstitution(_ context.Context, _ invocation.Invocation, action model.Action) (model.Resource, error) {
@@ -361,4 +392,92 @@ func TestMailDeliveryListFiltersByRecipientUser(t *testing.T) {
 	require.True(t, apperror.Is(err, "mail.query.invalid"), "error = %v", err)
 	require.Zero(t, persistence.lists, "a refused filter reads nothing")
 	require.Equal(t, []model.Action{model.ActionMailView, model.ActionMailView}, authorizer.actions)
+}
+
+// mailDeliveryPageFake lists a fixed page of deliveries.
+type mailDeliveryPageFake struct {
+	store.MailStore
+	deliveries []*model.MailDelivery
+}
+
+func (s *mailDeliveryPageFake) ListDeliveries(context.Context, store.MailDeliveryListOptions) ([]*model.MailDelivery, error) {
+	return s.deliveries, nil
+}
+
+func (s *mailDeliveryPageFake) CountDeliveries(_ context.Context, _ store.MailDeliveryListOptions, maximum int) (int, error) {
+	return min(len(s.deliveries), maximum), nil
+}
+
+func (s *mailDeliveryPageFake) GetDelivery(_ context.Context, id model.MailDeliveryID) (*model.MailDelivery, error) {
+	for _, delivery := range s.deliveries {
+		if delivery.ID == id {
+			return delivery.Clone(), nil
+		}
+	}
+	return nil, store.NewErrNotFound("mail_delivery", id.String())
+}
+
+// TestMailDeliveryReadsNameOnlyRecipientsTheViewerCanSee names a page's
+// recipients in one read inside the viewer's current User visibility: a
+// scoped mail viewer sees the names of the Users it can see and no others,
+// and an Invitation delivery, which has no User, stays unnamed. No address
+// beyond the masked one is ever read.
+func TestMailDeliveryReadsNameOnlyRecipientsTheViewerCanSee(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
+	visibleUser, hiddenUser := model.NewUserID(), model.NewUserID()
+	delivery := func(user model.UserID) *model.MailDelivery {
+		created := queuedMailDeliveryFixtureForApp(at)
+		created.TargetUserID = user
+		if user.IsZero() {
+			created.TargetInvitationID = model.NewInvitationID()
+		}
+		return created
+	}
+	toVisible, toHidden, toVisibleAgain, invitation := delivery(visibleUser), delivery(hiddenUser), delivery(visibleUser), delivery("")
+	persistence := &mailDeliveryPageFake{deliveries: []*model.MailDelivery{toVisible, toHidden, toVisibleAgain, invitation}}
+	scoped := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{model.NewAcademicUnitID()}, ActiveAt: at}
+	reads := []mailNameRead{}
+	// The store names only inside the visibility it is given; this scoped
+	// viewer cannot see hiddenUser.
+	users := mailUserStoreFake{visible: map[model.UserID]string{visibleUser: "Bo Student"}, names: &reads}
+	authorizer := &mailAuthorizerFake{users: scoped}
+	service := &Operations{deps: OperationsDependencies{Mail: persistence, Users: users, Authorization: authorizer}}
+	caller := invocation.New(mailTestPrincipal(at), model.RequestMetadata{})
+
+	page, err := service.ListMailDeliveries(context.Background(), caller, ListDeliveriesQuery{Limit: 10})
+	require.NoError(t, err)
+	require.Equal(t, []mailNameRead{{ids: []model.UserID{visibleUser, hiddenUser}, visibility: scoped}}, reads,
+		"one read for the page, each recipient once, inside the viewer's visibility")
+	require.Equal(t, 1, authorizer.visibilityReads)
+	require.Equal(t, []model.Action{model.ActionMailView}, authorizer.actions, "naming records no further decision")
+	names := make([]string, 0, len(page.Items))
+	for _, item := range page.Items {
+		names = append(names, item.RecipientDisplayName)
+	}
+	require.Equal(t, []string{"Bo Student", "", "Bo Student", ""}, names)
+	require.Equal(t, "o***@example.test", page.Items[1].MaskedRecipient, "an unnamed recipient keeps only the masked address")
+
+	reads = reads[:0]
+	view, err := service.GetMailDelivery(context.Background(), caller, toVisible.ID)
+	require.NoError(t, err)
+	require.Equal(t, "Bo Student", view.RecipientDisplayName)
+	view, err = service.GetMailDelivery(context.Background(), caller, toHidden.ID)
+	require.NoError(t, err)
+	require.Empty(t, view.RecipientDisplayName, "a scoped viewer cannot widen its User visibility through mail")
+	require.Len(t, reads, 2)
+
+	reads = reads[:0]
+	view, err = service.GetMailDelivery(context.Background(), caller, invitation.ID)
+	require.NoError(t, err)
+	require.Empty(t, view.RecipientDisplayName)
+	require.Empty(t, reads, "an Invitation delivery has no User to name")
+
+	wide := store.UserVisibilityScope{InstitutionWide: true}
+	users.visible[hiddenUser] = "Cy Teacher"
+	service.deps.Authorization = &mailAuthorizerFake{users: wide}
+	page, err = service.ListMailDeliveries(context.Background(), caller, ListDeliveriesQuery{Limit: 10})
+	require.NoError(t, err)
+	require.Equal(t, []mailNameRead{{ids: []model.UserID{visibleUser, hiddenUser}, visibility: wide}}, reads)
+	require.Equal(t, "Cy Teacher", page.Items[1].RecipientDisplayName, "an Institution-wide viewer sees every recipient's name")
 }

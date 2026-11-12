@@ -275,6 +275,13 @@ type UserStore interface {
 	// MaximumUserDisplayNames distinct Users are read; an archived or missing
 	// User is absent from the result. It grants no authority.
 	ListDisplayNames(context.Context, []model.UserID) ([]UserDisplayName, error)
+	// ListVisibleDisplayNames reads the same presentable names, in one
+	// statement, only for the given Users visible through the
+	// UserVisibilityScope as the User directory applies it: a scoped
+	// visibility never names a disabled User, and a zero visibility names
+	// nobody. At most MaximumUserDisplayNames distinct Users are read; a User
+	// outside the visibility, archived, or missing is absent.
+	ListVisibleDisplayNames(context.Context, []model.UserID, UserVisibilityScope) ([]UserDisplayName, error)
 }
 
 // MaximumUserDisplayNames bounds one UserStore.ListDisplayNames read.

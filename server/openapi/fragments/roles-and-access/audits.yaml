@@ -85,6 +85,19 @@ paths:
           description: >-
             Return only Events in this durable outcome state: an `attempt` whose outcome is not yet recorded, a
             `success`, or a `fail`.
+        - name: kind
+          in: query
+          schema:
+            type: string
+            enum:
+              - change
+              - read
+          description: >-
+            Return only Events whose action changes something (`change`: a mutation, a sign-in or other
+            authentication, a credential issued or revoked, mail sent) or only looks (`read`: a view, a search, a
+            list, or an export). Every audit action is one of the two. It narrows `action` and the caller's
+            visibility rather than adding to them, so an Academic Unit auditor still reads only its own academic
+            actions.
         - name: resource_type
           in: query
           schema:

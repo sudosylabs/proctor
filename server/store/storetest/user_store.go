@@ -44,6 +44,7 @@ func TestUserStore(t *testing.T, ss store.Store, probes ...UserStoreSQLProbe) {
 	t.Run("Update", func(t *testing.T) { testUserStoreUpdate(t, ss) })
 	t.Run("UpdateLastLogin", func(t *testing.T) { testUserStoreUpdateLastLogin(t, ss) })
 	t.Run("ListDisplayNames", func(t *testing.T) { testUserStoreListDisplayNames(t, ss) })
+	t.Run("ListVisibleDisplayNames", func(t *testing.T) { testUserStoreListVisibleDisplayNames(t, ss) })
 	t.Run("Uniqueness", func(t *testing.T) { testUserStoreUniqueness(t, ss) })
 	t.Run("ListAndDisable", func(t *testing.T) { testUserStoreListAndDisable(t, ss) })
 	t.Run("ListOrders", func(t *testing.T) { testUserStoreListOrders(t, ss) })
@@ -1406,6 +1407,79 @@ func testUserStoreListDisplayNames(t *testing.T, ss store.Store) {
 	}
 	_, err = ss.User().ListDisplayNames(ctx, tooMany)
 	require.ErrorAs(t, err, &invalid, "more Users than one read allows")
+}
+
+// testUserStoreListVisibleDisplayNames proves that the visible-name read
+// applies the User directory's visibility: a zero visibility names nobody, a
+// scoped one names only its subtree's current members and never a disabled
+// one, and Institution-wide visibility names every unarchived User.
+func testUserStoreListVisibleDisplayNames(t *testing.T, ss store.Store) {
+	ctx := context.Background()
+	institution := saveInstitution(t, ctx, ss)
+	root := saveAcademicUnit(t, ctx, ss, institution.ID.String(), "", "visible-names-root")
+	sibling := saveAcademicUnit(t, ctx, ss, institution.ID.String(), "", "visible-names-sibling")
+	named := func(name string, disabled bool, unit *model.AcademicUnit) *model.User {
+		t.Helper()
+		user := newUser()
+		user.DisplayName = name
+		if disabled {
+			user.PrepareCreate(model.NewUserID(), model.NowUTC().Add(-time.Hour))
+			user.DisabledAt = model.OptionalTimeFrom(model.NowUTC().Add(-time.Minute))
+		}
+		saved, err := createUser(t, ctx, ss, user)
+		require.NoError(t, err)
+		_, err = ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
+			AcademicUnitID: unit.ID, UserID: saved.ID, StartsAt: model.NowUTC().Add(-time.Minute),
+		})
+		require.NoError(t, err)
+		return saved
+	}
+	member, disabledMember, outsider := named("Root Member", false, root), named("Disabled Member", true, root), named("Sibling Member", false, sibling)
+	ids := []model.UserID{member.ID, disabledMember.ID, outsider.ID, member.ID, model.NewUserID()}
+	sorted := func(names []store.UserDisplayName) []store.UserDisplayName {
+		slices.SortFunc(names, func(a, b store.UserDisplayName) int { return strings.Compare(a.UserID.String(), b.UserID.String()) })
+		return names
+	}
+
+	names, err := ss.User().ListVisibleDisplayNames(ctx, ids, store.UserVisibilityScope{})
+	require.NoError(t, err)
+	require.Empty(t, names, "a zero visibility names nobody")
+
+	names, err = ss.User().ListVisibleDisplayNames(ctx, ids, store.UserVisibilityScope{
+		AcademicUnitRootIDs: []model.AcademicUnitID{root.ID}, ActiveAt: model.NowUTC(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, []store.UserDisplayName{{UserID: member.ID, DisplayName: "Root Member"}}, names,
+		"a scoped visibility names its current members once, never a disabled one or a sibling's")
+
+	names, err = ss.User().ListVisibleDisplayNames(ctx, ids, store.UserVisibilityScope{InstitutionWide: true})
+	require.NoError(t, err)
+	require.Equal(t, sorted([]store.UserDisplayName{
+		{UserID: member.ID, DisplayName: "Root Member"},
+		{UserID: disabledMember.ID, DisplayName: "Disabled Member"},
+		{UserID: outsider.ID, DisplayName: "Sibling Member"},
+	}), names)
+
+	empty, err := ss.User().ListVisibleDisplayNames(ctx, nil, store.UserVisibilityScope{InstitutionWide: true})
+	require.NoError(t, err)
+	require.Empty(t, empty)
+	var invalid *store.ErrInvalidInput
+	tooMany := make([]model.UserID, store.MaximumUserDisplayNames+1)
+	for index := range tooMany {
+		tooMany[index] = model.NewUserID()
+	}
+	for name, test := range map[string]struct {
+		ids        []model.UserID
+		visibility store.UserVisibilityScope
+	}{
+		"invalid User":    {[]model.UserID{"invalid"}, store.UserVisibilityScope{InstitutionWide: true}},
+		"too many Users":  {tooMany, store.UserVisibilityScope{InstitutionWide: true}},
+		"invalid root":    {[]model.UserID{member.ID}, store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{"invalid"}, ActiveAt: model.NowUTC()}},
+		"scoped no clock": {[]model.UserID{member.ID}, store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{root.ID}}},
+	} {
+		_, err = ss.User().ListVisibleDisplayNames(ctx, test.ids, test.visibility)
+		require.ErrorAs(t, err, &invalid, name)
+	}
 }
 
 func testUserStoreUniqueness(t *testing.T, ss store.Store) {

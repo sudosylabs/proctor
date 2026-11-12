@@ -36,6 +36,7 @@ func TestBaselineHotPathIndexes(t *testing.T) {
 		"file_revisions_file_entry_id_idx":                             "(file_entry_id)",
 		"external_identities_user_id_provider_idx":                     "(user_id, provider) WHERE (archived_at IS NULL)",
 		"class_members_user_id_academic_period_id_idx":                 "(user_id, academic_period_id) WHERE (archived_at IS NULL)",
+		"role_bindings_role_id_created_at_idx":                         "(role_id, created_at DESC, id DESC) WHERE (archived_at IS NULL)",
 		"exam_submission_manifest_entries_workspace_entry_idx":         "(workspace_id, entry_id, workspace_object_id)",
 		"exam_attempt_workspace_objects_retired_by_audit_event_id_idx": "(retired_by_audit_event_id) WHERE (retired_by_audit_event_id IS NOT NULL)",
 		"browser_authentication_transactions_invitation_id_idx":        "(invitation_id) WHERE (invitation_id IS NOT NULL)",

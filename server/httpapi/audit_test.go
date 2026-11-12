@@ -124,24 +124,27 @@ func TestSelfAuditEventEnumMatchesTheCatalogue(t *testing.T) {
 }
 
 // TestAuditQueryReadsSubjectStatusAndRepeatedActions pins the listing
-// filters: subject_user_id and status are single, action repeats, and the
-// application owns their vocabularies.
+// filters: subject_user_id, status and kind are single, action repeats, and
+// the application owns their vocabularies.
 func TestAuditQueryReadsSubjectStatusAndRepeatedActions(t *testing.T) {
 	t.Parallel()
 
 	subject := model.NewUserID()
 	query, _, err := auditQueryFromRequest(httptest.NewRequestWithContext(t.Context(), "GET",
-		"/api/v1/audits?subject_user_id="+subject.String()+"&status=fail&action=user.manage&action=user.view", nil))
+		"/api/v1/audits?subject_user_id="+subject.String()+"&status=fail&action=user.manage&action=user.view&kind=change", nil))
 	require.NoError(t, err)
 	require.Equal(t, subject, query.SubjectUserID)
 	require.Equal(t, model.AuditStatusFail, query.Status)
 	require.Equal(t, []string{"user.manage", "user.view"}, query.Actions)
+	require.Equal(t, model.AuditKindChange, query.Kind)
 
 	for _, raw := range []string{
 		"subject_user_id=",
 		"subject_user_id=" + subject.String() + "&subject_user_id=" + subject.String(),
 		"status=fail&status=success",
 		"status=",
+		"kind=read&kind=change",
+		"kind=",
 	} {
 		_, _, err = auditQueryFromRequest(httptest.NewRequestWithContext(t.Context(), "GET", "/api/v1/audits?"+raw, nil))
 		require.Error(t, err, raw)

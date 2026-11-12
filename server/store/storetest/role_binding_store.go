@@ -28,6 +28,8 @@ import (
 func TestRoleBindingStore(t *testing.T, ss store.Store) {
 	t.Run("ActiveIntervalPrecision", func(t *testing.T) { testRoleBindingActiveIntervalPrecision(t, ss) })
 	t.Run("VisibleSummariesByUsers", func(t *testing.T) { testRoleBindingVisibleSummariesByUsers(t, ss) })
+	t.Run("CurrentByRoles", func(t *testing.T) { testRoleBindingCurrentByRoles(t, ss) })
+	t.Run("HoldersByRoles", func(t *testing.T) { testRoleBindingHoldersByRoles(t, ss) })
 	t.Run("AuditedMutations", func(t *testing.T) {
 		ctx := context.Background()
 		institution := saveInstitution(t, ctx, ss)

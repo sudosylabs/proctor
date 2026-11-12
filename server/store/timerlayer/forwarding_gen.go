@@ -2361,6 +2361,12 @@ func (s *timedUserStore) ListDisplayNames(arg0 context.Context, arg1 []model.Use
 	})
 }
 
+func (s *timedUserStore) ListVisibleDisplayNames(arg0 context.Context, arg1 []model.UserID, arg2 store.UserVisibilityScope) ([]store.UserDisplayName, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateUser, methodListVisibleDisplayNames), func(callCtx context.Context) ([]store.UserDisplayName, error) {
+		return s.next.ListVisibleDisplayNames(callCtx, arg1, arg2)
+	})
+}
+
 func (s *timedUserSettingsStore) Get(arg0 context.Context, arg1 model.UserID) (*model.UserSettingsDocument, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateUserSettings, methodGet), func(callCtx context.Context) (*model.UserSettingsDocument, error) {
 		return s.next.Get(callCtx, arg1)
@@ -3714,6 +3720,24 @@ func (s *timedRoleBindingStore) ListVisibleSummariesByUsers(arg0 context.Context
 func (s *timedRoleBindingStore) ListByScope(arg0 context.Context, arg1 model.RoleScopeType, arg2 string) ([]*model.RoleBinding, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRoleBinding, methodListByScope), func(callCtx context.Context) ([]*model.RoleBinding, error) {
 		return s.next.ListByScope(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedRoleBindingStore) ListCurrentByRoles(arg0 context.Context, arg1 store.RoleBindingRoleListOptions) ([]*model.RoleBinding, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRoleBinding, methodListCurrentByRoles), func(callCtx context.Context) ([]*model.RoleBinding, error) {
+		return s.next.ListCurrentByRoles(callCtx, arg1)
+	})
+}
+
+func (s *timedRoleBindingStore) CountCurrentByRoles(arg0 context.Context, arg1 store.RoleBindingRoleListOptions, arg2 int) (int, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRoleBinding, methodCountCurrentByRoles), func(callCtx context.Context) (int, error) {
+		return s.next.CountCurrentByRoles(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedRoleBindingStore) CountHoldersByRoles(arg0 context.Context, arg1 store.RoleHolderCountOptions) ([]store.RoleHolderCount, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRoleBinding, methodCountHoldersByRoles), func(callCtx context.Context) ([]store.RoleHolderCount, error) {
+		return s.next.CountHoldersByRoles(callCtx, arg1)
 	})
 }
 

@@ -341,7 +341,7 @@ func (s SQLAuditStore) Count(ctx context.Context, options store.AuditListOptions
 
 // filterAuditList validates and applies every List filter but the keyset:
 // the visibility (operator, academic Institution-wide, or academic subtrees
-// limited to the allowed actions), actor, action, resource, and creation
+// limited to the allowed actions), actor, action, kind, resource, and creation
 // range. List and Count share it so a total always counts the listed rows.
 func filterAuditList(query sq.SelectBuilder, options store.AuditListOptions) (sq.SelectBuilder, error) {
 	if len(options.Visibility.AcademicUnitRootIDs) > 256 ||
@@ -428,6 +428,9 @@ func filterAuditList(query sq.SelectBuilder, options store.AuditListOptions) (sq
 	if len(options.Actions) > 0 {
 		query = query.Where("audit_events.action = ANY(?)", pq.Array(options.Actions))
 	}
+	if options.Kind != "" {
+		query = query.Where("audit_events.action = ANY(?)", pq.Array(model.AuditActionsOfKind(options.Kind)))
+	}
 	if options.Status != "" {
 		query = query.Where(sq.Eq{"audit_events.status": options.Status})
 	}
@@ -449,8 +452,8 @@ func filterAuditList(query sq.SelectBuilder, options store.AuditListOptions) (sq
 	return query, nil
 }
 
-// validAuditListFilters rejects a non-canonical subject, an unknown status,
-// and more than MaximumAuditListActions or blank actions.
+// validAuditListFilters rejects a non-canonical subject, an unknown status
+// or kind, and more than MaximumAuditListActions or blank actions.
 func validAuditListFilters(options store.AuditListOptions) error {
 	if options.SubjectUserID != "" && !options.SubjectUserID.IsValid() {
 		return store.NewErrInvalidInput("audit_event", "subject_user_id", nil)
@@ -459,6 +462,9 @@ func validAuditListFilters(options store.AuditListOptions) error {
 	case "", model.AuditStatusAttempt, model.AuditStatusSuccess, model.AuditStatusFail:
 	default:
 		return store.NewErrInvalidInput("audit_event", "status", options.Status)
+	}
+	if options.Kind != "" && !options.Kind.IsValid() {
+		return store.NewErrInvalidInput("audit_event", "kind", options.Kind)
 	}
 	if len(options.Actions) > store.MaximumAuditListActions {
 		return store.NewErrInvalidInput("audit_event", "actions", len(options.Actions))

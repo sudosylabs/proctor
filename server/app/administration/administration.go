@@ -54,6 +54,9 @@ type Authorizer interface {
 	// GrantedUserVisibility reports the Users the caller can see, without a
 	// decision; an audit page names only those.
 	GrantedUserVisibility(context.Context, model.Principal) (store.UserVisibilityScope, error)
+	// CanViewRoles reports, without recording a decision, whether the caller
+	// holds Institution-wide role.view, which is how a caller sees Roles.
+	CanViewRoles(context.Context, invocation.Invocation) (bool, error)
 	RecordAuthorizationDecision(
 		context.Context,
 		model.Principal,

@@ -113,19 +113,22 @@ func (a *sessionAdministrationHTTPApplication) RevokeUserSessions(_ context.Cont
 
 type roleHTTPApplication struct {
 	RoleApplication
-	list          []*model.Role
+	page          paging.Page[administration.RoleResult]
+	listQuery     administration.ListRolesQuery
 	result        *model.Role
+	holders       *administration.RoleHolders
 	createCommand administration.CreateRoleCommand
 	updateCommand administration.UpdateRoleCommand
 	archiveID     model.RoleID
 }
 
-func (a *roleHTTPApplication) ListRoles(context.Context, invocation.Invocation) ([]*model.Role, error) {
-	return a.list, nil
+func (a *roleHTTPApplication) ListRoles(_ context.Context, _ invocation.Invocation, query administration.ListRolesQuery) (paging.Page[administration.RoleResult], error) {
+	a.listQuery = query
+	return a.page, nil
 }
 
-func (a *roleHTTPApplication) GetRole(context.Context, invocation.Invocation, model.RoleID) (*model.Role, error) {
-	return a.result, nil
+func (a *roleHTTPApplication) GetRole(context.Context, invocation.Invocation, model.RoleID) (administration.RoleResult, error) {
+	return administration.RoleResult{Role: a.result, Holders: a.holders}, nil
 }
 
 func (a *roleHTTPApplication) CreateRole(_ context.Context, _ invocation.Invocation, command administration.CreateRoleCommand) (*model.Role, error) {

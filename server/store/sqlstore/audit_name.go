@@ -85,16 +85,9 @@ func (s SQLAuditStore) listAuditUserNames(
 	if len(ids) == 0 {
 		return nil
 	}
-	query, err := filterUserListVisibility(sq.Select(
-		"users.id",
-		"users.username AS name",
-		"COALESCE(NULLIF(users.display_name, ''), users.username) AS display_name",
-	).From("users").Where("users.id = ANY(?)", pq.Array(ids)).Where(sq.Eq{"users.archived_at": nil}), visibility)
+	query, err := visibleUserNamesQuery(ids, visibility)
 	if err != nil {
 		return err
-	}
-	if !visibility.InstitutionWide {
-		query = query.Where(sq.Eq{"users.disabled_at": nil})
 	}
 	return s.selectAuditNames(ctx, query, "user", func(row auditNameRow) error {
 		id, err := parsePersistedID("user", "id", row.ID, model.ParseUserID)

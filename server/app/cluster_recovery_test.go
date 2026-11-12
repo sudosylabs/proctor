@@ -307,6 +307,15 @@ func (recoveryRoleBindingStore) ListVisibleSummariesByUsers(context.Context, sto
 func (recoveryRoleBindingStore) ListByScope(context.Context, model.RoleScopeType, string) ([]*model.RoleBinding, error) {
 	return nil, errors.New("unused")
 }
+func (recoveryRoleBindingStore) ListCurrentByRoles(context.Context, store.RoleBindingRoleListOptions) ([]*model.RoleBinding, error) {
+	return nil, errors.New("unused")
+}
+func (recoveryRoleBindingStore) CountCurrentByRoles(context.Context, store.RoleBindingRoleListOptions, int) (int, error) {
+	return 0, errors.New("unused")
+}
+func (recoveryRoleBindingStore) CountHoldersByRoles(context.Context, store.RoleHolderCountOptions) ([]store.RoleHolderCount, error) {
+	return nil, errors.New("unused")
+}
 func (recoveryRoleBindingStore) End(context.Context, *store.RoleBindingEnd) (*model.RoleBinding, error) {
 	return nil, errors.New("unused")
 }

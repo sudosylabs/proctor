@@ -92,6 +92,9 @@ type mailDeliveryResponse struct {
 	AcceptedAt         string                  `json:"accepted_at,omitempty"`
 	FailedAt           string                  `json:"failed_at,omitempty"`
 	PublicFailureCode  string                  `json:"public_failure_code,omitempty"`
+	// RecipientDisplayName names the User target_user_id identifies, only on
+	// reads and only while the viewer can see that User.
+	RecipientDisplayName string `json:"recipient_display_name,omitempty"`
 }
 
 // mailDeliveryListResponse is the collection envelope; the first page also
@@ -637,6 +640,8 @@ func mailResponse(view mail.DeliveryView) mailDeliveryResponse {
 		MessageID:          view.MessageID,
 		AttemptCount:       view.AttemptCount,
 		PublicFailureCode:  view.PublicFailureCode,
+
+		RecipientDisplayName: view.RecipientDisplayName,
 	}
 	if view.AcceptedAt.Valid {
 		result.AcceptedAt = view.AcceptedAt.FormatRFC3339()

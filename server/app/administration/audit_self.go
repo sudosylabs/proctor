@@ -59,7 +59,9 @@ type ListSelfAuditEventsQuery struct {
 // to. The network identity is present only for the caller's own actions.
 // ResourceName names that related Academic Unit or Class when it is not
 // archived, and Role names the Role a Role Binding change granted the caller
-// or ended for them. No other person is ever named.
+// or ended for them. SubjectName names the User the caller acted on, only
+// while the caller can see that User through the User directory's
+// visibility; the actor of an event about the caller is never named.
 type SelfAuditEvent struct {
 	ID         model.AuditEventID
 	CreatedAt  time.Time
@@ -75,6 +77,16 @@ type SelfAuditEvent struct {
 
 	ResourceName string
 	Role         store.AuditRoleName
+	SubjectName  string
+}
+
+// SelfAuditRun is a stretch of at least two consecutive items on one page
+// that share an actor kind, event, recorded operation, status, and relation,
+// so a client can show them as one line. Start indexes the page's items. A
+// run never reaches past the page, so the next page may continue it.
+type SelfAuditRun struct {
+	Start  int
+	Length int
 }
 
 // SelfAuditPage is one page of the caller's history. The first page, read
@@ -83,6 +95,7 @@ type SelfAuditEvent struct {
 // set. Later pages leave Counted false and the client keeps the first total.
 type SelfAuditPage struct {
 	paging.Page[SelfAuditEvent]
+	Runs              []SelfAuditRun
 	Counted           bool
 	Total             int
 	TotalIsLowerBound bool
@@ -146,7 +159,8 @@ func (s *Service) ListSelfAuditEvents(
 	}
 
 	page := SelfAuditPage{Page: paging.New(items, query.Limit), Counted: counted}
-	if err = s.nameSelfAuditEvents(ctx, page.Items, roles); err != nil {
+	page.Runs = selfAuditRuns(page.Items, entries)
+	if err = s.nameSelfAuditEvents(ctx, principal, page.Items, entries, roles); err != nil {
 		return SelfAuditPage{}, err
 	}
 	if !counted {
@@ -249,12 +263,52 @@ func selfAuditRole(caller model.UserID, entry *store.AuditSelfEntry) model.RoleI
 	return entry.RoleID
 }
 
+// selfAuditRuns finds the runs among the page's items; entries are the
+// entries they were projected from, in the same order, with the probe row
+// past the page left out by the items' length. An event that does not
+// repeat never forms a run.
+func selfAuditRuns(items []SelfAuditEvent, entries []*store.AuditSelfEntry) []SelfAuditRun {
+	var runs []SelfAuditRun
+	for start := 0; start < len(items); {
+		end := start + 1
+		for end < len(items) && sameSelfAuditRun(items[start], entries[start], items[end], entries[end]) {
+			end++
+		}
+		if end-start >= 2 && items[start].Event.Repeats() {
+			runs = append(runs, SelfAuditRun{Start: start, Length: end - start})
+		}
+		start = end
+	}
+	return runs
+}
+
+// sameSelfAuditRun reports whether two items read as the same line: the
+// relation decides whether the line is about the caller or by them, and the
+// operation separates facts one event name covers, such as revoking one's
+// own Session or another User's.
+func sameSelfAuditRun(left SelfAuditEvent, leftEntry *store.AuditSelfEntry, right SelfAuditEvent, rightEntry *store.AuditSelfEntry) bool {
+	return left.ActorKind == right.ActorKind &&
+		left.Event == right.Event &&
+		left.Status == right.Status &&
+		left.Relation == right.Relation &&
+		leftEntry.Operation == rightEntry.Operation
+}
+
 // nameSelfAuditEvents reads, in one call, the current names of the related
-// Academic Units and Classes the projection kept and of the Roles bound to
-// the caller. roles holds each projected entry's Role, the page's items
-// first. The projection has already applied the related-resource rule,
-// so the read applies no further visibility; it never names a person.
-func (s *Service) nameSelfAuditEvents(ctx context.Context, items []SelfAuditEvent, roles []model.RoleID) error {
+// Academic Units and Classes the projection kept, of the Roles bound to the
+// caller, and of the Users the caller acted on. entries and roles hold each
+// projected entry's source and Role, the page's items first. The projection
+// has already applied the related-resource rule, so Academic Units, Classes
+// and Roles need no further visibility; a User is named only inside the
+// caller's current User visibility, as on the institution audit list, and
+// the person who acted on the caller is never named.
+func (s *Service) nameSelfAuditEvents(
+	ctx context.Context,
+	principal model.Principal,
+	items []SelfAuditEvent,
+	entries []*store.AuditSelfEntry,
+	roles []model.RoleID,
+) error {
 	options := store.AuditNameOptions{
 		AcademicUnitInstitutionWide: true,
 		ClassVisibility:             store.ClassVisibilityScope{InstitutionWide: true},
@@ -270,9 +324,19 @@ func (s *Service) nameSelfAuditEvents(ctx context.Context, items []SelfAuditEven
 		if !roles[index].IsZero() {
 			options.RoleIDs = append(options.RoleIDs, roles[index])
 		}
+		if subject := selfAuditSubject(item, entries[index]); !subject.IsZero() {
+			options.UserIDs = appendAuditName(options.UserIDs, subject)
+		}
 	}
-	if len(options.AcademicUnitIDs)+len(options.ClassIDs)+len(options.RoleIDs) == 0 {
+	if len(options.AcademicUnitIDs)+len(options.ClassIDs)+len(options.RoleIDs)+len(options.UserIDs) == 0 {
 		return nil
+	}
+	if len(options.UserIDs) > 0 {
+		visibility, err := s.authorizer.GrantedUserVisibility(ctx, principal)
+		if err != nil {
+			return err
+		}
+		options.UserVisibility = visibility
 	}
 
 	names, err := s.audits.ListNames(ctx, options)
@@ -288,6 +352,18 @@ func (s *Service) nameSelfAuditEvents(ctx context.Context, items []SelfAuditEven
 			item.ResourceName = names.Classes[model.ClassID(item.Resource.ID)]
 		}
 		item.Role = names.Roles[roles[index]]
+		if subject := selfAuditSubject(*item, entries[index]); !subject.IsZero() {
+			item.SubjectName = names.Users[subject]
+		}
 	}
 	return nil
+}
+
+// selfAuditSubject is the other User an event the caller performed was
+// about, or zero for an event about the caller or about no User.
+func selfAuditSubject(item SelfAuditEvent, entry *store.AuditSelfEntry) model.UserID {
+	if item.Relation != store.AuditSelfRelationActor {
+		return ""
+	}
+	return entry.SubjectUserID
 }

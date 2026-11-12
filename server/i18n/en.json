@@ -1053,7 +1053,7 @@
   },
   {
     "id": "audit.self.event.academic_unit.joined.other",
-    "translation": "You added a user to {{.Resource}}"
+    "translation": "You added {{.Subject}} to {{.Resource}}"
   },
   {
     "id": "audit.self.event.academic_unit.left",
@@ -1061,7 +1061,7 @@
   },
   {
     "id": "audit.self.event.academic_unit.left.other",
-    "translation": "You removed a user from {{.Resource}}"
+    "translation": "You removed {{.Subject}} from {{.Resource}}"
   },
   {
     "id": "audit.self.event.account.disabled",
@@ -1069,7 +1069,7 @@
   },
   {
     "id": "audit.self.event.account.disabled.other",
-    "translation": "You disabled a user's account"
+    "translation": "You disabled the account of {{.Subject}}"
   },
   {
     "id": "audit.self.event.account.enabled",
@@ -1077,7 +1077,7 @@
   },
   {
     "id": "audit.self.event.account.enabled.other",
-    "translation": "You enabled a user's account"
+    "translation": "You enabled the account of {{.Subject}}"
   },
   {
     "id": "audit.self.event.account.recovered_by_administrator",
@@ -1085,7 +1085,7 @@
   },
   {
     "id": "audit.self.event.account.recovered_by_administrator.other",
-    "translation": "You recovered administrator access to a user's account"
+    "translation": "You recovered administrator access to the account of {{.Subject}}"
   },
   {
     "id": "audit.self.event.affiliation.ended",
@@ -1093,7 +1093,7 @@
   },
   {
     "id": "audit.self.event.affiliation.ended.other",
-    "translation": "You ended one of a user's affiliations"
+    "translation": "You ended an affiliation of {{.Subject}}"
   },
   {
     "id": "audit.self.event.affiliation.started",
@@ -1101,7 +1101,7 @@
   },
   {
     "id": "audit.self.event.affiliation.started.other",
-    "translation": "You added an affiliation to a user's account"
+    "translation": "You added an affiliation for {{.Subject}}"
   },
   {
     "id": "audit.self.event.class.enrolled",
@@ -1109,7 +1109,7 @@
   },
   {
     "id": "audit.self.event.class.enrolled.other",
-    "translation": "You enrolled a user in {{.Resource}}"
+    "translation": "You enrolled {{.Subject}} in {{.Resource}}"
   },
   {
     "id": "audit.self.event.class.transferred_in",
@@ -1117,7 +1117,7 @@
   },
   {
     "id": "audit.self.event.class.transferred_in.other",
-    "translation": "You transferred a user into {{.Resource}}"
+    "translation": "You transferred {{.Subject}} into {{.Resource}}"
   },
   {
     "id": "audit.self.event.class.transferred_out",
@@ -1125,7 +1125,7 @@
   },
   {
     "id": "audit.self.event.class.transferred_out.other",
-    "translation": "You transferred a user out of {{.Resource}}"
+    "translation": "You transferred {{.Subject}} out of {{.Resource}}"
   },
   {
     "id": "audit.self.event.class.unenrolled",
@@ -1133,7 +1133,7 @@
   },
   {
     "id": "audit.self.event.class.unenrolled.other",
-    "translation": "You removed a user from {{.Resource}}"
+    "translation": "You removed {{.Subject}} from {{.Resource}}"
   },
   {
     "id": "audit.self.event.desktop.registration_renamed",
@@ -1141,7 +1141,7 @@
   },
   {
     "id": "audit.self.event.desktop.registration_renamed.other",
-    "translation": "You renamed a user's desktop device"
+    "translation": "You renamed a desktop device of {{.Subject}}"
   },
   {
     "id": "audit.self.event.desktop.registration_revoked",
@@ -1149,7 +1149,7 @@
   },
   {
     "id": "audit.self.event.desktop.registration_revoked.other",
-    "translation": "You removed a user's desktop device"
+    "translation": "You removed a desktop device of {{.Subject}}"
   },
   {
     "id": "audit.self.event.desktop.signed_in",
@@ -1165,7 +1165,7 @@
   },
   {
     "id": "audit.self.event.email.change_undone.other",
-    "translation": "You undid a change to a user's email address"
+    "translation": "You undid a change to the email address of {{.Subject}}"
   },
   {
     "id": "audit.self.event.email.changed",
@@ -1173,7 +1173,7 @@
   },
   {
     "id": "audit.self.event.email.changed.other",
-    "translation": "You changed a user's email address"
+    "translation": "You changed the email address of {{.Subject}}"
   },
   {
     "id": "audit.self.event.email.verified",
@@ -1181,7 +1181,7 @@
   },
   {
     "id": "audit.self.event.email.verified.other",
-    "translation": "You verified a user's email address"
+    "translation": "You verified the email address of {{.Subject}}"
   },
   {
     "id": "audit.self.event.invitation.accepted",
@@ -1197,7 +1197,7 @@
   },
   {
     "id": "audit.self.event.mfa.disabled.other",
-    "translation": "You turned off two-step verification for a user"
+    "translation": "You turned off two-step verification for {{.Subject}}"
   },
   {
     "id": "audit.self.event.mfa.enabled",
@@ -1221,7 +1221,7 @@
   },
   {
     "id": "audit.self.event.mfa.reset_by_administrator.other",
-    "translation": "You reset two-step verification for a user"
+    "translation": "You reset two-step verification for {{.Subject}}"
   },
   {
     "id": "audit.self.event.mfa.setup_started",
@@ -1237,7 +1237,7 @@
   },
   {
     "id": "audit.self.event.password.changed.other",
-    "translation": "You changed a user's password"
+    "translation": "You changed the password of {{.Subject}}"
   },
   {
     "id": "audit.self.event.password.enrolled",
@@ -1245,7 +1245,7 @@
   },
   {
     "id": "audit.self.event.password.enrolled.other",
-    "translation": "You added a password to a user's account"
+    "translation": "You added a password for {{.Subject}}"
   },
   {
     "id": "audit.self.event.password.removed",
@@ -1253,7 +1253,7 @@
   },
   {
     "id": "audit.self.event.password.removed.other",
-    "translation": "You removed the password from a user's account"
+    "translation": "You removed the password of {{.Subject}}"
   },
   {
     "id": "audit.self.event.password.reset",
@@ -1261,7 +1261,7 @@
   },
   {
     "id": "audit.self.event.password.reset.other",
-    "translation": "You reset a user's password"
+    "translation": "You reset the password of {{.Subject}}"
   },
   {
     "id": "audit.self.event.personal_access_token.created",
@@ -1301,7 +1301,7 @@
   },
   {
     "id": "audit.self.event.profile.changed.other",
-    "translation": "You changed a user's profile"
+    "translation": "You changed the profile of {{.Subject}}"
   },
   {
     "id": "audit.self.event.profile_picture.changed",
@@ -1309,7 +1309,7 @@
   },
   {
     "id": "audit.self.event.profile_picture.changed.other",
-    "translation": "You changed a user's profile picture"
+    "translation": "You changed the profile picture of {{.Subject}}"
   },
   {
     "id": "audit.self.event.profile_picture.removed",
@@ -1317,7 +1317,7 @@
   },
   {
     "id": "audit.self.event.profile_picture.removed.other",
-    "translation": "You removed a user's profile picture"
+    "translation": "You removed the profile picture of {{.Subject}}"
   },
   {
     "id": "audit.self.event.provider.unlinked",
@@ -1325,7 +1325,7 @@
   },
   {
     "id": "audit.self.event.provider.unlinked.other",
-    "translation": "You unlinked a sign-in provider from a user's account"
+    "translation": "You unlinked a sign-in provider from {{.Subject}}"
   },
   {
     "id": "audit.self.event.role.ended",
@@ -1333,7 +1333,7 @@
   },
   {
     "id": "audit.self.event.role.ended.other",
-    "translation": "You ended a user's role in {{.Resource}}"
+    "translation": "You ended a role of {{.Subject}} in {{.Resource}}"
   },
   {
     "id": "audit.self.event.role.granted",
@@ -1341,7 +1341,7 @@
   },
   {
     "id": "audit.self.event.role.granted.other",
-    "translation": "You gave a user a role in {{.Resource}}"
+    "translation": "You gave {{.Subject}} a role in {{.Resource}}"
   },
   {
     "id": "audit.self.event.session.renamed",
@@ -1349,7 +1349,7 @@
   },
   {
     "id": "audit.self.event.session.renamed.other",
-    "translation": "You renamed one of a user's sessions"
+    "translation": "You renamed a session of {{.Subject}}"
   },
   {
     "id": "audit.self.event.session.revoked",
@@ -1357,7 +1357,7 @@
   },
   {
     "id": "audit.self.event.session.revoked.other",
-    "translation": "You signed out one of a user's sessions"
+    "translation": "You signed out a session of {{.Subject}}"
   },
   {
     "id": "audit.self.event.sessions.revoked_all",
@@ -1365,7 +1365,7 @@
   },
   {
     "id": "audit.self.event.sessions.revoked_all.other",
-    "translation": "You signed out all of a user's sessions"
+    "translation": "You signed out all sessions of {{.Subject}}"
   },
   {
     "id": "audit.self.event.sessions.revoked_others",
@@ -1373,7 +1373,7 @@
   },
   {
     "id": "audit.self.event.sessions.revoked_others.other",
-    "translation": "You signed out a user's other sessions"
+    "translation": "You signed out the other sessions of {{.Subject}}"
   },
   {
     "id": "audit.self.event.sign_in.failed",
@@ -1406,6 +1406,566 @@
   {
     "id": "audit.self.role.unnamed",
     "translation": "a role"
+  },
+  {
+    "id": "audit.self.run.academic_unit.joined",
+    "translation": {
+      "one": "{{.Actor}} added you to {{.Count}} academic unit",
+      "other": "{{.Actor}} added you to {{.Count}} academic units"
+    }
+  },
+  {
+    "id": "audit.self.run.academic_unit.joined.other",
+    "translation": {
+      "one": "You added {{.Count}} member to academic units",
+      "other": "You added {{.Count}} members to academic units"
+    }
+  },
+  {
+    "id": "audit.self.run.academic_unit.left",
+    "translation": {
+      "one": "{{.Actor}} removed you from {{.Count}} academic unit",
+      "other": "{{.Actor}} removed you from {{.Count}} academic units"
+    }
+  },
+  {
+    "id": "audit.self.run.academic_unit.left.other",
+    "translation": {
+      "one": "You removed {{.Count}} member from academic units",
+      "other": "You removed {{.Count}} members from academic units"
+    }
+  },
+  {
+    "id": "audit.self.run.account.disabled",
+    "translation": {
+      "one": "{{.Actor}} disabled your account {{.Count}} time",
+      "other": "{{.Actor}} disabled your account {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.account.disabled.other",
+    "translation": {
+      "one": "You disabled {{.Count}} account",
+      "other": "You disabled {{.Count}} accounts"
+    }
+  },
+  {
+    "id": "audit.self.run.account.enabled",
+    "translation": {
+      "one": "{{.Actor}} enabled your account {{.Count}} time",
+      "other": "{{.Actor}} enabled your account {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.account.enabled.other",
+    "translation": {
+      "one": "You enabled {{.Count}} account",
+      "other": "You enabled {{.Count}} accounts"
+    }
+  },
+  {
+    "id": "audit.self.run.affiliation.ended",
+    "translation": {
+      "one": "{{.Actor}} ended {{.Count}} of your affiliations",
+      "other": "{{.Actor}} ended {{.Count}} of your affiliations"
+    }
+  },
+  {
+    "id": "audit.self.run.affiliation.ended.other",
+    "translation": {
+      "one": "You ended {{.Count}} affiliation",
+      "other": "You ended {{.Count}} affiliations"
+    }
+  },
+  {
+    "id": "audit.self.run.affiliation.started",
+    "translation": {
+      "one": "{{.Actor}} added {{.Count}} affiliation to your account",
+      "other": "{{.Actor}} added {{.Count}} affiliations to your account"
+    }
+  },
+  {
+    "id": "audit.self.run.affiliation.started.other",
+    "translation": {
+      "one": "You added {{.Count}} affiliation",
+      "other": "You added {{.Count}} affiliations"
+    }
+  },
+  {
+    "id": "audit.self.run.class.enrolled",
+    "translation": {
+      "one": "{{.Actor}} enrolled you in {{.Count}} class",
+      "other": "{{.Actor}} enrolled you in {{.Count}} classes"
+    }
+  },
+  {
+    "id": "audit.self.run.class.enrolled.other",
+    "translation": {
+      "one": "You made {{.Count}} class enrollment",
+      "other": "You made {{.Count}} class enrollments"
+    }
+  },
+  {
+    "id": "audit.self.run.class.transferred_in",
+    "translation": {
+      "one": "{{.Actor}} transferred you into {{.Count}} class",
+      "other": "{{.Actor}} transferred you into {{.Count}} classes"
+    }
+  },
+  {
+    "id": "audit.self.run.class.transferred_in.other",
+    "translation": {
+      "one": "You made {{.Count}} transfer into a class",
+      "other": "You made {{.Count}} transfers into classes"
+    }
+  },
+  {
+    "id": "audit.self.run.class.transferred_out",
+    "translation": {
+      "one": "{{.Actor}} transferred you out of {{.Count}} class",
+      "other": "{{.Actor}} transferred you out of {{.Count}} classes"
+    }
+  },
+  {
+    "id": "audit.self.run.class.transferred_out.other",
+    "translation": {
+      "one": "You made {{.Count}} transfer out of a class",
+      "other": "You made {{.Count}} transfers out of classes"
+    }
+  },
+  {
+    "id": "audit.self.run.class.unenrolled",
+    "translation": {
+      "one": "{{.Actor}} removed you from {{.Count}} class",
+      "other": "{{.Actor}} removed you from {{.Count}} classes"
+    }
+  },
+  {
+    "id": "audit.self.run.class.unenrolled.other",
+    "translation": {
+      "one": "You removed {{.Count}} member from classes",
+      "other": "You removed {{.Count}} members from classes"
+    }
+  },
+  {
+    "id": "audit.self.run.desktop.registration_renamed",
+    "translation": {
+      "one": "{{.Actor}} renamed your desktop devices {{.Count}} time",
+      "other": "{{.Actor}} renamed your desktop devices {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.desktop.registration_renamed.other",
+    "translation": {
+      "one": "You renamed {{.Count}} desktop device",
+      "other": "You renamed {{.Count}} desktop devices"
+    }
+  },
+  {
+    "id": "audit.self.run.desktop.registration_revoked",
+    "translation": {
+      "one": "{{.Actor}} removed {{.Count}} of your desktop devices",
+      "other": "{{.Actor}} removed {{.Count}} of your desktop devices"
+    }
+  },
+  {
+    "id": "audit.self.run.desktop.registration_revoked.other",
+    "translation": {
+      "one": "You removed {{.Count}} desktop device",
+      "other": "You removed {{.Count}} desktop devices"
+    }
+  },
+  {
+    "id": "audit.self.run.desktop.signed_in",
+    "translation": {
+      "one": "You signed in on the desktop app {{.Count}} time",
+      "other": "You signed in on the desktop app {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.desktop.signed_in.other",
+    "translation": {
+      "one": "You signed in on the desktop app {{.Count}} time",
+      "other": "You signed in on the desktop app {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.email.changed",
+    "translation": {
+      "one": "{{.Actor}} changed your email address {{.Count}} time",
+      "other": "{{.Actor}} changed your email address {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.email.changed.other",
+    "translation": {
+      "one": "You changed {{.Count}} email address",
+      "other": "You changed {{.Count}} email addresses"
+    }
+  },
+  {
+    "id": "audit.self.run.email.verified",
+    "translation": {
+      "one": "Your email address was verified {{.Count}} time",
+      "other": "Your email address was verified {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.email.verified.other",
+    "translation": {
+      "one": "You verified {{.Count}} email address",
+      "other": "You verified {{.Count}} email addresses"
+    }
+  },
+  {
+    "id": "audit.self.run.invitation.accepted",
+    "translation": {
+      "one": "You accepted {{.Count}} invitation",
+      "other": "You accepted {{.Count}} invitations"
+    }
+  },
+  {
+    "id": "audit.self.run.invitation.accepted.other",
+    "translation": {
+      "one": "You accepted {{.Count}} invitation",
+      "other": "You accepted {{.Count}} invitations"
+    }
+  },
+  {
+    "id": "audit.self.run.mfa.disabled",
+    "translation": {
+      "one": "{{.Actor}} turned off two-step verification for your account {{.Count}} time",
+      "other": "{{.Actor}} turned off two-step verification for your account {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.mfa.disabled.other",
+    "translation": {
+      "one": "You turned off two-step verification for {{.Count}} account",
+      "other": "You turned off two-step verification for {{.Count}} accounts"
+    }
+  },
+  {
+    "id": "audit.self.run.mfa.recovery_codes_regenerated",
+    "translation": {
+      "one": "{{.Actor}} created new recovery codes for your account {{.Count}} time",
+      "other": "{{.Actor}} created new recovery codes for your account {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.mfa.recovery_codes_regenerated.other",
+    "translation": {
+      "one": "You created new recovery codes {{.Count}} time",
+      "other": "You created new recovery codes {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.mfa.reset_by_administrator",
+    "translation": {
+      "one": "{{.Actor}} reset two-step verification for your account {{.Count}} time",
+      "other": "{{.Actor}} reset two-step verification for your account {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.mfa.reset_by_administrator.other",
+    "translation": {
+      "one": "You reset two-step verification for {{.Count}} account",
+      "other": "You reset two-step verification for {{.Count}} accounts"
+    }
+  },
+  {
+    "id": "audit.self.run.mfa.setup_started",
+    "translation": {
+      "one": "{{.Actor}} started setting up two-step verification for your account {{.Count}} time",
+      "other": "{{.Actor}} started setting up two-step verification for your account {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.mfa.setup_started.other",
+    "translation": {
+      "one": "You started setting up two-step verification {{.Count}} time",
+      "other": "You started setting up two-step verification {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.password.changed",
+    "translation": {
+      "one": "{{.Actor}} changed your password {{.Count}} time",
+      "other": "{{.Actor}} changed your password {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.password.changed.other",
+    "translation": {
+      "one": "You changed {{.Count}} password",
+      "other": "You changed {{.Count}} passwords"
+    }
+  },
+  {
+    "id": "audit.self.run.password.enrolled",
+    "translation": {
+      "one": "{{.Actor}} added a password to your account {{.Count}} time",
+      "other": "{{.Actor}} added a password to your account {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.password.enrolled.other",
+    "translation": {
+      "one": "You added a password to {{.Count}} account",
+      "other": "You added a password to {{.Count}} accounts"
+    }
+  },
+  {
+    "id": "audit.self.run.password.removed",
+    "translation": {
+      "one": "{{.Actor}} removed the password from your account {{.Count}} time",
+      "other": "{{.Actor}} removed the password from your account {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.password.removed.other",
+    "translation": {
+      "one": "You removed the password from {{.Count}} account",
+      "other": "You removed the password from {{.Count}} accounts"
+    }
+  },
+  {
+    "id": "audit.self.run.password.reset",
+    "translation": {
+      "one": "Your password was reset {{.Count}} time",
+      "other": "Your password was reset {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.password.reset.other",
+    "translation": {
+      "one": "You reset {{.Count}} password",
+      "other": "You reset {{.Count}} passwords"
+    }
+  },
+  {
+    "id": "audit.self.run.personal_access_token.created",
+    "translation": {
+      "one": "{{.Actor}} created {{.Count}} personal access token for your account",
+      "other": "{{.Actor}} created {{.Count}} personal access tokens for your account"
+    }
+  },
+  {
+    "id": "audit.self.run.personal_access_token.created.other",
+    "translation": {
+      "one": "You created {{.Count}} personal access token",
+      "other": "You created {{.Count}} personal access tokens"
+    }
+  },
+  {
+    "id": "audit.self.run.personal_access_token.disabled",
+    "translation": {
+      "one": "{{.Actor}} turned off {{.Count}} of your personal access tokens",
+      "other": "{{.Actor}} turned off {{.Count}} of your personal access tokens"
+    }
+  },
+  {
+    "id": "audit.self.run.personal_access_token.disabled.other",
+    "translation": {
+      "one": "You turned off {{.Count}} personal access token",
+      "other": "You turned off {{.Count}} personal access tokens"
+    }
+  },
+  {
+    "id": "audit.self.run.personal_access_token.enabled",
+    "translation": {
+      "one": "{{.Actor}} turned on {{.Count}} of your personal access tokens",
+      "other": "{{.Actor}} turned on {{.Count}} of your personal access tokens"
+    }
+  },
+  {
+    "id": "audit.self.run.personal_access_token.enabled.other",
+    "translation": {
+      "one": "You turned on {{.Count}} personal access token",
+      "other": "You turned on {{.Count}} personal access tokens"
+    }
+  },
+  {
+    "id": "audit.self.run.personal_access_token.revoked",
+    "translation": {
+      "one": "{{.Actor}} revoked {{.Count}} of your personal access tokens",
+      "other": "{{.Actor}} revoked {{.Count}} of your personal access tokens"
+    }
+  },
+  {
+    "id": "audit.self.run.personal_access_token.revoked.other",
+    "translation": {
+      "one": "You revoked {{.Count}} personal access token",
+      "other": "You revoked {{.Count}} personal access tokens"
+    }
+  },
+  {
+    "id": "audit.self.run.profile.changed",
+    "translation": {
+      "one": "{{.Actor}} changed your profile {{.Count}} time",
+      "other": "{{.Actor}} changed your profile {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.profile.changed.other",
+    "translation": {
+      "one": "You changed {{.Count}} profile",
+      "other": "You changed {{.Count}} profiles"
+    }
+  },
+  {
+    "id": "audit.self.run.profile_picture.changed",
+    "translation": {
+      "one": "{{.Actor}} changed your profile picture {{.Count}} time",
+      "other": "{{.Actor}} changed your profile picture {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.profile_picture.changed.other",
+    "translation": {
+      "one": "You changed {{.Count}} profile picture",
+      "other": "You changed {{.Count}} profile pictures"
+    }
+  },
+  {
+    "id": "audit.self.run.profile_picture.removed",
+    "translation": {
+      "one": "{{.Actor}} removed your profile picture {{.Count}} time",
+      "other": "{{.Actor}} removed your profile picture {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.profile_picture.removed.other",
+    "translation": {
+      "one": "You removed {{.Count}} profile picture",
+      "other": "You removed {{.Count}} profile pictures"
+    }
+  },
+  {
+    "id": "audit.self.run.provider.unlinked",
+    "translation": {
+      "one": "{{.Actor}} unlinked {{.Count}} sign-in provider from your account",
+      "other": "{{.Actor}} unlinked {{.Count}} sign-in providers from your account"
+    }
+  },
+  {
+    "id": "audit.self.run.provider.unlinked.other",
+    "translation": {
+      "one": "You unlinked {{.Count}} sign-in provider",
+      "other": "You unlinked {{.Count}} sign-in providers"
+    }
+  },
+  {
+    "id": "audit.self.run.role.ended",
+    "translation": {
+      "one": "{{.Actor}} ended {{.Count}} of your roles",
+      "other": "{{.Actor}} ended {{.Count}} of your roles"
+    }
+  },
+  {
+    "id": "audit.self.run.role.ended.other",
+    "translation": {
+      "one": "You ended {{.Count}} role",
+      "other": "You ended {{.Count}} roles"
+    }
+  },
+  {
+    "id": "audit.self.run.role.granted",
+    "translation": {
+      "one": "{{.Actor}} gave you {{.Count}} role",
+      "other": "{{.Actor}} gave you {{.Count}} roles"
+    }
+  },
+  {
+    "id": "audit.self.run.role.granted.other",
+    "translation": {
+      "one": "You gave {{.Count}} role",
+      "other": "You gave {{.Count}} roles"
+    }
+  },
+  {
+    "id": "audit.self.run.session.renamed",
+    "translation": {
+      "one": "{{.Actor}} renamed your sessions {{.Count}} time",
+      "other": "{{.Actor}} renamed your sessions {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.session.renamed.other",
+    "translation": {
+      "one": "You renamed sessions {{.Count}} time",
+      "other": "You renamed sessions {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.session.revoked",
+    "translation": {
+      "one": "{{.Actor}} signed out {{.Count}} of your sessions",
+      "other": "{{.Actor}} signed out {{.Count}} of your sessions"
+    }
+  },
+  {
+    "id": "audit.self.run.session.revoked.other",
+    "translation": {
+      "one": "You signed out {{.Count}} session",
+      "other": "You signed out {{.Count}} sessions"
+    }
+  },
+  {
+    "id": "audit.self.run.sessions.revoked_all",
+    "translation": {
+      "one": "{{.Actor}} signed out all your sessions {{.Count}} time",
+      "other": "{{.Actor}} signed out all your sessions {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.sessions.revoked_all.other",
+    "translation": {
+      "one": "You signed out all sessions of an account {{.Count}} time",
+      "other": "You signed out all sessions of an account {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.sign_in.failed",
+    "translation": {
+      "one": "{{.Count}} sign-in to your account failed",
+      "other": "{{.Count}} sign-ins to your account failed"
+    }
+  },
+  {
+    "id": "audit.self.run.sign_in.failed.other",
+    "translation": {
+      "one": "{{.Count}} of your sign-ins failed",
+      "other": "{{.Count}} of your sign-ins failed"
+    }
+  },
+  {
+    "id": "audit.self.run.sign_in.succeeded",
+    "translation": {
+      "one": "You signed in {{.Count}} time",
+      "other": "You signed in {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.sign_in.succeeded.other",
+    "translation": {
+      "one": "You signed in {{.Count}} time",
+      "other": "You signed in {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.sign_out",
+    "translation": {
+      "one": "You signed out {{.Count}} time",
+      "other": "You signed out {{.Count}} times"
+    }
+  },
+  {
+    "id": "audit.self.run.sign_out.other",
+    "translation": {
+      "one": "You signed out {{.Count}} time",
+      "other": "You signed out {{.Count}} times"
+    }
   },
   {
     "id": "audit.status.attempt",

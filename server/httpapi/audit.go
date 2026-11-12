@@ -117,7 +117,14 @@ func auditResource(app AuditListingApplication) route.Resource {
 			Method: http.MethodGet,
 			Path:   "/users/me/audits",
 			Auth:   route.AuthSessionRequired,
-			Errors: []string{"audit.query.invalid", "audit.unavailable", "request.invalid"},
+			Errors: []string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.query.invalid",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+			},
 			Handle: h.listSelf,
 		},
 	)
@@ -180,7 +187,7 @@ func auditQueryFromRequest(request *http.Request) (administration.ListAuditEvent
 		query.BeforeID = model.AuditEventID(cursor.ID)
 	}
 
-	for _, name := range []string{"created_after", "created_before", "subject_user_id", "status"} {
+	for _, name := range []string{"created_after", "created_before", "subject_user_id", "status", "kind"} {
 		if entries, present := values[name]; present && (len(entries) != 1 || entries[0] == "") {
 			return query, order, errAuditQuery(name)
 		}
@@ -195,9 +202,10 @@ func auditQueryFromRequest(request *http.Request) (administration.ListAuditEvent
 
 	query.ActorID = model.UserID(values.Get("actor_id"))
 	query.SubjectUserID = model.UserID(values.Get("subject_user_id"))
-	// The application owns the closed action and status vocabularies and
+	// The application owns the closed action, kind and status vocabularies and
 	// answers audit.query.invalid for a value outside them.
 	query.Actions = values["action"]
+	query.Kind = model.AuditKind(values.Get("kind"))
 	query.Status = model.AuditStatus(values.Get("status"))
 	resourceType, resourceID := values.Get("resource_type"), values.Get("resource_id")
 	if (resourceType == "") != (resourceID == "") {

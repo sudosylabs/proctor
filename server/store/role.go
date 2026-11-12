@@ -118,6 +118,46 @@ type RoleBindingSummary struct {
 	ScopeName   string
 }
 
+// MaximumRoleBindingListRoles bounds the Roles one Role Binding listing by
+// Role names.
+const MaximumRoleBindingListRoles = 16
+
+// RoleBindingRoleListOptions selects the current Role Bindings of any of
+// RoleIDs whose scope lies within Visibility, as ListVisibleByUser defines it.
+// Current means as RoleBindingSummaryOptions defines it: effective at
+// Visibility.ActiveAt, which is required, with an unarchived Role and scope.
+// The listing is ordered newest first by created_at then ID; BeforeCreatedAt
+// and BeforeID, both set or both zero, continue after the previous page's
+// last binding. Limit (1 to 201) is the probe size the caller reads.
+type RoleBindingRoleListOptions struct {
+	RoleIDs         []model.RoleID
+	Visibility      UserVisibilityScope
+	BeforeCreatedAt time.Time
+	BeforeID        model.RoleBindingID
+	Limit           int
+}
+
+// RoleHolderCountOptions counts, for each of RoleIDs (at most 200), the
+// current Role Bindings inside Visibility, current as
+// RoleBindingSummaryOptions defines it. Maximum (1 to MaximumListCount) stops
+// each Role's count.
+type RoleHolderCountOptions struct {
+	RoleIDs    []model.RoleID
+	Visibility UserVisibilityScope
+	Maximum    int
+}
+
+// RoleHolderCount is one Role's visible current holders. Bindings stops at
+// the count's Maximum, where more may exist; Users (distinct holders) and
+// Scopes (distinct scope type and ID pairs) are counted among those bindings
+// only, so they are lower bounds whenever Bindings reached Maximum.
+type RoleHolderCount struct {
+	RoleID   model.RoleID
+	Bindings int
+	Users    int
+	Scopes   int
+}
+
 // RoleBindingStore persists time-bounded role assignments. Scope references
 // are validated transactionally because PostgreSQL cannot express a foreign
 // key whose target table depends on scope_type.
@@ -130,6 +170,15 @@ type RoleBindingStore interface {
 	// listed User in one statement. A User with none has no entry.
 	ListVisibleSummariesByUsers(context.Context, RoleBindingSummaryOptions) ([]UserRoleBindingSummary, error)
 	ListByScope(context.Context, model.RoleScopeType, string) ([]*model.RoleBinding, error)
+	// ListCurrentByRoles reads one keyset page of the visible current
+	// bindings of the listed Roles; CountCurrentByRoles counts the same
+	// bindings, ignoring the keyset and limit, stopping at maximum (see
+	// MaximumListCount).
+	ListCurrentByRoles(context.Context, RoleBindingRoleListOptions) ([]*model.RoleBinding, error)
+	CountCurrentByRoles(context.Context, RoleBindingRoleListOptions, int) (int, error)
+	// CountHoldersByRoles counts every listed Role's visible current holders
+	// in one statement. A Role with none has no entry.
+	CountHoldersByRoles(context.Context, RoleHolderCountOptions) ([]RoleHolderCount, error)
 	// ListActiveByUser uses UTC microsecond precision and the interval [start, end).
 	// Archived bindings are excluded; no active bindings is an empty list.
 	ListActiveByUser(context.Context, model.UserID, time.Time) ([]*model.RoleBinding, error)

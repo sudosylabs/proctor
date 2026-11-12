@@ -411,6 +411,7 @@ func TestAuditListingFiltersReachPersistenceInsideTheVisibility(t *testing.T) {
 		"too many actions": {Actions: tooMany},
 		"unknown status":   {Status: "pending"},
 		"invalid subject":  {SubjectUserID: "not-an-id"},
+		"unknown kind":     {Kind: "other"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -423,6 +424,36 @@ func TestAuditListingFiltersReachPersistenceInsideTheVisibility(t *testing.T) {
 			_, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, query)
 			require.True(t, apperror.Is(err, "audit.query.invalid"), "error = %v", err)
 			require.Equal(t, []string{"authorize-view"}, events, "a refused filter reads nothing")
+		})
+	}
+}
+
+// TestAuditListingKindNarrowsAnAcademicAuditor passes the kind to
+// persistence beside, never instead of, the academic visibility and action
+// filter, so asking for reads or changes cannot widen what an academic
+// auditor reads.
+func TestAuditListingKindNarrowsAnAcademicAuditor(t *testing.T) {
+	t.Parallel()
+	rootID := model.NewAcademicUnitID()
+	outside := string(model.ActionAuditView)
+	for _, kind := range []model.AuditKind{model.AuditKindRead, model.AuditKindChange} {
+		t.Run(string(kind), func(t *testing.T) {
+			t.Parallel()
+			events := []string{}
+			persistence := &auditListingStoreFake{events: &events}
+			service := &Service{institutions: anyInstitution(), audits: persistence, authorizer: &auditListingAuthorizerFake{
+				events: &events, scope: store.AuditVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{rootID}},
+			}}
+			_, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{
+				Limit: 10, Kind: kind, Actions: []string{outside},
+			})
+			require.NoError(t, err)
+			require.Equal(t, kind, persistence.input.Kind)
+			require.Equal(t, []string{outside}, persistence.input.Actions, "the kind adds no action to the filter")
+			require.Equal(t, store.AuditVisibilityScope{
+				AcademicUnitRootIDs: []model.AcademicUnitID{rootID}, AllowedActions: model.AcademicAuditActions(),
+			}, persistence.input.Visibility, "the kind leaves the academic catalog as it is")
+			require.Equal(t, persistence.input, persistence.listCountInput, "the count reads the same kind")
 		})
 	}
 }

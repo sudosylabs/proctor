@@ -147,7 +147,6 @@ func lockCommandAuthorization(ctx context.Context, tx *sqlxTxWrapper, authority 
 	}
 
 	for _, action := range authority.DelegatedActions {
-		strictParent := teacherInvitationProtectedDelegationAction(action) && authority.ScopeType != model.RoleScopeInstitution
 		if err = requirePrincipalActionAtScope(
 			ctx,
 			tx,
@@ -156,7 +155,7 @@ func lockCommandAuthorization(ctx context.Context, tx *sqlxTxWrapper, authority 
 			authority.ScopeType,
 			authority.ScopeID,
 			at,
-			strictParent,
+			true,
 		); err != nil {
 			return err
 		}
@@ -264,6 +263,14 @@ func requireCurrentPrincipalCredential(ctx context.Context, tx *sqlxTxWrapper, p
 	return at, nil
 }
 
+// requirePrincipalActionAtScope rechecks, under the transaction's locks and at
+// the instant at, that the principal holds the Action at the scope: a
+// Personal Access Token must list the Action, and a current Role Binding must
+// grant it under the rule the application applied (see authority.go). Without
+// delegate that is access.Authorizer.Authorize, for an Action the principal
+// exercises; with delegate it is CanDelegateActionsAtScope, for an Action
+// handed on in a Role Binding, where a protected Action below the Institution
+// needs a grant from above the scope.
 func requirePrincipalActionAtScope(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -272,7 +279,7 @@ func requirePrincipalActionAtScope(
 	scopeType model.RoleScopeType,
 	scopeID string,
 	at time.Time,
-	strictParent bool,
+	delegate bool,
 ) error {
 	if principal.CredentialType == model.CredentialPersonalAccessToken {
 		allowed := false
@@ -288,7 +295,13 @@ func requirePrincipalActionAtScope(
 		}
 	}
 
-	return requireUserActionAtScopeWithDelegation(ctx, tx, principal.UserID, action, scopeType, scopeID, at, strictParent)
+	rule := grantRule{
+		ceiling:      principal.AcademicUnitID,
+		delegate:     delegate,
+		strictParent: delegate && teacherInvitationProtectedDelegationAction(action) && scopeType != model.RoleScopeInstitution,
+	}
+
+	return requireUserActionAtScopeWithDelegation(ctx, tx, principal.UserID, action, scopeType, scopeID, at, rule)
 }
 
 func requireUserActionAtScopeWithDelegation(
@@ -299,7 +312,7 @@ func requireUserActionAtScopeWithDelegation(
 	scopeType model.RoleScopeType,
 	scopeID string,
 	at time.Time,
-	strictParent bool,
+	rule grantRule,
 ) error {
 	if !userID.IsValid() || !scopeType.IsValid() || !model.IsValidOpaqueID(scopeID) || at.IsZero() {
 		return store.NewErrInvalidInput("authorization", "scope", nil)
@@ -308,11 +321,11 @@ func requireUserActionAtScopeWithDelegation(
 	var err error
 	switch scopeType {
 	case model.RoleScopeInstitution:
-		err = lockActionGrantAtInstitution(ctx, tx, userID, action, scopeID, at)
+		err = lockActionGrantAtInstitution(ctx, tx, userID, action, scopeID, at, rule)
 	case model.RoleScopeAcademicUnit:
-		err = lockDelegableActionGrantAtAcademicUnit(ctx, tx, userID, action, scopeID, at, strictParent)
+		err = lockActionGrantAtAcademicUnit(ctx, tx, userID, action, scopeID, at, rule)
 	case model.RoleScopeClass:
-		err = lockDelegableActionGrantAtClass(ctx, tx, userID, action, scopeID, at, strictParent)
+		err = lockActionGrantAtClass(ctx, tx, userID, action, scopeID, at, rule)
 	default:
 		return store.NewErrInvalidInput("authorization", "scope_type", nil)
 	}

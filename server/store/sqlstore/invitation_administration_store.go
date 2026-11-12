@@ -923,13 +923,15 @@ func requireInvitationManagementAuthority(
 		}
 	}
 
+	// The input names the actor, not a principal, so no credential ceiling
+	// applies here.
 	switch invitation.ScopeType {
 	case model.RoleScopeInstitution:
-		err = lockActionGrantAtInstitution(ctx, tx, actor, model.ActionInvitationManage, invitation.ScopeID, at)
+		err = lockActionGrantAtInstitution(ctx, tx, actor, model.ActionInvitationManage, invitation.ScopeID, at, grantRule{})
 	case model.RoleScopeAcademicUnit:
-		err = lockActionGrantAtAcademicUnit(ctx, tx, actor, model.ActionInvitationManage, invitation.ScopeID, at)
+		err = lockActionGrantAtAcademicUnit(ctx, tx, actor, model.ActionInvitationManage, invitation.ScopeID, at, grantRule{})
 	case model.RoleScopeClass:
-		err = lockActionGrantAtClass(ctx, tx, actor, model.ActionInvitationManage, invitation.ScopeID, at)
+		err = lockActionGrantAtClass(ctx, tx, actor, model.ActionInvitationManage, invitation.ScopeID, at, grantRule{})
 	default:
 		return store.NewErrInvalidInput("invitation", "scope", nil)
 	}

@@ -131,7 +131,7 @@ func TestRealtimeClusterAdapterPreservesSingleNodeLocalFirstPublication(t *testi
 	})
 
 	require.NoError(t, service.Publish(context.Background(), realtime.Event{
-		Name:   "user.notification",
+		Name:   "current_user.context.changed",
 		UserID: model.UserID(model.NewID()),
 	}))
 	require.Equal(t, 1, sink.publishCount(), "local publications")

@@ -1,0 +1,6 @@
+{
+  "title": "SHA-256 digest",
+  "description": "A lowercase hexadecimal SHA-256 digest.",
+  "type": "string",
+  "pattern": "^[0-9a-f]{64}$"
+}

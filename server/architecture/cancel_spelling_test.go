@@ -30,13 +30,15 @@ var doubleLCancelSpelling = regexp.MustCompile(`(?i)cancell(ed|ing)`)
 
 // cancelSpellingExempt lists paths whose spelling Proctor does not own: the
 // release history records names as they were, the independently versioned
-// reusable modules are pinned by content, and CI calls a GitHub function
-// that GitHub spells with two l's.
+// reusable modules are pinned by content, CI calls a GitHub function that
+// GitHub spells with two l's, and the official AsyncAPI schema is copied
+// unchanged.
 var cancelSpellingExempt = []string{
 	"CHANGELOG.md",
 	".github/",
 	"packages/",
 	"docs/api/reference/",
+	"server/internal/asyncapidoc/asyncapi-3.0.0.schema.json",
 }
 
 func TestCancellationIsSpelledWithOneL(t *testing.T) {

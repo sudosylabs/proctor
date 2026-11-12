@@ -1,0 +1,23 @@
+{
+  "title": "Exam archived",
+  "description": "The Exam revision and instant of archiving.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_id",
+    "exam_revision",
+    "archived_at"
+  ],
+  "properties": {
+    "exam_id": {
+      "$ref": "id.json"
+    },
+    "exam_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "archived_at": {
+      "$ref": "instant.json"
+    }
+  }
+}

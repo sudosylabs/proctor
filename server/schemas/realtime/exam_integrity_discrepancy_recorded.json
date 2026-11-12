@@ -1,0 +1,34 @@
+{
+  "title": "Integrity Discrepancy recorded",
+  "description": "A Focus Loss claim arrived after the Attempt or Sitting ended. Its duration and source are never included.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "submission_id",
+    "exam_sitting_id",
+    "exam_attempt_id",
+    "candidate_user_id",
+    "integrity_discrepancy_id",
+    "recorded_at"
+  ],
+  "properties": {
+    "submission_id": {
+      "$ref": "id.json"
+    },
+    "exam_sitting_id": {
+      "$ref": "id.json"
+    },
+    "exam_attempt_id": {
+      "$ref": "id.json"
+    },
+    "candidate_user_id": {
+      "$ref": "id.json"
+    },
+    "integrity_discrepancy_id": {
+      "$ref": "id.json"
+    },
+    "recorded_at": {
+      "$ref": "instant.json"
+    }
+  }
+}

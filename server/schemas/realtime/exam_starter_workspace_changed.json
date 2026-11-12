@@ -1,0 +1,38 @@
+{
+  "title": "Starter Workspace changed",
+  "description": "One committed Starter Workspace mutation. Paths, object identities and bytes are never included.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_id",
+    "entry_id",
+    "operation",
+    "draft_revision",
+    "changed_at"
+  ],
+  "properties": {
+    "exam_id": {
+      "$ref": "id.json"
+    },
+    "entry_id": {
+      "$ref": "id.json"
+    },
+    "operation": {
+      "type": "string",
+      "enum": [
+        "directory_created",
+        "file_created",
+        "entry_moved",
+        "file_replaced",
+        "entry_removed"
+      ]
+    },
+    "draft_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "changed_at": {
+      "$ref": "instant.json"
+    }
+  }
+}

@@ -85,6 +85,27 @@ and maps those contracts into versioned wire events; it does not own cluster
 fan-out or application invalidation policy. The parent application retains
 Principal validation and subscription authorization.
 
+The public contract for every frame after the upgrade is the AsyncAPI 3.0
+document in `server/asyncapi/`, compiled by `ptool asyncapi build` into
+`server/asyncapi.json`; its [authoring guide](../../../../server/asyncapi/README.md)
+says how to change it. Payload shapes live once, as JSON Schema files in
+`server/schemas/realtime/`, using only keywords JSON Schema draft-07 (the
+AsyncAPI default schema format) and 2020-12 (OpenAPI 3.1) share. The handshake
+stays the OpenAPI operation `connectWebSocket`; the AsyncAPI channel names it
+and does not repeat it.
+
+The server's list of events is closed. Every event the server emits is a
+message declared in `app/realtime/message.go`, built by a constructor, and
+described by an AsyncAPI message with a payload schema; `Delivery.Publish`
+refuses an undeclared name, and the `app/realtime` conformance tests fail when
+a declared message has no constructor entry, no AsyncAPI message, or data that
+does not match its schema. A peer forwards an event without rechecking the
+list, so a node of a newer build can relay a name an older node does not know.
+Clients stay open: they ignore an event name they do not recognize, which the
+public realtime guide tells them. A payload change follows the payload's
+`schema_version` where it has one; before the first release, server, contract
+and clients change together, as they do for OpenAPI.
+
 WebSocket reuses stable application error codes and safe fields inside its own
 versioned envelope, not HTTP Problem Details. Ordinary publication failures
 cross the parent application as the established public application

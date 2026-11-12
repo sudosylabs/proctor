@@ -1,0 +1,23 @@
+{
+  "title": "Command reply",
+  "description": "A successful reply to the command with the same sequence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "status",
+    "sequence"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "const": "ok"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "data": {
+      "description": "The command result, when the command returns one."
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "title": "Attempt Workspace changed",
+  "description": "A refetch hint for the candidate's Attempt Workspace. Paths, content and mutation bodies are never included.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_sitting_id",
+    "exam_attempt_id",
+    "entry_id",
+    "operation",
+    "workspace_cursor",
+    "changed_at"
+  ],
+  "properties": {
+    "exam_sitting_id": {
+      "$ref": "id.json"
+    },
+    "exam_attempt_id": {
+      "$ref": "id.json"
+    },
+    "entry_id": {
+      "$ref": "id.json"
+    },
+    "operation": {
+      "type": "string",
+      "enum": [
+        "create_file",
+        "create_directory",
+        "replace_file",
+        "move_entry",
+        "delete_entry"
+      ]
+    },
+    "workspace_cursor": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "changed_at": {
+      "$ref": "instant.json"
+    }
+  }
+}

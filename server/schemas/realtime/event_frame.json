@@ -1,0 +1,39 @@
+{
+  "title": "Event frame",
+  "description": "The envelope of every server-to-client event. sequence is assigned by the connection, increases by one per event, and is what a reconnecting client offers as sequence_number.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "event",
+    "sequence",
+    "resource"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "id.json"
+    },
+    "event": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+      "description": "The event name."
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "user_id": {
+      "$ref": "id.json"
+    },
+    "action": {
+      "type": "string",
+      "description": "The action a subscription must hold to receive the event. Absent on an event addressed to one User."
+    },
+    "resource": {
+      "$ref": "resource.json"
+    },
+    "data": {
+      "description": "The event payload. Each message defines its shape."
+    }
+  }
+}

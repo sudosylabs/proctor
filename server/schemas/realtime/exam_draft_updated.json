@@ -1,0 +1,19 @@
+{
+  "title": "Exam Draft updated",
+  "description": "The Draft revision after a text or policy change. Authored content is never included.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_id",
+    "draft_revision"
+  ],
+  "properties": {
+    "exam_id": {
+      "$ref": "id.json"
+    },
+    "draft_revision": {
+      "type": "integer",
+      "minimum": 1
+    }
+  }
+}

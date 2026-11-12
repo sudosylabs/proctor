@@ -226,6 +226,11 @@ func (s *Delivery) Publish(ctx context.Context, event Event) error {
 	if err := candidate.ValidateForPublish(); err != nil {
 		return &InvalidPublicationError{err: err}
 	}
+	// The server's event list is closed where an event starts. A peer forwards
+	// what its origin node accepted and checks only the shape.
+	if !isDeclaredName(candidate.Name) {
+		return &InvalidPublicationError{err: fmt.Errorf("realtime event %q is not a declared message", candidate.Name)}
+	}
 
 	// Same loop-prevention shape as Mattermost: publish locally once, then
 	// send to peers. Peer handlers call only publishLocal.

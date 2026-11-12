@@ -251,6 +251,18 @@ module when a change is not server-only. No module has been released yet.
 
 ### Added
 
+- Server: the realtime protocol has an AsyncAPI 3.0 contract,
+  `server/asyncapi/` compiled into `server/asyncapi.json`, with one message
+  for each of the 39 events and for `hello`, `resync_required`, `ping`,
+  `subscribe` and `unsubscribe` and their replies, plus the close codes.
+  Payload shapes are JSON Schema files in `server/schemas/realtime/`.
+  `ptool asyncapi build` and `check` (`make -C server asyncapi-build`,
+  `asyncapi-check`) validate it against the official AsyncAPI schema and check
+  every example. The server's event list is now closed: realtime publication
+  refuses an event name `app/realtime` does not declare, and conformance tests
+  hold each constructor's data to its schema. `user_profile_picture_changed`
+  now carries `changed_at` as an RFC 3339 string instead of Unix milliseconds
+  (**breaking**). The API docs gain a generated Realtime Reference.
 - Server: the Access Policy can require two-step verification of role
   holders, every User with a current Role Binding at any scope, with
   `role_holder_mfa_required` on `GET`, `PUT` and preflight; `GET` also

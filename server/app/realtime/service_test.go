@@ -23,7 +23,7 @@ func TestRealtimePublishRequiresClusterFanout(t *testing.T) {
 	service := newTestService(t, &sessionAttemptTargetsFake{})
 	_ = service.AttachSink(&recordingSink{})
 	err := service.Publish(context.Background(), Event{
-		Name:   "user.notification",
+		Name:   "current_user.context.changed",
 		UserID: model.UserID(model.NewID()),
 	})
 	require.Error(t, err, "Publish() error")

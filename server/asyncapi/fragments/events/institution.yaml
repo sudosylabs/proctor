@@ -1,0 +1,152 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+# Access Policy and Academic Unit events.
+components:
+  messages:
+    access_policy_changed:
+      name: access_policy_changed
+      title: Access Policy changed
+      summary: Refetch the Access Policy; the event carries only its new revision.
+      description: Refetch the Access Policy; the event carries only its new revision. Delivered to connections that subscribe to access_policy.view on the institution.
+      tags:
+        - name: event
+        - name: Institution
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: access_policy_changed
+              action:
+                type: string
+                const: access_policy.view
+              data:
+                $ref: '../../../schemas/realtime/access_policy_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: access_policy_changed
+            sequence: 40
+            action: access_policy.view
+            resource:
+              type: institution
+              id: ous3h9nfemqtwz47ydgjcx1ia5
+            data:
+              revision: 7
+    academic_unit_created:
+      name: academic_unit_created
+      title: Academic Unit created
+      summary: Refetch the Academic Unit. The event has no data.
+      description: Refetch the Academic Unit. The event has no data. Delivered to connections that subscribe to academic_unit.view on the academic unit.
+      tags:
+        - name: event
+        - name: Institution
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+            properties:
+              event:
+                type: string
+                const: academic_unit_created
+              action:
+                type: string
+                const: academic_unit.view
+            not:
+              required:
+                - data
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: academic_unit_created
+            sequence: 41
+            action: academic_unit.view
+            resource:
+              type: academic_unit
+              id: jcx1ia56br8kpous3h9nfemqtw
+    academic_unit_updated:
+      name: academic_unit_updated
+      title: Academic Unit updated
+      summary: Refetch the Academic Unit. The event has no data.
+      description: Refetch the Academic Unit. The event has no data. Delivered to connections that subscribe to academic_unit.view on the academic unit.
+      tags:
+        - name: event
+        - name: Institution
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+            properties:
+              event:
+                type: string
+                const: academic_unit_updated
+              action:
+                type: string
+                const: academic_unit.view
+            not:
+              required:
+                - data
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: academic_unit_updated
+            sequence: 42
+            action: academic_unit.view
+            resource:
+              type: academic_unit
+              id: jcx1ia56br8kpous3h9nfemqtw
+    academic_unit_archived:
+      name: academic_unit_archived
+      title: Academic Unit archived
+      summary: Refetch the Academic Unit. The event has no data.
+      description: Refetch the Academic Unit. The event has no data. Delivered to connections that subscribe to academic_unit.view on the academic unit.
+      tags:
+        - name: event
+        - name: Institution
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+            properties:
+              event:
+                type: string
+                const: academic_unit_archived
+              action:
+                type: string
+                const: academic_unit.view
+            not:
+              required:
+                - data
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: academic_unit_archived
+            sequence: 43
+            action: academic_unit.view
+            resource:
+              type: academic_unit
+              id: jcx1ia56br8kpous3h9nfemqtw

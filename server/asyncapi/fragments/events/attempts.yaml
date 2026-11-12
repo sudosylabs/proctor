@@ -1,0 +1,489 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+# Attempt events for Sitting viewers and for the candidate.
+components:
+  messages:
+    exam_attempt_connection_opened:
+      name: exam_attempt_connection_opened
+      title: Attempt Connection opened
+      summary: A candidate's desktop was admitted and holds an open Attempt Connection.
+      description: A candidate's desktop was admitted and holds an open Attempt Connection. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.
+      tags:
+        - name: event
+        - name: Attempts
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_attempt_connection_opened
+              action:
+                type: string
+                const: exam.sitting.view
+              data:
+                $ref: '../../../schemas/realtime/exam_attempt_connection_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_attempt_connection_opened
+            sequence: 40
+            action: exam.sitting.view
+            resource:
+              type: exam_sitting
+              id: h9nfemqtwz47ydgjcx1ia56br8
+            data:
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
+              exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
+              candidate_user_id: qtwz47ydgjcx1ia56br8kpous3
+              attempt_connection_id: kpous3h9nfemqtwz47ydgjcx1i
+              state: open
+              changed_at: '2026-08-01T09:30:00Z'
+    exam_attempt_connection_closed:
+      name: exam_attempt_connection_closed
+      title: Attempt Connection closed
+      summary: An Attempt Connection closed, and why.
+      description: An Attempt Connection closed, and why. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.
+      tags:
+        - name: event
+        - name: Attempts
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_attempt_connection_closed
+              action:
+                type: string
+                const: exam.sitting.view
+              data:
+                $ref: '../../../schemas/realtime/exam_attempt_connection_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_attempt_connection_closed
+            sequence: 41
+            action: exam.sitting.view
+            resource:
+              type: exam_sitting
+              id: h9nfemqtwz47ydgjcx1ia56br8
+            data:
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
+              exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
+              candidate_user_id: qtwz47ydgjcx1ia56br8kpous3
+              attempt_connection_id: kpous3h9nfemqtwz47ydgjcx1i
+              state: closed
+              changed_at: '2026-08-01T09:30:00Z'
+              close_reason: lease_expired
+    exam_attempt_suspended:
+      name: exam_attempt_suspended
+      title: Attempt suspended
+      summary: An Attempt was suspended by policy or kicked by an Exam Manager.
+      description: An Attempt was suspended by policy or kicked by an Exam Manager. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.
+      tags:
+        - name: event
+        - name: Attempts
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_attempt_suspended
+              action:
+                type: string
+                const: exam.sitting.view
+              data:
+                $ref: '../../../schemas/realtime/exam_attempt_suspended.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_attempt_suspended
+            sequence: 42
+            action: exam.sitting.view
+            resource:
+              type: exam_sitting
+              id: h9nfemqtwz47ydgjcx1ia56br8
+            data:
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
+              exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
+              candidate_user_id: qtwz47ydgjcx1ia56br8kpous3
+              attempt_connection_id: kpous3h9nfemqtwz47ydgjcx1i
+              integrity_flag_id: twz47ydgjcx1ia56br8kpous3h
+              suspension_id: a56br8kpous3h9nfemqtwz47yd
+              attempt_revision: 4
+              changed_at: '2026-08-01T09:30:00Z'
+    exam_attempt_reallowed:
+      name: exam_attempt_reallowed
+      title: Attempt re-allowed
+      summary: An Attempt Suspension was closed and the Attempt is active again.
+      description: An Attempt Suspension was closed and the Attempt is active again. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.
+      tags:
+        - name: event
+        - name: Attempts
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_attempt_reallowed
+              action:
+                type: string
+                const: exam.sitting.view
+              data:
+                $ref: '../../../schemas/realtime/exam_attempt_reallowed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_attempt_reallowed
+            sequence: 43
+            action: exam.sitting.view
+            resource:
+              type: exam_sitting
+              id: h9nfemqtwz47ydgjcx1ia56br8
+            data:
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
+              exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
+              candidate_user_id: qtwz47ydgjcx1ia56br8kpous3
+              suspension_id: a56br8kpous3h9nfemqtwz47yd
+              attempt_revision: 5
+              changed_at: '2026-08-01T09:30:00Z'
+    exam_attempt_access_suspended:
+      name: exam_attempt_access_suspended
+      title: Your Attempt was suspended
+      summary: Tells the candidate their Attempt is suspended, with a safe reason.
+      description: Tells the candidate their Attempt is suspended, with a safe reason. Delivered to the addressed User's connections that subscribe to exam.sitting.participate on the exam sitting.
+      tags:
+        - name: event
+        - name: Attempts
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - user_id
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_attempt_access_suspended
+              action:
+                type: string
+                const: exam.sitting.participate
+              data:
+                $ref: '../../../schemas/realtime/exam_attempt_access_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_attempt_access_suspended
+            sequence: 44
+            user_id: qtwz47ydgjcx1ia56br8kpous3
+            action: exam.sitting.participate
+            resource:
+              type: exam_sitting
+              id: h9nfemqtwz47ydgjcx1ia56br8
+            data:
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
+              exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
+              state: suspended
+              reason_code: manager_suspended
+              changed_at: '2026-08-01T09:30:00Z'
+    exam_attempt_access_reallowed:
+      name: exam_attempt_access_reallowed
+      title: Your Attempt was re-allowed
+      summary: Tells the candidate their Attempt is active again.
+      description: Tells the candidate their Attempt is active again. Delivered to the addressed User's connections that subscribe to exam.sitting.participate on the exam sitting.
+      tags:
+        - name: event
+        - name: Attempts
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - user_id
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_attempt_access_reallowed
+              action:
+                type: string
+                const: exam.sitting.participate
+              data:
+                $ref: '../../../schemas/realtime/exam_attempt_access_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_attempt_access_reallowed
+            sequence: 45
+            user_id: qtwz47ydgjcx1ia56br8kpous3
+            action: exam.sitting.participate
+            resource:
+              type: exam_sitting
+              id: h9nfemqtwz47ydgjcx1ia56br8
+            data:
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
+              exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
+              state: active
+              changed_at: '2026-08-01T09:30:00Z'
+    exam_attempt_workspace_changed:
+      name: exam_attempt_workspace_changed
+      title: Attempt Workspace changed
+      summary: Refetch the candidate's Attempt Workspace after one committed mutation.
+      description: Refetch the candidate's Attempt Workspace after one committed mutation. Delivered to the addressed User's connections that subscribe to exam.sitting.participate on the exam sitting.
+      tags:
+        - name: event
+        - name: Attempts
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - user_id
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_attempt_workspace_changed
+              action:
+                type: string
+                const: exam.sitting.participate
+              data:
+                $ref: '../../../schemas/realtime/exam_attempt_workspace_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_attempt_workspace_changed
+            sequence: 46
+            user_id: qtwz47ydgjcx1ia56br8kpous3
+            action: exam.sitting.participate
+            resource:
+              type: exam_sitting
+              id: h9nfemqtwz47ydgjcx1ia56br8
+            data:
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
+              exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
+              entry_id: nfemqtwz47ydgjcx1ia56br8kp
+              operation: replace_file
+              workspace_cursor: 9
+              changed_at: '2026-08-01T09:30:00Z'
+    exam_attempt_focus_warning:
+      name: exam_attempt_focus_warning
+      title: Focus Loss warning
+      summary: Warns the candidate that their Focus Loss crossed the policy threshold.
+      description: Warns the candidate that their Focus Loss crossed the policy threshold. Delivered to the addressed User's connections that subscribe to exam.sitting.participate on the exam sitting.
+      tags:
+        - name: event
+        - name: Attempts
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - user_id
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_attempt_focus_warning
+              action:
+                type: string
+                const: exam.sitting.participate
+              data:
+                $ref: '../../../schemas/realtime/exam_attempt_focus_warning.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_attempt_focus_warning
+            sequence: 47
+            user_id: qtwz47ydgjcx1ia56br8kpous3
+            action: exam.sitting.participate
+            resource:
+              type: exam_sitting
+              id: h9nfemqtwz47ydgjcx1ia56br8
+            data:
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
+              exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
+              warning_code: focus_loss_policy_warning
+              changed_at: '2026-08-01T09:30:00Z'
+    exam_attempt_integrity_flagged:
+      name: exam_attempt_integrity_flagged
+      title: Attempt Integrity Flag raised
+      summary: A Focus Loss Integrity Flag was raised on an Attempt.
+      description: A Focus Loss Integrity Flag was raised on an Attempt. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.
+      tags:
+        - name: event
+        - name: Attempts
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_attempt_integrity_flagged
+              action:
+                type: string
+                const: exam.sitting.view
+              data:
+                $ref: '../../../schemas/realtime/exam_attempt_integrity_flagged.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_attempt_integrity_flagged
+            sequence: 48
+            action: exam.sitting.view
+            resource:
+              type: exam_sitting
+              id: h9nfemqtwz47ydgjcx1ia56br8
+            data:
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
+              exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
+              candidate_user_id: qtwz47ydgjcx1ia56br8kpous3
+              integrity_flag_id: twz47ydgjcx1ia56br8kpous3h
+              policy_kind: focus_loss
+              outcome: flag_and_warn
+              retained_evidence_count: 2
+              evidence_overflow_count: 0
+              evidence_available: true
+              changed_at: '2026-08-01T09:30:00Z'
+    exam_attempt_submitted:
+      name: exam_attempt_submitted
+      title: Attempt submitted
+      summary: An Attempt was submitted. Sent to Sitting viewers.
+      description: An Attempt was submitted. Sent to Sitting viewers. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.
+      tags:
+        - name: event
+        - name: Attempts
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_attempt_submitted
+              action:
+                type: string
+                const: exam.sitting.view
+              data:
+                $ref: '../../../schemas/realtime/exam_attempt_submitted.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_attempt_submitted
+            sequence: 49
+            action: exam.sitting.view
+            resource:
+              type: exam_sitting
+              id: h9nfemqtwz47ydgjcx1ia56br8
+            data:
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
+              exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
+              candidate_user_id: qtwz47ydgjcx1ia56br8kpous3
+              submission_id: '9nfemqtwz47ydgjcx1ia56br8k'
+              state: submitted
+              provenance: candidate_submitted
+              workspace_cursor: 9
+              manifest_digest: '3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f'
+              submitted_at: '2026-08-01T09:30:00Z'
+    exam_attempt_submitted_for_candidate:
+      name: exam_attempt_submitted
+      title: Attempt submitted, for the candidate
+      summary: The candidate's own copy of the submission.
+      description: The candidate's own copy of the submission. Delivered to the addressed User's connections that subscribe to exam.sitting.participate on the exam sitting.
+      tags:
+        - name: event
+        - name: Attempts
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - user_id
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_attempt_submitted
+              action:
+                type: string
+                const: exam.sitting.participate
+              data:
+                $ref: '../../../schemas/realtime/exam_attempt_submitted_for_candidate.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_attempt_submitted
+            sequence: 50
+            user_id: qtwz47ydgjcx1ia56br8kpous3
+            action: exam.sitting.participate
+            resource:
+              type: exam_sitting
+              id: h9nfemqtwz47ydgjcx1ia56br8
+            data:
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
+              exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
+              submission_id: '9nfemqtwz47ydgjcx1ia56br8k'
+              state: submitted
+              provenance: candidate_submitted
+              workspace_cursor: 9
+              manifest_digest: '3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f'
+              submitted_at: '2026-08-01T09:30:00Z'

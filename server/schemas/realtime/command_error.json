@@ -1,0 +1,24 @@
+{
+  "title": "Command error",
+  "description": "A refused command. sequence is the request's, or 0 when the request had none.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "status",
+    "sequence",
+    "error"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "const": "error"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "error": {
+      "$ref": "protocol_error.json"
+    }
+  }
+}

@@ -92,12 +92,12 @@ func writeFileAtomically(name string, data []byte) error {
 	if info, err := os.Stat(name); err == nil {
 		mode = info.Mode().Perm()
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("inspect OpenAPI artifact %s: %w", name, err)
+		return fmt.Errorf("inspect artifact %s: %w", name, err)
 	}
 
-	temporary, err := os.CreateTemp(filepath.Dir(name), ".ptool-openapi-*")
+	temporary, err := os.CreateTemp(filepath.Dir(name), ".ptool-artifact-*")
 	if err != nil {
-		return fmt.Errorf("create temporary OpenAPI artifact: %w", err)
+		return fmt.Errorf("create temporary artifact: %w", err)
 	}
 	temporaryName := temporary.Name()
 	defer os.Remove(temporaryName)
@@ -117,7 +117,7 @@ func writeFileAtomically(name string, data []byte) error {
 		return err
 	}
 	if err := os.Rename(temporaryName, name); err != nil {
-		return fmt.Errorf("replace OpenAPI artifact %s: %w", name, err)
+		return fmt.Errorf("replace artifact %s: %w", name, err)
 	}
 	return nil
 }

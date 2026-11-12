@@ -1,0 +1,15 @@
+{
+  "title": "Access Policy changed",
+  "description": "The Access Policy revision after a committed change. No policy fields are included.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "revision"
+  ],
+  "properties": {
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "title": "Subscription",
+  "description": "An action and the exact resource it is checked against.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "action",
+    "resource"
+  ],
+  "properties": {
+    "action": {
+      "type": "string",
+      "minLength": 1
+    },
+    "resource": {
+      "$ref": "resource.json"
+    }
+  }
+}

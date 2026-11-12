@@ -1,0 +1,125 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+# Events for the current user and their settings.
+components:
+  messages:
+    current_user.context.changed:
+      name: current_user.context.changed
+      title: Current user context changed
+      summary: Refetch the current user's navigation context.
+      description: Refetch the current user's navigation context. Delivered to the addressed User's connections.
+      tags:
+        - name: event
+        - name: Users
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - user_id
+              - data
+            properties:
+              event:
+                type: string
+                const: current_user.context.changed
+              data:
+                $ref: '../../../schemas/realtime/collection_invalidation.json'
+            not:
+              required:
+                - action
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: current_user.context.changed
+            sequence: 40
+            user_id: qtwz47ydgjcx1ia56br8kpous3
+            resource:
+              type: ''
+              id: ''
+            data:
+              schema_version: 1
+    user_settings_changed:
+      name: user_settings_changed
+      title: User Settings changed
+      summary: Refetch the User Settings document; the event carries only its new revision.
+      description: Refetch the User Settings document; the event carries only its new revision. Delivered to the addressed User's connections.
+      tags:
+        - name: event
+        - name: Users
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - user_id
+              - data
+            properties:
+              event:
+                type: string
+                const: user_settings_changed
+              data:
+                $ref: '../../../schemas/realtime/user_settings_changed.json'
+            not:
+              required:
+                - action
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: user_settings_changed
+            sequence: 41
+            user_id: qtwz47ydgjcx1ia56br8kpous3
+            resource:
+              type: ''
+              id: ''
+            data:
+              revision: z47ydgjcx1ia56br8kpous3h9n
+              format_version: 1
+              changed_at: '2026-08-01T09:30:00Z'
+    user_profile_picture_changed:
+      name: user_profile_picture_changed
+      title: Profile picture changed
+      summary: The User's profile picture is now another File Entry.
+      description: The User's profile picture is now another File Entry. Delivered to the addressed User's connections.
+      tags:
+        - name: event
+        - name: Users
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - user_id
+              - data
+            properties:
+              event:
+                type: string
+                const: user_profile_picture_changed
+              data:
+                $ref: '../../../schemas/realtime/user_profile_picture_changed.json'
+            not:
+              required:
+                - action
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: user_profile_picture_changed
+            sequence: 42
+            user_id: qtwz47ydgjcx1ia56br8kpous3
+            resource:
+              type: ''
+              id: ''
+            data:
+              active_file_entry_id: '6br8kpous3h9nfemqtwz47ydgj'
+              revision: 4
+              changed_at: '2026-08-01T09:30:00Z'

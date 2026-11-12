@@ -1,0 +1,18 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+asyncapi: '3.0.0'
+info:
+  title: Proctor Realtime API
+  version: '1.0.0'
+  description: The messages of the authenticated WebSocket at /api/v1/websocket. The HTTP upgrade itself is the OpenAPI operation connectWebSocket. Realtime events tell an interface that something changed; durable HTTP resources remain the authority.
+defaultContentType: application/json
+servers:
+  proctor:
+    host: proctor.example.edu
+    protocol: wss
+    description: One Proctor installation. Replace the host with the installation's public origin.

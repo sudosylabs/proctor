@@ -1,0 +1,18 @@
+{
+  "title": "Authorization resource",
+  "description": "The resource an event is authorized against. Both members are empty strings on an event addressed to one User.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "type",
+    "id"
+  ],
+  "properties": {
+    "type": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    }
+  }
+}

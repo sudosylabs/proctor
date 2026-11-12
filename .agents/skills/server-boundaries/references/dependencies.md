@@ -57,6 +57,7 @@ exists.
 | static TLS key pair files | `internal/tlscert` | none | none | none |
 | ACME adapter | `internal/autocert` | none | `golang.org/x/crypto/acme`, `golang.org/x/net/idna` | none |
 | OpenAPI compiler | `internal/openapidoc` | none | `github.com/getkin/kin-openapi/openapi3`, `gopkg.in/yaml.v3` | infrastructure except `io/fs` |
+| AsyncAPI compiler | `internal/asyncapidoc` | none | `github.com/santhosh-tekuri/jsonschema/v6`, `gopkg.in/yaml.v3` | infrastructure except `io/fs` |
 | error catalog compiler | `internal/errorcatalog` | none | `gopkg.in/yaml.v3` | infrastructure except `net/http` |
 | browser origin serialization | `internal/weborigin` | none | none | infrastructure |
 | canonical agreement JSON | `internal/canonicaljson` | none | none | infrastructure |
@@ -106,7 +107,7 @@ exists.
 | operator executable | `cmd/proctor` | `cmd/proctor/commands` | none | none |
 | operator commands | `cmd/proctor/commands` and below | `server`, `localization`, `operator` | `github.com/spf13/cobra`, `golang.org/x/sys/unix` | `database/sql` and below, `net/smtp` |
 | ptool executable | `cmd/ptool` | `cmd/ptool/commands` | none | none |
-| ptool commands | `cmd/ptool/commands` and below | `cmd/ptool/devseed`, `app/mail`, `cmd/proctor/commands`, `httpapi`, `internal/errorcatalog`, `internal/openapidoc`, `localization`, `websocket` | `github.com/spf13/cobra` | none |
+| ptool commands | `cmd/ptool/commands` and below | `cmd/ptool/devseed`, `app/mail`, `cmd/proctor/commands`, `httpapi`, `internal/asyncapidoc`, `internal/errorcatalog`, `internal/openapidoc`, `localization`, `websocket` | `github.com/spf13/cobra` | none |
 | development seed HTTP client | `cmd/ptool/devseed` | none | none | none |
 | unknown ptool children | below `cmd/ptool` | none | none | all |
 | mail preview executable | `cmd/mailpreview` | `app/mail`, `localization`, `model` | none | none |

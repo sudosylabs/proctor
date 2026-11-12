@@ -144,11 +144,11 @@ func TestWebSocketIntegration(t *testing.T) {
 	require.Equal(t, "ok", responseMessage.Status)
 	require.Equal(t, int64(2), responseMessage.Sequence)
 
-	eventData := json.RawMessage(`{"version":1}`)
+	eventData := json.RawMessage(`{"revision":1}`)
 	require.NoError(t, helper.App.Realtime.Publish(
 		context.Background(),
 		realtime.Event{
-			Name:   "institution.updated",
+			Name:   "access_policy_changed",
 			Action: subscription.Action,
 			Resource: model.Resource{
 				Type: subscription.Resource.Type,
@@ -158,7 +158,7 @@ func TestWebSocketIntegration(t *testing.T) {
 		},
 	))
 	event := readWebSocketEvent(t, connection)
-	require.Equal(t, "institution.updated", event.Event)
+	require.Equal(t, "access_policy_changed", event.Event)
 	require.Equal(t, int64(2), event.Sequence)
 	require.Equal(t, string(eventData), string(event.Data))
 	_ = connection.WriteMessage(
@@ -174,7 +174,7 @@ func TestWebSocketIntegration(t *testing.T) {
 		candidate, candidateResponse, dialErr := gwebsocket.DefaultDialer.Dial(resumeURL, headers)
 		require.NoError(t, dialErr, "WebSocket resume dial = %v, response = %#v", dialErr, candidateResponse)
 		first := readWebSocketEvent(t, candidate)
-		if first.Event == "institution.updated" && first.Sequence == 2 {
+		if first.Event == "access_policy_changed" && first.Sequence == 2 {
 			resumed = candidate
 			break
 		}
@@ -328,18 +328,18 @@ func TestWebSocketTwoNodeConformance(t *testing.T) {
 	require.NoError(t, nodeA.App.Realtime.Publish(
 		context.Background(),
 		realtime.Event{
-			Name:   "institution.cluster_updated",
+			Name:   "access_policy_changed",
 			Action: subscription.Action,
 			Resource: model.Resource{
 				Type: subscription.Resource.Type,
 				ID:   subscription.Resource.ID,
 			},
-			Data: json.RawMessage(`{"source":"node-a"}`),
+			Data: json.RawMessage(`{"revision":2}`),
 		},
 	))
 	event := readWebSocketEvent(t, connection)
-	require.Equal(t, "institution.cluster_updated", event.Event)
-	require.Equal(t, `{"source":"node-a"}`, string(event.Data))
+	require.Equal(t, "access_policy_changed", event.Event)
+	require.Equal(t, `{"revision":2}`, string(event.Data))
 
 	principal, appErr := nodeA.App.Identity.AuthenticateAccess(
 		context.Background(),

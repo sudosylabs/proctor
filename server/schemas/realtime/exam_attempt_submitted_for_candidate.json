@@ -1,0 +1,49 @@
+{
+  "title": "Attempt submitted, candidate copy",
+  "description": "The candidate's own copy of the submission. It leaves out the candidate identity.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_sitting_id",
+    "exam_attempt_id",
+    "submission_id",
+    "state",
+    "provenance",
+    "workspace_cursor",
+    "manifest_digest",
+    "submitted_at"
+  ],
+  "properties": {
+    "exam_sitting_id": {
+      "$ref": "id.json"
+    },
+    "exam_attempt_id": {
+      "$ref": "id.json"
+    },
+    "submission_id": {
+      "$ref": "id.json"
+    },
+    "state": {
+      "type": "string",
+      "const": "submitted"
+    },
+    "provenance": {
+      "type": "string",
+      "enum": [
+        "candidate_submitted",
+        "manager_ended_attempt",
+        "sitting_closed"
+      ]
+    },
+    "workspace_cursor": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "manifest_digest": {
+      "$ref": "sha256.json"
+    },
+    "submitted_at": {
+      "$ref": "instant.json"
+    }
+  }
+}

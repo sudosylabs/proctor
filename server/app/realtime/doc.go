@@ -16,8 +16,10 @@
 
 // Package realtime tells connected clients that something changed. Event is
 // one such notice (its name, who may receive it and a small payload), event.go
-// has one constructor per event, and Delivery delivers an event to this node's
-// sockets first and then to the other nodes.
+// has one constructor per event, message.go declares the closed list of events
+// the server sends (each one an AsyncAPI message in server/asyncapi), and
+// Delivery delivers an event to this node's sockets first and then to the
+// other nodes.
 //
 // An application area does not call Delivery directly. It holds a Publisher,
 // builds its events in its own effects.go, and publishes only after its Store

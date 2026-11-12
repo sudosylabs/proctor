@@ -1,0 +1,39 @@
+{
+  "title": "Exam Sitting changed",
+  "description": "A Sitting's state and revision after it was scheduled, rescheduled or canceled. Times, Class and Exam Revision are never included.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_id",
+    "exam_sitting_id",
+    "state",
+    "revision",
+    "changed_at"
+  ],
+  "properties": {
+    "exam_id": {
+      "$ref": "id.json"
+    },
+    "exam_sitting_id": {
+      "$ref": "id.json"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "scheduled",
+        "open",
+        "paused",
+        "closing",
+        "closed",
+        "canceled"
+      ]
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "changed_at": {
+      "$ref": "instant.json"
+    }
+  }
+}

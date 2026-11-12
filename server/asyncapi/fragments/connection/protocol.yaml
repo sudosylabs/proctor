@@ -1,0 +1,229 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+# Frames of the connection itself: hello, resync_required, and the generic commands.
+components:
+  messages:
+    hello:
+      name: hello
+      title: Hello
+      summary: The first event on every connection.
+      description: Identifies the connection. A client keeps connection_id and the sequence of the last event it processed, and offers both as the handshake's connection_id and sequence_number when it reconnects.
+      tags:
+        - name: protocol
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - user_id
+              - data
+            properties:
+              event:
+                type: string
+                const: hello
+              data:
+                $ref: '../../../schemas/realtime/hello.json'
+            not:
+              required:
+                - action
+      examples:
+        - name: new connection
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: hello
+            sequence: 1
+            user_id: qtwz47ydgjcx1ia56br8kpous3
+            resource:
+              type: ''
+              id: ''
+            data:
+              connection_id: br8kpous3h9nfemqtwz47ydgjc
+              node_id: node-a
+              resumed: false
+    resync_required:
+      name: resync_required
+      title: Resynchronization required
+      summary: Missed events could not be replayed.
+      description: Follows hello when a reconnecting client asked to resume but the node no longer holds the missed events. Refetch authoritative state over HTTP before applying further events.
+      tags:
+        - name: protocol
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - user_id
+            properties:
+              event:
+                type: string
+                const: resync_required
+            not:
+              anyOf:
+                - required:
+                    - action
+                - required:
+                    - data
+      examples:
+        - name: replay unavailable
+          payload:
+            id: us3h9nfemqtwz47ydgjcx1ia56
+            event: resync_required
+            sequence: 2
+            user_id: qtwz47ydgjcx1ia56br8kpous3
+            resource:
+              type: ''
+              id: ''
+    ping:
+      name: ping
+      title: Ping
+      summary: Checks the connection at the application level.
+      description: Has no data. The server replies with pong. It does not renew an Attempt Participation.
+      tags:
+        - name: command
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/command_request.json'
+          - type: object
+            required:
+              - action
+            properties:
+              action:
+                type: string
+                const: ping
+      examples:
+        - name: ping
+          payload:
+            sequence: 1
+            action: ping
+    pong:
+      name: pong
+      title: Pong
+      summary: The reply to ping.
+      tags:
+        - name: reply
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/command_reply.json'
+          - type: object
+            required:
+              - data
+            properties:
+              data:
+                $ref: '../../../schemas/realtime/pong.json'
+      examples:
+        - name: pong
+          payload:
+            status: ok
+            sequence: 1
+            data:
+              pong: true
+    subscribe:
+      name: subscribe
+      title: Subscribe
+      summary: Starts receiving the events authorized by one action on one resource.
+      description: Each subscription is authorized on its own; the handshake grants none. Subscribing twice to the same pair succeeds once. A connection holds at most 256 subscriptions.
+      tags:
+        - name: command
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/command_request.json'
+          - type: object
+            required:
+              - action
+              - data
+            properties:
+              action:
+                type: string
+                const: subscribe
+              data:
+                $ref: '../../../schemas/realtime/subscription.json'
+      examples:
+        - name: Sitting viewer
+          payload:
+            sequence: 2
+            action: subscribe
+            data:
+              action: exam.sitting.view
+              resource:
+                type: exam_sitting
+                id: h9nfemqtwz47ydgjcx1ia56br8
+    unsubscribe:
+      name: unsubscribe
+      title: Unsubscribe
+      summary: Stops receiving the events of one subscription.
+      description: Succeeds whether or not the subscription was held. The Sitting subscription an Attempt Connection holds is kept until the connection unbinds.
+      tags:
+        - name: command
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/command_request.json'
+          - type: object
+            required:
+              - action
+              - data
+            properties:
+              action:
+                type: string
+                const: unsubscribe
+              data:
+                $ref: '../../../schemas/realtime/subscription.json'
+      examples:
+        - name: Sitting viewer
+          payload:
+            sequence: 3
+            action: unsubscribe
+            data:
+              action: exam.sitting.view
+              resource:
+                type: exam_sitting
+                id: h9nfemqtwz47ydgjcx1ia56br8
+    subscription_reply:
+      name: subscription_reply
+      title: Subscription reply
+      summary: The subscribe or unsubscribe command succeeded.
+      tags:
+        - name: reply
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/command_reply.json'
+          - type: object
+            not:
+              required:
+                - data
+      examples:
+        - name: subscribed
+          payload:
+            status: ok
+            sequence: 2
+    command_error:
+      name: command_error
+      title: Command error
+      summary: A command was refused.
+      description: The connection stays open. A rate-limited command carries retry_after_seconds; 64 consecutive refusals close the connection with code 4005.
+      tags:
+        - name: reply
+      payload:
+        $ref: '../../../schemas/realtime/command_error.json'
+      examples:
+        - name: subscription denied
+          payload:
+            status: error
+            sequence: 2
+            error:
+              code: authorization.denied
+              message: WebSocket subscription denied.
+        - name: rate limited
+          payload:
+            status: error
+            sequence: 9
+            error:
+              code: websocket.rate_limited
+              message: Too many WebSocket requests. Retry shortly.
+              retry_after_seconds: 1

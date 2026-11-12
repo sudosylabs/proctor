@@ -41,5 +41,5 @@ func TestProfilePictureRealtimeEffectContainsOnlySafeChangeMetadata(t *testing.T
 	require.Len(t, data, 3)
 	require.Equal(t, active.String(), data["active_file_entry_id"])
 	require.Equal(t, float64(4), data["revision"])
-	require.Equal(t, float64(500), data["changed_at"])
+	require.Equal(t, "1970-01-01T00:00:00.5Z", data["changed_at"])
 }

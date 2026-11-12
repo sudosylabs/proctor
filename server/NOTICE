@@ -1030,6 +1030,26 @@ Proctor places selection in the composition root, reads its own process-only
 environment variable once at startup, rejects unknown nonempty values, and
 passes an immutable Desktop compatibility policy into application services.
 
+AsyncAPI 3.0.0 JSON Schema
+--------------------------
+internal/asyncapidoc/asyncapi-3.0.0.schema.json is copied unchanged from
+https://github.com/asyncapi/spec-json-schemas at revision
+eee8d2217d23b22c475090c0e12f20801f531f11, file schemas/3.0.0.json
+(SHA-256 1786a007ac00344a8f529e5a6fc5db786b0be6757e0b94a8b95a8a6a52b7fe9a).
+It is the official JSON Schema of the AsyncAPI 3.0.0 specification.
+
+Governing license: Apache License 2.0 (the repository LICENSE file),
+reproduced in LICENSES/Apache-2.0.txt. The upstream NOTICE file reads:
+
+Copyright 2016-2025 AsyncAPI Initiative
+
+This product includes software developed at
+AsyncAPI Initiative (http://www.asyncapi.com/).
+
+The AsyncAPI compiler in internal/asyncapidoc embeds the file to validate the
+realtime contract in asyncapi/; the file is never served. No other
+spec-json-schemas content is copied.
+
 Common-password blocklist
 -------------------------
 app/identity/password_blocklist.txt is data copied from the Go module

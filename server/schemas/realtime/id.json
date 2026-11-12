@@ -1,0 +1,6 @@
+{
+  "title": "Opaque identifier",
+  "description": "A 26-character Proctor identifier.",
+  "type": "string",
+  "pattern": "^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$"
+}

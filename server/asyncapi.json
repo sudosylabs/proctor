@@ -1,0 +1,4473 @@
+{
+  "asyncapi": "3.0.0",
+  "channels": {
+    "websocket": {
+      "address": "/api/v1/websocket",
+      "bindings": {
+        "ws": {
+          "bindingVersion": "0.1.0",
+          "method": "GET"
+        }
+      },
+      "description": "Open it with the HTTP upgrade described by the OpenAPI operation connectWebSocket, which owns authentication, Origin, and the connection_id and sequence_number resume parameters. Every frame is one JSON text message. The server sends events, each with a sequence that increases by one; the client sends commands, each with a sequence it chooses, and the reply carries that sequence back. Clients ignore an event name they do not know.",
+      "messages": {
+        "academic_unit_archived": {
+          "$ref": "#/components/messages/academic_unit_archived"
+        },
+        "academic_unit_created": {
+          "$ref": "#/components/messages/academic_unit_created"
+        },
+        "academic_unit_updated": {
+          "$ref": "#/components/messages/academic_unit_updated"
+        },
+        "access_policy_changed": {
+          "$ref": "#/components/messages/access_policy_changed"
+        },
+        "candidate.exam_activity.changed": {
+          "$ref": "#/components/messages/candidate.exam_activity.changed"
+        },
+        "command_error": {
+          "$ref": "#/components/messages/command_error"
+        },
+        "current_user.context.changed": {
+          "$ref": "#/components/messages/current_user.context.changed"
+        },
+        "exam_archived": {
+          "$ref": "#/components/messages/exam_archived"
+        },
+        "exam_attempt_access_reallowed": {
+          "$ref": "#/components/messages/exam_attempt_access_reallowed"
+        },
+        "exam_attempt_access_suspended": {
+          "$ref": "#/components/messages/exam_attempt_access_suspended"
+        },
+        "exam_attempt_connection_closed": {
+          "$ref": "#/components/messages/exam_attempt_connection_closed"
+        },
+        "exam_attempt_connection_opened": {
+          "$ref": "#/components/messages/exam_attempt_connection_opened"
+        },
+        "exam_attempt_focus_warning": {
+          "$ref": "#/components/messages/exam_attempt_focus_warning"
+        },
+        "exam_attempt_integrity_flagged": {
+          "$ref": "#/components/messages/exam_attempt_integrity_flagged"
+        },
+        "exam_attempt_reallowed": {
+          "$ref": "#/components/messages/exam_attempt_reallowed"
+        },
+        "exam_attempt_submitted": {
+          "$ref": "#/components/messages/exam_attempt_submitted"
+        },
+        "exam_attempt_submitted_for_candidate": {
+          "$ref": "#/components/messages/exam_attempt_submitted_for_candidate"
+        },
+        "exam_attempt_suspended": {
+          "$ref": "#/components/messages/exam_attempt_suspended"
+        },
+        "exam_attempt_workspace_changed": {
+          "$ref": "#/components/messages/exam_attempt_workspace_changed"
+        },
+        "exam_created": {
+          "$ref": "#/components/messages/exam_created"
+        },
+        "exam_draft_updated": {
+          "$ref": "#/components/messages/exam_draft_updated"
+        },
+        "exam_integrity_discrepancy_recorded": {
+          "$ref": "#/components/messages/exam_integrity_discrepancy_recorded"
+        },
+        "exam_integrity_review_changed": {
+          "$ref": "#/components/messages/exam_integrity_review_changed"
+        },
+        "exam_integrity_review_finalized": {
+          "$ref": "#/components/messages/exam_integrity_review_finalized"
+        },
+        "exam_manager_changed": {
+          "$ref": "#/components/messages/exam_manager_changed"
+        },
+        "exam_owner_transferred": {
+          "$ref": "#/components/messages/exam_owner_transferred"
+        },
+        "exam_revision_published": {
+          "$ref": "#/components/messages/exam_revision_published"
+        },
+        "exam_sitting_canceled": {
+          "$ref": "#/components/messages/exam_sitting_canceled"
+        },
+        "exam_sitting_content_corrected": {
+          "$ref": "#/components/messages/exam_sitting_content_corrected"
+        },
+        "exam_sitting_content_corrected_for_candidate": {
+          "$ref": "#/components/messages/exam_sitting_content_corrected_for_candidate"
+        },
+        "exam_sitting_lifecycle_changed": {
+          "$ref": "#/components/messages/exam_sitting_lifecycle_changed"
+        },
+        "exam_sitting_lifecycle_changed_for_candidate": {
+          "$ref": "#/components/messages/exam_sitting_lifecycle_changed_for_candidate"
+        },
+        "exam_sitting_schedule_updated": {
+          "$ref": "#/components/messages/exam_sitting_schedule_updated"
+        },
+        "exam_sitting_scheduled": {
+          "$ref": "#/components/messages/exam_sitting_scheduled"
+        },
+        "exam_starter_workspace_changed": {
+          "$ref": "#/components/messages/exam_starter_workspace_changed"
+        },
+        "exam_student_result_released": {
+          "$ref": "#/components/messages/exam_student_result_released"
+        },
+        "exam_student_result_released_for_candidate": {
+          "$ref": "#/components/messages/exam_student_result_released_for_candidate"
+        },
+        "hello": {
+          "$ref": "#/components/messages/hello"
+        },
+        "manager.sitting_board.changed": {
+          "$ref": "#/components/messages/manager.sitting_board.changed"
+        },
+        "ping": {
+          "$ref": "#/components/messages/ping"
+        },
+        "pong": {
+          "$ref": "#/components/messages/pong"
+        },
+        "resync_required": {
+          "$ref": "#/components/messages/resync_required"
+        },
+        "subscribe": {
+          "$ref": "#/components/messages/subscribe"
+        },
+        "subscription_reply": {
+          "$ref": "#/components/messages/subscription_reply"
+        },
+        "unsubscribe": {
+          "$ref": "#/components/messages/unsubscribe"
+        },
+        "user_profile_picture_changed": {
+          "$ref": "#/components/messages/user_profile_picture_changed"
+        },
+        "user_settings_changed": {
+          "$ref": "#/components/messages/user_settings_changed"
+        }
+      },
+      "summary": "The one authenticated WebSocket of a Proctor installation.",
+      "title": "WebSocket connection",
+      "x-proctor-close-codes": [
+        {
+          "code": 4000,
+          "description": "The server closed the connection, for example while shutting down. Reconnect with backoff.",
+          "name": "server"
+        },
+        {
+          "code": 4001,
+          "description": "The Session is no longer valid. Authenticate again before reconnecting.",
+          "name": "session_revoked"
+        },
+        {
+          "code": 4002,
+          "description": "The client read events too slowly and the outbound queue filled. Reconnect and resume.",
+          "name": "backpressure"
+        },
+        {
+          "code": 4003,
+          "description": "A Role, binding, assurance or account change may have removed a subscription's authority. Reconnect and subscribe again.",
+          "name": "authorization_changed"
+        },
+        {
+          "code": 4004,
+          "description": "The Session or User already holds the most connections allowed (8 per Session, 64 per User), so the new connection is closed right after the upgrade.",
+          "name": "connection_limit"
+        },
+        {
+          "code": 4005,
+          "description": "64 consecutive command frames were refused by the inbound rate limit.",
+          "name": "rate_limited"
+        }
+      ],
+      "x-proctor-handshake": "connectWebSocket"
+    }
+  },
+  "components": {
+    "messages": {
+      "academic_unit_archived": {
+        "description": "Refetch the Academic Unit. The event has no data. Delivered to connections that subscribe to academic_unit.view on the academic unit.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "academic_unit.view",
+              "event": "academic_unit_archived",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "jcx1ia56br8kpous3h9nfemqtw",
+                "type": "academic_unit"
+              },
+              "sequence": 43
+            }
+          }
+        ],
+        "name": "academic_unit_archived",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "not": {
+                "required": [
+                  "data"
+                ]
+              },
+              "properties": {
+                "action": {
+                  "const": "academic_unit.view",
+                  "type": "string"
+                },
+                "event": {
+                  "const": "academic_unit_archived",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch the Academic Unit. The event has no data.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Institution"
+          }
+        ],
+        "title": "Academic Unit archived"
+      },
+      "academic_unit_created": {
+        "description": "Refetch the Academic Unit. The event has no data. Delivered to connections that subscribe to academic_unit.view on the academic unit.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "academic_unit.view",
+              "event": "academic_unit_created",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "jcx1ia56br8kpous3h9nfemqtw",
+                "type": "academic_unit"
+              },
+              "sequence": 41
+            }
+          }
+        ],
+        "name": "academic_unit_created",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "not": {
+                "required": [
+                  "data"
+                ]
+              },
+              "properties": {
+                "action": {
+                  "const": "academic_unit.view",
+                  "type": "string"
+                },
+                "event": {
+                  "const": "academic_unit_created",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch the Academic Unit. The event has no data.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Institution"
+          }
+        ],
+        "title": "Academic Unit created"
+      },
+      "academic_unit_updated": {
+        "description": "Refetch the Academic Unit. The event has no data. Delivered to connections that subscribe to academic_unit.view on the academic unit.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "academic_unit.view",
+              "event": "academic_unit_updated",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "jcx1ia56br8kpous3h9nfemqtw",
+                "type": "academic_unit"
+              },
+              "sequence": 42
+            }
+          }
+        ],
+        "name": "academic_unit_updated",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "not": {
+                "required": [
+                  "data"
+                ]
+              },
+              "properties": {
+                "action": {
+                  "const": "academic_unit.view",
+                  "type": "string"
+                },
+                "event": {
+                  "const": "academic_unit_updated",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch the Academic Unit. The event has no data.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Institution"
+          }
+        ],
+        "title": "Academic Unit updated"
+      },
+      "access_policy_changed": {
+        "description": "Refetch the Access Policy; the event carries only its new revision. Delivered to connections that subscribe to access_policy.view on the institution.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "access_policy.view",
+              "data": {
+                "revision": 7
+              },
+              "event": "access_policy_changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "ous3h9nfemqtwz47ydgjcx1ia5",
+                "type": "institution"
+              },
+              "sequence": 40
+            }
+          }
+        ],
+        "name": "access_policy_changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "access_policy.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/access_policy_changed"
+                },
+                "event": {
+                  "const": "access_policy_changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch the Access Policy; the event carries only its new revision.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Institution"
+          }
+        ],
+        "title": "Access Policy changed"
+      },
+      "candidate.exam_activity.changed": {
+        "description": "Refetch the candidate's Exam activity. Delivered to the addressed User's connections.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "data": {
+                "schema_version": 1
+              },
+              "event": "candidate.exam_activity.changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "",
+                "type": ""
+              },
+              "sequence": 48,
+              "user_id": "qtwz47ydgjcx1ia56br8kpous3"
+            }
+          }
+        ],
+        "name": "candidate.exam_activity.changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "not": {
+                "required": [
+                  "action"
+                ]
+              },
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/collection_invalidation"
+                },
+                "event": {
+                  "const": "candidate.exam_activity.changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "user_id",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch the candidate's Exam activity.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Sittings"
+          }
+        ],
+        "title": "Candidate Exam activity changed"
+      },
+      "command_error": {
+        "description": "The connection stays open. A rate-limited command carries retry_after_seconds; 64 consecutive refusals close the connection with code 4005.",
+        "examples": [
+          {
+            "name": "subscription denied",
+            "payload": {
+              "error": {
+                "code": "authorization.denied",
+                "message": "WebSocket subscription denied."
+              },
+              "sequence": 2,
+              "status": "error"
+            }
+          },
+          {
+            "name": "rate limited",
+            "payload": {
+              "error": {
+                "code": "websocket.rate_limited",
+                "message": "Too many WebSocket requests. Retry shortly.",
+                "retry_after_seconds": 1
+              },
+              "sequence": 9,
+              "status": "error"
+            }
+          }
+        ],
+        "name": "command_error",
+        "payload": {
+          "$ref": "#/components/schemas/command_error"
+        },
+        "summary": "A command was refused.",
+        "tags": [
+          {
+            "name": "reply"
+          }
+        ],
+        "title": "Command error"
+      },
+      "current_user.context.changed": {
+        "description": "Refetch the current user's navigation context. Delivered to the addressed User's connections.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "data": {
+                "schema_version": 1
+              },
+              "event": "current_user.context.changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "",
+                "type": ""
+              },
+              "sequence": 40,
+              "user_id": "qtwz47ydgjcx1ia56br8kpous3"
+            }
+          }
+        ],
+        "name": "current_user.context.changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "not": {
+                "required": [
+                  "action"
+                ]
+              },
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/collection_invalidation"
+                },
+                "event": {
+                  "const": "current_user.context.changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "user_id",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch the current user's navigation context.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Users"
+          }
+        ],
+        "title": "Current user context changed"
+      },
+      "exam_archived": {
+        "description": "The Exam was archived. Delivered to connections that subscribe to exam.view on the exam.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.view",
+              "data": {
+                "archived_at": "2026-08-01T09:30:00Z",
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y",
+                "exam_revision": 20
+              },
+              "event": "exam_archived",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "ia56br8kpous3h9nfemqtwz47y",
+                "type": "exam"
+              },
+              "sequence": 43
+            }
+          }
+        ],
+        "name": "exam_archived",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_archived"
+                },
+                "event": {
+                  "const": "exam_archived",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "The Exam was archived.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Exams"
+          }
+        ],
+        "title": "Exam archived"
+      },
+      "exam_attempt_access_reallowed": {
+        "description": "Tells the candidate their Attempt is active again. Delivered to the addressed User's connections that subscribe to exam.sitting.participate on the exam sitting.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.sitting.participate",
+              "data": {
+                "changed_at": "2026-08-01T09:30:00Z",
+                "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "state": "active"
+              },
+              "event": "exam_attempt_access_reallowed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "type": "exam_sitting"
+              },
+              "sequence": 45,
+              "user_id": "qtwz47ydgjcx1ia56br8kpous3"
+            }
+          }
+        ],
+        "name": "exam_attempt_access_reallowed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.sitting.participate",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_access_changed"
+                },
+                "event": {
+                  "const": "exam_attempt_access_reallowed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "user_id",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Tells the candidate their Attempt is active again.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Attempts"
+          }
+        ],
+        "title": "Your Attempt was re-allowed"
+      },
+      "exam_attempt_access_suspended": {
+        "description": "Tells the candidate their Attempt is suspended, with a safe reason. Delivered to the addressed User's connections that subscribe to exam.sitting.participate on the exam sitting.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.sitting.participate",
+              "data": {
+                "changed_at": "2026-08-01T09:30:00Z",
+                "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "reason_code": "manager_suspended",
+                "state": "suspended"
+              },
+              "event": "exam_attempt_access_suspended",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "type": "exam_sitting"
+              },
+              "sequence": 44,
+              "user_id": "qtwz47ydgjcx1ia56br8kpous3"
+            }
+          }
+        ],
+        "name": "exam_attempt_access_suspended",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.sitting.participate",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_access_changed"
+                },
+                "event": {
+                  "const": "exam_attempt_access_suspended",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "user_id",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Tells the candidate their Attempt is suspended, with a safe reason.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Attempts"
+          }
+        ],
+        "title": "Your Attempt was suspended"
+      },
+      "exam_attempt_connection_closed": {
+        "description": "An Attempt Connection closed, and why. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.sitting.view",
+              "data": {
+                "attempt_connection_id": "kpous3h9nfemqtwz47ydgjcx1i",
+                "candidate_user_id": "qtwz47ydgjcx1ia56br8kpous3",
+                "changed_at": "2026-08-01T09:30:00Z",
+                "close_reason": "lease_expired",
+                "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "state": "closed"
+              },
+              "event": "exam_attempt_connection_closed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "type": "exam_sitting"
+              },
+              "sequence": 41
+            }
+          }
+        ],
+        "name": "exam_attempt_connection_closed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.sitting.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_connection_changed"
+                },
+                "event": {
+                  "const": "exam_attempt_connection_closed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "An Attempt Connection closed, and why.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Attempts"
+          }
+        ],
+        "title": "Attempt Connection closed"
+      },
+      "exam_attempt_connection_opened": {
+        "description": "A candidate's desktop was admitted and holds an open Attempt Connection. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.sitting.view",
+              "data": {
+                "attempt_connection_id": "kpous3h9nfemqtwz47ydgjcx1i",
+                "candidate_user_id": "qtwz47ydgjcx1ia56br8kpous3",
+                "changed_at": "2026-08-01T09:30:00Z",
+                "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "state": "open"
+              },
+              "event": "exam_attempt_connection_opened",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "type": "exam_sitting"
+              },
+              "sequence": 40
+            }
+          }
+        ],
+        "name": "exam_attempt_connection_opened",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.sitting.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_connection_changed"
+                },
+                "event": {
+                  "const": "exam_attempt_connection_opened",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "A candidate's desktop was admitted and holds an open Attempt Connection.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Attempts"
+          }
+        ],
+        "title": "Attempt Connection opened"
+      },
+      "exam_attempt_focus_warning": {
+        "description": "Warns the candidate that their Focus Loss crossed the policy threshold. Delivered to the addressed User's connections that subscribe to exam.sitting.participate on the exam sitting.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.sitting.participate",
+              "data": {
+                "changed_at": "2026-08-01T09:30:00Z",
+                "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "warning_code": "focus_loss_policy_warning"
+              },
+              "event": "exam_attempt_focus_warning",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "type": "exam_sitting"
+              },
+              "sequence": 47,
+              "user_id": "qtwz47ydgjcx1ia56br8kpous3"
+            }
+          }
+        ],
+        "name": "exam_attempt_focus_warning",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.sitting.participate",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_focus_warning"
+                },
+                "event": {
+                  "const": "exam_attempt_focus_warning",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "user_id",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Warns the candidate that their Focus Loss crossed the policy threshold.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Attempts"
+          }
+        ],
+        "title": "Focus Loss warning"
+      },
+      "exam_attempt_integrity_flagged": {
+        "description": "A Focus Loss Integrity Flag was raised on an Attempt. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.sitting.view",
+              "data": {
+                "candidate_user_id": "qtwz47ydgjcx1ia56br8kpous3",
+                "changed_at": "2026-08-01T09:30:00Z",
+                "evidence_available": true,
+                "evidence_overflow_count": 0,
+                "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "integrity_flag_id": "twz47ydgjcx1ia56br8kpous3h",
+                "outcome": "flag_and_warn",
+                "policy_kind": "focus_loss",
+                "retained_evidence_count": 2
+              },
+              "event": "exam_attempt_integrity_flagged",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "type": "exam_sitting"
+              },
+              "sequence": 48
+            }
+          }
+        ],
+        "name": "exam_attempt_integrity_flagged",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.sitting.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_integrity_flagged"
+                },
+                "event": {
+                  "const": "exam_attempt_integrity_flagged",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "A Focus Loss Integrity Flag was raised on an Attempt.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Attempts"
+          }
+        ],
+        "title": "Attempt Integrity Flag raised"
+      },
+      "exam_attempt_reallowed": {
+        "description": "An Attempt Suspension was closed and the Attempt is active again. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.sitting.view",
+              "data": {
+                "attempt_revision": 5,
+                "candidate_user_id": "qtwz47ydgjcx1ia56br8kpous3",
+                "changed_at": "2026-08-01T09:30:00Z",
+                "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "suspension_id": "a56br8kpous3h9nfemqtwz47yd"
+              },
+              "event": "exam_attempt_reallowed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "type": "exam_sitting"
+              },
+              "sequence": 43
+            }
+          }
+        ],
+        "name": "exam_attempt_reallowed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.sitting.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_reallowed"
+                },
+                "event": {
+                  "const": "exam_attempt_reallowed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "An Attempt Suspension was closed and the Attempt is active again.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Attempts"
+          }
+        ],
+        "title": "Attempt re-allowed"
+      },
+      "exam_attempt_submitted": {
+        "description": "An Attempt was submitted. Sent to Sitting viewers. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.sitting.view",
+              "data": {
+                "candidate_user_id": "qtwz47ydgjcx1ia56br8kpous3",
+                "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "manifest_digest": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+                "provenance": "candidate_submitted",
+                "state": "submitted",
+                "submission_id": "9nfemqtwz47ydgjcx1ia56br8k",
+                "submitted_at": "2026-08-01T09:30:00Z",
+                "workspace_cursor": 9
+              },
+              "event": "exam_attempt_submitted",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "type": "exam_sitting"
+              },
+              "sequence": 49
+            }
+          }
+        ],
+        "name": "exam_attempt_submitted",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.sitting.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_submitted"
+                },
+                "event": {
+                  "const": "exam_attempt_submitted",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "An Attempt was submitted. Sent to Sitting viewers.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Attempts"
+          }
+        ],
+        "title": "Attempt submitted"
+      },
+      "exam_attempt_submitted_for_candidate": {
+        "description": "The candidate's own copy of the submission. Delivered to the addressed User's connections that subscribe to exam.sitting.participate on the exam sitting.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.sitting.participate",
+              "data": {
+                "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "manifest_digest": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+                "provenance": "candidate_submitted",
+                "state": "submitted",
+                "submission_id": "9nfemqtwz47ydgjcx1ia56br8k",
+                "submitted_at": "2026-08-01T09:30:00Z",
+                "workspace_cursor": 9
+              },
+              "event": "exam_attempt_submitted",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "type": "exam_sitting"
+              },
+              "sequence": 50,
+              "user_id": "qtwz47ydgjcx1ia56br8kpous3"
+            }
+          }
+        ],
+        "name": "exam_attempt_submitted",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.sitting.participate",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_submitted_for_candidate"
+                },
+                "event": {
+                  "const": "exam_attempt_submitted",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "user_id",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "The candidate's own copy of the submission.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Attempts"
+          }
+        ],
+        "title": "Attempt submitted, for the candidate"
+      },
+      "exam_attempt_suspended": {
+        "description": "An Attempt was suspended by policy or kicked by an Exam Manager. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.sitting.view",
+              "data": {
+                "attempt_connection_id": "kpous3h9nfemqtwz47ydgjcx1i",
+                "attempt_revision": 4,
+                "candidate_user_id": "qtwz47ydgjcx1ia56br8kpous3",
+                "changed_at": "2026-08-01T09:30:00Z",
+                "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "integrity_flag_id": "twz47ydgjcx1ia56br8kpous3h",
+                "suspension_id": "a56br8kpous3h9nfemqtwz47yd"
+              },
+              "event": "exam_attempt_suspended",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "type": "exam_sitting"
+              },
+              "sequence": 42
+            }
+          }
+        ],
+        "name": "exam_attempt_suspended",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.sitting.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_suspended"
+                },
+                "event": {
+                  "const": "exam_attempt_suspended",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "An Attempt was suspended by policy or kicked by an Exam Manager.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Attempts"
+          }
+        ],
+        "title": "Attempt suspended"
+      },
+      "exam_attempt_workspace_changed": {
+        "description": "Refetch the candidate's Attempt Workspace after one committed mutation. Delivered to the addressed User's connections that subscribe to exam.sitting.participate on the exam sitting.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.sitting.participate",
+              "data": {
+                "changed_at": "2026-08-01T09:30:00Z",
+                "entry_id": "nfemqtwz47ydgjcx1ia56br8kp",
+                "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "operation": "replace_file",
+                "workspace_cursor": 9
+              },
+              "event": "exam_attempt_workspace_changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "type": "exam_sitting"
+              },
+              "sequence": 46,
+              "user_id": "qtwz47ydgjcx1ia56br8kpous3"
+            }
+          }
+        ],
+        "name": "exam_attempt_workspace_changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.sitting.participate",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_workspace_changed"
+                },
+                "event": {
+                  "const": "exam_attempt_workspace_changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "user_id",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch the candidate's Attempt Workspace after one committed mutation.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Attempts"
+          }
+        ],
+        "title": "Attempt Workspace changed"
+      },
+      "exam_created": {
+        "description": "An Exam was created. The event has no data. Delivered to connections that subscribe to exam.view on the exam.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.view",
+              "event": "exam_created",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "ia56br8kpous3h9nfemqtwz47y",
+                "type": "exam"
+              },
+              "sequence": 40
+            }
+          }
+        ],
+        "name": "exam_created",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "not": {
+                "required": [
+                  "data"
+                ]
+              },
+              "properties": {
+                "action": {
+                  "const": "exam.view",
+                  "type": "string"
+                },
+                "event": {
+                  "const": "exam_created",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "An Exam was created. The event has no data.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Exams"
+          }
+        ],
+        "title": "Exam created"
+      },
+      "exam_draft_updated": {
+        "description": "The Exam's Draft text or policy changed. Delivered to connections that subscribe to exam.view on the exam.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.view",
+              "data": {
+                "draft_revision": 12,
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y"
+              },
+              "event": "exam_draft_updated",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "ia56br8kpous3h9nfemqtwz47y",
+                "type": "exam"
+              },
+              "sequence": 41
+            }
+          }
+        ],
+        "name": "exam_draft_updated",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_draft_updated"
+                },
+                "event": {
+                  "const": "exam_draft_updated",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "The Exam's Draft text or policy changed.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Exams"
+          }
+        ],
+        "title": "Exam Draft updated"
+      },
+      "exam_integrity_discrepancy_recorded": {
+        "description": "A Focus Loss claim arrived after its Attempt or Sitting ended. Delivered to connections that subscribe to submission.view on the submission.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "submission.view",
+              "data": {
+                "candidate_user_id": "qtwz47ydgjcx1ia56br8kpous3",
+                "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "integrity_discrepancy_id": "pous3h9nfemqtwz47ydgjcx1ia",
+                "recorded_at": "2026-08-01T09:30:00Z",
+                "submission_id": "9nfemqtwz47ydgjcx1ia56br8k"
+              },
+              "event": "exam_integrity_discrepancy_recorded",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "9nfemqtwz47ydgjcx1ia56br8k",
+                "type": "submission"
+              },
+              "sequence": 40
+            }
+          }
+        ],
+        "name": "exam_integrity_discrepancy_recorded",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "submission.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_integrity_discrepancy_recorded"
+                },
+                "event": {
+                  "const": "exam_integrity_discrepancy_recorded",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "A Focus Loss claim arrived after its Attempt or Sitting ended.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Integrity review"
+          }
+        ],
+        "title": "Integrity Discrepancy recorded"
+      },
+      "exam_integrity_review_changed": {
+        "description": "The Submission's Integrity Review changed. Delivered to connections that subscribe to submission.view on the submission.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "submission.view",
+              "data": {
+                "candidate_user_id": "qtwz47ydgjcx1ia56br8kpous3",
+                "changed_at": "2026-08-01T09:30:00Z",
+                "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "release_state": "withheld",
+                "review_revision": 2,
+                "review_state": "draft",
+                "submission_id": "9nfemqtwz47ydgjcx1ia56br8k",
+                "submission_review_id": "gjcx1ia56br8kpous3h9nfemqt"
+              },
+              "event": "exam_integrity_review_changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "9nfemqtwz47ydgjcx1ia56br8k",
+                "type": "submission"
+              },
+              "sequence": 41
+            }
+          }
+        ],
+        "name": "exam_integrity_review_changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "submission.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_integrity_review"
+                },
+                "event": {
+                  "const": "exam_integrity_review_changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "The Submission's Integrity Review changed.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Integrity review"
+          }
+        ],
+        "title": "Integrity Review changed"
+      },
+      "exam_integrity_review_finalized": {
+        "description": "The Submission's Integrity Review was finalized and its result is still withheld. Delivered to connections that subscribe to submission.view on the submission.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "submission.view",
+              "data": {
+                "candidate_user_id": "qtwz47ydgjcx1ia56br8kpous3",
+                "changed_at": "2026-08-01T09:30:00Z",
+                "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "release_state": "withheld",
+                "review_revision": 3,
+                "review_state": "finalized",
+                "submission_id": "9nfemqtwz47ydgjcx1ia56br8k",
+                "submission_review_id": "gjcx1ia56br8kpous3h9nfemqt"
+              },
+              "event": "exam_integrity_review_finalized",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "9nfemqtwz47ydgjcx1ia56br8k",
+                "type": "submission"
+              },
+              "sequence": 42
+            }
+          }
+        ],
+        "name": "exam_integrity_review_finalized",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "submission.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_integrity_review"
+                },
+                "event": {
+                  "const": "exam_integrity_review_finalized",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "The Submission's Integrity Review was finalized and its result is still withheld.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Integrity review"
+          }
+        ],
+        "title": "Integrity Review finalized"
+      },
+      "exam_manager_changed": {
+        "description": "A User was added as an Exam Manager or removed. Delivered to connections that subscribe to exam.view on the exam.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.view",
+              "data": {
+                "changed_at": "2026-08-01T09:30:00Z",
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y",
+                "exam_revision": 21,
+                "present": true,
+                "user_id": "cx1ia56br8kpous3h9nfemqtwz"
+              },
+              "event": "exam_manager_changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "ia56br8kpous3h9nfemqtwz47y",
+                "type": "exam"
+              },
+              "sequence": 44
+            }
+          }
+        ],
+        "name": "exam_manager_changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_manager_changed"
+                },
+                "event": {
+                  "const": "exam_manager_changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "A User was added as an Exam Manager or removed.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Exams"
+          }
+        ],
+        "title": "Exam Manager changed"
+      },
+      "exam_owner_transferred": {
+        "description": "The Exam has a new owner. Delivered to connections that subscribe to exam.view on the exam.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.view",
+              "data": {
+                "changed_at": "2026-08-01T09:30:00Z",
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y",
+                "exam_revision": 22,
+                "owner_user_id": "femqtwz47ydgjcx1ia56br8kpo"
+              },
+              "event": "exam_owner_transferred",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "ia56br8kpous3h9nfemqtwz47y",
+                "type": "exam"
+              },
+              "sequence": 45
+            }
+          }
+        ],
+        "name": "exam_owner_transferred",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_owner_transferred"
+                },
+                "event": {
+                  "const": "exam_owner_transferred",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "The Exam has a new owner.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Exams"
+          }
+        ],
+        "title": "Exam owner transferred"
+      },
+      "exam_revision_published": {
+        "description": "A new Exam Revision was published. Delivered to connections that subscribe to exam.view on the exam.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.view",
+              "data": {
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y",
+                "kind": "standard",
+                "number": 3,
+                "policy_digest": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+                "published_at": "2026-08-01T09:30:00Z",
+                "revision_id": "wz47ydgjcx1ia56br8kpous3h9"
+              },
+              "event": "exam_revision_published",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "ia56br8kpous3h9nfemqtwz47y",
+                "type": "exam"
+              },
+              "sequence": 46
+            }
+          }
+        ],
+        "name": "exam_revision_published",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_revision_published"
+                },
+                "event": {
+                  "const": "exam_revision_published",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "A new Exam Revision was published.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Exams"
+          }
+        ],
+        "title": "Exam Revision published"
+      },
+      "exam_sitting_canceled": {
+        "description": "A Sitting was canceled before it opened. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.sitting.view",
+              "data": {
+                "changed_at": "2026-08-01T09:30:00Z",
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "revision": 3,
+                "state": "canceled"
+              },
+              "event": "exam_sitting_canceled",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "type": "exam_sitting"
+              },
+              "sequence": 42
+            }
+          }
+        ],
+        "name": "exam_sitting_canceled",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.sitting.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_sitting_changed"
+                },
+                "event": {
+                  "const": "exam_sitting_canceled",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "A Sitting was canceled before it opened.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Sittings"
+          }
+        ],
+        "title": "Sitting canceled"
+      },
+      "exam_sitting_content_corrected": {
+        "description": "A live correction moved the Sitting to another Exam Revision. Sent to Sitting viewers. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.sitting.view",
+              "data": {
+                "effective_at": "2026-08-01T09:30:00Z",
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "previous_revision_id": "56br8kpous3h9nfemqtwz47ydg",
+                "revision_id": "wz47ydgjcx1ia56br8kpous3h9",
+                "sitting_revision": 6
+              },
+              "event": "exam_sitting_content_corrected",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "type": "exam_sitting"
+              },
+              "sequence": 45
+            }
+          }
+        ],
+        "name": "exam_sitting_content_corrected",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.sitting.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_sitting_content_corrected"
+                },
+                "event": {
+                  "const": "exam_sitting_content_corrected",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "A live correction moved the Sitting to another Exam Revision. Sent to Sitting viewers.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Sittings"
+          }
+        ],
+        "title": "Sitting content corrected"
+      },
+      "exam_sitting_content_corrected_for_candidate": {
+        "description": "The same correction, sent to candidates who participate in the Sitting. Delivered to connections that subscribe to exam.sitting.participate on the exam sitting.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.sitting.participate",
+              "data": {
+                "effective_at": "2026-08-01T09:30:00Z",
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "previous_revision_id": "56br8kpous3h9nfemqtwz47ydg",
+                "revision_id": "wz47ydgjcx1ia56br8kpous3h9",
+                "sitting_revision": 6
+              },
+              "event": "exam_sitting_content_corrected",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "type": "exam_sitting"
+              },
+              "sequence": 46
+            }
+          }
+        ],
+        "name": "exam_sitting_content_corrected",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.sitting.participate",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_sitting_content_corrected"
+                },
+                "event": {
+                  "const": "exam_sitting_content_corrected",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "The same correction, sent to candidates who participate in the Sitting.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Sittings"
+          }
+        ],
+        "title": "Sitting content corrected, for candidates"
+      },
+      "exam_sitting_lifecycle_changed": {
+        "description": "A Sitting opened, paused, resumed, was extended, or closed. Sent to Sitting viewers. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.sitting.view",
+              "data": {
+                "changed_at": "2026-08-01T09:30:00Z",
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "reason_code": "manager_paused",
+                "revision": 5,
+                "scheduled_end_at": "2026-08-01T11:00:00Z",
+                "state": "paused"
+              },
+              "event": "exam_sitting_lifecycle_changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "type": "exam_sitting"
+              },
+              "sequence": 43
+            }
+          }
+        ],
+        "name": "exam_sitting_lifecycle_changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.sitting.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_sitting_lifecycle_changed"
+                },
+                "event": {
+                  "const": "exam_sitting_lifecycle_changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "A Sitting opened, paused, resumed, was extended, or closed. Sent to Sitting viewers.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Sittings"
+          }
+        ],
+        "title": "Sitting lifecycle changed"
+      },
+      "exam_sitting_lifecycle_changed_for_candidate": {
+        "description": "The same lifecycle fact, sent to candidates who participate in the Sitting. Delivered to connections that subscribe to exam.sitting.participate on the exam sitting.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.sitting.participate",
+              "data": {
+                "changed_at": "2026-08-01T09:30:00Z",
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "reason_code": "manager_paused",
+                "revision": 5,
+                "scheduled_end_at": "2026-08-01T11:00:00Z",
+                "state": "paused"
+              },
+              "event": "exam_sitting_lifecycle_changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "type": "exam_sitting"
+              },
+              "sequence": 44
+            }
+          }
+        ],
+        "name": "exam_sitting_lifecycle_changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.sitting.participate",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_sitting_lifecycle_changed"
+                },
+                "event": {
+                  "const": "exam_sitting_lifecycle_changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "The same lifecycle fact, sent to candidates who participate in the Sitting.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Sittings"
+          }
+        ],
+        "title": "Sitting lifecycle changed, for candidates"
+      },
+      "exam_sitting_schedule_updated": {
+        "description": "A scheduled Sitting's Exam Revision, Class, start or end changed. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.sitting.view",
+              "data": {
+                "changed_at": "2026-08-01T09:30:00Z",
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "revision": 2,
+                "state": "scheduled"
+              },
+              "event": "exam_sitting_schedule_updated",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "type": "exam_sitting"
+              },
+              "sequence": 41
+            }
+          }
+        ],
+        "name": "exam_sitting_schedule_updated",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.sitting.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_sitting_changed"
+                },
+                "event": {
+                  "const": "exam_sitting_schedule_updated",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "A scheduled Sitting's Exam Revision, Class, start or end changed.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Sittings"
+          }
+        ],
+        "title": "Sitting schedule updated"
+      },
+      "exam_sitting_scheduled": {
+        "description": "A Sitting was scheduled. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.sitting.view",
+              "data": {
+                "changed_at": "2026-08-01T09:30:00Z",
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "revision": 1,
+                "state": "scheduled"
+              },
+              "event": "exam_sitting_scheduled",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "type": "exam_sitting"
+              },
+              "sequence": 40
+            }
+          }
+        ],
+        "name": "exam_sitting_scheduled",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.sitting.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_sitting_changed"
+                },
+                "event": {
+                  "const": "exam_sitting_scheduled",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "A Sitting was scheduled.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Sittings"
+          }
+        ],
+        "title": "Sitting scheduled"
+      },
+      "exam_starter_workspace_changed": {
+        "description": "One Starter Workspace entry was created, moved, replaced or removed. Delivered to connections that subscribe to exam.view on the exam.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.view",
+              "data": {
+                "changed_at": "2026-08-01T09:30:00Z",
+                "draft_revision": 13,
+                "entry_id": "nfemqtwz47ydgjcx1ia56br8kp",
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y",
+                "operation": "file_created"
+              },
+              "event": "exam_starter_workspace_changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "ia56br8kpous3h9nfemqtwz47y",
+                "type": "exam"
+              },
+              "sequence": 42
+            }
+          }
+        ],
+        "name": "exam_starter_workspace_changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_starter_workspace_changed"
+                },
+                "event": {
+                  "const": "exam_starter_workspace_changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "One Starter Workspace entry was created, moved, replaced or removed.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Exams"
+          }
+        ],
+        "title": "Starter Workspace changed"
+      },
+      "exam_student_result_released": {
+        "description": "The Submission's Student Result was released. Sent to those who may view the Submission. Delivered to connections that subscribe to submission.view on the submission.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "submission.view",
+              "data": {
+                "candidate_user_id": "qtwz47ydgjcx1ia56br8kpous3",
+                "changed_at": "2026-08-01T09:30:00Z",
+                "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "release_state": "released",
+                "review_revision": 4,
+                "review_state": "finalized",
+                "submission_id": "9nfemqtwz47ydgjcx1ia56br8k",
+                "submission_review_id": "gjcx1ia56br8kpous3h9nfemqt"
+              },
+              "event": "exam_student_result_released",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "9nfemqtwz47ydgjcx1ia56br8k",
+                "type": "submission"
+              },
+              "sequence": 43
+            }
+          }
+        ],
+        "name": "exam_student_result_released",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "submission.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_integrity_review"
+                },
+                "event": {
+                  "const": "exam_student_result_released",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "The Submission's Student Result was released. Sent to those who may view the Submission.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Integrity review"
+          }
+        ],
+        "title": "Student Result released"
+      },
+      "exam_student_result_released_for_candidate": {
+        "description": "Tells the candidate alone that their Student Result was released. Delivered to the addressed User's connections.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "data": {
+                "changed_at": "2026-08-01T09:30:00Z",
+                "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "release_state": "released",
+                "review_revision": 4,
+                "review_state": "finalized",
+                "submission_id": "9nfemqtwz47ydgjcx1ia56br8k",
+                "submission_review_id": "gjcx1ia56br8kpous3h9nfemqt"
+              },
+              "event": "exam_student_result_released",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "",
+                "type": ""
+              },
+              "sequence": 44,
+              "user_id": "qtwz47ydgjcx1ia56br8kpous3"
+            }
+          }
+        ],
+        "name": "exam_student_result_released",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "not": {
+                "required": [
+                  "action"
+                ]
+              },
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/exam_student_result_released_for_candidate"
+                },
+                "event": {
+                  "const": "exam_student_result_released",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "user_id",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Tells the candidate alone that their Student Result was released.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Integrity review"
+          }
+        ],
+        "title": "Student Result released, for the candidate"
+      },
+      "hello": {
+        "description": "Identifies the connection. A client keeps connection_id and the sequence of the last event it processed, and offers both as the handshake's connection_id and sequence_number when it reconnects.",
+        "examples": [
+          {
+            "name": "new connection",
+            "payload": {
+              "data": {
+                "connection_id": "br8kpous3h9nfemqtwz47ydgjc",
+                "node_id": "node-a",
+                "resumed": false
+              },
+              "event": "hello",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "",
+                "type": ""
+              },
+              "sequence": 1,
+              "user_id": "qtwz47ydgjcx1ia56br8kpous3"
+            }
+          }
+        ],
+        "name": "hello",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "not": {
+                "required": [
+                  "action"
+                ]
+              },
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/hello"
+                },
+                "event": {
+                  "const": "hello",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "user_id",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "The first event on every connection.",
+        "tags": [
+          {
+            "name": "protocol"
+          }
+        ],
+        "title": "Hello"
+      },
+      "manager.sitting_board.changed": {
+        "description": "Refetch the manager board of one Sitting. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.sitting.view",
+              "data": {
+                "exam_id": "ia56br8kpous3h9nfemqtwz47y",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "schema_version": 1
+              },
+              "event": "manager.sitting_board.changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "type": "exam_sitting"
+              },
+              "sequence": 47
+            }
+          }
+        ],
+        "name": "manager.sitting_board.changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.sitting.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/sitting_board_invalidation"
+                },
+                "event": {
+                  "const": "manager.sitting_board.changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch the manager board of one Sitting.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Sittings"
+          }
+        ],
+        "title": "Sitting board changed"
+      },
+      "ping": {
+        "description": "Has no data. The server replies with pong. It does not renew an Attempt Participation.",
+        "examples": [
+          {
+            "name": "ping",
+            "payload": {
+              "action": "ping",
+              "sequence": 1
+            }
+          }
+        ],
+        "name": "ping",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/command_request"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "ping",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "action"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Checks the connection at the application level.",
+        "tags": [
+          {
+            "name": "command"
+          }
+        ],
+        "title": "Ping"
+      },
+      "pong": {
+        "examples": [
+          {
+            "name": "pong",
+            "payload": {
+              "data": {
+                "pong": true
+              },
+              "sequence": 1,
+              "status": "ok"
+            }
+          }
+        ],
+        "name": "pong",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/command_reply"
+            },
+            {
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/pong"
+                }
+              },
+              "required": [
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "The reply to ping.",
+        "tags": [
+          {
+            "name": "reply"
+          }
+        ],
+        "title": "Pong"
+      },
+      "resync_required": {
+        "description": "Follows hello when a reconnecting client asked to resume but the node no longer holds the missed events. Refetch authoritative state over HTTP before applying further events.",
+        "examples": [
+          {
+            "name": "replay unavailable",
+            "payload": {
+              "event": "resync_required",
+              "id": "us3h9nfemqtwz47ydgjcx1ia56",
+              "resource": {
+                "id": "",
+                "type": ""
+              },
+              "sequence": 2,
+              "user_id": "qtwz47ydgjcx1ia56br8kpous3"
+            }
+          }
+        ],
+        "name": "resync_required",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "action"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "data"
+                    ]
+                  }
+                ]
+              },
+              "properties": {
+                "event": {
+                  "const": "resync_required",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "user_id"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Missed events could not be replayed.",
+        "tags": [
+          {
+            "name": "protocol"
+          }
+        ],
+        "title": "Resynchronization required"
+      },
+      "subscribe": {
+        "description": "Each subscription is authorized on its own; the handshake grants none. Subscribing twice to the same pair succeeds once. A connection holds at most 256 subscriptions.",
+        "examples": [
+          {
+            "name": "Sitting viewer",
+            "payload": {
+              "action": "subscribe",
+              "data": {
+                "action": "exam.sitting.view",
+                "resource": {
+                  "id": "h9nfemqtwz47ydgjcx1ia56br8",
+                  "type": "exam_sitting"
+                }
+              },
+              "sequence": 2
+            }
+          }
+        ],
+        "name": "subscribe",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/command_request"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "subscribe",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/subscription"
+                }
+              },
+              "required": [
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Starts receiving the events authorized by one action on one resource.",
+        "tags": [
+          {
+            "name": "command"
+          }
+        ],
+        "title": "Subscribe"
+      },
+      "subscription_reply": {
+        "examples": [
+          {
+            "name": "subscribed",
+            "payload": {
+              "sequence": 2,
+              "status": "ok"
+            }
+          }
+        ],
+        "name": "subscription_reply",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/command_reply"
+            },
+            {
+              "not": {
+                "required": [
+                  "data"
+                ]
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "The subscribe or unsubscribe command succeeded.",
+        "tags": [
+          {
+            "name": "reply"
+          }
+        ],
+        "title": "Subscription reply"
+      },
+      "unsubscribe": {
+        "description": "Succeeds whether or not the subscription was held. The Sitting subscription an Attempt Connection holds is kept until the connection unbinds.",
+        "examples": [
+          {
+            "name": "Sitting viewer",
+            "payload": {
+              "action": "unsubscribe",
+              "data": {
+                "action": "exam.sitting.view",
+                "resource": {
+                  "id": "h9nfemqtwz47ydgjcx1ia56br8",
+                  "type": "exam_sitting"
+                }
+              },
+              "sequence": 3
+            }
+          }
+        ],
+        "name": "unsubscribe",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/command_request"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "unsubscribe",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/subscription"
+                }
+              },
+              "required": [
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Stops receiving the events of one subscription.",
+        "tags": [
+          {
+            "name": "command"
+          }
+        ],
+        "title": "Unsubscribe"
+      },
+      "user_profile_picture_changed": {
+        "description": "The User's profile picture is now another File Entry. Delivered to the addressed User's connections.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "data": {
+                "active_file_entry_id": "6br8kpous3h9nfemqtwz47ydgj",
+                "changed_at": "2026-08-01T09:30:00Z",
+                "revision": 4
+              },
+              "event": "user_profile_picture_changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "",
+                "type": ""
+              },
+              "sequence": 42,
+              "user_id": "qtwz47ydgjcx1ia56br8kpous3"
+            }
+          }
+        ],
+        "name": "user_profile_picture_changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "not": {
+                "required": [
+                  "action"
+                ]
+              },
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/user_profile_picture_changed"
+                },
+                "event": {
+                  "const": "user_profile_picture_changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "user_id",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "The User's profile picture is now another File Entry.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Users"
+          }
+        ],
+        "title": "Profile picture changed"
+      },
+      "user_settings_changed": {
+        "description": "Refetch the User Settings document; the event carries only its new revision. Delivered to the addressed User's connections.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "data": {
+                "changed_at": "2026-08-01T09:30:00Z",
+                "format_version": 1,
+                "revision": "z47ydgjcx1ia56br8kpous3h9n"
+              },
+              "event": "user_settings_changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "",
+                "type": ""
+              },
+              "sequence": 41,
+              "user_id": "qtwz47ydgjcx1ia56br8kpous3"
+            }
+          }
+        ],
+        "name": "user_settings_changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "not": {
+                "required": [
+                  "action"
+                ]
+              },
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/user_settings_changed"
+                },
+                "event": {
+                  "const": "user_settings_changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "user_id",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch the User Settings document; the event carries only its new revision.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Users"
+          }
+        ],
+        "title": "User Settings changed"
+      }
+    },
+    "schemas": {
+      "access_policy_changed": {
+        "additionalProperties": false,
+        "description": "The Access Policy revision after a committed change. No policy fields are included.",
+        "properties": {
+          "revision": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revision"
+        ],
+        "title": "Access Policy changed",
+        "type": "object"
+      },
+      "collection_invalidation": {
+        "additionalProperties": false,
+        "description": "A content-free signal to refetch a collection. The envelope's user_id names the one User it is for.",
+        "properties": {
+          "schema_version": {
+            "const": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schema_version"
+        ],
+        "title": "Collection invalidation",
+        "type": "object"
+      },
+      "command_error": {
+        "additionalProperties": false,
+        "description": "A refused command. sequence is the request's, or 0 when the request had none.",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/protocol_error"
+          },
+          "sequence": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "status": {
+            "const": "error",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "sequence",
+          "error"
+        ],
+        "title": "Command error",
+        "type": "object"
+      },
+      "command_reply": {
+        "additionalProperties": false,
+        "description": "A successful reply to the command with the same sequence.",
+        "properties": {
+          "data": {
+            "description": "The command result, when the command returns one."
+          },
+          "sequence": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "status": {
+            "const": "ok",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "sequence"
+        ],
+        "title": "Command reply",
+        "type": "object"
+      },
+      "command_request": {
+        "additionalProperties": false,
+        "description": "The envelope of every client-to-server command. The client chooses a positive sequence; the reply carries it back.",
+        "properties": {
+          "action": {
+            "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+            "type": "string"
+          },
+          "data": {
+            "description": "The command input. Each command defines its shape."
+          },
+          "sequence": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sequence",
+          "action"
+        ],
+        "title": "Command request",
+        "type": "object"
+      },
+      "event_frame": {
+        "additionalProperties": false,
+        "description": "The envelope of every server-to-client event. sequence is assigned by the connection, increases by one per event, and is what a reconnecting client offers as sequence_number.",
+        "properties": {
+          "action": {
+            "description": "The action a subscription must hold to receive the event. Absent on an event addressed to one User.",
+            "type": "string"
+          },
+          "data": {
+            "description": "The event payload. Each message defines its shape."
+          },
+          "event": {
+            "description": "The event name.",
+            "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "resource": {
+            "$ref": "#/components/schemas/resource"
+          },
+          "sequence": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "id",
+          "event",
+          "sequence",
+          "resource"
+        ],
+        "title": "Event frame",
+        "type": "object"
+      },
+      "exam_archived": {
+        "additionalProperties": false,
+        "description": "The Exam revision and instant of archiving.",
+        "properties": {
+          "archived_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_revision": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "exam_id",
+          "exam_revision",
+          "archived_at"
+        ],
+        "title": "Exam archived",
+        "type": "object"
+      },
+      "exam_attempt_access_changed": {
+        "additionalProperties": false,
+        "description": "The candidate's own Attempt was suspended or re-allowed. A suspension carries the safe reason of its source.",
+        "properties": {
+          "changed_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "reason_code": {
+            "enum": [
+              "secure_connectivity_lost",
+              "focus_policy_review_required",
+              "manager_suspended"
+            ],
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "suspended",
+              "active"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "exam_sitting_id",
+          "exam_attempt_id",
+          "state",
+          "changed_at"
+        ],
+        "title": "Attempt access changed",
+        "type": "object"
+      },
+      "exam_attempt_connection_changed": {
+        "additionalProperties": false,
+        "description": "An Attempt Connection opened or closed. close_reason is present only when it closed.",
+        "properties": {
+          "attempt_connection_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "candidate_user_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "changed_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "close_reason": {
+            "enum": [
+              "transport_closed",
+              "interrupted",
+              "lease_expired",
+              "policy_suspended",
+              "kicked",
+              "submitted",
+              "manager_ended",
+              "sitting_closed"
+            ],
+            "type": "string"
+          },
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "closed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "exam_sitting_id",
+          "exam_attempt_id",
+          "candidate_user_id",
+          "attempt_connection_id",
+          "state",
+          "changed_at"
+        ],
+        "title": "Attempt Connection changed",
+        "type": "object"
+      },
+      "exam_attempt_focus_warning": {
+        "additionalProperties": false,
+        "description": "Warns the candidate that their Focus Loss crossed the policy threshold. No counts, thresholds or evidence are included.",
+        "properties": {
+          "changed_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "warning_code": {
+            "const": "focus_loss_policy_warning",
+            "type": "string"
+          }
+        },
+        "required": [
+          "exam_sitting_id",
+          "exam_attempt_id",
+          "warning_code",
+          "changed_at"
+        ],
+        "title": "Focus Loss warning",
+        "type": "object"
+      },
+      "exam_attempt_integrity_flagged": {
+        "additionalProperties": false,
+        "description": "A Focus Loss Integrity Flag, its policy outcome and how many evidence episodes were kept or overflowed. The evidence itself is never included.",
+        "properties": {
+          "candidate_user_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "changed_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "evidence_available": {
+            "const": true,
+            "type": "boolean"
+          },
+          "evidence_overflow_count": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "integrity_flag_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "outcome": {
+            "enum": [
+              "flag",
+              "flag_and_warn",
+              "flag_and_suspend"
+            ],
+            "type": "string"
+          },
+          "policy_kind": {
+            "const": "focus_loss",
+            "type": "string"
+          },
+          "retained_evidence_count": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "exam_sitting_id",
+          "exam_attempt_id",
+          "candidate_user_id",
+          "integrity_flag_id",
+          "policy_kind",
+          "outcome",
+          "retained_evidence_count",
+          "evidence_overflow_count",
+          "evidence_available",
+          "changed_at"
+        ],
+        "title": "Attempt Integrity Flag raised",
+        "type": "object"
+      },
+      "exam_attempt_reallowed": {
+        "additionalProperties": false,
+        "description": "The closed Attempt Suspension and the Attempt revision after the change. The manager's reason is never included.",
+        "properties": {
+          "attempt_revision": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "candidate_user_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "changed_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "suspension_id": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "exam_sitting_id",
+          "exam_attempt_id",
+          "candidate_user_id",
+          "suspension_id",
+          "attempt_revision",
+          "changed_at"
+        ],
+        "title": "Attempt re-allowed",
+        "type": "object"
+      },
+      "exam_attempt_submitted": {
+        "additionalProperties": false,
+        "description": "A submitted Attempt for Sitting viewers, with who or what submitted it.",
+        "properties": {
+          "candidate_user_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "manifest_digest": {
+            "$ref": "#/components/schemas/sha256"
+          },
+          "provenance": {
+            "enum": [
+              "candidate_submitted",
+              "manager_ended_attempt",
+              "sitting_closed"
+            ],
+            "type": "string"
+          },
+          "state": {
+            "const": "submitted",
+            "type": "string"
+          },
+          "submission_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "submitted_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "workspace_cursor": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "exam_sitting_id",
+          "exam_attempt_id",
+          "candidate_user_id",
+          "submission_id",
+          "state",
+          "provenance",
+          "workspace_cursor",
+          "manifest_digest",
+          "submitted_at"
+        ],
+        "title": "Attempt submitted",
+        "type": "object"
+      },
+      "exam_attempt_submitted_for_candidate": {
+        "additionalProperties": false,
+        "description": "The candidate's own copy of the submission. It leaves out the candidate identity.",
+        "properties": {
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "manifest_digest": {
+            "$ref": "#/components/schemas/sha256"
+          },
+          "provenance": {
+            "enum": [
+              "candidate_submitted",
+              "manager_ended_attempt",
+              "sitting_closed"
+            ],
+            "type": "string"
+          },
+          "state": {
+            "const": "submitted",
+            "type": "string"
+          },
+          "submission_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "submitted_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "workspace_cursor": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "exam_sitting_id",
+          "exam_attempt_id",
+          "submission_id",
+          "state",
+          "provenance",
+          "workspace_cursor",
+          "manifest_digest",
+          "submitted_at"
+        ],
+        "title": "Attempt submitted, candidate copy",
+        "type": "object"
+      },
+      "exam_attempt_suspended": {
+        "additionalProperties": false,
+        "description": "An Attempt Suspension for Sitting viewers. A policy suspension names its Connection and Integrity Flag; a kick names no Flag and no Connection when none was open.",
+        "properties": {
+          "attempt_connection_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "attempt_revision": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "candidate_user_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "changed_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "integrity_flag_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "suspension_id": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "exam_sitting_id",
+          "exam_attempt_id",
+          "candidate_user_id",
+          "suspension_id",
+          "attempt_revision",
+          "changed_at"
+        ],
+        "title": "Attempt suspended",
+        "type": "object"
+      },
+      "exam_attempt_workspace_changed": {
+        "additionalProperties": false,
+        "description": "A refetch hint for the candidate's Attempt Workspace. Paths, content and mutation bodies are never included.",
+        "properties": {
+          "changed_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "entry_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "operation": {
+            "enum": [
+              "create_file",
+              "create_directory",
+              "replace_file",
+              "move_entry",
+              "delete_entry"
+            ],
+            "type": "string"
+          },
+          "workspace_cursor": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "exam_sitting_id",
+          "exam_attempt_id",
+          "entry_id",
+          "operation",
+          "workspace_cursor",
+          "changed_at"
+        ],
+        "title": "Attempt Workspace changed",
+        "type": "object"
+      },
+      "exam_draft_updated": {
+        "additionalProperties": false,
+        "description": "The Draft revision after a text or policy change. Authored content is never included.",
+        "properties": {
+          "draft_revision": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "exam_id",
+          "draft_revision"
+        ],
+        "title": "Exam Draft updated",
+        "type": "object"
+      },
+      "exam_integrity_discrepancy_recorded": {
+        "additionalProperties": false,
+        "description": "A Focus Loss claim arrived after the Attempt or Sitting ended. Its duration and source are never included.",
+        "properties": {
+          "candidate_user_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "integrity_discrepancy_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "recorded_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "submission_id": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "submission_id",
+          "exam_sitting_id",
+          "exam_attempt_id",
+          "candidate_user_id",
+          "integrity_discrepancy_id",
+          "recorded_at"
+        ],
+        "title": "Integrity Discrepancy recorded",
+        "type": "object"
+      },
+      "exam_integrity_review": {
+        "additionalProperties": false,
+        "description": "The Integrity Review's identity, state and release state. Decisions, rationale, evidence and notes are never included.",
+        "properties": {
+          "candidate_user_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "changed_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "release_state": {
+            "enum": [
+              "withheld",
+              "released"
+            ],
+            "type": "string"
+          },
+          "review_revision": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "review_state": {
+            "enum": [
+              "draft",
+              "finalized"
+            ],
+            "type": "string"
+          },
+          "submission_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "submission_review_id": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "submission_id",
+          "exam_attempt_id",
+          "candidate_user_id",
+          "submission_review_id",
+          "review_state",
+          "review_revision",
+          "release_state",
+          "changed_at"
+        ],
+        "title": "Integrity Review state",
+        "type": "object"
+      },
+      "exam_manager_changed": {
+        "additionalProperties": false,
+        "description": "A User added as an Exam Manager (present true) or removed (present false).",
+        "properties": {
+          "changed_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_revision": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "present": {
+            "type": "boolean"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "exam_id",
+          "user_id",
+          "present",
+          "exam_revision",
+          "changed_at"
+        ],
+        "title": "Exam Manager changed",
+        "type": "object"
+      },
+      "exam_owner_transferred": {
+        "additionalProperties": false,
+        "description": "The new owner and the Exam revision the transfer produced.",
+        "properties": {
+          "changed_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_revision": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "owner_user_id": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "exam_id",
+          "owner_user_id",
+          "exam_revision",
+          "changed_at"
+        ],
+        "title": "Exam owner transferred",
+        "type": "object"
+      },
+      "exam_revision_published": {
+        "additionalProperties": false,
+        "description": "The published Revision's number, kind and policy digest. Published content is never included.",
+        "properties": {
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "kind": {
+            "enum": [
+              "standard",
+              "live_correction"
+            ],
+            "type": "string"
+          },
+          "number": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "policy_digest": {
+            "maxLength": 64,
+            "minLength": 64,
+            "type": "string"
+          },
+          "published_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "revision_id": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "exam_id",
+          "revision_id",
+          "number",
+          "policy_digest",
+          "kind",
+          "published_at"
+        ],
+        "title": "Exam Revision published",
+        "type": "object"
+      },
+      "exam_sitting_changed": {
+        "additionalProperties": false,
+        "description": "A Sitting's state and revision after it was scheduled, rescheduled or canceled. Times, Class and Exam Revision are never included.",
+        "properties": {
+          "changed_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "revision": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "scheduled",
+              "open",
+              "paused",
+              "closing",
+              "closed",
+              "canceled"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "exam_id",
+          "exam_sitting_id",
+          "state",
+          "revision",
+          "changed_at"
+        ],
+        "title": "Exam Sitting changed",
+        "type": "object"
+      },
+      "exam_sitting_content_corrected": {
+        "additionalProperties": false,
+        "description": "A live correction moved the Sitting to another Exam Revision. Refetch the presentation.",
+        "properties": {
+          "effective_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "previous_revision_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "revision_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "sitting_revision": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "exam_id",
+          "exam_sitting_id",
+          "previous_revision_id",
+          "revision_id",
+          "sitting_revision",
+          "effective_at"
+        ],
+        "title": "Exam Sitting content corrected",
+        "type": "object"
+      },
+      "exam_sitting_lifecycle_changed": {
+        "additionalProperties": false,
+        "description": "One committed lifecycle transition or deadline extension.",
+        "properties": {
+          "changed_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "reason_code": {
+            "enum": [
+              "scheduled_start_reached",
+              "manager_paused",
+              "manager_resumed",
+              "manager_extended",
+              "manager_closed",
+              "scheduled_end_reached",
+              "schedule_elapsed",
+              "academic_structure_invalid",
+              "closed_no_attempts",
+              "sealing_completed"
+            ],
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "scheduled_end_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "state": {
+            "enum": [
+              "scheduled",
+              "open",
+              "paused",
+              "closing",
+              "closed",
+              "canceled"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "exam_id",
+          "exam_sitting_id",
+          "state",
+          "revision",
+          "reason_code",
+          "scheduled_end_at",
+          "changed_at"
+        ],
+        "title": "Exam Sitting lifecycle changed",
+        "type": "object"
+      },
+      "exam_starter_workspace_changed": {
+        "additionalProperties": false,
+        "description": "One committed Starter Workspace mutation. Paths, object identities and bytes are never included.",
+        "properties": {
+          "changed_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "draft_revision": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "entry_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "operation": {
+            "enum": [
+              "directory_created",
+              "file_created",
+              "entry_moved",
+              "file_replaced",
+              "entry_removed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "exam_id",
+          "entry_id",
+          "operation",
+          "draft_revision",
+          "changed_at"
+        ],
+        "title": "Starter Workspace changed",
+        "type": "object"
+      },
+      "exam_student_result_released_for_candidate": {
+        "additionalProperties": false,
+        "description": "Tells the candidate their Student Result was released. It carries the Review's identity and state, never its content.",
+        "properties": {
+          "changed_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "release_state": {
+            "const": "released",
+            "type": "string"
+          },
+          "review_revision": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "review_state": {
+            "const": "finalized",
+            "type": "string"
+          },
+          "submission_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "submission_review_id": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "submission_id",
+          "exam_attempt_id",
+          "submission_review_id",
+          "review_state",
+          "review_revision",
+          "release_state",
+          "changed_at"
+        ],
+        "title": "Student Result released, candidate copy",
+        "type": "object"
+      },
+      "hello": {
+        "additionalProperties": false,
+        "description": "The first event on every connection. Keep connection_id and the last processed sequence to resume.",
+        "properties": {
+          "connection_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "node_id": {
+            "description": "The node that owns the connection.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "resumed": {
+            "description": "True when the connection resumed and replayed the missed events.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "connection_id",
+          "node_id",
+          "resumed"
+        ],
+        "title": "Hello",
+        "type": "object"
+      },
+      "id": {
+        "description": "A 26-character Proctor identifier.",
+        "pattern": "^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$",
+        "title": "Opaque identifier",
+        "type": "string"
+      },
+      "instant": {
+        "description": "An RFC 3339 UTC timestamp with up to microsecond precision.",
+        "format": "date-time",
+        "title": "Instant",
+        "type": "string"
+      },
+      "pong": {
+        "additionalProperties": false,
+        "description": "The reply to ping.",
+        "properties": {
+          "pong": {
+            "const": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "pong"
+        ],
+        "title": "Pong",
+        "type": "object"
+      },
+      "protocol_error": {
+        "description": "A stable error code and a localized message. Exam Attempt commands may add recovery members; clients ignore members they do not know.",
+        "properties": {
+          "code": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "retry_after_seconds": {
+            "description": "Seconds to wait before retrying a rate-limited command.",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "Protocol error",
+        "type": "object"
+      },
+      "resource": {
+        "additionalProperties": false,
+        "description": "The resource an event is authorized against. Both members are empty strings on an event addressed to one User.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "id"
+        ],
+        "title": "Authorization resource",
+        "type": "object"
+      },
+      "sha256": {
+        "description": "A lowercase hexadecimal SHA-256 digest.",
+        "pattern": "^[0-9a-f]{64}$",
+        "title": "SHA-256 digest",
+        "type": "string"
+      },
+      "sitting_board_invalidation": {
+        "additionalProperties": false,
+        "description": "Names the Exam Sitting whose manager board should be refetched. Candidate and Attempt identities are never included.",
+        "properties": {
+          "exam_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "schema_version": {
+            "const": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schema_version",
+          "exam_id",
+          "exam_sitting_id"
+        ],
+        "title": "Sitting board invalidation",
+        "type": "object"
+      },
+      "subscription": {
+        "additionalProperties": false,
+        "description": "An action and the exact resource it is checked against.",
+        "properties": {
+          "action": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "resource": {
+            "$ref": "#/components/schemas/resource"
+          }
+        },
+        "required": [
+          "action",
+          "resource"
+        ],
+        "title": "Subscription",
+        "type": "object"
+      },
+      "user_profile_picture_changed": {
+        "additionalProperties": false,
+        "description": "The File Entry that is now the User's profile picture and the User revision after the change.",
+        "properties": {
+          "active_file_entry_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "changed_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "revision": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "active_file_entry_id",
+          "revision",
+          "changed_at"
+        ],
+        "title": "User profile picture changed",
+        "type": "object"
+      },
+      "user_settings_changed": {
+        "additionalProperties": false,
+        "description": "The new revision of the User's settings document, never the document itself.",
+        "properties": {
+          "changed_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "format_version": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "revision",
+          "format_version",
+          "changed_at"
+        ],
+        "title": "User Settings changed",
+        "type": "object"
+      }
+    }
+  },
+  "defaultContentType": "application/json",
+  "info": {
+    "description": "The messages of the authenticated WebSocket at /api/v1/websocket. The HTTP upgrade itself is the OpenAPI operation connectWebSocket. Realtime events tell an interface that something changed; durable HTTP resources remain the authority.",
+    "title": "Proctor Realtime API",
+    "version": "1.0.0"
+  },
+  "operations": {
+    "receivePing": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/websocket"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/websocket/messages/ping"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/websocket"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/websocket/messages/pong"
+          },
+          {
+            "$ref": "#/channels/websocket/messages/command_error"
+          }
+        ]
+      },
+      "summary": "The server answers ping with pong.",
+      "title": "Ping",
+      "x-proctor-error-codes": [
+        "websocket.request.invalid",
+        "websocket.rate_limited"
+      ]
+    },
+    "receiveSubscribe": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/websocket"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/websocket/messages/subscribe"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/websocket"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/websocket/messages/subscription_reply"
+          },
+          {
+            "$ref": "#/channels/websocket/messages/command_error"
+          }
+        ]
+      },
+      "summary": "The server authorizes and records one subscription.",
+      "title": "Subscribe",
+      "x-proctor-error-codes": [
+        "websocket.request.invalid",
+        "websocket.rate_limited",
+        "websocket.subscription.invalid",
+        "websocket.subscription.limit",
+        "authorization.denied"
+      ]
+    },
+    "receiveUnsubscribe": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/websocket"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/websocket/messages/unsubscribe"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/websocket"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/websocket/messages/subscription_reply"
+          },
+          {
+            "$ref": "#/channels/websocket/messages/command_error"
+          }
+        ]
+      },
+      "summary": "The server drops one subscription.",
+      "title": "Unsubscribe",
+      "x-proctor-error-codes": [
+        "websocket.request.invalid",
+        "websocket.rate_limited",
+        "websocket.subscription.invalid"
+      ]
+    },
+    "sendEvent": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/websocket"
+      },
+      "description": "An event reaches a connection when its user_id, if present, is the connection's User and its action and resource, if present, match one of the connection's subscriptions. Events are best-effort signals sent after the change commits; refetch over HTTP for authoritative state.",
+      "messages": [
+        {
+          "$ref": "#/channels/websocket/messages/hello"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/resync_required"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/current_user.context.changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/user_settings_changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/user_profile_picture_changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/access_policy_changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/academic_unit_created"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/academic_unit_updated"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/academic_unit_archived"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_created"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_draft_updated"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_starter_workspace_changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_archived"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_manager_changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_owner_transferred"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_revision_published"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_sitting_scheduled"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_sitting_schedule_updated"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_sitting_canceled"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_sitting_lifecycle_changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_sitting_lifecycle_changed_for_candidate"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_sitting_content_corrected"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_sitting_content_corrected_for_candidate"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/manager.sitting_board.changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/candidate.exam_activity.changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt_connection_opened"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt_connection_closed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt_suspended"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt_reallowed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt_access_suspended"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt_access_reallowed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt_workspace_changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt_focus_warning"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt_integrity_flagged"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt_submitted"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt_submitted_for_candidate"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_integrity_discrepancy_recorded"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_integrity_review_changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_integrity_review_finalized"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_student_result_released"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_student_result_released_for_candidate"
+        }
+      ],
+      "summary": "The server sends hello, then the events the connection may receive.",
+      "title": "Send events"
+    }
+  },
+  "servers": {
+    "proctor": {
+      "description": "One Proctor installation. Replace the host with the installation's public origin.",
+      "host": "proctor.example.edu",
+      "protocol": "wss"
+    }
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "title": "Attempt Connection changed",
+  "description": "An Attempt Connection opened or closed. close_reason is present only when it closed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_sitting_id",
+    "exam_attempt_id",
+    "candidate_user_id",
+    "attempt_connection_id",
+    "state",
+    "changed_at"
+  ],
+  "properties": {
+    "exam_sitting_id": {
+      "$ref": "id.json"
+    },
+    "exam_attempt_id": {
+      "$ref": "id.json"
+    },
+    "candidate_user_id": {
+      "$ref": "id.json"
+    },
+    "attempt_connection_id": {
+      "$ref": "id.json"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "open",
+        "closed"
+      ]
+    },
+    "close_reason": {
+      "type": "string",
+      "enum": [
+        "transport_closed",
+        "interrupted",
+        "lease_expired",
+        "policy_suspended",
+        "kicked",
+        "submitted",
+        "manager_ended",
+        "sitting_closed"
+      ]
+    },
+    "changed_at": {
+      "$ref": "instant.json"
+    }
+  }
+}

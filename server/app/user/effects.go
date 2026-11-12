@@ -9,7 +9,6 @@ package user
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
@@ -43,22 +42,14 @@ func (s *Service) publishProfilePictureChanged(
 	user *model.User,
 	activeFileEntryID model.FileEntryID,
 ) error {
-	data, err := json.Marshal(struct {
-		ActiveFileEntryID string `json:"active_file_entry_id"`
-		Revision          int64  `json:"revision"`
-		ChangedAt         int64  `json:"changed_at"`
-	}{
-		ActiveFileEntryID: activeFileEntryID.String(),
-		Revision:          user.Revision,
-		ChangedAt:         user.ProfilePictureChangedAt.Time.UnixMilli(),
-	})
+	event, err := realtime.NewUserProfilePictureChangedEvent(
+		user.ID,
+		activeFileEntryID,
+		user.Revision,
+		user.ProfilePictureChangedAt.Time,
+	)
 	if err != nil {
 		return err
 	}
-
-	return s.publisher.Publish(ctx, realtime.Event{
-		Name:   "user_profile_picture_changed",
-		UserID: user.ID,
-		Data:   data,
-	})
+	return s.publisher.Publish(ctx, event)
 }

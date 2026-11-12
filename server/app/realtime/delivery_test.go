@@ -36,7 +36,7 @@ func TestRealtimeEventValidateForPublish(t *testing.T) {
 		},
 	}
 	require.NoError(t, valid.ValidateForPublish())
-	require.NoError(t, (Event{Name: "user.notification", UserID: model.UserID(model.NewID())}).ValidateForPublish())
+	require.NoError(t, (Event{Name: "current_user.context.changed", UserID: model.UserID(model.NewID())}).ValidateForPublish())
 
 	tests := []struct {
 		name  string
@@ -171,7 +171,7 @@ func TestPublishClonesGeneratesIDAndDeliversLocalFirst(t *testing.T) {
 	require.NoError(t, service.SetClusterFanout(fanout))
 
 	data := json.RawMessage(`{"ok":true}`)
-	event := Event{Name: "user.notification", UserID: model.UserID(model.NewID()), Data: data}
+	event := Event{Name: "current_user.context.changed", UserID: model.UserID(model.NewID()), Data: data}
 	require.NoError(t, service.Publish(context.Background(), event))
 	require.Empty(t, event.ID)
 	require.Equal(t, `{"ok":true}`, string(data), "caller data was mutated")
@@ -198,12 +198,12 @@ func TestPublishPreservesOrdinaryPeerWireFixtureAndDoesNotRebroadcast(t *testing
 
 	event := Event{
 		ID:     eventID,
-		Name:   "user.notification",
+		Name:   "current_user.context.changed",
 		UserID: userID,
 		Data:   json.RawMessage(`{"ok":true}`),
 	}
 	require.NoError(t, service.Publish(context.Background(), event))
-	want := `{"event":{"id":"yyyyyyyyyyyyyyyyyyyyyyyyyy","event":"user.notification","user_id":"bbbbbbbbbbbbbbbbbbbbbbbbbb","resource":{"type":"","id":""},"data":{"ok":true}}}`
+	want := `{"event":{"id":"yyyyyyyyyyyyyyyyyyyyyyyyyy","event":"current_user.context.changed","user_id":"bbbbbbbbbbbbbbbbbbbbbbbbbb","resource":{"type":"","id":""},"data":{"ok":true}}}`
 	got := string(fanout.broadcasts[0].data)
 	require.Equal(t, want, got, "ordinary peer wire payload\n got")
 
@@ -305,6 +305,19 @@ func TestPublishMissingCollaboratorsAndTypedFailures(t *testing.T) {
 		require.Empty(t, sink.events, "invalid publication effects: local")
 		require.Empty(t, fanout.broadcasts, "invalid publication effects: local")
 	})
+
+	t.Run("undeclared event name has no effects", func(t *testing.T) {
+		service := newOrdinaryTestDelivery(t)
+		sink := &recordingSink{}
+		fanout := &recordingFanout{}
+		require.NoError(t, service.SetSink(sink))
+		require.NoError(t, service.SetClusterFanout(fanout))
+		err := service.Publish(context.Background(), Event{Name: "user.notification", UserID: model.UserID(model.NewID())})
+		var invalid *InvalidPublicationError
+		require.ErrorAs(t, err, &invalid)
+		require.Empty(t, sink.events, "undeclared publication effects: local")
+		require.Empty(t, fanout.broadcasts, "undeclared publication effects: peers")
+	})
 }
 
 func TestCollaboratorAttachmentIsThreadSafeAndOnce(t *testing.T) {
@@ -363,7 +376,7 @@ func TestServiceHasNoBackgroundLifecycle(t *testing.T) {
 }
 
 func validUserEvent() Event {
-	return Event{Name: "user.notification", UserID: model.UserID(model.NewID())}
+	return Event{Name: "current_user.context.changed", UserID: model.UserID(model.NewID())}
 }
 
 func newOrdinaryTestDelivery(t *testing.T) *Delivery {

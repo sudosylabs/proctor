@@ -1,0 +1,25 @@
+{
+  "title": "Hello",
+  "description": "The first event on every connection. Keep connection_id and the last processed sequence to resume.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "connection_id",
+    "node_id",
+    "resumed"
+  ],
+  "properties": {
+    "connection_id": {
+      "$ref": "id.json"
+    },
+    "node_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The node that owns the connection."
+    },
+    "resumed": {
+      "type": "boolean",
+      "description": "True when the connection resumed and replayed the missed events."
+    }
+  }
+}

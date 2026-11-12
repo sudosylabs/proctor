@@ -67,7 +67,7 @@ func NewCandidateExamActivityChangedEvent(candidateID model.UserID) (Event, erro
 	if err != nil {
 		return Event{}, fmt.Errorf("encode candidate Exam activity invalidation: %w", err)
 	}
-	return Event{Name: "candidate.exam_activity.changed", UserID: candidateID, Data: data}, nil
+	return Event{Name: candidateExamActivityChangedMessage.name, UserID: candidateID, Data: data}, nil
 }
 
 // NewCurrentUserContextChangedEvent constructs a content-free refetch signal
@@ -80,7 +80,7 @@ func NewCurrentUserContextChangedEvent(userID model.UserID) (Event, error) {
 	if err != nil {
 		return Event{}, fmt.Errorf("encode current User context invalidation: %w", err)
 	}
-	return Event{Name: "current_user.context.changed", UserID: userID, Data: data}, nil
+	return Event{Name: currentUserContextChangedMessage.name, UserID: userID, Data: data}, nil
 }
 
 // NewManagerSittingBoardChangedEvent constructs a selector-only invalidation
@@ -101,7 +101,7 @@ func NewManagerSittingBoardChangedEvent(examID model.ExamID, sittingID model.Exa
 	}
 
 	return Event{
-		Name:     "manager.sitting_board.changed",
+		Name:     managerSittingBoardChangedMessage.name,
 		Action:   model.ActionExamSittingView,
 		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
 		Data:     data,
@@ -131,7 +131,7 @@ func NewUserSettingsChangedEvent(
 	}
 
 	return Event{
-		Name:   "user_settings_changed",
+		Name:   userSettingsChangedMessage.name,
 		UserID: userID,
 		Data:   data,
 	}, nil
@@ -351,7 +351,7 @@ func NewExamIntegrityDiscrepancyRecordedEvent(
 	}
 
 	return Event{
-		Name:     "exam_integrity_discrepancy_recorded",
+		Name:     examIntegrityDiscrepancyRecordedMessage.name,
 		Action:   model.ActionSubmissionView,
 		Resource: model.Resource{Type: model.ResourceSubmission, ID: submissionID.String()},
 		Data:     data,
@@ -385,7 +385,7 @@ type ExamIntegrityReviewEventFact struct {
 // NewExamIntegrityReviewChangedEvent tells those who may view the Submission
 // that its Integrity Review changed, in any state.
 func NewExamIntegrityReviewChangedEvent(fact ExamIntegrityReviewEventFact) (Event, error) {
-	return newManagerExamIntegrityReviewEvent("exam_integrity_review_changed", fact)
+	return newManagerExamIntegrityReviewEvent(examIntegrityReviewChangedMessage.name, fact)
 }
 
 // NewExamIntegrityReviewFinalizedEvent tells those who may view the
@@ -395,7 +395,7 @@ func NewExamIntegrityReviewFinalizedEvent(fact ExamIntegrityReviewEventFact) (Ev
 	if fact.State != model.SubmissionReviewFinalized || fact.ReleaseState != model.SubmissionReviewWithheld {
 		return Event{}, errors.New("finalized Integrity Review event requires a withheld finalized Review")
 	}
-	return newManagerExamIntegrityReviewEvent("exam_integrity_review_finalized", fact)
+	return newManagerExamIntegrityReviewEvent(examIntegrityReviewFinalizedMessage.name, fact)
 }
 
 // NewExamStudentResultReleasedEvent tells those who may view the Submission
@@ -405,7 +405,7 @@ func NewExamStudentResultReleasedEvent(fact ExamIntegrityReviewEventFact) (Event
 	if fact.State != model.SubmissionReviewFinalized || fact.ReleaseState != model.SubmissionReviewReleased {
 		return Event{}, errors.New("released Student Result event requires a released finalized Review")
 	}
-	return newManagerExamIntegrityReviewEvent("exam_student_result_released", fact)
+	return newManagerExamIntegrityReviewEvent(examStudentResultReleasedMessage.name, fact)
 }
 
 // NewCandidateStudentResultReleasedEvent tells the candidate alone that
@@ -436,7 +436,7 @@ func NewCandidateStudentResultReleasedEvent(fact ExamIntegrityReviewEventFact) (
 		return Event{}, fmt.Errorf("encode candidate Student Result event: %w", err)
 	}
 
-	return Event{Name: "exam_student_result_released", UserID: fact.CandidateID, Data: data}, nil
+	return Event{Name: candidateExamStudentResultReleasedMessage.name, UserID: fact.CandidateID, Data: data}, nil
 }
 
 func newManagerExamIntegrityReviewEvent(name string, fact ExamIntegrityReviewEventFact) (Event, error) {
@@ -515,7 +515,7 @@ func NewExamAttemptSubmittedEvent(
 	}
 
 	return Event{
-		Name:     "exam_attempt_submitted",
+		Name:     examAttemptSubmittedMessage.name,
 		Action:   model.ActionExamSittingView,
 		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
 		Data:     data,
@@ -562,7 +562,7 @@ func NewCandidateExamAttemptSubmittedEvent(
 	}
 
 	return Event{
-		Name:     "exam_attempt_submitted",
+		Name:     candidateExamAttemptSubmittedMessage.name,
 		UserID:   candidateID,
 		Action:   model.ActionExamSittingParticipate,
 		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
@@ -603,7 +603,7 @@ func NewCandidateExamAttemptFocusLossWarningEvent(
 	}
 
 	return Event{
-		Name:     "exam_attempt_focus_warning",
+		Name:     examAttemptFocusWarningMessage.name,
 		UserID:   candidateID,
 		Action:   model.ActionExamSittingParticipate,
 		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
@@ -661,7 +661,7 @@ func NewExamAttemptIntegrityFlaggedEvent(
 	}
 
 	return Event{
-		Name:     "exam_attempt_integrity_flagged",
+		Name:     examAttemptIntegrityFlaggedMessage.name,
 		Action:   model.ActionExamSittingView,
 		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
 		Data:     data,
@@ -703,7 +703,7 @@ func NewCandidateExamAttemptWorkspaceChangedEvent(
 	}
 
 	return Event{
-		Name:     "exam_attempt_workspace_changed",
+		Name:     examAttemptWorkspaceChangedMessage.name,
 		UserID:   candidateID,
 		Action:   model.ActionExamSittingParticipate,
 		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
@@ -730,7 +730,7 @@ func NewCandidateExamAttemptSuspendedEvent(
 	}
 
 	return newCandidateExamAttemptAccessEvent(
-		"exam_attempt_access_suspended",
+		examAttemptAccessSuspendedMessage.name,
 		sittingID,
 		attemptID,
 		candidateID,
@@ -750,7 +750,7 @@ func NewCandidateExamAttemptReallowedEvent(
 	changedAt time.Time,
 ) (Event, error) {
 	return newCandidateExamAttemptAccessEvent(
-		"exam_attempt_access_reallowed",
+		examAttemptAccessReallowedMessage.name,
 		sittingID,
 		attemptID,
 		candidateID,
@@ -873,7 +873,7 @@ func newExamAttemptSuspendedEvent(
 	}
 
 	return Event{
-		Name:     "exam_attempt_suspended",
+		Name:     examAttemptSuspendedMessage.name,
 		Action:   model.ActionExamSittingView,
 		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
 		Data:     data,
@@ -914,7 +914,7 @@ func NewExamAttemptReallowedEvent(
 	}
 
 	return Event{
-		Name:     "exam_attempt_reallowed",
+		Name:     examAttemptReallowedMessage.name,
 		Action:   model.ActionExamSittingView,
 		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
 		Data:     data,
@@ -932,7 +932,7 @@ func NewExamAttemptConnectionOpenedEvent(
 	openedAt time.Time,
 ) (Event, error) {
 	return newExamAttemptConnectionChangedEvent(
-		"exam_attempt_connection_opened",
+		examAttemptConnectionOpenedMessage.name,
 		sittingID,
 		attemptID,
 		candidateID,
@@ -960,7 +960,7 @@ func NewExamAttemptConnectionClosedEvent(
 		return Event{}, errors.New("Exam Attempt Connection closed event requires a valid reason")
 	}
 	return newExamAttemptConnectionChangedEvent(
-		"exam_attempt_connection_closed",
+		examAttemptConnectionClosedMessage.name,
 		sittingID,
 		attemptID,
 		candidateID,
@@ -1022,6 +1022,7 @@ func NewExamSittingContentCorrectedEvent(
 	effectiveAt time.Time,
 ) (Event, error) {
 	return newExamSittingContentCorrectedEvent(
+		examSittingContentCorrectedMessage,
 		model.ActionExamSittingView,
 		examID,
 		sittingID,
@@ -1045,6 +1046,7 @@ func NewCandidateExamSittingContentCorrectedEvent(
 	effectiveAt time.Time,
 ) (Event, error) {
 	return newExamSittingContentCorrectedEvent(
+		candidateExamSittingCorrectionMessage,
 		model.ActionExamSittingParticipate,
 		examID,
 		sittingID,
@@ -1056,6 +1058,7 @@ func NewCandidateExamSittingContentCorrectedEvent(
 }
 
 func newExamSittingContentCorrectedEvent(
+	declared message,
 	action model.Action,
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
@@ -1088,7 +1091,7 @@ func newExamSittingContentCorrectedEvent(
 	}
 
 	return Event{
-		Name:     "exam_sitting_content_corrected",
+		Name:     declared.name,
 		Action:   action,
 		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
 		Data:     data,
@@ -1107,6 +1110,7 @@ func NewExamSittingLifecycleChangedEvent(
 	changedAt time.Time,
 ) (Event, error) {
 	return newExamSittingLifecycleChangedEvent(
+		examSittingLifecycleChangedMessage,
 		model.ActionExamSittingView,
 		examID,
 		sittingID,
@@ -1130,6 +1134,7 @@ func NewCandidateExamSittingLifecycleChangedEvent(
 	changedAt time.Time,
 ) (Event, error) {
 	return newExamSittingLifecycleChangedEvent(
+		candidateExamSittingLifecycleMessage,
 		model.ActionExamSittingParticipate,
 		examID,
 		sittingID,
@@ -1142,6 +1147,7 @@ func NewCandidateExamSittingLifecycleChangedEvent(
 }
 
 func newExamSittingLifecycleChangedEvent(
+	declared message,
 	action model.Action,
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
@@ -1176,7 +1182,7 @@ func newExamSittingLifecycleChangedEvent(
 	}
 
 	return Event{
-		Name:     "exam_sitting_lifecycle_changed",
+		Name:     declared.name,
 		Action:   action,
 		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
 		Data:     data,
@@ -1215,7 +1221,7 @@ func NewExamSittingScheduledEvent(
 	if state != model.ExamSittingScheduled {
 		return Event{}, errors.New("scheduled Exam Sitting event requires Scheduled state")
 	}
-	return newExamSittingChangedEvent("exam_sitting_scheduled", examID, sittingID, state, revision, changedAt)
+	return newExamSittingChangedEvent(examSittingScheduledMessage.name, examID, sittingID, state, revision, changedAt)
 }
 
 // NewExamSittingScheduleUpdatedEvent tells Sitting viewers that a Scheduled
@@ -1232,7 +1238,7 @@ func NewExamSittingScheduleUpdatedEvent(
 	if state != model.ExamSittingScheduled {
 		return Event{}, errors.New("Exam Sitting schedule update event requires Scheduled state")
 	}
-	return newExamSittingChangedEvent("exam_sitting_schedule_updated", examID, sittingID, state, revision, changedAt)
+	return newExamSittingChangedEvent(examSittingScheduleUpdatedMessage.name, examID, sittingID, state, revision, changedAt)
 }
 
 // NewExamSittingCanceledEvent tells Sitting viewers that a Sitting was
@@ -1248,7 +1254,7 @@ func NewExamSittingCanceledEvent(
 	if state != model.ExamSittingCanceled {
 		return Event{}, errors.New("canceled Exam Sitting event requires Canceled state")
 	}
-	return newExamSittingChangedEvent("exam_sitting_canceled", examID, sittingID, state, revision, changedAt)
+	return newExamSittingChangedEvent(examSittingCanceledMessage.name, examID, sittingID, state, revision, changedAt)
 }
 
 func newExamSittingChangedEvent(
@@ -1311,7 +1317,7 @@ func NewExamRevisionPublishedEvent(
 	}
 
 	return Event{
-		Name:     "exam_revision_published",
+		Name:     examRevisionPublishedMessage.name,
 		Action:   model.ActionExamView,
 		Resource: model.Resource{Type: model.ResourceExam, ID: examID.String()},
 		Data:     data,
@@ -1324,7 +1330,7 @@ func NewExamCreatedEvent(examID model.ExamID) (Event, error) {
 		return Event{}, errors.New("exam created event requires a valid Exam ID")
 	}
 	return Event{
-		Name:     "exam_created",
+		Name:     examCreatedMessage.name,
 		Action:   model.ActionExamView,
 		Resource: model.Resource{Type: model.ResourceExam, ID: examID.String()},
 	}, nil
@@ -1343,7 +1349,7 @@ func NewExamDraftUpdatedEvent(examID model.ExamID, revision int64) (Event, error
 	}
 
 	return Event{
-		Name:     "exam_draft_updated",
+		Name:     examDraftUpdatedMessage.name,
 		Action:   model.ActionExamView,
 		Resource: model.Resource{Type: model.ResourceExam, ID: examID.String()},
 		Data:     data,
@@ -1376,7 +1382,7 @@ func NewExamStarterWorkspaceChangedEvent(
 	}
 
 	return Event{
-		Name:     "exam_starter_workspace_changed",
+		Name:     examStarterWorkspaceChangedMessage.name,
 		Action:   model.ActionExamView,
 		Resource: model.Resource{Type: model.ResourceExam, ID: examID.String()},
 		Data:     data,
@@ -1408,7 +1414,7 @@ func NewExamArchivedEvent(examID model.ExamID, revision int64, archivedAt time.T
 	}
 
 	return Event{
-		Name:     "exam_archived",
+		Name:     examArchivedMessage.name,
 		Action:   model.ActionExamView,
 		Resource: model.Resource{Type: model.ResourceExam, ID: examID.String()},
 		Data:     data,
@@ -1442,7 +1448,7 @@ func NewExamManagerChangedEvent(
 	}
 
 	return Event{
-		Name:     "exam_manager_changed",
+		Name:     examManagerChangedMessage.name,
 		Action:   model.ActionExamView,
 		Resource: model.Resource{Type: model.ResourceExam, ID: examID.String()},
 		Data:     data,
@@ -1467,11 +1473,72 @@ func NewExamOwnerTransferredEvent(examID model.ExamID, ownerID model.UserID, rev
 	}
 
 	return Event{
-		Name:     "exam_owner_transferred",
+		Name:     examOwnerTransferredMessage.name,
 		Action:   model.ActionExamView,
 		Resource: model.Resource{Type: model.ResourceExam, ID: examID.String()},
 		Data:     data,
 	}, nil
+}
+
+// NewAcademicUnitCreatedEvent tells everyone who may view the Academic Unit
+// that it was created. Like its update and archive siblings it carries no
+// payload: subscribers refetch the Academic Unit.
+func NewAcademicUnitCreatedEvent(unitID model.AcademicUnitID) (Event, error) {
+	return newAcademicUnitEvent(academicUnitCreatedMessage, unitID)
+}
+
+// NewAcademicUnitUpdatedEvent tells everyone who may view the Academic Unit
+// that it changed.
+func NewAcademicUnitUpdatedEvent(unitID model.AcademicUnitID) (Event, error) {
+	return newAcademicUnitEvent(academicUnitUpdatedMessage, unitID)
+}
+
+// NewAcademicUnitArchivedEvent tells everyone who may view the Academic Unit
+// that it was archived.
+func NewAcademicUnitArchivedEvent(unitID model.AcademicUnitID) (Event, error) {
+	return newAcademicUnitEvent(academicUnitArchivedMessage, unitID)
+}
+
+func newAcademicUnitEvent(declared message, unitID model.AcademicUnitID) (Event, error) {
+	if !unitID.IsValid() {
+		return Event{}, errors.New("Academic Unit event requires a valid Academic Unit identity")
+	}
+	return Event{
+		Name:     declared.name,
+		Action:   model.ActionAcademicUnitView,
+		Resource: model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()},
+	}, nil
+}
+
+type userProfilePictureChangedData struct {
+	ActiveFileEntryID string `json:"active_file_entry_id"`
+	Revision          int64  `json:"revision"`
+	ChangedAt         string `json:"changed_at"`
+}
+
+// NewUserProfilePictureChangedEvent tells the User's live sessions which File
+// Entry is now their profile picture, with the User revision and the instant
+// of the change.
+func NewUserProfilePictureChangedEvent(
+	userID model.UserID,
+	activeFileEntryID model.FileEntryID,
+	revision int64,
+	changedAt time.Time,
+) (Event, error) {
+	if !userID.IsValid() || !activeFileEntryID.IsValid() || revision < 1 || changedAt.IsZero() {
+		return Event{}, errors.New("User profile picture event requires valid bounded metadata")
+	}
+
+	data, err := json.Marshal(userProfilePictureChangedData{
+		ActiveFileEntryID: activeFileEntryID.String(),
+		Revision:          revision,
+		ChangedAt:         model.FormatRFC3339(changedAt),
+	})
+	if err != nil {
+		return Event{}, fmt.Errorf("encode User profile picture event: %w", err)
+	}
+
+	return Event{Name: userProfilePictureChangedMessage.name, UserID: userID, Data: data}, nil
 }
 
 // Clone returns a deep copy safe for concurrent local and cluster delivery.

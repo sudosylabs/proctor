@@ -120,6 +120,8 @@ components:
                 - id: external_capture
                   mode: disabled
               registry_digest: sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0
+              screen_recording:
+                enabled: true
   schemas:
     ConfigureExamDraftNativePolicyRequest:
       type: object
@@ -134,6 +136,17 @@ components:
           minimum: 1
         native:
           $ref: '#/components/schemas/NativeSecurityPolicy'
+    NativeScreenRecordingPolicy:
+      type: object
+      additionalProperties: false
+      description: >-
+        Whether Desktop records the candidate's screen on the device for the whole session, uploading only the ranges
+        the server requests. Off by default; the candidate is told before the Attempt starts.
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
     NativeSecurityPolicy:
       type: object
       additionalProperties: false
@@ -144,7 +157,10 @@ components:
         - registry_digest
         - baseline_id
         - families
+        - screen_recording
       properties:
+        screen_recording:
+          $ref: '#/components/schemas/NativeScreenRecordingPolicy'
         registry_digest:
           type: string
           const: sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0

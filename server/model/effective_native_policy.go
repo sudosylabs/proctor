@@ -68,6 +68,9 @@ type EffectiveExamSecurityPolicy struct {
 	VisibilityClassID     string               `json:"visibility_class_id"`
 	RetentionClassID      string               `json:"retention_class_id"`
 	Capabilities          []NativeFamilyPolicy `json:"capabilities"`
+	// ScreenRecording tells Desktop whether to run its screen evidence
+	// recorder for this Exam.
+	ScreenRecording NativeScreenRecordingPolicy `json:"screen_recording"`
 }
 
 type SecurityCatalogBinding struct {
@@ -165,6 +168,7 @@ func ResolveNativePolicy(input NativePolicyResolution) (ResolvedNativePolicy, er
 		VisibilityClassID:     "examiner_restricted",
 		RetentionClassID:      "native_minimized",
 		Capabilities:          slices.Clone(input.Selections.Native.Families),
+		ScreenRecording:       input.Selections.Native.ScreenRecording,
 	}
 	if input.Selections.FocusLoss.Enabled {
 		policy.FocusLossMode = NativeModeObserve

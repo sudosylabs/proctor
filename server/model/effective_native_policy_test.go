@@ -52,6 +52,19 @@ func setNativeFamily(t *testing.T, input *NativePolicyResolution, index int, raw
 	t.Helper()
 	require.NoError(t, json.Unmarshal([]byte(raw), &input.Selections.Native.Families[index]))
 }
+func TestEffectiveNativePolicyCarriesTheScreenRecorderSwitch(t *testing.T) {
+	input := nativeResolutionFixture(t)
+	off, err := ResolveNativePolicy(input)
+	require.NoError(t, err)
+	require.False(t, off.Policy.ScreenRecording.Enabled)
+
+	input.Selections.Native.ScreenRecording.Enabled = true
+	on, err := ResolveNativePolicy(input)
+	require.NoError(t, err)
+	require.True(t, on.Policy.ScreenRecording.Enabled, "Desktop learns from the policy whether to record")
+	require.NotEqual(t, off.PolicyContentDigest, on.PolicyContentDigest, "the switch is part of the content Desktop verifies")
+}
+
 func TestEffectiveNativePolicyContentDigestSurvivesOnlyScopeRebind(t *testing.T) {
 	input := nativeResolutionFixture(t)
 	resolved, err := ResolveNativePolicy(input)

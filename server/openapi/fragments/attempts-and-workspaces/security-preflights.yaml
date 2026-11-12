@@ -385,6 +385,7 @@ components:
         - visibility_class_id
         - retention_class_id
         - capabilities
+        - screen_recording
       properties:
         policy_id:
           type: string
@@ -500,6 +501,8 @@ components:
         retention_class_id:
           type: string
           const: native_minimized
+        screen_recording:
+          $ref: '#/components/schemas/NativeScreenRecordingPolicy'
         capabilities:
           type: array
           minItems: 10

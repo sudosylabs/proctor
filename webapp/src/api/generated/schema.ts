@@ -7931,6 +7931,7 @@ export interface components {
                 /** @constant */
                 kind: "attempt";
             };
+            screen_recording: components["schemas"]["NativeScreenRecordingPolicy"];
             sitting_id: string;
             target_tuple: string;
             /** @constant */
@@ -9792,6 +9793,10 @@ export interface components {
             status: "opened" | "repeated" | "recovered";
         };
         NativeRecord: components["schemas"]["NativeOccurrence"] | components["schemas"]["NativeCoverageTransition"] | components["schemas"]["NativeSourceReset"] | components["schemas"]["NativeSourceGap"];
+        /** @description Whether Desktop records the candidate's screen on the device for the whole session, uploading only the ranges the server requests. Off by default; the candidate is told before the Attempt starts. */
+        NativeScreenRecordingPolicy: {
+            enabled: boolean;
+        };
         NativeSecurityAcknowledgement: {
             /** Format: int64 */
             highest_contiguous_batch_sequence: number;
@@ -9869,6 +9874,7 @@ export interface components {
             ];
             /** @constant */
             registry_digest: "sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0";
+            screen_recording: components["schemas"]["NativeScreenRecordingPolicy"];
         };
         NativeSecurityStreamStatus: {
             /** Format: int64 */
@@ -15071,7 +15077,10 @@ export interface components {
                  *             "mode": "disabled"
                  *           }
                  *         ],
-                 *         "registry_digest": "sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0"
+                 *         "registry_digest": "sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0",
+                 *         "screen_recording": {
+                 *           "enabled": true
+                 *         }
                  *       }
                  *     }
                  */

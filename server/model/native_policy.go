@@ -260,9 +260,19 @@ func (p *NativeFamilyPolicy) UnmarshalJSON(document []byte) error {
 // an immutable mandatory baseline. Catalog resolution is a separate admission
 // operation; structurally valid IDs are not thereby registered or authorized.
 type NativeSecurityPolicy struct {
-	RegistryDigest string               `json:"registry_digest"`
-	BaselineID     string               `json:"baseline_id"`
-	Families       []NativeFamilyPolicy `json:"families"`
+	RegistryDigest  string                      `json:"registry_digest"`
+	BaselineID      string                      `json:"baseline_id"`
+	Families        []NativeFamilyPolicy        `json:"families"`
+	ScreenRecording NativeScreenRecordingPolicy `json:"screen_recording"`
+}
+
+// NativeScreenRecordingPolicy turns on Desktop's screen evidence recorder for
+// an Exam. Desktop then records the whole session on the device, from the
+// moment the candidate window opens until submission, and uploads only the
+// ranges the server requests. It is off by default, because a clip can show
+// anything on the candidate's screen.
+type NativeScreenRecordingPolicy struct {
+	Enabled bool `json:"enabled"`
 }
 
 func DefaultNativeSecurityPolicy() NativeSecurityPolicy {
@@ -314,6 +324,13 @@ func (p NativeSecurityPolicy) Clone() NativeSecurityPolicy {
 	return p
 }
 
+// completeNativeScreenRecording reports whether the recorder member names
+// its one member, so an omitted switch is never read as off.
+func completeNativeScreenRecording(member json.RawMessage) bool {
+	var members map[string]json.RawMessage
+	return json.Unmarshal(member, &members) == nil && len(members) == 1 && members["enabled"] != nil
+}
+
 func (p *NativeSecurityPolicy) UnmarshalJSON(document []byte) error {
 	if p == nil || len(document) > ExamPolicySetMaxBytes || validateExamDocumentJSON(document) != nil {
 		return errNativePolicy
@@ -334,10 +351,11 @@ func (p *NativeSecurityPolicy) UnmarshalJSON(document []byte) error {
 
 	var members map[string]json.RawMessage
 	if json.Unmarshal(document, &members) != nil ||
-		len(members) != 3 ||
+		len(members) != 4 ||
 		members["registry_digest"] == nil ||
 		members["baseline_id"] == nil ||
-		members["families"] == nil {
+		members["families"] == nil ||
+		!completeNativeScreenRecording(members["screen_recording"]) {
 		return errNativePolicy
 	}
 

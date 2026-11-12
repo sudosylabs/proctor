@@ -980,7 +980,10 @@
                     "mode": "disabled"
                   }
                 ],
-                "registry_digest": "sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0"
+                "registry_digest": "sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0",
+                "screen_recording": {
+                  "enabled": true
+                }
               }
             },
             "schema": {
@@ -14392,6 +14395,9 @@
               }
             ]
           },
+          "screen_recording": {
+            "$ref": "#/components/schemas/NativeScreenRecordingPolicy"
+          },
           "sitting_id": {
             "maxLength": 26,
             "minLength": 26,
@@ -14430,7 +14436,8 @@
           "evidence_class_id",
           "visibility_class_id",
           "retention_class_id",
-          "capabilities"
+          "capabilities",
+          "screen_recording"
         ],
         "type": "object"
       },
@@ -20677,6 +20684,19 @@
           }
         ]
       },
+      "NativeScreenRecordingPolicy": {
+        "additionalProperties": false,
+        "description": "Whether Desktop records the candidate's screen on the device for the whole session, uploading only the ranges the server requests. Off by default; the candidate is told before the Attempt starts.",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "type": "object"
+      },
       "NativeSecurityAcknowledgement": {
         "additionalProperties": false,
         "properties": {
@@ -21668,12 +21688,16 @@
           "registry_digest": {
             "const": "sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0",
             "type": "string"
+          },
+          "screen_recording": {
+            "$ref": "#/components/schemas/NativeScreenRecordingPolicy"
           }
         },
         "required": [
           "registry_digest",
           "baseline_id",
-          "families"
+          "families",
+          "screen_recording"
         ],
         "type": "object"
       },

@@ -105,3 +105,40 @@ func TestNativeFamilyPolicyRejectsUnsafeOrMeaninglessSelections(t *testing.T) {
 		})
 	}
 }
+
+func TestNativeScreenRecordingIsAnExplicitSwitchOffByDefault(t *testing.T) {
+	t.Parallel()
+
+	policy := DefaultNativeSecurityPolicy()
+	require.False(t, policy.ScreenRecording.Enabled, "the recorder is off by default")
+
+	policy.ScreenRecording.Enabled = true
+	encoded, err := json.Marshal(policy)
+	require.NoError(t, err)
+	var decoded NativeSecurityPolicy
+	require.NoError(t, json.Unmarshal(encoded, &decoded))
+	require.True(t, decoded.ScreenRecording.Enabled)
+
+	var members map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(encoded, &members))
+	for name, recorder := range map[string]json.RawMessage{
+		"omitted":       nil,
+		"empty":         json.RawMessage(`{}`),
+		"extra member":  json.RawMessage(`{"enabled":true,"fps":10}`),
+		"not a boolean": json.RawMessage(`{"enabled":"yes"}`),
+		"null":          json.RawMessage(`null`),
+	} {
+		changed := map[string]json.RawMessage{}
+		for key, value := range members {
+			changed[key] = value
+		}
+		if recorder == nil {
+			delete(changed, "screen_recording")
+		} else {
+			changed["screen_recording"] = recorder
+		}
+		document, marshalErr := json.Marshal(changed)
+		require.NoError(t, marshalErr)
+		require.Error(t, json.Unmarshal(document, &decoded), name)
+	}
+}

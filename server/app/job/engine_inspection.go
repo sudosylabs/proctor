@@ -17,7 +17,9 @@ import (
 )
 
 type ListQuery struct {
-	Statuses        []model.JobStatus
+	Statuses []model.JobStatus
+	// Ascending reads oldest first; the default is newest first.
+	Ascending       bool
 	BeforeCreatedAt time.Time
 	BeforeID        model.JobID
 	Limit           int
@@ -33,7 +35,7 @@ type AttemptListQuery struct {
 var ErrQueryInvalid = errors.New("job query is invalid")
 
 // List returns one page of the Jobs whose type is operator-visible, newest
-// first, 50 when Limit is zero. BeforeCreatedAt and
+// first unless Ascending, 50 when Limit is zero. BeforeCreatedAt and
 // BeforeID continue after the last item of the previous page; only the first
 // page is counted.
 func (r *Engine) List(ctx context.Context, query ListQuery) (Page, error) {
@@ -53,6 +55,7 @@ func (r *Engine) List(ctx context.Context, query ListQuery) (Page, error) {
 	options := store.JobListOptions{
 		Types:           r.operatorTypes(),
 		Statuses:        query.Statuses,
+		Ascending:       query.Ascending,
 		BeforeCreatedAt: query.BeforeCreatedAt,
 		BeforeID:        query.BeforeID,
 		Limit:           query.Limit + 1,

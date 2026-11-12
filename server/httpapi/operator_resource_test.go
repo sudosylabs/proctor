@@ -137,6 +137,8 @@ type focusedAuditApplication struct {
 	self      []administration.SelfAuditEvent
 	selfCalls int
 	selfTotal int
+	names     store.AuditNames
+	redacted  bool
 }
 
 func (f *focusedAuditApplication) ListSelfAuditEvents(_ context.Context, _ invocation.Invocation, query administration.ListSelfAuditEventsQuery) (administration.SelfAuditPage, error) {
@@ -149,9 +151,13 @@ func (f *focusedAuditApplication) ListSelfAuditEvents(_ context.Context, _ invoc
 	return page, f.err
 }
 
-func (f *focusedAuditApplication) ListAuditEvents(_ context.Context, _ invocation.Invocation, query administration.ListAuditEventsQuery) (paging.Counted[*model.AuditEvent], error) {
+func (f *focusedAuditApplication) ListAuditEvents(_ context.Context, _ invocation.Invocation, query administration.ListAuditEventsQuery) (administration.AuditEventPage, error) {
 	f.query = query
-	page := paging.Counted[*model.AuditEvent]{Page: paging.Page[*model.AuditEvent]{Items: f.events, HasMore: f.hasMore}}
+	page := administration.AuditEventPage{
+		Counted:  paging.Counted[*model.AuditEvent]{Page: paging.Page[*model.AuditEvent]{Items: f.events, HasMore: f.hasMore}},
+		Names:    f.names,
+		Redacted: f.redacted,
+	}
 	if query.BeforeID.IsZero() {
 		page.Total = paging.Total{Counted: true, Total: max(f.total, len(f.events)), TotalIsLowerBound: f.total == store.MaximumListCount}
 	}
@@ -242,12 +248,20 @@ func TestJobResourcePreservesPrivateProjectionAndBoundedControls(t *testing.T) {
 	for _, private := range []string{"command", "checkpoint", "claim_owner", "claim_token", "internal_error"} {
 		require.NotContains(t, list.Body.String(), private, "job list exposed")
 	}
-	cursor, err := encodeJobCursor(jobCursor{CreatedAt: model.FormatRFC3339(now), ID: jobID.String()})
+	cursor, err := encodeJobCursor(jobCursor{CreatedAt: model.FormatRFC3339(now), ID: jobID.String(), Order: listDescending})
 	require.NoError(t, err)
 	page := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/jobs?cursor="+url.QueryEscape(cursor), "", true)
 	require.Equal(t, http.StatusOK, page.Code, "job cursor forwarding = %d query=%#v body=%s", page.Code, jobs.listQuery, page.Body.String())
 	require.True(t, jobs.listQuery.BeforeCreatedAt.Equal(model.TimeUTC(now)), "job cursor forwarding = %d query=%#v body=%s", page.Code, jobs.listQuery, page.Body.String())
 	require.Equal(t, jobID, jobs.listQuery.BeforeID, "job cursor forwarding = %d query=%#v body=%s", page.Code, jobs.listQuery, page.Body.String())
+	require.False(t, jobs.listQuery.Ascending, "a newest-first cursor reads newest first")
+	otherOrder := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/jobs?order=asc&cursor="+url.QueryEscape(cursor), "", true)
+	assertHTTPProblem(t, otherOrder, http.StatusBadRequest, "request.invalid")
+	oldest := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/jobs?order=asc", "", true)
+	require.Equal(t, http.StatusOK, oldest.Code, oldest.Body.String())
+	require.True(t, jobs.listQuery.Ascending, "order=asc reads oldest first")
+	unknownOrder := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/jobs?order=status", "", true)
+	assertHTTPProblem(t, unknownOrder, http.StatusBadRequest, "request.invalid")
 	malformed := serveOperatorRequest(t, httpAPI, http.MethodGet, "/api/v1/jobs?cursor=not-a-cursor", "", true)
 	assertHTTPProblem(t, malformed, http.StatusBadRequest, "request.invalid")
 

@@ -138,7 +138,7 @@ func (s *Service) SetUserEnabled(
 			Action:     model.ActionUserManage,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: userID.String()},
 			Operation:  operation,
-			Value:      parameters,
+			Value:      command.Batch.AuditValue(parameters),
 			Prior:      current.Auditable(),
 			At:         now,
 		},

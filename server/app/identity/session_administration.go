@@ -207,7 +207,7 @@ func (s *Service) RevokeUserSessions(
 			Action:     model.ActionSessionManage,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: userID.String()},
 			Operation:  "revoke_sessions",
-			Value:      map[string]any{"user_id": userID},
+			Value:      command.Batch.AuditValue(map[string]any{"user_id": userID}),
 			At:         now,
 		},
 		&store.UserSessionsRevocation{

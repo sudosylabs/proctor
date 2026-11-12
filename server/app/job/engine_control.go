@@ -101,6 +101,7 @@ func (r *Engine) Cancel(ctx context.Context, target ControlTarget, audit AuditRe
 		return View{}, err
 	}
 
+	r.announceStatus(ctx, record)
 	return projectJob(record), nil
 }
 
@@ -122,6 +123,7 @@ func (r *Engine) Retry(ctx context.Context, target ControlTarget, audit AuditRef
 		return View{}, err
 	}
 
+	r.announceStatus(ctx, record)
 	return projectJob(record), nil
 }
 

@@ -13,7 +13,7 @@ paths:
       tags:
         - Mail
       description: >-
-        Lists authorized durable delivery metadata for the allowlisted template and filters. Recipient addresses remain masked and the response never exposes encrypted payloads, rendered message bodies, SMTP credentials, or provider diagnostics.
+        Lists authorized durable delivery metadata for the allowlisted template and filters, most recently updated first unless `sort` and `dir` choose another order. Recipient addresses remain masked and the response never exposes encrypted payloads, rendered message bodies, SMTP credentials, or provider diagnostics.
         The first page, read without a cursor, also reports `total`: the mail deliveries the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
       x-proctor-auth: principal_required
       x-proctor-error-codes:
@@ -64,6 +64,13 @@ paths:
             items:
               $ref: '#/components/schemas/MailTemplateKey'
           description: Optional set of template keys to include.
+        - name: recipient_user_id
+          in: query
+          schema:
+            $ref: '#/components/schemas/ID'
+          description: >-
+            Include only deliveries addressed to this User. A delivery to an Invitation has no recipient User and
+            never matches; mail history is never searched by address.
         - name: created_after
           in: query
           schema:
@@ -76,6 +83,28 @@ paths:
             type: string
             format: date-time
           description: Include deliveries created before this RFC 3339 instant.
+        - name: sort
+          in: query
+          required: false
+          description: >-
+            Order by the last update (`updated`, the default) or by creation (`created`), then by delivery identity.
+            A cursor continues only the sort and direction that produced it.
+          schema:
+            type: string
+            enum:
+              - updated
+              - created
+            default: updated
+        - name: dir
+          in: query
+          required: false
+          description: Newest first (`desc`, the default) or oldest first (`asc`) by the `sort` instant.
+          schema:
+            type: string
+            enum:
+              - desc
+              - asc
+            default: desc
       responses:
         "200":
           $ref: '#/components/responses/MailDeliveryListOK'

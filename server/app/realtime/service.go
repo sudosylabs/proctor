@@ -119,7 +119,8 @@ func (s *Service) Report(ctx context.Context, operation string, err error) {
 	s.deps.Diagnostics.ErrorContext(ctx, "transient realtime publication failed", fields...)
 }
 
-// SessionsRevoked propagates revoked Sessions and access tokens, then tells
+// SessionsRevoked propagates revoked Sessions and access tokens, tells the
+// User's remaining connections that their Session list changed, then tells
 // the affected Attempts' candidate and Sitting board that their activity
 // changed. Publication failures are reported, not returned.
 func (s *Service) SessionsRevoked(
@@ -137,6 +138,16 @@ func (s *Service) SessionsRevoked(
 	if err != nil {
 		s.Report(ctx, "session_revocation.attempt_invalidations", err)
 		return
+	}
+
+	// The revoked Sessions' connections are already closed, so only the
+	// User's other connections hear this.
+	sessionsEvent, err := NewCurrentUserSessionsChangedEvent(userID)
+	if err == nil {
+		err = s.Publish(ctx, sessionsEvent)
+	}
+	if err != nil {
+		s.Report(ctx, "session_revocation.sessions_changed", err)
 	}
 
 	parsedSessionIDs := make([]model.SessionID, len(sessionIDs))

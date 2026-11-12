@@ -73,11 +73,11 @@ func (s *Service) IssueStudentClassInvitation(
 		ScopeType:  model.RoleScopeClass,
 		ScopeID:    class.ID.String(),
 		Operation:  "issue_student_class",
-		Value: map[string]any{
+		Value: batchitem.ImportAuditValue(map[string]any{
 			"purpose":            model.InvitationPurposeStudentClass,
 			"class_id":           class.ID.String(),
 			"academic_period_id": period.ID.String(),
-		},
+		}, command.onboardingImportID, command.onboardingImportRowNumber),
 	}
 	if recovered, ok, recoverErr := s.recoverInvitationIssueOutcome(ctx, commandIdempotency, attempt); ok {
 		return recovered, recoverErr

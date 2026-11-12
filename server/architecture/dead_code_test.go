@@ -69,7 +69,6 @@ var reachableOnlyFromTests = map[string]string{
 	"model.CurrentAttemptConfigurationManifestFingerprint": "the empty Desktop manifest fingerprint other packages' tests pin",
 	"model.GetMillis":                                      "the millisecond clock fixtures in every package's tests read",
 	"model.GetMillisForTime":                               "the conversion model.GetMillis applies",
-	"model.AuditActions":                                   "the audit action catalog the architecture test reads",
 	"model.ParseSubmissionReceiptCode":                     "normalizes a receipt code a person typed; the planned staff lookup by receipt code is its first production caller",
 	"store/localcachelayer.NopInvalidationFanout.RegisterAcademicPeriod":  "the no-peer fan-out sqlstore conformance tests compose",
 	"store/localcachelayer.NopInvalidationFanout.BroadcastAcademicPeriod": "the no-peer fan-out sqlstore conformance tests compose",

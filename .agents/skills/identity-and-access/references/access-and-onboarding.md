@@ -571,6 +571,14 @@ authentication and atomically revokes the Registration, every live Session
 and credential bound to it, and the security audit before publishing Session
 revocation effects. Revocation is permanent security history.
 
+The User may rename an active Registration through the nested `PATCH` route
+from any interactive Session, without recent authentication, because the name
+is presentation only. The chosen name (`renamed_at` set) survives later
+Desktop sign-ins with the same key; until then each sign-in refreshes it from
+the reported device name. A revoked Registration cannot be renamed. A Desktop
+Session has no name of its own: Session lists show its Registration's name,
+and renaming the Session is refused in favor of the Registration.
+
 At most one unresolved Exam Attempt may hold the account's Session lock. Only
 a compatible, active, registered-key Desktop Session can activate a ready
 Attempt, and that exact Session is owned by the resulting Attempt
@@ -856,6 +864,37 @@ row, safe reference, normalized operation, status, created IDs, and public
 error code; downloads reauthorize and escape spreadsheet formulas. Audit,
 logs, metrics, and generic Job projections contain only safe IDs, counts,
 timing, and closed codes, never recipient lists or rows.
+
+An academic administration preview by filter is the third preview source,
+beside CSV and progression, and the same onboarding import aggregate with its
+own mode. It applies one batch operation (not `class.transfer`) to the Users a
+User directory filter matches, admitting exactly the filters the caller's
+directory admits. Its preview Job freezes the ordered User list under the
+caller's visibility at that moment, at most 10,000 rows, classifying each row
+as will change, no-op, or skipped with a closed reason; the caller's own
+account is always skipped, and disable and Session revocation skip System
+Administrators. Only its creator reads it, rows are shown only while the
+creator's directory shows their User, and the generic import surface never
+shows, lists, or counts it. Preview and commit require a strong recent
+Session; the commit expires 15 minutes after the preview became ready, by
+PostgreSQL time. Every read, the commit and each execution page admit the
+stored filter again through the creator's directory: a filter the directory
+would now refuse (Institution-wide-only or Role filters after that authority
+is lost) refuses reads and the commit with
+`academic_administration_preview.authorization_lost` and fails every
+remaining row. Classification never reveals what the creator could not
+already see: a Class enrollment is skipped for an enrollment conflict only
+when the creator sees the conflicting Class's members, and for a missing
+student Affiliation only for an Institution-wide viewer. Summary counts, like
+rows, cover only the Users the reader's directory shows now. Execution runs
+the frozen list, never the filter, and each row rechecks the User's
+visibility and System Administrator status before its named transaction
+re-resolves authority. The first commit records one batch-level audit entry.
+Each import row whose operation runs, from any import source, begins its own
+audit attempt with the import and row in its value, so a refused row's
+`fail` entry names them too; a row refused by the execution check before any
+operation runs begins no attempt and is accounted for by the batch entry, the
+page's recorded directory decision and the row's outcome.
 
 Student progression names exact source/destination Periods and Classes, dry
 runs every student conflict, preserves historical membership, and commits each

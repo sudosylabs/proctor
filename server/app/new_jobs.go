@@ -246,6 +246,7 @@ func buildApplicationJobDefinitions(
 		registrations = append(registrations,
 			jobs.NewOnboardingImportParse(onboardingPorts.ImportJobs),
 			jobs.NewStudentProgressionPreview(onboardingPorts.ImportJobs),
+			jobs.NewAcademicAdministrationPreviewResolve(onboardingPorts.ImportJobs),
 			jobs.NewOnboardingImportExecute(onboardingPorts.ImportJobs),
 		)
 	}

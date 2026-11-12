@@ -90,10 +90,8 @@ func newAPI(settings Settings, authenticator route.Authenticator, resources ...r
 	if settings.Localizer == nil {
 		return nil, errors.New("localizer is required")
 	}
-	for _, definition := range LocalizationDefinitions() {
-		if _, err := settings.Localizer.Translate("", definition.ID, nil); err != nil {
-			return nil, fmt.Errorf("validate localization %q: %w", definition.ID, err)
-		}
+	if err := route.ValidateLocalization(settings.Localizer, LocalizationDefinitions()); err != nil {
+		return nil, err
 	}
 	if settings.Health == nil {
 		return nil, errors.New("health state is required")

@@ -24,34 +24,39 @@ import (
 // OnboardingImportFailureCodes is every failure_code a failed import or
 // student progression records: a lost credential, an unreadable file, an
 // upload revalidation failure as an Invitation batch would record it, and the
-// progression preview failures.
+// progression and academic administration filter preview failures.
 func OnboardingImportFailureCodes() []string {
 	return sortedCodes(
 		[]string{"authentication.token_invalid", "onboarding_import.file_invalid"},
 		invitationRowErrorCodes(),
 		model.StudentProgressionFailureCodes(),
+		model.AcademicAdministrationPreviewFailureCodes(),
 	)
 }
 
 // OnboardingImportPreviewCodes is every preview_code a preview row records:
 // malformed or duplicate CSV rows, target resolution failures as an
-// Invitation batch would record them, and the student progression row
-// outcomes.
+// Invitation batch would record them, the student progression row
+// outcomes, and the academic administration filter preview skip reasons and
+// no-change marker.
 func OnboardingImportPreviewCodes() []string {
 	return sortedCodes(
 		[]string{"request.invalid", "onboarding_batch.duplicate"},
 		invitationRowErrorCodes(),
 		model.StudentProgressionPreviewCodes(),
+		AcademicAdministrationPreviewSkipReasons(),
+		[]string{store.AcademicAdministrationPreviewNoChange},
 	)
 }
 
 // OnboardingImportRowCodes is every public_code an executed row records when
 // it fails: a lost credential, and the item failures of the Invitation and
 // academic administration batches that execute the row, which include
-// student_progression.conflict for a changed source membership.
+// student_progression.conflict for a changed source membership, and the
+// System Administrator a filter preview row reached after it froze.
 func OnboardingImportRowCodes() []string {
 	return sortedCodes(
-		[]string{"authentication.token_invalid"},
+		[]string{"authentication.token_invalid", academicAdministrationPreviewSystemAdministrator},
 		invitationRowErrorCodes(),
 		AcademicAdministrationBatchErrorCodes(),
 	)

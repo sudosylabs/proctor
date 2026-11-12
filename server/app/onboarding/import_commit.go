@@ -34,57 +34,72 @@ func (s *Service) CommitOnboardingImport(
 	inv invocation.Invocation,
 	command CommitOnboardingImportCommand,
 ) (OnboardingImportView, error) {
-	return s.commitImport(ctx, inv, command, "")
+	committed, err := s.commitImport(ctx, inv, command, "")
+	if err != nil {
+		return OnboardingImportView{}, err
+	}
+	return onboardingImportView(committed), nil
 }
 
+// commitImport commits the import of expectedMode, or of any generic mode
+// when it is empty, and returns the committed snapshot the Store recorded,
+// the same on an idempotent replay.
 func (s *Service) commitImport(
 	ctx context.Context,
 	inv invocation.Invocation,
 	command CommitOnboardingImportCommand,
 	expectedMode model.OnboardingImportMode,
-) (OnboardingImportView, error) {
+) (*store.OnboardingImport, error) {
 	id := command.ID
 	if !id.IsValid() ||
 		command.ExpectedRevision < 1 ||
 		len(command.PreviewDigest) != sha256.Size*2 ||
 		!command.Policy.IsValid() ||
 		!validInvitationBatchItemKey(command.IdempotencyKey) {
-		return OnboardingImportView{}, apperror.New("request.invalid")
+		return nil, apperror.New("request.invalid")
 	}
 
 	if err := s.requireImports(); err != nil {
-		return OnboardingImportView{}, err
+		return nil, err
 	}
 
 	current, err := s.imports.GetOnboardingImport(ctx, id)
 	if err != nil {
-		return OnboardingImportView{}, onboardingImportStoreErrors.Translate(err)
+		return nil, onboardingImportStoreErrors.Translate(err)
 	}
 
 	resource := onboardingImportResource(current.ScopeType, current.ScopeID)
 	if err = s.authorizeImport(ctx, inv, current, true); err != nil {
-		return OnboardingImportView{}, err
+		return nil, err
 	}
-	if expectedMode != "" && current.Mode != expectedMode {
-		return OnboardingImportView{}, apperror.New("resource.not_found").WithField("resource", "student_progression")
+	if err = requireImportMode(current, expectedMode); err != nil {
+		return nil, err
 	}
 	if err = s.validatePrincipal(ctx, inv.Principal()); err != nil {
-		return OnboardingImportView{}, err
+		return nil, err
 	}
 	if current.ActorUserID != inv.Principal().UserID {
-		return OnboardingImportView{}, access.DeniedError()
+		return nil, access.DeniedError()
 	}
 
 	at := model.TimeUTC(s.now())
 	job, err := newOnboardingImportJob(model.JobTypeOnboardingImportExecute, id, at)
 	if err != nil {
-		return OnboardingImportView{}, apperror.New("onboarding_import.unavailable").Wrap(err)
+		return nil, apperror.New("onboarding_import.unavailable").Wrap(err)
 	}
 
 	digest := sha256.Sum256([]byte(command.IdempotencyKey))
 	auditAction, auditOperation := model.ActionOnboardingBatchManage, "onboarding_import.commit"
-	if current.Mode == model.OnboardingImportStudentProgression {
+	storeErrors := onboardingImportStoreErrors
+	var batchAudit *model.AuditEvent
+	switch current.Mode {
+	case model.OnboardingImportStudentProgression:
 		auditAction, auditOperation = model.ActionAcademicProgressionManage, "student_progression.commit"
+	case model.OnboardingImportAcademicAdministrationFilter:
+		auditOperation, storeErrors = "academic_administration_preview.commit", academicAdministrationPreviewStoreErrors
+		if batchAudit, err = s.prepareAcademicAdministrationBatchAudit(ctx, inv, current); err != nil {
+			return nil, err
+		}
 	}
 
 	attempt := access.Mutation{
@@ -121,6 +136,7 @@ func (s *Service) commitImport(
 			AuditEventID:       reference.ID,
 			SourceAuditEventID: sourceAuditID,
 			AuditAt:            reference.MutationAt,
+			BatchAuditEvent:    batchAudit,
 		})
 	}
 	var committed *store.OnboardingImport
@@ -147,18 +163,18 @@ func (s *Service) commitImport(
 			func(ctx context.Context, reference access.MutationReference) (*store.OnboardingImport, error) {
 				return persist(ctx, reference, "")
 			},
-			onboardingImportStoreErrors.Translate,
+			storeErrors.Translate,
 		)
 	}
 
 	if err != nil {
-		return OnboardingImportView{}, err
+		return nil, err
 	}
 	if s.wake != nil {
 		s.wake()
 	}
 
-	return onboardingImportView(committed), nil
+	return committed, nil
 }
 
 // CancelOnboardingImport cancels an unfinished onboarding import.
@@ -167,28 +183,34 @@ func (s *Service) CancelOnboardingImport(
 	inv invocation.Invocation,
 	id model.OnboardingImportID,
 ) (OnboardingImportView, error) {
-	return s.cancelImport(ctx, inv, id, "")
+	canceled, err := s.cancelImport(ctx, inv, id, "")
+	if err != nil {
+		return OnboardingImportView{}, err
+	}
+	return onboardingImportView(canceled), nil
 }
 
+// cancelImport cancels the import of expectedMode, or of any generic mode
+// when it is empty, and returns the canceled snapshot.
 func (s *Service) cancelImport(
 	ctx context.Context,
 	inv invocation.Invocation,
 	id model.OnboardingImportID,
 	expectedMode model.OnboardingImportMode,
-) (OnboardingImportView, error) {
+) (*store.OnboardingImport, error) {
 	if err := s.requireImports(); err != nil {
-		return OnboardingImportView{}, err
+		return nil, err
 	}
 
 	current, err := s.imports.GetOnboardingImport(ctx, id)
 	if err != nil {
-		return OnboardingImportView{}, onboardingImportStoreErrors.Translate(err)
+		return nil, onboardingImportStoreErrors.Translate(err)
 	}
 	if err = s.authorizeImport(ctx, inv, current, true); err != nil {
-		return OnboardingImportView{}, err
+		return nil, err
 	}
-	if expectedMode != "" && current.Mode != expectedMode {
-		return OnboardingImportView{}, apperror.New("resource.not_found").WithField("resource", "student_progression")
+	if err = requireImportMode(current, expectedMode); err != nil {
+		return nil, err
 	}
 
 	at := model.TimeUTC(s.now())
@@ -251,13 +273,13 @@ func (s *Service) cancelImport(
 	}
 
 	if err != nil {
-		return OnboardingImportView{}, err
+		return nil, err
 	}
 	if current.State == model.OnboardingImportParsing || current.State == model.OnboardingImportUploading {
 		_ = s.content.RemoveOnboardingImport(context.WithoutCancel(ctx), id)
 	}
 
-	return onboardingImportView(canceled), nil
+	return canceled, nil
 }
 
 func (s *Service) validatePrincipal(ctx context.Context, principal model.Principal) error {

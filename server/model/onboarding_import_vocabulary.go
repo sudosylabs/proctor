@@ -64,3 +64,17 @@ func StudentProgressionPreviewCodes() []string {
 		"student_progression.effective_date_conflict",
 	}
 }
+
+// AcademicAdministrationPreviewFailureCodes is the closed catalogue of codes
+// an academic administration filter preview's resolution fails with: its
+// Job's public failure codes beyond the shared onboarding ones, and the
+// preview's own failure_code. The caller lost the authority it asked with,
+// the scope or Role changed, or the filter matched more Users than one
+// preview holds.
+func AcademicAdministrationPreviewFailureCodes() []string {
+	return []string{
+		"academic_administration_preview.authorization_lost",
+		"academic_administration_preview.target_conflict",
+		"academic_administration_preview.too_many_users",
+	}
+}

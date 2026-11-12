@@ -1,0 +1,15 @@
+{
+  "title": "Collection invalidation",
+  "description": "A content-free signal to refetch a collection. The envelope's user_id names the one User it is for.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    }
+  }
+}

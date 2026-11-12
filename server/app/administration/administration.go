@@ -51,6 +51,9 @@ type Authorizer interface {
 	// GrantedScopes reports where the caller holds an Action; a scoped list
 	// records its one decision with RecordAuthorizationDecision.
 	GrantedScopes(context.Context, model.Principal, model.Action, model.ResourceType) (access.AuthorizedScopeConstraint, error)
+	// GrantedUserVisibility reports the Users the caller can see, without a
+	// decision; an audit page names only those.
+	GrantedUserVisibility(context.Context, model.Principal) (store.UserVisibilityScope, error)
 	RecordAuthorizationDecision(
 		context.Context,
 		model.Principal,

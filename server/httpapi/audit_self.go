@@ -34,6 +34,9 @@ type selfAuditEventResponse struct {
 	ClientType string                    `json:"client_type,omitempty"`
 	IPAddress  string                    `json:"ip_address,omitempty"`
 	UserAgent  string                    `json:"user_agent,omitempty"`
+	// Summary is one sentence describing the event in the request's locale.
+	// It never names another person.
+	Summary string `json:"summary"`
 }
 
 type selfAuditActorResponse struct {
@@ -45,7 +48,7 @@ type selfAuditResourceResponse struct {
 	ID   string             `json:"id,omitempty"`
 }
 
-func selfAuditEventResponseFromApplication(event administration.SelfAuditEvent) selfAuditEventResponse {
+func selfAuditEventResponseFromApplication(request *http.Request, event administration.SelfAuditEvent) selfAuditEventResponse {
 	return selfAuditEventResponse{
 		ID:         event.ID.String(),
 		CreatedAt:  model.FormatRFC3339(event.CreatedAt),
@@ -58,6 +61,7 @@ func selfAuditEventResponseFromApplication(event administration.SelfAuditEvent) 
 		ClientType: event.ClientType,
 		IPAddress:  event.IPAddress,
 		UserAgent:  event.UserAgent,
+		Summary:    selfAuditSummary(request, event),
 	}
 }
 
@@ -126,7 +130,9 @@ func (h auditHandlers) listSelf(request route.Request) (route.Result, error) {
 	envelope, err := route.NewList(
 		result.Items,
 		result.HasMore,
-		selfAuditEventResponseFromApplication,
+		func(event administration.SelfAuditEvent) selfAuditEventResponse {
+			return selfAuditEventResponseFromApplication(request.HTTP, event)
+		},
 		func(last administration.SelfAuditEvent) (string, error) {
 			return route.EncodeCursor(
 				selfAuditCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String(), Order: order},

@@ -661,8 +661,8 @@ func profilePictureChangedCall(committed *model.User, userID model.UserID, activ
 		Name:   "user_profile_picture_changed",
 		UserID: userID,
 		Data: json.RawMessage(fmt.Sprintf(
-			`{"active_file_entry_id":%q,"revision":%d,"changed_at":%d}`,
-			active, committed.Revision, committed.ProfilePictureChangedAt.Time.UnixMilli(),
+			`{"active_file_entry_id":%q,"revision":%d,"changed_at":%q}`,
+			active, committed.Revision, model.FormatRFC3339(committed.ProfilePictureChangedAt.Time),
 		)),
 	}}
 }

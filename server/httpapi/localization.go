@@ -28,8 +28,8 @@ func LocalizationDefinitions() []localization.Definition {
 }
 
 // resourceLocalizationDefinitions are the messages resources present: Session
-// revocation reasons, Personal Access Token scope titles and descriptions, and
-// the System Administrator Role.
+// revocation reasons, Personal Access Token scope titles and descriptions, the
+// System Administrator Role, and audit summaries.
 func resourceLocalizationDefinitions() []localization.Definition {
 	definitions := make([]localization.Definition, 0, len(model.AllSessionRevocationReasons())+
 		len(model.PersonalAccessTokenActions())*2+2)
@@ -49,7 +49,7 @@ func resourceLocalizationDefinitions() []localization.Definition {
 		localization.Definition{ID: systemAdministratorRoleNameID, Origin: localizationOrigin},
 		localization.Definition{ID: systemAdministratorRoleDescriptionID, Origin: localizationOrigin},
 	)
-	return definitions
+	return append(definitions, auditSummaryLocalizationDefinitions()...)
 }
 
 func sessionRevocationLocalizationID(reason model.SessionRevocationReason) string {

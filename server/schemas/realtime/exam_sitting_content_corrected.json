@@ -1,0 +1,35 @@
+{
+  "title": "Exam Sitting content corrected",
+  "description": "A live correction moved the Sitting to another Exam Revision. Refetch the presentation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_id",
+    "exam_sitting_id",
+    "previous_revision_id",
+    "revision_id",
+    "sitting_revision",
+    "effective_at"
+  ],
+  "properties": {
+    "exam_id": {
+      "$ref": "id.json"
+    },
+    "exam_sitting_id": {
+      "$ref": "id.json"
+    },
+    "previous_revision_id": {
+      "$ref": "id.json"
+    },
+    "revision_id": {
+      "$ref": "id.json"
+    },
+    "sitting_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "effective_at": {
+      "$ref": "instant.json"
+    }
+  }
+}

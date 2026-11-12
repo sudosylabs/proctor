@@ -13,7 +13,7 @@ paths:
       tags:
         - Users
       description: >-
-        Searches only User profiles visible through the caller's current Institution or scoped relationships, ordered by canonical username and identity. Disabled Users remain concealed unless an Institution-wide user viewer explicitly requests them.
+        Searches only User profiles visible through the caller's current Institution or scoped relationships, ordered by canonical username and identity unless `sort` and `dir` choose another order. Disabled Users remain concealed unless an Institution-wide user viewer explicitly requests them.
         Each item carries a `summary`: the User's current Affiliations with the current Academic Units the caller can see, and, for a caller holding role_binding.view, the current Role Bindings inside that authority's scopes, each list bounded and followed by a count of the rest.
         The first page, read without a cursor, also reports `total`: the Users the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
       x-proctor-auth: principal_required
@@ -76,6 +76,92 @@ paths:
             Keeps Users with a current membership in this Academic Unit or one of its descendants. A unit outside the caller's user.view scope answers an empty page rather than an error.
           schema:
             $ref: '#/components/schemas/ID'
+        - name: role_id
+          in: query
+          required: false
+          description: >-
+            Keeps Users holding a current Role Binding of any listed Role inside the caller's role_binding.view
+            scopes, so the filter matches only bindings the `summary` could show; a caller without role_binding.view
+            receives an empty page. Repeat the parameter for up to 16 Roles. Roles are seen through
+            Institution-wide role.view: without it, and for a Role that does not exist or is archived, the request
+            is `request.invalid` on `role_id` alike. The filter narrows the caller's visibility and never widens it.
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 16
+            items:
+              $ref: '#/components/schemas/ID'
+        - name: state
+          in: query
+          required: false
+          description: >-
+            Keeps only `active` or only `disabled` accounts. Like `include_disabled` it reaches disabled Users only
+            for Institution-wide user.view: scoped visibility never sees a disabled User, so `disabled` answers an
+            empty page. It cannot be combined with `include_disabled=true`.
+          schema:
+            type: string
+            enum:
+              - active
+              - disabled
+        - name: never_signed_in
+          in: query
+          required: false
+          description: >-
+            With `true`, keeps Users who have no recorded account activity, which is first recorded when a Session
+            is issued to them, so they have never signed in. Account activity is visible only to Institution-wide
+            user.view; any other caller receives `request.invalid`. It cannot be combined with `last_active_after`
+            or `last_active_before`.
+          schema:
+            type: boolean
+            default: false
+        - name: last_active_after
+          in: query
+          required: false
+          description: >-
+            Keeps Users whose last account activity is at or after this RFC 3339 instant; a User never active never
+            matches. Only Institution-wide user.view may filter on account activity; any other caller receives
+            `request.invalid`.
+          schema:
+            type: string
+            format: date-time
+        - name: last_active_before
+          in: query
+          required: false
+          description: >-
+            Keeps Users whose last account activity is before this RFC 3339 instant; it must be later than
+            `last_active_after`, and a User never active never matches. Only Institution-wide user.view may filter
+            on account activity; any other caller receives `request.invalid`.
+          schema:
+            type: string
+            format: date-time
+        - name: sort
+          in: query
+          required: false
+          description: >-
+            The page order, each key then by User identity: `username` (the default), `name` (the presented name,
+            the display name or else the username, compared case-insensitively on its first 64 characters),
+            `created`, or `last_active` (the last account activity; a User never active sorts as the least recent).
+            `last_active` reads account activity, which only an Institution-wide user.view caller can see, so any
+            other caller receives `request.invalid`. A cursor continues only the sort and direction that produced it.
+          schema:
+            type: string
+            enum:
+              - username
+              - name
+              - created
+              - last_active
+            default: username
+        - name: dir
+          in: query
+          required: false
+          description: Ascending (`asc`, the default) or descending (`desc`) by the `sort` key.
+          schema:
+            type: string
+            enum:
+              - asc
+              - desc
+            default: asc
         - $ref: '#/components/parameters/PageLimit'
         - $ref: '#/components/parameters/PageCursor'
       responses:
@@ -406,7 +492,7 @@ components:
         display_name:
           type: string
     UserProfileListResponse:
-      description: Visible User profiles ordered by canonical username and identity.
+      description: Visible User profiles in the requested order, by canonical username and identity by default.
       type: object
       additionalProperties: false
       required:

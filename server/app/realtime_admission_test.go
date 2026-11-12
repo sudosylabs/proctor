@@ -69,6 +69,24 @@ func TestAuthorizeWebSocketSittingSubscriptionConcealsMissingAndDeniedTargets(t 
 	}
 }
 
+// A subscription may name an owning scope its action accepts, but no other
+// Resource type; the shape is refused before any authorization decision.
+func TestAuthorizeWebSocketSubscriptionRefusesAResourceTheActionDoesNotAccept(t *testing.T) {
+	t.Parallel()
+	admission := &RealtimeAdmission{}
+	inv := invocation.New(testExamPrincipal(model.NewUserID()), model.RequestMetadata{})
+	for _, refused := range []struct {
+		action   model.Action
+		resource model.Resource
+	}{
+		{model.ActionJobView, model.Resource{Type: model.ResourceClass, ID: model.NewClassID().String()}},
+		{model.ActionOnboardingBatchView, model.Resource{Type: model.ResourceExam, ID: model.NewExamID().String()}},
+	} {
+		err := admission.AuthorizeWebSocketSubscription(context.Background(), inv, refused.action, refused.resource)
+		require.True(t, apperror.Is(err, "websocket.request.invalid"), "%s on %s: error = %v", refused.action, refused.resource.Type, err)
+	}
+}
+
 type realtimeExamViewFake struct {
 	inv    invocation.Invocation
 	examID model.ExamID

@@ -61,24 +61,24 @@ func TestResourceCursorContracts(t *testing.T) {
 	}{
 		{
 			name: "audit", encode: func() (string, error) {
-				return encodeAuditCursor(auditCursor{CreatedAt: at.Format(time.RFC3339Nano), ID: auditID})
+				return encodeAuditCursor(auditCursor{CreatedAt: at.Format(time.RFC3339Nano), ID: auditID, Order: listAscending})
 			}, decode: func(raw string) (any, error) { return decodeAuditCursor(raw) },
-			want: auditCursor{CreatedAt: at.Format(time.RFC3339Nano), ID: auditID}, plainKeyset: auditID,
-			malformed: fmt.Sprintf(`{"created_at":"invalid","id":%q}`, auditID),
+			want: auditCursor{CreatedAt: at.Format(time.RFC3339Nano), ID: auditID, Order: listAscending}, plainKeyset: auditID,
+			malformed: fmt.Sprintf(`{"created_at":"invalid","id":%q,"order":"desc"}`, auditID),
 		},
 		{
 			name: "mail", encode: func() (string, error) {
-				return encodeMailDeliveryCursor(mailDeliveryCursor{CreatedAt: at.Format(time.RFC3339Nano), ID: mailID})
+				return encodeMailDeliveryCursor(mailDeliveryCursor{Sort: "created", Dir: listAscending, At: at.Format(time.RFC3339Nano), ID: mailID})
 			}, decode: func(raw string) (any, error) { return decodeMailDeliveryCursor(raw) },
-			want: mailDeliveryCursor{CreatedAt: at.Format(time.RFC3339Nano), ID: mailID}, plainKeyset: mailID,
-			malformed: fmt.Sprintf(`{"created_at":"invalid","id":%q}`, mailID),
+			want: mailDeliveryCursor{Sort: "created", Dir: listAscending, At: at.Format(time.RFC3339Nano), ID: mailID}, plainKeyset: mailID,
+			malformed: fmt.Sprintf(`{"sort":"created","dir":"asc","at":"invalid","id":%q}`, mailID),
 		},
 		{
 			name: "job", encode: func() (string, error) {
-				return encodeJobCursor(jobCursor{CreatedAt: at.Format(time.RFC3339Nano), ID: jobID})
+				return encodeJobCursor(jobCursor{CreatedAt: at.Format(time.RFC3339Nano), ID: jobID, Order: listDescending})
 			}, decode: func(raw string) (any, error) { return decodeJobCursor(raw) },
-			want: jobCursor{CreatedAt: at.Format(time.RFC3339Nano), ID: jobID}, plainKeyset: jobID,
-			malformed: fmt.Sprintf(`{"created_at":"invalid","id":%q}`, jobID),
+			want: jobCursor{CreatedAt: at.Format(time.RFC3339Nano), ID: jobID, Order: listDescending}, plainKeyset: jobID,
+			malformed: fmt.Sprintf(`{"created_at":"invalid","id":%q,"order":"desc"}`, jobID),
 		},
 		{
 			name: "job attempt", encode: func() (string, error) { return encodeJobAttemptCursor(987654321) },

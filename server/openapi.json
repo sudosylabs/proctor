@@ -31,6 +31,15 @@
       }
     },
     "parameters": {
+      "AcademicAdministrationPreviewID": {
+        "description": "The academic administration preview identifier.",
+        "in": "path",
+        "name": "academic_administration_preview_id",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/ID"
+        }
+      },
       "AcademicPeriodID": {
         "description": "The Academic Period identifier.",
         "in": "path",
@@ -770,6 +779,21 @@
         "description": "Exact current Sitting revision and private rationale for manager-initiated early closure.",
         "required": true
       },
+      "CommitAcademicAdministrationPreview": {
+        "content": {
+          "application/json": {
+            "example": {
+              "expected_revision": 2,
+              "preview_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/AcademicAdministrationPreviewCommitRequest"
+            }
+          }
+        },
+        "description": "Exact immutable preview revision and digest to commit.",
+        "required": true
+      },
       "CommitOnboardingImport": {
         "content": {
           "application/json": {
@@ -955,6 +979,28 @@
           }
         },
         "description": "Supplies the expected Draft revision and the complete replacement native security policy.",
+        "required": true
+      },
+      "CreateAcademicAdministrationPreview": {
+        "content": {
+          "application/json": {
+            "example": {
+              "filter": {
+                "affiliation": [
+                  "student"
+                ],
+                "never_signed_in": true
+              },
+              "operation": "user.disable",
+              "scope_id": "ybndrfg8ejkmcpqxot1uwisza3",
+              "scope_type": "institution"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/AcademicAdministrationPreviewRequest"
+            }
+          }
+        },
+        "description": "One operation, its exact scope and fields, and the User directory filter whose matching Users it applies to.",
         "required": true
       },
       "CreateAcademicPeriod": {
@@ -1841,6 +1887,34 @@
         "description": "Supplies the last observed Draft revision required to remove the exact path entry safely.",
         "required": true
       },
+      "RenameDesktopRegistration": {
+        "content": {
+          "application/json": {
+            "example": {
+              "display_name": "Library laptop"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/RenameDesktopRegistrationRequest"
+            }
+          }
+        },
+        "description": "The name the current User chose for the Desktop Registration.",
+        "required": true
+      },
+      "RenameSession": {
+        "content": {
+          "application/json": {
+            "example": {
+              "device_name": "Office browser"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/RenameSessionRequest"
+            }
+          }
+        },
+        "description": "The device name the current User chose for the Session.",
+        "required": true
+      },
       "ReorderExamResources": {
         "content": {
           "application/json": {
@@ -2458,6 +2532,51 @@
           }
         }
       },
+      "AcademicAdministrationPreviewAccepted": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AcademicAdministrationPreviewResponse"
+            }
+          }
+        },
+        "description": "The preview whose resolution or execution Job was queued.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
+      "AcademicAdministrationPreviewOK": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AcademicAdministrationPreviewResponse"
+            }
+          }
+        },
+        "description": "The caller's own academic administration preview.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
+      "AcademicAdministrationPreviewRowsOK": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AcademicAdministrationPreviewRowListResponse"
+            }
+          }
+        },
+        "description": "One page of the preview's rows the caller's directory shows.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
       "AcademicPeriodArchived": {
         "description": "Academic Period archived",
         "headers": {
@@ -2695,8 +2814,24 @@
         "content": {
           "application/json": {
             "example": {
-              "items": [],
-              "total": 0,
+              "items": [
+                {
+                  "action": "class.members.manage",
+                  "actor_id": "ybndrfg8ejkmcpqxot1uwisza4",
+                  "created_at": "2026-08-01T09:30:00Z",
+                  "id": "ybndrfg8ejkmcpqxot1uwisza3",
+                  "resource": {
+                    "id": "ybndrfg8ejkmcpqxot1uwisza5",
+                    "type": "class"
+                  },
+                  "scope_id": "ybndrfg8ejkmcpqxot1uwisza6",
+                  "scope_type": "academic_unit",
+                  "status": "success",
+                  "summary": "Ada Admin enrolled a user in Year 1 Mathematics A",
+                  "updated_at": "2026-08-01T09:30:00Z"
+                }
+              ],
+              "total": 1,
               "total_is_lower_bound": false
             },
             "schema": {
@@ -3181,6 +3316,39 @@
           }
         }
       },
+      "CurrentUserSessionOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "authenticated_at": "2026-08-12T09:30:00Z",
+              "authentication_method": "password",
+              "authentication_strength": "single_factor",
+              "client_type": "web",
+              "created_at": "2026-08-12T09:30:00Z",
+              "current": true,
+              "device_id": "browser-7",
+              "device_name": "Office browser",
+              "expires_at": "2026-09-11T09:30:00Z",
+              "id": "ybndrfg8ejkmcpqxot1uwisza3",
+              "idle_expires_at": "2026-08-19T14:30:00Z",
+              "last_activity_at": "2026-08-12T14:30:00Z",
+              "mfa_enrollment_required": false,
+              "mfa_recovery_required": false,
+              "updated_at": "2026-08-12T14:30:00Z",
+              "user_id": "ybndrfg8ejkmcpqxot1uwisza4"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/CurrentUserSessionResponse"
+            }
+          }
+        },
+        "description": "The renamed current-user Session",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
       "DeliveryBudgetOK": {
         "content": {
           "application/json": {
@@ -3374,6 +3542,34 @@
           }
         },
         "description": "Current User's Desktop Registration security history",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
+      "DesktopRegistrationOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "architecture": "arm64",
+              "created_at": "2026-08-01T09:00:00Z",
+              "current": false,
+              "desktop_build_id": "build-2026-08",
+              "desktop_release": "1.4.0",
+              "display_name": "Library laptop",
+              "id": "ybndrfg8ejkmcpqxot1uwisza3",
+              "last_used_at": "2026-08-12T14:30:00Z",
+              "platform": "darwin",
+              "realtime_protocol": 1,
+              "status": "active"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/DesktopRegistrationResponse"
+            }
+          }
+        },
+        "description": "The renamed Desktop Registration",
         "headers": {
           "Cache-Control": {
             "$ref": "#/components/headers/NoStore"
@@ -5655,6 +5851,7 @@
                     "type": "user"
                   },
                   "status": "success",
+                  "summary": "You changed your password",
                   "user_agent": "Mozilla/5.0"
                 },
                 {
@@ -5670,7 +5867,8 @@
                     "id": "ybndrfg8ejkmcpqxot1uwisza4",
                     "type": "user"
                   },
-                  "status": "success"
+                  "status": "success",
+                  "summary": "An administrator reset two-step verification for your account"
                 }
               ],
               "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wNy0zMFQxNDowNTowMFoifQ",
@@ -6241,6 +6439,456 @@
         ],
         "type": "object"
       },
+      "AcademicAdministrationPreviewCommitRequest": {
+        "additionalProperties": false,
+        "description": "Revision and SHA-256 digest fencing a commit to the reviewed preview.",
+        "properties": {
+          "expected_revision": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "preview_digest": {
+            "description": "SHA-256 digest of the exact immutable preview, encoded as lowercase hexadecimal.",
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "preview_digest"
+        ],
+        "type": "object"
+      },
+      "AcademicAdministrationPreviewFilter": {
+        "additionalProperties": false,
+        "description": "The User directory filter of a preview, spelled as the directory's query parameters are; each member narrows the caller's visibility and none widens it. `q` is at most 256 characters.",
+        "properties": {
+          "academic_unit_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "affiliation": {
+            "items": {
+              "enum": [
+                "student",
+                "teacher",
+                "staff",
+                "external"
+              ],
+              "type": "string"
+            },
+            "maxItems": 4,
+            "type": "array"
+          },
+          "last_active_after": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "last_active_before": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "never_signed_in": {
+            "type": "boolean"
+          },
+          "q": {
+            "description": "Literal case-insensitive substring matched against visible User directory fields.",
+            "maxLength": 256,
+            "type": "string"
+          },
+          "role_id": {
+            "items": {
+              "$ref": "#/components/schemas/ID"
+            },
+            "maxItems": 16,
+            "type": "array"
+          },
+          "state": {
+            "enum": [
+              "active",
+              "disabled"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AcademicAdministrationPreviewOperation": {
+        "description": "The one existing-User academic administration operation a preview applies.",
+        "enum": [
+          "affiliation.add",
+          "affiliation.end",
+          "academic_unit_member.add",
+          "academic_unit_member.end",
+          "class.enroll",
+          "class.end",
+          "role_binding.create",
+          "role_binding.end",
+          "user.enable",
+          "user.disable",
+          "user_sessions.revoke"
+        ],
+        "type": "string"
+      },
+      "AcademicAdministrationPreviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "affiliation_kind": {
+            "enum": [
+              "student",
+              "teacher",
+              "staff",
+              "external"
+            ],
+            "type": "string"
+          },
+          "end_at": {
+            "description": "When the relationship a creating operation makes ends; it must be after `start_at`, or after the preview's creation when `start_at` is omitted, or the request is refused with `request.invalid` on `end_at`.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "filter": {
+            "$ref": "#/components/schemas/AcademicAdministrationPreviewFilter"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/AcademicAdministrationPreviewOperation"
+          },
+          "role_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "scope_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "scope_type": {
+            "enum": [
+              "institution",
+              "academic_unit",
+              "class"
+            ],
+            "type": "string"
+          },
+          "start_at": {
+            "description": "When the relationship a creating operation makes starts; omitted, every row starts when the preview is created.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "scope_type",
+          "scope_id",
+          "filter"
+        ],
+        "type": "object"
+      },
+      "AcademicAdministrationPreviewResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "affiliation_kind": {
+            "enum": [
+              "student",
+              "teacher",
+              "staff",
+              "external"
+            ],
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "end_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "execution_job_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "expires_at": {
+            "description": "When the preview and its rows are removed, seven days after creation.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "failed_rows": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "failure_code": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OnboardingImportFailureCode"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "string"
+          },
+          "filter": {
+            "$ref": "#/components/schemas/AcademicAdministrationPreviewFilter"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "no_op_rows": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/AcademicAdministrationPreviewOperation"
+          },
+          "preview_digest": {
+            "description": "Present once the preview is ready.",
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "preview_expires_at": {
+            "description": "When the ready preview stops admitting its commit, 15 minutes after it became ready.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "preview_job_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "revision": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "role_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "scope_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "scope_type": {
+            "enum": [
+              "institution",
+              "academic_unit",
+              "class"
+            ],
+            "type": "string"
+          },
+          "skipped_rows": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "start_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "parsing",
+              "preview_ready",
+              "executing",
+              "completed",
+              "completed_with_errors",
+              "canceled",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "succeeded_rows": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/AcademicAdministrationPreviewSummary"
+          },
+          "total_rows": {
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "operation",
+          "scope_type",
+          "scope_id",
+          "filter",
+          "total_rows",
+          "succeeded_rows",
+          "no_op_rows",
+          "failed_rows",
+          "skipped_rows",
+          "preview_job_id",
+          "created_at",
+          "updated_at",
+          "expires_at",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "AcademicAdministrationPreviewRowListResponse": {
+        "additionalProperties": false,
+        "description": "One page of preview rows in row order.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AcademicAdministrationPreviewRowResponse"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "next_cursor": {
+            "description": "Opaque continuation for the next page, omitted after the final page.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "AcademicAdministrationPreviewRowResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "group": {
+            "enum": [
+              "will_change",
+              "no_op",
+              "skipped"
+            ],
+            "type": "string"
+          },
+          "public_code": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OnboardingImportRowCode"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AcademicAdministrationPreviewSkipReason"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "string"
+          },
+          "resource_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "row": {
+            "maximum": 10000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "valid",
+              "invalid",
+              "pending",
+              "succeeded",
+              "no_op",
+              "failed",
+              "skipped",
+              "canceled"
+            ],
+            "type": "string"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "row",
+          "user_id",
+          "username",
+          "display_name",
+          "group",
+          "status"
+        ],
+        "type": "object"
+      },
+      "AcademicAdministrationPreviewSkipReason": {
+        "description": "Why a preview skips a row: the caller's own account, a System Administrator from a disable or Session revocation, a Class enrollment of a User enrolled in another Class of the same Period or without a current student Affiliation, or an end of a User holding several current relationships it could end. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.",
+        "enum": [
+          "academic_administration_preview.ambiguous",
+          "academic_administration_preview.enrollment_conflict",
+          "academic_administration_preview.self",
+          "academic_administration_preview.student_affiliation_required",
+          "academic_administration_preview.system_administrator"
+        ],
+        "type": "string"
+      },
+      "AcademicAdministrationPreviewSummary": {
+        "additionalProperties": false,
+        "description": "A ready preview's rows by class, and its skipped rows by reason.",
+        "properties": {
+          "no_op": {
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "skip_reasons": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "reason": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/AcademicAdministrationPreviewSkipReason"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ],
+                  "type": "string"
+                },
+                "rows": {
+                  "maximum": 10000,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "reason",
+                "rows"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "skipped": {
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "will_change": {
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "will_change",
+          "no_op",
+          "skipped",
+          "skip_reasons"
+        ],
+        "type": "object"
+      },
       "AcademicPeriodListResponse": {
         "additionalProperties": false,
         "description": "One page of the collection in its stable order.",
@@ -6411,7 +7059,7 @@
       },
       "AcademicUnitMemberListResponse": {
         "additionalProperties": false,
-        "description": "One page of the collection in its stable order.",
+        "description": "One page of the collection in its requested order; the first page carries its total.",
         "properties": {
           "items": {
             "items": {
@@ -6421,6 +7069,16 @@
           },
           "next_cursor": {
             "$ref": "#/components/schemas/NextCursor"
+          },
+          "total": {
+            "description": "Memberships matching the effective instant or history filter across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true.",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_is_lower_bound": {
+            "description": "True when `total` reached the 10,000 bound and there may be more. Present with `total`.",
+            "type": "boolean"
           }
         },
         "required": [
@@ -7519,6 +8177,7 @@
           "class.members.view",
           "class.view",
           "desktop_compatibility_policy.manage",
+          "desktop_registration.rename",
           "desktop_registration.revoke",
           "exam.attempt.browser_activity.view",
           "exam.create",
@@ -7690,6 +8349,11 @@
             "description": "Durable outcome state of the audited Attempt.",
             "type": "string"
           },
+          "summary": {
+            "description": "One sentence describing the Event in the negotiated language, for display only; clients that need to reason about the Event read its codes. People and records appear by name only when the caller could see them now, and an unfinished or failed Event says so.",
+            "maxLength": 2048,
+            "type": "string"
+          },
           "updated_at": {
             "description": "Time of the latest durable audit status change.",
             "format": "date-time",
@@ -7705,7 +8369,8 @@
           "updated_at",
           "action",
           "resource",
-          "status"
+          "status",
+          "summary"
         ],
         "type": "object"
       },
@@ -10353,18 +11018,92 @@
         ],
         "type": "object"
       },
+      "ClassListItemResponse": {
+        "additionalProperties": false,
+        "description": "One Class of a Class listing: the Class projection, with its current student count when the caller holds class.members.view on the listing's scope.",
+        "properties": {
+          "academic_period_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "archived_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "name": {
+            "type": "string"
+          },
+          "programme_level_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "revision": {
+            "description": "Current aggregate revision. Supply it as expected_revision on an edit or archive to protect a client snapshot from concurrent changes.",
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "student_count": {
+            "description": "The Class's current members, stopped at 10,000. Present only for a caller holding class.members.view on the listing's scope; sort a page by it on the client.",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "student_count_is_lower_bound": {
+            "description": "True when `student_count` reached the 10,000 bound. Present with `student_count`.",
+            "type": "boolean"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "id",
+          "created_at",
+          "updated_at",
+          "programme_level_id",
+          "academic_period_id",
+          "name",
+          "display_name",
+          "description"
+        ],
+        "type": "object"
+      },
       "ClassListResponse": {
         "additionalProperties": false,
-        "description": "One page of the collection in its stable order.",
+        "description": "One page of the collection in its requested order; the first page carries its total.",
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/ClassResponse"
+              "$ref": "#/components/schemas/ClassListItemResponse"
             },
             "type": "array"
           },
           "next_cursor": {
             "$ref": "#/components/schemas/NextCursor"
+          },
+          "total": {
+            "description": "Classes matching the filters across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true.",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_is_lower_bound": {
+            "description": "True when `total` reached the 10,000 bound and there may be more. Present with `total`.",
+            "type": "boolean"
           }
         },
         "required": [
@@ -10374,7 +11113,7 @@
       },
       "ClassMemberListResponse": {
         "additionalProperties": false,
-        "description": "One page of the collection in its stable order.",
+        "description": "One page of the collection in its requested order; the first page carries its total.",
         "properties": {
           "items": {
             "items": {
@@ -10384,6 +11123,16 @@
           },
           "next_cursor": {
             "$ref": "#/components/schemas/NextCursor"
+          },
+          "total": {
+            "description": "Memberships matching the effective instant or history filter across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true.",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_is_lower_bound": {
+            "description": "True when `total` reached the 10,000 bound and there may be more. Present with `total`.",
+            "type": "boolean"
           }
         },
         "required": [
@@ -11197,6 +11946,11 @@
             "minimum": 1,
             "type": "integer"
           },
+          "desktop_registration_display_name": {
+            "description": "Present only for a Desktop Session: the name of the Desktop Registration it is bound to, which is the name the User gives that device through renameDesktopRegistration.",
+            "maxLength": 128,
+            "type": "string"
+          },
           "desktop_registration_id": {
             "$ref": "#/components/schemas/ID"
           },
@@ -11207,6 +11961,7 @@
             "type": "string"
           },
           "device_name": {
+            "description": "For a browser or CLI Session, the name the client reported at sign-in or the User later chose. A Desktop Session's name is desktop_registration_display_name.",
             "type": "string"
           },
           "expires_at": {
@@ -13699,6 +14454,11 @@
       "ErrorCode": {
         "description": "Stable public problem code. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.",
         "enum": [
+          "academic_administration_preview.authorization_lost",
+          "academic_administration_preview.conflict",
+          "academic_administration_preview.expired",
+          "academic_administration_preview.target_conflict",
+          "academic_administration_preview.too_many_users",
           "academic_period.conflict",
           "academic_period.invalid",
           "academic_unit.conflict",
@@ -13792,6 +14552,8 @@
           "desktop_compatibility_policy.invalid",
           "desktop_compatibility_policy.revision_conflict",
           "desktop_compatibility_policy.unavailable",
+          "desktop_registration.invalid",
+          "desktop_registration.revoked",
           "desktop_registration.unavailable",
           "exam.archived",
           "exam.attempt.already_connected",
@@ -13999,7 +14761,9 @@
           "search.query.invalid",
           "server.internal",
           "service.busy",
+          "session.desktop_named_by_registration",
           "session.id.invalid",
+          "session.invalid",
           "session.not_found",
           "student_progression.conflict",
           "student_progression.effective_date_conflict",
@@ -18029,6 +18793,9 @@
       "JobErrorCode": {
         "description": "Stable safe failure category of a Job or Job Attempt. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.",
         "enum": [
+          "academic_administration_preview.authorization_lost",
+          "academic_administration_preview.target_conflict",
+          "academic_administration_preview.too_many_users",
           "database.unavailable",
           "dependency.unavailable",
           "exam.export.expired",
@@ -18276,6 +19043,7 @@
       "JobType": {
         "description": "Stable type of a background Job. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.",
         "enum": [
+          "academic_administration_preview.resolve",
           "audit.attempt_sweep",
           "command_outcome.cleanup",
           "exam_export.build",
@@ -21326,8 +22094,11 @@
         "type": "object"
       },
       "OnboardingImportFailureCode": {
-        "description": "Why a failed onboarding import or student progression failed: a lost credential or authority, an unreadable file, a target that no longer validates, or a progression preview failure. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.",
+        "description": "Why a failed onboarding import, student progression, or academic administration preview failed: a lost credential or authority, an unreadable file, a target that no longer validates, a progression preview failure, or a preview filter that matched too many Users. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.",
         "enum": [
+          "academic_administration_preview.authorization_lost",
+          "academic_administration_preview.target_conflict",
+          "academic_administration_preview.too_many_users",
           "administration.unavailable",
           "audit.unavailable",
           "authentication.reauthentication_required",
@@ -21377,8 +22148,14 @@
         "type": "object"
       },
       "OnboardingImportPreviewCode": {
-        "description": "Why a preview row is invalid, duplicate, or annotated: a malformed or duplicate CSV row, a target that does not resolve, or a student progression outcome such as an ineligible student or an existing destination enrollment. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.",
+        "description": "Why a preview row is invalid, duplicate, or annotated: a malformed or duplicate CSV row, a target that does not resolve, a student progression outcome such as an ineligible student or an existing destination enrollment, or an academic administration preview skip reason or no-change marker. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.",
         "enum": [
+          "academic_administration_preview.ambiguous",
+          "academic_administration_preview.enrollment_conflict",
+          "academic_administration_preview.no_change",
+          "academic_administration_preview.self",
+          "academic_administration_preview.student_affiliation_required",
+          "academic_administration_preview.system_administrator",
           "administration.unavailable",
           "audit.unavailable",
           "authentication.reauthentication_required",
@@ -21600,8 +22377,9 @@
         "type": "object"
       },
       "OnboardingImportRowCode": {
-        "description": "Why an executed onboarding import or student progression row failed, as the Invitation or academic administration operation that ran it reported. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.",
+        "description": "Why an executed onboarding import, student progression, or academic administration preview row failed, as the Invitation or academic administration operation that ran it reported, or because a preview row reached a User who became a System Administrator after the preview froze. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.",
         "enum": [
+          "academic_administration_preview.system_administrator",
           "academic_unit_member.conflict",
           "academic_unit_member.invalid",
           "administration.unavailable",
@@ -22164,6 +22942,16 @@
           },
           "next_cursor": {
             "$ref": "#/components/schemas/NextCursor"
+          },
+          "total": {
+            "description": "Programme Levels matching the filters across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true.",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_is_lower_bound": {
+            "description": "True when `total` reached the 10,000 bound and there may be more. Present with `total`.",
+            "type": "boolean"
           }
         },
         "required": [
@@ -22232,6 +23020,16 @@
           },
           "next_cursor": {
             "$ref": "#/components/schemas/NextCursor"
+          },
+          "total": {
+            "description": "Programmes matching the filters across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true.",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_is_lower_bound": {
+            "description": "True when `total` reached the 10,000 bound and there may be more. Present with `total`.",
+            "type": "boolean"
           }
         },
         "required": [
@@ -22589,6 +23387,36 @@
         },
         "required": [
           "expected_revision"
+        ],
+        "type": "object"
+      },
+      "RenameDesktopRegistrationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "description": "The new name. Surrounding whitespace is removed before the length is checked.",
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name"
+        ],
+        "type": "object"
+      },
+      "RenameSessionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "device_name": {
+            "description": "The new name. Surrounding whitespace is removed before the length is checked.",
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_name"
         ],
         "type": "object"
       },
@@ -23674,6 +24502,16 @@
           },
           "next_cursor": {
             "$ref": "#/components/schemas/NextCursor"
+          },
+          "total": {
+            "description": "Role Bindings matching the filters across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true.",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_is_lower_bound": {
+            "description": "True when `total` reached the 10,000 bound and there may be more. Present with `total`.",
+            "type": "boolean"
           }
         },
         "required": [
@@ -24422,6 +25260,7 @@
           "class.transferred_in",
           "class.transferred_out",
           "class.unenrolled",
+          "desktop.registration_renamed",
           "desktop.registration_revoked",
           "desktop.signed_in",
           "email.change_undone",
@@ -24447,6 +25286,7 @@
           "provider.unlinked",
           "role.ended",
           "role.granted",
+          "session.renamed",
           "session.revoked",
           "sessions.revoked_all",
           "sessions.revoked_others",
@@ -24544,6 +25384,11 @@
             ],
             "type": "string"
           },
+          "summary": {
+            "description": "One sentence describing the event in the negotiated language, for display only; clients that need to reason about the event read its codes. It never names another person, and a failed event says so.",
+            "maxLength": 2048,
+            "type": "string"
+          },
           "user_agent": {
             "description": "User agent of the User's own action; omitted for anyone else's.",
             "maxLength": 512,
@@ -24557,7 +25402,8 @@
           "status",
           "relation",
           "actor",
-          "resource"
+          "resource",
+          "summary"
         ],
         "type": "object"
       },
@@ -26324,7 +27170,7 @@
       },
       "UserProfileListResponse": {
         "additionalProperties": false,
-        "description": "Visible User profiles ordered by canonical username and identity.",
+        "description": "Visible User profiles in the requested order, by canonical username and identity by default.",
         "properties": {
           "items": {
             "items": {
@@ -26709,6 +27555,438 @@
         ],
         "x-proctor-idempotency": "required"
       }
+    },
+    "/api/v1/academic-administration-previews": {
+      "post": {
+        "description": "Proposes applying one existing-User academic administration operation to every User the User directory filter matches. The filter takes exactly the User directory's filter fields with the same validation and visibility rules, including those only an Institution-wide viewer may apply, and the request is refused as the directory would refuse it. Nothing changes yet: a preview Job resolves the filter under the caller's visibility at that moment, freezes the ordered list of matching Users, and classifies each row as `will_change`, `no_op`, or `skipped` with a closed reason. The caller's own account is always skipped, and a disable or Session revocation also skips System Administrators. More than 10,000 matching Users fails the preview with `academic_administration_preview.too_many_users`; narrow the filter. Poll the preview until it is `preview_ready` or `failed`. `class.transfer` is not offered: a transfer names the exact membership it replaces, which Student Progression chooses instead. Requires a strong, recent interactive Session.",
+        "operationId": "createAcademicAdministrationPreview",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CreateAcademicAdministrationPreview"
+        },
+        "responses": {
+          "202": {
+            "$ref": "#/components/responses/AcademicAdministrationPreviewAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Preview one academic administration operation over the Users a directory filter matches",
+        "tags": [
+          "Membership and progression"
+        ],
+        "x-proctor-auth": "strong_recent_session_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "administration.unavailable",
+          "authentication.mfa.unavailable",
+          "invitation.unavailable",
+          "onboarding_import.file_invalid",
+          "onboarding_import.unavailable",
+          "student_progression.conflict",
+          "student_progression.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid",
+          "authentication.strong_required",
+          "authentication.reauthentication_required"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/academic-administration-previews/{academic_administration_preview_id}": {
+      "get": {
+        "description": "Reads the caller's own preview: its lifecycle state, operation, filter, digest and revision, and once ready its `summary` of rows by class with skipped rows counted by reason. The summary counts only the rows whose User the caller's User directory shows now, the rows the rows listing shows. After commit the row counts report execution outcomes. Only the User who created a preview, holding onboarding batch visibility at its scope, can read it: a caller without that visibility is denied, and any other User reads it as not found. Once the caller's directory would refuse the preview's filter (an activity filter after Institution-wide `user.view` is lost, a Role filter after `role.view` is lost), the read is refused with `academic_administration_preview.authorization_lost`.",
+        "operationId": "getAcademicAdministrationPreview",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/AcademicAdministrationPreviewOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Read one academic administration preview and its counts",
+        "tags": [
+          "Membership and progression"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "academic_administration_preview.authorization_lost",
+          "administration.unavailable",
+          "onboarding_import.unavailable",
+          "invitation.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/AcademicAdministrationPreviewID"
+        }
+      ]
+    },
+    "/api/v1/academic-administration-previews/{academic_administration_preview_id}/cancel": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/AcademicAdministrationPreviewID"
+        }
+      ],
+      "post": {
+        "description": "Cancels the caller's own preview before it finishes. Rows not yet run are canceled; a row already committing finishes, and completed rows are never rolled back.",
+        "operationId": "cancelAcademicAdministrationPreview",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/AcademicAdministrationPreviewOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Cancel one unfinished academic administration preview",
+        "tags": [
+          "Membership and progression"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "source": "curl --fail-with-body \\\n  --request POST \\\n  --url 'https://proctor.example.edu/api/v1/academic-administration-previews/ybndrfg8ejkmcpqxot1uwisza3/cancel' \\\n  --header 'Authorization: Bearer \u003csession-access-token\u003e'"
+          }
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "invitation.unavailable",
+          "onboarding_import.conflict",
+          "onboarding_import.file_invalid",
+          "onboarding_import.unavailable",
+          "student_progression.conflict",
+          "student_progression.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/academic-administration-previews/{academic_administration_preview_id}/commit": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/AcademicAdministrationPreviewID"
+        }
+      ],
+      "post": {
+        "description": "Commits the caller's own ready preview when its revision and digest still match, within 15 minutes of it becoming ready as PostgreSQL measures it; after that the commit is refused with `academic_administration_preview.expired` and a new preview is needed. A preview another User created reads as not found, and a commit is refused with `academic_administration_preview.authorization_lost` once the caller's User directory would refuse the preview's filter. One execution Job then runs the frozen rows, never the filter again, so a User who starts matching after the preview is not changed. Every row is authorized again in PostgreSQL when it runs, a row whose User the caller's directory no longer shows fails with `authorization.denied`, and every remaining row fails with `authorization.denied` once the caller's directory would refuse the filter. The first commit records one batch-level audit entry with the operation, filter, counts and preview identity; each row's own audit entry names the preview and row, whether the row succeeds or fails. The response is the committed preview as the commit recorded it, and repeating the request with the same Idempotency-Key returns that same commit. Requires a strong, recent interactive Session.",
+        "operationId": "commitAcademicAdministrationPreview",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequiredIdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CommitAcademicAdministrationPreview"
+        },
+        "responses": {
+          "202": {
+            "$ref": "#/components/responses/AcademicAdministrationPreviewAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "410": {
+            "$ref": "#/components/responses/Gone"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Commit one exact academic administration preview",
+        "tags": [
+          "Membership and progression"
+        ],
+        "x-proctor-auth": "strong_recent_session_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "academic_administration_preview.authorization_lost",
+          "academic_administration_preview.conflict",
+          "academic_administration_preview.expired",
+          "administration.unavailable",
+          "authentication.mfa.unavailable",
+          "idempotency.key_required",
+          "idempotency.key_invalid",
+          "invitation.unavailable",
+          "onboarding_import.file_invalid",
+          "onboarding_import.unavailable",
+          "student_progression.conflict",
+          "student_progression.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid",
+          "authentication.strong_required",
+          "authentication.reauthentication_required"
+        ],
+        "x-proctor-idempotency": "required"
+      }
+    },
+    "/api/v1/academic-administration-previews/{academic_administration_preview_id}/rows": {
+      "get": {
+        "description": "Pages the frozen rows of one class of the caller's own preview in row order, each naming its User and, after commit, its outcome. A row appears only while the caller's User directory shows its User now, so a viewer whose visibility narrowed since the preview froze no longer sees the Users it lost, and the read is refused with `academic_administration_preview.authorization_lost` once the caller's directory would refuse the preview's filter. A cursor continues only the group and reason it was issued for.",
+        "operationId": "listAcademicAdministrationPreviewRows",
+        "parameters": [
+          {
+            "description": "The preview class whose rows to list.",
+            "in": "query",
+            "name": "group",
+            "required": true,
+            "schema": {
+              "enum": [
+                "will_change",
+                "no_op",
+                "skipped"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only with `group=skipped`, keep the rows skipped for this reason.",
+            "in": "query",
+            "name": "reason",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/AcademicAdministrationPreviewSkipReason"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageCursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/AcademicAdministrationPreviewRowsOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Show who is in one group of an academic administration preview",
+        "tags": [
+          "Membership and progression"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "academic_administration_preview.authorization_lost",
+          "administration.unavailable",
+          "onboarding_import.unavailable",
+          "invitation.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/AcademicAdministrationPreviewID"
+        }
+      ]
     },
     "/api/v1/academic-periods": {
       "get": {
@@ -27682,7 +28960,7 @@
     },
     "/api/v1/academic-units/{academic_unit_id}/classes": {
       "get": {
-        "description": "Searches Classes whose Programme hierarchy is owned by the authorized Academic Unit, using bounded stable traversal. Results expose Class structure only and never enroll students or grant Class-scoped permission.",
+        "description": "Searches Classes whose Programme hierarchy is owned by the authorized Academic Unit, using bounded stable traversal. Results expose Class structure only and never enroll students or grant Class-scoped permission. Items are ordered by name, then identity, in the `dir` direction. The first page, read without a cursor, also reports `total`: the Classes the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's. Each item carries `student_count`, the Class's current members stopped at 10,000 with `student_count_is_lower_bound`, only when the caller holds class.members.view on this Academic Unit; otherwise both are omitted.",
         "operationId": "searchClasses",
         "parameters": [
           {
@@ -27691,6 +28969,20 @@
             "name": "q",
             "required": false,
             "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Order by name, then identity, ascending (`asc`, the default) or descending (`desc`). A cursor continues only the direction that produced it.",
+            "in": "query",
+            "name": "dir",
+            "required": false,
+            "schema": {
+              "default": "asc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
               "type": "string"
             }
           },
@@ -27967,7 +29259,7 @@
     },
     "/api/v1/academic-units/{academic_unit_id}/members": {
       "get": {
-        "description": "Lists authorized current or historical organizational memberships for one Academic Unit at the requested effective instant. Membership describes a relationship only and is never presented as an unrestricted permission grant. Bounded pages use immutable (user_id, id) ordering. The next_cursor freezes the effective instant or history filter, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests. Each item names the member in `user`, with email only for Institution-wide user.view, and, for a caller holding role_binding.view on this unit, lists the member's current Role Bindings scoped exactly to it in `roles_here`.",
+        "description": "Lists authorized current or historical organizational memberships for one Academic Unit at the requested effective instant. Membership describes a relationship only and is never presented as an unrestricted permission grant. Bounded pages are ordered by `sort` and `dir`, by default the membership start (`since`) ascending then identity. The first page also reports `total`, the memberships the filter matches across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. The next_cursor freezes the effective instant or history filter and the order, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests. Each item names the member in `user`, with email only for Institution-wide user.view, and, for a caller holding role_binding.view on this unit, lists the member's current Role Bindings scoped exactly to it in `roles_here`.",
         "operationId": "listAcademicUnitMembers",
         "parameters": [
           {
@@ -27988,6 +29280,34 @@
             "schema": {
               "default": false,
               "type": "boolean"
+            }
+          },
+          {
+            "description": "The page order, each key then by membership identity: `since` (the membership start, the default) or `name` (the member's presented name, the display name or else the username, compared case-insensitively on its first 64 characters). A cursor continues only the sort and direction that produced it; repeat both when following it.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "since",
+              "enum": [
+                "since",
+                "name"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Ascending (`asc`, the default) or descending (`desc`) by the `sort` key.",
+            "in": "query",
+            "name": "dir",
+            "required": false,
+            "schema": {
+              "default": "asc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string"
             }
           },
           {
@@ -28132,7 +29452,7 @@
     },
     "/api/v1/academic-units/{academic_unit_id}/programmes": {
       "get": {
-        "description": "Lists active Programmes directly owned by one authorized Academic Unit, optionally narrowed by the documented search input. The collection does not include Programmes owned by descendants unless requested through those Units.",
+        "description": "Lists active Programmes directly owned by one authorized Academic Unit, optionally narrowed by the documented search input. The collection does not include Programmes owned by descendants unless requested through those Units. The first page, read without a cursor, also reports `total`: the Programmes the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
         "operationId": "listProgrammes",
         "parameters": [
           {
@@ -28658,7 +29978,7 @@
     },
     "/api/v1/audits": {
       "get": {
-        "description": "Lists bounded durable audit facts visible through the caller's Institution or Academic Unit authority. The projection omits raw parameters, prior state, result payloads, credentials, protected content, and unsafe internal failures. The first page, read without a cursor, also reports `total`: the audit Events the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
+        "description": "Lists bounded durable audit facts visible through the caller's Institution or Academic Unit authority, newest first unless `order=asc` asks for oldest first. The projection omits raw parameters, prior state, result payloads, credentials, protected content, and unsafe internal failures. The first page, read without a cursor, also reports `total`: the audit Events the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's. Each Event also carries a `summary` sentence in the language `Accept-Language` selects, falling back to the installation language and then English, beside the stable codes it is written from. It names the actor, the User the Event is about, and a User, Academic Unit, or Class resource by their current names only when the caller could see that record now through `user.view` or `class.members.view`, `academic_unit.view`, or `class.view`; otherwise it uses a generic noun such as \"a user\" or \"a class\". An Academic Unit auditor's summary names the action alone, never the recorded operation or the User the Event is about.",
         "operationId": "listAuditEvents",
         "parameters": [
           {
@@ -28689,11 +30009,38 @@
             }
           },
           {
-            "description": "Return only Events with this exact stable action.",
+            "description": "Return only Events about this User, such as a change to their account.",
+            "in": "query",
+            "name": "subject_user_id",
+            "schema": {
+              "$ref": "#/components/schemas/ID"
+            }
+          },
+          {
+            "description": "Return only Events with one of these exact stable actions. Repeat the parameter for up to 32 actions. An Academic Unit auditor still reads only the academic actions its authority allows, so naming any other action matches nothing.",
+            "explode": true,
             "in": "query",
             "name": "action",
             "schema": {
-              "$ref": "#/components/schemas/AuditAction"
+              "items": {
+                "$ref": "#/components/schemas/AuditAction"
+              },
+              "maxItems": 32,
+              "type": "array"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Return only Events in this durable outcome state: an `attempt` whose outcome is not yet recorded, a `success`, or a `fail`.",
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "enum": [
+                "attempt",
+                "success",
+                "fail"
+              ],
+              "type": "string"
             }
           },
           {
@@ -28729,6 +30076,20 @@
             "required": false,
             "schema": {
               "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Read newest first (`desc`, the default) or oldest first (`asc`). A cursor continues only the order that produced it.",
+            "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "desc",
+                "asc"
+              ],
               "type": "string"
             }
           }
@@ -31699,7 +33060,7 @@
     },
     "/api/v1/classes/{class_id}/members": {
       "get": {
-        "description": "Lists authorized student enrollments for one Class at the requested effective instant or across retained history. The roster projection contains relationship state and does not expand student credentials, answers, or unrestricted profile data. Bounded pages use immutable (user_id, id) ordering. The next_cursor freezes the effective instant or history filter, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests.",
+        "description": "Lists authorized student enrollments for one Class at the requested effective instant or across retained history. The roster projection contains relationship state and does not expand student credentials, answers, or unrestricted profile data. Bounded pages are ordered by `sort` and `dir`, by default the membership start (`enrolled`) ascending then identity. The first page also reports `total`, the memberships the filter matches across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. The next_cursor freezes the effective instant or history filter and the order, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests.",
         "operationId": "listClassMembers",
         "parameters": [
           {
@@ -31720,6 +33081,34 @@
             "schema": {
               "default": false,
               "type": "boolean"
+            }
+          },
+          {
+            "description": "The page order, each key then by membership identity: `enrolled` (the enrollment start, the default) or `name` (the member's presented name, the display name or else the username, compared case-insensitively on its first 64 characters). A cursor continues only the sort and direction that produced it; repeat both when following it.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "enrolled",
+              "enum": [
+                "enrolled",
+                "name"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Ascending (`asc`, the default) or descending (`desc`) by the `sort` key.",
+            "in": "query",
+            "name": "dir",
+            "required": false,
+            "schema": {
+              "default": "asc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string"
             }
           },
           {
@@ -42006,7 +43395,7 @@
     },
     "/api/v1/jobs": {
       "get": {
-        "description": "Lists only Job types deliberately exposed through the public administration contract and authorized for the current principal. Private payloads, claims, worker identities, and infrastructure errors are omitted from every projection. The first page, read without a cursor, also reports `total`: the Jobs the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
+        "description": "Lists only Job types deliberately exposed through the public administration contract and authorized for the current principal, newest first by creation unless `order=asc` asks for oldest first. Private payloads, claims, worker identities, and infrastructure errors are omitted from every projection. The first page, read without a cursor, also reports `total`: the Jobs the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
         "operationId": "listJobs",
         "parameters": [
           {
@@ -42037,6 +43426,20 @@
                 "$ref": "#/components/schemas/JobStatus"
               },
               "type": "array"
+            }
+          },
+          {
+            "description": "Read newest first by creation (`desc`, the default) or oldest first (`asc`). A cursor continues only the order that produced it.",
+            "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "desc",
+                "asc"
+              ],
+              "type": "string"
             }
           }
         ],
@@ -42438,7 +43841,7 @@
     },
     "/api/v1/mail/deliveries": {
       "get": {
-        "description": "Lists authorized durable delivery metadata for the allowlisted template and filters. Recipient addresses remain masked and the response never exposes encrypted payloads, rendered message bodies, SMTP credentials, or provider diagnostics. The first page, read without a cursor, also reports `total`: the mail deliveries the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
+        "description": "Lists authorized durable delivery metadata for the allowlisted template and filters, most recently updated first unless `sort` and `dir` choose another order. Recipient addresses remain masked and the response never exposes encrypted payloads, rendered message bodies, SMTP credentials, or provider diagnostics. The first page, read without a cursor, also reports `total`: the mail deliveries the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
         "operationId": "listMailDeliveries",
         "parameters": [
           {
@@ -42483,6 +43886,14 @@
             }
           },
           {
+            "description": "Include only deliveries addressed to this User. A delivery to an Invitation has no recipient User and never matches; mail history is never searched by address.",
+            "in": "query",
+            "name": "recipient_user_id",
+            "schema": {
+              "$ref": "#/components/schemas/ID"
+            }
+          },
+          {
             "description": "Include deliveries created at or after this RFC 3339 instant.",
             "in": "query",
             "name": "created_after",
@@ -42497,6 +43908,34 @@
             "name": "created_before",
             "schema": {
               "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Order by the last update (`updated`, the default) or by creation (`created`), then by delivery identity. A cursor continues only the sort and direction that produced it.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "updated",
+              "enum": [
+                "updated",
+                "created"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Newest first (`desc`, the default) or oldest first (`asc`) by the `sort` instant.",
+            "in": "query",
+            "name": "dir",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "desc",
+                "asc"
+              ],
               "type": "string"
             }
           }
@@ -43366,7 +44805,7 @@
     },
     "/api/v1/onboarding-imports": {
       "get": {
-        "description": "Lists the unexpired administrative onboarding imports the caller could read one by one through its current Institution, Academic Unit, or Class onboarding authority, newest first. Items are summary projections without rows; read one import for its preview or report rows. Student progressions are listed through their own resource and never appear here.",
+        "description": "Lists the unexpired administrative onboarding imports the caller could read one by one through its current Institution, Academic Unit, or Class onboarding authority, newest first unless `order=asc` asks for oldest first. Items are summary projections without rows; read one import for its preview or report rows. Student progressions are listed through their own resource and never appear here.",
         "operationId": "listOnboardingImports",
         "parameters": [
           {
@@ -43414,6 +44853,20 @@
               "maximum": 200,
               "minimum": 1,
               "type": "integer"
+            }
+          },
+          {
+            "description": "Read newest first by creation (`desc`, the default) or oldest first (`asc`). A cursor continues only the order that produced it.",
+            "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "desc",
+                "asc"
+              ],
+              "type": "string"
             }
           }
         ],
@@ -44158,9 +45611,23 @@
     },
     "/api/v1/programme-levels/{programme_level_id}/classes": {
       "get": {
-        "description": "Lists active Classes directly assigned to one authorized Programme Level. The collection returns structural Class metadata and excludes rosters, candidate Attempts, and permission grants.",
+        "description": "Lists active Classes directly assigned to one authorized Programme Level. The collection returns structural Class metadata and excludes rosters, candidate Attempts, and permission grants. Items are ordered by name, then identity, in the `dir` direction. The first page, read without a cursor, also reports `total`: the Classes the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's. Each item carries `student_count`, the Class's current members stopped at 10,000 with `student_count_is_lower_bound`, only when the caller holds class.members.view on this Programme Level; otherwise both are omitted.",
         "operationId": "listClasses",
         "parameters": [
+          {
+            "description": "Order by name, then identity, ascending (`asc`, the default) or descending (`desc`). A cursor continues only the direction that produced it.",
+            "in": "query",
+            "name": "dir",
+            "required": false,
+            "schema": {
+              "default": "asc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string"
+            }
+          },
           {
             "$ref": "#/components/parameters/PageLimit"
           },
@@ -44513,7 +45980,7 @@
     },
     "/api/v1/programmes/{programme_id}/levels": {
       "get": {
-        "description": "Lists active Levels directly owned by one authorized Programme with bounded stable search. The collection excludes Classes and does not imply roster or permission access.",
+        "description": "Lists active Levels directly owned by one authorized Programme with bounded stable search. The collection excludes Classes and does not imply roster or permission access. The first page, read without a cursor, also reports `total`: the Programme Levels the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
         "operationId": "listProgrammeLevels",
         "parameters": [
           {
@@ -45216,7 +46683,7 @@
     },
     "/api/v1/role-bindings": {
       "get": {
-        "description": "Lists current and historical Role Bindings authorized for the caller, optionally narrowed to one User or exact scope. A Binding is an effective-dated permission grant; membership or affiliation alone is not returned as authority.",
+        "description": "Lists current and historical Role Bindings authorized for the caller, optionally narrowed to one User or exact scope. A Binding is an effective-dated permission grant; membership or affiliation alone is not returned as authority. The first page, read without a cursor, also reports `total`: the Role Bindings the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
         "operationId": "listRoleBindings",
         "parameters": [
           {
@@ -47484,7 +48951,7 @@
     },
     "/api/v1/users": {
       "get": {
-        "description": "Searches only User profiles visible through the caller's current Institution or scoped relationships, ordered by canonical username and identity. Disabled Users remain concealed unless an Institution-wide user viewer explicitly requests them. Each item carries a `summary`: the User's current Affiliations with the current Academic Units the caller can see, and, for a caller holding role_binding.view, the current Role Bindings inside that authority's scopes, each list bounded and followed by a count of the rest. The first page, read without a cursor, also reports `total`: the Users the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
+        "description": "Searches only User profiles visible through the caller's current Institution or scoped relationships, ordered by canonical username and identity unless `sort` and `dir` choose another order. Disabled Users remain concealed unless an Institution-wide user viewer explicitly requests them. Each item carries a `summary`: the User's current Affiliations with the current Academic Units the caller can see, and, for a caller holding role_binding.view, the current Role Bindings inside that authority's scopes, each list bounded and followed by a count of the rest. The first page, read without a cursor, also reports `total`: the Users the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
         "operationId": "searchUsers",
         "parameters": [
           {
@@ -47535,6 +49002,94 @@
             "required": false,
             "schema": {
               "$ref": "#/components/schemas/ID"
+            }
+          },
+          {
+            "description": "Keeps Users holding a current Role Binding of any listed Role inside the caller's role_binding.view scopes, so the filter matches only bindings the `summary` could show; a caller without role_binding.view receives an empty page. Repeat the parameter for up to 16 Roles. Roles are seen through Institution-wide role.view: without it, and for a Role that does not exist or is archived, the request is `request.invalid` on `role_id` alike. The filter narrows the caller's visibility and never widens it.",
+            "explode": true,
+            "in": "query",
+            "name": "role_id",
+            "required": false,
+            "schema": {
+              "items": {
+                "$ref": "#/components/schemas/ID"
+              },
+              "maxItems": 16,
+              "type": "array"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Keeps only `active` or only `disabled` accounts. Like `include_disabled` it reaches disabled Users only for Institution-wide user.view: scoped visibility never sees a disabled User, so `disabled` answers an empty page. It cannot be combined with `include_disabled=true`.",
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "enum": [
+                "active",
+                "disabled"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "With `true`, keeps Users who have no recorded account activity, which is first recorded when a Session is issued to them, so they have never signed in. Account activity is visible only to Institution-wide user.view; any other caller receives `request.invalid`. It cannot be combined with `last_active_after` or `last_active_before`.",
+            "in": "query",
+            "name": "never_signed_in",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Keeps Users whose last account activity is at or after this RFC 3339 instant; a User never active never matches. Only Institution-wide user.view may filter on account activity; any other caller receives `request.invalid`.",
+            "in": "query",
+            "name": "last_active_after",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Keeps Users whose last account activity is before this RFC 3339 instant; it must be later than `last_active_after`, and a User never active never matches. Only Institution-wide user.view may filter on account activity; any other caller receives `request.invalid`.",
+            "in": "query",
+            "name": "last_active_before",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The page order, each key then by User identity: `username` (the default), `name` (the presented name, the display name or else the username, compared case-insensitively on its first 64 characters), `created`, or `last_active` (the last account activity; a User never active sorts as the least recent). `last_active` reads account activity, which only an Institution-wide user.view caller can see, so any other caller receives `request.invalid`. A cursor continues only the sort and direction that produced it.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "username",
+              "enum": [
+                "username",
+                "name",
+                "created",
+                "last_active"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Ascending (`asc`, the default) or descending (`desc`) by the `sort` key.",
+            "in": "query",
+            "name": "dir",
+            "required": false,
+            "schema": {
+              "default": "asc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string"
             }
           },
           {
@@ -47665,7 +49220,7 @@
     },
     "/api/v1/users/me/audits": {
       "get": {
-        "description": "Returns one page of the current Session User's own account history, newest first unless `order=asc` asks for oldest first. The first page, read without a cursor, also carries `total`: the number of events the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's. Reading the first page oldest first reaches the end of the history without counting pages. The history holds events about the User's account, whoever performed them, and account-relevant events the User performed on anything else. Each item carries a stable `event` name from a closed catalogue, which clients label themselves; rows outside the catalogue and unfinished attempts are never returned. Another person is never named: the actor is only `self`, `administrator`, or `system`, and the IP address and user agent appear only on the User's own actions. A resource identity appears only when the resource is the User, the Institution, or an Academic Unit or Class the User has or had a membership or Role Binding at. Personal Access Tokens cannot read this history. Reading it records no authorization decision.",
+        "description": "Returns one page of the current Session User's own account history, newest first unless `order=asc` asks for oldest first. The first page, read without a cursor, also carries `total`: the number of events the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's. Reading the first page oldest first reaches the end of the history without counting pages. The history holds events about the User's account, whoever performed them, and account-relevant events the User performed on anything else. Each item carries a stable `event` name from a closed catalogue, which clients label themselves; rows outside the catalogue and unfinished attempts are never returned. Another person is never named: the actor is only `self`, `administrator`, or `system`, and the IP address and user agent appear only on the User's own actions. A resource identity appears only when the resource is the User, the Institution, or an Academic Unit or Class the User has or had a membership or Role Binding at. Each item also carries a `summary` sentence in the language `Accept-Language` selects, falling back to the installation language and then English. It keeps the same mask: the actor is \"you\", \"an administrator\", or \"the system\", and no other person is ever named. It names an Academic Unit or Class only where the resource identity appears, and a Role only when the event bound it to the User; otherwise it uses a generic noun such as \"a class\". Personal Access Tokens cannot read this history. Reading it records no authorization decision.",
         "operationId": "listCurrentUserAuditEvents",
         "parameters": [
           {
@@ -47982,6 +49537,80 @@
           "authentication.csrf.invalid",
           "authentication.strong_required",
           "authentication.reauthentication_required"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "patch": {
+        "description": "Gives one of the current User's active Desktop Registrations the name they chose. The name is trimmed, loses bidirectional and invisible formatting code points, and must be 1 to 128 characters without control characters. It labels the device in the User's own registration and Session lists, and a later Desktop sign-in with the same key keeps it instead of the device name the Desktop reports. Renaming changes no key, Session, or credential, so any interactive Session may do it without recent authentication; Personal Access Tokens cannot. Repeating the request with the same name leaves the same result. A revoked registration is security history and cannot be renamed; a registration of another User is not found. Every rename is audited and appears in the User's own account history.",
+        "operationId": "renameDesktopRegistration",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DesktopRegistrationID"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/RenameDesktopRegistration"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/DesktopRegistrationOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Rename one Desktop Registration",
+        "tags": [
+          "Authentication"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "desktop_registration.invalid",
+          "desktop_registration.revoked",
+          "desktop_registration.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "audit.unavailable",
+          "authentication.session_required",
+          "authentication.reauthentication_required",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
         ],
         "x-proctor-idempotency": "none"
       }
@@ -48836,6 +50465,83 @@
         ],
         "x-proctor-auth": "session_required",
         "x-proctor-error-codes": [
+          "authentication.internal",
+          "audit.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/users/me/sessions/{session_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SessionID"
+        }
+      ],
+      "patch": {
+        "description": "Sets the device name of one of the current User's live browser or CLI Sessions. The name is trimmed, loses bidirectional and invisible formatting code points, and must be 1 to 128 characters without control characters. A Desktop Session is named by its Desktop Registration, so renaming one is refused with session.desktop_named_by_registration, whose fields.desktop_registration_id names the registration to rename through renameDesktopRegistration instead. Renaming changes no credential, so any interactive Session may do it without recent authentication; Personal Access Tokens cannot. Repeating the request with the same name leaves the same result. A Session of another User, or one that is revoked or expired, is not found. Every rename is audited and appears in the User's own account history.",
+        "operationId": "renameCurrentUserSession",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/RenameSession"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CurrentUserSessionOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Rename one current-user session",
+        "tags": [
+          "Authentication"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "session.id.invalid",
+          "session.invalid",
+          "session.not_found",
+          "session.desktop_named_by_registration",
+          "authentication.session_required",
+          "authentication.reauthentication_required",
           "authentication.internal",
           "audit.unavailable",
           "authentication.required",

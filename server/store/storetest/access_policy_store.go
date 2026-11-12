@@ -245,7 +245,7 @@ func TestAccessPolicyStore(t *testing.T, ss store.Store, probes ...AccessPolicyS
 	require.Equal(t, current.Revision, bounded.History[0].ToRevision, "bounded transition history")
 	require.Equal(t, current.Revision-int64(model.AccessPolicyTransitionHistoryLimit)+1, bounded.History[len(bounded.History)-1].ToRevision, "bounded transition history")
 	audits, err := ss.Audit().List(ctx, store.AuditListOptions{
-		Action: string(model.ActionAccessPolicyManage), Limit: 200,
+		Actions: []string{string(model.ActionAccessPolicyManage)}, Limit: 200,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
 	require.NoError(t, err)

@@ -22,6 +22,7 @@ const (
 	AuditSelfEventSignedOut                       AuditSelfEvent = "sign_out"
 	AuditSelfEventDesktopSignedIn                 AuditSelfEvent = "desktop.signed_in"
 	AuditSelfEventDesktopRegistrationRevoked      AuditSelfEvent = "desktop.registration_revoked"
+	AuditSelfEventDesktopRegistrationRenamed      AuditSelfEvent = "desktop.registration_renamed"
 	AuditSelfEventMFASetupStarted                 AuditSelfEvent = "mfa.setup_started"
 	AuditSelfEventMFAEnabled                      AuditSelfEvent = "mfa.enabled"
 	AuditSelfEventMFADisabled                     AuditSelfEvent = "mfa.disabled"
@@ -36,6 +37,7 @@ const (
 	AuditSelfEventSessionRevoked                  AuditSelfEvent = "session.revoked"
 	AuditSelfEventSessionsRevokedAll              AuditSelfEvent = "sessions.revoked_all"
 	AuditSelfEventSessionsRevokedOthers           AuditSelfEvent = "sessions.revoked_others"
+	AuditSelfEventSessionRenamed                  AuditSelfEvent = "session.renamed"
 	AuditSelfEventTokenCreated                    AuditSelfEvent = "personal_access_token.created"
 	AuditSelfEventTokenRevoked                    AuditSelfEvent = "personal_access_token.revoked"
 	AuditSelfEventTokenEnabled                    AuditSelfEvent = "personal_access_token.enabled"
@@ -64,8 +66,10 @@ const (
 // The operation strings writers record in audit parameters. They are part of
 // this catalogue's key, so a writer that renames one must change it here too.
 const (
-	AuditOperationDisableAccount = "disable_account"
-	AuditOperationEnableAccount  = "enable_account"
+	AuditOperationDisableAccount            = "disable_account"
+	AuditOperationEnableAccount             = "enable_account"
+	AuditOperationRenameDesktopRegistration = "rename"
+	AuditOperationRenameOwnSession          = "rename_own_session"
 )
 
 // AuditSelfEventKey is one exact (action, operation, status) combination a
@@ -96,6 +100,7 @@ var auditSelfEventRules = []auditSelfEventRule{
 	{ActionSessionManage, "logout", "", AuditSelfEventSignedOut},
 	{ActionAuthenticationDesktopSessionIssue, "exchange", AuditStatusSuccess, AuditSelfEventDesktopSignedIn},
 	{ActionDesktopRegistrationRevoke, "revoke", "", AuditSelfEventDesktopRegistrationRevoked},
+	{ActionDesktopRegistrationRename, AuditOperationRenameDesktopRegistration, "", AuditSelfEventDesktopRegistrationRenamed},
 
 	{ActionMFASetup, "", "", AuditSelfEventMFASetupStarted},
 	{ActionMFAActivate, "", "", AuditSelfEventMFAEnabled},
@@ -116,6 +121,7 @@ var auditSelfEventRules = []auditSelfEventRule{
 	{ActionSessionManage, "revoke_own_sessions", "", AuditSelfEventSessionsRevokedAll},
 	{ActionSessionManage, "revoke_sessions", "", AuditSelfEventSessionsRevokedAll},
 	{ActionSessionManage, "revoke_other_sessions", "", AuditSelfEventSessionsRevokedOthers},
+	{ActionSessionManage, AuditOperationRenameOwnSession, "", AuditSelfEventSessionRenamed},
 
 	{ActionPersonalAccessTokenCreate, "", "", AuditSelfEventTokenCreated},
 	{ActionPersonalAccessTokenRevoke, "", "", AuditSelfEventTokenRevoked},

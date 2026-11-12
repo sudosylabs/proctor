@@ -1,0 +1,127 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+# Onboarding import and Invitation events.
+components:
+  messages:
+    onboarding_import.changed:
+      name: onboarding_import.changed
+      title: Onboarding import changed
+      summary: Refetch the onboarding import; it entered a new state.
+      description: Refetch the onboarding import; it entered a new state. One event is sent for the import's own scope (the institution, an academic unit or a class) and one for each scope that encloses it, so a connection that subscribes to onboarding_batch.view on any scope that can see the import hears of it, and a connection subscribed at several of those scopes may hear of it more than once. Student progressions are not announced.
+      tags:
+        - name: event
+        - name: Onboarding
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: onboarding_import.changed
+              action:
+                type: string
+                const: onboarding_batch.view
+              data:
+                $ref: '../../../schemas/realtime/onboarding_import_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: onboarding_import.changed
+            sequence: 41
+            action: onboarding_batch.view
+            resource:
+              type: academic_unit
+              id: jcx1ia56br8kpous3h9nfemqtw
+            data:
+              schema_version: 1
+              import_id: z47ydgjcx1ia56br8kpous3h9n
+              state: preview_ready
+    onboarding_import.changed_for_creator:
+      name: onboarding_import.changed
+      title: Onboarding import changed (creator)
+      summary: Refetch an onboarding import you created; it entered a new state.
+      description: Refetch an onboarding import you created; it entered a new state. Imports that only their creator may read, such as academic administration filter previews, are delivered to the creator's connections alone instead of to onboarding_batch.view subscribers.
+      tags:
+        - name: event
+        - name: Onboarding
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - user_id
+              - data
+            properties:
+              event:
+                type: string
+                const: onboarding_import.changed
+              data:
+                $ref: '../../../schemas/realtime/onboarding_import_changed.json'
+            not:
+              required:
+                - action
+      examples:
+        - name: example
+          payload:
+            id: '9kpous3h9nfemqtwz47ydgjcx1'
+            event: onboarding_import.changed
+            sequence: 43
+            user_id: qtwz47ydgjcx1ia56br8kpous3
+            resource:
+              type: ''
+              id: ''
+            data:
+              schema_version: 1
+              import_id: z47ydgjcx1ia56br8kpous3h9n
+              state: preview_ready
+    invitation.changed:
+      name: invitation.changed
+      title: Invitation changed
+      summary: Refetch an Invitation you issued; it reached a new state.
+      description: Refetch an Invitation you issued; it reached a new state, today when it is accepted. Delivered to the connections of the User who issued it.
+      tags:
+        - name: event
+        - name: Onboarding
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - user_id
+              - data
+            properties:
+              event:
+                type: string
+                const: invitation.changed
+              data:
+                $ref: '../../../schemas/realtime/invitation_changed.json'
+            not:
+              required:
+                - action
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: invitation.changed
+            sequence: 42
+            user_id: qtwz47ydgjcx1ia56br8kpous3
+            resource:
+              type: ''
+              id: ''
+            data:
+              schema_version: 1
+              invitation_id: '6br8kpous3h9nfemqtwz47ydgj'
+              state: accepted

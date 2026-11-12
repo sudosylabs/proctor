@@ -30,16 +30,20 @@ type accountSecurityHTTPApplication struct {
 	MFA
 	PersonalAccessTokens
 
-	createToken  identity.CreatePersonalAccessTokenCommand
-	sessions     []*model.Session
-	revokeOthers int
+	createToken              identity.CreatePersonalAccessTokenCommand
+	sessions                 []*model.Session
+	desktopRegistrationNames map[model.DesktopRegistrationID]string
+	revokeOthers             int
 }
 
 func (as *accountSecurityHTTPApplication) ListSessions(
 	context.Context,
 	invocation.Invocation,
-) ([]*model.Session, error) {
-	return append([]*model.Session{}, as.sessions...), nil
+) (*identity.ListSessionsResult, error) {
+	return &identity.ListSessionsResult{
+		Sessions:                 append([]*model.Session{}, as.sessions...),
+		DesktopRegistrationNames: as.desktopRegistrationNames,
+	}, nil
 }
 
 func (as *accountSecurityHTTPApplication) RevokeOtherSessions(

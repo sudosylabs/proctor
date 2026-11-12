@@ -178,3 +178,50 @@ func TestCloseCodeForRealtimeReason(t *testing.T) {
 		})
 	}
 }
+
+// An onboarding import event addressed to one Academic Unit reaches the
+// connection subscribed to onboarding_batch.view there and no connection
+// subscribed at another unit.
+func TestHubDeliversAScopedEventOnlyToItsScopeSubscribers(t *testing.T) {
+	t.Parallel()
+
+	hub := newInternalTestHub(t)
+	require.NoError(t, hub.Start(context.Background()))
+	defer func() { _ = hub.Close(context.Background()) }()
+	inScope, _ := hub.register(newRuntimeTestSocket(),
+		model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID()}, model.RequestMetadata{}, "", 0, "")
+	outOfScope, _ := hub.register(newRuntimeTestSocket(),
+		model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID()}, model.RequestMetadata{}, "", 0, "")
+	require.NotNil(t, inScope)
+	require.NotNil(t, outOfScope)
+	unit := model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewAcademicUnitID().String()}
+	subscribeForScopeTest(t, inScope, unit)
+	subscribeForScopeTest(t, outOfScope, model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewAcademicUnitID().String()})
+
+	event, err := realtime.NewOnboardingImportChangedEvent(model.NewOnboardingImportID(), model.OnboardingImportParsing, unit)
+	require.NoError(t, err)
+	event.ID = model.NewID()
+	hub.PublishLocal(context.Background(), event)
+
+	require.Equal(t, []string{event.ID}, deliveredEventIDs(inScope))
+	require.Empty(t, deliveredEventIDs(outOfScope))
+}
+
+func subscribeForScopeTest(t *testing.T, runtime *connectionRuntime, scope model.Resource) {
+	t.Helper()
+	subscription := Subscription{Action: model.ActionOnboardingBatchView, Resource: resourceFromModel(scope)}
+	require.True(t, subscription.IsValid(), "onboarding_batch.view accepts an Academic Unit scope")
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	runtime.subscriptions[subscription.Key()] = subscription
+}
+
+func deliveredEventIDs(runtime *connectionRuntime) []string {
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	var ids []string
+	for _, event := range runtime.history {
+		ids = append(ids, event.ID)
+	}
+	return ids
+}

@@ -326,6 +326,28 @@ func testClassStoreListByProgrammeLevel(t *testing.T, ss store.Store) {
 	empty, err := ss.Class().ListByProgrammeLevel(ctx, model.NewProgrammeLevelID(), store.AcademicNameListOptions{Limit: 200})
 	require.NoError(t, err)
 	require.Empty(t, empty, "ListByProgrammeLevel(missing)")
+	descending, err := ss.Class().ListByProgrammeLevel(ctx, fixture.level.ID, store.AcademicNameListOptions{Descending: true, Limit: 1})
+	require.NoError(t, err)
+	require.Equal(t, []model.ClassID{second.ID}, []model.ClassID{descending[0].ID}, "descending begins at the last name")
+	descending, err = ss.Class().ListByProgrammeLevel(ctx, fixture.level.ID, store.AcademicNameListOptions{
+		Descending: true, AfterName: second.Name, AfterID: second.ID.String(), Limit: 200,
+	})
+	require.NoError(t, err)
+	require.Len(t, descending, 1, "a descending continuation moves toward smaller names")
+	require.Equal(t, first.ID, descending[0].ID)
+	total, err := ss.Class().CountByProgrammeLevel(ctx, fixture.level.ID, store.AcademicNameListOptions{AfterName: first.Name, AfterID: first.ID.String()}, store.MaximumListCount)
+	require.NoError(t, err)
+	require.Equal(t, 2, total, "the count ignores the continuation")
+	unitID, err := ss.Class().GetAcademicUnitID(ctx, first.ID)
+	require.NoError(t, err)
+	inUnit, err := ss.Class().SearchByAcademicUnit(ctx, unitID, store.AcademicNameListOptions{Limit: 200})
+	require.NoError(t, err)
+	unitTotal, err := ss.Class().CountByAcademicUnit(ctx, unitID, store.AcademicNameListOptions{}, store.MaximumListCount)
+	require.NoError(t, err)
+	require.Len(t, inUnit, unitTotal, "the unit count equals the unit listing")
+	named, err := ss.Class().CountByAcademicUnit(ctx, unitID, store.AcademicNameListOptions{Term: "class-b"}, store.MaximumListCount)
+	require.NoError(t, err)
+	require.Equal(t, 1, named, "the term narrows the unit count")
 }
 
 func testClassStoreListByAcademicPeriod(t *testing.T, ss store.Store) {

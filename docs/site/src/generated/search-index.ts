@@ -1,8 +1,8 @@
-// Generated from public MDX and server/openapi.json. Do not edit by hand.
+// Generated from public MDX, server/openapi.json and server/asyncapi.json. Do not edit by hand.
 
 export type SearchEntry = {
   id: string;
-  kind: 'guide' | 'glossary' | 'product-area' | 'endpoint';
+  kind: 'guide' | 'glossary' | 'product-area' | 'endpoint' | 'realtime-message';
   group: string;
   title: string;
   description: string;
@@ -182,7 +182,7 @@ export const searchEntries = [
     "title": "Make Command Reference",
     "description": "Choose the supported root or module-scoped Make command, understand what it starts or changes, and avoid destructive targets.",
     "href": "/developers/make-commands/",
-    "searchText": "make command reference choose the supported root or module-scoped make command, understand what it starts or changes, and avoid destructive targets. make command reference run product commands from the repository root. the root makefile is the supported interface for installing tools, running the local product, checking changes, exercising a cluster, and assembling release artifacts. make help is the exact list for the checkout in front of you. this page explains how those commands fit together and which ones change local state. targets omitted from make help are implementation steps, not a stable contributor interface. choose the right command first i need to… start with --- --- prepare a new checkout make bootstrap start the complete single-node product make run-server start only the hosted webapp with hot reload make run-webapp find why the local environment is unhealthy make dev-doctor run the normal product gate make check run the complete ci-facing gate make ci preview or verify documentation make docs-start or make docs-check exercise three active application nodes make run-cluster build and verify a local release directory make package-verify see every supported root target make help commands in this page use three kinds of effects: - read-only commands inspect or verify without intentionally changing source or durable development data; - generated-output commands install dependencies or write build, diagnostic, package, or generated files; and - runtime-state commands start, stop, populate, or delete local services. some verification commands install locked dependencies before checking them. they remain read-only with respect to authored source, but they can replace a local node modules tree or refresh ignored generated output. understand the root command surface the root makefile includes smaller, responsibility-specific files from build/make/ . inclusion creates one root command surface; it does not create a second command that must be run from build/ . for example, run make package at the repository root even though its recipe is maintained in build/make/release.mk . install and inspect the environment command what it does and changes --- --- make help prints the supported root targets and their current one-line descriptions. effect: read-only. make bootstrap validates the host, installs the pinned go tools, and installs the locked webapp and documentation dependencies. effect: generated output. make tools installs the go developer tools pinned by the isolated tool modules into .build/bin . effect: generated output. make tools-check verifies that every pinned go tool is installed at the expected version. effect: read-only. make dev-tools checks the required go, node, npm, docker, compose, jq , and curl commands. effect: read-only. make dev-doctor runs bounded checks of the host, generated artifacts, containers, and local health endpoints. it does not start or repair them. effect: read-only. use make bootstrap for first setup or after a pinned dependency changes. use make dev-doctor when an already-prepared environment stops behaving as expected. run the single-node product command what it does and changes --- --- make webapp-build installs locked webapp dependencies and builds the hosted application with the selected build identity. effect: generated output. make webapp-build-debug builds the hosted application with the server debugger's dev / unknown identity. effect: generated output. make dev-up creates development configuration and secrets, then starts postgresql, redis, minio, mailpit, and observability services. effect: runtime state. make run alias for the production-shaped make run-server lifecycle. effect: runtime state. make run-server builds the webapp, starts local dependencies, and runs the go server in the foreground. effect: runtime state. make run-webapp runs vite with hot reload and proxies api and websocket traffic to a separately running server. effect: runtime state. make dev-seed creates or reports the guarded synthetic institution, users, academic structure, exam, and sitting through the public api. effect: runtime state. make metrics-urls prints the local prometheus, grafana, loki, and jaeger addresses. effect: read-only. make dev-logs follows dependency and observability logs until interrupted. effect: read-only. make dev-down stops the development services and preserves their volumes and generated state. effect: runtime state. make dev-reset stops the development services, deletes their persistent volumes, and removes guarded seed state. effect: destructive runtime state. make run-server owns the ordinary first-run sequence. do not start with make dev-up unless you deliberately want the dependencies without the application process. use local setup for the full first-success path and local services for the service boundaries. make dev-reset permanently deletes the local postgresql installation, minio objects, captured mailpit messages, observability history, and compose volumes. use make dev-down when you only need to stop work. format, analyze, and secure go code command what it does and changes --- --- make fmt applies gofmt and the pinned goimports to versioned and unignored go source. effect: modifies source. make fmt-check fails when eligible go source is not formatted. effect: read-only. make lint-config validates the pinned golangci-lint configuration without analyzing source. effect: read-only. make lint rejects findings introduced beyond the recorded go linter baseline. effect: read-only. make lint-full reports the complete existing and new go linter backlog. effect: read-only. make lint-fix applies safe automated fixes from the pinned linter suite. review its diff. effect: modifies source. make vulncheck scans every product go module against the current vulnerability database. it requires network access. effect: read-only. make quality runs fmt-check and the new-finding lint gate. effect: read-only. make security runs static analysis and the live vulnerability scan. effect: read-only. make precommit runs build-script checks plus the fast repository formatting and lint gates. effect: read-only. run make fmt intentionally, inspect the resulting diff, then use make quality before a broader product gate. the live vulnerability result can change when the external vulnerability database changes even when the checkout does not. test and verify the product command what it proves and changes --- --- make check build scripts, hosted webapp, documentation, transactional-mail template freshness and rendering, server architecture, openapi agreement, localization, tests, race tests, and vet pass without dependency-backed integration suites. effect: read-only authored source; refreshes ignored dependencies and generated output. make brand-check verifies that package-owned artwork copies match the approved brand files. effect: read-only. make brand-copy refreshes the declared package-owned artwork copies from the approved brand files. review the copied files and local digests, then run make brand-check and the affected package checks. effect: modifies source. make docs-start installs locked docs dependencies and starts the docusaurus development server in the foreground. effect: generated output and runtime state. make mail-templates-check installs the locked mjml toolchain, then verifies that every tracked transactional-mail html file matches its mjml source and that the template tests pass. effect: refreshes ignored dependencies make docs-check validates openapi agreement, docs metadata and generators, typescript, and the production documentation build. effect: generated output. make integration runs the server's dependency-backed suites plus reusable redis-cache and smtp-mail conformance. effect: temporary runtime state. make e2e builds the webapp and server, starts one real node with disposable postgresql and mailpit on loopback, and runs the chromium end-to-end journeys in webapp/tests/e2e ; e2e args passes playwright arguments. effect: generated output and temporary runtime state, removed on exit. make independent-modules tests, race-tests, vets, and builds all four go modules with workspace assistance disabled. effect: read-only. make module-pins-check fails when the server's go.mod pins a packages/ module at content that differs from the working tree, and prints the pin to use. effect: read-only. make ci runs check , dependency-backed integration, independent-module verification, module-pin verification, and release-package verification. effect: generated output and temporary runtime state. make check is the normal product-wide handoff gate. make ci is materially slower, starts dependency containers, and requires a fresh package output path. use the verification ladder to choose the smallest honest gate for a change. debug, profile, and trace command what it does --- --- make debug-ready prepares tools, the debugger-matched webapp, dependencies, and the diagnostics directory without starting delve. make debug-server runs the local server in an interactive delve terminal session. make debug-server-dap starts a loopback-only delve dap listener for vs code or neovim. make debug-server-headless starts a loopback-only delve api v2 listener for goland remote attach. make debug-test debugs one selected go test through delve. make profile-test captures a cpu, memory, mutex, or block profile for one selected go test. make profile-open opens the selected captured profile with the pinned pprof viewer. make trace-test captures an execution trace for one selected go test. make trace-open opens the most recently captured trace with the pinned trace viewer. select a focused test without editing a makefile: set debug profile to cpu , memory , mutex , or block for profile-test and profile-open . diagnostics are written below .build/dev/diagnostics . see tooling and debugging for editor attachment and listener-safety details. exercise the three-node topology command what it does and changes --- --- make cluster-up builds the runtime image and starts three application nodes, haproxy, shared dependencies, and observability. effect: runtime state. make run-cluster runs cluster-up , then follows gateway and application-node logs. effect: runtime state. make run-haserver mattermost-compatible alias for make run-cluster . prefer the proctor name in new guidance. effect: runtime state. make cluster-down stops the cluster topology without deleting its persistent data. effect: runtime state. make cluster-logs follows haproxy and application-node logs. effect: read-only. make cluster-diagnostics prints bounded container state and recent cluster logs for diagnosis. effect: read-only. make cluster-smoke checks readiness, metrics, peer discovery, build identity, gateway traffic, and one-node failure recovery. effect: temporary runtime state. the single-node and clustered workflows share the default compose project and authoritative state. do not run both at once against that default project. the cluster development guide explains the topology and the evidence produced by the smoke test. build packages, archives, and images command output and important behavior --- --- make package produces a current-platform release directory, defaulting to dist/proctor . refuses to reuse its output directory. make package-verify produces the same package and verifies executables, metadata, configuration, hosted assets, and build identity. it runs package first and therefore also requires a fresh output directory. make package-linux-amd64 produces a linux amd64 release directory below dist , cross-compiled with cgo disabled. make package-linux-arm64 produces a linux arm64 release directory below dist , cross-compiled with cgo disabled. make dist produces deterministic linux amd64/arm64 archives and sha256sums . both architecture package directories must be absent. make clean-dist removes the repository's complete dist directory. destructive: review anything under dist first. make buildenv builds the pinned go and node maintainer image through docker. make buildenv-check runs make check inside the pinned maintainer image with the checkout mounted at /workspace . make buildenv-shell opens an interactive shell in the pinned maintainer image with the checkout mounted at /workspace . make container packages linux binaries for the host architecture with the same recipe as make dist , then builds the immutable, non-root runtime image from that package with the release dockerfile. effect: generated output below .build/container . make container-load compatibility alias for make container . prefer make container in new automation. make container-scan saves the container arch platform (the host architecture by default) of proctor runtime image to an archive and scans it with the repository-pinned trivy image. fails on any critical vulnerability and on a high vulnerability that has a fixed version; unfixed high findings are listed but allowed. effect: report below .build/container-scan and a vulnerability-database cache below .build/trivy-cache ; downloads the database. package outputs deliberately refuse an existing destination. this protects an operator-owned configuration from being silently mixed into or overwritten by a new build. choose a new package dir , or inspect and remove obsolete output deliberately; do not turn the refusal into an automatic cleanup step. why package appears twice there are two targets named package , but they belong to different make invocations and have different responsibilities: command definition and responsibility --- --- make package defined in build/make/release.mk , which the root makefile includes. this is the public product workflow: it builds the hosted webapp, asks the server module to assemble the core application tree, then adds deployment support and build metadata. make -c server package defined in server/makefile . this is the lower-level server assembly: it compiles the binaries and copies the already-built webapp, configuration examples, licenses, and notices into a caller-selected directory. the root recipe invokes the server recipe with $(make) -c server package . make scopes target names to the current makefile, so these definitions do not override or merge with one another. use make package or make package-verify from the repository root for a complete product artifact. use make -c server package only when developing the packaging implementation itself: it expects a compatible webapp build to already exist and it does not add the root-owned deployment support or final build metadata. use module-scoped commands deliberately the -c option tells make to change directories before reading a makefile. it is part of the command's identity: these commands are not interchangeable. the first verifies the product; the second verifies only the server module; the third verifies only the reusable cache module. server need command --- --- complete hermetic server gate make -c server check dependency-direction and documentation architecture checks make -c server architecture server unit tests, race tests, vet, or build make -c server test , test-race , vet , or build rerun every server code generator (error mapping, openapi artifact, typed ids, store layers) make -c server generate rebuild or verify the openapi artifact make -c server openapi-build or openapi-check regenerate or verify the http error mapping make -c server errors-generate or errors-check verify server translation catalogs make -c server i18n-check verify the openapi artifact and route agreement make -c server openapi-agreement run all tagged server integration tests make -c server integration-all run one dependency-backed boundary make -c server integration-postgres , integration-redis , integration-s3 , integration-providers , or integration-realtime install the template toolchain, then generate and verify transactional-mail templates make -c server mail-templates-install , mail-templates-generate , mail-templates-check , or mail-templates-test render synthetic transactional-mail previews make -c server mail-preview output=/absolute/output/directory the server makefile also contains narrow component and phase gates used by maintainers and ci. prefer the task-specific developer guide over guessing a target from its name. reusable modules module commands --- --- cache hermetic gate: make -c packages/cache check . redis conformance: make -c packages/cache conformance-redis . mail hermetic gate: make -c packages/mail check . smtp conformance: make -c packages/mail conformance-smtp . vfs run gowork=off go test -race ./... and gowork=off go vet ./... from packages/vfs . the server s3 integration gate exercises the product boundary. vfs intentionally has no module makefile at present. do not infer that a root target with a similar name is its replacement. override a value without editing the build gnu make accepts a variable assignment with the invocation: frequently used selection variables are: variable used for --- --- debug module , debug package , debug test focused debugging, profiling, and tracing debug profile cpu , memory , mutex , or block profile selection package dir , dist dir package and archive destinations version , commit , build time , source date epoch artifact identity and reproducibility proctor runtime image , proctor buildenv image local docker image names proctor buildenv run flags additional deliberate docker arguments for maintainer-container runs ports, origins, service image pins, precedence, and persistent workstation overrides are documented in development configuration. repository-owned go and toolchain settings ignore ambient and file-based overrides; change them only with an explicit make command-line assignment for a deliberate experiment. before running an unfamiliar target 1. confirm your working directory and preserve any local authored changes. 2. read make help ; for a scoped target, inspect that module's makefile or owning developer guide. 3. check whether the command starts containers, writes generated output, or removes state. 4. supply paths and selection variables explicitly rather than editing the recipe for one workstation. 5. after a modifying command, review git status and the generated output before continuing. return to the developer guide to choose a change workflow or use the testing guide to select the correct verification gate."
+    "searchText": "make command reference choose the supported root or module-scoped make command, understand what it starts or changes, and avoid destructive targets. make command reference run product commands from the repository root. the root makefile is the supported interface for installing tools, running the local product, checking changes, exercising a cluster, and assembling release artifacts. make help is the exact list for the checkout in front of you. this page explains how those commands fit together and which ones change local state. targets omitted from make help are implementation steps, not a stable contributor interface. choose the right command first i need to… start with --- --- prepare a new checkout make bootstrap start the complete single-node product make run-server start only the hosted webapp with hot reload make run-webapp find why the local environment is unhealthy make dev-doctor run the normal product gate make check run the complete ci-facing gate make ci preview or verify documentation make docs-start or make docs-check exercise three active application nodes make run-cluster build and verify a local release directory make package-verify see every supported root target make help commands in this page use three kinds of effects: - read-only commands inspect or verify without intentionally changing source or durable development data; - generated-output commands install dependencies or write build, diagnostic, package, or generated files; and - runtime-state commands start, stop, populate, or delete local services. some verification commands install locked dependencies before checking them. they remain read-only with respect to authored source, but they can replace a local node modules tree or refresh ignored generated output. understand the root command surface the root makefile includes smaller, responsibility-specific files from build/make/ . inclusion creates one root command surface; it does not create a second command that must be run from build/ . for example, run make package at the repository root even though its recipe is maintained in build/make/release.mk . install and inspect the environment command what it does and changes --- --- make help prints the supported root targets and their current one-line descriptions. effect: read-only. make bootstrap validates the host, installs the pinned go tools, and installs the locked webapp and documentation dependencies. effect: generated output. make tools installs the go developer tools pinned by the isolated tool modules into .build/bin . effect: generated output. make tools-check verifies that every pinned go tool is installed at the expected version. effect: read-only. make dev-tools checks the required go, node, npm, docker, compose, jq , and curl commands. effect: read-only. make dev-doctor runs bounded checks of the host, generated artifacts, containers, and local health endpoints. it does not start or repair them. effect: read-only. use make bootstrap for first setup or after a pinned dependency changes. use make dev-doctor when an already-prepared environment stops behaving as expected. run the single-node product command what it does and changes --- --- make webapp-build installs locked webapp dependencies and builds the hosted application with the selected build identity. effect: generated output. make webapp-build-debug builds the hosted application with the server debugger's dev / unknown identity. effect: generated output. make dev-up creates development configuration and secrets, then starts postgresql, redis, minio, mailpit, and observability services. effect: runtime state. make run alias for the production-shaped make run-server lifecycle. effect: runtime state. make run-server builds the webapp, starts local dependencies, and runs the go server in the foreground. effect: runtime state. make run-webapp runs vite with hot reload and proxies api and websocket traffic to a separately running server. effect: runtime state. make dev-seed creates or reports the guarded synthetic institution, users, academic structure, exam, and sitting through the public api. effect: runtime state. make metrics-urls prints the local prometheus, grafana, loki, and jaeger addresses. effect: read-only. make dev-logs follows dependency and observability logs until interrupted. effect: read-only. make dev-down stops the development services and preserves their volumes and generated state. effect: runtime state. make dev-reset stops the development services, deletes their persistent volumes, and removes guarded seed state. effect: destructive runtime state. make run-server owns the ordinary first-run sequence. do not start with make dev-up unless you deliberately want the dependencies without the application process. use local setup for the full first-success path and local services for the service boundaries. make dev-reset permanently deletes the local postgresql installation, minio objects, captured mailpit messages, observability history, and compose volumes. use make dev-down when you only need to stop work. format, analyze, and secure go code command what it does and changes --- --- make fmt applies gofmt and the pinned goimports to versioned and unignored go source. effect: modifies source. make fmt-check fails when eligible go source is not formatted. effect: read-only. make lint-config validates the pinned golangci-lint configuration without analyzing source. effect: read-only. make lint rejects findings introduced beyond the recorded go linter baseline. effect: read-only. make lint-full reports the complete existing and new go linter backlog. effect: read-only. make lint-fix applies safe automated fixes from the pinned linter suite. review its diff. effect: modifies source. make vulncheck scans every product go module against the current vulnerability database. it requires network access. effect: read-only. make quality runs fmt-check and the new-finding lint gate. effect: read-only. make security runs static analysis and the live vulnerability scan. effect: read-only. make precommit runs build-script checks plus the fast repository formatting and lint gates. effect: read-only. run make fmt intentionally, inspect the resulting diff, then use make quality before a broader product gate. the live vulnerability result can change when the external vulnerability database changes even when the checkout does not. test and verify the product command what it proves and changes --- --- make check build scripts, hosted webapp, documentation, transactional-mail template freshness and rendering, server architecture, openapi agreement, localization, tests, race tests, and vet pass without dependency-backed integration suites. effect: read-only authored source; refreshes ignored dependencies and generated output. make brand-check verifies that package-owned artwork copies match the approved brand files. effect: read-only. make brand-copy refreshes the declared package-owned artwork copies from the approved brand files. review the copied files and local digests, then run make brand-check and the affected package checks. effect: modifies source. make docs-start installs locked docs dependencies and starts the docusaurus development server in the foreground. effect: generated output and runtime state. make mail-templates-check installs the locked mjml toolchain, then verifies that every tracked transactional-mail html file matches its mjml source and that the template tests pass. effect: refreshes ignored dependencies make docs-check validates openapi agreement, docs metadata and generators, typescript, and the production documentation build. effect: generated output. make integration runs the server's dependency-backed suites plus reusable redis-cache and smtp-mail conformance. effect: temporary runtime state. make e2e builds the webapp and server, starts one real node with disposable postgresql and mailpit on loopback, and runs the chromium end-to-end journeys in webapp/tests/e2e ; e2e args passes playwright arguments. effect: generated output and temporary runtime state, removed on exit. make independent-modules tests, race-tests, vets, and builds all four go modules with workspace assistance disabled. effect: read-only. make module-pins-check fails when the server's go.mod pins a packages/ module at content that differs from the working tree, and prints the pin to use. effect: read-only. make ci runs check , dependency-backed integration, independent-module verification, module-pin verification, and release-package verification. effect: generated output and temporary runtime state. make check is the normal product-wide handoff gate. make ci is materially slower, starts dependency containers, and requires a fresh package output path. use the verification ladder to choose the smallest honest gate for a change. debug, profile, and trace command what it does --- --- make debug-ready prepares tools, the debugger-matched webapp, dependencies, and the diagnostics directory without starting delve. make debug-server runs the local server in an interactive delve terminal session. make debug-server-dap starts a loopback-only delve dap listener for vs code or neovim. make debug-server-headless starts a loopback-only delve api v2 listener for goland remote attach. make debug-test debugs one selected go test through delve. make profile-test captures a cpu, memory, mutex, or block profile for one selected go test. make profile-open opens the selected captured profile with the pinned pprof viewer. make trace-test captures an execution trace for one selected go test. make trace-open opens the most recently captured trace with the pinned trace viewer. select a focused test without editing a makefile: set debug profile to cpu , memory , mutex , or block for profile-test and profile-open . diagnostics are written below .build/dev/diagnostics . see tooling and debugging for editor attachment and listener-safety details. exercise the three-node topology command what it does and changes --- --- make cluster-up builds the runtime image and starts three application nodes, haproxy, shared dependencies, and observability. effect: runtime state. make run-cluster runs cluster-up , then follows gateway and application-node logs. effect: runtime state. make run-haserver mattermost-compatible alias for make run-cluster . prefer the proctor name in new guidance. effect: runtime state. make cluster-down stops the cluster topology without deleting its persistent data. effect: runtime state. make cluster-logs follows haproxy and application-node logs. effect: read-only. make cluster-diagnostics prints bounded container state and recent cluster logs for diagnosis. effect: read-only. make cluster-smoke checks readiness, metrics, peer discovery, build identity, gateway traffic, and one-node failure recovery. effect: temporary runtime state. the single-node and clustered workflows share the default compose project and authoritative state. do not run both at once against that default project. the cluster development guide explains the topology and the evidence produced by the smoke test. build packages, archives, and images command output and important behavior --- --- make package produces a current-platform release directory, defaulting to dist/proctor . refuses to reuse its output directory. make package-verify produces the same package and verifies executables, metadata, configuration, hosted assets, and build identity. it runs package first and therefore also requires a fresh output directory. make package-linux-amd64 produces a linux amd64 release directory below dist , cross-compiled with cgo disabled. make package-linux-arm64 produces a linux arm64 release directory below dist , cross-compiled with cgo disabled. make dist produces deterministic linux amd64/arm64 archives and sha256sums . both architecture package directories must be absent. make clean-dist removes the repository's complete dist directory. destructive: review anything under dist first. make buildenv builds the pinned go and node maintainer image through docker. make buildenv-check runs make check inside the pinned maintainer image with the checkout mounted at /workspace . make buildenv-shell opens an interactive shell in the pinned maintainer image with the checkout mounted at /workspace . make container packages linux binaries for the host architecture with the same recipe as make dist , then builds the immutable, non-root runtime image from that package with the release dockerfile. effect: generated output below .build/container . make container-load compatibility alias for make container . prefer make container in new automation. make container-scan saves the container arch platform (the host architecture by default) of proctor runtime image to an archive and scans it with the repository-pinned trivy image. fails on any critical vulnerability and on a high vulnerability that has a fixed version; unfixed high findings are listed but allowed. effect: report below .build/container-scan and a vulnerability-database cache below .build/trivy-cache ; downloads the database. package outputs deliberately refuse an existing destination. this protects an operator-owned configuration from being silently mixed into or overwritten by a new build. choose a new package dir , or inspect and remove obsolete output deliberately; do not turn the refusal into an automatic cleanup step. why package appears twice there are two targets named package , but they belong to different make invocations and have different responsibilities: command definition and responsibility --- --- make package defined in build/make/release.mk , which the root makefile includes. this is the public product workflow: it builds the hosted webapp, asks the server module to assemble the core application tree, then adds deployment support and build metadata. make -c server package defined in server/makefile . this is the lower-level server assembly: it compiles the binaries and copies the already-built webapp, configuration examples, licenses, and notices into a caller-selected directory. the root recipe invokes the server recipe with $(make) -c server package . make scopes target names to the current makefile, so these definitions do not override or merge with one another. use make package or make package-verify from the repository root for a complete product artifact. use make -c server package only when developing the packaging implementation itself: it expects a compatible webapp build to already exist and it does not add the root-owned deployment support or final build metadata. use module-scoped commands deliberately the -c option tells make to change directories before reading a makefile. it is part of the command's identity: these commands are not interchangeable. the first verifies the product; the second verifies only the server module; the third verifies only the reusable cache module. server need command --- --- complete hermetic server gate make -c server check dependency-direction and documentation architecture checks make -c server architecture server unit tests, race tests, vet, or build make -c server test , test-race , vet , or build rerun every server code generator (error mapping, openapi artifact, typed ids, store layers) make -c server generate rebuild or verify the openapi artifact make -c server openapi-build or openapi-check rebuild or verify the realtime asyncapi artifact make -c server asyncapi-build or asyncapi-check regenerate or verify the http error mapping make -c server errors-generate or errors-check verify server translation catalogs make -c server i18n-check verify the openapi artifact and route agreement make -c server openapi-agreement run all tagged server integration tests make -c server integration-all run one dependency-backed boundary make -c server integration-postgres , integration-redis , integration-s3 , integration-providers , or integration-realtime install the template toolchain, then generate and verify transactional-mail templates make -c server mail-templates-install , mail-templates-generate , mail-templates-check , or mail-templates-test render synthetic transactional-mail previews make -c server mail-preview output=/absolute/output/directory the server makefile also contains narrow component and phase gates used by maintainers and ci. prefer the task-specific developer guide over guessing a target from its name. reusable modules module commands --- --- cache hermetic gate: make -c packages/cache check . redis conformance: make -c packages/cache conformance-redis . mail hermetic gate: make -c packages/mail check . smtp conformance: make -c packages/mail conformance-smtp . vfs run gowork=off go test -race ./... and gowork=off go vet ./... from packages/vfs . the server s3 integration gate exercises the product boundary. vfs intentionally has no module makefile at present. do not infer that a root target with a similar name is its replacement. override a value without editing the build gnu make accepts a variable assignment with the invocation: frequently used selection variables are: variable used for --- --- debug module , debug package , debug test focused debugging, profiling, and tracing debug profile cpu , memory , mutex , or block profile selection package dir , dist dir package and archive destinations version , commit , build time , source date epoch artifact identity and reproducibility proctor runtime image , proctor buildenv image local docker image names proctor buildenv run flags additional deliberate docker arguments for maintainer-container runs ports, origins, service image pins, precedence, and persistent workstation overrides are documented in development configuration. repository-owned go and toolchain settings ignore ambient and file-based overrides; change them only with an explicit make command-line assignment for a deliberate experiment. before running an unfamiliar target 1. confirm your working directory and preserve any local authored changes. 2. read make help ; for a scoped target, inspect that module's makefile or owning developer guide. 3. check whether the command starts containers, writes generated output, or removes state. 4. supply paths and selection variables explicitly rather than editing the recipe for one workstation. 5. after a modifying command, review git status and the generated output before continuing. return to the developer guide to choose a change workflow or use the testing guide to select the correct verification gate."
   },
   {
     "id": "page:/developers/persistence/",
@@ -947,7 +947,7 @@ export const searchEntries = [
     "title": "Realtime and Replay",
     "description": "Connect to Proctor WebSocket events, authorize subscriptions, and recover from bounded replay gaps.",
     "href": "/api/guides/realtime",
-    "searchText": "realtime and replay connect to proctor websocket events, authorize subscriptions, and recover from bounded replay gaps. realtime and replay proctor exposes one authenticated websocket endpoint at /api/v1/websocket . realtime delivery accelerates an interface; durable http resources remain the authority. browser connections use the web session cookie and must present the installation's exact allowed origin. a web client using an allowed web session access credential may use bearer transport. proctor desktop instead presents its desktop session as authorization: dpop … with a fresh proof for the websocket handshake and current server nonce; a desktop credential is never a bearer credential. non-browser clients may omit origin. the connection handshake authenticates one session but does not grant every subscription. each subscription action and exact resource is authorized separately. candidate admission additionally requires the registered-key desktop session and the exact desktop compatibility inputs enforced by the attempt protocol. see connect websocket for the current handshake parameters and protocol schemas. resume after disconnect replay is bounded and node-local. retain the most recent sequence or replay cursor exactly as the protocol specifies, then offer it when reconnecting to the appropriate node. a successful replay fills only the available bounded gap. if the server reports that replay is unavailable or incomplete: 1. stop applying incremental events for the affected scope. 2. refetch the authoritative resource or collection over http. 3. replace local derived state with that snapshot. 4. establish a fresh realtime position and resume incremental processing. never treat a missing event as evidence that durable state did not change. cluster fan-out and websocket publication occur after the durable commit and are best-effort effects. protocol errors after upgrade, protocol errors use stable typed websocket envelopes rather than rfc 9457 problem details. handle an unknown event or error type defensively, preserve ordering within its documented scope, and reconnect with bounded backoff. avoid tight reconnect loops after authentication or authorization rejection. a failed dpop handshake can return a replacement dpop-nonce ; reconnect with a newly signed proof rather than replaying the upgrade request byte-for-byte."
+    "searchText": "realtime and replay connect to proctor websocket events, authorize subscriptions, and recover from bounded replay gaps. realtime and replay proctor exposes one authenticated websocket endpoint at /api/v1/websocket . realtime delivery accelerates an interface; durable http resources remain the authority. browser connections use the web session cookie and must present the installation's exact allowed origin. a web client using an allowed web session access credential may use bearer transport. proctor desktop instead presents its desktop session as authorization: dpop … with a fresh proof for the websocket handshake and current server nonce; a desktop credential is never a bearer credential. non-browser clients may omit origin. the connection handshake authenticates one session but does not grant every subscription. each subscription action and exact resource is authorized separately; the resource is the one the action protects or, for an action that also governs a collection, an owning scope it accepts. candidate admission additionally requires the registered-key desktop session and the exact desktop compatibility inputs enforced by the attempt protocol. see connect websocket for the handshake parameters. the realtime protocol reference describes every frame after the upgrade: the event frame, the commands and their replies, the close codes, and each event with its data. refetch signals most events name what changed and carry no more than identifiers, a state and a revision; refetch the resource over http to read it. operator and administrator views can follow jobs ( job.changed , subscribed with job.view on the institution) and onboarding imports ( onboarding import.changed , subscribed with onboarding batch.view on the institution, an academic unit or a class; an import is announced at its own scope and at every scope that encloses it). a user's own connections hear current user.sessions.changed when one of their sessions is revoked or renamed, and invitation.changed when an invitation they issued is accepted. job progress arrives at most once every two seconds per job; a status change arrives at once. unknown events the server sends only the events its reference lists, but the list grows. ignore an event whose name you do not recognize instead of treating it as an error, and keep processing the events that follow. before the first supported release an event's data may change in place, together with the reference, as the http contract may. resume after disconnect replay is bounded and node-local. retain the most recent sequence or replay cursor exactly as the protocol specifies, then offer it when reconnecting to the appropriate node. a successful replay fills only the available bounded gap. if the server reports that replay is unavailable or incomplete: 1. stop applying incremental events for the affected scope. 2. refetch the authoritative resource or collection over http. 3. replace local derived state with that snapshot. 4. establish a fresh realtime position and resume incremental processing. never treat a missing event as evidence that durable state did not change. cluster fan-out and websocket publication occur after the durable commit and are best-effort effects. protocol errors after upgrade, protocol errors use stable typed websocket envelopes rather than rfc 9457 problem details. handle an unknown event or error type defensively, preserve ordering within its documented scope, and reconnect with bounded backoff. avoid tight reconnect loops after authentication or authorization rejection. a failed dpop handshake can return a replacement dpop-nonce ; reconnect with a newly signed proof rather than replaying the upgrade request byte-for-byte."
   },
   {
     "id": "page:/api/guides/uploads-and-content",
@@ -965,7 +965,7 @@ export const searchEntries = [
     "title": "Proctor API",
     "description": "Use Proctor's reviewed OpenAPI contract, explicit authentication metadata, and stable Problem Details errors.",
     "href": "/api/",
-    "searchText": "proctor api use proctor's reviewed openapi contract, explicit authentication metadata, and stable problem details errors. the contract and generated endpoint reference describe the current pre-release server operation set. the /api/v1 contract may still change in place before the first supported release; pin the reviewed openapi artifact used by an integration. use the contract as the authority the docs build publishes openapi.json directly from the tracked server contract. it does not infer endpoints from handlers or rewrite canonical descriptions. the generated reference is a reader for that contract, never a second source of route behavior. browse the endpoint groups in the sidebar. every endpoint page is generated from the same contract and displays its authentication, idempotency, and stable error-code declarations before the request and response schemas. if this is your first integration, begin with getting started, then read authentication and assurance and errors and problem details. the remaining guides cover pagination, safe retries, uploads, protected content, realtime recovery, and compatibility. the end-to-end recipes connect those rules into real workflows: installation bootstrap, account entry and recovery, access policy changes, academic structure, invitations and onboarding, exam publication, sitting control, candidate attempts, integrity review, and audit consumption. choose a product area every generated product-area group has an authored starting point that explains the surrounding workflow before you use its exact endpoint pages. product area authored entry path --- --- system bootstrap an installation authentication authentication and assurance users invite and link users academic structure model an academic structure membership and progression run onboarding imports and progression invitations and onboarding invite and link users roles and access define roles and scoped bindings access policy change the access policy safely examinations author and publish an exam sittings manage a sitting attempts and workspaces run a candidate attempt submissions run a candidate attempt integrity review review and release a result jobs durable jobs and mail mail durable jobs and mail realtime realtime and replay read every operation completely each route declares its credential requirement through x-proctor-auth . security-sensitive operations may additionally require a strong, recently authenticated interactive session and csrf proof; a personal access token is not interchangeable with that assurance. public failures use rfc 9457 problem details and stable application codes. operations declare their bounded codes in x-proctor-error-codes , and agreement tests require them to map to documented http responses. contract conventions - request and response objects are closed unless a named extension point is deliberately open. - collection traversal uses bounded opaque keyset cursors. - resource mutations authorize the current principal against current durable state at the terminal use case. - idempotent commands distinguish exact replay from reuse with different input. - successful durable state commits before transient cache, cluster, or realtime effects. read the http contract conventions before generating a client or designing an integration."
+    "searchText": "proctor api use proctor's reviewed openapi contract, explicit authentication metadata, and stable problem details errors. the contract and generated endpoint reference describe the current pre-release server operation set. the /api/v1 contract may still change in place before the first supported release; pin the reviewed openapi artifact used by an integration. use the contract as the authority the docs build publishes openapi.json directly from the tracked server contract. it does not infer endpoints from handlers or rewrite canonical descriptions. the generated reference is a reader for that contract, never a second source of route behavior. browse the endpoint groups in the sidebar. every endpoint page is generated from the same contract and displays its authentication, idempotency, and stable error-code declarations before the request and response schemas. the realtime protocol reference is generated the same way from the reviewed asyncapi contract for the websocket frames. if this is your first integration, begin with getting started, then read authentication and assurance and errors and problem details. the remaining guides cover pagination, safe retries, uploads, protected content, realtime recovery, and compatibility. the end-to-end recipes connect those rules into real workflows: installation bootstrap, account entry and recovery, access policy changes, academic structure, invitations and onboarding, exam publication, sitting control, candidate attempts, integrity review, and audit consumption. choose a product area every generated product-area group has an authored starting point that explains the surrounding workflow before you use its exact endpoint pages. product area authored entry path --- --- system bootstrap an installation authentication authentication and assurance users invite and link users academic structure model an academic structure membership and progression run onboarding imports and progression invitations and onboarding invite and link users roles and access define roles and scoped bindings access policy change the access policy safely examinations author and publish an exam sittings manage a sitting attempts and workspaces run a candidate attempt submissions run a candidate attempt integrity review review and release a result jobs durable jobs and mail mail durable jobs and mail realtime realtime and replay read every operation completely each route declares its credential requirement through x-proctor-auth . security-sensitive operations may additionally require a strong, recently authenticated interactive session and csrf proof; a personal access token is not interchangeable with that assurance. public failures use rfc 9457 problem details and stable application codes. operations declare their bounded codes in x-proctor-error-codes , and agreement tests require them to map to documented http responses. contract conventions - request and response objects are closed unless a named extension point is deliberately open. - collection traversal uses bounded opaque keyset cursors. - resource mutations authorize the current principal against current durable state at the terminal use case. - idempotent commands distinguish exact replay from reuse with different input. - successful durable state commits before transient cache, cluster, or realtime effects. read the http contract conventions before generating a client or designing an integration."
   },
   {
     "id": "page:/api/recipes/academic-structure",
@@ -1294,6 +1294,61 @@ export const searchEntries = [
     "searchText": "runacademicadministrationbatch run one bounded typed existing-user academic administration batch executes one to 200 independent existing-user administration rows. each row retains the ordinary named aggregate, authorization, audit, mail, and idempotency semantics. membership and progression post /api/v1/academic-administration-batches principal_required required authorization.denied authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found authentication.strong_required authentication.reauthentication_required idempotency.key_required idempotency.key_invalid administration.unavailable invitation.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
   },
   {
+    "id": "operation:createAcademicAdministrationPreview",
+    "kind": "endpoint",
+    "group": "Membership and progression",
+    "title": "Preview one academic administration operation over the Users a directory filter matches",
+    "description": "Proposes applying one existing-User academic administration operation to every User the User directory filter matches. The filter takes exactly the User directory's filter fields with the same validation and visibility rules, including those only an Institution-wide viewer may apply, and the request is refused as the directory would refuse it. Nothing changes yet: a preview Job resolves the filter under the caller's visibility at that moment, freezes the ordered list of matching Users, and classifies each row as `will_change`, `no_op`, or `skipped` with a closed reason. The caller's own account is always skipped, and a disable or Session revocation also skips System Administrators. More than 10,000 matching Users fails the preview with `academic_administration_preview.too_many_users`; narrow the filter. Poll the preview until it is `preview_ready` or `failed`. `class.transfer` is not offered: a transfer names the exact membership it replaces, which Student Progression chooses instead. Requires a strong, recent interactive Session.",
+    "href": "/api/reference/create-academic-administration-preview",
+    "method": "POST",
+    "path": "/api/v1/academic-administration-previews",
+    "searchText": "createacademicadministrationpreview preview one academic administration operation over the users a directory filter matches proposes applying one existing-user academic administration operation to every user the user directory filter matches. the filter takes exactly the user directory's filter fields with the same validation and visibility rules, including those only an institution-wide viewer may apply, and the request is refused as the directory would refuse it. nothing changes yet: a preview job resolves the filter under the caller's visibility at that moment, freezes the ordered list of matching users, and classifies each row as `will_change`, `no_op`, or `skipped` with a closed reason. the caller's own account is always skipped, and a disable or session revocation also skips system administrators. more than 10,000 matching users fails the preview with `academic_administration_preview.too_many_users`; narrow the filter. poll the preview until it is `preview_ready` or `failed`. `class.transfer` is not offered: a transfer names the exact membership it replaces, which student progression chooses instead. requires a strong, recent interactive session. membership and progression post /api/v1/academic-administration-previews strong_recent_session_required none authorization.denied authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found administration.unavailable authentication.mfa.unavailable invitation.unavailable onboarding_import.file_invalid onboarding_import.unavailable student_progression.conflict student_progression.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid authentication.strong_required authentication.reauthentication_required"
+  },
+  {
+    "id": "operation:getAcademicAdministrationPreview",
+    "kind": "endpoint",
+    "group": "Membership and progression",
+    "title": "Read one academic administration preview and its counts",
+    "description": "Reads the caller's own preview: its lifecycle state, operation, filter, digest and revision, and once ready its `summary` of rows by class with skipped rows counted by reason. The summary counts only the rows whose User the caller's User directory shows now, the rows the rows listing shows. After commit the row counts report execution outcomes. Only the User who created a preview, holding onboarding batch visibility at its scope, can read it: a caller without that visibility is denied, and any other User reads it as not found. Once the caller's directory would refuse the preview's filter (an activity filter after Institution-wide `user.view` is lost, a Role filter after `role.view` is lost), the read is refused with `academic_administration_preview.authorization_lost`.",
+    "href": "/api/reference/get-academic-administration-preview",
+    "method": "GET",
+    "path": "/api/v1/academic-administration-previews/{academic_administration_preview_id}",
+    "searchText": "getacademicadministrationpreview read one academic administration preview and its counts reads the caller's own preview: its lifecycle state, operation, filter, digest and revision, and once ready its `summary` of rows by class with skipped rows counted by reason. the summary counts only the rows whose user the caller's user directory shows now, the rows the rows listing shows. after commit the row counts report execution outcomes. only the user who created a preview, holding onboarding batch visibility at its scope, can read it: a caller without that visibility is denied, and any other user reads it as not found. once the caller's directory would refuse the preview's filter (an activity filter after institution-wide `user.view` is lost, a role filter after `role.view` is lost), the read is refused with `academic_administration_preview.authorization_lost`. membership and progression get /api/v1/academic-administration-previews/{academic_administration_preview_id} session_required none authorization.denied authorization.request.invalid authorization.unavailable request.invalid resource.not_found academic_administration_preview.authorization_lost administration.unavailable onboarding_import.unavailable invitation.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
+    "id": "operation:cancelAcademicAdministrationPreview",
+    "kind": "endpoint",
+    "group": "Membership and progression",
+    "title": "Cancel one unfinished academic administration preview",
+    "description": "Cancels the caller's own preview before it finishes. Rows not yet run are canceled; a row already committing finishes, and completed rows are never rolled back.",
+    "href": "/api/reference/cancel-academic-administration-preview",
+    "method": "POST",
+    "path": "/api/v1/academic-administration-previews/{academic_administration_preview_id}/cancel",
+    "searchText": "cancelacademicadministrationpreview cancel one unfinished academic administration preview cancels the caller's own preview before it finishes. rows not yet run are canceled; a row already committing finishes, and completed rows are never rolled back. membership and progression post /api/v1/academic-administration-previews/{academic_administration_preview_id}/cancel session_required none authorization.denied authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found invitation.unavailable onboarding_import.conflict onboarding_import.file_invalid onboarding_import.unavailable student_progression.conflict student_progression.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
+  },
+  {
+    "id": "operation:commitAcademicAdministrationPreview",
+    "kind": "endpoint",
+    "group": "Membership and progression",
+    "title": "Commit one exact academic administration preview",
+    "description": "Commits the caller's own ready preview when its revision and digest still match, within 15 minutes of it becoming ready as PostgreSQL measures it; after that the commit is refused with `academic_administration_preview.expired` and a new preview is needed. A preview another User created reads as not found, and a commit is refused with `academic_administration_preview.authorization_lost` once the caller's User directory would refuse the preview's filter. One execution Job then runs the frozen rows, never the filter again, so a User who starts matching after the preview is not changed. Every row is authorized again in PostgreSQL when it runs, a row whose User the caller's directory no longer shows fails with `authorization.denied`, and every remaining row fails with `authorization.denied` once the caller's directory would refuse the filter. The first commit records one batch-level audit entry with the operation, filter, counts and preview identity; each row's own audit entry names the preview and row, whether the row succeeds or fails. The response is the committed preview as the commit recorded it, and repeating the request with the same Idempotency-Key returns that same commit. Requires a strong, recent interactive Session.",
+    "href": "/api/reference/commit-academic-administration-preview",
+    "method": "POST",
+    "path": "/api/v1/academic-administration-previews/{academic_administration_preview_id}/commit",
+    "searchText": "commitacademicadministrationpreview commit one exact academic administration preview commits the caller's own ready preview when its revision and digest still match, within 15 minutes of it becoming ready as postgresql measures it; after that the commit is refused with `academic_administration_preview.expired` and a new preview is needed. a preview another user created reads as not found, and a commit is refused with `academic_administration_preview.authorization_lost` once the caller's user directory would refuse the preview's filter. one execution job then runs the frozen rows, never the filter again, so a user who starts matching after the preview is not changed. every row is authorized again in postgresql when it runs, a row whose user the caller's directory no longer shows fails with `authorization.denied`, and every remaining row fails with `authorization.denied` once the caller's directory would refuse the filter. the first commit records one batch-level audit entry with the operation, filter, counts and preview identity; each row's own audit entry names the preview and row, whether the row succeeds or fails. the response is the committed preview as the commit recorded it, and repeating the request with the same idempotency-key returns that same commit. requires a strong, recent interactive session. membership and progression post /api/v1/academic-administration-previews/{academic_administration_preview_id}/commit strong_recent_session_required required authorization.denied authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found academic_administration_preview.authorization_lost academic_administration_preview.conflict academic_administration_preview.expired administration.unavailable authentication.mfa.unavailable idempotency.key_required idempotency.key_invalid invitation.unavailable onboarding_import.file_invalid onboarding_import.unavailable student_progression.conflict student_progression.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid authentication.strong_required authentication.reauthentication_required"
+  },
+  {
+    "id": "operation:listAcademicAdministrationPreviewRows",
+    "kind": "endpoint",
+    "group": "Membership and progression",
+    "title": "Show who is in one group of an academic administration preview",
+    "description": "Pages the frozen rows of one class of the caller's own preview in row order, each naming its User and, after commit, its outcome. A row appears only while the caller's User directory shows its User now, so a viewer whose visibility narrowed since the preview froze no longer sees the Users it lost, and the read is refused with `academic_administration_preview.authorization_lost` once the caller's directory would refuse the preview's filter. A cursor continues only the group and reason it was issued for.",
+    "href": "/api/reference/list-academic-administration-preview-rows",
+    "method": "GET",
+    "path": "/api/v1/academic-administration-previews/{academic_administration_preview_id}/rows",
+    "searchText": "listacademicadministrationpreviewrows show who is in one group of an academic administration preview pages the frozen rows of one class of the caller's own preview in row order, each naming its user and, after commit, its outcome. a row appears only while the caller's user directory shows its user now, so a viewer whose visibility narrowed since the preview froze no longer sees the users it lost, and the read is refused with `academic_administration_preview.authorization_lost` once the caller's directory would refuse the preview's filter. a cursor continues only the group and reason it was issued for. membership and progression get /api/v1/academic-administration-previews/{academic_administration_preview_id}/rows session_required none authorization.denied authorization.request.invalid authorization.unavailable request.invalid resource.not_found academic_administration_preview.authorization_lost administration.unavailable onboarding_import.unavailable invitation.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
     "id": "operation:listAcademicPeriods",
     "kind": "endpoint",
     "group": "Academic structure",
@@ -1441,11 +1496,11 @@ export const searchEntries = [
     "kind": "endpoint",
     "group": "Academic structure",
     "title": "Search Classes owned by an Academic Unit",
-    "description": "Searches Classes whose Programme hierarchy is owned by the authorized Academic Unit, using bounded stable traversal. Results expose Class structure only and never enroll students or grant Class-scoped permission.",
+    "description": "Searches Classes whose Programme hierarchy is owned by the authorized Academic Unit, using bounded stable traversal. Results expose Class structure only and never enroll students or grant Class-scoped permission. Items are ordered by name, then identity, in the `dir` direction. The first page, read without a cursor, also reports `total`: the Classes the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's. Each item carries `student_count`, the Class's current members stopped at 10,000 with `student_count_is_lower_bound`, only when the caller holds class.members.view on this Academic Unit; otherwise both are omitted.",
     "href": "/api/reference/search-classes",
     "method": "GET",
     "path": "/api/v1/academic-units/{academic_unit_id}/classes",
-    "searchText": "searchclasses search classes owned by an academic unit searches classes whose programme hierarchy is owned by the authorized academic unit, using bounded stable traversal. results expose class structure only and never enroll students or grant class-scoped permission. academic structure get /api/v1/academic-units/{academic_unit_id}/classes principal_required none authentication.required authentication.token_invalid authentication.credential_ambiguous authorization.denied authorization.request.invalid authorization.unavailable request.invalid resource.not_found administration.unavailable authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+    "searchText": "searchclasses search classes owned by an academic unit searches classes whose programme hierarchy is owned by the authorized academic unit, using bounded stable traversal. results expose class structure only and never enroll students or grant class-scoped permission. items are ordered by name, then identity, in the `dir` direction. the first page, read without a cursor, also reports `total`: the classes the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. later pages carry no total; keep the first page's. each item carries `student_count`, the class's current members stopped at 10,000 with `student_count_is_lower_bound`, only when the caller holds class.members.view on this academic unit; otherwise both are omitted. academic structure get /api/v1/academic-units/{academic_unit_id}/classes principal_required none authentication.required authentication.token_invalid authentication.credential_ambiguous authorization.denied authorization.request.invalid authorization.unavailable request.invalid resource.not_found administration.unavailable authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:issueAcademicUnitRoleInvitation",
@@ -1474,11 +1529,11 @@ export const searchEntries = [
     "kind": "endpoint",
     "group": "Membership and progression",
     "title": "List effective-dated organizational members",
-    "description": "Lists authorized current or historical organizational memberships for one Academic Unit at the requested effective instant. Membership describes a relationship only and is never presented as an unrestricted permission grant. Bounded pages use immutable (user_id, id) ordering. The next_cursor freezes the effective instant or history filter, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests. Each item names the member in `user`, with email only for Institution-wide user.view, and, for a caller holding role_binding.view on this unit, lists the member's current Role Bindings scoped exactly to it in `roles_here`.",
+    "description": "Lists authorized current or historical organizational memberships for one Academic Unit at the requested effective instant. Membership describes a relationship only and is never presented as an unrestricted permission grant. Bounded pages are ordered by `sort` and `dir`, by default the membership start (`since`) ascending then identity. The first page also reports `total`, the memberships the filter matches across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. The next_cursor freezes the effective instant or history filter and the order, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests. Each item names the member in `user`, with email only for Institution-wide user.view, and, for a caller holding role_binding.view on this unit, lists the member's current Role Bindings scoped exactly to it in `roles_here`.",
     "href": "/api/reference/list-academic-unit-members",
     "method": "GET",
     "path": "/api/v1/academic-units/{academic_unit_id}/members",
-    "searchText": "listacademicunitmembers list effective-dated organizational members lists authorized current or historical organizational memberships for one academic unit at the requested effective instant. membership describes a relationship only and is never presented as an unrestricted permission grant. bounded pages use immutable (user_id, id) ordering. the next_cursor freezes the effective instant or history filter, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests. each item names the member in `user`, with email only for institution-wide user.view, and, for a caller holding role_binding.view on this unit, lists the member's current role bindings scoped exactly to it in `roles_here`. membership and progression get /api/v1/academic-units/{academic_unit_id}/members principal_required none authentication.required authentication.token_invalid authentication.credential_ambiguous authorization.denied authorization.request.invalid authorization.unavailable request.invalid resource.not_found administration.unavailable authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+    "searchText": "listacademicunitmembers list effective-dated organizational members lists authorized current or historical organizational memberships for one academic unit at the requested effective instant. membership describes a relationship only and is never presented as an unrestricted permission grant. bounded pages are ordered by `sort` and `dir`, by default the membership start (`since`) ascending then identity. the first page also reports `total`, the memberships the filter matches across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. the next_cursor freezes the effective instant or history filter and the order, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests. each item names the member in `user`, with email only for institution-wide user.view, and, for a caller holding role_binding.view on this unit, lists the member's current role bindings scoped exactly to it in `roles_here`. membership and progression get /api/v1/academic-units/{academic_unit_id}/members principal_required none authentication.required authentication.token_invalid authentication.credential_ambiguous authorization.denied authorization.request.invalid authorization.unavailable request.invalid resource.not_found administration.unavailable authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:createAcademicUnitMember",
@@ -1496,11 +1551,11 @@ export const searchEntries = [
     "kind": "endpoint",
     "group": "Academic structure",
     "title": "List or search Programmes owned by an Academic Unit",
-    "description": "Lists active Programmes directly owned by one authorized Academic Unit, optionally narrowed by the documented search input. The collection does not include Programmes owned by descendants unless requested through those Units.",
+    "description": "Lists active Programmes directly owned by one authorized Academic Unit, optionally narrowed by the documented search input. The collection does not include Programmes owned by descendants unless requested through those Units. The first page, read without a cursor, also reports `total`: the Programmes the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
     "href": "/api/reference/list-programmes",
     "method": "GET",
     "path": "/api/v1/academic-units/{academic_unit_id}/programmes",
-    "searchText": "listprogrammes list or search programmes owned by an academic unit lists active programmes directly owned by one authorized academic unit, optionally narrowed by the documented search input. the collection does not include programmes owned by descendants unless requested through those units. academic structure get /api/v1/academic-units/{academic_unit_id}/programmes principal_required none authentication.required authentication.token_invalid authentication.credential_ambiguous authorization.denied authorization.request.invalid authorization.unavailable request.invalid resource.not_found administration.unavailable authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+    "searchText": "listprogrammes list or search programmes owned by an academic unit lists active programmes directly owned by one authorized academic unit, optionally narrowed by the documented search input. the collection does not include programmes owned by descendants unless requested through those units. the first page, read without a cursor, also reports `total`: the programmes the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. later pages carry no total; keep the first page's. academic structure get /api/v1/academic-units/{academic_unit_id}/programmes principal_required none authentication.required authentication.token_invalid authentication.credential_ambiguous authorization.denied authorization.request.invalid authorization.unavailable request.invalid resource.not_found administration.unavailable authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:createProgramme",
@@ -1573,11 +1628,11 @@ export const searchEntries = [
     "kind": "endpoint",
     "group": "Roles and access",
     "title": "List authorized institution or Academic Unit audit history",
-    "description": "Lists bounded durable audit facts visible through the caller's Institution or Academic Unit authority. The projection omits raw parameters, prior state, result payloads, credentials, protected content, and unsafe internal failures. The first page, read without a cursor, also reports `total`: the audit Events the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
+    "description": "Lists bounded durable audit facts visible through the caller's Institution or Academic Unit authority, newest first unless `order=asc` asks for oldest first. The projection omits raw parameters, prior state, result payloads, credentials, protected content, and unsafe internal failures. The first page, read without a cursor, also reports `total`: the audit Events the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's. Each Event also carries a `summary` sentence in the language `Accept-Language` selects, falling back to the installation language and then English, beside the stable codes it is written from. It names the actor, the User the Event is about, and a User, Academic Unit, or Class resource by their current names only when the caller could see that record now through `user.view` or `class.members.view`, `academic_unit.view`, or `class.view`; otherwise it uses a generic noun such as \"a user\" or \"a class\". An Academic Unit auditor's summary names the action alone, never the recorded operation or the User the Event is about.",
     "href": "/api/reference/list-audit-events",
     "method": "GET",
     "path": "/api/v1/audits",
-    "searchText": "listauditevents list authorized institution or academic unit audit history lists bounded durable audit facts visible through the caller's institution or academic unit authority. the projection omits raw parameters, prior state, result payloads, credentials, protected content, and unsafe internal failures. the first page, read without a cursor, also reports `total`: the audit events the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. later pages carry no total; keep the first page's. roles and access get /api/v1/audits principal_required none authorization.denied authorization.request.invalid authorization.unavailable audit.query.invalid audit.unavailable request.invalid resource.not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+    "searchText": "listauditevents list authorized institution or academic unit audit history lists bounded durable audit facts visible through the caller's institution or academic unit authority, newest first unless `order=asc` asks for oldest first. the projection omits raw parameters, prior state, result payloads, credentials, protected content, and unsafe internal failures. the first page, read without a cursor, also reports `total`: the audit events the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. later pages carry no total; keep the first page's. each event also carries a `summary` sentence in the language `accept-language` selects, falling back to the installation language and then english, beside the stable codes it is written from. it names the actor, the user the event is about, and a user, academic unit, or class resource by their current names only when the caller could see that record now through `user.view` or `class.members.view`, `academic_unit.view`, or `class.view`; otherwise it uses a generic noun such as \"a user\" or \"a class\". an academic unit auditor's summary names the action alone, never the recorded operation or the user the event is about. roles and access get /api/v1/audits principal_required none authorization.denied authorization.request.invalid authorization.unavailable audit.query.invalid audit.unavailable request.invalid resource.not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:startBrowserInvitation",
@@ -2145,11 +2200,11 @@ export const searchEntries = [
     "kind": "endpoint",
     "group": "Membership and progression",
     "title": "List active or historical student enrollments for a Class",
-    "description": "Lists authorized student enrollments for one Class at the requested effective instant or across retained history. The roster projection contains relationship state and does not expand student credentials, answers, or unrestricted profile data. Bounded pages use immutable (user_id, id) ordering. The next_cursor freezes the effective instant or history filter, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests.",
+    "description": "Lists authorized student enrollments for one Class at the requested effective instant or across retained history. The roster projection contains relationship state and does not expand student credentials, answers, or unrestricted profile data. Bounded pages are ordered by `sort` and `dir`, by default the membership start (`enrolled`) ascending then identity. The first page also reports `total`, the memberships the filter matches across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. The next_cursor freezes the effective instant or history filter and the order, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests.",
     "href": "/api/reference/list-class-members",
     "method": "GET",
     "path": "/api/v1/classes/{class_id}/members",
-    "searchText": "listclassmembers list active or historical student enrollments for a class lists authorized student enrollments for one class at the requested effective instant or across retained history. the roster projection contains relationship state and does not expand student credentials, answers, or unrestricted profile data. bounded pages use immutable (user_id, id) ordering. the next_cursor freezes the effective instant or history filter, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests. membership and progression get /api/v1/classes/{class_id}/members principal_required none authentication.required authentication.token_invalid authentication.credential_ambiguous authorization.denied authorization.request.invalid authorization.unavailable request.invalid resource.not_found administration.unavailable authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+    "searchText": "listclassmembers list active or historical student enrollments for a class lists authorized student enrollments for one class at the requested effective instant or across retained history. the roster projection contains relationship state and does not expand student credentials, answers, or unrestricted profile data. bounded pages are ordered by `sort` and `dir`, by default the membership start (`enrolled`) ascending then identity. the first page also reports `total`, the memberships the filter matches across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. the next_cursor freezes the effective instant or history filter and the order, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests. membership and progression get /api/v1/classes/{class_id}/members principal_required none authentication.required authentication.token_invalid authentication.credential_ambiguous authorization.denied authorization.request.invalid authorization.unavailable request.invalid resource.not_found administration.unavailable authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:enrollClassMember",
@@ -3377,11 +3432,11 @@ export const searchEntries = [
     "kind": "endpoint",
     "group": "Jobs",
     "title": "List allowlisted durable Jobs",
-    "description": "Lists only Job types deliberately exposed through the public administration contract and authorized for the current principal. Private payloads, claims, worker identities, and infrastructure errors are omitted from every projection. The first page, read without a cursor, also reports `total`: the Jobs the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
+    "description": "Lists only Job types deliberately exposed through the public administration contract and authorized for the current principal, newest first by creation unless `order=asc` asks for oldest first. Private payloads, claims, worker identities, and infrastructure errors are omitted from every projection. The first page, read without a cursor, also reports `total`: the Jobs the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
     "href": "/api/reference/list-jobs",
     "method": "GET",
     "path": "/api/v1/jobs",
-    "searchText": "listjobs list allowlisted durable jobs lists only job types deliberately exposed through the public administration contract and authorized for the current principal. private payloads, claims, worker identities, and infrastructure errors are omitted from every projection. the first page, read without a cursor, also reports `total`: the jobs the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. later pages carry no total; keep the first page's. jobs get /api/v1/jobs principal_required none authorization.denied authorization.request.invalid authorization.unavailable job.query.invalid job.unavailable request.invalid resource.not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+    "searchText": "listjobs list allowlisted durable jobs lists only job types deliberately exposed through the public administration contract and authorized for the current principal, newest first by creation unless `order=asc` asks for oldest first. private payloads, claims, worker identities, and infrastructure errors are omitted from every projection. the first page, read without a cursor, also reports `total`: the jobs the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. later pages carry no total; keep the first page's. jobs get /api/v1/jobs principal_required none authorization.denied authorization.request.invalid authorization.unavailable job.query.invalid job.unavailable request.invalid resource.not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:getJob",
@@ -3432,11 +3487,11 @@ export const searchEntries = [
     "kind": "endpoint",
     "group": "Mail",
     "title": "List safe mail delivery metadata",
-    "description": "Lists authorized durable delivery metadata for the allowlisted template and filters. Recipient addresses remain masked and the response never exposes encrypted payloads, rendered message bodies, SMTP credentials, or provider diagnostics. The first page, read without a cursor, also reports `total`: the mail deliveries the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
+    "description": "Lists authorized durable delivery metadata for the allowlisted template and filters, most recently updated first unless `sort` and `dir` choose another order. Recipient addresses remain masked and the response never exposes encrypted payloads, rendered message bodies, SMTP credentials, or provider diagnostics. The first page, read without a cursor, also reports `total`: the mail deliveries the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
     "href": "/api/reference/list-mail-deliveries",
     "method": "GET",
     "path": "/api/v1/mail/deliveries",
-    "searchText": "listmaildeliveries list safe mail delivery metadata lists authorized durable delivery metadata for the allowlisted template and filters. recipient addresses remain masked and the response never exposes encrypted payloads, rendered message bodies, smtp credentials, or provider diagnostics. the first page, read without a cursor, also reports `total`: the mail deliveries the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. later pages carry no total; keep the first page's. mail get /api/v1/mail/deliveries principal_required none authorization.denied authorization.request.invalid authorization.unavailable mail.query.invalid mail.unavailable request.invalid resource.not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+    "searchText": "listmaildeliveries list safe mail delivery metadata lists authorized durable delivery metadata for the allowlisted template and filters, most recently updated first unless `sort` and `dir` choose another order. recipient addresses remain masked and the response never exposes encrypted payloads, rendered message bodies, smtp credentials, or provider diagnostics. the first page, read without a cursor, also reports `total`: the mail deliveries the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. later pages carry no total; keep the first page's. mail get /api/v1/mail/deliveries principal_required none authorization.denied authorization.request.invalid authorization.unavailable mail.query.invalid mail.unavailable request.invalid resource.not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:getMailDelivery",
@@ -3564,11 +3619,11 @@ export const searchEntries = [
     "kind": "endpoint",
     "group": "Invitations and onboarding",
     "title": "List onboarding imports within the caller's authorized scope",
-    "description": "Lists the unexpired administrative onboarding imports the caller could read one by one through its current Institution, Academic Unit, or Class onboarding authority, newest first. Items are summary projections without rows; read one import for its preview or report rows. Student progressions are listed through their own resource and never appear here.",
+    "description": "Lists the unexpired administrative onboarding imports the caller could read one by one through its current Institution, Academic Unit, or Class onboarding authority, newest first unless `order=asc` asks for oldest first. Items are summary projections without rows; read one import for its preview or report rows. Student progressions are listed through their own resource and never appear here.",
     "href": "/api/reference/list-onboarding-imports",
     "method": "GET",
     "path": "/api/v1/onboarding-imports",
-    "searchText": "listonboardingimports list onboarding imports within the caller's authorized scope lists the unexpired administrative onboarding imports the caller could read one by one through its current institution, academic unit, or class onboarding authority, newest first. items are summary projections without rows; read one import for its preview or report rows. student progressions are listed through their own resource and never appear here. invitations and onboarding get /api/v1/onboarding-imports principal_required none authorization.denied authorization.request.invalid authorization.unavailable request.invalid resource.not_found onboarding_import.unavailable invitation.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+    "searchText": "listonboardingimports list onboarding imports within the caller's authorized scope lists the unexpired administrative onboarding imports the caller could read one by one through its current institution, academic unit, or class onboarding authority, newest first unless `order=asc` asks for oldest first. items are summary projections without rows; read one import for its preview or report rows. student progressions are listed through their own resource and never appear here. invitations and onboarding get /api/v1/onboarding-imports principal_required none authorization.denied authorization.request.invalid authorization.unavailable request.invalid resource.not_found onboarding_import.unavailable invitation.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:uploadOnboardingImport",
@@ -3663,11 +3718,11 @@ export const searchEntries = [
     "kind": "endpoint",
     "group": "Academic structure",
     "title": "List Classes for a Programme Level",
-    "description": "Lists active Classes directly assigned to one authorized Programme Level. The collection returns structural Class metadata and excludes rosters, candidate Attempts, and permission grants.",
+    "description": "Lists active Classes directly assigned to one authorized Programme Level. The collection returns structural Class metadata and excludes rosters, candidate Attempts, and permission grants. Items are ordered by name, then identity, in the `dir` direction. The first page, read without a cursor, also reports `total`: the Classes the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's. Each item carries `student_count`, the Class's current members stopped at 10,000 with `student_count_is_lower_bound`, only when the caller holds class.members.view on this Programme Level; otherwise both are omitted.",
     "href": "/api/reference/list-classes",
     "method": "GET",
     "path": "/api/v1/programme-levels/{programme_level_id}/classes",
-    "searchText": "listclasses list classes for a programme level lists active classes directly assigned to one authorized programme level. the collection returns structural class metadata and excludes rosters, candidate attempts, and permission grants. academic structure get /api/v1/programme-levels/{programme_level_id}/classes principal_required none authentication.required authentication.token_invalid authentication.credential_ambiguous authorization.denied authorization.request.invalid authorization.unavailable request.invalid resource.not_found administration.unavailable authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+    "searchText": "listclasses list classes for a programme level lists active classes directly assigned to one authorized programme level. the collection returns structural class metadata and excludes rosters, candidate attempts, and permission grants. items are ordered by name, then identity, in the `dir` direction. the first page, read without a cursor, also reports `total`: the classes the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. later pages carry no total; keep the first page's. each item carries `student_count`, the class's current members stopped at 10,000 with `student_count_is_lower_bound`, only when the caller holds class.members.view on this programme level; otherwise both are omitted. academic structure get /api/v1/programme-levels/{programme_level_id}/classes principal_required none authentication.required authentication.token_invalid authentication.credential_ambiguous authorization.denied authorization.request.invalid authorization.unavailable request.invalid resource.not_found administration.unavailable authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:createClass",
@@ -3718,11 +3773,11 @@ export const searchEntries = [
     "kind": "endpoint",
     "group": "Academic structure",
     "title": "List or search Programme Levels owned by a Programme",
-    "description": "Lists active Levels directly owned by one authorized Programme with bounded stable search. The collection excludes Classes and does not imply roster or permission access.",
+    "description": "Lists active Levels directly owned by one authorized Programme with bounded stable search. The collection excludes Classes and does not imply roster or permission access. The first page, read without a cursor, also reports `total`: the Programme Levels the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
     "href": "/api/reference/list-programme-levels",
     "method": "GET",
     "path": "/api/v1/programmes/{programme_id}/levels",
-    "searchText": "listprogrammelevels list or search programme levels owned by a programme lists active levels directly owned by one authorized programme with bounded stable search. the collection excludes classes and does not imply roster or permission access. academic structure get /api/v1/programmes/{programme_id}/levels principal_required none authentication.required authentication.token_invalid authentication.credential_ambiguous authorization.denied authorization.request.invalid authorization.unavailable request.invalid resource.not_found administration.unavailable authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+    "searchText": "listprogrammelevels list or search programme levels owned by a programme lists active levels directly owned by one authorized programme with bounded stable search. the collection excludes classes and does not imply roster or permission access. the first page, read without a cursor, also reports `total`: the programme levels the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. later pages carry no total; keep the first page's. academic structure get /api/v1/programmes/{programme_id}/levels principal_required none authentication.required authentication.token_invalid authentication.credential_ambiguous authorization.denied authorization.request.invalid authorization.unavailable request.invalid resource.not_found administration.unavailable authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:createProgrammeLevel",
@@ -3817,11 +3872,11 @@ export const searchEntries = [
     "kind": "endpoint",
     "group": "Roles and access",
     "title": "List Role Bindings by user or scope",
-    "description": "Lists current and historical Role Bindings authorized for the caller, optionally narrowed to one User or exact scope. A Binding is an effective-dated permission grant; membership or affiliation alone is not returned as authority.",
+    "description": "Lists current and historical Role Bindings authorized for the caller, optionally narrowed to one User or exact scope. A Binding is an effective-dated permission grant; membership or affiliation alone is not returned as authority. The first page, read without a cursor, also reports `total`: the Role Bindings the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
     "href": "/api/reference/list-role-bindings",
     "method": "GET",
     "path": "/api/v1/role-bindings",
-    "searchText": "listrolebindings list role bindings by user or scope lists current and historical role bindings authorized for the caller, optionally narrowed to one user or exact scope. a binding is an effective-dated permission grant; membership or affiliation alone is not returned as authority. roles and access get /api/v1/role-bindings principal_required none authorization.denied authorization.request.invalid authorization.unavailable request.invalid administration.unavailable resource.not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+    "searchText": "listrolebindings list role bindings by user or scope lists current and historical role bindings authorized for the caller, optionally narrowed to one user or exact scope. a binding is an effective-dated permission grant; membership or affiliation alone is not returned as authority. the first page, read without a cursor, also reports `total`: the role bindings the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. later pages carry no total; keep the first page's. roles and access get /api/v1/role-bindings principal_required none authorization.denied authorization.request.invalid authorization.unavailable request.invalid administration.unavailable resource.not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:createRoleBinding",
@@ -4114,11 +4169,11 @@ export const searchEntries = [
     "kind": "endpoint",
     "group": "Users",
     "title": "Search the authorized User directory",
-    "description": "Searches only User profiles visible through the caller's current Institution or scoped relationships, ordered by canonical username and identity. Disabled Users remain concealed unless an Institution-wide user viewer explicitly requests them. Each item carries a `summary`: the User's current Affiliations with the current Academic Units the caller can see, and, for a caller holding role_binding.view, the current Role Bindings inside that authority's scopes, each list bounded and followed by a count of the rest. The first page, read without a cursor, also reports `total`: the Users the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
+    "description": "Searches only User profiles visible through the caller's current Institution or scoped relationships, ordered by canonical username and identity unless `sort` and `dir` choose another order. Disabled Users remain concealed unless an Institution-wide user viewer explicitly requests them. Each item carries a `summary`: the User's current Affiliations with the current Academic Units the caller can see, and, for a caller holding role_binding.view, the current Role Bindings inside that authority's scopes, each list bounded and followed by a count of the rest. The first page, read without a cursor, also reports `total`: the Users the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
     "href": "/api/reference/search-users",
     "method": "GET",
     "path": "/api/v1/users",
-    "searchText": "searchusers search the authorized user directory searches only user profiles visible through the caller's current institution or scoped relationships, ordered by canonical username and identity. disabled users remain concealed unless an institution-wide user viewer explicitly requests them. each item carries a `summary`: the user's current affiliations with the current academic units the caller can see, and, for a caller holding role_binding.view, the current role bindings inside that authority's scopes, each list bounded and followed by a count of the rest. the first page, read without a cursor, also reports `total`: the users the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. later pages carry no total; keep the first page's. users get /api/v1/users principal_required none authorization.denied authorization.request.invalid authorization.unavailable request.invalid user.invalid administration.unavailable resource.not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+    "searchText": "searchusers search the authorized user directory searches only user profiles visible through the caller's current institution or scoped relationships, ordered by canonical username and identity unless `sort` and `dir` choose another order. disabled users remain concealed unless an institution-wide user viewer explicitly requests them. each item carries a `summary`: the user's current affiliations with the current academic units the caller can see, and, for a caller holding role_binding.view, the current role bindings inside that authority's scopes, each list bounded and followed by a count of the rest. the first page, read without a cursor, also reports `total`: the users the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. later pages carry no total; keep the first page's. users get /api/v1/users principal_required none authorization.denied authorization.request.invalid authorization.unavailable request.invalid user.invalid administration.unavailable resource.not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:getCurrentUserProfile",
@@ -4136,11 +4191,11 @@ export const searchEntries = [
     "kind": "endpoint",
     "group": "Authentication",
     "title": "List the current User's own account history",
-    "description": "Returns one page of the current Session User's own account history, newest first unless `order=asc` asks for oldest first. The first page, read without a cursor, also carries `total`: the number of events the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's. Reading the first page oldest first reaches the end of the history without counting pages. The history holds events about the User's account, whoever performed them, and account-relevant events the User performed on anything else. Each item carries a stable `event` name from a closed catalogue, which clients label themselves; rows outside the catalogue and unfinished attempts are never returned. Another person is never named: the actor is only `self`, `administrator`, or `system`, and the IP address and user agent appear only on the User's own actions. A resource identity appears only when the resource is the User, the Institution, or an Academic Unit or Class the User has or had a membership or Role Binding at. Personal Access Tokens cannot read this history. Reading it records no authorization decision.",
+    "description": "Returns one page of the current Session User's own account history, newest first unless `order=asc` asks for oldest first. The first page, read without a cursor, also carries `total`: the number of events the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's. Reading the first page oldest first reaches the end of the history without counting pages. The history holds events about the User's account, whoever performed them, and account-relevant events the User performed on anything else. Each item carries a stable `event` name from a closed catalogue, which clients label themselves; rows outside the catalogue and unfinished attempts are never returned. Another person is never named: the actor is only `self`, `administrator`, or `system`, and the IP address and user agent appear only on the User's own actions. A resource identity appears only when the resource is the User, the Institution, or an Academic Unit or Class the User has or had a membership or Role Binding at. Each item also carries a `summary` sentence in the language `Accept-Language` selects, falling back to the installation language and then English. It keeps the same mask: the actor is \"you\", \"an administrator\", or \"the system\", and no other person is ever named. It names an Academic Unit or Class only where the resource identity appears, and a Role only when the event bound it to the User; otherwise it uses a generic noun such as \"a class\". Personal Access Tokens cannot read this history. Reading it records no authorization decision.",
     "href": "/api/reference/list-current-user-audit-events",
     "method": "GET",
     "path": "/api/v1/users/me/audits",
-    "searchText": "listcurrentuserauditevents list the current user's own account history returns one page of the current session user's own account history, newest first unless `order=asc` asks for oldest first. the first page, read without a cursor, also carries `total`: the number of events the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. later pages carry no total; keep the first page's. reading the first page oldest first reaches the end of the history without counting pages. the history holds events about the user's account, whoever performed them, and account-relevant events the user performed on anything else. each item carries a stable `event` name from a closed catalogue, which clients label themselves; rows outside the catalogue and unfinished attempts are never returned. another person is never named: the actor is only `self`, `administrator`, or `system`, and the ip address and user agent appear only on the user's own actions. a resource identity appears only when the resource is the user, the institution, or an academic unit or class the user has or had a membership or role binding at. personal access tokens cannot read this history. reading it records no authorization decision. authentication get /api/v1/users/me/audits session_required none audit.query.invalid audit.unavailable request.invalid authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+    "searchText": "listcurrentuserauditevents list the current user's own account history returns one page of the current session user's own account history, newest first unless `order=asc` asks for oldest first. the first page, read without a cursor, also carries `total`: the number of events the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. later pages carry no total; keep the first page's. reading the first page oldest first reaches the end of the history without counting pages. the history holds events about the user's account, whoever performed them, and account-relevant events the user performed on anything else. each item carries a stable `event` name from a closed catalogue, which clients label themselves; rows outside the catalogue and unfinished attempts are never returned. another person is never named: the actor is only `self`, `administrator`, or `system`, and the ip address and user agent appear only on the user's own actions. a resource identity appears only when the resource is the user, the institution, or an academic unit or class the user has or had a membership or role binding at. each item also carries a `summary` sentence in the language `accept-language` selects, falling back to the installation language and then english. it keeps the same mask: the actor is \"you\", \"an administrator\", or \"the system\", and no other person is ever named. it names an academic unit or class only where the resource identity appears, and a role only when the event bound it to the user; otherwise it uses a generic noun such as \"a class\". personal access tokens cannot read this history. reading it records no authorization decision. authentication get /api/v1/users/me/audits session_required none audit.query.invalid audit.unavailable request.invalid authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:getCurrentUserContext",
@@ -4174,6 +4229,17 @@ export const searchEntries = [
     "method": "DELETE",
     "path": "/api/v1/users/me/desktop-registrations/{desktop_registration_id}",
     "searchText": "revokedesktopregistration irreversibly revoke one desktop registration requires strong recent interactive authentication and atomically revokes the registration and all bound session credential families. authentication delete /api/v1/users/me/desktop-registrations/{desktop_registration_id} strong_recent_session_required none desktop_registration.unavailable request.invalid resource.not_found audit.unavailable authentication.session_required authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid authentication.strong_required authentication.reauthentication_required"
+  },
+  {
+    "id": "operation:renameDesktopRegistration",
+    "kind": "endpoint",
+    "group": "Authentication",
+    "title": "Rename one Desktop Registration",
+    "description": "Gives one of the current User's active Desktop Registrations the name they chose. The name is trimmed, loses bidirectional and invisible formatting code points, and must be 1 to 128 characters without control characters. It labels the device in the User's own registration and Session lists, and a later Desktop sign-in with the same key keeps it instead of the device name the Desktop reports. Renaming changes no key, Session, or credential, so any interactive Session may do it without recent authentication; Personal Access Tokens cannot. Repeating the request with the same name leaves the same result. A revoked registration is security history and cannot be renamed; a registration of another User is not found. Every rename is audited and appears in the User's own account history.",
+    "href": "/api/reference/rename-desktop-registration",
+    "method": "PATCH",
+    "path": "/api/v1/users/me/desktop-registrations/{desktop_registration_id}",
+    "searchText": "renamedesktopregistration rename one desktop registration gives one of the current user's active desktop registrations the name they chose. the name is trimmed, loses bidirectional and invisible formatting code points, and must be 1 to 128 characters without control characters. it labels the device in the user's own registration and session lists, and a later desktop sign-in with the same key keeps it instead of the device name the desktop reports. renaming changes no key, session, or credential, so any interactive session may do it without recent authentication; personal access tokens cannot. repeating the request with the same name leaves the same result. a revoked registration is security history and cannot be renamed; a registration of another user is not found. every rename is audited and appears in the user's own account history. authentication patch /api/v1/users/me/desktop-registrations/{desktop_registration_id} session_required none desktop_registration.invalid desktop_registration.revoked desktop_registration.unavailable request.invalid resource.not_found audit.unavailable authentication.session_required authentication.reauthentication_required authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
   },
   {
     "id": "operation:listCandidateExamActivity",
@@ -4306,6 +4372,17 @@ export const searchEntries = [
     "method": "POST",
     "path": "/api/v1/users/me/sessions/revoke-others",
     "searchText": "revokeothercurrentusersessions sign out every other current-user session revokes every active session belonging to the current user except the session making the request, which stays signed in; its cookies and credentials are left in place. the response reports how many sessions were revoked, which is zero when no other session was active. a personal access token has no session to keep and is refused. authentication post /api/v1/users/me/sessions/revoke-others session_required none authentication.internal audit.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
+  },
+  {
+    "id": "operation:renameCurrentUserSession",
+    "kind": "endpoint",
+    "group": "Authentication",
+    "title": "Rename one current-user session",
+    "description": "Sets the device name of one of the current User's live browser or CLI Sessions. The name is trimmed, loses bidirectional and invisible formatting code points, and must be 1 to 128 characters without control characters. A Desktop Session is named by its Desktop Registration, so renaming one is refused with session.desktop_named_by_registration, whose fields.desktop_registration_id names the registration to rename through renameDesktopRegistration instead. Renaming changes no credential, so any interactive Session may do it without recent authentication; Personal Access Tokens cannot. Repeating the request with the same name leaves the same result. A Session of another User, or one that is revoked or expired, is not found. Every rename is audited and appears in the User's own account history.",
+    "href": "/api/reference/rename-current-user-session",
+    "method": "PATCH",
+    "path": "/api/v1/users/me/sessions/{session_id}",
+    "searchText": "renamecurrentusersession rename one current-user session sets the device name of one of the current user's live browser or cli sessions. the name is trimmed, loses bidirectional and invisible formatting code points, and must be 1 to 128 characters without control characters. a desktop session is named by its desktop registration, so renaming one is refused with session.desktop_named_by_registration, whose fields.desktop_registration_id names the registration to rename through renamedesktopregistration instead. renaming changes no credential, so any interactive session may do it without recent authentication; personal access tokens cannot. repeating the request with the same name leaves the same result. a session of another user, or one that is revoked or expired, is not found. every rename is audited and appears in the user's own account history. authentication patch /api/v1/users/me/sessions/{session_id} session_required none request.invalid session.id.invalid session.invalid session.not_found session.desktop_named_by_registration authentication.session_required authentication.reauthentication_required authentication.internal audit.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
   },
   {
     "id": "operation:getCurrentUserSettings",
@@ -4592,5 +4669,483 @@ export const searchEntries = [
     "method": "GET",
     "path": "/health/ready",
     "searchText": "getreadiness check service readiness reports whether this node and its required dependencies are ready to serve application traffic. orchestrators should remove a failing node from service while continuing to use liveness to decide whether the process needs replacement. system get /health/ready public none health.not_ready"
+  },
+  {
+    "id": "realtime:overview",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Realtime Protocol",
+    "description": "The one authenticated WebSocket of a Proctor installation.",
+    "href": "/api/reference/realtime-protocol/",
+    "path": "/api/v1/websocket",
+    "searchText": "realtime protocol websocket /api/v1/websocket open it with the http upgrade described by the openapi operation connectwebsocket, which owns authentication, origin, and the connection_id and sequence_number resume parameters. every frame is one json text message. the server sends events, each with a sequence that increases by one; the client sends commands, each with a sequence it chooses, and the reply carries that sequence back. clients ignore an event name they do not know."
+  },
+  {
+    "id": "realtime:academic_unit_archived",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Academic Unit archived",
+    "description": "Refetch the Academic Unit. The event has no data.",
+    "href": "/api/reference/realtime-protocol/academic-unit-archived",
+    "searchText": "academic_unit_archived academic_unit_archived academic unit archived refetch the academic unit. the event has no data. delivered to connections that subscribe to academic_unit.view on the academic unit. event institution"
+  },
+  {
+    "id": "realtime:academic_unit_created",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Academic Unit created",
+    "description": "Refetch the Academic Unit. The event has no data.",
+    "href": "/api/reference/realtime-protocol/academic-unit-created",
+    "searchText": "academic_unit_created academic_unit_created academic unit created refetch the academic unit. the event has no data. delivered to connections that subscribe to academic_unit.view on the academic unit. event institution"
+  },
+  {
+    "id": "realtime:academic_unit_updated",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Academic Unit updated",
+    "description": "Refetch the Academic Unit. The event has no data.",
+    "href": "/api/reference/realtime-protocol/academic-unit-updated",
+    "searchText": "academic_unit_updated academic_unit_updated academic unit updated refetch the academic unit. the event has no data. delivered to connections that subscribe to academic_unit.view on the academic unit. event institution"
+  },
+  {
+    "id": "realtime:access_policy_changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Access Policy changed",
+    "description": "Refetch the Access Policy; the event carries only its new revision.",
+    "href": "/api/reference/realtime-protocol/access-policy-changed",
+    "searchText": "access_policy_changed access_policy_changed access policy changed refetch the access policy; the event carries only its new revision. delivered to connections that subscribe to access_policy.view on the institution. event institution"
+  },
+  {
+    "id": "realtime:candidate.exam_activity.changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Candidate Exam activity changed",
+    "description": "Refetch the candidate's Exam activity.",
+    "href": "/api/reference/realtime-protocol/candidate-exam-activity-changed",
+    "searchText": "candidate.exam_activity.changed candidate.exam_activity.changed candidate exam activity changed refetch the candidate's exam activity. delivered to the addressed user's connections. event sittings"
+  },
+  {
+    "id": "realtime:command_error",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Command error",
+    "description": "A command was refused.",
+    "href": "/api/reference/realtime-protocol/command-error",
+    "searchText": "command_error command_error command error the connection stays open. a rate-limited command carries retry_after_seconds; 64 consecutive refusals close the connection with code 4005. reply"
+  },
+  {
+    "id": "realtime:current_user.context.changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Current user context changed",
+    "description": "Refetch the current user's navigation context.",
+    "href": "/api/reference/realtime-protocol/current-user-context-changed",
+    "searchText": "current_user.context.changed current_user.context.changed current user context changed refetch the current user's navigation context. delivered to the addressed user's connections. event users"
+  },
+  {
+    "id": "realtime:current_user.sessions.changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Current user Sessions changed",
+    "description": "Refetch the current user's Sessions.",
+    "href": "/api/reference/realtime-protocol/current-user-sessions-changed",
+    "searchText": "current_user.sessions.changed current_user.sessions.changed current user sessions changed refetch the current user's sessions; one of them was revoked, ended or renamed. the connections of a revoked session close instead. delivered to the addressed user's connections. event users"
+  },
+  {
+    "id": "realtime:exam_archived",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Exam archived",
+    "description": "The Exam was archived.",
+    "href": "/api/reference/realtime-protocol/exam-archived",
+    "searchText": "exam_archived exam_archived exam archived the exam was archived. delivered to connections that subscribe to exam.view on the exam. event exams"
+  },
+  {
+    "id": "realtime:exam_attempt_access_reallowed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Your Attempt was re-allowed",
+    "description": "Tells the candidate their Attempt is active again.",
+    "href": "/api/reference/realtime-protocol/exam-attempt-access-reallowed",
+    "searchText": "exam_attempt_access_reallowed exam_attempt_access_reallowed your attempt was re-allowed tells the candidate their attempt is active again. delivered to the addressed user's connections that subscribe to exam.sitting.participate on the exam sitting. event attempts"
+  },
+  {
+    "id": "realtime:exam_attempt_access_suspended",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Your Attempt was suspended",
+    "description": "Tells the candidate their Attempt is suspended, with a safe reason.",
+    "href": "/api/reference/realtime-protocol/exam-attempt-access-suspended",
+    "searchText": "exam_attempt_access_suspended exam_attempt_access_suspended your attempt was suspended tells the candidate their attempt is suspended, with a safe reason. delivered to the addressed user's connections that subscribe to exam.sitting.participate on the exam sitting. event attempts"
+  },
+  {
+    "id": "realtime:exam_attempt_connection_closed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Attempt Connection closed",
+    "description": "An Attempt Connection closed, and why.",
+    "href": "/api/reference/realtime-protocol/exam-attempt-connection-closed",
+    "searchText": "exam_attempt_connection_closed exam_attempt_connection_closed attempt connection closed an attempt connection closed, and why. delivered to connections that subscribe to exam.sitting.view on the exam sitting. event attempts"
+  },
+  {
+    "id": "realtime:exam_attempt_connection_opened",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Attempt Connection opened",
+    "description": "A candidate's desktop was admitted and holds an open Attempt Connection.",
+    "href": "/api/reference/realtime-protocol/exam-attempt-connection-opened",
+    "searchText": "exam_attempt_connection_opened exam_attempt_connection_opened attempt connection opened a candidate's desktop was admitted and holds an open attempt connection. delivered to connections that subscribe to exam.sitting.view on the exam sitting. event attempts"
+  },
+  {
+    "id": "realtime:exam_attempt_focus_warning",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Focus Loss warning",
+    "description": "Warns the candidate that their Focus Loss crossed the policy threshold.",
+    "href": "/api/reference/realtime-protocol/exam-attempt-focus-warning",
+    "searchText": "exam_attempt_focus_warning exam_attempt_focus_warning focus loss warning warns the candidate that their focus loss crossed the policy threshold. delivered to the addressed user's connections that subscribe to exam.sitting.participate on the exam sitting. event attempts"
+  },
+  {
+    "id": "realtime:exam_attempt_integrity_flagged",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Attempt Integrity Flag raised",
+    "description": "A Focus Loss Integrity Flag was raised on an Attempt.",
+    "href": "/api/reference/realtime-protocol/exam-attempt-integrity-flagged",
+    "searchText": "exam_attempt_integrity_flagged exam_attempt_integrity_flagged attempt integrity flag raised a focus loss integrity flag was raised on an attempt. delivered to connections that subscribe to exam.sitting.view on the exam sitting. event attempts"
+  },
+  {
+    "id": "realtime:exam_attempt_reallowed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Attempt re-allowed",
+    "description": "An Attempt Suspension was closed and the Attempt is active again.",
+    "href": "/api/reference/realtime-protocol/exam-attempt-reallowed",
+    "searchText": "exam_attempt_reallowed exam_attempt_reallowed attempt re-allowed an attempt suspension was closed and the attempt is active again. delivered to connections that subscribe to exam.sitting.view on the exam sitting. event attempts"
+  },
+  {
+    "id": "realtime:exam_attempt_submitted",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Attempt submitted",
+    "description": "An Attempt was submitted. Sent to Sitting viewers.",
+    "href": "/api/reference/realtime-protocol/exam-attempt-submitted",
+    "searchText": "exam_attempt_submitted exam_attempt_submitted attempt submitted an attempt was submitted. sent to sitting viewers. delivered to connections that subscribe to exam.sitting.view on the exam sitting. event attempts"
+  },
+  {
+    "id": "realtime:exam_attempt_submitted_for_candidate",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Attempt submitted, for the candidate",
+    "description": "The candidate's own copy of the submission.",
+    "href": "/api/reference/realtime-protocol/exam-attempt-submitted-for-candidate",
+    "searchText": "exam_attempt_submitted exam_attempt_submitted_for_candidate attempt submitted, for the candidate the candidate's own copy of the submission. delivered to the addressed user's connections that subscribe to exam.sitting.participate on the exam sitting. event attempts"
+  },
+  {
+    "id": "realtime:exam_attempt_suspended",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Attempt suspended",
+    "description": "An Attempt was suspended by policy or kicked by an Exam Manager.",
+    "href": "/api/reference/realtime-protocol/exam-attempt-suspended",
+    "searchText": "exam_attempt_suspended exam_attempt_suspended attempt suspended an attempt was suspended by policy or kicked by an exam manager. delivered to connections that subscribe to exam.sitting.view on the exam sitting. event attempts"
+  },
+  {
+    "id": "realtime:exam_attempt_workspace_changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Attempt Workspace changed",
+    "description": "Refetch the candidate's Attempt Workspace after one committed mutation.",
+    "href": "/api/reference/realtime-protocol/exam-attempt-workspace-changed",
+    "searchText": "exam_attempt_workspace_changed exam_attempt_workspace_changed attempt workspace changed refetch the candidate's attempt workspace after one committed mutation. delivered to the addressed user's connections that subscribe to exam.sitting.participate on the exam sitting. event attempts"
+  },
+  {
+    "id": "realtime:exam_created",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Exam created",
+    "description": "An Exam was created. The event has no data.",
+    "href": "/api/reference/realtime-protocol/exam-created",
+    "searchText": "exam_created exam_created exam created an exam was created. the event has no data. delivered to connections that subscribe to exam.view on the exam. event exams"
+  },
+  {
+    "id": "realtime:exam_draft_updated",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Exam Draft updated",
+    "description": "The Exam's Draft text or policy changed.",
+    "href": "/api/reference/realtime-protocol/exam-draft-updated",
+    "searchText": "exam_draft_updated exam_draft_updated exam draft updated the exam's draft text or policy changed. delivered to connections that subscribe to exam.view on the exam. event exams"
+  },
+  {
+    "id": "realtime:exam_integrity_discrepancy_recorded",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Integrity Discrepancy recorded",
+    "description": "A Focus Loss claim arrived after its Attempt or Sitting ended.",
+    "href": "/api/reference/realtime-protocol/exam-integrity-discrepancy-recorded",
+    "searchText": "exam_integrity_discrepancy_recorded exam_integrity_discrepancy_recorded integrity discrepancy recorded a focus loss claim arrived after its attempt or sitting ended. delivered to connections that subscribe to submission.view on the submission. event integrity review"
+  },
+  {
+    "id": "realtime:exam_integrity_review_changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Integrity Review changed",
+    "description": "The Submission's Integrity Review changed.",
+    "href": "/api/reference/realtime-protocol/exam-integrity-review-changed",
+    "searchText": "exam_integrity_review_changed exam_integrity_review_changed integrity review changed the submission's integrity review changed. delivered to connections that subscribe to submission.view on the submission. event integrity review"
+  },
+  {
+    "id": "realtime:exam_integrity_review_finalized",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Integrity Review finalized",
+    "description": "The Submission's Integrity Review was finalized and its result is still withheld.",
+    "href": "/api/reference/realtime-protocol/exam-integrity-review-finalized",
+    "searchText": "exam_integrity_review_finalized exam_integrity_review_finalized integrity review finalized the submission's integrity review was finalized and its result is still withheld. delivered to connections that subscribe to submission.view on the submission. event integrity review"
+  },
+  {
+    "id": "realtime:exam_manager_changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Exam Manager changed",
+    "description": "A User was added as an Exam Manager or removed.",
+    "href": "/api/reference/realtime-protocol/exam-manager-changed",
+    "searchText": "exam_manager_changed exam_manager_changed exam manager changed a user was added as an exam manager or removed. delivered to connections that subscribe to exam.view on the exam. event exams"
+  },
+  {
+    "id": "realtime:exam_owner_transferred",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Exam owner transferred",
+    "description": "The Exam has a new owner.",
+    "href": "/api/reference/realtime-protocol/exam-owner-transferred",
+    "searchText": "exam_owner_transferred exam_owner_transferred exam owner transferred the exam has a new owner. delivered to connections that subscribe to exam.view on the exam. event exams"
+  },
+  {
+    "id": "realtime:exam_revision_published",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Exam Revision published",
+    "description": "A new Exam Revision was published.",
+    "href": "/api/reference/realtime-protocol/exam-revision-published",
+    "searchText": "exam_revision_published exam_revision_published exam revision published a new exam revision was published. delivered to connections that subscribe to exam.view on the exam. event exams"
+  },
+  {
+    "id": "realtime:exam_sitting_canceled",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Sitting canceled",
+    "description": "A Sitting was canceled before it opened.",
+    "href": "/api/reference/realtime-protocol/exam-sitting-canceled",
+    "searchText": "exam_sitting_canceled exam_sitting_canceled sitting canceled a sitting was canceled before it opened. delivered to connections that subscribe to exam.sitting.view on the exam sitting. event sittings"
+  },
+  {
+    "id": "realtime:exam_sitting_content_corrected",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Sitting content corrected",
+    "description": "A live correction moved the Sitting to another Exam Revision. Sent to Sitting viewers.",
+    "href": "/api/reference/realtime-protocol/exam-sitting-content-corrected",
+    "searchText": "exam_sitting_content_corrected exam_sitting_content_corrected sitting content corrected a live correction moved the sitting to another exam revision. sent to sitting viewers. delivered to connections that subscribe to exam.sitting.view on the exam sitting. event sittings"
+  },
+  {
+    "id": "realtime:exam_sitting_content_corrected_for_candidate",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Sitting content corrected, for candidates",
+    "description": "The same correction, sent to candidates who participate in the Sitting.",
+    "href": "/api/reference/realtime-protocol/exam-sitting-content-corrected-for-candidate",
+    "searchText": "exam_sitting_content_corrected exam_sitting_content_corrected_for_candidate sitting content corrected, for candidates the same correction, sent to candidates who participate in the sitting. delivered to connections that subscribe to exam.sitting.participate on the exam sitting. event sittings"
+  },
+  {
+    "id": "realtime:exam_sitting_lifecycle_changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Sitting lifecycle changed",
+    "description": "A Sitting opened, paused, resumed, was extended, or closed. Sent to Sitting viewers.",
+    "href": "/api/reference/realtime-protocol/exam-sitting-lifecycle-changed",
+    "searchText": "exam_sitting_lifecycle_changed exam_sitting_lifecycle_changed sitting lifecycle changed a sitting opened, paused, resumed, was extended, or closed. sent to sitting viewers. delivered to connections that subscribe to exam.sitting.view on the exam sitting. event sittings"
+  },
+  {
+    "id": "realtime:exam_sitting_lifecycle_changed_for_candidate",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Sitting lifecycle changed, for candidates",
+    "description": "The same lifecycle fact, sent to candidates who participate in the Sitting.",
+    "href": "/api/reference/realtime-protocol/exam-sitting-lifecycle-changed-for-candidate",
+    "searchText": "exam_sitting_lifecycle_changed exam_sitting_lifecycle_changed_for_candidate sitting lifecycle changed, for candidates the same lifecycle fact, sent to candidates who participate in the sitting. delivered to connections that subscribe to exam.sitting.participate on the exam sitting. event sittings"
+  },
+  {
+    "id": "realtime:exam_sitting_schedule_updated",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Sitting schedule updated",
+    "description": "A scheduled Sitting's Exam Revision, Class, start or end changed.",
+    "href": "/api/reference/realtime-protocol/exam-sitting-schedule-updated",
+    "searchText": "exam_sitting_schedule_updated exam_sitting_schedule_updated sitting schedule updated a scheduled sitting's exam revision, class, start or end changed. delivered to connections that subscribe to exam.sitting.view on the exam sitting. event sittings"
+  },
+  {
+    "id": "realtime:exam_sitting_scheduled",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Sitting scheduled",
+    "description": "A Sitting was scheduled.",
+    "href": "/api/reference/realtime-protocol/exam-sitting-scheduled",
+    "searchText": "exam_sitting_scheduled exam_sitting_scheduled sitting scheduled a sitting was scheduled. delivered to connections that subscribe to exam.sitting.view on the exam sitting. event sittings"
+  },
+  {
+    "id": "realtime:exam_starter_workspace_changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Starter Workspace changed",
+    "description": "One Starter Workspace entry was created, moved, replaced or removed.",
+    "href": "/api/reference/realtime-protocol/exam-starter-workspace-changed",
+    "searchText": "exam_starter_workspace_changed exam_starter_workspace_changed starter workspace changed one starter workspace entry was created, moved, replaced or removed. delivered to connections that subscribe to exam.view on the exam. event exams"
+  },
+  {
+    "id": "realtime:exam_student_result_released",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Student Result released",
+    "description": "The Submission's Student Result was released. Sent to those who may view the Submission.",
+    "href": "/api/reference/realtime-protocol/exam-student-result-released",
+    "searchText": "exam_student_result_released exam_student_result_released student result released the submission's student result was released. sent to those who may view the submission. delivered to connections that subscribe to submission.view on the submission. event integrity review"
+  },
+  {
+    "id": "realtime:exam_student_result_released_for_candidate",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Student Result released, for the candidate",
+    "description": "Tells the candidate alone that their Student Result was released.",
+    "href": "/api/reference/realtime-protocol/exam-student-result-released-for-candidate",
+    "searchText": "exam_student_result_released exam_student_result_released_for_candidate student result released, for the candidate tells the candidate alone that their student result was released. delivered to the addressed user's connections. event integrity review"
+  },
+  {
+    "id": "realtime:hello",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Hello",
+    "description": "The first event on every connection.",
+    "href": "/api/reference/realtime-protocol/hello",
+    "searchText": "hello hello hello identifies the connection. a client keeps connection_id and the sequence of the last event it processed, and offers both as the handshake's connection_id and sequence_number when it reconnects. protocol"
+  },
+  {
+    "id": "realtime:invitation.changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Invitation changed",
+    "description": "Refetch an Invitation you issued; it reached a new state.",
+    "href": "/api/reference/realtime-protocol/invitation-changed",
+    "searchText": "invitation.changed invitation.changed invitation changed refetch an invitation you issued; it reached a new state, today when it is accepted. delivered to the connections of the user who issued it. event onboarding"
+  },
+  {
+    "id": "realtime:job.changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Job changed",
+    "description": "Refetch the Job; its status changed or its progress advanced.",
+    "href": "/api/reference/realtime-protocol/job-changed",
+    "searchText": "job.changed job.changed job changed refetch the job; its status changed or its progress advanced. sent when a node claims, completes, cancels or retries an operator-visible job, and on its checkpoints at most once every 2 seconds per job on each node. progress is present only for a job type that reports progress. delivered to connections that subscribe to job.view on the institution. event jobs"
+  },
+  {
+    "id": "realtime:manager.sitting_board.changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Sitting board changed",
+    "description": "Refetch the manager board of one Sitting.",
+    "href": "/api/reference/realtime-protocol/manager-sitting-board-changed",
+    "searchText": "manager.sitting_board.changed manager.sitting_board.changed sitting board changed refetch the manager board of one sitting. delivered to connections that subscribe to exam.sitting.view on the exam sitting. event sittings"
+  },
+  {
+    "id": "realtime:onboarding_import.changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Onboarding import changed",
+    "description": "Refetch the onboarding import; it entered a new state.",
+    "href": "/api/reference/realtime-protocol/onboarding-import-changed",
+    "searchText": "onboarding_import.changed onboarding_import.changed onboarding import changed refetch the onboarding import; it entered a new state. one event is sent for the import's own scope (the institution, an academic unit or a class) and one for each scope that encloses it, so a connection that subscribes to onboarding_batch.view on any scope that can see the import hears of it, and a connection subscribed at several of those scopes may hear of it more than once. student progressions are not announced. event onboarding"
+  },
+  {
+    "id": "realtime:onboarding_import.changed_for_creator",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Onboarding import changed (creator)",
+    "description": "Refetch an onboarding import you created; it entered a new state.",
+    "href": "/api/reference/realtime-protocol/onboarding-import-changed-for-creator",
+    "searchText": "onboarding_import.changed onboarding_import.changed_for_creator onboarding import changed (creator) refetch an onboarding import you created; it entered a new state. imports that only their creator may read, such as academic administration filter previews, are delivered to the creator's connections alone instead of to onboarding_batch.view subscribers. event onboarding"
+  },
+  {
+    "id": "realtime:ping",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Ping",
+    "description": "Checks the connection at the application level.",
+    "href": "/api/reference/realtime-protocol/ping",
+    "searchText": "ping ping ping has no data. the server replies with pong. it does not renew an attempt participation. command"
+  },
+  {
+    "id": "realtime:pong",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Pong",
+    "description": "The reply to ping.",
+    "href": "/api/reference/realtime-protocol/pong",
+    "searchText": "pong pong pong the reply to ping. reply"
+  },
+  {
+    "id": "realtime:resync_required",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Resynchronization required",
+    "description": "Missed events could not be replayed.",
+    "href": "/api/reference/realtime-protocol/resync-required",
+    "searchText": "resync_required resync_required resynchronization required follows hello when a reconnecting client asked to resume but the node no longer holds the missed events. refetch authoritative state over http before applying further events. protocol"
+  },
+  {
+    "id": "realtime:subscribe",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Subscribe",
+    "description": "Starts receiving the events authorized by one action on one resource.",
+    "href": "/api/reference/realtime-protocol/subscribe",
+    "searchText": "subscribe subscribe subscribe each subscription is authorized on its own; the handshake grants none. subscribing twice to the same pair succeeds once. a connection holds at most 256 subscriptions. command"
+  },
+  {
+    "id": "realtime:subscription_reply",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Subscription reply",
+    "description": "The subscribe or unsubscribe command succeeded.",
+    "href": "/api/reference/realtime-protocol/subscription-reply",
+    "searchText": "subscription_reply subscription_reply subscription reply the subscribe or unsubscribe command succeeded. reply"
+  },
+  {
+    "id": "realtime:unsubscribe",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Unsubscribe",
+    "description": "Stops receiving the events of one subscription.",
+    "href": "/api/reference/realtime-protocol/unsubscribe",
+    "searchText": "unsubscribe unsubscribe unsubscribe succeeds whether or not the subscription was held. the sitting subscription an attempt connection holds is kept until the connection unbinds. command"
+  },
+  {
+    "id": "realtime:user_profile_picture_changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Profile picture changed",
+    "description": "The User's profile picture is now another File Entry.",
+    "href": "/api/reference/realtime-protocol/user-profile-picture-changed",
+    "searchText": "user_profile_picture_changed user_profile_picture_changed profile picture changed the user's profile picture is now another file entry. delivered to the addressed user's connections. event users"
+  },
+  {
+    "id": "realtime:user_settings_changed",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "User Settings changed",
+    "description": "Refetch the User Settings document; the event carries only its new revision.",
+    "href": "/api/reference/realtime-protocol/user-settings-changed",
+    "searchText": "user_settings_changed user_settings_changed user settings changed refetch the user settings document; the event carries only its new revision. delivered to the addressed user's connections. event users"
   }
 ] satisfies readonly SearchEntry[];

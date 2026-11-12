@@ -1,0 +1,27 @@
+{
+  "title": "Focus Loss warning",
+  "description": "Warns the candidate that their Focus Loss crossed the policy threshold. No counts, thresholds or evidence are included.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_sitting_id",
+    "exam_attempt_id",
+    "warning_code",
+    "changed_at"
+  ],
+  "properties": {
+    "exam_sitting_id": {
+      "$ref": "id.json"
+    },
+    "exam_attempt_id": {
+      "$ref": "id.json"
+    },
+    "warning_code": {
+      "type": "string",
+      "const": "focus_loss_policy_warning"
+    },
+    "changed_at": {
+      "$ref": "instant.json"
+    }
+  }
+}

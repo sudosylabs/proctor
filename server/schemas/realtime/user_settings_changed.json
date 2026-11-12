@@ -1,0 +1,23 @@
+{
+  "title": "User Settings changed",
+  "description": "The new revision of the User's settings document, never the document itself.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "revision",
+    "format_version",
+    "changed_at"
+  ],
+  "properties": {
+    "revision": {
+      "$ref": "id.json"
+    },
+    "format_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "changed_at": {
+      "$ref": "instant.json"
+    }
+  }
+}

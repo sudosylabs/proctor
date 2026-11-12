@@ -1,0 +1,716 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+paths:
+  /api/v1/academic-administration-previews:
+    post:
+      operationId: createAcademicAdministrationPreview
+      summary: Preview one academic administration operation over the Users a directory filter matches
+      tags:
+        - Membership and progression
+      description: >-
+        Proposes applying one existing-User academic administration operation to every User the User directory filter matches. The filter takes exactly the User directory's filter fields with the same validation and visibility rules, including those only an Institution-wide viewer may apply, and the request is refused as the directory would refuse it.
+        Nothing changes yet: a preview Job resolves the filter under the caller's visibility at that moment, freezes the ordered list of matching Users, and classifies each row as `will_change`, `no_op`, or `skipped` with a closed reason. The caller's own account is always skipped, and a disable or Session revocation also skips System Administrators. More than 10,000 matching Users fails the preview with `academic_administration_preview.too_many_users`; narrow the filter.
+        Poll the preview until it is `preview_ready` or `failed`. `class.transfer` is not offered: a transfer names the exact membership it replaces, which Student Progression chooses instead. Requires a strong, recent interactive Session.
+      x-proctor-auth: strong_recent_session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - audit.unavailable
+        - request.invalid
+        - resource.not_found
+        - administration.unavailable
+        - authentication.mfa.unavailable
+        - invitation.unavailable
+        - onboarding_import.file_invalid
+        - onboarding_import.unavailable
+        - student_progression.conflict
+        - student_progression.unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+        - authentication.strong_required
+        - authentication.reauthentication_required
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        $ref: '#/components/requestBodies/CreateAcademicAdministrationPreview'
+      responses:
+        "202":
+          $ref: '#/components/responses/AcademicAdministrationPreviewAccepted'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+        "500":
+          $ref: '#/components/responses/InternalError'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/academic-administration-previews/{academic_administration_preview_id}:
+    parameters:
+      - $ref: '#/components/parameters/AcademicAdministrationPreviewID'
+    get:
+      operationId: getAcademicAdministrationPreview
+      summary: Read one academic administration preview and its counts
+      tags:
+        - Membership and progression
+      description: >-
+        Reads the caller's own preview: its lifecycle state, operation, filter, digest and revision, and once ready its `summary` of rows by class with skipped rows counted by reason. The summary counts only the rows whose User the caller's User directory shows now, the rows the rows listing shows. After commit the row counts report execution outcomes. Only the User who created a preview, holding onboarding batch visibility at its scope, can read it: a caller without that visibility is denied, and any other User reads it as not found. Once the caller's directory would refuse the preview's filter (an activity filter after Institution-wide `user.view` is lost, a Role filter after `role.view` is lost), the read is refused with `academic_administration_preview.authorization_lost`.
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - request.invalid
+        - resource.not_found
+        - academic_administration_preview.authorization_lost
+        - administration.unavailable
+        - onboarding_import.unavailable
+        - invitation.unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      responses:
+        "200":
+          $ref: '#/components/responses/AcademicAdministrationPreviewOK'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+        "500":
+          $ref: '#/components/responses/InternalError'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/academic-administration-previews/{academic_administration_preview_id}/rows:
+    parameters:
+      - $ref: '#/components/parameters/AcademicAdministrationPreviewID'
+    get:
+      operationId: listAcademicAdministrationPreviewRows
+      summary: Show who is in one group of an academic administration preview
+      tags:
+        - Membership and progression
+      description: >-
+        Pages the frozen rows of one class of the caller's own preview in row order, each naming its User and, after commit, its outcome. A row appears only while the caller's User directory shows its User now, so a viewer whose visibility narrowed since the preview froze no longer sees the Users it lost, and the read is refused with `academic_administration_preview.authorization_lost` once the caller's directory would refuse the preview's filter. A cursor continues only the group and reason it was issued for.
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - request.invalid
+        - resource.not_found
+        - academic_administration_preview.authorization_lost
+        - administration.unavailable
+        - onboarding_import.unavailable
+        - invitation.unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - name: group
+          in: query
+          required: true
+          description: The preview class whose rows to list.
+          schema:
+            type: string
+            enum:
+              - will_change
+              - no_op
+              - skipped
+        - name: reason
+          in: query
+          required: false
+          description: Only with `group=skipped`, keep the rows skipped for this reason.
+          schema:
+            $ref: '#/components/schemas/AcademicAdministrationPreviewSkipReason'
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
+      responses:
+        "200":
+          $ref: '#/components/responses/AcademicAdministrationPreviewRowsOK'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+        "500":
+          $ref: '#/components/responses/InternalError'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/academic-administration-previews/{academic_administration_preview_id}/commit:
+    parameters:
+      - $ref: '#/components/parameters/AcademicAdministrationPreviewID'
+    post:
+      operationId: commitAcademicAdministrationPreview
+      summary: Commit one exact academic administration preview
+      tags:
+        - Membership and progression
+      description: >-
+        Commits the caller's own ready preview when its revision and digest still match, within 15 minutes of it becoming ready as PostgreSQL measures it; after that the commit is refused with `academic_administration_preview.expired` and a new preview is needed. A preview another User created reads as not found, and a commit is refused with `academic_administration_preview.authorization_lost` once the caller's User directory would refuse the preview's filter.
+        One execution Job then runs the frozen rows, never the filter again, so a User who starts matching after the preview is not changed. Every row is authorized again in PostgreSQL when it runs, a row whose User the caller's directory no longer shows fails with `authorization.denied`, and every remaining row fails with `authorization.denied` once the caller's directory would refuse the filter. The first commit records one batch-level audit entry with the operation, filter, counts and preview identity; each row's own audit entry names the preview and row, whether the row succeeds or fails. The response is the committed preview as the commit recorded it, and repeating the request with the same Idempotency-Key returns that same commit. Requires a strong, recent interactive Session.
+      x-proctor-auth: strong_recent_session_required
+      x-proctor-idempotency: required
+      x-proctor-error-codes:
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - audit.unavailable
+        - request.invalid
+        - resource.not_found
+        - academic_administration_preview.authorization_lost
+        - academic_administration_preview.conflict
+        - academic_administration_preview.expired
+        - administration.unavailable
+        - authentication.mfa.unavailable
+        - idempotency.key_required
+        - idempotency.key_invalid
+        - invitation.unavailable
+        - onboarding_import.file_invalid
+        - onboarding_import.unavailable
+        - student_progression.conflict
+        - student_progression.unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+        - authentication.strong_required
+        - authentication.reauthentication_required
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        $ref: '#/components/requestBodies/CommitAcademicAdministrationPreview'
+      responses:
+        "202":
+          $ref: '#/components/responses/AcademicAdministrationPreviewAccepted'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+        "410":
+          $ref: '#/components/responses/Gone'
+        "500":
+          $ref: '#/components/responses/InternalError'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/academic-administration-previews/{academic_administration_preview_id}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/AcademicAdministrationPreviewID'
+    post:
+      operationId: cancelAcademicAdministrationPreview
+      summary: Cancel one unfinished academic administration preview
+      tags:
+        - Membership and progression
+      description: >-
+        Cancels the caller's own preview before it finishes. Rows not yet run are canceled; a row already committing finishes, and completed rows are never rolled back.
+      x-codeSamples:
+        - lang: Shell
+          source: |-
+            curl --fail-with-body \
+              --request POST \
+              --url 'https://proctor.example.edu/api/v1/academic-administration-previews/ybndrfg8ejkmcpqxot1uwisza3/cancel' \
+              --header 'Authorization: Bearer <session-access-token>'
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - audit.unavailable
+        - request.invalid
+        - resource.not_found
+        - invitation.unavailable
+        - onboarding_import.conflict
+        - onboarding_import.file_invalid
+        - onboarding_import.unavailable
+        - student_progression.conflict
+        - student_progression.unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      responses:
+        "200":
+          $ref: '#/components/responses/AcademicAdministrationPreviewOK'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+        "500":
+          $ref: '#/components/responses/InternalError'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+components:
+  parameters:
+    AcademicAdministrationPreviewID:
+      name: academic_administration_preview_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ID'
+      description: The academic administration preview identifier.
+  requestBodies:
+    CreateAcademicAdministrationPreview:
+      description: One operation, its exact scope and fields, and the User directory filter whose matching Users it applies to.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AcademicAdministrationPreviewRequest'
+          example:
+            operation: user.disable
+            scope_type: institution
+            scope_id: ybndrfg8ejkmcpqxot1uwisza3
+            filter:
+              affiliation:
+                - student
+              never_signed_in: true
+    CommitAcademicAdministrationPreview:
+      description: Exact immutable preview revision and digest to commit.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AcademicAdministrationPreviewCommitRequest'
+          example:
+            expected_revision: 2
+            preview_digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  responses:
+    AcademicAdministrationPreviewAccepted:
+      description: The preview whose resolution or execution Job was queued.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AcademicAdministrationPreviewResponse'
+    AcademicAdministrationPreviewOK:
+      description: The caller's own academic administration preview.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AcademicAdministrationPreviewResponse'
+    AcademicAdministrationPreviewRowsOK:
+      description: One page of the preview's rows the caller's directory shows.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AcademicAdministrationPreviewRowListResponse'
+  schemas:
+    AcademicAdministrationPreviewSkipReason:
+      type: string
+      description: >-
+        Why a preview skips a row: the caller's own account, a System Administrator from a disable or Session revocation, a Class enrollment of a User enrolled in another Class of the same Period or without a current student Affiliation, or an end of a User holding several current relationships it could end. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+      enum:
+        - academic_administration_preview.ambiguous
+        - academic_administration_preview.enrollment_conflict
+        - academic_administration_preview.self
+        - academic_administration_preview.student_affiliation_required
+        - academic_administration_preview.system_administrator
+    AcademicAdministrationPreviewOperation:
+      type: string
+      description: The one existing-User academic administration operation a preview applies.
+      enum:
+        - affiliation.add
+        - affiliation.end
+        - academic_unit_member.add
+        - academic_unit_member.end
+        - class.enroll
+        - class.end
+        - role_binding.create
+        - role_binding.end
+        - user.enable
+        - user.disable
+        - user_sessions.revoke
+    AcademicAdministrationPreviewFilter:
+      description: >-
+        The User directory filter of a preview, spelled as the directory's query parameters are; each member narrows the caller's visibility and none widens it. `q` is at most 256 characters.
+      type: object
+      additionalProperties: false
+      properties:
+        q:
+          type: string
+          maxLength: 256
+          description: Literal case-insensitive substring matched against visible User directory fields.
+        affiliation:
+          type: array
+          maxItems: 4
+          items:
+            type: string
+            enum:
+              - student
+              - teacher
+              - staff
+              - external
+        academic_unit_id:
+          $ref: '#/components/schemas/ID'
+        role_id:
+          type: array
+          maxItems: 16
+          items:
+            $ref: '#/components/schemas/ID'
+        state:
+          type: string
+          enum:
+            - active
+            - disabled
+        never_signed_in:
+          type: boolean
+        last_active_after:
+          type: string
+          format: date-time
+        last_active_before:
+          type: string
+          format: date-time
+    AcademicAdministrationPreviewRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - operation
+        - scope_type
+        - scope_id
+        - filter
+      properties:
+        operation:
+          $ref: '#/components/schemas/AcademicAdministrationPreviewOperation'
+        scope_type:
+          type: string
+          enum:
+            - institution
+            - academic_unit
+            - class
+        scope_id:
+          $ref: '#/components/schemas/ID'
+        filter:
+          $ref: '#/components/schemas/AcademicAdministrationPreviewFilter'
+        role_id:
+          $ref: '#/components/schemas/ID'
+        affiliation_kind:
+          type: string
+          enum:
+            - student
+            - teacher
+            - staff
+            - external
+        start_at:
+          description: When the relationship a creating operation makes starts; omitted, every row starts when the preview is created.
+          type: string
+          format: date-time
+        end_at:
+          description: When the relationship a creating operation makes ends; it must be after `start_at`, or after the preview's creation when `start_at` is omitted, or the request is refused with `request.invalid` on `end_at`.
+          type: string
+          format: date-time
+    AcademicAdministrationPreviewCommitRequest:
+      description: Revision and SHA-256 digest fencing a commit to the reviewed preview.
+      type: object
+      additionalProperties: false
+      required:
+        - expected_revision
+        - preview_digest
+      properties:
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 1
+        preview_digest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          description: SHA-256 digest of the exact immutable preview, encoded as lowercase hexadecimal.
+    AcademicAdministrationPreviewSummary:
+      description: A ready preview's rows by class, and its skipped rows by reason.
+      type: object
+      additionalProperties: false
+      required:
+        - will_change
+        - no_op
+        - skipped
+        - skip_reasons
+      properties:
+        will_change:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        no_op:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        skipped:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        skip_reasons:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - reason
+              - rows
+            properties:
+              reason:
+                type: string
+                anyOf:
+                  - $ref: '#/components/schemas/AcademicAdministrationPreviewSkipReason'
+                  - type: string
+              rows:
+                type: integer
+                minimum: 1
+                maximum: 10000
+    AcademicAdministrationPreviewResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - state
+        - operation
+        - scope_type
+        - scope_id
+        - filter
+        - total_rows
+        - succeeded_rows
+        - no_op_rows
+        - failed_rows
+        - skipped_rows
+        - preview_job_id
+        - created_at
+        - updated_at
+        - expires_at
+        - revision
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        state:
+          type: string
+          enum:
+            - parsing
+            - preview_ready
+            - executing
+            - completed
+            - completed_with_errors
+            - canceled
+            - failed
+        operation:
+          $ref: '#/components/schemas/AcademicAdministrationPreviewOperation'
+        scope_type:
+          type: string
+          enum:
+            - institution
+            - academic_unit
+            - class
+        scope_id:
+          $ref: '#/components/schemas/ID'
+        filter:
+          $ref: '#/components/schemas/AcademicAdministrationPreviewFilter'
+        role_id:
+          $ref: '#/components/schemas/ID'
+        affiliation_kind:
+          type: string
+          enum:
+            - student
+            - teacher
+            - staff
+            - external
+        start_at:
+          type: string
+          format: date-time
+        end_at:
+          type: string
+          format: date-time
+        preview_digest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          description: Present once the preview is ready.
+        summary:
+          $ref: '#/components/schemas/AcademicAdministrationPreviewSummary'
+        total_rows:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        succeeded_rows:
+          type: integer
+          minimum: 0
+        no_op_rows:
+          type: integer
+          minimum: 0
+        failed_rows:
+          type: integer
+          minimum: 0
+        skipped_rows:
+          type: integer
+          minimum: 0
+        preview_job_id:
+          $ref: '#/components/schemas/ID'
+        execution_job_id:
+          $ref: '#/components/schemas/ID'
+        failure_code:
+          type: string
+          anyOf:
+            - $ref: '#/components/schemas/OnboardingImportFailureCode'
+            - type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        preview_expires_at:
+          type: string
+          format: date-time
+          description: When the ready preview stops admitting its commit, 15 minutes after it became ready.
+        expires_at:
+          type: string
+          format: date-time
+          description: When the preview and its rows are removed, seven days after creation.
+        revision:
+          type: integer
+          format: int64
+          minimum: 1
+    AcademicAdministrationPreviewRowResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - row
+        - user_id
+        - username
+        - display_name
+        - group
+        - status
+      properties:
+        row:
+          type: integer
+          minimum: 1
+          maximum: 10000
+        user_id:
+          $ref: '#/components/schemas/ID'
+        username:
+          type: string
+        display_name:
+          type: string
+        group:
+          type: string
+          enum:
+            - will_change
+            - no_op
+            - skipped
+        reason:
+          type: string
+          anyOf:
+            - $ref: '#/components/schemas/AcademicAdministrationPreviewSkipReason'
+            - type: string
+        status:
+          type: string
+          enum:
+            - valid
+            - invalid
+            - pending
+            - succeeded
+            - no_op
+            - failed
+            - skipped
+            - canceled
+        public_code:
+          type: string
+          anyOf:
+            - $ref: '#/components/schemas/OnboardingImportRowCode'
+            - type: string
+        resource_id:
+          $ref: '#/components/schemas/ID'
+    AcademicAdministrationPreviewRowListResponse:
+      description: One page of preview rows in row order.
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/AcademicAdministrationPreviewRowResponse'
+        next_cursor:
+          type: string
+          description: Opaque continuation for the next page, omitted after the final page.

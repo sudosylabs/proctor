@@ -1,0 +1,59 @@
+{
+  "title": "Attempt Integrity Flag raised",
+  "description": "A Focus Loss Integrity Flag, its policy outcome and how many evidence episodes were kept or overflowed. The evidence itself is never included.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_sitting_id",
+    "exam_attempt_id",
+    "candidate_user_id",
+    "integrity_flag_id",
+    "policy_kind",
+    "outcome",
+    "retained_evidence_count",
+    "evidence_overflow_count",
+    "evidence_available",
+    "changed_at"
+  ],
+  "properties": {
+    "exam_sitting_id": {
+      "$ref": "id.json"
+    },
+    "exam_attempt_id": {
+      "$ref": "id.json"
+    },
+    "candidate_user_id": {
+      "$ref": "id.json"
+    },
+    "integrity_flag_id": {
+      "$ref": "id.json"
+    },
+    "policy_kind": {
+      "type": "string",
+      "const": "focus_loss"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "flag",
+        "flag_and_warn",
+        "flag_and_suspend"
+      ]
+    },
+    "retained_evidence_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "evidence_overflow_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "evidence_available": {
+      "type": "boolean",
+      "const": true
+    },
+    "changed_at": {
+      "$ref": "instant.json"
+    }
+  }
+}

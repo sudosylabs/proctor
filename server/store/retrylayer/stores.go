@@ -1121,6 +1121,10 @@ func (s *auditStore) CountSelf(ctx context.Context, options store.AuditSelfListO
 	return retryCall1(ctx, s.layer, func() (int, error) { return s.AuditStore.CountSelf(ctx, options) })
 }
 
+func (s *auditStore) ListNames(ctx context.Context, options store.AuditNameOptions) (store.AuditNames, error) {
+	return retryCall1(ctx, s.layer, func() (store.AuditNames, error) { return s.AuditStore.ListNames(ctx, options) })
+}
+
 func (s *installationStore) Get(ctx context.Context) (*model.InstallationState, error) {
 	return retryCall1(ctx, s.layer, func() (*model.InstallationState, error) { return s.InstallationStore.Get(ctx) })
 }

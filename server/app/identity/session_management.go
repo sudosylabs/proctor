@@ -16,6 +16,7 @@ package identity
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/sudosylabs/proctor/server/app/access"
@@ -31,11 +32,23 @@ type RevokeOtherSessionsResult struct {
 	RevokedSessionCount int
 }
 
-// ListSessions lists the caller's active Sessions.
+// ListSessionsResult is the caller's active Sessions with the name of the
+// Desktop Registration each Desktop Session is bound to.
+type ListSessionsResult struct {
+	Sessions []*model.Session
+	// DesktopRegistrationNames holds the display name of every Desktop
+	// Registration a listed Desktop Session is bound to, keyed by its ID.
+	DesktopRegistrationNames map[model.DesktopRegistrationID]string
+}
+
+// ListSessions lists the caller's active Sessions. A Desktop Session is named
+// by its Desktop Registration, so the names are read with the list in one
+// further read of the caller's registrations, only when a Desktop Session is
+// listed.
 func (s *Service) ListSessions(
 	ctx context.Context,
 	inv invocation.Invocation,
-) ([]*model.Session, error) {
+) (*ListSessionsResult, error) {
 	principal := inv.Principal()
 	if principal.Validate() != nil {
 		return nil, access.InvalidTokenAppError()
@@ -48,7 +61,95 @@ func (s *Service) ListSessions(
 	if err != nil {
 		return nil, authenticationUnavailable(err)
 	}
-	return sessions, nil
+
+	result := &ListSessionsResult{Sessions: sessions, DesktopRegistrationNames: map[model.DesktopRegistrationID]string{}}
+	if !slices.ContainsFunc(sessions, func(session *model.Session) bool {
+		return session.ClientType == model.SessionClientDesktop
+	}) {
+		return result, nil
+	}
+
+	registrations, err := s.desktopRegistrations.ListByUser(ctx, principal.UserID)
+	if err != nil {
+		return nil, authenticationUnavailable(err)
+	}
+	for _, registration := range registrations {
+		result.DesktopRegistrationNames[registration.ID] = registration.DisplayName
+	}
+	return result, nil
+}
+
+type RenameSessionCommand struct {
+	SessionID  model.SessionID
+	DeviceName string
+}
+
+// RenameSession gives one of the caller's own live browser or CLI Sessions
+// the name they chose. A Desktop Session is named by its Desktop
+// Registration, so renaming one is refused with a pointer to that
+// registration. A rename changes no credential, so any interactive Session
+// may make it.
+func (s *Service) RenameSession(
+	ctx context.Context,
+	inv invocation.Invocation,
+	command RenameSessionCommand,
+) (*model.Session, error) {
+	principal := inv.Principal()
+	at := model.TimeUTC(s.now())
+	if err := requireInteractiveSession(principal, false, at, s.recentAuthenticationTTL); err != nil {
+		return nil, err
+	}
+
+	if !command.SessionID.IsValid() {
+		return nil, apperror.Invalid("session.id.invalid", "session_id")
+	}
+	deviceName, err := model.NormalizeSessionDeviceName(command.DeviceName)
+	if err != nil {
+		return nil, apperror.Invalid("session.invalid", "device_name").Wrap(err)
+	}
+
+	session, err := s.sessions.Get(ctx, command.SessionID)
+	if err != nil {
+		if store.IsNotFound(err) {
+			return nil, apperror.New("session.not_found")
+		}
+		return nil, authenticationUnavailable(err)
+	}
+	if session.UserID != principal.UserID {
+		return nil, apperror.New("session.not_found")
+	}
+	if session.ClientType == model.SessionClientDesktop {
+		return nil, apperror.New("session.desktop_named_by_registration").
+			WithField("desktop_registration_id", session.DesktopRegistrationID.String())
+	}
+
+	renamed, err := access.RunAudited(
+		ctx,
+		s.auditor,
+		access.Mutation{
+			Invocation: inv,
+			Action:     model.ActionSessionManage,
+			Resource:   model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
+			Operation:  model.AuditOperationRenameOwnSession,
+			Value:      map[string]any{"session_id": session.ID.String()},
+			At:         at,
+		},
+		func(ctx context.Context, reference access.MutationReference) (*model.Session, error) {
+			return s.sessions.Rename(ctx, &store.SessionRename{
+				SessionID:    session.ID,
+				UserID:       principal.UserID,
+				DeviceName:   deviceName,
+				AuditEventID: reference.ID,
+				AuditAt:      reference.MutationAt,
+			})
+		},
+		selfSessionRenameStoreErrors.Translate,
+	)
+	if err != nil {
+		return nil, err
+	}
+	s.publishSessionsChanged(ctx, principal.UserID, "session.renamed")
+	return renamed, nil
 }
 
 // RevokeSession revokes one of the caller's own Sessions.
@@ -167,6 +268,14 @@ func (s *Service) RevokeOtherSessions(
 // stopped being valid during the request.
 var selfOtherSessionsRevocationStoreErrors = apperror.StoreTable{
 	NotFound:    "authentication.token_invalid",
+	Unavailable: "authentication.internal",
+}
+
+// A Session that stopped being live, or a Desktop Session, after the read
+// above is reported as the read would have reported it.
+var selfSessionRenameStoreErrors = apperror.StoreTable{
+	NotFound:    "session.not_found",
+	Conflict:    "session.desktop_named_by_registration",
 	Unavailable: "authentication.internal",
 }
 

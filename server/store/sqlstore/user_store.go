@@ -344,8 +344,8 @@ func (s SQLUserStore) GetByEmail(ctx context.Context, email string) (*model.User
 	}), email)
 }
 
-// List returns a page of unarchived Users ordered by username and ID,
-// restricted to the input visibility and search term.
+// List returns a page of unarchived Users in options.Order (username by
+// default) then ID, restricted to the input visibility and search term.
 func (s SQLUserStore) List(
 	ctx context.Context,
 	options store.UserListOptions,
@@ -357,15 +357,23 @@ func (s SQLUserStore) List(
 	if err != nil {
 		return nil, err
 	}
-	if options.AfterUsername != "" {
-		query = query.Where(
-			"(users.username > ? OR (users.username = ? AND users.id > ?))",
-			options.AfterUsername,
-			options.AfterUsername,
-			options.AfterID,
-		)
+	key, direction, keyset := userListKey(options)
+	if options.AfterID != "" {
+		var after any
+		switch options.Order {
+		case store.UserOrderName:
+			after = sq.Expr("(SELECT sort_name FROM users WHERE id = ?)", options.AfterID)
+		case store.UserOrderCreated:
+			after = model.TimeUTC(options.AfterCreatedAt)
+		case store.UserOrderLastActive:
+			after = sq.Expr("COALESCE(?::timestamptz, '-infinity'::timestamptz)", NullTimeFromOptional(options.AfterLastActivityAt))
+		default:
+			after = options.AfterUsername
+		}
+		query = query.Where(sq.Expr("("+key+", users.id) "+keyset+" (?, ?)", after, options.AfterID))
 	}
-	query = query.OrderBy("users.username", "users.id").Limit(uint64(options.Limit)) //nolint:gosec // G115: validUserListOptions bounds Limit to 1..201.
+	query = query.OrderBy(key+" "+direction, "users.id "+direction).
+		Limit(uint64(options.Limit)) //nolint:gosec // G115: validUserListOptions bounds Limit to 1..201.
 	rows := []userRow{}
 	if err := s.GetMaster().SelectBuilder(ctx, &rows, query); err != nil {
 		return nil, fmt.Errorf("list users: %w", err)
@@ -384,7 +392,8 @@ func (s SQLUserStore) List(
 // Count counts through the same filter as List, without its keyset, order,
 // or limit, reading at most one row past maximum.
 func (s SQLUserStore) Count(ctx context.Context, options store.UserListOptions, maximum int) (int, error) {
-	options.AfterUsername, options.AfterID, options.Limit = "", "", 1
+	options.Order, options.Descending, options.Limit = store.UserOrderUsername, false, 1
+	options.AfterUsername, options.AfterCreatedAt, options.AfterLastActivityAt, options.AfterID = "", time.Time{}, model.OptionalTime{}, ""
 	if !validUserListOptions(options) || !store.ValidCountMaximum(maximum) {
 		return 0, store.NewErrInvalidInput("user", "count_options", nil)
 	}
@@ -396,8 +405,9 @@ func (s SQLUserStore) Count(ctx context.Context, options store.UserListOptions, 
 }
 
 // filterUserList applies every List filter but the keyset: archived and
-// disabled Users, the exact ID, visibility, search, Affiliation, and Academic
-// Unit. List and Count share it so a total always counts the listed rows.
+// disabled Users, the exact ID, visibility, search, Affiliation, Academic
+// Unit, Role, and last activity. List and Count share it so a total always
+// counts the listed rows.
 func filterUserList(query sq.SelectBuilder, options store.UserListOptions) (sq.SelectBuilder, error) {
 	query = query.Where(sq.Eq{"users.archived_at": nil})
 	if options.ID != "" {
@@ -407,7 +417,12 @@ func filterUserList(query sq.SelectBuilder, options store.UserListOptions) (sq.S
 	if err != nil {
 		return query, err
 	}
-	if !options.IncludeDisabled || !options.Visibility.InstitutionWide {
+	switch {
+	case options.OnlyDisabled && options.Visibility.InstitutionWide:
+		query = query.Where(sq.NotEq{"users.disabled_at": nil})
+	case options.OnlyDisabled:
+		query = query.Where("FALSE")
+	case !options.IncludeDisabled || !options.Visibility.InstitutionWide:
 		query = query.Where(sq.Eq{"users.disabled_at": nil})
 	}
 	if options.MissingDefaultProfilePicture {
@@ -415,7 +430,52 @@ func filterUserList(query sq.SelectBuilder, options store.UserListOptions) (sq.S
 	}
 	query = filterUserListSearch(query, options)
 	query = filterUserListAffiliations(query, options)
-	return filterUserListAcademicUnit(query, options), nil
+	query = filterUserListAcademicUnit(query, options)
+	query = filterUserListRoles(query, options)
+	return filterUserListActivity(query, options), nil
+}
+
+// userListKey returns the ordered expression of options.Order, its direction,
+// and the keyset comparison that continues past a key in that direction.
+func userListKey(options store.UserListOptions) (string, string, string) {
+	direction, keyset := "ASC", ">"
+	if options.Descending {
+		direction, keyset = "DESC", "<"
+	}
+	switch options.Order {
+	case store.UserOrderName:
+		return "users.sort_name", direction, keyset
+	case store.UserOrderCreated:
+		return "users.created_at", direction, keyset
+	case store.UserOrderLastActive:
+		return "COALESCE(users.last_activity_at, '-infinity'::timestamptz)", direction, keyset
+	default:
+		return "users.username", direction, keyset
+	}
+}
+
+// validUserListContinuation reports whether a continuation carries exactly
+// the key its order reads.
+func validUserListContinuation(options store.UserListOptions) bool {
+	if options.Order != "" && !options.Order.IsValid() {
+		return false
+	}
+	if options.AfterID == "" {
+		return options.AfterUsername == "" && options.AfterCreatedAt.IsZero() && !options.AfterLastActivityAt.Valid
+	}
+	if !options.AfterID.IsValid() {
+		return false
+	}
+	switch options.Order {
+	case store.UserOrderName:
+		return options.AfterUsername == "" && options.AfterCreatedAt.IsZero() && !options.AfterLastActivityAt.Valid
+	case store.UserOrderCreated:
+		return options.AfterUsername == "" && !options.AfterCreatedAt.IsZero() && !options.AfterLastActivityAt.Valid
+	case store.UserOrderLastActive:
+		return options.AfterUsername == "" && options.AfterCreatedAt.IsZero()
+	default:
+		return options.AfterUsername != "" && options.AfterCreatedAt.IsZero() && !options.AfterLastActivityAt.Valid
+	}
 }
 
 // validUserListOptions reports whether the list page size, cursor and visibility bounds are acceptable.
@@ -423,9 +483,10 @@ func validUserListOptions(options store.UserListOptions) bool {
 	return !(options.Limit < 1 ||
 		options.Limit > 201 ||
 		(options.ID != "" && !options.ID.IsValid()) ||
-		(options.AfterUsername == "") != (options.AfterID == "") ||
-		(options.AfterID != "" && !options.AfterID.IsValid()) ||
+		!validUserListContinuation(options) ||
 		!validUserListMembershipFilters(options) ||
+		!validUserListRoleFilter(options) ||
+		!validUserListActivityFilter(options) ||
 		len(options.Visibility.ClassIDs)+len(options.Visibility.AcademicUnitRootIDs)+
 			len(options.Visibility.ClassMemberAcademicUnitRootIDs) > 256 ||
 		!validVisibilityIDs(options.Visibility.ClassIDs) ||
@@ -482,31 +543,107 @@ func filterUserListAcademicUnit(query sq.SelectBuilder, options store.UserListOp
 		return query
 	}
 	if !options.Visibility.InstitutionWide {
+		scopeUnits, scopeRoots := academicSubtreeCTE("filter_scope_units", options.Visibility.AcademicUnitRootIDs)
 		query = query.Where(`EXISTS (
-			WITH RECURSIVE filter_scope_units AS (
-				SELECT id FROM academic_units WHERE id = ANY(?) AND archived_at IS NULL
-				UNION ALL SELECT child.id FROM academic_units child
-				JOIN filter_scope_units parent ON child.parent_id = parent.id
-				WHERE child.archived_at IS NULL
-			) SELECT 1 FROM filter_scope_units WHERE id = ?
-		)`, pq.Array(idStrings(options.Visibility.AcademicUnitRootIDs)), options.AcademicUnitID)
+			WITH RECURSIVE `+scopeUnits+` SELECT 1 FROM filter_scope_units WHERE id = ?
+		)`, scopeRoots, options.AcademicUnitID)
 	}
 	activeAt := model.TimeUTC(options.Visibility.ActiveAt)
+	units, root := academicSubtreeCTE("filter_units", []model.AcademicUnitID{options.AcademicUnitID})
 	return query.Where(`EXISTS (
 		SELECT 1 FROM academic_unit_members filter_aum
 		WHERE filter_aum.user_id = users.id
 			AND filter_aum.archived_at IS NULL
 			AND filter_aum.start_at <= ?
 			AND (filter_aum.end_at IS NULL OR filter_aum.end_at > ?)
-			AND filter_aum.academic_unit_id IN (
-				WITH RECURSIVE filter_units AS (
-					SELECT id FROM academic_units WHERE id = ? AND archived_at IS NULL
-					UNION ALL SELECT child.id FROM academic_units child
-					JOIN filter_units parent ON child.parent_id = parent.id
-					WHERE child.archived_at IS NULL
-				) SELECT id FROM filter_units
-			)
-	)`, activeAt, activeAt, options.AcademicUnitID)
+			AND filter_aum.academic_unit_id IN (WITH RECURSIVE `+units+` SELECT id FROM filter_units)
+	)`, activeAt, activeAt, root)
+}
+
+// validUserListRoleFilter reports whether the Role filter names at most
+// MaximumUserListRoles canonical Roles, carries its instant, and bounds its
+// role_binding.view scope like a visibility.
+func validUserListRoleFilter(options store.UserListOptions) bool {
+	scope := options.RoleBindingVisibility
+	if len(options.RoleIDs) == 0 {
+		return true
+	}
+	return len(options.RoleIDs) <= store.MaximumUserListRoles &&
+		validVisibilityIDs(options.RoleIDs) &&
+		!options.Visibility.ActiveAt.IsZero() &&
+		len(scope.AcademicUnitRootIDs)+len(scope.ClassIDs) <= 256 &&
+		validVisibilityIDs(scope.AcademicUnitRootIDs) &&
+		validVisibilityIDs(scope.ClassIDs)
+}
+
+// filterUserListRoles keeps Users holding a current Role Binding of a listed
+// unarchived Role inside the role_binding.view scope: Institution-wide, or
+// bound at a unit of its subtrees, at a Class of a Programme in them, or at
+// one of its Classes. A scope that sees no binding matches nothing.
+func filterUserListRoles(query sq.SelectBuilder, options store.UserListOptions) sq.SelectBuilder {
+	if len(options.RoleIDs) == 0 {
+		return query
+	}
+	activeAt := model.TimeUTC(options.Visibility.ActiveAt)
+	scope := options.RoleBindingVisibility
+	prefix, predicate, prefixArguments, predicateArguments := "", "TRUE", []any(nil), []any(nil)
+	if !scope.InstitutionWide {
+		units, roots := academicSubtreeCTE("filter_role_units", scope.AcademicUnitRootIDs)
+		prefix, prefixArguments = "WITH RECURSIVE "+units, []any{roots}
+		predicate = `(
+			(filter_rb.scope_type = 'academic_unit' AND filter_rb.scope_id IN (SELECT id FROM filter_role_units))
+			OR (filter_rb.scope_type = 'class' AND (
+				filter_rb.scope_id = ANY(?) OR EXISTS (
+					SELECT 1 FROM classes filter_c
+					JOIN programme_levels filter_pl ON filter_pl.id = filter_c.programme_level_id
+					JOIN programmes filter_p ON filter_p.id = filter_pl.programme_id
+					WHERE filter_c.id = filter_rb.scope_id
+						AND filter_p.academic_unit_id IN (SELECT id FROM filter_role_units)
+				)
+			))
+		)`
+		predicateArguments = []any{pq.Array(idStrings(scope.ClassIDs))}
+	}
+	arguments := append(prefixArguments, pq.Array(idStrings(options.RoleIDs)), activeAt, activeAt)
+	return query.Where(`EXISTS (`+prefix+`
+		SELECT 1 FROM role_bindings filter_rb
+		JOIN roles filter_role ON filter_role.id = filter_rb.role_id AND filter_role.archived_at IS NULL
+		WHERE filter_rb.user_id = users.id
+			AND filter_rb.role_id = ANY(?)
+			AND filter_rb.archived_at IS NULL
+			AND filter_rb.start_at <= ?
+			AND (filter_rb.end_at IS NULL OR filter_rb.end_at > ?)
+			AND `+predicate+`
+	)`, append(arguments, predicateArguments...)...)
+}
+
+// validUserListActivityFilter reports whether the last-activity filters are
+// read only Institution-wide and are coherent: no bound beside NeverSignedIn,
+// and an after bound that precedes the before bound.
+func validUserListActivityFilter(options store.UserListOptions) bool {
+	after, before := options.LastActivityAfter, options.LastActivityBefore
+	if !options.NeverSignedIn && after.IsZero() && before.IsZero() {
+		return true
+	}
+	return options.Visibility.InstitutionWide &&
+		!(options.NeverSignedIn && (!after.IsZero() || !before.IsZero())) &&
+		(after.IsZero() || before.IsZero() || after.Before(before))
+}
+
+// filterUserListActivity keeps Users never signed in (no last activity), or
+// whose last activity is at or after LastActivityAfter and before
+// LastActivityBefore.
+func filterUserListActivity(query sq.SelectBuilder, options store.UserListOptions) sq.SelectBuilder {
+	if options.NeverSignedIn {
+		query = query.Where(sq.Eq{"users.last_activity_at": nil})
+	}
+	if !options.LastActivityAfter.IsZero() {
+		query = query.Where(sq.GtOrEq{"users.last_activity_at": model.TimeUTC(options.LastActivityAfter)})
+	}
+	if !options.LastActivityBefore.IsZero() {
+		query = query.Where(sq.Lt{"users.last_activity_at": model.TimeUTC(options.LastActivityBefore)})
+	}
+	return query
 }
 
 // filterUserListVisibility restricts a User listing to the Users visible through a scoped visibility.
@@ -526,17 +663,9 @@ func filterUserListVisibility(query sq.SelectBuilder, visibility store.UserVisib
 		}
 
 		activeAt := model.TimeUTC(visibility.ActiveAt)
-		query = query.Prefix(`WITH RECURSIVE user_allowed_units AS (
-			SELECT id FROM academic_units WHERE id = ANY(?) AND archived_at IS NULL
-			UNION ALL SELECT child.id FROM academic_units child
-			JOIN user_allowed_units parent ON child.parent_id = parent.id
-			WHERE child.archived_at IS NULL
-		), class_member_allowed_units AS (
-			SELECT id FROM academic_units WHERE id = ANY(?) AND archived_at IS NULL
-			UNION ALL SELECT child.id FROM academic_units child
-			JOIN class_member_allowed_units parent ON child.parent_id = parent.id
-			WHERE child.archived_at IS NULL
-		)`, pq.Array(idStrings(visibility.AcademicUnitRootIDs)), pq.Array(idStrings(visibility.ClassMemberAcademicUnitRootIDs))).Where(
+		userUnits, userRoots := academicSubtreeCTE("user_allowed_units", visibility.AcademicUnitRootIDs)
+		classMemberUnits, classMemberRoots := academicSubtreeCTE("class_member_allowed_units", visibility.ClassMemberAcademicUnitRootIDs)
+		query = query.Prefix(`WITH RECURSIVE `+userUnits+`, `+classMemberUnits, userRoots, classMemberRoots).Where(
 			`(
 		EXISTS (
 			SELECT 1 FROM academic_unit_members aum

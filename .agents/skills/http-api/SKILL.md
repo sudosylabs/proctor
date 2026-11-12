@@ -34,6 +34,12 @@ description: Add or change Proctor HTTP routes, handlers, DTOs, credential or as
    route/document agreement is derived. Update route, mapping, Problem
    Details, upload/download, WebSocket, and concealment tests, then run the
    focused HTTP/OpenAPI checks and `make -C server architecture`.
+7. A new realtime event lands with its schema and AsyncAPI message, following
+   the [AsyncAPI authoring guide](../../../server/asyncapi/README.md): declare
+   it in `app/realtime/message.go`, build it in a constructor, add its payload
+   schema and message, and add its conformance entry. Completion:
+   `make -C server asyncapi-check` and `go test ./app/realtime ./websocket`
+   pass, and the event's reference page is generated.
 
 ## Current open decision
 

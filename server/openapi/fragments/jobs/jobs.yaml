@@ -13,7 +13,7 @@ paths:
       tags:
         - Jobs
       description: >-
-        Lists only Job types deliberately exposed through the public administration contract and authorized for the current principal. Private payloads, claims, worker identities, and infrastructure errors are omitted from every projection.
+        Lists only Job types deliberately exposed through the public administration contract and authorized for the current principal, newest first by creation unless `order=asc` asks for oldest first. Private payloads, claims, worker identities, and infrastructure errors are omitted from every projection.
         The first page, read without a cursor, also reports `total`: the Jobs the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
       x-proctor-auth: principal_required
       x-proctor-error-codes:
@@ -57,6 +57,18 @@ paths:
             items:
               $ref: '#/components/schemas/JobStatus'
           description: Optional set of durable lifecycle states to include.
+        - name: order
+          in: query
+          required: false
+          description: >-
+            Read newest first by creation (`desc`, the default) or oldest first (`asc`). A cursor continues only
+            the order that produced it.
+          schema:
+            type: string
+            enum:
+              - desc
+              - asc
+            default: desc
       responses:
         "200":
           $ref: '#/components/responses/JobListOK'

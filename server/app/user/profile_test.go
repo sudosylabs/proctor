@@ -10,6 +10,7 @@ package user
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -434,4 +435,202 @@ func TestUserSearchCountsThroughTheListedOptions(t *testing.T) {
 	require.Len(t, page.Items, 1)
 	// Contract: global search composes the uncounted directory read.
 	require.Equal(t, []string{"authorize-search", "list-users"}, events)
+}
+
+// TestUserSearchSortsByLastActivityOnlyForInstitutionWideViewers pins the
+// privacy rule of the last_active order: account activity is shown only to
+// Institution-wide user.view, so a scoped viewer can neither read the order
+// nor infer it, while the other orders reach persistence unchanged.
+func TestUserSearchSortsByLastActivityOnlyForInstitutionWideViewers(t *testing.T) {
+	t.Parallel()
+	scoped := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{model.NewAcademicUnitID()}, ActiveAt: model.TimeFromMillis(100)}
+	for _, test := range []struct {
+		name    string
+		scope   store.UserVisibilityScope
+		order   store.UserOrder
+		allowed bool
+	}{
+		{name: "scoped last active", scope: scoped, order: store.UserOrderLastActive},
+		{name: "scoped class members last active", scope: store.UserVisibilityScope{ClassMemberInstitutionWide: true, ActiveAt: model.TimeFromMillis(100)}, order: store.UserOrderLastActive},
+		{name: "scoped name", scope: scoped, order: store.UserOrderName, allowed: true},
+		{name: "scoped created", scope: scoped, order: store.UserOrderCreated, allowed: true},
+		{name: "institution last active", scope: store.UserVisibilityScope{InstitutionWide: true}, order: store.UserOrderLastActive, allowed: true},
+		{name: "unknown order", scope: store.UserVisibilityScope{InstitutionWide: true}, order: "email"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			events := []string{}
+			persistence := &userStoreFake{events: &events}
+			service := newProfileService(persistence, nil, &authorizerFake{events: &events, searchScope: test.scope}, &profilePictureAuditorFake{events: &events}, time.Now)
+			_, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{Limit: 10, Order: test.order, Descending: true})
+			if !test.allowed {
+				require.True(t, apperror.Is(err, "request.invalid"), "%s: %v", test.name, err)
+				require.Equal(t, []string{"authorize-search"}, events, "a refused order reads nothing")
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, test.order, persistence.listOptions.Order)
+			require.True(t, persistence.listOptions.Descending)
+		})
+	}
+}
+
+// roleStoreFake answers GetByIDs with the known Roles among the requested.
+type roleStoreFake struct {
+	store.RoleStore
+	events *[]string
+	known  []model.RoleID
+}
+
+func (s *roleStoreFake) GetByIDs(_ context.Context, ids []model.RoleID) ([]*model.Role, error) {
+	*s.events = append(*s.events, "get-roles")
+	roles := []*model.Role{}
+	for _, id := range ids {
+		if slices.Contains(s.known, id) {
+			roles = append(roles, &model.Role{ID: id})
+		}
+	}
+	return roles, nil
+}
+
+func newDirectoryFilterService(persistence *userStoreFake, roles *roleStoreFake, authorizer *authorizerFake) *Service {
+	service, err := New(Dependencies{
+		Store:      &catalogFake{user: persistence, role: roles, userSettings: &userSettingsStoreFake{}},
+		Authorizer: authorizer, Auditor: &profilePictureAuditorFake{events: persistence.events}, SettingsAuditor: &settingsAuditFake{},
+		Publisher: &realtimetest.Publisher{}, Now: func() time.Time { return model.TimeFromMillis(500) },
+	})
+	if err != nil {
+		panic(err)
+	}
+	return service
+}
+
+// TestUserSearchAccountFiltersFollowTheDisabledAndActivityRules pins the
+// privacy rules of the account filters: last activity is read only by
+// Institution-wide user.view, as for sort=last_active, so a scoped viewer is
+// refused rather than given a filter that would reveal it; state=disabled
+// reaches the Store as OnlyDisabled, which a scoped visibility answers
+// empty; and incoherent combinations are refused before anything is read.
+func TestUserSearchAccountFiltersFollowTheDisabledAndActivityRules(t *testing.T) {
+	t.Parallel()
+	scoped := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{model.NewAcademicUnitID()}, ActiveAt: model.TimeFromMillis(100)}
+	institution := store.UserVisibilityScope{InstitutionWide: true}
+	after, before := model.TimeFromMillis(1_000), model.TimeFromMillis(2_000)
+	for _, test := range []struct {
+		name      string
+		scope     store.UserVisibilityScope
+		query     SearchUsersQuery
+		field     string
+		authorize bool
+		check     func(*testing.T, store.UserListOptions)
+	}{
+		{name: "scoped never signed in", scope: scoped, query: SearchUsersQuery{NeverSignedIn: true}, field: "never_signed_in", authorize: true},
+		{name: "scoped active after", scope: scoped, query: SearchUsersQuery{LastActiveAfter: after}, field: "last_active_after", authorize: true},
+		{name: "scoped active before", scope: scoped, query: SearchUsersQuery{LastActiveBefore: before}, field: "last_active_before", authorize: true},
+		{name: "never beside a bound", scope: institution, query: SearchUsersQuery{NeverSignedIn: true, LastActiveBefore: before}, field: "never_signed_in"},
+		{name: "empty activity range", scope: institution, query: SearchUsersQuery{LastActiveAfter: before, LastActiveBefore: before}, field: "last_active_before"},
+		{name: "unknown state", scope: institution, query: SearchUsersQuery{State: "locked"}, field: "state"},
+		{name: "state beside include_disabled", scope: institution, query: SearchUsersQuery{State: AccountStateActive, IncludeDisabled: true}, field: "state"},
+		{name: "institution activity range", scope: institution, query: SearchUsersQuery{LastActiveAfter: after, LastActiveBefore: before},
+			check: func(t *testing.T, options store.UserListOptions) {
+				require.Equal(t, after, options.LastActivityAfter)
+				require.Equal(t, before, options.LastActivityBefore)
+			}},
+		{name: "institution never signed in", scope: institution, query: SearchUsersQuery{NeverSignedIn: true},
+			check: func(t *testing.T, options store.UserListOptions) { require.True(t, options.NeverSignedIn) }},
+		{name: "institution disabled", scope: institution, query: SearchUsersQuery{State: AccountStateDisabled},
+			check: func(t *testing.T, options store.UserListOptions) {
+				require.True(t, options.OnlyDisabled)
+				require.False(t, options.IncludeDisabled)
+			}},
+		{name: "scoped disabled", scope: scoped, query: SearchUsersQuery{State: AccountStateDisabled},
+			check: func(t *testing.T, options store.UserListOptions) {
+				require.True(t, options.OnlyDisabled, "the Store answers a scoped OnlyDisabled with no rows")
+				require.Equal(t, scoped, options.Visibility)
+			}},
+		{name: "active is the default", scope: institution, query: SearchUsersQuery{State: AccountStateActive},
+			check: func(t *testing.T, options store.UserListOptions) {
+				require.False(t, options.OnlyDisabled)
+				require.False(t, options.IncludeDisabled)
+			}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			events := []string{}
+			persistence := &userStoreFake{events: &events}
+			service := newDirectoryFilterService(persistence, &roleStoreFake{events: &events}, &authorizerFake{events: &events, searchScope: test.scope})
+			test.query.Limit = 10
+			_, err := service.SearchUsers(context.Background(), invocation.Invocation{}, test.query)
+			if test.field != "" {
+				var appErr *apperror.Error
+				require.ErrorAs(t, err, &appErr)
+				require.Equal(t, "request.invalid", appErr.Code())
+				require.Equal(t, test.field, appErr.Fields()["field"])
+				want := []string{}
+				if test.authorize {
+					want = []string{"authorize-search"}
+				}
+				require.Equal(t, want, events, "a refused filter reads nothing")
+				return
+			}
+			require.NoError(t, err)
+			test.check(t, persistence.listOptions)
+			require.Equal(t, persistence.listOptions, persistence.countOptions, "the count reads the same filters")
+		})
+	}
+}
+
+// TestUserSearchRoleFilterRequiresVisibleRoles pins the Role filter: a Role
+// is seen through Institution-wide role.view, so without it, and for an
+// unknown or archived Role, the request is refused alike on role_id; an
+// admitted filter matches bindings inside the caller's role_binding.view
+// scope, read at the visibility's own instant.
+func TestUserSearchRoleFilterRequiresVisibleRoles(t *testing.T) {
+	t.Parallel()
+	known, unknown := model.NewRoleID(), model.NewRoleID()
+	scoped := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{model.NewAcademicUnitID()}, ActiveAt: model.TimeFromMillis(100)}
+	roleScope := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{model.NewAcademicUnitID()}, ActiveAt: model.TimeFromMillis(100)}
+	tooMany := make([]model.RoleID, store.MaximumUserListRoles+1)
+	for index := range tooMany {
+		tooMany[index] = model.NewRoleID()
+	}
+	for _, test := range []struct {
+		name      string
+		roleIDs   []model.RoleID
+		rolesView bool
+		events    []string
+	}{
+		{name: "without role.view", roleIDs: []model.RoleID{known}, events: []string{"authorize-search", "can-view-roles"}},
+		{name: "unknown Role", roleIDs: []model.RoleID{known, unknown}, rolesView: true, events: []string{"authorize-search", "can-view-roles", "get-roles"}},
+		{name: "invalid Role", roleIDs: []model.RoleID{"not-an-id"}, rolesView: true, events: []string{}},
+		{name: "too many Roles", roleIDs: tooMany, rolesView: true, events: []string{}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			events := []string{}
+			service := newDirectoryFilterService(&userStoreFake{events: &events}, &roleStoreFake{events: &events, known: []model.RoleID{known}},
+				&authorizerFake{events: &events, searchScope: scoped, rolesView: test.rolesView, roleScope: roleScope})
+			_, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{Limit: 10, RoleIDs: test.roleIDs})
+			var appErr *apperror.Error
+			require.ErrorAs(t, err, &appErr)
+			require.Equal(t, "request.invalid", appErr.Code())
+			require.Equal(t, "role_id", appErr.Fields()["field"])
+			require.Equal(t, test.events, events)
+		})
+	}
+
+	t.Run("admitted", func(t *testing.T) {
+		t.Parallel()
+		events := []string{}
+		persistence := &userStoreFake{events: &events}
+		authorizer := &authorizerFake{events: &events, searchScope: scoped, rolesView: true, roleScope: roleScope}
+		service := newDirectoryFilterService(persistence, &roleStoreFake{events: &events, known: []model.RoleID{known}}, authorizer)
+		_, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{Limit: 10, RoleIDs: []model.RoleID{known, known}})
+		require.NoError(t, err)
+		require.Equal(t, []model.RoleID{known}, persistence.listOptions.RoleIDs, "repeats are dropped")
+		require.Equal(t, roleScope, persistence.listOptions.RoleBindingVisibility)
+		require.Equal(t, scoped, persistence.listOptions.Visibility, "the filter narrows the caller's own visibility")
+		require.Equal(t, scoped.ActiveAt, authorizer.roleScopeAt, "bindings are read at the visibility instant")
+		require.Equal(t, []string{"authorize-search", "can-view-roles", "get-roles", "role-binding-view-scope", "list-users", "count-users"}, events)
+	})
 }

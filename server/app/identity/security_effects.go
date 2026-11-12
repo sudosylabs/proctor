@@ -96,3 +96,17 @@ func (s *Service) sessionsRevoked(
 ) {
 	s.publisher.SessionsRevoked(ctx, userID, sessionIDs, hashes)
 }
+
+// publishSessionsChanged tells the User's connections to refetch their
+// Session list after a change that ends no Session, such as a rename; a
+// revocation announces itself through SessionsRevoked. It is best effort, and
+// operation names what failed.
+func (s *Service) publishSessionsChanged(ctx context.Context, userID model.UserID, operation string) {
+	event, err := realtime.NewCurrentUserSessionsChangedEvent(userID)
+	if err == nil {
+		err = s.publisher.Publish(ctx, event)
+	}
+	if err != nil {
+		s.publisher.Report(ctx, operation, err)
+	}
+}

@@ -23,12 +23,14 @@ import (
 type catalogFake struct {
 	store.Catalog
 	user         store.UserStore
+	role         store.RoleStore
 	roleBinding  store.RoleBindingStore
 	file         store.FileStore
 	userSettings store.UserSettingsStore
 }
 
 func (c *catalogFake) User() store.UserStore                 { return c.user }
+func (c *catalogFake) Role() store.RoleStore                 { return c.role }
 func (c *catalogFake) RoleBinding() store.RoleBindingStore   { return c.roleBinding }
 func (c *catalogFake) File() store.FileStore                 { return c.file }
 func (c *catalogFake) UserSettings() store.UserSettingsStore { return c.userSettings }
@@ -67,6 +69,7 @@ type authorizerFake struct {
 	searchScope store.UserVisibilityScope
 	roleScope   store.UserVisibilityScope
 	roleScopeAt time.Time
+	rolesView   bool
 	fullRead    bool
 	readErr     error
 	writeErr    error
@@ -86,6 +89,11 @@ func (a *authorizerFake) RoleBindingViewScope(_ context.Context, _ invocation.In
 	*a.events = append(*a.events, "role-binding-view-scope")
 	a.roleScopeAt = at
 	return a.roleScope, nil
+}
+
+func (a *authorizerFake) CanViewRoles(context.Context, invocation.Invocation) (bool, error) {
+	*a.events = append(*a.events, "can-view-roles")
+	return a.rolesView, nil
 }
 
 func (a *authorizerFake) AuthorizeProfileRead(context.Context, invocation.Invocation, model.UserID) (access.ProfileReadAuthorization, error) {

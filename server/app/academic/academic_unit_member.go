@@ -18,6 +18,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/internal/batchitem"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -111,7 +112,7 @@ func (s *Service) CreateAcademicUnitMember(
 			Action:     model.ActionAcademicUnitMembersManage,
 			Resource:   resource,
 			Operation:  "create_member",
-			Value:      candidate.Auditable(),
+			Value:      command.Batch.AuditValue(candidate.Auditable()),
 			Subject:    candidate.UserID,
 			At:         at,
 		},
@@ -214,6 +215,7 @@ func (s *Service) EndAcademicUnitMember(
 			Action:     model.ActionAcademicUnitMembersManage,
 			Resource:   resource,
 			Operation:  "end_member",
+			Value:      command.Batch.AuditValue(nil),
 			Prior:      current.Auditable(),
 			Subject:    current.UserID,
 			At:         at,
@@ -285,6 +287,7 @@ var AcademicUnitMemberStoreErrors = apperror.AdministrationStoreTable(
 // ListAcademicUnitMembersPageQuery opts into bounded membership enumeration. Each page is
 // authorized independently and explicit selectors preserve its effective filter.
 type ListAcademicUnitMembersPageQuery struct {
+	AfterStartAt   time.Time
 	AfterUserID    model.UserID
 	AfterID        model.AcademicUnitMemberID
 	AcademicUnitID model.AcademicUnitID
@@ -295,13 +298,15 @@ type ListAcademicUnitMembersPageQuery struct {
 // every listed member; its Email is set only for a caller holding
 // Institution-wide user.view. RolesHere holds each member's current Role
 // Bindings scoped exactly to the unit, at most academicUnitMemberRolesHere
-// each, and is nil when the caller lacks role_binding.view on the unit.
+// each, and is nil when the caller lacks role_binding.view on the unit. The
+// first page also counts every membership the page's filters match.
 type AcademicUnitMemberPage struct {
 	Members   []*model.AcademicUnitMember
 	HasMore   bool
 	ActiveAt  int64
 	Users     map[model.UserID]store.UserIdentity
 	RolesHere map[model.UserID]store.UserRoleBindingSummary
+	paging.Total
 }
 
 // academicUnitMemberRolesHere bounds the Role Bindings shown per member.
@@ -324,17 +329,21 @@ func (s *Service) ListAcademicUnitMembersPage(
 		return nil, err
 	}
 
-	if query.AfterID.IsZero() != query.AfterUserID.IsZero() ||
-		(!query.AfterID.IsZero() && (!query.AfterID.IsValid() || !query.AfterUserID.IsValid())) {
+	if !query.AfterID.IsZero() && !query.AfterID.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "cursor")
 	}
 
+	keyset, err := membershipPageKeyset(query.MembershipPageQuery, query.AfterID.String(), query.AfterStartAt, query.AfterUserID)
+	if err != nil {
+		return nil, err
+	}
+
 	options := store.AcademicUnitMemberPageOptions{
-		AcademicUnitID: query.AcademicUnitID,
-		ActiveAt:       model.TimeFromMillis(activeAt),
-		Limit:          limit,
-		AfterID:        query.AfterID,
-		AfterUserID:    query.AfterUserID,
+		AcademicUnitID:       query.AcademicUnitID,
+		ActiveAt:             model.TimeFromMillis(activeAt),
+		MembershipPageKeyset: keyset,
+		AfterID:              query.AfterID,
+		Limit:                limit,
 	}
 
 	page, err := s.academicUnitMembers.ListPageByAcademicUnit(ctx, options)
@@ -346,6 +355,18 @@ func (s *Service) ListAcademicUnitMembersPage(
 	if result.Members == nil {
 		result.Members = []*model.AcademicUnitMember{}
 	}
+
+	total, consistent, err := paging.CountFirst(query.AfterID.IsZero(), len(result.Members), func(maximum int) (int, error) {
+		return s.academicUnitMembers.CountPageByAcademicUnit(ctx, options, maximum)
+	})
+	if err != nil {
+		return nil, AcademicUnitMemberStoreErrors.Translate(err)
+	}
+	if !consistent {
+		return nil, apperror.New("administration.unavailable").WithField("resource", "academic_unit_member")
+	}
+
+	result.Total = total
 	if err := s.describeMembers(ctx, inv, resource, result, now); err != nil {
 		return nil, err
 	}

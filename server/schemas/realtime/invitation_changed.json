@@ -1,0 +1,30 @@
+{
+  "title": "Invitation changed",
+  "description": "Names an Invitation the addressed User issued and the state it reached. The accepting User is never included.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "invitation_id",
+    "state"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "invitation_id": {
+      "$ref": "id.json"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "accepted",
+        "revoked",
+        "expired",
+        "superseded"
+      ]
+    }
+  }
+}

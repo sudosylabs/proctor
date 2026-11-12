@@ -106,6 +106,22 @@ func testOnboardingImportListing(t *testing.T, ss store.Store) {
 			options.BeforeCreatedAt, options.BeforeID = last.CreatedAt, last.ID
 		}
 		require.Equal(t, []model.OnboardingImportID{tied[0], tied[1], classImport, childImport, unitImport}, paged)
+
+		paged = nil
+		options = store.OnboardingImportListOptions{Visibility: visibility, Ascending: true, Limit: 2}
+		for range 4 {
+			values, listErr := ss.OnboardingImport().ListOnboardingImports(ctx, options)
+			require.NoError(t, listErr)
+			if len(values) == 0 {
+				break
+			}
+			for _, value := range values {
+				paged = append(paged, value.ID)
+			}
+			last := values[len(values)-1]
+			options.BeforeCreatedAt, options.BeforeID = last.CreatedAt, last.ID
+		}
+		require.Equal(t, []model.OnboardingImportID{unitImport, childImport, classImport, tied[1], tied[0]}, paged, "oldest first is the exact reverse")
 	})
 	t.Run("StateFilter", func(t *testing.T) {
 		require.Equal(t, []model.OnboardingImportID{childImport}, list(store.OnboardingImportListOptions{

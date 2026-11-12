@@ -566,9 +566,10 @@ func (h *Hub) publishWire(event *Event) {
 	}
 
 	if h.recorder != nil {
-		// Event names are application payload data rather than a closed wire
-		// registry. Keep the metric series bounded while retaining publication
-		// outcome and fan-out depth.
+		// The server's event names are a closed list that app/realtime declares
+		// and asyncapi.json documents, but a peer may forward a name this node
+		// does not know, so the metric keeps one series and records only the
+		// publication outcome and fan-out depth.
 		h.recorder.ObserveWebSocketBroadcast("event", "published", len(connections))
 	}
 }

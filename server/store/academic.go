@@ -68,12 +68,14 @@ type AcademicUnitArchive struct {
 // name then identity. Term matches the name or display name as a literal,
 // case-insensitive substring; empty matches every row. AfterName and AfterID
 // are the exclusive continuation, both set or both empty. Limit is 1..201 so
-// the caller can probe one row past a full page.
+// the caller can probe one row past a full page. Descending reverses the
+// order; the continuation then moves toward smaller names.
 type AcademicNameListOptions struct {
-	Term      string
-	AfterName string
-	AfterID   string
-	Limit     int
+	Term       string
+	Descending bool
+	AfterName  string
+	AfterID    string
+	Limit      int
 }
 
 // AcademicPeriodListOptions selects one page of Academic Periods ordered by
@@ -130,6 +132,10 @@ type ProgrammeStore interface {
 	GetByName(context.Context, model.AcademicUnitID, string) (*model.Programme, error)
 	ListByAcademicUnit(context.Context, model.AcademicUnitID) ([]*model.Programme, error)
 	SearchByAcademicUnit(context.Context, model.AcademicUnitID, AcademicNameListOptions) ([]*model.Programme, error)
+	// CountByAcademicUnit counts the Programmes SearchByAcademicUnit would
+	// return across every page for the same Term, ignoring the continuation,
+	// order, and limit, and stops at maximum (see MaximumListCount).
+	CountByAcademicUnit(ctx context.Context, academicUnitID model.AcademicUnitID, options AcademicNameListOptions, maximum int) (int, error)
 	// SeedUpdate is an unaudited fixture write; production code never calls it.
 	SeedUpdate(context.Context, *model.Programme) (*model.Programme, error)
 }
@@ -164,6 +170,10 @@ type ProgrammeLevelStore interface {
 	GetByName(context.Context, model.ProgrammeID, string) (*model.ProgrammeLevel, error)
 	ListByProgramme(context.Context, model.ProgrammeID) ([]*model.ProgrammeLevel, error)
 	SearchByProgramme(context.Context, model.ProgrammeID, AcademicNameListOptions) ([]*model.ProgrammeLevel, error)
+	// CountByProgramme counts the Programme Levels SearchByProgramme would
+	// return across every page for the same Term, ignoring the continuation,
+	// order, and limit, and stops at maximum (see MaximumListCount).
+	CountByProgramme(ctx context.Context, programmeID model.ProgrammeID, options AcademicNameListOptions, maximum int) (int, error)
 	// SeedUpdate is an unaudited fixture write; production code never calls it.
 	SeedUpdate(context.Context, *model.ProgrammeLevel) (*model.ProgrammeLevel, error)
 }
@@ -262,6 +272,12 @@ type ClassStore interface {
 	ListByProgrammeLevel(context.Context, model.ProgrammeLevelID, AcademicNameListOptions) ([]*model.Class, error)
 	ListByAcademicPeriod(context.Context, model.AcademicPeriodID) ([]*model.Class, error)
 	SearchByAcademicUnit(context.Context, model.AcademicUnitID, AcademicNameListOptions) ([]*model.Class, error)
+	// CountByProgrammeLevel and CountByAcademicUnit count the Classes the
+	// matching listing would return across every page for the same Term,
+	// ignoring the continuation, order, and limit, and stop at maximum (see
+	// MaximumListCount).
+	CountByProgrammeLevel(ctx context.Context, programmeLevelID model.ProgrammeLevelID, options AcademicNameListOptions, maximum int) (int, error)
+	CountByAcademicUnit(ctx context.Context, academicUnitID model.AcademicUnitID, options AcademicNameListOptions, maximum int) (int, error)
 	SearchVisible(context.Context, ClassSearchOptions) ([]*model.Class, error)
 	GetAcademicUnitID(context.Context, model.ClassID) (model.AcademicUnitID, error)
 }

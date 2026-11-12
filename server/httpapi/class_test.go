@@ -35,6 +35,9 @@ type classHTTPApplication struct {
 	list           []*model.Class
 	createCommand  academic.CreateClassCommand
 	searchErr      error
+	listQuery      academic.ListClassesQuery
+	searchQuery    academic.SearchClassesQuery
+	studentCounts  map[model.ClassID]int
 }
 
 func TestClassResourceRunsThroughRoutingKernelWithNarrowDependencies(t *testing.T) {
@@ -186,11 +189,24 @@ func newFocusedResourceAPI(
 func (a *classHTTPApplication) GetClass(context.Context, invocation.Invocation, model.ClassID) (*model.Class, error) {
 	return a.result, nil
 }
-func (a *classHTTPApplication) ListClasses(context.Context, invocation.Invocation, academic.ListClassesQuery) (paging.Page[*model.Class], error) {
-	return paging.Page[*model.Class]{Items: a.list}, nil
+func (a *classHTTPApplication) ListClasses(_ context.Context, _ invocation.Invocation, query academic.ListClassesQuery) (academic.ClassPage, error) {
+	a.listQuery = query
+	return a.classPage(query.NameQuery), nil
 }
-func (a *classHTTPApplication) SearchClasses(context.Context, invocation.Invocation, academic.SearchClassesQuery) (paging.Page[*model.Class], error) {
-	return paging.Page[*model.Class]{Items: a.list}, a.searchErr
+func (a *classHTTPApplication) SearchClasses(_ context.Context, _ invocation.Invocation, query academic.SearchClassesQuery) (academic.ClassPage, error) {
+	a.searchQuery = query
+	return a.classPage(query.NameQuery), a.searchErr
+}
+
+// classPage answers the fake's Classes, counting the first page as the
+// application does.
+func (a *classHTTPApplication) classPage(query paging.NameQuery) academic.ClassPage {
+	page := academic.ClassPage{StudentCounts: a.studentCounts}
+	page.Items = a.list
+	if query.AfterID == "" {
+		page.Total = paging.CountWhole(len(a.list))
+	}
+	return page
 }
 
 func TestClassSearchMapsMissingAcademicUnit(t *testing.T) {
@@ -266,8 +282,8 @@ func TestClassOpenAPIDocument(t *testing.T) {
 	var searchOperation openAPIOperation
 	path := model.APIURLSuffix + "/academic-units/{academic_unit_id}/classes"
 	require.NoError(t, json.Unmarshal(document.Paths[path]["get"], &searchOperation))
-	require.Equal(t, []string{"cursor", "limit", "q"}, academicStructureQueryParameterNames(searchOperation.Parameters), "Class search query parameters")
+	require.Equal(t, []string{"cursor", "dir", "limit", "q"}, academicStructureQueryParameterNames(searchOperation.Parameters), "Class search query parameters")
 	list := document.Components.Schemas["ClassListResponse"]
-	requireOpenAPIListEnvelope(t, list, "#/components/schemas/ClassResponse")
+	requireOpenAPIListEnvelope(t, list, "#/components/schemas/ClassListItemResponse")
 	require.Equal(t, "#/components/headers/NoStore", document.Components.Responses["ClassArchived"].Headers["Cache-Control"].Ref)
 }

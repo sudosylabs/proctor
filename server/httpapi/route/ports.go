@@ -11,12 +11,17 @@ import (
 	"context"
 	"net/http"
 	"time"
+
+	"github.com/sudosylabs/proctor/server/localization"
 )
 
 // Localizer is the narrow presentation-owned localization port. Application
 // and domain failures remain stable codes; only the HTTP edge asks for prose.
 type Localizer interface {
 	Translate(locale, id string, args any) (string, error)
+	// TranslateRequest renders one message with its template data and, for a
+	// plural message, its count.
+	TranslateRequest(locale string, request localization.Request) (string, error)
 	SupportedLocales() []string
 }
 

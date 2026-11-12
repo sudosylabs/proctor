@@ -1,0 +1,23 @@
+{
+  "title": "User profile picture changed",
+  "description": "The File Entry that is now the User's profile picture and the User revision after the change.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "active_file_entry_id",
+    "revision",
+    "changed_at"
+  ],
+  "properties": {
+    "active_file_entry_id": {
+      "$ref": "id.json"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "changed_at": {
+      "$ref": "instant.json"
+    }
+  }
+}

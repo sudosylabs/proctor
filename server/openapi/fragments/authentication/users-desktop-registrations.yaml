@@ -30,6 +30,33 @@ paths:
         "500": {$ref: '#/components/responses/InternalError'}
         "503": {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/users/me/desktop-registrations/{desktop_registration_id}:
+    patch:
+      operationId: renameDesktopRegistration
+      summary: Rename one Desktop Registration
+      description: >-
+        Gives one of the current User's active Desktop Registrations the name they chose. The name is trimmed, loses bidirectional and invisible formatting code points, and must be 1 to 128 characters without control characters. It labels the device in the User's own registration and Session lists, and a later Desktop sign-in with the same key keeps it instead of the device name the Desktop reports. Renaming changes no key, Session, or credential, so any interactive Session may do it without recent authentication; Personal Access Tokens cannot. Repeating the request with the same name leaves the same result. A revoked registration is security history and cannot be renamed; a registration of another User is not found. Every rename is audited and appears in the User's own account history.
+      tags: [Authentication]
+      parameters:
+        - $ref: '#/components/parameters/DesktopRegistrationID'
+      x-proctor-auth: session_required
+      x-proctor-error-codes: [desktop_registration.invalid, desktop_registration.revoked, desktop_registration.unavailable, request.invalid, resource.not_found, audit.unavailable, authentication.session_required, authentication.reauthentication_required, authentication.required, authentication.token_invalid, authentication.credential_ambiguous, authentication.dpop.invalid, authentication.dpop.replayed, authentication.dpop.use_nonce, authentication.dpop.unavailable, authentication.csrf.invalid]
+      x-proctor-idempotency: none
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        $ref: '#/components/requestBodies/RenameDesktopRegistration'
+      responses:
+        "200": {$ref: '#/components/responses/DesktopRegistrationOK'}
+        "400": {$ref: '#/components/responses/BadRequest'}
+        "401": {$ref: '#/components/responses/Unauthorized'}
+        "403": {$ref: '#/components/responses/Forbidden'}
+        "404": {$ref: '#/components/responses/NotFound'}
+        "409": {$ref: '#/components/responses/Conflict'}
+        "500": {$ref: '#/components/responses/InternalError'}
+        "503": {$ref: '#/components/responses/ServiceUnavailable'}
     delete:
       operationId: revokeDesktopRegistration
       summary: Irreversibly revoke one Desktop Registration
@@ -70,7 +97,35 @@ components:
       required: true
       description: Exact Desktop Registration identity from the current User's private registration list.
       schema: {$ref: '#/components/schemas/ID'}
+  requestBodies:
+    RenameDesktopRegistration:
+      required: true
+      description: The name the current User chose for the Desktop Registration.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/RenameDesktopRegistrationRequest'}
+          example:
+            display_name: Library laptop
   responses:
+    DesktopRegistrationOK:
+      description: The renamed Desktop Registration
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/DesktopRegistrationResponse'}
+          example:
+            id: ybndrfg8ejkmcpqxot1uwisza3
+            display_name: Library laptop
+            desktop_release: 1.4.0
+            desktop_build_id: build-2026-08
+            platform: darwin
+            architecture: arm64
+            realtime_protocol: 1
+            created_at: '2026-08-01T09:00:00Z'
+            last_used_at: '2026-08-12T14:30:00Z'
+            status: active
+            current: false
     DesktopRegistrationListOK:
       description: Current User's Desktop Registration security history
       headers:
@@ -79,6 +134,16 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/DesktopRegistrationListResponse'}
   schemas:
+    RenameDesktopRegistrationRequest:
+      type: object
+      additionalProperties: false
+      required: [display_name]
+      properties:
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: The new name. Surrounding whitespace is removed before the length is checked.
     DesktopRegistrationListResponse:
       description: One page of the collection in its stable order.
       type: object

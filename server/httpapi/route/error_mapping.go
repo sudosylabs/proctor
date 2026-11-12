@@ -14,6 +14,11 @@ import "net/http"
 // applicationErrorMappings is the exhaustive HTTP status table for public
 // application and kernel error codes, generated from error_catalog.yaml.
 var applicationErrorMappings = map[string]applicationErrorMapping{
+	"academic_administration_preview.authorization_lost":          {status: http.StatusConflict},
+	"academic_administration_preview.conflict":                    {status: http.StatusConflict},
+	"academic_administration_preview.expired":                     {status: http.StatusGone},
+	"academic_administration_preview.target_conflict":             {status: http.StatusConflict},
+	"academic_administration_preview.too_many_users":              {status: http.StatusConflict},
 	"academic_period.conflict":                                    {status: http.StatusConflict},
 	"academic_period.invalid":                                     {status: http.StatusBadRequest},
 	"academic_unit.conflict":                                      {status: http.StatusConflict},
@@ -107,6 +112,8 @@ var applicationErrorMappings = map[string]applicationErrorMapping{
 	"desktop_compatibility_policy.invalid":                        {status: http.StatusBadRequest},
 	"desktop_compatibility_policy.revision_conflict":              {status: http.StatusConflict},
 	"desktop_compatibility_policy.unavailable":                    {status: http.StatusServiceUnavailable},
+	"desktop_registration.invalid":                                {status: http.StatusBadRequest},
+	"desktop_registration.revoked":                                {status: http.StatusConflict},
 	"desktop_registration.unavailable":                            {status: http.StatusServiceUnavailable},
 	"exam.archived":                                               {status: http.StatusConflict},
 	"exam.attempt.already_connected":                              {status: http.StatusConflict},
@@ -308,7 +315,9 @@ var applicationErrorMappings = map[string]applicationErrorMapping{
 	"role_binding.system_admin_scope_invalid":                     {status: http.StatusBadRequest},
 	"search.query.invalid":                                        {status: http.StatusBadRequest},
 	"service.busy":                                                {status: http.StatusServiceUnavailable, retryAfter: 1},
+	"session.desktop_named_by_registration":                       {status: http.StatusConflict},
 	"session.id.invalid":                                          {status: http.StatusBadRequest},
+	"session.invalid":                                             {status: http.StatusBadRequest},
 	"session.not_found":                                           {status: http.StatusNotFound},
 	"student_progression.conflict":                                {status: http.StatusConflict},
 	"student_progression.effective_date_conflict":                 {status: http.StatusConflict},

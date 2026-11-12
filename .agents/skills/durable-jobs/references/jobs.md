@@ -121,8 +121,18 @@ events, or generic API responses.
 System administrators receive allowlisted list, get, attempt-history, and
 cancel operations. There is no generic API for creating arbitrary Job Types.
 Domain-facing work may later expose status through its owning resource.
-PostgreSQL is authoritative; general realtime Job events are not required for
-the first slice.
+PostgreSQL is authoritative. The engine announces each transition it commits
+for an operator-visible Job (claim, completion or retry, operator cancel and
+retry) and its checkpoints, at most one per Job every two seconds on each node
+(a status change bypasses and clears that window), to a `ChangeListener`; the
+application publishes it as the `job.changed` refetch signal to `job.view`
+subscribers on the Institution. The signal carries only the Job's identifier,
+type and status, plus `current`/`total`/`stage` progress for a type that
+declares progress stages; commands, checkpoint documents, results and errors
+never travel, and clients refetch the Job over HTTP. Store-side transitions
+the engine does not see, such as the requeue or failure of an expired lease
+inside `ClaimNext` and domain enqueues, are not announced; the next claim or
+completion is.
 
 Canonical safe Job and Job Attempt projections live with the `app/job` engine
 and omit raw commands, checkpoints, result documents, deduplication keys,
@@ -275,6 +285,11 @@ execution but keep their own preview, scope, row, and report state; generic Job
 payloads are not the product API. Upload creates no domain effects. A bounded
 parse Job produces a content-digested immutable preview, explicit commit creates
 one execution Job, and each row runs one named atomic aggregate transaction.
+Three sources produce the preview: a CSV parse Job, the student progression
+preview Job, and the academic administration filter preview Job
+(`academic_administration_preview.resolve`), which freezes the Users a
+directory filter matches and fails the preview rather than truncate past
+10,000 rows. All three commit to the same execution Job.
 
 Submission and every row reauthorize against current actor, target, scope, and
 credential type. Cancellation prevents new row claims, lets a committing row

@@ -47,7 +47,7 @@ func TestJobResponseNamesItsInitiatorAndSubjectOnlyWhenKnown(t *testing.T) {
 }
 
 func TestJobCursorIsOpaqueAndRejectsInvalidInput(t *testing.T) {
-	cursor := jobCursor{CreatedAt: "2026-01-02T03:04:05.123Z", ID: model.NewID()}
+	cursor := jobCursor{CreatedAt: "2026-01-02T03:04:05.123Z", ID: model.NewID(), Order: listDescending}
 	encoded, err := encodeJobCursor(cursor)
 	require.NoError(t, err)
 	roundTrip, err := decodeJobCursor(encoded)
@@ -55,4 +55,6 @@ func TestJobCursorIsOpaqueAndRejectsInvalidInput(t *testing.T) {
 	require.Equal(t, cursor, roundTrip, "cursor")
 	_, err = decodeJobCursor("not-a-cursor")
 	require.Error(t, err, "invalid cursor accepted")
+	_, err = encodeJobCursor(jobCursor{CreatedAt: cursor.CreatedAt, ID: cursor.ID, Order: "newest"})
+	require.Error(t, err, "a cursor names a known order")
 }

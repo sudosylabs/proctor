@@ -32,7 +32,7 @@ func NewAccessPolicyChangedEvent(institutionID model.InstitutionID, revision int
 	}
 
 	return Event{
-		Name:     "access_policy_changed",
+		Name:     accessPolicyChangedMessage.name,
 		Action:   model.ActionAccessPolicyView,
 		Resource: model.Resource{Type: model.ResourceInstitution, ID: institutionID.String()},
 		Data:     data,

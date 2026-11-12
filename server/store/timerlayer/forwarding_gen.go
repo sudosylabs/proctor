@@ -1095,6 +1095,12 @@ func (s *timedProgrammeStore) SearchByAcademicUnit(arg0 context.Context, arg1 mo
 	})
 }
 
+func (s *timedProgrammeStore) CountByAcademicUnit(ctx context.Context, academicUnitID model.AcademicUnitID, options store.AcademicNameListOptions, maximum int) (int, error) {
+	return timeStoreCall1(ctx, s.layer, storeOperation(aggregateProgramme, methodCountByAcademicUnit), func(callCtx context.Context) (int, error) {
+		return s.next.CountByAcademicUnit(callCtx, academicUnitID, options, maximum)
+	})
+}
+
 func (s *timedProgrammeStore) SeedUpdate(arg0 context.Context, arg1 *model.Programme) (*model.Programme, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateProgramme, methodSeedUpdate), func(callCtx context.Context) (*model.Programme, error) {
 		return s.next.SeedUpdate(callCtx, arg1)
@@ -1140,6 +1146,12 @@ func (s *timedProgrammeLevelStore) ListByProgramme(arg0 context.Context, arg1 mo
 func (s *timedProgrammeLevelStore) SearchByProgramme(arg0 context.Context, arg1 model.ProgrammeID, arg2 store.AcademicNameListOptions) ([]*model.ProgrammeLevel, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateProgrammeLevel, methodSearchByProgramme), func(callCtx context.Context) ([]*model.ProgrammeLevel, error) {
 		return s.next.SearchByProgramme(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedProgrammeLevelStore) CountByProgramme(ctx context.Context, programmeID model.ProgrammeID, options store.AcademicNameListOptions, maximum int) (int, error) {
+	return timeStoreCall1(ctx, s.layer, storeOperation(aggregateProgrammeLevel, methodCountByProgramme), func(callCtx context.Context) (int, error) {
+		return s.next.CountByProgramme(callCtx, programmeID, options, maximum)
 	})
 }
 
@@ -2235,6 +2247,18 @@ func (s *timedClassStore) SearchByAcademicUnit(arg0 context.Context, arg1 model.
 	})
 }
 
+func (s *timedClassStore) CountByProgrammeLevel(ctx context.Context, programmeLevelID model.ProgrammeLevelID, options store.AcademicNameListOptions, maximum int) (int, error) {
+	return timeStoreCall1(ctx, s.layer, storeOperation(aggregateClass, methodCountByProgrammeLevel), func(callCtx context.Context) (int, error) {
+		return s.next.CountByProgrammeLevel(callCtx, programmeLevelID, options, maximum)
+	})
+}
+
+func (s *timedClassStore) CountByAcademicUnit(ctx context.Context, academicUnitID model.AcademicUnitID, options store.AcademicNameListOptions, maximum int) (int, error) {
+	return timeStoreCall1(ctx, s.layer, storeOperation(aggregateClass, methodCountByAcademicUnit), func(callCtx context.Context) (int, error) {
+		return s.next.CountByAcademicUnit(callCtx, academicUnitID, options, maximum)
+	})
+}
+
 func (s *timedClassStore) SearchVisible(arg0 context.Context, arg1 store.ClassSearchOptions) ([]*model.Class, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateClass, methodSearchVisible), func(callCtx context.Context) ([]*model.Class, error) {
 		return s.next.SearchVisible(callCtx, arg1)
@@ -2823,6 +2847,12 @@ func (s *timedDesktopRegistrationStore) ListByUser(arg0 context.Context, arg1 mo
 	})
 }
 
+func (s *timedDesktopRegistrationStore) Rename(arg0 context.Context, arg1 *store.DesktopRegistrationRename) (*model.DesktopRegistration, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateDesktopRegistration, methodRename), func(callCtx context.Context) (*model.DesktopRegistration, error) {
+		return s.next.Rename(callCtx, arg1)
+	})
+}
+
 func (s *timedDesktopRegistrationStore) Revoke(arg0 context.Context, arg1 *store.DesktopRegistrationRevocation) (*store.DesktopRegistrationRevocationResult, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateDesktopRegistration, methodRevoke), func(callCtx context.Context) (*store.DesktopRegistrationRevocationResult, error) {
 		return s.next.Revoke(callCtx, arg1)
@@ -3090,6 +3120,18 @@ func (s *timedOnboardingImportStore) CommitOnboardingImport(arg0 context.Context
 func (s *timedOnboardingImportStore) ListOnboardingImportRows(arg0 context.Context, arg1 model.OnboardingImportID, arg2 int, arg3 int) (*store.OnboardingImportPage, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateOnboardingImport, methodListOnboardingImportRows), func(callCtx context.Context) (*store.OnboardingImportPage, error) {
 		return s.next.ListOnboardingImportRows(callCtx, arg1, arg2, arg3)
+	})
+}
+
+func (s *timedOnboardingImportStore) CountAcademicAdministrationPreviewGroups(arg0 context.Context, arg1 store.AcademicAdministrationPreviewGroupCountOptions) ([]store.AcademicAdministrationPreviewGroup, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateOnboardingImport, methodCountAcademicAdministrationPreviewGroups), func(callCtx context.Context) ([]store.AcademicAdministrationPreviewGroup, error) {
+		return s.next.CountAcademicAdministrationPreviewGroups(callCtx, arg1)
+	})
+}
+
+func (s *timedOnboardingImportStore) ListAcademicAdministrationPreviewRows(arg0 context.Context, arg1 store.AcademicAdministrationPreviewRowListOptions) ([]store.AcademicAdministrationPreviewRow, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateOnboardingImport, methodListAcademicAdministrationPreviewRows), func(callCtx context.Context) ([]store.AcademicAdministrationPreviewRow, error) {
+		return s.next.ListAcademicAdministrationPreviewRows(callCtx, arg1)
 	})
 }
 
@@ -3369,6 +3411,12 @@ func (s *timedAcademicUnitMemberStore) ListPageByAcademicUnit(arg0 context.Conte
 	})
 }
 
+func (s *timedAcademicUnitMemberStore) CountPageByAcademicUnit(arg0 context.Context, arg1 store.AcademicUnitMemberPageOptions, arg2 int) (int, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAcademicUnitMember, methodCountPageByAcademicUnit), func(callCtx context.Context) (int, error) {
+		return s.next.CountPageByAcademicUnit(callCtx, arg1, arg2)
+	})
+}
+
 func (s *timedAcademicUnitMemberStore) ListActiveByUser(arg0 context.Context, arg1 model.UserID, arg2 time.Time) ([]*model.AcademicUnitMember, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAcademicUnitMember, methodListActiveByUser), func(callCtx context.Context) ([]*model.AcademicUnitMember, error) {
 		return s.next.ListActiveByUser(callCtx, arg1, arg2)
@@ -3408,6 +3456,18 @@ func (s *timedClassMemberStore) ListByClass(ctx context.Context, classID model.C
 func (s *timedClassMemberStore) ListPageByClass(arg0 context.Context, arg1 store.ClassMemberPageOptions) (*store.ClassMemberPage, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateClassMember, methodListPageByClass), func(callCtx context.Context) (*store.ClassMemberPage, error) {
 		return s.next.ListPageByClass(callCtx, arg1)
+	})
+}
+
+func (s *timedClassMemberStore) CountPageByClass(arg0 context.Context, arg1 store.ClassMemberPageOptions, arg2 int) (int, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateClassMember, methodCountPageByClass), func(callCtx context.Context) (int, error) {
+		return s.next.CountPageByClass(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedClassMemberStore) CountCurrentByClasses(ctx context.Context, classIDs []model.ClassID, at time.Time, maximum int) ([]store.ClassStudentCount, error) {
+	return timeStoreCall1(ctx, s.layer, storeOperation(aggregateClassMember, methodCountCurrentByClasses), func(callCtx context.Context) ([]store.ClassStudentCount, error) {
+		return s.next.CountCurrentByClasses(callCtx, classIDs, at, maximum)
 	})
 }
 
@@ -3528,6 +3588,12 @@ func (s *timedSessionStore) Revoke(arg0 context.Context, arg1 *store.SessionRevo
 func (s *timedSessionStore) RevokeAllForUser(arg0 context.Context, arg1 *store.UserSessionsRevocation) (*store.UserSessionsRevocationResult, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateSession, methodRevokeAllForUser), func(callCtx context.Context) (*store.UserSessionsRevocationResult, error) {
 		return s.next.RevokeAllForUser(callCtx, arg1)
+	})
+}
+
+func (s *timedSessionStore) Rename(arg0 context.Context, arg1 *store.SessionRename) (*model.Session, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateSession, methodRename), func(callCtx context.Context) (*model.Session, error) {
+		return s.next.Rename(callCtx, arg1)
 	})
 }
 
@@ -3702,6 +3768,12 @@ func (s *timedAuditStore) ListSelf(arg0 context.Context, arg1 store.AuditSelfLis
 func (s *timedAuditStore) CountSelf(arg0 context.Context, arg1 store.AuditSelfListOptions) (int, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAudit, methodCountSelf), func(callCtx context.Context) (int, error) {
 		return s.next.CountSelf(callCtx, arg1)
+	})
+}
+
+func (s *timedAuditStore) ListNames(arg0 context.Context, arg1 store.AuditNameOptions) (store.AuditNames, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAudit, methodListNames), func(callCtx context.Context) (store.AuditNames, error) {
+		return s.next.ListNames(callCtx, arg1)
 	})
 }
 

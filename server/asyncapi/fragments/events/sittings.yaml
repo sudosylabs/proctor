@@ -1,0 +1,379 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+# Sitting events and the board and activity invalidations.
+components:
+  messages:
+    exam_sitting_scheduled:
+      name: exam_sitting_scheduled
+      title: Sitting scheduled
+      summary: A Sitting was scheduled.
+      description: A Sitting was scheduled. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.
+      tags:
+        - name: event
+        - name: Sittings
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_sitting_scheduled
+              action:
+                type: string
+                const: exam.sitting.view
+              data:
+                $ref: '../../../schemas/realtime/exam_sitting_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_sitting_scheduled
+            sequence: 40
+            action: exam.sitting.view
+            resource:
+              type: exam_sitting
+              id: h9nfemqtwz47ydgjcx1ia56br8
+            data:
+              exam_id: ia56br8kpous3h9nfemqtwz47y
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
+              state: scheduled
+              revision: 1
+              changed_at: '2026-08-01T09:30:00Z'
+    exam_sitting_schedule_updated:
+      name: exam_sitting_schedule_updated
+      title: Sitting schedule updated
+      summary: A scheduled Sitting's Exam Revision, Class, start or end changed.
+      description: A scheduled Sitting's Exam Revision, Class, start or end changed. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.
+      tags:
+        - name: event
+        - name: Sittings
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_sitting_schedule_updated
+              action:
+                type: string
+                const: exam.sitting.view
+              data:
+                $ref: '../../../schemas/realtime/exam_sitting_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_sitting_schedule_updated
+            sequence: 41
+            action: exam.sitting.view
+            resource:
+              type: exam_sitting
+              id: h9nfemqtwz47ydgjcx1ia56br8
+            data:
+              exam_id: ia56br8kpous3h9nfemqtwz47y
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
+              state: scheduled
+              revision: 2
+              changed_at: '2026-08-01T09:30:00Z'
+    exam_sitting_canceled:
+      name: exam_sitting_canceled
+      title: Sitting canceled
+      summary: A Sitting was canceled before it opened.
+      description: A Sitting was canceled before it opened. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.
+      tags:
+        - name: event
+        - name: Sittings
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_sitting_canceled
+              action:
+                type: string
+                const: exam.sitting.view
+              data:
+                $ref: '../../../schemas/realtime/exam_sitting_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_sitting_canceled
+            sequence: 42
+            action: exam.sitting.view
+            resource:
+              type: exam_sitting
+              id: h9nfemqtwz47ydgjcx1ia56br8
+            data:
+              exam_id: ia56br8kpous3h9nfemqtwz47y
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
+              state: canceled
+              revision: 3
+              changed_at: '2026-08-01T09:30:00Z'
+    exam_sitting_lifecycle_changed:
+      name: exam_sitting_lifecycle_changed
+      title: Sitting lifecycle changed
+      summary: A Sitting opened, paused, resumed, was extended, or closed. Sent to Sitting viewers.
+      description: A Sitting opened, paused, resumed, was extended, or closed. Sent to Sitting viewers. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.
+      tags:
+        - name: event
+        - name: Sittings
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_sitting_lifecycle_changed
+              action:
+                type: string
+                const: exam.sitting.view
+              data:
+                $ref: '../../../schemas/realtime/exam_sitting_lifecycle_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_sitting_lifecycle_changed
+            sequence: 43
+            action: exam.sitting.view
+            resource:
+              type: exam_sitting
+              id: h9nfemqtwz47ydgjcx1ia56br8
+            data:
+              exam_id: ia56br8kpous3h9nfemqtwz47y
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
+              state: paused
+              revision: 5
+              reason_code: manager_paused
+              scheduled_end_at: '2026-08-01T11:00:00Z'
+              changed_at: '2026-08-01T09:30:00Z'
+    exam_sitting_lifecycle_changed_for_candidate:
+      name: exam_sitting_lifecycle_changed
+      title: Sitting lifecycle changed, for candidates
+      summary: The same lifecycle fact, sent to candidates who participate in the Sitting.
+      description: The same lifecycle fact, sent to candidates who participate in the Sitting. Delivered to connections that subscribe to exam.sitting.participate on the exam sitting.
+      tags:
+        - name: event
+        - name: Sittings
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_sitting_lifecycle_changed
+              action:
+                type: string
+                const: exam.sitting.participate
+              data:
+                $ref: '../../../schemas/realtime/exam_sitting_lifecycle_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_sitting_lifecycle_changed
+            sequence: 44
+            action: exam.sitting.participate
+            resource:
+              type: exam_sitting
+              id: h9nfemqtwz47ydgjcx1ia56br8
+            data:
+              exam_id: ia56br8kpous3h9nfemqtwz47y
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
+              state: paused
+              revision: 5
+              reason_code: manager_paused
+              scheduled_end_at: '2026-08-01T11:00:00Z'
+              changed_at: '2026-08-01T09:30:00Z'
+    exam_sitting_content_corrected:
+      name: exam_sitting_content_corrected
+      title: Sitting content corrected
+      summary: A live correction moved the Sitting to another Exam Revision. Sent to Sitting viewers.
+      description: A live correction moved the Sitting to another Exam Revision. Sent to Sitting viewers. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.
+      tags:
+        - name: event
+        - name: Sittings
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_sitting_content_corrected
+              action:
+                type: string
+                const: exam.sitting.view
+              data:
+                $ref: '../../../schemas/realtime/exam_sitting_content_corrected.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_sitting_content_corrected
+            sequence: 45
+            action: exam.sitting.view
+            resource:
+              type: exam_sitting
+              id: h9nfemqtwz47ydgjcx1ia56br8
+            data:
+              exam_id: ia56br8kpous3h9nfemqtwz47y
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
+              previous_revision_id: '56br8kpous3h9nfemqtwz47ydg'
+              revision_id: wz47ydgjcx1ia56br8kpous3h9
+              sitting_revision: 6
+              effective_at: '2026-08-01T09:30:00Z'
+    exam_sitting_content_corrected_for_candidate:
+      name: exam_sitting_content_corrected
+      title: Sitting content corrected, for candidates
+      summary: The same correction, sent to candidates who participate in the Sitting.
+      description: The same correction, sent to candidates who participate in the Sitting. Delivered to connections that subscribe to exam.sitting.participate on the exam sitting.
+      tags:
+        - name: event
+        - name: Sittings
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_sitting_content_corrected
+              action:
+                type: string
+                const: exam.sitting.participate
+              data:
+                $ref: '../../../schemas/realtime/exam_sitting_content_corrected.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_sitting_content_corrected
+            sequence: 46
+            action: exam.sitting.participate
+            resource:
+              type: exam_sitting
+              id: h9nfemqtwz47ydgjcx1ia56br8
+            data:
+              exam_id: ia56br8kpous3h9nfemqtwz47y
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
+              previous_revision_id: '56br8kpous3h9nfemqtwz47ydg'
+              revision_id: wz47ydgjcx1ia56br8kpous3h9
+              sitting_revision: 6
+              effective_at: '2026-08-01T09:30:00Z'
+    manager.sitting_board.changed:
+      name: manager.sitting_board.changed
+      title: Sitting board changed
+      summary: Refetch the manager board of one Sitting.
+      description: Refetch the manager board of one Sitting. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.
+      tags:
+        - name: event
+        - name: Sittings
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: manager.sitting_board.changed
+              action:
+                type: string
+                const: exam.sitting.view
+              data:
+                $ref: '../../../schemas/realtime/sitting_board_invalidation.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: manager.sitting_board.changed
+            sequence: 47
+            action: exam.sitting.view
+            resource:
+              type: exam_sitting
+              id: h9nfemqtwz47ydgjcx1ia56br8
+            data:
+              schema_version: 1
+              exam_id: ia56br8kpous3h9nfemqtwz47y
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
+    candidate.exam_activity.changed:
+      name: candidate.exam_activity.changed
+      title: Candidate Exam activity changed
+      summary: Refetch the candidate's Exam activity.
+      description: Refetch the candidate's Exam activity. Delivered to the addressed User's connections.
+      tags:
+        - name: event
+        - name: Sittings
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - user_id
+              - data
+            properties:
+              event:
+                type: string
+                const: candidate.exam_activity.changed
+              data:
+                $ref: '../../../schemas/realtime/collection_invalidation.json'
+            not:
+              required:
+                - action
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: candidate.exam_activity.changed
+            sequence: 48
+            user_id: qtwz47ydgjcx1ia56br8kpous3
+            resource:
+              type: ''
+              id: ''
+            data:
+              schema_version: 1

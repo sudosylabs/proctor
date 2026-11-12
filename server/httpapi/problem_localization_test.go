@@ -54,6 +54,10 @@ func TestSessionAndBuiltInRolePresentationLocalizesWithoutChangingIdentifiers(t 
 	require.Equal(t, "Accès complet à l’installation.", role.Description)
 }
 
+func (l problemTestLocalizer) TranslateRequest(locale string, request localization.Request) (string, error) {
+	return l.Translate(locale, request.ID, request.TemplateData)
+}
+
 func (problemTestLocalizer) SupportedLocales() []string { return []string{"en", "fr"} }
 
 func TestPreferredLocaleHonorsAcceptLanguageQuality(t *testing.T) {

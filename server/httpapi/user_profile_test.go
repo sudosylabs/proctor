@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -22,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/administration"
+	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -42,6 +44,7 @@ type userProfileHTTPApplication struct {
 	searchHasMore      bool
 	searchTotal        int
 	searchQuery        user.SearchUsersQuery
+	searchErr          error
 	updateCommand      user.UpdateUserProfileCommand
 	changeEmailCommand identity.ChangeUserEmailCommand
 	verifyEmailUserID  model.UserID
@@ -187,7 +190,7 @@ func (a *userProfileHTTPApplication) SearchUsers(_ context.Context, _ invocation
 	if query.AfterID == "" {
 		page.Total = paging.Total{Counted: true, Total: max(a.searchTotal, len(entries)), TotalIsLowerBound: a.searchTotal == store.MaximumListCount}
 	}
-	return page, nil
+	return page, a.searchErr
 }
 func (a *userProfileHTTPApplication) GetUserProfile(context.Context, invocation.Invocation, model.UserID) (*model.User, error) {
 	return a.result, nil
@@ -693,4 +696,150 @@ func assertOpenAPIIfMatchForProfile(
 		}
 	}
 	assert.Fail(t, fmt.Sprintf("%s does not document If-Match", key))
+}
+
+// TestUserSearchTransportCarriesTheOrderInItsCursor pins the directory order
+// parameters: each sort and direction reaches the application with the
+// previous page's key in that order, a cursor resumes only the order that
+// wrote it, and the application's refusal of a sort the caller's projection
+// cannot show (last_active for a scoped viewer) is a request.invalid problem.
+func TestUserSearchTransportCarriesTheOrderInItsCursor(t *testing.T) {
+	t.Parallel()
+	logger, _ := routetest.NewLogger(t)
+	principal := model.Principal{
+		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
+		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
+		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
+		ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now(),
+	}
+	createdAt := time.Date(2026, 9, 1, 8, 0, 0, 123_000, time.UTC)
+	activeAt := createdAt.Add(time.Hour)
+	listed := &model.User{ID: model.NewUserID(), Username: "amina", DisplayName: "Amina Diallo", CreatedAt: createdAt,
+		LastActivityAt: model.OptionalTimeFrom(activeAt)}
+	never := &model.User{ID: model.NewUserID(), Username: "bola", CreatedAt: createdAt}
+	profiles := &userProfileHTTPApplication{values: []*model.User{listed}, searchHasMore: true}
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userProfileResource(profiles, profiles, profiles))
+	serve := func(query string) *httptest.ResponseRecorder {
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users"+query, nil)
+		request.Header.Set("Authorization", "Bearer credential")
+		response := httptest.NewRecorder()
+		httpAPI.ServeHTTP(response, request)
+		return response
+	}
+	nextCursor := func(query string) string {
+		t.Helper()
+		response := serve(query)
+		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+		var page route.CountedList[json.RawMessage]
+		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
+		require.NotEmpty(t, page.NextCursor)
+		return page.NextCursor
+	}
+
+	_ = nextCursor("")
+	require.Equal(t, store.UserOrderUsername, profiles.searchQuery.Order, "the default order is username")
+	require.False(t, profiles.searchQuery.Descending)
+
+	for _, test := range []struct {
+		sort, dir string
+		check     func(user.SearchUsersQuery)
+	}{
+		{sort: "username", dir: "desc", check: func(query user.SearchUsersQuery) { require.Equal(t, listed.Username, query.AfterUsername) }},
+		{sort: "name", dir: "asc", check: func(query user.SearchUsersQuery) {
+			require.Empty(t, query.AfterUsername, "the name order resumes from the User alone")
+			require.True(t, query.AfterCreatedAt.IsZero())
+		}},
+		{sort: "created", dir: "desc", check: func(query user.SearchUsersQuery) { require.True(t, createdAt.Equal(query.AfterCreatedAt)) }},
+		{sort: "last_active", dir: "asc", check: func(query user.SearchUsersQuery) {
+			require.True(t, query.AfterLastActivityAt.Valid)
+			require.True(t, activeAt.Equal(query.AfterLastActivityAt.Time))
+		}},
+	} {
+		t.Run(test.sort+" "+test.dir, func(t *testing.T) {
+			order := "?sort=" + test.sort + "&dir=" + test.dir
+			cursor := nextCursor(order)
+			require.Equal(t, store.UserOrder(test.sort), profiles.searchQuery.Order)
+			require.Equal(t, test.dir == "desc", profiles.searchQuery.Descending)
+
+			response := serve(order + "&cursor=" + url.QueryEscape(cursor))
+			require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+			require.Equal(t, listed.ID, profiles.searchQuery.AfterID)
+			test.check(profiles.searchQuery)
+
+			other := "desc"
+			if test.dir == "desc" {
+				other = "asc"
+			}
+			for _, reused := range []string{"?sort=" + test.sort + "&dir=" + other, "?dir=" + test.dir, "?sort=email"} {
+				if test.sort == "username" && reused == "?dir="+test.dir {
+					continue // username is the default sort, so this is the same order
+				}
+				response = serve(reused + "&cursor=" + url.QueryEscape(cursor))
+				assertHTTPProblem(t, response, http.StatusBadRequest, "request.invalid")
+			}
+		})
+	}
+
+	profiles.values = []*model.User{never}
+	cursor := nextCursor("?sort=last_active")
+	response := serve("?sort=last_active&cursor=" + url.QueryEscape(cursor))
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.False(t, profiles.searchQuery.AfterLastActivityAt.Valid, "a never-active User resumes as the least recent")
+
+	profiles.searchErr = apperror.Invalid("request.invalid", "sort")
+	assertHTTPProblem(t, serve("?sort=last_active"), http.StatusBadRequest, "request.invalid")
+	for _, query := range []string{"?sort=", "?sort=name&sort=created", "?dir=up", "?sort=email"} {
+		assertHTTPProblem(t, serve(query), http.StatusBadRequest, "request.invalid")
+	}
+}
+
+// TestUserSearchTransportReadsTheAccountFilters pins the directory's account
+// filters on the wire: role_id repeats, state, never_signed_in and the
+// last-activity bounds are single, and each malformed value is a
+// request.invalid problem before the application is called; which caller may
+// apply them is the application's decision.
+func TestUserSearchTransportReadsTheAccountFilters(t *testing.T) {
+	t.Parallel()
+	logger, _ := routetest.NewLogger(t)
+	principal := model.Principal{
+		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
+		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
+		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
+		ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now(),
+	}
+	profiles := &userProfileHTTPApplication{}
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userProfileResource(profiles, profiles, profiles))
+	serve := func(query string) *httptest.ResponseRecorder {
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users"+query, nil)
+		request.Header.Set("Authorization", "Bearer credential")
+		response := httptest.NewRecorder()
+		httpAPI.ServeHTTP(response, request)
+		return response
+	}
+
+	first, second := model.NewRoleID(), model.NewRoleID()
+	response := serve("?role_id=" + first.String() + "&role_id=" + second.String() + "&state=disabled" +
+		"&last_active_after=2026-09-01T08:00:00Z&last_active_before=2026-09-02T10:00:00%2B02:00")
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.Equal(t, []model.RoleID{first, second}, profiles.searchQuery.RoleIDs)
+	require.Equal(t, user.AccountStateDisabled, profiles.searchQuery.State)
+	require.False(t, profiles.searchQuery.NeverSignedIn)
+	require.True(t, time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC).Equal(profiles.searchQuery.LastActiveAfter))
+	require.True(t, time.Date(2026, 9, 2, 8, 0, 0, 0, time.UTC).Equal(profiles.searchQuery.LastActiveBefore))
+
+	response = serve("?never_signed_in=true&state=active")
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.True(t, profiles.searchQuery.NeverSignedIn)
+	require.Equal(t, user.AccountStateActive, profiles.searchQuery.State)
+	require.Empty(t, profiles.searchQuery.RoleIDs)
+
+	for _, query := range []string{
+		"?role_id=not-an-id", "?role_id=",
+		"?state=locked", "?state=", "?state=active&state=disabled",
+		"?never_signed_in=maybe", "?never_signed_in=true&never_signed_in=false",
+		"?last_active_after=yesterday", "?last_active_before=2026-09-01", "?last_active_after=",
+		"?last_active_before=2026-09-01T08:00:00Z&last_active_before=2026-09-02T08:00:00Z",
+	} {
+		assertHTTPProblem(t, serve(query), http.StatusBadRequest, "request.invalid")
+	}
 }

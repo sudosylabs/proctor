@@ -100,7 +100,7 @@ func TestRetentionPolicyHTTPAcrossNodesPreservesAuthorizationAndRetry(t *testing
 	require.Equal(t, http.StatusForbidden, denied.Code, "ordinary read: %d %s", denied.Code, denied.Body.String())
 	require.True(t, bytes.Contains(denied.Body.Bytes(), []byte(`"code":"authorization.denied"`)), "ordinary read: %d %s", denied.Code, denied.Body.String())
 	audits, err := primaryStore.Audit().List(context.Background(), store.AuditListOptions{
-		Action: string(model.ActionRetentionPolicyManage), Limit: 20,
+		Actions: []string{string(model.ActionRetentionPolicyManage)}, Limit: 20,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
 	require.NoError(t, err)

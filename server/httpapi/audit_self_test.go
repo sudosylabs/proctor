@@ -54,6 +54,8 @@ func TestSelfAuditResourceParsesFiltersAndPagesPrivately(t *testing.T) {
 	require.Len(t, page.Items, 1)
 	require.Equal(t, "mfa.reset_by_administrator", page.Items[0].Event)
 	require.Equal(t, "administrator", page.Items[0].Actor.Kind)
+	require.Equal(t, "An administrator reset two-step verification for your account", page.Items[0].Summary,
+		"the summary keeps the actor mask beside the codes")
 	require.Empty(t, page.Items[0].IPAddress)
 	require.NotEmpty(t, page.NextCursor)
 	require.False(t, audits.selfQuery.Ascending, "newest first is the default order")

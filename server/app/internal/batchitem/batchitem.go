@@ -13,6 +13,8 @@
 package batchitem
 
 import (
+	"maps"
+
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -51,6 +53,31 @@ func BindOnboardingImport(idempotency *store.CommandIdempotency, id model.Onboar
 	}
 	idempotency.OnboardingImportID = id
 	idempotency.OnboardingImportRowNumber = rowNumber
+}
+
+// AuditValue returns the audit value a command run for this Item begins its
+// attempt with: value itself outside an onboarding import, and otherwise a
+// copy that also names the import and row, as ImportAuditValue does.
+func (i Item) AuditValue(value map[string]any) map[string]any {
+	return ImportAuditValue(value, i.fields.OnboardingImportID, i.fields.OnboardingImportRowNumber)
+}
+
+// ImportAuditValue returns a copy of value that also names, as
+// onboarding_import_id and onboarding_import_row, the onboarding import row a
+// command runs for. The application begins the row's audit attempt with it,
+// so the entry names its import and row whether the row succeeds or fails.
+// An invalid import or row returns value unchanged.
+func ImportAuditValue(value map[string]any, id model.OnboardingImportID, rowNumber int) map[string]any {
+	if !id.IsValid() || rowNumber < 1 {
+		return value
+	}
+	named := maps.Clone(value)
+	if named == nil {
+		named = make(map[string]any, 2)
+	}
+	named["onboarding_import_id"] = id
+	named["onboarding_import_row"] = rowNumber
+	return named
 }
 
 // BindAuthorization records the batch's authority on a command's idempotency

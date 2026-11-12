@@ -46,8 +46,10 @@ func TestUserStore(t *testing.T, ss store.Store, probes ...UserStoreSQLProbe) {
 	t.Run("ListDisplayNames", func(t *testing.T) { testUserStoreListDisplayNames(t, ss) })
 	t.Run("Uniqueness", func(t *testing.T) { testUserStoreUniqueness(t, ss) })
 	t.Run("ListAndDisable", func(t *testing.T) { testUserStoreListAndDisable(t, ss) })
+	t.Run("ListOrders", func(t *testing.T) { testUserStoreListOrders(t, ss) })
 	t.Run("VisibilityIntervalPrecision", func(t *testing.T) { testUserVisibilityIntervalPrecision(t, ss) })
 	t.Run("AffiliationAndAcademicUnitFilters", func(t *testing.T) { testUserListAffiliationAndAcademicUnitFilters(t, ss) })
+	t.Run("StateActivityAndRoleFilters", func(t *testing.T) { testUserListStateActivityAndRoleFilters(t, ss) })
 	t.Run("DirectorySummaries", func(t *testing.T) { testUserDirectorySummaries(t, ss) })
 	t.Run("ListIdentities", func(t *testing.T) { testUserListIdentities(t, ss) })
 	t.Run("EnablementRevocationAndAuditAreAtomic", func(t *testing.T) {
@@ -790,6 +792,170 @@ func testUserListAffiliationAndAcademicUnitFilters(t *testing.T, ss store.Store)
 	}
 }
 
+// testUserListStateActivityAndRoleFilters proves the account filters: only
+// disabled Users, never signed in, and the last-activity range (after
+// inclusive, before exclusive) read Institution-wide only, and the Role filter
+// matches current bindings of unarchived Roles inside the role_binding.view
+// scope while still narrowing the user.view visibility.
+func testUserListStateActivityAndRoleFilters(t *testing.T, ss store.Store) {
+	ctx := context.Background()
+	token := strings.ToLower(model.NewID()[:12])
+	activeAt := model.TimeUTC(model.NowUTC().Add(100 * time.Millisecond))
+	before := model.TimeUTC(activeAt.Add(-20 * time.Millisecond))
+	fixture := saveClassFixture(t, ctx, ss)
+	root := fixture.programme.AcademicUnitID
+	sibling := saveAcademicUnit(t, ctx, ss, fixture.institution.ID.String(), "", "account-sibling-"+token)
+	class := saveClass(t, ctx, ss, fixture.level.ID.String(), fixture.period.ID.String(), "account-class-"+token)
+	named := func(name string, unitID model.AcademicUnitID) *model.User {
+		t.Helper()
+		user := newUser()
+		user.Username = "acct-" + token + "-" + name
+		user, err := createUser(t, ctx, ss, user)
+		require.NoError(t, err)
+		if unitID != "" {
+			_, err = ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: unitID, UserID: user.ID, StartsAt: before})
+			require.NoError(t, err)
+		}
+		return user
+	}
+	signIn := func(user *model.User, at time.Time) {
+		t.Helper()
+		require.NoError(t, ss.User().UpdateLastLogin(ctx, &store.UserLastLoginUpdate{ID: user.ID, At: at}))
+	}
+	role := func(name string) *model.Role {
+		t.Helper()
+		saved, err := SaveRole(ctx, ss, &model.Role{Name: "acct-" + name + "-" + token, DisplayName: name, Permissions: []string{string(model.ActionClassView)}})
+		require.NoError(t, err)
+		return saved
+	}
+	bind := func(user *model.User, role *model.Role, scopeType model.RoleScopeType, scopeID string) *model.RoleBinding {
+		t.Helper()
+		saved, err := SaveRoleBinding(ctx, ss, &model.RoleBinding{UserID: user.ID, RoleID: role.ID, ScopeType: scopeType, ScopeID: scopeID, StartsAt: before})
+		require.NoError(t, err)
+		return saved
+	}
+
+	fresh := named("fresh", root)
+	early := named("early", root)
+	late := named("late", root)
+	gone := named("gone", root)
+	outsider := named("outsider", "")
+	firstActivity := model.TimeUTC(model.NowUTC().Add(time.Second))
+	secondActivity := firstActivity.Add(time.Second)
+	signIn(early, firstActivity)
+	signIn(late, secondActivity)
+	attempt := saveUserProfileAuditAttempt(t, ctx, ss, gone.ID.String())
+	disabledAt := model.NowUTC()
+	_, err := ss.User().SetDisabled(ctx, userDisabledStateChangeWithNotice(t, &store.UserDisabledStateChange{
+		ID: gone.ID, ExpectedRevision: gone.Revision, Disabled: true, ChangedAt: disabledAt,
+		RevocationReason: model.SessionRevocationAccountDisabled, AuditEventID: attempt.ID, AuditAt: disabledAt,
+	}))
+	require.NoError(t, err)
+
+	reader, marker, retired := role("reader"), role("marker"), role("retired")
+	bind(early, reader, model.RoleScopeAcademicUnit, root.String())
+	bind(late, reader, model.RoleScopeClass, class.ID.String())
+	bind(outsider, reader, model.RoleScopeAcademicUnit, sibling.ID.String())
+	bind(fresh, marker, model.RoleScopeAcademicUnit, sibling.ID.String())
+	ended := bind(fresh, reader, model.RoleScopeAcademicUnit, root.String())
+	_, err = EndRoleBinding(ctx, ss, ended.ID, before.Add(time.Millisecond))
+	require.NoError(t, err)
+	bind(early, retired, model.RoleScopeAcademicUnit, root.String())
+	_, err = ArchiveRole(ctx, ss, retired.ID, model.NowUTC())
+	require.NoError(t, err)
+
+	list := func(options store.UserListOptions) []model.UserID {
+		t.Helper()
+		options.Query, options.Limit = "acct-"+token, 20
+		users, listErr := ss.User().List(ctx, options)
+		require.NoError(t, listErr)
+		ids := make([]model.UserID, 0, len(users))
+		for _, user := range users {
+			ids = append(ids, user.ID)
+		}
+		total, countErr := ss.User().Count(ctx, options, store.MaximumListCount)
+		require.NoError(t, countErr)
+		require.Len(t, ids, total, "Count agrees with List")
+		return ids
+	}
+	institution := store.UserVisibilityScope{InstitutionWide: true, ActiveAt: activeAt}
+	rootScope := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{root}, ActiveAt: activeAt}
+	everyBinding := store.UserVisibilityScope{InstitutionWide: true}
+	roles := func(ids ...model.RoleID) []model.RoleID { return ids }
+
+	require.Equal(t, []model.UserID{gone.ID}, list(store.UserListOptions{OnlyDisabled: true, Visibility: institution}),
+		"only disabled Users")
+	require.Empty(t, list(store.UserListOptions{OnlyDisabled: true, Visibility: rootScope}),
+		"a scoped visibility never sees a disabled User")
+	require.ElementsMatch(t, []model.UserID{fresh.ID, outsider.ID}, list(store.UserListOptions{NeverSignedIn: true, Visibility: institution}),
+		"never signed in, disabled Users excluded by default")
+	require.ElementsMatch(t, []model.UserID{fresh.ID, gone.ID, outsider.ID}, list(store.UserListOptions{
+		NeverSignedIn: true, IncludeDisabled: true, Visibility: institution,
+	}))
+	require.ElementsMatch(t, []model.UserID{early.ID, late.ID}, list(store.UserListOptions{
+		LastActivityAfter: firstActivity, Visibility: institution,
+	}), "the after bound is inclusive and a User never active never matches")
+	require.Equal(t, []model.UserID{early.ID}, list(store.UserListOptions{
+		LastActivityBefore: secondActivity, Visibility: institution,
+	}), "the before bound is exclusive")
+	require.Equal(t, []model.UserID{late.ID}, list(store.UserListOptions{
+		LastActivityAfter: firstActivity.Add(time.Microsecond), LastActivityBefore: secondActivity.Add(time.Microsecond), Visibility: institution,
+	}))
+
+	require.ElementsMatch(t, []model.UserID{early.ID, late.ID, outsider.ID}, list(store.UserListOptions{
+		RoleIDs: roles(reader.ID), RoleBindingVisibility: everyBinding, Visibility: institution,
+	}), "a current binding of the Role at any scope; the ended binding does not match")
+	require.ElementsMatch(t, []model.UserID{early.ID, late.ID, outsider.ID, fresh.ID}, list(store.UserListOptions{
+		RoleIDs: roles(reader.ID, marker.ID), RoleBindingVisibility: everyBinding, Visibility: institution,
+	}), "Roles are alternatives")
+	require.Empty(t, list(store.UserListOptions{RoleIDs: roles(retired.ID), RoleBindingVisibility: everyBinding, Visibility: institution}),
+		"an archived Role matches nothing")
+	require.ElementsMatch(t, []model.UserID{early.ID, late.ID}, list(store.UserListOptions{
+		RoleIDs:               roles(reader.ID),
+		RoleBindingVisibility: store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{root}},
+		Visibility:            institution,
+	}), "a unit role_binding.view scope matches bindings in its subtree and its Classes")
+	require.Equal(t, []model.UserID{late.ID}, list(store.UserListOptions{
+		RoleIDs: roles(reader.ID), RoleBindingVisibility: store.UserVisibilityScope{ClassIDs: []model.ClassID{class.ID}}, Visibility: institution,
+	}), "a Class role_binding.view scope matches its own bindings")
+	require.Empty(t, list(store.UserListOptions{RoleIDs: roles(reader.ID), Visibility: institution}),
+		"no role_binding.view scope matches nothing")
+	require.ElementsMatch(t, []model.UserID{early.ID, late.ID}, list(store.UserListOptions{
+		RoleIDs: roles(reader.ID), RoleBindingVisibility: everyBinding, Visibility: rootScope,
+	}), "the Role filter narrows the user.view scope and never widens it")
+	require.Equal(t, []model.UserID{fresh.ID}, list(store.UserListOptions{
+		RoleIDs: roles(marker.ID), RoleBindingVisibility: everyBinding, Visibility: rootScope,
+	}), "user.view decides who is listed and role_binding.view which bindings match")
+	require.Empty(t, list(store.UserListOptions{
+		RoleIDs:               roles(marker.ID),
+		RoleBindingVisibility: store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{root}},
+		Visibility:            rootScope,
+	}), "a binding outside the role_binding.view scope never matches, though its holder is visible")
+
+	tooMany := make([]model.RoleID, store.MaximumUserListRoles+1)
+	for index := range tooMany {
+		tooMany[index] = model.NewRoleID()
+	}
+	var invalid *store.ErrInvalidInput
+	for name, options := range map[string]store.UserListOptions{
+		"scoped never signed in": {NeverSignedIn: true, Visibility: rootScope},
+		"scoped activity bound":  {LastActivityAfter: firstActivity, Visibility: rootScope},
+		"never and a bound":      {NeverSignedIn: true, LastActivityBefore: secondActivity, Visibility: institution},
+		"empty activity range":   {LastActivityAfter: firstActivity, LastActivityBefore: firstActivity, Visibility: institution},
+		"too many Roles":         {RoleIDs: tooMany, RoleBindingVisibility: everyBinding, Visibility: institution},
+		"invalid Role":           {RoleIDs: roles("not-an-id"), RoleBindingVisibility: everyBinding, Visibility: institution},
+		"Role without a clock":   {RoleIDs: roles(reader.ID), RoleBindingVisibility: everyBinding, Visibility: store.UserVisibilityScope{InstitutionWide: true}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			options.Limit = 10
+			_, listErr := ss.User().List(ctx, options)
+			require.ErrorAs(t, listErr, &invalid)
+			_, countErr := ss.User().Count(ctx, options, store.MaximumListCount)
+			require.ErrorAs(t, countErr, &invalid)
+		})
+	}
+}
+
 func testUserDirectorySummaries(t *testing.T, ss store.Store) {
 	ctx := context.Background()
 	token := strings.ToLower(model.NewID()[:12])
@@ -1315,4 +1481,116 @@ func testUserCreation(input *model.User, credential *model.PasswordCredential) *
 func defaultProfilePictureCommand(userID model.UserID) json.RawMessage {
 	document, _ := json.Marshal(map[string]string{"user_id": userID.String()})
 	return document
+}
+
+// testUserStoreListOrders pages every directory order in both directions one
+// User at a time and requires exactly the order each key defines: the folded
+// presented name, creation, or last activity (a never-active User is the
+// least recent), each then by ID.
+func testUserStoreListOrders(t *testing.T, ss store.Store) {
+	ctx := context.Background()
+	token := model.NewID()
+	institution := store.UserVisibilityScope{InstitutionWide: true}
+	names := []string{"delta Ward", "Alder Cove", "", "Birch Hale"}
+	users := make([]*model.User, 0, len(names))
+	for index, name := range names {
+		candidate := newUser()
+		candidate.DisplayName, candidate.LastName = name, "ord-"+token
+		if name == "" {
+			candidate.Username = "cedar-" + token
+		}
+		user, err := createUser(t, ctx, ss, candidate)
+		require.NoError(t, err)
+		if index < 2 {
+			at := user.CreatedAt.Add(time.Duration(index+1) * time.Second)
+			require.NoError(t, ss.User().UpdateLastLogin(ctx, &store.UserLastLoginUpdate{ID: user.ID, At: at}))
+		}
+		user, err = ss.User().Get(ctx, user.ID)
+		require.NoError(t, err)
+		users = append(users, user)
+	}
+
+	presented := func(user *model.User) string {
+		if user.DisplayName != "" {
+			return strings.ToLower(user.DisplayName)
+		}
+		return strings.ToLower(user.Username)
+	}
+	compare := map[store.UserOrder]func(a, b *model.User) int{
+		store.UserOrderUsername: func(a, b *model.User) int { return strings.Compare(a.Username, b.Username) },
+		store.UserOrderName:     func(a, b *model.User) int { return strings.Compare(presented(a), presented(b)) },
+		store.UserOrderCreated:  func(a, b *model.User) int { return a.CreatedAt.Compare(b.CreatedAt) },
+		store.UserOrderLastActive: func(a, b *model.User) int {
+			switch {
+			case !a.LastActivityAt.Valid && !b.LastActivityAt.Valid:
+				return 0
+			case !a.LastActivityAt.Valid:
+				return -1
+			case !b.LastActivityAt.Valid:
+				return 1
+			}
+			return a.LastActivityAt.Time.Compare(b.LastActivityAt.Time)
+		},
+	}
+	for order, keyOrder := range compare {
+		for _, descending := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s descending=%t", order, descending), func(t *testing.T) {
+				expected := slices.Clone(users)
+				slices.SortFunc(expected, func(a, b *model.User) int {
+					result := keyOrder(a, b)
+					if result == 0 {
+						result = strings.Compare(a.ID.String(), b.ID.String())
+					}
+					if descending {
+						return -result
+					}
+					return result
+				})
+				want := make([]model.UserID, 0, len(expected))
+				for _, user := range expected {
+					want = append(want, user.ID)
+				}
+
+				options := store.UserListOptions{Query: "ord-" + token, Order: order, Descending: descending, Limit: 1, Visibility: institution}
+				paged := []model.UserID{}
+				for range len(users) + 1 {
+					page, err := ss.User().List(ctx, options)
+					require.NoError(t, err)
+					if len(page) == 0 {
+						break
+					}
+					last := page[0]
+					paged = append(paged, last.ID)
+					options.AfterID = last.ID
+					switch order {
+					case store.UserOrderUsername:
+						options.AfterUsername = last.Username
+					case store.UserOrderCreated:
+						options.AfterCreatedAt = last.CreatedAt
+					case store.UserOrderLastActive:
+						options.AfterLastActivityAt = last.LastActivityAt
+					}
+				}
+				require.Equal(t, want, paged)
+				total, err := ss.User().Count(ctx, options, store.MaximumListCount)
+				require.NoError(t, err)
+				require.Equal(t, len(users), total, "the count ignores the order and keyset")
+			})
+		}
+	}
+
+	var invalid *store.ErrInvalidInput
+	for name, options := range map[string]store.UserListOptions{
+		"unknown order":            {Order: "email"},
+		"name with a username":     {Order: store.UserOrderName, AfterUsername: "x", AfterID: users[0].ID},
+		"created without its key":  {Order: store.UserOrderCreated, AfterID: users[0].ID},
+		"username without its key": {AfterID: users[0].ID},
+		"key without a position":   {Order: store.UserOrderCreated, AfterCreatedAt: users[0].CreatedAt},
+	} {
+		t.Run(name, func(t *testing.T) {
+			options.Limit, options.Visibility = 10, institution
+			_, err := ss.User().List(ctx, options)
+			require.ErrorAs(t, err, &invalid)
+		})
+	}
 }

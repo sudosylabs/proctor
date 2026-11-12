@@ -1,0 +1,27 @@
+{
+  "title": "Exam owner transferred",
+  "description": "The new owner and the Exam revision the transfer produced.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_id",
+    "owner_user_id",
+    "exam_revision",
+    "changed_at"
+  ],
+  "properties": {
+    "exam_id": {
+      "$ref": "id.json"
+    },
+    "owner_user_id": {
+      "$ref": "id.json"
+    },
+    "exam_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "changed_at": {
+      "$ref": "instant.json"
+    }
+  }
+}

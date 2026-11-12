@@ -22,6 +22,11 @@ paths:
         never named: the actor is only `self`, `administrator`, or `system`, and the IP address and user agent
         appear only on the User's own actions. A resource identity appears only when the resource is the User,
         the Institution, or an Academic Unit or Class the User has or had a membership or Role Binding at.
+        Each item also carries a `summary` sentence in the language `Accept-Language` selects, falling back to
+        the installation language and then English. It keeps the same mask: the actor is "you", "an
+        administrator", or "the system", and no other person is ever named. It names an Academic Unit or Class
+        only where the resource identity appears, and a Role only when the event bound it to the User; otherwise
+        it uses a generic noun such as "a class".
         Personal Access Tokens cannot read this history. Reading it records no authorization decision.
       tags:
         - Authentication
@@ -138,6 +143,7 @@ components:
                 client_type: web
                 ip_address: 192.0.2.10
                 user_agent: Mozilla/5.0
+                summary: You changed your password
               - id: ybndrfg8ejkmcpqxot1uwisza5
                 created_at: '2026-07-30T14:05:00Z'
                 event: mfa.reset_by_administrator
@@ -149,6 +155,7 @@ components:
                   type: user
                   id: ybndrfg8ejkmcpqxot1uwisza4
                 client_type: web
+                summary: An administrator reset two-step verification for your account
             next_cursor: eyJjcmVhdGVkX2F0IjoiMjAyNi0wNy0zMFQxNDowNTowMFoifQ
             total: 248
             total_is_lower_bound: false
@@ -170,6 +177,7 @@ components:
         - class.transferred_in
         - class.transferred_out
         - class.unenrolled
+        - desktop.registration_renamed
         - desktop.registration_revoked
         - desktop.signed_in
         - email.change_undone
@@ -195,6 +203,7 @@ components:
         - provider.unlinked
         - role.ended
         - role.granted
+        - session.renamed
         - session.revoked
         - sessions.revoked_all
         - sessions.revoked_others
@@ -213,6 +222,7 @@ components:
         - relation
         - actor
         - resource
+        - summary
       properties:
         id:
           $ref: '#/components/schemas/ID'
@@ -281,6 +291,12 @@ components:
           type: string
           maxLength: 512
           description: User agent of the User's own action; omitted for anyone else's.
+        summary:
+          type: string
+          maxLength: 2048
+          description: >-
+            One sentence describing the event in the negotiated language, for display only; clients that need to
+            reason about the event read its codes. It never names another person, and a failed event says so.
     SelfAuditListResponse:
       description: One bounded page of the current User's own account history.
       type: object

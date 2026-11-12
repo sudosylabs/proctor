@@ -63,7 +63,7 @@ func (s *RealtimeAdmission) AuthorizeWebSocketSubscription(
 ) (resultErr error) {
 	defer func() { recordOperational(s.operational, "realtime", "subscription_authorize", resultErr) }()
 	definition, ok := model.DefinitionForAction(action)
-	if !ok || resource.Validate() != nil || definition.ResourceType != resource.Type {
+	if !ok || resource.Validate() != nil || !definition.AcceptsResource(resource.Type) {
 		return invalidRealtimeRequest("subscription")
 	}
 	if action == model.ActionExamView && resource.Type == model.ResourceExam {

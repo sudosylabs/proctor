@@ -169,6 +169,7 @@ func (s *Service) acceptExternalIdentity(
 	if err != nil {
 		return nil, err
 	}
+	s.publishInvitationChanged(ctx, result.Invitation, "invitation.changed")
 	if result.User != nil && (result.AcademicUnitMember != nil || result.RoleBinding != nil) {
 		s.publisher.InvalidateAuthorization(ctx, result.User.ID)
 	}

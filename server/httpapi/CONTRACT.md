@@ -514,6 +514,28 @@ strong recent Session authentication and atomically revokes the Registration,
 all of its live Sessions and credentials, and the audit. The irreversible
 record remains visible as revoked; security effects publish only after commit.
 
+`PATCH /api/v1/users/me/desktop-registrations/{desktop_registration_id}`
+takes `{"display_name"}` and `PATCH /api/v1/users/me/sessions/{session_id}`
+takes `{"device_name"}` for a browser or CLI Session; each returns the renamed
+resource with `no-store`. They require an interactive Session (no PAT) but not
+recent or strong authentication: a name changes no key, Session, or credential
+and is shown only in the User's own lists, unlike the irreversible revocation
+beside it. Each name is trimmed, sanitized like every stored device label, and
+must be 1-128 characters without control characters
+(`desktop_registration.invalid`, `session.invalid`). Another User's
+registration is `resource.not_found` and another User's or a no-longer-live
+Session `session.not_found`; a revoked registration is
+`desktop_registration.revoked`. A Desktop Session is named by its
+Registration, so its rename is `session.desktop_named_by_registration` with
+`fields.desktop_registration_id`, and `GET /api/v1/users/me/sessions` gives
+each Desktop Session the Registration's `desktop_registration_display_name`,
+read with the list in one further bounded read. A chosen Registration name
+survives later Desktop sign-ins with the same key. Neither route carries an
+`expected_revision` or `Idempotency-Key`: setting the same name again leaves
+the same state, and neither resource has a revision. Each rename is one audited
+Store operation (`desktop_registration.rename`; `session.manage` with
+`rename_own_session`) whose audit never records the name.
+
 ## Authentication-method lifecycle
 
 `GET /api/v1/authentication-methods` requires an authenticated Session and
@@ -572,6 +594,28 @@ no `user.manage`, account-disable, credential, MFA, external-provider, or
 settings authority. Disabled Users are absent from scoped search, exact-profile,
 and profile-picture reads; `include_disabled=true` is honored only for
 institution-wide visibility and therefore cannot reveal scoped disablement.
+The directory orders by `sort=username|name|created|last_active` (default
+`username`) and `dir=asc|desc`. `name` is the stored `users.sort_name`: the
+display name, else the username, lower-cased and cut to 64 characters.
+`last_active` orders by `last_activity_at`, which only the User and
+institution-wide `user.view` can read, so any other caller is refused with
+`request.invalid` rather than given an order that would reveal it.
+
+The directory filters narrow the caller's visibility and never widen it.
+`state=active|disabled` follows the `include_disabled` rule: only
+institution-wide visibility reaches disabled Users, so `state=disabled` answers
+a scoped caller an empty page, and `state` with `include_disabled=true` is
+`request.invalid`. `never_signed_in=true`, `last_active_after` (inclusive) and
+`last_active_before` (exclusive) read `last_activity_at` and are refused for
+any caller but institution-wide `user.view`, like `sort=last_active`;
+`never_signed_in` cannot be combined with either bound. `last_activity_at` is
+first written, with `last_login_at`, when a Session is issued, and afterwards
+only advances, so a User without it has never signed in. Repeatable `role_id`
+(at most 16) keeps Users holding a current Role Binding of a listed Role inside
+the caller's `role_binding.view` scopes, the same bindings the row `summary`
+shows. A Role is seen through institution-wide `role.view`; without it, or for
+an unknown or archived Role, the filter is `request.invalid` on `role_id` alike,
+so it reveals neither which Roles exist nor bindings the caller cannot read.
 
 Generic User-profile PATCH cannot mutate the email address or verification
 state. `PUT /api/v1/users/{user_id}/email` is the explicit strong, recent
@@ -599,6 +643,34 @@ for subtree grants, and unrelated account, credential, MFA, provider, mail,
 and security events are always excluded. The response also omits Session,
 request, node, authentication, IP-address, User-Agent, and private audit-value
 metadata.
+The listing filters `actor_id`, `subject_user_id` (the User an Event is about),
+`status=attempt|success|fail`, a resource, a creation range and repeatable
+`action` (at most 32, each from the audit action catalog, else
+`audit.query.invalid`) apply inside that visibility, so an academic auditor
+naming an action outside its catalog or a User outside its subtrees reads
+nothing more.
+
+Each `GET /api/v1/audits` and `GET /api/v1/users/me/audits` item carries a
+`summary`: one sentence written by the server in the locale `Accept-Language`
+negotiates, falling back per message to the installation locale and then
+English, as Problem Details do; the User's `locale` field does not take part.
+The codes stay beside it and remain the only thing a client reasons about.
+Audits store only identifiers, so names are read at request time from the live
+tables, once per page, and only inside the caller's current authority to see
+each record: Users through the User directory's visibility (`user.view` and
+`class.members.view`), Academic Units through `academic_unit.view`, and
+Classes through `class.view`. A record the caller cannot see, an archived one,
+and any other resource type take a generic noun ("a user", "a class"). The
+admin summary is keyed by action, or by action and recorded operation where
+the self-history catalogue distinguishes operations; an academic auditor's
+redacted row has no parameters, so its summary names only the action, actor,
+and resource and never the operation or the User the Event is about. Account
+history keeps its actor mask ("An administrator gave you the Teacher role in
+Mathematics"): it never names another person, names an Academic Unit or Class
+only where the item's resource identity appears, and names a Role only when the
+event bound it to the caller. An unfinished or failed row says so. Runs of
+similar rows are not folded on the server, because folding across pages would
+break cursors and totals.
 
 ## Public local registration
 
@@ -852,6 +924,76 @@ never rolls back completed rows; compensation is an explicit inverse ordinary
 operation (for example membership end or User enable), never an implicit Job
 rollback.
 
+## Academic administration previews by filter
+
+`POST /api/v1/academic-administration-previews` applies one existing-User
+academic administration operation to the Users a User directory filter
+matches. Its `filter` takes exactly the directory's filter fields (`q`,
+`affiliation`, `academic_unit_id`, `role_id`, `state`, `never_signed_in`,
+`last_active_after`, `last_active_before`) with the directory's own
+validation and visibility rules, including those only an Institution-wide
+viewer may apply; `q` is at most 256 characters. The operation union is the
+JSON batch union without `class.transfer`, which names the exact membership it
+replaces. The route and the use case require a strong, recent interactive
+Session and `onboarding_batch.manage` plus the operation's own action at the
+exact scope. A creating operation's `end_at` must be after its effective
+start, `start_at` or the preview's creation when `start_at` is omitted, or the
+request is refused with `request.invalid` on `end_at`. The request changes
+nothing and queues one preview Job.
+
+The preview Job resolves the filter under the creator's visibility at that
+moment and freezes the ordered User list (username order) as at most 10,000
+rows; more matching Users fail the preview with
+`academic_administration_preview.too_many_users`. Each row is `will_change`,
+`no_op`, or `skipped` with a closed reason: the creator's own account is
+always skipped, and a disable or Session revocation also skips System
+Administrators. A Class enrollment skips a User enrolled in another Class of
+the Period (`enrollment_conflict`) only when the creator may see that Class's
+members (Institution-wide `user.view` or `class.members.view` on it), and a
+User without a student Affiliation (`student_affiliation_required`) only for
+an Institution-wide viewer; otherwise the row will change and its execution
+refuses the enrollment as an ordinary batch item does, so a preview reveals
+nothing the creator could not already see. `GET .../{id}` returns the summary
+by class and skip reason, and `GET .../{id}/rows?group=` pages one group. Only
+the creator reads a preview, through onboarding batch visibility at its
+scope; any other User reads it as `resource.not_found`. A row is shown, and
+counted in the summary, only while the creator's directory shows its User
+now. The generic onboarding import routes treat a filter preview as absent
+and never list or count it.
+
+Every read, the commit, and each execution page admit the stored filter again
+through the creator's User directory, as the directory admits its own query.
+Once the directory would refuse it, such as an activity filter after
+Institution-wide `user.view` is lost or a Role filter after `role.view` is
+lost, reads and the commit are refused with
+`academic_administration_preview.authorization_lost` (`409`) and every
+remaining row fails with `authorization.denied`.
+
+`POST .../{id}/commit` requires an `Idempotency-Key` and the exact digest and
+revision, and is refused with `academic_administration_preview.expired`
+(`410`) once PostgreSQL time passes `preview_expires_at`, 15 minutes after the
+preview became ready. It queues one execution Job over the frozen rows, never
+the filter again, and answers with the committed preview as the commit
+recorded it, so a replay with the same key returns the same body; the summary
+counts in that answer are best effort and omitted if they cannot be read. Each row is checked again when it runs: a User the
+creator's directory no longer shows fails with `authorization.denied`, a
+disable or Session revocation of a User who became a System Administrator
+fails with `academic_administration_preview.system_administrator`, and the
+row's own named transaction re-resolves the actor's authority in PostgreSQL
+and refuses the creator's own account and System Administrators again. The
+first commit records one batch-level audit entry (operation, filter without
+the search term, counts of every frozen row, preview ID). A row that reaches
+its operation begins its own audit attempt with `onboarding_import_id` and
+`onboarding_import_row` in its value, so the entry names the preview and row
+whether the row succeeds or its transaction refuses it. A row the execution
+check refuses before its operation runs (the creator's own account, a User
+the directory no longer shows or a filter it no longer admits, a System
+Administrator, an enrollment conflict) begins no attempt: nothing was
+attempted, the page's directory decision is recorded once, and the batch
+entry plus the row's recorded outcome and public code account for it.
+`POST .../{id}/cancel` stops later rows and answers with the canceled
+preview. Every response is `no-store`.
+
 ## CSV onboarding imports
 
 `POST /api/v1/onboarding-imports` is a bounded streaming `text/csv` upload for
@@ -913,11 +1055,16 @@ fences the mutation atomically. Conflicts use each resource's existing
 `*.conflict` code; a stale editor cannot update or archive newer state.
 
 Academic Unit Member and Class Member collections page like every other
-collection, ordered by the immutable `(user_id, id)` tuple. Every page freshly
-authorizes the scope. Its bounded cursor fixes scope and effective time/history
-filters; omitted filters inherit the cursor, while conflicting values are
-rejected. Paged `history=true` cannot be combined with `active_at`. Results
-remain a live view, not a retained database snapshot.
+collection, ordered by `sort` and `dir`: the membership start by default
+(`enrolled` for a Class, `since` for an Academic Unit) or the member's
+`name` (`users.sort_name`), each then by membership ID, ascending unless
+`dir=desc`. The first page carries the bounded `total` of the scope and
+effective filter. Every page freshly authorizes the scope. Its bounded cursor
+fixes scope, effective time/history filters, and the order; omitted filters
+inherit the cursor, while conflicting values, and any other sort or direction,
+are rejected. Paged `history=true` cannot be combined with `active_at`.
+Results remain a live view, not a retained database snapshot; a name page
+resumes from its last member's current name.
 
 ## Collections
 
@@ -939,11 +1086,28 @@ only, paired with `total_is_lower_bound`, when its count runs through the same
 visibility and filters as the list and stops at a fixed bound (10,000): the
 Store counts with the list's own filter builder, ignoring only the keyset,
 order, and limit, so a total can never count rows the caller could not page
-to. The User directory, Invitations, Jobs, audit Events, mail deliveries, and
-the User's own account history count this way; the account history also adds
-`order=asc` so the end of the history is one read away. A total never comes
-with offset paging. `TestOpenAPIListOperationsUseOneEnvelope` enforces the
-idiom over the reviewed OpenAPI document.
+to. The User directory, Invitations, Jobs, audit Events, mail deliveries,
+Academic Unit and Class members, Role Bindings, the Programmes, Classes, and
+Programme Levels of an academic listing, and the User's own account history
+count this way; a collection the application returns whole (Role Bindings)
+counts its length with the same bound. A total never comes with offset paging.
+`TestOpenAPIListOperationsUseOneEnvelope` enforces the idiom over the reviewed
+OpenAPI document.
+
+A collection that offers a choice of order takes it from a closed key set,
+each key backed by an index (or, for a member's name, a bounded per-scope
+sort) and broken by identity: `sort=<key>` plus `dir=asc|desc`, or, where
+creation time is the only key (account history, audit Events, Jobs,
+onboarding imports), `order=asc|desc`. The User directory sorts by username,
+name, creation, or last activity; members by start or name; mail deliveries
+by last update (the default, newest first) or creation; the Classes of a
+unit or Programme Level take `dir` on their name order. No collection sorts by
+a count that changes while it is paged: a Class listing instead carries each
+Class's bounded `student_count` (with `student_count_is_lower_bound`) for a
+caller holding `class.members.view` on the listing's scope, read in one
+grouped count per page. Every cursor records its sort and direction, and a
+cursor presented under another sort or direction is `request.invalid`; an
+omitted parameter means its default, not the cursor's value.
 
 `GET /api/v1/administration/counts` is not a collection. It answers bounded
 navigation counts (pending Invitations, recently failed Jobs, failed mail
@@ -1616,9 +1780,10 @@ that the message reached an inbox.
 
 `GET /api/v1/mail/deliveries` requires `mail.view` and returns the same safe
 projection through a bounded, opaque-cursor collection. Repeated `state` and
-`template_key` filters and optional RFC 3339 `created_after` and
-`created_before` bounds are applied in persistence; `limit` defaults to 50 and
-is bounded at 200. Authorization completes before any delivery is inspected.
+`template_key` filters, an optional `recipient_user_id` matching the Delivery's
+recipient User (never an address; Invitation deliveries have none), and
+optional RFC 3339 `created_after` and `created_before` bounds are applied in
+persistence; `limit` defaults to 50 and is bounded at 200. Authorization completes before any delivery is inspected.
 
 `GET /api/v1/mail/metrics` requires `mail.view` and returns only bounded
 template/state/public-outcome aggregates, attempts, latency, queue count and

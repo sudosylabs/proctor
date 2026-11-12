@@ -1,0 +1,38 @@
+{
+  "title": "Attempt access changed",
+  "description": "The candidate's own Attempt was suspended or re-allowed. A suspension carries the safe reason of its source.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_sitting_id",
+    "exam_attempt_id",
+    "state",
+    "changed_at"
+  ],
+  "properties": {
+    "exam_sitting_id": {
+      "$ref": "id.json"
+    },
+    "exam_attempt_id": {
+      "$ref": "id.json"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "suspended",
+        "active"
+      ]
+    },
+    "reason_code": {
+      "type": "string",
+      "enum": [
+        "secure_connectivity_lost",
+        "focus_policy_review_required",
+        "manager_suspended"
+      ]
+    },
+    "changed_at": {
+      "$ref": "instant.json"
+    }
+  }
+}

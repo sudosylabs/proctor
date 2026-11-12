@@ -80,7 +80,11 @@ type JobListOptions struct {
 	Statuses []model.JobStatus
 	// UpdatedWithin, when positive, keeps Jobs updated less than that long
 	// before PostgreSQL time.
-	UpdatedWithin   time.Duration
+	UpdatedWithin time.Duration
+	// Ascending reads oldest first; the default is newest first.
+	Ascending bool
+	// BeforeCreatedAt and BeforeID are the previous page's last key; the
+	// page continues past it in the read order.
 	BeforeCreatedAt time.Time
 	BeforeID        model.JobID
 	Limit           int

@@ -1,0 +1,35 @@
+{
+  "title": "Attempt re-allowed",
+  "description": "The closed Attempt Suspension and the Attempt revision after the change. The manager's reason is never included.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_sitting_id",
+    "exam_attempt_id",
+    "candidate_user_id",
+    "suspension_id",
+    "attempt_revision",
+    "changed_at"
+  ],
+  "properties": {
+    "exam_sitting_id": {
+      "$ref": "id.json"
+    },
+    "exam_attempt_id": {
+      "$ref": "id.json"
+    },
+    "candidate_user_id": {
+      "$ref": "id.json"
+    },
+    "suspension_id": {
+      "$ref": "id.json"
+    },
+    "attempt_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "changed_at": {
+      "$ref": "instant.json"
+    }
+  }
+}

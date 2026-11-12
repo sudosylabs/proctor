@@ -15,21 +15,21 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strconv"
 
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
-const defaultAuditPageSize = 50
-
+// auditCursor continues one read order; a cursor from the other order is an
+// invalid query, not a position.
 type auditCursor struct {
 	CreatedAt string `json:"created_at"`
 	ID        string `json:"id"`
+	Order     string `json:"order"`
 }
 
 type auditEventResponse struct {
@@ -50,6 +50,9 @@ type auditEventResponse struct {
 	IPAddress  string                `json:"ip_address,omitempty"`
 	UserAgent  string                `json:"user_agent,omitempty"`
 	ErrorCode  string                `json:"error_code,omitempty"`
+	// Summary is one sentence describing the event in the request's locale.
+	// It names a person or record only when the caller could see it now.
+	Summary string `json:"summary"`
 	// Reason is the optional account disable reason. Institution-wide readers
 	// receive it; academic-scoped readers never do because their projection
 	// drops parameters.
@@ -63,7 +66,7 @@ type auditResourceResponse struct {
 	ID   string             `json:"id"`
 }
 
-func auditEventResponseFromModel(event *model.AuditEvent) auditEventResponse {
+func auditEventResponseFromModel(request *http.Request, event *model.AuditEvent, names store.AuditNames) auditEventResponse {
 	return auditEventResponse{
 		ID:         event.ID.String(),
 		CreatedAt:  model.FormatRFC3339(event.CreatedAt),
@@ -82,6 +85,7 @@ func auditEventResponseFromModel(event *model.AuditEvent) auditEventResponse {
 		IPAddress:  event.IPAddress,
 		UserAgent:  event.UserAgent,
 		ErrorCode:  event.ErrorCode,
+		Summary:    auditSummary(request, event, names),
 		Reason:     event.AccountDisableReason(),
 	}
 }
@@ -120,7 +124,7 @@ func auditResource(app AuditListingApplication) route.Resource {
 }
 
 func (h auditHandlers) list(request route.Request) (route.Result, error) {
-	query, err := auditQueryFromRequest(request.HTTP)
+	query, order, err := auditQueryFromRequest(request.HTTP)
 	if err != nil {
 		return route.Result{}, apperror.Invalid("request.invalid", "query")
 	}
@@ -132,8 +136,11 @@ func (h auditHandlers) list(request route.Request) (route.Result, error) {
 	if listErr != nil {
 		return route.Result{}, listErr
 	}
-	envelope, err := route.NewList(page.Items, page.HasMore, auditEventResponseFromModel, func(last *model.AuditEvent) (string, error) {
-		return encodeAuditCursor(auditCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String()})
+	present := func(event *model.AuditEvent) auditEventResponse {
+		return auditEventResponseFromModel(request.HTTP, event, page.Names)
+	}
+	envelope, err := route.NewList(page.Items, page.HasMore, present, func(last *model.AuditEvent) (string, error) {
+		return encodeAuditCursor(auditCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String(), Order: order})
 	})
 	if err != nil {
 		return route.Result{}, err
@@ -145,22 +152,27 @@ func (h auditHandlers) list(request route.Request) (route.Result, error) {
 	return route.JSON(http.StatusOK, response), nil
 }
 
-func auditQueryFromRequest(request *http.Request) (administration.ListAuditEventsQuery, error) {
-	query := administration.ListAuditEventsQuery{Limit: defaultAuditPageSize}
-	values := request.URL.Query()
-	if raw := values.Get("limit"); raw != "" {
-		limit, err := strconv.Atoi(raw)
-		if err != nil || limit < 1 || limit > 200 {
-			return query, err
-		}
-
-		query.Limit = limit
+// auditQueryFromRequest parses the listing query and returns the read order,
+// newest first (desc) unless order=asc. A cursor continues only its own order.
+func auditQueryFromRequest(request *http.Request) (administration.ListAuditEventsQuery, string, error) {
+	page, err := route.ParsePage(request)
+	if err != nil {
+		return administration.ListAuditEventsQuery{}, "", err
 	}
-
-	if raw := values.Get("cursor"); raw != "" {
-		cursor, err := decodeAuditCursor(raw)
-		if err != nil {
-			return query, err
+	query := administration.ListAuditEventsQuery{Limit: page.Limit}
+	values := request.URL.Query()
+	order, err := parseListDirection(values, "order", listDescending)
+	if err != nil {
+		return query, order, err
+	}
+	query.Ascending = order == listAscending
+	if raw := page.Cursor; raw != "" {
+		cursor, decodeErr := decodeAuditCursor(raw)
+		if decodeErr != nil {
+			return query, order, decodeErr
+		}
+		if cursor.Order != order {
+			return query, order, errAuditQuery("cursor")
 		}
 
 		createdAt, _ := model.ParseRFC3339(cursor.CreatedAt)
@@ -168,37 +180,40 @@ func auditQueryFromRequest(request *http.Request) (administration.ListAuditEvent
 		query.BeforeID = model.AuditEventID(cursor.ID)
 	}
 
-	for _, name := range []string{"created_after", "created_before"} {
+	for _, name := range []string{"created_after", "created_before", "subject_user_id", "status"} {
 		if entries, present := values[name]; present && (len(entries) != 1 || entries[0] == "") {
-			return query, errAuditQuery(name)
+			return query, order, errAuditQuery(name)
 		}
 	}
 
-	var err error
 	if query.Since, err = optionalAuditTime(values, "created_after"); err != nil {
-		return query, err
+		return query, order, err
 	}
 	if query.Until, err = optionalAuditTime(values, "created_before"); err != nil {
-		return query, err
+		return query, order, err
 	}
 
 	query.ActorID = model.UserID(values.Get("actor_id"))
-	query.Action = values.Get("action")
+	query.SubjectUserID = model.UserID(values.Get("subject_user_id"))
+	// The application owns the closed action and status vocabularies and
+	// answers audit.query.invalid for a value outside them.
+	query.Actions = values["action"]
+	query.Status = model.AuditStatus(values.Get("status"))
 	resourceType, resourceID := values.Get("resource_type"), values.Get("resource_id")
 	if (resourceType == "") != (resourceID == "") {
-		return query, errInvalidAuditResource
+		return query, order, errInvalidAuditResource
 	}
 
 	if resourceType != "" {
 		resource := model.Resource{Type: model.ResourceType(resourceType), ID: resourceID}
 		if resource.Validate() != nil {
-			return query, errInvalidAuditResource
+			return query, order, errInvalidAuditResource
 		}
 
 		query.Resource = &resource
 	}
 
-	return query, nil
+	return query, order, nil
 }
 
 var errInvalidAuditResource = errAuditQuery("resource")
@@ -221,10 +236,10 @@ func auditCursorSpec() route.CursorSpec[auditCursor] {
 	return route.CursorSpec[auditCursor]{
 		Label:                "audit",
 		MaximumEncodedLength: route.DefaultMaximumCursorLength,
-		Members:              []string{"created_at", "id"},
+		Members:              []string{"created_at", "id", "order"},
 		Validate: func(cursor auditCursor) error {
 			createdAt, err := model.ParseRFC3339(cursor.CreatedAt)
-			if err != nil || createdAt.IsZero() || !model.AuditEventID(cursor.ID).IsValid() {
+			if err != nil || createdAt.IsZero() || !model.AuditEventID(cursor.ID).IsValid() || !validListDirection(cursor.Order) {
 				return errors.New("invalid audit keyset")
 			}
 
@@ -235,6 +250,6 @@ func auditCursorSpec() route.CursorSpec[auditCursor] {
 
 // AuditListingApplication is the application port its handlers call; it lists audit events for administrators and for the caller.
 type AuditListingApplication interface {
-	ListAuditEvents(context.Context, invocation.Invocation, administration.ListAuditEventsQuery) (paging.Counted[*model.AuditEvent], error)
+	ListAuditEvents(context.Context, invocation.Invocation, administration.ListAuditEventsQuery) (administration.AuditEventPage, error)
 	ListSelfAuditEvents(context.Context, invocation.Invocation, administration.ListSelfAuditEventsQuery) (administration.SelfAuditPage, error)
 }

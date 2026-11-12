@@ -1,0 +1,23 @@
+{
+  "title": "Command request",
+  "description": "The envelope of every client-to-server command. The client chooses a positive sequence; the reply carries it back.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sequence",
+    "action"
+  ],
+  "properties": {
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "action": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+    },
+    "data": {
+      "description": "The command input. Each command defines its shape."
+    }
+  }
+}

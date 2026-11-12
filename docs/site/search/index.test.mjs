@@ -42,6 +42,21 @@ test('search covers authored pages, product areas, and every operation', async (
   );
 });
 
+test('search covers the realtime overview and every realtime message', async () => {
+  const entries = await buildSearchIndex();
+  const asyncapi = JSON.parse(await readFile(new URL('../../../server/asyncapi.json', import.meta.url), 'utf8'));
+  const realtime = entries.filter((entry) => entry.kind === 'realtime-message');
+  assert.equal(realtime.length, Object.keys(asyncapi.channels.websocket.messages).length + 1);
+  assert(realtime.some((entry) => entry.href === '/api/reference/realtime-protocol/'));
+  assert(
+    realtime.some(
+      (entry) =>
+        entry.id === 'realtime:exam_attempt_submitted_for_candidate' &&
+        entry.href === '/api/reference/realtime-protocol/exam-attempt-submitted-for-candidate',
+    ),
+  );
+});
+
 test('the generated adapter records its human-owned inputs', async () => {
-  assert.match(renderSearchData(await buildSearchIndex()), /public MDX and server\/openapi\.json/);
+  assert.match(renderSearchData(await buildSearchIndex()), /public MDX, server\/openapi\.json and server\/asyncapi\.json/);
 });

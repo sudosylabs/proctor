@@ -177,10 +177,7 @@ func (s SQLProgrammeLevelStore) SearchByProgramme(
 	programmeID model.ProgrammeID,
 	options store.AcademicNameListOptions,
 ) ([]*model.ProgrammeLevel, error) {
-	query, valid := academicNamePage(s.programmeLevelsQuery.Where(sq.Eq{
-		"programme_levels.programme_id": programmeID,
-		"programme_levels.archived_at":  nil,
-	}), "programme_levels", options)
+	query, valid := academicNamePage(levelsInProgramme(s.programmeLevelsQuery, programmeID), "programme_levels", options)
 	if !valid {
 		return nil, store.NewErrInvalidInput("programme_level", "list_options", options)
 	}
@@ -469,4 +466,21 @@ func (s SQLProgrammeLevelStore) SeedUpdate(
 	}
 
 	return s.updateProgrammeLevel(ctx, &candidate, "", nil)
+}
+
+// CountByProgramme counts through the same Programme and term filter as
+// SearchByProgramme.
+func (s SQLProgrammeLevelStore) CountByProgramme(
+	ctx context.Context,
+	programmeID model.ProgrammeID,
+	options store.AcademicNameListOptions,
+	maximum int,
+) (int, error) {
+	rows := levelsInProgramme(sq.Select("programme_levels.id").From("programme_levels"), programmeID)
+	return countAcademicNamePage(ctx, s.GetMaster(), rows, "programme_levels", options, maximum)
+}
+
+// levelsInProgramme keeps the Programme's unarchived Programme Levels.
+func levelsInProgramme(query sq.SelectBuilder, programmeID model.ProgrammeID) sq.SelectBuilder {
+	return query.Where(sq.Eq{"programme_levels.programme_id": programmeID, "programme_levels.archived_at": nil})
 }

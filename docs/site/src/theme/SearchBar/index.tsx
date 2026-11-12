@@ -45,6 +45,8 @@ function kindLabel(entry: SearchEntry): string {
       return 'Endpoint';
     case 'product-area':
       return 'Product area';
+    case 'realtime-message':
+      return 'Realtime';
     case 'glossary':
       return 'Glossary';
     default:

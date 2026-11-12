@@ -174,7 +174,7 @@ func TestEmailTransitionsUseRealServerGraphAndFrozenRecipients(t *testing.T) {
 	}
 	require.Equal(t, 1, suppressed, "suppressed privileged verification deliveries")
 	audits, err := persistence.Audit().List(ctx, store.AuditListOptions{
-		Action: string(model.ActionUserManage), Limit: 100,
+		Actions: []string{string(model.ActionUserManage)}, Limit: 100,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
 	require.NoError(t, err)

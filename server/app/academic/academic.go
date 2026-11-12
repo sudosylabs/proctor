@@ -47,6 +47,9 @@ type Authorizer interface {
 	CanViewInstitutionUsers(context.Context, invocation.Invocation) (bool, error)
 	// CanViewRoleBindings reports role_binding.view on the Resource.
 	CanViewRoleBindings(context.Context, invocation.Invocation, model.Resource) (bool, error)
+	// CanViewClassMembers reports class.members.view on the Resource, the
+	// authority that shows a Class listing's student counts.
+	CanViewClassMembers(context.Context, invocation.Invocation, model.Resource) (bool, error)
 }
 
 // Auditor records the attempt and failure of each audited mutation. Begin

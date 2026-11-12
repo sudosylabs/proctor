@@ -177,7 +177,7 @@ func TestDesktopReauthenticationRestoresRecencyWithoutMFA(t *testing.T) {
 	// The account holds no delegable role, so creation now stops only at scope
 	// delegation, after the recency requirement has been met.
 	require.True(t, apperror.Is(createToken(fresh), "personal_access_token.invalid"), "recency gate after reauthentication: %v", createToken(fresh))
-	events, err := persistence.Audit().List(ctx, store.AuditListOptions{Action: string(model.ActionAuthenticationReauthenticate),
+	events, err := persistence.Audit().List(ctx, store.AuditListOptions{Actions: []string{string(model.ActionAuthenticationReauthenticate)},
 		ActorID: user.ID, Limit: 10, Visibility: store.AuditVisibilityScope{InstitutionWide: true}})
 	require.NoError(t, err)
 	require.Len(t, events, 1, "Desktop reauthentication audits")

@@ -21,28 +21,29 @@ import (
 const classMembershipSittingPage = 200
 
 func (s *Service) publishAcademicUnitCreated(ctx context.Context, unitID model.AcademicUnitID) error {
-	return s.publishAcademicUnit(ctx, "academic_unit_created", unitID)
+	return s.publishAcademicUnit(ctx, realtime.NewAcademicUnitCreatedEvent, unitID)
 }
 
 func (s *Service) publishAcademicUnitUpdated(ctx context.Context, unitID model.AcademicUnitID) error {
-	return s.publishAcademicUnit(ctx, "academic_unit_updated", unitID)
+	return s.publishAcademicUnit(ctx, realtime.NewAcademicUnitUpdatedEvent, unitID)
 }
 
 func (s *Service) publishAcademicUnitArchived(ctx context.Context, unitID model.AcademicUnitID) error {
-	return s.publishAcademicUnit(ctx, "academic_unit_archived", unitID)
+	return s.publishAcademicUnit(ctx, realtime.NewAcademicUnitArchivedEvent, unitID)
 }
 
 // publishAcademicUnit publishes a payload-free event to everyone who may view
 // the Academic Unit.
-func (s *Service) publishAcademicUnit(ctx context.Context, name string, unitID model.AcademicUnitID) error {
-	return s.publisher.Publish(ctx, realtime.Event{
-		Name:   name,
-		Action: model.ActionAcademicUnitView,
-		Resource: model.Resource{
-			Type: model.ResourceAcademicUnit,
-			ID:   unitID.String(),
-		},
-	})
+func (s *Service) publishAcademicUnit(
+	ctx context.Context,
+	newEvent func(model.AcademicUnitID) (realtime.Event, error),
+	unitID model.AcademicUnitID,
+) error {
+	event, err := newEvent(unitID)
+	if err != nil {
+		return err
+	}
+	return s.publisher.Publish(ctx, event)
 }
 
 // PublishClassMembershipChanged tells a candidate that their Exam activity

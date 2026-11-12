@@ -408,7 +408,7 @@ func TestAuthenticationIntegration(t *testing.T) {
 	require.NotEmpty(t, first.Tokens.RefreshToken)
 	require.Empty(t, login.Result().Cookies())
 	loginAudits, err := persistence.Audit().List(context.Background(), store.AuditListOptions{
-		Action: "authentication.login", Resource: &model.Resource{Type: model.ResourceUser, ID: user.ID.String()},
+		Actions: []string{"authentication.login"}, Resource: &model.Resource{Type: model.ResourceUser, ID: user.ID.String()},
 		Limit: 10, Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
 	require.NoError(t, err, "login audits")

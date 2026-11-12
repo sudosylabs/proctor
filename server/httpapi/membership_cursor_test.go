@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -24,7 +25,10 @@ import (
 func TestMembershipCursorStrictEnvelope(t *testing.T) {
 	t.Parallel()
 	at := int64(0) // history requires an explicit zero; missing and null are invalid
-	cursor := membershipPageCursor{ScopeType: model.ResourceClass, ScopeID: model.NewID(), ActiveAt: &at, AfterUserID: model.NewID(), AfterID: model.NewID()}
+	cursor := membershipPageCursor{
+		ScopeType: model.ResourceClass, ScopeID: model.NewID(), ActiveAt: &at,
+		Sort: membershipSortName, Dir: listAscending, AfterUserID: model.NewID(), AfterID: model.NewID(),
+	}
 	encoded, err := route.EncodeCursor(cursor, membershipPageCursorSpec())
 	require.NoError(t, err)
 	decoded, err := route.DecodeCursor(encoded, membershipPageCursorSpec())
@@ -84,29 +88,66 @@ func TestMembershipCursorScopeAndFilterBinding(t *testing.T) {
 	t.Parallel()
 	scope := model.Resource{Type: model.ResourceClass, ID: model.NewID()}
 	instant := int64(1000)
-	cursor := membershipPageCursor{ScopeType: scope.Type, ScopeID: scope.ID, ActiveAt: &instant, AfterUserID: model.NewID(), AfterID: model.NewID()}
+	cursor := membershipPageCursor{
+		ScopeType: scope.Type, ScopeID: scope.ID, ActiveAt: &instant,
+		Sort: membershipSortName, Dir: listAscending, AfterUserID: model.NewID(), AfterID: model.NewID(),
+	}
 	encoded, err := route.EncodeCursor(cursor, membershipPageCursorSpec())
 	require.NoError(t, err)
-	request := func(suffix string) string { return "/members?cursor=" + url.QueryEscape(encoded) + suffix }
-	query, after, err := membershipPageQuery(httptest.NewRequestWithContext(t.Context(), "GET", request(""), nil), scope)
+	request := func(suffix string) string { return "/members?sort=name&cursor=" + url.QueryEscape(encoded) + suffix }
+	query, _, after, err := membershipPageQuery(httptest.NewRequestWithContext(t.Context(), "GET", request(""), nil), scope)
 	require.NoError(t, err, "continuation = %#v %#v", query, after)
 	require.NotNil(t, query.ActiveAt, "continuation = %#v %#v", query, after)
 	require.Equal(t, instant, *query.ActiveAt, "continuation = %#v %#v", query, after)
 	require.Equal(t, cursor.AfterID, after.AfterID, "continuation = %#v %#v", query, after)
-	for _, suffix := range []string{"&active_at=1970-01-01T00:00:02Z", "&history=true"} {
-		_, _, err = membershipPageQuery(httptest.NewRequestWithContext(t.Context(), "GET", request(suffix), nil), scope)
+	for _, suffix := range []string{"&active_at=1970-01-01T00:00:02Z", "&history=true", "&dir=desc"} {
+		_, _, _, err = membershipPageQuery(httptest.NewRequestWithContext(t.Context(), "GET", request(suffix), nil), scope)
 		require.Error(t, err, "conflicting filter accepted: %s", suffix)
 	}
 	for _, other := range []model.Resource{{Type: scope.Type, ID: model.NewID()}, {Type: model.ResourceAcademicUnit, ID: scope.ID}} {
-		_, _, err = membershipPageQuery(httptest.NewRequestWithContext(t.Context(), "GET", request(""), nil), other)
+		_, _, _, err = membershipPageQuery(httptest.NewRequestWithContext(t.Context(), "GET", request(""), nil), other)
 		require.Error(t, err, "cross-scope continuation accepted: %#v", other)
 	}
 	instant = 0
 	encoded, err = route.EncodeCursor(cursor, membershipPageCursorSpec())
 	require.NoError(t, err)
-	query, _, err = membershipPageQuery(httptest.NewRequestWithContext(t.Context(), "GET", request(""), nil), scope)
+	query, _, _, err = membershipPageQuery(httptest.NewRequestWithContext(t.Context(), "GET", request(""), nil), scope)
 	require.NoError(t, err, "history continuation = %#v", query)
 	require.NotNil(t, query.History, "history continuation = %#v", query)
 	require.True(t, *query.History, "history continuation = %#v", query)
 	require.Nil(t, query.ActiveAt, "history continuation = %#v", query)
+}
+
+// TestMembershipCursorRejectsAnotherOrder pins that a cursor continues only
+// the sort and direction that wrote it: the default enrolled order cannot
+// resume a name cursor, nor ascending a descending one.
+func TestMembershipCursorRejectsAnotherOrder(t *testing.T) {
+	t.Parallel()
+	scope := model.Resource{Type: model.ResourceClass, ID: model.NewID()}
+	instant := int64(1000)
+	cursor := membershipPageCursor{
+		ScopeType: scope.Type, ScopeID: scope.ID, ActiveAt: &instant,
+		Sort: membershipSortEnrolled, Dir: listDescending, AfterStartAt: "2026-09-01T08:00:00Z", AfterID: model.NewID(),
+	}
+	encoded, err := route.EncodeCursor(cursor, membershipPageCursorSpec())
+	require.NoError(t, err)
+	parse := func(parameters string) error {
+		_, _, _, parseErr := membershipPageQuery(httptest.NewRequestWithContext(t.Context(), "GET",
+			"/members?cursor="+url.QueryEscape(encoded)+parameters, nil), scope)
+		return parseErr
+	}
+	query, order, after, err := membershipPageQuery(httptest.NewRequestWithContext(t.Context(), "GET",
+		"/members?dir=desc&cursor="+url.QueryEscape(encoded), nil), scope)
+	require.NoError(t, err)
+	require.Equal(t, listOrder{Sort: membershipSortEnrolled, Dir: listDescending}, order)
+	require.True(t, query.Descending)
+	startAt, userID := after.after()
+	require.True(t, startAt.Equal(time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)))
+	require.True(t, userID.IsZero())
+	for _, parameters := range []string{"", "&dir=asc", "&sort=name&dir=desc", "&sort=since&dir=desc"} {
+		require.Error(t, parse(parameters), "cursor resumed under %q", parameters)
+	}
+	_, _, _, err = membershipPageQuery(httptest.NewRequestWithContext(t.Context(), "GET",
+		"/members?sort=since", nil), scope)
+	require.Error(t, err, "a Class member list has no since sort")
 }

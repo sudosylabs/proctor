@@ -206,6 +206,7 @@ CREATE UNIQUE INDEX jobs_permanent_type_dedupe_key_idx ON jobs (type, dedupe_key
     WHERE dedupe_policy = 'permanent';
 -- The administration summary counts recent failures without scanning history.
 CREATE INDEX jobs_failed_updated_at_idx ON jobs (updated_at DESC) WHERE status = 'failed';
+CREATE INDEX jobs_created_at_id_idx ON jobs (created_at DESC, id DESC);
 
 -- Permanent occurrence keys deliberately outlive retained Job history. The
 -- referenced Job ID is informational rather than a foreign key so cleanup can
@@ -325,6 +326,13 @@ CREATE TABLE users (
     default_profile_picture_file_id varchar(26) REFERENCES file_entries(id),
     custom_profile_picture_file_id varchar(26) REFERENCES file_entries(id),
     profile_picture_changed_at timestamptz,
+    -- The directory and membership name order: the presented name (display
+    -- name, else username), folded to lower case and cut to 64 characters so
+    -- a continuation cursor stays bounded. (sort_name, id) is still a total
+    -- order.
+    sort_name text GENERATED ALWAYS AS (
+        lower(left(CASE WHEN display_name <> '' THEN display_name ELSE username END, 64))
+    ) STORED,
     CONSTRAINT users_lifecycle_check CHECK (updated_at >= created_at),
     -- Profile names are single-line text that mail embeds; Unicode Cc is
     -- rejected (model.ContainsControlCharacter).
@@ -342,6 +350,12 @@ CREATE INDEX users_default_profile_picture_file_id_idx
 CREATE INDEX users_custom_profile_picture_file_id_idx
     ON users (custom_profile_picture_file_id) WHERE custom_profile_picture_file_id IS NOT NULL;
 CREATE UNIQUE INDEX users_email_key ON users (email) WHERE archived_at IS NULL;
+-- User directory orders; each serves both directions. A User who was never
+-- active sorts as the least recent.
+CREATE INDEX users_sort_name_idx ON users (sort_name, id) WHERE archived_at IS NULL;
+CREATE INDEX users_created_at_id_idx ON users (created_at, id) WHERE archived_at IS NULL;
+CREATE INDEX users_last_activity_at_idx
+    ON users ((COALESCE(last_activity_at, '-infinity'::timestamptz)), id) WHERE archived_at IS NULL;
 -- A Job keeps its history when the User who started it is deleted.
 ALTER TABLE jobs ADD CONSTRAINT jobs_created_by_user_id_fkey
     FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL;
@@ -461,7 +475,7 @@ CREATE INDEX invitations_state_created_at_idx ON invitations (state, created_at 
 -- recipient data remains in these domain-owned tables and is removed with it.
 CREATE TABLE onboarding_imports (
     id varchar(26) PRIMARY KEY,
-    mode varchar(32) NOT NULL CHECK (mode IN ('student_class', 'teacher_academic_unit', 'institution', 'academic_administration', 'student_progression')),
+    mode varchar(32) NOT NULL CHECK (mode IN ('student_class', 'teacher_academic_unit', 'institution', 'academic_administration', 'student_progression', 'academic_administration_filter')),
     state varchar(32) NOT NULL CHECK (state IN ('uploading', 'parsing', 'preview_ready', 'executing', 'completed', 'completed_with_errors', 'canceled', 'failed')),
     scope_type varchar(32) NOT NULL CHECK (scope_type IN ('class', 'academic_unit', 'institution')),
     scope_id varchar(26) NOT NULL,
@@ -495,7 +509,13 @@ CREATE TABLE onboarding_imports (
     failure_code varchar(128) NOT NULL DEFAULT '',
     -- The uploaded file's base name as the uploader gave it; never set for a
     -- student progression, which has no file.
-    file_name varchar(255) CHECK (file_name IS NULL OR (char_length(file_name) BETWEEN 1 AND 255 AND mode <> 'student_progression')),
+    file_name varchar(255) CHECK (file_name IS NULL OR (char_length(file_name) BETWEEN 1 AND 255 AND mode NOT IN ('student_progression', 'academic_administration_filter'))),
+    -- An academic administration filter preview keeps the operation and the
+    -- User directory filter it was asked for, and PostgreSQL decides when
+    -- its frozen preview stops admitting a commit: 15 minutes after it
+    -- became ready. Neither is ever set for another mode.
+    filter jsonb CHECK (filter IS NULL OR (jsonb_typeof(filter) = 'object' AND octet_length(filter::text) <= 8192)),
+    preview_expires_at timestamptz,
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL,
     expires_at timestamptz NOT NULL,
@@ -505,6 +525,7 @@ CREATE TABLE onboarding_imports (
         (mode = 'teacher_academic_unit' AND scope_type = 'academic_unit' AND role_id IS NOT NULL) OR
         (mode = 'institution' AND scope_type = 'institution' AND role_id IS NULL) OR
         (mode = 'academic_administration' AND scope_type IN ('institution', 'academic_unit', 'class') AND role_id IS NULL) OR
+        (mode = 'academic_administration_filter' AND scope_type IN ('institution', 'academic_unit', 'class') AND role_id IS NULL) OR
         (mode = 'student_progression' AND scope_type = 'class' AND role_id IS NULL AND
          source_period_id IS NOT NULL AND source_class_id IS NOT NULL AND destination_period_id IS NOT NULL AND
          destination_class_id = scope_id AND effective_at IS NOT NULL AND source_period_revision > 0 AND
@@ -515,6 +536,14 @@ CREATE TABLE onboarding_imports (
         (mode <> 'student_progression' AND source_period_id IS NULL AND source_class_id IS NULL AND
          destination_period_id IS NULL AND destination_class_id IS NULL AND effective_at IS NULL AND
          source_period_revision = 0 AND source_class_revision = 0 AND destination_period_revision = 0 AND destination_class_revision = 0)
+    ),
+    CONSTRAINT onboarding_imports_filter_package_check CHECK (
+        (mode = 'academic_administration_filter') = (filter IS NOT NULL) AND
+        (mode = 'academic_administration_filter' OR preview_expires_at IS NULL) AND
+        (mode <> 'academic_administration_filter' OR total_rows <= 10000) AND
+        (mode <> 'academic_administration_filter' OR
+         state NOT IN ('preview_ready', 'executing', 'completed', 'completed_with_errors') OR
+         preview_expires_at IS NOT NULL)
     ),
     CONSTRAINT onboarding_imports_counts_check CHECK (
         valid_rows + invalid_rows = total_rows AND
@@ -717,6 +746,15 @@ CREATE INDEX mail_deliveries_state_deadline_idx
 CREATE INDEX mail_deliveries_operator_list_idx
     ON mail_deliveries (created_at DESC, id DESC)
     INCLUDE (state, template_key);
+
+CREATE INDEX mail_deliveries_operator_updated_idx
+    ON mail_deliveries (updated_at DESC, id DESC);
+
+-- The operator listing filtered by recipient User; one User's deliveries are
+-- few, so the update order sorts them rather than needing its own index.
+CREATE INDEX mail_deliveries_target_user_id_created_at_id_idx
+    ON mail_deliveries (target_user_id, created_at DESC, id DESC)
+    WHERE target_user_id IS NOT NULL;
 
 CREATE INDEX mail_deliveries_terminal_retention_idx
     ON mail_deliveries (state, updated_at, id);
@@ -1601,11 +1639,13 @@ CREATE TABLE desktop_registrations (
     architecture varchar(32) NOT NULL CHECK (architecture IN ('arm64', 'x64')),
     realtime_protocol integer NOT NULL CHECK (realtime_protocol > 0),
     last_used_at timestamptz NOT NULL,
+    renamed_at timestamptz,
     revoked_at timestamptz,
     UNIQUE (id, user_id),
     UNIQUE (user_id, institution_id, key_thumbprint),
     CONSTRAINT desktop_registrations_lifecycle_check CHECK (
         updated_at >= created_at AND last_used_at BETWEEN created_at AND updated_at AND
+        (renamed_at IS NULL OR renamed_at BETWEEN created_at AND updated_at) AND
         (revoked_at IS NULL OR revoked_at BETWEEN created_at AND updated_at)
     ),
     CONSTRAINT desktop_registrations_jwk_check CHECK (
@@ -4613,6 +4653,11 @@ CREATE INDEX academic_unit_members_scope_page_idx
     ON academic_unit_members (academic_unit_id, user_id, id) WHERE archived_at IS NULL;
 CREATE INDEX class_members_scope_page_idx
     ON class_members (class_id, user_id, id) WHERE archived_at IS NULL;
+-- Membership pages order by start, in either direction, by default.
+CREATE INDEX academic_unit_members_scope_start_idx
+    ON academic_unit_members (academic_unit_id, start_at, id) WHERE archived_at IS NULL;
+CREATE INDEX class_members_scope_start_idx
+    ON class_members (class_id, start_at, id) WHERE archived_at IS NULL;
 
 -- Explicit examination records completion and scoped manual preservation.
 CREATE TABLE exam_sitting_records_completions (

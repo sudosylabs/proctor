@@ -1,0 +1,15 @@
+{
+  "title": "Pong",
+  "description": "The reply to ping.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "pong"
+  ],
+  "properties": {
+    "pong": {
+      "type": "boolean",
+      "const": true
+    }
+  }
+}

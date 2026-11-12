@@ -17,6 +17,43 @@ module when a change is not server-only. No module has been released yet.
 
 ### Changed
 
+- Server: list filters. `GET /api/v1/users` takes repeatable `role_id` (at
+  most 16; current Role Bindings inside the caller's `role_binding.view`
+  scopes, and only for a caller with Institution-wide `role.view`, else
+  `request.invalid`), `state=active|disabled` (disabled Users stay
+  Institution-wide only, and `state` with `include_disabled=true` is
+  `request.invalid`), and `never_signed_in`, `last_active_after` and
+  `last_active_before`, which read `last_activity_at` and are refused like
+  `sort=last_active`. `GET /api/v1/audits` takes `subject_user_id`,
+  `status=attempt|success|fail` and a repeatable `action` (at most 32); an
+  action outside the catalog is now `audit.query.invalid` rather than an empty
+  page (**breaking**). `GET /api/v1/mail/deliveries` takes
+  `recipient_user_id`. Every filter narrows the caller's visibility. The
+  baseline adds `mail_deliveries_target_user_id_created_at_id_idx`. Existing
+  development databases must be recreated.
+- Server: list sorting and capped totals. `GET /api/v1/users` takes
+  `sort=username|name|created|last_active` and `dir`; `last_active` is
+  refused with `request.invalid` unless the caller holds Institution-wide
+  `user.view`. `GET /api/v1/audits`, `GET /api/v1/jobs` and
+  `GET /api/v1/onboarding-imports` take `order=asc|desc`. Class and Academic
+  Unit member lists take `sort=enrolled|since|name` and `dir` and now default
+  to the membership start rather than `(user_id, id)` (**breaking**).
+  `GET /api/v1/mail/deliveries` takes `sort=updated|created` and `dir` and now
+  defaults to the last update, newest first, rather than creation
+  (**breaking**). The Class listings take `dir` and carry a bounded
+  `student_count` for `class.members.view` callers. Member lists, Role
+  Bindings, and the Programme, Programme Level, and Class listings report a
+  first-page `total`. Every cursor records its order, and a cursor presented
+  under another order is `request.invalid`; outstanding cursors of these lists
+  are invalid. The baseline adds the generated `users.sort_name` column and
+  indexes for each new order. Existing development databases must be
+  recreated.
+- Server: `GET /api/v1/audits`, `GET /api/v1/jobs` and
+  `GET /api/v1/jobs/{job_id}/attempts` reject an out-of-range, empty or
+  repeated `limit` or `cursor` with `request.invalid`. They had silently read
+  the default page without their filters or cursor. Every list now shares one
+  page rule. The baseline adds `jobs_created_at_id_idx` for the Job list order.
+  Existing development databases must be recreated.
 - Server: the baseline adds `access_policies.role_holder_mfa_required`,
   `session_idle_minutes` and `session_absolute_minutes` and
   `sessions.mfa_enrollment_required`, and admits those three policy fields
@@ -228,6 +265,82 @@ module when a change is not server-only. No module has been released yet.
 
 ### Added
 
+- Server: live updates for the administration views, as refetch signals over
+  `/api/v1/websocket`. `job.changed` (`job_id`, `type`, `status`, and
+  `progress` for a type that reports it) reaches `job.view` subscribers on the
+  institution when a node claims, completes, cancels or retries an
+  operator-visible Job, and on its checkpoints at most once every 2 seconds
+  per Job on each node. `onboarding_import.changed` (`import_id`, `state`)
+  reaches `onboarding_batch.view` subscribers on the import's scope and every
+  scope enclosing it; such a subscription may now name an academic unit or a
+  class, as may any action on an owning scope it accepts.
+  `current_user.sessions.changed` tells a User's other connections that one
+  of their Sessions was revoked or that a Session or Desktop Registration was
+  renamed, and `invitation.changed` (`invitation_id`, `state`) tells the
+  inviter that an Invitation was accepted. Checkpoints, payloads and row data
+  never travel; each event has its schema and AsyncAPI message.
+- Server: audit summaries. Each item of `GET /api/v1/audits` and
+  `GET /api/v1/users/me/audits` carries a `summary` sentence in the language
+  `Accept-Language` selects, beside the existing codes. Names are read from
+  the live records, once per page, and appear only when the caller could see
+  that record now; account history still never names another person.
+- Server: bulk changes by filter. `POST /api/v1/academic-administration-previews`
+  previews one academic administration operation (the batch operations but
+  `class.transfer`) over the Users the User directory filter matches, with
+  the directory's own filter fields and visibility rules. A preview Job
+  (`academic_administration_preview.resolve`) freezes at most 10,000 matching
+  Users in username order and classifies each as `will_change`, `no_op` or
+  `skipped` with a closed reason; the caller's own account is always skipped
+  and a disable or Session revocation skips System Administrators. A Class
+  enrollment is skipped for an enrollment conflict or a missing student
+  Affiliation only when the caller could already see it. More matching Users
+  fail with `academic_administration_preview.too_many_users`. `GET .../{id}`
+  returns the counts and `GET .../{id}/rows?group=` shows who, both
+  filtered by the reader's visibility now. `POST .../{id}/commit` takes the
+  digest, revision and an `Idempotency-Key` within 15 minutes of the preview
+  becoming ready (`academic_administration_preview.expired` after), runs one
+  execution Job over the frozen list, every row authorized again, and
+  answers with the committed preview, the same on a replay. Only the creator
+  reads or commits a preview; anyone else finds none. Reads, the commit and
+  execution admit the stored filter again, and once the creator's directory
+  would refuse it they are refused with
+  `academic_administration_preview.authorization_lost` and the remaining
+  rows fail. Preview and commit require a strong, recent Session. The first
+  commit writes one batch-level audit entry, and every import row's audit
+  attempt now names its import and row from the start, so a refused row's
+  entry names them too. The baseline adds the
+  `academic_administration_filter` import mode and its `filter` and
+  `preview_expires_at` columns; existing development databases must be
+  recreated.
+- Server: Users rename their own devices.
+  `PATCH /api/v1/users/me/desktop-registrations/{desktop_registration_id}`
+  takes `{"display_name": ...}` and keeps the name across later Desktop
+  sign-ins with the same key; a revoked registration is
+  `desktop_registration.revoked`. `PATCH /api/v1/users/me/sessions/{session_id}`
+  takes `{"device_name": ...}` for a browser or CLI Session and refuses a
+  Desktop Session with `session.desktop_named_by_registration`, naming the
+  registration to rename instead. Both need an interactive Session but no
+  recent authentication, trim and sanitize the name to 1-128 characters
+  without control characters, and are audited (`desktop_registration.rename`
+  and `session.manage` with `rename_own_session`), appearing in account
+  history as `desktop.registration_renamed` and `session.renamed`.
+  `GET /api/v1/users/me/sessions` items carry
+  `desktop_registration_display_name` for Desktop Sessions. The baseline adds
+  `desktop_registrations.renamed_at`; existing development databases must be
+  recreated.
+
+- Server: the realtime protocol has an AsyncAPI 3.0 contract,
+  `server/asyncapi/` compiled into `server/asyncapi.json`, with one message
+  for each of the 39 events and for `hello`, `resync_required`, `ping`,
+  `subscribe` and `unsubscribe` and their replies, plus the close codes.
+  Payload shapes are JSON Schema files in `server/schemas/realtime/`.
+  `ptool asyncapi build` and `check` (`make -C server asyncapi-build`,
+  `asyncapi-check`) validate it against the official AsyncAPI schema and check
+  every example. The server's event list is now closed: realtime publication
+  refuses an event name `app/realtime` does not declare, and conformance tests
+  hold each constructor's data to its schema. `user_profile_picture_changed`
+  now carries `changed_at` as an RFC 3339 string instead of Unix milliseconds
+  (**breaking**). The API docs gain a generated Realtime Reference.
 - Server: the Access Policy can require two-step verification of role
   holders, every User with a current Role Binding at any scope, with
   `role_holder_mfa_required` on `GET`, `PUT` and preflight; `GET` also
@@ -500,6 +613,11 @@ module when a change is not server-only. No module has been released yet.
 
 ### Fixed
 
+- Server: every `affiliation.end`, `academic_unit_member.end`, `class.end`
+  and `role_binding.end` row of an `academic_administration` CSV import
+  failed with `request.invalid` when it executed, because the row's batch
+  item also named the User its relationship resolved to. An ending row now
+  names only the relationship it ends, as a JSON batch item does.
 - Server: mail deliveries required `target_user_id`, but Invitation mail goes
   to an invitee with no account, so a page holding one failed the contract.
   Exactly one of `target_user_id` and the new `target_invitation_id` is now

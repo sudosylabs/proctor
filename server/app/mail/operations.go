@@ -56,12 +56,20 @@ type DeliveryPage struct {
 	paging.Total
 }
 
+// ListDeliveriesQuery lists deliveries newest first by Order's instant (last
+// update when Order is empty), or oldest first when Ascending; BeforeAt and
+// BeforeID continue past the previous page's last delivery in that order.
+// RecipientUserID keeps the deliveries addressed to that User; mail history is
+// never searched by address.
 type ListDeliveriesQuery struct {
 	States          []model.MailDeliveryState
 	TemplateKeys    []model.MailTemplateKey
+	RecipientUserID model.UserID
 	CreatedAfter    time.Time
 	CreatedBefore   time.Time
-	BeforeCreatedAt time.Time
+	Order           store.MailDeliveryOrder
+	Ascending       bool
+	BeforeAt        time.Time
 	BeforeID        model.MailDeliveryID
 	Limit           int
 }
@@ -317,16 +325,24 @@ func (s *Operations) ListMailDeliveries(
 	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, inv, model.ActionMailView); err != nil {
 		return DeliveryPage{}, err
 	}
-	if query.Limit < 1 || query.Limit > paging.MaximumLimit {
+	order := query.Order
+	if order == "" {
+		order = store.MailDeliveryOrderUpdated
+	}
+	if query.Limit < 1 || query.Limit > paging.MaximumLimit || !order.IsValid() ||
+		(query.RecipientUserID != "" && !query.RecipientUserID.IsValid()) {
 		return DeliveryPage{}, apperror.New("mail.query.invalid")
 	}
 
 	options := store.MailDeliveryListOptions{
 		States:          query.States,
 		TemplateKeys:    query.TemplateKeys,
+		RecipientUserID: query.RecipientUserID,
 		CreatedAfter:    query.CreatedAfter,
 		CreatedBefore:   query.CreatedBefore,
-		BeforeCreatedAt: query.BeforeCreatedAt,
+		Order:           order,
+		Ascending:       query.Ascending,
+		BeforeAt:        query.BeforeAt,
 		BeforeID:        query.BeforeID,
 		Limit:           query.Limit + 1,
 	}

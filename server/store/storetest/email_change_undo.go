@@ -76,7 +76,7 @@ func testEmailChangeUndoRestoresPreviousAddress(t *testing.T, ss store.Store) {
 	verification, err := ss.UserToken().Get(ctx, changed.Token.ID)
 	require.NoError(t, err)
 	require.True(t, verification.ArchivedAt.Valid, "the replaced address can still verify")
-	audits, err := ss.Audit().List(ctx, store.AuditListOptions{Action: string(model.ActionAuthenticationEmailChangeUndo), Limit: 50, Visibility: store.AuditVisibilityScope{InstitutionWide: true}})
+	audits, err := ss.Audit().List(ctx, store.AuditListOptions{Actions: []string{string(model.ActionAuthenticationEmailChangeUndo)}, Limit: 50, Visibility: store.AuditVisibilityScope{InstitutionWide: true}})
 	require.NoError(t, err)
 	found := false
 	for _, event := range audits {

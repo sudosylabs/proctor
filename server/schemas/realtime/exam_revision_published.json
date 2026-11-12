@@ -1,0 +1,41 @@
+{
+  "title": "Exam Revision published",
+  "description": "The published Revision's number, kind and policy digest. Published content is never included.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_id",
+    "revision_id",
+    "number",
+    "policy_digest",
+    "kind",
+    "published_at"
+  ],
+  "properties": {
+    "exam_id": {
+      "$ref": "id.json"
+    },
+    "revision_id": {
+      "$ref": "id.json"
+    },
+    "number": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "policy_digest": {
+      "type": "string",
+      "minLength": 64,
+      "maxLength": 64
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "standard",
+        "live_correction"
+      ]
+    },
+    "published_at": {
+      "$ref": "instant.json"
+    }
+  }
+}

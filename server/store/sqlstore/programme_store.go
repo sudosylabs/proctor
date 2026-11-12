@@ -182,10 +182,7 @@ func (s SQLProgrammeStore) SearchByAcademicUnit(
 	academicUnitID model.AcademicUnitID,
 	options store.AcademicNameListOptions,
 ) ([]*model.Programme, error) {
-	query, valid := academicNamePage(s.programmesQuery.Where(sq.Eq{
-		"programmes.academic_unit_id": academicUnitID,
-		"programmes.archived_at":      nil,
-	}), "programmes", options)
+	query, valid := academicNamePage(programmesInUnit(s.programmesQuery, academicUnitID), "programmes", options)
 	if !valid {
 		return nil, store.NewErrInvalidInput("programme", "list_options", options)
 	}
@@ -469,4 +466,21 @@ func (s SQLProgrammeStore) SeedUpdate(ctx context.Context, programme *model.Prog
 	}
 
 	return s.updateProgramme(ctx, &candidate, "", nil)
+}
+
+// CountByAcademicUnit counts through the same unit and term filter as
+// SearchByAcademicUnit.
+func (s SQLProgrammeStore) CountByAcademicUnit(
+	ctx context.Context,
+	academicUnitID model.AcademicUnitID,
+	options store.AcademicNameListOptions,
+	maximum int,
+) (int, error) {
+	rows := programmesInUnit(sq.Select("programmes.id").From("programmes"), academicUnitID)
+	return countAcademicNamePage(ctx, s.GetMaster(), rows, "programmes", options, maximum)
+}
+
+// programmesInUnit keeps the unit's unarchived Programmes.
+func programmesInUnit(query sq.SelectBuilder, academicUnitID model.AcademicUnitID) sq.SelectBuilder {
+	return query.Where(sq.Eq{"programmes.academic_unit_id": academicUnitID, "programmes.archived_at": nil})
 }

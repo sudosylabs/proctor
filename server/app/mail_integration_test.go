@@ -106,7 +106,7 @@ func TestControlledMailUsesRealApplicationGraphAndDurableWorker(t *testing.T) {
 	require.Empty(t, durable.EncryptedPayload)
 	require.True(t, durable.AcceptedAt.Valid)
 	audits, err := persistence.Audit().List(ctx, store.AuditListOptions{
-		Action: string(model.ActionMailManage), Limit: 10,
+		Actions: []string{string(model.ActionMailManage)}, Limit: 10,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
 	foundMutationAudit := false

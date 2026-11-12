@@ -1,0 +1,41 @@
+{
+  "title": "Student Result released, candidate copy",
+  "description": "Tells the candidate their Student Result was released. It carries the Review's identity and state, never its content.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "submission_id",
+    "exam_attempt_id",
+    "submission_review_id",
+    "review_state",
+    "review_revision",
+    "release_state",
+    "changed_at"
+  ],
+  "properties": {
+    "submission_id": {
+      "$ref": "id.json"
+    },
+    "exam_attempt_id": {
+      "$ref": "id.json"
+    },
+    "submission_review_id": {
+      "$ref": "id.json"
+    },
+    "review_state": {
+      "type": "string",
+      "const": "finalized"
+    },
+    "review_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "release_state": {
+      "type": "string",
+      "const": "released"
+    },
+    "changed_at": {
+      "$ref": "instant.json"
+    }
+  }
+}

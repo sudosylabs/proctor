@@ -12,7 +12,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strconv"
+	"slices"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -20,9 +20,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
-
-const defaultMailDeliveryPageSize = 50
 
 type mailRekeyRequest struct {
 	RetiringKeyID string `json:"retiring_key_id"`
@@ -130,10 +129,19 @@ type mailMetricsResponse struct {
 	HealthCode string                       `json:"health_code"`
 }
 
+// mailDeliveryCursor continues one order: At is the last delivery's instant
+// under Sort (its update or creation), and a cursor presented under another
+// sort or direction is an invalid query.
 type mailDeliveryCursor struct {
-	CreatedAt string `json:"created_at"`
-	ID        string `json:"id"`
+	Sort string `json:"sort"`
+	Dir  string `json:"dir"`
+	At   string `json:"at"`
+	ID   string `json:"id"`
 }
+
+// mailDeliverySorts is the delivery listing's closed sort set; the default,
+// updated, shows recent activity first.
+var mailDeliverySorts = []string{string(store.MailDeliveryOrderUpdated), string(store.MailDeliveryOrderCreated)}
 
 type mailHandlers struct{ app MailApplication }
 
@@ -402,7 +410,7 @@ func (h mailHandlers) listDeliveries(request route.Request) (route.Result, error
 		return route.Result{}, route.ErrUnpresentable
 	}
 
-	query, err := listMailDeliveriesQuery(request.HTTP)
+	query, order, err := listMailDeliveriesQuery(request.HTTP)
 	if err != nil {
 		return route.Result{}, apperror.Invalid("request.invalid", "query")
 	}
@@ -423,9 +431,15 @@ func (h mailHandlers) listDeliveries(request route.Request) (route.Result, error
 
 	if page.HasMore {
 		last := page.Items[len(page.Items)-1]
+		at := last.UpdatedAt
+		if order.Sort == string(store.MailDeliveryOrderCreated) {
+			at = last.CreatedAt
+		}
 		response.NextCursor, err = encodeMailDeliveryCursor(mailDeliveryCursor{
-			CreatedAt: model.FormatRFC3339(last.CreatedAt),
-			ID:        last.ID.String(),
+			Sort: order.Sort,
+			Dir:  order.Dir,
+			At:   model.FormatRFC3339(at),
+			ID:   last.ID.String(),
 		})
 		if err != nil {
 			return route.Result{}, route.Unpresentable(err)
@@ -488,77 +502,89 @@ func requireEmptyMailBody(request *http.Request) error {
 	return nil
 }
 
-func listMailDeliveriesQuery(request *http.Request) (mail.ListDeliveriesQuery, error) {
-	query := mail.ListDeliveriesQuery{Limit: defaultMailDeliveryPageSize}
-	if raw := request.URL.Query().Get("limit"); raw != "" {
-		limit, err := strconv.Atoi(raw)
-		if err != nil || limit < 1 || limit > 200 {
-			return query, errors.New("invalid mail delivery limit")
-		}
-
-		query.Limit = limit
+// listMailDeliveriesQuery parses the delivery listing query and its order:
+// newest update first unless sort and dir say otherwise.
+func listMailDeliveriesQuery(request *http.Request) (mail.ListDeliveriesQuery, listOrder, error) {
+	page, err := route.ParsePage(request)
+	if err != nil {
+		return mail.ListDeliveriesQuery{}, listOrder{}, err
 	}
-
-	if raw := request.URL.Query().Get("cursor"); raw != "" {
-		cursor, err := decodeMailDeliveryCursor(raw)
-		if err != nil {
-			return query, err
+	order, err := parseListOrder(request.URL.Query(), mailDeliverySorts, listDescending)
+	if err != nil {
+		return mail.ListDeliveriesQuery{}, order, err
+	}
+	query := mail.ListDeliveriesQuery{Limit: page.Limit, Order: store.MailDeliveryOrder(order.Sort), Ascending: !order.Descending()}
+	if raw := page.Cursor; raw != "" {
+		var cursor mailDeliveryCursor
+		if cursor, err = decodeMailDeliveryCursor(raw); err != nil {
+			return query, order, err
+		}
+		if !order.continues(cursor.Sort, cursor.Dir) {
+			return query, order, errors.New("mail delivery cursor belongs to another order")
 		}
 
-		query.BeforeCreatedAt, err = model.ParseRFC3339(cursor.CreatedAt)
+		query.BeforeAt, err = model.ParseRFC3339(cursor.At)
 		if err != nil {
-			return query, errors.New("invalid mail delivery cursor time")
+			return query, order, errors.New("invalid mail delivery cursor time")
 		}
 
-		query.BeforeCreatedAt, query.BeforeID = query.BeforeCreatedAt.UTC(), model.MailDeliveryID(cursor.ID)
+		query.BeforeAt, query.BeforeID = query.BeforeAt.UTC(), model.MailDeliveryID(cursor.ID)
 	}
 
 	for _, raw := range request.URL.Query()["state"] {
 		state := model.MailDeliveryState(raw)
 		if !state.IsValid() {
-			return query, errors.New("invalid mail delivery state")
+			return query, order, errors.New("invalid mail delivery state")
 		}
 
 		query.States = append(query.States, state)
 	}
 
 	if len(query.States) > 6 {
-		return query, errors.New("too many mail delivery states")
+		return query, order, errors.New("too many mail delivery states")
 	}
 
 	for _, raw := range request.URL.Query()["template_key"] {
 		key := model.MailTemplateKey(raw)
 		if !key.IsValid() {
-			return query, errors.New("invalid mail template key")
+			return query, order, errors.New("invalid mail template key")
 		}
 
 		query.TemplateKeys = append(query.TemplateKeys, key)
 	}
 
 	if len(query.TemplateKeys) > 64 {
-		return query, errors.New("too many mail template keys")
+		return query, order, errors.New("too many mail template keys")
 	}
 
-	var err error
+	if raw, present := request.URL.Query()["recipient_user_id"]; present {
+		if len(raw) != 1 {
+			return query, order, errors.New("repeated mail recipient")
+		}
+		if query.RecipientUserID, err = model.ParseUserID(raw[0]); err != nil {
+			return query, order, err
+		}
+	}
+
 	if raw := request.URL.Query().Get("created_after"); raw != "" {
 		query.CreatedAfter, err = parseMailFilterTime(raw)
 		if err != nil {
-			return query, err
+			return query, order, err
 		}
 	}
 
 	if raw := request.URL.Query().Get("created_before"); raw != "" {
 		query.CreatedBefore, err = parseMailFilterTime(raw)
 		if err != nil {
-			return query, err
+			return query, order, err
 		}
 	}
 
 	if !query.CreatedAfter.IsZero() && !query.CreatedBefore.IsZero() && !query.CreatedAfter.Before(query.CreatedBefore) {
-		return query, errors.New("invalid mail delivery time range")
+		return query, order, errors.New("invalid mail delivery time range")
 	}
 
-	return query, nil
+	return query, order, nil
 }
 
 func parseMailFilterTime(raw string) (time.Time, error) {
@@ -581,10 +607,11 @@ func mailDeliveryCursorSpec() route.CursorSpec[mailDeliveryCursor] {
 	return route.CursorSpec[mailDeliveryCursor]{
 		Label:                "mail delivery",
 		MaximumEncodedLength: route.DefaultMaximumCursorLength,
-		Members:              []string{"created_at", "id"},
+		Members:              []string{"sort", "dir", "at", "id"},
 		Validate: func(cursor mailDeliveryCursor) error {
-			parsed, err := model.ParseRFC3339(cursor.CreatedAt)
-			if err != nil || parsed.IsZero() || !model.MailDeliveryID(cursor.ID).IsValid() {
+			parsed, err := model.ParseRFC3339(cursor.At)
+			if err != nil || parsed.IsZero() || !model.MailDeliveryID(cursor.ID).IsValid() ||
+				!slices.Contains(mailDeliverySorts, cursor.Sort) || !validListDirection(cursor.Dir) {
 				return errors.New("invalid mail delivery keyset")
 			}
 

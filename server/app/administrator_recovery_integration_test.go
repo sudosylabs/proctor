@@ -147,7 +147,7 @@ func TestOfflineAdministratorRecoveryReconcilesBeforeNormalAuthentication(t *tes
 	})
 	require.Error(t, err, "repeated pending recovery succeeded")
 	events, err := persistence.Audit().List(context.Background(), store.AuditListOptions{
-		Action: "authentication.administrator_recovery", Limit: 10,
+		Actions: []string{"authentication.administrator_recovery"}, Limit: 10,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
 	require.NoError(t, err, "pre-start audit events")
@@ -172,7 +172,7 @@ func TestOfflineAdministratorRecoveryReconcilesBeforeNormalAuthentication(t *tes
 	}, "")
 	require.NotEqual(t, http.StatusOK, oldLogin.Code, "old password authenticated after rotation")
 	events, err = persistence.Audit().List(context.Background(), store.AuditListOptions{
-		Action: "authentication.administrator_recovery", Limit: 10,
+		Actions: []string{"authentication.administrator_recovery"}, Limit: 10,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
 	require.NoError(t, err, "reconciled audit events")

@@ -13,8 +13,9 @@ paths:
       tags:
         - Roles and access
       description: >-
-        Lists bounded durable audit facts visible through the caller's Institution or Academic Unit authority. The projection omits raw parameters, prior state, result payloads, credentials, protected content, and unsafe internal failures.
+        Lists bounded durable audit facts visible through the caller's Institution or Academic Unit authority, newest first unless `order=asc` asks for oldest first. The projection omits raw parameters, prior state, result payloads, credentials, protected content, and unsafe internal failures.
         The first page, read without a cursor, also reports `total`: the audit Events the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
+        Each Event also carries a `summary` sentence in the language `Accept-Language` selects, falling back to the installation language and then English, beside the stable codes it is written from. It names the actor, the User the Event is about, and a User, Academic Unit, or Class resource by their current names only when the caller could see that record now through `user.view` or `class.members.view`, `academic_unit.view`, or `class.view`; otherwise it uses a generic noun such as "a user" or "a class". An Academic Unit auditor's summary names the action alone, never the recorded operation or the User the Event is about.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -55,11 +56,35 @@ paths:
           schema:
             $ref: '#/components/schemas/ID'
           description: Return only Events attributed to this actor User.
-        - name: action
+        - name: subject_user_id
           in: query
           schema:
-            $ref: '#/components/schemas/AuditAction'
-          description: Return only Events with this exact stable action.
+            $ref: '#/components/schemas/ID'
+          description: Return only Events about this User, such as a change to their account.
+        - name: action
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 32
+            items:
+              $ref: '#/components/schemas/AuditAction'
+          description: >-
+            Return only Events with one of these exact stable actions. Repeat the parameter for up to 32 actions.
+            An Academic Unit auditor still reads only the academic actions its authority allows, so naming any other
+            action matches nothing.
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum:
+              - attempt
+              - success
+              - fail
+          description: >-
+            Return only Events in this durable outcome state: an `attempt` whose outcome is not yet recorded, a
+            `success`, or a `fail`.
         - name: resource_type
           in: query
           schema:
@@ -84,6 +109,18 @@ paths:
           schema:
             type: string
             format: date-time
+        - name: order
+          in: query
+          required: false
+          description: >-
+            Read newest first (`desc`, the default) or oldest first (`asc`). A cursor continues only the order
+            that produced it.
+          schema:
+            type: string
+            enum:
+              - desc
+              - asc
+            default: desc
       responses:
         "200":
           $ref: '#/components/responses/AuditListOK'
@@ -108,8 +145,20 @@ components:
           schema:
             $ref: '#/components/schemas/AuditListResponse'
           example:
-            items: []
-            total: 0
+            items:
+              - id: ybndrfg8ejkmcpqxot1uwisza3
+                created_at: '2026-08-01T09:30:00Z'
+                updated_at: '2026-08-01T09:30:00Z'
+                actor_id: ybndrfg8ejkmcpqxot1uwisza4
+                action: class.members.manage
+                resource:
+                  type: class
+                  id: ybndrfg8ejkmcpqxot1uwisza5
+                scope_type: academic_unit
+                scope_id: ybndrfg8ejkmcpqxot1uwisza6
+                status: success
+                summary: Ada Admin enrolled a user in Year 1 Mathematics A
+            total: 1
             total_is_lower_bound: false
   schemas:
     AuditEventResponse:
@@ -123,6 +172,7 @@ components:
         - action
         - resource
         - status
+        - summary
       properties:
         id:
           $ref: '#/components/schemas/ID'
@@ -186,6 +236,13 @@ components:
         error_code:
           type: string
           description: Stable safe failure category for an unsuccessful action; internal detail is omitted.
+        summary:
+          type: string
+          maxLength: 2048
+          description: >-
+            One sentence describing the Event in the negotiated language, for display only; clients that need to
+            reason about the Event read its codes. People and records appear by name only when the caller could see
+            them now, and an unfinished or failed Event says so.
         reason:
           type: string
           maxLength: 500

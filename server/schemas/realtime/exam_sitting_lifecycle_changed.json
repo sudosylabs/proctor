@@ -1,0 +1,59 @@
+{
+  "title": "Exam Sitting lifecycle changed",
+  "description": "One committed lifecycle transition or deadline extension.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_id",
+    "exam_sitting_id",
+    "state",
+    "revision",
+    "reason_code",
+    "scheduled_end_at",
+    "changed_at"
+  ],
+  "properties": {
+    "exam_id": {
+      "$ref": "id.json"
+    },
+    "exam_sitting_id": {
+      "$ref": "id.json"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "scheduled",
+        "open",
+        "paused",
+        "closing",
+        "closed",
+        "canceled"
+      ]
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "reason_code": {
+      "type": "string",
+      "enum": [
+        "scheduled_start_reached",
+        "manager_paused",
+        "manager_resumed",
+        "manager_extended",
+        "manager_closed",
+        "scheduled_end_reached",
+        "schedule_elapsed",
+        "academic_structure_invalid",
+        "closed_no_attempts",
+        "sealing_completed"
+      ]
+    },
+    "scheduled_end_at": {
+      "$ref": "instant.json"
+    },
+    "changed_at": {
+      "$ref": "instant.json"
+    }
+  }
+}

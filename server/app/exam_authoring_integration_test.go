@@ -259,7 +259,7 @@ func TestExamAuthoringIntegration(t *testing.T) {
 	require.Len(t, overridePage.Items, 1, "override catalog = %#v", overridePage)
 	require.Equal(t, created.Exam.ID, overridePage.Items[0].ID, "override catalog = %#v", overridePage)
 	viewOverrideAudits, err := persistence.Audit().List(ctx, store.AuditListOptions{
-		ActorID: outsider.ID, Action: string(model.ActionExamViewOverride),
+		ActorID: outsider.ID, Actions: []string{string(model.ActionExamViewOverride)},
 		Resource: &model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}, Limit: 10,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
@@ -275,7 +275,7 @@ func TestExamAuthoringIntegration(t *testing.T) {
 	require.True(t, archived.IsArchived())
 	require.Equal(t, currentExamRevision+1, archived.Revision)
 	manageOverrideAudits, err := persistence.Audit().List(ctx, store.AuditListOptions{
-		ActorID: outsider.ID, Action: string(model.ActionExamManageOverride),
+		ActorID: outsider.ID, Actions: []string{string(model.ActionExamManageOverride)},
 		Resource: &model.Resource{Type: model.ResourceExam, ID: created.Exam.ID.String()}, Limit: 10,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})

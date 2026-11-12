@@ -1,5 +1,6 @@
 import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
 import referenceSidebar from '../api/reference/sidebar';
+import realtimeSidebar from '../api/reference/realtime-protocol/sidebar';
 
 const sidebars: SidebarsConfig = {
   apiSidebar: [
@@ -48,6 +49,12 @@ const sidebars: SidebarsConfig = {
       label: 'Endpoint Reference',
       collapsed: false,
       items: referenceSidebar,
+    },
+    {
+      type: 'category',
+      label: 'Realtime Reference',
+      collapsed: true,
+      items: realtimeSidebar,
     },
   ],
 };

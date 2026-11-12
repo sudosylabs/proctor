@@ -41,7 +41,9 @@ import (
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/jobs"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -54,6 +56,8 @@ type resourceAuthorizer interface {
 	Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error
 	CanDelegateActionsAtScope(context.Context, model.Principal, []string, model.RoleScopeType, string) (bool, error)
 	GrantedScopes(context.Context, model.Principal, model.Action, model.ResourceType) (access.AuthorizedScopeConstraint, error)
+	AuthorizeUserSearch(context.Context, invocation.Invocation) (store.UserVisibilityScope, error)
+	CanViewClassMembers(context.Context, invocation.Invocation, model.Resource) (bool, error)
 	Institution(context.Context) (*model.Institution, error)
 	RecordAuthorizationDecision(
 		context.Context,
@@ -68,6 +72,33 @@ type resourceAuthorizer interface {
 }
 
 var _ resourceAuthorizer = (*access.Authorizer)(nil)
+
+// auditDrafter prepares the audit draft a Store aggregate inserts itself:
+// the one batch-level entry of an academic administration filter preview.
+// The mutation auditor composition passes is probed for it.
+type auditDrafter interface {
+	PrepareAtScope(
+		context.Context,
+		invocation.Invocation,
+		model.Action,
+		model.Resource,
+		model.RoleScopeType,
+		string,
+		string,
+		map[string]any,
+	) (*model.AuditEvent, error)
+}
+
+var _ auditDrafter = access.MutationAuditAdapter{}
+
+// userDirectory is the User directory read an academic administration
+// filter preview resolves its filter through, held as the user Service, so
+// the preview applies exactly the directory's validation and visibility.
+type userDirectory interface {
+	SearchUserPage(context.Context, invocation.Invocation, user.SearchUsersQuery) (paging.Page[*model.User], error)
+}
+
+var _ userDirectory = (*user.Service)(nil)
 
 // mailComposer is the part of *mail.Composer onboarding prepares frozen mail
 // with: the Invitation lifecycle messages and the public registration
@@ -150,8 +181,11 @@ type Dependencies struct {
 	Identity       *identity.Service
 	Academic       *academic.Service
 	Administration *administration.Service
-	Publisher      realtime.Publisher
-	Wake           func()
+	// Users is the User directory academic administration filter previews
+	// resolve their filter through; without it they are unavailable.
+	Users     *user.Service
+	Publisher realtime.Publisher
+	Wake      func()
 
 	NodeID                  string
 	PublicURL               string
@@ -183,6 +217,7 @@ type Service struct {
 	sittings store.ExamSittingStore
 	// imports is nil when the Store catalog is too reduced for onboarding
 	// imports; every import use case then refuses (see requireImports).
+	// Otherwise it announces each committed state change (see effects.go).
 	imports store.OnboardingImportStore
 	content OnboardingImportFiles
 
@@ -197,7 +232,11 @@ type Service struct {
 	academic       academicCommands
 	administration roleBindingCommands
 	identity       identityCommands
-	wake           func()
+	// directory and drafts are nil when composition supplies no User
+	// directory or no drafting auditor; filter previews then refuse.
+	directory userDirectory
+	drafts    auditDrafter
+	wake      func()
 
 	nodeID    string
 	publicURL string
@@ -310,6 +349,12 @@ func New(deps Dependencies) (*Service, Ports, error) {
 	if deps.Authorizer != nil {
 		s.authorizer = deps.Authorizer
 	}
+	if deps.Users != nil {
+		s.directory = deps.Users
+	}
+	if drafter, ok := deps.Auditor.(auditDrafter); ok {
+		s.drafts = drafter
+	}
 
 	enabled, err := onboardingImportsEnabled(deps)
 	if err != nil {
@@ -318,7 +363,8 @@ func New(deps Dependencies) (*Service, Ports, error) {
 
 	ports := Ports{AcceptExternalIdentity: s.acceptExternalIdentity, CountPendingInvitations: s.countPendingInvitations}
 	if enabled {
-		s.imports, s.content, s.wake = catalog.OnboardingImport(), deps.Content, deps.Wake
+		s.imports = announcingImports{OnboardingImportStore: catalog.OnboardingImport(), service: s}
+		s.content, s.wake = deps.Content, deps.Wake
 		ports.CountOpenImports, ports.ImportJobs = s.countOpenOnboardingImports, onboardingImportJobs{service: s}
 	}
 

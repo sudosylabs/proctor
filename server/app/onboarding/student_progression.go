@@ -187,7 +187,7 @@ func (s *Service) CommitStudentProgression(
 	inv invocation.Invocation,
 	command CommitStudentProgressionCommand,
 ) (OnboardingImportView, error) {
-	view, err := s.commitImport(
+	committed, err := s.commitImport(
 		ctx,
 		inv,
 		CommitOnboardingImportCommand{
@@ -199,7 +199,7 @@ func (s *Service) CommitStudentProgression(
 		},
 		model.OnboardingImportStudentProgression,
 	)
-	return view, studentProgressionError(err)
+	return onboardingImportView(committed), studentProgressionError(err)
 }
 
 // CancelStudentProgression cancels an unfinished Student Progression.
@@ -208,8 +208,8 @@ func (s *Service) CancelStudentProgression(
 	inv invocation.Invocation,
 	id model.OnboardingImportID,
 ) (OnboardingImportView, error) {
-	view, err := s.cancelImport(ctx, inv, id, model.OnboardingImportStudentProgression)
-	return view, studentProgressionError(err)
+	canceled, err := s.cancelImport(ctx, inv, id, model.OnboardingImportStudentProgression)
+	return onboardingImportView(canceled), studentProgressionError(err)
 }
 
 // StudentProgressionReport writes a finished Student Progression's row report.

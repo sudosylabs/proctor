@@ -42,16 +42,37 @@ type MailDeliveryCompletion struct {
 	At                time.Time
 }
 
-// MailDeliveryListOptions is a bounded, server-side operator query. The
-// (BeforeCreatedAt, BeforeID) pair is the decoded opaque keyset cursor.
+// MailDeliveryListOptions is a bounded, server-side operator query, newest
+// first by Order's instant (creation when Order is empty) then ID, or oldest
+// first when Ascending. The (BeforeAt, BeforeID) pair is the decoded opaque
+// keyset cursor: the previous page's last delivery, its instant in Order.
+// RecipientUserID keeps the deliveries addressed to that User; a delivery to
+// an Invitation has no recipient User and never matches it.
 type MailDeliveryListOptions struct {
 	States          []model.MailDeliveryState
 	TemplateKeys    []model.MailTemplateKey
+	RecipientUserID model.UserID
 	CreatedAfter    time.Time
 	CreatedBefore   time.Time
-	BeforeCreatedAt time.Time
+	Order           MailDeliveryOrder
+	Ascending       bool
+	BeforeAt        time.Time
 	BeforeID        model.MailDeliveryID
 	Limit           int
+}
+
+// MailDeliveryOrder names the instant an operator delivery listing orders by.
+type MailDeliveryOrder string
+
+const (
+	MailDeliveryOrderCreated MailDeliveryOrder = "created"
+	MailDeliveryOrderUpdated MailDeliveryOrder = "updated"
+)
+
+// IsValid reports whether o is a known order; the zero value is the creation
+// order.
+func (o MailDeliveryOrder) IsValid() bool {
+	return o == "" || o == MailDeliveryOrderCreated || o == MailDeliveryOrderUpdated
 }
 
 // MailDeliveryMutation fences an audited operator transition against the

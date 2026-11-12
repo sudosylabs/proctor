@@ -39,8 +39,12 @@ type programmeLevelHTTPApplication struct {
 func (a *programmeLevelHTTPApplication) GetProgrammeLevel(context.Context, invocation.Invocation, model.ProgrammeLevelID) (*model.ProgrammeLevel, error) {
 	return a.result, a.err
 }
-func (a *programmeLevelHTTPApplication) ListProgrammeLevels(context.Context, invocation.Invocation, academic.ListProgrammeLevelsQuery) (paging.Page[*model.ProgrammeLevel], error) {
-	return paging.Page[*model.ProgrammeLevel]{Items: a.list}, a.err
+func (a *programmeLevelHTTPApplication) ListProgrammeLevels(_ context.Context, _ invocation.Invocation, query academic.ListProgrammeLevelsQuery) (paging.Counted[*model.ProgrammeLevel], error) {
+	page := paging.Counted[*model.ProgrammeLevel]{Page: paging.Page[*model.ProgrammeLevel]{Items: a.list}}
+	if query.AfterID == "" {
+		page.Total = paging.CountWhole(len(a.list))
+	}
+	return page, a.err
 }
 func (a *programmeLevelHTTPApplication) CreateProgrammeLevel(_ context.Context, _ invocation.Invocation, command academic.CreateProgrammeLevelCommand) (*model.ProgrammeLevel, error) {
 	a.createCommand = command

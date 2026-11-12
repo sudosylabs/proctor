@@ -1,0 +1,227 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+# Integrity review and result release events.
+components:
+  messages:
+    exam_integrity_discrepancy_recorded:
+      name: exam_integrity_discrepancy_recorded
+      title: Integrity Discrepancy recorded
+      summary: A Focus Loss claim arrived after its Attempt or Sitting ended.
+      description: A Focus Loss claim arrived after its Attempt or Sitting ended. Delivered to connections that subscribe to submission.view on the submission.
+      tags:
+        - name: event
+        - name: Integrity review
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_integrity_discrepancy_recorded
+              action:
+                type: string
+                const: submission.view
+              data:
+                $ref: '../../../schemas/realtime/exam_integrity_discrepancy_recorded.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_integrity_discrepancy_recorded
+            sequence: 40
+            action: submission.view
+            resource:
+              type: submission
+              id: '9nfemqtwz47ydgjcx1ia56br8k'
+            data:
+              submission_id: '9nfemqtwz47ydgjcx1ia56br8k'
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
+              exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
+              candidate_user_id: qtwz47ydgjcx1ia56br8kpous3
+              integrity_discrepancy_id: pous3h9nfemqtwz47ydgjcx1ia
+              recorded_at: '2026-08-01T09:30:00Z'
+    exam_integrity_review_changed:
+      name: exam_integrity_review_changed
+      title: Integrity Review changed
+      summary: The Submission's Integrity Review changed.
+      description: The Submission's Integrity Review changed. Delivered to connections that subscribe to submission.view on the submission.
+      tags:
+        - name: event
+        - name: Integrity review
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_integrity_review_changed
+              action:
+                type: string
+                const: submission.view
+              data:
+                $ref: '../../../schemas/realtime/exam_integrity_review.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_integrity_review_changed
+            sequence: 41
+            action: submission.view
+            resource:
+              type: submission
+              id: '9nfemqtwz47ydgjcx1ia56br8k'
+            data:
+              submission_id: '9nfemqtwz47ydgjcx1ia56br8k'
+              exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
+              candidate_user_id: qtwz47ydgjcx1ia56br8kpous3
+              submission_review_id: gjcx1ia56br8kpous3h9nfemqt
+              review_state: draft
+              review_revision: 2
+              release_state: withheld
+              changed_at: '2026-08-01T09:30:00Z'
+    exam_integrity_review_finalized:
+      name: exam_integrity_review_finalized
+      title: Integrity Review finalized
+      summary: The Submission's Integrity Review was finalized and its result is still withheld.
+      description: The Submission's Integrity Review was finalized and its result is still withheld. Delivered to connections that subscribe to submission.view on the submission.
+      tags:
+        - name: event
+        - name: Integrity review
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_integrity_review_finalized
+              action:
+                type: string
+                const: submission.view
+              data:
+                $ref: '../../../schemas/realtime/exam_integrity_review.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_integrity_review_finalized
+            sequence: 42
+            action: submission.view
+            resource:
+              type: submission
+              id: '9nfemqtwz47ydgjcx1ia56br8k'
+            data:
+              submission_id: '9nfemqtwz47ydgjcx1ia56br8k'
+              exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
+              candidate_user_id: qtwz47ydgjcx1ia56br8kpous3
+              submission_review_id: gjcx1ia56br8kpous3h9nfemqt
+              review_state: finalized
+              review_revision: 3
+              release_state: withheld
+              changed_at: '2026-08-01T09:30:00Z'
+    exam_student_result_released:
+      name: exam_student_result_released
+      title: Student Result released
+      summary: The Submission's Student Result was released. Sent to those who may view the Submission.
+      description: The Submission's Student Result was released. Sent to those who may view the Submission. Delivered to connections that subscribe to submission.view on the submission.
+      tags:
+        - name: event
+        - name: Integrity review
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_student_result_released
+              action:
+                type: string
+                const: submission.view
+              data:
+                $ref: '../../../schemas/realtime/exam_integrity_review.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_student_result_released
+            sequence: 43
+            action: submission.view
+            resource:
+              type: submission
+              id: '9nfemqtwz47ydgjcx1ia56br8k'
+            data:
+              submission_id: '9nfemqtwz47ydgjcx1ia56br8k'
+              exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
+              candidate_user_id: qtwz47ydgjcx1ia56br8kpous3
+              submission_review_id: gjcx1ia56br8kpous3h9nfemqt
+              review_state: finalized
+              review_revision: 4
+              release_state: released
+              changed_at: '2026-08-01T09:30:00Z'
+    exam_student_result_released_for_candidate:
+      name: exam_student_result_released
+      title: Student Result released, for the candidate
+      summary: Tells the candidate alone that their Student Result was released.
+      description: Tells the candidate alone that their Student Result was released. Delivered to the addressed User's connections.
+      tags:
+        - name: event
+        - name: Integrity review
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - user_id
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_student_result_released
+              data:
+                $ref: '../../../schemas/realtime/exam_student_result_released_for_candidate.json'
+            not:
+              required:
+                - action
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_student_result_released
+            sequence: 44
+            user_id: qtwz47ydgjcx1ia56br8kpous3
+            resource:
+              type: ''
+              id: ''
+            data:
+              submission_id: '9nfemqtwz47ydgjcx1ia56br8k'
+              exam_attempt_id: dgjcx1ia56br8kpous3h9nfemq
+              submission_review_id: gjcx1ia56br8kpous3h9nfemqt
+              review_state: finalized
+              review_revision: 4
+              release_state: released
+              changed_at: '2026-08-01T09:30:00Z'

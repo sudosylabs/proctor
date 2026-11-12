@@ -46,10 +46,11 @@ func TestSelfAuditListingProjectsOnlyTheCallersFacts(t *testing.T) {
 		Resource: model.Resource{Type: model.ResourceUser, ID: me.String()}, ResourceRelated: true,
 		ClientType: "web", IPAddress: "203.0.113.4", UserAgent: "Unknown",
 	}
+	teacherRole := model.NewRoleID()
 	roleGrant := &store.AuditSelfEntry{
 		ID: model.NewAuditEventID(), CreatedAt: at.Add(-3 * time.Minute), ActorID: administrator, SubjectUserID: me,
 		Action: string(model.ActionRoleBindingManage), Operation: "create_binding", Status: model.AuditStatusSuccess,
-		Resource: model.Resource{Type: model.ResourceAcademicUnit, ID: unitID}, ResourceRelated: true,
+		Resource: model.Resource{Type: model.ResourceAcademicUnit, ID: unitID}, ResourceRelated: true, RoleID: teacherRole,
 	}
 	enrolledOther := &store.AuditSelfEntry{
 		ID: model.NewAuditEventID(), CreatedAt: at.Add(-4 * time.Minute), ActorID: me, SubjectUserID: other,
@@ -57,12 +58,25 @@ func TestSelfAuditListingProjectsOnlyTheCallersFacts(t *testing.T) {
 		Resource: model.Resource{Type: model.ResourceClass, ID: foreignClassID}, ResourceRelated: false,
 		ClientType: "desktop", IPAddress: "192.0.2.10", UserAgent: "Proctor Desktop",
 	}
-	persistence := &auditListingStoreFake{events: &events, self: []*store.AuditSelfEntry{ownChange, adminReset, failedSignIn, roleGrant, enrolledOther}, count: 5}
+	persistence := &auditListingStoreFake{
+		events: &events, self: []*store.AuditSelfEntry{ownChange, adminReset, failedSignIn, roleGrant, enrolledOther}, count: 5,
+		names: store.AuditNames{
+			AcademicUnits: map[model.AcademicUnitID]string{model.AcademicUnitID(unitID): "Mathematics"},
+			Roles:         map[model.RoleID]store.AuditRoleName{teacherRole: {Name: "teacher", DisplayName: "Teacher"}},
+		},
+	}
 	service := &Service{audits: persistence, authorizer: &auditListingAuthorizerFake{events: &events}}
 
 	page, err := service.ListSelfAuditEvents(context.Background(), caller, ListSelfAuditEventsQuery{Limit: 4})
 	require.NoError(t, err)
-	require.Equal(t, []string{"list-self-audits", "count-self-audits"}, events, "a self read must not authorize or record a decision")
+	require.Equal(t, []string{"list-self-audits", "list-audit-names", "count-self-audits"}, events,
+		"a self read must not authorize or record a decision, and names its page in one read")
+	require.Equal(t, []store.AuditNameOptions{{
+		AcademicUnitIDs:             []model.AcademicUnitID{model.AcademicUnitID(unitID)},
+		AcademicUnitInstitutionWide: true,
+		ClassVisibility:             store.ClassVisibilityScope{InstitutionWide: true},
+		RoleIDs:                     []model.RoleID{teacherRole},
+	}}, persistence.namesInputs, "only the related resources and the caller's own Role are named, and never a person")
 	require.Equal(t, me, persistence.selfInput.UserID)
 	require.Equal(t, persistence.selfInput, persistence.countInput, "the total counts the listed filters")
 	require.True(t, page.Counted)
@@ -96,6 +110,12 @@ func TestSelfAuditListingProjectsOnlyTheCallersFacts(t *testing.T) {
 	grant := page.Items[3]
 	require.Equal(t, model.AuditSelfEventRoleGranted, grant.Event)
 	require.Equal(t, unitID, grant.Resource.ID)
+	require.Equal(t, "Mathematics", grant.ResourceName)
+	require.Equal(t, store.AuditRoleName{Name: "teacher", DisplayName: "Teacher"}, grant.Role)
+	for _, item := range page.Items[:3] {
+		require.Empty(t, item.ResourceName, "a User resource is never named")
+		require.Equal(t, store.AuditRoleName{}, item.Role)
+	}
 
 	events = events[:0]
 	persistence.self = []*store.AuditSelfEntry{enrolledOther}
@@ -103,12 +123,13 @@ func TestSelfAuditListingProjectsOnlyTheCallersFacts(t *testing.T) {
 		Limit: 10, Ascending: true, BeforeCreatedAt: at.Add(-5 * time.Minute), BeforeID: model.NewAuditEventID(),
 	})
 	require.NoError(t, err)
-	require.Equal(t, []string{"list-self-audits"}, events, "a later page must not count again")
+	require.Equal(t, []string{"list-self-audits"}, events, "a later page must not count again, and an unrelated Class needs no name")
 	require.True(t, persistence.selfInput.Ascending)
 	require.False(t, page.Counted)
 	require.Len(t, page.Items, 1)
 	require.Equal(t, store.AuditSelfRelationActor, page.Items[0].Relation)
 	require.Equal(t, model.Resource{Type: model.ResourceClass}, page.Items[0].Resource, "an unrelated Class identity escaped")
+	require.Empty(t, page.Items[0].ResourceName, "an unrelated Class name escaped")
 	require.Equal(t, "Proctor Desktop", page.Items[0].UserAgent)
 }
 

@@ -20,6 +20,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -87,7 +88,7 @@ func TestClassMemberResourceForwardsHistoryAndEndsMembership(t *testing.T) {
 	require.Equal(t, model.ClassID(classID), members.pageQuery.ClassID)
 	require.NotNil(t, members.pageQuery.History)
 	require.True(t, *members.pageQuery.History, "history listing")
-	require.JSONEq(t, `{"items":[]}`, listed.Body.String(), "empty collection envelope")
+	require.JSONEq(t, `{"items":[],"total":0,"total_is_lower_bound":false}`, listed.Body.String(), "empty first page with its total")
 
 	end := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/api/v1/class-members/"+member.ID.String(), nil)
 	end.Header.Set("Authorization", "Bearer credential")
@@ -101,7 +102,7 @@ func TestClassMemberResourceForwardsHistoryAndEndsMembership(t *testing.T) {
 func TestClassMemberHistoryQueryIsForwarded(t *testing.T) {
 	t.Parallel()
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/classes/class/members?history=true", nil)
-	query, _, err := membershipPageQuery(request, model.Resource{Type: model.ResourceClass, ID: model.NewID()})
+	query, _, _, err := membershipPageQuery(request, model.Resource{Type: model.ResourceClass, ID: model.NewID()})
 	require.NoError(t, err)
 	require.NotNil(t, query.History)
 	require.True(t, *query.History, "history")
@@ -110,9 +111,18 @@ func TestClassMemberHistoryQueryIsForwarded(t *testing.T) {
 func (a *classMemberHTTPApplication) ListClassMembersPage(_ context.Context, _ invocation.Invocation, query academic.ListClassMembersPageQuery) (*academic.ClassMemberPage, error) {
 	a.pageQuery = query
 	if a.pageResult != nil {
+		if query.AfterID.IsZero() && !a.pageResult.Counted {
+			counted := *a.pageResult
+			counted.Total = paging.CountWhole(len(counted.Members))
+			return &counted, nil
+		}
 		return a.pageResult, nil
 	}
-	return &academic.ClassMemberPage{}, nil
+	page := &academic.ClassMemberPage{}
+	if query.AfterID.IsZero() {
+		page.Total = paging.CountWhole(0)
+	}
+	return page, nil
 }
 
 func TestClassMemberOpenAPIDocument(t *testing.T) {

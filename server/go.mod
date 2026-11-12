@@ -26,6 +26,7 @@ require (
 	github.com/pdfcpu/pdfcpu v0.15.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/redis/rueidis v1.0.79
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
 	github.com/sudosylabs/proctor/packages/cache v0.0.0-20261111213109-79e3170a5027
@@ -97,7 +98,6 @@ require (
 	github.com/prometheus/procfs v0.21.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0 // indirect
 	github.com/rs/xid v1.6.0 // indirect
-	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3 // indirect
 	github.com/sean-/seed v0.0.0-20170313163322-e2103e2c3529 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/tinylib/msgp v1.6.4 // indirect

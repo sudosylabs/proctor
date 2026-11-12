@@ -785,9 +785,13 @@ func (s *Auditor) List(
 		return nil, apperror.New("audit.query.invalid")
 	}
 
+	var actions []string
+	if query.Action != "" {
+		actions = []string{query.Action}
+	}
 	events, err := s.deps.Audits.List(ctx, store.AuditListOptions{
 		ActorID:         model.UserID(query.ActorID),
-		Action:          query.Action,
+		Actions:         actions,
 		Resource:        query.Resource,
 		BeforeCreatedAt: query.BeforeCreatedAt,
 		BeforeID:        model.AuditEventID(query.BeforeID),

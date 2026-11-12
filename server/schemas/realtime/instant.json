@@ -1,0 +1,6 @@
+{
+  "title": "Instant",
+  "description": "An RFC 3339 UTC timestamp with up to microsecond precision.",
+  "type": "string",
+  "format": "date-time"
+}

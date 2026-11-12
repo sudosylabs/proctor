@@ -35,6 +35,7 @@ type programmeStoreFake struct {
 	listed       []*model.Programme
 	searchTerm   string
 	searchLimit  int
+	countTerm    string
 }
 
 func (s *programmeStoreFake) Get(context.Context, model.ProgrammeID) (*model.Programme, error) {
@@ -44,6 +45,10 @@ func (s *programmeStoreFake) Get(context.Context, model.ProgrammeID) (*model.Pro
 func (s *programmeStoreFake) SearchByAcademicUnit(_ context.Context, _ model.AcademicUnitID, options store.AcademicNameListOptions) ([]*model.Programme, error) {
 	s.searchTerm, s.searchLimit = options.Term, options.Limit
 	return s.listed[:min(options.Limit, len(s.listed))], nil
+}
+func (s *programmeStoreFake) CountByAcademicUnit(_ context.Context, _ model.AcademicUnitID, options store.AcademicNameListOptions, maximum int) (int, error) {
+	s.countTerm = options.Term
+	return min(len(s.listed), maximum), nil
 }
 func (s *programmeStoreFake) Create(_ context.Context, input *store.ProgrammeCreation) (*model.Programme, error) {
 	*s.events = append(*s.events, "store-create")
@@ -74,6 +79,12 @@ type programmeAuthorizerFake struct {
 	// listing predicates.
 	institutionUsers bool
 	roleBindings     bool
+	classMembers     bool
+}
+
+func (a *programmeAuthorizerFake) CanViewClassMembers(_ context.Context, _ invocation.Invocation, resource model.Resource) (bool, error) {
+	*a.events = append(*a.events, "can-view-class-members:"+string(resource.Type)+":"+resource.ID)
+	return a.classMembers, nil
 }
 
 func (a *programmeAuthorizerFake) CanViewInstitutionUsers(context.Context, invocation.Invocation) (bool, error) {
@@ -237,6 +248,8 @@ func TestProgrammeListPreservesLimitWithoutSearch(t *testing.T) {
 			require.Equal(t, len(persistence.listed) > 1, got.HasMore, "List(limit=1) reports a further page")
 			require.Equal(t, strings.TrimSpace(term), persistence.searchTerm, "bounded query")
 			require.Equal(t, 2, persistence.searchLimit, "bounded query probes one row past the page")
+			require.Equal(t, paging.Total{Counted: true, Total: 2}, got.Total, "the first page counts every matching Programme")
+			require.Equal(t, persistence.searchTerm, persistence.countTerm, "the count reads the list's term")
 		})
 	}
 }

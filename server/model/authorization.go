@@ -121,6 +121,11 @@ const (
 	ResourceMailDelivery   ResourceType = "mail_delivery"
 )
 
+// ResourceTypes returns the closed resource catalogue in lexical order.
+func ResourceTypes() []ResourceType {
+	return slices.Clone(resourceTypes)
+}
+
 // resourceTypes is the closed resource catalogue in lexical order; the
 // contract's ResourceType enum is kept equal to it.
 var resourceTypes = []ResourceType{

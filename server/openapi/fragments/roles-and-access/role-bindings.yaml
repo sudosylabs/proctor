@@ -13,7 +13,7 @@ paths:
       tags:
         - Roles and access
       description: >-
-        Lists current and historical Role Bindings authorized for the caller, optionally narrowed to one User or exact scope. A Binding is an effective-dated permission grant; membership or affiliation alone is not returned as authority.
+        Lists current and historical Role Bindings authorized for the caller, optionally narrowed to one User or exact scope. A Binding is an effective-dated permission grant; membership or affiliation alone is not returned as authority. The first page, read without a cursor, also reports `total`: the Role Bindings the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -240,6 +240,16 @@ components:
             $ref: '#/components/schemas/RoleBindingResponse'
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
+        total:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            Role Bindings matching the filters across every page, present only on the first page. At 10,000 counting
+            stops and `total_is_lower_bound` is true.
+        total_is_lower_bound:
+          type: boolean
+          description: True when `total` reached the 10,000 bound and there may be more. Present with `total`.
     CreateRoleBindingRequest:
       description: Exact effective-dated permission grant to create.
       type: object

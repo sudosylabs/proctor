@@ -271,7 +271,8 @@ func (s SQLMailStore) GetDelivery(ctx context.Context, id model.MailDeliveryID) 
 func (s SQLMailStore) ListDeliveries(ctx context.Context, options store.MailDeliveryListOptions) ([]*model.MailDelivery, error) {
 	if options.Limit < 1 ||
 		options.Limit > 201 ||
-		(options.BeforeCreatedAt.IsZero() != options.BeforeID.IsZero()) ||
+		!options.Order.IsValid() ||
+		(options.BeforeAt.IsZero() != options.BeforeID.IsZero()) ||
 		(!options.BeforeID.IsZero() && !options.BeforeID.IsValid()) {
 		return nil, store.NewErrInvalidInput("mail_delivery", "list", nil)
 	}
@@ -281,9 +282,17 @@ func (s SQLMailStore) ListDeliveries(ctx context.Context, options store.MailDeli
 		return nil, err
 	}
 
-	if !options.BeforeCreatedAt.IsZero() {
-		conditions = append(conditions, "(created_at < ? OR (created_at = ? AND id < ?))")
-		arguments = append(arguments, model.TimeUTC(options.BeforeCreatedAt), model.TimeUTC(options.BeforeCreatedAt), options.BeforeID.String())
+	key := "created_at"
+	if options.Order == store.MailDeliveryOrderUpdated {
+		key = "updated_at"
+	}
+	direction, keyset := "DESC", "<"
+	if options.Ascending {
+		direction, keyset = "ASC", ">"
+	}
+	if !options.BeforeAt.IsZero() {
+		conditions = append(conditions, "("+key+", id) "+keyset+" (?, ?)")
+		arguments = append(arguments, model.TimeUTC(options.BeforeAt), options.BeforeID.String())
 	}
 
 	query := `SELECT ` + mailDeliveryColumns + ` FROM mail_deliveries`
@@ -291,7 +300,7 @@ func (s SQLMailStore) ListDeliveries(ctx context.Context, options store.MailDeli
 		query += ` WHERE ` + strings.Join(conditions, ` AND `)
 	}
 
-	query += ` ORDER BY created_at DESC, id DESC LIMIT ?`
+	query += ` ORDER BY ` + key + ` ` + direction + `, id ` + direction + ` LIMIT ?`
 	arguments = append(arguments, options.Limit)
 	var rows []mailDeliveryRow
 	if err := s.GetMaster().Select(ctx, &rows, query, arguments...); err != nil {
@@ -329,11 +338,12 @@ func (s SQLMailStore) CountDeliveries(ctx context.Context, options store.MailDel
 }
 
 // mailDeliveryListConditions validates and builds every ListDeliveries filter
-// but the keyset: states, templates, and the creation range. ListDeliveries
+// but the keyset: states, templates, recipient User, and the creation range. ListDeliveries
 // and CountDeliveries share it so a total always counts the listed rows.
 func mailDeliveryListConditions(options store.MailDeliveryListOptions) ([]string, []any, error) {
 	if len(options.States) > 6 ||
 		len(options.TemplateKeys) > 64 ||
+		(options.RecipientUserID != "" && !options.RecipientUserID.IsValid()) ||
 		(!options.CreatedAfter.IsZero() && !options.CreatedBefore.IsZero() && !options.CreatedAfter.Before(options.CreatedBefore)) {
 		return nil, nil, store.NewErrInvalidInput("mail_delivery", "list", nil)
 	}
@@ -376,6 +386,11 @@ func mailDeliveryListConditions(options store.MailDeliveryListOptions) ([]string
 		}
 
 		conditions = append(conditions, "template_key IN ("+strings.Join(placeholders, ", ")+")")
+	}
+
+	if options.RecipientUserID != "" {
+		conditions = append(conditions, "target_user_id = ?")
+		arguments = append(arguments, options.RecipientUserID.String())
 	}
 
 	if !options.CreatedAfter.IsZero() {

@@ -11,7 +11,7 @@ paths:
       operationId: listOnboardingImports
       summary: List onboarding imports within the caller's authorized scope
       description: >-
-        Lists the unexpired administrative onboarding imports the caller could read one by one through its current Institution, Academic Unit, or Class onboarding authority, newest first. Items are summary projections without rows; read one import for its preview or report rows. Student progressions are listed through their own resource and never appear here.
+        Lists the unexpired administrative onboarding imports the caller could read one by one through its current Institution, Academic Unit, or Class onboarding authority, newest first unless `order=asc` asks for oldest first. Items are summary projections without rows; read one import for its preview or report rows. Student progressions are listed through their own resource and never appear here.
       tags:
         - Invitations and onboarding
       x-proctor-auth: principal_required
@@ -72,6 +72,18 @@ paths:
             minimum: 1
             maximum: 200
             default: 50
+        - name: order
+          in: query
+          required: false
+          description: >-
+            Read newest first by creation (`desc`, the default) or oldest first (`asc`). A cursor continues only
+            the order that produced it.
+          schema:
+            type: string
+            enum:
+              - desc
+              - asc
+            default: desc
       x-codeSamples:
         - lang: Shell
           label: List imports awaiting review

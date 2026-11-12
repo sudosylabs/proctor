@@ -113,7 +113,7 @@ func (s *Service) CreateAffiliation(
 			Action:     model.ActionUserManage,
 			Resource:   resource,
 			Operation:  "create",
-			Value:      candidate.Auditable(),
+			Value:      command.Batch.AuditValue(candidate.Auditable()),
 			At:         at,
 		},
 		func(ctx context.Context, reference access.MutationReference) (*model.Affiliation, error) {
@@ -202,6 +202,7 @@ func (s *Service) EndAffiliation(
 			Action:     model.ActionUserManage,
 			Resource:   resource,
 			Operation:  "end",
+			Value:      command.Batch.AuditValue(nil),
 			Prior:      current.Auditable(),
 			At:         s.now(),
 		},

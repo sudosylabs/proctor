@@ -336,6 +336,14 @@ func (s *Authorizer) AuthorizeExamList(
 	}, nil
 }
 
+// GrantedUserVisibility reports the Users the principal can see now, as the
+// User directory applies it: user.view relationships and class.members.view
+// rosters. It records no decision; a caller shapes an already authorized
+// projection with it, such as naming the people an audit page refers to.
+func (s *Authorizer) GrantedUserVisibility(ctx context.Context, principal model.Principal) (store.UserVisibilityScope, error) {
+	return s.userVisibilityScope(ctx, principal)
+}
+
 func (s *Authorizer) userVisibilityScope(
 	ctx context.Context,
 	principal model.Principal,
@@ -1186,6 +1194,19 @@ func (r *ScopeResolver) resolveUser(ctx context.Context, resource model.Resource
 func (s *Authorizer) CanViewInstitutionUsers(ctx context.Context, inv invocation.Invocation) (bool, error) {
 	constraint, err := s.GrantedScopes(ctx, inv.Principal(), model.ActionUserView, model.ResourceUser)
 	return constraint.InstitutionWide, err
+}
+
+// CanViewRoles derives Institution-wide role.view, the authority that lists
+// and reads Roles, without recording a decision.
+func (s *Authorizer) CanViewRoles(ctx context.Context, inv invocation.Invocation) (bool, error) {
+	constraint, err := s.GrantedScopes(ctx, inv.Principal(), model.ActionRoleView, model.ResourceInstitution)
+	return constraint.InstitutionWide, err
+}
+
+// CanViewClassMembers evaluates class.members.view on the Resource without
+// recording a decision.
+func (s *Authorizer) CanViewClassMembers(ctx context.Context, inv invocation.Invocation, resource model.Resource) (bool, error) {
+	return s.Can(ctx, inv.Principal(), model.ActionClassMembersView, resource)
 }
 
 // CanViewRoleBindings evaluates role_binding.view on the Resource without

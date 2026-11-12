@@ -283,12 +283,21 @@ func (s SQLAuditStore) List(
 		return nil, err
 	}
 
-	query = query.OrderBy("audit_events.created_at DESC", "audit_events.id DESC").Limit(uint64(options.Limit))
+	direction := "DESC"
+	if options.Ascending {
+		direction = "ASC"
+	}
+	query = query.OrderBy("audit_events.created_at "+direction, "audit_events.id "+direction).Limit(uint64(options.Limit))
 	if !options.BeforeCreatedAt.IsZero() {
 		beforeTime := model.TimeUTC(options.BeforeCreatedAt)
-		if options.BeforeID == "" {
+		switch {
+		case options.Ascending && options.BeforeID == "":
+			query = query.Where(sq.Gt{"audit_events.created_at": beforeTime})
+		case options.Ascending:
+			query = query.Where("(audit_events.created_at, audit_events.id) > (?, ?)", beforeTime, options.BeforeID)
+		case options.BeforeID == "":
 			query = query.Where(sq.Lt{"audit_events.created_at": beforeTime})
-		} else {
+		default:
 			query = query.Where(sq.Or{
 				sq.Lt{"audit_events.created_at": beforeTime},
 				sq.And{
@@ -345,6 +354,10 @@ func filterAuditList(query sq.SelectBuilder, options store.AuditListOptions) (sq
 
 	if !options.Since.IsZero() && !options.Until.IsZero() && !options.Since.Before(options.Until) {
 		return query, store.NewErrInvalidInput("audit_event", "range", nil)
+	}
+
+	if err := validAuditListFilters(options); err != nil {
+		return query, err
 	}
 
 	for _, action := range options.Visibility.AllowedActions {
@@ -409,8 +422,14 @@ func filterAuditList(query sq.SelectBuilder, options store.AuditListOptions) (sq
 	if options.ActorID != "" {
 		query = query.Where(sq.Eq{"audit_events.actor_id": options.ActorID})
 	}
-	if options.Action != "" {
-		query = query.Where(sq.Eq{"audit_events.action": options.Action})
+	if options.SubjectUserID != "" {
+		query = query.Where(sq.Eq{"audit_events.subject_user_id": options.SubjectUserID})
+	}
+	if len(options.Actions) > 0 {
+		query = query.Where("audit_events.action = ANY(?)", pq.Array(options.Actions))
+	}
+	if options.Status != "" {
+		query = query.Where(sq.Eq{"audit_events.status": options.Status})
 	}
 
 	if options.Resource != nil {
@@ -430,6 +449,28 @@ func filterAuditList(query sq.SelectBuilder, options store.AuditListOptions) (sq
 	return query, nil
 }
 
+// validAuditListFilters rejects a non-canonical subject, an unknown status,
+// and more than MaximumAuditListActions or blank actions.
+func validAuditListFilters(options store.AuditListOptions) error {
+	if options.SubjectUserID != "" && !options.SubjectUserID.IsValid() {
+		return store.NewErrInvalidInput("audit_event", "subject_user_id", nil)
+	}
+	switch options.Status {
+	case "", model.AuditStatusAttempt, model.AuditStatusSuccess, model.AuditStatusFail:
+	default:
+		return store.NewErrInvalidInput("audit_event", "status", options.Status)
+	}
+	if len(options.Actions) > store.MaximumAuditListActions {
+		return store.NewErrInvalidInput("audit_event", "actions", len(options.Actions))
+	}
+	for _, action := range options.Actions {
+		if strings.TrimSpace(action) == "" || len(action) > 128 {
+			return store.NewErrInvalidInput("audit_event", "action", action)
+		}
+	}
+	return nil
+}
+
 // auditSelfRow is the bounded self-history projection of audit_events.
 type auditSelfRow struct {
 	ID              string             `db:"id"`
@@ -446,6 +487,7 @@ type auditSelfRow struct {
 	IPAddress       string             `db:"ip_address"`
 	UserAgent       string             `db:"user_agent"`
 	ErrorCode       string             `db:"error_code"`
+	RoleID          string             `db:"role_id"`
 }
 
 // ListSelf reads the subject and actor relations through their own partial
@@ -472,11 +514,14 @@ func (s SQLAuditStore) ListSelf(ctx context.Context, options store.AuditSelfList
 	order := `ORDER BY e.created_at ` + direction + `, e.id ` + direction
 	branches, args := auditSelfBranches(options, filter, filterArgs, `e.id, e.created_at`, order+` LIMIT ?`, options.Limit)
 	userID := options.UserID.String()
-	args = append(args, userID, userID, userID, userID, userID, options.Limit)
+	args = append(args, string(model.ActionRoleBindingManage), userID, userID, userID, userID, userID, options.Limit)
 	query := auditSelfEventKeysCTE + `, candidates AS (` + strings.Join(branches, " UNION ALL ") + `)
 		SELECT e.id, e.created_at, e.actor_id, e.subject_user_id, e.action,
 			COALESCE(e.parameters->>'operation', '') AS operation, e.status, e.resource_type,
 			e.resource_id, e.client_type, e.ip_address, e.user_agent, e.error_code,
+			CASE WHEN e.action = ? THEN COALESCE(
+				e.parameters->'value'->>'role_id', e.prior_state->>'role_id', ''
+			) ELSE '' END AS role_id,
 			CASE e.resource_type
 				WHEN 'user' THEN e.resource_id = ?
 				WHEN 'institution' THEN TRUE
@@ -693,7 +738,18 @@ func (row auditSelfRow) entry() (*store.AuditSelfEntry, error) {
 		IPAddress:       row.IPAddress,
 		UserAgent:       row.UserAgent,
 		ErrorCode:       row.ErrorCode,
+		RoleID:          auditSelfRoleID(row.RoleID),
 	}, nil
+}
+
+// auditSelfRoleID keeps a Role identifier read from audit values only when
+// it is well formed. The values are writer-owned JSON rather than a typed
+// column, so a malformed one names no Role instead of failing the history.
+func auditSelfRoleID(raw string) model.RoleID {
+	if id := model.RoleID(raw); id.IsValid() {
+		return id
+	}
+	return ""
 }
 
 func newAuditRow(event *model.AuditEvent) auditRow {

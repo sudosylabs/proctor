@@ -161,7 +161,7 @@ func testDesktopAuthorizationRotatingSession(t *testing.T, development bool) {
 	require.NotEmpty(t, exchanged.Tokens.AccessToken)
 	require.NotEmpty(t, exchanged.Tokens.RefreshToken)
 	for _, action := range []string{"authentication.desktop_authorization", "authentication.desktop_session_issue"} {
-		events, listErr := primaryStore.Audit().List(ctx, store.AuditListOptions{Action: action, ActorID: user.ID,
+		events, listErr := primaryStore.Audit().List(ctx, store.AuditListOptions{Actions: []string{action}, ActorID: user.ID,
 			Limit: 10, Visibility: store.AuditVisibilityScope{InstitutionWide: true}})
 		require.NoError(t, listErr, "%s audits for approving account", action)
 		require.Len(t, events, 1, "%s audits for approving account", action)

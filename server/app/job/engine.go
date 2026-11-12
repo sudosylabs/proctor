@@ -26,6 +26,10 @@ type Engine struct {
 	deps     Dependencies
 	registry *Registry
 	wake     chan struct{}
+	// changes hears committed transitions once attached; progress coalesces
+	// the checkpoint announcements.
+	changes  ChangeListener
+	progress *progressCoalescer
 
 	mu      sync.Mutex
 	started bool
@@ -85,7 +89,12 @@ func New(deps Dependencies) (*Engine, error) {
 		deps.Clock = systemClock{}
 	}
 	deps.Recurrences, deps.PeriodicTasks = recurrences, periodicTasks
-	return &Engine{deps: deps, registry: registry, wake: make(chan struct{}, 1)}, nil
+	return &Engine{
+		deps:     deps,
+		registry: registry,
+		wake:     make(chan struct{}, 1),
+		progress: newProgressCoalescer(progressWindow, deps.Clock.Now),
+	}, nil
 }
 
 // Descriptor returns the immutable execution contract for a registered type.

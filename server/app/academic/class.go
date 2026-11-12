@@ -82,71 +82,137 @@ func (s *Service) GetClass(ctx context.Context, inv invocation.Invocation, id mo
 	return class, nil
 }
 
-// ListClasses lists Classes after authorizing the caller.
+// ClassPage is one page of Classes. The first page also counts every Class
+// the listing matches. StudentCounts holds each listed Class's current member
+// count, stopped at store.MaximumListCount and absent for a Class with none;
+// it is nil when the caller lacks class.members.view on the listing's scope.
+type ClassPage struct {
+	paging.Counted[*model.Class]
+	StudentCounts map[model.ClassID]int
+}
+
+// ListClasses lists a Programme Level's Classes by name after authorizing the
+// caller.
 func (s *Service) ListClasses(
 	ctx context.Context,
 	inv invocation.Invocation,
 	query ListClassesQuery,
-) (paging.Page[*model.Class], error) {
+) (ClassPage, error) {
 	levelID := query.ProgrammeLevelID
 	if !levelID.IsValid() {
-		return paging.Page[*model.Class]{}, apperror.New("request.invalid").WithField("field", "programme_level_id")
+		return ClassPage{}, apperror.New("request.invalid").WithField("field", "programme_level_id")
 	}
 
 	limit, probe, err := paging.ResolveLimit(query.Limit, "limit")
 	if err != nil {
-		return paging.Page[*model.Class]{}, err
+		return ClassPage{}, err
 	}
 
 	resource := model.Resource{Type: model.ResourceProgrammeLevel, ID: levelID.String()}
 	if err = s.authorizer.Authorize(ctx, inv, model.ActionClassView, resource); err != nil {
-		return paging.Page[*model.Class]{}, err
+		return ClassPage{}, err
 	}
 
-	classes, err := s.classes.ListByProgrammeLevel(ctx, levelID, store.AcademicNameListOptions{
-		AfterName: query.AfterName,
-		AfterID:   query.AfterID,
-		Limit:     probe,
-	})
+	options := store.AcademicNameListOptions{
+		Descending: query.Descending,
+		AfterName:  query.AfterName,
+		AfterID:    query.AfterID,
+		Limit:      probe,
+	}
+	classes, err := s.classes.ListByProgrammeLevel(ctx, levelID, options)
 	if err != nil {
-		return paging.Page[*model.Class]{}, classStoreErrors.Translate(err)
+		return ClassPage{}, classStoreErrors.Translate(err)
 	}
 
-	return paging.New(classes, limit), nil
+	return s.classPage(ctx, inv, resource, paging.New(classes, limit), query.AfterID == "", func(maximum int) (int, error) {
+		return s.classes.CountByProgrammeLevel(ctx, levelID, options, maximum)
+	})
 }
 
-// SearchClasses searches Classes after authorizing the caller.
+// SearchClasses searches an Academic Unit's Classes by name after
+// authorizing the caller.
 func (s *Service) SearchClasses(
 	ctx context.Context,
 	inv invocation.Invocation,
 	query SearchClassesQuery,
-) (paging.Page[*model.Class], error) {
+) (ClassPage, error) {
 	unitID := query.AcademicUnitID
 	if !unitID.IsValid() {
-		return paging.Page[*model.Class]{}, apperror.New("request.invalid").WithField("field", "academic_unit_id")
+		return ClassPage{}, apperror.New("request.invalid").WithField("field", "academic_unit_id")
 	}
 
 	limit, probe, err := paging.ResolveLimit(query.Limit, "limit")
 	if err != nil {
-		return paging.Page[*model.Class]{}, err
+		return ClassPage{}, err
 	}
 
 	resource := model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()}
 	if err = s.authorizer.Authorize(ctx, inv, model.ActionClassView, resource); err != nil {
-		return paging.Page[*model.Class]{}, err
+		return ClassPage{}, err
 	}
 
-	classes, err := s.classes.SearchByAcademicUnit(ctx, unitID, store.AcademicNameListOptions{
-		Term:      strings.TrimSpace(query.Query),
-		AfterName: query.AfterName,
-		AfterID:   query.AfterID,
-		Limit:     probe,
-	})
+	options := store.AcademicNameListOptions{
+		Term:       strings.TrimSpace(query.Query),
+		Descending: query.Descending,
+		AfterName:  query.AfterName,
+		AfterID:    query.AfterID,
+		Limit:      probe,
+	}
+	classes, err := s.classes.SearchByAcademicUnit(ctx, unitID, options)
 	if err != nil {
-		return paging.Page[*model.Class]{}, classStoreErrors.Translate(err)
+		return ClassPage{}, classStoreErrors.Translate(err)
 	}
 
-	return paging.New(classes, limit), nil
+	return s.classPage(ctx, inv, resource, paging.New(classes, limit), query.AfterID == "", func(maximum int) (int, error) {
+		return s.classes.CountByAcademicUnit(ctx, unitID, options, maximum)
+	})
+}
+
+// classPage counts the first page of a Class listing and, for a caller
+// holding class.members.view on the listing's scope, each listed Class's
+// current students in one grouped read.
+func (s *Service) classPage(
+	ctx context.Context,
+	inv invocation.Invocation,
+	scope model.Resource,
+	page paging.Page[*model.Class],
+	first bool,
+	count func(int) (int, error),
+) (ClassPage, error) {
+	total, consistent, err := paging.CountFirst(first, len(page.Items), count)
+	if err != nil {
+		return ClassPage{}, classStoreErrors.Translate(err)
+	}
+	if !consistent {
+		return ClassPage{}, apperror.New("administration.unavailable").WithField("resource", "class")
+	}
+
+	result := ClassPage{Counted: paging.Counted[*model.Class]{Page: page, Total: total}}
+	if len(page.Items) == 0 {
+		return result, nil
+	}
+
+	visible, err := s.authorizer.CanViewClassMembers(ctx, inv, scope)
+	if err != nil || !visible {
+		return result, err
+	}
+
+	classIDs := make([]model.ClassID, 0, len(page.Items))
+	for _, class := range page.Items {
+		classIDs = append(classIDs, class.ID)
+	}
+
+	counts, err := s.classMembers.CountCurrentByClasses(ctx, classIDs, model.TimeUTC(s.now()), store.MaximumListCount)
+	if err != nil {
+		return ClassPage{}, ClassMemberStoreErrors.Translate(err)
+	}
+
+	result.StudentCounts = make(map[model.ClassID]int, len(counts))
+	for _, counted := range counts {
+		result.StudentCounts[counted.ClassID] = counted.Count
+	}
+
+	return result, nil
 }
 
 // CreateClass creates a Class after authorizing the caller.

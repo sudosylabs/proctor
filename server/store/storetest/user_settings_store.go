@@ -70,7 +70,7 @@ func TestUserSettingsStore(t *testing.T, ss store.Store) {
 	require.Equal(t, replaced.Revision, replayed.Revision, "Replace(replay) = %#v, want %#v", replayed, replaced)
 	require.True(t, replayed.UpdatedAt.Equal(replaced.UpdatedAt), "Replace(replay) = %#v, want %#v", replayed, replaced)
 	audits, err := ss.Audit().List(ctx, store.AuditListOptions{
-		Action: "user.settings.replace", Limit: 10,
+		Actions: []string{"user.settings.replace"}, Limit: 10,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
 	require.NoError(t, err)
@@ -96,7 +96,7 @@ func TestUserSettingsStore(t *testing.T, ss store.Store) {
 	require.False(t, noOpReplay.Changed)
 	require.Equal(t, stored.Revision, noOpReplay.Revision)
 	audits, err = ss.Audit().List(ctx, store.AuditListOptions{
-		Action: "user.settings.replace", Limit: 10,
+		Actions: []string{"user.settings.replace"}, Limit: 10,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
 	require.NoError(t, err)

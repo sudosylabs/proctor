@@ -314,7 +314,7 @@ func TestMailDeliveryListCountsTheFirstPageThroughTheListedOptions(t *testing.T)
 	require.Equal(t, paging.Total{Counted: true, Total: 3}, first.Total)
 	require.Equal(t, query.States, persistence.countOptions.States, "the count reads the list's filters")
 
-	query.BeforeCreatedAt, query.BeforeID = delivery.CreatedAt, delivery.ID
+	query.Order, query.BeforeAt, query.BeforeID = store.MailDeliveryOrderCreated, delivery.CreatedAt, delivery.ID
 	persistence.counts = 0
 	later, err := service.ListMailDeliveries(context.Background(), caller, query)
 	require.NoError(t, err)
@@ -339,4 +339,26 @@ func (f *testLimiterFake) AccountMailTest(_ context.Context, userID model.UserID
 	}
 	f.counts[userID]++
 	return f.counts[userID] > maximum, nil
+}
+
+// TestMailDeliveryListFiltersByRecipientUser pins the recipient filter: a
+// canonical recipient User reaches the read and the count, and a
+// non-canonical one is mail.query.invalid after authorization and before
+// any delivery is inspected.
+func TestMailDeliveryListFiltersByRecipientUser(t *testing.T) {
+	t.Parallel()
+	persistence := &mailStoreFake{}
+	authorizer := &mailAuthorizerFake{}
+	service := &Operations{deps: OperationsDependencies{Mail: persistence, Authorization: authorizer}}
+	caller := invocation.New(mailTestPrincipal(time.Now()), model.RequestMetadata{})
+	recipient := model.NewUserID()
+	_, err := service.ListMailDeliveries(context.Background(), caller, ListDeliveriesQuery{RecipientUserID: recipient, Limit: 10})
+	require.NoError(t, err)
+	require.Equal(t, recipient, persistence.countOptions.RecipientUserID, "the count reads the list's recipient")
+
+	persistence.lists = 0
+	_, err = service.ListMailDeliveries(context.Background(), caller, ListDeliveriesQuery{RecipientUserID: "not-an-id", Limit: 10})
+	require.True(t, apperror.Is(err, "mail.query.invalid"), "error = %v", err)
+	require.Zero(t, persistence.lists, "a refused filter reads nothing")
+	require.Equal(t, []model.Action{model.ActionMailView, model.ActionMailView}, authorizer.actions)
 }

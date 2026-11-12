@@ -43,6 +43,16 @@ conditions:
   busy: 503
 default_status: 409
 codes:
+  - code: academic_administration_preview.authorization_lost
+    description: "The creator's User directory no longer admits the preview's filter, for example an activity or Role filter after Institution-wide visibility was lost; create a new preview."
+  - code: academic_administration_preview.conflict
+    description: "The academic administration preview is not ready to commit, or its revision or digest no longer match."
+  - code: academic_administration_preview.expired
+    description: "The academic administration preview stopped admitting its commit 15 minutes after it became ready; create a new preview."
+  - code: academic_administration_preview.target_conflict
+    description: "The scope or Role of the academic administration preview changed or was archived before the preview resolved."
+  - code: academic_administration_preview.too_many_users
+    description: "The User directory filter matched more than 10,000 Users; narrow the filter and create a new preview."
   - code: academic_period.conflict
     description: "The Academic Period conflicts with an existing period or its current state."
   - code: academic_period.invalid
@@ -283,6 +293,10 @@ codes:
     description: "The supplied Desktop Compatibility Policy revision is stale; `fields.current_revision` carries the current revision."
   - code: desktop_compatibility_policy.unavailable
     description: "The Desktop Compatibility Policy could not be read or saved; retry later."
+  - code: desktop_registration.invalid
+    description: "The Desktop Registration name is blank, too long, or contains a control character; `fields` names the rejected input."
+  - code: desktop_registration.revoked
+    description: "The Desktop Registration is revoked; it stays as security history and cannot be renamed."
   - code: desktop_registration.unavailable
     description: "The Desktop Registration change failed; retry later."
   - code: exam.archived
@@ -749,8 +763,12 @@ codes:
     description: "The node is at capacity for expensive work; retry after the `Retry-After` interval."
     transport: true
     retry_after: 1
+  - code: session.desktop_named_by_registration
+    description: "A Desktop Session takes its name from its Desktop Registration; rename that registration instead. `fields.desktop_registration_id` names it."
   - code: session.id.invalid
     description: "The Session identifier is malformed."
+  - code: session.invalid
+    description: "The Session name is blank, too long, or contains a control character; `fields` names the rejected input."
   - code: session.not_found
     description: "The Session does not exist or is not visible to the caller."
   - code: student_progression.conflict

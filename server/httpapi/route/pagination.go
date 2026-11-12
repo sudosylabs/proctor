@@ -9,6 +9,7 @@ package route
 
 import (
 	"errors"
+	"net/http"
 	"slices"
 	"strconv"
 	"strings"
@@ -77,7 +78,13 @@ type PageRequest struct {
 // Page parses the collection parameters. A repeated, empty, or out-of-range
 // value is invalid.
 func (r Request) Page() (PageRequest, error) {
-	values := r.HTTP.URL.Query()
+	return ParsePage(r.HTTP)
+}
+
+// ParsePage applies the collection page rule of [Request.Page] to a plain
+// request, for list parsers that read the rest of their query themselves.
+func ParsePage(request *http.Request) (PageRequest, error) {
+	values := request.URL.Query()
 	page := PageRequest{Limit: DefaultPageLimit}
 	for _, name := range []string{"limit", "cursor"} {
 		if entries, present := values[name]; present && (len(entries) != 1 || entries[0] == "") {

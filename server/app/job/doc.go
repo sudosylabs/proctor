@@ -24,4 +24,8 @@
 //
 // Operations, in operations.go, is the operator service: it authorizes,
 // audits and translates errors around the Engine's list, cancel and retry.
+// change.go announces each committed transition of an operator-visible Job,
+// and its checkpoints at most once per Job every two seconds, to the
+// ChangeListener the application attaches; the application publishes them as
+// job.changed refetch signals.
 package job

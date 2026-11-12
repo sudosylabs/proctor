@@ -78,3 +78,14 @@ func TestEventResourceWireShapeRemainsSnakeCase(t *testing.T) {
 	require.NotNil(t, wire.Resource["type"])
 	require.NotNil(t, wire.Resource["id"])
 }
+
+func TestSubscriptionAcceptsAnOwningScopeItsActionAccepts(t *testing.T) {
+	t.Parallel()
+
+	for _, resourceType := range []model.ResourceType{model.ResourceInstitution, model.ResourceAcademicUnit, model.ResourceClass} {
+		subscription := Subscription{Action: model.ActionOnboardingBatchView, Resource: Resource{Type: resourceType, ID: model.NewID()}}
+		require.True(t, subscription.IsValid(), "onboarding_batch.view on %s", resourceType)
+	}
+	refused := Subscription{Action: model.ActionJobView, Resource: Resource{Type: model.ResourceClass, ID: model.NewID()}}
+	require.False(t, refused.IsValid(), "job.view is checked only on the institution")
+}

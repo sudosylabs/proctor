@@ -35,7 +35,15 @@ type auditListingStoreFake struct {
 	countInput     store.AuditSelfListOptions
 	listCount      int
 	listCountInput store.AuditListOptions
+	names          store.AuditNames
+	namesInputs    []store.AuditNameOptions
 	err            error
+}
+
+func (s *auditListingStoreFake) ListNames(_ context.Context, options store.AuditNameOptions) (store.AuditNames, error) {
+	*s.events = append(*s.events, "list-audit-names")
+	s.namesInputs = append(s.namesInputs, options)
+	return s.names, s.err
 }
 
 func (s *auditListingStoreFake) Count(_ context.Context, options store.AuditListOptions, maximum int) (int, error) {
@@ -71,6 +79,15 @@ type auditListingAuthorizerFake struct {
 	err       error
 	scope     store.AuditVisibilityScope
 	decisions []recordedDecision
+	// grants answers GrantedScopes for the actions an audit page's names
+	// need, and users answers GrantedUserVisibility.
+	grants map[model.Action]access.AuthorizedScopeConstraint
+	users  store.UserVisibilityScope
+}
+
+func (a *auditListingAuthorizerFake) GrantedUserVisibility(context.Context, model.Principal) (store.UserVisibilityScope, error) {
+	*a.events = append(*a.events, "user-visibility")
+	return a.users, nil
 }
 
 // recordedDecision is one RecordAuthorizationDecision call, as the authorizer
@@ -87,6 +104,10 @@ func (a *auditListingAuthorizerFake) GrantedScopes(_ context.Context, _ model.Pr
 	if action == model.ActionAuditView {
 		*a.events = append(*a.events, "authorize-view")
 		return access.AuthorizedScopeConstraint{InstitutionWide: a.scope.InstitutionWide}, a.err
+	}
+	if grant, named := a.grants[action]; named {
+		*a.events = append(*a.events, "scopes-"+string(action))
+		return grant, nil
 	}
 	return access.AuthorizedScopeConstraint{InstitutionWide: a.scope.AcademicInstitutionWide, AcademicUnitRootIDs: a.scope.AcademicUnitRootIDs}, nil
 }
@@ -352,4 +373,141 @@ func TestAuditListingCountsTheFirstPageWithinItsVisibility(t *testing.T) {
 	require.Equal(t, paging.Total{}, later.Total)
 	// Contract: a continued page authorizes and lists without counting.
 	require.Equal(t, []string{"authorize-view", "list-audits"}, events)
+}
+
+// TestAuditListingFiltersReachPersistenceInsideTheVisibility pins the
+// subject, status and repeatable action filters: each reaches persistence
+// beside the caller's unchanged visibility, so an academic auditor keeps its
+// subtrees and catalog, and a value outside the closed vocabularies is
+// audit.query.invalid before anything is read.
+func TestAuditListingFiltersReachPersistenceInsideTheVisibility(t *testing.T) {
+	t.Parallel()
+	subject := model.NewUserID()
+	rootID := model.NewAcademicUnitID()
+	inCatalog, outside := string(model.ActionClassMembersManage), string(model.ActionExternalIdentityManage)
+	events := []string{}
+	persistence := &auditListingStoreFake{events: &events}
+	service := &Service{institutions: anyInstitution(), audits: persistence, authorizer: &auditListingAuthorizerFake{
+		events: &events, scope: store.AuditVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{rootID}},
+	}}
+	_, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{
+		Limit: 10, SubjectUserID: subject, Status: model.AuditStatusFail, Actions: []string{inCatalog, " " + outside, inCatalog},
+	})
+	require.NoError(t, err)
+	require.Equal(t, subject, persistence.input.SubjectUserID)
+	require.Equal(t, model.AuditStatusFail, persistence.input.Status)
+	require.Equal(t, []string{inCatalog, outside}, persistence.input.Actions, "actions are trimmed and repeats dropped")
+	require.Equal(t, store.AuditVisibilityScope{
+		AcademicUnitRootIDs: []model.AcademicUnitID{rootID}, AllowedActions: model.AcademicAuditActions(),
+	}, persistence.input.Visibility, "an action outside the academic catalog does not widen it")
+	require.Equal(t, persistence.input, persistence.listCountInput, "the count reads the same filters")
+
+	tooMany := make([]string, store.MaximumAuditListActions+1)
+	for index := range tooMany {
+		tooMany[index] = inCatalog
+	}
+	for name, query := range map[string]ListAuditEventsQuery{
+		"unknown action":   {Actions: []string{"audit.unknown"}},
+		"too many actions": {Actions: tooMany},
+		"unknown status":   {Status: "pending"},
+		"invalid subject":  {SubjectUserID: "not-an-id"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			events := []string{}
+			persistence := &auditListingStoreFake{events: &events}
+			service := &Service{institutions: anyInstitution(), audits: persistence, authorizer: &auditListingAuthorizerFake{
+				events: &events, scope: store.AuditVisibilityScope{InstitutionWide: true},
+			}}
+			query.Limit = 10
+			_, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, query)
+			require.True(t, apperror.Is(err, "audit.query.invalid"), "error = %v", err)
+			require.Equal(t, []string{"authorize-view"}, events, "a refused filter reads nothing")
+		})
+	}
+}
+
+// TestAuditListingNamesOnlyWhatTheCallerCanSeeInOneRead pins name
+// resolution: the page's actors, subjects and resources are named in one
+// Store read, each inside the caller's current authority to see that record,
+// never through audit visibility alone.
+func TestAuditListingNamesOnlyWhatTheCallerCanSeeInOneRead(t *testing.T) {
+	t.Parallel()
+	events := []string{}
+	actor, subject := model.NewUserID(), model.NewUserID()
+	classID, unitID, rootID := model.NewClassID(), model.NewAcademicUnitID(), model.NewAcademicUnitID()
+	enrolment := &model.AuditEvent{
+		ID: model.NewAuditEventID(), CreatedAt: model.TimeFromMillis(300), ActorID: actor, SubjectUserID: subject,
+		Action: string(model.ActionClassMembersManage), Resource: model.Resource{Type: model.ResourceClass, ID: classID.String()},
+		Status: model.AuditStatusSuccess, Parameters: []byte(`{"operation":"enroll","value":{}}`),
+	}
+	unitChange := &model.AuditEvent{
+		ID: model.NewAuditEventID(), CreatedAt: model.TimeFromMillis(200), ActorID: actor,
+		Action: string(model.ActionAcademicUnitManage), Resource: model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()},
+		Status: model.AuditStatusSuccess,
+	}
+	signIn := &model.AuditEvent{
+		ID: model.NewAuditEventID(), CreatedAt: model.TimeFromMillis(100), SubjectUserID: subject,
+		Action: string(model.ActionAuthenticationLogin), Resource: model.Resource{Type: model.ResourceUser, ID: subject.String()},
+		Status: model.AuditStatusFail,
+	}
+	names := store.AuditNames{Users: map[model.UserID]string{actor: "Ada Admin"}}
+	persistence := &auditListingStoreFake{events: &events, list: []*model.AuditEvent{enrolment, unitChange, signIn}, names: names}
+	users := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{rootID}, ActiveAt: model.TimeFromMillis(400)}
+	authorizer := &auditListingAuthorizerFake{
+		events: &events, scope: store.AuditVisibilityScope{InstitutionWide: true}, users: users,
+		grants: map[model.Action]access.AuthorizedScopeConstraint{
+			model.ActionAcademicUnitView: {AcademicUnitRootIDs: []model.AcademicUnitID{rootID}},
+			model.ActionClassView:        {ClassIDs: []model.ClassID{classID}},
+		},
+	}
+	service := &Service{institutions: anyInstitution(), audits: persistence, authorizer: authorizer}
+
+	page, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{Limit: 10})
+	require.NoError(t, err)
+	require.Equal(t, []string{
+		"authorize-view", "list-audits", "count-audits",
+		"user-visibility", "scopes-academic_unit.view", "scopes-class.view", "list-audit-names",
+	}, events, "one name read per page, after the scopes that gate it")
+	require.Equal(t, []store.AuditNameOptions{{
+		UserIDs:             []model.UserID{actor, subject},
+		UserVisibility:      users,
+		AcademicUnitIDs:     []model.AcademicUnitID{unitID},
+		AcademicUnitRootIDs: []model.AcademicUnitID{rootID},
+		ClassIDs:            []model.ClassID{classID},
+		ClassVisibility:     store.ClassVisibilityScope{ClassIDs: []model.ClassID{classID}},
+	}}, persistence.namesInputs)
+	require.Equal(t, names, page.Names)
+	require.False(t, page.Redacted)
+}
+
+// TestAcademicAuditListingNamesNoSubject keeps a redacted page's summaries
+// within its redaction: its events carry no parameters, so the page names
+// the actor and resource it already shows but never the User an Event is
+// about.
+func TestAcademicAuditListingNamesNoSubject(t *testing.T) {
+	t.Parallel()
+	events := []string{}
+	actor, subject, classID := model.NewUserID(), model.NewUserID(), model.NewClassID()
+	rootID := model.NewAcademicUnitID()
+	enrolment := &model.AuditEvent{
+		ID: model.NewAuditEventID(), CreatedAt: model.TimeFromMillis(100), ActorID: actor, SubjectUserID: subject,
+		Action: string(model.ActionClassMembersManage), Resource: model.Resource{Type: model.ResourceClass, ID: classID.String()},
+		ScopeType: model.RoleScopeAcademicUnit, ScopeID: rootID.String(),
+		Status: model.AuditStatusSuccess, Parameters: []byte(`{"operation":"enroll","value":{}}`), IPAddress: "192.0.2.10",
+	}
+	persistence := &auditListingStoreFake{events: &events, list: []*model.AuditEvent{enrolment}}
+	service := &Service{institutions: anyInstitution(), audits: persistence, authorizer: &auditListingAuthorizerFake{
+		events: &events, scope: store.AuditVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{rootID}},
+		grants: map[model.Action]access.AuthorizedScopeConstraint{
+			model.ActionClassView: {AcademicUnitRootIDs: []model.AcademicUnitID{rootID}},
+		},
+	}}
+
+	page, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{Limit: 10})
+	require.NoError(t, err)
+	require.True(t, page.Redacted)
+	require.Len(t, persistence.namesInputs, 1)
+	require.Equal(t, []model.UserID{actor}, persistence.namesInputs[0].UserIDs, "a redacted page never names the subject")
+	require.Empty(t, page.Items[0].Operation(), "a redacted Event keeps no operation to choose a summary by")
 }

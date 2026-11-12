@@ -87,7 +87,7 @@ func New(deps Dependencies) (*App, error) {
 		return nil, err
 	}
 
-	onboardings, onboardingPorts, err := newOnboarding(deps, shared, authorizer, identities, academics, administrations, wake)
+	onboardings, onboardingPorts, err := newOnboarding(deps, shared, authorizer, identities, academics, administrations, users, wake)
 	if err != nil {
 		return nil, err
 	}
@@ -96,6 +96,12 @@ func New(deps Dependencies) (*App, error) {
 	runtime, err := newJobRuntime(deps, shared, authorizer, exams, users, defaultPictureJobs, onboardingPorts, wake)
 	if err != nil {
 		return nil, err
+	}
+	if runtime.engine != nil && deps.Store.Institution() != nil {
+		changes := &jobChangePublisher{publisher: shared.realtime, institutions: deps.Store.Institution()}
+		if err = runtime.engine.AttachChangeListener(changes); err != nil {
+			return nil, err
+		}
 	}
 
 	// Search spans Exams, Users and Classes, and the administration counts
@@ -418,6 +424,7 @@ func newOnboarding(
 	identities *identity.Service,
 	academics *academic.Service,
 	administrations *administration.Service,
+	users *user.Service,
 	wake *jobWake,
 ) (*onboarding.Service, onboarding.Ports, error) {
 	return onboarding.New(onboarding.Dependencies{
@@ -431,6 +438,7 @@ func newOnboarding(
 		Identity:                identities,
 		Academic:                academics,
 		Administration:          administrations,
+		Users:                   users,
 		Publisher:               shared.realtime,
 		Wake:                    wake.Wake,
 		NodeID:                  deps.NodeID,

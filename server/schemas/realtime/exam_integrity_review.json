@@ -1,0 +1,51 @@
+{
+  "title": "Integrity Review state",
+  "description": "The Integrity Review's identity, state and release state. Decisions, rationale, evidence and notes are never included.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "submission_id",
+    "exam_attempt_id",
+    "candidate_user_id",
+    "submission_review_id",
+    "review_state",
+    "review_revision",
+    "release_state",
+    "changed_at"
+  ],
+  "properties": {
+    "submission_id": {
+      "$ref": "id.json"
+    },
+    "exam_attempt_id": {
+      "$ref": "id.json"
+    },
+    "candidate_user_id": {
+      "$ref": "id.json"
+    },
+    "submission_review_id": {
+      "$ref": "id.json"
+    },
+    "review_state": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "finalized"
+      ]
+    },
+    "review_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "release_state": {
+      "type": "string",
+      "enum": [
+        "withheld",
+        "released"
+      ]
+    },
+    "changed_at": {
+      "$ref": "instant.json"
+    }
+  }
+}

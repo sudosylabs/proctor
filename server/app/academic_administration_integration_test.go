@@ -191,6 +191,30 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	require.Len(t, csvAffiliations, 1, "CSV batch affiliations")
 	require.Equal(t, model.AffiliationStaff, csvAffiliations[0].Kind, "CSV batch affiliations")
 
+	// A CSV row that ends a relationship names only that relationship, and
+	// executes even though its frozen row also records the resolved User.
+	endUpload := performCSVUpload(handler,
+		"/api/v1/onboarding-imports?mode=academic_administration&scope_type=institution&scope_id="+installation.Institution.ID.String(),
+		"operation,relationship_id,reference\n"+
+			"affiliation.end,"+csvAffiliations[0].ID.String()+",csv-staff-end\n",
+		adminToken,
+	)
+	require.Equal(t, http.StatusAccepted, endUpload.Code, "academic CSV end upload = %d: %s", endUpload.Code, endUpload.Body.String())
+	var endImport onboardingImportIntegrationResponse
+	decodeIntegrationResponse(t, endUpload, &endImport)
+	endImport = waitForOnboardingImportState(t, handler, adminToken, onboardingImportsCollection, endImport.ID, "preview_ready")
+	require.Equal(t, 1, endImport.ValidRows)
+	endCommit := performIdempotentJSONRequest(handler, "/api/v1/onboarding-imports/"+endImport.ID+"/commit", map[string]any{
+		"expected_revision": endImport.Revision, "preview_digest": endImport.PreviewDigest, "policy": "require_all_valid",
+	}, adminToken, "academic-csv-end-commit")
+	require.Equal(t, http.StatusAccepted, endCommit.Code, "academic CSV end commit = %d: %s", endCommit.Code, endCommit.Body.String())
+	endImport = waitForOnboardingImportState(t, handler, adminToken, onboardingImportsCollection, endImport.ID, "completed")
+	require.Equal(t, 1, endImport.SucceededRows, "the CSV end row executes: %#v", endImport.Rows)
+	require.Equal(t, 0, endImport.FailedRows)
+	endedAffiliation, err := persistence.Affiliation().Get(context.Background(), csvAffiliations[0].ID)
+	require.NoError(t, err, "CSV ended affiliation")
+	require.True(t, endedAffiliation.EndsAt.Valid, "the CSV end row ended the affiliation")
+
 	cancelUpload := performCSVUpload(handler,
 		"/api/v1/onboarding-imports?mode=academic_administration&scope_type=institution&scope_id="+installation.Institution.ID.String(),
 		"operation,user_id,affiliation_kind,start_at,reference\n"+
@@ -316,7 +340,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	require.Equal(t, http.StatusOK, visible.Code, "teacher student visibility = %d: %s", visible.Code, visible.Body.String())
 	visibilityEvents, err := persistence.Audit().List(context.Background(), store.AuditListOptions{
 		ActorID: teacher.ID,
-		Action:  string(model.ActionUserView),
+		Actions: []string{string(model.ActionUserView)},
 		Resource: &model.Resource{
 			Type: model.ResourceUser,
 			ID:   student.ID.String(),

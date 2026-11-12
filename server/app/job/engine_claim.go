@@ -77,6 +77,7 @@ func (r *Engine) claimLoop(ctx context.Context, descriptor Descriptor) {
 			Duration:     claimDuration,
 			QueueLatency: queueLatency,
 		})
+		r.announceStatus(ctx, claim.Job)
 		resolved, err := r.registry.Descriptor(claim.Job.Type)
 		if err != nil {
 			r.completeUnsupported(ctx, descriptor, claim, err)

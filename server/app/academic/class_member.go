@@ -18,6 +18,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/internal/batchitem"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -226,7 +227,7 @@ func (s *Service) enrollRetainedClassMember(
 			Action:     model.ActionClassMembersManage,
 			Resource:   resource,
 			Operation:  "enroll",
-			Value:      candidate.Auditable(),
+			Value:      command.Batch.AuditValue(candidate.Auditable()),
 			Subject:    candidate.UserID,
 			At:         at,
 		},
@@ -260,6 +261,7 @@ func (s *Service) enrollRetainedClassMember(
 				Action:     model.ActionClassMembersManage,
 				Resource:   model.Resource{Type: model.ResourceClass, ID: retainedPrevious.ClassID.String()},
 				Operation:  "transfer_out",
+				Value:      command.Batch.AuditValue(nil),
 				Prior:      retainedPrevious.Auditable(),
 				Subject:    retainedPrevious.UserID,
 				At:         at,
@@ -435,7 +437,7 @@ func (s *Service) runClassEnrollment(
 		Action:     model.ActionClassMembersManage,
 		Resource:   resource,
 		Operation:  "enroll",
-		Value:      candidate.Auditable(),
+		Value:      command.Batch.AuditValue(candidate.Auditable()),
 		Subject:    candidate.UserID,
 		At:         at,
 	}
@@ -478,6 +480,7 @@ func (s *Service) runClassEnrollment(
 				Action:     model.ActionClassMembersManage,
 				Resource:   model.Resource{Type: model.ResourceClass, ID: previous.ClassID.String()},
 				Operation:  "transfer_out",
+				Value:      command.Batch.AuditValue(nil),
 				Prior:      previous.Auditable(),
 				Subject:    previous.UserID,
 				At:         model.TimeUTC(destinationReference.MutationAt),
@@ -600,6 +603,7 @@ func (s *Service) EndClassMember(
 			Action:     model.ActionClassMembersManage,
 			Resource:   resource,
 			Operation:  "end",
+			Value:      command.Batch.AuditValue(nil),
 			Prior:      current.Auditable(),
 			Subject:    current.UserID,
 			At:         at,
@@ -681,6 +685,7 @@ func (s *Service) endRetainedClassMember(
 			Action:     model.ActionClassMembersManage,
 			Resource:   model.Resource{Type: model.ResourceClass, ID: strings.TrimSpace(command.BatchScopeID)},
 			Operation:  "end",
+			Value:      command.Batch.AuditValue(nil),
 			At:         at,
 		},
 		func(ctx context.Context, reference access.MutationReference) (*model.ClassMember, error) {
@@ -753,17 +758,20 @@ var ClassMemberStoreErrors = apperror.AdministrationStoreTable(
 // ListClassMembersPageQuery opts into bounded membership enumeration. Each page is
 // authorized independently and explicit selectors preserve its effective filter.
 type ListClassMembersPageQuery struct {
-	AfterUserID model.UserID
-	AfterID     model.ClassMemberID
-	ClassID     model.ClassID
+	AfterStartAt time.Time
+	AfterUserID  model.UserID
+	AfterID      model.ClassMemberID
+	ClassID      model.ClassID
 	MembershipPageQuery
 }
 
-// ClassMemberPage is one page of a Class's memberships with the members' identities.
+// ClassMemberPage is one page of a Class's memberships. The first page also
+// counts every membership the page's filters match.
 type ClassMemberPage struct {
 	Members  []*model.ClassMember
 	HasMore  bool
 	ActiveAt int64
+	paging.Total
 }
 
 // ListClassMembersPage lists a page of Class Memberships after authorizing the caller.
@@ -781,17 +789,21 @@ func (s *Service) ListClassMembersPage(
 		return nil, err
 	}
 
-	if query.AfterID.IsZero() != query.AfterUserID.IsZero() ||
-		(!query.AfterID.IsZero() && (!query.AfterID.IsValid() || !query.AfterUserID.IsValid())) {
+	if !query.AfterID.IsZero() && !query.AfterID.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "cursor")
 	}
 
+	keyset, err := membershipPageKeyset(query.MembershipPageQuery, query.AfterID.String(), query.AfterStartAt, query.AfterUserID)
+	if err != nil {
+		return nil, err
+	}
+
 	options := store.ClassMemberPageOptions{
-		ClassID:     query.ClassID,
-		ActiveAt:    model.TimeFromMillis(activeAt),
-		Limit:       limit,
-		AfterID:     query.AfterID,
-		AfterUserID: query.AfterUserID,
+		ClassID:              query.ClassID,
+		ActiveAt:             model.TimeFromMillis(activeAt),
+		MembershipPageKeyset: keyset,
+		AfterID:              query.AfterID,
+		Limit:                limit,
 	}
 
 	page, err := s.classMembers.ListPageByClass(ctx, options)
@@ -804,5 +816,16 @@ func (s *Service) ListClassMembersPage(
 		result.Members = []*model.ClassMember{}
 	}
 
+	total, consistent, err := paging.CountFirst(query.AfterID.IsZero(), len(result.Members), func(maximum int) (int, error) {
+		return s.classMembers.CountPageByClass(ctx, options, maximum)
+	})
+	if err != nil {
+		return nil, ClassMemberStoreErrors.Translate(err)
+	}
+	if !consistent {
+		return nil, apperror.New("administration.unavailable").WithField("resource", "class_member")
+	}
+
+	result.Total = total
 	return result, nil
 }

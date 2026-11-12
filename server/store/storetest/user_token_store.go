@@ -416,7 +416,7 @@ func testUserTokenCallerClockCannotBackdateEmailVerification(t *testing.T, ss st
 	require.False(t, result.User.UpdatedAt.Before(token.CreatedAt))
 	require.True(t, result.Token.ConsumedAt.Time.After(model.TimeUTC(behindNodeTime)))
 	audits, err := ss.Audit().List(ctx, store.AuditListOptions{
-		Action: "authentication.email_verification.complete", Limit: 10,
+		Actions: []string{"authentication.email_verification.complete"}, Limit: 10,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
 	require.NoError(t, err)
@@ -444,7 +444,7 @@ func testUserTokenCallerClockCannotBackdatePasswordReset(t *testing.T, ss store.
 	require.Len(t, result.RevokedSessions, 1)
 	require.False(t, result.RevokedSessions[0].RevokedAt.Time.Before(session.CreatedAt))
 	audits, err := ss.Audit().List(ctx, store.AuditListOptions{
-		Action: "authentication.password_reset.complete", Limit: 10,
+		Actions: []string{"authentication.password_reset.complete"}, Limit: 10,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
 	require.NoError(t, err)
@@ -621,7 +621,7 @@ func testPasswordResetRevokesSessionsAndAudits(t *testing.T, ss store.Store) {
 	require.True(t, resolved.RevokedAt.Time.Equal(transitionAt), "reset session remained active: %#v %#v", resolved, resolvedSession)
 	require.True(t, resolvedSession.RevokedAt.Time.Equal(transitionAt), "reset session remained active: %#v %#v", resolved, resolvedSession)
 	audits, err := ss.Audit().List(ctx, store.AuditListOptions{
-		Action:     "authentication.password_reset.complete",
+		Actions:    []string{"authentication.password_reset.complete"},
 		Limit:      10,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})

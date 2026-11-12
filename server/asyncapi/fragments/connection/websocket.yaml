@@ -1,0 +1,253 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+# The channel, its close codes, and the operations on it.
+channels:
+  websocket:
+    address: '/api/v1/websocket'
+    title: WebSocket connection
+    summary: The one authenticated WebSocket of a Proctor installation.
+    description: Open it with the HTTP upgrade described by the OpenAPI operation connectWebSocket, which owns authentication, Origin, and the connection_id and sequence_number resume parameters. Every frame is one JSON text message. The server sends events, each with a sequence that increases by one; the client sends commands, each with a sequence it chooses, and the reply carries that sequence back. Clients ignore an event name they do not know.
+    messages:
+      hello:
+        $ref: '#/components/messages/hello'
+      resync_required:
+        $ref: '#/components/messages/resync_required'
+      current_user.context.changed:
+        $ref: '#/components/messages/current_user.context.changed'
+      current_user.sessions.changed:
+        $ref: '#/components/messages/current_user.sessions.changed'
+      user_settings_changed:
+        $ref: '#/components/messages/user_settings_changed'
+      user_profile_picture_changed:
+        $ref: '#/components/messages/user_profile_picture_changed'
+      access_policy_changed:
+        $ref: '#/components/messages/access_policy_changed'
+      job.changed:
+        $ref: '#/components/messages/job.changed'
+      onboarding_import.changed:
+        $ref: '#/components/messages/onboarding_import.changed'
+      onboarding_import.changed_for_creator:
+        $ref: '#/components/messages/onboarding_import.changed_for_creator'
+      invitation.changed:
+        $ref: '#/components/messages/invitation.changed'
+      academic_unit_created:
+        $ref: '#/components/messages/academic_unit_created'
+      academic_unit_updated:
+        $ref: '#/components/messages/academic_unit_updated'
+      academic_unit_archived:
+        $ref: '#/components/messages/academic_unit_archived'
+      exam_created:
+        $ref: '#/components/messages/exam_created'
+      exam_draft_updated:
+        $ref: '#/components/messages/exam_draft_updated'
+      exam_starter_workspace_changed:
+        $ref: '#/components/messages/exam_starter_workspace_changed'
+      exam_archived:
+        $ref: '#/components/messages/exam_archived'
+      exam_manager_changed:
+        $ref: '#/components/messages/exam_manager_changed'
+      exam_owner_transferred:
+        $ref: '#/components/messages/exam_owner_transferred'
+      exam_revision_published:
+        $ref: '#/components/messages/exam_revision_published'
+      exam_sitting_scheduled:
+        $ref: '#/components/messages/exam_sitting_scheduled'
+      exam_sitting_schedule_updated:
+        $ref: '#/components/messages/exam_sitting_schedule_updated'
+      exam_sitting_canceled:
+        $ref: '#/components/messages/exam_sitting_canceled'
+      exam_sitting_lifecycle_changed:
+        $ref: '#/components/messages/exam_sitting_lifecycle_changed'
+      exam_sitting_lifecycle_changed_for_candidate:
+        $ref: '#/components/messages/exam_sitting_lifecycle_changed_for_candidate'
+      exam_sitting_content_corrected:
+        $ref: '#/components/messages/exam_sitting_content_corrected'
+      exam_sitting_content_corrected_for_candidate:
+        $ref: '#/components/messages/exam_sitting_content_corrected_for_candidate'
+      manager.sitting_board.changed:
+        $ref: '#/components/messages/manager.sitting_board.changed'
+      candidate.exam_activity.changed:
+        $ref: '#/components/messages/candidate.exam_activity.changed'
+      exam_attempt_connection_opened:
+        $ref: '#/components/messages/exam_attempt_connection_opened'
+      exam_attempt_connection_closed:
+        $ref: '#/components/messages/exam_attempt_connection_closed'
+      exam_attempt_suspended:
+        $ref: '#/components/messages/exam_attempt_suspended'
+      exam_attempt_reallowed:
+        $ref: '#/components/messages/exam_attempt_reallowed'
+      exam_attempt_access_suspended:
+        $ref: '#/components/messages/exam_attempt_access_suspended'
+      exam_attempt_access_reallowed:
+        $ref: '#/components/messages/exam_attempt_access_reallowed'
+      exam_attempt_workspace_changed:
+        $ref: '#/components/messages/exam_attempt_workspace_changed'
+      exam_attempt_focus_warning:
+        $ref: '#/components/messages/exam_attempt_focus_warning'
+      exam_attempt_integrity_flagged:
+        $ref: '#/components/messages/exam_attempt_integrity_flagged'
+      exam_attempt_submitted:
+        $ref: '#/components/messages/exam_attempt_submitted'
+      exam_attempt_submitted_for_candidate:
+        $ref: '#/components/messages/exam_attempt_submitted_for_candidate'
+      exam_integrity_discrepancy_recorded:
+        $ref: '#/components/messages/exam_integrity_discrepancy_recorded'
+      exam_integrity_review_changed:
+        $ref: '#/components/messages/exam_integrity_review_changed'
+      exam_integrity_review_finalized:
+        $ref: '#/components/messages/exam_integrity_review_finalized'
+      exam_student_result_released:
+        $ref: '#/components/messages/exam_student_result_released'
+      exam_student_result_released_for_candidate:
+        $ref: '#/components/messages/exam_student_result_released_for_candidate'
+      ping:
+        $ref: '#/components/messages/ping'
+      pong:
+        $ref: '#/components/messages/pong'
+      subscribe:
+        $ref: '#/components/messages/subscribe'
+      unsubscribe:
+        $ref: '#/components/messages/unsubscribe'
+      subscription_reply:
+        $ref: '#/components/messages/subscription_reply'
+      command_error:
+        $ref: '#/components/messages/command_error'
+    bindings:
+      ws:
+        method: GET
+        bindingVersion: '0.1.0'
+    x-proctor-handshake: connectWebSocket
+    x-proctor-close-codes:
+      - code: 4000
+        name: server
+        description: The server closed the connection, for example while shutting down. Reconnect with backoff.
+      - code: 4001
+        name: session_revoked
+        description: The Session is no longer valid. Authenticate again before reconnecting.
+      - code: 4002
+        name: backpressure
+        description: The client read events too slowly and the outbound queue filled. Reconnect and resume.
+      - code: 4003
+        name: authorization_changed
+        description: A Role, binding, assurance or account change may have removed a subscription's authority. Reconnect and subscribe again.
+      - code: 4004
+        name: connection_limit
+        description: The Session or User already holds the most connections allowed (8 per Session, 64 per User), so the new connection is closed right after the upgrade.
+      - code: 4005
+        name: rate_limited
+        description: '64 consecutive command frames were refused by the inbound rate limit.'
+operations:
+  sendEvent:
+    action: send
+    channel:
+      $ref: '#/channels/websocket'
+    title: Send events
+    summary: The server sends hello, then the events the connection may receive.
+    description: An event reaches a connection when its user_id, if present, is the connection's User and its action and resource, if present, match one of the connection's subscriptions. Events are best-effort signals sent after the change commits; refetch over HTTP for authoritative state.
+    messages:
+      - $ref: '#/channels/websocket/messages/hello'
+      - $ref: '#/channels/websocket/messages/resync_required'
+      - $ref: '#/channels/websocket/messages/current_user.context.changed'
+      - $ref: '#/channels/websocket/messages/current_user.sessions.changed'
+      - $ref: '#/channels/websocket/messages/user_settings_changed'
+      - $ref: '#/channels/websocket/messages/user_profile_picture_changed'
+      - $ref: '#/channels/websocket/messages/access_policy_changed'
+      - $ref: '#/channels/websocket/messages/job.changed'
+      - $ref: '#/channels/websocket/messages/onboarding_import.changed'
+      - $ref: '#/channels/websocket/messages/onboarding_import.changed_for_creator'
+      - $ref: '#/channels/websocket/messages/invitation.changed'
+      - $ref: '#/channels/websocket/messages/academic_unit_created'
+      - $ref: '#/channels/websocket/messages/academic_unit_updated'
+      - $ref: '#/channels/websocket/messages/academic_unit_archived'
+      - $ref: '#/channels/websocket/messages/exam_created'
+      - $ref: '#/channels/websocket/messages/exam_draft_updated'
+      - $ref: '#/channels/websocket/messages/exam_starter_workspace_changed'
+      - $ref: '#/channels/websocket/messages/exam_archived'
+      - $ref: '#/channels/websocket/messages/exam_manager_changed'
+      - $ref: '#/channels/websocket/messages/exam_owner_transferred'
+      - $ref: '#/channels/websocket/messages/exam_revision_published'
+      - $ref: '#/channels/websocket/messages/exam_sitting_scheduled'
+      - $ref: '#/channels/websocket/messages/exam_sitting_schedule_updated'
+      - $ref: '#/channels/websocket/messages/exam_sitting_canceled'
+      - $ref: '#/channels/websocket/messages/exam_sitting_lifecycle_changed'
+      - $ref: '#/channels/websocket/messages/exam_sitting_lifecycle_changed_for_candidate'
+      - $ref: '#/channels/websocket/messages/exam_sitting_content_corrected'
+      - $ref: '#/channels/websocket/messages/exam_sitting_content_corrected_for_candidate'
+      - $ref: '#/channels/websocket/messages/manager.sitting_board.changed'
+      - $ref: '#/channels/websocket/messages/candidate.exam_activity.changed'
+      - $ref: '#/channels/websocket/messages/exam_attempt_connection_opened'
+      - $ref: '#/channels/websocket/messages/exam_attempt_connection_closed'
+      - $ref: '#/channels/websocket/messages/exam_attempt_suspended'
+      - $ref: '#/channels/websocket/messages/exam_attempt_reallowed'
+      - $ref: '#/channels/websocket/messages/exam_attempt_access_suspended'
+      - $ref: '#/channels/websocket/messages/exam_attempt_access_reallowed'
+      - $ref: '#/channels/websocket/messages/exam_attempt_workspace_changed'
+      - $ref: '#/channels/websocket/messages/exam_attempt_focus_warning'
+      - $ref: '#/channels/websocket/messages/exam_attempt_integrity_flagged'
+      - $ref: '#/channels/websocket/messages/exam_attempt_submitted'
+      - $ref: '#/channels/websocket/messages/exam_attempt_submitted_for_candidate'
+      - $ref: '#/channels/websocket/messages/exam_integrity_discrepancy_recorded'
+      - $ref: '#/channels/websocket/messages/exam_integrity_review_changed'
+      - $ref: '#/channels/websocket/messages/exam_integrity_review_finalized'
+      - $ref: '#/channels/websocket/messages/exam_student_result_released'
+      - $ref: '#/channels/websocket/messages/exam_student_result_released_for_candidate'
+  receivePing:
+    action: receive
+    channel:
+      $ref: '#/channels/websocket'
+    title: Ping
+    summary: The server answers ping with pong.
+    messages:
+      - $ref: '#/channels/websocket/messages/ping'
+    reply:
+      channel:
+        $ref: '#/channels/websocket'
+      messages:
+        - $ref: '#/channels/websocket/messages/pong'
+        - $ref: '#/channels/websocket/messages/command_error'
+    x-proctor-error-codes:
+      - websocket.request.invalid
+      - websocket.rate_limited
+  receiveSubscribe:
+    action: receive
+    channel:
+      $ref: '#/channels/websocket'
+    title: Subscribe
+    summary: The server authorizes and records one subscription.
+    messages:
+      - $ref: '#/channels/websocket/messages/subscribe'
+    reply:
+      channel:
+        $ref: '#/channels/websocket'
+      messages:
+        - $ref: '#/channels/websocket/messages/subscription_reply'
+        - $ref: '#/channels/websocket/messages/command_error'
+    x-proctor-error-codes:
+      - websocket.request.invalid
+      - websocket.rate_limited
+      - websocket.subscription.invalid
+      - websocket.subscription.limit
+      - authorization.denied
+  receiveUnsubscribe:
+    action: receive
+    channel:
+      $ref: '#/channels/websocket'
+    title: Unsubscribe
+    summary: The server drops one subscription.
+    messages:
+      - $ref: '#/channels/websocket/messages/unsubscribe'
+    reply:
+      channel:
+        $ref: '#/channels/websocket'
+      messages:
+        - $ref: '#/channels/websocket/messages/subscription_reply'
+        - $ref: '#/channels/websocket/messages/command_error'
+    x-proctor-error-codes:
+      - websocket.request.invalid
+      - websocket.rate_limited
+      - websocket.subscription.invalid

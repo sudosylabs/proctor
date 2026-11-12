@@ -619,8 +619,11 @@ components:
     OnboardingImportFailureCode:
       type: string
       description: >-
-        Why a failed onboarding import or student progression failed: a lost credential or authority, an unreadable file, a target that no longer validates, or a progression preview failure. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+        Why a failed onboarding import, student progression, or academic administration preview failed: a lost credential or authority, an unreadable file, a target that no longer validates, a progression preview failure, or a preview filter that matched too many Users. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
       enum:
+        - academic_administration_preview.authorization_lost
+        - academic_administration_preview.target_conflict
+        - academic_administration_preview.too_many_users
         - administration.unavailable
         - audit.unavailable
         - authentication.reauthentication_required
@@ -650,8 +653,14 @@ components:
     OnboardingImportPreviewCode:
       type: string
       description: >-
-        Why a preview row is invalid, duplicate, or annotated: a malformed or duplicate CSV row, a target that does not resolve, or a student progression outcome such as an ineligible student or an existing destination enrollment. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+        Why a preview row is invalid, duplicate, or annotated: a malformed or duplicate CSV row, a target that does not resolve, a student progression outcome such as an ineligible student or an existing destination enrollment, or an academic administration preview skip reason or no-change marker. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
       enum:
+        - academic_administration_preview.ambiguous
+        - academic_administration_preview.enrollment_conflict
+        - academic_administration_preview.no_change
+        - academic_administration_preview.self
+        - academic_administration_preview.student_affiliation_required
+        - academic_administration_preview.system_administrator
         - administration.unavailable
         - audit.unavailable
         - authentication.reauthentication_required
@@ -680,8 +689,9 @@ components:
     OnboardingImportRowCode:
       type: string
       description: >-
-        Why an executed onboarding import or student progression row failed, as the Invitation or academic administration operation that ran it reported. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+        Why an executed onboarding import, student progression, or academic administration preview row failed, as the Invitation or academic administration operation that ran it reported, or because a preview row reached a User who became a System Administrator after the preview froze. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
       enum:
+        - academic_administration_preview.system_administrator
         - academic_unit_member.conflict
         - academic_unit_member.invalid
         - administration.unavailable
@@ -946,6 +956,11 @@ components:
       description: >-
         Stable public problem code. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
       enum:
+        - academic_administration_preview.authorization_lost
+        - academic_administration_preview.conflict
+        - academic_administration_preview.expired
+        - academic_administration_preview.target_conflict
+        - academic_administration_preview.too_many_users
         - academic_period.conflict
         - academic_period.invalid
         - academic_unit.conflict
@@ -1039,6 +1054,8 @@ components:
         - desktop_compatibility_policy.invalid
         - desktop_compatibility_policy.revision_conflict
         - desktop_compatibility_policy.unavailable
+        - desktop_registration.invalid
+        - desktop_registration.revoked
         - desktop_registration.unavailable
         - exam.archived
         - exam.attempt.already_connected
@@ -1246,7 +1263,9 @@ components:
         - search.query.invalid
         - server.internal
         - service.busy
+        - session.desktop_named_by_registration
         - session.id.invalid
+        - session.invalid
         - session.not_found
         - student_progression.conflict
         - student_progression.effective_date_conflict
@@ -1304,6 +1323,7 @@ components:
         - class.members.view
         - class.view
         - desktop_compatibility_policy.manage
+        - desktop_registration.rename
         - desktop_registration.revoke
         - exam.attempt.browser_activity.view
         - exam.create

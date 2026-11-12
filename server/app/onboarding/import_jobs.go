@@ -39,6 +39,23 @@ func (a onboardingImportJobs) PreviewProgression(ctx context.Context, id model.O
 	return "", err
 }
 
+func (a onboardingImportJobs) ResolveAcademicAdministrationPreview(ctx context.Context, id model.OnboardingImportID) (string, error) {
+	err := a.service.resolveAcademicAdministrationPreview(ctx, id)
+	if err == nil {
+		return "", nil
+	}
+	if academicAdministrationFilterAuthorizationLost(err) {
+		return "academic_administration_preview.authorization_lost", err
+	}
+	if failure, ok := apperror.As(err); ok && slices.Contains(model.AcademicAdministrationPreviewFailureCodes(), failure.Code()) {
+		return failure.Code(), err
+	}
+	if store.IsNotFound(err) {
+		return "academic_administration_preview.target_conflict", err
+	}
+	return "", err
+}
+
 func (a onboardingImportJobs) Parse(ctx context.Context, id model.OnboardingImportID) (string, error) {
 	err := a.service.parseImport(ctx, id)
 	if err == nil {

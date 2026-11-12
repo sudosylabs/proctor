@@ -1,0 +1,41 @@
+{
+  "title": "Attempt suspended",
+  "description": "An Attempt Suspension for Sitting viewers. A policy suspension names its Connection and Integrity Flag; a kick names no Flag and no Connection when none was open.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_sitting_id",
+    "exam_attempt_id",
+    "candidate_user_id",
+    "suspension_id",
+    "attempt_revision",
+    "changed_at"
+  ],
+  "properties": {
+    "exam_sitting_id": {
+      "$ref": "id.json"
+    },
+    "exam_attempt_id": {
+      "$ref": "id.json"
+    },
+    "candidate_user_id": {
+      "$ref": "id.json"
+    },
+    "attempt_connection_id": {
+      "$ref": "id.json"
+    },
+    "integrity_flag_id": {
+      "$ref": "id.json"
+    },
+    "suspension_id": {
+      "$ref": "id.json"
+    },
+    "attempt_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "changed_at": {
+      "$ref": "instant.json"
+    }
+  }
+}

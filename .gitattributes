@@ -10,3 +10,4 @@
 *.woff2 binary
 
 server/openapi.json linguist-generated=true
+server/asyncapi.json linguist-generated=true

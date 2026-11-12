@@ -1,0 +1,286 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+# Exam authoring events, sent to subscribers holding exam.view.
+components:
+  messages:
+    exam_created:
+      name: exam_created
+      title: Exam created
+      summary: An Exam was created. The event has no data.
+      description: An Exam was created. The event has no data. Delivered to connections that subscribe to exam.view on the exam.
+      tags:
+        - name: event
+        - name: Exams
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+            properties:
+              event:
+                type: string
+                const: exam_created
+              action:
+                type: string
+                const: exam.view
+            not:
+              required:
+                - data
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_created
+            sequence: 40
+            action: exam.view
+            resource:
+              type: exam
+              id: ia56br8kpous3h9nfemqtwz47y
+    exam_draft_updated:
+      name: exam_draft_updated
+      title: Exam Draft updated
+      summary: The Exam's Draft text or policy changed.
+      description: The Exam's Draft text or policy changed. Delivered to connections that subscribe to exam.view on the exam.
+      tags:
+        - name: event
+        - name: Exams
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_draft_updated
+              action:
+                type: string
+                const: exam.view
+              data:
+                $ref: '../../../schemas/realtime/exam_draft_updated.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_draft_updated
+            sequence: 41
+            action: exam.view
+            resource:
+              type: exam
+              id: ia56br8kpous3h9nfemqtwz47y
+            data:
+              exam_id: ia56br8kpous3h9nfemqtwz47y
+              draft_revision: 12
+    exam_starter_workspace_changed:
+      name: exam_starter_workspace_changed
+      title: Starter Workspace changed
+      summary: One Starter Workspace entry was created, moved, replaced or removed.
+      description: One Starter Workspace entry was created, moved, replaced or removed. Delivered to connections that subscribe to exam.view on the exam.
+      tags:
+        - name: event
+        - name: Exams
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_starter_workspace_changed
+              action:
+                type: string
+                const: exam.view
+              data:
+                $ref: '../../../schemas/realtime/exam_starter_workspace_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_starter_workspace_changed
+            sequence: 42
+            action: exam.view
+            resource:
+              type: exam
+              id: ia56br8kpous3h9nfemqtwz47y
+            data:
+              exam_id: ia56br8kpous3h9nfemqtwz47y
+              entry_id: nfemqtwz47ydgjcx1ia56br8kp
+              operation: file_created
+              draft_revision: 13
+              changed_at: '2026-08-01T09:30:00Z'
+    exam_archived:
+      name: exam_archived
+      title: Exam archived
+      summary: The Exam was archived.
+      description: The Exam was archived. Delivered to connections that subscribe to exam.view on the exam.
+      tags:
+        - name: event
+        - name: Exams
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_archived
+              action:
+                type: string
+                const: exam.view
+              data:
+                $ref: '../../../schemas/realtime/exam_archived.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_archived
+            sequence: 43
+            action: exam.view
+            resource:
+              type: exam
+              id: ia56br8kpous3h9nfemqtwz47y
+            data:
+              exam_id: ia56br8kpous3h9nfemqtwz47y
+              exam_revision: 20
+              archived_at: '2026-08-01T09:30:00Z'
+    exam_manager_changed:
+      name: exam_manager_changed
+      title: Exam Manager changed
+      summary: A User was added as an Exam Manager or removed.
+      description: A User was added as an Exam Manager or removed. Delivered to connections that subscribe to exam.view on the exam.
+      tags:
+        - name: event
+        - name: Exams
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_manager_changed
+              action:
+                type: string
+                const: exam.view
+              data:
+                $ref: '../../../schemas/realtime/exam_manager_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_manager_changed
+            sequence: 44
+            action: exam.view
+            resource:
+              type: exam
+              id: ia56br8kpous3h9nfemqtwz47y
+            data:
+              exam_id: ia56br8kpous3h9nfemqtwz47y
+              user_id: cx1ia56br8kpous3h9nfemqtwz
+              present: true
+              exam_revision: 21
+              changed_at: '2026-08-01T09:30:00Z'
+    exam_owner_transferred:
+      name: exam_owner_transferred
+      title: Exam owner transferred
+      summary: The Exam has a new owner.
+      description: The Exam has a new owner. Delivered to connections that subscribe to exam.view on the exam.
+      tags:
+        - name: event
+        - name: Exams
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_owner_transferred
+              action:
+                type: string
+                const: exam.view
+              data:
+                $ref: '../../../schemas/realtime/exam_owner_transferred.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_owner_transferred
+            sequence: 45
+            action: exam.view
+            resource:
+              type: exam
+              id: ia56br8kpous3h9nfemqtwz47y
+            data:
+              exam_id: ia56br8kpous3h9nfemqtwz47y
+              owner_user_id: femqtwz47ydgjcx1ia56br8kpo
+              exam_revision: 22
+              changed_at: '2026-08-01T09:30:00Z'
+    exam_revision_published:
+      name: exam_revision_published
+      title: Exam Revision published
+      summary: A new Exam Revision was published.
+      description: A new Exam Revision was published. Delivered to connections that subscribe to exam.view on the exam.
+      tags:
+        - name: event
+        - name: Exams
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: exam_revision_published
+              action:
+                type: string
+                const: exam.view
+              data:
+                $ref: '../../../schemas/realtime/exam_revision_published.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: exam_revision_published
+            sequence: 46
+            action: exam.view
+            resource:
+              type: exam
+              id: ia56br8kpous3h9nfemqtwz47y
+            data:
+              exam_id: ia56br8kpous3h9nfemqtwz47y
+              revision_id: wz47ydgjcx1ia56br8kpous3h9
+              number: 3
+              policy_digest: '3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f'
+              kind: standard
+              published_at: '2026-08-01T09:30:00Z'

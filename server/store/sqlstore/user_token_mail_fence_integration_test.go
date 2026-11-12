@@ -416,7 +416,7 @@ func TestUserTokenConsumptionPreservesLifecycleWhenNodeClockLeads(t *testing.T) 
 	consumedAudit := func(t *testing.T, ctx context.Context, persistence *SQLStore, action string, at time.Time) {
 		t.Helper()
 		audits, err := persistence.Audit().List(ctx, store.AuditListOptions{
-			Action: action, Limit: 10, Visibility: store.AuditVisibilityScope{InstitutionWide: true},
+			Actions: []string{action}, Limit: 10, Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 		})
 		require.NoError(t, err, "consumption audits")
 		require.Len(t, audits, 1, "consumption audits")
@@ -477,7 +477,7 @@ func TestUserTokenConsumptionPreservesLifecycleWhenNodeClockLeads(t *testing.T) 
 func assertExpiredConsumptionAuditAbsent(t *testing.T, ctx context.Context, persistence *SQLStore, action string) {
 	t.Helper()
 	audits, err := persistence.Audit().List(ctx, store.AuditListOptions{
-		Action: action, Limit: 10, Visibility: store.AuditVisibilityScope{InstitutionWide: true},
+		Actions: []string{action}, Limit: 10, Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
 	require.NoError(t, err, "expired consumption audits")
 	require.Empty(t, audits, "expired consumption audits")

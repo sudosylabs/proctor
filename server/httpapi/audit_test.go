@@ -18,14 +18,15 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 func TestAuditResourceResponseWireShapeRemainsSnakeCase(t *testing.T) {
 	t.Parallel()
 
-	response := auditEventResponseFromModel(&model.AuditEvent{
+	response := auditEventResponseFromModel(httptest.NewRequestWithContext(t.Context(), "GET", "/", nil), &model.AuditEvent{
 		Resource: model.Resource{Type: model.ResourceInstitution, ID: model.NewID()},
-	})
+	}, store.AuditNames{})
 	encoded, err := json.Marshal(response)
 	require.NoError(t, err)
 	var wire struct {
@@ -42,14 +43,14 @@ func TestAuditEventResponseCarriesOnlyTheDisableReason(t *testing.T) {
 	event := &model.AuditEvent{Action: string(model.ActionUserManage),
 		Resource:   model.Resource{Type: model.ResourceUser, ID: model.NewID()},
 		Parameters: json.RawMessage(`{"operation":"disable_account","value":{"user_id":"x","disabled":true,"reason":"Left the institution"}}`)}
-	encoded, err := json.Marshal(auditEventResponseFromModel(event))
+	encoded, err := json.Marshal(auditEventResponseFromModel(httptest.NewRequestWithContext(t.Context(), "GET", "/", nil), event, store.AuditNames{}))
 	require.NoError(t, err)
 	var wire map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(encoded, &wire))
 	require.JSONEq(t, `"Left the institution"`, string(wire["reason"]))
 	require.NotContains(t, wire, "parameters", "other parameters stay operator-only")
 	event.Parameters = nil
-	encoded, err = json.Marshal(auditEventResponseFromModel(event))
+	encoded, err = json.Marshal(auditEventResponseFromModel(httptest.NewRequestWithContext(t.Context(), "GET", "/", nil), event, store.AuditNames{}))
 	require.NoError(t, err)
 	require.NotContains(t, string(encoded), "reason", "an academic projection drops parameters and so the reason")
 }
@@ -59,9 +60,9 @@ func TestAuditCursorKeepsMicrosecondsSoSameMillisecondRowsAreNotSkipped(t *testi
 
 	createdAt := time.Date(2026, 8, 12, 9, 30, 0, 123_456_000, time.UTC)
 	id := model.NewAuditEventID()
-	cursor, err := encodeAuditCursor(auditCursor{CreatedAt: model.FormatRFC3339(createdAt), ID: id.String()})
+	cursor, err := encodeAuditCursor(auditCursor{CreatedAt: model.FormatRFC3339(createdAt), ID: id.String(), Order: listDescending})
 	require.NoError(t, err)
-	query, err := auditQueryFromRequest(httptest.NewRequestWithContext(t.Context(), "GET", "/api/v1/audit?cursor="+cursor, nil))
+	query, _, err := auditQueryFromRequest(httptest.NewRequestWithContext(t.Context(), "GET", "/api/v1/audit?cursor="+cursor, nil))
 	require.NoError(t, err)
 	require.True(t, createdAt.Equal(query.BeforeCreatedAt), "cursor instant = %v", query.BeforeCreatedAt)
 	require.Equal(t, id, query.BeforeID)
@@ -72,7 +73,7 @@ func TestAuditQueryReadsCreatedRangeLikeSelfHistory(t *testing.T) {
 
 	after := time.Date(2026, 8, 12, 9, 0, 0, 0, time.UTC)
 	before := time.Date(2026, 8, 13, 9, 0, 0, 0, time.UTC)
-	query, err := auditQueryFromRequest(httptest.NewRequestWithContext(t.Context(), "GET",
+	query, _, err := auditQueryFromRequest(httptest.NewRequestWithContext(t.Context(), "GET",
 		"/api/v1/audits?created_after=2026-08-12T09:00:00Z&created_before=2026-08-13T11:00:00%2B02:00", nil))
 	require.NoError(t, err)
 	require.True(t, after.Equal(query.Since), "Since = %v", query.Since)
@@ -84,7 +85,7 @@ func TestAuditQueryReadsCreatedRangeLikeSelfHistory(t *testing.T) {
 		"created_after=",
 		"created_after=2026-08-12T09:00:00Z&created_after=2026-08-13T09:00:00Z",
 	} {
-		_, err = auditQueryFromRequest(httptest.NewRequestWithContext(t.Context(), "GET", "/api/v1/audits?"+raw, nil))
+		_, _, err = auditQueryFromRequest(httptest.NewRequestWithContext(t.Context(), "GET", "/api/v1/audits?"+raw, nil))
 		require.Error(t, err, raw)
 	}
 }
@@ -120,4 +121,29 @@ func TestSelfAuditEventEnumMatchesTheCatalogue(t *testing.T) {
 	}
 	sort.Strings(want)
 	require.Equal(t, want, document.Components.Schemas["SelfAuditEvent"].Enum)
+}
+
+// TestAuditQueryReadsSubjectStatusAndRepeatedActions pins the listing
+// filters: subject_user_id and status are single, action repeats, and the
+// application owns their vocabularies.
+func TestAuditQueryReadsSubjectStatusAndRepeatedActions(t *testing.T) {
+	t.Parallel()
+
+	subject := model.NewUserID()
+	query, _, err := auditQueryFromRequest(httptest.NewRequestWithContext(t.Context(), "GET",
+		"/api/v1/audits?subject_user_id="+subject.String()+"&status=fail&action=user.manage&action=user.view", nil))
+	require.NoError(t, err)
+	require.Equal(t, subject, query.SubjectUserID)
+	require.Equal(t, model.AuditStatusFail, query.Status)
+	require.Equal(t, []string{"user.manage", "user.view"}, query.Actions)
+
+	for _, raw := range []string{
+		"subject_user_id=",
+		"subject_user_id=" + subject.String() + "&subject_user_id=" + subject.String(),
+		"status=fail&status=success",
+		"status=",
+	} {
+		_, _, err = auditQueryFromRequest(httptest.NewRequestWithContext(t.Context(), "GET", "/api/v1/audits?"+raw, nil))
+		require.Error(t, err, raw)
+	}
 }

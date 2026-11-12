@@ -331,7 +331,7 @@ func personalAccessTokenAuditDraft(userID model.UserID, sessionID model.SessionI
 
 func requirePersonalAccessTokenTerminalAudit(t *testing.T, ctx context.Context, ss store.Store, userID model.UserID, action string) *model.AuditEvent {
 	t.Helper()
-	events, err := ss.Audit().List(ctx, store.AuditListOptions{ActorID: userID, Action: action, Limit: 20, Visibility: store.AuditVisibilityScope{InstitutionWide: true}})
+	events, err := ss.Audit().List(ctx, store.AuditListOptions{ActorID: userID, Actions: []string{action}, Limit: 20, Visibility: store.AuditVisibilityScope{InstitutionWide: true}})
 	require.NoError(t, err)
 	for _, event := range events {
 		if event.Status == model.AuditStatusSuccess {
@@ -344,7 +344,7 @@ func requirePersonalAccessTokenTerminalAudit(t *testing.T, ctx context.Context, 
 
 func countPersonalAccessTokenTerminalAudits(t *testing.T, ctx context.Context, ss store.Store, userID model.UserID, action string) int {
 	t.Helper()
-	events, err := ss.Audit().List(ctx, store.AuditListOptions{ActorID: userID, Action: action, Limit: 20, Visibility: store.AuditVisibilityScope{InstitutionWide: true}})
+	events, err := ss.Audit().List(ctx, store.AuditListOptions{ActorID: userID, Actions: []string{action}, Limit: 20, Visibility: store.AuditVisibilityScope{InstitutionWide: true}})
 	require.NoError(t, err)
 	count := 0
 	for _, event := range events {

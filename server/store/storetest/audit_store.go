@@ -12,6 +12,7 @@ package storetest
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -174,7 +175,7 @@ func TestAuditStore(t *testing.T, ss store.Store) {
 	for name, options := range map[string]store.AuditListOptions{
 		"zero visibility":           {ActorID: user.ID},
 		"operator actor":            {ActorID: user.ID, Visibility: store.AuditVisibilityScope{InstitutionWide: true}},
-		"operator action":           {ActorID: user.ID, Action: string(model.ActionAuditView), Visibility: store.AuditVisibilityScope{InstitutionWide: true}},
+		"operator action":           {ActorID: user.ID, Actions: []string{string(model.ActionAuditView)}, Visibility: store.AuditVisibilityScope{InstitutionWide: true}},
 		"academic subtree":          {Visibility: scopedVisibility},
 		"academic Institution-wide": {Visibility: store.AuditVisibilityScope{AcademicInstitutionWide: true, AllowedActions: scopedVisibility.AllowedActions}},
 		"academic without actions":  {Visibility: store.AuditVisibilityScope{AcademicInstitutionWide: true}},
@@ -195,6 +196,27 @@ func TestAuditStore(t *testing.T, ss store.Store) {
 			total, countErr := ss.Audit().Count(ctx, pageOptions, store.MaximumListCount)
 			require.NoError(t, countErr)
 			require.Equal(t, paged, total, "the count ignores the keyset and equals every page together")
+
+			var newest, oldest []model.AuditEventID
+			for _, ascending := range []bool{false, true} {
+				pageOptions = options
+				pageOptions.Ascending, pageOptions.Limit = ascending, 1
+				for range 10 {
+					page, listErr := ss.Audit().List(ctx, pageOptions)
+					require.NoError(t, listErr)
+					if len(page) == 0 {
+						break
+					}
+					if ascending {
+						oldest = append(oldest, page[0].ID)
+					} else {
+						newest = append(newest, page[0].ID)
+					}
+					pageOptions.BeforeCreatedAt, pageOptions.BeforeID = page[0].CreatedAt, page[0].ID
+				}
+			}
+			slices.Reverse(oldest)
+			require.Equal(t, newest, oldest, "oldest first pages the exact reverse")
 		})
 	}
 	capped, err := ss.Audit().Count(ctx, store.AuditListOptions{Visibility: scopedVisibility}, 1)
@@ -207,7 +229,99 @@ func TestAuditStore(t *testing.T, ss store.Store) {
 
 	testAuditAbandonedAttempts(t, ctx, ss, institution.ID.String(), user.ID)
 	testAuditSelfHistory(t, ctx, ss, institution.ID.String())
+	testAuditNames(t, ctx, ss, institution.ID.String())
 	testAuditListCreatedRange(t, ctx, ss, institution.ID.String())
+	testAuditListFilters(t, ctx, ss, institution.ID.String())
+}
+
+// testAuditListFilters proves the subject, status and repeatable action
+// filters: each matches exactly, actions are alternatives, and every filter
+// narrows the visibility, so an academic auditor naming a subject or an
+// action outside its subtrees and catalog reads nothing more.
+func testAuditListFilters(t *testing.T, ctx context.Context, ss store.Store, institutionID string) {
+	actor, subject, other := saveUser(t, ctx, ss), saveUser(t, ctx, ss), saveUser(t, ctx, ss)
+	root := saveAcademicUnit(t, ctx, ss, institutionID, "", "audit-filter-root")
+	sibling := saveAcademicUnit(t, ctx, ss, institutionID, "", "audit-filter-sibling")
+	unitMembers, provider := string(model.ActionAcademicUnitMembersManage), string(model.ActionExternalIdentityManage)
+	save := func(action string, about *model.User, unit *model.AcademicUnit, status model.AuditStatus) model.AuditEventID {
+		t.Helper()
+		resource := model.Resource{Type: model.ResourceAcademicUnit, ID: unit.ID.String()}
+		if action == provider {
+			resource = model.Resource{Type: model.ResourceUser, ID: about.ID.String()}
+		}
+		saved, err := ss.Audit().Save(ctx, &model.AuditEvent{
+			ActorID: actor.ID, SubjectUserID: about.ID, Action: action, Resource: resource,
+			ScopeType: model.RoleScopeAcademicUnit, ScopeID: unit.ID.String(), Status: status, NodeID: "test-node",
+		})
+		require.NoError(t, err)
+		return saved.ID
+	}
+	rootMembers := save(unitMembers, subject, root, model.AuditStatusSuccess)
+	rootProvider := save(provider, subject, root, model.AuditStatusSuccess)
+	siblingMembers := save(unitMembers, subject, sibling, model.AuditStatusFail)
+	otherMembers := save(unitMembers, other, root, model.AuditStatusAttempt)
+
+	institution := store.AuditVisibilityScope{InstitutionWide: true}
+	catalog := []string{unitMembers, string(model.ActionClassMembersManage)}
+	academic := store.AuditVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{root.ID}, AllowedActions: catalog}
+	list := func(options store.AuditListOptions) []model.AuditEventID {
+		t.Helper()
+		options.ActorID, options.Limit = actor.ID, 20
+		events, err := ss.Audit().List(ctx, options)
+		require.NoError(t, err)
+		ids := make([]model.AuditEventID, 0, len(events))
+		for _, event := range events {
+			ids = append(ids, event.ID)
+		}
+		total, err := ss.Audit().Count(ctx, options, store.MaximumListCount)
+		require.NoError(t, err)
+		require.Len(t, ids, total, "Count agrees with List")
+		return ids
+	}
+
+	require.ElementsMatch(t, []model.AuditEventID{rootMembers, rootProvider, siblingMembers},
+		list(store.AuditListOptions{SubjectUserID: subject.ID, Visibility: institution}), "the subject matches exactly")
+	require.Equal(t, []model.AuditEventID{siblingMembers}, list(store.AuditListOptions{Status: model.AuditStatusFail, Visibility: institution}))
+	require.Equal(t, []model.AuditEventID{otherMembers}, list(store.AuditListOptions{Status: model.AuditStatusAttempt, Visibility: institution}))
+	require.Equal(t, []model.AuditEventID{rootProvider}, list(store.AuditListOptions{Actions: []string{provider}, Visibility: institution}))
+	require.ElementsMatch(t, []model.AuditEventID{rootMembers, rootProvider, siblingMembers, otherMembers},
+		list(store.AuditListOptions{Actions: []string{unitMembers, provider}, Visibility: institution}), "actions are alternatives")
+	require.Equal(t, []model.AuditEventID{rootMembers}, list(store.AuditListOptions{
+		SubjectUserID: subject.ID, Actions: []string{unitMembers}, Status: model.AuditStatusSuccess, Visibility: institution,
+	}), "the filters combine")
+
+	require.Equal(t, []model.AuditEventID{rootMembers}, list(store.AuditListOptions{SubjectUserID: subject.ID, Visibility: academic}),
+		"an academic subtree reads the subject only inside its subtree and catalog")
+	require.Empty(t, list(store.AuditListOptions{Actions: []string{provider}, Visibility: academic}),
+		"an action outside the academic catalog reads nothing")
+	require.ElementsMatch(t, []model.AuditEventID{rootMembers, otherMembers},
+		list(store.AuditListOptions{Actions: []string{unitMembers, provider}, Visibility: academic}),
+		"naming an outside action beside an allowed one adds nothing")
+	require.Empty(t, list(store.AuditListOptions{Status: model.AuditStatusFail, Visibility: academic}),
+		"a status filter does not reach the sibling subtree")
+	require.ElementsMatch(t, []model.AuditEventID{rootMembers, siblingMembers}, list(store.AuditListOptions{
+		SubjectUserID: subject.ID, Visibility: store.AuditVisibilityScope{AcademicInstitutionWide: true, AllowedActions: catalog},
+	}), "an Institution-wide academic grant spans subtrees but keeps its catalog")
+
+	tooMany := make([]string, store.MaximumAuditListActions+1)
+	for index := range tooMany {
+		tooMany[index] = unitMembers
+	}
+	var invalid *store.ErrInvalidInput
+	for name, options := range map[string]store.AuditListOptions{
+		"unknown status":   {Status: "pending"},
+		"invalid subject":  {SubjectUserID: "not-an-id"},
+		"blank action":     {Actions: []string{" "}},
+		"too many actions": {Actions: tooMany},
+	} {
+		t.Run(name, func(t *testing.T) {
+			options.Limit, options.Visibility = 10, institution
+			_, err := ss.Audit().List(ctx, options)
+			require.ErrorAs(t, err, &invalid)
+			_, err = ss.Audit().Count(ctx, options, store.MaximumListCount)
+			require.ErrorAs(t, err, &invalid)
+		})
+	}
 }
 
 // testAuditListCreatedRange proves the operator list's created_at range:
@@ -288,9 +402,11 @@ func testAuditSelfHistory(t *testing.T, ctx context.Context, ss store.Store, ins
 	grantedToOther := save(&model.AuditEvent{ActorID: me.ID, SubjectUserID: other.ID, Action: string(model.ActionRoleBindingManage),
 		Resource: model.Resource{Type: model.ResourceAcademicUnit, ID: foreignUnit.ID.String()}, Parameters: operation("create_binding"),
 		Status: model.AuditStatusSuccess})
+	grantedRole := model.NewRoleID()
 	grantedToMe := save(&model.AuditEvent{ActorID: administrator.ID, SubjectUserID: me.ID, Action: string(model.ActionRoleBindingManage),
-		Resource: model.Resource{Type: model.ResourceAcademicUnit, ID: memberUnit.ID.String()}, Parameters: operation("create_binding"),
-		Status: model.AuditStatusSuccess})
+		Resource:   model.Resource{Type: model.ResourceAcademicUnit, ID: memberUnit.ID.String()},
+		Parameters: []byte(`{"operation":"create_binding","value":{"role_id":"` + grantedRole.String() + `"}}`),
+		Status:     model.AuditStatusSuccess})
 	save(&model.AuditEvent{ActorID: administrator.ID, Action: string(model.ActionUserMFAReset), Resource: userResource(other), Status: model.AuditStatusSuccess})
 	mfaEnabled := save(&model.AuditEvent{ActorID: me.ID, SubjectUserID: me.ID, Action: string(model.ActionMFAActivate), Resource: institution,
 		Status: model.AuditStatusSuccess})
@@ -328,6 +444,9 @@ func testAuditSelfHistory(t *testing.T, ctx context.Context, ss store.Store, ins
 	require.Equal(t, me.ID, byID[passwordChanged.ID].SubjectUserID)
 	require.True(t, byID[mfaEnabled.ID].ResourceRelated, "the Institution")
 	require.True(t, byID[grantedToMe.ID].ResourceRelated, "an Academic Unit the caller belongs to")
+	require.Equal(t, grantedRole, byID[grantedToMe.ID].RoleID, "a Role Binding change carries its Role")
+	require.True(t, byID[grantedToOther.ID].RoleID.IsZero(), "a value without a Role names none")
+	require.True(t, byID[passwordChanged.ID].RoleID.IsZero(), "only Role Binding changes carry a Role")
 	require.False(t, byID[grantedToOther.ID].ResourceRelated, "an Academic Unit the caller has no relationship with")
 	require.Equal(t, other.ID, byID[grantedToOther.ID].SubjectUserID)
 	require.True(t, byID[failedSignIn.ID].ActorID.IsZero())
@@ -407,6 +526,106 @@ func testAuditSelfHistory(t *testing.T, ctx context.Context, ss store.Store, ins
 			_, err = ss.Audit().CountSelf(ctx, bad)
 			require.ErrorAs(t, err, &invalid, "count "+name)
 		}
+	}
+}
+
+// testAuditNames proves ListNames names each record only inside its
+// visibility: Users as the User directory sees them (a scoped visibility
+// never names a disabled User), Academic Units through their subtrees, and
+// Classes as a Class search sees them; archived records are never named.
+func testAuditNames(t *testing.T, ctx context.Context, ss store.Store, institutionID string) {
+	t.Helper()
+	root := saveAcademicUnit(t, ctx, ss, institutionID, "", "audit-names-root")
+	child := saveAcademicUnit(t, ctx, ss, institutionID, root.ID.String(), "audit-names-child")
+	sibling := saveAcademicUnit(t, ctx, ss, institutionID, "", "audit-names-sibling")
+	archived := saveAcademicUnit(t, ctx, ss, institutionID, "", "audit-names-archived")
+	_, err := ArchiveAcademicUnit(ctx, ss, archived.ID, model.NowUTC())
+	require.NoError(t, err)
+
+	named := func(name string, disabled bool) *model.User {
+		t.Helper()
+		user := newUser()
+		user.DisplayName = name
+		if disabled {
+			user.PrepareCreate(model.NewUserID(), model.NowUTC().Add(-time.Hour))
+			user.DisabledAt = model.OptionalTimeFrom(model.NowUTC().Add(-time.Minute))
+		}
+		saved, createErr := createUser(t, ctx, ss, user)
+		require.NoError(t, createErr)
+		return saved
+	}
+	member, outsider, disabledMember := named("Unit Member", false), named("Outsider", false), named("Disabled Member", true)
+	for _, user := range []*model.User{member, disabledMember} {
+		_, err = ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
+			AcademicUnitID: child.ID, UserID: user.ID, StartsAt: model.NowUTC().Add(-time.Minute),
+		})
+		require.NoError(t, err)
+	}
+
+	fixture := saveClassFixture(t, ctx, ss)
+	visibleClass := saveClass(t, ctx, ss, fixture.level.ID.String(), fixture.period.ID.String(), "audit-names-visible")
+	otherClass := saveClass(t, ctx, ss, fixture.level.ID.String(), fixture.period.ID.String(), "audit-names-other")
+
+	role, err := SaveRole(ctx, ss, &model.Role{Name: "audit-names-" + model.NewID(), DisplayName: "Audit Names Teacher",
+		Permissions: []string{string(model.ActionClassView)}})
+	require.NoError(t, err)
+	archivedRole, err := SaveRole(ctx, ss, &model.Role{Name: "audit-names-archived-" + model.NewID(), DisplayName: "Gone",
+		Permissions: []string{string(model.ActionClassView)}})
+	require.NoError(t, err)
+	_, err = ArchiveRole(ctx, ss, archivedRole.ID, model.NowUTC())
+	require.NoError(t, err)
+
+	all := store.AuditNameOptions{
+		UserIDs:         []model.UserID{member.ID, outsider.ID, disabledMember.ID, member.ID},
+		AcademicUnitIDs: []model.AcademicUnitID{root.ID, child.ID, sibling.ID, archived.ID},
+		ClassIDs:        []model.ClassID{visibleClass.ID, otherClass.ID},
+		RoleIDs:         []model.RoleID{role.ID, archivedRole.ID},
+	}
+	names, err := ss.Audit().ListNames(ctx, all)
+	require.NoError(t, err)
+	require.Equal(t, store.AuditNames{
+		Users:         map[model.UserID]string{},
+		AcademicUnits: map[model.AcademicUnitID]string{},
+		Classes:       map[model.ClassID]string{},
+		Roles:         map[model.RoleID]store.AuditRoleName{role.ID: {Name: role.Name, DisplayName: "Audit Names Teacher"}},
+	}, names, "a zero visibility names no User, Academic Unit, or Class")
+
+	wide := all
+	wide.UserVisibility = store.UserVisibilityScope{InstitutionWide: true}
+	wide.AcademicUnitInstitutionWide = true
+	wide.ClassVisibility = store.ClassVisibilityScope{InstitutionWide: true}
+	names, err = ss.Audit().ListNames(ctx, wide)
+	require.NoError(t, err)
+	require.Equal(t, map[model.UserID]string{member.ID: "Unit Member", outsider.ID: "Outsider", disabledMember.ID: "Disabled Member"}, names.Users)
+	require.Equal(t, map[model.AcademicUnitID]string{
+		root.ID: "audit-names-root", child.ID: "audit-names-child", sibling.ID: "audit-names-sibling",
+	}, names.AcademicUnits, "an archived Academic Unit is never named")
+	require.Equal(t, map[model.ClassID]string{visibleClass.ID: "audit-names-visible", otherClass.ID: "audit-names-other"}, names.Classes)
+
+	scoped := all
+	scoped.UserVisibility = store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{root.ID}, ActiveAt: model.NowUTC()}
+	scoped.AcademicUnitRootIDs = []model.AcademicUnitID{root.ID}
+	scoped.ClassVisibility = store.ClassVisibilityScope{ClassIDs: []model.ClassID{visibleClass.ID}}
+	names, err = ss.Audit().ListNames(ctx, scoped)
+	require.NoError(t, err)
+	require.Equal(t, map[model.UserID]string{member.ID: "Unit Member"}, names.Users,
+		"a subtree names its current members only, and never a disabled one")
+	require.Equal(t, map[model.AcademicUnitID]string{root.ID: "audit-names-root", child.ID: "audit-names-child"}, names.AcademicUnits)
+	require.Equal(t, map[model.ClassID]string{visibleClass.ID: "audit-names-visible"}, names.Classes)
+
+	var invalid *store.ErrInvalidInput
+	tooMany := make([]model.UserID, 0, store.MaximumAuditNames+1)
+	for range store.MaximumAuditNames + 1 {
+		tooMany = append(tooMany, model.NewUserID())
+	}
+	for name, bad := range map[string]store.AuditNameOptions{
+		"invalid user":    {UserIDs: []model.UserID{"not-an-id"}},
+		"too many users":  {UserIDs: tooMany},
+		"invalid root":    {AcademicUnitRootIDs: []model.AcademicUnitID{"not-an-id"}},
+		"scoped no clock": {UserIDs: []model.UserID{member.ID}, UserVisibility: store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{root.ID}}},
+	} {
+		_, err = ss.Audit().ListNames(ctx, bad)
+		require.ErrorAs(t, err, &invalid, name)
 	}
 }
 

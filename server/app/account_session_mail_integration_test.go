@@ -80,7 +80,7 @@ func TestAccountAndAdministrativeSessionNoticesUseRealServerGraph(t *testing.T) 
 		require.NoError(t, helper.App.Identity.RevokeAllSessions(ctx, allInvocation))
 	}
 	audits, err := persistence.Audit().List(ctx, store.AuditListOptions{
-		ActorID: target.ID, Action: string(model.ActionSessionManage),
+		ActorID: target.ID, Actions: []string{string(model.ActionSessionManage)},
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true}, Limit: 20,
 	})
 	require.NoError(t, err)

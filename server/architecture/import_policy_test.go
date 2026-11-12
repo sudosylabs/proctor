@@ -207,6 +207,17 @@ var dependencyRules = []dependencyRule{
 		),
 	},
 	{
+		// The realtime contract compiler validates JSON Schema with the
+		// library kin-openapi already brings into the module graph.
+		name:           "AsyncAPI compiler",
+		sources:        []pathPattern{exact(serverModule + "/internal/asyncapidoc")},
+		deniedStandard: standardInfrastructureExceptFS,
+		thirdParty: only(
+			exact("github.com/santhosh-tekuri/jsonschema/v6"),
+			exact("gopkg.in/yaml.v3"),
+		),
+	},
+	{
 		name:           "error catalog compiler",
 		sources:        []pathPattern{exact(serverModule + "/internal/errorcatalog")},
 		deniedStandard: standardInfrastructureExceptHTTP,
@@ -823,6 +834,7 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app/mail"),
 			exact(serverModule+"/cmd/proctor/commands"),
 			exact(serverModule+"/httpapi"),
+			exact(serverModule+"/internal/asyncapidoc"),
 			exact(serverModule+"/internal/errorcatalog"),
 			exact(serverModule+"/internal/openapidoc"),
 			exact(serverModule+"/localization"),
@@ -918,6 +930,7 @@ func TestDependencyRulePrecedence(t *testing.T) {
 		{packagePath: serverModule + "/store/sqlstore", wantRule: "SQL store adapter"},
 		{packagePath: serverModule + "/platform/externalauth/oidc", wantRule: "external-auth adapters"},
 		{packagePath: serverModule + "/internal/openapidoc", wantRule: "OpenAPI compiler"},
+		{packagePath: serverModule + "/internal/asyncapidoc", wantRule: "AsyncAPI compiler"},
 		{packagePath: serverModule + "/internal/errorcatalog", wantRule: "error catalog compiler"},
 		{packagePath: serverModule + "/cmd/proctor-healthcheck", wantRule: "healthcheck executable"},
 		{packagePath: serverModule + "/operator", wantRule: "offline operator commands"},

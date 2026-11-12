@@ -285,7 +285,7 @@ func TestOIDCExternalAuthenticationIntegration(t *testing.T) {
 	require.NoError(t, err, "OIDC Invitation proof created an ordinary Session")
 	require.Empty(t, invitedSessions, "OIDC Invitation proof created an ordinary Session")
 	invitationAudits, err := persistence.Audit().List(context.Background(), store.AuditListOptions{ActorID: invitedUser.ID,
-		Action: "invitation.accept", Limit: 10, Visibility: store.AuditVisibilityScope{InstitutionWide: true}})
+		Actions: []string{"invitation.accept"}, Limit: 10, Visibility: store.AuditVisibilityScope{InstitutionWide: true}})
 	require.NoError(t, err, "OIDC Invitation acceptance audits")
 	require.Len(t, invitationAudits, 1, "OIDC Invitation acceptance audits")
 	require.Equal(t, config.ExternalAuthenticationTypeOIDC, invitationAudits[0].AuthMethod, "OIDC Invitation acceptance audits")
@@ -335,7 +335,7 @@ func TestOIDCExternalAuthenticationIntegration(t *testing.T) {
 	loginAudits, err := persistence.Audit().List(
 		context.Background(),
 		store.AuditListOptions{
-			Action:     "authentication.external_login",
+			Actions:    []string{"authentication.external_login"},
 			Limit:      10,
 			Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 		},

@@ -30,6 +30,10 @@ func (contractOnboardingService) PreviewProgression(context.Context, model.Onboa
 	return "", nil
 }
 
+func (contractOnboardingService) ResolveAcademicAdministrationPreview(context.Context, model.OnboardingImportID) (string, error) {
+	return "", nil
+}
+
 func (contractOnboardingService) Parse(context.Context, model.OnboardingImportID) (string, error) {
 	return "", nil
 }

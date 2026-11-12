@@ -1,0 +1,54 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+# Events for operators watching Jobs.
+components:
+  messages:
+    job.changed:
+      name: job.changed
+      title: Job changed
+      summary: Refetch the Job; its status changed or its progress advanced.
+      description: Refetch the Job; its status changed or its progress advanced. Sent when a node claims, completes, cancels or retries an operator-visible Job, and on its checkpoints at most once every 2 seconds per Job on each node. progress is present only for a Job type that reports progress. Delivered to connections that subscribe to job.view on the institution.
+      tags:
+        - name: event
+        - name: Jobs
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - action
+              - data
+            properties:
+              event:
+                type: string
+                const: job.changed
+              action:
+                type: string
+                const: job.view
+              data:
+                $ref: '../../../schemas/realtime/job_changed.json'
+      examples:
+        - name: example
+          payload:
+            id: '8kpous3h9nfemqtwz47ydgjcx1'
+            event: job.changed
+            sequence: 40
+            action: job.view
+            resource:
+              type: institution
+              id: ous3h9nfemqtwz47ydgjcx1ia5
+            data:
+              schema_version: 1
+              job_id: z47ydgjcx1ia56br8kpous3h9n
+              type: onboarding_import.execute
+              status: running
+              progress:
+                current: 120
+                total: 400
+                stage: executing

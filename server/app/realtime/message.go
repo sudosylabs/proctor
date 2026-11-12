@@ -55,6 +55,7 @@ var (
 	invitationChangedMessage                  = declare("invitation.changed", "invitation.changed")
 	jobChangedMessage                         = declare("job.changed", "job.changed")
 	onboardingImportChangedMessage            = declare("onboarding_import.changed", "onboarding_import.changed")
+	creatorOnboardingImportChangedMessage     = declare("onboarding_import.changed_for_creator", "onboarding_import.changed")
 	managerSittingBoardChangedMessage         = declare("manager.sitting_board.changed", "manager.sitting_board.changed")
 	userSettingsChangedMessage                = declare("user_settings_changed", "user_settings_changed")
 	userProfilePictureChangedMessage          = declare("user_profile_picture_changed", "user_profile_picture_changed")

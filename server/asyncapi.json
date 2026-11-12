@@ -140,6 +140,9 @@
         "onboarding_import.changed": {
           "$ref": "#/components/messages/onboarding_import.changed"
         },
+        "onboarding_import.changed_for_creator": {
+          "$ref": "#/components/messages/onboarding_import.changed_for_creator"
+        },
         "ping": {
           "$ref": "#/components/messages/ping"
         },
@@ -2931,6 +2934,69 @@
         ],
         "title": "Onboarding import changed"
       },
+      "onboarding_import.changed_for_creator": {
+        "description": "Refetch an onboarding import you created; it entered a new state. Imports that only their creator may read, such as academic administration filter previews, are delivered to the creator's connections alone instead of to onboarding_batch.view subscribers.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "data": {
+                "import_id": "z47ydgjcx1ia56br8kpous3h9n",
+                "schema_version": 1,
+                "state": "preview_ready"
+              },
+              "event": "onboarding_import.changed",
+              "id": "9kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "",
+                "type": ""
+              },
+              "sequence": 43,
+              "user_id": "qtwz47ydgjcx1ia56br8kpous3"
+            }
+          }
+        ],
+        "name": "onboarding_import.changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "not": {
+                "required": [
+                  "action"
+                ]
+              },
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/onboarding_import_changed"
+                },
+                "event": {
+                  "const": "onboarding_import.changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "user_id",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch an onboarding import you created; it entered a new state.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Onboarding"
+          }
+        ],
+        "title": "Onboarding import changed (creator)"
+      },
       "ping": {
         "description": "Has no data. The server replies with pong. It does not renew an Attempt Participation.",
         "examples": [
@@ -4755,6 +4821,9 @@
         },
         {
           "$ref": "#/channels/websocket/messages/onboarding_import.changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/onboarding_import.changed_for_creator"
         },
         {
           "$ref": "#/channels/websocket/messages/invitation.changed"

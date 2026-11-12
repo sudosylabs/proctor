@@ -31,6 +31,8 @@ channels:
         $ref: '#/components/messages/job.changed'
       onboarding_import.changed:
         $ref: '#/components/messages/onboarding_import.changed'
+      onboarding_import.changed_for_creator:
+        $ref: '#/components/messages/onboarding_import.changed_for_creator'
       invitation.changed:
         $ref: '#/components/messages/invitation.changed'
       academic_unit_created:
@@ -157,6 +159,7 @@ operations:
       - $ref: '#/channels/websocket/messages/access_policy_changed'
       - $ref: '#/channels/websocket/messages/job.changed'
       - $ref: '#/channels/websocket/messages/onboarding_import.changed'
+      - $ref: '#/channels/websocket/messages/onboarding_import.changed_for_creator'
       - $ref: '#/channels/websocket/messages/invitation.changed'
       - $ref: '#/channels/websocket/messages/academic_unit_created'
       - $ref: '#/channels/websocket/messages/academic_unit_updated'

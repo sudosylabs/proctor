@@ -47,6 +47,45 @@ components:
               schema_version: 1
               import_id: z47ydgjcx1ia56br8kpous3h9n
               state: preview_ready
+    onboarding_import.changed_for_creator:
+      name: onboarding_import.changed
+      title: Onboarding import changed (creator)
+      summary: Refetch an onboarding import you created; it entered a new state.
+      description: Refetch an onboarding import you created; it entered a new state. Imports that only their creator may read, such as academic administration filter previews, are delivered to the creator's connections alone instead of to onboarding_batch.view subscribers.
+      tags:
+        - name: event
+        - name: Onboarding
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/event_frame.json'
+          - type: object
+            required:
+              - event
+              - user_id
+              - data
+            properties:
+              event:
+                type: string
+                const: onboarding_import.changed
+              data:
+                $ref: '../../../schemas/realtime/onboarding_import_changed.json'
+            not:
+              required:
+                - action
+      examples:
+        - name: example
+          payload:
+            id: '9kpous3h9nfemqtwz47ydgjcx1'
+            event: onboarding_import.changed
+            sequence: 43
+            user_id: qtwz47ydgjcx1ia56br8kpous3
+            resource:
+              type: ''
+              id: ''
+            data:
+              schema_version: 1
+              import_id: z47ydgjcx1ia56br8kpous3h9n
+              state: preview_ready
     invitation.changed:
       name: invitation.changed
       title: Invitation changed

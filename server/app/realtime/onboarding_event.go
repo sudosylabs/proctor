@@ -60,6 +60,27 @@ func NewOnboardingImportChangedEvent(
 	}, nil
 }
 
+// NewCreatorOnboardingImportChangedEvent tells only the User who created an
+// onboarding import that it entered state. Imports that only their creator may
+// read, such as filter previews, are announced this way so that other viewers
+// at the scope never learn that they exist.
+func NewCreatorOnboardingImportChangedEvent(
+	creatorID model.UserID,
+	importID model.OnboardingImportID,
+	state model.OnboardingImportState,
+) (Event, error) {
+	if !creatorID.IsValid() || !importID.IsValid() || !state.IsValid() {
+		return Event{}, errors.New("onboarding import change event requires a valid creator, import and state")
+	}
+
+	data, err := json.Marshal(onboardingImportChangedData{SchemaVersion: 1, ImportID: importID.String(), State: state})
+	if err != nil {
+		return Event{}, fmt.Errorf("encode onboarding import change event: %w", err)
+	}
+
+	return Event{Name: creatorOnboardingImportChangedMessage.name, UserID: creatorID, Data: data}, nil
+}
+
 // NewInvitationChangedEvent tells the User who issued an Invitation that it
 // reached state, such as accepted. Only the inviter's own connections receive
 // it; the accepting User and their account never travel.

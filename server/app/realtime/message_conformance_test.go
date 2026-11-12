@@ -80,6 +80,10 @@ func conformanceConstructors() map[string]func() (Event, error) {
 			return NewOnboardingImportChangedEvent(model.NewOnboardingImportID(), model.OnboardingImportPreviewReady,
 				model.Resource{Type: model.ResourceClass, ID: model.NewClassID().String()})
 		},
+		"onboarding_import.changed_for_creator": func() (Event, error) {
+			return NewCreatorOnboardingImportChangedEvent(model.NewUserID(), model.NewOnboardingImportID(),
+				model.OnboardingImportPreviewReady)
+		},
 		"manager.sitting_board.changed": func() (Event, error) {
 			return NewManagerSittingBoardChangedEvent(examID, sittingID)
 		},

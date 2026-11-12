@@ -217,6 +217,30 @@ func TestImportEffectsAnnounceNeitherRowsNorStudentProgressions(t *testing.T) {
 	require.Equal(t, []string{"complete row", "complete preview"}, f.events)
 }
 
+// A filter preview is readable by its creator alone, so its transitions reach
+// only the creator's connections and never an onboarding_batch.view
+// subscription at its scope.
+func TestFilterPreviewTransitionsTellOnlyTheirCreator(t *testing.T) {
+	t.Parallel()
+
+	f := newImportEffectsFixture()
+	creatorID := model.NewUserID()
+	value := &store.OnboardingImport{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportAcademicAdministrationFilter,
+		State: model.OnboardingImportPreviewReady, ScopeType: model.RoleScopeClass, ScopeID: f.classID.String(),
+		ActorUserID: creatorID}
+
+	_, err := f.imports(value, nil).CompleteOnboardingImportPreview(context.Background(), &store.OnboardingImportPreviewCompletion{})
+
+	require.NoError(t, err)
+	event, err := realtime.NewCreatorOnboardingImportChangedEvent(creatorID, value.ID, value.State)
+	require.NoError(t, err)
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.Publish, Event: event}}, f.publisher.Calls())
+	require.Equal(t, creatorID, f.publisher.Calls()[0].Event.UserID)
+	require.Empty(t, f.publisher.Calls()[0].Event.Action, "no scoped subscription receives a filter preview")
+	require.Equal(t, []string{"complete preview", "Publish onboarding_import.changed"}, f.events,
+		"the creator hears of the preview after its transition commits")
+}
+
 func TestImportEffectsStillTellTheOwnScopeWhenEnclosingScopesCannotBeRead(t *testing.T) {
 	t.Parallel()
 

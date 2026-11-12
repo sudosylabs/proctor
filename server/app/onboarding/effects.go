@@ -98,6 +98,10 @@ func (s *Service) publishImportChanged(ctx context.Context, value *store.Onboard
 	if value == nil || value.Mode == model.OnboardingImportStudentProgression {
 		return
 	}
+	if value.Mode == model.OnboardingImportAcademicAdministrationFilter {
+		s.publishCreatorImportChanged(ctx, value)
+		return
+	}
 	scopes, err := s.importAudience(ctx, value.ScopeType, value.ScopeID)
 	for _, scope := range scopes {
 		event, eventErr := realtime.NewOnboardingImportChangedEvent(value.ID, value.State, scope)
@@ -117,6 +121,18 @@ func (s *Service) publishImportChanged(ctx context.Context, value *store.Onboard
 // encloses it: the Academic Units above it, nearest first, then the
 // Institution. A subscriber at any of them may view the import. It always
 // returns the import's own scope, with the error that stopped the walk.
+// publishCreatorImportChanged announces a filter preview to its creator alone,
+// because only the creator may read it.
+func (s *Service) publishCreatorImportChanged(ctx context.Context, value *store.OnboardingImport) {
+	event, err := realtime.NewCreatorOnboardingImportChangedEvent(value.ActorUserID, value.ID, value.State)
+	if err == nil {
+		err = s.publisher.Publish(ctx, event)
+	}
+	if err != nil {
+		s.publisher.Report(ctx, "onboarding_import.changed", err)
+	}
+}
+
 func (s *Service) importAudience(ctx context.Context, scopeType model.RoleScopeType, scopeID string) ([]model.Resource, error) {
 	own := onboardingImportResource(scopeType, scopeID)
 	audience := []model.Resource{own}

@@ -16,6 +16,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/plugin"
 )
 
 func TestRegistryIsInstanceScopedAndRejectsInvalidFactories(t *testing.T) {
@@ -52,45 +53,29 @@ func (f fakeFactory) Type() string {
 
 func (f fakeFactory) New(
 	settings config.ExternalAuthenticationProvider,
-) (Provider, error) {
+) (plugin.IdentityProvider, error) {
 	if settings.ID == "" {
 		return nil, errors.New("missing id")
 	}
-	return fakeProvider{
-		descriptor: model.ExternalAuthenticationProvider{
-			ID: settings.ID, Type: settings.Type,
-		},
-	}, nil
+	return fakeProvider{}, nil
 }
 
-type fakeProvider struct {
-	descriptor model.ExternalAuthenticationProvider
-}
+type fakeProvider struct{}
 
-func (p fakeProvider) Descriptor() model.ExternalAuthenticationProvider {
-	return p.descriptor
-}
-
-func (fakeProvider) AutoProvision() bool {
-	return false
-}
-
-func (fakeProvider) State(
-	model.ExternalAuthenticationCallback,
-) (string, error) {
+func (fakeProvider) State(plugin.Callback) (string, error) {
 	return model.NewCredentialToken(), nil
 }
 
 func (fakeProvider) Begin(
 	context.Context,
-	BeginRequest,
-) (*BeginResponse, error) {
-	return &BeginResponse{RedirectURL: "https://example.test"}, nil
+	plugin.BeginRequest,
+) (plugin.BeginResponse, error) {
+	return plugin.BeginResponse{RedirectURL: "https://example.test"}, nil
 }
 
 func (fakeProvider) Complete(
 	context.Context,
-	CompleteRequest,
-) (*model.ExternalAuthenticationAssertion, error) {
-	return nil, ErrAuthenticationRejected
+	plugin.CompleteRequest,
+) (plugin.Assertion, error) {
+	return plugin.Assertion{}, plugin.ErrAuthenticationRejected
 }

@@ -52,6 +52,7 @@ exists.
 | --- | --- | --- | --- | --- |
 | reusable modules | `packages/cache` and below, `packages/mail` and below, `packages/vfs` and below | any except `server` and below | any | none |
 | composition root | `server` | any | any | none |
+| plugin contracts | `plugin` | none | none | none |
 | model build tools | `model/internal/idgen` and below | none | none | none |
 | route error-code analysis for tests | `internal/errorflow` | none | `golang.org/x/tools/go` and below | none |
 | static TLS key pair files | `internal/tlscert` | none | none | none |
@@ -78,7 +79,7 @@ exists.
 | exam manager access consumers | `app/exam`, `app/exam/correction`, `app/exam/resource`, `app/exam/workspace` | `app/access`, `app/apperror`, `app/idempotency`, `app/invocation`, `app/exam/manageraccess`, `app/realtime`, `model`, `store` | none | infrastructure |
 | exam mail and safe Markdown consumers | `app/exam/attempt`, `app/exam/review` | `app/access`, `app/apperror`, `app/idempotency`, `app/invocation`, `app/mail`, `app/realtime`, `model`, `store`, `app/exam/safemarkdown` | none | infrastructure |
 | safe Markdown | `app/exam/safemarkdown` | none | none | infrastructure |
-| file-content adapter | `filecontent` and below | `app/exam`, `app/user`, `model`, `packages/vfs` | `github.com/HugoSmits86/nativewebp`, `github.com/disintegration/imaging`, below `github.com/pdfcpu/pdfcpu`, `golang.org/x/image/webp` | infrastructure except `os` |
+| file-content adapter | `filecontent` and below | `app/exam`, `app/user`, `model`, `plugin`, `packages/vfs` | `github.com/HugoSmits86/nativewebp`, `github.com/disintegration/imaging`, below `github.com/pdfcpu/pdfcpu`, `golang.org/x/image/webp` | infrastructure except `os` |
 | Desktop release verification | `desktoprelease` | `model`, `internal/canonicaljson` | none | infrastructure |
 | secret sealing | `secretseal` | none | none | infrastructure |
 | localization | `localization` | none | `github.com/nicksnyder/go-i18n/v2/i18n` and below, `golang.org/x/text/language` | infrastructure except `io/fs` |
@@ -100,7 +101,7 @@ exists.
 | cluster adapters | `cluster/local` and below, `cluster/memberlist` and below | `cluster` | any | none |
 | metrics | `metrics` | `config`, `internal/tlscert`, `store/timerlayer`, `store/localcachelayer`, `platform`, `cluster`, `packages/vfs`, `packages/mail` | `github.com/prometheus/client_golang` and below | none |
 | tracing | `tracing` | `config` | `go.opentelemetry.io/otel` and below | none |
-| external-auth adapters | `platform/externalauth` and below | `config`, `model`, `platform/externalauth` | any | none |
+| external-auth adapters | `platform/externalauth` and below | `config`, `model`, `platform/externalauth`, `plugin` | any | none |
 | platform lifecycle | `platform` | any except below `packages/cache`, below `packages/mail`, below `packages/vfs`, below `cluster`, below `platform/externalauth`, `store/sqlstore`, `metrics`, `app` and below, `httpapi` and below, `websocket` and below | none | none |
 | healthcheck executable | `cmd/proctor-healthcheck` | none | none | none |
 | offline operator commands | `operator` | `config`, `model`, `store`, `store/sqlstore` | none | infrastructure |

@@ -31,6 +31,7 @@ import (
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/platform/externalauth"
+	"github.com/sudosylabs/proctor/server/plugin"
 )
 
 type Factory struct{}
@@ -45,7 +46,7 @@ func (Factory) Type() string {
 
 func (Factory) New(
 	settings config.ExternalAuthenticationProvider,
-) (externalauth.Provider, error) {
+) (plugin.IdentityProvider, error) {
 	if settings.OIDC == nil {
 		return nil, errors.New("OIDC settings are missing")
 	}
@@ -70,22 +71,14 @@ type Provider struct {
 	discovered     *coreoidc.Provider
 }
 
-func (p *Provider) Descriptor() model.ExternalAuthenticationProvider {
-	return p.mapper.Descriptor()
-}
-
-func (p *Provider) AutoProvision() bool {
-	return p.mapper.AutoProvision()
-}
-
 func (p *Provider) State(
-	callback model.ExternalAuthenticationCallback,
+	callback plugin.Callback,
 ) (string, error) {
 	state, err := callback.SingleValue("state", 256)
 	if err != nil || !model.IsValidCredentialToken(state) {
 		return "", externalauth.Rejected(
 			"resolve OIDC callback state",
-			model.ErrInvalidExternalAuthenticationCallback,
+			plugin.ErrInvalidCallback,
 		)
 	}
 	return state, nil
@@ -93,19 +86,19 @@ func (p *Provider) State(
 
 func (p *Provider) Begin(
 	ctx context.Context,
-	request externalauth.BeginRequest,
-) (*externalauth.BeginResponse, error) {
+	request plugin.BeginRequest,
+) (plugin.BeginResponse, error) {
 	if !validCallbackURL(request.CallbackURL) ||
 		!model.IsValidCredentialToken(request.State) ||
 		!model.IsValidCredentialToken(request.Proof) {
-		return nil, externalauth.InvalidResponse(
+		return plugin.BeginResponse{}, externalauth.InvalidResponse(
 			"construct OIDC authorization",
 			errors.New("invalid external authentication transaction"),
 		)
 	}
 	discovered, err := p.discover(ctx)
 	if err != nil {
-		return nil, err
+		return plugin.BeginResponse{}, err
 	}
 	oauthConfig := p.oauthConfig(discovered, request.CallbackURL)
 	options := []oauth2.AuthCodeOption{
@@ -116,32 +109,32 @@ func (p *Provider) Begin(
 		options = append(options, oauth2.SetAuthURLParam("prompt", "login"), oauth2.SetAuthURLParam("max_age", "0"))
 	}
 	redirectURL := oauthConfig.AuthCodeURL(request.State, options...)
-	return &externalauth.BeginResponse{RedirectURL: redirectURL}, nil
+	return plugin.BeginResponse{RedirectURL: redirectURL}, nil
 }
 
 func (p *Provider) Complete(
 	ctx context.Context,
-	request externalauth.CompleteRequest,
-) (*model.ExternalAuthenticationAssertion, error) {
+	request plugin.CompleteRequest,
+) (plugin.Assertion, error) {
 	callbackState, err := p.State(request.Callback)
 	if err != nil ||
 		subtle.ConstantTimeCompare(
 			[]byte(callbackState),
 			[]byte(request.State),
 		) != 1 {
-		return nil, externalauth.Rejected(
+		return plugin.Assertion{}, externalauth.Rejected(
 			"validate OIDC callback",
-			model.ErrInvalidExternalAuthenticationCallback,
+			plugin.ErrInvalidCallback,
 		)
 	}
 
 	providerError, err := request.Callback.OptionalSingleValue("error", 256)
 	if err != nil {
-		return nil, externalauth.Rejected("validate OIDC callback", err)
+		return plugin.Assertion{}, externalauth.Rejected("validate OIDC callback", err)
 	}
 
 	if providerError != "" {
-		return nil, externalauth.Rejected(
+		return plugin.Assertion{}, externalauth.Rejected(
 			"complete OIDC authorization",
 			errors.New("provider denied authorization"),
 		)
@@ -154,15 +147,15 @@ func (p *Provider) Complete(
 	if err != nil ||
 		!model.IsValidCredentialToken(request.Proof) ||
 		!validCallbackURL(request.CallbackURL) {
-		return nil, externalauth.Rejected(
+		return plugin.Assertion{}, externalauth.Rejected(
 			"validate OIDC callback",
-			model.ErrInvalidExternalAuthenticationCallback,
+			plugin.ErrInvalidCallback,
 		)
 	}
 
 	discovered, err := p.discover(ctx)
 	if err != nil {
-		return nil, err
+		return plugin.Assertion{}, err
 	}
 
 	providerContext := coreoidc.ClientContext(ctx, p.client)
@@ -178,13 +171,13 @@ func (p *Provider) Complete(
 			retrieveError.Response != nil &&
 			retrieveError.Response.StatusCode >= 400 &&
 			retrieveError.Response.StatusCode < 500 {
-			return nil, externalauth.Rejected(
+			return plugin.Assertion{}, externalauth.Rejected(
 				"exchange OIDC authorization code",
 				err,
 			)
 		}
 
-		return nil, externalauth.Unavailable(
+		return plugin.Assertion{}, externalauth.Unavailable(
 			"exchange OIDC authorization code",
 			err,
 		)
@@ -192,7 +185,7 @@ func (p *Provider) Complete(
 
 	rawIDToken, ok := token.Extra("id_token").(string)
 	if !ok || rawIDToken == "" {
-		return nil, externalauth.InvalidResponse(
+		return plugin.Assertion{}, externalauth.InvalidResponse(
 			"verify OIDC ID token",
 			errors.New("provider omitted the ID token"),
 		)
@@ -204,7 +197,7 @@ func (p *Provider) Complete(
 	)
 	idToken, err := verifier.Verify(providerContext, rawIDToken)
 	if err != nil {
-		return nil, externalauth.InvalidResponse(
+		return plugin.Assertion{}, externalauth.InvalidResponse(
 			"verify OIDC ID token",
 			err,
 		)
@@ -218,7 +211,7 @@ func (p *Provider) Complete(
 		[]byte(idToken.Nonce),
 		[]byte(expectedNonce),
 	) != 1 {
-		return nil, externalauth.Rejected(
+		return plugin.Assertion{}, externalauth.Rejected(
 			"verify OIDC nonce",
 			errors.New("OIDC nonce mismatch"),
 		)
@@ -226,7 +219,7 @@ func (p *Provider) Complete(
 
 	if idToken.AccessTokenHash != "" {
 		if verifyErr := idToken.VerifyAccessToken(token.AccessToken); verifyErr != nil {
-			return nil, externalauth.InvalidResponse(
+			return plugin.Assertion{}, externalauth.InvalidResponse(
 				"verify OIDC access token",
 				verifyErr,
 			)
@@ -235,7 +228,7 @@ func (p *Provider) Complete(
 
 	claims := make(map[string]json.RawMessage)
 	if claimsErr := idToken.Claims(&claims); claimsErr != nil {
-		return nil, externalauth.InvalidResponse(
+		return plugin.Assertion{}, externalauth.InvalidResponse(
 			"decode OIDC ID token claims",
 			claimsErr,
 		)
@@ -247,7 +240,7 @@ func (p *Provider) Complete(
 			oauth2.StaticTokenSource(token),
 		)
 		if userInfoErr != nil {
-			return nil, externalauth.Unavailable(
+			return plugin.Assertion{}, externalauth.Unavailable(
 				"retrieve OIDC user information",
 				userInfoErr,
 			)
@@ -257,7 +250,7 @@ func (p *Provider) Complete(
 			[]byte(userInfo.Subject),
 			[]byte(idToken.Subject),
 		) != 1 {
-			return nil, externalauth.InvalidResponse(
+			return plugin.Assertion{}, externalauth.InvalidResponse(
 				"verify OIDC user information",
 				errors.New("userinfo subject does not match ID token"),
 			)
@@ -265,7 +258,7 @@ func (p *Provider) Complete(
 
 		userInfoClaims := make(map[string]json.RawMessage)
 		if claimsErr := userInfo.Claims(&userInfoClaims); claimsErr != nil {
-			return nil, externalauth.InvalidResponse(
+			return plugin.Assertion{}, externalauth.InvalidResponse(
 				"decode OIDC user information",
 				claimsErr,
 			)
@@ -296,7 +289,7 @@ func (p *Provider) Complete(
 		p.now(),
 	)
 	if err != nil {
-		return nil, externalauth.InvalidResponse(
+		return plugin.Assertion{}, externalauth.InvalidResponse(
 			"verify OIDC authentication time",
 			err,
 		)
@@ -308,14 +301,14 @@ func (p *Provider) Complete(
 		if len(claims["auth_time"]) == 0 ||
 			authenticatedAt < request.AuthenticationStartedAt.Truncate(time.Second).UnixMilli() ||
 			authenticatedAt > p.now().UnixMilli() {
-			return nil, externalauth.Rejected("verify fresh OIDC authentication", errors.New("fresh authentication proof is unavailable"))
+			return plugin.Assertion{}, externalauth.Rejected("verify fresh OIDC authentication", errors.New("fresh authentication proof is unavailable"))
 		}
 	}
 
 	return p.mapper.Assertion(
 		values,
 		emailVerified,
-		authenticatedAt,
+		time.UnixMilli(authenticatedAt),
 	)
 }
 
@@ -498,6 +491,6 @@ func validProviderEndpoint(value string) bool {
 }
 
 var (
-	_ externalauth.Factory  = Factory{}
-	_ externalauth.Provider = (*Provider)(nil)
+	_ externalauth.Factory    = Factory{}
+	_ plugin.IdentityProvider = (*Provider)(nil)
 )

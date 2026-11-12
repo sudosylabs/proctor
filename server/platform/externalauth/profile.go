@@ -11,10 +11,12 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/plugin"
 )
 
 type ProfileMapper struct {
@@ -41,19 +43,17 @@ func (m *ProfileMapper) Descriptor() model.ExternalAuthenticationProvider {
 	return m.descriptor
 }
 
-func (m *ProfileMapper) AutoProvision() bool {
-	return m.autoProvision
-}
-
 func (m *ProfileMapper) Claims() config.ExternalClaimMapping {
 	return m.claims
 }
 
+// Assertion maps provider values to a normalized assertion. AuthenticatedAt
+// keeps the millisecond precision Proctor records.
 func (m *ProfileMapper) Assertion(
 	values map[string][]string,
 	emailVerified bool,
-	authenticatedAt int64,
-) (*model.ExternalAuthenticationAssertion, error) {
+	authenticatedAt time.Time,
+) (plugin.Assertion, error) {
 	first := func(name string) string {
 		if items := values[name]; len(items) != 0 {
 			return strings.TrimSpace(items[0])
@@ -65,7 +65,7 @@ func (m *ProfileMapper) Assertion(
 		utf8.RuneCountInString(subject) > model.IdentitySubjectMaxRunes ||
 		!utf8.ValidString(subject) ||
 		model.SanitizeUnicode(subject) != subject {
-		return nil, InvalidResponse(
+		return plugin.Assertion{}, InvalidResponse(
 			"map external identity",
 			fmt.Errorf("provider returned an invalid subject"),
 		)
@@ -78,22 +78,21 @@ func (m *ProfileMapper) Assertion(
 		homeOrganization,
 		m.claims.AllowedHomeOrganizations,
 	) {
-		return nil, Rejected(
+		return plugin.Assertion{}, Rejected(
 			"map external identity",
 			fmt.Errorf("provider returned an unauthorized home organization"),
 		)
 	}
 
-	strength := model.AuthenticationSingleFactor
+	strength := plugin.AuthenticationSingleFactor
 	if providerClaimMatches(
 		values[m.claims.MultiFactorAttribute],
 		m.claims.MultiFactorValues,
 	) {
-		strength = model.AuthenticationMultiFactor
+		strength = plugin.AuthenticationMultiFactor
 	}
 
-	assertion := &model.ExternalAuthenticationAssertion{
-		ProviderID:       m.descriptor.ID,
+	assertion := plugin.Assertion{
 		Subject:          subject,
 		Username:         first(m.claims.Username),
 		Email:            first(m.claims.Email),
@@ -108,7 +107,7 @@ func (m *ProfileMapper) Assertion(
 			128,
 		),
 		AuthenticationStrength: strength,
-		AuthenticatedAt:        authenticatedAt,
+		AuthenticatedAt:        time.UnixMilli(authenticatedAt.UnixMilli()),
 	}
 	if m.autoProvision {
 		candidate := &model.User{
@@ -122,7 +121,7 @@ func (m *ProfileMapper) Assertion(
 		// Validate profile fields only; ID/timestamps are assigned at provision time.
 		candidate.PrepareCreate(model.NewUserID(), model.NowUTC())
 		if err := candidate.Validate(); err != nil {
-			return nil, InvalidResponse(
+			return plugin.Assertion{}, InvalidResponse(
 				"map external identity",
 				fmt.Errorf("provider returned invalid provisioning claims"),
 			)

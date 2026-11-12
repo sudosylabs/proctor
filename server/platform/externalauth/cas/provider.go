@@ -25,6 +25,7 @@ import (
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/platform/externalauth"
+	"github.com/sudosylabs/proctor/server/plugin"
 )
 
 type Factory struct{}
@@ -39,7 +40,7 @@ func (Factory) Type() string {
 
 func (Factory) New(
 	settings config.ExternalAuthenticationProvider,
-) (externalauth.Provider, error) {
+) (plugin.IdentityProvider, error) {
 	if settings.CAS == nil {
 		return nil, errors.New("CAS settings are missing")
 	}
@@ -74,22 +75,14 @@ type Provider struct {
 	now                  func() time.Time
 }
 
-func (p *Provider) Descriptor() model.ExternalAuthenticationProvider {
-	return p.mapper.Descriptor()
-}
-
-func (p *Provider) AutoProvision() bool {
-	return p.mapper.AutoProvision()
-}
-
 func (p *Provider) State(
-	callback model.ExternalAuthenticationCallback,
+	callback plugin.Callback,
 ) (string, error) {
 	state, err := callback.SingleValue("state", 256)
 	if err != nil || !model.IsValidCredentialToken(state) {
 		return "", externalauth.Rejected(
 			"resolve CAS callback state",
-			model.ErrInvalidExternalAuthenticationCallback,
+			plugin.ErrInvalidCallback,
 		)
 	}
 	return state, nil
@@ -97,11 +90,11 @@ func (p *Provider) State(
 
 func (p *Provider) Begin(
 	_ context.Context,
-	request externalauth.BeginRequest,
-) (*externalauth.BeginResponse, error) {
+	request plugin.BeginRequest,
+) (plugin.BeginResponse, error) {
 	serviceURL, err := casServiceURL(request.CallbackURL, request.State)
 	if err != nil || !model.IsValidCredentialToken(request.Proof) {
-		return nil, externalauth.InvalidResponse(
+		return plugin.BeginResponse{}, externalauth.InvalidResponse(
 			"construct CAS login",
 			errors.New("invalid external authentication transaction"),
 		)
@@ -113,28 +106,28 @@ func (p *Provider) Begin(
 		query.Set("renew", "true")
 	}
 	loginURL.RawQuery = query.Encode()
-	return &externalauth.BeginResponse{RedirectURL: loginURL.String()}, nil
+	return plugin.BeginResponse{RedirectURL: loginURL.String()}, nil
 }
 
 func (p *Provider) Complete(
 	ctx context.Context,
-	request externalauth.CompleteRequest,
-) (*model.ExternalAuthenticationAssertion, error) {
+	request plugin.CompleteRequest,
+) (plugin.Assertion, error) {
 	callbackState, err := p.State(request.Callback)
 	if err != nil ||
 		subtle.ConstantTimeCompare(
 			[]byte(callbackState),
 			[]byte(request.State),
 		) != 1 {
-		return nil, externalauth.Rejected(
+		return plugin.Assertion{}, externalauth.Rejected(
 			"validate CAS callback",
-			model.ErrInvalidExternalAuthenticationCallback,
+			plugin.ErrInvalidCallback,
 		)
 	}
 
 	ticket, err := request.Callback.SingleValue("ticket", 2048)
 	if err != nil {
-		return nil, externalauth.Rejected(
+		return plugin.Assertion{}, externalauth.Rejected(
 			"validate CAS callback",
 			err,
 		)
@@ -142,7 +135,7 @@ func (p *Provider) Complete(
 
 	serviceURL, err := casServiceURL(request.CallbackURL, request.State)
 	if err != nil {
-		return nil, externalauth.InvalidResponse(
+		return plugin.Assertion{}, externalauth.InvalidResponse(
 			"construct CAS validation",
 			err,
 		)
@@ -165,7 +158,7 @@ func (p *Provider) Complete(
 		nil,
 	)
 	if err != nil {
-		return nil, externalauth.InvalidResponse(
+		return plugin.Assertion{}, externalauth.InvalidResponse(
 			"construct CAS validation",
 			err,
 		)
@@ -174,7 +167,7 @@ func (p *Provider) Complete(
 	httpRequest.Header.Set("Accept", "application/xml, text/xml")
 	response, err := p.client.Do(httpRequest)
 	if err != nil {
-		return nil, externalauth.Unavailable(
+		return plugin.Assertion{}, externalauth.Unavailable(
 			"validate CAS ticket",
 			err,
 		)
@@ -183,7 +176,7 @@ func (p *Provider) Complete(
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, response.Body)
-		return nil, externalauth.Unavailable(
+		return plugin.Assertion{}, externalauth.Unavailable(
 			"validate CAS ticket",
 			fmt.Errorf("provider status %d", response.StatusCode),
 		)
@@ -191,21 +184,21 @@ func (p *Provider) Complete(
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		return nil, externalauth.InvalidResponse(
+		return plugin.Assertion{}, externalauth.InvalidResponse(
 			"read CAS validation",
 			err,
 		)
 	}
 
 	if int64(len(body)) > p.maximumResponseBytes {
-		return nil, externalauth.InvalidResponse(
+		return plugin.Assertion{}, externalauth.InvalidResponse(
 			"read CAS validation",
 			externalauth.ErrResponseTooLarge,
 		)
 	}
 
 	if bytes.Contains(bytes.ToUpper(body), []byte("<!DOCTYPE")) {
-		return nil, externalauth.InvalidResponse(
+		return plugin.Assertion{}, externalauth.InvalidResponse(
 			"decode CAS validation",
 			errors.New("document type is not allowed"),
 		)
@@ -215,21 +208,21 @@ func (p *Provider) Complete(
 	decoder := xml.NewDecoder(bytes.NewReader(body))
 	decoder.Strict = true
 	if err := decoder.Decode(&envelope); err != nil {
-		return nil, externalauth.InvalidResponse(
+		return plugin.Assertion{}, externalauth.InvalidResponse(
 			"decode CAS validation",
 			err,
 		)
 	}
 
 	if envelope.Failure != nil {
-		return nil, externalauth.Rejected(
+		return plugin.Assertion{}, externalauth.Rejected(
 			"validate CAS ticket",
 			errors.New("CAS rejected authentication"),
 		)
 	}
 
 	if envelope.Success == nil {
-		return nil, externalauth.InvalidResponse(
+		return plugin.Assertion{}, externalauth.InvalidResponse(
 			"decode CAS validation",
 			errors.New("missing authentication result"),
 		)
@@ -260,7 +253,7 @@ func (p *Provider) Complete(
 		// Use the transaction start as a conservative proof instant: the
 		// service-bound ticket required primary credentials after that start.
 		if request.AuthenticationStartedAt.After(authenticatedAt) {
-			return nil, externalauth.Rejected("verify fresh CAS authentication", errors.New("fresh authentication time is invalid"))
+			return plugin.Assertion{}, externalauth.Rejected("verify fresh CAS authentication", errors.New("fresh authentication time is invalid"))
 		}
 
 		authenticatedAt = request.AuthenticationStartedAt
@@ -269,7 +262,7 @@ func (p *Provider) Complete(
 	return p.mapper.Assertion(
 		values,
 		emailVerified,
-		authenticatedAt.UnixMilli(),
+		authenticatedAt,
 	)
 }
 
@@ -339,6 +332,6 @@ type attribute struct {
 }
 
 var (
-	_ externalauth.Factory  = Factory{}
-	_ externalauth.Provider = (*Provider)(nil)
+	_ externalauth.Factory    = Factory{}
+	_ plugin.IdentityProvider = (*Provider)(nil)
 )

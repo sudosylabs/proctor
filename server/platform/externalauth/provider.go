@@ -25,12 +25,20 @@ import (
 
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/plugin"
 )
 
+// A Provider fails with one of these; NewProvider maps the matching
+// plugin.Err* sentinels onto them.
 var (
+	// ErrAuthenticationRejected means the provider or the person declined
+	// the authentication.
 	ErrAuthenticationRejected = errors.New("external authentication rejected")
-	ErrInvalidResponse        = errors.New("external authentication response is invalid")
-	ErrProviderUnavailable    = errors.New("external authentication provider is unavailable")
+	// ErrInvalidResponse means the provider's response failed validation.
+	ErrInvalidResponse = errors.New("external authentication response is invalid")
+	// ErrProviderUnavailable means the provider could not be reached or
+	// failed to answer.
+	ErrProviderUnavailable = errors.New("external authentication provider is unavailable")
 )
 
 type BeginRequest struct {
@@ -66,12 +74,13 @@ type Provider interface {
 	) (*model.ExternalAuthenticationAssertion, error)
 }
 
-// Factory constructs one protocol adapter. Factories are registered on an
-// instance Registry at the platform composition root; there is no process-wide
-// mutable provider map or init-time side effect.
+// Factory constructs one protocol integration as a plugin.IdentityProvider.
+// Factories are registered on an instance Registry at the platform
+// composition root; there is no process-wide mutable provider map or
+// init-time side effect. The Registry wraps each provider with NewProvider.
 type Factory interface {
 	Type() string
-	New(config.ExternalAuthenticationProvider) (Provider, error)
+	New(config.ExternalAuthenticationProvider) (plugin.IdentityProvider, error)
 }
 
 type Registry struct {
@@ -138,23 +147,14 @@ func (r *Registry) Configure(
 			)
 		}
 
-		descriptor := provider.Descriptor()
-		if descriptor.ID != definition.ID ||
-			descriptor.Type != definition.Type {
+		if _, exists := configured[definition.ID]; exists {
 			return fmt.Errorf(
-				"external authentication provider %q returned a mismatched descriptor",
+				"external authentication provider %q is duplicated",
 				definition.ID,
 			)
 		}
 
-		if _, exists := configured[descriptor.ID]; exists {
-			return fmt.Errorf(
-				"external authentication provider %q is duplicated",
-				descriptor.ID,
-			)
-		}
-
-		configured[descriptor.ID] = provider
+		configured[definition.ID] = NewProvider(definition, provider)
 	}
 
 	r.mutex.Lock()
@@ -189,7 +189,8 @@ func (r *Registry) Descriptors() []model.ExternalAuthenticationProvider {
 
 // OperationError exposes a stable classification without allowing provider
 // URLs, authorization codes, tickets, tokens, claims, or response bodies from
-// the wrapped diagnostic error to appear through Error().
+// the wrapped diagnostic error to appear through Error(). Kind is one of the
+// plugin.Err* sentinels.
 type OperationError struct {
 	Kind      error
 	Operation string
@@ -208,25 +209,28 @@ func (e *OperationError) Is(target error) bool {
 	return target == e.Kind || errors.Is(e.Cause, target)
 }
 
+// Rejected classifies cause as plugin.ErrAuthenticationRejected.
 func Rejected(operation string, cause error) error {
 	return &OperationError{
-		Kind:      ErrAuthenticationRejected,
+		Kind:      plugin.ErrAuthenticationRejected,
 		Operation: operation,
 		Cause:     cause,
 	}
 }
 
+// InvalidResponse classifies cause as plugin.ErrInvalidResponse.
 func InvalidResponse(operation string, cause error) error {
 	return &OperationError{
-		Kind:      ErrInvalidResponse,
+		Kind:      plugin.ErrInvalidResponse,
 		Operation: operation,
 		Cause:     cause,
 	}
 }
 
+// Unavailable classifies cause as plugin.ErrProviderUnavailable.
 func Unavailable(operation string, cause error) error {
 	return &OperationError{
-		Kind:      ErrProviderUnavailable,
+		Kind:      plugin.ErrProviderUnavailable,
 		Operation: operation,
 		Cause:     cause,
 	}

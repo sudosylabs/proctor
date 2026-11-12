@@ -108,13 +108,15 @@ func TestProviderAuthorizationCodePKCEAndClaims(t *testing.T) {
 	serverURL = server.URL
 	oidcServer.SetIssuer(server.URL)
 
-	created, err := NewFactory().New(testSettings(server.URL))
+	settings := testSettings(server.URL)
+	created, err := NewFactory().New(settings)
 	require.NoError(t, err)
 	provider := created.(*Provider)
+	bridged := externalauth.NewProvider(settings, provider)
 	state := model.NewCredentialToken()
 	proof := model.NewCredentialToken()
 	callbackURL := "https://proctor.example.edu/api/v1/auth/providers/campus-oidc/callback"
-	challenge, err := provider.Begin(
+	challenge, err := bridged.Begin(
 		context.Background(),
 		externalauth.BeginRequest{
 			CallbackURL: callbackURL, State: state, Proof: proof,
@@ -132,7 +134,7 @@ func TestProviderAuthorizationCodePKCEAndClaims(t *testing.T) {
 	require.Equal(t, oauth2.S256ChallengeFromVerifier(proof), authorizationURL.Query().Get("code_challenge"))
 	require.Equal(t, "S256", authorizationURL.Query().Get("code_challenge_method"))
 	require.NotEmpty(t, nonce)
-	assertion, err := provider.Complete(
+	assertion, err := bridged.Complete(
 		context.Background(),
 		externalauth.CompleteRequest{
 			CallbackURL: callbackURL, State: state, Proof: proof,
@@ -172,20 +174,22 @@ func TestProviderRejectsCallbackAndRedactsExchangeFailure(
 	}))
 	defer server.Close()
 	oidcServer.SetIssuer(server.URL)
-	created, err := NewFactory().New(testSettings(server.URL))
+	settings := testSettings(server.URL)
+	created, err := NewFactory().New(settings)
 	require.NoError(t, err)
 	provider := created.(*Provider)
+	bridged := externalauth.NewProvider(settings, provider)
 	state := model.NewCredentialToken()
 	proof := model.NewCredentialToken()
 	callbackURL := "https://proctor.example.edu/callback"
-	_, err = provider.Begin(
+	_, err = bridged.Begin(
 		context.Background(),
 		externalauth.BeginRequest{
 			CallbackURL: callbackURL, State: state, Proof: proof,
 		},
 	)
 	require.NoError(t, err)
-	_, err = provider.Complete(
+	_, err = bridged.Complete(
 		context.Background(),
 		externalauth.CompleteRequest{
 			CallbackURL: callbackURL, State: state, Proof: proof,
@@ -264,10 +268,11 @@ func TestProviderFreshProofRequiresAuthenticationTimeAfterBoundFlow(t *testing.T
 			created, err := NewFactory().New(settings)
 			require.NoError(t, err)
 			provider := created.(*Provider)
+			bridged := externalauth.NewProvider(settings, provider)
 			provider.now = func() time.Time { return now.Add(500 * time.Millisecond) }
 			state, proof := model.NewCredentialToken(), model.NewCredentialToken()
 			request := externalauth.BeginRequest{CallbackURL: "https://proctor.example.edu/callback", State: state, Proof: proof, FreshAuthentication: true}
-			start, err := provider.Begin(context.Background(), request)
+			start, err := bridged.Begin(context.Background(), request)
 			require.NoError(t, err)
 			u, err := url.Parse(start.RedirectURL)
 			require.NoError(t, err)
@@ -275,7 +280,7 @@ func TestProviderFreshProofRequiresAuthenticationTimeAfterBoundFlow(t *testing.T
 			require.Equal(t, "login", u.Query().Get("prompt"), "fresh OIDC request lacks authenticated freshness constraints")
 			require.Equal(t, "0", u.Query().Get("max_age"), "fresh OIDC request lacks authenticated freshness constraints")
 			require.NotEmpty(t, nonce, "fresh OIDC request lacks authenticated freshness constraints")
-			assertion, err := provider.Complete(context.Background(), externalauth.CompleteRequest{CallbackURL: request.CallbackURL, State: state, Proof: proof, AuthenticationStartedAt: now.Add(100 * time.Millisecond), Callback: model.ExternalAuthenticationCallback{Values: map[string][]string{"state": {state}, "code": {"fresh-code"}}}})
+			assertion, err := bridged.Complete(context.Background(), externalauth.CompleteRequest{CallbackURL: request.CallbackURL, State: state, Proof: proof, AuthenticationStartedAt: now.Add(100 * time.Millisecond), Callback: model.ExternalAuthenticationCallback{Values: map[string][]string{"state": {state}, "code": {"fresh-code"}}}})
 			if test.valid {
 				require.NoError(t, err)
 				require.Equal(t, now.UnixMilli(), assertion.AuthenticatedAt)

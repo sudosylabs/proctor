@@ -175,6 +175,10 @@ var dependencyRules = []dependencyRule{
 		thirdParty: allImports(),
 	},
 	{
+		name:    "plugin contracts",
+		sources: []pathPattern{exact(serverModule + "/plugin")},
+	},
+	{
 		name:    "model build tools",
 		sources: []pathPattern{subtree(serverModule + "/model/internal/idgen")},
 	},
@@ -452,6 +456,7 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app/exam"),
 			exact(serverModule+"/app/user"),
 			exact(serverModule+"/model"),
+			exact(serverModule+"/plugin"),
 			exact(repositoryModule+"/packages/vfs"),
 		),
 		thirdParty: only(
@@ -767,6 +772,7 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/config"),
 			exact(serverModule+"/model"),
 			exact(serverModule+"/platform/externalauth"),
+			exact(serverModule+"/plugin"),
 		),
 		thirdParty: allImports(),
 	},

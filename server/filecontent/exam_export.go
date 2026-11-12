@@ -8,8 +8,6 @@
 package filecontent
 
 import (
-	"archive/zip"
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -18,17 +16,12 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"time"
 
 	"github.com/sudosylabs/proctor/packages/vfs"
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/plugin"
 )
-
-type examExportManifest struct {
-	ExportID model.ExamExportID        `json:"export_id"`
-	Entries  []examExportManifestEntry `json:"entries"`
-}
 
 type uncertainExamExportWrite struct{ cause error }
 
@@ -36,37 +29,18 @@ func (e *uncertainExamExportWrite) Error() string           { return "Exam expor
 func (e *uncertainExamExportWrite) Unwrap() error           { return e.cause }
 func (*uncertainExamExportWrite) ExamExportWriteUncertain() {}
 
-type examExportManifestEntry struct {
-	ArchivePath  string                        `json:"archive_path"`
-	SizeBytes    int64                         `json:"size_bytes"`
-	SHA256       string                        `json:"sha256"`
-	SubmissionID model.SubmissionID            `json:"submission_id,omitempty"`
-	EntryID      model.AttemptWorkspaceEntryID `json:"entry_id,omitempty"`
-	OriginalPath string                        `json:"original_path,omitempty"`
-	MediaType    string                        `json:"media_type,omitempty"`
+// BuildExamExport writes only the pre-registered opaque attempt identity. It
+// verifies every original file while the zip format reads it, closes the ZIP,
+// then reopens and hashes the managed object before returning verified
+// publication metadata.
+func (c *Content) BuildExamExport(ctx context.Context, input exam.ExportArchiveInput) (*exam.ExportArchiveContent, error) {
+	return c.buildExamExport(ctx, input, zipExportFormat{})
 }
 
-const examExportReadme = `Proctor examination export
-
-records.json contains the selected structured records as captured when requested.
-manifest.json lists every data member with its exact byte size and SHA-256 hash.
-The manifest itself is excluded from that list to avoid a circular checksum.
-
-Original files are unchanged. Their ZIP member names use opaque identifiers;
-original workspace paths and empty directories are recorded in records.json.
-Do not execute exported files or render private review text as trusted HTML.
-
-To verify independently, read manifest.json, reject duplicate/unlisted data
-members, and compute the size and SHA-256 of each uncompressed member. Compare
-the complete ZIP SHA-256 with the value supplied by the authenticated export API.
-Hashes detect changes; they are not a digital signature or proof of authorship.
-This format is a portable record archive, not an installation backup or importer.
-`
-
-// BuildExamExport writes only the pre-registered opaque attempt identity. It
-// verifies every original file while copying, closes the ZIP, then reopens and
-// hashes the managed object before returning verified publication metadata.
-func (c *Content) BuildExamExport(ctx context.Context, input exam.ExportArchiveInput) (*exam.ExportArchiveContent, error) {
+// buildExamExport owns everything around format: validation, the work
+// budget, the private spool and its size bound, per-file verification,
+// hashing and storage. format only encodes the archive it is handed.
+func (c *Content) buildExamExport(ctx context.Context, input exam.ExportArchiveInput, format plugin.ExportFormat) (*exam.ExportArchiveContent, error) {
 	if err := c.validateExamExportInput(input); err != nil {
 		return nil, err
 	}
@@ -84,7 +58,7 @@ func (c *Content) BuildExamExport(ctx context.Context, input exam.ExportArchiveI
 
 	defer releaseSpool()
 	bounded := &examExportBoundedWriter{writer: spool, remaining: model.ExamExportMaximumArchiveBytes}
-	if err = c.writeExamExportArchive(ctx, zip.NewWriter(bounded), input); err != nil {
+	if err = c.writeExamExport(ctx, input, format, bounded); err != nil {
 		return nil, err
 	}
 	if _, err = spool.Seek(0, io.SeekStart); err != nil {
@@ -147,76 +121,6 @@ func (c *Content) validateExamExportInput(input exam.ExportArchiveInput) error {
 	return nil
 }
 
-// writeExamExportArchive writes the records, README, verified source files and manifest, then closes the ZIP.
-func (c *Content) writeExamExportArchive(ctx context.Context, archive *zip.Writer, input exam.ExportArchiveInput) error {
-	manifest := examExportManifest{ExportID: input.ExportID, Entries: make([]examExportManifestEntry, 0, len(input.Files)+2)}
-	for _, item := range []struct {
-		name string
-		body []byte
-	}{{"records.json", input.Records}, {"README.txt", []byte(examExportReadme)}} {
-		size, digest, err := writeExamExportMember(ctx, archive, item.name, bytes.NewReader(item.body), int64(len(item.body)))
-		if err != nil {
-			return sanitize("write Exam export records", err)
-		}
-		manifest.Entries = append(manifest.Entries, examExportManifestEntry{ArchivePath: item.name, SizeBytes: size, SHA256: digest})
-	}
-	for _, f := range input.Files {
-		entry, err := c.copyExamExportFile(ctx, archive, f)
-		if err != nil {
-			return err
-		}
-		manifest.Entries = append(manifest.Entries, entry)
-	}
-	encoded, err := json.Marshal(manifest)
-	if err != nil {
-		return sanitize("encode Exam export manifest", err)
-	}
-	if _, _, err = writeExamExportMember(ctx, archive, "manifest.json", bytes.NewReader(encoded), int64(len(encoded))); err != nil {
-		return sanitize("write Exam export manifest", err)
-	}
-	if err = archive.Close(); err != nil {
-		return sanitize("close Exam export archive", err)
-	}
-	return nil
-}
-
-// copyExamExportFile copies one source file into the archive and verifies its size and digest.
-func (c *Content) copyExamExportFile(ctx context.Context, archive *zip.Writer, f exam.ExportArchiveFile) (examExportManifestEntry, error) {
-	var body io.ReadCloser
-	var err error
-	switch f.Entry.StorageOrigin {
-	case model.AttemptWorkspaceStorageStarter:
-		body, err = c.OpenStarterWorkspaceObject(ctx, f.Entry.StarterObjectID)
-	case model.AttemptWorkspaceStorageAttempt:
-		body, err = c.OpenAttemptWorkspaceObject(ctx, f.Entry.AttemptObjectID)
-	default:
-		return examExportManifestEntry{}, errors.New("invalid Exam export storage origin")
-	}
-
-	if err != nil {
-		return examExportManifestEntry{}, sanitize("open Exam export source", err)
-	}
-
-	size, digest, copyErr := writeExamExportMember(ctx, archive, examExportFileMember(f), body, f.Entry.SizeBytes)
-	closeErr := body.Close()
-	if copyErr != nil || closeErr != nil {
-		return examExportManifestEntry{}, sanitize("copy Exam export source", errors.Join(copyErr, closeErr))
-	}
-	if size != f.Entry.SizeBytes || digest != f.Entry.SHA256 {
-		return examExportManifestEntry{}, errors.New("Exam export source verification failed")
-	}
-
-	return examExportManifestEntry{
-		ArchivePath:  examExportFileMember(f),
-		SizeBytes:    size,
-		SHA256:       digest,
-		SubmissionID: f.SubmissionID,
-		EntryID:      f.Entry.EntryID,
-		OriginalPath: f.Entry.Path,
-		MediaType:    f.Entry.MediaType,
-	}, nil
-}
-
 // storeExamExport writes the spooled archive under key and publishes it only after an independent read verifies it.
 func (c *Content) storeExamExport(
 	ctx context.Context,
@@ -264,30 +168,6 @@ func (c *Content) storeExamExport(
 
 func examExportFileMember(f exam.ExportArchiveFile) string {
 	return "files/" + f.SubmissionID.String() + "/" + f.Entry.EntryID.String()
-}
-
-func writeExamExportMember(ctx context.Context, archive *zip.Writer, name string, body io.Reader, expected int64) (int64, string, error) {
-	h := &zip.FileHeader{Name: name, Method: zip.Store, Modified: time.Date(1980, 1, 1, 0, 0, 0, 0, time.UTC)}
-	h.SetMode(0600)
-	member, err := archive.CreateHeader(h)
-	if err != nil {
-		return 0, "", err
-	}
-
-	hash := sha256.New()
-	size, err := io.CopyBuffer(
-		io.MultiWriter(member, hash),
-		io.LimitReader(workReader{ctx: ctx, reader: body}, expected+1),
-		make([]byte, 32<<10),
-	)
-	if err != nil {
-		return 0, "", err
-	}
-	if size != expected {
-		return 0, "", errors.New("Exam export member size mismatch")
-	}
-
-	return size, hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 type examExportBoundedWriter struct {

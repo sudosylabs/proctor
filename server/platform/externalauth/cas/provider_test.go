@@ -58,10 +58,12 @@ func TestProviderLoginAndAuthentication(t *testing.T) {
 	}))
 	defer server.Close()
 
-	created, err := NewFactory().New(testSettings(server.URL + "/cas"))
+	settings := testSettings(server.URL + "/cas")
+	created, err := NewFactory().New(settings)
 	require.NoError(t, err)
 	provider := created.(*Provider)
-	challenge, err := provider.Begin(
+	bridged := externalauth.NewProvider(settings, provider)
+	challenge, err := bridged.Begin(
 		context.Background(),
 		externalauth.BeginRequest{
 			CallbackURL: callbackURL, State: state, Proof: proof,
@@ -72,7 +74,7 @@ func TestProviderLoginAndAuthentication(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "/cas/login", parsed.Path)
 	require.Equal(t, serviceURL, parsed.Query().Get("service"))
-	assertion, err := provider.Complete(
+	assertion, err := bridged.Complete(
 		context.Background(),
 		externalauth.CompleteRequest{
 			CallbackURL: callbackURL, State: state, Proof: proof,
@@ -127,11 +129,13 @@ func TestProviderRejectsFailureAndUnsafeXML(t *testing.T) {
 				_, _ = writer.Write([]byte(test.response))
 			}))
 			defer server.Close()
-			created, err := NewFactory().New(testSettings(server.URL))
+			settings := testSettings(server.URL)
+			created, err := NewFactory().New(settings)
 			require.NoError(t, err)
 			provider := created.(*Provider)
+			bridged := externalauth.NewProvider(settings, provider)
 			state := model.NewCredentialToken()
-			_, err = provider.Complete(
+			_, err = bridged.Complete(
 				context.Background(),
 				completeRequest(state, "ST-ticket"),
 			)
@@ -142,9 +146,11 @@ func TestProviderRejectsFailureAndUnsafeXML(t *testing.T) {
 
 func TestProviderRedactsTicketFromTransportErrors(t *testing.T) {
 	const ticket = "ST-must-not-appear"
-	created, err := NewFactory().New(testSettings("http://127.0.0.1:1"))
+	settings := testSettings("http://127.0.0.1:1")
+	created, err := NewFactory().New(settings)
 	require.NoError(t, err)
 	provider := created.(*Provider)
+	bridged := externalauth.NewProvider(settings, provider)
 	cause := errors.New("transport included " + ticket)
 	provider.client.Transport = roundTripperFunc(func(
 		request *http.Request,
@@ -152,7 +158,7 @@ func TestProviderRedactsTicketFromTransportErrors(t *testing.T) {
 		return nil, errors.New(cause.Error() + " " + request.URL.String())
 	})
 	state := model.NewCredentialToken()
-	_, err = provider.Complete(
+	_, err = bridged.Complete(
 		context.Background(),
 		completeRequest(state, ticket),
 	)
@@ -230,16 +236,17 @@ func TestProviderFreshProofRenewsAtLoginAndValidation(t *testing.T) {
 			created, err := NewFactory().New(settings)
 			require.NoError(t, err)
 			provider := created.(*Provider)
+			bridged := externalauth.NewProvider(settings, provider)
 			now := time.Now()
 			provider.now = func() time.Time { return now }
 			state := model.NewCredentialToken()
 			request := completeRequest(state, "ST-fresh")
 			request.AuthenticationStartedAt = now.Add(-time.Second)
-			start, err := provider.Begin(context.Background(), externalauth.BeginRequest{CallbackURL: request.CallbackURL, State: state, Proof: request.Proof, FreshAuthentication: true})
+			start, err := bridged.Begin(context.Background(), externalauth.BeginRequest{CallbackURL: request.CallbackURL, State: state, Proof: request.Proof, FreshAuthentication: true})
 			require.NoError(t, err)
 			u, _ := url.Parse(start.RedirectURL)
 			require.Equal(t, "true", u.Query().Get("renew"), "CAS login did not request new primary proof")
-			assertion, err := provider.Complete(context.Background(), request)
+			assertion, err := bridged.Complete(context.Background(), request)
 			require.True(t, validated, "ticket was not validated")
 			if reject {
 				require.ErrorIs(t, err, externalauth.ErrAuthenticationRejected)

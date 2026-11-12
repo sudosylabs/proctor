@@ -12,7 +12,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"strconv"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -546,32 +545,6 @@ func (s *Service) checkAcademicAdministrationFilterRow(
 		}
 	}
 	return "", nil
-}
-
-// academicAdministrationFilterRowItem is the one batch item a frozen filter
-// preview row runs as: an ending operation names only the relationship it
-// ends, and every other operation names the User.
-func academicAdministrationFilterRowItem(row store.OnboardingImportRow) AcademicAdministrationBatchItemCommand {
-	item := AcademicAdministrationBatchItemCommand{
-		IdempotencyKey: strconv.Itoa(row.RowNumber),
-		UserID:         row.UserID,
-	}
-	switch AcademicAdministrationBatchOperation(row.Operation) {
-	case AcademicAdministrationAffiliationEnd,
-		AcademicAdministrationAcademicUnitMemberEnd,
-		AcademicAdministrationClassEnd,
-		AcademicAdministrationRoleBindingEnd:
-		item.UserID, item.RelationshipID = "", row.RelationshipID
-	case AcademicAdministrationAffiliationAdd:
-		item.AffiliationKind, item.StartAt, item.EndAt = row.AffiliationKind, row.StartsAt.Millis(), row.EndsAt.Millis()
-	case AcademicAdministrationAcademicUnitMemberAdd:
-		item.StartAt = row.StartsAt.Millis()
-	case AcademicAdministrationClassEnroll:
-		item.StartAt, item.EndAt = row.StartsAt.Millis(), row.EndsAt.Millis()
-	case AcademicAdministrationRoleBindingCreate:
-		item.RoleID, item.StartAt, item.EndAt = row.RoleID, row.StartsAt.Millis(), row.EndsAt.Millis()
-	}
-	return item
 }
 
 // academicAdministrationFilterAuthorizationLost reports whether a resolution

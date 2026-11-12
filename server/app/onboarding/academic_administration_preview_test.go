@@ -255,14 +255,17 @@ func TestAcademicAdministrationFilterRowCheckRefusesWhatThePreviewWouldNotAdmitN
 	require.Error(t, err, "a row is never run without its page guard")
 }
 
-func TestAcademicAdministrationFilterRowItemNamesOnlyWhatTheOperationOwns(t *testing.T) {
+func TestAcademicAdministrationImportRowItemNamesOnlyWhatTheOperationOwns(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
 	userID, relationship, roleID := model.NewUserID(), model.NewID(), model.NewRoleID()
 	row := store.OnboardingImportRow{RowNumber: 7, UserID: userID, RelationshipID: relationship, RoleID: roleID,
 		AffiliationKind: model.AffiliationStaff, StartsAt: model.OptionalTimeFrom(at), EndsAt: model.OptionalTimeFrom(at.Add(time.Hour))}
 	for operation, want := range map[AcademicAdministrationBatchOperation]AcademicAdministrationBatchItemCommand{
-		AcademicAdministrationClassEnd: {IdempotencyKey: "7", RelationshipID: relationship},
+		AcademicAdministrationClassEnd:       {IdempotencyKey: "7", RelationshipID: relationship},
+		AcademicAdministrationAffiliationEnd: {IdempotencyKey: "7", RelationshipID: relationship},
+		AcademicAdministrationClassTransfer: {IdempotencyKey: "7", UserID: userID, RelationshipID: relationship,
+			StartAt: at.UnixMilli(), EndAt: at.Add(time.Hour).UnixMilli()},
 		AcademicAdministrationAffiliationAdd: {IdempotencyKey: "7", UserID: userID, AffiliationKind: model.AffiliationStaff,
 			StartAt: at.UnixMilli(), EndAt: at.Add(time.Hour).UnixMilli()},
 		AcademicAdministrationAcademicUnitMemberAdd: {IdempotencyKey: "7", UserID: userID, StartAt: at.UnixMilli()},
@@ -273,7 +276,7 @@ func TestAcademicAdministrationFilterRowItemNamesOnlyWhatTheOperationOwns(t *tes
 		t.Run(string(operation), func(t *testing.T) {
 			value := row
 			value.Operation = string(operation)
-			item := academicAdministrationFilterRowItem(value)
+			item := academicAdministrationImportRowItem(value)
 			require.Equal(t, want, item)
 			require.NoError(t, validateAcademicAdministrationBatchItem(operation, item))
 		})

@@ -605,6 +605,11 @@ module when a change is not server-only. No module has been released yet.
 
 ### Fixed
 
+- Server: every `affiliation.end`, `academic_unit_member.end`, `class.end`
+  and `role_binding.end` row of an `academic_administration` CSV import
+  failed with `request.invalid` when it executed, because the row's batch
+  item also named the User its relationship resolved to. An ending row now
+  names only the relationship it ends, as a JSON batch item does.
 - Server: mail deliveries required `target_user_id`, but Invitation mail goes
   to an invitee with no account, so a page holding one failed the contract.
   Exactly one of `target_user_id` and the new `target_invitation_id` is now

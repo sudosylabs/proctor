@@ -167,26 +167,10 @@ func (s *Service) executeImportRow(
 	}
 
 	if operation := AcademicAdministrationBatchOperation(row.Operation); operation.IsValid() {
-		relationshipID := row.RelationshipID
 		progression := current != nil &&
 			current.Mode == model.OnboardingImportStudentProgression &&
 			(operation == AcademicAdministrationClassEnroll || operation == AcademicAdministrationClassTransfer)
-		if progression && operation == AcademicAdministrationClassEnroll {
-			relationshipID = ""
-		}
-
-		batchItem := AcademicAdministrationBatchItemCommand{
-			IdempotencyKey:  strconv.Itoa(row.RowNumber),
-			UserID:          row.UserID,
-			RelationshipID:  relationshipID,
-			RoleID:          row.RoleID,
-			AffiliationKind: row.AffiliationKind,
-			StartAt:         row.StartsAt.Millis(),
-			EndAt:           row.EndsAt.Millis(),
-		}
-		if filterMode {
-			batchItem = academicAdministrationFilterRowItem(row)
-		}
+		batchItem := academicAdministrationImportRowItem(row)
 
 		run := func(ctx context.Context, sourceAuditID, destinationAuditID model.AuditEventID) (AcademicAdministrationBatchResult, error) {
 			if progression {
@@ -290,6 +274,37 @@ func (s *Service) executeImportRow(
 	}
 
 	return model.OnboardingImportRowFailed, "", "", item.ErrorCode, nil
+}
+
+// academicAdministrationImportRowItem is the one batch item a frozen
+// academic administration import row runs as, whichever source froze it: a
+// CSV upload, a Student Progression or a filter preview. Each operation names
+// exactly what it owns. An ending operation names only the relationship it
+// ends, although the row also records the User and kind it resolved to, so
+// the item passes the batch's own validation.
+func academicAdministrationImportRowItem(row store.OnboardingImportRow) AcademicAdministrationBatchItemCommand {
+	item := AcademicAdministrationBatchItemCommand{
+		IdempotencyKey: strconv.Itoa(row.RowNumber),
+		UserID:         row.UserID,
+	}
+	switch AcademicAdministrationBatchOperation(row.Operation) {
+	case AcademicAdministrationAffiliationEnd,
+		AcademicAdministrationAcademicUnitMemberEnd,
+		AcademicAdministrationClassEnd,
+		AcademicAdministrationRoleBindingEnd:
+		item.UserID, item.RelationshipID = "", row.RelationshipID
+	case AcademicAdministrationAffiliationAdd:
+		item.AffiliationKind, item.StartAt, item.EndAt = row.AffiliationKind, row.StartsAt.Millis(), row.EndsAt.Millis()
+	case AcademicAdministrationAcademicUnitMemberAdd:
+		item.StartAt = row.StartsAt.Millis()
+	case AcademicAdministrationClassEnroll:
+		item.StartAt, item.EndAt = row.StartsAt.Millis(), row.EndsAt.Millis()
+	case AcademicAdministrationClassTransfer:
+		item.RelationshipID, item.StartAt, item.EndAt = row.RelationshipID, row.StartsAt.Millis(), row.EndsAt.Millis()
+	case AcademicAdministrationRoleBindingCreate:
+		item.RoleID, item.StartAt, item.EndAt = row.RoleID, row.StartsAt.Millis(), row.EndsAt.Millis()
+	}
+	return item
 }
 
 func onboardingImportRetryableError(err error) bool {

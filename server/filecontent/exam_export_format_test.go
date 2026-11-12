@@ -172,7 +172,7 @@ func TestZipExportPluginOffersTheZipFormat(t *testing.T) {
 	t.Parallel()
 
 	manifest := NewZipExportPlugin().Manifest()
-	require.Equal(t, plugin.Manifest{ID: "export.zip", Name: "Zip export", EnabledByDefault: true}, manifest)
+	require.Equal(t, plugin.Manifest{ID: "export.zip", Name: "Zip export", EnabledByDefault: true, Required: true}, manifest)
 	require.NoError(t, manifest.Validate())
 
 	host := &formatRecordingHost{}

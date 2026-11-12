@@ -23,12 +23,14 @@ import (
 // nothing registered later is accepted.
 type Plugin interface {
 	Manifest() Manifest
-	// Activate prepares the plugin and registers what it offers. An error,
-	// or a panic, leaves the plugin failed: what it registered is discarded,
-	// Deactivate is not called, and the server starts without it. Activate
-	// releases anything it acquired before failing.
+	// Activate prepares the plugin and registers what it offers. It must
+	// return when ctx is done. An error, a panic or running past ctx leaves
+	// the plugin failed: what it registered is discarded and the server
+	// starts without it. After an error or a panic, Deactivate is called at
+	// once, so it must cope with a partial activation.
 	Activate(ctx context.Context, host Host) error
-	// Deactivate releases what Activate acquired. It stops when ctx is done.
+	// Deactivate releases what Activate acquired. It must return when ctx is
+	// done.
 	Deactivate(ctx context.Context) error
 }
 
@@ -43,6 +45,10 @@ type Manifest struct {
 	// EnabledByDefault turns the plugin on when the configuration does not
 	// say otherwise.
 	EnabledByDefault bool
+	// Required marks a plugin the server always runs, such as the Exam
+	// export format. Configuration cannot turn it off; if it fails to
+	// activate, the server still starts without it.
+	Required bool
 }
 
 // ErrInvalidManifest is returned by Manifest.Validate.

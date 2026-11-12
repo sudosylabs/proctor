@@ -47,6 +47,7 @@ type fixturePlugin struct {
 	log           *callLog
 	activateErr   error
 	activatePanic bool
+	activateHang  chan struct{}
 	deactivateErr error
 	settings      json.RawMessage
 	deadline      bool
@@ -64,6 +65,9 @@ func (p *fixturePlugin) Activate(ctx context.Context, host plugin.Host) error {
 	}
 	if p.activatePanic {
 		panic("activation exploded")
+	}
+	if p.activateHang != nil {
+		<-p.activateHang
 	}
 	return p.activateErr
 }
@@ -157,8 +161,13 @@ func TestActivateContainsAFailedOrPanickingPlugin(t *testing.T) {
 	}, host.Statuses())
 
 	require.NoError(t, host.Close(context.Background()))
-	// Only the plugin that activated is deactivated.
-	require.Equal(t, []string{"activate:failing", "activate:panicking", "activate:healthy", "deactivate:healthy"}, log.all())
+	// A plugin whose Activate fails or panics is deactivated at once, to
+	// release a partial activation; Close deactivates only the healthy one.
+	require.Equal(t, []string{
+		"activate:failing", "deactivate:failing",
+		"activate:panicking", "deactivate:panicking",
+		"activate:healthy", "deactivate:healthy",
+	}, log.all())
 }
 
 func TestActivateHandsEachPluginItsSettingsAndADeadline(t *testing.T) {
@@ -271,4 +280,98 @@ func TestNilHostClosesWithoutError(t *testing.T) {
 
 	var host *pluginhost.Host
 	require.NoError(t, host.Close(context.Background()))
+}
+
+func TestActivateGivesUpOnAPluginThatDoesNotReturnInTime(t *testing.T) {
+	t.Parallel()
+
+	log := &callLog{}
+	hanging := newFixture(log, "hanging", true)
+	hanging.activateHang = make(chan struct{})
+	t.Cleanup(func() { close(hanging.activateHang) })
+	healthy := newFixture(log, "healthy", true)
+	recorder := &recordingRecorder{}
+	host, err := pluginhost.Activate(context.Background(), pluginhost.Dependencies{
+		Plugins:           []plugin.Plugin{hanging, healthy},
+		Logger:            discardLogger(),
+		ActivationTimeout: 20 * time.Millisecond,
+		Recorder:          recorder,
+	})
+	require.NoError(t, err, "a hung plugin does not hold up the server")
+	require.Equal(t, pluginhost.StateFailed, host.Statuses()[0].State)
+	require.Equal(t, pluginhost.StateActive, host.Statuses()[1].State)
+	require.Contains(t, recorder.calls(), "hanging activate timeout")
+
+	require.NoError(t, host.Close(context.Background()))
+	// A plugin whose Activate may still be running is never deactivated.
+	require.Equal(t, []string{"activate:hanging", "activate:healthy", "deactivate:healthy"}, log.all())
+}
+
+func TestARequiredPluginRunsAndCannotBeTurnedOff(t *testing.T) {
+	t.Parallel()
+
+	log := &callLog{}
+	required := newFixture(log, "required", false)
+	required.manifest.Required = true
+	host, err := pluginhost.Activate(context.Background(), pluginhost.Dependencies{
+		Plugins: []plugin.Plugin{required},
+		Logger:  discardLogger(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, pluginhost.StateActive, host.Statuses()[0].State, "a required plugin runs without being enabled")
+
+	_, err = pluginhost.Activate(context.Background(), pluginhost.Dependencies{
+		Plugins:  []plugin.Plugin{required},
+		Settings: map[string]pluginhost.Settings{"required": {Enable: boolPointer(false)}},
+		Logger:   discardLogger(),
+	})
+	require.EqualError(t, err, `plugin "required" is required and cannot be turned off`)
+}
+
+func TestRecorderSeesEveryCallAndStateChange(t *testing.T) {
+	t.Parallel()
+
+	log := &callLog{}
+	failing := newFixture(log, "failing", true)
+	failing.activateErr = errors.New("no")
+	recorder := &recordingRecorder{}
+	host, err := pluginhost.Activate(context.Background(), pluginhost.Dependencies{
+		Plugins:  []plugin.Plugin{newFixture(log, "off", false), failing, newFixture(log, "on", true)},
+		Logger:   discardLogger(),
+		Recorder: recorder,
+	})
+	require.NoError(t, err)
+	require.NoError(t, host.Close(context.Background()))
+	// Calls and states in the order the host made and saw them.
+	require.Equal(t, []string{
+		"off disabled",
+		"failing activate error", "failing failed", "failing deactivate ok",
+		"on activate ok", "on active",
+		"on deactivate ok",
+	}, recorder.calls())
+}
+
+// recordingRecorder keeps calls as "plugin operation outcome" and states as
+// "plugin state", in order.
+type recordingRecorder struct {
+	mu      sync.Mutex
+	entries []string
+}
+
+func (r *recordingRecorder) PluginCall(pluginID, operation, outcome string, _ time.Duration) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.entries = append(r.entries, pluginID+" "+operation+" "+outcome)
+}
+
+func (r *recordingRecorder) PluginState(pluginID string, state pluginhost.State) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.entries = append(r.entries, pluginID+" "+string(state))
+}
+
+func (r *recordingRecorder) calls() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.entries...)
 }

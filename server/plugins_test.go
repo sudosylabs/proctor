@@ -66,11 +66,12 @@ func TestServerActivatesPluginsWhileBuiltAndDeactivatesThemOnClose(t *testing.T)
 	runtime, err := server.NewForTesting(context.Background(), overrides)
 	require.NoError(t, err, "a plugin that fails to activate does not stop the server")
 	require.Equal(t, []string{"activate"}, healthy.recorded())
-	require.Equal(t, []string{"activate"}, broken.recorded())
+	require.Equal(t, []string{"activate", "deactivate"}, broken.recorded(), "a failed activation is cleaned up at once")
 
 	require.NoError(t, runtime.Server.Close())
 	require.Equal(t, []string{"activate", "deactivate"}, healthy.recorded())
-	require.Equal(t, []string{"activate"}, broken.recorded(), "a plugin that never activated is not deactivated")
+	require.Equal(t, []string{"activate", "deactivate"}, broken.recorded(),
+		"a plugin whose activation failed is deactivated once, at once, and not again on Close")
 }
 
 func TestServerDeactivatesPluginsWhenConstructionFails(t *testing.T) {

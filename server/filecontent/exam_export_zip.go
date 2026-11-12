@@ -58,7 +58,7 @@ This format is a portable record archive, not an installation backup or importer
 const ZipExportMediaType = "application/zip"
 
 // ZipExportPlugin is the built-in export.zip plugin. It offers the zip Exam
-// export format, which every installation needs, so it is on by default.
+// export format, which every installation needs, so it is required.
 type ZipExportPlugin struct{}
 
 // NewZipExportPlugin returns the built-in export.zip plugin.
@@ -66,7 +66,7 @@ func NewZipExportPlugin() ZipExportPlugin { return ZipExportPlugin{} }
 
 // Manifest names the plugin.
 func (ZipExportPlugin) Manifest() plugin.Manifest {
-	return plugin.Manifest{ID: "export.zip", Name: "Zip export", EnabledByDefault: true}
+	return plugin.Manifest{ID: "export.zip", Name: "Zip export", EnabledByDefault: true, Required: true}
 }
 
 // Activate offers the zip Exam export format.

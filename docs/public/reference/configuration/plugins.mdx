@@ -23,7 +23,11 @@ need a restart.
 | --- | --- | --- |
 | The CAS sign-in protocol for [external authentication providers](./authentication.mdx) | `cas` | On |
 | The OpenID Connect sign-in protocol for [external authentication providers](./authentication.mdx) | `oidc` | On |
-| The zip encoding of Exam exports | `export.zip` | On |
+| The zip encoding of Exam exports | `export.zip` | Always on |
+
+`export.zip` is required: setting its `Enable` to `false` stops the server
+from starting. If it fails to start, Exam exports are unavailable and the
+server logs a warning.
 
 When `cas` or `oidc` is turned off or fails, the server still starts. Each
 configured provider of that type is left out of sign-in, and a warning naming
@@ -42,8 +46,8 @@ back. Use `proctor administrator recover` on the host in that case.
 
 ## When a plugin fails
 
-A plugin that fails to start is left out, and the server starts and serves
-without it. After a plugin panics three times, Proctor stops calling it until
+A plugin that fails to start, or does not finish starting within 30 seconds,
+is left out, and the server starts and serves without it. After a plugin panics three times, Proctor stops calling it until
 the next restart. Either way the reason is in the server log, labeled with
 the plugin's ID. Signed-in clients can list the plugins that are active with
 `GET /api/v1/system/plugins`.

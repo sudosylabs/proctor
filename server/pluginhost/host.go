@@ -74,6 +74,9 @@ type Dependencies struct {
 	// ActivationTimeout bounds each Activate and Deactivate call; zero means
 	// DefaultActivationTimeout.
 	ActivationTimeout time.Duration
+	// Recorder receives call outcomes and state changes for metrics. Nil
+	// records nothing.
+	Recorder Recorder
 }
 
 // Status is what the server reports about one plugin.
@@ -101,16 +104,21 @@ type entry struct {
 	manifest plugin.Manifest
 	plugin   plugin.Plugin
 	logger   *slog.Logger
+	recorder Recorder
 
 	mu     sync.Mutex
 	state  State
 	panics int
+	// activated is set once Activate has returned without error; Close then
+	// deactivates the plugin even if it later failed.
+	activated bool
 }
 
 // Activate validates every manifest and setting, then activates each enabled
 // plugin in order. It returns an error only for a mistake in what it was
-// given: an invalid or repeated manifest, or settings for an unknown plugin.
-// A plugin that fails to activate does not fail Activate.
+// given: an invalid or repeated manifest, settings for an unknown plugin, or
+// turning off a required plugin. A plugin that fails to activate does not
+// fail Activate.
 func Activate(ctx context.Context, deps Dependencies) (*Host, error) {
 	if deps.Logger == nil {
 		return nil, errors.New("plugin host logger is required")
@@ -120,6 +128,10 @@ func Activate(ctx context.Context, deps Dependencies) (*Host, error) {
 		timeout = DefaultActivationTimeout
 	}
 
+	recorder := deps.Recorder
+	if recorder == nil {
+		recorder = discardRecorder{}
+	}
 	host := &Host{logger: deps.Logger, timeout: timeout}
 	seen := make(map[string]struct{}, len(deps.Plugins))
 	for _, p := range deps.Plugins {
@@ -138,12 +150,18 @@ func Activate(ctx context.Context, deps Dependencies) (*Host, error) {
 			manifest: manifest,
 			plugin:   p,
 			logger:   deps.Logger.With(slog.String("plugin", manifest.ID)),
+			recorder: recorder,
 			state:    StateDisabled,
 		})
 	}
 	for id := range deps.Settings {
 		if _, known := seen[id]; !known {
 			return nil, fmt.Errorf("plugin settings name %q, which is not compiled in", id)
+		}
+	}
+	for _, e := range host.entries {
+		if enable := deps.Settings[e.manifest.ID].Enable; e.manifest.Required && enable != nil && !*enable {
+			return nil, fmt.Errorf("plugin %q is required and cannot be turned off", e.manifest.ID)
 		}
 	}
 
@@ -153,7 +171,11 @@ func Activate(ctx context.Context, deps Dependencies) (*Host, error) {
 		if settings.Enable != nil {
 			enabled = *settings.Enable
 		}
+		if e.manifest.Required {
+			enabled = true
+		}
 		if !enabled {
+			e.recorder.PluginState(e.manifest.ID, StateDisabled)
 			e.logger.Info("plugin is disabled")
 			continue
 		}
@@ -163,27 +185,36 @@ func Activate(ctx context.Context, deps Dependencies) (*Host, error) {
 }
 
 // activate runs one plugin's Activate under the host's timeout and records
-// the result.
+// the result. When Activate fails or panics, Deactivate runs at once so the
+// plugin can release what it acquired before failing. When Activate does
+// not return in time, it may still be running, so Deactivate is never
+// called for it.
 func (h *Host) activate(ctx context.Context, e *entry, settings json.RawMessage) {
-	activationCtx, cancel := context.WithTimeout(ctx, h.timeout)
-	defer cancel()
-
 	registration := &registrar{host: h, entry: e, settings: settings, open: true}
-	err := e.call("activate", func() error { return e.plugin.Activate(activationCtx, registration) })
+	err := e.callWithin(ctx, h.timeout, "activate", func(bounded context.Context) error {
+		return e.plugin.Activate(bounded, registration)
+	})
 	registration.close()
-	if err != nil {
-		h.discardRegistrations(e)
-	}
-
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if err != nil {
-		e.state = StateFailed
-		e.logger.Error("plugin failed to activate", slog.Any("error", err))
+	if err == nil {
+		e.mu.Lock()
+		e.activated = true
+		e.setState(StateActive)
+		e.mu.Unlock()
+		e.logger.Info("plugin activated")
 		return
 	}
-	e.state = StateActive
-	e.logger.Info("plugin activated")
+
+	h.discardRegistrations(e)
+	e.mu.Lock()
+	e.setState(StateFailed)
+	e.mu.Unlock()
+	e.logger.Error("plugin failed to activate", slog.Any("error", err))
+	if errors.Is(err, ErrTimedOut) {
+		return
+	}
+	if cleanupErr := e.callWithin(ctx, h.timeout, "deactivate", e.plugin.Deactivate); cleanupErr != nil {
+		e.logger.Error("plugin failed to clean up after a failed activation", slog.Any("error", cleanupErr))
+	}
 }
 
 // discardRegistrations forgets what a plugin registered before its
@@ -224,15 +255,13 @@ func (h *Host) Close(ctx context.Context) error {
 // later failed by panicking: it still holds what Activate acquired.
 func (h *Host) deactivate(ctx context.Context, e *entry) error {
 	e.mu.Lock()
-	activated := e.state == StateActive || e.panics >= PanicLimit
+	activated := e.activated
 	e.mu.Unlock()
 	if !activated {
 		return nil
 	}
 
-	deactivationCtx, cancel := context.WithTimeout(ctx, h.timeout)
-	defer cancel()
-	if err := e.call("deactivate", func() error { return e.plugin.Deactivate(deactivationCtx) }); err != nil {
+	if err := e.callWithin(ctx, h.timeout, "deactivate", e.plugin.Deactivate); err != nil {
 		e.logger.Error("plugin failed to deactivate", slog.Any("error", err))
 		return fmt.Errorf("deactivate plugin %q: %w", e.manifest.ID, err)
 	}

@@ -118,6 +118,7 @@ type Catalog interface {
 	Installation() InstallationStore
 	AccessPolicy() AccessPolicyStore
 	DesktopCompatibilityPolicy() DesktopCompatibilityPolicyStore
+	PluginSettings() PluginSettingsStore
 	RetentionPolicy() RetentionPolicyStore
 	Retention() RetentionStore
 	ClusterDiscovery() ClusterDiscoveryStore

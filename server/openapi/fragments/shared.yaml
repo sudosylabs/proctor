@@ -1371,6 +1371,7 @@ components:
         - personal_access_token.disable
         - personal_access_token.enable
         - personal_access_token.revoke
+        - plugin.manage
         - programme.manage
         - programme.view
         - programme_level.manage

@@ -258,6 +258,7 @@ func NewLifecycleStore() *LifecycleStore {
 
 func (s *LifecycleStore) Institution() store.InstitutionStore   { return lifecycleInstitutionStore{} }
 func (s *LifecycleStore) AccessPolicy() store.AccessPolicyStore { return lifecycleAccessPolicyStore{} }
+func (s *LifecycleStore) PluginSettings() store.PluginSettingsStore { return nil }
 func (s *LifecycleStore) DesktopCompatibilityPolicy() store.DesktopCompatibilityPolicyStore {
 	return lifecycleDesktopCompatibilityPolicyStore{}
 }

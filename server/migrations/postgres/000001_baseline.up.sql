@@ -3801,6 +3801,18 @@ CREATE TABLE desktop_compatibility_policies (
         CHECK (institution_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$')
 );
 
+CREATE TABLE plugin_settings (
+    plugin_id varchar(64) PRIMARY KEY CHECK (plugin_id ~ '^[a-z][a-z0-9.-]{0,63}$'),
+    revision bigint NOT NULL CHECK (revision > 0),
+    enabled boolean NOT NULL,
+    settings jsonb NOT NULL CHECK (
+        jsonb_typeof(settings) = 'object' AND
+        octet_length(settings::text) <= 65536
+    ),
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL CHECK (updated_at >= created_at)
+);
+
 CREATE TABLE access_policy_transitions (
     access_policy_id varchar(26) NOT NULL REFERENCES access_policies(id) ON DELETE CASCADE,
     from_revision bigint NOT NULL CHECK (from_revision > 0),

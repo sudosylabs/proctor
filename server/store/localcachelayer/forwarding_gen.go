@@ -116,6 +116,8 @@ type localCacheStores struct {
 	accessPolicyOnce               sync.Once
 	desktopCompatibilityPolicy     store.DesktopCompatibilityPolicyStore
 	desktopCompatibilityPolicyOnce sync.Once
+	pluginSettings                 store.PluginSettingsStore
+	pluginSettingsOnce             sync.Once
 	retentionPolicy                store.RetentionPolicyStore
 	retentionPolicyOnce            sync.Once
 	retention                      store.RetentionStore
@@ -375,6 +377,11 @@ type accessPolicyStore struct {
 
 type desktopCompatibilityPolicyStore struct {
 	store.DesktopCompatibilityPolicyStore
+	layer *Layer
+}
+
+type pluginSettingsStore struct {
+	store.PluginSettingsStore
 	layer *Layer
 }
 
@@ -903,6 +910,16 @@ func (l *Layer) DesktopCompatibilityPolicy() store.DesktopCompatibilityPolicySto
 	return l.stores.desktopCompatibilityPolicy
 }
 
+func (l *Layer) PluginSettings() store.PluginSettingsStore {
+	l.stores.pluginSettingsOnce.Do(func() {
+		next := l.Store.PluginSettings()
+		if next != nil {
+			l.stores.pluginSettings = &pluginSettingsStore{PluginSettingsStore: next, layer: l}
+		}
+	})
+	return l.stores.pluginSettings
+}
+
 func (l *Layer) RetentionPolicy() store.RetentionPolicyStore {
 	l.stores.retentionPolicyOnce.Do(func() {
 		next := l.Store.RetentionPolicy()
@@ -1005,6 +1022,7 @@ var (
 	_ store.InstallationStore               = (*installationStore)(nil)
 	_ store.AccessPolicyStore               = (*accessPolicyStore)(nil)
 	_ store.DesktopCompatibilityPolicyStore = (*desktopCompatibilityPolicyStore)(nil)
+	_ store.PluginSettingsStore             = (*pluginSettingsStore)(nil)
 	_ store.RetentionPolicyStore            = (*retentionPolicyStore)(nil)
 	_ store.RetentionStore                  = (*retentionStore)(nil)
 	_ store.ClusterDiscoveryStore           = (*clusterDiscoveryStore)(nil)

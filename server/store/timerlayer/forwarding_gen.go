@@ -119,6 +119,8 @@ type timedStores struct {
 	accessPolicyOnce               sync.Once
 	desktopCompatibilityPolicy     store.DesktopCompatibilityPolicyStore
 	desktopCompatibilityPolicyOnce sync.Once
+	pluginSettings                 store.PluginSettingsStore
+	pluginSettingsOnce             sync.Once
 	retentionPolicy                store.RetentionPolicyStore
 	retentionPolicyOnce            sync.Once
 	retention                      store.RetentionStore
@@ -379,6 +381,11 @@ type timedAccessPolicyStore struct {
 type timedDesktopCompatibilityPolicyStore struct {
 	layer *Layer
 	next  store.DesktopCompatibilityPolicyStore
+}
+
+type timedPluginSettingsStore struct {
+	layer *Layer
+	next  store.PluginSettingsStore
 }
 
 type timedRetentionPolicyStore struct {
@@ -904,6 +911,16 @@ func (l *Layer) DesktopCompatibilityPolicy() store.DesktopCompatibilityPolicySto
 		}
 	})
 	return l.stores.desktopCompatibilityPolicy
+}
+
+func (l *Layer) PluginSettings() store.PluginSettingsStore {
+	l.stores.pluginSettingsOnce.Do(func() {
+		next := l.next.PluginSettings()
+		if next != nil {
+			l.stores.pluginSettings = &timedPluginSettingsStore{layer: l, next: next}
+		}
+	})
+	return l.stores.pluginSettings
 }
 
 func (l *Layer) RetentionPolicy() store.RetentionPolicyStore {
@@ -3884,6 +3901,24 @@ func (s *timedDesktopCompatibilityPolicyStore) Replace(arg0 context.Context, arg
 	})
 }
 
+func (s *timedPluginSettingsStore) List(arg0 context.Context) ([]*model.PluginSettings, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregatePluginSettings, methodList), func(callCtx context.Context) ([]*model.PluginSettings, error) {
+		return s.next.List(callCtx)
+	})
+}
+
+func (s *timedPluginSettingsStore) ChangeCount(arg0 context.Context) (int64, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregatePluginSettings, methodChangeCount), func(callCtx context.Context) (int64, error) {
+		return s.next.ChangeCount(callCtx)
+	})
+}
+
+func (s *timedPluginSettingsStore) Replace(arg0 context.Context, arg1 *store.PluginSettingsReplacement, arg2 *store.CommandIdempotency) (*store.PluginSettingsReplacementResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregatePluginSettings, methodReplace), func(callCtx context.Context) (*store.PluginSettingsReplacementResult, error) {
+		return s.next.Replace(callCtx, arg1, arg2)
+	})
+}
+
 func (s *timedRetentionPolicyStore) Get(arg0 context.Context) (*model.RetentionPolicy, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRetentionPolicy, methodGet), func(callCtx context.Context) (*model.RetentionPolicy, error) {
 		return s.next.Get(callCtx)
@@ -4080,6 +4115,7 @@ var (
 	_ store.InstallationStore               = (*timedInstallationStore)(nil)
 	_ store.AccessPolicyStore               = (*timedAccessPolicyStore)(nil)
 	_ store.DesktopCompatibilityPolicyStore = (*timedDesktopCompatibilityPolicyStore)(nil)
+	_ store.PluginSettingsStore             = (*timedPluginSettingsStore)(nil)
 	_ store.RetentionPolicyStore            = (*timedRetentionPolicyStore)(nil)
 	_ store.RetentionStore                  = (*timedRetentionStore)(nil)
 	_ store.ClusterDiscoveryStore           = (*timedClusterDiscoveryStore)(nil)

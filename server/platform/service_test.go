@@ -406,6 +406,7 @@ func TestAcceptRejectsClosedConfigurationListenerRegistration(t *testing.T) {
 
 func (testStore) Institution() store.InstitutionStore   { return nil }
 func (testStore) AccessPolicy() store.AccessPolicyStore { return nil }
+func (testStore) PluginSettings() store.PluginSettingsStore { return nil }
 func (testStore) DesktopCompatibilityPolicy() store.DesktopCompatibilityPolicyStore {
 	return nil
 }

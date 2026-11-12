@@ -18,6 +18,7 @@ import (
 	"github.com/sudosylabs/proctor/packages/vfs"
 	"github.com/sudosylabs/proctor/server/cluster"
 	"github.com/sudosylabs/proctor/server/config"
+	"github.com/sudosylabs/proctor/server/httpapi"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/platform"
@@ -285,4 +286,23 @@ func TestRootSelectsConfiguredSMTPVFSAndIdentityAdapters(t *testing.T) {
 	}
 	require.NoError(t, providers.Configure(external))
 	require.Len(t, providers.Descriptors(), 2)
+}
+
+func TestActivePluginSummariesListOnlyActivePlugins(t *testing.T) {
+	t.Parallel()
+
+	logger, err := logging.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = logger.Shutdown() })
+	disabled := false
+	settings := config.Default()
+	settings.Plugins = map[string]config.Plugin{"cas": {Enable: &disabled}}
+	plugins, err := activatePlugins(context.Background(), settings, logger, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = plugins.Close(context.Background()) })
+
+	require.Equal(t, []httpapi.PluginSummary{
+		{ID: "oidc", Name: "OpenID Connect"},
+		{ID: "export.zip", Name: "Zip export"},
+	}, activePluginSummaries(plugins)(), "the disabled CAS plugin is not listed")
 }

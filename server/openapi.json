@@ -6114,6 +6114,37 @@
           }
         }
       },
+      "SystemPluginsOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "items": [
+                {
+                  "id": "cas",
+                  "name": "CAS"
+                },
+                {
+                  "id": "oidc",
+                  "name": "OpenID Connect"
+                },
+                {
+                  "id": "export.zip",
+                  "name": "Zip export"
+                }
+              ]
+            },
+            "schema": {
+              "$ref": "#/components/schemas/SystemPluginsResponse"
+            }
+          }
+        },
+        "description": "The active plugins",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
       "TooManyRequests": {
         "content": {
           "application/problem+json": {
@@ -26435,6 +26466,47 @@
           "reason",
           "compatibility",
           "compatibility_reason"
+        ],
+        "type": "object"
+      },
+      "SystemPlugin": {
+        "additionalProperties": false,
+        "description": "One active plugin.",
+        "properties": {
+          "id": {
+            "description": "Stable plugin identifier, also its key in the Plugins configuration section.",
+            "pattern": "^[a-z][a-z0-9.-]{0,63}$",
+            "type": "string"
+          },
+          "name": {
+            "description": "Short human-readable plugin name.",
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
+      "SystemPluginsResponse": {
+        "additionalProperties": false,
+        "description": "One page of the active plugins, ordered by name.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SystemPlugin"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "$ref": "#/components/schemas/NextCursor"
+          }
+        },
+        "required": [
+          "items"
         ],
         "type": "object"
       },
@@ -48927,6 +48999,64 @@
           "request.invalid",
           "desktop_compatibility_policy.revision_conflict",
           "desktop_compatibility_policy.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/system/plugins": {
+      "get": {
+        "description": "Lists the optional features compiled into the server that are active on the serving node, ordered by name, so a client can show only what this server supports. A plugin that is turned off, failed to activate, or has since failed is not listed. The response carries no plugin settings or diagnostics.",
+        "operationId": "listActiveSystemPlugins",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageCursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SystemPluginsOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List the plugins active on this server",
+        "tags": [
+          "System"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
         ],
         "x-proctor-idempotency": "none"
       }

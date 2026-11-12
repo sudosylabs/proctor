@@ -84,6 +84,8 @@ var openAPIDTOs = map[string]reflect.Type{
 	"BrowserReceiptPage":                             reflect.TypeOf(route.List[model.BrowserEventReceipt]{}),
 	"BrowserSourceStatus":                            reflect.TypeOf(model.BrowserSourceStatus{}),
 	"BuildInfoResponse":                              reflect.TypeOf(BuildInfo{}),
+	"SystemPluginsResponse":                          reflect.TypeOf(route.List[PluginSummary]{}),
+	"SystemPlugin":                                   reflect.TypeOf(PluginSummary{}),
 	"CancelExamSittingRequest":                       reflect.TypeOf(cancelExamSittingRequest{}),
 	"CandidateAttemptConfiguration":                  reflect.TypeOf(candidateAttemptConfigurationResponse{}),
 	"CandidateBrowserPolicy":                         reflect.TypeOf(candidateBrowserPolicyResponse{}),

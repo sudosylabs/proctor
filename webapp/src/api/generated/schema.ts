@@ -4947,6 +4947,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/system/plugins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the plugins active on this server
+         * @description Lists the optional features compiled into the server that are active on the serving node, ordered by name, so a client can show only what this server supports. A plugin that is turned off, failed to activate, or has since failed is not listed. The response carries no plugin settings or diagnostics.
+         */
+        get: operations["listActiveSystemPlugins"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/system/version": {
         parameters: {
             query?: never;
@@ -11224,6 +11244,18 @@ export interface components {
              */
             server_time: string;
         };
+        /** @description One active plugin. */
+        SystemPlugin: {
+            /** @description Stable plugin identifier, also its key in the Plugins configuration section. */
+            id: string;
+            /** @description Short human-readable plugin name. */
+            name: string;
+        };
+        /** @description One page of the active plugins, ordered by name. */
+        SystemPluginsResponse: {
+            items: components["schemas"]["SystemPlugin"][];
+            next_cursor?: components["schemas"]["NextCursor"];
+        };
         /** @description Existing Review identity and exact revision for a terminal transition. */
         TerminalExamIntegrityReviewRequest: {
             /** Format: int64 */
@@ -14301,6 +14333,34 @@ export interface components {
                  *     }
                  */
                 "application/json": components["schemas"]["SystemPingResponse"];
+            };
+        };
+        /** @description The active plugins */
+        SystemPluginsOK: {
+            headers: {
+                "Cache-Control": components["headers"]["NoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "items": [
+                 *         {
+                 *           "id": "cas",
+                 *           "name": "CAS"
+                 *         },
+                 *         {
+                 *           "id": "oidc",
+                 *           "name": "OpenID Connect"
+                 *         },
+                 *         {
+                 *           "id": "export.zip",
+                 *           "name": "Zip export"
+                 *         }
+                 *       ]
+                 *     }
+                 */
+                "application/json": components["schemas"]["SystemPluginsResponse"];
             };
         };
         /** @description Rate limited */
@@ -22643,6 +22703,27 @@ export interface operations {
             200: components["responses"]["SystemPingOK"];
             400: components["responses"]["BadRequest"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    listActiveSystemPlugins: {
+        parameters: {
+            query?: {
+                /** @description Maximum number of items in the page. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Opaque next_cursor from the previous page, returned unchanged; omit it for the first page. */
+                cursor?: components["parameters"]["PageCursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["SystemPluginsOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };
     };

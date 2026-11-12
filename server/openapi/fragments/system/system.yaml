@@ -89,6 +89,43 @@ paths:
       responses:
         "200":
           $ref: '#/components/responses/BuildInfoOK'
+  /api/v1/system/plugins:
+    get:
+      operationId: listActiveSystemPlugins
+      summary: List the plugins active on this server
+      tags:
+        - System
+      description: >-
+        Lists the optional features compiled into the server that are active on the serving node, ordered by name, so a client can show only what this server supports. A plugin that is turned off, failed to activate, or has since failed is not listed. The response carries no plugin settings or diagnostics.
+      parameters:
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - request.invalid
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      responses:
+        "200":
+          $ref: '#/components/responses/SystemPluginsOK'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "500":
+          $ref: '#/components/responses/InternalError'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
 components:
   responses:
     SystemPingOK:
@@ -107,6 +144,23 @@ components:
             reason: ready
             compatibility: unsupported_target
             compatibility_reason: unsupported_target
+    SystemPluginsOK:
+      description: The active plugins
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SystemPluginsResponse'
+          example:
+            items:
+              - id: cas
+                name: CAS
+              - id: oidc
+                name: OpenID Connect
+              - id: export.zip
+                name: Zip export
     BuildInfoOK:
       description: Build information
       content:
@@ -186,6 +240,36 @@ components:
         maximum_realtime_protocol:
           type: integer
           minimum: 1
+    SystemPluginsResponse:
+      description: One page of the active plugins, ordered by name.
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SystemPlugin'
+        next_cursor:
+          $ref: '#/components/schemas/NextCursor'
+    SystemPlugin:
+      description: One active plugin.
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+          description: Stable plugin identifier, also its key in the Plugins configuration section.
+          pattern: '^[a-z][a-z0-9.-]{0,63}$'
+        name:
+          type: string
+          description: Short human-readable plugin name.
+          minLength: 1
+          maxLength: 128
     BuildInfoResponse:
       description: Public build provenance for the serving Proctor binary.
       type: object

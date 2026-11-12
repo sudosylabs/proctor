@@ -396,6 +396,7 @@ func httpAPISettings(
 		Metrics:                 httpMetrics,
 		Tracing:                 httpTracer,
 		BuildInfo:               buildInfo,
+		ActivePlugins:           activePluginSummaries(capabilities.plugins),
 		PublicURL:               snapshot.Server.PublicURL,
 		MaxBodyBytes:            snapshot.Server.MaxBodyBytes,
 		ReadTimeout:             snapshot.Server.ReadTimeout.Duration,

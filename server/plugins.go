@@ -13,6 +13,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/filecontent"
+	"github.com/sudosylabs/proctor/server/httpapi"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/platform/externalauth/cas"
 	"github.com/sudosylabs/proctor/server/platform/externalauth/oidc"
@@ -53,4 +54,18 @@ func activatePlugins(
 		return nil, fmt.Errorf("activate plugins: %w", err)
 	}
 	return host, nil
+}
+
+// activePluginSummaries lists the plugins active at the moment of each call,
+// so a plugin that fails while serving drops out of the list.
+func activePluginSummaries(host *pluginhost.Host) httpapi.ActivePlugins {
+	return func() []httpapi.PluginSummary {
+		var summaries []httpapi.PluginSummary
+		for _, status := range host.Statuses() {
+			if status.State == pluginhost.StateActive {
+				summaries = append(summaries, httpapi.PluginSummary{ID: status.ID, Name: status.Name})
+			}
+		}
+		return summaries
+	}
 }

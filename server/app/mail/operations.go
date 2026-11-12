@@ -56,14 +56,19 @@ type DeliveryPage struct {
 	paging.Total
 }
 
+// ListDeliveriesQuery lists deliveries newest first by Order's instant (last
+// update when Order is empty), or oldest first when Ascending; BeforeAt and
+// BeforeID continue past the previous page's last delivery in that order.
 type ListDeliveriesQuery struct {
-	States          []model.MailDeliveryState
-	TemplateKeys    []model.MailTemplateKey
-	CreatedAfter    time.Time
-	CreatedBefore   time.Time
-	BeforeCreatedAt time.Time
-	BeforeID        model.MailDeliveryID
-	Limit           int
+	States        []model.MailDeliveryState
+	TemplateKeys  []model.MailTemplateKey
+	CreatedAfter  time.Time
+	CreatedBefore time.Time
+	Order         store.MailDeliveryOrder
+	Ascending     bool
+	BeforeAt      time.Time
+	BeforeID      model.MailDeliveryID
+	Limit         int
 }
 
 // InstitutionAuthorization authorizes a mail operator Action on the singleton
@@ -317,18 +322,24 @@ func (s *Operations) ListMailDeliveries(
 	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, inv, model.ActionMailView); err != nil {
 		return DeliveryPage{}, err
 	}
-	if query.Limit < 1 || query.Limit > paging.MaximumLimit {
+	order := query.Order
+	if order == "" {
+		order = store.MailDeliveryOrderUpdated
+	}
+	if query.Limit < 1 || query.Limit > paging.MaximumLimit || !order.IsValid() {
 		return DeliveryPage{}, apperror.New("mail.query.invalid")
 	}
 
 	options := store.MailDeliveryListOptions{
-		States:          query.States,
-		TemplateKeys:    query.TemplateKeys,
-		CreatedAfter:    query.CreatedAfter,
-		CreatedBefore:   query.CreatedBefore,
-		BeforeCreatedAt: query.BeforeCreatedAt,
-		BeforeID:        query.BeforeID,
-		Limit:           query.Limit + 1,
+		States:        query.States,
+		TemplateKeys:  query.TemplateKeys,
+		CreatedAfter:  query.CreatedAfter,
+		CreatedBefore: query.CreatedBefore,
+		Order:         order,
+		Ascending:     query.Ascending,
+		BeforeAt:      query.BeforeAt,
+		BeforeID:      query.BeforeID,
+		Limit:         query.Limit + 1,
 	}
 	deliveries, err := s.deps.Mail.ListDeliveries(ctx, options)
 	if err != nil {

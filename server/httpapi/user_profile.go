@@ -703,12 +703,26 @@ func (h userProfileHandlers) search(request route.Request) (route.Result, error)
 		return route.Result{}, route.InvalidRequest(err)
 	}
 
-	query := user.SearchUsersQuery{Query: request.HTTP.URL.Query().Get("q"), Limit: requested.Limit, IncludeDisabled: includeDisabled}
+	order, err := parseListOrder(request.HTTP.URL.Query(), userDirectorySorts, listAscending)
+	if err != nil {
+		return route.Result{}, err
+	}
+
+	query := user.SearchUsersQuery{
+		Query:           request.HTTP.URL.Query().Get("q"),
+		Order:           store.UserOrder(order.Sort),
+		Descending:      order.Descending(),
+		Limit:           requested.Limit,
+		IncludeDisabled: includeDisabled,
+	}
 	if query.Affiliations, query.AcademicUnitID, err = userDirectoryFilters(request.HTTP.URL.Query()); err != nil {
 		return route.Result{}, err
 	}
 	if present {
-		query.AfterUsername, query.AfterID = cursor.Username, model.UserID(cursor.ID)
+		if !order.continues(cursor.Sort, cursor.Dir) {
+			return route.Result{}, route.InvalidRequest(errors.New("cursor belongs to another order"))
+		}
+		cursor.continueQuery(&query)
 	}
 
 	page, err := h.profiles.SearchUsers(request.Context, request.Invocation(), query)
@@ -721,7 +735,7 @@ func (h userProfileHandlers) search(request route.Request) (route.Result, error)
 		page.HasMore,
 		userDirectoryEntryResponseFromApplication,
 		func(last user.UserDirectoryEntry) (string, error) {
-			return route.EncodeCursor(userDirectoryCursor{Username: last.User.Username, ID: last.User.ID.String()}, userDirectoryCursorSpec())
+			return route.EncodeCursor(newUserDirectoryCursor(order, last.User), userDirectoryCursorSpec())
 		},
 	)
 	if err != nil {
@@ -801,25 +815,87 @@ func userDirectoryFilters(values url.Values) ([]model.AffiliationKind, model.Aca
 	return kinds, unitID, nil
 }
 
-// userDirectoryCursor continues the User directory ordered by username then
-// identity.
+// userDirectorySorts is the User directory's closed sort set; username, the
+// default, keeps the directory's historical order.
+var userDirectorySorts = []string{
+	string(store.UserOrderUsername),
+	string(store.UserOrderName),
+	string(store.UserOrderCreated),
+	string(store.UserOrderLastActive),
+}
+
+// userDirectoryCursor continues the User directory in one order. Key is the
+// last User's key in that order: the username, or the RFC 3339 creation or
+// last-activity instant; it is empty for the name order, which the Store
+// resumes from the User itself, and for a User who was never active.
 type userDirectoryCursor struct {
-	Username string `json:"username"`
-	ID       string `json:"id"`
+	Sort string `json:"sort"`
+	Dir  string `json:"dir"`
+	Key  string `json:"key,omitempty"`
+	ID   string `json:"id"`
+}
+
+func newUserDirectoryCursor(order listOrder, last *model.User) userDirectoryCursor {
+	cursor := userDirectoryCursor{Sort: order.Sort, Dir: order.Dir, ID: last.ID.String()}
+	switch store.UserOrder(order.Sort) {
+	case store.UserOrderUsername:
+		cursor.Key = last.Username
+	case store.UserOrderCreated:
+		cursor.Key = model.FormatRFC3339(last.CreatedAt)
+	case store.UserOrderLastActive:
+		cursor.Key = last.LastActivityAt.FormatRFC3339()
+	}
+	return cursor
+}
+
+// continueQuery sets the query's keyset from a validated cursor.
+func (c userDirectoryCursor) continueQuery(query *user.SearchUsersQuery) {
+	query.AfterID = model.UserID(c.ID)
+	switch store.UserOrder(c.Sort) {
+	case store.UserOrderUsername:
+		query.AfterUsername = c.Key
+	case store.UserOrderCreated:
+		query.AfterCreatedAt, _ = model.ParseRFC3339(c.Key)
+	case store.UserOrderLastActive:
+		if c.Key != "" {
+			at, _ := model.ParseRFC3339(c.Key)
+			query.AfterLastActivityAt = model.OptionalTimeFrom(at)
+		}
+	}
 }
 
 func userDirectoryCursorSpec() route.CursorSpec[userDirectoryCursor] {
 	return route.CursorSpec[userDirectoryCursor]{
 		Label:                "User directory",
 		MaximumEncodedLength: route.DefaultMaximumCursorLength,
-		Members:              []string{"username", "id"},
+		Members:              []string{"sort", "dir", "key", "id"},
 		Validate: func(cursor userDirectoryCursor) error {
-			if cursor.Username == "" || len(cursor.Username) > 64 || !model.UserID(cursor.ID).IsValid() {
+			if !validListDirection(cursor.Dir) || !model.UserID(cursor.ID).IsValid() || !validUserDirectoryKey(cursor.Sort, cursor.Key) {
 				return errors.New("invalid User directory keyset")
 			}
 			return nil
 		},
 	}
+}
+
+// validUserDirectoryKey reports whether key is a well-formed key of sort.
+func validUserDirectoryKey(sort, key string) bool {
+	switch store.UserOrder(sort) {
+	case store.UserOrderUsername:
+		return key != "" && len(key) <= 64
+	case store.UserOrderName:
+		return key == ""
+	case store.UserOrderCreated:
+		at, err := model.ParseRFC3339(key)
+		return err == nil && !at.IsZero()
+	case store.UserOrderLastActive:
+		if key == "" {
+			return true
+		}
+		at, err := model.ParseRFC3339(key)
+		return err == nil && !at.IsZero()
+	}
+	return false
 }
 
 func (h userProfileHandlers) current(request route.Request) (route.Result, error) {

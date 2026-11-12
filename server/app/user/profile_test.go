@@ -435,3 +435,41 @@ func TestUserSearchCountsThroughTheListedOptions(t *testing.T) {
 	// Contract: global search composes the uncounted directory read.
 	require.Equal(t, []string{"authorize-search", "list-users"}, events)
 }
+
+// TestUserSearchSortsByLastActivityOnlyForInstitutionWideViewers pins the
+// privacy rule of the last_active order: account activity is shown only to
+// Institution-wide user.view, so a scoped viewer can neither read the order
+// nor infer it, while the other orders reach persistence unchanged.
+func TestUserSearchSortsByLastActivityOnlyForInstitutionWideViewers(t *testing.T) {
+	t.Parallel()
+	scoped := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{model.NewAcademicUnitID()}, ActiveAt: model.TimeFromMillis(100)}
+	for _, test := range []struct {
+		name    string
+		scope   store.UserVisibilityScope
+		order   store.UserOrder
+		allowed bool
+	}{
+		{name: "scoped last active", scope: scoped, order: store.UserOrderLastActive},
+		{name: "scoped class members last active", scope: store.UserVisibilityScope{ClassMemberInstitutionWide: true, ActiveAt: model.TimeFromMillis(100)}, order: store.UserOrderLastActive},
+		{name: "scoped name", scope: scoped, order: store.UserOrderName, allowed: true},
+		{name: "scoped created", scope: scoped, order: store.UserOrderCreated, allowed: true},
+		{name: "institution last active", scope: store.UserVisibilityScope{InstitutionWide: true}, order: store.UserOrderLastActive, allowed: true},
+		{name: "unknown order", scope: store.UserVisibilityScope{InstitutionWide: true}, order: "email"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			events := []string{}
+			persistence := &userStoreFake{events: &events}
+			service := newProfileService(persistence, nil, &authorizerFake{events: &events, searchScope: test.scope}, &profilePictureAuditorFake{events: &events}, time.Now)
+			_, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{Limit: 10, Order: test.order, Descending: true})
+			if !test.allowed {
+				require.True(t, apperror.Is(err, "request.invalid"), "%s: %v", test.name, err)
+				require.Equal(t, []string{"authorize-search"}, events, "a refused order reads nothing")
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, test.order, persistence.listOptions.Order)
+			require.True(t, persistence.listOptions.Descending)
+		})
+	}
+}

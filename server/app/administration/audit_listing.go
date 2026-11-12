@@ -28,7 +28,10 @@ type ListAuditEventsQuery struct {
 	// precede Until.
 	Since time.Time
 	Until time.Time
-	// BeforeCreatedAt and BeforeID continue a page at microsecond precision.
+	// Ascending reads oldest first; the default is newest first.
+	Ascending bool
+	// BeforeCreatedAt and BeforeID continue a page at microsecond precision,
+	// past the previous page's last event in the read order.
 	BeforeCreatedAt time.Time
 	BeforeID        model.AuditEventID
 	Limit           int
@@ -71,6 +74,7 @@ func (s *Service) ListAuditEvents(
 		Resource:        query.Resource,
 		Since:           query.Since,
 		Until:           query.Until,
+		Ascending:       query.Ascending,
 		BeforeCreatedAt: query.BeforeCreatedAt,
 		BeforeID:        query.BeforeID,
 		Limit:           query.Limit + 1,

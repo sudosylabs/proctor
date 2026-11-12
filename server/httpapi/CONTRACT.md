@@ -572,6 +572,12 @@ no `user.manage`, account-disable, credential, MFA, external-provider, or
 settings authority. Disabled Users are absent from scoped search, exact-profile,
 and profile-picture reads; `include_disabled=true` is honored only for
 institution-wide visibility and therefore cannot reveal scoped disablement.
+The directory orders by `sort=username|name|created|last_active` (default
+`username`) and `dir=asc|desc`. `name` is the stored `users.sort_name`: the
+display name, else the username, lower-cased and cut to 64 characters.
+`last_active` orders by `last_activity_at`, which only the User and
+institution-wide `user.view` can read, so any other caller is refused with
+`request.invalid` rather than given an order that would reveal it.
 
 Generic User-profile PATCH cannot mutate the email address or verification
 state. `PUT /api/v1/users/{user_id}/email` is the explicit strong, recent
@@ -913,11 +919,16 @@ fences the mutation atomically. Conflicts use each resource's existing
 `*.conflict` code; a stale editor cannot update or archive newer state.
 
 Academic Unit Member and Class Member collections page like every other
-collection, ordered by the immutable `(user_id, id)` tuple. Every page freshly
-authorizes the scope. Its bounded cursor fixes scope and effective time/history
-filters; omitted filters inherit the cursor, while conflicting values are
-rejected. Paged `history=true` cannot be combined with `active_at`. Results
-remain a live view, not a retained database snapshot.
+collection, ordered by `sort` and `dir`: the membership start by default
+(`enrolled` for a Class, `since` for an Academic Unit) or the member's
+`name` (`users.sort_name`), each then by membership ID, ascending unless
+`dir=desc`. The first page carries the bounded `total` of the scope and
+effective filter. Every page freshly authorizes the scope. Its bounded cursor
+fixes scope, effective time/history filters, and the order; omitted filters
+inherit the cursor, while conflicting values, and any other sort or direction,
+are rejected. Paged `history=true` cannot be combined with `active_at`.
+Results remain a live view, not a retained database snapshot; a name page
+resumes from its last member's current name.
 
 ## Collections
 
@@ -939,11 +950,28 @@ only, paired with `total_is_lower_bound`, when its count runs through the same
 visibility and filters as the list and stops at a fixed bound (10,000): the
 Store counts with the list's own filter builder, ignoring only the keyset,
 order, and limit, so a total can never count rows the caller could not page
-to. The User directory, Invitations, Jobs, audit Events, mail deliveries, and
-the User's own account history count this way; the account history also adds
-`order=asc` so the end of the history is one read away. A total never comes
-with offset paging. `TestOpenAPIListOperationsUseOneEnvelope` enforces the
-idiom over the reviewed OpenAPI document.
+to. The User directory, Invitations, Jobs, audit Events, mail deliveries,
+Academic Unit and Class members, Role Bindings, the Programmes, Classes, and
+Programme Levels of an academic listing, and the User's own account history
+count this way; a collection the application returns whole (Role Bindings)
+counts its length with the same bound. A total never comes with offset paging.
+`TestOpenAPIListOperationsUseOneEnvelope` enforces the idiom over the reviewed
+OpenAPI document.
+
+A collection that offers a choice of order takes it from a closed key set,
+each key backed by an index (or, for a member's name, a bounded per-scope
+sort) and broken by identity: `sort=<key>` plus `dir=asc|desc`, or, where
+creation time is the only key (account history, audit Events, Jobs,
+onboarding imports), `order=asc|desc`. The User directory sorts by username,
+name, creation, or last activity; members by start or name; mail deliveries
+by last update (the default, newest first) or creation; the Classes of a
+unit or Programme Level take `dir` on their name order. No collection sorts by
+a count that changes while it is paged: a Class listing instead carries each
+Class's bounded `student_count` (with `student_count_is_lower_bound`) for a
+caller holding `class.members.view` on the listing's scope, read in one
+grouped count per page. Every cursor records its sort and direction, and a
+cursor presented under another sort or direction is `request.invalid`; an
+omitted parameter means its default, not the cursor's value.
 
 `GET /api/v1/administration/counts` is not a collection. It answers bounded
 navigation counts (pending Invitations, recently failed Jobs, failed mail

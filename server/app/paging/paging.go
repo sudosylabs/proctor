@@ -34,10 +34,12 @@ type Page[T any] struct {
 
 // NameQuery continues a listing ordered by name then identity: AfterName
 // and AfterID are the last item of the previous page, both set or both empty.
+// Descending reverses the order for a listing that offers it.
 type NameQuery struct {
-	AfterName string
-	AfterID   string
-	Limit     int
+	AfterName  string
+	AfterID    string
+	Descending bool
+	Limit      int
 }
 
 // Total is a counted collection's first-page total. A page read without a
@@ -73,6 +75,14 @@ func CountFirst(first bool, items int, count func(maximum int) (int, error)) (To
 		return Total{}, false, nil
 	}
 	return Total{Counted: true, Total: total, TotalIsLowerBound: total == store.MaximumListCount}, true, nil
+}
+
+// CountWhole is the first-page total of a collection the application
+// returns whole: its length, stopped at store.MaximumListCount and then a
+// lower bound, as CountFirst reports a Store count.
+func CountWhole(items int) Total {
+	total := min(items, store.MaximumListCount)
+	return Total{Counted: true, Total: total, TotalIsLowerBound: total == store.MaximumListCount}
 }
 
 // ResolveLimit validates a requested page size and returns it with the

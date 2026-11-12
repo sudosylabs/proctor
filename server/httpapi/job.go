@@ -78,9 +78,13 @@ type jobAttemptListResponse struct {
 	Items      []jobAttemptResponse `json:"items"`
 	NextCursor string               `json:"next_cursor,omitempty"`
 }
+
+// jobCursor continues one read order; a cursor from the other order is an
+// invalid query.
 type jobCursor struct {
 	CreatedAt string `json:"created_at"`
 	ID        string `json:"id"`
+	Order     string `json:"order"`
 }
 type jobAttemptCursor struct {
 	Number int `json:"number"`
@@ -193,7 +197,7 @@ func (h jobHandlers) list(request route.Request) (route.Result, error) {
 	}
 	if page.HasMore {
 		last := page.Items[len(page.Items)-1]
-		response.NextCursor, err = encodeJobCursor(jobCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String()})
+		response.NextCursor, err = encodeJobCursor(jobCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String(), Order: jobListOrder(query)})
 		if err != nil {
 			return route.Result{}, route.Unpresentable(err)
 		}
@@ -281,10 +285,18 @@ func listJobsQuery(r *http.Request) (job.ListQuery, error) {
 		return job.ListQuery{}, err
 	}
 	query := job.ListQuery{Limit: page.Limit}
+	order, err := parseListDirection(r.URL.Query(), "order", listDescending)
+	if err != nil {
+		return query, err
+	}
+	query.Ascending = order == listAscending
 	if raw := page.Cursor; raw != "" {
 		cursor, err := decodeJobCursor(raw)
 		if err != nil {
 			return query, err
+		}
+		if cursor.Order != order {
+			return query, errors.New("job cursor belongs to another order")
 		}
 		query.BeforeCreatedAt, _ = model.ParseRFC3339(cursor.CreatedAt)
 		query.BeforeID = model.JobID(cursor.ID)
@@ -315,6 +327,15 @@ func decodeJobAttemptCursor(raw string) (int, error) {
 	cursor, err := route.DecodeCursor(raw, jobAttemptCursorSpec())
 	return cursor.Number, err
 }
+
+// jobListOrder names the read order of query as its cursor records it.
+func jobListOrder(query job.ListQuery) string {
+	if query.Ascending {
+		return listAscending
+	}
+	return listDescending
+}
+
 func encodeJobCursor(cursor jobCursor) (string, error) {
 	return route.EncodeCursor(cursor, jobCursorSpec())
 }
@@ -325,10 +346,10 @@ func jobCursorSpec() route.CursorSpec[jobCursor] {
 	return route.CursorSpec[jobCursor]{
 		Label:                "job",
 		MaximumEncodedLength: route.DefaultMaximumCursorLength,
-		Members:              []string{"created_at", "id"},
+		Members:              []string{"created_at", "id", "order"},
 		Validate: func(cursor jobCursor) error {
 			createdAt, err := model.ParseRFC3339(cursor.CreatedAt)
-			if err != nil || createdAt.IsZero() || !model.JobID(cursor.ID).IsValid() {
+			if err != nil || createdAt.IsZero() || !model.JobID(cursor.ID).IsValid() || !validListDirection(cursor.Order) {
 				return errors.New("invalid job keyset")
 			}
 

@@ -169,15 +169,18 @@ type OnboardingImportVisibilityScope struct {
 }
 
 // OnboardingImportListOptions selects up to Limit (1..OnboardingImportListMaximum)
-// unexpired administrative imports inside Visibility, newest first by creation
-// instant then identity. Student progression aggregates are never listed: they
+// unexpired administrative imports inside Visibility, newest first (oldest
+// first when Ascending) by creation instant then identity. Student progression aggregates are never listed: they
 // authorize through Class progression authority, not onboarding_batch.view.
 // An empty States matches every state; BeforeCreatedAt and BeforeID are the
 // keyset of the previous page's last item, both set or both zero. An empty
 // Visibility is invalid input.
 type OnboardingImportListOptions struct {
-	Visibility      OnboardingImportVisibilityScope
-	States          []model.OnboardingImportState
+	Visibility OnboardingImportVisibilityScope
+	States     []model.OnboardingImportState
+	// Ascending reads oldest first instead; BeforeCreatedAt and BeforeID then
+	// continue past the previous page's last import toward newer ones.
+	Ascending       bool
 	BeforeCreatedAt time.Time
 	BeforeID        model.OnboardingImportID
 	Limit           int

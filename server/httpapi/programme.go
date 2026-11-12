@@ -111,7 +111,7 @@ func (h programmeHandlers) list(request route.Request) (route.Result, error) {
 		return route.Result{}, err
 	}
 
-	return academicNameListResult(page, programmeResponseFromModel, func(programme *model.Programme) (string, string) {
+	return academicNameCountedResult(page, pageQuery, programmeResponseFromModel, func(programme *model.Programme) (string, string) {
 		return programme.Name, programme.ID.String()
 	})
 }
@@ -232,7 +232,7 @@ func programmeResponseFromModel(programme *model.Programme) programmeResponse {
 // ProgrammeApplication is the application port its handlers call; it reads and changes Programmes.
 type ProgrammeApplication interface {
 	GetProgramme(context.Context, invocation.Invocation, model.ProgrammeID) (*model.Programme, error)
-	ListProgrammes(context.Context, invocation.Invocation, academic.ListProgrammesQuery) (paging.Page[*model.Programme], error)
+	ListProgrammes(context.Context, invocation.Invocation, academic.ListProgrammesQuery) (paging.Counted[*model.Programme], error)
 	CreateProgramme(context.Context, invocation.Invocation, academic.CreateProgrammeCommand) (*model.Programme, error)
 	UpdateProgramme(context.Context, invocation.Invocation, academic.UpdateProgrammeCommand) (*model.Programme, error)
 	ArchiveProgramme(context.Context, invocation.Invocation, academic.ArchiveProgrammeCommand) error

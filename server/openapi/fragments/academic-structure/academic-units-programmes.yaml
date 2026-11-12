@@ -15,7 +15,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Lists active Programmes directly owned by one authorized Academic Unit, optionally narrowed by the documented search input. The collection does not include Programmes owned by descendants unless requested through those Units.
+        Lists active Programmes directly owned by one authorized Academic Unit, optionally narrowed by the documented search input. The collection does not include Programmes owned by descendants unless requested through those Units. The first page, read without a cursor, also reports `total`: the Programmes the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -151,6 +151,16 @@ components:
             $ref: '#/components/schemas/ProgrammeResponse'
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
+        total:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            Programmes matching the filters across every page, present only on the first page. At 10,000 counting
+            stops and `total_is_lower_bound` is true.
+        total_is_lower_bound:
+          type: boolean
+          description: True when `total` reached the 10,000 bound and there may be more. Present with `total`.
     CreateProgrammeRequest:
       description: Canonical and human-facing fields for a new Programme.
       type: object

@@ -22,7 +22,11 @@ type AuditListOptions struct {
 	// zero bound is open. When both are set Since precedes Until.
 	Since time.Time
 	Until time.Time
-	// BeforeCreatedAt and BeforeID continue a page at microsecond precision.
+	// Ascending reads oldest first; the default is newest first.
+	Ascending bool
+	// BeforeCreatedAt and BeforeID are the previous page's last key, at
+	// microsecond precision. The page continues past it in the read order:
+	// older entries when newest first, newer entries when Ascending.
 	BeforeCreatedAt time.Time
 	BeforeID        model.AuditEventID
 	Limit           int

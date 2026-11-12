@@ -6411,7 +6411,7 @@
       },
       "AcademicUnitMemberListResponse": {
         "additionalProperties": false,
-        "description": "One page of the collection in its stable order.",
+        "description": "One page of the collection in its requested order; the first page carries its total.",
         "properties": {
           "items": {
             "items": {
@@ -6421,6 +6421,16 @@
           },
           "next_cursor": {
             "$ref": "#/components/schemas/NextCursor"
+          },
+          "total": {
+            "description": "Memberships matching the effective instant or history filter across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true.",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_is_lower_bound": {
+            "description": "True when `total` reached the 10,000 bound and there may be more. Present with `total`.",
+            "type": "boolean"
           }
         },
         "required": [
@@ -10353,18 +10363,92 @@
         ],
         "type": "object"
       },
+      "ClassListItemResponse": {
+        "additionalProperties": false,
+        "description": "One Class of a Class listing: the Class projection, with its current student count when the caller holds class.members.view on the listing's scope.",
+        "properties": {
+          "academic_period_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "archived_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "name": {
+            "type": "string"
+          },
+          "programme_level_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "revision": {
+            "description": "Current aggregate revision. Supply it as expected_revision on an edit or archive to protect a client snapshot from concurrent changes.",
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "student_count": {
+            "description": "The Class's current members, stopped at 10,000. Present only for a caller holding class.members.view on the listing's scope; sort a page by it on the client.",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "student_count_is_lower_bound": {
+            "description": "True when `student_count` reached the 10,000 bound. Present with `student_count`.",
+            "type": "boolean"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "id",
+          "created_at",
+          "updated_at",
+          "programme_level_id",
+          "academic_period_id",
+          "name",
+          "display_name",
+          "description"
+        ],
+        "type": "object"
+      },
       "ClassListResponse": {
         "additionalProperties": false,
-        "description": "One page of the collection in its stable order.",
+        "description": "One page of the collection in its requested order; the first page carries its total.",
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/ClassResponse"
+              "$ref": "#/components/schemas/ClassListItemResponse"
             },
             "type": "array"
           },
           "next_cursor": {
             "$ref": "#/components/schemas/NextCursor"
+          },
+          "total": {
+            "description": "Classes matching the filters across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true.",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_is_lower_bound": {
+            "description": "True when `total` reached the 10,000 bound and there may be more. Present with `total`.",
+            "type": "boolean"
           }
         },
         "required": [
@@ -10374,7 +10458,7 @@
       },
       "ClassMemberListResponse": {
         "additionalProperties": false,
-        "description": "One page of the collection in its stable order.",
+        "description": "One page of the collection in its requested order; the first page carries its total.",
         "properties": {
           "items": {
             "items": {
@@ -10384,6 +10468,16 @@
           },
           "next_cursor": {
             "$ref": "#/components/schemas/NextCursor"
+          },
+          "total": {
+            "description": "Memberships matching the effective instant or history filter across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true.",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_is_lower_bound": {
+            "description": "True when `total` reached the 10,000 bound and there may be more. Present with `total`.",
+            "type": "boolean"
           }
         },
         "required": [
@@ -22164,6 +22258,16 @@
           },
           "next_cursor": {
             "$ref": "#/components/schemas/NextCursor"
+          },
+          "total": {
+            "description": "Programme Levels matching the filters across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true.",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_is_lower_bound": {
+            "description": "True when `total` reached the 10,000 bound and there may be more. Present with `total`.",
+            "type": "boolean"
           }
         },
         "required": [
@@ -22232,6 +22336,16 @@
           },
           "next_cursor": {
             "$ref": "#/components/schemas/NextCursor"
+          },
+          "total": {
+            "description": "Programmes matching the filters across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true.",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_is_lower_bound": {
+            "description": "True when `total` reached the 10,000 bound and there may be more. Present with `total`.",
+            "type": "boolean"
           }
         },
         "required": [
@@ -23674,6 +23788,16 @@
           },
           "next_cursor": {
             "$ref": "#/components/schemas/NextCursor"
+          },
+          "total": {
+            "description": "Role Bindings matching the filters across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true.",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_is_lower_bound": {
+            "description": "True when `total` reached the 10,000 bound and there may be more. Present with `total`.",
+            "type": "boolean"
           }
         },
         "required": [
@@ -26324,7 +26448,7 @@
       },
       "UserProfileListResponse": {
         "additionalProperties": false,
-        "description": "Visible User profiles ordered by canonical username and identity.",
+        "description": "Visible User profiles in the requested order, by canonical username and identity by default.",
         "properties": {
           "items": {
             "items": {
@@ -27682,7 +27806,7 @@
     },
     "/api/v1/academic-units/{academic_unit_id}/classes": {
       "get": {
-        "description": "Searches Classes whose Programme hierarchy is owned by the authorized Academic Unit, using bounded stable traversal. Results expose Class structure only and never enroll students or grant Class-scoped permission.",
+        "description": "Searches Classes whose Programme hierarchy is owned by the authorized Academic Unit, using bounded stable traversal. Results expose Class structure only and never enroll students or grant Class-scoped permission. Items are ordered by name, then identity, in the `dir` direction. The first page, read without a cursor, also reports `total`: the Classes the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's. Each item carries `student_count`, the Class's current members stopped at 10,000 with `student_count_is_lower_bound`, only when the caller holds class.members.view on this Academic Unit; otherwise both are omitted.",
         "operationId": "searchClasses",
         "parameters": [
           {
@@ -27691,6 +27815,20 @@
             "name": "q",
             "required": false,
             "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Order by name, then identity, ascending (`asc`, the default) or descending (`desc`). A cursor continues only the direction that produced it.",
+            "in": "query",
+            "name": "dir",
+            "required": false,
+            "schema": {
+              "default": "asc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
               "type": "string"
             }
           },
@@ -27967,7 +28105,7 @@
     },
     "/api/v1/academic-units/{academic_unit_id}/members": {
       "get": {
-        "description": "Lists authorized current or historical organizational memberships for one Academic Unit at the requested effective instant. Membership describes a relationship only and is never presented as an unrestricted permission grant. Bounded pages use immutable (user_id, id) ordering. The next_cursor freezes the effective instant or history filter, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests. Each item names the member in `user`, with email only for Institution-wide user.view, and, for a caller holding role_binding.view on this unit, lists the member's current Role Bindings scoped exactly to it in `roles_here`.",
+        "description": "Lists authorized current or historical organizational memberships for one Academic Unit at the requested effective instant. Membership describes a relationship only and is never presented as an unrestricted permission grant. Bounded pages are ordered by `sort` and `dir`, by default the membership start (`since`) ascending then identity. The first page also reports `total`, the memberships the filter matches across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. The next_cursor freezes the effective instant or history filter and the order, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests. Each item names the member in `user`, with email only for Institution-wide user.view, and, for a caller holding role_binding.view on this unit, lists the member's current Role Bindings scoped exactly to it in `roles_here`.",
         "operationId": "listAcademicUnitMembers",
         "parameters": [
           {
@@ -27988,6 +28126,34 @@
             "schema": {
               "default": false,
               "type": "boolean"
+            }
+          },
+          {
+            "description": "The page order, each key then by membership identity: `since` (the membership start, the default) or `name` (the member's presented name, the display name or else the username, compared case-insensitively on its first 64 characters). A cursor continues only the sort and direction that produced it; repeat both when following it.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "since",
+              "enum": [
+                "since",
+                "name"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Ascending (`asc`, the default) or descending (`desc`) by the `sort` key.",
+            "in": "query",
+            "name": "dir",
+            "required": false,
+            "schema": {
+              "default": "asc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string"
             }
           },
           {
@@ -28132,7 +28298,7 @@
     },
     "/api/v1/academic-units/{academic_unit_id}/programmes": {
       "get": {
-        "description": "Lists active Programmes directly owned by one authorized Academic Unit, optionally narrowed by the documented search input. The collection does not include Programmes owned by descendants unless requested through those Units.",
+        "description": "Lists active Programmes directly owned by one authorized Academic Unit, optionally narrowed by the documented search input. The collection does not include Programmes owned by descendants unless requested through those Units. The first page, read without a cursor, also reports `total`: the Programmes the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
         "operationId": "listProgrammes",
         "parameters": [
           {
@@ -28658,7 +28824,7 @@
     },
     "/api/v1/audits": {
       "get": {
-        "description": "Lists bounded durable audit facts visible through the caller's Institution or Academic Unit authority. The projection omits raw parameters, prior state, result payloads, credentials, protected content, and unsafe internal failures. The first page, read without a cursor, also reports `total`: the audit Events the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
+        "description": "Lists bounded durable audit facts visible through the caller's Institution or Academic Unit authority, newest first unless `order=asc` asks for oldest first. The projection omits raw parameters, prior state, result payloads, credentials, protected content, and unsafe internal failures. The first page, read without a cursor, also reports `total`: the audit Events the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
         "operationId": "listAuditEvents",
         "parameters": [
           {
@@ -28729,6 +28895,20 @@
             "required": false,
             "schema": {
               "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Read newest first (`desc`, the default) or oldest first (`asc`). A cursor continues only the order that produced it.",
+            "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "desc",
+                "asc"
+              ],
               "type": "string"
             }
           }
@@ -31699,7 +31879,7 @@
     },
     "/api/v1/classes/{class_id}/members": {
       "get": {
-        "description": "Lists authorized student enrollments for one Class at the requested effective instant or across retained history. The roster projection contains relationship state and does not expand student credentials, answers, or unrestricted profile data. Bounded pages use immutable (user_id, id) ordering. The next_cursor freezes the effective instant or history filter, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests.",
+        "description": "Lists authorized student enrollments for one Class at the requested effective instant or across retained history. The roster projection contains relationship state and does not expand student credentials, answers, or unrestricted profile data. Bounded pages are ordered by `sort` and `dir`, by default the membership start (`enrolled`) ascending then identity. The first page also reports `total`, the memberships the filter matches across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. The next_cursor freezes the effective instant or history filter and the order, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests.",
         "operationId": "listClassMembers",
         "parameters": [
           {
@@ -31720,6 +31900,34 @@
             "schema": {
               "default": false,
               "type": "boolean"
+            }
+          },
+          {
+            "description": "The page order, each key then by membership identity: `enrolled` (the enrollment start, the default) or `name` (the member's presented name, the display name or else the username, compared case-insensitively on its first 64 characters). A cursor continues only the sort and direction that produced it; repeat both when following it.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "enrolled",
+              "enum": [
+                "enrolled",
+                "name"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Ascending (`asc`, the default) or descending (`desc`) by the `sort` key.",
+            "in": "query",
+            "name": "dir",
+            "required": false,
+            "schema": {
+              "default": "asc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string"
             }
           },
           {
@@ -42006,7 +42214,7 @@
     },
     "/api/v1/jobs": {
       "get": {
-        "description": "Lists only Job types deliberately exposed through the public administration contract and authorized for the current principal. Private payloads, claims, worker identities, and infrastructure errors are omitted from every projection. The first page, read without a cursor, also reports `total`: the Jobs the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
+        "description": "Lists only Job types deliberately exposed through the public administration contract and authorized for the current principal, newest first by creation unless `order=asc` asks for oldest first. Private payloads, claims, worker identities, and infrastructure errors are omitted from every projection. The first page, read without a cursor, also reports `total`: the Jobs the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
         "operationId": "listJobs",
         "parameters": [
           {
@@ -42037,6 +42245,20 @@
                 "$ref": "#/components/schemas/JobStatus"
               },
               "type": "array"
+            }
+          },
+          {
+            "description": "Read newest first by creation (`desc`, the default) or oldest first (`asc`). A cursor continues only the order that produced it.",
+            "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "desc",
+                "asc"
+              ],
+              "type": "string"
             }
           }
         ],
@@ -42438,7 +42660,7 @@
     },
     "/api/v1/mail/deliveries": {
       "get": {
-        "description": "Lists authorized durable delivery metadata for the allowlisted template and filters. Recipient addresses remain masked and the response never exposes encrypted payloads, rendered message bodies, SMTP credentials, or provider diagnostics. The first page, read without a cursor, also reports `total`: the mail deliveries the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
+        "description": "Lists authorized durable delivery metadata for the allowlisted template and filters, most recently updated first unless `sort` and `dir` choose another order. Recipient addresses remain masked and the response never exposes encrypted payloads, rendered message bodies, SMTP credentials, or provider diagnostics. The first page, read without a cursor, also reports `total`: the mail deliveries the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
         "operationId": "listMailDeliveries",
         "parameters": [
           {
@@ -42497,6 +42719,34 @@
             "name": "created_before",
             "schema": {
               "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Order by the last update (`updated`, the default) or by creation (`created`), then by delivery identity. A cursor continues only the sort and direction that produced it.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "updated",
+              "enum": [
+                "updated",
+                "created"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Newest first (`desc`, the default) or oldest first (`asc`) by the `sort` instant.",
+            "in": "query",
+            "name": "dir",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "desc",
+                "asc"
+              ],
               "type": "string"
             }
           }
@@ -43366,7 +43616,7 @@
     },
     "/api/v1/onboarding-imports": {
       "get": {
-        "description": "Lists the unexpired administrative onboarding imports the caller could read one by one through its current Institution, Academic Unit, or Class onboarding authority, newest first. Items are summary projections without rows; read one import for its preview or report rows. Student progressions are listed through their own resource and never appear here.",
+        "description": "Lists the unexpired administrative onboarding imports the caller could read one by one through its current Institution, Academic Unit, or Class onboarding authority, newest first unless `order=asc` asks for oldest first. Items are summary projections without rows; read one import for its preview or report rows. Student progressions are listed through their own resource and never appear here.",
         "operationId": "listOnboardingImports",
         "parameters": [
           {
@@ -43414,6 +43664,20 @@
               "maximum": 200,
               "minimum": 1,
               "type": "integer"
+            }
+          },
+          {
+            "description": "Read newest first by creation (`desc`, the default) or oldest first (`asc`). A cursor continues only the order that produced it.",
+            "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "desc",
+                "asc"
+              ],
+              "type": "string"
             }
           }
         ],
@@ -44158,9 +44422,23 @@
     },
     "/api/v1/programme-levels/{programme_level_id}/classes": {
       "get": {
-        "description": "Lists active Classes directly assigned to one authorized Programme Level. The collection returns structural Class metadata and excludes rosters, candidate Attempts, and permission grants.",
+        "description": "Lists active Classes directly assigned to one authorized Programme Level. The collection returns structural Class metadata and excludes rosters, candidate Attempts, and permission grants. Items are ordered by name, then identity, in the `dir` direction. The first page, read without a cursor, also reports `total`: the Classes the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's. Each item carries `student_count`, the Class's current members stopped at 10,000 with `student_count_is_lower_bound`, only when the caller holds class.members.view on this Programme Level; otherwise both are omitted.",
         "operationId": "listClasses",
         "parameters": [
+          {
+            "description": "Order by name, then identity, ascending (`asc`, the default) or descending (`desc`). A cursor continues only the direction that produced it.",
+            "in": "query",
+            "name": "dir",
+            "required": false,
+            "schema": {
+              "default": "asc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string"
+            }
+          },
           {
             "$ref": "#/components/parameters/PageLimit"
           },
@@ -44513,7 +44791,7 @@
     },
     "/api/v1/programmes/{programme_id}/levels": {
       "get": {
-        "description": "Lists active Levels directly owned by one authorized Programme with bounded stable search. The collection excludes Classes and does not imply roster or permission access.",
+        "description": "Lists active Levels directly owned by one authorized Programme with bounded stable search. The collection excludes Classes and does not imply roster or permission access. The first page, read without a cursor, also reports `total`: the Programme Levels the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
         "operationId": "listProgrammeLevels",
         "parameters": [
           {
@@ -45216,7 +45494,7 @@
     },
     "/api/v1/role-bindings": {
       "get": {
-        "description": "Lists current and historical Role Bindings authorized for the caller, optionally narrowed to one User or exact scope. A Binding is an effective-dated permission grant; membership or affiliation alone is not returned as authority.",
+        "description": "Lists current and historical Role Bindings authorized for the caller, optionally narrowed to one User or exact scope. A Binding is an effective-dated permission grant; membership or affiliation alone is not returned as authority. The first page, read without a cursor, also reports `total`: the Role Bindings the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
         "operationId": "listRoleBindings",
         "parameters": [
           {
@@ -47484,7 +47762,7 @@
     },
     "/api/v1/users": {
       "get": {
-        "description": "Searches only User profiles visible through the caller's current Institution or scoped relationships, ordered by canonical username and identity. Disabled Users remain concealed unless an Institution-wide user viewer explicitly requests them. Each item carries a `summary`: the User's current Affiliations with the current Academic Units the caller can see, and, for a caller holding role_binding.view, the current Role Bindings inside that authority's scopes, each list bounded and followed by a count of the rest. The first page, read without a cursor, also reports `total`: the Users the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
+        "description": "Searches only User profiles visible through the caller's current Institution or scoped relationships, ordered by canonical username and identity unless `sort` and `dir` choose another order. Disabled Users remain concealed unless an Institution-wide user viewer explicitly requests them. Each item carries a `summary`: the User's current Affiliations with the current Academic Units the caller can see, and, for a caller holding role_binding.view, the current Role Bindings inside that authority's scopes, each list bounded and followed by a count of the rest. The first page, read without a cursor, also reports `total`: the Users the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
         "operationId": "searchUsers",
         "parameters": [
           {
@@ -47535,6 +47813,36 @@
             "required": false,
             "schema": {
               "$ref": "#/components/schemas/ID"
+            }
+          },
+          {
+            "description": "The page order, each key then by User identity: `username` (the default), `name` (the presented name, the display name or else the username, compared case-insensitively on its first 64 characters), `created`, or `last_active` (the last account activity; a User never active sorts as the least recent). `last_active` reads account activity, which only an Institution-wide user.view caller can see, so any other caller receives `request.invalid`. A cursor continues only the sort and direction that produced it.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "username",
+              "enum": [
+                "username",
+                "name",
+                "created",
+                "last_active"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Ascending (`asc`, the default) or descending (`desc`) by the `sort` key.",
+            "in": "query",
+            "name": "dir",
+            "required": false,
+            "schema": {
+              "default": "asc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string"
             }
           },
           {

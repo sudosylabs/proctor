@@ -247,7 +247,7 @@ func testMailDeliveryCount(t *testing.T, ctx context.Context, ss store.Store, at
 					break
 				}
 				paged = append(paged, page[0].ID)
-				options.BeforeCreatedAt, options.BeforeID = page[0].CreatedAt, page[0].ID
+				options.BeforeAt, options.BeforeID = page[0].CreatedAt, page[0].ID
 			}
 			total, err := ss.Mail().CountDeliveries(ctx, options, store.MaximumListCount)
 			require.NoError(t, err)
@@ -286,7 +286,7 @@ func testMailOperatorStore(t *testing.T, ctx context.Context, ss store.Store, us
 	next, err := ss.Mail().ListDeliveries(ctx, store.MailDeliveryListOptions{
 		States: []model.MailDeliveryState{model.MailDeliveryQueued}, TemplateKeys: []model.MailTemplateKey{model.MailTemplateSystemTest},
 		CreatedAfter: at.Add(-time.Nanosecond), CreatedBefore: at.Add(2 * time.Second),
-		BeforeCreatedAt: page[0].CreatedAt, BeforeID: page[0].ID, Limit: 10,
+		BeforeAt: page[0].CreatedAt, BeforeID: page[0].ID, Limit: 10,
 	})
 	require.NoError(t, err)
 	require.Len(t, next, 1)
@@ -304,6 +304,37 @@ func testMailOperatorStore(t *testing.T, ctx context.Context, ss store.Store, us
 	canceledJob, err := ss.Job().Get(ctx, canceled.JobID)
 	require.NoError(t, err)
 	require.Equal(t, model.JobStatusCanceled, canceledJob.Status)
+	pair := store.MailDeliveryListOptions{
+		TemplateKeys: []model.MailTemplateKey{model.MailTemplateSystemTest},
+		CreatedAfter: at.Add(-time.Nanosecond), CreatedBefore: at.Add(1500 * time.Millisecond),
+	}
+	for name, order := range map[string]struct {
+		options store.MailDeliveryListOptions
+		want    []model.MailDeliveryID
+	}{
+		"updated newest first": {store.MailDeliveryListOptions{Order: store.MailDeliveryOrderUpdated}, []model.MailDeliveryID{second.ID, first.ID}},
+		"updated oldest first": {store.MailDeliveryListOptions{Order: store.MailDeliveryOrderUpdated, Ascending: true}, []model.MailDeliveryID{first.ID, second.ID}},
+		"created oldest first": {store.MailDeliveryListOptions{Order: store.MailDeliveryOrderCreated, Ascending: true}, []model.MailDeliveryID{first.ID, second.ID}},
+	} {
+		options := pair
+		options.Order, options.Ascending, options.Limit = order.options.Order, order.options.Ascending, 1
+		var paged []model.MailDeliveryID
+		for range 4 {
+			page, listErr := ss.Mail().ListDeliveries(ctx, options)
+			require.NoError(t, listErr)
+			if len(page) == 0 {
+				break
+			}
+			paged = append(paged, page[0].ID)
+			options.BeforeAt, options.BeforeID = page[0].UpdatedAt, page[0].ID
+			if order.options.Order == store.MailDeliveryOrderCreated {
+				options.BeforeAt = page[0].CreatedAt
+			}
+		}
+		require.Equal(t, order.want, paged, name)
+	}
+	_, err = ss.Mail().ListDeliveries(ctx, store.MailDeliveryListOptions{Order: "recipient", Limit: 10})
+	require.Error(t, err, "ListDeliveries accepted an unknown order")
 	_, err = ss.Mail().CancelDelivery(ctx, &store.MailDeliveryMutation{ID: second.ID, ExpectedRevision: second.Revision, AuditEventID: cancelAudit.ID, AuditAt: model.NowUTC()})
 	require.True(t, store.IsConflict(err), "CancelDelivery(stale) error")
 	mismatchInput := mailTestEnqueueFixture(t, user, institution, at.Add(1500*time.Millisecond))

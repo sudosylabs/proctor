@@ -70,15 +70,15 @@ func (s *Service) ListProgrammes(
 	ctx context.Context,
 	inv invocation.Invocation,
 	query ListProgrammesQuery,
-) (paging.Page[*model.Programme], error) {
+) (paging.Counted[*model.Programme], error) {
 	unitID := query.AcademicUnitID
 	if !unitID.IsValid() {
-		return paging.Page[*model.Programme]{}, apperror.New("request.invalid").WithField("field", "academic_unit_id")
+		return paging.Counted[*model.Programme]{}, apperror.New("request.invalid").WithField("field", "academic_unit_id")
 	}
 
 	limit, probe, err := paging.ResolveLimit(query.Limit, "limit")
 	if err != nil {
-		return paging.Page[*model.Programme]{}, err
+		return paging.Counted[*model.Programme]{}, err
 	}
 
 	if err = s.authorizer.Authorize(
@@ -87,20 +87,33 @@ func (s *Service) ListProgrammes(
 		model.ActionProgrammeView,
 		model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()},
 	); err != nil {
-		return paging.Page[*model.Programme]{}, err
+		return paging.Counted[*model.Programme]{}, err
 	}
 
-	programmes, err := s.programmes.SearchByAcademicUnit(ctx, unitID, store.AcademicNameListOptions{
+	options := store.AcademicNameListOptions{
 		Term:      strings.TrimSpace(query.Query),
 		AfterName: query.AfterName,
 		AfterID:   query.AfterID,
 		Limit:     probe,
-	})
+	}
+	programmes, err := s.programmes.SearchByAcademicUnit(ctx, unitID, options)
 	if err != nil {
-		return paging.Page[*model.Programme]{}, programmeStoreErrors.Translate(err)
+		return paging.Counted[*model.Programme]{}, programmeStoreErrors.Translate(err)
 	}
 
-	return paging.New(programmes, limit), nil
+	page := paging.Counted[*model.Programme]{Page: paging.New(programmes, limit)}
+	total, consistent, err := paging.CountFirst(query.AfterID == "", len(page.Items), func(maximum int) (int, error) {
+		return s.programmes.CountByAcademicUnit(ctx, unitID, options, maximum)
+	})
+	if err != nil {
+		return paging.Counted[*model.Programme]{}, programmeStoreErrors.Translate(err)
+	}
+	if !consistent {
+		return paging.Counted[*model.Programme]{}, apperror.New("administration.unavailable").WithField("resource", "programme")
+	}
+
+	page.Total = total
+	return page, nil
 }
 
 // CreateProgramme creates a Programme after authorizing the caller.

@@ -13,7 +13,7 @@ paths:
       tags:
         - Roles and access
       description: >-
-        Lists bounded durable audit facts visible through the caller's Institution or Academic Unit authority. The projection omits raw parameters, prior state, result payloads, credentials, protected content, and unsafe internal failures.
+        Lists bounded durable audit facts visible through the caller's Institution or Academic Unit authority, newest first unless `order=asc` asks for oldest first. The projection omits raw parameters, prior state, result payloads, credentials, protected content, and unsafe internal failures.
         The first page, read without a cursor, also reports `total`: the audit Events the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
@@ -84,6 +84,18 @@ paths:
           schema:
             type: string
             format: date-time
+        - name: order
+          in: query
+          required: false
+          description: >-
+            Read newest first (`desc`, the default) or oldest first (`asc`). A cursor continues only the order
+            that produced it.
+          schema:
+            type: string
+            enum:
+              - desc
+              - asc
+            default: desc
       responses:
         "200":
           $ref: '#/components/responses/AuditListOK'

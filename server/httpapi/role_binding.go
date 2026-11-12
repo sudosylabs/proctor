@@ -13,6 +13,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -131,7 +132,7 @@ func (h roleBindingHandlers) list(request route.Request) (route.Result, error) {
 		return route.Result{}, err
 	}
 
-	response, err := route.BoundedList(
+	envelope, err := route.BoundedList(
 		request,
 		"Role Binding",
 		bindings,
@@ -140,6 +141,18 @@ func (h roleBindingHandlers) list(request route.Request) (route.Result, error) {
 		},
 		roleBindingResponseFromModel,
 	)
+	if err != nil {
+		return route.Result{}, err
+	}
+
+	// The application returns the holders whole, so the first page counts
+	// exactly the bindings a caller can page through.
+	continued := values.Get("cursor") != ""
+	total := paging.Total{}
+	if !continued {
+		total = paging.CountWhole(len(bindings))
+	}
+	response, err := route.WithPageTotal(envelope, total, continued)
 	if err != nil {
 		return route.Result{}, err
 	}

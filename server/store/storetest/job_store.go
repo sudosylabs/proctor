@@ -329,6 +329,21 @@ func testJobListCount(t *testing.T, ctx context.Context, ss store.Store, failedI
 			total, err := ss.Job().Count(ctx, options, store.MaximumListCount)
 			require.NoError(t, err)
 			require.Len(t, paged, total, "the count ignores the keyset and equals every page together")
+
+			var oldest []model.JobID
+			ascending := cases[name]
+			ascending.Ascending, ascending.Limit = true, 1
+			for range 50 {
+				page, err := ss.Job().List(ctx, ascending)
+				require.NoError(t, err)
+				if len(page) == 0 {
+					break
+				}
+				oldest = append(oldest, page[0].ID)
+				ascending.BeforeCreatedAt, ascending.BeforeID = page[0].CreatedAt, page[0].ID
+			}
+			slices.Reverse(oldest)
+			require.Equal(t, paged, oldest, "oldest first pages the exact reverse")
 			switch name {
 			case "failed this week":
 				require.Contains(t, paged, failedID, "a failure from a minute ago is inside the week")

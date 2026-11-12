@@ -37,8 +37,12 @@ type programmeHTTPApplication struct {
 func (a *programmeHTTPApplication) GetProgramme(context.Context, invocation.Invocation, model.ProgrammeID) (*model.Programme, error) {
 	return a.result, nil
 }
-func (a *programmeHTTPApplication) ListProgrammes(context.Context, invocation.Invocation, academic.ListProgrammesQuery) (paging.Page[*model.Programme], error) {
-	return paging.Page[*model.Programme]{Items: a.list}, nil
+func (a *programmeHTTPApplication) ListProgrammes(_ context.Context, _ invocation.Invocation, query academic.ListProgrammesQuery) (paging.Counted[*model.Programme], error) {
+	page := paging.Counted[*model.Programme]{Page: paging.Page[*model.Programme]{Items: a.list}}
+	if query.AfterID == "" {
+		page.Total = paging.CountWhole(len(a.list))
+	}
+	return page, nil
 }
 func (a *programmeHTTPApplication) CreateProgramme(_ context.Context, _ invocation.Invocation, command academic.CreateProgrammeCommand) (*model.Programme, error) {
 	a.createCommand = command

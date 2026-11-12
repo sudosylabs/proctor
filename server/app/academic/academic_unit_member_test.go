@@ -23,12 +23,13 @@ import (
 
 type academicUnitMemberStoreFake struct {
 	store.AcademicUnitMemberStore
-	pageOptions store.AcademicUnitMemberPageOptions
-	pageResult  *store.AcademicUnitMemberPage
-	events      *[]string
-	current     *model.AcademicUnitMember
-	createInput *store.AcademicUnitMemberCreation
-	endInput    *store.AcademicUnitMemberEnd
+	pageOptions  store.AcademicUnitMemberPageOptions
+	countOptions store.AcademicUnitMemberPageOptions
+	pageResult   *store.AcademicUnitMemberPage
+	events       *[]string
+	current      *model.AcademicUnitMember
+	createInput  *store.AcademicUnitMemberCreation
+	endInput     *store.AcademicUnitMemberEnd
 }
 
 func (s *academicUnitMemberStoreFake) Get(context.Context, model.AcademicUnitMemberID) (*model.AcademicUnitMember, error) {
@@ -137,4 +138,12 @@ func (s *academicUnitMemberStoreFake) ListPageByAcademicUnit(_ context.Context, 
 		return s.pageResult, nil
 	}
 	return &store.AcademicUnitMemberPage{}, nil
+}
+func (s *academicUnitMemberStoreFake) CountPageByAcademicUnit(_ context.Context, options store.AcademicUnitMemberPageOptions, maximum int) (int, error) {
+	*s.events = append(*s.events, "count-page")
+	s.countOptions = options
+	if s.pageResult == nil {
+		return 0, nil
+	}
+	return min(len(s.pageResult.Members), maximum), nil
 }

@@ -17,6 +17,23 @@ module when a change is not server-only. No module has been released yet.
 
 ### Changed
 
+- Server: list sorting and capped totals. `GET /api/v1/users` takes
+  `sort=username|name|created|last_active` and `dir`; `last_active` is
+  refused with `request.invalid` unless the caller holds Institution-wide
+  `user.view`. `GET /api/v1/audits`, `GET /api/v1/jobs` and
+  `GET /api/v1/onboarding-imports` take `order=asc|desc`. Class and Academic
+  Unit member lists take `sort=enrolled|since|name` and `dir` and now default
+  to the membership start rather than `(user_id, id)` (**breaking**).
+  `GET /api/v1/mail/deliveries` takes `sort=updated|created` and `dir` and now
+  defaults to the last update, newest first, rather than creation
+  (**breaking**). The Class listings take `dir` and carry a bounded
+  `student_count` for `class.members.view` callers. Member lists, Role
+  Bindings, and the Programme, Programme Level, and Class listings report a
+  first-page `total`. Every cursor records its order, and a cursor presented
+  under another order is `request.invalid`; outstanding cursors of these lists
+  are invalid. The baseline adds the generated `users.sort_name` column and
+  indexes for each new order. Existing development databases must be
+  recreated.
 - Server: `GET /api/v1/audits`, `GET /api/v1/jobs` and
   `GET /api/v1/jobs/{job_id}/attempts` reject an out-of-range, empty or
   repeated `limit` or `cursor` with `request.invalid`. They had silently read

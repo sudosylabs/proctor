@@ -124,7 +124,7 @@ func (h programmeLevelHandlers) list(request route.Request) (route.Result, error
 	if err != nil {
 		return route.Result{}, err
 	}
-	return academicNameListResult(page, programmeLevelResponseFromModel, func(level *model.ProgrammeLevel) (string, string) {
+	return academicNameCountedResult(page, pageQuery, programmeLevelResponseFromModel, func(level *model.ProgrammeLevel) (string, string) {
 		return level.Name, level.ID.String()
 	})
 }
@@ -234,7 +234,7 @@ func programmeLevelResponseFromModel(level *model.ProgrammeLevel) programmeLevel
 // ProgrammeLevelApplication is the application port its handlers call; it reads and changes Programme Levels.
 type ProgrammeLevelApplication interface {
 	GetProgrammeLevel(context.Context, invocation.Invocation, model.ProgrammeLevelID) (*model.ProgrammeLevel, error)
-	ListProgrammeLevels(context.Context, invocation.Invocation, academic.ListProgrammeLevelsQuery) (paging.Page[*model.ProgrammeLevel], error)
+	ListProgrammeLevels(context.Context, invocation.Invocation, academic.ListProgrammeLevelsQuery) (paging.Counted[*model.ProgrammeLevel], error)
 	CreateProgrammeLevel(context.Context, invocation.Invocation, academic.CreateProgrammeLevelCommand) (*model.ProgrammeLevel, error)
 	UpdateProgrammeLevel(context.Context, invocation.Invocation, academic.UpdateProgrammeLevelCommand) (*model.ProgrammeLevel, error)
 	ArchiveProgrammeLevel(context.Context, invocation.Invocation, academic.ArchiveProgrammeLevelCommand) error

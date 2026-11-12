@@ -120,15 +120,17 @@ func (h academicUnitMemberHandlers) list(request route.Request) (route.Result, e
 	}
 
 	scope := model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()}
-	query, after, err := membershipPageQuery(request.HTTP, scope)
+	query, order, after, err := membershipPageQuery(request.HTTP, scope)
 	if err != nil {
 		return route.Result{}, err
 	}
 
+	afterStartAt, afterUserID := after.after()
 	page, err := h.app.ListAcademicUnitMembersPage(request.Context, request.Invocation(), academic.ListAcademicUnitMembersPageQuery{
 		AcademicUnitID:      unitID,
 		MembershipPageQuery: query,
-		AfterUserID:         model.UserID(after.AfterUserID),
+		AfterStartAt:        afterStartAt,
+		AfterUserID:         afterUserID,
 		AfterID:             model.AcademicUnitMemberID(after.AfterID),
 	})
 	if err != nil {
@@ -141,11 +143,14 @@ func (h academicUnitMemberHandlers) list(request route.Request) (route.Result, e
 	return membershipListResult(
 		scope,
 		page.ActiveAt,
+		order,
 		page.Members,
 		page.HasMore,
+		page.Total,
+		after.AfterID != "",
 		present,
-		func(member *model.AcademicUnitMember) (string, string) {
-			return member.UserID.String(), member.ID.String()
+		func(member *model.AcademicUnitMember) membershipPageKey {
+			return membershipPageKey{ID: member.ID.String(), UserID: member.UserID, StartAt: member.StartsAt}
 		},
 	)
 }

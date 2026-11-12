@@ -314,7 +314,7 @@ func TestMailDeliveryListCountsTheFirstPageThroughTheListedOptions(t *testing.T)
 	require.Equal(t, paging.Total{Counted: true, Total: 3}, first.Total)
 	require.Equal(t, query.States, persistence.countOptions.States, "the count reads the list's filters")
 
-	query.BeforeCreatedAt, query.BeforeID = delivery.CreatedAt, delivery.ID
+	query.Order, query.BeforeAt, query.BeforeID = store.MailDeliveryOrderCreated, delivery.CreatedAt, delivery.ID
 	persistence.counts = 0
 	later, err := service.ListMailDeliveries(context.Background(), caller, query)
 	require.NoError(t, err)

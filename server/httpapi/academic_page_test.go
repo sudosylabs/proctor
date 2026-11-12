@@ -29,10 +29,10 @@ import (
 type programmePageHTTPApplication struct {
 	programmeHTTPApplication
 	query academic.ListProgrammesQuery
-	page  paging.Page[*model.Programme]
+	page  paging.Counted[*model.Programme]
 }
 
-func (a *programmePageHTTPApplication) ListProgrammes(_ context.Context, _ invocation.Invocation, query academic.ListProgrammesQuery) (paging.Page[*model.Programme], error) {
+func (a *programmePageHTTPApplication) ListProgrammes(_ context.Context, _ invocation.Invocation, query academic.ListProgrammesQuery) (paging.Counted[*model.Programme], error) {
 	a.query = query
 	return a.page, nil
 }
@@ -47,7 +47,10 @@ func TestAcademicNameListContinuesAfterTheLastName(t *testing.T) {
 	}
 	unitID := model.NewAcademicUnitID()
 	programme := &model.Programme{ID: model.NewProgrammeID(), AcademicUnitID: unitID, Name: "computer-science", DisplayName: "Computer Science"}
-	application := &programmePageHTTPApplication{page: paging.Page[*model.Programme]{Items: []*model.Programme{programme}, HasMore: true}}
+	application := &programmePageHTTPApplication{page: paging.Counted[*model.Programme]{
+		Page:  paging.Page[*model.Programme]{Items: []*model.Programme{programme}, HasMore: true},
+		Total: paging.Total{Counted: true, Total: 7},
+	}}
 	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, programmeResource(application))
 	call := func(query string) *httptest.ResponseRecorder {
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+unitID.String()+"/programmes"+query, nil)
@@ -60,12 +63,16 @@ func TestAcademicNameListContinuesAfterTheLastName(t *testing.T) {
 	response := call("?q=comp&limit=1")
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	require.Equal(t, paging.NameQuery{Limit: 1}, application.query.NameQuery)
-	var page route.List[programmeResponse]
+	var page route.CountedList[programmeResponse]
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
 	require.Len(t, page.Items, 1)
 	require.NotContains(t, page.NextCursor, programme.Name, "the cursor is opaque")
+	require.NotNil(t, page.Total, "the first page carries its total")
+	require.Equal(t, 7, *page.Total)
+	require.NotNil(t, page.TotalIsLowerBound)
+	require.False(t, *page.TotalIsLowerBound)
 
-	application.page = paging.Page[*model.Programme]{Items: []*model.Programme{}}
+	application.page = paging.Counted[*model.Programme]{Page: paging.Page[*model.Programme]{Items: []*model.Programme{}}}
 	response = call("?q=comp&cursor=" + url.QueryEscape(page.NextCursor))
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	require.Equal(t, paging.NameQuery{AfterName: programme.Name, AfterID: programme.ID.String(), Limit: route.DefaultPageLimit}, application.query.NameQuery)

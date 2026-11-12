@@ -16,6 +16,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 type classResponse struct {
@@ -30,6 +31,16 @@ type classResponse struct {
 	DisplayName      string `json:"display_name"`
 	Description      string `json:"description"`
 }
+
+// classListItemResponse is one Class of a Class listing with its current
+// student count, present only for a caller who may view the Classes'
+// members. The count stops at 10,000 and then is a lower bound.
+type classListItemResponse struct {
+	classResponse
+	StudentCount             *int  `json:"student_count,omitempty"`
+	StudentCountIsLowerBound *bool `json:"student_count_is_lower_bound,omitempty"`
+}
+
 type createClassRequest struct {
 	AcademicPeriodID string `json:"academic_period_id"`
 	Name             string `json:"name"`
@@ -127,7 +138,7 @@ func (h classHandlers) search(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
-	pageQuery, err := academicNamePageQuery(request)
+	pageQuery, err := academicNameDirectedPageQuery(request)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -143,9 +154,7 @@ func (h classHandlers) search(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
-	return academicNameListResult(page, classResponseFromModel, func(class *model.Class) (string, string) {
-		return class.Name, class.ID.String()
-	})
+	return classListResult(page, pageQuery)
 }
 
 func (h classHandlers) list(request route.Request) (route.Result, error) {
@@ -153,7 +162,7 @@ func (h classHandlers) list(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
-	pageQuery, err := academicNamePageQuery(request)
+	pageQuery, err := academicNameDirectedPageQuery(request)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -165,7 +174,22 @@ func (h classHandlers) list(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
-	return academicNameListResult(page, classResponseFromModel, func(class *model.Class) (string, string) {
+	return classListResult(page, pageQuery)
+}
+
+// classListResult presents one name-ordered Class page with its first-page
+// total and, when the application read them, each Class's student count.
+func classListResult(page academic.ClassPage, query paging.NameQuery) (route.Result, error) {
+	present := func(class *model.Class) classListItemResponse {
+		item := classListItemResponse{classResponse: classResponseFromModel(class)}
+		if page.StudentCounts != nil {
+			count := page.StudentCounts[class.ID]
+			lowerBound := count >= store.MaximumListCount
+			item.StudentCount, item.StudentCountIsLowerBound = &count, &lowerBound
+		}
+		return item
+	}
+	return academicNameCountedResult(page.Counted, query, present, func(class *model.Class) (string, string) {
 		return class.Name, class.ID.String()
 	})
 }
@@ -282,8 +306,8 @@ func classResponseFromModel(class *model.Class) classResponse {
 // ClassApplication is the application port its handlers call; it reads and changes Classes.
 type ClassApplication interface {
 	GetClass(context.Context, invocation.Invocation, model.ClassID) (*model.Class, error)
-	ListClasses(context.Context, invocation.Invocation, academic.ListClassesQuery) (paging.Page[*model.Class], error)
-	SearchClasses(context.Context, invocation.Invocation, academic.SearchClassesQuery) (paging.Page[*model.Class], error)
+	ListClasses(context.Context, invocation.Invocation, academic.ListClassesQuery) (academic.ClassPage, error)
+	SearchClasses(context.Context, invocation.Invocation, academic.SearchClassesQuery) (academic.ClassPage, error)
 	CreateClass(context.Context, invocation.Invocation, academic.CreateClassCommand) (*model.Class, error)
 	UpdateClass(context.Context, invocation.Invocation, academic.UpdateClassCommand) (*model.Class, error)
 	ArchiveClass(context.Context, invocation.Invocation, academic.ArchiveClassCommand) error

@@ -11,6 +11,18 @@ paths:
       - $ref: '#/components/parameters/ProgrammeLevelID'
     get:
       parameters:
+        - name: dir
+          in: query
+          required: false
+          description: >-
+            Order by name, then identity, ascending (`asc`, the default) or descending (`desc`). A cursor continues
+            only the direction that produced it.
+          schema:
+            type: string
+            enum:
+              - asc
+              - desc
+            default: asc
         - $ref: '#/components/parameters/PageLimit'
         - $ref: '#/components/parameters/PageCursor'
       operationId: listClasses
@@ -18,7 +30,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Lists active Classes directly assigned to one authorized Programme Level. The collection returns structural Class metadata and excludes rosters, candidate Attempts, and permission grants.
+        Lists active Classes directly assigned to one authorized Programme Level. The collection returns structural Class metadata and excludes rosters, candidate Attempts, and permission grants. Items are ordered by name, then identity, in the `dir` direction. The first page, read without a cursor, also reports `total`: the Classes the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's. Each item carries `student_count`, the Class's current members stopped at 10,000 with `student_count_is_lower_bound`, only when the caller holds class.members.view on this Programme Level; otherwise both are omitted.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:

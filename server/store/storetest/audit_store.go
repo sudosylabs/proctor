@@ -12,6 +12,7 @@ package storetest
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -195,6 +196,27 @@ func TestAuditStore(t *testing.T, ss store.Store) {
 			total, countErr := ss.Audit().Count(ctx, pageOptions, store.MaximumListCount)
 			require.NoError(t, countErr)
 			require.Equal(t, paged, total, "the count ignores the keyset and equals every page together")
+
+			var newest, oldest []model.AuditEventID
+			for _, ascending := range []bool{false, true} {
+				pageOptions = options
+				pageOptions.Ascending, pageOptions.Limit = ascending, 1
+				for range 10 {
+					page, listErr := ss.Audit().List(ctx, pageOptions)
+					require.NoError(t, listErr)
+					if len(page) == 0 {
+						break
+					}
+					if ascending {
+						oldest = append(oldest, page[0].ID)
+					} else {
+						newest = append(newest, page[0].ID)
+					}
+					pageOptions.BeforeCreatedAt, pageOptions.BeforeID = page[0].CreatedAt, page[0].ID
+				}
+			}
+			slices.Reverse(oldest)
+			require.Equal(t, newest, oldest, "oldest first pages the exact reverse")
 		})
 	}
 	capped, err := ss.Audit().Count(ctx, store.AuditListOptions{Visibility: scopedVisibility}, 1)

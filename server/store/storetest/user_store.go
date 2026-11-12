@@ -46,6 +46,7 @@ func TestUserStore(t *testing.T, ss store.Store, probes ...UserStoreSQLProbe) {
 	t.Run("ListDisplayNames", func(t *testing.T) { testUserStoreListDisplayNames(t, ss) })
 	t.Run("Uniqueness", func(t *testing.T) { testUserStoreUniqueness(t, ss) })
 	t.Run("ListAndDisable", func(t *testing.T) { testUserStoreListAndDisable(t, ss) })
+	t.Run("ListOrders", func(t *testing.T) { testUserStoreListOrders(t, ss) })
 	t.Run("VisibilityIntervalPrecision", func(t *testing.T) { testUserVisibilityIntervalPrecision(t, ss) })
 	t.Run("AffiliationAndAcademicUnitFilters", func(t *testing.T) { testUserListAffiliationAndAcademicUnitFilters(t, ss) })
 	t.Run("DirectorySummaries", func(t *testing.T) { testUserDirectorySummaries(t, ss) })
@@ -1315,4 +1316,116 @@ func testUserCreation(input *model.User, credential *model.PasswordCredential) *
 func defaultProfilePictureCommand(userID model.UserID) json.RawMessage {
 	document, _ := json.Marshal(map[string]string{"user_id": userID.String()})
 	return document
+}
+
+// testUserStoreListOrders pages every directory order in both directions one
+// User at a time and requires exactly the order each key defines: the folded
+// presented name, creation, or last activity (a never-active User is the
+// least recent), each then by ID.
+func testUserStoreListOrders(t *testing.T, ss store.Store) {
+	ctx := context.Background()
+	token := model.NewID()
+	institution := store.UserVisibilityScope{InstitutionWide: true}
+	names := []string{"delta Ward", "Alder Cove", "", "Birch Hale"}
+	users := make([]*model.User, 0, len(names))
+	for index, name := range names {
+		candidate := newUser()
+		candidate.DisplayName, candidate.LastName = name, "ord-"+token
+		if name == "" {
+			candidate.Username = "cedar-" + token
+		}
+		user, err := createUser(t, ctx, ss, candidate)
+		require.NoError(t, err)
+		if index < 2 {
+			at := user.CreatedAt.Add(time.Duration(index+1) * time.Second)
+			require.NoError(t, ss.User().UpdateLastLogin(ctx, &store.UserLastLoginUpdate{ID: user.ID, At: at}))
+		}
+		user, err = ss.User().Get(ctx, user.ID)
+		require.NoError(t, err)
+		users = append(users, user)
+	}
+
+	presented := func(user *model.User) string {
+		if user.DisplayName != "" {
+			return strings.ToLower(user.DisplayName)
+		}
+		return strings.ToLower(user.Username)
+	}
+	compare := map[store.UserOrder]func(a, b *model.User) int{
+		store.UserOrderUsername: func(a, b *model.User) int { return strings.Compare(a.Username, b.Username) },
+		store.UserOrderName:     func(a, b *model.User) int { return strings.Compare(presented(a), presented(b)) },
+		store.UserOrderCreated:  func(a, b *model.User) int { return a.CreatedAt.Compare(b.CreatedAt) },
+		store.UserOrderLastActive: func(a, b *model.User) int {
+			switch {
+			case !a.LastActivityAt.Valid && !b.LastActivityAt.Valid:
+				return 0
+			case !a.LastActivityAt.Valid:
+				return -1
+			case !b.LastActivityAt.Valid:
+				return 1
+			}
+			return a.LastActivityAt.Time.Compare(b.LastActivityAt.Time)
+		},
+	}
+	for order, keyOrder := range compare {
+		for _, descending := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s descending=%t", order, descending), func(t *testing.T) {
+				expected := slices.Clone(users)
+				slices.SortFunc(expected, func(a, b *model.User) int {
+					result := keyOrder(a, b)
+					if result == 0 {
+						result = strings.Compare(a.ID.String(), b.ID.String())
+					}
+					if descending {
+						return -result
+					}
+					return result
+				})
+				want := make([]model.UserID, 0, len(expected))
+				for _, user := range expected {
+					want = append(want, user.ID)
+				}
+
+				options := store.UserListOptions{Query: "ord-" + token, Order: order, Descending: descending, Limit: 1, Visibility: institution}
+				paged := []model.UserID{}
+				for range len(users) + 1 {
+					page, err := ss.User().List(ctx, options)
+					require.NoError(t, err)
+					if len(page) == 0 {
+						break
+					}
+					last := page[0]
+					paged = append(paged, last.ID)
+					options.AfterID = last.ID
+					switch order {
+					case store.UserOrderUsername:
+						options.AfterUsername = last.Username
+					case store.UserOrderCreated:
+						options.AfterCreatedAt = last.CreatedAt
+					case store.UserOrderLastActive:
+						options.AfterLastActivityAt = last.LastActivityAt
+					}
+				}
+				require.Equal(t, want, paged)
+				total, err := ss.User().Count(ctx, options, store.MaximumListCount)
+				require.NoError(t, err)
+				require.Equal(t, len(users), total, "the count ignores the order and keyset")
+			})
+		}
+	}
+
+	var invalid *store.ErrInvalidInput
+	for name, options := range map[string]store.UserListOptions{
+		"unknown order":            {Order: "email"},
+		"name with a username":     {Order: store.UserOrderName, AfterUsername: "x", AfterID: users[0].ID},
+		"created without its key":  {Order: store.UserOrderCreated, AfterID: users[0].ID},
+		"username without its key": {AfterID: users[0].ID},
+		"key without a position":   {Order: store.UserOrderCreated, AfterCreatedAt: users[0].CreatedAt},
+	} {
+		t.Run(name, func(t *testing.T) {
+			options.Limit, options.Visibility = 10, institution
+			_, err := ss.User().List(ctx, options)
+			require.ErrorAs(t, err, &invalid)
+		})
+	}
 }

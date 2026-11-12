@@ -376,16 +376,19 @@ func (s SQLInvitationStore) ListOnboardingImports(
 		args = append(args, pq.Array(states))
 	}
 
+	direction, keyset := "DESC", "<"
+	if options.Ascending {
+		direction, keyset = "ASC", ">"
+	}
 	if options.BeforeID.IsValid() {
-		before := model.TimeUTC(options.BeforeCreatedAt)
-		conditions = append(conditions, "(oi.created_at < ? OR (oi.created_at = ? AND oi.id < ?))")
-		args = append(args, before, before, options.BeforeID.String())
+		conditions = append(conditions, "(oi.created_at, oi.id) "+keyset+" (?, ?)")
+		args = append(args, model.TimeUTC(options.BeforeCreatedAt), options.BeforeID.String())
 	}
 
 	args = append(args, options.Limit)
 	rows := []onboardingImportRow{}
 	if err := s.GetMaster().Select(ctx, &rows, `SELECT `+onboardingImportColumns+` FROM onboarding_imports oi WHERE `+
-		strings.Join(conditions, " AND ")+` ORDER BY oi.created_at DESC, oi.id DESC LIMIT ?`, args...); err != nil {
+		strings.Join(conditions, " AND ")+` ORDER BY oi.created_at `+direction+`, oi.id `+direction+` LIMIT ?`, args...); err != nil {
 		return nil, fmt.Errorf("list onboarding imports: %w", err)
 	}
 

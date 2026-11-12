@@ -36,16 +36,16 @@ func TestHandWrittenListParsersRejectInvalidPages(t *testing.T) {
 	t.Parallel()
 
 	parsers := map[string]func(*http.Request) error{
-		"audits": func(r *http.Request) error { _, err := auditQueryFromRequest(r); return err },
+		"audits": func(r *http.Request) error { _, _, err := auditQueryFromRequest(r); return err },
 		"jobs":   func(r *http.Request) error { _, err := listJobsQuery(r); return err },
 		"job attempts": func(r *http.Request) error {
 			_, _, err := attemptPagination(r)
 			return err
 		},
-		"mail deliveries": func(r *http.Request) error { _, err := listMailDeliveriesQuery(r); return err },
+		"mail deliveries": func(r *http.Request) error { _, _, err := listMailDeliveriesQuery(r); return err },
 		"invitations":     func(r *http.Request) error { _, err := invitationListQuery(r); return err },
 		"memberships": func(r *http.Request) error {
-			_, _, err := membershipPageQuery(r, model.Resource{Type: model.ResourceClass, ID: model.NewID()})
+			_, _, _, err := membershipPageQuery(r, model.Resource{Type: model.ResourceClass, ID: model.NewID()})
 			return err
 		},
 	}
@@ -62,7 +62,7 @@ func TestHandWrittenListParsersRejectInvalidPages(t *testing.T) {
 func TestAuditAndJobQueriesKeepTheRequestedLimit(t *testing.T) {
 	t.Parallel()
 
-	audits, err := auditQueryFromRequest(httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/audits?limit=10", nil))
+	audits, _, err := auditQueryFromRequest(httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/audits?limit=10", nil))
 	require.NoError(t, err)
 	require.Equal(t, 10, audits.Limit)
 	jobs, err := listJobsQuery(httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/jobs?limit=25", nil))

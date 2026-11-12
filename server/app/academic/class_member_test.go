@@ -26,15 +26,16 @@ import (
 
 type classMemberStoreFake struct {
 	store.ClassMemberStore
-	pageOptions store.ClassMemberPageOptions
-	pageResult  *store.ClassMemberPage
-	events      *[]string
-	current     *model.ClassMember
-	enrollInput *store.ClassMemberEnrollment
-	endInput    *store.ClassMemberEnd
-	active      []*model.ClassMember
-	replayed    bool
-	noOp        bool
+	pageOptions  store.ClassMemberPageOptions
+	countOptions store.ClassMemberPageOptions
+	pageResult   *store.ClassMemberPage
+	events       *[]string
+	current      *model.ClassMember
+	enrollInput  *store.ClassMemberEnrollment
+	endInput     *store.ClassMemberEnd
+	active       []*model.ClassMember
+	replayed     bool
+	noOp         bool
 }
 
 func (s *classMemberStoreFake) ListActiveByUser(context.Context, model.UserID, time.Time) ([]*model.ClassMember, error) {
@@ -326,4 +327,12 @@ func (s *classMemberStoreFake) ListPageByClass(_ context.Context, options store.
 		return s.pageResult, nil
 	}
 	return &store.ClassMemberPage{}, nil
+}
+func (s *classMemberStoreFake) CountPageByClass(_ context.Context, options store.ClassMemberPageOptions, maximum int) (int, error) {
+	*s.events = append(*s.events, "count-page")
+	s.countOptions = options
+	if s.pageResult == nil {
+		return 0, nil
+	}
+	return min(len(s.pageResult.Members), maximum), nil
 }

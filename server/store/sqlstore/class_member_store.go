@@ -18,9 +18,11 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
+	"github.com/lib/pq"
 
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -1311,26 +1313,12 @@ func (r classMemberRow) model() (*model.ClassMember, error) {
 var _ store.ClassMemberStore = (*SQLClassMemberStore)(nil)
 
 func (s SQLClassMemberStore) ListPageByClass(ctx context.Context, options store.ClassMemberPageOptions) (*store.ClassMemberPage, error) {
-	if !options.ClassID.IsValid() ||
-		options.Limit < 1 ||
-		options.Limit > 200 ||
-		options.AfterID.IsZero() != options.AfterUserID.IsZero() ||
-		(!options.AfterID.IsZero() && (!options.AfterID.IsValid() || !options.AfterUserID.IsValid())) {
+	if !validClassMemberPageOptions(options) {
 		return nil, store.NewErrInvalidInput("class_member", "page", nil)
 	}
 
-	query := s.query.Where(sq.Eq{"class_members.class_id": options.ClassID.String(), "class_members.archived_at": nil})
-	if !options.ActiveAt.IsZero() {
-		at := model.TimeUTC(options.ActiveAt)
-		query = query.Where(sq.LtOrEq{"class_members.start_at": at}).
-			Where("(class_members.end_at IS NULL OR class_members.end_at > ?)", at)
-	}
-
-	if !options.AfterID.IsZero() {
-		query = query.Where("(class_members.user_id, class_members.id) > (?, ?)", options.AfterUserID.String(), options.AfterID.String())
-	}
-
-	members, err := s.selectMembers(ctx, query.OrderBy("class_members.user_id", "class_members.id").Limit(uint64(options.Limit+1)))
+	query := orderMembershipPage(filterClassMemberPage(s.query, options), "class_members", options.MembershipPageKeyset, options.AfterID.String())
+	members, err := s.selectMembers(ctx, query.Limit(uint64(options.Limit+1))) //nolint:gosec // G115: validClassMemberPageOptions bounds Limit to 1..200.
 	if err != nil {
 		return nil, err
 	}
@@ -1341,6 +1329,85 @@ func (s SQLClassMemberStore) ListPageByClass(ctx context.Context, options store.
 	}
 
 	return &store.ClassMemberPage{Members: members, HasMore: more}, nil
+}
+
+// CountPageByClass counts through the same filter as ListPageByClass,
+// without its keyset, order, or limit, reading at most one row past maximum.
+func (s SQLClassMemberStore) CountPageByClass(ctx context.Context, options store.ClassMemberPageOptions, maximum int) (int, error) {
+	options.MembershipPageKeyset, options.AfterID, options.Limit = store.MembershipPageKeyset{}, "", 1
+	if !validClassMemberPageOptions(options) || !store.ValidCountMaximum(maximum) {
+		return 0, store.NewErrInvalidInput("class_member", "count", nil)
+	}
+
+	return countBounded(ctx, s.GetMaster(), filterClassMemberPage(sq.Select("class_members.id").From("class_members"), options), maximum, "class members")
+}
+
+// CountCurrentByClasses counts each Class's current memberships through the
+// current-member index, reading at most one row past maximum per Class.
+func (s SQLClassMemberStore) CountCurrentByClasses(
+	ctx context.Context,
+	classIDs []model.ClassID,
+	at time.Time,
+	maximum int,
+) ([]store.ClassStudentCount, error) {
+	if len(classIDs) > store.MaximumClassStudentCountClasses || at.IsZero() || !store.ValidCountMaximum(maximum) || !validVisibilityIDs(classIDs) {
+		return nil, store.NewErrInvalidInput("class_member", "count", nil)
+	}
+	if len(classIDs) == 0 {
+		return []store.ClassStudentCount{}, nil
+	}
+
+	at = model.TimeUTC(at)
+	rows := []struct {
+		ClassID string `db:"class_id"`
+		Count   int    `db:"count"`
+	}{}
+	if err := s.GetMaster().Select(ctx, &rows, `
+		SELECT classes.id AS class_id, counted.count
+		FROM unnest(?::text[]) AS classes(id)
+		CROSS JOIN LATERAL (
+			SELECT LEAST(count(*), `+strconv.Itoa(maximum)+`) AS count
+			FROM (
+				SELECT 1
+				FROM class_members
+				WHERE class_members.class_id = classes.id
+					AND class_members.archived_at IS NULL
+					AND class_members.start_at <= ?
+					AND (class_members.end_at IS NULL OR class_members.end_at > ?)
+				LIMIT `+strconv.Itoa(maximum+1)+`
+			) bounded
+		) counted
+		WHERE counted.count > 0`,
+		pq.Array(idStrings(classIDs)), at, at,
+	); err != nil {
+		return nil, fmt.Errorf("count current class members: %w", err)
+	}
+
+	counts := make([]store.ClassStudentCount, 0, len(rows))
+	for _, row := range rows {
+		counts = append(counts, store.ClassStudentCount{ClassID: model.ClassID(row.ClassID), Count: row.Count})
+	}
+	return counts, nil
+}
+
+// filterClassMemberPage applies every ListPageByClass filter but the keyset:
+// the Class, unarchived memberships, and the effective instant.
+func filterClassMemberPage(query sq.SelectBuilder, options store.ClassMemberPageOptions) sq.SelectBuilder {
+	query = query.Where(sq.Eq{"class_members.class_id": options.ClassID.String(), "class_members.archived_at": nil})
+	if !options.ActiveAt.IsZero() {
+		at := model.TimeUTC(options.ActiveAt)
+		query = query.Where(sq.LtOrEq{"class_members.start_at": at}).
+			Where("(class_members.end_at IS NULL OR class_members.end_at > ?)", at)
+	}
+	return query
+}
+
+func validClassMemberPageOptions(options store.ClassMemberPageOptions) bool {
+	return options.ClassID.IsValid() &&
+		options.Limit >= 1 &&
+		options.Limit <= 200 &&
+		(options.AfterID.IsZero() || options.AfterID.IsValid()) &&
+		validMembershipPageKeyset(options.MembershipPageKeyset, !options.AfterID.IsZero())
 }
 
 // SeedEnroll is an unaudited fixture write for conformance and integration tests.

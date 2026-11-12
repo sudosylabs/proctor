@@ -344,8 +344,8 @@ func (s SQLUserStore) GetByEmail(ctx context.Context, email string) (*model.User
 	}), email)
 }
 
-// List returns a page of unarchived Users ordered by username and ID,
-// restricted to the input visibility and search term.
+// List returns a page of unarchived Users in options.Order (username by
+// default) then ID, restricted to the input visibility and search term.
 func (s SQLUserStore) List(
 	ctx context.Context,
 	options store.UserListOptions,
@@ -357,15 +357,23 @@ func (s SQLUserStore) List(
 	if err != nil {
 		return nil, err
 	}
-	if options.AfterUsername != "" {
-		query = query.Where(
-			"(users.username > ? OR (users.username = ? AND users.id > ?))",
-			options.AfterUsername,
-			options.AfterUsername,
-			options.AfterID,
-		)
+	key, direction, keyset := userListKey(options)
+	if options.AfterID != "" {
+		var after any
+		switch options.Order {
+		case store.UserOrderName:
+			after = sq.Expr("(SELECT sort_name FROM users WHERE id = ?)", options.AfterID)
+		case store.UserOrderCreated:
+			after = model.TimeUTC(options.AfterCreatedAt)
+		case store.UserOrderLastActive:
+			after = sq.Expr("COALESCE(?::timestamptz, '-infinity'::timestamptz)", NullTimeFromOptional(options.AfterLastActivityAt))
+		default:
+			after = options.AfterUsername
+		}
+		query = query.Where(sq.Expr("("+key+", users.id) "+keyset+" (?, ?)", after, options.AfterID))
 	}
-	query = query.OrderBy("users.username", "users.id").Limit(uint64(options.Limit)) //nolint:gosec // G115: validUserListOptions bounds Limit to 1..201.
+	query = query.OrderBy(key+" "+direction, "users.id "+direction).
+		Limit(uint64(options.Limit)) //nolint:gosec // G115: validUserListOptions bounds Limit to 1..201.
 	rows := []userRow{}
 	if err := s.GetMaster().SelectBuilder(ctx, &rows, query); err != nil {
 		return nil, fmt.Errorf("list users: %w", err)
@@ -384,7 +392,8 @@ func (s SQLUserStore) List(
 // Count counts through the same filter as List, without its keyset, order,
 // or limit, reading at most one row past maximum.
 func (s SQLUserStore) Count(ctx context.Context, options store.UserListOptions, maximum int) (int, error) {
-	options.AfterUsername, options.AfterID, options.Limit = "", "", 1
+	options.Order, options.Descending, options.Limit = store.UserOrderUsername, false, 1
+	options.AfterUsername, options.AfterCreatedAt, options.AfterLastActivityAt, options.AfterID = "", time.Time{}, model.OptionalTime{}, ""
 	if !validUserListOptions(options) || !store.ValidCountMaximum(maximum) {
 		return 0, store.NewErrInvalidInput("user", "count_options", nil)
 	}
@@ -418,13 +427,55 @@ func filterUserList(query sq.SelectBuilder, options store.UserListOptions) (sq.S
 	return filterUserListAcademicUnit(query, options), nil
 }
 
+// userListKey returns the ordered expression of options.Order, its direction,
+// and the keyset comparison that continues past a key in that direction.
+func userListKey(options store.UserListOptions) (string, string, string) {
+	direction, keyset := "ASC", ">"
+	if options.Descending {
+		direction, keyset = "DESC", "<"
+	}
+	switch options.Order {
+	case store.UserOrderName:
+		return "users.sort_name", direction, keyset
+	case store.UserOrderCreated:
+		return "users.created_at", direction, keyset
+	case store.UserOrderLastActive:
+		return "COALESCE(users.last_activity_at, '-infinity'::timestamptz)", direction, keyset
+	default:
+		return "users.username", direction, keyset
+	}
+}
+
+// validUserListContinuation reports whether a continuation carries exactly
+// the key its order reads.
+func validUserListContinuation(options store.UserListOptions) bool {
+	if options.Order != "" && !options.Order.IsValid() {
+		return false
+	}
+	if options.AfterID == "" {
+		return options.AfterUsername == "" && options.AfterCreatedAt.IsZero() && !options.AfterLastActivityAt.Valid
+	}
+	if !options.AfterID.IsValid() {
+		return false
+	}
+	switch options.Order {
+	case store.UserOrderName:
+		return options.AfterUsername == "" && options.AfterCreatedAt.IsZero() && !options.AfterLastActivityAt.Valid
+	case store.UserOrderCreated:
+		return options.AfterUsername == "" && !options.AfterCreatedAt.IsZero() && !options.AfterLastActivityAt.Valid
+	case store.UserOrderLastActive:
+		return options.AfterUsername == "" && options.AfterCreatedAt.IsZero()
+	default:
+		return options.AfterUsername != "" && options.AfterCreatedAt.IsZero() && !options.AfterLastActivityAt.Valid
+	}
+}
+
 // validUserListOptions reports whether the list page size, cursor and visibility bounds are acceptable.
 func validUserListOptions(options store.UserListOptions) bool {
 	return !(options.Limit < 1 ||
 		options.Limit > 201 ||
 		(options.ID != "" && !options.ID.IsValid()) ||
-		(options.AfterUsername == "") != (options.AfterID == "") ||
-		(options.AfterID != "" && !options.AfterID.IsValid()) ||
+		!validUserListContinuation(options) ||
 		!validUserListMembershipFilters(options) ||
 		len(options.Visibility.ClassIDs)+len(options.Visibility.AcademicUnitRootIDs)+
 			len(options.Visibility.ClassMemberAcademicUnitRootIDs) > 256 ||

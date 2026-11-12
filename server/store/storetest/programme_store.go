@@ -303,5 +303,18 @@ func testProgrammeStoreSearchLimit(t *testing.T, ss store.Store) {
 		require.NoError(t, err)
 		require.Len(t, found, 1, "SearchByAcademicUnit(q=%q, limit=1)", term)
 		require.Equal(t, first.ID, found[0].ID, "SearchByAcademicUnit(q=%q, limit=1)", term)
+		listed, err := ss.Programme().SearchByAcademicUnit(ctx, unit.ID, store.AcademicNameListOptions{Term: term, Limit: 200})
+		require.NoError(t, err)
+		total, err := ss.Programme().CountByAcademicUnit(ctx, unit.ID, store.AcademicNameListOptions{Term: term, AfterName: first.Name, AfterID: first.ID.String(), Limit: 1}, store.MaximumListCount)
+		require.NoError(t, err)
+		require.Len(t, listed, total, "the count reads the term and ignores the continuation (q=%q)", term)
 	}
+	narrowed, err := ss.Programme().CountByAcademicUnit(ctx, unit.ID, store.AcademicNameListOptions{Term: "bounded-second"}, store.MaximumListCount)
+	require.NoError(t, err)
+	require.Equal(t, 1, narrowed, "the term narrows the count")
+	capped, err := ss.Programme().CountByAcademicUnit(ctx, unit.ID, store.AcademicNameListOptions{}, 1)
+	require.NoError(t, err)
+	require.Equal(t, 1, capped, "the count stops at its bound")
+	_, err = ss.Programme().CountByAcademicUnit(ctx, unit.ID, store.AcademicNameListOptions{}, 0)
+	require.Error(t, err, "a zero bound")
 }

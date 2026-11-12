@@ -94,7 +94,9 @@ type OnboardingImportRowView struct {
 // and BeforeID continue after the previous page's last item, both set or both
 // zero.
 type ListOnboardingImportsQuery struct {
-	States          []model.OnboardingImportState
+	States []model.OnboardingImportState
+	// Ascending reads oldest first; the default is newest first.
+	Ascending       bool
 	BeforeCreatedAt time.Time
 	BeforeID        model.OnboardingImportID
 	Limit           int
@@ -338,7 +340,12 @@ func (s *Service) ListOnboardingImports(
 		return paging.Page[OnboardingImportView]{}, err
 	}
 
-	options := store.OnboardingImportListOptions{Visibility: store.OnboardingImportVisibilityScope(scope), States: states, Limit: probe}
+	options := store.OnboardingImportListOptions{
+		Visibility: store.OnboardingImportVisibilityScope(scope),
+		States:     states,
+		Ascending:  query.Ascending,
+		Limit:      probe,
+	}
 	if query.BeforeID.IsValid() {
 		options.BeforeCreatedAt, options.BeforeID = model.TimeUTC(query.BeforeCreatedAt), query.BeforeID
 	}

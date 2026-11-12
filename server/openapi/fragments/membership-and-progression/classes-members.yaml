@@ -15,7 +15,7 @@ paths:
       tags:
         - Membership and progression
       description: >-
-        Lists authorized student enrollments for one Class at the requested effective instant or across retained history. The roster projection contains relationship state and does not expand student credentials, answers, or unrestricted profile data. Bounded pages use immutable (user_id, id) ordering. The next_cursor freezes the effective instant or history filter, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests.
+        Lists authorized student enrollments for one Class at the requested effective instant or across retained history. The roster projection contains relationship state and does not expand student credentials, answers, or unrestricted profile data. Bounded pages are ordered by `sort` and `dir`, by default the membership start (`enrolled`) ascending then identity. The first page also reports `total`, the memberships the filter matches across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. The next_cursor freezes the effective instant or history filter and the order, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -51,6 +51,30 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: sort
+          in: query
+          required: false
+          description: >-
+            The page order, each key then by membership identity: `enrolled` (the enrollment start, the default) or `name`
+            (the member's presented name, the display name or else the username, compared case-insensitively on
+            its first 64 characters). A cursor continues only the sort and direction that produced it; repeat both
+            when following it.
+          schema:
+            type: string
+            enum:
+              - enrolled
+              - name
+            default: enrolled
+        - name: dir
+          in: query
+          required: false
+          description: Ascending (`asc`, the default) or descending (`desc`) by the `sort` key.
+          schema:
+            type: string
+            enum:
+              - asc
+              - desc
+            default: asc
         - $ref: '#/components/parameters/PageLimit'
         - $ref: '#/components/parameters/PageCursor'
       responses:
@@ -148,7 +172,7 @@ components:
             $ref: '#/components/schemas/ClassEnrollmentResponse'
   schemas:
     ClassMemberListResponse:
-      description: One page of the collection in its stable order.
+      description: One page of the collection in its requested order; the first page carries its total.
       type: object
       additionalProperties: false
       required:
@@ -160,6 +184,16 @@ components:
             $ref: '#/components/schemas/ClassMemberResponse'
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
+        total:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            Memberships matching the effective instant or history filter across every page, present only on the
+            first page. At 10,000 counting stops and `total_is_lower_bound` is true.
+        total_is_lower_bound:
+          type: boolean
+          description: True when `total` reached the 10,000 bound and there may be more. Present with `total`.
     ClassEnrollmentResponse:
       type: object
       additionalProperties: false

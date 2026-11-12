@@ -96,21 +96,22 @@ type onboardingImportResponse struct {
 	FileName string `json:"file_name,omitempty"`
 }
 
-// onboardingImportCursor is the keyset of the last listed import: newest
-// first by creation instant, then identity.
+// onboardingImportCursor is the keyset of the last listed import by creation
+// instant, then identity, in the read order it records.
 type onboardingImportCursor struct {
 	CreatedAt string `json:"created_at"`
 	ID        string `json:"id"`
+	Order     string `json:"order"`
 }
 
 func onboardingImportCursorSpec() route.CursorSpec[onboardingImportCursor] {
 	return route.CursorSpec[onboardingImportCursor]{
 		Label:                "onboarding import",
 		MaximumEncodedLength: route.DefaultMaximumCursorLength,
-		Members:              []string{"created_at", "id"},
+		Members:              []string{"created_at", "id", "order"},
 		Validate: func(cursor onboardingImportCursor) error {
 			createdAt, err := model.ParseRFC3339(cursor.CreatedAt)
-			if err != nil || createdAt.IsZero() || !model.OnboardingImportID(cursor.ID).IsValid() {
+			if err != nil || createdAt.IsZero() || !model.OnboardingImportID(cursor.ID).IsValid() || !validListDirection(cursor.Order) {
 				return errors.New("invalid onboarding import keyset")
 			}
 
@@ -289,12 +290,17 @@ func (h onboardingImportHandlers) list(request route.Request) (route.Result, err
 
 	values := request.HTTP.URL.Query()
 	for key := range values {
-		if key != "state" && key != "limit" && key != "cursor" {
+		if key != "state" && key != "order" && key != "limit" && key != "cursor" {
 			return route.Result{}, route.InvalidRequest(errors.New("unknown onboarding import query parameter"))
 		}
 	}
 
-	query := onboarding.ListOnboardingImportsQuery{Limit: page.Limit}
+	order, err := parseListDirection(values, "order", listDescending)
+	if err != nil {
+		return route.Result{}, err
+	}
+
+	query := onboarding.ListOnboardingImportsQuery{Limit: page.Limit, Ascending: order == listAscending}
 	for _, raw := range values["state"] {
 		if raw == "" {
 			return route.Result{}, route.InvalidRequest(errors.New("state must be non-empty"))
@@ -309,6 +315,9 @@ func (h onboardingImportHandlers) list(request route.Request) (route.Result, err
 	}
 
 	if continued {
+		if cursor.Order != order {
+			return route.Result{}, route.InvalidRequest(errors.New("cursor belongs to another order"))
+		}
 		query.BeforeCreatedAt, _ = model.ParseRFC3339(cursor.CreatedAt)
 		query.BeforeID = model.OnboardingImportID(cursor.ID)
 	}
@@ -325,7 +334,7 @@ func (h onboardingImportHandlers) list(request route.Request) (route.Result, err
 		return onboardingImportResponseFromView(view, nil)
 	}, func(last onboarding.OnboardingImportView) (string, error) {
 		return route.EncodeCursor(
-			onboardingImportCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String()},
+			onboardingImportCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String(), Order: order},
 			onboardingImportCursorSpec(),
 		)
 	})

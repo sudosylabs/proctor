@@ -81,15 +81,15 @@ func (s *Service) ListProgrammeLevels(
 	ctx context.Context,
 	inv invocation.Invocation,
 	query ListProgrammeLevelsQuery,
-) (paging.Page[*model.ProgrammeLevel], error) {
+) (paging.Counted[*model.ProgrammeLevel], error) {
 	programmeID := query.ProgrammeID
 	if !programmeID.IsValid() {
-		return paging.Page[*model.ProgrammeLevel]{}, apperror.New("request.invalid").WithField("field", "programme_id")
+		return paging.Counted[*model.ProgrammeLevel]{}, apperror.New("request.invalid").WithField("field", "programme_id")
 	}
 
 	limit, probe, err := paging.ResolveLimit(query.Limit, "limit")
 	if err != nil {
-		return paging.Page[*model.ProgrammeLevel]{}, err
+		return paging.Counted[*model.ProgrammeLevel]{}, err
 	}
 
 	if err = s.authorizer.Authorize(
@@ -98,20 +98,33 @@ func (s *Service) ListProgrammeLevels(
 		model.ActionProgrammeLevelView,
 		model.Resource{Type: model.ResourceProgramme, ID: programmeID.String()},
 	); err != nil {
-		return paging.Page[*model.ProgrammeLevel]{}, err
+		return paging.Counted[*model.ProgrammeLevel]{}, err
 	}
 
-	levels, err := s.programmeLevels.SearchByProgramme(ctx, programmeID, store.AcademicNameListOptions{
+	options := store.AcademicNameListOptions{
 		Term:      strings.TrimSpace(query.Query),
 		AfterName: query.AfterName,
 		AfterID:   query.AfterID,
 		Limit:     probe,
-	})
+	}
+	levels, err := s.programmeLevels.SearchByProgramme(ctx, programmeID, options)
 	if err != nil {
-		return paging.Page[*model.ProgrammeLevel]{}, programmeLevelStoreErrors.Translate(err)
+		return paging.Counted[*model.ProgrammeLevel]{}, programmeLevelStoreErrors.Translate(err)
 	}
 
-	return paging.New(levels, limit), nil
+	page := paging.Counted[*model.ProgrammeLevel]{Page: paging.New(levels, limit)}
+	total, consistent, err := paging.CountFirst(query.AfterID == "", len(page.Items), func(maximum int) (int, error) {
+		return s.programmeLevels.CountByProgramme(ctx, programmeID, options, maximum)
+	})
+	if err != nil {
+		return paging.Counted[*model.ProgrammeLevel]{}, programmeLevelStoreErrors.Translate(err)
+	}
+	if !consistent {
+		return paging.Counted[*model.ProgrammeLevel]{}, apperror.New("administration.unavailable").WithField("resource", "programme_level")
+	}
+
+	page.Total = total
+	return page, nil
 }
 
 // CreateProgrammeLevel creates a Programme Level after authorizing the caller.

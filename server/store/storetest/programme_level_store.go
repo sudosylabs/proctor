@@ -127,10 +127,16 @@ func testProgrammeLevelStoreSearchAndArchive(t *testing.T, ss store.Store) {
 		require.NoError(t, err)
 		require.Len(t, found, 1, "SearchByProgramme(%q)", query)
 		require.Equal(t, level.ID, found[0].ID, "SearchByProgramme(%q)", query)
+		total, countErr := ss.ProgrammeLevel().CountByProgramme(ctx, programme.ID, store.AcademicNameListOptions{Term: query}, store.MaximumListCount)
+		require.NoError(t, countErr)
+		require.Equal(t, 1, total, "CountByProgramme(%q) reads the list's term", query)
 	}
 	archived, err := ArchiveProgrammeLevel(ctx, ss, level.ID, model.NowUTC())
 	require.NoError(t, err)
 	require.NotEqual(t, int64(0), archived.ArchivedAt.Millis())
+	total, err := ss.ProgrammeLevel().CountByProgramme(ctx, programme.ID, store.AcademicNameListOptions{Term: "foundation"}, store.MaximumListCount)
+	require.NoError(t, err)
+	require.Zero(t, total, "an archived level is not counted")
 }
 
 func testProgrammeLevelStoreSave(t *testing.T, ss store.Store) {

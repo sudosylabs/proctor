@@ -719,11 +719,15 @@ func (s SQLJobStore) List(ctx context.Context, options store.JobListOptions) ([]
 	}
 	filter, arguments := jobListFilter(options)
 	query := `SELECT ` + jobColumns + ` FROM jobs WHERE ` + filter
+	direction, keyset := "DESC", "<"
+	if options.Ascending {
+		direction, keyset = "ASC", ">"
+	}
 	if !options.BeforeID.IsZero() {
-		query += ` AND (created_at, id) < (?, ?)`
+		query += ` AND (created_at, id) ` + keyset + ` (?, ?)`
 		arguments = append(arguments, options.BeforeCreatedAt, options.BeforeID.String())
 	}
-	query += ` ORDER BY created_at DESC, id DESC LIMIT ?`
+	query += ` ORDER BY created_at ` + direction + `, id ` + direction + ` LIMIT ?`
 	arguments = append(arguments, options.Limit)
 	var rows []jobRow
 	if err := s.GetMaster().Select(ctx, &rows, query, arguments...); err != nil {
@@ -743,7 +747,7 @@ func (s SQLJobStore) List(ctx context.Context, options store.JobListOptions) ([]
 // Count counts through the same filter as List, without its keyset, order,
 // or limit, reading at most one row past maximum.
 func (s SQLJobStore) Count(ctx context.Context, options store.JobListOptions, maximum int) (int, error) {
-	options.BeforeCreatedAt, options.BeforeID, options.Limit = time.Time{}, "", 1
+	options.Ascending, options.BeforeCreatedAt, options.BeforeID, options.Limit = false, time.Time{}, "", 1
 	if !validJobListOptions(options) || !store.ValidCountMaximum(maximum) {
 		return 0, store.NewErrInvalidInput("job", "count", nil)
 	}

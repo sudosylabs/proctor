@@ -1188,6 +1188,12 @@ func (s *Authorizer) CanViewInstitutionUsers(ctx context.Context, inv invocation
 	return constraint.InstitutionWide, err
 }
 
+// CanViewClassMembers evaluates class.members.view on the Resource without
+// recording a decision.
+func (s *Authorizer) CanViewClassMembers(ctx context.Context, inv invocation.Invocation, resource model.Resource) (bool, error) {
+	return s.Can(ctx, inv.Principal(), model.ActionClassMembersView, resource)
+}
+
 // CanViewRoleBindings evaluates role_binding.view on the Resource without
 // recording a decision.
 func (s *Authorizer) CanViewRoleBindings(ctx context.Context, inv invocation.Invocation, resource model.Resource) (bool, error) {

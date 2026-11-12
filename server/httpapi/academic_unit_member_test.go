@@ -20,6 +20,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -37,7 +38,7 @@ func TestAcademicUnitMemberHistoryQueryIncludesEndedMemberships(t *testing.T) {
 	t.Parallel()
 
 	request := httptest.NewRequestWithContext(t.Context(), "GET", "/api/v1/academic-units/unit/members?history=true", nil)
-	query, _, err := membershipPageQuery(request, model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewID()})
+	query, _, _, err := membershipPageQuery(request, model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewID()})
 	require.NoError(t, err)
 	require.NotNil(t, query.History)
 	require.True(t, *query.History, "history")
@@ -47,7 +48,7 @@ func TestAcademicUnitMemberHistoryQueryRejectsInvalidBoolean(t *testing.T) {
 	t.Parallel()
 
 	request := httptest.NewRequestWithContext(t.Context(), "GET", "/api/v1/academic-units/unit/members?history=invalid", nil)
-	_, _, err := membershipPageQuery(request, model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewID()})
+	_, _, _, err := membershipPageQuery(request, model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewID()})
 	require.Error(t, err, "invalid history query was accepted")
 }
 
@@ -55,7 +56,7 @@ func TestAcademicUnitMemberFalseHistoryQueryUsesActiveAt(t *testing.T) {
 	t.Parallel()
 
 	request := httptest.NewRequestWithContext(t.Context(), "GET", "/api/v1/academic-units/unit/members?history=false&active_at=1970-01-01T00:00:00.123Z", nil)
-	query, _, err := membershipPageQuery(request, model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewID()})
+	query, _, _, err := membershipPageQuery(request, model.Resource{Type: model.ResourceAcademicUnit, ID: model.NewID()})
 	require.NoError(t, err)
 	require.NotNil(t, query.ActiveAt)
 	require.Equal(t, int64(123), *query.ActiveAt, "active at")
@@ -100,7 +101,7 @@ func TestAcademicUnitMemberResourceRunsThroughRoutingKernel(t *testing.T) {
 	require.Equal(t, model.AcademicUnitID(unitID), members.pageQuery.AcademicUnitID)
 	require.NotNil(t, members.pageQuery.History)
 	require.True(t, *members.pageQuery.History, "history listing")
-	require.JSONEq(t, `{"items":[]}`, listed.Body.String(), "empty collection envelope")
+	require.JSONEq(t, `{"items":[],"total":0,"total_is_lower_bound":false}`, listed.Body.String(), "empty first page with its total")
 }
 
 func TestAcademicUnitMemberListNamesMembersAndTheirRolesHere(t *testing.T) {
@@ -169,9 +170,18 @@ func TestAcademicUnitMemberResourceRejectsInvalidQueryAndMissingPrincipal(t *tes
 func (a *academicUnitMemberHTTPApplication) ListAcademicUnitMembersPage(_ context.Context, _ invocation.Invocation, query academic.ListAcademicUnitMembersPageQuery) (*academic.AcademicUnitMemberPage, error) {
 	a.pageQuery = query
 	if a.pageResult != nil {
+		if query.AfterID.IsZero() && !a.pageResult.Counted {
+			counted := *a.pageResult
+			counted.Total = paging.CountWhole(len(counted.Members))
+			return &counted, nil
+		}
 		return a.pageResult, nil
 	}
-	return &academic.AcademicUnitMemberPage{}, nil
+	page := &academic.AcademicUnitMemberPage{}
+	if query.AfterID.IsZero() {
+		page.Total = paging.CountWhole(0)
+	}
+	return page, nil
 }
 
 func TestAcademicUnitMemberOpenAPIDocument(t *testing.T) {

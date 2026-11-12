@@ -24,9 +24,12 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
+// auditCursor continues one read order; a cursor from the other order is an
+// invalid query, not a position.
 type auditCursor struct {
 	CreatedAt string `json:"created_at"`
 	ID        string `json:"id"`
+	Order     string `json:"order"`
 }
 
 type auditEventResponse struct {
@@ -117,7 +120,7 @@ func auditResource(app AuditListingApplication) route.Resource {
 }
 
 func (h auditHandlers) list(request route.Request) (route.Result, error) {
-	query, err := auditQueryFromRequest(request.HTTP)
+	query, order, err := auditQueryFromRequest(request.HTTP)
 	if err != nil {
 		return route.Result{}, apperror.Invalid("request.invalid", "query")
 	}
@@ -130,7 +133,7 @@ func (h auditHandlers) list(request route.Request) (route.Result, error) {
 		return route.Result{}, listErr
 	}
 	envelope, err := route.NewList(page.Items, page.HasMore, auditEventResponseFromModel, func(last *model.AuditEvent) (string, error) {
-		return encodeAuditCursor(auditCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String()})
+		return encodeAuditCursor(auditCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String(), Order: order})
 	})
 	if err != nil {
 		return route.Result{}, err
@@ -142,17 +145,27 @@ func (h auditHandlers) list(request route.Request) (route.Result, error) {
 	return route.JSON(http.StatusOK, response), nil
 }
 
-func auditQueryFromRequest(request *http.Request) (administration.ListAuditEventsQuery, error) {
+// auditQueryFromRequest parses the listing query and returns the read order,
+// newest first (desc) unless order=asc. A cursor continues only its own order.
+func auditQueryFromRequest(request *http.Request) (administration.ListAuditEventsQuery, string, error) {
 	page, err := route.ParsePage(request)
 	if err != nil {
-		return administration.ListAuditEventsQuery{}, err
+		return administration.ListAuditEventsQuery{}, "", err
 	}
 	query := administration.ListAuditEventsQuery{Limit: page.Limit}
 	values := request.URL.Query()
+	order, err := parseListDirection(values, "order", listDescending)
+	if err != nil {
+		return query, order, err
+	}
+	query.Ascending = order == listAscending
 	if raw := page.Cursor; raw != "" {
 		cursor, decodeErr := decodeAuditCursor(raw)
 		if decodeErr != nil {
-			return query, decodeErr
+			return query, order, decodeErr
+		}
+		if cursor.Order != order {
+			return query, order, errAuditQuery("cursor")
 		}
 
 		createdAt, _ := model.ParseRFC3339(cursor.CreatedAt)
@@ -162,34 +175,34 @@ func auditQueryFromRequest(request *http.Request) (administration.ListAuditEvent
 
 	for _, name := range []string{"created_after", "created_before"} {
 		if entries, present := values[name]; present && (len(entries) != 1 || entries[0] == "") {
-			return query, errAuditQuery(name)
+			return query, order, errAuditQuery(name)
 		}
 	}
 
 	if query.Since, err = optionalAuditTime(values, "created_after"); err != nil {
-		return query, err
+		return query, order, err
 	}
 	if query.Until, err = optionalAuditTime(values, "created_before"); err != nil {
-		return query, err
+		return query, order, err
 	}
 
 	query.ActorID = model.UserID(values.Get("actor_id"))
 	query.Action = values.Get("action")
 	resourceType, resourceID := values.Get("resource_type"), values.Get("resource_id")
 	if (resourceType == "") != (resourceID == "") {
-		return query, errInvalidAuditResource
+		return query, order, errInvalidAuditResource
 	}
 
 	if resourceType != "" {
 		resource := model.Resource{Type: model.ResourceType(resourceType), ID: resourceID}
 		if resource.Validate() != nil {
-			return query, errInvalidAuditResource
+			return query, order, errInvalidAuditResource
 		}
 
 		query.Resource = &resource
 	}
 
-	return query, nil
+	return query, order, nil
 }
 
 var errInvalidAuditResource = errAuditQuery("resource")
@@ -212,10 +225,10 @@ func auditCursorSpec() route.CursorSpec[auditCursor] {
 	return route.CursorSpec[auditCursor]{
 		Label:                "audit",
 		MaximumEncodedLength: route.DefaultMaximumCursorLength,
-		Members:              []string{"created_at", "id"},
+		Members:              []string{"created_at", "id", "order"},
 		Validate: func(cursor auditCursor) error {
 			createdAt, err := model.ParseRFC3339(cursor.CreatedAt)
-			if err != nil || createdAt.IsZero() || !model.AuditEventID(cursor.ID).IsValid() {
+			if err != nil || createdAt.IsZero() || !model.AuditEventID(cursor.ID).IsValid() || !validListDirection(cursor.Order) {
 				return errors.New("invalid audit keyset")
 			}
 

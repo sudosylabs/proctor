@@ -283,12 +283,21 @@ func (s SQLAuditStore) List(
 		return nil, err
 	}
 
-	query = query.OrderBy("audit_events.created_at DESC", "audit_events.id DESC").Limit(uint64(options.Limit))
+	direction := "DESC"
+	if options.Ascending {
+		direction = "ASC"
+	}
+	query = query.OrderBy("audit_events.created_at "+direction, "audit_events.id "+direction).Limit(uint64(options.Limit))
 	if !options.BeforeCreatedAt.IsZero() {
 		beforeTime := model.TimeUTC(options.BeforeCreatedAt)
-		if options.BeforeID == "" {
+		switch {
+		case options.Ascending && options.BeforeID == "":
+			query = query.Where(sq.Gt{"audit_events.created_at": beforeTime})
+		case options.Ascending:
+			query = query.Where("(audit_events.created_at, audit_events.id) > (?, ?)", beforeTime, options.BeforeID)
+		case options.BeforeID == "":
 			query = query.Where(sq.Lt{"audit_events.created_at": beforeTime})
-		} else {
+		default:
 			query = query.Where(sq.Or{
 				sq.Lt{"audit_events.created_at": beforeTime},
 				sq.And{

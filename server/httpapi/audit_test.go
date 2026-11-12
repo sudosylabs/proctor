@@ -59,9 +59,9 @@ func TestAuditCursorKeepsMicrosecondsSoSameMillisecondRowsAreNotSkipped(t *testi
 
 	createdAt := time.Date(2026, 8, 12, 9, 30, 0, 123_456_000, time.UTC)
 	id := model.NewAuditEventID()
-	cursor, err := encodeAuditCursor(auditCursor{CreatedAt: model.FormatRFC3339(createdAt), ID: id.String()})
+	cursor, err := encodeAuditCursor(auditCursor{CreatedAt: model.FormatRFC3339(createdAt), ID: id.String(), Order: listDescending})
 	require.NoError(t, err)
-	query, err := auditQueryFromRequest(httptest.NewRequestWithContext(t.Context(), "GET", "/api/v1/audit?cursor="+cursor, nil))
+	query, _, err := auditQueryFromRequest(httptest.NewRequestWithContext(t.Context(), "GET", "/api/v1/audit?cursor="+cursor, nil))
 	require.NoError(t, err)
 	require.True(t, createdAt.Equal(query.BeforeCreatedAt), "cursor instant = %v", query.BeforeCreatedAt)
 	require.Equal(t, id, query.BeforeID)
@@ -72,7 +72,7 @@ func TestAuditQueryReadsCreatedRangeLikeSelfHistory(t *testing.T) {
 
 	after := time.Date(2026, 8, 12, 9, 0, 0, 0, time.UTC)
 	before := time.Date(2026, 8, 13, 9, 0, 0, 0, time.UTC)
-	query, err := auditQueryFromRequest(httptest.NewRequestWithContext(t.Context(), "GET",
+	query, _, err := auditQueryFromRequest(httptest.NewRequestWithContext(t.Context(), "GET",
 		"/api/v1/audits?created_after=2026-08-12T09:00:00Z&created_before=2026-08-13T11:00:00%2B02:00", nil))
 	require.NoError(t, err)
 	require.True(t, after.Equal(query.Since), "Since = %v", query.Since)
@@ -84,7 +84,7 @@ func TestAuditQueryReadsCreatedRangeLikeSelfHistory(t *testing.T) {
 		"created_after=",
 		"created_after=2026-08-12T09:00:00Z&created_after=2026-08-13T09:00:00Z",
 	} {
-		_, err = auditQueryFromRequest(httptest.NewRequestWithContext(t.Context(), "GET", "/api/v1/audits?"+raw, nil))
+		_, _, err = auditQueryFromRequest(httptest.NewRequestWithContext(t.Context(), "GET", "/api/v1/audits?"+raw, nil))
 		require.Error(t, err, raw)
 	}
 }

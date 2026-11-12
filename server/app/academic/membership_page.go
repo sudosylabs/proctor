@@ -12,14 +12,48 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
-// MembershipPageQuery selects an effective instant or full retained history.
-// Transport adapters resolve opaque continuations into explicit selectors.
+// MembershipPageQuery selects an effective instant or full retained history
+// and the page order: by membership start (the zero Order) or by member name,
+// reversed when Descending. Transport adapters resolve opaque continuations
+// into explicit selectors.
 type MembershipPageQuery struct {
-	Limit    int
-	ActiveAt *int64
-	History  *bool
+	Limit      int
+	ActiveAt   *int64
+	History    *bool
+	Order      store.MembershipOrder
+	Descending bool
+}
+
+// membershipPageKeyset validates the order and continuation of a membership
+// page: a continuation names its last membership (afterID) with that
+// membership's start in the start order, or its member in the name order.
+func membershipPageKeyset(query MembershipPageQuery, afterID string, afterStartAt time.Time, afterUserID model.UserID) (store.MembershipPageKeyset, error) {
+	keyset := store.MembershipPageKeyset{Order: query.Order, Descending: query.Descending}
+	if !keyset.Order.IsValid() {
+		return keyset, apperror.New("request.invalid").WithField("field", "sort")
+	}
+
+	switch {
+	case afterID == "":
+		if !afterStartAt.IsZero() || !afterUserID.IsZero() {
+			return keyset, apperror.New("request.invalid").WithField("field", "cursor")
+		}
+	case keyset.Order == store.MembershipOrderName:
+		if !afterStartAt.IsZero() || !afterUserID.IsValid() {
+			return keyset, apperror.New("request.invalid").WithField("field", "cursor")
+		}
+		keyset.AfterUserID = afterUserID
+	default:
+		if afterStartAt.IsZero() || !afterUserID.IsZero() {
+			return keyset, apperror.New("request.invalid").WithField("field", "cursor")
+		}
+		keyset.AfterStartAt = model.TimeUTC(afterStartAt)
+	}
+
+	return keyset, nil
 }
 
 func resolveMembershipPage(query MembershipPageQuery, now time.Time) (int64, int, error) {

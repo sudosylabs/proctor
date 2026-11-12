@@ -34,6 +34,7 @@ type programmeLevelStoreFake struct {
 	listed       []*model.ProgrammeLevel
 	searchTerm   string
 	searchLimit  int
+	countTerm    string
 }
 
 func (s *programmeLevelStoreFake) Get(context.Context, model.ProgrammeLevelID) (*model.ProgrammeLevel, error) {
@@ -43,6 +44,10 @@ func (s *programmeLevelStoreFake) Get(context.Context, model.ProgrammeLevelID) (
 func (s *programmeLevelStoreFake) SearchByProgramme(_ context.Context, _ model.ProgrammeID, options store.AcademicNameListOptions) ([]*model.ProgrammeLevel, error) {
 	s.searchTerm, s.searchLimit = options.Term, options.Limit
 	return s.listed[:min(options.Limit, len(s.listed))], nil
+}
+func (s *programmeLevelStoreFake) CountByProgramme(_ context.Context, _ model.ProgrammeID, options store.AcademicNameListOptions, maximum int) (int, error) {
+	s.countTerm = options.Term
+	return min(len(s.listed), maximum), nil
 }
 func (s *programmeLevelStoreFake) Create(_ context.Context, input *store.ProgrammeLevelCreation) (*model.ProgrammeLevel, error) {
 	*s.events = append(*s.events, "store-create")
@@ -170,6 +175,8 @@ func TestProgrammeLevelListPreservesLimitWithoutSearch(t *testing.T) {
 			require.Equal(t, len(persistence.listed) > 1, got.HasMore, "List(limit=1) reports a further page")
 			require.Equal(t, strings.TrimSpace(term), persistence.searchTerm, "bounded query")
 			require.Equal(t, 2, persistence.searchLimit, "bounded query probes one row past the page")
+			require.Equal(t, paging.Total{Counted: true, Total: 2}, got.Total, "the first page counts every matching level")
+			require.Equal(t, persistence.searchTerm, persistence.countTerm, "the count reads the list's term")
 		})
 	}
 }

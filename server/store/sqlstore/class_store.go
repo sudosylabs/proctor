@@ -173,11 +173,7 @@ func (s SQLClassStore) ListByProgrammeLevel(
 	programmeLevelID model.ProgrammeLevelID,
 	options store.AcademicNameListOptions,
 ) ([]*model.Class, error) {
-	query, valid := academicNamePage(s.classesQuery.
-		Where(sq.Eq{
-			"classes.programme_level_id": programmeLevelID,
-			"classes.archived_at":        nil,
-		}), "classes", options)
+	query, valid := academicNamePage(classesInLevel(s.classesQuery, programmeLevelID), "classes", options)
 	if !valid {
 		return nil, store.NewErrInvalidInput("class", "list_options", options)
 	}
@@ -204,15 +200,7 @@ func (s SQLClassStore) SearchByAcademicUnit(
 	academicUnitID model.AcademicUnitID,
 	options store.AcademicNameListOptions,
 ) ([]*model.Class, error) {
-	query, valid := academicNamePage(s.classesQuery.
-		Join("programme_levels ON programme_levels.id = classes.programme_level_id").
-		Join("programmes ON programmes.id = programme_levels.programme_id").
-		Where(sq.Eq{
-			"programmes.academic_unit_id":  academicUnitID,
-			"programmes.archived_at":       nil,
-			"programme_levels.archived_at": nil,
-			"classes.archived_at":          nil,
-		}), "classes", options)
+	query, valid := academicNamePage(classesInUnit(s.classesQuery, academicUnitID), "classes", options)
 	if !valid {
 		return nil, store.NewErrInvalidInput("class", "list_options", options)
 	}
@@ -695,3 +683,46 @@ func (row classRow) model() (*model.Class, error) {
 }
 
 var _ store.ClassStore = (*SQLClassStore)(nil)
+
+// CountByProgrammeLevel counts through the same level filter as
+// ListByProgrammeLevel.
+func (s SQLClassStore) CountByProgrammeLevel(
+	ctx context.Context,
+	programmeLevelID model.ProgrammeLevelID,
+	options store.AcademicNameListOptions,
+	maximum int,
+) (int, error) {
+	rows := classesInLevel(sq.Select("classes.id").From("classes"), programmeLevelID)
+	return countAcademicNamePage(ctx, s.GetMaster(), rows, "classes", options, maximum)
+}
+
+// CountByAcademicUnit counts through the same unit and term filter as
+// SearchByAcademicUnit.
+func (s SQLClassStore) CountByAcademicUnit(
+	ctx context.Context,
+	academicUnitID model.AcademicUnitID,
+	options store.AcademicNameListOptions,
+	maximum int,
+) (int, error) {
+	rows := classesInUnit(sq.Select("classes.id").From("classes"), academicUnitID)
+	return countAcademicNamePage(ctx, s.GetMaster(), rows, "classes", options, maximum)
+}
+
+// classesInLevel keeps the Programme Level's unarchived Classes.
+func classesInLevel(query sq.SelectBuilder, programmeLevelID model.ProgrammeLevelID) sq.SelectBuilder {
+	return query.Where(sq.Eq{"classes.programme_level_id": programmeLevelID, "classes.archived_at": nil})
+}
+
+// classesInUnit keeps the unarchived Classes under the unit's unarchived
+// Programmes and Programme Levels.
+func classesInUnit(query sq.SelectBuilder, academicUnitID model.AcademicUnitID) sq.SelectBuilder {
+	return query.
+		Join("programme_levels ON programme_levels.id = classes.programme_level_id").
+		Join("programmes ON programmes.id = programme_levels.programme_id").
+		Where(sq.Eq{
+			"programmes.academic_unit_id":  academicUnitID,
+			"programmes.archived_at":       nil,
+			"programme_levels.archived_at": nil,
+			"classes.archived_at":          nil,
+		})
+}

@@ -735,36 +735,17 @@ func (s SQLAcademicUnitMemberStore) ListPageByAcademicUnit(
 	ctx context.Context,
 	options store.AcademicUnitMemberPageOptions,
 ) (*store.AcademicUnitMemberPage, error) {
-	if !options.AcademicUnitID.IsValid() ||
-		options.Limit < 1 ||
-		options.Limit > 200 ||
-		options.AfterID.IsZero() != options.AfterUserID.IsZero() ||
-		(!options.AfterID.IsZero() && (!options.AfterID.IsValid() || !options.AfterUserID.IsValid())) {
+	if !validAcademicUnitMemberPageOptions(options) {
 		return nil, store.NewErrInvalidInput("academic_unit_member", "page", nil)
 	}
 
-	query := s.query.Where(sq.Eq{
-		"academic_unit_members.academic_unit_id": options.AcademicUnitID.String(),
-		"academic_unit_members.archived_at":      nil,
-	})
-	if !options.ActiveAt.IsZero() {
-		at := model.TimeUTC(options.ActiveAt)
-		query = query.Where(sq.LtOrEq{"academic_unit_members.start_at": at}).
-			Where("(academic_unit_members.end_at IS NULL OR academic_unit_members.end_at > ?)", at)
-	}
-
-	if !options.AfterID.IsZero() {
-		query = query.Where(
-			"(academic_unit_members.user_id, academic_unit_members.id) > (?, ?)",
-			options.AfterUserID.String(),
-			options.AfterID.String(),
-		)
-	}
-
-	members, err := s.selectMembers(
-		ctx,
-		query.OrderBy("academic_unit_members.user_id", "academic_unit_members.id").Limit(uint64(options.Limit+1)),
+	query := orderMembershipPage(
+		filterAcademicUnitMemberPage(s.query, options),
+		"academic_unit_members",
+		options.MembershipPageKeyset,
+		options.AfterID.String(),
 	)
+	members, err := s.selectMembers(ctx, query.Limit(uint64(options.Limit+1))) //nolint:gosec // G115: validAcademicUnitMemberPageOptions bounds Limit to 1..200.
 	if err != nil {
 		return nil, err
 	}
@@ -775,4 +756,44 @@ func (s SQLAcademicUnitMemberStore) ListPageByAcademicUnit(
 	}
 
 	return &store.AcademicUnitMemberPage{Members: members, HasMore: more}, nil
+}
+
+// CountPageByAcademicUnit counts through the same filter as
+// ListPageByAcademicUnit, without its keyset, order, or limit, reading at most
+// one row past maximum.
+func (s SQLAcademicUnitMemberStore) CountPageByAcademicUnit(
+	ctx context.Context,
+	options store.AcademicUnitMemberPageOptions,
+	maximum int,
+) (int, error) {
+	options.MembershipPageKeyset, options.AfterID, options.Limit = store.MembershipPageKeyset{}, "", 1
+	if !validAcademicUnitMemberPageOptions(options) || !store.ValidCountMaximum(maximum) {
+		return 0, store.NewErrInvalidInput("academic_unit_member", "count", nil)
+	}
+
+	rows := filterAcademicUnitMemberPage(sq.Select("academic_unit_members.id").From("academic_unit_members"), options)
+	return countBounded(ctx, s.GetMaster(), rows, maximum, "academic unit members")
+}
+
+// filterAcademicUnitMemberPage applies every ListPageByAcademicUnit filter
+// but the keyset: the unit, unarchived memberships, and the effective instant.
+func filterAcademicUnitMemberPage(query sq.SelectBuilder, options store.AcademicUnitMemberPageOptions) sq.SelectBuilder {
+	query = query.Where(sq.Eq{
+		"academic_unit_members.academic_unit_id": options.AcademicUnitID.String(),
+		"academic_unit_members.archived_at":      nil,
+	})
+	if !options.ActiveAt.IsZero() {
+		at := model.TimeUTC(options.ActiveAt)
+		query = query.Where(sq.LtOrEq{"academic_unit_members.start_at": at}).
+			Where("(academic_unit_members.end_at IS NULL OR academic_unit_members.end_at > ?)", at)
+	}
+	return query
+}
+
+func validAcademicUnitMemberPageOptions(options store.AcademicUnitMemberPageOptions) bool {
+	return options.AcademicUnitID.IsValid() &&
+		options.Limit >= 1 &&
+		options.Limit <= 200 &&
+		(options.AfterID.IsZero() || options.AfterID.IsValid()) &&
+		validMembershipPageKeyset(options.MembershipPageKeyset, !options.AfterID.IsZero())
 }

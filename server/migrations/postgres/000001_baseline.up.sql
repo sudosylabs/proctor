@@ -326,6 +326,13 @@ CREATE TABLE users (
     default_profile_picture_file_id varchar(26) REFERENCES file_entries(id),
     custom_profile_picture_file_id varchar(26) REFERENCES file_entries(id),
     profile_picture_changed_at timestamptz,
+    -- The directory and membership name order: the presented name (display
+    -- name, else username), folded to lower case and cut to 64 characters so
+    -- a continuation cursor stays bounded. (sort_name, id) is still a total
+    -- order.
+    sort_name text GENERATED ALWAYS AS (
+        lower(left(CASE WHEN display_name <> '' THEN display_name ELSE username END, 64))
+    ) STORED,
     CONSTRAINT users_lifecycle_check CHECK (updated_at >= created_at),
     -- Profile names are single-line text that mail embeds; Unicode Cc is
     -- rejected (model.ContainsControlCharacter).
@@ -343,6 +350,12 @@ CREATE INDEX users_default_profile_picture_file_id_idx
 CREATE INDEX users_custom_profile_picture_file_id_idx
     ON users (custom_profile_picture_file_id) WHERE custom_profile_picture_file_id IS NOT NULL;
 CREATE UNIQUE INDEX users_email_key ON users (email) WHERE archived_at IS NULL;
+-- User directory orders; each serves both directions. A User who was never
+-- active sorts as the least recent.
+CREATE INDEX users_sort_name_idx ON users (sort_name, id) WHERE archived_at IS NULL;
+CREATE INDEX users_created_at_id_idx ON users (created_at, id) WHERE archived_at IS NULL;
+CREATE INDEX users_last_activity_at_idx
+    ON users ((COALESCE(last_activity_at, '-infinity'::timestamptz)), id) WHERE archived_at IS NULL;
 -- A Job keeps its history when the User who started it is deleted.
 ALTER TABLE jobs ADD CONSTRAINT jobs_created_by_user_id_fkey
     FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL;
@@ -718,6 +731,9 @@ CREATE INDEX mail_deliveries_state_deadline_idx
 CREATE INDEX mail_deliveries_operator_list_idx
     ON mail_deliveries (created_at DESC, id DESC)
     INCLUDE (state, template_key);
+
+CREATE INDEX mail_deliveries_operator_updated_idx
+    ON mail_deliveries (updated_at DESC, id DESC);
 
 CREATE INDEX mail_deliveries_terminal_retention_idx
     ON mail_deliveries (state, updated_at, id);
@@ -4614,6 +4630,11 @@ CREATE INDEX academic_unit_members_scope_page_idx
     ON academic_unit_members (academic_unit_id, user_id, id) WHERE archived_at IS NULL;
 CREATE INDEX class_members_scope_page_idx
     ON class_members (class_id, user_id, id) WHERE archived_at IS NULL;
+-- Membership pages order by start, in either direction, by default.
+CREATE INDEX academic_unit_members_scope_start_idx
+    ON academic_unit_members (academic_unit_id, start_at, id) WHERE archived_at IS NULL;
+CREATE INDEX class_members_scope_start_idx
+    ON class_members (class_id, start_at, id) WHERE archived_at IS NULL;
 
 -- Explicit examination records completion and scoped manual preservation.
 CREATE TABLE exam_sitting_records_completions (

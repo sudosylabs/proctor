@@ -24,10 +24,22 @@ import (
 // require. A scoped visibility answers no rows for an AcademicUnitID outside
 // its user.view subtrees (AcademicUnitRootIDs), so the filter never discloses
 // membership the scope could not read.
+//
+// Order picks the keyset and Descending reverses it; the zero Order is
+// username order. A continuation sets AfterID, the previous page's last User,
+// with its key in the same order: AfterUsername (username), AfterCreatedAt
+// (created), or AfterLastActivityAt (last_active, invalid for a User never
+// active, who sorts as the least recent). The name order reads the key of
+// AfterID itself, the presented name the database folds for sorting, so a
+// continuation never carries a second spelling of it.
 type UserListOptions struct {
 	ID                           model.UserID
 	Query                        string
+	Order                        UserOrder
+	Descending                   bool
 	AfterUsername                string
+	AfterCreatedAt               time.Time
+	AfterLastActivityAt          model.OptionalTime
 	AfterID                      model.UserID
 	Limit                        int
 	IncludeDisabled              bool
@@ -35,6 +47,26 @@ type UserListOptions struct {
 	AffiliationKinds             []model.AffiliationKind
 	AcademicUnitID               model.AcademicUnitID
 	Visibility                   UserVisibilityScope
+}
+
+// UserOrder names a User directory order. Each is ascending by its key, then
+// by ID.
+type UserOrder string
+
+const (
+	UserOrderUsername   UserOrder = "username"
+	UserOrderName       UserOrder = "name"
+	UserOrderCreated    UserOrder = "created"
+	UserOrderLastActive UserOrder = "last_active"
+)
+
+// IsValid reports whether o is a known order; the zero value is not one.
+func (o UserOrder) IsValid() bool {
+	switch o {
+	case UserOrderUsername, UserOrderName, UserOrderCreated, UserOrderLastActive:
+		return true
+	}
+	return false
 }
 
 // UserVisibilityScope constrains user list/search results in persistence.

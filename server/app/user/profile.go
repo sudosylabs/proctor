@@ -10,6 +10,7 @@ package user
 import (
 	"context"
 	"slices"
+	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -23,14 +24,24 @@ import (
 // a current Affiliation of any listed kind and AcademicUnitID keeps current
 // members of that Academic Unit or its descendants; both narrow, never widen,
 // the caller's visibility.
+//
+// Order and Descending choose the page order (username ascending when Order
+// is empty); the continuation fields carry the previous page's last key in
+// that order, as store.UserListOptions describes. The last_active order reads
+// account activity, so only a caller whose projection shows it (Institution-
+// wide user.view) may sort by it.
 type SearchUsersQuery struct {
-	Query           string
-	AfterUsername   string
-	AfterID         model.UserID
-	Limit           int
-	IncludeDisabled bool
-	Affiliations    []model.AffiliationKind
-	AcademicUnitID  model.AcademicUnitID
+	Query               string
+	Order               store.UserOrder
+	Descending          bool
+	AfterUsername       string
+	AfterCreatedAt      time.Time
+	AfterLastActivityAt model.OptionalTime
+	AfterID             model.UserID
+	Limit               int
+	IncludeDisabled     bool
+	Affiliations        []model.AffiliationKind
+	AcademicUnitID      model.AcademicUnitID
 }
 
 // UpdateUserProfileCommand changes the profile members whose pointer is set.
@@ -261,20 +272,32 @@ func (s *Service) listUsers(
 		return paging.Page[*model.User]{}, store.UserListOptions{}, err
 	}
 
+	order := query.Order
+	if order == "" {
+		order = store.UserOrderUsername
+	}
+	if !order.IsValid() || (order == store.UserOrderLastActive && !visibility.InstitutionWide) {
+		return paging.Page[*model.User]{}, store.UserListOptions{}, apperror.Invalid("request.invalid", "sort")
+	}
+
 	includeDisabled := query.IncludeDisabled && visibility.InstitutionWide
 	if visibility.ActiveAt.IsZero() && (len(affiliations) > 0 || query.AcademicUnitID != "") {
 		visibility.ActiveAt = model.TimeUTC(s.now())
 	}
 
 	options := store.UserListOptions{
-		Query:            query.Query,
-		AfterUsername:    query.AfterUsername,
-		AfterID:          query.AfterID,
-		Limit:            probe,
-		IncludeDisabled:  includeDisabled,
-		AffiliationKinds: affiliations,
-		AcademicUnitID:   query.AcademicUnitID,
-		Visibility:       visibility,
+		Query:               query.Query,
+		Order:               order,
+		Descending:          query.Descending,
+		AfterUsername:       query.AfterUsername,
+		AfterCreatedAt:      query.AfterCreatedAt,
+		AfterLastActivityAt: query.AfterLastActivityAt,
+		AfterID:             query.AfterID,
+		Limit:               probe,
+		IncludeDisabled:     includeDisabled,
+		AffiliationKinds:    affiliations,
+		AcademicUnitID:      query.AcademicUnitID,
+		Visibility:          visibility,
 	}
 	users, err := s.users.List(ctx, options)
 	if err != nil {

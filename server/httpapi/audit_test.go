@@ -121,3 +121,28 @@ func TestSelfAuditEventEnumMatchesTheCatalogue(t *testing.T) {
 	sort.Strings(want)
 	require.Equal(t, want, document.Components.Schemas["SelfAuditEvent"].Enum)
 }
+
+// TestAuditQueryReadsSubjectStatusAndRepeatedActions pins the listing
+// filters: subject_user_id and status are single, action repeats, and the
+// application owns their vocabularies.
+func TestAuditQueryReadsSubjectStatusAndRepeatedActions(t *testing.T) {
+	t.Parallel()
+
+	subject := model.NewUserID()
+	query, _, err := auditQueryFromRequest(httptest.NewRequestWithContext(t.Context(), "GET",
+		"/api/v1/audits?subject_user_id="+subject.String()+"&status=fail&action=user.manage&action=user.view", nil))
+	require.NoError(t, err)
+	require.Equal(t, subject, query.SubjectUserID)
+	require.Equal(t, model.AuditStatusFail, query.Status)
+	require.Equal(t, []string{"user.manage", "user.view"}, query.Actions)
+
+	for _, raw := range []string{
+		"subject_user_id=",
+		"subject_user_id=" + subject.String() + "&subject_user_id=" + subject.String(),
+		"status=fail&status=success",
+		"status=",
+	} {
+		_, _, err = auditQueryFromRequest(httptest.NewRequestWithContext(t.Context(), "GET", "/api/v1/audits?"+raw, nil))
+		require.Error(t, err, raw)
+	}
+}

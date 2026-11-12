@@ -85,7 +85,6 @@ var unindexedForeignKeys = map[foreignKeyColumns]string{
 	{"invitations", "class_id"}:                                                         "Classes are never deleted; the join goes from an invitation row to its Class.",
 	{"invitations", "inviter_user_id"}:                                                  "Parent rows are never deleted in production code and no query filters by this column.",
 	{"invitations", "role_id"}:                                                          "Roles are never deleted; lookups use the target_email-led unique keys; the role archive guard is a rare administrator action.",
-	{"mail_deliveries", "target_user_id"}:                                               "Users are never deleted; (occurrence_id, target_user_id) lookups use `mail_deliveries_occurrence_user_recipient_key`.",
 	{"mail_key_state", "active_rekey_job_id"}:                                           "Singleton table; the ON DELETE SET NULL check reads one row.",
 	{"mfa_key_state", "active_rekey_job_id"}:                                            "Singleton table; the ON DELETE SET NULL check reads one row.",
 	{"mail_occurrences", "actor_user_id"}:                                               "Parent rows are never deleted in production code and no query filters by this column.",

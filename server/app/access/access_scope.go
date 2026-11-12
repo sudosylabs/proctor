@@ -1188,6 +1188,13 @@ func (s *Authorizer) CanViewInstitutionUsers(ctx context.Context, inv invocation
 	return constraint.InstitutionWide, err
 }
 
+// CanViewRoles derives Institution-wide role.view, the authority that lists
+// and reads Roles, without recording a decision.
+func (s *Authorizer) CanViewRoles(ctx context.Context, inv invocation.Invocation) (bool, error) {
+	constraint, err := s.GrantedScopes(ctx, inv.Principal(), model.ActionRoleView, model.ResourceInstitution)
+	return constraint.InstitutionWide, err
+}
+
 // CanViewClassMembers evaluates class.members.view on the Resource without
 // recording a decision.
 func (s *Authorizer) CanViewClassMembers(ctx context.Context, inv invocation.Invocation, resource model.Resource) (bool, error) {

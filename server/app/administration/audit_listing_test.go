@@ -353,3 +353,55 @@ func TestAuditListingCountsTheFirstPageWithinItsVisibility(t *testing.T) {
 	// Contract: a continued page authorizes and lists without counting.
 	require.Equal(t, []string{"authorize-view", "list-audits"}, events)
 }
+
+// TestAuditListingFiltersReachPersistenceInsideTheVisibility pins the
+// subject, status and repeatable action filters: each reaches persistence
+// beside the caller's unchanged visibility, so an academic auditor keeps its
+// subtrees and catalog, and a value outside the closed vocabularies is
+// audit.query.invalid before anything is read.
+func TestAuditListingFiltersReachPersistenceInsideTheVisibility(t *testing.T) {
+	t.Parallel()
+	subject := model.NewUserID()
+	rootID := model.NewAcademicUnitID()
+	inCatalog, outside := string(model.ActionClassMembersManage), string(model.ActionExternalIdentityManage)
+	events := []string{}
+	persistence := &auditListingStoreFake{events: &events}
+	service := &Service{institutions: anyInstitution(), audits: persistence, authorizer: &auditListingAuthorizerFake{
+		events: &events, scope: store.AuditVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{rootID}},
+	}}
+	_, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{
+		Limit: 10, SubjectUserID: subject, Status: model.AuditStatusFail, Actions: []string{inCatalog, " " + outside, inCatalog},
+	})
+	require.NoError(t, err)
+	require.Equal(t, subject, persistence.input.SubjectUserID)
+	require.Equal(t, model.AuditStatusFail, persistence.input.Status)
+	require.Equal(t, []string{inCatalog, outside}, persistence.input.Actions, "actions are trimmed and repeats dropped")
+	require.Equal(t, store.AuditVisibilityScope{
+		AcademicUnitRootIDs: []model.AcademicUnitID{rootID}, AllowedActions: model.AcademicAuditActions(),
+	}, persistence.input.Visibility, "an action outside the academic catalog does not widen it")
+	require.Equal(t, persistence.input, persistence.listCountInput, "the count reads the same filters")
+
+	tooMany := make([]string, store.MaximumAuditListActions+1)
+	for index := range tooMany {
+		tooMany[index] = inCatalog
+	}
+	for name, query := range map[string]ListAuditEventsQuery{
+		"unknown action":   {Actions: []string{"audit.unknown"}},
+		"too many actions": {Actions: tooMany},
+		"unknown status":   {Status: "pending"},
+		"invalid subject":  {SubjectUserID: "not-an-id"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			events := []string{}
+			persistence := &auditListingStoreFake{events: &events}
+			service := &Service{institutions: anyInstitution(), audits: persistence, authorizer: &auditListingAuthorizerFake{
+				events: &events, scope: store.AuditVisibilityScope{InstitutionWide: true},
+			}}
+			query.Limit = 10
+			_, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, query)
+			require.True(t, apperror.Is(err, "audit.query.invalid"), "error = %v", err)
+			require.Equal(t, []string{"authorize-view"}, events, "a refused filter reads nothing")
+		})
+	}
+}

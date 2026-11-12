@@ -579,6 +579,22 @@ display name, else the username, lower-cased and cut to 64 characters.
 institution-wide `user.view` can read, so any other caller is refused with
 `request.invalid` rather than given an order that would reveal it.
 
+The directory filters narrow the caller's visibility and never widen it.
+`state=active|disabled` follows the `include_disabled` rule: only
+institution-wide visibility reaches disabled Users, so `state=disabled` answers
+a scoped caller an empty page, and `state` with `include_disabled=true` is
+`request.invalid`. `never_signed_in=true`, `last_active_after` (inclusive) and
+`last_active_before` (exclusive) read `last_activity_at` and are refused for
+any caller but institution-wide `user.view`, like `sort=last_active`;
+`never_signed_in` cannot be combined with either bound. `last_activity_at` is
+first written, with `last_login_at`, when a Session is issued, and afterwards
+only advances, so a User without it has never signed in. Repeatable `role_id`
+(at most 16) keeps Users holding a current Role Binding of a listed Role inside
+the caller's `role_binding.view` scopes, the same bindings the row `summary`
+shows. A Role is seen through institution-wide `role.view`; without it, or for
+an unknown or archived Role, the filter is `request.invalid` on `role_id` alike,
+so it reveals neither which Roles exist nor bindings the caller cannot read.
+
 Generic User-profile PATCH cannot mutate the email address or verification
 state. `PUT /api/v1/users/{user_id}/email` is the explicit strong, recent
 interactive-session transition; it authorizes `user.manage`, normalizes and
@@ -605,6 +621,12 @@ for subtree grants, and unrelated account, credential, MFA, provider, mail,
 and security events are always excluded. The response also omits Session,
 request, node, authentication, IP-address, User-Agent, and private audit-value
 metadata.
+The listing filters `actor_id`, `subject_user_id` (the User an Event is about),
+`status=attempt|success|fail`, a resource, a creation range and repeatable
+`action` (at most 32, each from the audit action catalog, else
+`audit.query.invalid`) apply inside that visibility, so an academic auditor
+naming an action outside its catalog or a User outside its subtrees reads
+nothing more.
 
 ## Public local registration
 
@@ -1644,9 +1666,10 @@ that the message reached an inbox.
 
 `GET /api/v1/mail/deliveries` requires `mail.view` and returns the same safe
 projection through a bounded, opaque-cursor collection. Repeated `state` and
-`template_key` filters and optional RFC 3339 `created_after` and
-`created_before` bounds are applied in persistence; `limit` defaults to 50 and
-is bounded at 200. Authorization completes before any delivery is inspected.
+`template_key` filters, an optional `recipient_user_id` matching the Delivery's
+recipient User (never an address; Invitation deliveries have none), and
+optional RFC 3339 `created_after` and `created_before` bounds are applied in
+persistence; `limit` defaults to 50 and is bounded at 200. Authorization completes before any delivery is inspected.
 
 `GET /api/v1/mail/metrics` requires `mail.view` and returns only bounded
 template/state/public-outcome aggregates, attempts, latency, queue count and

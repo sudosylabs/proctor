@@ -191,7 +191,7 @@ func TestAdministratorMFAResetStore(t *testing.T, ss store.Store, probes ...Admi
 
 func assertAdministratorMFARecoveryAudit(t *testing.T, ctx context.Context, ss store.Store, input *store.AdministratorMFAReset, want int) {
 	t.Helper()
-	events, err := ss.Audit().List(ctx, store.AuditListOptions{Action: "authentication.administrator_mfa_reset", Limit: 10, Visibility: store.AuditVisibilityScope{InstitutionWide: true}})
+	events, err := ss.Audit().List(ctx, store.AuditListOptions{Actions: []string{"authentication.administrator_mfa_reset"}, Limit: 10, Visibility: store.AuditVisibilityScope{InstitutionWide: true}})
 	require.NoError(t, err)
 	require.Len(t, events, want, "MFA recovery audits")
 	for _, event := range events {

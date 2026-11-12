@@ -61,15 +61,11 @@ func (s SQLUserStore) ListDirectorySummaries(
 		Position int    `db:"position"`
 	}
 	rows := []summaryRow{}
+	scopeUnits, scopeRoots := academicSubtreeCTE("summary_scope_units", visibility.AcademicUnitRootIDs)
 	if err := s.GetMaster().Select(
 		ctx,
 		&rows,
-		`WITH RECURSIVE summary_scope_units AS (
-		SELECT id FROM academic_units WHERE id = ANY(?) AND archived_at IS NULL
-		UNION ALL SELECT child.id FROM academic_units child
-		JOIN summary_scope_units parent ON child.parent_id = parent.id
-		WHERE child.archived_at IS NULL
-	), current_affiliations AS (
+		`WITH RECURSIVE `+scopeUnits+`, current_affiliations AS (
 		SELECT user_id, kind, min(start_at) AS start_at FROM affiliations
 		WHERE user_id = ANY(?)
 			AND archived_at IS NULL
@@ -101,7 +97,7 @@ func (s SQLUserStore) ListDirectorySummaries(
 	SELECT user_id, 'academic_unit', id, display_name, total, position
 	FROM ranked_units WHERE position <= ?
 	ORDER BY user_id, entry DESC, position`,
-		pq.Array(idStrings(visibility.AcademicUnitRootIDs)),
+		scopeRoots,
 		userIDs,
 		activeAt,
 		activeAt,

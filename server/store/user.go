@@ -25,6 +25,25 @@ import (
 // its user.view subtrees (AcademicUnitRootIDs), so the filter never discloses
 // membership the scope could not read.
 //
+// RoleIDs keeps Users holding a current Role Binding, at Visibility.ActiveAt,
+// of one of at most 16 listed unarchived Roles inside RoleBindingVisibility:
+// the caller's role_binding.view scopes (InstitutionWide, or the
+// AcademicUnitRootIDs subtrees and their Classes plus ClassIDs). The filter
+// therefore matches only bindings the directory summary could show, and it
+// still narrows Visibility.
+//
+// OnlyDisabled keeps only disabled Users. Like IncludeDisabled it is
+// effective only with an InstitutionWide visibility: a scoped visibility
+// never sees a disabled User, so it answers no rows.
+//
+// NeverSignedIn, LastActivityAfter (inclusive) and LastActivityBefore
+// (exclusive) read the User's last activity, which only an InstitutionWide
+// visibility may read; any of them with another visibility is invalid input.
+// A User's last activity is first set when a Session is issued to them and is
+// only ever advanced afterwards, so NeverSignedIn (no last activity) means no
+// Session was ever issued. It excludes both bounds, which never match such a
+// User, and when both bounds are set the first precedes the second.
+//
 // Order picks the keyset and Descending reverses it; the zero Order is
 // username order. A continuation sets AfterID, the previous page's last User,
 // with its key in the same order: AfterUsername (username), AfterCreatedAt
@@ -43,11 +62,20 @@ type UserListOptions struct {
 	AfterID                      model.UserID
 	Limit                        int
 	IncludeDisabled              bool
+	OnlyDisabled                 bool
 	MissingDefaultProfilePicture bool
 	AffiliationKinds             []model.AffiliationKind
 	AcademicUnitID               model.AcademicUnitID
+	RoleIDs                      []model.RoleID
+	RoleBindingVisibility        UserVisibilityScope
+	NeverSignedIn                bool
+	LastActivityAfter            time.Time
+	LastActivityBefore           time.Time
 	Visibility                   UserVisibilityScope
 }
+
+// MaximumUserListRoles bounds the Roles one User directory filter names.
+const MaximumUserListRoles = 16
 
 // UserOrder names a User directory order. Each is ascending by its key, then
 // by ID.

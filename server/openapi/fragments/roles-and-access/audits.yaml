@@ -55,11 +55,35 @@ paths:
           schema:
             $ref: '#/components/schemas/ID'
           description: Return only Events attributed to this actor User.
-        - name: action
+        - name: subject_user_id
           in: query
           schema:
-            $ref: '#/components/schemas/AuditAction'
-          description: Return only Events with this exact stable action.
+            $ref: '#/components/schemas/ID'
+          description: Return only Events about this User, such as a change to their account.
+        - name: action
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 32
+            items:
+              $ref: '#/components/schemas/AuditAction'
+          description: >-
+            Return only Events with one of these exact stable actions. Repeat the parameter for up to 32 actions.
+            An Academic Unit auditor still reads only the academic actions its authority allows, so naming any other
+            action matches nothing.
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum:
+              - attempt
+              - success
+              - fail
+          description: >-
+            Return only Events in this durable outcome state: an `attempt` whose outcome is not yet recorded, a
+            `success`, or a `fail`.
         - name: resource_type
           in: query
           schema:

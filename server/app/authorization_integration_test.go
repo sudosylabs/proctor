@@ -342,7 +342,7 @@ func TestPrincipalPermissionAndUserVisibilityPolicies(t *testing.T) {
 
 	events, err := persistence.Audit().List(ctx, store.AuditListOptions{
 		ActorID: viewer.ID,
-		Action:  string(model.ActionUserView),
+		Actions: []string{string(model.ActionUserView)},
 		Resource: &model.Resource{
 			Type: model.ResourceUser,
 			ID:   target.ID.String(),
@@ -606,7 +606,7 @@ func TestAcademicUnitVisibilityIsBoundedAcrossUsersBindingsAndAudits(t *testing.
 	unitRead := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users/"+unitUser.ID.String(), nil, login.Tokens.AccessToken)
 	require.Equal(t, http.StatusOK, unitRead.Code, "descendant user read status = %d: %s", unitRead.Code, unitRead.Body.String())
 	readDecisions, err := persistence.Audit().List(ctx, store.AuditListOptions{
-		ActorID: viewer.ID, Action: string(model.ActionUserView),
+		ActorID: viewer.ID, Actions: []string{string(model.ActionUserView)},
 		Resource: &model.Resource{Type: model.ResourceUser, ID: unitUser.ID.String()}, Limit: 10,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
@@ -785,7 +785,7 @@ func TestAcademicUnitVisibilityIsBoundedAcrossUsersBindingsAndAudits(t *testing.
 	require.NotEmpty(t, tokenBody.Credential, "create academic audit PAT response = %s", createdToken.Body.String())
 	assertInstitutionAcademicAudits("personal access token", tokenBody.Credential)
 	decisions, err := persistence.Audit().List(ctx, store.AuditListOptions{
-		ActorID: institutionAcademicViewer.ID, Action: string(model.ActionAcademicAuditView), Limit: 10,
+		ActorID: institutionAcademicViewer.ID, Actions: []string{string(model.ActionAcademicAuditView)}, Limit: 10,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
 	require.NoError(t, err)

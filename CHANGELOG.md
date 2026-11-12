@@ -17,6 +17,20 @@ module when a change is not server-only. No module has been released yet.
 
 ### Changed
 
+- Server: list filters. `GET /api/v1/users` takes repeatable `role_id` (at
+  most 16; current Role Bindings inside the caller's `role_binding.view`
+  scopes, and only for a caller with Institution-wide `role.view`, else
+  `request.invalid`), `state=active|disabled` (disabled Users stay
+  Institution-wide only, and `state` with `include_disabled=true` is
+  `request.invalid`), and `never_signed_in`, `last_active_after` and
+  `last_active_before`, which read `last_activity_at` and are refused like
+  `sort=last_active`. `GET /api/v1/audits` takes `subject_user_id`,
+  `status=attempt|success|fail` and a repeatable `action` (at most 32); an
+  action outside the catalog is now `audit.query.invalid` rather than an empty
+  page (**breaking**). `GET /api/v1/mail/deliveries` takes
+  `recipient_user_id`. Every filter narrows the caller's visibility. The
+  baseline adds `mail_deliveries_target_user_id_created_at_id_idx`. Existing
+  development databases must be recreated.
 - Server: list sorting and capped totals. `GET /api/v1/users` takes
   `sort=username|name|created|last_active` and `dir`; `last_active` is
   refused with `request.invalid` unless the caller holds Institution-wide

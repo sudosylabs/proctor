@@ -118,7 +118,7 @@ func TestUserSettingsReadOwnIntegrationPreservesExactSource(t *testing.T) {
 	require.Equal(t, replacementSource, after.Source)
 	require.Equal(t, replaced.Revision, after.Revision)
 	audits, err := persistence.Audit().List(ctx, store.AuditListOptions{
-		Action: "user.settings.replace", Limit: 10,
+		Actions: []string{"user.settings.replace"}, Limit: 10,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
 	require.NoError(t, err)

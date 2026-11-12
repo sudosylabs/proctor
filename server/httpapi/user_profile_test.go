@@ -792,3 +792,54 @@ func TestUserSearchTransportCarriesTheOrderInItsCursor(t *testing.T) {
 		assertHTTPProblem(t, serve(query), http.StatusBadRequest, "request.invalid")
 	}
 }
+
+// TestUserSearchTransportReadsTheAccountFilters pins the directory's account
+// filters on the wire: role_id repeats, state, never_signed_in and the
+// last-activity bounds are single, and each malformed value is a
+// request.invalid problem before the application is called; which caller may
+// apply them is the application's decision.
+func TestUserSearchTransportReadsTheAccountFilters(t *testing.T) {
+	t.Parallel()
+	logger, _ := routetest.NewLogger(t)
+	principal := model.Principal{
+		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
+		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
+		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
+		ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now(),
+	}
+	profiles := &userProfileHTTPApplication{}
+	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{Principal: principal}, userProfileResource(profiles, profiles, profiles))
+	serve := func(query string) *httptest.ResponseRecorder {
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users"+query, nil)
+		request.Header.Set("Authorization", "Bearer credential")
+		response := httptest.NewRecorder()
+		httpAPI.ServeHTTP(response, request)
+		return response
+	}
+
+	first, second := model.NewRoleID(), model.NewRoleID()
+	response := serve("?role_id=" + first.String() + "&role_id=" + second.String() + "&state=disabled" +
+		"&last_active_after=2026-09-01T08:00:00Z&last_active_before=2026-09-02T10:00:00%2B02:00")
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.Equal(t, []model.RoleID{first, second}, profiles.searchQuery.RoleIDs)
+	require.Equal(t, user.AccountStateDisabled, profiles.searchQuery.State)
+	require.False(t, profiles.searchQuery.NeverSignedIn)
+	require.True(t, time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC).Equal(profiles.searchQuery.LastActiveAfter))
+	require.True(t, time.Date(2026, 9, 2, 8, 0, 0, 0, time.UTC).Equal(profiles.searchQuery.LastActiveBefore))
+
+	response = serve("?never_signed_in=true&state=active")
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.True(t, profiles.searchQuery.NeverSignedIn)
+	require.Equal(t, user.AccountStateActive, profiles.searchQuery.State)
+	require.Empty(t, profiles.searchQuery.RoleIDs)
+
+	for _, query := range []string{
+		"?role_id=not-an-id", "?role_id=",
+		"?state=locked", "?state=", "?state=active&state=disabled",
+		"?never_signed_in=maybe", "?never_signed_in=true&never_signed_in=false",
+		"?last_active_after=yesterday", "?last_active_before=2026-09-01", "?last_active_after=",
+		"?last_active_before=2026-09-01T08:00:00Z&last_active_before=2026-09-02T08:00:00Z",
+	} {
+		assertHTTPProblem(t, serve(query), http.StatusBadRequest, "request.invalid")
+	}
+}

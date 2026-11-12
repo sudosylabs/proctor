@@ -40,8 +40,28 @@ type SearchUsersQuery struct {
 	AfterID             model.UserID
 	Limit               int
 	IncludeDisabled     bool
+	State               AccountState
 	Affiliations        []model.AffiliationKind
 	AcademicUnitID      model.AcademicUnitID
+	RoleIDs             []model.RoleID
+	NeverSignedIn       bool
+	LastActiveAfter     time.Time
+	LastActiveBefore    time.Time
+}
+
+// AccountState narrows the User directory to active or to disabled accounts;
+// the zero value applies no state filter of its own.
+type AccountState string
+
+// The account states the directory filters on.
+const (
+	AccountStateActive   AccountState = "active"
+	AccountStateDisabled AccountState = "disabled"
+)
+
+// IsValid reports whether s is a known state; the zero value is not one.
+func (s AccountState) IsValid() bool {
+	return s == AccountStateActive || s == AccountStateDisabled
 }
 
 // UpdateUserProfileCommand changes the profile members whose pointer is set.
@@ -266,6 +286,17 @@ func (s *Service) listUsers(
 	if query.AcademicUnitID != "" && !query.AcademicUnitID.IsValid() {
 		return paging.Page[*model.User]{}, store.UserListOptions{}, apperror.Invalid("request.invalid", "academic_unit_id")
 	}
+	roleIDs, err := userDirectoryRoleIDs(query.RoleIDs)
+	if err != nil {
+		return paging.Page[*model.User]{}, store.UserListOptions{}, err
+	}
+	activityField, err := userDirectoryActivityField(query)
+	if err != nil {
+		return paging.Page[*model.User]{}, store.UserListOptions{}, err
+	}
+	if (query.State != "" && !query.State.IsValid()) || (query.State != "" && query.IncludeDisabled) {
+		return paging.Page[*model.User]{}, store.UserListOptions{}, apperror.Invalid("request.invalid", "state")
+	}
 
 	visibility, err := s.authorizer.AuthorizeUserSearch(ctx, inv)
 	if err != nil {
@@ -279,25 +310,40 @@ func (s *Service) listUsers(
 	if !order.IsValid() || (order == store.UserOrderLastActive && !visibility.InstitutionWide) {
 		return paging.Page[*model.User]{}, store.UserListOptions{}, apperror.Invalid("request.invalid", "sort")
 	}
+	// Account activity is shown only to Institution-wide user.view, so a
+	// scoped viewer can neither filter on it nor infer it.
+	if activityField != "" && !visibility.InstitutionWide {
+		return paging.Page[*model.User]{}, store.UserListOptions{}, apperror.Invalid("request.invalid", activityField)
+	}
 
 	includeDisabled := query.IncludeDisabled && visibility.InstitutionWide
-	if visibility.ActiveAt.IsZero() && (len(affiliations) > 0 || query.AcademicUnitID != "") {
+	if visibility.ActiveAt.IsZero() && (len(affiliations) > 0 || query.AcademicUnitID != "" || len(roleIDs) > 0) {
 		visibility.ActiveAt = model.TimeUTC(s.now())
+	}
+	roleScope, err := s.userDirectoryRoleScope(ctx, inv, roleIDs, visibility.ActiveAt)
+	if err != nil {
+		return paging.Page[*model.User]{}, store.UserListOptions{}, err
 	}
 
 	options := store.UserListOptions{
-		Query:               query.Query,
-		Order:               order,
-		Descending:          query.Descending,
-		AfterUsername:       query.AfterUsername,
-		AfterCreatedAt:      query.AfterCreatedAt,
-		AfterLastActivityAt: query.AfterLastActivityAt,
-		AfterID:             query.AfterID,
-		Limit:               probe,
-		IncludeDisabled:     includeDisabled,
-		AffiliationKinds:    affiliations,
-		AcademicUnitID:      query.AcademicUnitID,
-		Visibility:          visibility,
+		Query:                 query.Query,
+		Order:                 order,
+		Descending:            query.Descending,
+		AfterUsername:         query.AfterUsername,
+		AfterCreatedAt:        query.AfterCreatedAt,
+		AfterLastActivityAt:   query.AfterLastActivityAt,
+		AfterID:               query.AfterID,
+		Limit:                 probe,
+		IncludeDisabled:       includeDisabled,
+		OnlyDisabled:          query.State == AccountStateDisabled,
+		AffiliationKinds:      affiliations,
+		AcademicUnitID:        query.AcademicUnitID,
+		RoleIDs:               roleIDs,
+		RoleBindingVisibility: roleScope,
+		NeverSignedIn:         query.NeverSignedIn,
+		LastActivityAfter:     query.LastActiveAfter,
+		LastActivityBefore:    query.LastActiveBefore,
+		Visibility:            visibility,
 	}
 	users, err := s.users.List(ctx, options)
 	if err != nil {
@@ -346,6 +392,76 @@ func userDirectoryAffiliations(kinds []model.AffiliationKind) ([]model.Affiliati
 		}
 	}
 	return result, nil
+}
+
+// userDirectoryRoleIDs validates the requested Roles and drops repeats, so
+// the filter is a set of at most store.MaximumUserListRoles canonical IDs.
+func userDirectoryRoleIDs(ids []model.RoleID) ([]model.RoleID, error) {
+	var result []model.RoleID
+	for _, id := range ids {
+		if !id.IsValid() {
+			return nil, apperror.Invalid("request.invalid", "role_id")
+		}
+		if !slices.Contains(result, id) {
+			result = append(result, id)
+		}
+	}
+	if len(result) > store.MaximumUserListRoles {
+		return nil, apperror.Invalid("request.invalid", "role_id")
+	}
+	return result, nil
+}
+
+// userDirectoryActivityField names the first last-activity filter the query
+// sets, or "" when it sets none, and refuses an incoherent combination:
+// never_signed_in beside a bound, or an after bound not before the before
+// bound.
+func userDirectoryActivityField(query SearchUsersQuery) (string, error) {
+	after, before := query.LastActiveAfter, query.LastActiveBefore
+	switch {
+	case query.NeverSignedIn && (!after.IsZero() || !before.IsZero()):
+		return "", apperror.Invalid("request.invalid", "never_signed_in")
+	case !after.IsZero() && !before.IsZero() && !after.Before(before):
+		return "", apperror.Invalid("request.invalid", "last_active_before")
+	case query.NeverSignedIn:
+		return "never_signed_in", nil
+	case !after.IsZero():
+		return "last_active_after", nil
+	case !before.IsZero():
+		return "last_active_before", nil
+	}
+	return "", nil
+}
+
+// userDirectoryRoleScope admits the Role filter and returns the
+// role_binding.view scope its bindings are matched within. A Role is seen
+// through Institution-wide role.view, so without it, or for a Role that does
+// not exist or is archived, every requested Role is refused alike as
+// request.invalid on role_id, never revealing which Roles exist.
+func (s *Service) userDirectoryRoleScope(
+	ctx context.Context,
+	inv invocation.Invocation,
+	roleIDs []model.RoleID,
+	at time.Time,
+) (store.UserVisibilityScope, error) {
+	if len(roleIDs) == 0 {
+		return store.UserVisibilityScope{}, nil
+	}
+	visible, err := s.authorizer.CanViewRoles(ctx, inv)
+	if err != nil {
+		return store.UserVisibilityScope{}, err
+	}
+	if !visible {
+		return store.UserVisibilityScope{}, apperror.Invalid("request.invalid", "role_id")
+	}
+	roles, err := s.roles.GetByIDs(ctx, roleIDs)
+	if err != nil {
+		return store.UserVisibilityScope{}, StoreErrors.Translate(err)
+	}
+	if len(roles) != len(roleIDs) {
+		return store.UserVisibilityScope{}, apperror.Invalid("request.invalid", "role_id")
+	}
+	return s.authorizer.RoleBindingViewScope(ctx, inv, at)
 }
 
 func scopedUserDirectoryProjection(users []*model.User) []*model.User {

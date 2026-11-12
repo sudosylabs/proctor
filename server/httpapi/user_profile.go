@@ -17,6 +17,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
@@ -718,6 +719,9 @@ func (h userProfileHandlers) search(request route.Request) (route.Result, error)
 	if query.Affiliations, query.AcademicUnitID, err = userDirectoryFilters(request.HTTP.URL.Query()); err != nil {
 		return route.Result{}, err
 	}
+	if err = userDirectoryAccountFilters(request.HTTP.URL.Query(), &query); err != nil {
+		return route.Result{}, err
+	}
 	if present {
 		if !order.continues(cursor.Sort, cursor.Dir) {
 			return route.Result{}, route.InvalidRequest(errors.New("cursor belongs to another order"))
@@ -813,6 +817,65 @@ func userDirectoryFilters(values url.Values) ([]model.AffiliationKind, model.Aca
 		return nil, "", apperror.Invalid("request.invalid", "academic_unit_id")
 	}
 	return kinds, unitID, nil
+}
+
+// userDirectoryAccountFilters reads the repeatable role_id filter and the
+// single state, never_signed_in, last_active_after and last_active_before
+// filters. The application decides which of them the caller may apply.
+func userDirectoryAccountFilters(values url.Values, query *user.SearchUsersQuery) error {
+	for _, raw := range values["role_id"] {
+		id, err := model.ParseRoleID(raw)
+		if err != nil {
+			return apperror.Invalid("request.invalid", "role_id")
+		}
+		query.RoleIDs = append(query.RoleIDs, id)
+	}
+	single := func(name string) (string, error) {
+		raw, present := values[name]
+		if !present {
+			return "", nil
+		}
+		if len(raw) != 1 || raw[0] == "" {
+			return "", apperror.Invalid("request.invalid", name)
+		}
+		return raw[0], nil
+	}
+	state, err := single("state")
+	if err != nil {
+		return err
+	}
+	query.State = user.AccountState(state)
+	if state != "" && !query.State.IsValid() {
+		return apperror.Invalid("request.invalid", "state")
+	}
+	never, err := single("never_signed_in")
+	if err != nil {
+		return err
+	}
+	if never != "" {
+		if query.NeverSignedIn, err = strconv.ParseBool(never); err != nil {
+			return apperror.Invalid("request.invalid", "never_signed_in")
+		}
+	}
+	for _, bound := range []struct {
+		name   string
+		target *time.Time
+	}{{"last_active_after", &query.LastActiveAfter}, {"last_active_before", &query.LastActiveBefore}} {
+		name := bound.name
+		raw, err := single(name)
+		if err != nil {
+			return err
+		}
+		if raw == "" {
+			continue
+		}
+		at, err := model.ParseRFC3339(raw)
+		if err != nil || at.IsZero() {
+			return apperror.Invalid("request.invalid", name)
+		}
+		*bound.target = at
+	}
+	return nil
 }
 
 // userDirectorySorts is the User directory's closed sort set; username, the

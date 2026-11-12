@@ -356,6 +356,10 @@ func filterAuditList(query sq.SelectBuilder, options store.AuditListOptions) (sq
 		return query, store.NewErrInvalidInput("audit_event", "range", nil)
 	}
 
+	if err := validAuditListFilters(options); err != nil {
+		return query, err
+	}
+
 	for _, action := range options.Visibility.AllowedActions {
 		if strings.TrimSpace(action) == "" || len(action) > 128 {
 			return query, store.NewErrInvalidInput("audit_event", "visibility_action", action)
@@ -418,8 +422,14 @@ func filterAuditList(query sq.SelectBuilder, options store.AuditListOptions) (sq
 	if options.ActorID != "" {
 		query = query.Where(sq.Eq{"audit_events.actor_id": options.ActorID})
 	}
-	if options.Action != "" {
-		query = query.Where(sq.Eq{"audit_events.action": options.Action})
+	if options.SubjectUserID != "" {
+		query = query.Where(sq.Eq{"audit_events.subject_user_id": options.SubjectUserID})
+	}
+	if len(options.Actions) > 0 {
+		query = query.Where("audit_events.action = ANY(?)", pq.Array(options.Actions))
+	}
+	if options.Status != "" {
+		query = query.Where(sq.Eq{"audit_events.status": options.Status})
 	}
 
 	if options.Resource != nil {
@@ -437,6 +447,28 @@ func filterAuditList(query sq.SelectBuilder, options store.AuditListOptions) (sq
 	}
 
 	return query, nil
+}
+
+// validAuditListFilters rejects a non-canonical subject, an unknown status,
+// and more than MaximumAuditListActions or blank actions.
+func validAuditListFilters(options store.AuditListOptions) error {
+	if options.SubjectUserID != "" && !options.SubjectUserID.IsValid() {
+		return store.NewErrInvalidInput("audit_event", "subject_user_id", nil)
+	}
+	switch options.Status {
+	case "", model.AuditStatusAttempt, model.AuditStatusSuccess, model.AuditStatusFail:
+	default:
+		return store.NewErrInvalidInput("audit_event", "status", options.Status)
+	}
+	if len(options.Actions) > store.MaximumAuditListActions {
+		return store.NewErrInvalidInput("audit_event", "actions", len(options.Actions))
+	}
+	for _, action := range options.Actions {
+		if strings.TrimSpace(action) == "" || len(action) > 128 {
+			return store.NewErrInvalidInput("audit_event", "action", action)
+		}
+	}
+	return nil
 }
 
 // auditSelfRow is the bounded self-history projection of audit_events.

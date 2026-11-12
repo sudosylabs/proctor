@@ -14,10 +14,17 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
+// AuditListOptions narrows an audit listing inside Visibility. ActorID,
+// SubjectUserID, Status and Resource each match exactly; Actions are
+// alternatives, at most MaximumAuditListActions of them. Every filter narrows
+// the visibility, so an academic visibility still reads only its subtrees and
+// AllowedActions catalog.
 type AuditListOptions struct {
-	ActorID  model.UserID
-	Action   string
-	Resource *model.Resource
+	ActorID       model.UserID
+	SubjectUserID model.UserID
+	Actions       []string
+	Status        model.AuditStatus
+	Resource      *model.Resource
 	// Since is an inclusive and Until an exclusive bound on created_at; a
 	// zero bound is open. When both are set Since precedes Until.
 	Since time.Time
@@ -32,6 +39,9 @@ type AuditListOptions struct {
 	Limit           int
 	Visibility      AuditVisibilityScope
 }
+
+// MaximumAuditListActions bounds the actions one audit listing names.
+const MaximumAuditListActions = 32
 
 // AuditVisibilityScope constrains audit history in persistence. InstitutionWide
 // explicitly retains operator visibility; its zero value denies all rows.

@@ -119,7 +119,7 @@ func TestAdministratorRecoveryStore(t *testing.T, ss store.Store, probes ...Admi
 	require.NoError(t, err)
 	require.True(t, activeMFA.IsActive())
 	events, listErr := ss.Audit().List(ctx, store.AuditListOptions{
-		Action: "authentication.administrator_recovery", Limit: 10,
+		Actions: []string{"authentication.administrator_recovery"}, Limit: 10,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
 	require.NoError(t, listErr, "pre-startup recovery audits")
@@ -135,7 +135,7 @@ func TestAdministratorRecoveryStore(t *testing.T, ss store.Store, probes ...Admi
 	require.NotNil(t, reconciled)
 	require.Equal(t, 1, reconciled.Reconciled)
 	events, err = ss.Audit().List(ctx, store.AuditListOptions{
-		Action: "authentication.administrator_recovery", Limit: 10,
+		Actions: []string{"authentication.administrator_recovery"}, Limit: 10,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
 	require.NoError(t, err)

@@ -9,6 +9,7 @@ package administration
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -20,10 +21,15 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// ListAuditEventsQuery narrows the listing: ActorID, SubjectUserID (the User
+// the Event is about), Status and Resource match exactly, and Actions, each a
+// known audit action, are alternatives.
 type ListAuditEventsQuery struct {
-	ActorID  model.UserID
-	Action   string
-	Resource *model.Resource
+	ActorID       model.UserID
+	SubjectUserID model.UserID
+	Actions       []string
+	Status        model.AuditStatus
+	Resource      *model.Resource
 	// Since is inclusive and Until exclusive; when both are set Since must
 	// precede Until.
 	Since time.Time
@@ -62,15 +68,23 @@ func (s *Service) ListAuditEvents(
 	if query.Limit < 1 ||
 		query.Limit > 200 ||
 		(query.ActorID != "" && !query.ActorID.IsValid()) ||
+		(query.SubjectUserID != "" && !query.SubjectUserID.IsValid()) ||
 		(query.BeforeID != "" && !query.BeforeID.IsValid()) ||
 		(query.Resource != nil && query.Resource.Validate() != nil) ||
-		(!query.Since.IsZero() && !query.Until.IsZero() && !query.Since.Before(query.Until)) {
+		(!query.Since.IsZero() && !query.Until.IsZero() && !query.Since.Before(query.Until)) ||
+		!validAuditListStatus(query.Status) {
 		return paging.Counted[*model.AuditEvent]{}, apperror.New("audit.query.invalid")
+	}
+	actions, err := auditListActions(query.Actions)
+	if err != nil {
+		return paging.Counted[*model.AuditEvent]{}, err
 	}
 
 	options := store.AuditListOptions{
 		ActorID:         model.UserID(strings.TrimSpace(query.ActorID.String())),
-		Action:          strings.TrimSpace(query.Action),
+		SubjectUserID:   query.SubjectUserID,
+		Actions:         actions,
+		Status:          query.Status,
 		Resource:        query.Resource,
 		Since:           query.Since,
 		Until:           query.Until,
@@ -100,6 +114,37 @@ func (s *Service) ListAuditEvents(
 
 	page.Total = total
 	return page, nil
+}
+
+// validAuditListStatus reports whether status is empty or an audit status.
+func validAuditListStatus(status model.AuditStatus) bool {
+	switch status {
+	case "", model.AuditStatusAttempt, model.AuditStatusSuccess, model.AuditStatusFail:
+		return true
+	}
+	return false
+}
+
+// auditListActions trims the requested actions, drops repeats and refuses
+// more than store.MaximumAuditListActions or one outside the audit action
+// catalog. An academic visibility still intersects them with its own catalog,
+// so naming an action never widens what the caller reads.
+func auditListActions(requested []string) ([]string, error) {
+	if len(requested) > store.MaximumAuditListActions {
+		return nil, apperror.New("audit.query.invalid")
+	}
+	known := model.AuditActions()
+	var actions []string
+	for _, raw := range requested {
+		action := strings.TrimSpace(raw)
+		if !slices.Contains(known, action) {
+			return nil, apperror.New("audit.query.invalid")
+		}
+		if !slices.Contains(actions, action) {
+			actions = append(actions, action)
+		}
+	}
+	return actions, nil
 }
 
 func academicAuditProjection(events []*model.AuditEvent) []*model.AuditEvent {

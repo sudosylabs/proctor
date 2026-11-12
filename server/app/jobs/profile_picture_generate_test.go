@@ -43,6 +43,8 @@ type defaultPictureCatalogFake struct {
 
 func (f defaultPictureCatalogFake) User() store.UserStore { return f.users }
 
+func (defaultPictureCatalogFake) Role() store.RoleStore { return nil }
+
 func (defaultPictureCatalogFake) RoleBinding() store.RoleBindingStore { return nil }
 
 func (defaultPictureCatalogFake) File() store.FileStore { return nil }

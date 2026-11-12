@@ -186,7 +186,7 @@ func TestAccessPolicyTwoNodePostgreSQLFenceAndSafeRevisionFanout(t *testing.T) {
 	require.True(t, bytes.Contains(conflictResponse.Body.Bytes(), []byte(`"code":"idempotency.conflict"`)), "conflicting reuse=%d %s", conflictResponse.Code, conflictResponse.Body.String())
 
 	audits, err := primaryStore.Audit().List(context.Background(), store.AuditListOptions{
-		Action: string(model.ActionAccessPolicyManage), Limit: 20,
+		Actions: []string{string(model.ActionAccessPolicyManage)}, Limit: 20,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
 	require.NoError(t, err)

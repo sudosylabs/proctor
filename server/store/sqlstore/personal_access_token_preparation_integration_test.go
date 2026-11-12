@@ -51,7 +51,7 @@ func TestPersonalAccessTokenPreparationMaintenanceIsBoundedAndAppendOnly(t *test
 	var remaining int
 	require.NoError(t, persistence.GetMaster().Get(ctx, &remaining, `SELECT COUNT(*) FROM personal_access_token_mutation_preparations`), "remaining preparations")
 	require.Equal(t, 0, remaining, "remaining preparations")
-	events, err := persistence.Audit().List(ctx, store.AuditListOptions{ActorID: user.ID, Action: "personal_access_token.create", Limit: 10, Visibility: store.AuditVisibilityScope{InstitutionWide: true}})
+	events, err := persistence.Audit().List(ctx, store.AuditListOptions{ActorID: user.ID, Actions: []string{"personal_access_token.create"}, Limit: 10, Visibility: store.AuditVisibilityScope{InstitutionWide: true}})
 	require.NoError(t, err)
 	require.Len(t, events, 2, "terminal failure audits")
 	for _, event := range events {

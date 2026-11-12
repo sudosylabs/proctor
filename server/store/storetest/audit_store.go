@@ -175,7 +175,7 @@ func TestAuditStore(t *testing.T, ss store.Store) {
 	for name, options := range map[string]store.AuditListOptions{
 		"zero visibility":           {ActorID: user.ID},
 		"operator actor":            {ActorID: user.ID, Visibility: store.AuditVisibilityScope{InstitutionWide: true}},
-		"operator action":           {ActorID: user.ID, Action: string(model.ActionAuditView), Visibility: store.AuditVisibilityScope{InstitutionWide: true}},
+		"operator action":           {ActorID: user.ID, Actions: []string{string(model.ActionAuditView)}, Visibility: store.AuditVisibilityScope{InstitutionWide: true}},
 		"academic subtree":          {Visibility: scopedVisibility},
 		"academic Institution-wide": {Visibility: store.AuditVisibilityScope{AcademicInstitutionWide: true, AllowedActions: scopedVisibility.AllowedActions}},
 		"academic without actions":  {Visibility: store.AuditVisibilityScope{AcademicInstitutionWide: true}},
@@ -230,6 +230,97 @@ func TestAuditStore(t *testing.T, ss store.Store) {
 	testAuditAbandonedAttempts(t, ctx, ss, institution.ID.String(), user.ID)
 	testAuditSelfHistory(t, ctx, ss, institution.ID.String())
 	testAuditListCreatedRange(t, ctx, ss, institution.ID.String())
+	testAuditListFilters(t, ctx, ss, institution.ID.String())
+}
+
+// testAuditListFilters proves the subject, status and repeatable action
+// filters: each matches exactly, actions are alternatives, and every filter
+// narrows the visibility, so an academic auditor naming a subject or an
+// action outside its subtrees and catalog reads nothing more.
+func testAuditListFilters(t *testing.T, ctx context.Context, ss store.Store, institutionID string) {
+	actor, subject, other := saveUser(t, ctx, ss), saveUser(t, ctx, ss), saveUser(t, ctx, ss)
+	root := saveAcademicUnit(t, ctx, ss, institutionID, "", "audit-filter-root")
+	sibling := saveAcademicUnit(t, ctx, ss, institutionID, "", "audit-filter-sibling")
+	unitMembers, provider := string(model.ActionAcademicUnitMembersManage), string(model.ActionExternalIdentityManage)
+	save := func(action string, about *model.User, unit *model.AcademicUnit, status model.AuditStatus) model.AuditEventID {
+		t.Helper()
+		resource := model.Resource{Type: model.ResourceAcademicUnit, ID: unit.ID.String()}
+		if action == provider {
+			resource = model.Resource{Type: model.ResourceUser, ID: about.ID.String()}
+		}
+		saved, err := ss.Audit().Save(ctx, &model.AuditEvent{
+			ActorID: actor.ID, SubjectUserID: about.ID, Action: action, Resource: resource,
+			ScopeType: model.RoleScopeAcademicUnit, ScopeID: unit.ID.String(), Status: status, NodeID: "test-node",
+		})
+		require.NoError(t, err)
+		return saved.ID
+	}
+	rootMembers := save(unitMembers, subject, root, model.AuditStatusSuccess)
+	rootProvider := save(provider, subject, root, model.AuditStatusSuccess)
+	siblingMembers := save(unitMembers, subject, sibling, model.AuditStatusFail)
+	otherMembers := save(unitMembers, other, root, model.AuditStatusAttempt)
+
+	institution := store.AuditVisibilityScope{InstitutionWide: true}
+	catalog := []string{unitMembers, string(model.ActionClassMembersManage)}
+	academic := store.AuditVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{root.ID}, AllowedActions: catalog}
+	list := func(options store.AuditListOptions) []model.AuditEventID {
+		t.Helper()
+		options.ActorID, options.Limit = actor.ID, 20
+		events, err := ss.Audit().List(ctx, options)
+		require.NoError(t, err)
+		ids := make([]model.AuditEventID, 0, len(events))
+		for _, event := range events {
+			ids = append(ids, event.ID)
+		}
+		total, err := ss.Audit().Count(ctx, options, store.MaximumListCount)
+		require.NoError(t, err)
+		require.Len(t, ids, total, "Count agrees with List")
+		return ids
+	}
+
+	require.ElementsMatch(t, []model.AuditEventID{rootMembers, rootProvider, siblingMembers},
+		list(store.AuditListOptions{SubjectUserID: subject.ID, Visibility: institution}), "the subject matches exactly")
+	require.Equal(t, []model.AuditEventID{siblingMembers}, list(store.AuditListOptions{Status: model.AuditStatusFail, Visibility: institution}))
+	require.Equal(t, []model.AuditEventID{otherMembers}, list(store.AuditListOptions{Status: model.AuditStatusAttempt, Visibility: institution}))
+	require.Equal(t, []model.AuditEventID{rootProvider}, list(store.AuditListOptions{Actions: []string{provider}, Visibility: institution}))
+	require.ElementsMatch(t, []model.AuditEventID{rootMembers, rootProvider, siblingMembers, otherMembers},
+		list(store.AuditListOptions{Actions: []string{unitMembers, provider}, Visibility: institution}), "actions are alternatives")
+	require.Equal(t, []model.AuditEventID{rootMembers}, list(store.AuditListOptions{
+		SubjectUserID: subject.ID, Actions: []string{unitMembers}, Status: model.AuditStatusSuccess, Visibility: institution,
+	}), "the filters combine")
+
+	require.Equal(t, []model.AuditEventID{rootMembers}, list(store.AuditListOptions{SubjectUserID: subject.ID, Visibility: academic}),
+		"an academic subtree reads the subject only inside its subtree and catalog")
+	require.Empty(t, list(store.AuditListOptions{Actions: []string{provider}, Visibility: academic}),
+		"an action outside the academic catalog reads nothing")
+	require.ElementsMatch(t, []model.AuditEventID{rootMembers, otherMembers},
+		list(store.AuditListOptions{Actions: []string{unitMembers, provider}, Visibility: academic}),
+		"naming an outside action beside an allowed one adds nothing")
+	require.Empty(t, list(store.AuditListOptions{Status: model.AuditStatusFail, Visibility: academic}),
+		"a status filter does not reach the sibling subtree")
+	require.ElementsMatch(t, []model.AuditEventID{rootMembers, siblingMembers}, list(store.AuditListOptions{
+		SubjectUserID: subject.ID, Visibility: store.AuditVisibilityScope{AcademicInstitutionWide: true, AllowedActions: catalog},
+	}), "an Institution-wide academic grant spans subtrees but keeps its catalog")
+
+	tooMany := make([]string, store.MaximumAuditListActions+1)
+	for index := range tooMany {
+		tooMany[index] = unitMembers
+	}
+	var invalid *store.ErrInvalidInput
+	for name, options := range map[string]store.AuditListOptions{
+		"unknown status":   {Status: "pending"},
+		"invalid subject":  {SubjectUserID: "not-an-id"},
+		"blank action":     {Actions: []string{" "}},
+		"too many actions": {Actions: tooMany},
+	} {
+		t.Run(name, func(t *testing.T) {
+			options.Limit, options.Visibility = 10, institution
+			_, err := ss.Audit().List(ctx, options)
+			require.ErrorAs(t, err, &invalid)
+			_, err = ss.Audit().Count(ctx, options, store.MaximumListCount)
+			require.ErrorAs(t, err, &invalid)
+		})
+	}
 }
 
 // testAuditListCreatedRange proves the operator list's created_at range:

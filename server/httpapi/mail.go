@@ -557,6 +557,15 @@ func listMailDeliveriesQuery(request *http.Request) (mail.ListDeliveriesQuery, l
 		return query, order, errors.New("too many mail template keys")
 	}
 
+	if raw, present := request.URL.Query()["recipient_user_id"]; present {
+		if len(raw) != 1 {
+			return query, order, errors.New("repeated mail recipient")
+		}
+		if query.RecipientUserID, err = model.ParseUserID(raw[0]); err != nil {
+			return query, order, err
+		}
+	}
+
 	if raw := request.URL.Query().Get("created_after"); raw != "" {
 		query.CreatedAfter, err = parseMailFilterTime(raw)
 		if err != nil {

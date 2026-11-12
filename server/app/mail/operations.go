@@ -59,16 +59,19 @@ type DeliveryPage struct {
 // ListDeliveriesQuery lists deliveries newest first by Order's instant (last
 // update when Order is empty), or oldest first when Ascending; BeforeAt and
 // BeforeID continue past the previous page's last delivery in that order.
+// RecipientUserID keeps the deliveries addressed to that User; mail history is
+// never searched by address.
 type ListDeliveriesQuery struct {
-	States        []model.MailDeliveryState
-	TemplateKeys  []model.MailTemplateKey
-	CreatedAfter  time.Time
-	CreatedBefore time.Time
-	Order         store.MailDeliveryOrder
-	Ascending     bool
-	BeforeAt      time.Time
-	BeforeID      model.MailDeliveryID
-	Limit         int
+	States          []model.MailDeliveryState
+	TemplateKeys    []model.MailTemplateKey
+	RecipientUserID model.UserID
+	CreatedAfter    time.Time
+	CreatedBefore   time.Time
+	Order           store.MailDeliveryOrder
+	Ascending       bool
+	BeforeAt        time.Time
+	BeforeID        model.MailDeliveryID
+	Limit           int
 }
 
 // InstitutionAuthorization authorizes a mail operator Action on the singleton
@@ -326,20 +329,22 @@ func (s *Operations) ListMailDeliveries(
 	if order == "" {
 		order = store.MailDeliveryOrderUpdated
 	}
-	if query.Limit < 1 || query.Limit > paging.MaximumLimit || !order.IsValid() {
+	if query.Limit < 1 || query.Limit > paging.MaximumLimit || !order.IsValid() ||
+		(query.RecipientUserID != "" && !query.RecipientUserID.IsValid()) {
 		return DeliveryPage{}, apperror.New("mail.query.invalid")
 	}
 
 	options := store.MailDeliveryListOptions{
-		States:        query.States,
-		TemplateKeys:  query.TemplateKeys,
-		CreatedAfter:  query.CreatedAfter,
-		CreatedBefore: query.CreatedBefore,
-		Order:         order,
-		Ascending:     query.Ascending,
-		BeforeAt:      query.BeforeAt,
-		BeforeID:      query.BeforeID,
-		Limit:         query.Limit + 1,
+		States:          query.States,
+		TemplateKeys:    query.TemplateKeys,
+		RecipientUserID: query.RecipientUserID,
+		CreatedAfter:    query.CreatedAfter,
+		CreatedBefore:   query.CreatedBefore,
+		Order:           order,
+		Ascending:       query.Ascending,
+		BeforeAt:        query.BeforeAt,
+		BeforeID:        query.BeforeID,
+		Limit:           query.Limit + 1,
 	}
 	deliveries, err := s.deps.Mail.ListDeliveries(ctx, options)
 	if err != nil {

@@ -364,7 +364,7 @@ func TestCASExternalAuthenticationIntegration(t *testing.T) {
 	require.NoError(t, err, "Invitation proof created an ordinary Session")
 	require.Empty(t, invitationSessions, "Invitation proof created an ordinary Session")
 	invitationAudits, err := persistence.Audit().List(context.Background(), store.AuditListOptions{ActorID: invitationUser.ID,
-		Action: "invitation.accept", Limit: 10, Visibility: store.AuditVisibilityScope{InstitutionWide: true}})
+		Actions: []string{"invitation.accept"}, Limit: 10, Visibility: store.AuditVisibilityScope{InstitutionWide: true}})
 	require.NoError(t, err, "CAS Invitation acceptance audits")
 	require.Len(t, invitationAudits, 1, "CAS Invitation acceptance audits")
 	require.Equal(t, config.ExternalAuthenticationTypeCAS, invitationAudits[0].AuthMethod, "CAS Invitation acceptance audits")

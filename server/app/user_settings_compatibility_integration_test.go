@@ -98,7 +98,7 @@ func TestUserSettingsUnsupportedFormatIsOpaqueAndReadOnlyAfterRollback(t *testin
 	require.Equal(t, before.Revision, after.Revision, "rejected replacements changed persisted state: before=%#v after=%#v", before, after)
 	require.True(t, after.UpdatedAt.Equal(before.UpdatedAt), "rejected replacements changed persisted state: before=%#v after=%#v", before, after)
 	audits, err := persistence.Audit().List(ctx, store.AuditListOptions{
-		Action: "user.settings.replace", Limit: 10,
+		Actions: []string{"user.settings.replace"}, Limit: 10,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
 	require.NoError(t, err)

@@ -170,7 +170,7 @@ func TestAccountRecoveryIntegration(t *testing.T) {
 	)
 	require.Equal(t, http.StatusBadRequest, resetReplay.Code, "password reset replay status")
 	audits, err := persistence.Audit().List(context.Background(), store.AuditListOptions{
-		Action:     "authentication.password_reset.complete",
+		Actions:    []string{"authentication.password_reset.complete"},
 		Limit:      10,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})

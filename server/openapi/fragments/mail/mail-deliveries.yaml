@@ -64,6 +64,13 @@ paths:
             items:
               $ref: '#/components/schemas/MailTemplateKey'
           description: Optional set of template keys to include.
+        - name: recipient_user_id
+          in: query
+          schema:
+            $ref: '#/components/schemas/ID'
+          description: >-
+            Include only deliveries addressed to this User. A delivery to an Invitation has no recipient User and
+            never matches; mail history is never searched by address.
         - name: created_after
           in: query
           schema:

@@ -235,7 +235,7 @@ func TestExternalIdentityStore(t *testing.T, ss store.Store) {
 		require.Equal(t, model.UserSettingsFormatVersion1, settings.FormatVersion)
 		require.True(t, settings.CreatedAt.Equal(resolved.User.CreatedAt))
 		audits, err := ss.Audit().List(ctx, store.AuditListOptions{
-			Action:     "authentication.external_provision",
+			Actions:    []string{"authentication.external_provision"},
 			Limit:      10,
 			Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 		})
@@ -309,7 +309,7 @@ func TestExternalIdentityStore(t *testing.T, ss store.Store) {
 		creation.DefaultProfilePictureJob.Command = defaultProfilePictureCommand(model.NewUserID())
 		subject := "mismatched-job-" + model.NewID()
 		before, err := ss.Audit().List(ctx, store.AuditListOptions{
-			Action: "authentication.external_provision", Limit: 100,
+			Actions: []string{"authentication.external_provision"}, Limit: 100,
 			Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 		})
 		require.NoError(t, err)
@@ -333,7 +333,7 @@ func TestExternalIdentityStore(t *testing.T, ss store.Store) {
 		_, err = ss.UserSettings().Get(ctx, creation.User.ID)
 		require.True(t, store.IsNotFound(err), "mismatched provision settings survived rollback")
 		after, err := ss.Audit().List(ctx, store.AuditListOptions{
-			Action: "authentication.external_provision", Limit: 100,
+			Actions: []string{"authentication.external_provision"}, Limit: 100,
 			Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 		})
 		require.NoError(t, err)

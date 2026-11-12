@@ -38,7 +38,7 @@ func TestMailStore(t *testing.T, ss store.Store) {
 	require.Equal(t, "o***@example.test", stored.MaskedRecipient)
 	require.Equal(t, user.ID, stored.TargetUserID)
 	audits, err := ss.Audit().List(ctx, store.AuditListOptions{
-		Action: string(model.ActionMailManage), Limit: 10,
+		Actions: []string{string(model.ActionMailManage)}, Limit: 10,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
 	require.NoError(t, err)
@@ -114,6 +114,7 @@ func TestMailStore(t *testing.T, ss store.Store) {
 	_, err = ss.Job().Get(ctx, rollback.Job.ID)
 	require.True(t, store.IsNotFound(err), "rolled-back job error")
 	testMailOperatorStore(t, ctx, ss, user, institution)
+	testMailDeliveryRecipientFilter(t, ctx, ss, user, institution)
 
 	ordinaryPermit, err := ss.Mail().AcquireSendPermit(ctx, store.MailSendOrdinary)
 	require.NoError(t, err)
@@ -414,6 +415,59 @@ func testMailOperatorStore(t *testing.T, ctx context.Context, ss store.Store, us
 	recoveredJob, err := ss.Job().Get(ctx, recovered.JobID)
 	require.NoError(t, err)
 	require.Equal(t, model.JobStatusQueued, recoveredJob.Status)
+}
+
+// testMailDeliveryRecipientFilter proves the recipient User filter: it
+// keeps exactly that User's deliveries, combines with the other filters,
+// counts what it lists, and refuses a non-canonical User. The deliveries are
+// canceled afterwards so no later queue scan meets them.
+func testMailDeliveryRecipientFilter(t *testing.T, ctx context.Context, ss store.Store, user *model.User, institution *model.Institution) {
+	other := saveUser(t, ctx, ss)
+	at := model.NowUTC().Add(-time.Hour)
+	enqueue := func(recipient *model.User, offset time.Duration) *model.MailDelivery {
+		t.Helper()
+		delivery, err := ss.Mail().EnqueueTest(ctx, mailTestEnqueueFixture(t, recipient, institution, at.Add(offset)))
+		require.NoError(t, err)
+		return delivery
+	}
+	mine, theirs := enqueue(user, 0), enqueue(other, time.Second)
+	window := store.MailDeliveryListOptions{CreatedAfter: at, CreatedBefore: at.Add(2 * time.Second), Limit: 10}
+	for name, test := range map[string]struct {
+		recipient model.UserID
+		want      []model.MailDeliveryID
+	}{
+		"no recipient":    {want: []model.MailDeliveryID{theirs.ID, mine.ID}},
+		"one recipient":   {recipient: user.ID, want: []model.MailDeliveryID{mine.ID}},
+		"other recipient": {recipient: other.ID, want: []model.MailDeliveryID{theirs.ID}},
+		"no deliveries":   {recipient: model.NewUserID(), want: []model.MailDeliveryID{}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			options := window
+			options.RecipientUserID = test.recipient
+			deliveries, err := ss.Mail().ListDeliveries(ctx, options)
+			require.NoError(t, err)
+			ids := make([]model.MailDeliveryID, 0, len(deliveries))
+			for _, delivery := range deliveries {
+				ids = append(ids, delivery.ID)
+			}
+			require.Equal(t, test.want, ids)
+			total, err := ss.Mail().CountDeliveries(ctx, options, store.MaximumListCount)
+			require.NoError(t, err)
+			require.Len(t, ids, total, "the count reads the same filter")
+		})
+	}
+	options := window
+	options.RecipientUserID = "not-an-id"
+	_, err := ss.Mail().ListDeliveries(ctx, options)
+	require.Error(t, err, "ListDeliveries accepted a non-canonical recipient")
+	_, err = ss.Mail().CountDeliveries(ctx, options, store.MaximumListCount)
+	require.Error(t, err, "CountDeliveries accepted a non-canonical recipient")
+
+	for _, delivery := range []*model.MailDelivery{mine, theirs} {
+		audit := saveMailMutationAudit(t, ctx, ss, institution, delivery, "cancel")
+		_, err = ss.Mail().CancelDelivery(ctx, &store.MailDeliveryMutation{ID: delivery.ID, ExpectedRevision: delivery.Revision, AuditEventID: audit.ID, AuditAt: model.NowUTC()})
+		require.NoError(t, err)
+	}
 }
 
 func saveMailMutationAudit(t *testing.T, ctx context.Context, ss store.Store, institution *model.Institution, delivery *model.MailDelivery, operation string) *model.AuditEvent {

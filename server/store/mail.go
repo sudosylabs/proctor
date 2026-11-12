@@ -46,16 +46,19 @@ type MailDeliveryCompletion struct {
 // first by Order's instant (creation when Order is empty) then ID, or oldest
 // first when Ascending. The (BeforeAt, BeforeID) pair is the decoded opaque
 // keyset cursor: the previous page's last delivery, its instant in Order.
+// RecipientUserID keeps the deliveries addressed to that User; a delivery to
+// an Invitation has no recipient User and never matches it.
 type MailDeliveryListOptions struct {
-	States        []model.MailDeliveryState
-	TemplateKeys  []model.MailTemplateKey
-	CreatedAfter  time.Time
-	CreatedBefore time.Time
-	Order         MailDeliveryOrder
-	Ascending     bool
-	BeforeAt      time.Time
-	BeforeID      model.MailDeliveryID
-	Limit         int
+	States          []model.MailDeliveryState
+	TemplateKeys    []model.MailTemplateKey
+	RecipientUserID model.UserID
+	CreatedAfter    time.Time
+	CreatedBefore   time.Time
+	Order           MailDeliveryOrder
+	Ascending       bool
+	BeforeAt        time.Time
+	BeforeID        model.MailDeliveryID
+	Limit           int
 }
 
 // MailDeliveryOrder names the instant an operator delivery listing orders by.

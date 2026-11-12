@@ -28855,11 +28855,38 @@
             }
           },
           {
-            "description": "Return only Events with this exact stable action.",
+            "description": "Return only Events about this User, such as a change to their account.",
+            "in": "query",
+            "name": "subject_user_id",
+            "schema": {
+              "$ref": "#/components/schemas/ID"
+            }
+          },
+          {
+            "description": "Return only Events with one of these exact stable actions. Repeat the parameter for up to 32 actions. An Academic Unit auditor still reads only the academic actions its authority allows, so naming any other action matches nothing.",
+            "explode": true,
             "in": "query",
             "name": "action",
             "schema": {
-              "$ref": "#/components/schemas/AuditAction"
+              "items": {
+                "$ref": "#/components/schemas/AuditAction"
+              },
+              "maxItems": 32,
+              "type": "array"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Return only Events in this durable outcome state: an `attempt` whose outcome is not yet recorded, a `success`, or a `fail`.",
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "enum": [
+                "attempt",
+                "success",
+                "fail"
+              ],
+              "type": "string"
             }
           },
           {
@@ -42705,6 +42732,14 @@
             }
           },
           {
+            "description": "Include only deliveries addressed to this User. A delivery to an Invitation has no recipient User and never matches; mail history is never searched by address.",
+            "in": "query",
+            "name": "recipient_user_id",
+            "schema": {
+              "$ref": "#/components/schemas/ID"
+            }
+          },
+          {
             "description": "Include deliveries created at or after this RFC 3339 instant.",
             "in": "query",
             "name": "created_after",
@@ -47813,6 +47848,64 @@
             "required": false,
             "schema": {
               "$ref": "#/components/schemas/ID"
+            }
+          },
+          {
+            "description": "Keeps Users holding a current Role Binding of any listed Role inside the caller's role_binding.view scopes, so the filter matches only bindings the `summary` could show; a caller without role_binding.view receives an empty page. Repeat the parameter for up to 16 Roles. Roles are seen through Institution-wide role.view: without it, and for a Role that does not exist or is archived, the request is `request.invalid` on `role_id` alike. The filter narrows the caller's visibility and never widens it.",
+            "explode": true,
+            "in": "query",
+            "name": "role_id",
+            "required": false,
+            "schema": {
+              "items": {
+                "$ref": "#/components/schemas/ID"
+              },
+              "maxItems": 16,
+              "type": "array"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Keeps only `active` or only `disabled` accounts. Like `include_disabled` it reaches disabled Users only for Institution-wide user.view: scoped visibility never sees a disabled User, so `disabled` answers an empty page. It cannot be combined with `include_disabled=true`.",
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "enum": [
+                "active",
+                "disabled"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "With `true`, keeps Users who have no recorded account activity, which is first recorded when a Session is issued to them, so they have never signed in. Account activity is visible only to Institution-wide user.view; any other caller receives `request.invalid`. It cannot be combined with `last_active_after` or `last_active_before`.",
+            "in": "query",
+            "name": "never_signed_in",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Keeps Users whose last account activity is at or after this RFC 3339 instant; a User never active never matches. Only Institution-wide user.view may filter on account activity; any other caller receives `request.invalid`.",
+            "in": "query",
+            "name": "last_active_after",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Keeps Users whose last account activity is before this RFC 3339 instant; it must be later than `last_active_after`, and a User never active never matches. Only Institution-wide user.view may filter on account activity; any other caller receives `request.invalid`.",
+            "in": "query",
+            "name": "last_active_before",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
             }
           },
           {

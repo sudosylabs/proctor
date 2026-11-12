@@ -36,6 +36,9 @@ type Authorizer interface {
 	// in which the caller holds role_binding.view at the instant. It narrows
 	// what a directory summary shows; it never admits a request.
 	RoleBindingViewScope(context.Context, invocation.Invocation, time.Time) (store.UserVisibilityScope, error)
+	// CanViewRoles reports, without recording a decision, whether the caller
+	// holds Institution-wide role.view, which is how a caller sees Roles.
+	CanViewRoles(context.Context, invocation.Invocation) (bool, error)
 	// AuthorizeProfileRead reports fullProfile when the caller reads its own
 	// profile or holds institution-wide User visibility; a scoped grant reads
 	// the limited profile.
@@ -83,6 +86,7 @@ type Dependencies struct {
 // use case.
 type Service struct {
 	users        store.UserStore
+	roles        store.RoleStore
 	roleBindings store.RoleBindingStore
 	files        store.FileStore
 	settings     store.UserSettingsStore
@@ -119,6 +123,7 @@ func New(deps Dependencies) (*Service, error) {
 
 	return &Service{
 		users:           deps.Store.User(),
+		roles:           deps.Store.Role(),
 		roleBindings:    deps.Store.RoleBinding(),
 		files:           deps.Store.File(),
 		settings:        deps.Store.UserSettings(),

@@ -37,7 +37,7 @@ func TestInstallationStore(t *testing.T, ss store.Store) {
 	require.Nil(t, pristine.Role)
 	require.Empty(t, pristine.AddedPermissions)
 	events, err := ss.Audit().List(ctx, store.AuditListOptions{
-		Action: "role.system_admin.reconcile", Limit: 10,
+		Actions: []string{"role.system_admin.reconcile"}, Limit: 10,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
 	require.NoError(t, err, "pristine reconciliation audit events")
@@ -53,7 +53,7 @@ func TestInstallationStore(t *testing.T, ss store.Store) {
 	_, err = ss.Job().Get(ctx, mismatched.DefaultProfilePictureJob.ID)
 	require.True(t, store.IsNotFound(err), "mismatched bootstrap Job was persisted")
 	events, err = ss.Audit().List(ctx, store.AuditListOptions{
-		Action: "installation.bootstrap", Limit: 10,
+		Actions: []string{"installation.bootstrap"}, Limit: 10,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
 	require.NoError(t, err, "bootstrap audit survived mismatched Job rollback: events")
@@ -184,7 +184,7 @@ func TestInstallationStore(t *testing.T, ss store.Store) {
 	require.False(t, inserted, "bootstrap default-picture job inserted=%t job=%#v", inserted, queued)
 	require.Equal(t, winner.Administrator.ID.String(), queued.DedupeKey, "bootstrap default-picture job inserted=%t job=%#v", inserted, queued)
 	events, err = ss.Audit().List(ctx, store.AuditListOptions{
-		Action: "installation.bootstrap", Limit: 10,
+		Actions: []string{"installation.bootstrap"}, Limit: 10,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
 	require.NoError(t, err)
@@ -249,7 +249,7 @@ func TestInstallationStore(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	require.Equal(t, *bindingBefore, *bindingAfter, "reconciliation changed a Role Binding: before=%#v after=%#v", bindingBefore, bindingAfter)
 	reconciliationEvents, err := ss.Audit().List(ctx, store.AuditListOptions{
-		Action: "role.system_admin.reconcile", Limit: 10,
+		Actions: []string{"role.system_admin.reconcile"}, Limit: 10,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
 	require.NoError(t, err)
@@ -275,7 +275,7 @@ func TestInstallationStore(t *testing.T, ss store.Store) {
 	require.False(t, noOp.Changed)
 	require.Empty(t, noOp.AddedPermissions)
 	reconciliationEvents, err = ss.Audit().List(ctx, store.AuditListOptions{
-		Action: "role.system_admin.reconcile", Limit: 10,
+		Actions: []string{"role.system_admin.reconcile"}, Limit: 10,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
 	require.NoError(t, err)

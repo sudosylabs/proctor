@@ -316,7 +316,7 @@ func TestAcademicMembershipAndUserAdministrationIntegration(t *testing.T) {
 	require.Equal(t, http.StatusOK, visible.Code, "teacher student visibility = %d: %s", visible.Code, visible.Body.String())
 	visibilityEvents, err := persistence.Audit().List(context.Background(), store.AuditListOptions{
 		ActorID: teacher.ID,
-		Action:  string(model.ActionUserView),
+		Actions: []string{string(model.ActionUserView)},
 		Resource: &model.Resource{
 			Type: model.ResourceUser,
 			ID:   student.ID.String(),

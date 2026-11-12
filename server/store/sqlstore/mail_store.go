@@ -338,11 +338,12 @@ func (s SQLMailStore) CountDeliveries(ctx context.Context, options store.MailDel
 }
 
 // mailDeliveryListConditions validates and builds every ListDeliveries filter
-// but the keyset: states, templates, and the creation range. ListDeliveries
+// but the keyset: states, templates, recipient User, and the creation range. ListDeliveries
 // and CountDeliveries share it so a total always counts the listed rows.
 func mailDeliveryListConditions(options store.MailDeliveryListOptions) ([]string, []any, error) {
 	if len(options.States) > 6 ||
 		len(options.TemplateKeys) > 64 ||
+		(options.RecipientUserID != "" && !options.RecipientUserID.IsValid()) ||
 		(!options.CreatedAfter.IsZero() && !options.CreatedBefore.IsZero() && !options.CreatedAfter.Before(options.CreatedBefore)) {
 		return nil, nil, store.NewErrInvalidInput("mail_delivery", "list", nil)
 	}
@@ -385,6 +386,11 @@ func mailDeliveryListConditions(options store.MailDeliveryListOptions) ([]string
 		}
 
 		conditions = append(conditions, "template_key IN ("+strings.Join(placeholders, ", ")+")")
+	}
+
+	if options.RecipientUserID != "" {
+		conditions = append(conditions, "target_user_id = ?")
+		arguments = append(arguments, options.RecipientUserID.String())
 	}
 
 	if !options.CreatedAfter.IsZero() {

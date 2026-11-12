@@ -735,6 +735,12 @@ CREATE INDEX mail_deliveries_operator_list_idx
 CREATE INDEX mail_deliveries_operator_updated_idx
     ON mail_deliveries (updated_at DESC, id DESC);
 
+-- The operator listing filtered by recipient User; one User's deliveries are
+-- few, so the update order sorts them rather than needing its own index.
+CREATE INDEX mail_deliveries_target_user_id_created_at_id_idx
+    ON mail_deliveries (target_user_id, created_at DESC, id DESC)
+    WHERE target_user_id IS NOT NULL;
+
 CREATE INDEX mail_deliveries_terminal_retention_idx
     ON mail_deliveries (state, updated_at, id);
 

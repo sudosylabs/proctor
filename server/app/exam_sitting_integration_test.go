@@ -366,7 +366,7 @@ func assertExamSittingOverrideAudit(t *testing.T, ctx context.Context, persisten
 ) {
 	t.Helper()
 	events, err := persistence.Audit().List(ctx, store.AuditListOptions{
-		ActorID: actorID, Action: string(action), Resource: &resource, Limit: 20,
+		ActorID: actorID, Actions: []string{string(action)}, Resource: &resource, Limit: 20,
 		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
 	})
 	require.NoError(t, err)

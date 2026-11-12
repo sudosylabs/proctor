@@ -173,7 +173,7 @@ func auditQueryFromRequest(request *http.Request) (administration.ListAuditEvent
 		query.BeforeID = model.AuditEventID(cursor.ID)
 	}
 
-	for _, name := range []string{"created_after", "created_before"} {
+	for _, name := range []string{"created_after", "created_before", "subject_user_id", "status"} {
 		if entries, present := values[name]; present && (len(entries) != 1 || entries[0] == "") {
 			return query, order, errAuditQuery(name)
 		}
@@ -187,7 +187,11 @@ func auditQueryFromRequest(request *http.Request) (administration.ListAuditEvent
 	}
 
 	query.ActorID = model.UserID(values.Get("actor_id"))
-	query.Action = values.Get("action")
+	query.SubjectUserID = model.UserID(values.Get("subject_user_id"))
+	// The application owns the closed action and status vocabularies and
+	// answers audit.query.invalid for a value outside them.
+	query.Actions = values["action"]
+	query.Status = model.AuditStatus(values.Get("status"))
 	resourceType, resourceID := values.Get("resource_type"), values.Get("resource_id")
 	if (resourceType == "") != (resourceID == "") {
 		return query, order, errInvalidAuditResource

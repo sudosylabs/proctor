@@ -327,3 +327,27 @@ func (s *Service) UpdateExamSecurityCoverage(
 
 	return result, nil
 }
+
+// SecurityPolicyOverview resolves the Sitting's current policy for the
+// candidate's readiness overview, under the same eligibility checks as
+// preparation. It creates no preflight, records nothing, and grants nothing:
+// the preflight prepared at Start is still the binding check.
+func (s *Service) SecurityPolicyOverview(
+	ctx context.Context,
+	inv invocation.Invocation,
+	sittingID model.ExamSittingID,
+) (_ *store.SecurityPolicyOverview, resultErr error) {
+	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
+	if !sittingID.IsValid() {
+		return nil, apperror.Invalid("exam.attempt.invalid", "exam_sitting_id")
+	}
+	preflightAccess, err := s.securityPreflightAccess(ctx, inv, sittingID)
+	if err != nil {
+		return nil, err
+	}
+	overview, err := s.securityPreflight.ReadSecurityPolicyOverview(ctx, preflightAccess)
+	if err != nil {
+		return nil, storeError(securityPreflightStoreErrors, err)
+	}
+	return overview, nil
+}

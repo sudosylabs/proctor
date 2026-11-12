@@ -24052,6 +24052,11 @@
         ],
         "type": "object"
       },
+      "ReadinessDigest": {
+        "description": "Identifies what the readiness overview shows and Desktop enforces: the activations and rules, family selections, recorder switch, and the registry, matrix and catalogs they rest on. Unlike the policy content digest it leaves out the policy's own identity, so the overview and the preflight prepared at Start carry the same value exactly when nothing that matters changed.",
+        "pattern": "^sha256:[0-9a-f]{64}$",
+        "type": "string"
+      },
       "ReallowExamAttemptRequest": {
         "additionalProperties": false,
         "properties": {
@@ -25912,6 +25917,44 @@
         ],
         "type": "object"
       },
+      "SecurityPolicyOverviewResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "browser_activity_disclosure": {
+            "$ref": "#/components/schemas/BrowserActivityDisclosure"
+          },
+          "capability_matrix_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "catalog_bindings": {
+            "items": {
+              "$ref": "#/components/schemas/SecurityCatalogBinding"
+            },
+            "maxItems": 32,
+            "type": "array"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/EffectiveExamSecurityPolicy"
+          },
+          "readiness_digest": {
+            "$ref": "#/components/schemas/ReadinessDigest"
+          },
+          "server_time": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "server_time",
+          "policy",
+          "readiness_digest",
+          "capability_matrix_digest",
+          "catalog_bindings",
+          "browser_activity_disclosure"
+        ],
+        "type": "object"
+      },
       "SecurityPolicyRecovery": {
         "additionalProperties": false,
         "properties": {
@@ -26000,6 +26043,9 @@
           "preflight_challenge": {
             "$ref": "#/components/schemas/SecurityPreflightChallenge"
           },
+          "readiness_digest": {
+            "$ref": "#/components/schemas/ReadinessDigest"
+          },
           "server_time": {
             "format": "date-time",
             "type": "string"
@@ -26009,6 +26055,7 @@
           "server_time",
           "policy",
           "policy_content_digest",
+          "readiness_digest",
           "capability_matrix_digest",
           "catalog_bindings",
           "preflight_challenge",
@@ -37936,6 +37983,92 @@
         ],
         "x-proctor-idempotency": "required"
       }
+    },
+    "/api/v1/exam-sittings/{exam_sitting_id}/security-policy": {
+      "get": {
+        "description": "Resolves the Sitting's current native policy, under the same eligibility checks as preparing a preflight, for the overview a candidate's Desktop shows before Start: the capabilities it activates, the rules it checks, the recorder switch and the disclosure. It creates no preflight, records nothing and grants nothing, so the overview may hold it for as long as it is open. At Start, compare readiness_digest with the one the prepared preflight returns; if they differ, refresh the overview.",
+        "operationId": "getSecurityPolicyOverview",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecurityPolicyOverviewResponse"
+                }
+              }
+            },
+            "description": "The policy the readiness overview checks the machine against",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/PrivateNoStore"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Read the policy for the readiness overview",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.registered_desktop_required",
+          "exam.attempt.desktop_incompatible",
+          "exam.attempt.sitting_not_open",
+          "exam.attempt.management_authority_conflict",
+          "exam.attempt.unavailable",
+          "exam.security.unsupported_capability",
+          "exam.security.catalog_missing",
+          "exam.delivery.metadata_capacity",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamSittingID"
+        }
+      ]
     },
     "/api/v1/exam-sittings/{exam_sitting_id}/security-preflights": {
       "parameters": [

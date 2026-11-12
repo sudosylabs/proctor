@@ -22,6 +22,9 @@ type attemptStoreFake struct {
 	screenClipErr                   error
 	screenClipReplayed              bool
 	screenClipUpload                *store.ExamAttemptScreenClipUploadStatus
+	overview                        *store.SecurityPolicyOverview
+	overviewErr                     error
+	overviewAccess                  *store.SecurityPreflightAccess
 	screenClipChunk                 *store.ExamAttemptScreenClipChunk
 	connect                         *store.ExamAttemptConnect
 	connectErr                      error
@@ -327,6 +330,11 @@ func (f *attemptStoreFake) ReportSecurityPreflight(context.Context, *store.Secur
 
 func (f *attemptStoreFake) ResolveSecurityPreflightSitting(context.Context, string, model.UserID, model.SessionID) (model.ExamSittingID, error) {
 	return "", errors.New("unexpected preflight lookup")
+}
+
+func (f *attemptStoreFake) ReadSecurityPolicyOverview(_ context.Context, access store.SecurityPreflightAccess) (*store.SecurityPolicyOverview, error) {
+	f.overviewAccess = &access
+	return f.overview, f.overviewErr
 }
 
 func (f *attemptStoreFake) RecoverSecurityPolicy(context.Context, store.SecurityPreflightAccess, model.ExamAttemptID) (*store.SecurityPolicyRecovery, error) {

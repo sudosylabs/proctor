@@ -88,6 +88,7 @@ type ExamAttemptApplication interface {
 		attempt.NativeDeliverySummaryCommand,
 	) (*model.NativeSecurityStreamStatus, error)
 	RecoverExamSecurityPolicy(context.Context, invocation.Invocation, model.ExamAttemptID) (*store.SecurityPolicyRecovery, error)
+	SecurityPolicyOverview(context.Context, invocation.Invocation, model.ExamSittingID) (*store.SecurityPolicyOverview, error)
 	PrepareExamSecurityPreflight(
 		context.Context,
 		invocation.Invocation,

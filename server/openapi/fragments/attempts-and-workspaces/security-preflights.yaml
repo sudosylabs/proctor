@@ -87,6 +87,69 @@ paths:
           $ref: '#/components/responses/InternalError'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/exam-sittings/{exam_sitting_id}/security-policy:
+    parameters:
+      - $ref: '#/components/parameters/ExamSittingID'
+    get:
+      operationId: getSecurityPolicyOverview
+      summary: Read the policy for the readiness overview
+      description: >-
+        Resolves the Sitting's current native policy, under the same eligibility checks as preparing a preflight,
+        for the overview a candidate's Desktop shows before Start: the capabilities it activates, the rules it
+        checks, the recorder switch and the disclosure. It creates no preflight, records nothing and grants nothing,
+        so the overview may hold it for as long as it is open. At Start, compare readiness_digest with the one the
+        prepared preflight returns; if they differ, refresh the overview.
+      tags:
+        - Attempts and workspaces
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - request.invalid
+        - resource.not_found
+        - exam.attempt.invalid
+        - exam.attempt.registered_desktop_required
+        - exam.attempt.desktop_incompatible
+        - exam.attempt.sitting_not_open
+        - exam.attempt.management_authority_conflict
+        - exam.attempt.unavailable
+        - exam.security.unsupported_capability
+        - exam.security.catalog_missing
+        - exam.delivery.metadata_capacity
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      responses:
+        '200':
+          description: The policy the readiness overview checks the machine against
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/PrivateNoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecurityPolicyOverviewResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   /api/v1/security-preflights/{security_preflight_id}/report:
     parameters:
       - $ref: '#/components/parameters/SecurityPreflightID'
@@ -1178,6 +1241,42 @@ components:
         Localized collection notice, not consent or history-read authority. Zero days means no configured
         automatic expiry. Holds, approval, grace and source reconciliation still apply; minimized integrity
         evidence can have a different period.
+    SecurityPolicyOverviewResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - server_time
+        - policy
+        - readiness_digest
+        - capability_matrix_digest
+        - catalog_bindings
+        - browser_activity_disclosure
+      properties:
+        server_time:
+          type: string
+          format: date-time
+        policy:
+          $ref: '#/components/schemas/EffectiveExamSecurityPolicy'
+        readiness_digest:
+          $ref: '#/components/schemas/ReadinessDigest'
+        capability_matrix_digest:
+          type: string
+          pattern: ^sha256:[0-9a-f]{64}$
+        catalog_bindings:
+          type: array
+          maxItems: 32
+          items:
+            $ref: '#/components/schemas/SecurityCatalogBinding'
+        browser_activity_disclosure:
+          $ref: '#/components/schemas/BrowserActivityDisclosure'
+    ReadinessDigest:
+      type: string
+      pattern: ^sha256:[0-9a-f]{64}$
+      description: >-
+        Identifies what the readiness overview shows and Desktop enforces: the activations and rules, family
+        selections, recorder switch, and the registry, matrix and catalogs they rest on. Unlike the policy content
+        digest it leaves out the policy's own identity, so the overview and the preflight prepared at Start carry the
+        same value exactly when nothing that matters changed.
     SecurityPolicyResponse:
       type: object
       additionalProperties: false
@@ -1185,6 +1284,7 @@ components:
         - server_time
         - policy
         - policy_content_digest
+        - readiness_digest
         - capability_matrix_digest
         - catalog_bindings
         - preflight_challenge
@@ -1199,6 +1299,8 @@ components:
         policy_content_digest:
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
+        readiness_digest:
+          $ref: '#/components/schemas/ReadinessDigest'
         capability_matrix_digest:
           type: string
           pattern: ^sha256:[0-9a-f]{64}$

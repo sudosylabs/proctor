@@ -123,4 +123,16 @@ type SecurityPreflightStore interface {
 	// Attempt Configuration and native control state of the Candidate's active
 	// Participation, for a Desktop that lost its Connect response.
 	RecoverSecurityPolicy(context.Context, SecurityPreflightAccess, model.ExamAttemptID) (*SecurityPolicyRecovery, error)
+	// ReadSecurityPolicyOverview resolves the Sitting's current policy for the
+	// readiness overview, under the same eligibility checks as preparation,
+	// without creating a preflight.
+	ReadSecurityPolicyOverview(context.Context, SecurityPreflightAccess) (*SecurityPolicyOverview, error)
+}
+
+// SecurityPolicyOverview is the policy the readiness overview checks the
+// candidate's machine against before Start.
+type SecurityPolicyOverview struct {
+	ServerTime                time.Time
+	Resolved                  model.ResolvedNativePolicy
+	BrowserActivityDisclosure model.BrowserActivityDisclosure
 }

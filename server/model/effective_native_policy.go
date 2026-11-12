@@ -573,3 +573,30 @@ func (p *EffectiveExamSecurityPolicy) UnmarshalJSON(raw []byte) error {
 	*p = candidate
 	return nil
 }
+
+// ReadinessDigest identifies what the readiness overview shows and Desktop
+// enforces: the activations and rules, the family selections, the recorder
+// switch, and the registry, matrix and catalogs they rest on. Unlike the
+// content digest it leaves out the policy's own identity, which each
+// resolution mints anew, so the overview read and the preflight Start
+// prepares agree exactly when nothing that matters changed.
+func (r ResolvedNativePolicy) ReadinessDigest() (string, error) {
+	document, err := encodeCanonicalExamDocument(struct {
+		Activations            []NativeActivation          `json:"activations"`
+		Rules                  []NativeRule                `json:"rules"`
+		Capabilities           []NativeFamilyPolicy        `json:"capabilities"`
+		ScreenRecording        NativeScreenRecordingPolicy `json:"screen_recording"`
+		FocusLossMode          NativeMode                  `json:"focus_loss_mode"`
+		ConnectionLossMode     NativeMode                  `json:"connection_loss_mode"`
+		RegistryDigest         string                      `json:"registry_digest"`
+		CapabilityMatrixDigest string                      `json:"capability_matrix_digest"`
+		CatalogBindings        []SecurityCatalogBinding    `json:"catalog_bindings"`
+	}{
+		r.Policy.Activations, r.Policy.Rules, r.Policy.Capabilities, r.Policy.ScreenRecording, r.Policy.FocusLossMode,
+		r.Policy.ConnectionLossMode, r.Policy.RegistryDigest, r.CapabilityMatrixDigest, r.CatalogBindings,
+	})
+	if err != nil {
+		return "", err
+	}
+	return SHA256Fingerprint(document), nil
+}

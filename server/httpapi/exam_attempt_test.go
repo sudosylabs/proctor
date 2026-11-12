@@ -1330,6 +1330,10 @@ func (f *examAttemptHTTPFake) OpenCandidateExamWorkspaceFile(_ context.Context, 
 	return f.content, nil
 }
 
+func (f *examAttemptHTTPFake) SecurityPolicyOverview(context.Context, invocation.Invocation, model.ExamSittingID) (*store.SecurityPolicyOverview, error) {
+	return nil, apperror.New("exam.attempt.unavailable")
+}
+
 func (f *examAttemptHTTPFake) PrepareExamSecurityPreflight(context.Context, invocation.Invocation, attempt.PrepareSecurityPreflightCommand) (*store.SecurityPreflightPrepared, error) {
 	return nil, errors.New("unexpected preflight prepare")
 }

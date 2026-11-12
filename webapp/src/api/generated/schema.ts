@@ -2348,6 +2348,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/exam-sittings/{exam_sitting_id}/security-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam Sitting identifier. */
+                exam_sitting_id: components["parameters"]["ExamSittingID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read the policy for the readiness overview
+         * @description Resolves the Sitting's current native policy, under the same eligibility checks as preparing a preflight, for the overview a candidate's Desktop shows before Start: the capabilities it activates, the rules it checks, the recorder switch and the disclosure. It creates no preflight, records nothing and grants nothing, so the overview may hold it for as long as it is open. At Start, compare readiness_digest with the one the prepared preflight returns; if they differ, refresh the overview.
+         */
+        get: operations["getSecurityPolicyOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/exam-sittings/{exam_sitting_id}/security-preflights": {
         parameters: {
             query?: never;
@@ -10603,6 +10626,8 @@ export interface components {
              */
             expected_revision: number;
         };
+        /** @description Identifies what the readiness overview shows and Desktop enforces: the activations and rules, family selections, recorder switch, and the registry, matrix and catalogs they rest on. Unlike the policy content digest it leaves out the policy's own identity, so the overview and the preflight prepared at Start carry the same value exactly when nothing that matters changed. */
+        ReadinessDigest: string;
         ReallowExamAttemptRequest: {
             /** Format: int64 */
             expected_revision: number;
@@ -11222,6 +11247,15 @@ export interface components {
             security_interaction_allowed: boolean;
             source_reset_receipts: components["schemas"]["SourceResetReceipt"][];
         };
+        SecurityPolicyOverviewResponse: {
+            browser_activity_disclosure: components["schemas"]["BrowserActivityDisclosure"];
+            capability_matrix_digest: string;
+            catalog_bindings: components["schemas"]["SecurityCatalogBinding"][];
+            policy: components["schemas"]["EffectiveExamSecurityPolicy"];
+            readiness_digest: components["schemas"]["ReadinessDigest"];
+            /** Format: date-time */
+            server_time: string;
+        };
         SecurityPolicyRecovery: {
             current_coverage: components["schemas"]["NativeCoverageClaim"][];
             current_sources: components["schemas"]["NativeSourceCoverage"][];
@@ -11241,6 +11275,7 @@ export interface components {
             policy: components["schemas"]["EffectiveExamSecurityPolicy"];
             policy_content_digest: string;
             preflight_challenge: components["schemas"]["SecurityPreflightChallenge"];
+            readiness_digest: components["schemas"]["ReadinessDigest"];
             /** Format: date-time */
             server_time: string;
         };
@@ -19755,6 +19790,37 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["CandidateWorkspaceMutationOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getSecurityPolicyOverview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Exam Sitting identifier. */
+                exam_sitting_id: components["parameters"]["ExamSittingID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The policy the readiness overview checks the machine against */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["PrivateNoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecurityPolicyOverviewResponse"];
+                };
+            };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];

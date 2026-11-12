@@ -1687,6 +1687,12 @@ func (s *timedSecurityPreflightStore) RecoverSecurityPolicy(arg0 context.Context
 	})
 }
 
+func (s *timedSecurityPreflightStore) ReadSecurityPolicyOverview(arg0 context.Context, arg1 store.SecurityPreflightAccess) (*store.SecurityPolicyOverview, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateSecurityPreflight, methodReadSecurityPolicyOverview), func(callCtx context.Context) (*store.SecurityPolicyOverview, error) {
+		return s.next.ReadSecurityPolicyOverview(callCtx, arg1)
+	})
+}
+
 func (s *timedNativeDeliveryStore) ResolveNativeDeliveryTarget(arg0 context.Context, arg1 store.NativeDeliveryAccess) (*store.NativeDeliveryTarget, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateNativeDelivery, methodResolveNativeDeliveryTarget), func(callCtx context.Context) (*store.NativeDeliveryTarget, error) {
 		return s.next.ResolveNativeDeliveryTarget(callCtx, arg1)

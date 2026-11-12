@@ -145,3 +145,25 @@ func TestEffectivePolicyRejectsRemovedAndUnknownMembers(t *testing.T) {
 		require.Error(t, json.Unmarshal([]byte(document), &value), "invalid policy document accepted")
 	}
 }
+
+func TestReadinessDigestIgnoresPolicyIdentityButNotContent(t *testing.T) {
+	input := nativeResolutionFixture(t)
+	first, err := ResolveNativePolicy(input)
+	require.NoError(t, err)
+	input.PolicyID, input.Ordinal = "another-policy", 2
+	second, err := ResolveNativePolicy(input)
+	require.NoError(t, err)
+	firstDigest, err := first.ReadinessDigest()
+	require.NoError(t, err)
+	secondDigest, err := second.ReadinessDigest()
+	require.NoError(t, err)
+	require.Equal(t, firstDigest, secondDigest, "a fresh resolution of the same policy reads the same")
+	require.NotEqual(t, first.PolicyContentDigest, second.PolicyContentDigest, "the content digest binds the policy's identity")
+
+	input.Selections.Native.ScreenRecording.Enabled = true
+	changed, err := ResolveNativePolicy(input)
+	require.NoError(t, err)
+	changedDigest, err := changed.ReadinessDigest()
+	require.NoError(t, err)
+	require.NotEqual(t, firstDigest, changedDigest, "turning the recorder on changes what the overview shows")
+}

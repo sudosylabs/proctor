@@ -76,10 +76,29 @@ func TestSecurityPreflightStore(t *testing.T, ss store.Store, probes ...Security
 	build := connection.DesktopBuild
 	build.NativeAgreement = syntheticNativeAgreement(t, build)
 	access := store.SecurityPreflightAccess{SittingID: fixture.sitting.ID, CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID, DesktopRegistrationID: fixture.session.DesktopRegistrationID, DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint, DesktopBuild: build, DesktopCompatibilityPolicyRevision: connection.DesktopCompatibilityPolicyRevision}
+	overview, err := ss.SecurityPreflight().ReadSecurityPolicyOverview(ctx, access)
+	require.NoError(t, err)
+	require.False(t, overview.ServerTime.IsZero())
+	require.Equal(t, fixture.sitting.ID, overview.Resolved.Policy.SittingID)
+	again, err := ss.SecurityPreflight().ReadSecurityPolicyOverview(ctx, access)
+	require.NoError(t, err)
+	overviewDigest, err := overview.Resolved.ReadinessDigest()
+	require.NoError(t, err)
+	againDigest, err := again.Resolved.ReadinessDigest()
+	require.NoError(t, err)
+	require.Equal(t, overviewDigest, againDigest, "reading the overview again shows the same policy")
+	rebound := access
+	rebound.SessionID = model.NewSessionID()
+	_, err = ss.SecurityPreflight().ReadSecurityPolicyOverview(ctx, rebound)
+	require.Error(t, err, "the overview is only for the candidate's own eligible Session")
+
 	input := &store.SecurityPreflightPrepare{Access: access, PreflightID: model.NewID(), Challenge: model.NewCredentialToken(), NativeRegistryDigest: build.NativeAgreement.RegistryDigest(), SourceManifestDigest: build.NativeAgreement.SourceManifestDigest(), ConfigurationManifestFingerprint: build.ConfigurationManifest.Fingerprint(), AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
 	command := examCommand(fixture.candidate.ID, store.SecurityPreflightPrepareOperation, "preflight-prepare", "preflight-prepare")
 	prepared, err := ss.SecurityPreflight().PrepareSecurityPreflight(ctx, input, command)
 	require.NoError(t, err)
+	preparedDigest, err := prepared.Resolved.ReadinessDigest()
+	require.NoError(t, err)
+	require.Equal(t, overviewDigest, preparedDigest, "Start prepares exactly what the overview showed")
 	require.True(t, prepared.ConsistentWith(fixture.sitting.ID), "PrepareSecurityPreflight returned a result inconsistent with its request")
 	require.False(t, prepared.Replayed)
 	require.Nil(t, prepared.FrozenAttemptConfiguration)

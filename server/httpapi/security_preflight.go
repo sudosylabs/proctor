@@ -140,6 +140,7 @@ type securityPolicyResponse struct {
 	ServerTime                 time.Time                         `json:"server_time"`
 	Policy                     model.EffectiveExamSecurityPolicy `json:"policy"`
 	PolicyContentDigest        string                            `json:"policy_content_digest"`
+	ReadinessDigest            string                            `json:"readiness_digest"`
 	CapabilityMatrixDigest     string                            `json:"capability_matrix_digest"`
 	CatalogBindings            []model.SecurityCatalogBinding    `json:"catalog_bindings"`
 	PreflightChallenge         model.SecurityPreflightChallenge  `json:"preflight_challenge"`
@@ -173,10 +174,15 @@ func (h examAttemptHandlers) prepareSecurityPreflight(request route.Request) (ro
 		return route.Result{}, route.ErrUnpresentable
 	}
 
+	readiness, err := prepared.Resolved.ReadinessDigest()
+	if err != nil {
+		return route.Result{}, route.ErrUnpresentable
+	}
 	result := securityPolicyResponse{
 		ServerTime:                 prepared.ServerTime,
 		Policy:                     prepared.Resolved.Policy,
 		PolicyContentDigest:        prepared.Resolved.PolicyContentDigest,
+		ReadinessDigest:            readiness,
 		CapabilityMatrixDigest:     prepared.Resolved.CapabilityMatrixDigest,
 		CatalogBindings:            prepared.Resolved.CatalogBindings,
 		PreflightChallenge:         prepared.Challenge,
@@ -190,6 +196,47 @@ func (h examAttemptHandlers) prepareSecurityPreflight(request route.Request) (ro
 
 	return route.JSON(http.StatusOK, result), nil
 }
+
+// securityPolicyOverviewResponse is the policy the readiness overview checks
+// the machine against. readiness_digest is compared with the one the
+// preflight prepared at Start returns.
+type securityPolicyOverviewResponse struct {
+	ServerTime                time.Time                         `json:"server_time"`
+	Policy                    model.EffectiveExamSecurityPolicy `json:"policy"`
+	ReadinessDigest           string                            `json:"readiness_digest"`
+	CapabilityMatrixDigest    string                            `json:"capability_matrix_digest"`
+	CatalogBindings           []model.SecurityCatalogBinding    `json:"catalog_bindings"`
+	BrowserActivityDisclosure model.BrowserActivityDisclosure   `json:"browser_activity_disclosure"`
+}
+
+func (h examAttemptHandlers) securityPolicyOverview(request route.Request) (route.Result, error) {
+	sittingID, err := route.PathID[model.ExamSittingID](request, "exam_sitting_id")
+	if err != nil {
+		return route.Result{}, err
+	}
+	overview, err := h.app.SecurityPolicyOverview(request.Context, request.Invocation(), sittingID)
+	if err != nil {
+		return route.Result{}, err
+	}
+	if overview == nil {
+		return route.Result{}, route.ErrUnpresentable
+	}
+	readiness, err := overview.Resolved.ReadinessDigest()
+	if err != nil {
+		return route.Result{}, route.ErrUnpresentable
+	}
+	result := securityPolicyOverviewResponse{
+		ServerTime: overview.ServerTime, Policy: overview.Resolved.Policy, ReadinessDigest: readiness,
+		CapabilityMatrixDigest: overview.Resolved.CapabilityMatrixDigest, CatalogBindings: overview.Resolved.CatalogBindings,
+		BrowserActivityDisclosure: overview.BrowserActivityDisclosure,
+	}
+	encoded, err := json.Marshal(result)
+	if err != nil || len(encoded) > model.SecurityPolicyResponseMaxBytes {
+		return route.Result{}, route.ErrUnpresentable
+	}
+	return route.JSON(http.StatusOK, result).WithHeaders(privateNoStoreHeaders()), nil
+}
+
 func (h examAttemptHandlers) reportSecurityPreflight(request route.Request) (route.Result, error) {
 	id, err := route.OpaquePathID(request, "security_preflight_id")
 	if err != nil {
@@ -285,6 +332,25 @@ func securityPreflightResource(app ExamAttemptApplication) route.Resource {
 				"exam.delivery.metadata_capacity",
 			},
 			Handle: h.prepareSecurityPreflight,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/exam-sittings/{exam_sitting_id}/security-policy",
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.registered_desktop_required",
+				"exam.attempt.desktop_incompatible",
+				"exam.attempt.sitting_not_open",
+				"exam.attempt.management_authority_conflict",
+				"exam.attempt.unavailable",
+				"exam.security.unsupported_capability",
+				"exam.security.catalog_missing",
+				"exam.delivery.metadata_capacity",
+			},
+			Handle: h.securityPolicyOverview,
 		},
 		route.Endpoint{
 			Method:      http.MethodPost,

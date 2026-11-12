@@ -773,3 +773,43 @@ func (s *SQLSecurityPreflightStore) ResolveSecurityPreflightSitting(
 	}
 	return model.ParseExamSittingID(sitting)
 }
+
+// readinessOverviewScope names the overview's resolution, which grants and
+// records nothing; only its readiness digest is compared later.
+const readinessOverviewScope = "readiness-overview"
+
+// ReadSecurityPolicyOverview resolves the Sitting's policy for the readiness
+// overview without creating a preflight.
+func (s *SQLSecurityPreflightStore) ReadSecurityPolicyOverview(
+	ctx context.Context,
+	access store.SecurityPreflightAccess,
+) (*store.SecurityPolicyOverview, error) {
+	if !validSecurityPreflightAccess(access) {
+		return nil, store.NewErrInvalidInput("security_preflight", "overview", nil)
+	}
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "read security policy overview", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.SecurityPolicyOverview, error) {
+		guard, err := s.lockPreflightEligibility(ctx, tx, access)
+		if err != nil {
+			return nil, err
+		}
+		now := guard.DatabaseNow.UTC().Truncate(time.Millisecond)
+		revision, resolved, err := resolvePreflightPolicy(ctx, tx, &store.SecurityPreflightPrepare{
+			Access: access, PreflightID: readinessOverviewScope,
+		}, guard, now)
+		if err != nil {
+			return nil, err
+		}
+		retention, err := getRetentionPolicy(ctx, tx, "FOR SHARE OF p")
+		if err != nil {
+			return nil, err
+		}
+		disclosure, err := model.NewBrowserActivityDisclosure(retention, revision.BrowserPolicy.MayCreateIntegrityEvidence())
+		if err != nil {
+			return nil, err
+		}
+		return &store.SecurityPolicyOverview{ServerTime: now, Resolved: resolved, BrowserActivityDisclosure: disclosure}, nil
+	})
+}

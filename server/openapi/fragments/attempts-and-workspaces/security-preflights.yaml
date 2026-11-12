@@ -1830,6 +1830,7 @@ components:
         - health
         - certainty
         - state
+        - summary
       properties:
         capability:
           type: string
@@ -1870,8 +1871,13 @@ components:
         state:
           type: object
           description: >-
-            The capability's minimized full state, as its published fact schema describes it, at most 16 KiB. It
-            never holds what must not leave the device.
+            The capability's minimized full state, valid against its published state schema, at most 16 KiB. It never
+            holds what must not leave the device. A field named "<capability>.<name>" is read from state.<name>.
+        summary:
+          type: object
+          description: >-
+            The counts Desktop derives from the state, valid against its published summary schema, at most 16 KiB. A
+            field named "<capability>.summary.<name>" is read from summary.<name>.
     NativeRuleReport:
       type: object
       additionalProperties: false

@@ -14,20 +14,41 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func readinessOf(capability NativeCapabilityID, certainty NativeFactCertainty, state string) NativeCapabilityReadiness {
+// factsChecked accepts every fact, standing in for the release's compiled
+// fact schemas, which internal/factschema tests against Desktop's registry.
+type factsChecked struct{ refuse NativeCapabilityID }
+
+func (f factsChecked) ValidateFact(capability NativeCapabilityID, _ string, _ []byte) error {
+	if capability == f.refuse {
+		return errNativeRegistry
+	}
+	return nil
+}
+
+func readinessOf(capability NativeCapabilityID, certainty NativeFactCertainty, state, summary string) NativeCapabilityReadiness {
 	return NativeCapabilityReadiness{
 		Capability: capability, SourceInstanceID: "instance-" + string(capability), Sequence: 1,
-		Permission: NativePermissionGranted, Health: NativeHealthHealthy, Certainty: certainty, State: json.RawMessage(state),
+		Permission: NativePermissionGranted, Health: NativeHealthHealthy, Certainty: certainty,
+		State: json.RawMessage(state), Summary: json.RawMessage(summary),
 	}
 }
 
 func compliantStart() []NativeCapabilityReadiness {
 	return []NativeCapabilityReadiness{
-		readinessOf("candidate_window", NativeCertaintyComplete, `{"presence":"absent"}`),
-		readinessOf("display", NativeCertaintyComplete, `{"summary":{"active_physical":1,"connected_total":1}}`),
+		readinessOf("candidate_window", NativeCertaintyComplete, `{"presence":"absent"}`, `{}`),
+		readinessOf("display", NativeCertaintyComplete, `{"targets":[]}`, `{"active_physical":1,"connected_total":1}`),
 		readinessOf("interactive_session", NativeCertaintyComplete,
-			`{"console_owner":"candidate","lock":"unlocked","remote_attachment":"absent","other_human_sessions":0}`),
+			`{"console_owner":"candidate","lock":"unlocked","remote_attachment":"absent","other_human_sessions":0}`, `{}`),
 	}
+}
+
+func checkedRegistry(t *testing.T) *NativeCapabilityRegistry {
+	t.Helper()
+	registry, err := ParseNativeCapabilityRegistry(readNativeCapabilityRegistry(t))
+	require.NoError(t, err)
+	checked, err := registry.WithFactValidator(factsChecked{})
+	require.NoError(t, err)
+	return checked
 }
 
 func TestTheBaselineCompilesIntoEveryPolicy(t *testing.T) {
@@ -51,8 +72,7 @@ func TestTheBaselineCompilesIntoEveryPolicy(t *testing.T) {
 func TestTheServerDecidesReadinessFromTheReportedState(t *testing.T) {
 	t.Parallel()
 
-	registry, err := ParseNativeCapabilityRegistry(readNativeCapabilityRegistry(t))
-	require.NoError(t, err)
+	registry := checkedRegistry(t)
 	activations, rules := compileNativePolicy(registry)
 
 	statuses, blocked, ok := evaluateNativeReadiness(registry, activations, rules, compliantStart())
@@ -71,7 +91,7 @@ func TestTheServerDecidesReadinessFromTheReportedState(t *testing.T) {
 	require.Contains(t, statuses, NativeRuleReport{RuleID: "baseline.session", Status: NativeRuleUnknown, UnknownCause: NativeUnknownPartial})
 
 	second := compliantStart()
-	second[1] = readinessOf("display", NativeCertaintyComplete, `{"summary":{"active_physical":2,"connected_total":2}}`)
+	second[1] = readinessOf("display", NativeCertaintyComplete, `{"targets":[]}`, `{"active_physical":2,"connected_total":2}`)
 	statuses, blocked, ok = evaluateNativeReadiness(registry, activations, rules, second)
 	require.True(t, ok)
 	require.True(t, blocked)
@@ -79,7 +99,7 @@ func TestTheServerDecidesReadinessFromTheReportedState(t *testing.T) {
 
 	uncounted := compliantStart()
 	uncounted[2] = readinessOf("interactive_session", NativeCertaintyComplete,
-		`{"console_owner":"candidate","lock":"unlocked","remote_attachment":"absent"}`)
+		`{"console_owner":"candidate","lock":"unlocked","remote_attachment":"absent"}`, `{}`)
 	statuses, _, ok = evaluateNativeReadiness(registry, activations, rules, uncounted)
 	require.True(t, ok)
 	require.Contains(t, statuses, NativeRuleReport{RuleID: "baseline.session", Status: NativeRuleUnknown, UnknownCause: NativeUnknownUnavailable},
@@ -92,11 +112,11 @@ func TestTheServerDecidesReadinessFromTheReportedState(t *testing.T) {
 			return r
 		},
 		"wrong value type": func(r []NativeCapabilityReadiness) []NativeCapabilityReadiness {
-			r[1].State = json.RawMessage(`{"summary":{"active_physical":"one","connected_total":1}}`)
+			r[1].Summary = json.RawMessage(`{"active_physical":"one","connected_total":1}`)
 			return r
 		},
 		"count past its max": func(r []NativeCapabilityReadiness) []NativeCapabilityReadiness {
-			r[1].State = json.RawMessage(`{"summary":{"active_physical":33,"connected_total":1}}`)
+			r[1].Summary = json.RawMessage(`{"active_physical":33,"connected_total":1}`)
 			return r
 		},
 		"unregistered symbol": func(r []NativeCapabilityReadiness) []NativeCapabilityReadiness {
@@ -107,15 +127,33 @@ func TestTheServerDecidesReadinessFromTheReportedState(t *testing.T) {
 		_, _, ok = evaluateNativeReadiness(registry, activations, rules, change(compliantStart()))
 		require.False(t, ok, name)
 	}
+
+	countsInState := compliantStart()
+	countsInState[1] = readinessOf("display", NativeCertaintyComplete,
+		`{"targets":[],"summary":{"active_physical":1,"connected_total":1}}`, `{}`)
+	statuses, _, ok = evaluateNativeReadiness(registry, activations, rules, countsInState)
+	require.True(t, ok)
+	require.Contains(t, statuses, NativeRuleReport{RuleID: "baseline.single_display", Status: NativeRuleUnknown, UnknownCause: NativeUnknownUnavailable},
+		"summary fields are read from the fact's summary, never from the state")
+
+	refusing, err := registry.WithFactValidator(factsChecked{refuse: "display"})
+	require.NoError(t, err)
+	_, _, ok = evaluateNativeReadiness(refusing, activations, rules, compliantStart())
+	require.False(t, ok, "a fact that misses its published schema refuses the report")
+	unchecked, err := ParseNativeCapabilityRegistry(readNativeCapabilityRegistry(t))
+	require.NoError(t, err)
+	_, _, ok = evaluateNativeReadiness(unchecked, activations, rules, compliantStart())
+	require.False(t, ok, "a registry with no schema validator accepts no fact")
 }
 
 func TestReadinessReportsAreBounded(t *testing.T) {
 	t.Parallel()
 
-	valid := readinessOf("display", NativeCertaintyComplete, `{"summary":{}}`)
+	valid := readinessOf("display", NativeCertaintyComplete, `{"targets":[]}`, `{}`)
 	require.True(t, valid.validate())
 	for name, change := range map[string]func(*NativeCapabilityReadiness){
 		"array state":       func(r *NativeCapabilityReadiness) { r.State = json.RawMessage(`[]`) },
+		"no summary":        func(r *NativeCapabilityReadiness) { r.Summary = nil },
 		"oversized state":   func(r *NativeCapabilityReadiness) { r.State = make(json.RawMessage, NativeCapabilityStateMaxBytes+1) },
 		"unknown health":    func(r *NativeCapabilityReadiness) { r.Health = "fine" },
 		"unknown certainty": func(r *NativeCapabilityReadiness) { r.Certainty = "mostly" },

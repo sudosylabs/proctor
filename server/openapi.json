@@ -20630,7 +20630,11 @@
             "type": "string"
           },
           "state": {
-            "description": "The capability's minimized full state, as its published fact schema describes it, at most 16 KiB. It never holds what must not leave the device.",
+            "description": "The capability's minimized full state, valid against its published state schema, at most 16 KiB. It never holds what must not leave the device. A field named \"\u003ccapability\u003e.\u003cname\u003e\" is read from state.\u003cname\u003e.",
+            "type": "object"
+          },
+          "summary": {
+            "description": "The counts Desktop derives from the state, valid against its published summary schema, at most 16 KiB. A field named \"\u003ccapability\u003e.summary.\u003cname\u003e\" is read from summary.\u003cname\u003e.",
             "type": "object"
           }
         },
@@ -20641,7 +20645,8 @@
           "permission",
           "health",
           "certainty",
-          "state"
+          "state",
+          "summary"
         ],
         "type": "object"
       },

@@ -23,6 +23,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/sudosylabs/proctor/server/internal/canonicaljson"
+	"github.com/sudosylabs/proctor/server/internal/factschema"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -137,6 +138,13 @@ func Verify(expected Expectation, artifacts Artifacts, admittedKeys map[string]e
 	}
 
 	capabilities, err := model.ParseNativeCapabilityRegistry(artifacts.Registry)
+	if err != nil {
+		return model.DesktopBuildTuple{}, ErrInvalidArtifact
+	}
+	validator, err := factschema.Compile(capabilities.FactSchemas())
+	if err == nil {
+		capabilities, err = capabilities.WithFactValidator(validator)
+	}
 	if err != nil {
 		return model.DesktopBuildTuple{}, ErrInvalidArtifact
 	}

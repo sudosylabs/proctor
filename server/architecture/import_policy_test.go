@@ -245,6 +245,15 @@ var dependencyRules = []dependencyRule{
 		),
 	},
 	{
+		// Desktop's fact schemas are JSON Schema; the release adapter
+		// compiles them with the library the realtime compiler uses.
+		name:           "native fact schemas",
+		sources:        []pathPattern{exact(serverModule + "/internal/factschema")},
+		deniedStandard: standardInfrastructure,
+		project:        only(exact(serverModule + "/model")),
+		thirdParty:     only(exact("github.com/santhosh-tekuri/jsonschema/v6")),
+	},
+	{
 		name:           "error catalog compiler",
 		sources:        []pathPattern{exact(serverModule + "/internal/errorcatalog")},
 		deniedStandard: standardInfrastructureExceptHTTP,
@@ -503,7 +512,11 @@ var dependencyRules = []dependencyRule{
 		name:           "Desktop release verification",
 		sources:        []pathPattern{exact(serverModule + "/desktoprelease")},
 		deniedStandard: standardInfrastructure,
-		project:        only(exact(serverModule+"/model"), exact(serverModule+"/internal/canonicaljson")),
+		project: only(
+			exact(serverModule+"/model"),
+			exact(serverModule+"/internal/canonicaljson"),
+			exact(serverModule+"/internal/factschema"),
+		),
 	},
 	{
 		name:           "secret sealing",

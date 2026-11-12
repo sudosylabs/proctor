@@ -9906,8 +9906,10 @@ export interface components {
              */
             sequence: number;
             source_instance_id: string;
-            /** @description The capability's minimized full state, as its published fact schema describes it, at most 16 KiB. It never holds what must not leave the device. */
+            /** @description The capability's minimized full state, valid against its published state schema, at most 16 KiB. It never holds what must not leave the device. A field named "<capability>.<name>" is read from state.<name>. */
             state: Record<string, never>;
+            /** @description The counts Desktop derives from the state, valid against its published summary schema, at most 16 KiB. A field named "<capability>.summary.<name>" is read from summary.<name>. */
+            summary: Record<string, never>;
         };
         NativeCatalogApplications: {
             /** @description Catalog application IDs in ASCII order. */

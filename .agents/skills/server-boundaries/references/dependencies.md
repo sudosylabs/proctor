@@ -61,6 +61,7 @@ exists.
 | ACME adapter | `internal/autocert` | none | `golang.org/x/crypto/acme`, `golang.org/x/net/idna` | none |
 | OpenAPI compiler | `internal/openapidoc` | none | `github.com/getkin/kin-openapi/openapi3`, `gopkg.in/yaml.v3` | infrastructure except `io/fs` |
 | AsyncAPI compiler | `internal/asyncapidoc` | none | `github.com/santhosh-tekuri/jsonschema/v6`, `gopkg.in/yaml.v3` | infrastructure except `io/fs` |
+| native fact schemas | `internal/factschema` | `model` | `github.com/santhosh-tekuri/jsonschema/v6` | infrastructure |
 | error catalog compiler | `internal/errorcatalog` | none | `gopkg.in/yaml.v3` | infrastructure except `net/http` |
 | browser origin serialization | `internal/weborigin` | none | none | infrastructure |
 | canonical agreement JSON | `internal/canonicaljson` | none | none | infrastructure |
@@ -83,7 +84,7 @@ exists.
 | exam mail and safe Markdown consumers | `app/exam/attempt`, `app/exam/review` | `app/access`, `app/apperror`, `app/idempotency`, `app/invocation`, `app/mail`, `app/realtime`, `model`, `store`, `app/exam/safemarkdown` | none | infrastructure |
 | safe Markdown | `app/exam/safemarkdown` | none | none | infrastructure |
 | file-content adapter | `filecontent` and below | `app/exam`, `app/user`, `model`, `plugin`, `packages/vfs` | `github.com/HugoSmits86/nativewebp`, `github.com/disintegration/imaging`, below `github.com/pdfcpu/pdfcpu`, `golang.org/x/image/webp` | infrastructure except `os` |
-| Desktop release verification | `desktoprelease` | `model`, `internal/canonicaljson` | none | infrastructure |
+| Desktop release verification | `desktoprelease` | `model`, `internal/canonicaljson`, `internal/factschema` | none | infrastructure |
 | secret sealing | `secretseal` | none | none | infrastructure |
 | localization | `localization` | none | `github.com/nicksnyder/go-i18n/v2/i18n` and below, `golang.org/x/text/language` | infrastructure except `io/fs` |
 | access application | `app/access` | `app/apperror`, `app/invocation`, `model`, `store` | none | infrastructure |

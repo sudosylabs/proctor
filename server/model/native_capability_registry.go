@@ -74,6 +74,48 @@ type NativeCapabilityRegistry struct {
 	// factSchemas are each capability's published JSON Schemas, by kind
 	// (state, summary), kept as the exact bytes Desktop published.
 	factSchemas map[NativeCapabilityID]map[string]json.RawMessage
+	// validator checks reported facts against factSchemas.
+	validator NativeFactValidator
+}
+
+// NativeFactValidator checks a capability's reported state or summary
+// against the JSON Schema the registry publishes for it. A JSON Schema
+// engine is infrastructure, so the release adapter supplies it.
+type NativeFactValidator interface {
+	ValidateFact(capability NativeCapabilityID, kind string, document []byte) error
+}
+
+// FactSchemas returns a copy of each capability's published fact schemas,
+// by kind, for compiling a NativeFactValidator.
+func (r *NativeCapabilityRegistry) FactSchemas() map[NativeCapabilityID]map[string]json.RawMessage {
+	schemas := make(map[NativeCapabilityID]map[string]json.RawMessage, len(r.factSchemas))
+	for capability, kinds := range r.factSchemas {
+		copied := make(map[string]json.RawMessage, len(kinds))
+		for kind, schema := range kinds {
+			copied[kind] = append(json.RawMessage{}, schema...)
+		}
+		schemas[capability] = copied
+	}
+	return schemas
+}
+
+// WithFactValidator returns the registry checking reported facts with
+// validator.
+func (r *NativeCapabilityRegistry) WithFactValidator(validator NativeFactValidator) (*NativeCapabilityRegistry, error) {
+	if r == nil || validator == nil {
+		return nil, errNativeRegistry
+	}
+	registry := *r
+	registry.validator = validator
+	return &registry, nil
+}
+
+// validFact reports whether a capability's state and summary match their
+// published schemas. A registry without a validator accepts nothing.
+func (r *NativeCapabilityRegistry) validFact(capability NativeCapabilityID, state, summary []byte) bool {
+	return r.validator != nil &&
+		r.validator.ValidateFact(capability, "state", state) == nil &&
+		r.validator.ValidateFact(capability, "summary", summary) == nil
 }
 
 type nativeRegisteredField struct {

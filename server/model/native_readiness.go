@@ -37,9 +37,11 @@ type NativeCapabilityReadiness struct {
 	Permission       NativeFactPermission `json:"permission"`
 	Health           NativeFactHealth     `json:"health"`
 	Certainty        NativeFactCertainty  `json:"certainty"`
-	// State is the capability's minimized full state, as its published fact
-	// schema describes it. It never holds what must not leave the device.
-	State json.RawMessage `json:"state"`
+	// State is the capability's minimized full state, and Summary the counts
+	// Desktop derives from it, each as its published fact schema describes
+	// it. Neither holds what must not leave the device.
+	State   json.RawMessage `json:"state"`
+	Summary json.RawMessage `json:"summary"`
 }
 
 // NativeRuleReport is one rule's status: Desktop's in a report, the
@@ -51,7 +53,6 @@ type NativeRuleReport struct {
 }
 
 func (r NativeCapabilityReadiness) validate() bool {
-	state := bytes.TrimSpace(r.State)
 	return isNativeIdentifier(string(r.Capability)) && IsValidAgreementID(r.SourceInstanceID) &&
 		securitySafeInt(r.Sequence) &&
 		slices.Contains([]NativeFactPermission{NativePermissionNotDetermined, NativePermissionGranted, NativePermissionDenied,
@@ -59,7 +60,13 @@ func (r NativeCapabilityReadiness) validate() bool {
 		slices.Contains([]NativeFactHealth{NativeHealthUnsupported, NativeHealthHealthy, NativeHealthDegraded,
 			NativeHealthFailed, NativeHealthStopped}, r.Health) &&
 		slices.Contains([]NativeFactCertainty{NativeCertaintyComplete, NativeCertaintyPartial, NativeCertaintyUnknown}, r.Certainty) &&
-		len(r.State) <= NativeCapabilityStateMaxBytes && len(state) > 1 && state[0] == '{' && json.Valid(state)
+		nativeFactObject(r.State) && nativeFactObject(r.Summary)
+}
+
+// nativeFactObject reports whether document is one bounded JSON object.
+func nativeFactObject(document json.RawMessage) bool {
+	trimmed := bytes.TrimSpace(document)
+	return len(document) <= NativeCapabilityStateMaxBytes && len(trimmed) > 1 && trimmed[0] == '{' && json.Valid(trimmed)
 }
 
 func (r NativeRuleReport) validate() bool {
@@ -89,19 +96,23 @@ func compileNativePolicy(registry *NativeCapabilityRegistry) ([]NativeActivation
 	return activations, rules
 }
 
-// facts reads a capability's registered fields out of its reported state.
-// A field's path is its name after the capability prefix, so
-// display.summary.active_physical is summary.active_physical in the state.
-// A value of the wrong type fails the report; a missing one is unavailable.
+// facts reads a capability's registered fields out of its reported fact.
+// "<capability>.summary.<name>" is read from the summary and every other
+// "<capability>.<name>" from the state, so display.summary.active_physical
+// is summary.active_physical and interactive_session.console_owner is
+// state.console_owner. Both documents must match their published schemas. A
+// value of the wrong type fails the report; a missing one is unavailable.
 func (r *NativeCapabilityRegistry) facts(readiness NativeCapabilityReadiness) (*NativeCapabilityFacts, bool) {
 	definition, ok := r.Capability(readiness.Capability)
+	if !ok || !r.validFact(readiness.Capability, readiness.State, readiness.Summary) {
+		return nil, false
+	}
+	state, ok := decodeNativeFactObject(readiness.State)
 	if !ok {
 		return nil, false
 	}
-	var state map[string]any
-	decoder := json.NewDecoder(bytes.NewReader(readiness.State))
-	decoder.UseNumber()
-	if decoder.Decode(&state) != nil {
+	summary, ok := decodeNativeFactObject(readiness.Summary)
+	if !ok {
 		return nil, false
 	}
 	facts := &NativeCapabilityFacts{
@@ -109,7 +120,7 @@ func (r *NativeCapabilityRegistry) facts(readiness NativeCapabilityReadiness) (*
 		Fields: map[string]NativeScalar{},
 	}
 	for _, field := range definition.Fields {
-		value, present := nativeStateValue(state, field.Name)
+		value, present := nativeFactValue(state, summary, field.Name)
 		if !present {
 			continue
 		}
@@ -129,9 +140,19 @@ func (r *NativeCapabilityRegistry) facts(readiness NativeCapabilityReadiness) (*
 	return facts, true
 }
 
-func nativeStateValue(state map[string]any, name string) (any, bool) {
+func decodeNativeFactObject(document json.RawMessage) (map[string]any, bool) {
+	var object map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(document))
+	decoder.UseNumber()
+	return object, decoder.Decode(&object) == nil && object != nil
+}
+
+func nativeFactValue(state, summary map[string]any, name string) (any, bool) {
 	path := strings.Split(name, ".")[1:]
 	var current any = state
+	if len(path) > 1 && path[0] == "summary" {
+		current, path = summary, path[1:]
+	}
 	for _, segment := range path {
 		object, ok := current.(map[string]any)
 		if !ok {

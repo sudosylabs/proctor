@@ -123,7 +123,13 @@ func TestSelfAuditListingProjectsOnlyTheCallersFacts(t *testing.T) {
 		Limit: 10, Ascending: true, BeforeCreatedAt: at.Add(-5 * time.Minute), BeforeID: model.NewAuditEventID(),
 	})
 	require.NoError(t, err)
-	require.Equal(t, []string{"list-self-audits"}, events, "a later page must not count again, and an unrelated Class needs no name")
+	require.Equal(t, []string{"list-self-audits", "user-visibility", "list-audit-names"}, events,
+		"a later page must not count again, and an unrelated Class needs no name but the enrolled User does")
+	require.Equal(t, []store.AuditNameOptions{{
+		UserIDs:                     []model.UserID{other},
+		AcademicUnitInstitutionWide: true,
+		ClassVisibility:             store.ClassVisibilityScope{InstitutionWide: true},
+	}}, persistence.namesInputs[1:], "the User the caller acted on is named only through the caller's User visibility")
 	require.True(t, persistence.selfInput.Ascending)
 	require.False(t, page.Counted)
 	require.Len(t, page.Items, 1)
@@ -131,6 +137,112 @@ func TestSelfAuditListingProjectsOnlyTheCallersFacts(t *testing.T) {
 	require.Equal(t, model.Resource{Type: model.ResourceClass}, page.Items[0].Resource, "an unrelated Class identity escaped")
 	require.Empty(t, page.Items[0].ResourceName, "an unrelated Class name escaped")
 	require.Equal(t, "Proctor Desktop", page.Items[0].UserAgent)
+	require.Empty(t, page.Items[0].SubjectName, "a User the store did not name stays unnamed")
+	for _, item := range page.Items {
+		require.Empty(t, item.SubjectName)
+	}
+}
+
+// TestSelfAuditListingNamesTheUserTheCallerActedOnOnlyWhenVisible names the
+// other User of the caller's own action through GrantedUserVisibility, and
+// never the person who acted on the caller.
+func TestSelfAuditListingNamesTheUserTheCallerActedOnOnlyWhenVisible(t *testing.T) {
+	t.Parallel()
+	caller := selfAuditSessionInvocation()
+	me := caller.Principal().UserID
+	visible, hidden, administrator := model.NewUserID(), model.NewUserID(), model.NewUserID()
+	rootID := model.NewAcademicUnitID()
+	at := time.Date(2026, 8, 1, 9, 0, 0, 0, time.UTC)
+	disable := func(subject, actor model.UserID, offset time.Duration) *store.AuditSelfEntry {
+		return &store.AuditSelfEntry{
+			ID: model.NewAuditEventID(), CreatedAt: at.Add(-offset), ActorID: actor, SubjectUserID: subject,
+			Action: string(model.ActionUserManage), Operation: model.AuditOperationDisableAccount, Status: model.AuditStatusSuccess,
+			Resource: model.Resource{Type: model.ResourceUser, ID: subject.String()},
+		}
+	}
+	events := []string{}
+	scoped := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{rootID}, ActiveAt: at}
+	persistence := &auditListingStoreFake{
+		events: &events,
+		self:   []*store.AuditSelfEntry{disable(visible, me, 0), disable(hidden, me, time.Minute), disable(me, administrator, 2*time.Minute)},
+		count:  3,
+		// The store answers only inside the visibility it is given; the
+		// scoped caller cannot see hidden.
+		names: store.AuditNames{Users: map[model.UserID]string{visible: "Bo Student"}},
+	}
+	service := &Service{audits: persistence, authorizer: &auditListingAuthorizerFake{events: &events, users: scoped}}
+
+	page, err := service.ListSelfAuditEvents(context.Background(), caller, ListSelfAuditEventsQuery{Limit: 10})
+	require.NoError(t, err)
+	require.Equal(t, []string{"list-self-audits", "user-visibility", "list-audit-names", "count-self-audits"}, events)
+	require.Equal(t, []store.AuditNameOptions{{
+		UserIDs:                     []model.UserID{visible, hidden},
+		UserVisibility:              scoped,
+		AcademicUnitInstitutionWide: true,
+		ClassVisibility:             store.ClassVisibilityScope{InstitutionWide: true},
+	}}, persistence.namesInputs, "one read for the page, inside the caller's current User visibility, never asking for the administrator")
+	require.Equal(t, "Bo Student", page.Items[0].SubjectName)
+	require.Empty(t, page.Items[1].SubjectName, "a User outside the caller's visibility stays unnamed")
+	require.Equal(t, store.AuditSelfRelationSubject, page.Items[2].Relation)
+	require.Empty(t, page.Items[2].SubjectName, "the person who acted on the caller is never named")
+}
+
+// TestSelfAuditListingFindsRunsInsideThePage folds consecutive rows that
+// share an actor kind, event, operation, status and relation; a lone row, an
+// event that does not repeat, and the probe row past the page form no run.
+func TestSelfAuditListingFindsRunsInsideThePage(t *testing.T) {
+	t.Parallel()
+	caller := selfAuditSessionInvocation()
+	me := caller.Principal().UserID
+	administrator := model.NewUserID()
+	at := time.Date(2026, 8, 1, 9, 0, 0, 0, time.UTC)
+	offset := 0
+	entry := func(actor, subject model.UserID, action model.Action, operation string, status model.AuditStatus) *store.AuditSelfEntry {
+		offset++
+		return &store.AuditSelfEntry{
+			ID: model.NewAuditEventID(), CreatedAt: at.Add(-time.Duration(offset) * time.Minute), ActorID: actor, SubjectUserID: subject,
+			Action: string(action), Operation: operation, Status: status,
+			Resource: model.Resource{Type: model.ResourceUser, ID: subject.String()},
+		}
+	}
+	picture := func(status model.AuditStatus) *store.AuditSelfEntry {
+		return entry(me, model.NewUserID(), model.ActionUserManage, "set_profile_picture", status)
+	}
+	signIn := func() *store.AuditSelfEntry {
+		return entry("", me, model.ActionAuthenticationLogin, "", model.AuditStatusSuccess)
+	}
+	revoke := func(operation string) *store.AuditSelfEntry {
+		return entry(me, me, model.ActionSessionManage, operation, model.AuditStatusSuccess)
+	}
+	others := func() *store.AuditSelfEntry {
+		return entry(me, me, model.ActionSessionManage, "revoke_other_sessions", model.AuditStatusSuccess)
+	}
+	rows := []*store.AuditSelfEntry{
+		picture(model.AuditStatusSuccess), picture(model.AuditStatusSuccess), picture(model.AuditStatusSuccess), // 0-2: a run
+		picture(model.AuditStatusFail), // 3: another status
+		entry(administrator, me, model.ActionUserManage, "set_profile_picture", model.AuditStatusSuccess), // 4: about the caller
+		signIn(), signIn(), // 5-6: a run
+		revoke("revoke_own_session"), revoke("revoke_session"), // 7-8: one event, two operations
+		others(), others(), // 9-10: an event that does not repeat
+		signIn(), signIn(), // 11: on the page; 12: the probe row
+	}
+	events := []string{}
+	persistence := &auditListingStoreFake{events: &events, self: rows, count: len(rows)}
+	service := &Service{audits: persistence, authorizer: &auditListingAuthorizerFake{events: &events}}
+
+	page, err := service.ListSelfAuditEvents(context.Background(), caller, ListSelfAuditEventsQuery{Limit: 12})
+	require.NoError(t, err)
+	require.True(t, page.HasMore)
+	require.Len(t, page.Items, 12)
+	require.Equal(t, model.AuditSelfEventSessionRevoked, page.Items[7].Event)
+	require.Equal(t, model.AuditSelfEventSessionRevoked, page.Items[8].Event)
+	require.Equal(t, []SelfAuditRun{{Start: 0, Length: 3}, {Start: 5, Length: 2}}, page.Runs)
+
+	persistence.self = rows[5:7]
+	page, err = service.ListSelfAuditEvents(context.Background(), caller, ListSelfAuditEventsQuery{Limit: 1})
+	require.NoError(t, err)
+	require.Len(t, page.Items, 1)
+	require.Empty(t, page.Runs, "the probe row never extends a run")
 }
 
 func TestSelfAuditListingNarrowsTheCatalogue(t *testing.T) {

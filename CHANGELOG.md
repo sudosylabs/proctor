@@ -265,6 +265,18 @@ module when a change is not server-only. No module has been released yet.
 
 ### Added
 
+- Server: audit and mail follow-ups for the desktop. `GET /api/v1/audits`
+  takes `kind=change|read`, read from a closed classification of every audit
+  action (sign-ins and other authentication count as changes); it narrows
+  `action` and an academic auditor's catalog rather than adding to them.
+  `GET /api/v1/users/me/audits` names the User the caller acted on in
+  `summary` while the caller can still see them, and returns `runs`
+  (`start`, `length`, and a plural `summary` such as "You changed 5 profile
+  pictures") for consecutive items on the page that read as one line; runs
+  never cross pages. It may now also answer `authorization.unavailable`,
+  `authorization.request.invalid` and `resource.not_found`. Mail delivery
+  reads carry `recipient_display_name` beside `target_user_id`, only while
+  the viewer can see that User; the address stays masked.
 - Server: live updates for the administration views, as refetch signals over
   `/api/v1/websocket`. `job.changed` (`job_id`, `type`, `status`, and
   `progress` for a type that reports it) reaches `job.view` subscribers on the

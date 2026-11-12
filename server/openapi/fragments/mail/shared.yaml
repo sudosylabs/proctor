@@ -169,3 +169,12 @@ components:
             - $ref: '#/components/schemas/MailFailureCode'
             - type: string
           description: Stable safe failure category; raw SMTP or infrastructure errors are never exposed.
+        recipient_display_name:
+          type: string
+          maxLength: 256
+          description: >-
+            Current name of the User target_user_id identifies, present when the mail delivery is read (listed or
+            fetched by ID) and only while the caller can see that User now through the User directory's
+            visibility (`user.view` or `class.members.view`); `mail.view` alone does not reveal it. Absent for
+            Invitation mail, for a User the caller cannot see, and on the responses of sending a test, canceling,
+            or retrying. It is the account's display name, not the address the mail went to, which stays masked.

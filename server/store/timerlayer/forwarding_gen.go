@@ -2361,6 +2361,12 @@ func (s *timedUserStore) ListDisplayNames(arg0 context.Context, arg1 []model.Use
 	})
 }
 
+func (s *timedUserStore) ListVisibleDisplayNames(arg0 context.Context, arg1 []model.UserID, arg2 store.UserVisibilityScope) ([]store.UserDisplayName, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateUser, methodListVisibleDisplayNames), func(callCtx context.Context) ([]store.UserDisplayName, error) {
+		return s.next.ListVisibleDisplayNames(callCtx, arg1, arg2)
+	})
+}
+
 func (s *timedUserSettingsStore) Get(arg0 context.Context, arg1 model.UserID) (*model.UserSettingsDocument, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateUserSettings, methodGet), func(callCtx context.Context) (*model.UserSettingsDocument, error) {
 		return s.next.Get(callCtx, arg1)

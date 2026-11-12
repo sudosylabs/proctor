@@ -18,24 +18,35 @@ paths:
         first page oldest first reaches the end of the history without counting pages. The history holds
         events about the User's account, whoever performed them, and account-relevant events the User performed
         on anything else. Each item carries a stable `event` name from a closed catalogue, which clients label
-        themselves; rows outside the catalogue and unfinished attempts are never returned. Another person is
-        never named: the actor is only `self`, `administrator`, or `system`, and the IP address and user agent
+        themselves; rows outside the catalogue and unfinished attempts are never returned. No item carries
+        another person's identity: the actor is only `self`, `administrator`, or `system`, and the IP address and user agent
         appear only on the User's own actions. A resource identity appears only when the resource is the User,
         the Institution, or an Academic Unit or Class the User has or had a membership or Role Binding at.
         Each item also carries a `summary` sentence in the language `Accept-Language` selects, falling back to
         the installation language and then English. It keeps the same mask: the actor is "you", "an
-        administrator", or "the system", and no other person is ever named. It names an Academic Unit or Class
-        only where the resource identity appears, and a Role only when the event bound it to the User; otherwise
-        it uses a generic noun such as "a class".
+        administrator", or "the system", and whoever acted on the User is never named. When the User acted on
+        another User, the sentence names that User only while the User can see them now through the User
+        directory's visibility, as the institution audit list does, and otherwise says "a user". It names an
+        Academic Unit or Class only where the resource identity appears, and a Role only when the event bound it
+        to the User; otherwise it uses a generic noun such as "a class".
+        The page also carries `runs`: each stretch of two or more consecutive items on the page with the same
+        actor kind, event, recorded operation, status, and relation, with a plural `summary` such as "You
+        changed 5 profile pictures". Items stay unchanged and individually addressable. A run never reaches
+        past the page, so a stretch the page edge cuts reads as two runs, or the client fetches the next page
+        before folding the last one; each run's count is exact for the items it covers. Events that cannot
+        follow one another, such as turning on two-step verification, never form a run.
         Personal Access Tokens cannot read this history. Reading it records no authorization decision.
       tags:
         - Authentication
       x-proctor-auth: session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
+        - authorization.request.invalid
+        - authorization.unavailable
         - audit.query.invalid
         - audit.unavailable
         - request.invalid
+        - resource.not_found
         - authentication.required
         - authentication.token_invalid
         - authentication.credential_ambiguous
@@ -113,6 +124,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         "401":
           $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
         "500":
           $ref: '#/components/responses/InternalError'
         "503":
@@ -156,6 +169,36 @@ components:
                   id: ybndrfg8ejkmcpqxot1uwisza4
                 client_type: web
                 summary: An administrator reset two-step verification for your account
+              - id: ybndrfg8ejkmcpqxot1uwisza6
+                created_at: '2026-07-29T11:00:00Z'
+                event: profile_picture.changed
+                status: success
+                relation: actor
+                actor:
+                  kind: self
+                resource:
+                  type: user
+                client_type: web
+                ip_address: 192.0.2.10
+                user_agent: Mozilla/5.0
+                summary: You changed the profile picture of Bo Student
+              - id: ybndrfg8ejkmcpqxot1uwisza7
+                created_at: '2026-07-29T10:59:00Z'
+                event: profile_picture.changed
+                status: success
+                relation: actor
+                actor:
+                  kind: self
+                resource:
+                  type: user
+                client_type: web
+                ip_address: 192.0.2.10
+                user_agent: Mozilla/5.0
+                summary: You changed the profile picture of a user
+            runs:
+              - start: 2
+                length: 2
+                summary: You changed 2 profile pictures
             next_cursor: eyJjcmVhdGVkX2F0IjoiMjAyNi0wNy0zMFQxNDowNTowMFoifQ
             total: 248
             total_is_lower_bound: false
@@ -296,7 +339,8 @@ components:
           maxLength: 2048
           description: >-
             One sentence describing the event in the negotiated language, for display only; clients that need to
-            reason about the event read its codes. It never names another person, and a failed event says so.
+            reason about the event read its codes. It never names who acted on the User; it names a User the User
+            acted on only while the User can see them now, and a failed event says so.
     SelfAuditListResponse:
       description: One bounded page of the current User's own account history.
       type: object
@@ -309,6 +353,14 @@ components:
           maxItems: 200
           items:
             $ref: '#/components/schemas/SelfAuditEventResponse'
+        runs:
+          type: array
+          maxItems: 100
+          description: >-
+            Stretches of two or more consecutive items on this page that read as one line, in page order and never
+            overlapping. Omitted when the page has none.
+          items:
+            $ref: '#/components/schemas/SelfAuditRun'
         next_cursor:
           type: string
           maxLength: 2048
@@ -323,3 +375,29 @@ components:
         total_is_lower_bound:
           type: boolean
           description: True when `total` reached the 10,000 bound and the history may be longer. Present with `total`.
+    SelfAuditRun:
+      description: >-
+        Consecutive items on one page with the same actor kind, event, recorded operation, status, and relation.
+      type: object
+      additionalProperties: false
+      required:
+        - start
+        - length
+        - summary
+      properties:
+        start:
+          type: integer
+          minimum: 0
+          maximum: 198
+          description: Index in `items` of the run's first item.
+        length:
+          type: integer
+          minimum: 2
+          maximum: 200
+          description: Number of items the run covers, starting at `start`.
+        summary:
+          type: string
+          maxLength: 2048
+          description: >-
+            One plural sentence for the whole run in the negotiated language, counted by its items, such as "You
+            changed 5 profile pictures". It names no person or resource, and a failed run says so.

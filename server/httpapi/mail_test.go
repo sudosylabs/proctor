@@ -277,3 +277,23 @@ func TestMailDeliveryResponseNamesExactlyOneTarget(t *testing.T) {
 	require.NotContains(t, wire, "target_invitation_id")
 	require.JSONEq(t, `"`+user.String()+`"`, string(wire["target_user_id"]))
 }
+
+// TestMailDeliveryResponseNamesTheRecipientOnlyWhenTheApplicationDid carries
+// the recipient's name beside the masked address when the application named
+// the User, and omits it otherwise; no address beyond the masked one appears.
+func TestMailDeliveryResponseNamesTheRecipientOnlyWhenTheApplicationDid(t *testing.T) {
+	t.Parallel()
+	recipient := model.NewUserID()
+	view := mail.DeliveryView{ID: model.NewMailDeliveryID(), TargetUserID: recipient, MaskedRecipient: "b***@example.test", RecipientDisplayName: "Bo Student"}
+	named := mailResponse(view)
+	require.Equal(t, recipient.String(), named.TargetUserID)
+	require.Equal(t, "Bo Student", named.RecipientDisplayName)
+	require.Equal(t, "b***@example.test", named.MaskedRecipient)
+
+	view.RecipientDisplayName = ""
+	encoded, err := json.Marshal(mailResponse(view))
+	require.NoError(t, err)
+	var fields map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(encoded, &fields))
+	require.NotContains(t, fields, "recipient_display_name", "an unnamed recipient omits the name")
+}

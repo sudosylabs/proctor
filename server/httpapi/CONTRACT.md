@@ -644,11 +644,18 @@ and security events are always excluded. The response also omits Session,
 request, node, authentication, IP-address, User-Agent, and private audit-value
 metadata.
 The listing filters `actor_id`, `subject_user_id` (the User an Event is about),
-`status=attempt|success|fail`, a resource, a creation range and repeatable
+`status=attempt|success|fail`, a resource, a creation range, repeatable
 `action` (at most 32, each from the audit action catalog, else
-`audit.query.invalid`) apply inside that visibility, so an academic auditor
-naming an action outside its catalog or a User outside its subtrees reads
-nothing more.
+`audit.query.invalid`) and `kind=change|read` apply inside that visibility, so
+an academic auditor naming an action outside its catalog or a User outside its
+subtrees reads nothing more. `kind` reads the closed classification
+`model.AuditActionKind`, which places every audit action, event-only ones
+included, in exactly one kind: a `read` only looks (a view, a search, a list,
+or an export that copies records out), and a `change` mutates state,
+authenticates someone (a sign-in or second factor, even a failed one),
+issues or revokes a credential, or sends mail. It narrows `action` and the
+academic catalog rather than adding to them. Account history has no `kind`,
+because every event in its catalogue is a change.
 
 Each `GET /api/v1/audits` and `GET /api/v1/users/me/audits` item carries a
 `summary`: one sentence written by the server in the locale `Accept-Language`
@@ -666,11 +673,24 @@ the self-history catalogue distinguishes operations; an academic auditor's
 redacted row has no parameters, so its summary names only the action, actor,
 and resource and never the operation or the User the Event is about. Account
 history keeps its actor mask ("An administrator gave you the Teacher role in
-Mathematics"): it never names another person, names an Academic Unit or Class
-only where the item's resource identity appears, and names a Role only when the
-event bound it to the caller. An unfinished or failed row says so. Runs of
-similar rows are not folded on the server, because folding across pages would
-break cursors and totals.
+Mathematics"): it never names the person who acted on the caller, names an
+Academic Unit or Class only where the item's resource identity appears, and
+names a Role only when the event bound it to the caller. When the caller acted
+on another User ("You disabled the account of Bo Student"), that User is named
+only while the caller can see them through the User directory's visibility, as
+on the institution list, and is otherwise "a user". An unfinished or failed row
+says so.
+
+Account history also returns `runs`: each stretch of two or more consecutive
+items on the page with the same actor kind, event, recorded operation, status,
+and relation, as `{start, length, summary}` with a plural sentence counted by
+its items ("You changed 5 profile pictures"). The server finds runs inside the
+page only, so items, cursors, and totals are unchanged; a stretch cut by the
+page edge reads as two runs, and each run's count is exact for the items it
+covers. A run sentence names no person or resource, because its items may
+differ in both. Events that cannot follow one another (turning on two-step
+verification, undoing an email change, offline administrator recovery, and
+signing out the other Sessions) never form a run.
 
 ## Public local registration
 
@@ -1784,6 +1804,18 @@ projection through a bounded, opaque-cursor collection. Repeated `state` and
 recipient User (never an address; Invitation deliveries have none), and
 optional RFC 3339 `created_after` and `created_before` bounds are applied in
 persistence; `limit` defaults to 50 and is bounded at 200. Authorization completes before any delivery is inspected.
+
+Both reads name a Delivery's recipient User with `recipient_display_name`
+beside `target_user_id`, read once per page from the live `users` table and
+only inside the viewer's current User directory visibility (`user.view` and
+`class.members.view`), as audit summaries are. `mail.view` shows that a
+Delivery exists and its masked address; it does not by itself reveal whose
+it is, so a scoped viewer sees no name it could not read in the directory,
+and a scoped visibility never names a disabled User. The name is the
+account's current display name, never the address the mail went to: no read
+decrypts the recipient envelope, and the full address is never returned.
+Invitation deliveries have no User and no name. The test, cancel, and retry
+responses carry no name.
 
 `GET /api/v1/mail/metrics` requires `mail.view` and returns only bounded
 template/state/public-outcome aggregates, attempts, latency, queue count and

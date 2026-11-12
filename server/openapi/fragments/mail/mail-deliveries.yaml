@@ -13,7 +13,7 @@ paths:
       tags:
         - Mail
       description: >-
-        Lists authorized durable delivery metadata for the allowlisted template and filters, most recently updated first unless `sort` and `dir` choose another order. Recipient addresses remain masked and the response never exposes encrypted payloads, rendered message bodies, SMTP credentials, or provider diagnostics.
+        Lists authorized durable delivery metadata for the allowlisted template and filters, most recently updated first unless `sort` and `dir` choose another order. Recipient addresses remain masked and the response never exposes encrypted payloads, rendered message bodies, SMTP credentials, or provider diagnostics. A delivery addressed to a User carries `recipient_display_name` only when the caller can see that User now; the page's names are read once.
         The first page, read without a cursor, also reports `total`: the mail deliveries the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
       x-proctor-auth: principal_required
       x-proctor-error-codes:
@@ -134,7 +134,7 @@ paths:
       tags:
         - Mail
       description: >-
-        Returns safe lifecycle metadata for one authorized durable delivery. The projection keeps the recipient masked and omits payload ciphertext, plaintext message content, SMTP response detail, and encryption-key material.
+        Returns safe lifecycle metadata for one authorized durable delivery. The projection keeps the recipient masked and omits payload ciphertext, plaintext message content, SMTP response detail, and encryption-key material. It names the recipient User with `recipient_display_name` only when the caller can see that User now.
       x-proctor-auth: principal_required
       x-proctor-error-codes:
         - authentication.required

@@ -74,6 +74,19 @@ func TestAuditSummaryCatalogueCoversEveryActionOperationAndSelfEvent(t *testing.
 	slices.Sort(events)
 	require.Equal(t, wantEvents, events, "every self-history event has a summary about the User and one by the User")
 
+	wantRuns := []model.AuditSelfEvent{}
+	for _, event := range wantEvents {
+		if event.Repeats() {
+			wantRuns = append(wantRuns, event)
+		}
+	}
+	runs := make([]model.AuditSelfEvent, 0, len(selfAuditRunSummaryVariables))
+	for event := range selfAuditRunSummaryVariables {
+		runs = append(runs, event)
+	}
+	slices.Sort(runs)
+	require.Equal(t, wantRuns, runs, "every self-history event that repeats has a plural run summary, and no other does")
+
 	require.NoError(t, route.ValidateLocalization(routetest.NewLocalizer(t), auditSummaryLocalizationDefinitions()),
 		"every summary renders in English with its declared variables")
 }
@@ -194,6 +207,14 @@ func TestSelfAuditSummaryKeepsTheActorMask(t *testing.T) {
 			Event: model.AuditSelfEventClassEnrolled, Status: model.AuditStatusSuccess, Relation: store.AuditSelfRelationActor,
 			ActorKind: administration.SelfAuditActorSelf, Resource: model.Resource{Type: model.ResourceClass},
 		}, "You enrolled a user in a class"},
+		"by the caller on a person they can see": {administration.SelfAuditEvent{
+			Event: model.AuditSelfEventAccountDisabled, Status: model.AuditStatusSuccess, Relation: store.AuditSelfRelationActor,
+			ActorKind: administration.SelfAuditActorSelf, Resource: model.Resource{Type: model.ResourceUser}, SubjectName: "Bo Student",
+		}, "You disabled the account of Bo Student"},
+		"a subject name never reaches a sentence about the caller": {administration.SelfAuditEvent{
+			Event: model.AuditSelfEventAccountDisabled, Status: model.AuditStatusSuccess, Relation: store.AuditSelfRelationSubject,
+			ActorKind: administration.SelfAuditActorAdministrator, Resource: model.Resource{Type: model.ResourceUser}, SubjectName: "Ada Admin",
+		}, "An administrator disabled your account"},
 		"failed": {administration.SelfAuditEvent{
 			Event: model.AuditSelfEventAccountDisabled, Status: model.AuditStatusFail, Relation: store.AuditSelfRelationSubject,
 			ActorKind: administration.SelfAuditActorAdministrator, Resource: model.Resource{Type: model.ResourceUser},
@@ -206,6 +227,38 @@ func TestSelfAuditSummaryKeepsTheActorMask(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, test.want, selfAuditSummary(request, test.event))
+		})
+	}
+}
+
+func TestSelfAuditRunSummaryCountsTheRunInThePluralForm(t *testing.T) {
+	t.Parallel()
+	request := auditSummaryRequest(t, "en")
+	for name, test := range map[string]struct {
+		first  administration.SelfAuditEvent
+		length int
+		want   string
+	}{
+		"by the caller on others": {administration.SelfAuditEvent{
+			Event: model.AuditSelfEventProfilePictureChanged, Status: model.AuditStatusSuccess, Relation: store.AuditSelfRelationActor,
+			ActorKind: administration.SelfAuditActorSelf, SubjectName: "Bo Student",
+		}, 5, "You changed 5 profile pictures"},
+		"about the caller, actor masked": {administration.SelfAuditEvent{
+			Event: model.AuditSelfEventProfileChanged, Status: model.AuditStatusSuccess, Relation: store.AuditSelfRelationSubject,
+			ActorKind: administration.SelfAuditActorAdministrator,
+		}, 2, "An administrator changed your profile 2 times"},
+		"failed run says so": {administration.SelfAuditEvent{
+			Event: model.AuditSelfEventAccountDisabled, Status: model.AuditStatusFail, Relation: store.AuditSelfRelationActor,
+			ActorKind: administration.SelfAuditActorSelf,
+		}, 3, "You disabled 3 accounts (failed)"},
+		"failed sign-ins say so once": {administration.SelfAuditEvent{
+			Event: model.AuditSelfEventSignInFailed, Status: model.AuditStatusFail, Relation: store.AuditSelfRelationSubject,
+			ActorKind: administration.SelfAuditActorSystem,
+		}, 4, "4 sign-ins to your account failed"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, test.want, selfAuditRunSummary(request, test.first, test.length))
 		})
 	}
 }

@@ -135,6 +135,7 @@ type focusedAuditApplication struct {
 	err       error
 	selfQuery administration.ListSelfAuditEventsQuery
 	self      []administration.SelfAuditEvent
+	selfRuns  []administration.SelfAuditRun
 	selfCalls int
 	selfTotal int
 	names     store.AuditNames
@@ -144,7 +145,9 @@ type focusedAuditApplication struct {
 func (f *focusedAuditApplication) ListSelfAuditEvents(_ context.Context, _ invocation.Invocation, query administration.ListSelfAuditEventsQuery) (administration.SelfAuditPage, error) {
 	f.selfQuery = query
 	f.selfCalls++
-	page := administration.SelfAuditPage{Page: paging.Page[administration.SelfAuditEvent]{Items: f.self, HasMore: f.hasMore}, Counted: query.BeforeID.IsZero()}
+	page := administration.SelfAuditPage{
+		Page: paging.Page[administration.SelfAuditEvent]{Items: f.self, HasMore: f.hasMore}, Runs: f.selfRuns, Counted: query.BeforeID.IsZero(),
+	}
 	if page.Counted {
 		page.Total, page.TotalIsLowerBound = f.selfTotal, f.selfTotal == store.MaximumAuditSelfCount
 	}

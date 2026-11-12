@@ -103,6 +103,7 @@ const (
 	methodListScope                                 methodName = "list_scope"
 	methodListBuildTitles                           methodName = "list_build_titles"
 	methodListDisplayNames                          methodName = "list_display_names"
+	methodListVisibleDisplayNames                   methodName = "list_visible_display_names"
 	methodListCreationScope                         methodName = "list_creation_scope"
 	methodBeginBuild                                methodName = "begin_build"
 	methodFinishWriter                              methodName = "finish_writer"

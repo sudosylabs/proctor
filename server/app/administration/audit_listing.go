@@ -22,12 +22,14 @@ import (
 )
 
 // ListAuditEventsQuery narrows the listing: ActorID, SubjectUserID (the User
-// the Event is about), Status and Resource match exactly, and Actions, each a
-// known audit action, are alternatives.
+// the Event is about), Status and Resource match exactly, Actions, each a
+// known audit action, are alternatives, and Kind keeps the reads or the
+// changes among them.
 type ListAuditEventsQuery struct {
 	ActorID       model.UserID
 	SubjectUserID model.UserID
 	Actions       []string
+	Kind          model.AuditKind
 	Status        model.AuditStatus
 	Resource      *model.Resource
 	// Since is inclusive and Until exclusive; when both are set Since must
@@ -82,6 +84,7 @@ func (s *Service) ListAuditEvents(
 		(query.BeforeID != "" && !query.BeforeID.IsValid()) ||
 		(query.Resource != nil && query.Resource.Validate() != nil) ||
 		(!query.Since.IsZero() && !query.Until.IsZero() && !query.Since.Before(query.Until)) ||
+		(query.Kind != "" && !query.Kind.IsValid()) ||
 		!validAuditListStatus(query.Status) {
 		return AuditEventPage{}, apperror.New("audit.query.invalid")
 	}
@@ -94,6 +97,7 @@ func (s *Service) ListAuditEvents(
 		ActorID:         model.UserID(strings.TrimSpace(query.ActorID.String())),
 		SubjectUserID:   query.SubjectUserID,
 		Actions:         actions,
+		Kind:            query.Kind,
 		Status:          query.Status,
 		Resource:        query.Resource,
 		Since:           query.Since,

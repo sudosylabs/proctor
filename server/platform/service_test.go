@@ -26,9 +26,9 @@ import (
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/platform/externalauth"
-	"github.com/sudosylabs/proctor/server/platform/externalauth/cas"
-	"github.com/sudosylabs/proctor/server/platform/externalauth/oidc"
 	"github.com/sudosylabs/proctor/server/plugin"
+	"github.com/sudosylabs/proctor/server/plugin/cas"
+	"github.com/sudosylabs/proctor/server/plugin/oidc"
 	"github.com/sudosylabs/proctor/server/pluginhost"
 	"github.com/sudosylabs/proctor/server/store"
 )

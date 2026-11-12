@@ -501,8 +501,8 @@ registry, and CAS/OIDC adapters in:
 - `server/app/identity/external_provider.go`;
 - `server/httpapi/external_authentication.go`;
 - `server/platform/externalauth/provider.go`;
-- `server/platform/externalauth/cas/provider.go`;
-- `server/platform/externalauth/oidc/provider.go`;
+- `server/plugin/cas/provider.go`;
+- `server/plugin/oidc/provider.go`;
 
 are Proctor-specific implementations. Their separation was behaviorally
 compared with Mattermost revision

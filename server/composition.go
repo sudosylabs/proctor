@@ -28,6 +28,7 @@ import (
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/platform"
+	"github.com/sudosylabs/proctor/server/plugin/zipexport"
 	"github.com/sudosylabs/proctor/server/pluginhost"
 	"github.com/sudosylabs/proctor/server/tracing"
 	"github.com/sudosylabs/proctor/server/websocket"
@@ -264,7 +265,7 @@ func composeApplicationDependencies(
 	if capabilities.metrics.Enabled() {
 		contentRecorder = capabilities.metrics.WorkRecorder("file_content")
 	}
-	examExportFormat, offered := capabilities.plugins.ExportFormat(filecontent.ZipExportMediaType)
+	examExportFormat, offered := capabilities.plugins.ExportFormat(zipexport.MediaType)
 	if !offered {
 		capabilities.logger.Warn("Exam exports are unavailable: no active plugin offers the zip export format")
 	}

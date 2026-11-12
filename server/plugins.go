@@ -16,13 +16,13 @@ import (
 	"github.com/sudosylabs/proctor/server/app/events"
 
 	"github.com/sudosylabs/proctor/server/config"
-	"github.com/sudosylabs/proctor/server/filecontent"
 	"github.com/sudosylabs/proctor/server/httpapi"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/metrics"
-	"github.com/sudosylabs/proctor/server/platform/externalauth/cas"
-	"github.com/sudosylabs/proctor/server/platform/externalauth/oidc"
 	"github.com/sudosylabs/proctor/server/plugin"
+	"github.com/sudosylabs/proctor/server/plugin/cas"
+	"github.com/sudosylabs/proctor/server/plugin/oidc"
+	"github.com/sudosylabs/proctor/server/plugin/zipexport"
 	"github.com/sudosylabs/proctor/server/pluginhost"
 )
 
@@ -32,7 +32,7 @@ func builtinPlugins() []plugin.Plugin {
 	return []plugin.Plugin{
 		cas.NewPlugin(),
 		oidc.NewPlugin(),
-		filecontent.NewZipExportPlugin(),
+		zipexport.NewPlugin(),
 	}
 }
 

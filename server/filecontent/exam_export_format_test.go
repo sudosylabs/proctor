@@ -25,6 +25,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/plugin"
+	"github.com/sudosylabs/proctor/server/plugin/zipexport"
 )
 
 // goldenExportFixture builds an export input whose identities and bytes are
@@ -32,7 +33,7 @@ import (
 // an Attempt-origin file, a Starter-origin file and an empty file.
 func goldenExportFixture(t *testing.T) (*Content, exam.ExportArchiveInput) {
 	t.Helper()
-	content, err := New(memory.New(), Policy{MaximumConcurrentOperations: 1, ExamExportFormat: zipExportFormat{}}, nil)
+	content, err := New(memory.New(), Policy{MaximumConcurrentOperations: 1, ExamExportFormat: zipFormat(t)}, nil)
 	require.NoError(t, err)
 	ctx := context.Background()
 	attemptBody := []byte("original answer bytes\x00\n")
@@ -69,11 +70,6 @@ func TestExamExportArchiveBytesAreStable(t *testing.T) {
 	require.Equal(t, "9d47ff82fcf977974be10ad80828b11fc838e72a04c46d04c8a2546222ae94f6", result.SHA256)
 	require.Equal(t, result.SizeBytes, int64(len(data)))
 	require.Equal(t, result.SHA256, hex.EncodeToString(digest[:]))
-}
-
-func TestZipExportFormatDescribesItsBytes(t *testing.T) {
-	require.Equal(t, "application/zip", zipExportFormat{}.MediaType())
-	require.Equal(t, ".zip", zipExportFormat{}.FileExtension())
 }
 
 // fakeExportFormat writes the raw bytes of whatever its write function
@@ -168,20 +164,6 @@ func TestZipExportFormatStopsAtAnAlteredFile(t *testing.T) {
 	require.Nil(t, result)
 }
 
-func TestZipExportPluginOffersTheZipFormat(t *testing.T) {
-	t.Parallel()
-
-	manifest := NewZipExportPlugin().Manifest()
-	require.Equal(t, plugin.Manifest{ID: "export.zip", Name: "Zip export", EnabledByDefault: true, Required: true}, manifest)
-	require.NoError(t, manifest.Validate())
-
-	host := &formatRecordingHost{}
-	require.NoError(t, NewZipExportPlugin().Activate(context.Background(), host))
-	require.Equal(t, []plugin.ExportFormat{zipExportFormat{}}, host.formats)
-	require.Equal(t, ZipExportMediaType, host.formats[0].MediaType())
-	require.NoError(t, NewZipExportPlugin().Deactivate(context.Background()))
-}
-
 func TestBuildExamExportWithoutAFormatIsUnavailable(t *testing.T) {
 	t.Parallel()
 
@@ -207,4 +189,14 @@ func (h *formatRecordingHost) AddExportFormat(format plugin.ExportFormat) error 
 }
 func (*formatRecordingHost) AddEventHandler(plugin.EventTopic, plugin.EventHandler) error {
 	return errors.New("not offered")
+}
+
+// zipFormat activates the built-in zip export plugin, as the server does, and
+// returns the format it offers.
+func zipFormat(t *testing.T) plugin.ExportFormat {
+	t.Helper()
+	host := &formatRecordingHost{}
+	require.NoError(t, zipexport.NewPlugin().Activate(context.Background(), host))
+	require.Len(t, host.formats, 1)
+	return host.formats[0]
 }

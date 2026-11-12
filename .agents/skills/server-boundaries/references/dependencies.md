@@ -53,6 +53,7 @@ exists.
 | reusable modules | `packages/cache` and below, `packages/mail` and below, `packages/vfs` and below | any except `server` and below | any | none |
 | composition root | `server` | any | any | none |
 | plugin contracts | `plugin` | none | none | none |
+| plugins | below `plugin` | `plugin`, `model`, `config`, `platform/externalauth` | any | none |
 | plugin host | `pluginhost` | `plugin` | none | infrastructure |
 | model build tools | `model/internal/idgen` and below | none | none | none |
 | route error-code analysis for tests | `internal/errorflow` | none | `golang.org/x/tools/go` and below | none |
@@ -103,7 +104,7 @@ exists.
 | cluster adapters | `cluster/local` and below, `cluster/memberlist` and below | `cluster` | any | none |
 | metrics | `metrics` | `config`, `internal/tlscert`, `store/timerlayer`, `store/localcachelayer`, `platform`, `cluster`, `packages/vfs`, `packages/mail` | `github.com/prometheus/client_golang` and below | none |
 | tracing | `tracing` | `config` | `go.opentelemetry.io/otel` and below | none |
-| external-auth adapters | `platform/externalauth` and below | `config`, `model`, `platform/externalauth`, `plugin` | any | none |
+| external-auth adapters | `platform/externalauth` and below | `config`, `model`, `plugin` | any | none |
 | platform lifecycle | `platform` | any except below `packages/cache`, below `packages/mail`, below `packages/vfs`, below `cluster`, below `platform/externalauth`, `store/sqlstore`, `metrics`, `app` and below, `httpapi` and below, `websocket` and below | none | none |
 | healthcheck executable | `cmd/proctor-healthcheck` | none | none | none |
 | offline operator commands | `operator` | `config`, `model`, `store`, `store/sqlstore` | none | infrastructure |

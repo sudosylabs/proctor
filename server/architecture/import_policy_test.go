@@ -179,6 +179,21 @@ var dependencyRules = []dependencyRule{
 		sources: []pathPattern{exact(serverModule + "/plugin")},
 	},
 	{
+		// A plugin is one folder below the contracts. It reaches the core
+		// only through the contracts, the domain model and configuration
+		// types, and the support packages named for it; only the
+		// composition root imports a plugin.
+		name:    "plugins",
+		sources: []pathPattern{descendants(serverModule + "/plugin")},
+		project: only(
+			exact(serverModule+"/plugin"),
+			exact(serverModule+"/model"),
+			exact(serverModule+"/config"),
+			exact(serverModule+"/platform/externalauth"),
+		),
+		thirdParty: allImports(),
+	},
+	{
 		// The host runs plugins and knows nothing of the application: the
 		// composition root hands what plugins register to their consumers.
 		name:           "plugin host",
@@ -790,7 +805,6 @@ var dependencyRules = []dependencyRule{
 		project: only(
 			exact(serverModule+"/config"),
 			exact(serverModule+"/model"),
-			exact(serverModule+"/platform/externalauth"),
 			exact(serverModule+"/plugin"),
 		),
 		thirdParty: allImports(),
@@ -954,7 +968,8 @@ func TestDependencyRulePrecedence(t *testing.T) {
 		{packagePath: serverModule + "/app/internal/batchitem", wantRule: "batch item context"},
 		{packagePath: serverModule + "/app", wantRule: "application"},
 		{packagePath: serverModule + "/store/sqlstore", wantRule: "SQL store adapter"},
-		{packagePath: serverModule + "/platform/externalauth/oidc", wantRule: "external-auth adapters"},
+		{packagePath: serverModule + "/platform/externalauth", wantRule: "external-auth adapters"},
+		{packagePath: serverModule + "/plugin/oidc", wantRule: "plugins"},
 		{packagePath: serverModule + "/internal/openapidoc", wantRule: "OpenAPI compiler"},
 		{packagePath: serverModule + "/internal/asyncapidoc", wantRule: "AsyncAPI compiler"},
 		{packagePath: serverModule + "/internal/errorcatalog", wantRule: "error catalog compiler"},

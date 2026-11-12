@@ -50,7 +50,9 @@ func (c *Content) writeExamExport(ctx context.Context, input exam.ExportArchiveI
 	case failure != nil:
 		return failure
 	case writeErr != nil:
-		return writeErr
+		// A format's error text is its own; sanitize keeps it out of
+		// what callers report.
+		return sanitize("write Exam export archive", writeErr)
 	case !verified:
 		return errExamExportSourceVerification()
 	}

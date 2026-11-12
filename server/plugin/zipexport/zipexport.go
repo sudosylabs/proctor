@@ -5,7 +5,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-package filecontent
+// Package zipexport is the built-in export.zip plugin: the stored-ZIP
+// encoding of Exam exports. The core chooses, bounds and verifies every file
+// it reads; this package only encodes the archive it is handed.
+package zipexport
 
 import (
 	"archive/zip"
@@ -15,6 +18,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"time"
 
@@ -54,28 +58,28 @@ Hashes detect changes; they are not a digital signature or proof of authorship.
 This format is a portable record archive, not an installation backup or importer.
 `
 
-// ZipExportMediaType is the media type of the zip Exam export format.
-const ZipExportMediaType = "application/zip"
+// MediaType is the media type of the zip Exam export format.
+const MediaType = "application/zip"
 
-// ZipExportPlugin is the built-in export.zip plugin. It offers the zip Exam
-// export format, which every installation needs, so it is required.
-type ZipExportPlugin struct{}
+// Plugin is the built-in export.zip plugin. It offers the zip Exam export
+// format, which every installation needs, so it is required.
+type Plugin struct{}
 
-// NewZipExportPlugin returns the built-in export.zip plugin.
-func NewZipExportPlugin() ZipExportPlugin { return ZipExportPlugin{} }
+// NewPlugin returns the built-in export.zip plugin.
+func NewPlugin() Plugin { return Plugin{} }
 
 // Manifest names the plugin.
-func (ZipExportPlugin) Manifest() plugin.Manifest {
+func (Plugin) Manifest() plugin.Manifest {
 	return plugin.Manifest{ID: "export.zip", Name: "Zip export", EnabledByDefault: true, Required: true}
 }
 
 // Activate offers the zip Exam export format.
-func (ZipExportPlugin) Activate(_ context.Context, host plugin.Host) error {
+func (Plugin) Activate(_ context.Context, host plugin.Host) error {
 	return host.AddExportFormat(zipExportFormat{})
 }
 
 // Deactivate has nothing to release.
-func (ZipExportPlugin) Deactivate(context.Context) error { return nil }
+func (Plugin) Deactivate(context.Context) error { return nil }
 
 // zipExportFormat is the built-in Examination Export encoding: a stored
 // (uncompressed) ZIP of records.json, README.txt, every file and a closing
@@ -88,10 +92,10 @@ type zipExportFormat struct{}
 
 var (
 	_ plugin.ExportFormat = zipExportFormat{}
-	_ plugin.Plugin       = ZipExportPlugin{}
+	_ plugin.Plugin       = Plugin{}
 )
 
-func (zipExportFormat) MediaType() string     { return ZipExportMediaType }
+func (zipExportFormat) MediaType() string     { return MediaType }
 func (zipExportFormat) FileExtension() string { return ".zip" }
 
 // Write writes the records, README, files and manifest, then closes the ZIP.
@@ -104,7 +108,7 @@ func (zipExportFormat) Write(ctx context.Context, archive plugin.ExportArchive, 
 	}{{"records.json", archive.Records}, {"README.txt", []byte(examExportReadme)}} {
 		size, digest, err := writeExamExportMember(ctx, writer, item.name, bytes.NewReader(item.body), int64(len(item.body)))
 		if err != nil {
-			return sanitize("write Exam export records", err)
+			return fmt.Errorf("write Exam export records: %w", err)
 		}
 		manifest.Entries = append(manifest.Entries, examExportManifestEntry{ArchivePath: item.name, SizeBytes: size, SHA256: digest})
 	}
@@ -117,13 +121,13 @@ func (zipExportFormat) Write(ctx context.Context, archive plugin.ExportArchive, 
 	}
 	encoded, err := json.Marshal(manifest)
 	if err != nil {
-		return sanitize("encode Exam export manifest", err)
+		return fmt.Errorf("encode Exam export manifest: %w", err)
 	}
 	if _, _, err = writeExamExportMember(ctx, writer, "manifest.json", bytes.NewReader(encoded), int64(len(encoded))); err != nil {
-		return sanitize("write Exam export manifest", err)
+		return fmt.Errorf("write Exam export manifest: %w", err)
 	}
 	if err = writer.Close(); err != nil {
-		return sanitize("close Exam export archive", err)
+		return fmt.Errorf("close Exam export archive: %w", err)
 	}
 	return nil
 }
@@ -139,7 +143,7 @@ func writeExamExportFile(ctx context.Context, writer *zip.Writer, f plugin.Expor
 	size, digest, copyErr := writeExamExportMember(ctx, writer, f.Path, body, f.Size)
 	closeErr := body.Close()
 	if copyErr != nil || closeErr != nil {
-		return examExportManifestEntry{}, sanitize("copy Exam export source", errors.Join(copyErr, closeErr))
+		return examExportManifestEntry{}, fmt.Errorf("copy Exam export source: %w", errors.Join(copyErr, closeErr))
 	}
 	return examExportManifestEntry{
 		ArchivePath:  f.Path,
@@ -160,7 +164,7 @@ func writeExamExportMember(ctx context.Context, archive *zip.Writer, name string
 		return 0, "", err
 	}
 	hash := sha256.New()
-	size, err := io.CopyBuffer(io.MultiWriter(member, hash), io.LimitReader(workReader{ctx: ctx, reader: body}, expected+1), make([]byte, 32<<10))
+	size, err := io.CopyBuffer(io.MultiWriter(member, hash), io.LimitReader(contextReader{ctx: ctx, reader: body}, expected+1), make([]byte, 32<<10))
 	if err != nil {
 		return 0, "", err
 	}
@@ -168,4 +172,17 @@ func writeExamExportMember(ctx context.Context, archive *zip.Writer, name string
 		return 0, "", errors.New("Exam export member size mismatch")
 	}
 	return size, hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+// contextReader stops reading once ctx is done.
+type contextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (r contextReader) Read(body []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return r.reader.Read(body)
 }

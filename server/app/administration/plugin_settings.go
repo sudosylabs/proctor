@@ -109,8 +109,11 @@ func (s *Service) ReplacePluginSettings(
 	if descriptor.Required && !command.Enabled {
 		return PluginView{}, apperror.New("plugin.required")
 	}
+	if command.ExpectedRevision < 0 {
+		return PluginView{}, apperror.New("request.invalid").WithField("field", "expected_revision")
+	}
 	settings, err := model.NormalizePluginSettingsDocument(command.Settings)
-	if err != nil || command.ExpectedRevision < 0 {
+	if err != nil {
 		return PluginView{}, apperror.Invalid("plugin.invalid", "settings")
 	}
 	if command.IdempotencyKey == "" {

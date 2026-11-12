@@ -108,7 +108,9 @@ An administrator turns a plugin on or off and edits its settings through the
 plugin administration API. Each plugin publishes a settings schema that a UI
 draws its form from, and validates a document before it is saved. A change
 is audited and applied live: every node converges within a few seconds. A
-required plugin, such as the zip export, cannot be turned off.
+required plugin, such as the zip export, cannot be turned off. A save
+records the on or off choice and the settings together, so a saved plugin
+always has both; a plugin nobody has saved keeps its manifest default.
 
 A plugin publishes its schema in `Manifest.SettingsSchema`, checks a
 document by implementing `plugin.SettingsValidator`, and can take new

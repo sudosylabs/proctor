@@ -86,10 +86,16 @@ standard library. `pluginhost` runs them and imports only `server/plugin`. The
 root names every built-in in `builtinPlugins()`, the one place a plugin is
 listed.
 
-- Activate plugins right after configuration and logging, before anything
-  that consumes what they register. A plugin that fails to activate is left
-  out and never fails construction. Only a configuration mistake does, such
-  as settings for a plugin that is not compiled in.
+- Activate plugins once persistence and telemetry exist, before anything
+  that consumes what they register, with the settings an administrator saved.
+  A plugin that fails to activate is left out and never fails construction.
+  Only a configuration mistake does, such as secrets for a plugin that is not
+  compiled in, or saved settings that cannot be read.
+- The root reads saved plugin settings straight from their Store, at startup
+  and in the node-local reconciler that applies changes, as it reads cluster
+  discovery. They configure the graph the application is built from, so no
+  application use case can read them first. Changing them goes through
+  `app/administration`, audited, like any other mutation.
 - Hand what plugins registered to its consumer from the root, as plain
   contracts: identity provider types to `externalauth`, the export format to
   `filecontent`, event subscriptions to `app/events`. The host wraps each one

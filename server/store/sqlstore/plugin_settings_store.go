@@ -156,7 +156,7 @@ func replacePluginSettings(
 		return pluginSettingsReplacementOutcome{}, err
 	}
 
-	current, err := getPluginSettingsForUpdate(ctx, tx, input.PluginID)
+	current, saved, err := getPluginSettingsForUpdate(ctx, tx, input.PluginID)
 	if err != nil {
 		return pluginSettingsReplacementOutcome{}, err
 	}
@@ -175,7 +175,7 @@ func replacePluginSettings(
 	}
 
 	var currentRevision int64
-	if current != nil {
+	if saved {
 		currentRevision = current.Revision
 	}
 	if currentRevision != input.ExpectedRevision {
@@ -183,7 +183,7 @@ func replacePluginSettings(
 	}
 
 	var outcome pluginSettingsReplacementOutcome
-	if current == nil {
+	if !saved {
 		created, createErr := model.NewPluginSettings(input.PluginID, input.Change, databaseNow)
 		if createErr != nil {
 			return pluginSettingsReplacementOutcome{}, store.NewErrInvalidInput("plugin_settings", "replacement", nil).Wrap(createErr)
@@ -213,20 +213,28 @@ func replacePluginSettings(
 	return outcome, nil
 }
 
-// getPluginSettingsForUpdate locks and returns a plugin's saved settings, or
-// nil when none are saved. A first save is serialized by the System
-// Administrator authentication lock taken before it.
-func getPluginSettingsForUpdate(ctx context.Context, tx *sqlxTxWrapper, id model.PluginID) (*model.PluginSettings, error) {
+// getPluginSettingsForUpdate locks and returns a plugin's saved settings.
+// saved is false when none are saved. A first save is serialized by the
+// System Administrator authentication lock taken before it.
+func getPluginSettingsForUpdate(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	id model.PluginID,
+) (settings *model.PluginSettings, saved bool, err error) {
 	var row pluginSettingsRow
-	err := tx.Get(ctx, &row, `SELECT plugin_id, revision, enabled, settings, created_at, updated_at
+	err = tx.Get(ctx, &row, `SELECT plugin_id, revision, enabled, settings, created_at, updated_at
 		FROM plugin_settings WHERE plugin_id = ? FOR UPDATE`, id.String())
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
+		return nil, false, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("lock plugin settings: %w", err)
+		return nil, false, fmt.Errorf("lock plugin settings: %w", err)
 	}
-	return row.model()
+	settings, err = row.model()
+	if err != nil {
+		return nil, false, err
+	}
+	return settings, true, nil
 }
 
 func insertPluginSettings(ctx context.Context, tx *sqlxTxWrapper, settings *model.PluginSettings) error {

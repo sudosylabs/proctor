@@ -168,7 +168,7 @@ func TestReplacePluginSettingsRejectsWhatItCannotSave(t *testing.T) {
 			c.PluginID, c.Enabled = "export.zip", false
 		}, "plugin.required"},
 		{"settings not an object", func(_ *pluginFixture, c *ReplacePluginSettingsCommand) { c.Settings = json.RawMessage(`[]`) }, "plugin.invalid"},
-		{"negative revision", func(_ *pluginFixture, c *ReplacePluginSettingsCommand) { c.ExpectedRevision = -1 }, "plugin.invalid"},
+		{"negative revision", func(_ *pluginFixture, c *ReplacePluginSettingsCommand) { c.ExpectedRevision = -1 }, "request.invalid"},
 		{"missing idempotency", func(_ *pluginFixture, c *ReplacePluginSettingsCommand) { c.IdempotencyKey = "" }, "idempotency.key_required"},
 		{"refused by the plugin", func(f *pluginFixture, _ *ReplacePluginSettingsCommand) {
 			f.catalog.validateErr = errors.New("mode must be observe or enforce")

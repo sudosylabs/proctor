@@ -1624,11 +1624,13 @@ CREATE TABLE desktop_registrations (
     architecture varchar(32) NOT NULL CHECK (architecture IN ('arm64', 'x64')),
     realtime_protocol integer NOT NULL CHECK (realtime_protocol > 0),
     last_used_at timestamptz NOT NULL,
+    renamed_at timestamptz,
     revoked_at timestamptz,
     UNIQUE (id, user_id),
     UNIQUE (user_id, institution_id, key_thumbprint),
     CONSTRAINT desktop_registrations_lifecycle_check CHECK (
         updated_at >= created_at AND last_used_at BETWEEN created_at AND updated_at AND
+        (renamed_at IS NULL OR renamed_at BETWEEN created_at AND updated_at) AND
         (revoked_at IS NULL OR revoked_at BETWEEN created_at AND updated_at)
     ),
     CONSTRAINT desktop_registrations_jwk_check CHECK (

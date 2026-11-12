@@ -34,6 +34,7 @@ const (
 	ActionInvitationAccept                        Action = "invitation.accept"
 	ActionUserSearch                              Action = "user.search"
 	ActionUserSettingsReplace                     Action = "user.settings.replace"
+	ActionDesktopRegistrationRename               Action = "desktop_registration.rename"
 	ActionPersonalAccessTokenCreate               Action = "personal_access_token.create"
 	ActionPersonalAccessTokenEnable               Action = "personal_access_token.enable"
 	ActionPersonalAccessTokenDisable              Action = "personal_access_token.disable"
@@ -72,6 +73,7 @@ var eventAuditActions = map[Action]eventAuditActionDefinition{
 	ActionInvitationAccept:                        {},
 	ActionUserSearch:                              {AcademicAudit: true},
 	ActionUserSettingsReplace:                     {},
+	ActionDesktopRegistrationRename:               {},
 	ActionPersonalAccessTokenCreate:               {},
 	ActionPersonalAccessTokenEnable:               {},
 	ActionPersonalAccessTokenDisable:              {},

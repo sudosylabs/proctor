@@ -2847,6 +2847,12 @@ func (s *timedDesktopRegistrationStore) ListByUser(arg0 context.Context, arg1 mo
 	})
 }
 
+func (s *timedDesktopRegistrationStore) Rename(arg0 context.Context, arg1 *store.DesktopRegistrationRename) (*model.DesktopRegistration, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateDesktopRegistration, methodRename), func(callCtx context.Context) (*model.DesktopRegistration, error) {
+		return s.next.Rename(callCtx, arg1)
+	})
+}
+
 func (s *timedDesktopRegistrationStore) Revoke(arg0 context.Context, arg1 *store.DesktopRegistrationRevocation) (*store.DesktopRegistrationRevocationResult, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateDesktopRegistration, methodRevoke), func(callCtx context.Context) (*store.DesktopRegistrationRevocationResult, error) {
 		return s.next.Revoke(callCtx, arg1)
@@ -3570,6 +3576,12 @@ func (s *timedSessionStore) Revoke(arg0 context.Context, arg1 *store.SessionRevo
 func (s *timedSessionStore) RevokeAllForUser(arg0 context.Context, arg1 *store.UserSessionsRevocation) (*store.UserSessionsRevocationResult, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateSession, methodRevokeAllForUser), func(callCtx context.Context) (*store.UserSessionsRevocationResult, error) {
 		return s.next.RevokeAllForUser(callCtx, arg1)
+	})
+}
+
+func (s *timedSessionStore) Rename(arg0 context.Context, arg1 *store.SessionRename) (*model.Session, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateSession, methodRename), func(callCtx context.Context) (*model.Session, error) {
+		return s.next.Rename(callCtx, arg1)
 	})
 }
 

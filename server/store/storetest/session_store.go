@@ -39,6 +39,7 @@ func TestSessionStores(t *testing.T, ss store.Store) {
 	t.Run("RevokeAllForUser", func(t *testing.T) { testSessionRevokeAllForUser(t, ss) })
 	t.Run("RevokeAllForUser", func(t *testing.T) { testSessionRevokeAllForUserWithAudit(t, ss) })
 	t.Run("RevokeOtherSessionsKeepsCurrent", func(t *testing.T) { testSessionRevokeOtherSessionsKeepsCurrent(t, ss) })
+	t.Run("Rename", func(t *testing.T) { testSessionRename(t, ss) })
 	t.Run("DisabledMailRecordsTerminalAdministrativeNotice", func(t *testing.T) {
 		testSessionDisabledMailRecordsTerminalAdministrativeNotice(t, ss)
 	})

@@ -514,6 +514,28 @@ strong recent Session authentication and atomically revokes the Registration,
 all of its live Sessions and credentials, and the audit. The irreversible
 record remains visible as revoked; security effects publish only after commit.
 
+`PATCH /api/v1/users/me/desktop-registrations/{desktop_registration_id}`
+takes `{"display_name"}` and `PATCH /api/v1/users/me/sessions/{session_id}`
+takes `{"device_name"}` for a browser or CLI Session; each returns the renamed
+resource with `no-store`. They require an interactive Session (no PAT) but not
+recent or strong authentication: a name changes no key, Session, or credential
+and is shown only in the User's own lists, unlike the irreversible revocation
+beside it. Each name is trimmed, sanitized like every stored device label, and
+must be 1-128 characters without control characters
+(`desktop_registration.invalid`, `session.invalid`). Another User's
+registration is `resource.not_found` and another User's or a no-longer-live
+Session `session.not_found`; a revoked registration is
+`desktop_registration.revoked`. A Desktop Session is named by its
+Registration, so its rename is `session.desktop_named_by_registration` with
+`fields.desktop_registration_id`, and `GET /api/v1/users/me/sessions` gives
+each Desktop Session the Registration's `desktop_registration_display_name`,
+read with the list in one further bounded read. A chosen Registration name
+survives later Desktop sign-ins with the same key. Neither route carries an
+`expected_revision` or `Idempotency-Key`: setting the same name again leaves
+the same state, and neither resource has a revision. Each rename is one audited
+Store operation (`desktop_registration.rename`; `session.manage` with
+`rename_own_session`) whose audit never records the name.
+
 ## Authentication-method lifecycle
 
 `GET /api/v1/authentication-methods` requires an authenticated Session and

@@ -27,10 +27,18 @@ type revokeSessionRequest struct {
 	SessionID string `json:"session_id"`
 }
 
+// renameSessionRequest names one of the caller's browser or CLI Sessions.
+type renameSessionRequest struct {
+	DeviceName string `json:"device_name"`
+}
+
 // currentUserSessionResponse is one item of the caller's own Session list.
+// A Desktop Session also carries the name of its Desktop Registration, which
+// is the name the User gives that device.
 type currentUserSessionResponse struct {
 	sessionResponse
-	Current bool `json:"current"`
+	DesktopRegistrationDisplayName string `json:"desktop_registration_display_name,omitempty"`
+	Current                        bool   `json:"current"`
 }
 
 type revokeOtherSessionsResponse struct {
@@ -65,6 +73,23 @@ func sessionResource(app Sessions, cookies route.Cookies) route.Resource {
 			Handle: h.list,
 		},
 		route.Endpoint{
+			Method: http.MethodPatch,
+			Path:   "/users/me/sessions/{session_id}",
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{
+				"request.invalid",
+				"session.id.invalid",
+				"session.invalid",
+				"session.not_found",
+				"session.desktop_named_by_registration",
+				"authentication.session_required",
+				"authentication.reauthentication_required",
+				"authentication.internal",
+				"audit.unavailable",
+			},
+			Handle: h.rename,
+		},
+		route.Endpoint{
 			Method: http.MethodPost,
 			Path:   "/users/me/sessions/revoke",
 			Auth:   route.AuthSessionRequired,
@@ -89,7 +114,7 @@ func sessionResource(app Sessions, cookies route.Cookies) route.Resource {
 }
 
 func (h sessionHandlers) list(request route.Request) (route.Result, error) {
-	sessions, err := h.app.ListSessions(
+	listed, err := h.app.ListSessions(
 		request.Context,
 		request.Invocation(),
 	)
@@ -97,8 +122,8 @@ func (h sessionHandlers) list(request route.Request) (route.Result, error) {
 		return route.Result{}, err
 	}
 
-	presentable := make([]*model.Session, 0, len(sessions))
-	for _, session := range sessions {
+	presentable := make([]*model.Session, 0, len(listed.Sessions))
+	for _, session := range listed.Sessions {
 		if sessionResponseFromModel(request.HTTP, session) != nil {
 			presentable = append(presentable, session)
 		}
@@ -112,10 +137,7 @@ func (h sessionHandlers) list(request route.Request) (route.Result, error) {
 			return route.BoundedKey{At: session.CreatedAt, ID: session.ID.String()}
 		},
 		func(session *model.Session) currentUserSessionResponse {
-			return currentUserSessionResponse{
-				sessionResponse: *sessionResponseFromModel(request.HTTP, session),
-				Current:         session.ID == request.Principal.SessionID,
-			}
+			return currentUserSessionResponseFromModel(request, session, listed.DesktopRegistrationNames)
 		},
 	)
 	if err != nil {
@@ -123,6 +145,46 @@ func (h sessionHandlers) list(request route.Request) (route.Result, error) {
 	}
 
 	return route.JSON(http.StatusOK, response), nil
+}
+
+func (h sessionHandlers) rename(request route.Request) (route.Result, error) {
+	sessionID, err := route.PathID[model.SessionID](request, "session_id")
+	if err != nil {
+		return route.Result{}, err
+	}
+	var input renameSessionRequest
+	if err = request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
+	}
+
+	renamed, err := h.app.RenameSession(
+		request.Context,
+		request.Invocation(),
+		identity.RenameSessionCommand{SessionID: sessionID, DeviceName: input.DeviceName},
+	)
+	if err != nil {
+		return route.Result{}, err
+	}
+
+	// Only a browser or CLI Session can be renamed, so no Desktop
+	// Registration name accompanies it.
+	return route.JSON(http.StatusOK, currentUserSessionResponseFromModel(request, renamed, nil)).
+		WithHeaders(noStoreHeaders()), nil
+}
+
+func currentUserSessionResponseFromModel(
+	request route.Request,
+	session *model.Session,
+	desktopRegistrationNames map[model.DesktopRegistrationID]string,
+) currentUserSessionResponse {
+	response := currentUserSessionResponse{
+		sessionResponse: *sessionResponseFromModel(request.HTTP, session),
+		Current:         session.ID == request.Principal.SessionID,
+	}
+	if session.ClientType == model.SessionClientDesktop {
+		response.DesktopRegistrationDisplayName = desktopRegistrationNames[session.DesktopRegistrationID]
+	}
+	return response
 }
 
 func (h sessionHandlers) revoke(request route.Request) (route.Result, error) {
@@ -171,9 +233,10 @@ func (h sessionHandlers) revokeOthers(request route.Request) (route.Result, erro
 	return route.JSON(http.StatusOK, revokeOtherSessionsResponse{RevokedSessionCount: result.RevokedSessionCount}), nil
 }
 
-// Sessions is the application port its handlers call; it lists and revokes the caller's own Sessions.
+// Sessions is the application port its handlers call; it lists, renames, and revokes the caller's own Sessions.
 type Sessions interface {
-	ListSessions(context.Context, invocation.Invocation) ([]*model.Session, error)
+	ListSessions(context.Context, invocation.Invocation) (*identity.ListSessionsResult, error)
+	RenameSession(context.Context, invocation.Invocation, identity.RenameSessionCommand) (*model.Session, error)
 	RevokeSession(context.Context, invocation.Invocation, model.SessionID) error
 	RevokeAllSessions(context.Context, invocation.Invocation) error
 	RevokeOtherSessions(

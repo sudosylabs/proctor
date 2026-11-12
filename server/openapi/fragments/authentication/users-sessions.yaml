@@ -227,6 +227,60 @@ paths:
           $ref: '#/components/responses/InternalError'
         "503":
           $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/users/me/sessions/{session_id}:
+    parameters:
+      - $ref: '#/components/parameters/SessionID'
+    patch:
+      operationId: renameCurrentUserSession
+      summary: Rename one current-user session
+      description: >-
+        Sets the device name of one of the current User's live browser or CLI Sessions. The name is trimmed, loses bidirectional and invisible formatting code points, and must be 1 to 128 characters without control characters. A Desktop Session is named by its Desktop Registration, so renaming one is refused with session.desktop_named_by_registration, whose fields.desktop_registration_id names the registration to rename through renameDesktopRegistration instead. Renaming changes no credential, so any interactive Session may do it without recent authentication; Personal Access Tokens cannot. Repeating the request with the same name leaves the same result. A Session of another User, or one that is revoked or expired, is not found. Every rename is audited and appears in the User's own account history.
+      tags:
+        - Authentication
+      x-proctor-auth: session_required
+      x-proctor-error-codes:
+        - request.invalid
+        - session.id.invalid
+        - session.invalid
+        - session.not_found
+        - session.desktop_named_by_registration
+        - authentication.session_required
+        - authentication.reauthentication_required
+        - authentication.internal
+        - audit.unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+      x-proctor-idempotency: none
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        $ref: '#/components/requestBodies/RenameSession'
+      responses:
+        "200":
+          $ref: '#/components/responses/CurrentUserSessionOK'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+        "500":
+          $ref: '#/components/responses/InternalError'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
   /api/v1/users/me/sessions/revoke:
     post:
       operationId: revokeCurrentUserSession
@@ -375,6 +429,15 @@ components:
         $ref: '#/components/schemas/ID'
       description: The interactive Session identifier.
   requestBodies:
+    RenameSession:
+      required: true
+      description: The device name the current User chose for the Session.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RenameSessionRequest'
+          example:
+            device_name: Office browser
     RevokeSession:
       required: true
       description: Identifies the exact Session belonging to the current User that should be revoked.
@@ -385,6 +448,32 @@ components:
           example:
             session_id: ybndrfg8ejkmcpqxot1uwisza3
   responses:
+    CurrentUserSessionOK:
+      description: The renamed current-user Session
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CurrentUserSessionResponse'
+          example:
+            id: ybndrfg8ejkmcpqxot1uwisza3
+            created_at: '2026-08-12T09:30:00Z'
+            updated_at: '2026-08-12T14:30:00Z'
+            user_id: ybndrfg8ejkmcpqxot1uwisza4
+            client_type: web
+            device_id: browser-7
+            device_name: Office browser
+            authentication_method: password
+            authentication_strength: single_factor
+            authenticated_at: '2026-08-12T09:30:00Z'
+            mfa_recovery_required: false
+            mfa_enrollment_required: false
+            last_activity_at: '2026-08-12T14:30:00Z'
+            idle_expires_at: '2026-08-19T14:30:00Z'
+            expires_at: '2026-09-11T09:30:00Z'
+            current: true
     SessionAdministrationListOK:
       description: Administrative session list
       content:
@@ -597,6 +686,12 @@ components:
           type: string
         device_name:
           type: string
+          description: For a browser or CLI Session, the name the client reported at sign-in or the User later chose. A Desktop Session's name is desktop_registration_display_name.
+        desktop_registration_display_name:
+          type: string
+          maxLength: 128
+          description: >-
+            Present only for a Desktop Session: the name of the Desktop Registration it is bound to, which is the name the User gives that device through renameDesktopRegistration.
         authentication_method:
           type: string
         authentication_strength:
@@ -681,6 +776,17 @@ components:
         revoked_session_count:
           type: integer
           minimum: 0
+    RenameSessionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - device_name
+      properties:
+        device_name:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: The new name. Surrounding whitespace is removed before the length is checked.
     RevokeSessionRequest:
       type: object
       additionalProperties: false

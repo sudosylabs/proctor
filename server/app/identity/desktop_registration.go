@@ -96,7 +96,68 @@ func (s *Service) RevokeDesktopRegistration(
 	return nil
 }
 
+type RenameDesktopRegistrationCommand struct {
+	RegistrationID model.DesktopRegistrationID
+	DisplayName    string
+}
+
+// RenameDesktopRegistration gives one of the calling User's active Desktop
+// Registrations the name they chose. The name labels the device in the
+// User's own lists and survives later Desktop sign-ins with the same key. A
+// rename changes no key, Session, or credential, so any interactive Session
+// may make it; it needs no recent authentication.
+func (s *Service) RenameDesktopRegistration(
+	ctx context.Context,
+	inv invocation.Invocation,
+	command RenameDesktopRegistrationCommand,
+) (*model.DesktopRegistration, error) {
+	principal := inv.Principal()
+	at := model.TimeUTC(s.now())
+	if err := requireInteractiveSession(principal, false, at, s.recentAuthenticationTTL); err != nil {
+		return nil, err
+	}
+
+	if !command.RegistrationID.IsValid() {
+		return nil, apperror.New("request.invalid").WithField("field", "desktop_registration_id")
+	}
+	displayName, err := model.NormalizeDesktopRegistrationDisplayName(command.DisplayName)
+	if err != nil {
+		return nil, apperror.Invalid("desktop_registration.invalid", "display_name").Wrap(err)
+	}
+
+	return access.RunAudited(
+		ctx,
+		s.auditor,
+		access.Mutation{
+			Invocation: inv,
+			Action:     model.ActionDesktopRegistrationRename,
+			Resource:   model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
+			Operation:  model.AuditOperationRenameDesktopRegistration,
+			Value:      map[string]any{"registration_id": command.RegistrationID.String()},
+			At:         at,
+		},
+		func(ctx context.Context, reference access.MutationReference) (*model.DesktopRegistration, error) {
+			return s.desktopRegistrations.Rename(ctx, &store.DesktopRegistrationRename{
+				RegistrationID: command.RegistrationID,
+				UserID:         principal.UserID,
+				DisplayName:    displayName,
+				AuditEventID:   reference.ID,
+				AuditAt:        reference.MutationAt,
+			})
+		},
+		desktopRegistrationRenameStoreErrors.Translate,
+	)
+}
+
 var desktopRegistrationStoreErrors = apperror.StoreTable{
 	NotFound:    "resource.not_found",
+	Unavailable: "desktop_registration.unavailable",
+}
+
+// A revoked registration stays in the User's list as security history, so
+// renaming it is refused rather than concealed.
+var desktopRegistrationRenameStoreErrors = apperror.StoreTable{
+	NotFound:    "resource.not_found",
+	Conflict:    "desktop_registration.revoked",
 	Unavailable: "desktop_registration.unavailable",
 }

@@ -265,6 +265,23 @@ module when a change is not server-only. No module has been released yet.
 
 ### Added
 
+- Server: Users rename their own devices.
+  `PATCH /api/v1/users/me/desktop-registrations/{desktop_registration_id}`
+  takes `{"display_name": ...}` and keeps the name across later Desktop
+  sign-ins with the same key; a revoked registration is
+  `desktop_registration.revoked`. `PATCH /api/v1/users/me/sessions/{session_id}`
+  takes `{"device_name": ...}` for a browser or CLI Session and refuses a
+  Desktop Session with `session.desktop_named_by_registration`, naming the
+  registration to rename instead. Both need an interactive Session but no
+  recent authentication, trim and sanitize the name to 1-128 characters
+  without control characters, and are audited (`desktop_registration.rename`
+  and `session.manage` with `rename_own_session`), appearing in account
+  history as `desktop.registration_renamed` and `session.renamed`.
+  `GET /api/v1/users/me/sessions` items carry
+  `desktop_registration_display_name` for Desktop Sessions. The baseline adds
+  `desktop_registrations.renamed_at`; existing development databases must be
+  recreated.
+
 - Server: the realtime protocol has an AsyncAPI 3.0 contract,
   `server/asyncapi/` compiled into `server/asyncapi.json`, with one message
   for each of the 39 events and for `hello`, `resync_required`, `ping`,

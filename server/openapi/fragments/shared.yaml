@@ -1039,6 +1039,8 @@ components:
         - desktop_compatibility_policy.invalid
         - desktop_compatibility_policy.revision_conflict
         - desktop_compatibility_policy.unavailable
+        - desktop_registration.invalid
+        - desktop_registration.revoked
         - desktop_registration.unavailable
         - exam.archived
         - exam.attempt.already_connected
@@ -1246,7 +1248,9 @@ components:
         - search.query.invalid
         - server.internal
         - service.busy
+        - session.desktop_named_by_registration
         - session.id.invalid
+        - session.invalid
         - session.not_found
         - student_progression.conflict
         - student_progression.effective_date_conflict
@@ -1304,6 +1308,7 @@ components:
         - class.members.view
         - class.view
         - desktop_compatibility_policy.manage
+        - desktop_registration.rename
         - desktop_registration.revoke
         - exam.attempt.browser_activity.view
         - exam.create

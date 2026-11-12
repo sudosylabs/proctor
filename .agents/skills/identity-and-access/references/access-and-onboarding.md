@@ -571,6 +571,14 @@ authentication and atomically revokes the Registration, every live Session
 and credential bound to it, and the security audit before publishing Session
 revocation effects. Revocation is permanent security history.
 
+The User may rename an active Registration through the nested `PATCH` route
+from any interactive Session, without recent authentication, because the name
+is presentation only. The chosen name (`renamed_at` set) survives later
+Desktop sign-ins with the same key; until then each sign-in refreshes it from
+the reported device name. A revoked Registration cannot be renamed. A Desktop
+Session has no name of its own: Session lists show its Registration's name,
+and renaming the Session is refused in favor of the Registration.
+
 At most one unresolved Exam Attempt may hold the account's Session lock. Only
 a compatible, active, registered-key Desktop Session can activate a ready
 Attempt, and that exact Session is owned by the resulting Attempt

@@ -1841,6 +1841,34 @@
         "description": "Supplies the last observed Draft revision required to remove the exact path entry safely.",
         "required": true
       },
+      "RenameDesktopRegistration": {
+        "content": {
+          "application/json": {
+            "example": {
+              "display_name": "Library laptop"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/RenameDesktopRegistrationRequest"
+            }
+          }
+        },
+        "description": "The name the current User chose for the Desktop Registration.",
+        "required": true
+      },
+      "RenameSession": {
+        "content": {
+          "application/json": {
+            "example": {
+              "device_name": "Office browser"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/RenameSessionRequest"
+            }
+          }
+        },
+        "description": "The device name the current User chose for the Session.",
+        "required": true
+      },
       "ReorderExamResources": {
         "content": {
           "application/json": {
@@ -3181,6 +3209,39 @@
           }
         }
       },
+      "CurrentUserSessionOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "authenticated_at": "2026-08-12T09:30:00Z",
+              "authentication_method": "password",
+              "authentication_strength": "single_factor",
+              "client_type": "web",
+              "created_at": "2026-08-12T09:30:00Z",
+              "current": true,
+              "device_id": "browser-7",
+              "device_name": "Office browser",
+              "expires_at": "2026-09-11T09:30:00Z",
+              "id": "ybndrfg8ejkmcpqxot1uwisza3",
+              "idle_expires_at": "2026-08-19T14:30:00Z",
+              "last_activity_at": "2026-08-12T14:30:00Z",
+              "mfa_enrollment_required": false,
+              "mfa_recovery_required": false,
+              "updated_at": "2026-08-12T14:30:00Z",
+              "user_id": "ybndrfg8ejkmcpqxot1uwisza4"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/CurrentUserSessionResponse"
+            }
+          }
+        },
+        "description": "The renamed current-user Session",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
       "DeliveryBudgetOK": {
         "content": {
           "application/json": {
@@ -3374,6 +3435,34 @@
           }
         },
         "description": "Current User's Desktop Registration security history",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
+      "DesktopRegistrationOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "architecture": "arm64",
+              "created_at": "2026-08-01T09:00:00Z",
+              "current": false,
+              "desktop_build_id": "build-2026-08",
+              "desktop_release": "1.4.0",
+              "display_name": "Library laptop",
+              "id": "ybndrfg8ejkmcpqxot1uwisza3",
+              "last_used_at": "2026-08-12T14:30:00Z",
+              "platform": "darwin",
+              "realtime_protocol": 1,
+              "status": "active"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/DesktopRegistrationResponse"
+            }
+          }
+        },
+        "description": "The renamed Desktop Registration",
         "headers": {
           "Cache-Control": {
             "$ref": "#/components/headers/NoStore"
@@ -7529,6 +7618,7 @@
           "class.members.view",
           "class.view",
           "desktop_compatibility_policy.manage",
+          "desktop_registration.rename",
           "desktop_registration.revoke",
           "exam.attempt.browser_activity.view",
           "exam.create",
@@ -11291,6 +11381,11 @@
             "minimum": 1,
             "type": "integer"
           },
+          "desktop_registration_display_name": {
+            "description": "Present only for a Desktop Session: the name of the Desktop Registration it is bound to, which is the name the User gives that device through renameDesktopRegistration.",
+            "maxLength": 128,
+            "type": "string"
+          },
           "desktop_registration_id": {
             "$ref": "#/components/schemas/ID"
           },
@@ -11301,6 +11396,7 @@
             "type": "string"
           },
           "device_name": {
+            "description": "For a browser or CLI Session, the name the client reported at sign-in or the User later chose. A Desktop Session's name is desktop_registration_display_name.",
             "type": "string"
           },
           "expires_at": {
@@ -13886,6 +13982,8 @@
           "desktop_compatibility_policy.invalid",
           "desktop_compatibility_policy.revision_conflict",
           "desktop_compatibility_policy.unavailable",
+          "desktop_registration.invalid",
+          "desktop_registration.revoked",
           "desktop_registration.unavailable",
           "exam.archived",
           "exam.attempt.already_connected",
@@ -14093,7 +14191,9 @@
           "search.query.invalid",
           "server.internal",
           "service.busy",
+          "session.desktop_named_by_registration",
           "session.id.invalid",
+          "session.invalid",
           "session.not_found",
           "student_progression.conflict",
           "student_progression.effective_date_conflict",
@@ -22706,6 +22806,36 @@
         ],
         "type": "object"
       },
+      "RenameDesktopRegistrationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "description": "The new name. Surrounding whitespace is removed before the length is checked.",
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name"
+        ],
+        "type": "object"
+      },
+      "RenameSessionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "device_name": {
+            "description": "The new name. Surrounding whitespace is removed before the length is checked.",
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_name"
+        ],
+        "type": "object"
+      },
       "ReorderExamResourcesRequest": {
         "additionalProperties": false,
         "properties": {
@@ -24546,6 +24676,7 @@
           "class.transferred_in",
           "class.transferred_out",
           "class.unenrolled",
+          "desktop.registration_renamed",
           "desktop.registration_revoked",
           "desktop.signed_in",
           "email.change_undone",
@@ -24571,6 +24702,7 @@
           "provider.unlinked",
           "role.ended",
           "role.granted",
+          "session.renamed",
           "session.revoked",
           "sessions.revoked_all",
           "sessions.revoked_others",
@@ -48385,6 +48517,80 @@
           "authentication.reauthentication_required"
         ],
         "x-proctor-idempotency": "none"
+      },
+      "patch": {
+        "description": "Gives one of the current User's active Desktop Registrations the name they chose. The name is trimmed, loses bidirectional and invisible formatting code points, and must be 1 to 128 characters without control characters. It labels the device in the User's own registration and Session lists, and a later Desktop sign-in with the same key keeps it instead of the device name the Desktop reports. Renaming changes no key, Session, or credential, so any interactive Session may do it without recent authentication; Personal Access Tokens cannot. Repeating the request with the same name leaves the same result. A revoked registration is security history and cannot be renamed; a registration of another User is not found. Every rename is audited and appears in the User's own account history.",
+        "operationId": "renameDesktopRegistration",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DesktopRegistrationID"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/RenameDesktopRegistration"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/DesktopRegistrationOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Rename one Desktop Registration",
+        "tags": [
+          "Authentication"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "desktop_registration.invalid",
+          "desktop_registration.revoked",
+          "desktop_registration.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "audit.unavailable",
+          "authentication.session_required",
+          "authentication.reauthentication_required",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "none"
       }
     },
     "/api/v1/users/me/exam-activity": {
@@ -49237,6 +49443,83 @@
         ],
         "x-proctor-auth": "session_required",
         "x-proctor-error-codes": [
+          "authentication.internal",
+          "audit.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/users/me/sessions/{session_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SessionID"
+        }
+      ],
+      "patch": {
+        "description": "Sets the device name of one of the current User's live browser or CLI Sessions. The name is trimmed, loses bidirectional and invisible formatting code points, and must be 1 to 128 characters without control characters. A Desktop Session is named by its Desktop Registration, so renaming one is refused with session.desktop_named_by_registration, whose fields.desktop_registration_id names the registration to rename through renameDesktopRegistration instead. Renaming changes no credential, so any interactive Session may do it without recent authentication; Personal Access Tokens cannot. Repeating the request with the same name leaves the same result. A Session of another User, or one that is revoked or expired, is not found. Every rename is audited and appears in the User's own account history.",
+        "operationId": "renameCurrentUserSession",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/RenameSession"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CurrentUserSessionOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Rename one current-user session",
+        "tags": [
+          "Authentication"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "session.id.invalid",
+          "session.invalid",
+          "session.not_found",
+          "session.desktop_named_by_registration",
+          "authentication.session_required",
+          "authentication.reauthentication_required",
           "authentication.internal",
           "audit.unavailable",
           "authentication.required",

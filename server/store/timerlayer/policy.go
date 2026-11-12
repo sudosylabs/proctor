@@ -335,6 +335,7 @@ const (
 	methodUnlink                                    methodName = "unlink"
 	methodChangeEmail                               methodName = "change_email"
 	methodVerifyEmailPrivileged                     methodName = "verify_email_privileged"
+	methodRename                                    methodName = "rename"
 	methodRevoke                                    methodName = "revoke"
 	methodWithdraw                                  methodName = "withdraw"
 	methodSeedPending                               methodName = "seed_pending"

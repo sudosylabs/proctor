@@ -170,6 +170,7 @@ components:
         - class.transferred_in
         - class.transferred_out
         - class.unenrolled
+        - desktop.registration_renamed
         - desktop.registration_revoked
         - desktop.signed_in
         - email.change_undone
@@ -195,6 +196,7 @@ components:
         - provider.unlinked
         - role.ended
         - role.granted
+        - session.renamed
         - session.revoked
         - sessions.revoked_all
         - sessions.revoked_others

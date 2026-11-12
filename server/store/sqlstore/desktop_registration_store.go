@@ -45,6 +45,7 @@ type desktopRegistrationRow struct {
 	Architecture     string       `db:"architecture"`
 	RealtimeProtocol int          `db:"realtime_protocol"`
 	LastUsedAt       time.Time    `db:"last_used_at"`
+	RenamedAt        sql.NullTime `db:"renamed_at"`
 	RevokedAt        sql.NullTime `db:"revoked_at"`
 }
 
@@ -64,6 +65,7 @@ func desktopRegistrationColumns() []string {
 		"architecture",
 		"realtime_protocol",
 		"last_used_at",
+		"renamed_at",
 		"revoked_at",
 	}
 }
@@ -127,14 +129,17 @@ func getOrCreateDesktopRegistration(
 			return nil, store.NewErrConflict("desktop_registration", "desktop_registration_revoked", nil)
 		}
 
-		registration.DisplayName = transaction.DeviceName
+		// A name the User chose outlives the device name the Desktop reports.
+		if !registration.RenamedAt.Valid {
+			registration.DisplayName = transaction.DeviceName
+		}
 		registration.DesktopRelease = transaction.DesktopRelease
 		registration.DesktopBuildID = transaction.DesktopBuildID
 		registration.Platform = transaction.DesktopPlatform
 		registration.Architecture = transaction.DesktopArchitecture
 		registration.RealtimeProtocol = transaction.DesktopRealtimeProtocol
 		registration.LastUsedAt = now
-		registration.UpdatedAt = now
+		registration.UpdatedAt = latestTime(registration.UpdatedAt, now)
 		if registration.Validate() != nil {
 			return nil, store.NewErrInvalidInput("desktop_registration", "metadata", nil)
 		}
@@ -142,7 +147,7 @@ func getOrCreateDesktopRegistration(
 		if _, err = tx.Exec(
 			ctx,
 			`UPDATE desktop_registrations
-		   SET updated_at = ?, display_name = ?, desktop_release = ?, desktop_build_id = ?, platform = ?, architecture = ?,
+		   SET updated_at = GREATEST(updated_at, ?), display_name = ?, desktop_release = ?, desktop_build_id = ?, platform = ?, architecture = ?,
 		       realtime_protocol = ?, last_used_at = ?
 		 WHERE id = ? AND revoked_at IS NULL`,
 			now,
@@ -191,9 +196,9 @@ func getOrCreateDesktopRegistration(
 		ctx,
 		`INSERT INTO desktop_registrations (
 		id, created_at, updated_at, user_id, institution_id, public_jwk, key_thumbprint, display_name,
-		desktop_release, desktop_build_id, platform, architecture, realtime_protocol, last_used_at, revoked_at
+		desktop_release, desktop_build_id, platform, architecture, realtime_protocol, last_used_at, renamed_at, revoked_at
 	)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)`,
 		candidate.ID.String(),
 		now,
 		now,
@@ -213,6 +218,79 @@ func getOrCreateDesktopRegistration(
 	}
 
 	return candidate, nil
+}
+
+// Rename sets the display name of the User's active Desktop Registration,
+// records when the User chose it, and completes the audit event.
+func (s SQLDesktopRegistrationStore) Rename(
+	ctx context.Context,
+	input *store.DesktopRegistrationRename,
+) (*model.DesktopRegistration, error) {
+	if input == nil ||
+		!input.RegistrationID.IsValid() ||
+		!input.UserID.IsValid() ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() {
+		return nil, store.NewErrInvalidInput("desktop_registration", "rename", nil)
+	}
+	if name, err := model.NormalizeDesktopRegistrationDisplayName(input.DisplayName); err != nil || name != input.DisplayName {
+		return nil, store.NewErrInvalidInput("desktop_registration", "display_name", nil)
+	}
+
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "rename Desktop Registration", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*model.DesktopRegistration, error) {
+		var row desktopRegistrationRow
+		if err := tx.Get(
+			ctx,
+			&row,
+			`SELECT `+strings.Join(desktopRegistrationColumns(), ",")+`
+		  FROM desktop_registrations WHERE id = ? AND user_id = ? FOR UPDATE`,
+			input.RegistrationID.String(),
+			input.UserID.String(),
+		); err != nil {
+			return nil, translateError("desktop_registration", input.RegistrationID.String(), err)
+		}
+
+		registration, err := row.model()
+		if err != nil {
+			return nil, err
+		}
+		if registration.RevokedAt.Valid {
+			return nil, store.NewErrConflict("desktop_registration", "desktop_registration_revoked", nil)
+		}
+
+		at := model.TimeUTC(input.AuditAt)
+		if _, err = tx.Exec(
+			ctx,
+			`UPDATE desktop_registrations SET updated_at = GREATEST(updated_at, ?), display_name = ?,
+			renamed_at = GREATEST(created_at, ?) WHERE id = ? AND user_id = ? AND revoked_at IS NULL`,
+			at,
+			input.DisplayName,
+			at,
+			input.RegistrationID.String(),
+			input.UserID.String(),
+		); err != nil {
+			return nil, fmt.Errorf("rename Desktop Registration: %w", err)
+		}
+
+		// The rename instant never precedes rows stamped by PostgreSQL time
+		// or another node's clock; the model mirrors the stored values.
+		registration.UpdatedAt = latestTime(registration.UpdatedAt, at)
+		registration.RenamedAt = model.OptionalTimeFrom(latestTime(registration.CreatedAt, at))
+		registration.DisplayName = input.DisplayName
+
+		encoded, err := model.EncodeAuditData(registration.Auditable())
+		if err != nil {
+			return nil, err
+		}
+		if _, err = completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", encoded, input.AuditAt); err != nil {
+			return nil, fmt.Errorf("complete Desktop Registration rename audit: %w", err)
+		}
+
+		return registration, nil
+	})
 }
 
 // Revoke revokes the User's Desktop Registration together with its Sessions and
@@ -374,6 +452,7 @@ func (row desktopRegistrationRow) model() (*model.DesktopRegistration, error) {
 		Architecture:     model.DesktopArchitecture(row.Architecture),
 		RealtimeProtocol: row.RealtimeProtocol,
 		LastUsedAt:       row.LastUsedAt.UTC(),
+		RenamedAt:        OptionalTimeFromNullTime(row.RenamedAt),
 		RevokedAt:        OptionalTimeFromNullTime(row.RevokedAt),
 	}
 	if err = json.Unmarshal(row.PublicJWK, &value.PublicJWK); err != nil {

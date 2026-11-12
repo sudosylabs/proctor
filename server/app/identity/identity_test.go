@@ -502,6 +502,10 @@ func (authenticationSessionStore) RevokeAllForUser(context.Context, *store.UserS
 	return nil, errors.New("unused")
 }
 
+func (authenticationSessionStore) Rename(context.Context, *store.SessionRename) (*model.Session, error) {
+	return nil, errors.New("unused")
+}
+
 type authenticationSessionCredentialStore struct{ root *authenticationStoreFake }
 
 func (s authenticationSessionCredentialStore) GetSessionByTokenHash(

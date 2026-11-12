@@ -61,3 +61,24 @@ func TestAuditSelfEventsNameTerminalFactsOnly(t *testing.T) {
 	require.True(t, AuditSelfEventSessionsRevokedOthers.IsValid())
 	require.False(t, AuditSelfEvent("mfa.activate").IsValid())
 }
+
+func TestAuditSelfEventsNameDeviceRenames(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		action    Action
+		operation string
+		event     AuditSelfEvent
+	}{
+		{ActionDesktopRegistrationRename, AuditOperationRenameDesktopRegistration, AuditSelfEventDesktopRegistrationRenamed},
+		{ActionSessionManage, AuditOperationRenameOwnSession, AuditSelfEventSessionRenamed},
+	} {
+		t.Run(string(test.event), func(t *testing.T) {
+			t.Parallel()
+			for _, status := range []AuditStatus{AuditStatusSuccess, AuditStatusFail} {
+				got, ok := AuditSelfEventFor(string(test.action), test.operation, status)
+				require.True(t, ok, "%s %s", test.action, status)
+				require.Equal(t, test.event, got)
+			}
+		})
+	}
+}

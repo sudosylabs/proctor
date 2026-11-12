@@ -283,6 +283,10 @@ codes:
     description: "The supplied Desktop Compatibility Policy revision is stale; `fields.current_revision` carries the current revision."
   - code: desktop_compatibility_policy.unavailable
     description: "The Desktop Compatibility Policy could not be read or saved; retry later."
+  - code: desktop_registration.invalid
+    description: "The Desktop Registration name is blank, too long, or contains a control character; `fields` names the rejected input."
+  - code: desktop_registration.revoked
+    description: "The Desktop Registration is revoked; it stays as security history and cannot be renamed."
   - code: desktop_registration.unavailable
     description: "The Desktop Registration change failed; retry later."
   - code: exam.archived
@@ -749,8 +753,12 @@ codes:
     description: "The node is at capacity for expensive work; retry after the `Retry-After` interval."
     transport: true
     retry_after: 1
+  - code: session.desktop_named_by_registration
+    description: "A Desktop Session takes its name from its Desktop Registration; rename that registration instead. `fields.desktop_registration_id` names it."
   - code: session.id.invalid
     description: "The Session identifier is malformed."
+  - code: session.invalid
+    description: "The Session name is blank, too long, or contains a control character; `fields` names the rejected input."
   - code: session.not_found
     description: "The Session does not exist or is not visible to the caller."
   - code: student_progression.conflict

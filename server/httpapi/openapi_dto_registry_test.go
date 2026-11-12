@@ -339,6 +339,8 @@ var openAPIDTOs = map[string]reflect.Type{
 	"RetentionRecordsResponse":                       reflect.TypeOf(retentionRecordsResponse{}),
 	"RetentionRetirement":                            reflect.TypeOf(retirementResponse{}),
 	"RevokeOtherSessionsResponse":                    reflect.TypeOf(revokeOtherSessionsResponse{}),
+	"RenameDesktopRegistrationRequest":               reflect.TypeOf(renameDesktopRegistrationRequest{}),
+	"RenameSessionRequest":                           reflect.TypeOf(renameSessionRequest{}),
 	"RevokeSessionRequest":                           reflect.TypeOf(revokeSessionRequest{}),
 	"RoleBindingResponse":                            reflect.TypeOf(roleBindingResponse{}),
 	"RoleResponse":                                   reflect.TypeOf(roleResponse{}),

@@ -223,6 +223,12 @@ successful completion. An unavailable required audit fails closed before
 post-commit cache or realtime effects. Self-service reasons never create an
 administrator security notice.
 
+Renaming one's own live browser or CLI Session is an audited self-service
+mutation under the same ownership rule, recorded as `session.manage` with the
+`rename_own_session` operation; it needs no recent authentication, changes no
+credential, and never records the chosen name in audit. A Desktop Session is
+named by its Desktop Registration and is renamed only through it.
+
 Repeating a single listed-Session revocation returns concealed not-found once
 that Session is revoked, with a failed mutation attempt when ownership was
 resolved. Logout on an already absent or revoked caller Session remains a

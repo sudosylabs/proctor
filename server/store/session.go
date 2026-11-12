@@ -41,6 +41,18 @@ type SessionRevocationResult struct {
 	TokenHashes []string
 }
 
+// SessionRename is the complete durable input for renaming one of a User's
+// browser or CLI Sessions under an already-persisted audit attempt.
+// DeviceName is the normalized name the User chose
+// (model.NormalizeSessionDeviceName).
+type SessionRename struct {
+	SessionID    model.SessionID
+	UserID       model.UserID
+	DeviceName   string
+	AuditEventID model.AuditEventID
+	AuditAt      time.Time
+}
+
 // SessionExpiryEnforcementResult reports the authoritative outcome of checking
 // one active Session against both of its durable expiry clocks. Expired is true
 // only when this call committed the Session and credential-family revocation.
@@ -101,6 +113,14 @@ type SessionStore interface {
 	Withdraw(context.Context, *SessionWithdrawal) ([]string, error)
 	Revoke(context.Context, *SessionRevocation) (*SessionRevocationResult, error)
 	RevokeAllForUser(context.Context, *UserSessionsRevocation) (*UserSessionsRevocationResult, error)
+	// Rename sets the device name of the User's live Web or CLI Session and
+	// completes the audit attempt as success in the same transaction. A
+	// Session that is missing, belongs to another User, or is revoked,
+	// archived, or expired by PostgreSQL time is ErrNotFound. A Desktop
+	// Session is ErrConflict and stays unchanged: its name belongs to its
+	// Desktop Registration. The Session row lock serializes a rename with
+	// revocation.
+	Rename(context.Context, *SessionRename) (*model.Session, error)
 	// PurgeRetired deletes retired Sessions and their credentials once their
 	// grace has passed and nothing else references them.
 	PurgeRetired(context.Context, *SessionPurge) (*SessionPurgeResult, error)

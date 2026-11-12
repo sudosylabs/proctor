@@ -11,6 +11,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,7 +46,46 @@ func TestDesktopRegistrationValidation(t *testing.T) {
 	registration.PrepareCreate(NewDesktopRegistrationID(), at)
 	err = registration.Validate()
 	require.NoError(t, err)
+	renamed := registration
+	renamed.RenamedAt = OptionalTimeFrom(at.Add(-time.Second))
+	require.Error(t, renamed.Validate(), "Validate() accepted a rename before creation")
+	renamed.RenamedAt = OptionalTimeFrom(at)
+	require.NoError(t, renamed.Validate())
 	registration.KeyThumbprint = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 	err = registration.Validate()
 	require.Error(t, err, "Validate() accepted a mismatched thumbprint")
+}
+
+func TestDeviceLabelNormalization(t *testing.T) {
+	normalizers := map[string]struct {
+		normalize func(string) (string, error)
+		maxRunes  int
+	}{
+		"DesktopRegistrationDisplayName": {NormalizeDesktopRegistrationDisplayName, DesktopRegistrationDisplayNameMaxRunes},
+		"SessionDeviceName":              {NormalizeSessionDeviceName, SessionDeviceNameMaxRunes},
+	}
+	for name, normalizer := range normalizers {
+		t.Run(name, func(t *testing.T) {
+			label, err := normalizer.normalize("  Lab laptop \u202Eright\u202C  ")
+			require.NoError(t, err)
+			require.Equal(t, "Lab laptop right", label)
+
+			label, err = normalizer.normalize(strings.Repeat("é", normalizer.maxRunes))
+			require.NoError(t, err)
+			require.Equal(t, strings.Repeat("é", normalizer.maxRunes), label)
+
+			for input, reason := range map[string]string{
+				"":             "blank",
+				" \t ":         "whitespace only",
+				"\u2066\u2069": "only stripped code points",
+				strings.Repeat("x", normalizer.maxRunes+1): "too long",
+				"line\nbreak": "control character",
+				"bad\xffbyte": "invalid UTF-8",
+			} {
+				_, err = normalizer.normalize(input)
+				var invalid *ValidationError
+				require.ErrorAs(t, err, &invalid, "%s label %q", reason, input)
+			}
+		})
+	}
 }

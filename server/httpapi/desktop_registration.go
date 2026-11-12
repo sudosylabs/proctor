@@ -8,9 +8,11 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -29,11 +31,29 @@ type desktopRegistrationResponse struct {
 	Current          bool   `json:"current"`
 }
 
-type desktopRegistrationHandlers struct {
-	app *identity.Service
+// renameDesktopRegistrationRequest names one of the caller's Desktop
+// Registrations.
+type renameDesktopRegistrationRequest struct {
+	DisplayName string `json:"display_name"`
 }
 
-func desktopRegistrationResource(app *identity.Service) route.Resource {
+type desktopRegistrationHandlers struct {
+	app DesktopRegistrations
+}
+
+// DesktopRegistrations is the application port its handlers call; it lists,
+// renames, and revokes the caller's own Desktop Registrations.
+type DesktopRegistrations interface {
+	ListDesktopRegistrations(context.Context, invocation.Invocation) ([]*model.DesktopRegistration, error)
+	RenameDesktopRegistration(
+		context.Context,
+		invocation.Invocation,
+		identity.RenameDesktopRegistrationCommand,
+	) (*model.DesktopRegistration, error)
+	RevokeDesktopRegistration(context.Context, invocation.Invocation, model.DesktopRegistrationID) error
+}
+
+func desktopRegistrationResource(app DesktopRegistrations) route.Resource {
 	h := desktopRegistrationHandlers{app: app}
 	collection := "/users/me/desktop-registrations"
 	item := "/users/me/desktop-registrations/{desktop_registration_id}"
@@ -50,6 +70,22 @@ func desktopRegistrationResource(app *identity.Service) route.Resource {
 				"request.invalid",
 			},
 			Handle: h.list,
+		},
+		route.Endpoint{
+			Method: http.MethodPatch,
+			Path:   item,
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{
+				"desktop_registration.invalid",
+				"desktop_registration.revoked",
+				"desktop_registration.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"audit.unavailable",
+				"authentication.session_required",
+				"authentication.reauthentication_required",
+			},
+			Handle: h.rename,
 		},
 		route.Endpoint{
 			Method: http.MethodDelete,
@@ -90,6 +126,34 @@ func (h desktopRegistrationHandlers) list(request route.Request) (route.Result, 
 	}
 
 	return route.JSON(http.StatusOK, response).WithHeaders(privateNoStoreHeaders()), nil
+}
+
+// rename needs only an interactive Session, unlike revoke: a name changes no
+// key, Session, or credential, and it is visible only in the User's own lists.
+func (h desktopRegistrationHandlers) rename(request route.Request) (route.Result, error) {
+	registrationID, err := route.PathID[model.DesktopRegistrationID](request, "desktop_registration_id")
+	if err != nil {
+		return route.Result{}, err
+	}
+	var input renameDesktopRegistrationRequest
+	if err = request.DecodeJSON(&input); err != nil {
+		return route.Result{}, err
+	}
+
+	renamed, err := h.app.RenameDesktopRegistration(
+		request.Context,
+		request.Invocation(),
+		identity.RenameDesktopRegistrationCommand{RegistrationID: registrationID, DisplayName: input.DisplayName},
+	)
+	if err != nil {
+		return route.Result{}, err
+	}
+
+	principal, _ := route.Principal(request.Context)
+	return route.JSON(
+		http.StatusOK,
+		desktopRegistrationResponseFromModel(renamed, principal.DesktopRegistrationID == renamed.ID),
+	).WithHeaders(privateNoStoreHeaders()), nil
 }
 
 func (h desktopRegistrationHandlers) revoke(request route.Request) (route.Result, error) {

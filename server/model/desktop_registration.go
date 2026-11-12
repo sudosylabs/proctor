@@ -14,7 +14,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"math/big"
+	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -117,7 +119,11 @@ type DesktopRegistration struct {
 	Architecture     DesktopArchitecture
 	RealtimeProtocol int
 	LastUsedAt       time.Time
-	RevokedAt        OptionalTime
+	// RenamedAt is when the User last chose DisplayName. Once set, a later
+	// Desktop sign-in with the same key keeps the chosen name instead of the
+	// device name the Desktop reports.
+	RenamedAt OptionalTime
+	RevokedAt OptionalTime
 }
 
 func (r *DesktopRegistration) PrepareCreate(id DesktopRegistrationID, at time.Time) {
@@ -169,11 +175,50 @@ func (r *DesktopRegistration) Validate() error {
 		return invalidModelError(where, "desktop_registration", "metadata", "is invalid", "")
 	}
 
+	if r.RenamedAt.Valid && (r.RenamedAt.Time.Before(r.CreatedAt) || r.RenamedAt.Time.After(r.UpdatedAt)) {
+		return invalidModelError(where, "desktop_registration", "renamed_at", "must be within the lifecycle", "")
+	}
+
 	if r.RevokedAt.Valid && (r.RevokedAt.Time.Before(r.CreatedAt) || r.RevokedAt.Time.After(r.UpdatedAt)) {
 		return invalidModelError(where, "desktop_registration", "revoked_at", "must be within the lifecycle", "")
 	}
 
 	return nil
+}
+
+// NormalizeDesktopRegistrationDisplayName returns the name a User chose for
+// one of their Desktop Registrations as it is stored: trimmed and stripped of
+// the same bidirectional and invisible code points every stored label loses.
+// A blank name, a control character, or more than
+// DesktopRegistrationDisplayNameMaxRunes runes is invalid.
+func NormalizeDesktopRegistrationDisplayName(value string) (string, error) {
+	return normalizeDeviceLabel("desktop_registration", "display_name", value, DesktopRegistrationDisplayNameMaxRunes)
+}
+
+// NormalizeSessionDeviceName returns the name a User chose for one of their
+// browser or CLI Sessions as it is stored, under the same rules as
+// NormalizeDesktopRegistrationDisplayName and the SessionDeviceNameMaxRunes
+// bound.
+func NormalizeSessionDeviceName(value string) (string, error) {
+	return normalizeDeviceLabel("session", "device_name", value, SessionDeviceNameMaxRunes)
+}
+
+func normalizeDeviceLabel(modelName, field, value string, maxRunes int) (string, error) {
+	const where = "normalizeDeviceLabel"
+	if !utf8.ValidString(value) {
+		return "", invalidModelError(where, modelName, field, "must be valid UTF-8", "")
+	}
+	label := strings.TrimSpace(SanitizeUnicode(value))
+	if label == "" {
+		return "", invalidModelError(where, modelName, field, "is required", "")
+	}
+	if utf8.RuneCountInString(label) > maxRunes {
+		return "", invalidModelError(where, modelName, field, "is too long", "")
+	}
+	if strings.ContainsFunc(label, unicode.IsControl) {
+		return "", invalidModelError(where, modelName, field, "must not contain control characters", "")
+	}
+	return label, nil
 }
 
 func (r *DesktopRegistration) IsActive() bool {

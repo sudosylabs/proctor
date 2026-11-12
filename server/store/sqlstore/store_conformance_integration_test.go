@@ -161,6 +161,7 @@ func runLayerConformance(
 		{"PersonalAccessToken", storetest.TestPersonalAccessTokenStore},
 		{"MFA", storetest.TestMFAStore},
 		{"Session", storetest.TestSessionStores},
+		{"DesktopRegistration", storetest.TestDesktopRegistrationStore},
 		{"ClusterDiscovery", storetest.TestClusterDiscoveryStore},
 		{"Affiliation", storetest.TestAffiliationStore},
 		{"AcademicUnitMember", storetest.TestAcademicUnitMemberStore},
@@ -1337,6 +1338,10 @@ func TestMFAStore(t *testing.T) {
 
 func TestSessionStores(t *testing.T) {
 	StoreTestWithAuthenticationPolicy(t, nil, storetest.TestSessionStores)
+}
+
+func TestDesktopRegistrationStore(t *testing.T) {
+	StoreTest(t, storetest.TestDesktopRegistrationStore)
 }
 
 func TestClusterDiscoveryStore(t *testing.T) {

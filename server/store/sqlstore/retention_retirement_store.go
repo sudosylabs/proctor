@@ -498,14 +498,10 @@ func retireSubmissionIntegrity(ctx context.Context, tx *sqlxTxWrapper, id model.
 	// archive and exact retry survive source retirement without copying content.
 	queries := []string{
 		`DELETE FROM native_condition_evidence WHERE exam_attempt_id = (SELECT exam_attempt_id FROM exam_submissions WHERE id = ?)`,
-		`DELETE FROM exam_native_occurrences
-		WHERE participation_id IN (
-			SELECT participation_id
-			FROM exam_attempt_security_owners
-			WHERE exam_attempt_id = (SELECT exam_attempt_id FROM exam_submissions WHERE id = ?)
-		)`,
+		`UPDATE exam_attempt_security_owners SET native_interpretation_canonical = NULL
+		WHERE exam_attempt_id = (SELECT exam_attempt_id FROM exam_submissions WHERE id = ?)`,
 		`DELETE FROM exam_native_delivery_records
-		WHERE kind = 'occurrence'
+		WHERE kind IN ('capability_fact', 'rule_status')
 			AND participation_id IN (
 				SELECT participation_id
 				FROM exam_attempt_security_owners

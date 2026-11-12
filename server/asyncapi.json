@@ -3743,7 +3743,7 @@
       },
       "exam_attempt_integrity_flagged": {
         "additionalProperties": false,
-        "description": "A Focus Loss Integrity Flag, its policy outcome and how many evidence episodes were kept or overflowed. The evidence itself is never included.",
+        "description": "An Integrity Flag a policy raised or added evidence to (Focus Loss, or native.\u003ccapability\u003e when an enforce rule's occurrence opens), its policy outcome and how many evidence episodes were kept or overflowed. The evidence itself is never included.",
         "properties": {
           "candidate_user_id": {
             "$ref": "#/components/schemas/id"

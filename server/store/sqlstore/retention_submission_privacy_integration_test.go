@@ -69,13 +69,14 @@ func TestRetentionSubmissionPrivacy(t *testing.T) {
 			require.NoError(t, s.GetMaster().Get(ctx, &privateOutcomes, `SELECT count(*) FROM command_outcomes o JOIN audit_events a ON a.id=o.original_audit_event_id WHERE a.resource_type='submission' AND a.resource_id=? AND o.outcome::text LIKE '%private-retirement-review-note%'`, id.String()))
 			var nativeCopies, nativeDeliveryCopies int
 			require.NoError(t, s.GetMaster().Get(ctx, &nativeCopies, `SELECT count(*) FROM native_condition_evidence WHERE exam_attempt_id=(SELECT exam_attempt_id FROM exam_submissions WHERE id=?)`, id.String()))
-			require.NoError(t, s.GetMaster().Get(ctx, &nativeDeliveryCopies, `SELECT count(*) FROM exam_native_delivery_records WHERE kind='occurrence' AND participation_id IN (SELECT participation_id FROM exam_attempt_security_owners WHERE exam_attempt_id=(SELECT exam_attempt_id FROM exam_submissions WHERE id=?))`, id.String()))
-			expected := 1
+			require.NoError(t, s.GetMaster().Get(ctx, &nativeDeliveryCopies, `SELECT count(*) FROM exam_native_delivery_records WHERE kind IN ('capability_fact','rule_status') AND participation_id IN (SELECT participation_id FROM exam_attempt_security_owners WHERE exam_attempt_id=(SELECT exam_attempt_id FROM exam_submissions WHERE id=?))`, id.String()))
+			// Start's two readiness rule statuses, and Desktop's one rule status.
+			expectedCopies, expectedRecords := 2, 1
 			if retired {
-				expected = 0
+				expectedCopies, expectedRecords = 0, 0
 			}
-			require.Equal(t, expected, nativeCopies, "native condition retirement copies")
-			require.Equal(t, expected, nativeDeliveryCopies, "native condition retirement copies")
+			require.Equal(t, expectedCopies, nativeCopies, "native condition retirement copies")
+			require.Equal(t, expectedRecords, nativeDeliveryCopies, "native condition retirement copies")
 			if !retired {
 				require.Equal(t, 2, sources, "fixture lacks source chain or replay copies")
 				require.GreaterOrEqual(t, privateOutcomes, 1, "fixture lacks source chain or replay copies")
@@ -114,7 +115,7 @@ func TestRetentionNativeOperationalIndependence(t *testing.T) {
 			(SELECT count(*) FROM exam_native_delivery_records r JOIN exam_attempt_security_owners o ON o.participation_id=r.participation_id WHERE o.exam_attempt_id=sub.exam_attempt_id) AS raw,
 			b.security_retired_at IS NOT NULL AS retired, sub.integrity_retired_at IS NULL AS integrity_retained
 			FROM exam_submissions sub JOIN exam_attempt_delivery_budgets b ON b.exam_attempt_id=sub.exam_attempt_id WHERE sub.id=?`, id.String()))
-			require.Equal(t, 1, row.Copies)
+			require.Equal(t, 2, row.Copies)
 			require.Equal(t, 0, row.Raw)
 			require.True(t, row.Retired)
 			require.True(t, row.IntegrityRetained)

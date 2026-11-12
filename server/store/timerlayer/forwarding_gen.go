@@ -1723,8 +1723,8 @@ func (s *timedNativeDeliveryStore) NativeDeliveryReceipt(arg0 context.Context, a
 	})
 }
 
-func (s *timedNativeDeliveryStore) AppendNativeDelivery(arg0 context.Context, arg1 *store.NativeDeliveryAppend, arg2 *store.CommandIdempotency) (*model.NativeSecurityAcknowledgement, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateNativeDelivery, methodAppendNativeDelivery), func(callCtx context.Context) (*model.NativeSecurityAcknowledgement, error) {
+func (s *timedNativeDeliveryStore) AppendNativeDelivery(arg0 context.Context, arg1 *store.NativeDeliveryAppend, arg2 *store.CommandIdempotency) (*store.NativeDeliveryAppended, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateNativeDelivery, methodAppendNativeDelivery), func(callCtx context.Context) (*store.NativeDeliveryAppended, error) {
 		return s.next.AppendNativeDelivery(callCtx, arg1, arg2)
 	})
 }

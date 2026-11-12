@@ -1602,26 +1602,25 @@ func TestSecureConnectStore(t *testing.T) {
 func TestNativeDeliveryAppendStore(t *testing.T) {
 	s := openTestStore(t)
 	resetTestStore(t, s)
-	storetest.TestNativeDeliveryAppendStore(t, s, func(part model.AttemptParticipationID, records, occurrences int64) {
+	storetest.TestNativeDeliveryAppendStore(t, s, func(part model.AttemptParticipationID, records, flags int64) {
 		var row struct {
-			Records     int64 `db:"records"`
-			Occurrences int64 `db:"occurrences"`
-			Unresolved  int64 `db:"unresolved"`
-			Pending     int64 `db:"pending"`
-			Flags       int64 `db:"flags"`
-			Bytes       int64 `db:"bytes"`
-			Counted     int64 `db:"counted"`
-			Metadata    int64 `db:"metadata"`
+			Records        int64  `db:"records"`
+			Pending        int64  `db:"pending"`
+			Flags          int64  `db:"flags"`
+			Bytes          int64  `db:"bytes"`
+			Counted        int64  `db:"counted"`
+			Metadata       int64  `db:"metadata"`
+			Interpretation []byte `db:"interpretation"`
 		}
-		err := s.GetMaster().Get(context.Background(), &row, `SELECT o.retained_records AS records,(SELECT count(*) FROM exam_native_occurrences WHERE participation_id=o.participation_id) AS occurrences,(SELECT count(*) FROM exam_native_occurrences WHERE participation_id=o.participation_id AND unresolved_opener) AS unresolved,b.native_pending_bytes AS pending,(SELECT count(*) FROM integrity_flags WHERE exam_attempt_id=o.exam_attempt_id) AS flags,o.retained_bytes AS bytes,(SELECT sum(counted_bytes) FROM exam_native_delivery_batches WHERE participation_id=o.participation_id) AS counted,b.control_metadata_bytes AS metadata FROM exam_attempt_security_owners o JOIN exam_attempt_delivery_budgets b USING(exam_attempt_id) WHERE o.participation_id=?`, part.String())
+		err := s.GetMaster().Get(context.Background(), &row, `SELECT o.retained_records AS records,b.native_pending_bytes AS pending,(SELECT count(*) FROM integrity_flags WHERE exam_attempt_id=o.exam_attempt_id) AS flags,o.retained_bytes AS bytes,(SELECT sum(counted_bytes) FROM exam_native_delivery_batches WHERE participation_id=o.participation_id) AS counted,b.control_metadata_bytes AS metadata,o.native_interpretation_canonical AS interpretation FROM exam_attempt_security_owners o JOIN exam_attempt_delivery_budgets b USING(exam_attempt_id) WHERE o.participation_id=?`, part.String())
 		require.NoError(t, err)
 		require.Equal(t, records, row.Records)
-		require.Equal(t, occurrences, row.Occurrences)
-		require.Equal(t, int64(1), row.Unresolved)
 		require.Equal(t, int64(0), row.Pending)
-		require.Equal(t, int64(0), row.Flags)
+		require.Equal(t, flags, row.Flags)
 		require.Equal(t, row.Counted, row.Bytes)
 		require.Greater(t, row.Metadata, model.NativeOwnerReservationBytes)
+		var interpretation model.NativeInterpretation
+		require.NoError(t, json.Unmarshal(row.Interpretation, &interpretation), "the interpretation is kept with the owner")
 	})
 }
 

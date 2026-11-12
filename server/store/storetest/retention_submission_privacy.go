@@ -252,13 +252,13 @@ func testRetentionSubmissionPrivacy(t *testing.T, ss store.Store, probe Retentio
 		}
 		page, examErr := ss.ExamIntegrityReview().ListNativeConditions(ctx, store.NativeConditionListOptions{SubmissionID: subID, Limit: 100})
 		require.NoError(t, examErr)
-		require.Len(t, page.Items, 1, "operational retirement erased independent native review evidence")
+		require.Len(t, page.Items, 2, "operational retirement erased independent native review evidence")
 		require.NoError(t, page.Items[0].Validate(), "operational retirement erased independent native review evidence")
 		snapshot, examErr := ss.ExamIntegrityReview().Get(ctx, subID)
 		require.NoError(t, examErr)
 		require.NotNil(t, snapshot.Review, "operational retirement invalidated retained integrity inventory")
 		require.Equal(t, model.SubmissionReviewFinalized, snapshot.Review.State, "operational retirement invalidated retained integrity inventory")
-		require.Equal(t, int64(1), snapshot.NativeConditions.Records, "operational retirement invalidated retained integrity inventory")
+		require.Equal(t, int64(2), snapshot.NativeConditions.Records, "operational retirement invalidated retained integrity inventory")
 		return
 	}
 	probe.Inspect(t, ctx, subID, true)
@@ -268,8 +268,9 @@ func testRetentionSubmissionPrivacy(t *testing.T, ss store.Store, probe Retentio
 	nativeInput.Access.Access.ConnectionID = ""
 	nativeInput.Access.Access.ContinuityCredentialHash = ""
 	nativeInput.Batch.BatchSequence = 2
-	nativeInput.Batch.Records[0].Occurrence.Status = "repeated"
-	nativeInput.Batch.Records[0].Occurrence.RepeatCount = 2
+	later := *nativeInput.Batch.Records[0].RuleStatus
+	later.ObservedAt = later.ObservedAt.Add(time.Second)
+	nativeInput.Batch.Records = []model.NativeRecord{{RuleStatus: &later}}
 	nativeInput.AuditEventID = saveExamAttemptAudit(t, ctx, ss, f).ID
 	nativeInput.AuditAt = model.NowUTC()
 	_, err = ss.NativeDelivery().AppendNativeDelivery(ctx, nativeInput, examCommand(f.candidate.ID, store.NativeDeliveryAppendOperation, "retired-native-new", "retired-native-new"))
@@ -360,15 +361,11 @@ func appendRetirementNativeCondition(t *testing.T, ctx context.Context, ss store
 	t.Helper()
 	renewal := &store.ExamAttemptParticipationRenewal{AttemptID: access.AttemptID, ParticipationID: connected.Participation.ID, ConnectionID: access.ConnectionID, CandidateUserID: access.CandidateUserID, SessionID: access.SessionID, DesktopRegistrationID: access.DesktopRegistrationID, DPoPKeyThumbprint: access.DPoPKeyThumbprint, ContinuityCredentialHash: access.ContinuityCredentialHash, Generation: connected.Participation.Generation, DesktopCompatibilityPolicyRevision: 1}
 	prepareParticipationRenewalCoverage(t, ctx, ss, renewal)
-	var source model.NativeSourceCoverage
-	for _, candidate := range renewal.SecurityCoverage.Sources {
-		if candidate.SourceID == model.NativeSourceCapture {
-			source = candidate
-		}
-	}
 	at := model.NowUTC().Truncate(time.Millisecond)
-	occurrence := model.NativeOccurrence{Kind: "occurrence", OccurrenceID: model.NewID(), ConditionID: "baseline.capture", DetectorID: "synthetic-baseline", DetectorVersion: 1, CapabilityID: "baseline", Mode: model.NativeClaimEnforce, Status: "opened", FirstObservedAt: at, LastConfirmedAt: at, RepeatCount: 1, Certainty: "complete", SourceRanges: []model.NativeSourceRange{{SourceID: source.SourceID, SourceInstanceID: source.SourceInstanceID, FirstSequence: 0, LastSequence: 1}}}
-	b := model.NativeSecurityBatch{StreamID: connected.Security.DeliveryStreamID, BatchSequence: 1, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, SecuritySessionID: connected.Security.SecuritySessionID, PolicyDigest: connected.Security.Policy.Digest, ApplicationReleaseID: connected.Security.Policy.ApplicationReleaseID, MatrixID: connected.Security.Policy.MatrixID, Records: []model.NativeRecord{{Occurrence: &occurrence}}}
+	// Desktop agrees the window rule is met: no rule changes, so the Attempt's
+	// native evidence is the two readiness rule statuses kept at Start.
+	status := model.NativeRuleStatusReport{Kind: "rule_status", RuleID: "baseline.window", Status: model.NativeRuleMet, ObservedAt: at}
+	b := model.NativeSecurityBatch{StreamID: connected.Security.DeliveryStreamID, BatchSequence: 1, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, SecuritySessionID: connected.Security.SecuritySessionID, PolicyDigest: connected.Security.Policy.Digest, ApplicationReleaseID: connected.Security.Policy.ApplicationReleaseID, MatrixID: connected.Security.Policy.MatrixID, Records: []model.NativeRecord{{RuleStatus: &status}}}
 	input := &store.NativeDeliveryAppend{Access: store.NativeDeliveryAccess{Access: access, StreamID: b.StreamID, ParticipationID: b.ParticipationID, Generation: b.Generation}, Batch: b, DesktopBuild: renewal.DesktopBuild, AuditEventID: saveExamAttemptAudit(t, ctx, ss, f).ID, AuditAt: model.NowUTC()}
 	_, err := ss.NativeDelivery().AppendNativeDelivery(ctx, input, examCommand(f.candidate.ID, store.NativeDeliveryAppendOperation, "retirement-native", "retirement-native"))
 	require.NoError(t, err)

@@ -42,14 +42,8 @@ func TestDeliveryCorruptReads(t *testing.T) {
 			read = `SELECT record_canonical FROM exam_native_delivery_records WHERE participation_id=? AND batch_sequence=4 AND record_index=0`
 			write = `UPDATE exam_native_delivery_records SET record_canonical=? WHERE participation_id=? AND batch_sequence=4 AND record_index=0`
 			id = part.String()
-			var raw []byte
-			require.NoError(t, s.GetMaster().Get(ctx, &raw, read, id))
-			var record model.NativeRecord
-			require.NoError(t, json.Unmarshal(raw, &record))
-			record.Occurrence.Status = "opened"
-			var err error
-			invalid, err = json.Marshal(record)
-			require.NoError(t, err)
+			// A fact that lost its state is no longer a contract record.
+			invalid = []byte(`{"kind":"capability_fact"}`)
 		case "native_source_sequence", "native_source_id", "native_coverage_state":
 			read = `SELECT latest_report_canonical FROM exam_attempt_security_owners WHERE participation_id=?`
 			write = `UPDATE exam_attempt_security_owners SET latest_report_canonical=? WHERE participation_id=?`

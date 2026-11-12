@@ -1,6 +1,6 @@
 {
   "title": "Attempt Integrity Flag raised",
-  "description": "A Focus Loss Integrity Flag, its policy outcome and how many evidence episodes were kept or overflowed. The evidence itself is never included.",
+  "description": "An Integrity Flag a policy raised or added evidence to (Focus Loss, or native.<capability> when an enforce rule's occurrence opens), its policy outcome and how many evidence episodes were kept or overflowed. The evidence itself is never included.",
   "type": "object",
   "additionalProperties": false,
   "required": [

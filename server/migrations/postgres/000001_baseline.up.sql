@@ -5289,7 +5289,10 @@ CREATE TABLE exam_attempt_security_owners (
     stop_reason varchar(40) CHECK (stop_reason IN ('records','bytes','positions','metadata','local_loss_inventory_exhausted')),
  retained_records bigint NOT NULL DEFAULT 0 CHECK(retained_records BETWEEN 0 AND 50000),
  retained_bytes bigint NOT NULL DEFAULT 0 CHECK(retained_bytes BETWEEN 0 AND 33554432),
- interpreted_through_sequence bigint NOT NULL DEFAULT 0 CHECK(interpreted_through_sequence BETWEEN 0 AND 20000)
+ interpreted_through_sequence bigint NOT NULL DEFAULT 0 CHECK(interpreted_through_sequence BETWEEN 0 AND 20000),
+ -- The server's evaluation of the native rules: each capability's latest
+ -- facts and each rule's tracker. NULL once retired.
+ native_interpretation_canonical bytea CHECK(octet_length(native_interpretation_canonical) <= 262144)
 );
 CREATE INDEX exam_attempt_security_owners_attempt ON exam_attempt_security_owners(exam_attempt_id);
 
@@ -5324,21 +5327,11 @@ CREATE TABLE exam_native_delivery_records (
  participation_id varchar(26) NOT NULL,
  batch_sequence bigint NOT NULL,
  record_index smallint NOT NULL CHECK(record_index BETWEEN 0 AND 63),
- kind varchar(24) NOT NULL CHECK(kind IN ('occurrence','coverage_transition','source_reset','source_gap')),
+ kind varchar(24) NOT NULL CHECK(kind IN ('capability_fact','participation_confirmed','rule_status','coverage_transition','source_reset','source_gap')),
  record_canonical bytea NOT NULL CHECK(octet_length(record_canonical) <= 262144),
  metadata_canonical bytea NOT NULL CHECK(octet_length(metadata_canonical) <= 65536),
  PRIMARY KEY(participation_id,batch_sequence,record_index),
  FOREIGN KEY(participation_id,batch_sequence) REFERENCES exam_native_delivery_batches(participation_id,batch_sequence)
-);
-
-CREATE TABLE exam_native_occurrences (
- participation_id varchar(26) NOT NULL,
- occurrence_id varchar(128) NOT NULL,
- batch_sequence bigint NOT NULL,
- record_index smallint NOT NULL,
- unresolved_opener boolean NOT NULL,
- PRIMARY KEY(participation_id,occurrence_id),
- FOREIGN KEY(participation_id,batch_sequence,record_index) REFERENCES exam_native_delivery_records(participation_id,batch_sequence,record_index)
 );
 
 CREATE TABLE browser_delivery_retired_sources (
@@ -5414,10 +5407,12 @@ CREATE TABLE native_condition_evidence (
  id varchar(26) PRIMARY KEY,
  exam_attempt_id varchar(26) NOT NULL REFERENCES exam_attempts(id),
  participation_id varchar(26) NOT NULL REFERENCES exam_attempt_participations(id),
- batch_sequence bigint NOT NULL CHECK(batch_sequence BETWEEN 1 AND 20000),
+ -- Batch 0 is the state Desktop reported at Start.
+ batch_sequence bigint NOT NULL CHECK(batch_sequence BETWEEN 0 AND 20000),
  record_index smallint NOT NULL CHECK(record_index BETWEEN 0 AND 63),
+ transition_index smallint NOT NULL CHECK(transition_index BETWEEN 0 AND 127),
  canonical bytea NOT NULL CHECK(octet_length(canonical) BETWEEN 1 AND 264192),
- UNIQUE(participation_id,batch_sequence,record_index)
+ UNIQUE(participation_id,batch_sequence,record_index,transition_index)
 );
 CREATE INDEX native_condition_evidence_attempt ON native_condition_evidence(exam_attempt_id,id);
 CREATE FUNCTION guard_native_condition_evidence() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -5473,10 +5468,6 @@ ALTER TABLE exam_native_delivery_batches
 
 ALTER TABLE exam_native_delivery_records
     ADD CONSTRAINT exam_native_delivery_records_participation_id_canonical_check
-    CHECK (participation_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
-
-ALTER TABLE exam_native_occurrences
-    ADD CONSTRAINT exam_native_occurrences_participation_id_canonical_check
     CHECK (participation_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
 
 ALTER TABLE browser_delivery_retired_sources

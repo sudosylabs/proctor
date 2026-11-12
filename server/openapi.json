@@ -20649,6 +20649,88 @@
         ],
         "type": "object"
       },
+      "NativeCapabilityFact": {
+        "additionalProperties": false,
+        "description": "One activated capability's full minimized state as Desktop observed it, with its envelope. Desktop sends a fact whenever the state or the envelope changes; the server checks it against the capability's published schemas and evaluates the policy's rules on it again. A fact no newer than the latest of its source instance changes nothing.",
+        "properties": {
+          "capability": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "certainty": {
+            "enum": [
+              "complete",
+              "partial",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "health": {
+            "enum": [
+              "unsupported",
+              "healthy",
+              "degraded",
+              "failed",
+              "stopped"
+            ],
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "capability_fact"
+            ],
+            "type": "string"
+          },
+          "observed_at": {
+            "description": "The device time of the observation, in whole milliseconds.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "permission": {
+            "enum": [
+              "not_determined",
+              "granted",
+              "denied",
+              "restricted",
+              "unavailable"
+            ],
+            "type": "string"
+          },
+          "sequence": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source_instance_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "type": "string"
+          },
+          "state": {
+            "description": "The full state, valid against its published state schema. State and summary are at most 16 KiB together.",
+            "type": "object"
+          },
+          "summary": {
+            "description": "The counts derived from the state, valid against its published summary schema.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "kind",
+          "observed_at",
+          "capability",
+          "source_instance_id",
+          "sequence",
+          "permission",
+          "health",
+          "certainty",
+          "state",
+          "summary"
+        ],
+        "type": "object"
+      },
       "NativeCapabilityReadiness": {
         "additionalProperties": false,
         "properties": {
@@ -20867,7 +20949,7 @@
           "batch_sequence": {
             "format": "int64",
             "maximum": 20000,
-            "minimum": 1,
+            "minimum": 0,
             "type": "integer"
           },
           "generation": {
@@ -20889,9 +20971,6 @@
             "maxLength": 128,
             "minLength": 1,
             "type": "string"
-          },
-          "occurrence": {
-            "$ref": "#/components/schemas/NativeOccurrence"
           },
           "participation_id": {
             "maxLength": 26,
@@ -20926,8 +21005,8 @@
             "minLength": 1,
             "type": "string"
           },
-          "unresolved_opener": {
-            "type": "boolean"
+          "transition": {
+            "$ref": "#/components/schemas/NativeRuleTransition"
           }
         },
         "required": [
@@ -20943,8 +21022,7 @@
           "matrix_id",
           "batch_sequence",
           "record_index",
-          "occurrence",
-          "unresolved_opener",
+          "transition",
           "received_at",
           "interpreted_at"
         ],
@@ -21079,120 +21157,34 @@
         ],
         "type": "object"
       },
-      "NativeOccurrence": {
+      "NativeParticipationConfirmed": {
         "additionalProperties": false,
+        "description": "Where the exam begins on the stream: Desktop sends it once, when the candidate window mounts after admission. Before it the server applies the policy's readiness rules; from it, the participation rules.",
         "properties": {
-          "capability_id": {
-            "maxLength": 128,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-            "type": "string"
-          },
-          "certainty": {
-            "enum": [
-              "complete",
-              "partial",
-              "unknown"
-            ],
-            "type": "string"
-          },
-          "condition_id": {
-            "maxLength": 128,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-            "type": "string"
-          },
-          "detector_id": {
-            "maxLength": 128,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-            "type": "string"
-          },
-          "detector_version": {
-            "format": "int64",
-            "maximum": 9007199254740991,
-            "minimum": 1,
-            "type": "integer"
-          },
-          "first_observed_at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "gap_count": {
-            "format": "int64",
-            "maximum": 9007199254740991,
-            "minimum": 0,
-            "type": "integer"
-          },
           "kind": {
             "enum": [
-              "occurrence"
+              "participation_confirmed"
             ],
             "type": "string"
           },
-          "last_confirmed_at": {
+          "observed_at": {
             "format": "date-time",
-            "type": "string"
-          },
-          "mode": {
-            "enum": [
-              "observe",
-              "enforce"
-            ],
-            "type": "string"
-          },
-          "occurrence_id": {
-            "maxLength": 128,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-            "type": "string"
-          },
-          "repeat_count": {
-            "format": "int64",
-            "maximum": 9007199254740991,
-            "minimum": 1,
-            "type": "integer"
-          },
-          "source_ranges": {
-            "items": {
-              "$ref": "#/components/schemas/NativeSourceRange"
-            },
-            "maxItems": 11,
-            "minItems": 1,
-            "type": "array"
-          },
-          "status": {
-            "enum": [
-              "opened",
-              "repeated",
-              "recovered"
-            ],
             "type": "string"
           }
         },
         "required": [
           "kind",
-          "occurrence_id",
-          "condition_id",
-          "detector_id",
-          "detector_version",
-          "capability_id",
-          "mode",
-          "status",
-          "first_observed_at",
-          "last_confirmed_at",
-          "repeat_count",
-          "certainty",
-          "gap_count",
-          "source_ranges"
+          "observed_at"
         ],
         "type": "object"
       },
       "NativeRecord": {
         "discriminator": {
           "mapping": {
+            "capability_fact": "#/components/schemas/NativeCapabilityFact",
             "coverage_transition": "#/components/schemas/NativeCoverageTransition",
-            "occurrence": "#/components/schemas/NativeOccurrence",
+            "participation_confirmed": "#/components/schemas/NativeParticipationConfirmed",
+            "rule_status": "#/components/schemas/NativeRuleStatusReport",
             "source_gap": "#/components/schemas/NativeSourceGap",
             "source_reset": "#/components/schemas/NativeSourceReset"
           },
@@ -21200,7 +21192,13 @@
         },
         "oneOf": [
           {
-            "$ref": "#/components/schemas/NativeOccurrence"
+            "$ref": "#/components/schemas/NativeCapabilityFact"
+          },
+          {
+            "$ref": "#/components/schemas/NativeParticipationConfirmed"
+          },
+          {
+            "$ref": "#/components/schemas/NativeRuleStatusReport"
           },
           {
             "$ref": "#/components/schemas/NativeCoverageTransition"
@@ -21291,6 +21289,116 @@
         "required": [
           "rule_id",
           "status"
+        ],
+        "type": "object"
+      },
+      "NativeRuleStatusReport": {
+        "additionalProperties": false,
+        "description": "Desktop's own status for one participation rule and whether it is containing the candidate window because of it. The server's status is authoritative; a disagreement is counted, never applied.",
+        "properties": {
+          "contained": {
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "rule_status"
+            ],
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "rule_id": {
+            "maxLength": 128,
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "met",
+              "not_met",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "unknown_cause": {
+            "description": "Why the rule is unknown; present only when status is unknown.",
+            "enum": [
+              "unavailable",
+              "gap",
+              "unhealthy",
+              "permission",
+              "partial",
+              "checking"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "rule_id",
+          "status",
+          "contained",
+          "observed_at"
+        ],
+        "type": "object"
+      },
+      "NativeRuleTransition": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "description": "The device time of the change; it never moves backwards within a Participation.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "capability": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "event": {
+            "enum": [
+              "opened",
+              "closed"
+            ],
+            "type": "string"
+          },
+          "from": {
+            "$ref": "#/components/schemas/NativeRuleReport"
+          },
+          "mode": {
+            "enum": [
+              "enforce",
+              "observe"
+            ],
+            "type": "string"
+          },
+          "occurrence": {
+            "description": "The rule's occurrence this change opened or closed, counted from 1 per Participation.",
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "reason": {
+            "description": "The reason ID Desktop's registry publishes for the rule; Desktop owns its wording.",
+            "maxLength": 128,
+            "type": "string"
+          },
+          "rule_id": {
+            "maxLength": 128,
+            "type": "string"
+          },
+          "to": {
+            "$ref": "#/components/schemas/NativeRuleReport"
+          }
+        },
+        "required": [
+          "rule_id",
+          "capability",
+          "mode",
+          "reason",
+          "to",
+          "at"
         ],
         "type": "object"
       },
@@ -50521,7 +50629,7 @@
     },
     "/api/v1/submissions/{submission_id}/native-conditions": {
       "get": {
-        "description": "Requires the same current Submission integrity-view authorization as detailed evidence. Returns selected catalog-validated occurrence transitions without creating a Flag or declaring a violation. Includes original receipt and interpretation times, immutable stream/policy provenance and unresolved-opener state. Operational health, gaps and resets are excluded. Pages contain at most 100 records. Integrity retirement removes this material independently of native operational retention. No-store; cursors are purpose-specific opaque keysets.",
+        "description": "Requires the same current Submission integrity-view authorization as detailed evidence. Returns every change of a native rule's status as the server evaluated it on the facts Desktop reported, with the delivery position that caused it (batch 0 is the state reported at Start), original receipt and interpretation times, and immutable stream and policy provenance. An occurrence opens when a rule becomes not met and closes when it is met again; an enforce occurrence that opens also raises its capability's native Flag. The facts themselves are not returned. Pages contain at most 100 records. Integrity retirement removes this material independently of native operational retention. No-store; cursors are purpose-specific opaque keysets.",
         "operationId": "listNativeConditions",
         "parameters": [
           {
@@ -50579,7 +50687,7 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Inspect minimized native condition transitions for a Submission",
+        "summary": "Inspect the native rule status changes of a Submission",
         "tags": [
           "Integrity review"
         ],

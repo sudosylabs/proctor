@@ -14,7 +14,6 @@ DROP TABLE IF EXISTS browser_integrity_overflow;
 DROP TABLE IF EXISTS browser_integrity_groups;
 DROP TABLE IF EXISTS browser_delivery_retired_sources;
 DROP TABLE IF EXISTS browser_delivery_declarations;
-DROP TABLE IF EXISTS exam_native_occurrences;
 DROP TABLE IF EXISTS exam_native_delivery_records;
 DROP TABLE IF EXISTS exam_native_delivery_batches;
 DROP TABLE IF EXISTS exam_native_delivery_declarations;

@@ -640,9 +640,13 @@ func evaluateNativeRecordCodecAgreement(violations []openAPIAgreementViolation, 
 			panic(err)
 		}
 	}
-	variants := []reflect.Type{reflect.TypeOf(model.NativeOccurrence{}), reflect.TypeOf(model.NativeCoverageTransition{}), reflect.TypeOf(model.NativeSourceReset{}), reflect.TypeOf(model.NativeSourceGap{})}
+	variants := []reflect.Type{
+		reflect.TypeOf(model.NativeCapabilityFact{}), reflect.TypeOf(model.NativeParticipationConfirmed{}),
+		reflect.TypeOf(model.NativeRuleStatusReport{}), reflect.TypeOf(model.NativeCoverageTransition{}),
+		reflect.TypeOf(model.NativeSourceReset{}), reflect.TypeOf(model.NativeSourceGap{}),
+	}
 	if len(shape.OneOf) != len(variants) {
-		return appendAgreementViolation(violations, target, "oneOf", "must describe the four closed native record variants")
+		return appendAgreementViolation(violations, target, "oneOf", "must describe the six closed native record variants")
 	}
 	for i, variant := range variants {
 		violations = evaluateOpenAPIShapeAgreement(violations, document, target+"."+variant.Name(), shape.OneOf[i], variant, requestSchema, false, false, false, nil, nil)

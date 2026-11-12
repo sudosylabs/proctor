@@ -437,12 +437,29 @@ func (s *Service) AppendNativeDelivery(
 		return nil, s.failAudit(ctx, audit, s.nativeDeliveryFailure(ctx, deliveryAccess, err))
 	}
 
-	if value == nil ||
-		value.Receipt.Validate() != nil ||
-		value.Receipt.StreamID != deliveryAccess.StreamID ||
-		value.Receipt.BatchSequence != command.Batch.BatchSequence {
+	if value == nil || value.Acknowledgement == nil ||
+		value.Acknowledgement.Receipt.Validate() != nil ||
+		value.Acknowledgement.Receipt.StreamID != deliveryAccess.StreamID ||
+		value.Acknowledgement.Receipt.BatchSequence != command.Batch.BatchSequence {
 		return nil, apperror.New("exam.attempt.unavailable").Wrap(model.ErrNativeDeliveryInvalid)
 	}
 
-	return value, nil
+	for _, flagged := range value.Flagged {
+		if effectErr := s.publishIntegrityOutcome(ctx, integrityEffects{
+			SittingID:       target.SittingID,
+			AttemptID:       deliveryAccess.Access.AttemptID,
+			CandidateUserID: deliveryAccess.Access.CandidateUserID,
+			At:              value.Acknowledgement.Receipt.ReceivedAt,
+			Flagged: &integrityFlagNotice{
+				FlagID:           flagged.FlagID,
+				Kind:             flagged.Kind,
+				Outcome:          model.IntegrityOutcomeFlag,
+				RetainedEvidence: flagged.RetainedEvidence,
+			},
+		}); effectErr != nil {
+			s.publisher.Report(ctx, "exam_attempt_native_flagged", effectErr)
+		}
+	}
+
+	return value.Acknowledgement, nil
 }

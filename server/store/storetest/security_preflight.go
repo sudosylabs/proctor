@@ -39,11 +39,11 @@ func syntheticNativeAgreement(t *testing.T, build model.DesktopBuildTuple) *mode
 	}
 	agreement, err := model.NewDesktopNativeAgreement(model.NativeRegistryDigest, model.SHA256Fingerprint([]byte("synthetic-manifest")), model.SHA256Fingerprint([]byte("synthetic-matrix")), model.SHA256Fingerprint([]byte("synthetic-detectors")), definitions, matrix, []model.NativeDetectorDefinition{{DetectorID: "synthetic-baseline", Version: 1, CapabilityID: "baseline", ConditionIDs: []string{"baseline.capture"}, SourceIDs: []model.NativeSourceID{model.NativeSourceCapture}, AllowedModes: []model.NativeCapabilityClaim{model.NativeClaimEnforce}}})
 	require.NoError(t, err)
-	return agreement
+	return withNativeRegistry(t, agreement)
 }
 func syntheticPreflightReport(prepared *store.SecurityPreflightPrepared, agreement *model.DesktopNativeAgreement) model.SecurityPreflightReport {
 	resolved := prepared.Resolved
-	report := model.SecurityPreflightReport{Challenge: prepared.Challenge.Challenge, PolicyDigest: resolved.Policy.Digest, PolicyContentDigest: resolved.PolicyContentDigest, CapabilityMatrixDigest: resolved.CapabilityMatrixDigest, SecuritySessionID: model.NewID(), SourceManifestDigest: agreement.SourceManifestDigest(), SelectedSourceCategories: resolved.Categories, Sources: []model.NativeSourceCoverage{}, Coverage: []model.NativeCoverageClaim{}, Baseline: model.NativeBaselineReport{ConstrainedWindow: "verified", SinglePhysicalDisplay: "verified", ContentProtection: "verified"}, Posture: "compliant", Capabilities: []model.NativeCapabilityReadiness{}, Rules: []model.NativeRuleReport{}, ReportedAt: time.Now().UTC().Truncate(time.Millisecond)}
+	report := model.SecurityPreflightReport{Challenge: prepared.Challenge.Challenge, PolicyDigest: resolved.Policy.Digest, PolicyContentDigest: resolved.PolicyContentDigest, CapabilityMatrixDigest: resolved.CapabilityMatrixDigest, SecuritySessionID: model.NewID(), SourceManifestDigest: agreement.SourceManifestDigest(), SelectedSourceCategories: resolved.Categories, Sources: []model.NativeSourceCoverage{}, Coverage: []model.NativeCoverageClaim{}, Baseline: model.NativeBaselineReport{ConstrainedWindow: "verified", SinglePhysicalDisplay: "verified", ContentProtection: "verified"}, Posture: "compliant", Capabilities: compliantReadiness(resolved.Policy.Activations), Rules: []model.NativeRuleReport{}, ReportedAt: time.Now().UTC().Truncate(time.Millisecond)}
 	for _, source := range resolved.Sources {
 		for _, requirement := range resolved.Requirements {
 			if requirement.SourceID == source {

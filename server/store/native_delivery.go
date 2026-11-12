@@ -77,6 +77,21 @@ func (e *NativeDeliveryRefusal) Error() string { return "native delivery detail 
 // Desktop delivers for one Participation: appended batches and their receipts,
 // declared gaps, the final declaration, and the summary of what was not
 // retained.
+// NativeDeliveryAppended is an append's acknowledgement and the native Flags
+// its records raised.
+type NativeDeliveryAppended struct {
+	Acknowledgement *model.NativeSecurityAcknowledgement
+	Flagged         []NativeIntegrityFlagged
+}
+
+// NativeIntegrityFlagged is a native Flag an append raised or added
+// evidence to, for managers to be told of it.
+type NativeIntegrityFlagged struct {
+	FlagID           model.IntegrityFlagID
+	Kind             model.IntegrityPolicyKind
+	RetainedEvidence int
+}
+
 type NativeDeliveryStore interface {
 	// ResolveNativeDeliveryTarget returns the Sitting, Class and admitted
 	// security binding that own the stream.
@@ -87,8 +102,9 @@ type NativeDeliveryStore interface {
 	// given sequence.
 	NativeDeliveryReceipt(context.Context, NativeDeliveryAccess, int64) (*model.NativeBatchReceipt, error)
 	// AppendNativeDelivery appends one batch to the stream and returns its
-	// acknowledgement. A replayed command returns the original receipt.
-	AppendNativeDelivery(context.Context, *NativeDeliveryAppend, *CommandIdempotency) (*model.NativeSecurityAcknowledgement, error)
+	// acknowledgement and the native Flags it raised. A replayed command
+	// returns the original receipt and raises nothing.
+	AppendNativeDelivery(context.Context, *NativeDeliveryAppend, *CommandIdempotency) (*NativeDeliveryAppended, error)
 	// DeclareNativeDeliveryGaps records the gaps the stream declares in what
 	// it delivered. A refused declaration is a *NativeDeliveryRefusal.
 	DeclareNativeDeliveryGaps(context.Context, *NativeDeliveryGapDeclaration, *CommandIdempotency) (*model.DeliveryGapReceipt, error)

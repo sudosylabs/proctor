@@ -73,21 +73,10 @@ func TestDeliveryCorruptReads(t *testing.T, ss store.Store, corrupt func(model.A
 				assert.ErrorIs(t, securityErr, store.ErrInvalidState)
 			})
 		}
-		var source model.NativeSourceCoverage
-		for _, value := range recovery.CurrentSources {
-			if value.SourceID == model.NativeSourceCapture {
-				source = value
-			}
-		}
 		at := model.NowUTC().Truncate(time.Millisecond)
-		occurrence := model.NativeOccurrence{Kind: "occurrence", OccurrenceID: model.NewID(), ConditionID: "baseline.capture", DetectorID: "synthetic-baseline", DetectorVersion: 1, CapabilityID: "baseline", Mode: model.NativeClaimEnforce, Status: "opened", FirstObservedAt: at, LastConfirmedAt: at, RepeatCount: 1, Certainty: "complete", SourceRanges: []model.NativeSourceRange{{SourceID: source.SourceID, SourceInstanceID: source.SourceInstanceID, FirstSequence: 0, LastSequence: 1}}}
 		appendBatch := func(sequence int64, key string) error {
-			record := occurrence
-			if sequence > 1 {
-				record.Status = "repeated"
-				record.RepeatCount = 2
-			}
-			batch := model.NativeSecurityBatch{StreamID: native.StreamID, BatchSequence: sequence, ParticipationID: native.ParticipationID, Generation: native.Generation, SecuritySessionID: connected.Security.SecuritySessionID, PolicyDigest: connected.Security.Policy.Digest, ApplicationReleaseID: connected.Security.Policy.ApplicationReleaseID, MatrixID: connected.Security.Policy.MatrixID, Records: []model.NativeRecord{{Occurrence: &record}}}
+			record := secondDisplay(sequence+1, at.Add(time.Duration(sequence)*time.Second))
+			batch := model.NativeSecurityBatch{StreamID: native.StreamID, BatchSequence: sequence, ParticipationID: native.ParticipationID, Generation: native.Generation, SecuritySessionID: connected.Security.SecuritySessionID, PolicyDigest: connected.Security.Policy.Digest, ApplicationReleaseID: connected.Security.Policy.ApplicationReleaseID, MatrixID: connected.Security.Policy.MatrixID, Records: []model.NativeRecord{record}}
 			raw, canonicalErr := batch.Canonical()
 			require.NoError(t, canonicalErr)
 			_, canonicalErr = ss.NativeDelivery().AppendNativeDelivery(ctx, &store.NativeDeliveryAppend{Access: native, Batch: batch, DesktopBuild: build, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}, examCommand(fixture.candidate.ID, store.NativeDeliveryAppendOperation, key, model.SHA256Fingerprint(raw)))

@@ -268,7 +268,7 @@ func expireDeliveryOwner(ctx context.Context, tx *sqlxTxWrapper, d store.Deliver
 				return false, err
 			}
 
-			if err := advanceNativeInterpretation(ctx, tx, nativeDeliveryOwner{
+			if _, err := advanceNativeInterpretation(ctx, tx, nativeDeliveryOwner{
 				Binding:         binding,
 				ParticipationID: d.ParticipationID.String(),
 				Allocated:       row.Allocated,

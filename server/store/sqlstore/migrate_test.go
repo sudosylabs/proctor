@@ -67,7 +67,6 @@ var baselineTables = []string{
 	"exam_native_delivery_batches",
 	"exam_native_delivery_declarations",
 	"exam_native_delivery_records",
-	"exam_native_occurrences",
 	"exam_native_source_resets",
 	"exam_resource_identities",
 	"exam_resources",

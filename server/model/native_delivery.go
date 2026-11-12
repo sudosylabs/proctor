@@ -29,63 +29,65 @@ type NativeSourceRange struct {
 	LastSequence     int64          `json:"last_sequence"`
 }
 
-type NativeOccurrence struct {
-	firstObservedAtSpelling string
-	lastConfirmedAtSpelling string
+// NativeCapabilityFact is one capability's full minimized state, as Desktop
+// observed it at ObservedAt, with the envelope around it. Facts are
+// change-driven: Desktop sends one whenever the state or its envelope
+// changes, and the server evaluates the policy's rules on it again.
+type NativeCapabilityFact struct {
+	observedAtSpelling string
 
-	Kind            string                `json:"kind"`
-	OccurrenceID    string                `json:"occurrence_id"`
-	ConditionID     string                `json:"condition_id"`
-	DetectorID      string                `json:"detector_id"`
-	DetectorVersion int64                 `json:"detector_version"`
-	CapabilityID    string                `json:"capability_id"`
-	Mode            NativeCapabilityClaim `json:"mode"`
-	Status          string                `json:"status"`
-	FirstObservedAt time.Time             `json:"first_observed_at"`
-	LastConfirmedAt time.Time             `json:"last_confirmed_at"`
-	RepeatCount     int64                 `json:"repeat_count"`
-	Certainty       string                `json:"certainty"`
-	GapCount        int64                 `json:"gap_count"`
-	SourceRanges    []NativeSourceRange   `json:"source_ranges"`
+	Kind       string    `json:"kind"`
+	ObservedAt time.Time `json:"observed_at"`
+	NativeCapabilityReadiness
 }
 
-func (v NativeOccurrence) Validate() error {
-	if v.Kind != "occurrence" ||
-		!IsValidAgreementID(v.OccurrenceID) ||
-		!IsValidAgreementID(v.ConditionID) ||
-		!IsValidAgreementID(v.DetectorID) ||
-		v.DetectorVersion <= 0 ||
-		!securitySafeInt(v.DetectorVersion) ||
-		!IsValidAgreementID(v.CapabilityID) ||
-		!slices.Contains([]NativeCapabilityClaim{NativeClaimObserve, NativeClaimEnforce}, v.Mode) ||
-		!slices.Contains([]string{"opened", "repeated", "recovered"}, v.Status) ||
-		!securityInstant(v.FirstObservedAt) ||
-		!securityInstant(v.LastConfirmedAt) ||
-		v.RepeatCount <= 0 ||
-		!securitySafeInt(v.RepeatCount) ||
-		!slices.Contains([]string{"complete", "partial", "unknown"}, v.Certainty) ||
-		!securitySafeInt(v.GapCount) ||
-		len(v.SourceRanges) == 0 ||
-		len(v.SourceRanges) > 11 {
+// NativeCapabilityFactMaxBytes bounds one fact record.
+const NativeCapabilityFactMaxBytes = 16 * 1024
+
+func (v NativeCapabilityFact) Validate() error {
+	if v.Kind != "capability_fact" || !securityInstant(v.ObservedAt) || !v.validate() ||
+		len(v.State)+len(v.Summary) > NativeCapabilityFactMaxBytes {
 		return ErrNativeDeliveryInvalid
 	}
+	return nil
+}
 
-	previous := -1
-	for _, r := range v.SourceRanges {
-		order := slices.Index(NativeSources(), r.SourceID)
-		if order <= previous ||
-			!IsValidAgreementID(r.SourceInstanceID) ||
-			!securitySafeInt(r.FirstSequence) ||
-			!securitySafeInt(r.LastSequence) ||
-			r.LastSequence < r.FirstSequence {
-			return ErrNativeDeliveryInvalid
-		}
+// NativeParticipationConfirmed marks where the exam begins on the stream:
+// Desktop sends it when the candidate window mounts after admission. Before
+// it, readiness rules apply; from it, participation rules do.
+type NativeParticipationConfirmed struct {
+	observedAtSpelling string
 
-		previous = order
+	Kind       string    `json:"kind"`
+	ObservedAt time.Time `json:"observed_at"`
+}
+
+func (v NativeParticipationConfirmed) Validate() error {
+	if v.Kind != "participation_confirmed" || !securityInstant(v.ObservedAt) {
+		return ErrNativeDeliveryInvalid
 	}
+	return nil
+}
 
-	// Client wall clocks may roll back. Source sequences and stream ordering,
-	// never timestamp equality, determine occurrence continuity.
+// NativeRuleStatusReport is Desktop's own status for one rule, and whether
+// it is containing the candidate window because of it. The server's status
+// is authoritative; a disagreement is counted as a discrepancy.
+type NativeRuleStatusReport struct {
+	observedAtSpelling string
+
+	Kind         string             `json:"kind"`
+	RuleID       string             `json:"rule_id"`
+	Status       NativeRuleStatus   `json:"status"`
+	UnknownCause NativeUnknownCause `json:"unknown_cause,omitempty"`
+	Contained    bool               `json:"contained"`
+	ObservedAt   time.Time          `json:"observed_at"`
+}
+
+func (v NativeRuleStatusReport) Validate() error {
+	if v.Kind != "rule_status" || !securityInstant(v.ObservedAt) ||
+		!(NativeRuleReport{RuleID: v.RuleID, Status: v.Status, UnknownCause: v.UnknownCause}).validate() {
+		return ErrNativeDeliveryInvalid
+	}
 	return nil
 }
 
@@ -138,7 +140,9 @@ func (v NativeSourceGap) Validate() error {
 
 // NativeRecord is a closed union. It never retains an arbitrary raw detail bag.
 type NativeRecord struct {
-	Occurrence *NativeOccurrence
+	Fact       *NativeCapabilityFact
+	Confirmed  *NativeParticipationConfirmed
+	RuleStatus *NativeRuleStatusReport
 	Coverage   *NativeCoverageTransition
 	Reset      *NativeSourceReset
 	Gap        *NativeSourceGap
@@ -147,10 +151,18 @@ type NativeRecord struct {
 func (r NativeRecord) value() (any, error) {
 	var value any
 	count := 0
-	for _, candidate := range []interface{ Validate() error }{r.Occurrence, r.Coverage, r.Reset, r.Gap} {
+	for _, candidate := range []interface{ Validate() error }{r.Fact, r.Confirmed, r.RuleStatus, r.Coverage, r.Reset, r.Gap} {
 		// Typed nil pointers cannot be tested through the interface itself.
 		switch v := candidate.(type) {
-		case *NativeOccurrence:
+		case *NativeCapabilityFact:
+			if v == nil {
+				continue
+			}
+		case *NativeParticipationConfirmed:
+			if v == nil {
+				continue
+			}
+		case *NativeRuleStatusReport:
 			if v == nil {
 				continue
 			}
@@ -204,9 +216,15 @@ func (r *NativeRecord) UnmarshalJSON(raw []byte) error {
 	var value NativeRecord
 	var target any
 	switch kind.Kind {
-	case "occurrence":
-		value.Occurrence = new(NativeOccurrence)
-		target = value.Occurrence
+	case "capability_fact":
+		value.Fact = new(NativeCapabilityFact)
+		target = value.Fact
+	case "participation_confirmed":
+		value.Confirmed = new(NativeParticipationConfirmed)
+		target = value.Confirmed
+	case "rule_status":
+		value.RuleStatus = new(NativeRuleStatusReport)
+		target = value.RuleStatus
 	case "coverage_transition":
 		value.Coverage = new(NativeCoverageTransition)
 		target = value.Coverage
@@ -436,38 +454,23 @@ func ValidateNativeRecordBinding(
 
 		return ErrNativeDeliveryInvalid
 	}
-	if occurrence := record.Occurrence; occurrence != nil {
-		sources := make([]NativeSourceID, 0, len(occurrence.SourceRanges))
-		for _, r := range occurrence.SourceRanges {
-			if err := checkRange(r.SourceID, r.SourceInstanceID, r.LastSequence); err != nil {
-				return err
-			}
-
-			sources = append(sources, r.SourceID)
-		}
-
-		if agreement.ValidateDetector(
-			occurrence.DetectorID,
-			occurrence.DetectorVersion,
-			occurrence.CapabilityID,
-			occurrence.ConditionID,
-			occurrence.Mode,
-			sources,
-		) != nil {
+	if fact := record.Fact; fact != nil {
+		if !slices.ContainsFunc(resolved.Policy.Activations, func(a NativeActivation) bool { return a.Capability == fact.Capability }) {
 			return ErrNativeDeliveryInvalid
 		}
+		return nil
+	}
 
-		selected := false
-		for _, required := range resolved.Requirements {
-			if required.CapabilityID == occurrence.CapabilityID && required.RequiredClaim == occurrence.Mode {
-				selected = true
-			}
-		}
+	if record.Confirmed != nil {
+		return nil
+	}
 
-		if !selected {
+	if status := record.RuleStatus; status != nil {
+		if !slices.ContainsFunc(resolved.Policy.Rules, func(r NativeRule) bool {
+			return r.RuleID == status.RuleID && r.Phase.AppliesTo(NativeRuleParticipation)
+		}) {
 			return ErrNativeDeliveryInvalid
 		}
-
 		return nil
 	}
 
@@ -499,96 +502,93 @@ func ValidateNativeRecordBinding(
 	return nil
 }
 
-// NativeOccurrenceProgress is an interpretation result, not a misconduct Flag.
-// UnresolvedOpener survives subsequent transitions when a terminal delivery gap
-// prevented the server from receiving the opening observation.
-type NativeOccurrenceProgress struct {
-	Latest           NativeOccurrence
-	UnresolvedOpener bool
-}
-
-func AdvanceNativeOccurrence(
-	prior *NativeOccurrenceProgress,
-	next NativeOccurrence,
-	precedingTerminalGap bool,
-) (NativeOccurrenceProgress, error) {
-	zero := NativeOccurrenceProgress{}
-	if next.Validate() != nil {
-		return zero, ErrNativeDeliveryInvalid
+func (v NativeCapabilityFact) MarshalJSON() ([]byte, error) {
+	type wire struct {
+		Kind       string              `json:"kind"`
+		ObservedAt securityJSONInstant `json:"observed_at"`
+		NativeCapabilityReadiness
 	}
-
-	if prior == nil {
-		if next.Status != "opened" && !precedingTerminalGap {
-			return zero, ErrDeliveryConflict
-		}
-		return NativeOccurrenceProgress{Latest: cloneNativeOccurrence(next), UnresolvedOpener: next.Status != "opened"}, nil
-	}
-
-	old := prior.Latest
-	if old.Validate() != nil ||
-		old.OccurrenceID != next.OccurrenceID ||
-		old.ConditionID != next.ConditionID ||
-		old.DetectorID != next.DetectorID ||
-		old.DetectorVersion != next.DetectorVersion ||
-		old.CapabilityID != next.CapabilityID ||
-		old.Mode != next.Mode ||
-		old.Status == "recovered" ||
-		next.Status == "opened" ||
-		!old.FirstObservedAt.Equal(next.FirstObservedAt) ||
-		next.RepeatCount < old.RepeatCount ||
-		next.GapCount < old.GapCount ||
-		len(old.SourceRanges) != len(next.SourceRanges) {
-		return zero, ErrDeliveryConflict
-	}
-
-	for i, r := range old.SourceRanges {
-		n := next.SourceRanges[i]
-		if r.SourceID != n.SourceID ||
-			r.SourceInstanceID != n.SourceInstanceID ||
-			n.FirstSequence != r.FirstSequence ||
-			n.LastSequence < r.LastSequence {
-			return zero, ErrDeliveryConflict
-		}
-	}
-
-	return NativeOccurrenceProgress{Latest: cloneNativeOccurrence(next), UnresolvedOpener: prior.UnresolvedOpener}, nil
-}
-func cloneNativeOccurrence(o NativeOccurrence) NativeOccurrence {
-	o.SourceRanges = slices.Clone(o.SourceRanges)
-	return o
-}
-
-func (v NativeOccurrence) MarshalJSON() ([]byte, error) {
-	type wire NativeOccurrence
-	return json.Marshal(struct {
-		*wire
-		FirstObservedAt securityJSONInstant `json:"first_observed_at"`
-		LastConfirmedAt securityJSONInstant `json:"last_confirmed_at"`
-	}{
-		wire:            (*wire)(&v),
-		FirstObservedAt: securityJSONInstant{Time: v.FirstObservedAt, spelling: v.firstObservedAtSpelling},
-		LastConfirmedAt: securityJSONInstant{Time: v.LastConfirmedAt, spelling: v.lastConfirmedAtSpelling},
+	return json.Marshal(wire{
+		Kind: v.Kind, ObservedAt: securityJSONInstant{Time: v.ObservedAt, spelling: v.observedAtSpelling},
+		NativeCapabilityReadiness: v.NativeCapabilityReadiness,
 	})
 }
-func (v *NativeOccurrence) UnmarshalJSON(raw []byte) error {
+func (v *NativeCapabilityFact) UnmarshalJSON(raw []byte) error {
 	if v == nil {
 		return ErrNativeDeliveryInvalid
 	}
-	type wire NativeOccurrence
+	var value struct {
+		Kind       string              `json:"kind"`
+		ObservedAt securityJSONInstant `json:"observed_at"`
+		NativeCapabilityReadiness
+	}
+	if decodeClosedDeliveryDeclaration(raw, &value, 256*1024) != nil {
+		return ErrNativeDeliveryInvalid
+	}
+	candidate := NativeCapabilityFact{
+		observedAtSpelling: value.ObservedAt.spelling, Kind: value.Kind, ObservedAt: value.ObservedAt.Time,
+		NativeCapabilityReadiness: value.NativeCapabilityReadiness,
+	}
+	if candidate.Validate() != nil {
+		return ErrNativeDeliveryInvalid
+	}
+	*v = candidate
+	return nil
+}
+
+func (v NativeParticipationConfirmed) MarshalJSON() ([]byte, error) {
+	type wire NativeParticipationConfirmed
+	return json.Marshal(struct {
+		*wire
+		ObservedAt securityJSONInstant `json:"observed_at"`
+	}{wire: (*wire)(&v), ObservedAt: securityJSONInstant{Time: v.ObservedAt, spelling: v.observedAtSpelling}})
+}
+func (v *NativeParticipationConfirmed) UnmarshalJSON(raw []byte) error {
+	if v == nil {
+		return ErrNativeDeliveryInvalid
+	}
+	type wire NativeParticipationConfirmed
 	var decoded wire
 	value := struct {
 		*wire
-		FirstObservedAt securityJSONInstant `json:"first_observed_at"`
-		LastConfirmedAt securityJSONInstant `json:"last_confirmed_at"`
+		ObservedAt securityJSONInstant `json:"observed_at"`
 	}{wire: &decoded}
 	if decodeClosedDeliveryDeclaration(raw, &value, 256*1024) != nil {
 		return ErrNativeDeliveryInvalid
 	}
-	candidate := NativeOccurrence(decoded)
-	candidate.FirstObservedAt = value.FirstObservedAt.Time
-	candidate.firstObservedAtSpelling = value.FirstObservedAt.spelling
-	candidate.LastConfirmedAt = value.LastConfirmedAt.Time
-	candidate.lastConfirmedAtSpelling = value.LastConfirmedAt.spelling
+	candidate := NativeParticipationConfirmed(decoded)
+	candidate.ObservedAt = value.ObservedAt.Time
+	candidate.observedAtSpelling = value.ObservedAt.spelling
+	if candidate.Validate() != nil {
+		return ErrNativeDeliveryInvalid
+	}
+	*v = candidate
+	return nil
+}
+
+func (v NativeRuleStatusReport) MarshalJSON() ([]byte, error) {
+	type wire NativeRuleStatusReport
+	return json.Marshal(struct {
+		*wire
+		ObservedAt securityJSONInstant `json:"observed_at"`
+	}{wire: (*wire)(&v), ObservedAt: securityJSONInstant{Time: v.ObservedAt, spelling: v.observedAtSpelling}})
+}
+func (v *NativeRuleStatusReport) UnmarshalJSON(raw []byte) error {
+	if v == nil {
+		return ErrNativeDeliveryInvalid
+	}
+	type wire NativeRuleStatusReport
+	var decoded wire
+	value := struct {
+		*wire
+		ObservedAt securityJSONInstant `json:"observed_at"`
+	}{wire: &decoded}
+	if decodeClosedDeliveryDeclaration(raw, &value, 256*1024) != nil {
+		return ErrNativeDeliveryInvalid
+	}
+	candidate := NativeRuleStatusReport(decoded)
+	candidate.ObservedAt = value.ObservedAt.Time
+	candidate.observedAtSpelling = value.ObservedAt.spelling
 	if candidate.Validate() != nil {
 		return ErrNativeDeliveryInvalid
 	}

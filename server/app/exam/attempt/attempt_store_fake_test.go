@@ -388,7 +388,7 @@ func (f *attemptStoreFake) ResolveNativeDeliveryTarget(context.Context, store.Na
 	return nil, errors.New("unexpected native delivery target")
 }
 
-func (f *attemptStoreFake) AppendNativeDelivery(context.Context, *store.NativeDeliveryAppend, *store.CommandIdempotency) (*model.NativeSecurityAcknowledgement, error) {
+func (f *attemptStoreFake) AppendNativeDelivery(context.Context, *store.NativeDeliveryAppend, *store.CommandIdempotency) (*store.NativeDeliveryAppended, error) {
 	return nil, errors.New("unexpected AppendNativeDelivery")
 }
 

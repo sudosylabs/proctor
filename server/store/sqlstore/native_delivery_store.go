@@ -475,7 +475,7 @@ func nativeDeliveryStatus(
 	owner nativeDeliveryOwner,
 	streamID string,
 ) (*model.NativeSecurityStreamStatus, error) {
-	if err := advanceNativeInterpretation(ctx, tx, owner); err != nil {
+	if _, err := advanceNativeInterpretation(ctx, tx, owner); err != nil {
 		return nil, err
 	}
 	return projectNativeDeliveryStatus(ctx, tx, owner, streamID)

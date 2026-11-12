@@ -1,0 +1,1626 @@
+{
+  "cases": [
+    {
+      "name": "first_evaluation_sets_the_status_without_waiting",
+      "policy": {
+        "activations": [
+          {
+            "capability": "example",
+            "categories": []
+          }
+        ],
+        "rules": [
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "Compare": {
+                "field": "example.count",
+                "op": "eq",
+                "value": 1
+              }
+            },
+            "rule_id": "r"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "at_ms": 0,
+          "expect": [
+            {
+              "rule_id": "r",
+              "status": "met"
+            }
+          ],
+          "input": {
+            "open": {
+              "example": {
+                "envelope": {
+                  "certainty": "complete",
+                  "health": "healthy",
+                  "permission": "granted"
+                },
+                "fields": {
+                  "example.count": 1,
+                  "example.mode": "on"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "count_comparisons",
+      "policy": {
+        "activations": [
+          {
+            "capability": "example",
+            "categories": []
+          }
+        ],
+        "rules": [
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "Compare": {
+                "field": "example.count",
+                "op": "eq",
+                "value": 1
+              }
+            },
+            "rule_id": "eq"
+          },
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "Compare": {
+                "field": "example.count",
+                "op": "lt",
+                "value": 2
+              }
+            },
+            "rule_id": "lt"
+          },
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "Compare": {
+                "field": "example.count",
+                "op": "ge",
+                "value": 3
+              }
+            },
+            "rule_id": "ge"
+          },
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "Compare": {
+                "field": "example.count",
+                "op": "in",
+                "value": [
+                  0,
+                  2
+                ]
+              }
+            },
+            "rule_id": "in"
+          },
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "Compare": {
+                "field": "example.count",
+                "op": "not_in",
+                "value": [
+                  0,
+                  2
+                ]
+              }
+            },
+            "rule_id": "not_in"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "at_ms": 0,
+          "expect": [
+            {
+              "rule_id": "eq",
+              "status": "not_met"
+            },
+            {
+              "rule_id": "lt",
+              "status": "not_met"
+            },
+            {
+              "rule_id": "ge",
+              "status": "not_met"
+            },
+            {
+              "rule_id": "in",
+              "status": "met"
+            },
+            {
+              "rule_id": "not_in",
+              "status": "not_met"
+            }
+          ],
+          "input": {
+            "open": {
+              "example": {
+                "envelope": {
+                  "certainty": "complete",
+                  "health": "healthy",
+                  "permission": "granted"
+                },
+                "fields": {
+                  "example.count": 2
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_missing_field_is_unavailable",
+      "policy": {
+        "activations": [
+          {
+            "capability": "example",
+            "categories": []
+          }
+        ],
+        "rules": [
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "Compare": {
+                "field": "example.mode",
+                "op": "in",
+                "value": [
+                  "on"
+                ]
+              }
+            },
+            "rule_id": "r"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "at_ms": 0,
+          "expect": [
+            {
+              "rule_id": "r",
+              "status": "unknown",
+              "unknown_cause": "unavailable"
+            }
+          ],
+          "input": {
+            "open": {
+              "example": {
+                "envelope": {
+                  "certainty": "complete",
+                  "health": "healthy",
+                  "permission": "granted"
+                },
+                "fields": {
+                  "example.count": 1
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "partial_certainty_is_unknown_partial_never_not_met",
+      "policy": {
+        "activations": [
+          {
+            "capability": "example",
+            "categories": []
+          }
+        ],
+        "rules": [
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "Compare": {
+                "field": "example.count",
+                "op": "eq",
+                "value": 1
+              }
+            },
+            "rule_id": "r"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "at_ms": 0,
+          "expect": [
+            {
+              "rule_id": "r",
+              "status": "unknown",
+              "unknown_cause": "partial"
+            }
+          ],
+          "input": {
+            "open": {
+              "example": {
+                "envelope": {
+                  "certainty": "partial",
+                  "health": "degraded",
+                  "permission": "granted"
+                },
+                "fields": {
+                  "example.count": 2
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "envelope_causes_report_the_first_in_order",
+      "policy": {
+        "activations": [
+          {
+            "capability": "example",
+            "categories": []
+          }
+        ],
+        "rules": [
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "Compare": {
+                "field": "example.count",
+                "op": "eq",
+                "value": 1
+              }
+            },
+            "rule_id": "r"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "at_ms": 0,
+          "expect": [
+            {
+              "rule_id": "r",
+              "status": "unknown",
+              "unknown_cause": "unhealthy"
+            }
+          ],
+          "input": {
+            "open": {
+              "example": {
+                "envelope": {
+                  "certainty": "partial",
+                  "health": "failed",
+                  "permission": "denied"
+                },
+                "fields": {
+                  "example.count": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "at_ms": 10,
+          "expect": [
+            {
+              "rule_id": "r",
+              "status": "unknown",
+              "unknown_cause": "permission"
+            }
+          ],
+          "input": {
+            "observe": {
+              "capability": "example",
+              "state": {
+                "envelope": {
+                  "certainty": "partial",
+                  "health": "healthy",
+                  "permission": "denied"
+                },
+                "fields": {
+                  "example.count": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "at_ms": 20,
+          "expect": [
+            {
+              "rule_id": "r",
+              "status": "unknown",
+              "unknown_cause": "partial"
+            }
+          ],
+          "input": {
+            "observe": {
+              "capability": "example",
+              "state": {
+                "envelope": {
+                  "certainty": "partial",
+                  "health": "degraded",
+                  "permission": "granted"
+                },
+                "fields": {
+                  "example.count": 1
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "unknown_and_not_met_combine_by_kleene_logic",
+      "policy": {
+        "activations": [
+          {
+            "capability": "example",
+            "categories": []
+          }
+        ],
+        "rules": [
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "All": {
+                "conditions": [
+                  {
+                    "Compare": {
+                      "field": "example.mode",
+                      "op": "in",
+                      "value": [
+                        "on"
+                      ]
+                    }
+                  },
+                  {
+                    "Compare": {
+                      "field": "example.count",
+                      "op": "eq",
+                      "value": 9
+                    }
+                  }
+                ]
+              }
+            },
+            "rule_id": "all_not_met_wins"
+          },
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "All": {
+                "conditions": [
+                  {
+                    "Compare": {
+                      "field": "example.count",
+                      "op": "eq",
+                      "value": 1
+                    }
+                  },
+                  {
+                    "Compare": {
+                      "field": "example.mode",
+                      "op": "in",
+                      "value": [
+                        "on"
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            "rule_id": "all_unknown"
+          },
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "Any": {
+                "conditions": [
+                  {
+                    "Compare": {
+                      "field": "example.mode",
+                      "op": "in",
+                      "value": [
+                        "on"
+                      ]
+                    }
+                  },
+                  {
+                    "Compare": {
+                      "field": "example.count",
+                      "op": "eq",
+                      "value": 1
+                    }
+                  }
+                ]
+              }
+            },
+            "rule_id": "any_met_wins"
+          },
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "Any": {
+                "conditions": [
+                  {
+                    "Compare": {
+                      "field": "example.count",
+                      "op": "eq",
+                      "value": 9
+                    }
+                  },
+                  {
+                    "Compare": {
+                      "field": "example.mode",
+                      "op": "in",
+                      "value": [
+                        "on"
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            "rule_id": "any_unknown"
+          },
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "Not": {
+                "condition": {
+                  "Compare": {
+                    "field": "example.mode",
+                    "op": "in",
+                    "value": [
+                      "on"
+                    ]
+                  }
+                }
+              }
+            },
+            "rule_id": "not_unknown"
+          },
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "Not": {
+                "condition": {
+                  "Compare": {
+                    "field": "example.count",
+                    "op": "eq",
+                    "value": 1
+                  }
+                }
+              }
+            },
+            "rule_id": "not_met"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "at_ms": 0,
+          "expect": [
+            {
+              "rule_id": "all_not_met_wins",
+              "status": "not_met"
+            },
+            {
+              "rule_id": "all_unknown",
+              "status": "unknown",
+              "unknown_cause": "unavailable"
+            },
+            {
+              "rule_id": "any_met_wins",
+              "status": "met"
+            },
+            {
+              "rule_id": "any_unknown",
+              "status": "unknown",
+              "unknown_cause": "unavailable"
+            },
+            {
+              "rule_id": "not_unknown",
+              "status": "unknown",
+              "unknown_cause": "unavailable"
+            },
+            {
+              "rule_id": "not_met",
+              "status": "not_met"
+            }
+          ],
+          "input": {
+            "open": {
+              "example": {
+                "envelope": {
+                  "certainty": "complete",
+                  "health": "healthy",
+                  "permission": "granted"
+                },
+                "fields": {
+                  "example.count": 1
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "recovery_waits_for_the_stability_time_violation_is_immediate",
+      "policy": {
+        "activations": [
+          {
+            "capability": "example",
+            "categories": []
+          }
+        ],
+        "rules": [
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "Compare": {
+                "field": "example.count",
+                "op": "eq",
+                "value": 1
+              }
+            },
+            "rule_id": "r"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "at_ms": 0,
+          "expect": [
+            {
+              "rule_id": "r",
+              "status": "not_met"
+            }
+          ],
+          "input": {
+            "open": {
+              "example": {
+                "envelope": {
+                  "certainty": "complete",
+                  "health": "healthy",
+                  "permission": "granted"
+                },
+                "fields": {
+                  "example.count": 2
+                }
+              }
+            }
+          }
+        },
+        {
+          "at_ms": 100,
+          "expect": [
+            {
+              "rule_id": "r",
+              "status": "not_met"
+            }
+          ],
+          "input": {
+            "observe": {
+              "capability": "example",
+              "state": {
+                "envelope": {
+                  "certainty": "complete",
+                  "health": "healthy",
+                  "permission": "granted"
+                },
+                "fields": {
+                  "example.count": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "at_ms": 1099,
+          "expect": [
+            {
+              "rule_id": "r",
+              "status": "not_met"
+            }
+          ],
+          "input": {
+            "tick": {}
+          }
+        },
+        {
+          "at_ms": 1100,
+          "expect": [
+            {
+              "rule_id": "r",
+              "status": "met"
+            }
+          ],
+          "input": {
+            "tick": {}
+          }
+        },
+        {
+          "at_ms": 1101,
+          "expect": [
+            {
+              "rule_id": "r",
+              "status": "not_met"
+            }
+          ],
+          "input": {
+            "observe": {
+              "capability": "example",
+              "state": {
+                "envelope": {
+                  "certainty": "complete",
+                  "health": "healthy",
+                  "permission": "granted"
+                },
+                "fields": {
+                  "example.count": 2
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_relapse_during_the_wait_restarts_it",
+      "policy": {
+        "activations": [
+          {
+            "capability": "example",
+            "categories": []
+          }
+        ],
+        "rules": [
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "Compare": {
+                "field": "example.count",
+                "op": "eq",
+                "value": 1
+              }
+            },
+            "rule_id": "r"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "at_ms": 0,
+          "expect": [
+            {
+              "rule_id": "r",
+              "status": "not_met"
+            }
+          ],
+          "input": {
+            "open": {
+              "example": {
+                "envelope": {
+                  "certainty": "complete",
+                  "health": "healthy",
+                  "permission": "granted"
+                },
+                "fields": {
+                  "example.count": 2
+                }
+              }
+            }
+          }
+        },
+        {
+          "at_ms": 100,
+          "expect": [
+            {
+              "rule_id": "r",
+              "status": "not_met"
+            }
+          ],
+          "input": {
+            "observe": {
+              "capability": "example",
+              "state": {
+                "envelope": {
+                  "certainty": "complete",
+                  "health": "healthy",
+                  "permission": "granted"
+                },
+                "fields": {
+                  "example.count": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "at_ms": 500,
+          "expect": [
+            {
+              "rule_id": "r",
+              "status": "not_met"
+            }
+          ],
+          "input": {
+            "observe": {
+              "capability": "example",
+              "state": {
+                "envelope": {
+                  "certainty": "complete",
+                  "health": "healthy",
+                  "permission": "granted"
+                },
+                "fields": {
+                  "example.count": 2
+                }
+              }
+            }
+          }
+        },
+        {
+          "at_ms": 600,
+          "expect": [
+            {
+              "rule_id": "r",
+              "status": "not_met"
+            }
+          ],
+          "input": {
+            "observe": {
+              "capability": "example",
+              "state": {
+                "envelope": {
+                  "certainty": "complete",
+                  "health": "healthy",
+                  "permission": "granted"
+                },
+                "fields": {
+                  "example.count": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "at_ms": 1100,
+          "expect": [
+            {
+              "rule_id": "r",
+              "status": "not_met"
+            }
+          ],
+          "input": {
+            "tick": {}
+          }
+        },
+        {
+          "at_ms": 1600,
+          "expect": [
+            {
+              "rule_id": "r",
+              "status": "met"
+            }
+          ],
+          "input": {
+            "tick": {}
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_gap_is_unknown_until_a_fresh_state_then_recovery_waits",
+      "policy": {
+        "activations": [
+          {
+            "capability": "example",
+            "categories": []
+          }
+        ],
+        "rules": [
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "Compare": {
+                "field": "example.count",
+                "op": "eq",
+                "value": 1
+              }
+            },
+            "rule_id": "r"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "at_ms": 0,
+          "expect": [
+            {
+              "rule_id": "r",
+              "status": "met"
+            }
+          ],
+          "input": {
+            "open": {
+              "example": {
+                "envelope": {
+                  "certainty": "complete",
+                  "health": "healthy",
+                  "permission": "granted"
+                },
+                "fields": {
+                  "example.count": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "at_ms": 10,
+          "expect": [
+            {
+              "rule_id": "r",
+              "status": "unknown",
+              "unknown_cause": "gap"
+            }
+          ],
+          "input": {
+            "events_lost": {
+              "capability": "example",
+              "count": 3
+            }
+          }
+        },
+        {
+          "at_ms": 20,
+          "expect": [
+            {
+              "rule_id": "r",
+              "status": "unknown",
+              "unknown_cause": "gap"
+            }
+          ],
+          "input": {
+            "observe": {
+              "capability": "example",
+              "state": {
+                "envelope": {
+                  "certainty": "complete",
+                  "health": "healthy",
+                  "permission": "granted"
+                },
+                "fields": {
+                  "example.count": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "at_ms": 1020,
+          "expect": [
+            {
+              "rule_id": "r",
+              "status": "met"
+            }
+          ],
+          "input": {
+            "tick": {}
+          }
+        }
+      ]
+    },
+    {
+      "name": "an_interruption_makes_every_rule_unknown_gap",
+      "policy": {
+        "activations": [
+          {
+            "capability": "example",
+            "categories": []
+          }
+        ],
+        "rules": [
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "Compare": {
+                "field": "example.count",
+                "op": "eq",
+                "value": 1
+              }
+            },
+            "rule_id": "r"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "at_ms": 0,
+          "expect": [
+            {
+              "rule_id": "r",
+              "status": "met"
+            }
+          ],
+          "input": {
+            "open": {
+              "example": {
+                "envelope": {
+                  "certainty": "complete",
+                  "health": "healthy",
+                  "permission": "granted"
+                },
+                "fields": {
+                  "example.count": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "at_ms": 10,
+          "expect": [
+            {
+              "rule_id": "r",
+              "status": "unknown",
+              "unknown_cause": "gap"
+            }
+          ],
+          "input": {
+            "interrupted": {}
+          }
+        }
+      ]
+    },
+    {
+      "name": "app_conditions_report_no_match_first_then_the_envelope_then_checking",
+      "policy": {
+        "activations": [
+          {
+            "capability": "apps",
+            "categories": []
+          }
+        ],
+        "rules": [
+          {
+            "capability": "apps",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "apps.reason",
+            "requirement": {
+              "AppsAbsent": {
+                "catalog_app_ids": [
+                  "teamviewer"
+                ]
+              }
+            },
+            "rule_id": "blocked"
+          },
+          {
+            "capability": "apps",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "apps.reason",
+            "requirement": {
+              "AppsOnly": {
+                "catalog_app_ids": [
+                  "editor"
+                ]
+              }
+            },
+            "rule_id": "allowed"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "at_ms": 0,
+          "expect": [
+            {
+              "rule_id": "blocked",
+              "status": "unknown",
+              "unknown_cause": "unavailable"
+            },
+            {
+              "rule_id": "allowed",
+              "status": "unknown",
+              "unknown_cause": "unhealthy"
+            }
+          ],
+          "input": {
+            "open": {
+              "apps": {
+                "apps": {
+                  "checking": 2,
+                  "violated": {
+                    "allowed": false
+                  }
+                },
+                "envelope": {
+                  "certainty": "partial",
+                  "health": "failed",
+                  "permission": "denied"
+                },
+                "fields": {}
+              }
+            }
+          }
+        },
+        {
+          "at_ms": 10,
+          "expect": [
+            {
+              "rule_id": "blocked",
+              "status": "unknown",
+              "unknown_cause": "partial"
+            },
+            {
+              "rule_id": "allowed",
+              "status": "unknown",
+              "unknown_cause": "partial"
+            }
+          ],
+          "input": {
+            "observe": {
+              "capability": "apps",
+              "state": {
+                "apps": {
+                  "checking": 2,
+                  "violated": {
+                    "allowed": false,
+                    "blocked": false
+                  }
+                },
+                "envelope": {
+                  "certainty": "partial",
+                  "health": "degraded",
+                  "permission": "granted"
+                },
+                "fields": {}
+              }
+            }
+          }
+        },
+        {
+          "at_ms": 20,
+          "expect": [
+            {
+              "rule_id": "blocked",
+              "status": "unknown",
+              "unknown_cause": "checking"
+            },
+            {
+              "rule_id": "allowed",
+              "status": "unknown",
+              "unknown_cause": "checking"
+            }
+          ],
+          "input": {
+            "observe": {
+              "capability": "apps",
+              "state": {
+                "apps": {
+                  "checking": 2,
+                  "violated": {
+                    "allowed": false,
+                    "blocked": false
+                  }
+                },
+                "envelope": {
+                  "certainty": "complete",
+                  "health": "healthy",
+                  "permission": "granted"
+                },
+                "fields": {}
+              }
+            }
+          }
+        },
+        {
+          "at_ms": 30,
+          "expect": [
+            {
+              "rule_id": "blocked",
+              "status": "not_met"
+            },
+            {
+              "rule_id": "allowed",
+              "status": "unknown",
+              "unknown_cause": "checking"
+            }
+          ],
+          "input": {
+            "observe": {
+              "capability": "apps",
+              "state": {
+                "apps": {
+                  "checking": 0,
+                  "violated": {
+                    "allowed": false,
+                    "blocked": true
+                  }
+                },
+                "envelope": {
+                  "certainty": "complete",
+                  "health": "healthy",
+                  "permission": "granted"
+                },
+                "fields": {}
+              }
+            }
+          }
+        },
+        {
+          "at_ms": 1030,
+          "expect": [
+            {
+              "rule_id": "blocked",
+              "status": "not_met"
+            },
+            {
+              "rule_id": "allowed",
+              "status": "met"
+            }
+          ],
+          "input": {
+            "tick": {}
+          }
+        }
+      ]
+    },
+    {
+      "name": "phases_select_which_rules_are_evaluated",
+      "policy": {
+        "activations": [
+          {
+            "capability": "example",
+            "categories": []
+          }
+        ],
+        "rules": [
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "readiness",
+            "reason": "example.reason",
+            "requirement": {
+              "Compare": {
+                "field": "example.count",
+                "op": "eq",
+                "value": 1
+              }
+            },
+            "rule_id": "ready_only"
+          },
+          {
+            "capability": "example",
+            "mode": "observe",
+            "phase": "participation",
+            "reason": "example.reason",
+            "requirement": {
+              "Compare": {
+                "field": "example.count",
+                "op": "eq",
+                "value": 1
+              }
+            },
+            "rule_id": "exam_only"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "at_ms": 0,
+          "expect": [
+            {
+              "rule_id": "ready_only",
+              "status": "met"
+            }
+          ],
+          "input": {
+            "open": {
+              "example": {
+                "envelope": {
+                  "certainty": "complete",
+                  "health": "healthy",
+                  "permission": "granted"
+                },
+                "fields": {
+                  "example.count": 1
+                }
+              }
+            }
+          }
+        },
+        {
+          "at_ms": 10,
+          "expect": [
+            {
+              "rule_id": "ready_only",
+              "status": "met"
+            }
+          ],
+          "input": {
+            "begin_participation": {}
+          }
+        },
+        {
+          "at_ms": 20,
+          "expect": [
+            {
+              "rule_id": "exam_only",
+              "status": "met"
+            }
+          ],
+          "input": {
+            "confirm_participation": {}
+          }
+        }
+      ]
+    }
+  ],
+  "description": "Proctor native rule conformance vectors. Each case opens readiness with the given states and applies the inputs in order; after each step the listed rules must have exactly the given status and unknown cause. Every refusal policy must be refused.",
+  "refusals": [
+    {
+      "name": "depth_four_is_refused",
+      "policy": {
+        "activations": [
+          {
+            "capability": "example",
+            "categories": []
+          }
+        ],
+        "rules": [
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "Not": {
+                "condition": {
+                  "Not": {
+                    "condition": {
+                      "Not": {
+                        "condition": {
+                          "Compare": {
+                            "field": "example.count",
+                            "op": "eq",
+                            "value": 1
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "rule_id": "r"
+          }
+        ]
+      }
+    },
+    {
+      "name": "an_envelope_field_is_not_a_rule_field",
+      "policy": {
+        "activations": [
+          {
+            "capability": "example",
+            "categories": []
+          }
+        ],
+        "rules": [
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "Compare": {
+                "field": "example.certainty",
+                "op": "eq",
+                "value": "complete"
+              }
+            },
+            "rule_id": "r"
+          }
+        ]
+      }
+    },
+    {
+      "name": "two_app_conditions_in_one_rule_are_refused",
+      "policy": {
+        "activations": [
+          {
+            "capability": "apps",
+            "categories": []
+          }
+        ],
+        "rules": [
+          {
+            "capability": "apps",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "apps.reason",
+            "requirement": {
+              "All": {
+                "conditions": [
+                  {
+                    "AppsAbsent": {
+                      "catalog_app_ids": [
+                        "a"
+                      ]
+                    }
+                  },
+                  {
+                    "AppsOnly": {
+                      "catalog_app_ids": [
+                        "b"
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            "rule_id": "r"
+          }
+        ]
+      }
+    },
+    {
+      "name": "an_app_condition_on_a_capability_without_them_is_refused",
+      "policy": {
+        "activations": [
+          {
+            "capability": "example",
+            "categories": []
+          }
+        ],
+        "rules": [
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "AppsAbsent": {
+                "catalog_app_ids": [
+                  "a"
+                ]
+              }
+            },
+            "rule_id": "r"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_value_outside_the_field_type_is_refused",
+      "policy": {
+        "activations": [
+          {
+            "capability": "example",
+            "categories": []
+          }
+        ],
+        "rules": [
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "Compare": {
+                "field": "example.mode",
+                "op": "eq",
+                "value": "sideways"
+              }
+            },
+            "rule_id": "r"
+          }
+        ]
+      }
+    },
+    {
+      "name": "an_ordering_comparison_on_a_symbol_is_refused",
+      "policy": {
+        "activations": [
+          {
+            "capability": "example",
+            "categories": []
+          }
+        ],
+        "rules": [
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "Compare": {
+                "field": "example.mode",
+                "op": "lt",
+                "value": "on"
+              }
+            },
+            "rule_id": "r"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_rule_on_a_capability_that_is_not_activated_is_refused",
+      "policy": {
+        "activations": [
+          {
+            "capability": "apps",
+            "categories": []
+          }
+        ],
+        "rules": [
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "Compare": {
+                "field": "example.count",
+                "op": "eq",
+                "value": 1
+              }
+            },
+            "rule_id": "r"
+          }
+        ]
+      }
+    },
+    {
+      "name": "an_empty_group_is_refused",
+      "policy": {
+        "activations": [
+          {
+            "capability": "example",
+            "categories": []
+          }
+        ],
+        "rules": [
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "All": {
+                "conditions": []
+              }
+            },
+            "rule_id": "r"
+          }
+        ]
+      }
+    }
+  ],
+  "registry": {
+    "baseline_rules": [],
+    "capabilities": [
+      {
+        "app_conditions": false,
+        "categories": [],
+        "fields": [
+          {
+            "max": 32,
+            "name": "example.count",
+            "type": "count"
+          },
+          {
+            "name": "example.mode",
+            "type": "symbol",
+            "values": [
+              "on",
+              "off"
+            ]
+          }
+        ],
+        "id": "example",
+        "permission_prompt": false,
+        "reasons": [
+          "example.reason"
+        ],
+        "sensitive": false,
+        "stability_ms": 1000
+      },
+      {
+        "app_conditions": true,
+        "categories": [],
+        "fields": [],
+        "id": "apps",
+        "permission_prompt": false,
+        "reasons": [
+          "apps.reason"
+        ],
+        "sensitive": true,
+        "stability_ms": 1000
+      }
+    ]
+  }
+}

@@ -11,6 +11,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
@@ -39,7 +40,9 @@ func fixture(t *testing.T) releaseFixture {
 		DesktopSettingsRegistryFingerprint: "fnv1a64:aaaaaaaaaaaaaaaa", ConfigurationManifest: manifest,
 		AttemptConfigurationManifestFingerprint: manifest.Fingerprint(), CapabilityMatrixIdentity: "synthetic-test-matrix"}, ApplicationReleaseID: "synthetic-release",
 		SourceSchemaDigests: map[model.NativeSourceID]string{}}
-	f.artifacts = Artifacts{Registry: []byte(`{"synthetic_test_registry":true}`), SourceManifest: canonical(t, model.NativeSources()),
+	registry, err := os.ReadFile("../model/testdata/native_capability_registry.json")
+	require.NoError(t, err)
+	f.artifacts = Artifacts{Registry: registry, SourceManifest: canonical(t, model.NativeSources()),
 		Schemas: map[string][]byte{}, ConfigurationManifest: manifest.Canonical(), Matrix: SignedMatrix{KeyID: "synthetic-test-only"}}
 	for _, source := range model.NativeSources() {
 		schema := canonical(t, map[string]string{"synthetic_source": string(source)})
@@ -202,4 +205,15 @@ func TestVerifyRejectsUntrustedOrInconsistentArtifacts(t *testing.T) {
 			require.Equal(t, ErrInvalidArtifact, err)
 		})
 	}
+}
+
+func TestVerifyRefusesASignedRegistryItCannotParse(t *testing.T) {
+	t.Parallel()
+	f := fixture(t)
+	f.artifacts.Registry = []byte(`{"description":"a registry in a format the server does not model"}`)
+	f.expected.RegistryDigest = model.SHA256Fingerprint(f.artifacts.Registry)
+	f.matrix.RegistryDigest = f.expected.RegistryDigest
+	f.sign(t)
+	_, err := Verify(f.expected, f.artifacts, f.keys)
+	require.ErrorIs(t, err, ErrInvalidArtifact, "an exact, signed registry must still be one the server understands")
 }

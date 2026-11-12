@@ -136,6 +136,11 @@ func Verify(expected Expectation, artifacts Artifacts, admittedKeys map[string]e
 		return model.DesktopBuildTuple{}, ErrInvalidArtifact
 	}
 
+	capabilities, err := model.ParseNativeCapabilityRegistry(artifacts.Registry)
+	if err != nil {
+		return model.DesktopBuildTuple{}, ErrInvalidArtifact
+	}
+
 	agreement, err := model.NewDesktopNativeAgreement(
 		expected.RegistryDigest,
 		expected.SourceManifestDigest,
@@ -145,6 +150,9 @@ func Verify(expected Expectation, artifacts Artifacts, admittedKeys map[string]e
 		matrix,
 		detectors,
 	)
+	if err == nil {
+		agreement, err = agreement.WithCapabilityRegistry(capabilities)
+	}
 	if err != nil {
 		return model.DesktopBuildTuple{}, ErrInvalidArtifact
 	}

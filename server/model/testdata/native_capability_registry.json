@@ -1,0 +1,262 @@
+{
+  "description": "Proctor native capability registry: capabilities, typed rule fields, reasons, baseline rules and fact schemas, generated from the Rust types.",
+  "fact_schemas": {
+    "display": {
+      "state": {
+        "$defs": {
+          "Connection": {
+            "enum": [
+              "direct",
+              "indirect",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "DisplayKind": {
+            "enum": [
+              "physical",
+              "virtual",
+              "wireless",
+              "remote",
+              "specialized",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "DisplayTarget": {
+            "additionalProperties": false,
+            "description": "One display. `target_id` is opaque and stable only within one agent session.",
+            "properties": {
+              "active": {
+                "type": "boolean"
+              },
+              "built_in": {
+                "type": "boolean"
+              },
+              "connection": {
+                "$ref": "#/$defs/Connection"
+              },
+              "kind": {
+                "$ref": "#/$defs/DisplayKind"
+              },
+              "mirror_of": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "power": {
+                "$ref": "#/$defs/Power"
+              },
+              "primary": {
+                "$ref": "#/$defs/Primary"
+              },
+              "target_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "target_id",
+              "active",
+              "built_in",
+              "kind",
+              "connection",
+              "power",
+              "primary"
+            ],
+            "type": "object"
+          },
+          "Power": {
+            "enum": [
+              "awake",
+              "asleep",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "Primary": {
+            "enum": [
+              "primary",
+              "not_primary",
+              "unknown"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "targets": {
+            "items": {
+              "$ref": "#/$defs/DisplayTarget"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "targets"
+        ],
+        "title": "DisplayState",
+        "type": "object"
+      },
+      "summary": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Derived only from the targets; sent with every fact.",
+        "properties": {
+          "active_physical": {
+            "description": "Physical, active and not a mirror.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "active_total": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "connected_total": {
+            "description": "Every connected target, including inactive, asleep and mirrored ones.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "mirrored": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "remote": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "specialized": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unknown_kind": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "virtual": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "wireless": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "active_physical",
+          "active_total",
+          "connected_total",
+          "mirrored",
+          "virtual",
+          "wireless",
+          "remote",
+          "specialized",
+          "unknown_kind"
+        ],
+        "title": "DisplaySummary",
+        "type": "object"
+      }
+    }
+  },
+  "registry": {
+    "baseline_rules": [
+      {
+        "capability": "display",
+        "mode": "enforce",
+        "phase": "both",
+        "reason": "display.single_display_required",
+        "requirement": {
+          "All": {
+            "conditions": [
+              {
+                "Compare": {
+                  "field": "display.summary.connected_total",
+                  "op": "eq",
+                  "value": 1
+                }
+              },
+              {
+                "Compare": {
+                  "field": "display.summary.active_physical",
+                  "op": "eq",
+                  "value": 1
+                }
+              }
+            ]
+          }
+        },
+        "rule_id": "baseline.single_display"
+      }
+    ],
+    "capabilities": [
+      {
+        "app_conditions": false,
+        "categories": [],
+        "fields": [
+          {
+            "max": 32,
+            "name": "display.summary.active_physical",
+            "type": "count"
+          },
+          {
+            "max": 32,
+            "name": "display.summary.active_total",
+            "type": "count"
+          },
+          {
+            "max": 32,
+            "name": "display.summary.connected_total",
+            "type": "count"
+          },
+          {
+            "max": 32,
+            "name": "display.summary.mirrored",
+            "type": "count"
+          },
+          {
+            "max": 32,
+            "name": "display.summary.virtual",
+            "type": "count"
+          },
+          {
+            "max": 32,
+            "name": "display.summary.wireless",
+            "type": "count"
+          },
+          {
+            "max": 32,
+            "name": "display.summary.remote",
+            "type": "count"
+          },
+          {
+            "max": 32,
+            "name": "display.summary.specialized",
+            "type": "count"
+          },
+          {
+            "max": 32,
+            "name": "display.summary.unknown_kind",
+            "type": "count"
+          }
+        ],
+        "id": "display",
+        "permission_prompt": false,
+        "reasons": [
+          "display.single_display_required"
+        ],
+        "sensitive": false,
+        "stability_ms": 1000
+      }
+    ]
+  }
+}

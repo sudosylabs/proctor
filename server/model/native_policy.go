@@ -14,12 +14,13 @@ import (
 	"slices"
 )
 
-// NativeRegistryDigest identifies the reviewed registry artifact. It does not
-// certify any Desktop release or native implementation. New registry meaning
-// requires coordinated server/client artifact admission. The identity is for
-// proctor-desktop native/schemas/native-capability-registry.json at revision
-// 271f63b293ea42c3ee1dfc9e30b96835a6def32e; no artifact source is embedded here.
-const NativeRegistryDigest = "sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0"
+// NativeRegistryDigest identifies the reviewed capability registry: the
+// registry document Desktop generates from its Rust types, proctor-desktop
+// native/crates/prctr-capabilities/registry/registry.json at commit 976deaf.
+// It does not certify any Desktop release or native implementation; a
+// release's own registry must have exactly this digest. New registry meaning
+// requires coordinated server and Desktop admission.
+const NativeRegistryDigest = "sha256:9dfdf6c8fa531de0417f28f7819946edefb892c3a41fe50f97eeed39cda73732"
 
 type NativeMode string
 

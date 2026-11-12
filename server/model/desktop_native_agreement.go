@@ -115,6 +115,21 @@ type DesktopNativeAgreement struct {
 	definitions           []NativeCoverageDefinition
 	matrix                NativeCapabilityMatrix
 	detectors             []NativeDetectorDefinition
+	// capabilities is the release's parsed capability registry: the
+	// capabilities, fields and reasons its rules may name, and its baseline.
+	capabilities *NativeCapabilityRegistry
+}
+
+// WithCapabilityRegistry returns the agreement carrying the release's parsed
+// capability registry. The registry's bytes are the ones RegistryDigest
+// names; the caller verified them.
+func (a *DesktopNativeAgreement) WithCapabilityRegistry(registry *NativeCapabilityRegistry) (*DesktopNativeAgreement, error) {
+	if a == nil || registry == nil {
+		return nil, errNativeAgreement
+	}
+	agreement := *a
+	agreement.capabilities = registry
+	return &agreement, nil
 }
 
 var errNativeAgreement = errors.New("desktop native agreement is invalid")

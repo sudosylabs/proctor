@@ -1,0 +1,94 @@
+// ---------------------------------------------------------------------------------------------
+// Copyright (c) 2026 Sudosy Labs. All rights reserved.
+// Licensed under the GNU Affero General Public License, version 3 only.
+// See LICENSE in the server module root for license information.
+// SPDX-License-Identifier: AGPL-3.0-only
+// ---------------------------------------------------------------------------------------------
+
+package model
+
+import (
+	"bytes"
+	"encoding/json"
+	"os"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+)
+
+// nativeCapabilityRegistryDigest pins the registry Desktop generates from its
+// Rust types (proctor-desktop native/crates/prctr-capabilities/registry/
+// registry.json, commit 976deaf). A new file is copied in, never edited.
+const nativeCapabilityRegistryDigest = "sha256:9dfdf6c8fa531de0417f28f7819946edefb892c3a41fe50f97eeed39cda73732"
+
+func readNativeCapabilityRegistry(t *testing.T) []byte {
+	t.Helper()
+	document, err := os.ReadFile("testdata/native_capability_registry.json")
+	require.NoError(t, err)
+	require.Equal(t, nativeCapabilityRegistryDigest, SHA256Fingerprint(document), "the registry is Desktop's, byte for byte")
+	return document
+}
+
+func TestDesktopsCapabilityRegistryParses(t *testing.T) {
+	t.Parallel()
+
+	registry, err := ParseNativeCapabilityRegistry(readNativeCapabilityRegistry(t))
+	require.NoError(t, err)
+
+	display, ok := registry.Capability("display")
+	require.True(t, ok)
+	require.Equal(t, time.Second, display.Stability)
+	require.Equal(t, []string{"display.single_display_required"}, display.Reasons)
+	field, capability, ok := registry.Field("display.summary.active_physical")
+	require.True(t, ok)
+	require.Equal(t, NativeCapabilityID("display"), capability)
+	require.Equal(t, NativeFieldCount, field.Type)
+	require.Equal(t, int64(32), field.Max)
+
+	require.Len(t, registry.baseline, 1)
+	require.Equal(t, "baseline.single_display", registry.baseline[0].RuleID)
+	require.Equal(t, NativeRuleEnforce, registry.baseline[0].Mode)
+	require.Contains(t, registry.factSchemas["display"], "state")
+	require.Contains(t, registry.factSchemas["display"], "summary")
+}
+
+func TestCapabilityRegistryRefusesWhatItDoesNotModel(t *testing.T) {
+	t.Parallel()
+
+	original := readNativeCapabilityRegistry(t)
+	change := func(edit func(map[string]any)) []byte {
+		var document map[string]any
+		require.NoError(t, json.Unmarshal(original, &document))
+		edit(document)
+		changed, err := json.Marshal(document)
+		require.NoError(t, err)
+		return changed
+	}
+	capabilities := func(document map[string]any) []any {
+		return document["registry"].(map[string]any)["capabilities"].([]any)
+	}
+
+	for name, document := range map[string][]byte{
+		"unknown member": change(func(d map[string]any) { d["extra"] = true }),
+		"missing fact schemas": change(func(d map[string]any) {
+			delete(d["fact_schemas"].(map[string]any)["display"].(map[string]any), "state")
+		}),
+		"server spelling of an enum": change(func(d map[string]any) {
+			fields := capabilities(d)[0].(map[string]any)["fields"].([]any)
+			fields[0] = map[string]any{"name": "display.summary.kind", "type": "enum", "values": []string{"a"}}
+		}),
+		"baseline on an unregistered field": change(func(d map[string]any) {
+			rule := d["registry"].(map[string]any)["baseline_rules"].([]any)[0].(map[string]any)
+			rule["requirement"] = map[string]any{"Compare": map[string]any{"field": "display.summary.nothing", "op": "eq", "value": 1}}
+		}),
+		"envelope field": change(func(d map[string]any) {
+			fields := capabilities(d)[0].(map[string]any)["fields"].([]any)
+			fields[0] = map[string]any{"name": "display.certainty", "type": "count", "max": 1}
+		}),
+		"trailing document": append(bytes.Clone(original), []byte(`{}`)...),
+	} {
+		_, err := ParseNativeCapabilityRegistry(document)
+		require.Error(t, err, name)
+	}
+}

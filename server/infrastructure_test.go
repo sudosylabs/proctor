@@ -9,6 +9,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -22,6 +23,7 @@ import (
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/platform"
+	"github.com/sudosylabs/proctor/server/plugin"
 	"github.com/sudosylabs/proctor/server/store"
 	"github.com/sudosylabs/proctor/server/store/sqlstore"
 	"github.com/sudosylabs/proctor/server/store/timerlayer"
@@ -306,4 +308,49 @@ func TestActivePluginSummariesListOnlyActivePlugins(t *testing.T) {
 		{ID: "export.zip", Name: "Zip export"},
 	}, pluginDirectory{host: plugins}.Active(), "the disabled CAS plugin is not listed")
 	require.False(t, pluginDirectory{host: plugins}.Degraded(), "a disabled plugin does not degrade readiness")
+}
+
+// eventPlugin subscribes to one topic, or fails to activate.
+type eventPlugin struct {
+	id          string
+	activateErr error
+}
+
+func (p eventPlugin) Manifest() plugin.Manifest {
+	return plugin.Manifest{ID: p.id, Name: "Event " + p.id, EnabledByDefault: true}
+}
+
+func (p eventPlugin) Activate(_ context.Context, host plugin.Host) error {
+	if p.activateErr != nil {
+		return p.activateErr
+	}
+	return host.AddEventHandler(plugin.TopicExamAttemptSubmitted, eventHandlerFunc(func(context.Context, plugin.Event) error { return nil }))
+}
+
+func (eventPlugin) Deactivate(context.Context) error { return nil }
+
+type eventHandlerFunc func(context.Context, plugin.Event) error
+
+func (f eventHandlerFunc) HandleEvent(ctx context.Context, event plugin.Event) error {
+	return f(ctx, event)
+}
+
+func TestPluginEventSubscriptionsAndDegradedReadiness(t *testing.T) {
+	t.Parallel()
+
+	logger, err := logging.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = logger.Shutdown() })
+	plugins, err := activatePlugins(context.Background(), config.Default(), logger, nil, []plugin.Plugin{
+		eventPlugin{id: "mirror"},
+		eventPlugin{id: "broken", activateErr: errors.New("unreachable")},
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = plugins.Close(context.Background()) })
+
+	subscriptions := eventSubscriptions(plugins)
+	require.Len(t, subscriptions, 1, "only the active plugin subscribes")
+	require.Equal(t, "mirror:exam.attempt.submitted", subscriptions[0].Key, "the key names the plugin and topic")
+	require.Equal(t, plugin.TopicExamAttemptSubmitted, subscriptions[0].Topic)
+	require.True(t, pluginDirectory{host: plugins}.Degraded(), "a failed plugin degrades readiness")
 }

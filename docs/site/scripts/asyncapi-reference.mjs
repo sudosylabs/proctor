@@ -11,11 +11,17 @@ export function messageSlug(key) {
     .toLowerCase();
 }
 
-function text(value) {
+function collapse(value) {
   return String(value ?? '')
     .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/[{}<>]/g, (character) => `\\${character}`);
+    .trim();
+}
+
+// text escapes a literal backslash together with the characters MDX reads as
+// markup, so an escape the input already holds can never pair with one added
+// here.
+function text(value) {
+  return collapse(value).replace(/[\\{}<>]/g, (character) => `\\${character}`);
 }
 
 function cell(value) {
@@ -27,7 +33,7 @@ function code(value) {
 }
 
 function yamlString(value) {
-  return JSON.stringify(text(value).replace(/\\([{}<>])/g, '$1'));
+  return JSON.stringify(collapse(value));
 }
 
 function component(document, reference) {

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import test from 'node:test';
 
-import {messageSlug, renderReference} from './asyncapi-reference.mjs';
+import {memberTable, messageSlug, renderReference} from './asyncapi-reference.mjs';
 
 const document = JSON.parse(
   await readFile(new URL('../../../server/asyncapi.json', import.meta.url), 'utf8'),
@@ -56,4 +56,14 @@ test('two messages that would share a page fail', () => {
   colliding.components.messages['exam-created'] = colliding.components.messages.exam_created;
   colliding.channels.websocket.messages['exam-created'] = {$ref: '#/components/messages/exam-created'};
   assert.throws(() => renderReference(colliding), /two messages render to exam-created\.mdx/);
+});
+
+test('a description holding a backslash or a pipe stays inside its table cell', () => {
+  const table = memberTable(document, {
+    type: 'object',
+    properties: {path: {type: 'string', description: 'ends in \\ | then {x}'}},
+  });
+  const row = table.split('\n')[2];
+  assert.equal(row, '| `path` | string | No | ends in \\\\ \\| then \\{x\\} |');
+  assert.equal(row.split(/(?<!\\)\|/).length - 2, 4, 'the row keeps exactly four cells');
 });

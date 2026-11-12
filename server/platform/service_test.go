@@ -44,6 +44,7 @@ func (unavailableMailer) Test(context.Context) error {
 
 func (testStore) File() store.FileStore                                   { return nil }
 func (testStore) Job() store.JobStore                                     { return nil }
+func (testStore) DomainEvent() store.DomainEventStore                     { return nil }
 func (testStore) Mail() store.MailStore                                   { return nil }
 func (testStore) BrowserAuthentication() store.BrowserAuthenticationStore { return nil }
 func (testStore) DesktopRegistration() store.DesktopRegistrationStore     { return nil }

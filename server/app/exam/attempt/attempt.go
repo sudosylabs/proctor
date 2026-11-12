@@ -159,7 +159,12 @@ type Dependencies struct {
 	NewWorkspaceVersion func() model.WorkspaceContentVersion
 	NewSubmission       func() model.SubmissionID
 	NewReceiptCode      func() model.SubmissionReceiptCode
-	Operational         OperationalRecorder
+	// NewDomainEvent and NewJob propose the exam.attempt.submitted outbox row
+	// and its dispatch Job that a fresh voluntary, automatic or manager seal
+	// commits with the Submission.
+	NewDomainEvent func() model.DomainEventID
+	NewJob         func() model.JobID
+	Operational    OperationalRecorder
 }
 
 // OperationalRecorder receives the outcome of each use case the module
@@ -206,6 +211,8 @@ type Service struct {
 	newWorkspaceVersion  func() model.WorkspaceContentVersion
 	newSubmissionID      func() model.SubmissionID
 	newReceiptCode       func() model.SubmissionReceiptCode
+	newDomainEventID     func() model.DomainEventID
+	newJobID             func() model.JobID
 
 	liveControls     controlAdmission
 	deliveryControls controlAdmission
@@ -244,7 +251,9 @@ func New(deps Dependencies) (*Service, error) {
 		deps.NewWorkspaceObject == nil ||
 		deps.NewWorkspaceVersion == nil ||
 		deps.NewSubmission == nil ||
-		deps.NewReceiptCode == nil {
+		deps.NewReceiptCode == nil ||
+		deps.NewDomainEvent == nil ||
+		deps.NewJob == nil {
 		return nil, errors.New("Exam Attempt dependencies are required")
 	}
 
@@ -281,6 +290,8 @@ func New(deps Dependencies) (*Service, error) {
 		newWorkspaceVersion:  deps.NewWorkspaceVersion,
 		newSubmissionID:      deps.NewSubmission,
 		newReceiptCode:       deps.NewReceiptCode,
+		newDomainEventID:     deps.NewDomainEvent,
+		newJobID:             deps.NewJob,
 		liveControls:         controlAdmission{lane: liveControlLane},
 		deliveryControls:     controlAdmission{lane: deliveryControlLane},
 	}, nil

@@ -15,6 +15,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/administration"
+	"github.com/sudosylabs/proctor/server/app/events"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/jobs"
@@ -68,7 +69,13 @@ func newJobRuntime(
 		mailHealth = mail.NewHealth(deps.MailDeliverySender != nil && deps.MailDeliverySender.Enabled())
 	}
 
-	definitions := buildApplicationJobDefinitions(deps, shared, exams, users, defaultPictureJobs, onboardingPorts, mailHealth)
+	// No plugin host exists yet, so the dispatcher has no handlers: a domain
+	// event is delivered to nobody and its outbox row is retired.
+	domainEvents, err := events.NewDispatcher()
+	if err != nil {
+		return jobRuntime{}, err
+	}
+	definitions := buildApplicationJobDefinitions(deps, shared, exams, users, defaultPictureJobs, onboardingPorts, mailHealth, domainEvents)
 	engine, err := job.New(job.Dependencies{
 		Store:         deps.Store.Job(),
 		Descriptors:   definitions.descriptors,
@@ -190,6 +197,7 @@ func buildApplicationJobDefinitions(
 	defaultPictureJobs *jobs.DefaultProfilePictureJobs,
 	onboardingPorts onboarding.Ports,
 	mailHealth *mail.Health,
+	domainEvents *events.Dispatcher,
 ) applicationJobDefinitions {
 	if mailHealth == nil {
 		mailHealth = mail.NewHealth(deps.MailDeliverySender != nil && deps.MailDeliverySender.Enabled())
@@ -237,6 +245,7 @@ func buildApplicationJobDefinitions(
 		jobs.NewExamSittingLifecycleRecovery(exams.sittings, jobStore, now),
 		jobs.NewExamExportBuild(exams.exports),
 		jobs.NewExamExportCleanup(deps.Store.ExamExport(), deps.FileContent, jobStore, now),
+		jobs.NewDomainEventDispatch(deps.Store.DomainEvent(), domainEvents),
 		jobs.NewRetentionExpiry(deps.Store.Retention(), retentionJobs.ExpiryAudit, jobStore, now),
 		jobs.NewRetentionReconcile(deps.Store.Retention(), retentionJobs.Audit, jobStore, now),
 		jobs.NewRetentionPurge(deps.Store.Retention(), deps.FileContent, jobStore, now),

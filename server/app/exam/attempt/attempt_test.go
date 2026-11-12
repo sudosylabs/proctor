@@ -208,6 +208,8 @@ func newFixture(t *testing.T) *fixture {
 			}
 			return model.NewSubmissionReceiptCode()
 		},
+		NewDomainEvent: model.NewDomainEventID,
+		NewJob:         model.NewJobID,
 	})
 	require.NoError(t, err)
 	f.service = service

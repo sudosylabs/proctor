@@ -256,6 +256,10 @@ func endExamAttemptByManager(
 	if err != nil {
 		return zero, err
 	}
+	events := domainEventIdentities{EventID: input.DomainEventID, JobID: input.DomainEventJobID}
+	if !events.valid() {
+		return zero, store.NewErrInvalidInput("exam_submission", "domain_event", nil)
+	}
 
 	accounting, err := lockAutomaticExamSubmissionAccounting(ctx, tx, row, target.AttemptID, "current_policy")
 	if err != nil {
@@ -350,6 +354,9 @@ func endExamAttemptByManager(
 		return zero, err
 	}
 	if err = insertExamSubmissionReceiptMail(ctx, tx, input.Notice, payloadKeyID); err != nil {
+		return zero, err
+	}
+	if err = insertExamAttemptSubmittedEvent(ctx, tx, events, submission, target.SittingID, target.ExamID, databaseNow); err != nil {
 		return zero, err
 	}
 

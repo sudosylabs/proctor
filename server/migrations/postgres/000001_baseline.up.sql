@@ -241,6 +241,19 @@ CREATE TABLE job_attempts (
 CREATE INDEX job_attempts_expired_idx ON job_attempts (lease_expires_at, id) WHERE status = 'running';
 CREATE INDEX job_attempts_incompatible_node_idx ON job_attempts (job_id, node_id) WHERE status = 'incompatible';
 
+-- The domain-event outbox. A row is written in the transaction that commits
+-- the fact it describes, together with its dispatch Job, and is deleted once
+-- that Job has delivered it. Data holds identifiers only.
+CREATE TABLE domain_events (
+    id varchar(26) PRIMARY KEY,
+    topic varchar(64) NOT NULL,
+    data jsonb NOT NULL,
+    occurred_at timestamptz NOT NULL,
+    CONSTRAINT domain_events_id_canonical_check CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    CONSTRAINT domain_events_topic_check CHECK (topic IN ('exam.attempt.submitted')),
+    CONSTRAINT domain_events_data_check CHECK (jsonb_typeof(data) = 'object' AND octet_length(data::text) <= 4096)
+);
+
 -- ---------------------------------------------------------------------------
 -- Identity domain
 -- ---------------------------------------------------------------------------

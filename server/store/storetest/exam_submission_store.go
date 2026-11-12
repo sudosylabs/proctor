@@ -49,6 +49,7 @@ func attachSubmissionReceipt(t *testing.T, ctx context.Context, ss store.Store, 
 	input.Notice = submissionReceiptNotice(t, candidate, input.SubmissionID, input.AuditAt,
 		model.MailTemplateExamSubmissionReceived)
 	input.ExpectedRecipientRevision = candidate.Revision
+	input.DomainEventID, input.DomainEventJobID = model.NewDomainEventID(), model.NewJobID()
 }
 
 func attachAutomaticSubmissionReceipt(t *testing.T, candidate *model.User, input *store.ExamSubmissionAutomaticSeal) {
@@ -56,6 +57,7 @@ func attachAutomaticSubmissionReceipt(t *testing.T, candidate *model.User, input
 	input.Notice = submissionReceiptNotice(t, candidate, input.SubmissionID, input.AuditAt,
 		model.MailTemplateExamSubmissionAutomaticallySealed)
 	input.ExpectedRecipientRevision = candidate.Revision
+	input.DomainEventID, input.DomainEventJobID = model.NewDomainEventID(), model.NewJobID()
 }
 
 func attachManagerEndedSubmissionReceipt(t *testing.T, candidate *model.User, input *store.ExamSubmissionManagerEnd) {
@@ -63,6 +65,7 @@ func attachManagerEndedSubmissionReceipt(t *testing.T, candidate *model.User, in
 	input.Notice = submissionReceiptNotice(t, candidate, input.SubmissionID, input.AuditAt,
 		model.MailTemplateExamSubmissionManagerEnded)
 	input.ExpectedRecipientRevision = candidate.Revision
+	input.DomainEventID, input.DomainEventJobID = model.NewDomainEventID(), model.NewJobID()
 }
 
 func submissionReceiptNotice(t *testing.T, candidate *model.User, submissionID model.SubmissionID, auditAt time.Time,
@@ -175,6 +178,10 @@ func TestExamSubmissionStore(t *testing.T, ss store.Store, submissions store.Exa
 	require.Equal(t, connected.Participation.Generation, sealed.Generation)
 	require.Equal(t, connected.Connection.ID, sealed.ConnectionID)
 	requireSuccessfulAudit(t, ctx, ss, input.AuditEventID)
+	requireExamAttemptSubmittedEvent(t, ctx, ss, input.DomainEventID, input.DomainEventJobID, examAttemptSubmittedFact{
+		SubmissionID: sealed.Receipt.SubmissionID, AttemptID: connected.Attempt.ID, SittingID: fixture.sitting.ID,
+		ExamID: fixture.examID, SubmittedAt: sealed.Receipt.SubmittedAt,
+	})
 	replayTarget, err := submissions.ResolveSealTarget(ctx, access)
 	require.NoError(t, err)
 	require.NotNil(t, replayTarget)
@@ -662,17 +669,23 @@ func testManagerEndedExamSubmission(t *testing.T, ctx context.Context, ss store.
 		delivery, err := ss.Mail().GetDelivery(ctx, input.Notice.Delivery.ID)
 		require.NoError(t, err)
 		require.Equal(t, model.MailTemplateExamSubmissionManagerEnded, delivery.TemplateKey)
+		requireExamAttemptSubmittedEvent(t, ctx, ss, input.DomainEventID, input.DomainEventJobID, examAttemptSubmittedFact{
+			SubmissionID: ended.Receipt.SubmissionID, AttemptID: connected.Attempt.ID, SittingID: fixture.sitting.ID,
+			ExamID: fixture.examID, SubmittedAt: ended.Receipt.SubmittedAt,
+		})
 		replayPreparation, err := submissions.PrepareManagerEnd(ctx, request)
 		require.NoError(t, err)
 		require.NotNil(t, replayPreparation)
 		require.True(t, replayPreparation.Replayed)
 		replay := &store.ExamSubmissionManagerEnd{Request: request, Target: replayPreparation.Target,
 			SubmissionID: model.NewSubmissionID(), ReceiptCode: model.NewSubmissionReceiptCode(), AuditEventID: saveExamSittingAudit(t, ctx, ss, fixture.manager.ID,
-				fixture.examID, fixture.unitID).ID, AuditAt: replayPreparation.SealAt}
+				fixture.examID, fixture.unitID).ID, AuditAt: replayPreparation.SealAt,
+			DomainEventID: model.NewDomainEventID(), DomainEventJobID: model.NewJobID()}
 		replayed, err := submissions.EndByManager(ctx, replay, command)
 		require.NoError(t, err)
 		require.True(t, replayed.ConsistentWith(connected.Attempt.ID, fixture.examID, fixture.sitting.ID, replayPreparation.Target, replay.SubmissionID, replay.ReceiptCode),
 			"EndByManager replay returned a result inconsistent with its request")
+		requireNoDomainEvent(t, ctx, ss, replay.DomainEventID, replay.DomainEventJobID)
 		require.NotNil(t, replayed)
 		require.True(t, replayed.Replayed)
 		require.False(t, replayed.ConnectionClosed)
@@ -789,6 +802,7 @@ func testAutomaticExamSubmissionSealing(t *testing.T, ctx context.Context, ss st
 		delivery, deliveryErr := ss.Mail().GetDelivery(ctx, rollbackInput.Notice.Delivery.ID)
 		require.True(t, store.IsNotFound(deliveryErr), "automatic rolled-back receipt")
 		require.Nil(t, delivery, "automatic rolled-back receipt")
+		requireNoDomainEvent(t, ctx, ss, rollbackInput.DomainEventID, rollbackInput.DomainEventJobID)
 		suspendedInput := &store.ExamSubmissionAutomaticSeal{
 			Target: suspendedTarget, SubmissionID: model.NewSubmissionID(), ReceiptCode: model.NewSubmissionReceiptCode(), AuditEventID: suspendedAudit.ID,
 			AuditAt: suspendedPreparation.SealAt}
@@ -799,6 +813,10 @@ func testAutomaticExamSubmissionSealing(t *testing.T, ctx context.Context, ss st
 			"SealForSittingClose returned a result inconsistent with its request")
 		require.False(t, suspendedResult.Replayed)
 		require.False(t, suspendedResult.ConnectionClosed)
+		requireExamAttemptSubmittedEvent(t, ctx, ss, suspendedInput.DomainEventID, suspendedInput.DomainEventJobID, examAttemptSubmittedFact{
+			SubmissionID: suspendedResult.Receipt.SubmissionID, AttemptID: suspendedTarget.AttemptID, SittingID: suspendedTarget.SittingID,
+			ExamID: suspendedTarget.ExamID, SubmittedAt: suspendedResult.Receipt.SubmittedAt,
+		})
 		automaticReceipts, listErr := ss.Mail().ListDeliveries(ctx, store.MailDeliveryListOptions{
 			TemplateKeys: []model.MailTemplateKey{model.MailTemplateExamSubmissionAutomaticallySealed}, Limit: 200})
 		require.NoError(t, listErr)
@@ -949,6 +967,15 @@ func raceAutomaticExamSubmissionSeal(t *testing.T, ctx context.Context, ss store
 	}
 	require.Equal(t, winner.Receipt.SubmissionID, winningInput.SubmissionID)
 	require.Equal(t, winningInput.ReceiptCode, winner.Receipt.ReceiptCode, "the automatic replay returned another receipt code")
+	losingInput := inputs[0]
+	if losingInput == winningInput {
+		losingInput = inputs[1]
+	}
+	requireExamAttemptSubmittedEvent(t, ctx, ss, winningInput.DomainEventID, winningInput.DomainEventJobID, examAttemptSubmittedFact{
+		SubmissionID: winner.Receipt.SubmissionID, AttemptID: target.AttemptID, SittingID: target.SittingID,
+		ExamID: target.ExamID, SubmittedAt: winner.Receipt.SubmittedAt,
+	})
+	requireNoDomainEvent(t, ctx, ss, losingInput.DomainEventID, losingInput.DomainEventJobID)
 	require.NotEqual(t, values[1].ConnectionClosed, values[0].ConnectionClosed)
 	for _, input := range inputs {
 		requireSuccessfulAudit(t, ctx, ss, input.AuditEventID)
@@ -1023,6 +1050,7 @@ func testExamSubmissionRollback(t *testing.T, ctx context.Context, ss store.Stor
 	delivery, err := ss.Mail().GetDelivery(ctx, input.Notice.Delivery.ID)
 	require.True(t, store.IsNotFound(err), "GetDelivery(rolled-back voluntary receipt)")
 	require.Nil(t, delivery, "GetDelivery(rolled-back voluntary receipt)")
+	requireNoDomainEvent(t, ctx, ss, input.DomainEventID, input.DomainEventJobID)
 	_, err = submissions.ResolveSealTarget(ctx, access)
 	require.NoError(t, err)
 	manager, err := ss.ExamAttempt().Get(ctx, fixture.examID, connected.Attempt.ID)
@@ -1263,8 +1291,14 @@ func testIndependentExamSubmissionReplay(t *testing.T, ctx context.Context, ss s
 	replay.SubmissionID = model.NewSubmissionID()
 	replay.ReceiptCode = model.NewSubmissionReceiptCode()
 	replay.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
+	replay.DomainEventID, replay.DomainEventJobID = model.NewDomainEventID(), model.NewJobID()
 	replayed, err := second.Seal(ctx, &replay, command)
 	require.NoError(t, err)
+	requireExamAttemptSubmittedEvent(t, ctx, ss, input.DomainEventID, input.DomainEventJobID, examAttemptSubmittedFact{
+		SubmissionID: sealed.Receipt.SubmissionID, AttemptID: connected.Attempt.ID, SittingID: fixture.sitting.ID,
+		ExamID: fixture.examID, SubmittedAt: sealed.Receipt.SubmittedAt,
+	})
+	requireNoDomainEvent(t, ctx, ss, replay.DomainEventID, replay.DomainEventJobID)
 	require.NotNil(t, replayed, "Seal(independent unknown-commit replay) = %#v, first = %#v", replayed, sealed)
 	require.True(t, replayed.Replayed, "Seal(independent unknown-commit replay) = %#v, first = %#v", replayed, sealed)
 	require.Equal(t, sealed.Receipt, replayed.Receipt, "Seal(independent unknown-commit replay) = %#v, first = %#v", replayed, sealed)
@@ -1324,13 +1358,14 @@ func testConcurrentExamSubmission(t *testing.T, ctx context.Context, ss store.St
 	require.Len(t, succeeded, 1, "concurrent different-key Seals")
 	require.Equal(t, 1, failed, "concurrent different-key Seals")
 	require.False(t, succeeded[0].Replayed, "concurrent different-key Seals")
-	losingID := inputs[0].SubmissionID
-	if losingID == succeeded[0].Receipt.SubmissionID {
-		losingID = inputs[1].SubmissionID
+	losing := inputs[0]
+	if losing.SubmissionID == succeeded[0].Receipt.SubmissionID {
+		losing = inputs[1]
 	}
-	got, err := first.Get(ctx, losingID)
+	got, err := first.Get(ctx, losing.SubmissionID)
 	require.True(t, store.IsNotFound(err), "Get(concurrent losing Submission)")
 	require.Nil(t, got, "Get(concurrent losing Submission)")
+	requireNoDomainEvent(t, ctx, ss, losing.DomainEventID, losing.DomainEventJobID)
 }
 
 func submissionAccess(access store.ExamAttemptFocusLossAccess, currentRevisionID model.ExamRevisionID,

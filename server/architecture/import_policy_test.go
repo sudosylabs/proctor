@@ -301,6 +301,7 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app/exam"),
 			exact(serverModule+"/app/exam/attempt"),
 			exact(serverModule+"/app/exam/sitting"),
+			exact(serverModule+"/app/events"),
 		),
 	},
 	{
@@ -317,6 +318,15 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app/access"),
 			exact(serverModule+"/app/apperror"),
 			exact(serverModule+"/app/invocation"),
+		),
+	},
+	{
+		name:           "domain event dispatch",
+		sources:        []pathPattern{subtree(serverModule + "/app/events")},
+		deniedStandard: standardInfrastructure,
+		project: only(
+			exact(serverModule+"/model"),
+			exact(serverModule+"/plugin"),
 		),
 	},
 	{
@@ -649,6 +659,7 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/store"),
 			exact(serverModule+"/app/job"),
 			exact(serverModule+"/app/jobs"),
+			exact(serverModule+"/app/events"),
 			exact(serverModule+"/app/realtime"),
 			exact(serverModule+"/app/mail"),
 			exact(serverModule+"/app/search"),
@@ -914,6 +925,7 @@ func TestDependencyRulePrecedence(t *testing.T) {
 		wantRule    string
 	}{
 		{packagePath: serverModule + "/app/jobs", wantRule: "concrete jobs"},
+		{packagePath: serverModule + "/app/events", wantRule: "domain event dispatch"},
 		{packagePath: serverModule + "/app/idempotency", wantRule: "idempotency application"},
 		{packagePath: serverModule + "/app/invocation", wantRule: "invocation application"},
 		{packagePath: serverModule + "/app/apperror", wantRule: "application error vocabulary"},

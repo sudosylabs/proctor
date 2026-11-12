@@ -180,6 +180,9 @@ type MailOccurrenceID string
 // MailDeliveryID identifies one frozen single-recipient delivery.
 type MailDeliveryID string
 
+// DomainEventID identifies one committed domain event awaiting delivery.
+type DomainEventID string
+
 // ExternalLoginStateID identifies a one-use external login transaction.
 type ExternalLoginStateID string
 

@@ -121,9 +121,10 @@ func (s *hookStore) User() store.UserStore               { return hookUserStore{
 func (s *hookStore) UserSettings() store.UserSettingsStore {
 	return hookUserSettingsStore{}
 }
-func (s *hookStore) File() store.FileStore       { return nil }
-func (s *hookStore) Job() store.JobStore         { return nil }
-func (s *hookStore) Session() store.SessionStore { return hookSessionStore{} }
+func (s *hookStore) File() store.FileStore               { return nil }
+func (s *hookStore) Job() store.JobStore                 { return nil }
+func (s *hookStore) DomainEvent() store.DomainEventStore { return nil }
+func (s *hookStore) Session() store.SessionStore         { return hookSessionStore{} }
 func (s *hookStore) SessionCredential() store.SessionCredentialStore {
 	return hookSessionCredentialStore{}
 }

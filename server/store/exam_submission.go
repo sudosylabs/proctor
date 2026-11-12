@@ -58,6 +58,8 @@ type ExamSubmissionSealTarget struct {
 // ReceiptCode are not part of the semantic command fingerprint: an
 // outcome-unknown retry returns the single retained Submission and its
 // original receipt code rather than creating or minting a second one.
+// DomainEventID and DomainEventJobID name the exam.attempt.submitted outbox
+// row and its dispatch Job that a fresh seal inserts; a replay ignores them.
 type ExamSubmissionSeal struct {
 	SubmissionID              model.SubmissionID
 	ReceiptCode               model.SubmissionReceiptCode
@@ -66,6 +68,8 @@ type ExamSubmissionSeal struct {
 	AuditAt                   time.Time
 	Notice                    *PreparedMail
 	ExpectedRecipientRevision int64
+	DomainEventID             model.DomainEventID
+	DomainEventJobID          model.JobID
 }
 
 // ExamSubmissionReceipt combines immutable content identity with current, bounded
@@ -172,7 +176,9 @@ type ExamSubmissionAutomaticSealTarget struct {
 // receipt code, and actor-less audit attempt. AttemptID is the natural
 // idempotency key: a concurrent or crash replay returns the one retained
 // Submission with its original receipt code and completes the new audit
-// without duplicating the immutable manifest.
+// without duplicating the immutable manifest. DomainEventID and
+// DomainEventJobID name the exam.attempt.submitted outbox row and its dispatch
+// Job that a fresh seal inserts; a replay ignores them.
 type ExamSubmissionAutomaticSeal struct {
 	Target                    ExamSubmissionAutomaticSealTarget
 	SubmissionID              model.SubmissionID
@@ -181,6 +187,8 @@ type ExamSubmissionAutomaticSeal struct {
 	AuditAt                   time.Time
 	Notice                    *PreparedMail
 	ExpectedRecipientRevision int64
+	DomainEventID             model.DomainEventID
+	DomainEventJobID          model.JobID
 }
 
 // ExamSubmissionAutomaticSealResult is the safe post-commit projection used
@@ -249,6 +257,11 @@ type ExamSubmissionManagerEndRequest struct {
 	PrivateReason           string
 }
 
+// ExamSubmissionManagerEnd supplies the server-proposed Submission identity,
+// receipt code, audit attempt and receipt to an authorized manager seal.
+// DomainEventID and DomainEventJobID name the exam.attempt.submitted outbox
+// row and its dispatch Job that a fresh manager seal inserts; a replay
+// ignores them.
 type ExamSubmissionManagerEnd struct {
 	Request                   ExamSubmissionManagerEndRequest
 	Target                    ExamSubmissionAutomaticSealTarget
@@ -258,6 +271,8 @@ type ExamSubmissionManagerEnd struct {
 	AuditAt                   time.Time
 	Notice                    *PreparedMail
 	ExpectedRecipientRevision int64
+	DomainEventID             model.DomainEventID
+	DomainEventJobID          model.JobID
 }
 
 type ExamSubmissionManagerEndResult struct {
@@ -405,7 +420,9 @@ type ExamSubmissionFileSelector struct {
 // code, and its retained content references at the reserved action time; marks the Attempt Submitted; ends Participation
 // and Connection; terminates integrity collection as Settled or Gapped;
 // completes the supplied audit; inserts exactly one semantic receipt
-// occurrence and queued or terminally suppressed delivery; and retains the
+// occurrence and queued or terminally suppressed delivery; inserts exactly one
+// exam.attempt.submitted domain event, at the transaction's PostgreSQL time,
+// and its queued dispatch Job; and retains the
 // bounded command outcome in the same transaction. Encrypted receipt payloads
 // hold the durable primary-key fence through commit. A failed transaction
 // changes none of those facts.
@@ -422,14 +439,18 @@ type ExamSubmissionFileSelector struct {
 // attempt_participation_generation, attempt_participation_expired, and
 // attempt_connection_closed.
 // Fresh voluntary and automatic seals require the matching prepared notice
-// and expected recipient revision; exact replay requires neither and never
-// inserts another occurrence, delivery, or Job. PrepareAutomaticSeal performs
+// and expected recipient revision, and the proposed domain event and dispatch
+// Job identities; exact replay requires none of them and never inserts another
+// occurrence, delivery, domain event, or Job. PrepareAutomaticSeal performs
 // no transition: it locks and resolves the exact automatic target, reports a
 // retained replay, and reserves the PostgreSQL action time used by a fresh
 // automatic seal. SealForSittingClose repeats the User-first recipient and
 // lifecycle checks before the Attempt/Workspace transition, uses that same
 // action time for Submission, audit, and receipt, and otherwise has the same
 // atomic mail, audit, rollback, rekey-fence, and replay guarantees as Seal.
+// EndByManager likewise commits exactly one exam.attempt.submitted domain
+// event and its dispatch Job with a fresh manager-ended Submission, and none
+// on replay.
 //
 // Manager callers authorize externally through Resolve before Get,
 // ListManifest, or ResolveFile. Get returns only the immutable aggregate

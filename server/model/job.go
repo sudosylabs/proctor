@@ -56,6 +56,9 @@ const (
 	// JobTypeAcademicAdministrationPreviewResolve resolves the Users an
 	// academic administration filter matches into a frozen preview.
 	JobTypeAcademicAdministrationPreviewResolve JobType = "academic_administration_preview.resolve"
+	// JobTypeDomainEventDispatch delivers one committed domain event from the
+	// outbox to the plugin event handlers.
+	JobTypeDomainEventDispatch JobType = "domain_event.dispatch"
 
 	JobStatusQueued          JobStatus = "queued"
 	JobStatusRunning         JobStatus = "running"
@@ -502,6 +505,7 @@ var jobTypes = []JobType{
 	JobTypeAcademicAdministrationPreviewResolve,
 	JobTypeExamExportBuild,
 	JobTypeExamExportCleanup,
+	JobTypeDomainEventDispatch,
 }
 
 // jobStatuses is the closed Job status vocabulary in lifecycle order.

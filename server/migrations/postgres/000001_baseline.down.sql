@@ -62,6 +62,7 @@ DROP TABLE IF EXISTS browser_authentication_transactions;
 DROP TABLE IF EXISTS invitations;
 DROP TABLE IF EXISTS job_attempts;
 DROP TABLE IF EXISTS job_permanent_occurrences;
+DROP TABLE IF EXISTS domain_events;
 DROP TABLE IF EXISTS jobs;
 DROP TABLE IF EXISTS administrator_recovery_records;
 DROP TABLE IF EXISTS installation_states;

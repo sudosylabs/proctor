@@ -631,6 +631,10 @@ func sealExamSubmission(ctx context.Context, tx *sqlxTxWrapper, input *store.Exa
 	if err != nil {
 		return zero, err
 	}
+	events := domainEventIdentities{EventID: input.DomainEventID, JobID: input.DomainEventJobID}
+	if !events.valid() {
+		return zero, store.NewErrInvalidInput("exam_submission", "domain_event", nil)
+	}
 
 	tail := input.Access.FinalFocusLossSequence - integrityTail.AcceptedSequence
 	if tail > math.MaxInt64-integrityTail.TotalUnresolved {
@@ -747,6 +751,9 @@ func sealExamSubmission(ctx context.Context, tx *sqlxTxWrapper, input *store.Exa
 		return zero, err
 	}
 	if err = insertExamSubmissionReceiptMail(ctx, tx, input.Notice, payloadKeyID); err != nil {
+		return zero, err
+	}
+	if err = insertExamAttemptSubmittedEvent(ctx, tx, events, submission, target.SittingID, target.ExamID, databaseNow); err != nil {
 		return zero, err
 	}
 

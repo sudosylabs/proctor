@@ -145,6 +145,7 @@ func runLayerConformance(
 		{"UserSettings", storetest.TestUserSettingsStore},
 		{"File", storetest.TestFileStore},
 		{"Job", storetest.TestJobStore},
+		{"DomainEvent", storetest.TestDomainEventStore},
 		{"Mail", storetest.TestMailStore},
 		{"ExternalIdentity", storetest.TestExternalIdentityStore},
 		{"ExternalLoginState", func(t *testing.T, decorated store.Store) {

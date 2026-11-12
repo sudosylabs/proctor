@@ -95,6 +95,7 @@ type Catalog interface {
 	UserSettings() UserSettingsStore
 	File() FileStore
 	Job() JobStore
+	DomainEvent() DomainEventStore
 	Mail() MailStore
 	ExternalIdentity() ExternalIdentityStore
 	ExternalLoginState() ExternalLoginStateStore

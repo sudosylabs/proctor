@@ -113,6 +113,7 @@ type SQLStoreStores struct {
 	userSettings               store.UserSettingsStore
 	file                       store.FileStore
 	job                        store.JobStore
+	domainEvent                store.DomainEventStore
 	mail                       store.MailStore
 	externalIdentity           store.ExternalIdentityStore
 	externalLoginState         store.ExternalLoginStateStore
@@ -274,6 +275,7 @@ func New(ctx context.Context, settings Settings) (*SQLStore, error) {
 	sqlStore.stores.clusterDiscovery = newSQLClusterDiscoveryStore(sqlStore)
 	sqlStore.stores.servingNodeLease = newSQLServingNodeLeaseStore(sqlStore)
 	sqlStore.stores.commandOutcome = newSQLCommandOutcomeStore(sqlStore)
+	sqlStore.stores.domainEvent = newSQLDomainEventStore(sqlStore)
 	return sqlStore, nil
 }
 
@@ -489,6 +491,9 @@ func (ss *SQLStore) ServingNodeLease() store.ServingNodeLeaseStore {
 }
 
 func (ss *SQLStore) CommandOutcome() store.CommandOutcomeStore { return ss.stores.commandOutcome }
+
+// DomainEvent returns the domain-event outbox adapter.
+func (ss *SQLStore) DomainEvent() store.DomainEventStore { return ss.stores.domainEvent }
 
 func (ss *SQLStore) GetMaster() *sqlxDBWrapper {
 	return ss.masterX

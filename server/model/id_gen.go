@@ -171,6 +171,9 @@ func NewMailOccurrenceID() MailOccurrenceID { return MailOccurrenceID(NewID()) }
 // NewMailDeliveryID returns a freshly generated mail-delivery identifier.
 func NewMailDeliveryID() MailDeliveryID { return MailDeliveryID(NewID()) }
 
+// NewDomainEventID returns a freshly generated domain-event identifier.
+func NewDomainEventID() DomainEventID { return DomainEventID(NewID()) }
+
 // NewExternalLoginStateID returns a freshly generated external-login-state identifier.
 func NewExternalLoginStateID() ExternalLoginStateID { return ExternalLoginStateID(NewID()) }
 
@@ -456,6 +459,11 @@ func ParseMailDeliveryID(value string) (MailDeliveryID, error) {
 	return parseID[MailDeliveryID](value, "mail_delivery_id")
 }
 
+// ParseDomainEventID validates and converts the shared identifier representation.
+func ParseDomainEventID(value string) (DomainEventID, error) {
+	return parseID[DomainEventID](value, "domain_event_id")
+}
+
 // ParseExternalLoginStateID validates and converts the shared identifier representation.
 func ParseExternalLoginStateID(value string) (ExternalLoginStateID, error) {
 	return parseID[ExternalLoginStateID](value, "external_login_state_id")
@@ -647,6 +655,9 @@ func (id MailOccurrenceID) IsZero() bool { return id == "" }
 // IsZero reports whether the mail-delivery is the empty zero value.
 func (id MailDeliveryID) IsZero() bool { return id == "" }
 
+// IsZero reports whether the domain-event is the empty zero value.
+func (id DomainEventID) IsZero() bool { return id == "" }
+
 // IsZero reports whether the external-login-state is the empty zero value.
 func (id ExternalLoginStateID) IsZero() bool { return id == "" }
 
@@ -823,6 +834,9 @@ func (id MailOccurrenceID) IsValid() bool { return IsValidOpaqueID(string(id)) }
 
 // IsValid reports whether the mail-delivery is a canonical non-zero ID.
 func (id MailDeliveryID) IsValid() bool { return IsValidOpaqueID(string(id)) }
+
+// IsValid reports whether the domain-event is a canonical non-zero ID.
+func (id DomainEventID) IsValid() bool { return IsValidOpaqueID(string(id)) }
 
 // IsValid reports whether the external-login-state is a canonical non-zero ID.
 func (id ExternalLoginStateID) IsValid() bool { return IsValidOpaqueID(string(id)) }
@@ -1001,6 +1015,9 @@ func (id MailOccurrenceID) String() string { return string(id) }
 // String returns the mail-delivery wire/database representation.
 func (id MailDeliveryID) String() string { return string(id) }
 
+// String returns the domain-event wire/database representation.
+func (id DomainEventID) String() string { return string(id) }
+
 // String returns the external-login-state wire/database representation.
 func (id ExternalLoginStateID) String() string { return string(id) }
 
@@ -1177,6 +1194,9 @@ func (id MailOccurrenceID) MarshalText() ([]byte, error) { return marshalID(id) 
 
 // MarshalText encodes the mail-delivery as its canonical string.
 func (id MailDeliveryID) MarshalText() ([]byte, error) { return marshalID(id) }
+
+// MarshalText encodes the domain-event as its canonical string.
+func (id DomainEventID) MarshalText() ([]byte, error) { return marshalID(id) }
 
 // MarshalText encodes the external-login-state as its canonical string.
 func (id ExternalLoginStateID) MarshalText() ([]byte, error) { return marshalID(id) }
@@ -1459,6 +1479,11 @@ func (id *MailDeliveryID) UnmarshalText(data []byte) error {
 	return unmarshalID(id, data, ParseMailDeliveryID)
 }
 
+// UnmarshalText decodes and validates the domain-event when non-empty.
+func (id *DomainEventID) UnmarshalText(data []byte) error {
+	return unmarshalID(id, data, ParseDomainEventID)
+}
+
 // UnmarshalText decodes and validates the external-login-state when non-empty.
 func (id *ExternalLoginStateID) UnmarshalText(data []byte) error {
 	return unmarshalID(id, data, ParseExternalLoginStateID)
@@ -1649,6 +1674,9 @@ func (id MailOccurrenceID) MarshalJSON() ([]byte, error) { return marshalIDJSON(
 
 // MarshalJSON encodes the mail-delivery as a JSON string.
 func (id MailDeliveryID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
+
+// MarshalJSON encodes the domain-event as a JSON string.
+func (id DomainEventID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
 
 // MarshalJSON encodes the external-login-state as a JSON string.
 func (id ExternalLoginStateID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
@@ -1929,6 +1957,11 @@ func (id *MailOccurrenceID) UnmarshalJSON(data []byte) error {
 // UnmarshalJSON decodes a JSON string into the mail-delivery.
 func (id *MailDeliveryID) UnmarshalJSON(data []byte) error {
 	return unmarshalIDJSON(id, data, ParseMailDeliveryID)
+}
+
+// UnmarshalJSON decodes a JSON string into the domain-event.
+func (id *DomainEventID) UnmarshalJSON(data []byte) error {
+	return unmarshalIDJSON(id, data, ParseDomainEventID)
 }
 
 // UnmarshalJSON decodes a JSON string into the external-login-state.

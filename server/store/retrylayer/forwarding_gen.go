@@ -70,6 +70,8 @@ type retryStores struct {
 	fileOnce                       sync.Once
 	job                            store.JobStore
 	jobOnce                        sync.Once
+	domainEvent                    store.DomainEventStore
+	domainEventOnce                sync.Once
 	mail                           store.MailStore
 	mailOnce                       sync.Once
 	externalIdentity               store.ExternalIdentityStore
@@ -258,6 +260,11 @@ type fileStore struct {
 
 type jobStore struct {
 	store.JobStore
+	layer *Layer
+}
+
+type domainEventStore struct {
+	store.DomainEventStore
 	layer *Layer
 }
 
@@ -666,6 +673,16 @@ func (l *Layer) Job() store.JobStore {
 	return l.stores.job
 }
 
+func (l *Layer) DomainEvent() store.DomainEventStore {
+	l.stores.domainEventOnce.Do(func() {
+		next := l.Store.DomainEvent()
+		if next != nil {
+			l.stores.domainEvent = &domainEventStore{DomainEventStore: next, layer: l}
+		}
+	})
+	return l.stores.domainEvent
+}
+
 func (l *Layer) Mail() store.MailStore {
 	l.stores.mailOnce.Do(func() {
 		next := l.Store.Mail()
@@ -965,6 +982,7 @@ var (
 	_ store.UserSettingsStore               = (*userSettingsStore)(nil)
 	_ store.FileStore                       = (*fileStore)(nil)
 	_ store.JobStore                        = (*jobStore)(nil)
+	_ store.DomainEventStore                = (*domainEventStore)(nil)
 	_ store.MailStore                       = (*mailStore)(nil)
 	_ store.ExternalIdentityStore           = (*externalIdentityStore)(nil)
 	_ store.ExternalLoginStateStore         = (*externalLoginStateStore)(nil)

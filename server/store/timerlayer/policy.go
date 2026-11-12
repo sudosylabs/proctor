@@ -31,6 +31,7 @@ const (
 	aggregateRetention                  aggregateName = "retention"
 	aggregateExamExport                 aggregateName = "exam_export"
 	aggregateDesktopRegistration        aggregateName = "desktop_registration"
+	aggregateDomainEvent                aggregateName = "domain_event"
 	aggregateExternalIdentity           aggregateName = "external_identity"
 	aggregateExternalLoginState         aggregateName = "external_login_state"
 	aggregateExamAuthoring              aggregateName = "exam_authoring"

@@ -22,6 +22,7 @@ components:
         - academic_administration_preview.resolve
         - audit.attempt_sweep
         - command_outcome.cleanup
+        - domain_event.dispatch
         - exam_export.build
         - exam_export.cleanup
         - exam_sitting.lifecycle

@@ -73,6 +73,8 @@ type timedStores struct {
 	fileOnce                       sync.Once
 	job                            store.JobStore
 	jobOnce                        sync.Once
+	domainEvent                    store.DomainEventStore
+	domainEventOnce                sync.Once
 	mail                           store.MailStore
 	mailOnce                       sync.Once
 	externalIdentity               store.ExternalIdentityStore
@@ -262,6 +264,11 @@ type timedFileStore struct {
 type timedJobStore struct {
 	layer *Layer
 	next  store.JobStore
+}
+
+type timedDomainEventStore struct {
+	layer *Layer
+	next  store.DomainEventStore
 }
 
 type timedMailStore struct {
@@ -667,6 +674,16 @@ func (l *Layer) Job() store.JobStore {
 		}
 	})
 	return l.stores.job
+}
+
+func (l *Layer) DomainEvent() store.DomainEventStore {
+	l.stores.domainEventOnce.Do(func() {
+		next := l.next.DomainEvent()
+		if next != nil {
+			l.stores.domainEvent = &timedDomainEventStore{layer: l, next: next}
+		}
+	})
+	return l.stores.domainEvent
 }
 
 func (l *Layer) Mail() store.MailStore {
@@ -2535,6 +2552,18 @@ func (s *timedJobStore) DeleteTerminalHistory(arg0 context.Context, arg1 *store.
 	})
 }
 
+func (s *timedDomainEventStore) Get(arg0 context.Context, arg1 model.DomainEventID) (*model.DomainEvent, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateDomainEvent, methodGet), func(callCtx context.Context) (*model.DomainEvent, error) {
+		return s.next.Get(callCtx, arg1)
+	})
+}
+
+func (s *timedDomainEventStore) Delete(arg0 context.Context, arg1 model.DomainEventID) error {
+	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateDomainEvent, methodDelete), func(callCtx context.Context) error {
+		return s.next.Delete(callCtx, arg1)
+	})
+}
+
 func (s *timedMailStore) EnqueueTest(arg0 context.Context, arg1 *store.MailTestEnqueue) (*model.MailDelivery, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateMail, methodEnqueueTest), func(callCtx context.Context) (*model.MailDelivery, error) {
 		return s.next.EnqueueTest(callCtx, arg1)
@@ -4028,6 +4057,7 @@ var (
 	_ store.UserSettingsStore               = (*timedUserSettingsStore)(nil)
 	_ store.FileStore                       = (*timedFileStore)(nil)
 	_ store.JobStore                        = (*timedJobStore)(nil)
+	_ store.DomainEventStore                = (*timedDomainEventStore)(nil)
 	_ store.MailStore                       = (*timedMailStore)(nil)
 	_ store.ExternalIdentityStore           = (*timedExternalIdentityStore)(nil)
 	_ store.ExternalLoginStateStore         = (*timedExternalLoginStateStore)(nil)

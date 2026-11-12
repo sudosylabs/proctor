@@ -32,7 +32,7 @@ type healthResponse struct {
 type systemHandlers struct {
 	health    Health
 	buildInfo BuildInfo
-	plugins   ActivePlugins
+	plugins   Plugins
 	app       DesktopCompatibilityApplication
 	now       func() time.Time
 }
@@ -43,14 +43,20 @@ type PluginSummary struct {
 	Name string `json:"name"`
 }
 
-// ActivePlugins reports the plugins that are active on this node. A nil
-// ActivePlugins reports none.
-type ActivePlugins func() []PluginSummary
+// Plugins is what the HTTP API reports about the node's plugins. A nil
+// Plugins reports none, and none degraded.
+type Plugins interface {
+	// Active lists the plugins that are active on this node.
+	Active() []PluginSummary
+	// Degraded reports whether an enabled plugin has failed. The node still
+	// serves; readiness says "degraded" rather than failing.
+	Degraded() bool
+}
 
 func systemResourceWithApplication(
 	health Health,
 	buildInfo BuildInfo,
-	plugins ActivePlugins,
+	plugins Plugins,
 	app DesktopCompatibilityApplication,
 	now func() time.Time,
 ) route.Resource {
@@ -146,6 +152,9 @@ func (h systemHandlers) readiness(request route.Request) (route.Result, error) {
 			RequestID: route.RequestID(request.Context),
 		}), nil
 	}
+	if h.plugins != nil && h.plugins.Degraded() {
+		return route.JSON(http.StatusOK, healthResponse{Status: "degraded"}), nil
+	}
 	return route.JSON(http.StatusOK, healthResponse{Status: "ok"}), nil
 }
 
@@ -157,7 +166,7 @@ func (h systemHandlers) version(route.Request) (route.Result, error) {
 func (h systemHandlers) activePlugins(request route.Request) (route.Result, error) {
 	var plugins []PluginSummary
 	if h.plugins != nil {
-		plugins = h.plugins()
+		plugins = h.plugins.Active()
 	}
 	response, err := route.BoundedList(
 		request,

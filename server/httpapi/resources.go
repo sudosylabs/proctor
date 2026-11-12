@@ -21,7 +21,7 @@ func productionResources(
 	application *app.App,
 	health Health,
 	buildInfo BuildInfo,
-	plugins ActivePlugins,
+	plugins Plugins,
 	cookies route.Cookies,
 	webSocket WebSocketTransport,
 ) []route.Resource {

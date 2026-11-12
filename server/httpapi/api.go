@@ -36,7 +36,7 @@ func New(application *app.App, settings Settings) (*route.API, error) {
 	return newAPI(
 		settings,
 		application.Identity,
-		productionResources(application, settings.Health, settings.BuildInfo, settings.ActivePlugins, cookies, settings.WebSocket)...,
+		productionResources(application, settings.Health, settings.BuildInfo, settings.Plugins, cookies, settings.WebSocket)...,
 	)
 }
 

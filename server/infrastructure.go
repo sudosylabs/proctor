@@ -171,15 +171,16 @@ func openRuntimeInfrastructure(
 		return result, err
 	}
 	cfg := result.resources.Configuration.Get()
-	plugins, pluginsErr := activatePlugins(ctx, cfg, result.resources.Logger, overrides.Plugins)
-	if pluginsErr != nil {
-		return result, pluginsErr
-	}
-	result.plugins = plugins
 	if err := result.acquirePersistence(ctx, cfg, schema); err != nil {
 		return result, err
 	}
 	metricsModule, tracingModule, err := result.constructTelemetry(cfg)
+	if err != nil {
+		return result, err
+	}
+	// Plugins activate once metrics exist, so their first calls are
+	// recorded, and before anything that consumes what they register.
+	result.plugins, err = activatePlugins(ctx, cfg, result.resources.Logger, pluginRecorder(metricsModule), overrides.Plugins)
 	if err != nil {
 		return result, err
 	}

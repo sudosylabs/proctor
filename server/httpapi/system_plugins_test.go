@@ -21,7 +21,7 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-func systemPluginsAPI(t *testing.T, plugins ActivePlugins) http.Handler {
+func systemPluginsAPI(t *testing.T, plugins Plugins) http.Handler {
 	t.Helper()
 	logger, _ := routetest.NewLogger(t)
 	principal := model.Principal{
@@ -48,9 +48,9 @@ func getSystemPlugins(t *testing.T, handler http.Handler, query string, authoriz
 func TestSystemPluginsPagesTheActivePluginsByName(t *testing.T) {
 	t.Parallel()
 
-	handler := systemPluginsAPI(t, func() []PluginSummary {
-		return []PluginSummary{{ID: "oidc", Name: "OpenID Connect"}, {ID: "cas", Name: "CAS"}, {ID: "export.zip", Name: "Zip export"}}
-	})
+	handler := systemPluginsAPI(t, fakePlugins{active: []PluginSummary{
+		{ID: "oidc", Name: "OpenID Connect"}, {ID: "cas", Name: "CAS"}, {ID: "export.zip", Name: "Zip export"},
+	}})
 
 	response := getSystemPlugins(t, handler, "?limit=2", true)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
@@ -88,4 +88,36 @@ func TestSystemPluginsRejectsAnInvalidPage(t *testing.T) {
 
 	response := getSystemPlugins(t, systemPluginsAPI(t, nil), "?limit=0", true)
 	require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
+}
+
+// fakePlugins is a fixed plugin report.
+type fakePlugins struct {
+	active   []PluginSummary
+	degraded bool
+}
+
+func (p fakePlugins) Active() []PluginSummary { return p.active }
+func (p fakePlugins) Degraded() bool          { return p.degraded }
+
+func TestReadinessIsDegradedButServingWhenAPluginHasFailed(t *testing.T) {
+	t.Parallel()
+
+	for name, test := range map[string]struct {
+		plugins Plugins
+		want    string
+	}{
+		"no plugins":      {plugins: nil, want: `{"status":"ok"}`},
+		"healthy plugins": {plugins: fakePlugins{}, want: `{"status":"ok"}`},
+		"failed plugin":   {plugins: fakePlugins{degraded: true}, want: `{"status":"degraded"}`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health/ready", nil)
+			response := httptest.NewRecorder()
+			systemPluginsAPI(t, test.plugins).ServeHTTP(response, request)
+			require.Equal(t, http.StatusOK, response.Code, "a failed plugin never takes the node out of service")
+			require.JSONEq(t, test.want, response.Body.String())
+		})
+	}
 }

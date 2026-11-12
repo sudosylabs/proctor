@@ -8889,10 +8889,10 @@ export interface components {
         /** @description Minimal successful health-check projection. */
         HealthResponse: {
             /**
-             * @description The literal successful health state.
+             * @description The successful health state. Readiness answers `degraded` when an enabled plugin has failed: the node still serves, without that plugin. The server log and the `proctor_plugin_state` metric name the plugin.
              * @enum {string}
              */
-            status: "ok";
+            status: "ok" | "degraded";
         };
         ID: string;
         /** @description Initial admission and sign-in policy created during bootstrap. */

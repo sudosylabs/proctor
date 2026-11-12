@@ -227,6 +227,9 @@ func (h *Host) discardRegistrations(e *entry) {
 
 // Statuses reports every compiled-in plugin, in activation order.
 func (h *Host) Statuses() []Status {
+	if h == nil {
+		return nil
+	}
 	statuses := make([]Status, 0, len(h.entries))
 	for _, e := range h.entries {
 		statuses = append(statuses, Status{ID: e.manifest.ID, Name: e.manifest.Name, State: e.currentState()})

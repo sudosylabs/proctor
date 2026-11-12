@@ -229,7 +229,7 @@ func TestRootSelectsLocalDevelopmentInfrastructure(t *testing.T) {
 	t.Cleanup(func() { _ = cluster.Stop(context.Background()) })
 	require.Equal(t, settings.Cluster.NodeID, cluster.NodeID(), "cluster node ID")
 
-	plugins, err := activatePlugins(context.Background(), settings, logger, nil)
+	plugins, err := activatePlugins(context.Background(), settings, logger, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = plugins.Close(context.Background()) })
 	providers, err := newExternalAuthenticationRegistry(plugins)
@@ -257,7 +257,7 @@ func TestRootSelectsConfiguredSMTPVFSAndIdentityAdapters(t *testing.T) {
 	logger, err := logging.New()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = logger.Shutdown() })
-	plugins, err := activatePlugins(context.Background(), settings, logger, nil)
+	plugins, err := activatePlugins(context.Background(), settings, logger, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = plugins.Close(context.Background()) })
 	providers, err := newExternalAuthenticationRegistry(plugins)
@@ -297,12 +297,13 @@ func TestActivePluginSummariesListOnlyActivePlugins(t *testing.T) {
 	disabled := false
 	settings := config.Default()
 	settings.Plugins = map[string]config.Plugin{"cas": {Enable: &disabled}}
-	plugins, err := activatePlugins(context.Background(), settings, logger, nil)
+	plugins, err := activatePlugins(context.Background(), settings, logger, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = plugins.Close(context.Background()) })
 
 	require.Equal(t, []httpapi.PluginSummary{
 		{ID: "oidc", Name: "OpenID Connect"},
 		{ID: "export.zip", Name: "Zip export"},
-	}, activePluginSummaries(plugins)(), "the disabled CAS plugin is not listed")
+	}, pluginDirectory{host: plugins}.Active(), "the disabled CAS plugin is not listed")
+	require.False(t, pluginDirectory{host: plugins}.Degraded(), "a disabled plugin does not degrade readiness")
 }

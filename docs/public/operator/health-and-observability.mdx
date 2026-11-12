@@ -32,6 +32,12 @@ rejected serving lease, or a lease renewal that keeps failing past its retry
 slack is terminal: Proctor removes readiness and stops serving rather than
 risk operating without its durable node proof.
 
+A failed plugin never removes readiness. While an enabled plugin has failed,
+`GET /health/ready` still answers `200` but with `"status": "degraded"`, and
+the node keeps serving without that plugin. The server log and the
+`proctor_plugin_state` metric name the plugin. See
+[Plugins configuration](../reference/configuration/plugins.mdx).
+
 The serving lease lasts 30 seconds, renews every 5 seconds, and bounds each
 operation to 5 seconds. A transient renewal failure is retried every second
 while an attempt can still finish at least 5 seconds before the last renewed
@@ -45,7 +51,7 @@ Metrics use a separate node-local listener, default `127.0.0.1:8067`, exposing
 `GET /metrics` and, only when [profiling](#profiling) is enabled, the Go
 runtime profiles. Scrape every node; Memberlist does not aggregate metrics.
 The `proctor_` families cover readiness, HTTP, stores, caches, WebSocket,
-cluster, Jobs, VFS, mail, and selected domain outcomes.
+cluster, Jobs, VFS, mail, plugins, and selected domain outcomes.
 
 When binding beyond loopback, configuration requires static TLS and a random
 32–512-byte bearer token. Keep the token in protected secret input (prefer
@@ -87,6 +93,19 @@ retries and every statement of a transaction. The record carries the
 request's `request_id` and, with tracing enabled, the store span's `trace_id`.
 The default `0s` disables
 the log; `proctor_store_operation_duration_seconds` remains the aggregate view.
+
+### Plugins
+
+| Family | Meaning |
+| --- | --- |
+| `proctor_plugin_state` | 1 for each compiled-in plugin's current state (`disabled`, `active` or `failed`), 0 for its other states |
+| `proctor_plugin_calls_total` | calls from the server into a plugin, by `operation` and `outcome` (`ok`, `error`, `panic`, `unavailable`, `timeout`) |
+| `proctor_plugin_call_duration_seconds` | duration of those calls |
+
+A `panic` or `timeout` outcome is a defect in the plugin. After three panics a
+plugin moves to `failed`. `unavailable` counts calls refused because the
+plugin had already failed. `error` includes the plugin's ordinary refusals,
+such as a sign-in the provider rejected.
 
 ## Profiling
 

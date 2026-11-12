@@ -9,6 +9,7 @@ package server
 
 import (
 	"context"
+	"time"
 
 	"fmt"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/sudosylabs/proctor/server/filecontent"
 	"github.com/sudosylabs/proctor/server/httpapi"
 	"github.com/sudosylabs/proctor/server/logging"
+	"github.com/sudosylabs/proctor/server/metrics"
 	"github.com/sudosylabs/proctor/server/platform/externalauth/cas"
 	"github.com/sudosylabs/proctor/server/platform/externalauth/oidc"
 	"github.com/sudosylabs/proctor/server/plugin"
@@ -42,6 +44,7 @@ func activatePlugins(
 	ctx context.Context,
 	cfg config.Config,
 	logger *logging.Logger,
+	recorder pluginhost.Recorder,
 	extra []plugin.Plugin,
 ) (*pluginhost.Host, error) {
 	settings := make(map[string]pluginhost.Settings, len(cfg.Plugins))
@@ -52,6 +55,7 @@ func activatePlugins(
 		Plugins:  append(builtinPlugins(), extra...),
 		Settings: settings,
 		Logger:   logger.Slog(),
+		Recorder: recorder,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("activate plugins: %w", err)
@@ -59,18 +63,31 @@ func activatePlugins(
 	return host, nil
 }
 
-// activePluginSummaries lists the plugins active at the moment of each call,
-// so a plugin that fails while serving drops out of the list.
-func activePluginSummaries(host *pluginhost.Host) httpapi.ActivePlugins {
-	return func() []httpapi.PluginSummary {
-		var summaries []httpapi.PluginSummary
-		for _, status := range host.Statuses() {
-			if status.State == pluginhost.StateActive {
-				summaries = append(summaries, httpapi.PluginSummary{ID: status.ID, Name: status.Name})
-			}
+// pluginDirectory presents the plugin host to the HTTP API.
+type pluginDirectory struct {
+	host *pluginhost.Host
+}
+
+// Active lists the plugins active at the moment of the call, so a plugin
+// that fails while serving drops out of the list.
+func (d pluginDirectory) Active() []httpapi.PluginSummary {
+	var summaries []httpapi.PluginSummary
+	for _, status := range d.host.Statuses() {
+		if status.State == pluginhost.StateActive {
+			summaries = append(summaries, httpapi.PluginSummary{ID: status.ID, Name: status.Name})
 		}
-		return summaries
 	}
+	return summaries
+}
+
+// Degraded reports whether an enabled plugin has failed.
+func (d pluginDirectory) Degraded() bool {
+	for _, status := range d.host.Statuses() {
+		if status.State == pluginhost.StateFailed {
+			return true
+		}
+	}
+	return false
 }
 
 // eventSubscriptions hands the plugins' guarded event handlers to the
@@ -85,4 +102,27 @@ func eventSubscriptions(host *pluginhost.Host) []events.Subscription {
 		})
 	}
 	return subscriptions
+}
+
+// pluginRecorder reports plugin calls and states to metrics, or nothing when
+// metrics are off.
+func pluginRecorder(module *metrics.Module) pluginhost.Recorder {
+	if !module.Enabled() {
+		return nil
+	}
+	return pluginMetrics{module: module}
+}
+
+// pluginMetrics adapts the metrics module to the plugin host's Recorder;
+// neither package may import the other.
+type pluginMetrics struct {
+	module *metrics.Module
+}
+
+func (m pluginMetrics) PluginCall(pluginID, operation, outcome string, elapsed time.Duration) {
+	m.module.PluginCall(pluginID, operation, outcome, elapsed)
+}
+
+func (m pluginMetrics) PluginState(pluginID string, state pluginhost.State) {
+	m.module.PluginState(pluginID, string(state))
 }

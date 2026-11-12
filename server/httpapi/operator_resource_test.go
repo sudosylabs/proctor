@@ -137,6 +137,8 @@ type focusedAuditApplication struct {
 	self      []administration.SelfAuditEvent
 	selfCalls int
 	selfTotal int
+	names     store.AuditNames
+	redacted  bool
 }
 
 func (f *focusedAuditApplication) ListSelfAuditEvents(_ context.Context, _ invocation.Invocation, query administration.ListSelfAuditEventsQuery) (administration.SelfAuditPage, error) {
@@ -149,9 +151,13 @@ func (f *focusedAuditApplication) ListSelfAuditEvents(_ context.Context, _ invoc
 	return page, f.err
 }
 
-func (f *focusedAuditApplication) ListAuditEvents(_ context.Context, _ invocation.Invocation, query administration.ListAuditEventsQuery) (paging.Counted[*model.AuditEvent], error) {
+func (f *focusedAuditApplication) ListAuditEvents(_ context.Context, _ invocation.Invocation, query administration.ListAuditEventsQuery) (administration.AuditEventPage, error) {
 	f.query = query
-	page := paging.Counted[*model.AuditEvent]{Page: paging.Page[*model.AuditEvent]{Items: f.events, HasMore: f.hasMore}}
+	page := administration.AuditEventPage{
+		Counted:  paging.Counted[*model.AuditEvent]{Page: paging.Page[*model.AuditEvent]{Items: f.events, HasMore: f.hasMore}},
+		Names:    f.names,
+		Redacted: f.redacted,
+	}
 	if query.BeforeID.IsZero() {
 		page.Total = paging.Total{Counted: true, Total: max(f.total, len(f.events)), TotalIsLowerBound: f.total == store.MaximumListCount}
 	}

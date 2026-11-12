@@ -3759,6 +3759,12 @@ func (s *timedAuditStore) CountSelf(arg0 context.Context, arg1 store.AuditSelfLi
 	})
 }
 
+func (s *timedAuditStore) ListNames(arg0 context.Context, arg1 store.AuditNameOptions) (store.AuditNames, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAudit, methodListNames), func(callCtx context.Context) (store.AuditNames, error) {
+		return s.next.ListNames(callCtx, arg1)
+	})
+}
+
 func (s *timedAuditStore) FailAbandonedAttempts(arg0 context.Context, arg1 *store.AuditAttemptAbandonment) (int64, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAudit, methodFailAbandonedAttempts), func(callCtx context.Context) (int64, error) {
 		return s.next.FailAbandonedAttempts(callCtx, arg1)

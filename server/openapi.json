@@ -2723,8 +2723,24 @@
         "content": {
           "application/json": {
             "example": {
-              "items": [],
-              "total": 0,
+              "items": [
+                {
+                  "action": "class.members.manage",
+                  "actor_id": "ybndrfg8ejkmcpqxot1uwisza4",
+                  "created_at": "2026-08-01T09:30:00Z",
+                  "id": "ybndrfg8ejkmcpqxot1uwisza3",
+                  "resource": {
+                    "id": "ybndrfg8ejkmcpqxot1uwisza5",
+                    "type": "class"
+                  },
+                  "scope_id": "ybndrfg8ejkmcpqxot1uwisza6",
+                  "scope_type": "academic_unit",
+                  "status": "success",
+                  "summary": "Ada Admin enrolled a user in Year 1 Mathematics A",
+                  "updated_at": "2026-08-01T09:30:00Z"
+                }
+              ],
+              "total": 1,
               "total_is_lower_bound": false
             },
             "schema": {
@@ -5744,6 +5760,7 @@
                     "type": "user"
                   },
                   "status": "success",
+                  "summary": "You changed your password",
                   "user_agent": "Mozilla/5.0"
                 },
                 {
@@ -5759,7 +5776,8 @@
                     "id": "ybndrfg8ejkmcpqxot1uwisza4",
                     "type": "user"
                   },
-                  "status": "success"
+                  "status": "success",
+                  "summary": "An administrator reset two-step verification for your account"
                 }
               ],
               "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wNy0zMFQxNDowNTowMFoifQ",
@@ -7790,6 +7808,11 @@
             "description": "Durable outcome state of the audited Attempt.",
             "type": "string"
           },
+          "summary": {
+            "description": "One sentence describing the Event in the negotiated language, for display only; clients that need to reason about the Event read its codes. People and records appear by name only when the caller could see them now, and an unfinished or failed Event says so.",
+            "maxLength": 2048,
+            "type": "string"
+          },
           "updated_at": {
             "description": "Time of the latest durable audit status change.",
             "format": "date-time",
@@ -7805,7 +7828,8 @@
           "updated_at",
           "action",
           "resource",
-          "status"
+          "status",
+          "summary"
         ],
         "type": "object"
       },
@@ -24800,6 +24824,11 @@
             ],
             "type": "string"
           },
+          "summary": {
+            "description": "One sentence describing the event in the negotiated language, for display only; clients that need to reason about the event read its codes. It never names another person, and a failed event says so.",
+            "maxLength": 2048,
+            "type": "string"
+          },
           "user_agent": {
             "description": "User agent of the User's own action; omitted for anyone else's.",
             "maxLength": 512,
@@ -24813,7 +24842,8 @@
           "status",
           "relation",
           "actor",
-          "resource"
+          "resource",
+          "summary"
         ],
         "type": "object"
       },
@@ -28956,7 +28986,7 @@
     },
     "/api/v1/audits": {
       "get": {
-        "description": "Lists bounded durable audit facts visible through the caller's Institution or Academic Unit authority, newest first unless `order=asc` asks for oldest first. The projection omits raw parameters, prior state, result payloads, credentials, protected content, and unsafe internal failures. The first page, read without a cursor, also reports `total`: the audit Events the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
+        "description": "Lists bounded durable audit facts visible through the caller's Institution or Academic Unit authority, newest first unless `order=asc` asks for oldest first. The projection omits raw parameters, prior state, result payloads, credentials, protected content, and unsafe internal failures. The first page, read without a cursor, also reports `total`: the audit Events the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's. Each Event also carries a `summary` sentence in the language `Accept-Language` selects, falling back to the installation language and then English, beside the stable codes it is written from. It names the actor, the User the Event is about, and a User, Academic Unit, or Class resource by their current names only when the caller could see that record now through `user.view` or `class.members.view`, `academic_unit.view`, or `class.view`; otherwise it uses a generic noun such as \"a user\" or \"a class\". An Academic Unit auditor's summary names the action alone, never the recorded operation or the User the Event is about.",
         "operationId": "listAuditEvents",
         "parameters": [
           {
@@ -48198,7 +48228,7 @@
     },
     "/api/v1/users/me/audits": {
       "get": {
-        "description": "Returns one page of the current Session User's own account history, newest first unless `order=asc` asks for oldest first. The first page, read without a cursor, also carries `total`: the number of events the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's. Reading the first page oldest first reaches the end of the history without counting pages. The history holds events about the User's account, whoever performed them, and account-relevant events the User performed on anything else. Each item carries a stable `event` name from a closed catalogue, which clients label themselves; rows outside the catalogue and unfinished attempts are never returned. Another person is never named: the actor is only `self`, `administrator`, or `system`, and the IP address and user agent appear only on the User's own actions. A resource identity appears only when the resource is the User, the Institution, or an Academic Unit or Class the User has or had a membership or Role Binding at. Personal Access Tokens cannot read this history. Reading it records no authorization decision.",
+        "description": "Returns one page of the current Session User's own account history, newest first unless `order=asc` asks for oldest first. The first page, read without a cursor, also carries `total`: the number of events the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's. Reading the first page oldest first reaches the end of the history without counting pages. The history holds events about the User's account, whoever performed them, and account-relevant events the User performed on anything else. Each item carries a stable `event` name from a closed catalogue, which clients label themselves; rows outside the catalogue and unfinished attempts are never returned. Another person is never named: the actor is only `self`, `administrator`, or `system`, and the IP address and user agent appear only on the User's own actions. A resource identity appears only when the resource is the User, the Institution, or an Academic Unit or Class the User has or had a membership or Role Binding at. Each item also carries a `summary` sentence in the language `Accept-Language` selects, falling back to the installation language and then English. It keeps the same mask: the actor is \"you\", \"an administrator\", or \"the system\", and no other person is ever named. It names an Academic Unit or Class only where the resource identity appears, and a Role only when the event bound it to the User; otherwise it uses a generic noun such as \"a class\". Personal Access Tokens cannot read this history. Reading it records no authorization decision.",
         "operationId": "listCurrentUserAuditEvents",
         "parameters": [
           {

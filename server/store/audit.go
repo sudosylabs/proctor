@@ -97,9 +97,10 @@ const MaximumAuditSelfCount = MaximumListCount
 
 // AuditSelfEntry is the bounded projection of one self-history event. It
 // carries no parameters, prior state, or result beyond the recorded
-// operation name. ResourceRelated reports whether the resource is the User
-// themself, the Institution, or an Academic Unit or Class the User has a
-// membership or Role Binding at, whether current or ended.
+// operation name and, for a Role Binding change, the bound Role.
+// ResourceRelated reports whether the resource is the User themself, the
+// Institution, or an Academic Unit or Class the User has a membership or Role
+// Binding at, whether current or ended.
 type AuditSelfEntry struct {
 	ID              model.AuditEventID
 	CreatedAt       time.Time
@@ -114,6 +115,54 @@ type AuditSelfEntry struct {
 	IPAddress       string
 	UserAgent       string
 	ErrorCode       string
+	// RoleID is the Role a role_binding.manage event granted or ended, read
+	// from its value or, for an end, its prior state; zero for any other
+	// action.
+	RoleID model.RoleID
+}
+
+// MaximumAuditNames bounds the identifiers of each kind one ListNames read
+// names: an audit page of at most 201 events names an actor, a subject and a
+// resource each.
+const MaximumAuditNames = 3 * 201
+
+// AuditNameOptions names the records one page of audit events refers to, so
+// the page reads every name in one bounded call rather than one per event.
+// Each name is read only inside its visibility, the current authority the
+// reader would need to see that record: Users through UserVisibility as the
+// User directory applies it (a scoped visibility never names a disabled
+// User), Academic Units through AcademicUnitInstitutionWide or the
+// AcademicUnitRootIDs subtrees, and Classes through ClassVisibility as a
+// Class search applies it. A zero visibility names nothing. Roles carry no
+// visibility: the caller asks only for Roles the reader is already entitled
+// to, such as the Roles bound to the reader themself. Archived and missing
+// records are never named.
+type AuditNameOptions struct {
+	UserIDs                     []model.UserID
+	UserVisibility              UserVisibilityScope
+	AcademicUnitIDs             []model.AcademicUnitID
+	AcademicUnitInstitutionWide bool
+	AcademicUnitRootIDs         []model.AcademicUnitID
+	ClassIDs                    []model.ClassID
+	ClassVisibility             ClassVisibilityScope
+	RoleIDs                     []model.RoleID
+}
+
+// AuditNames are the current presentable names ListNames found. A record
+// outside its visibility, archived, or missing is absent.
+type AuditNames struct {
+	Users         map[model.UserID]string
+	AcademicUnits map[model.AcademicUnitID]string
+	Classes       map[model.ClassID]string
+	Roles         map[model.RoleID]AuditRoleName
+}
+
+// AuditRoleName names one Role: its stable Name, which identifies the
+// built-in System Administrator Role whose presentation is localized, and its
+// DisplayName.
+type AuditRoleName struct {
+	Name        string
+	DisplayName string
 }
 
 // AuditStore owns authoritative security records. Events are append-oriented;
@@ -135,6 +184,9 @@ type AuditStore interface {
 	// for the same filters, ignoring the order, keyset, and limit, and stops
 	// at MaximumAuditSelfCount.
 	CountSelf(context.Context, AuditSelfListOptions) (int, error)
+	// ListNames reads, in one bounded call per page, the current names of
+	// the records the page's events refer to, each inside its visibility.
+	ListNames(context.Context, AuditNameOptions) (AuditNames, error)
 	// FailAbandonedAttempts terminalizes up to Limit attempts created longer
 	// than Age ago by PostgreSQL time, oldest first, as failures with
 	// model.AuditErrorAttemptAbandoned, and returns how many it changed.

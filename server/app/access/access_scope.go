@@ -336,6 +336,14 @@ func (s *Authorizer) AuthorizeExamList(
 	}, nil
 }
 
+// GrantedUserVisibility reports the Users the principal can see now, as the
+// User directory applies it: user.view relationships and class.members.view
+// rosters. It records no decision; a caller shapes an already authorized
+// projection with it, such as naming the people an audit page refers to.
+func (s *Authorizer) GrantedUserVisibility(ctx context.Context, principal model.Principal) (store.UserVisibilityScope, error) {
+	return s.userVisibilityScope(ctx, principal)
+}
+
 func (s *Authorizer) userVisibilityScope(
 	ctx context.Context,
 	principal model.Principal,

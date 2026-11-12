@@ -43,23 +43,33 @@ type ListAuditEventsQuery struct {
 	Limit           int
 }
 
+// AuditEventPage is one page of the audit listing with the current names of
+// the records its events refer to, each present only when the caller could
+// see that record now. Redacted reports an academic-only reader, whose events
+// carry no parameters, so they name neither an operation nor a subject.
+type AuditEventPage struct {
+	paging.Counted[*model.AuditEvent]
+	Names    store.AuditNames
+	Redacted bool
+}
+
 // ListAuditEvents returns a page of audit events within the caller's audit
 // visibility; an academic-only reader receives redacted events.
 func (s *Service) ListAuditEvents(
 	ctx context.Context,
 	inv invocation.Invocation,
 	query ListAuditEventsQuery,
-) (paging.Counted[*model.AuditEvent], error) {
+) (AuditEventPage, error) {
 	visibility, err := s.authorizeAuditList(ctx, inv)
 	if err != nil {
-		return paging.Counted[*model.AuditEvent]{}, err
+		return AuditEventPage{}, err
 	}
 
 	validAcademicVisibility := len(visibility.AllowedActions) > 0 &&
 		((visibility.AcademicInstitutionWide && len(visibility.AcademicUnitRootIDs) == 0) ||
 			(!visibility.AcademicInstitutionWide && len(visibility.AcademicUnitRootIDs) > 0))
 	if !visibility.InstitutionWide && !validAcademicVisibility {
-		return paging.Counted[*model.AuditEvent]{}, access.DeniedError()
+		return AuditEventPage{}, access.DeniedError()
 	}
 	if query.Limit == 0 {
 		query.Limit = 50
@@ -73,11 +83,11 @@ func (s *Service) ListAuditEvents(
 		(query.Resource != nil && query.Resource.Validate() != nil) ||
 		(!query.Since.IsZero() && !query.Until.IsZero() && !query.Since.Before(query.Until)) ||
 		!validAuditListStatus(query.Status) {
-		return paging.Counted[*model.AuditEvent]{}, apperror.New("audit.query.invalid")
+		return AuditEventPage{}, apperror.New("audit.query.invalid")
 	}
 	actions, err := auditListActions(query.Actions)
 	if err != nil {
-		return paging.Counted[*model.AuditEvent]{}, err
+		return AuditEventPage{}, err
 	}
 
 	options := store.AuditListOptions{
@@ -96,12 +106,13 @@ func (s *Service) ListAuditEvents(
 	}
 	events, err := s.audits.List(ctx, options)
 	if err != nil {
-		return paging.Counted[*model.AuditEvent]{}, auditListingError(err)
+		return AuditEventPage{}, auditListingError(err)
 	}
 
-	page := paging.Counted[*model.AuditEvent]{Page: paging.New(events, query.Limit)}
+	page := AuditEventPage{Counted: paging.Counted[*model.AuditEvent]{Page: paging.New(events, query.Limit)}}
 	if !visibility.InstitutionWide {
 		page.Items = academicAuditProjection(page.Items)
+		page.Redacted = true
 	}
 
 	total, consistent, err := paging.CountFirst(query.BeforeID.IsZero() &&
@@ -109,11 +120,80 @@ func (s *Service) ListAuditEvents(
 		return s.audits.Count(ctx, options, maximum)
 	})
 	if err != nil || !consistent {
-		return paging.Counted[*model.AuditEvent]{}, auditListingError(err)
+		return AuditEventPage{}, auditListingError(err)
 	}
 
 	page.Total = total
+	if page.Names, err = s.auditNames(ctx, inv.Principal(), page.Items, page.Redacted); err != nil {
+		return AuditEventPage{}, err
+	}
 	return page, nil
+}
+
+// auditNames reads, in one call, the names of the actors, subjects and
+// resources a page refers to, each only inside the caller's current authority
+// to see it: the User directory's visibility for Users, academic_unit.view
+// for Academic Units and class.view for Classes. Seeing the audit history does
+// not by itself reveal a name. A redacted page names no subject, because its
+// events carry no parameters to say what happened to one.
+func (s *Service) auditNames(
+	ctx context.Context,
+	principal model.Principal,
+	events []*model.AuditEvent,
+	redacted bool,
+) (store.AuditNames, error) {
+	var options store.AuditNameOptions
+	for _, event := range events {
+		if !event.ActorID.IsZero() {
+			options.UserIDs = appendAuditName(options.UserIDs, event.ActorID)
+		}
+		if !redacted && !event.SubjectUserID.IsZero() {
+			options.UserIDs = appendAuditName(options.UserIDs, event.SubjectUserID)
+		}
+		switch event.Resource.Type {
+		case model.ResourceUser:
+			options.UserIDs = appendAuditName(options.UserIDs, model.UserID(event.Resource.ID))
+		case model.ResourceAcademicUnit:
+			options.AcademicUnitIDs = appendAuditName(options.AcademicUnitIDs, model.AcademicUnitID(event.Resource.ID))
+		case model.ResourceClass:
+			options.ClassIDs = appendAuditName(options.ClassIDs, model.ClassID(event.Resource.ID))
+		}
+	}
+	if len(options.UserIDs)+len(options.AcademicUnitIDs)+len(options.ClassIDs) == 0 {
+		return store.AuditNames{}, nil
+	}
+
+	var err error
+	if len(options.UserIDs) > 0 {
+		if options.UserVisibility, err = s.authorizer.GrantedUserVisibility(ctx, principal); err != nil {
+			return store.AuditNames{}, err
+		}
+	}
+	if len(options.AcademicUnitIDs) > 0 {
+		units, scopeErr := s.authorizer.GrantedScopes(ctx, principal, model.ActionAcademicUnitView, model.ResourceAcademicUnit)
+		if scopeErr != nil {
+			return store.AuditNames{}, scopeErr
+		}
+		options.AcademicUnitInstitutionWide = units.InstitutionWide
+		options.AcademicUnitRootIDs = units.AcademicUnitRootIDs
+	}
+	if len(options.ClassIDs) > 0 {
+		classes, scopeErr := s.authorizer.GrantedScopes(ctx, principal, model.ActionClassView, model.ResourceClass)
+		if scopeErr != nil {
+			return store.AuditNames{}, scopeErr
+		}
+		options.ClassVisibility = store.ClassVisibilityScope{
+			InstitutionWide:     classes.InstitutionWide,
+			AcademicUnitRootIDs: classes.AcademicUnitRootIDs,
+			ClassIDs:            classes.ClassIDs,
+		}
+	}
+
+	names, err := s.audits.ListNames(ctx, options)
+	if err != nil {
+		return store.AuditNames{}, auditListingError(err)
+	}
+	return names, nil
 }
 
 // validAuditListStatus reports whether status is empty or an audit status.
@@ -243,4 +323,13 @@ func (s *Service) authorizeAuditList(ctx context.Context, inv invocation.Invocat
 func auditListingError(err error) error {
 
 	return apperror.New("audit.unavailable").WithField("resource", "audit").Wrap(err)
+}
+
+// appendAuditName adds id once, so a page that refers to one record many
+// times asks for its name once.
+func appendAuditName[T comparable](ids []T, id T) []T {
+	if slices.Contains(ids, id) {
+		return ids
+	}
+	return append(ids, id)
 }

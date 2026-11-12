@@ -87,7 +87,7 @@ func New(settings Settings, authenticator Authenticator, resources ...Resource) 
 	if settings.Localizer == nil {
 		return nil, errors.New("localizer is required")
 	}
-	if err := validateLocalization(settings.Localizer, LocalizationDefinitions()); err != nil {
+	if err := ValidateLocalization(settings.Localizer, LocalizationDefinitions()); err != nil {
 		return nil, err
 	}
 	if settings.MaxBodyBytes <= 0 {

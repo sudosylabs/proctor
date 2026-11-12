@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/httpapi/route/routetest"
+	"github.com/sudosylabs/proctor/server/localization"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -56,6 +57,10 @@ func (problemTestLocalizer) Translate(_ string, id string, _ any) (string, error
 		"problem.forbidden.detail": "Cette action n’est pas autorisée.",
 	}
 	return translations[id], nil
+}
+
+func (l problemTestLocalizer) TranslateRequest(locale string, request localization.Request) (string, error) {
+	return l.Translate(locale, request.ID, request.TemplateData)
 }
 
 func (problemTestLocalizer) SupportedLocales() []string { return []string{"en", "fr"} }

@@ -221,7 +221,22 @@ func (s SQLClassStore) SearchVisible(ctx context.Context, options store.ClassSea
 		return nil, store.NewErrInvalidInput("class", "search_options", nil)
 	}
 
-	query := s.classesQuery.
+	query := filterClassVisibility(s.classesQuery, visibility)
+	if term := strings.TrimSpace(options.Term); term != "" {
+		pattern := directorySearchPattern(term)
+		query = query.Where("(classes.name ILIKE ? ESCAPE '!' OR classes.display_name ILIKE ? ESCAPE '!')", pattern, pattern)
+	}
+
+	query = query.OrderBy("classes.name", "classes.id").Limit(uint64(options.Limit))
+	return s.selectClasses(ctx, query, "search visible classes")
+}
+
+// filterClassVisibility restricts a selection from classes to the unarchived
+// Classes, under unarchived Programme Levels and Programmes, inside a
+// class.view visibility. The Academic Unit subtrees expand in the same
+// statement, so no Class outside the scope is ever loaded.
+func filterClassVisibility(query sq.SelectBuilder, visibility store.ClassVisibilityScope) sq.SelectBuilder {
+	return query.
 		Prefix(`WITH RECURSIVE class_visible_units AS (
 				SELECT id
 				FROM academic_units
@@ -249,13 +264,6 @@ func (s SQLClassStore) SearchVisible(ctx context.Context, options store.ClassSea
 			visibility.InstitutionWide,
 			pq.Array(idStrings(visibility.ClassIDs)),
 		)
-	if term := strings.TrimSpace(options.Term); term != "" {
-		pattern := directorySearchPattern(term)
-		query = query.Where("(classes.name ILIKE ? ESCAPE '!' OR classes.display_name ILIKE ? ESCAPE '!')", pattern, pattern)
-	}
-
-	query = query.OrderBy("classes.name", "classes.id").Limit(uint64(options.Limit))
-	return s.selectClasses(ctx, query, "search visible classes")
 }
 
 // GetAcademicUnitID returns the Academic Unit that owns the Class through its

@@ -15,6 +15,7 @@ paths:
       description: >-
         Lists bounded durable audit facts visible through the caller's Institution or Academic Unit authority, newest first unless `order=asc` asks for oldest first. The projection omits raw parameters, prior state, result payloads, credentials, protected content, and unsafe internal failures.
         The first page, read without a cursor, also reports `total`: the audit Events the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
+        Each Event also carries a `summary` sentence in the language `Accept-Language` selects, falling back to the installation language and then English, beside the stable codes it is written from. It names the actor, the User the Event is about, and a User, Academic Unit, or Class resource by their current names only when the caller could see that record now through `user.view` or `class.members.view`, `academic_unit.view`, or `class.view`; otherwise it uses a generic noun such as "a user" or "a class". An Academic Unit auditor's summary names the action alone, never the recorded operation or the User the Event is about.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -144,8 +145,20 @@ components:
           schema:
             $ref: '#/components/schemas/AuditListResponse'
           example:
-            items: []
-            total: 0
+            items:
+              - id: ybndrfg8ejkmcpqxot1uwisza3
+                created_at: '2026-08-01T09:30:00Z'
+                updated_at: '2026-08-01T09:30:00Z'
+                actor_id: ybndrfg8ejkmcpqxot1uwisza4
+                action: class.members.manage
+                resource:
+                  type: class
+                  id: ybndrfg8ejkmcpqxot1uwisza5
+                scope_type: academic_unit
+                scope_id: ybndrfg8ejkmcpqxot1uwisza6
+                status: success
+                summary: Ada Admin enrolled a user in Year 1 Mathematics A
+            total: 1
             total_is_lower_bound: false
   schemas:
     AuditEventResponse:
@@ -159,6 +172,7 @@ components:
         - action
         - resource
         - status
+        - summary
       properties:
         id:
           $ref: '#/components/schemas/ID'
@@ -222,6 +236,13 @@ components:
         error_code:
           type: string
           description: Stable safe failure category for an unsuccessful action; internal detail is omitted.
+        summary:
+          type: string
+          maxLength: 2048
+          description: >-
+            One sentence describing the Event in the negotiated language, for display only; clients that need to
+            reason about the Event read its codes. People and records appear by name only when the caller could see
+            them now, and an unfinished or failed Event says so.
         reason:
           type: string
           maxLength: 500

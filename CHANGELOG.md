@@ -265,6 +265,11 @@ module when a change is not server-only. No module has been released yet.
 
 ### Added
 
+- Server: audit summaries. Each item of `GET /api/v1/audits` and
+  `GET /api/v1/users/me/audits` carries a `summary` sentence in the language
+  `Accept-Language` selects, beside the existing codes. Names are read from
+  the live records, once per page, and appear only when the caller could see
+  that record now; account history still never names another person.
 - Server: Users rename their own devices.
   `PATCH /api/v1/users/me/desktop-registrations/{desktop_registration_id}`
   takes `{"display_name": ...}` and keeps the name across later Desktop

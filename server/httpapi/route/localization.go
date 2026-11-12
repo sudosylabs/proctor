@@ -52,6 +52,13 @@ func LocalizationDefinitions() []localization.Definition {
 // Translate returns message id in the request's negotiated locale, or fallback
 // when the request carries no localizer or the message is missing.
 func Translate(request *http.Request, id, fallback string) string {
+	return TranslateRequest(request, localization.Request{ID: id}, fallback)
+}
+
+// TranslateRequest returns message in the request's negotiated locale with its
+// template data and, for a plural message, its count, or fallback when the
+// request carries no localizer or the message is missing or cannot render.
+func TranslateRequest(request *http.Request, message localization.Request, fallback string) string {
 	if request == nil {
 		return fallback
 	}
@@ -59,22 +66,41 @@ func Translate(request *http.Request, id, fallback string) string {
 	if !ok || requestLocalization.localizer == nil {
 		return fallback
 	}
-	translated, err := requestLocalization.localizer.Translate(requestLocalization.locale, id, nil)
+	translated, err := requestLocalization.localizer.TranslateRequest(requestLocalization.locale, message)
 	if err != nil {
 		return fallback
 	}
 	return translated
 }
 
-// validateLocalization reports the first definition the localizer cannot
+// ValidateLocalization reports the first definition the localizer cannot
 // translate, so a missing message fails construction instead of a request.
-func validateLocalization(localizer Localizer, definitions []localization.Definition) error {
+// Each message renders with a sample value for every declared variable and,
+// when plural, a count, so a templated message is proven renderable too.
+func ValidateLocalization(localizer Localizer, definitions []localization.Definition) error {
 	for _, definition := range definitions {
-		if _, err := localizer.Translate("", definition.ID, nil); err != nil {
+		if _, err := localizer.TranslateRequest("", sampleLocalizationRequest(definition)); err != nil {
 			return fmt.Errorf("validate localization %q: %w", definition.ID, err)
 		}
 	}
 	return nil
+}
+
+func sampleLocalizationRequest(definition localization.Definition) localization.Request {
+	message := localization.Request{ID: definition.ID}
+	if len(definition.Variables) == 0 && definition.PluralVariable == "" {
+		return message
+	}
+	data := make(map[string]any, len(definition.Variables)+1)
+	for _, variable := range definition.Variables {
+		data[variable] = variable
+	}
+	if definition.PluralVariable != "" {
+		data[definition.PluralVariable] = 1
+		message.PluralCount = 1
+	}
+	message.TemplateData = data
+	return message
 }
 
 func (a *API) localize(request *http.Request) *http.Request {

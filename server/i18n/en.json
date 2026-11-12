@@ -424,6 +424,1002 @@
     "translation": "View users"
   },
   {
+    "id": "audit.action.academic.progression.manage",
+    "translation": "{{.Actor}} moved students on from {{.Resource}}"
+  },
+  {
+    "id": "audit.action.academic_audit.view",
+    "translation": "{{.Actor}} viewed academic audit history"
+  },
+  {
+    "id": "audit.action.academic_period.manage",
+    "translation": "{{.Actor}} managed {{.Resource}}"
+  },
+  {
+    "id": "audit.action.academic_period.view",
+    "translation": "{{.Actor}} viewed {{.Resource}}"
+  },
+  {
+    "id": "audit.action.academic_unit.manage",
+    "translation": "{{.Actor}} managed {{.Resource}}"
+  },
+  {
+    "id": "audit.action.academic_unit.members.manage",
+    "translation": "{{.Actor}} changed the members of {{.Resource}}"
+  },
+  {
+    "id": "audit.action.academic_unit.members.view",
+    "translation": "{{.Actor}} viewed the members of {{.Resource}}"
+  },
+  {
+    "id": "audit.action.academic_unit.view",
+    "translation": "{{.Actor}} viewed {{.Resource}}"
+  },
+  {
+    "id": "audit.action.access_policy.manage",
+    "translation": "{{.Actor}} changed the access policy"
+  },
+  {
+    "id": "audit.action.access_policy.view",
+    "translation": "{{.Actor}} viewed the access policy"
+  },
+  {
+    "id": "audit.action.audit.view",
+    "translation": "{{.Actor}} viewed audit history"
+  },
+  {
+    "id": "audit.action.authentication.administrator_mfa_reset",
+    "translation": "{{.Actor}} reset two-step verification for {{.Resource}} from the server command line"
+  },
+  {
+    "id": "audit.action.authentication.administrator_recovery",
+    "translation": "{{.Actor}} recovered administrator access for {{.Resource}} from the server command line"
+  },
+  {
+    "id": "audit.action.authentication.desktop_authorization",
+    "translation": "{{.Actor}} approved a desktop app sign-in"
+  },
+  {
+    "id": "audit.action.authentication.desktop_session_issue",
+    "translation": "{{.Actor}} started a desktop app session"
+  },
+  {
+    "id": "audit.action.authentication.email_change.undo",
+    "translation": "An email address change was undone for {{.Resource}}"
+  },
+  {
+    "id": "audit.action.authentication.email_verification.complete",
+    "translation": "An email address was verified for {{.Resource}}"
+  },
+  {
+    "id": "audit.action.authentication.email_verification.request",
+    "translation": "Email verification was requested for {{.Resource}}"
+  },
+  {
+    "id": "audit.action.authentication.external_login",
+    "translation": "Sign-in to {{.Resource}} through an external provider"
+  },
+  {
+    "id": "audit.action.authentication.external_provision",
+    "translation": "Account creation for {{.Resource}} through an external provider"
+  },
+  {
+    "id": "audit.action.authentication.login",
+    "translation": "Sign-in to {{.Resource}}"
+  },
+  {
+    "id": "audit.action.authentication.password_reset.complete",
+    "translation": "A password was reset for {{.Resource}}"
+  },
+  {
+    "id": "audit.action.authentication.password_reset.request",
+    "translation": "A password reset was requested for {{.Resource}}"
+  },
+  {
+    "id": "audit.action.authentication.public_registration",
+    "translation": "Self-registration of {{.Resource}}"
+  },
+  {
+    "id": "audit.action.authentication.reauthenticate",
+    "translation": "{{.Actor}} confirmed their identity again"
+  },
+  {
+    "id": "audit.action.class.manage",
+    "translation": "{{.Actor}} managed {{.Resource}}"
+  },
+  {
+    "id": "audit.action.class.members.manage",
+    "translation": "{{.Actor}} changed the members of {{.Resource}}"
+  },
+  {
+    "id": "audit.action.class.members.view",
+    "translation": "{{.Actor}} viewed the members of {{.Resource}}"
+  },
+  {
+    "id": "audit.action.class.view",
+    "translation": "{{.Actor}} viewed {{.Resource}}"
+  },
+  {
+    "id": "audit.action.desktop_compatibility_policy.manage",
+    "translation": "{{.Actor}} changed the desktop compatibility policy"
+  },
+  {
+    "id": "audit.action.desktop_registration.rename",
+    "translation": "{{.Actor}} renamed a desktop device of {{.Resource}}"
+  },
+  {
+    "id": "audit.action.desktop_registration.revoke",
+    "translation": "{{.Actor}} removed a desktop device of {{.Resource}}"
+  },
+  {
+    "id": "audit.action.exam.attempt.browser_activity.view",
+    "translation": "{{.Actor}} viewed browser activity in {{.Resource}}"
+  },
+  {
+    "id": "audit.action.exam.create",
+    "translation": "{{.Actor}} created an exam in {{.Resource}}"
+  },
+  {
+    "id": "audit.action.exam.create.override",
+    "translation": "{{.Actor}} created an exam in {{.Resource}} through the administrator override"
+  },
+  {
+    "id": "audit.action.exam.manage",
+    "translation": "{{.Actor}} edited {{.Resource}}"
+  },
+  {
+    "id": "audit.action.exam.manage.override",
+    "translation": "{{.Actor}} edited {{.Resource}} through the administrator override"
+  },
+  {
+    "id": "audit.action.exam.publish",
+    "translation": "{{.Actor}} published a revision of {{.Resource}}"
+  },
+  {
+    "id": "audit.action.exam.publish.override",
+    "translation": "{{.Actor}} published a revision of {{.Resource}} through the administrator override"
+  },
+  {
+    "id": "audit.action.exam.records.complete",
+    "translation": "{{.Actor}} completed the records of {{.Resource}}"
+  },
+  {
+    "id": "audit.action.exam.records.complete.override",
+    "translation": "{{.Actor}} completed the records of {{.Resource}} through the administrator override"
+  },
+  {
+    "id": "audit.action.exam.records.export",
+    "translation": "{{.Actor}} exported records from {{.Resource}}"
+  },
+  {
+    "id": "audit.action.exam.records.export.override",
+    "translation": "{{.Actor}} exported records from {{.Resource}} through the administrator override"
+  },
+  {
+    "id": "audit.action.exam.records.hold",
+    "translation": "{{.Actor}} placed a retention hold on {{.Resource}}"
+  },
+  {
+    "id": "audit.action.exam.records.hold.override",
+    "translation": "{{.Actor}} placed a retention hold on {{.Resource}} through the administrator override"
+  },
+  {
+    "id": "audit.action.exam.sitting.create",
+    "translation": "{{.Actor}} scheduled a sitting of {{.Resource}}"
+  },
+  {
+    "id": "audit.action.exam.sitting.create.override",
+    "translation": "{{.Actor}} scheduled a sitting of {{.Resource}} through the administrator override"
+  },
+  {
+    "id": "audit.action.exam.sitting.manage",
+    "translation": "{{.Actor}} rescheduled or canceled {{.Resource}}"
+  },
+  {
+    "id": "audit.action.exam.sitting.manage.override",
+    "translation": "{{.Actor}} rescheduled or canceled {{.Resource}} through the administrator override"
+  },
+  {
+    "id": "audit.action.exam.sitting.participate",
+    "translation": "{{.Actor}} took part in {{.Resource}}"
+  },
+  {
+    "id": "audit.action.exam.sitting.view",
+    "translation": "{{.Actor}} viewed {{.Resource}}"
+  },
+  {
+    "id": "audit.action.exam.sitting.view.override",
+    "translation": "{{.Actor}} viewed {{.Resource}} through the administrator override"
+  },
+  {
+    "id": "audit.action.exam.view",
+    "translation": "{{.Actor}} viewed {{.Resource}}"
+  },
+  {
+    "id": "audit.action.exam.view.override",
+    "translation": "{{.Actor}} viewed {{.Resource}} through the administrator override"
+  },
+  {
+    "id": "audit.action.external_identity.manage",
+    "translation": "{{.Actor}} changed the sign-in methods of {{.Resource}}"
+  },
+  {
+    "id": "audit.action.installation.bootstrap",
+    "translation": "{{.Actor}} set up the installation"
+  },
+  {
+    "id": "audit.action.institution.manage",
+    "translation": "{{.Actor}} changed the institution settings"
+  },
+  {
+    "id": "audit.action.invitation.accept",
+    "translation": "{{.Actor}} accepted an invitation"
+  },
+  {
+    "id": "audit.action.invitation.create",
+    "translation": "{{.Actor}} created an invitation at {{.Resource}}"
+  },
+  {
+    "id": "audit.action.invitation.manage",
+    "translation": "{{.Actor}} resent or revoked an invitation at {{.Resource}}"
+  },
+  {
+    "id": "audit.action.invitation.view",
+    "translation": "{{.Actor}} viewed invitations at {{.Resource}}"
+  },
+  {
+    "id": "audit.action.job.manage",
+    "translation": "{{.Actor}} retried or canceled a background job"
+  },
+  {
+    "id": "audit.action.job.view",
+    "translation": "{{.Actor}} viewed background jobs"
+  },
+  {
+    "id": "audit.action.mail.manage",
+    "translation": "{{.Actor}} managed outgoing mail"
+  },
+  {
+    "id": "audit.action.mail.rekey",
+    "translation": "{{.Actor}} rotated the outgoing mail encryption key"
+  },
+  {
+    "id": "audit.action.mail.view",
+    "translation": "{{.Actor}} viewed outgoing mail"
+  },
+  {
+    "id": "audit.action.mfa.activate",
+    "translation": "{{.Actor}} turned on two-step verification"
+  },
+  {
+    "id": "audit.action.mfa.challenge",
+    "translation": "{{.Actor}} answered a two-step verification challenge"
+  },
+  {
+    "id": "audit.action.mfa.disable",
+    "translation": "{{.Actor}} turned off two-step verification"
+  },
+  {
+    "id": "audit.action.mfa.recovery_codes.regenerate",
+    "translation": "{{.Actor}} created new two-step verification recovery codes"
+  },
+  {
+    "id": "audit.action.mfa.rekey",
+    "translation": "{{.Actor}} rotated the two-step verification encryption key"
+  },
+  {
+    "id": "audit.action.mfa.setup",
+    "translation": "{{.Actor}} started setting up two-step verification"
+  },
+  {
+    "id": "audit.action.onboarding_batch.manage",
+    "translation": "{{.Actor}} managed an onboarding batch at {{.Resource}}"
+  },
+  {
+    "id": "audit.action.onboarding_batch.view",
+    "translation": "{{.Actor}} viewed onboarding batches at {{.Resource}}"
+  },
+  {
+    "id": "audit.action.personal_access_token.create",
+    "translation": "{{.Actor}} created a personal access token"
+  },
+  {
+    "id": "audit.action.personal_access_token.disable",
+    "translation": "{{.Actor}} turned off a personal access token"
+  },
+  {
+    "id": "audit.action.personal_access_token.enable",
+    "translation": "{{.Actor}} turned on a personal access token"
+  },
+  {
+    "id": "audit.action.personal_access_token.revoke",
+    "translation": "{{.Actor}} revoked a personal access token"
+  },
+  {
+    "id": "audit.action.programme.manage",
+    "translation": "{{.Actor}} managed {{.Resource}}"
+  },
+  {
+    "id": "audit.action.programme.view",
+    "translation": "{{.Actor}} viewed {{.Resource}}"
+  },
+  {
+    "id": "audit.action.programme_level.manage",
+    "translation": "{{.Actor}} managed {{.Resource}}"
+  },
+  {
+    "id": "audit.action.programme_level.view",
+    "translation": "{{.Actor}} viewed {{.Resource}}"
+  },
+  {
+    "id": "audit.action.retention_cleanup.manage",
+    "translation": "{{.Actor}} changed retention cleanup"
+  },
+  {
+    "id": "audit.action.retention_hold.release",
+    "translation": "{{.Actor}} released a retention hold on {{.Resource}}"
+  },
+  {
+    "id": "audit.action.retention_policy.manage",
+    "translation": "{{.Actor}} changed the retention policy"
+  },
+  {
+    "id": "audit.action.retention_policy.view",
+    "translation": "{{.Actor}} viewed the retention policy"
+  },
+  {
+    "id": "audit.action.role.manage",
+    "translation": "{{.Actor}} managed roles"
+  },
+  {
+    "id": "audit.action.role.system_admin.reconcile",
+    "translation": "{{.Actor}} reconciled the System Administrator role"
+  },
+  {
+    "id": "audit.action.role.view",
+    "translation": "{{.Actor}} viewed roles"
+  },
+  {
+    "id": "audit.action.role_binding.manage",
+    "translation": "{{.Actor}} changed role assignments at {{.Resource}}"
+  },
+  {
+    "id": "audit.action.role_binding.view",
+    "translation": "{{.Actor}} viewed role assignments at {{.Resource}}"
+  },
+  {
+    "id": "audit.action.session.manage",
+    "translation": "{{.Actor}} managed the sessions of {{.Resource}}"
+  },
+  {
+    "id": "audit.action.session.view",
+    "translation": "{{.Actor}} viewed the sessions of {{.Resource}}"
+  },
+  {
+    "id": "audit.action.submission.release",
+    "translation": "{{.Actor}} released review results for {{.Resource}}"
+  },
+  {
+    "id": "audit.action.submission.release.override",
+    "translation": "{{.Actor}} released review results for {{.Resource}} through the administrator override"
+  },
+  {
+    "id": "audit.action.submission.review",
+    "translation": "{{.Actor}} reviewed {{.Resource}}"
+  },
+  {
+    "id": "audit.action.submission.review.override",
+    "translation": "{{.Actor}} reviewed {{.Resource}} through the administrator override"
+  },
+  {
+    "id": "audit.action.submission.view",
+    "translation": "{{.Actor}} viewed {{.Resource}}"
+  },
+  {
+    "id": "audit.action.submission.view.override",
+    "translation": "{{.Actor}} viewed {{.Resource}} through the administrator override"
+  },
+  {
+    "id": "audit.action.user.manage",
+    "translation": "{{.Actor}} changed the account of {{.Resource}}"
+  },
+  {
+    "id": "audit.action.user.mfa.reset",
+    "translation": "{{.Actor}} reset two-step verification for {{.Resource}}"
+  },
+  {
+    "id": "audit.action.user.profile_picture.manage",
+    "translation": "{{.Actor}} changed the profile picture of {{.Resource}}"
+  },
+  {
+    "id": "audit.action.user.search",
+    "translation": "{{.Actor}} searched the user directory"
+  },
+  {
+    "id": "audit.action.user.settings.replace",
+    "translation": "{{.Actor}} replaced their settings"
+  },
+  {
+    "id": "audit.action.user.view",
+    "translation": "{{.Actor}} viewed {{.Resource}}"
+  },
+  {
+    "id": "audit.actor.hidden",
+    "translation": "A user"
+  },
+  {
+    "id": "audit.actor.system",
+    "translation": "The system"
+  },
+  {
+    "id": "audit.operation.academic_unit.members.manage.create_member",
+    "translation": "{{.Actor}} added {{.Subject}} to {{.Resource}}"
+  },
+  {
+    "id": "audit.operation.academic_unit.members.manage.end_member",
+    "translation": "{{.Actor}} removed {{.Subject}} from {{.Resource}}"
+  },
+  {
+    "id": "audit.operation.authentication.desktop_session_issue.exchange",
+    "translation": "{{.Actor}} signed in on the desktop app"
+  },
+  {
+    "id": "audit.operation.class.members.manage.end",
+    "translation": "{{.Actor}} removed {{.Subject}} from {{.Resource}}"
+  },
+  {
+    "id": "audit.operation.class.members.manage.enroll",
+    "translation": "{{.Actor}} enrolled {{.Subject}} in {{.Resource}}"
+  },
+  {
+    "id": "audit.operation.class.members.manage.transfer_in",
+    "translation": "{{.Actor}} transferred {{.Subject}} into {{.Resource}}"
+  },
+  {
+    "id": "audit.operation.class.members.manage.transfer_out",
+    "translation": "{{.Actor}} transferred {{.Subject}} out of {{.Resource}}"
+  },
+  {
+    "id": "audit.operation.desktop_registration.rename.rename",
+    "translation": "{{.Actor}} renamed a desktop device of {{.Subject}}"
+  },
+  {
+    "id": "audit.operation.desktop_registration.revoke.revoke",
+    "translation": "{{.Actor}} removed a desktop device of {{.Subject}}"
+  },
+  {
+    "id": "audit.operation.external_identity.manage.change_password",
+    "translation": "{{.Actor}} changed the password of {{.Subject}}"
+  },
+  {
+    "id": "audit.operation.external_identity.manage.enroll_password",
+    "translation": "{{.Actor}} added a password for {{.Subject}}"
+  },
+  {
+    "id": "audit.operation.external_identity.manage.remove_password",
+    "translation": "{{.Actor}} removed the password of {{.Subject}}"
+  },
+  {
+    "id": "audit.operation.external_identity.manage.unlink_provider",
+    "translation": "{{.Actor}} unlinked a sign-in provider from {{.Subject}}"
+  },
+  {
+    "id": "audit.operation.invitation.accept.accept_scoped_role_invitation",
+    "translation": "{{.Actor}} accepted an invitation to a role"
+  },
+  {
+    "id": "audit.operation.role_binding.manage.create_binding",
+    "translation": "{{.Actor}} gave {{.Subject}} a role at {{.Resource}}"
+  },
+  {
+    "id": "audit.operation.role_binding.manage.end_binding",
+    "translation": "{{.Actor}} ended a role of {{.Subject}} at {{.Resource}}"
+  },
+  {
+    "id": "audit.operation.session.manage.logout",
+    "translation": "{{.Actor}} signed out"
+  },
+  {
+    "id": "audit.operation.session.manage.rename_own_session",
+    "translation": "{{.Actor}} renamed one of their sessions"
+  },
+  {
+    "id": "audit.operation.session.manage.revoke_other_sessions",
+    "translation": "{{.Actor}} signed out their other sessions"
+  },
+  {
+    "id": "audit.operation.session.manage.revoke_own_session",
+    "translation": "{{.Actor}} signed out one of their sessions"
+  },
+  {
+    "id": "audit.operation.session.manage.revoke_own_sessions",
+    "translation": "{{.Actor}} signed out all their sessions"
+  },
+  {
+    "id": "audit.operation.session.manage.revoke_session",
+    "translation": "{{.Actor}} signed out a session of {{.Subject}}"
+  },
+  {
+    "id": "audit.operation.session.manage.revoke_sessions",
+    "translation": "{{.Actor}} signed out all sessions of {{.Subject}}"
+  },
+  {
+    "id": "audit.operation.user.manage.change_email",
+    "translation": "{{.Actor}} changed the email address of {{.Subject}}"
+  },
+  {
+    "id": "audit.operation.user.manage.create",
+    "translation": "{{.Actor}} added an affiliation for {{.Subject}}"
+  },
+  {
+    "id": "audit.operation.user.manage.disable_account",
+    "translation": "{{.Actor}} disabled the account of {{.Subject}}"
+  },
+  {
+    "id": "audit.operation.user.manage.enable_account",
+    "translation": "{{.Actor}} enabled the account of {{.Subject}}"
+  },
+  {
+    "id": "audit.operation.user.manage.end",
+    "translation": "{{.Actor}} ended an affiliation of {{.Subject}}"
+  },
+  {
+    "id": "audit.operation.user.manage.remove_profile_picture",
+    "translation": "{{.Actor}} removed the profile picture of {{.Subject}}"
+  },
+  {
+    "id": "audit.operation.user.manage.set_profile_picture",
+    "translation": "{{.Actor}} changed the profile picture of {{.Subject}}"
+  },
+  {
+    "id": "audit.operation.user.manage.update_profile",
+    "translation": "{{.Actor}} changed the profile of {{.Subject}}"
+  },
+  {
+    "id": "audit.operation.user.manage.verify_email_privileged",
+    "translation": "{{.Actor}} marked the email address of {{.Subject}} as verified"
+  },
+  {
+    "id": "audit.operation.user.profile_picture.manage.remove_profile_picture",
+    "translation": "{{.Actor}} removed the profile picture of {{.Subject}}"
+  },
+  {
+    "id": "audit.operation.user.profile_picture.manage.set_profile_picture",
+    "translation": "{{.Actor}} changed the profile picture of {{.Subject}}"
+  },
+  {
+    "id": "audit.resource.academic_period",
+    "translation": "an academic period"
+  },
+  {
+    "id": "audit.resource.academic_unit",
+    "translation": "an academic unit"
+  },
+  {
+    "id": "audit.resource.class",
+    "translation": "a class"
+  },
+  {
+    "id": "audit.resource.exam",
+    "translation": "an exam"
+  },
+  {
+    "id": "audit.resource.exam_sitting",
+    "translation": "an exam sitting"
+  },
+  {
+    "id": "audit.resource.institution",
+    "translation": "the institution"
+  },
+  {
+    "id": "audit.resource.mail_delivery",
+    "translation": "a mail delivery"
+  },
+  {
+    "id": "audit.resource.programme",
+    "translation": "a programme"
+  },
+  {
+    "id": "audit.resource.programme_level",
+    "translation": "a programme level"
+  },
+  {
+    "id": "audit.resource.submission",
+    "translation": "a submission"
+  },
+  {
+    "id": "audit.resource.unknown",
+    "translation": "a record"
+  },
+  {
+    "id": "audit.resource.user",
+    "translation": "a user"
+  },
+  {
+    "id": "audit.self.actor.administrator",
+    "translation": "An administrator"
+  },
+  {
+    "id": "audit.self.actor.self",
+    "translation": "You"
+  },
+  {
+    "id": "audit.self.actor.system",
+    "translation": "The system"
+  },
+  {
+    "id": "audit.self.event.academic_unit.joined",
+    "translation": "{{.Actor}} added you to {{.Resource}}"
+  },
+  {
+    "id": "audit.self.event.academic_unit.joined.other",
+    "translation": "You added a user to {{.Resource}}"
+  },
+  {
+    "id": "audit.self.event.academic_unit.left",
+    "translation": "{{.Actor}} removed you from {{.Resource}}"
+  },
+  {
+    "id": "audit.self.event.academic_unit.left.other",
+    "translation": "You removed a user from {{.Resource}}"
+  },
+  {
+    "id": "audit.self.event.account.disabled",
+    "translation": "{{.Actor}} disabled your account"
+  },
+  {
+    "id": "audit.self.event.account.disabled.other",
+    "translation": "You disabled a user's account"
+  },
+  {
+    "id": "audit.self.event.account.enabled",
+    "translation": "{{.Actor}} enabled your account"
+  },
+  {
+    "id": "audit.self.event.account.enabled.other",
+    "translation": "You enabled a user's account"
+  },
+  {
+    "id": "audit.self.event.account.recovered_by_administrator",
+    "translation": "{{.Actor}} recovered administrator access to your account"
+  },
+  {
+    "id": "audit.self.event.account.recovered_by_administrator.other",
+    "translation": "You recovered administrator access to a user's account"
+  },
+  {
+    "id": "audit.self.event.affiliation.ended",
+    "translation": "{{.Actor}} ended one of your affiliations"
+  },
+  {
+    "id": "audit.self.event.affiliation.ended.other",
+    "translation": "You ended one of a user's affiliations"
+  },
+  {
+    "id": "audit.self.event.affiliation.started",
+    "translation": "{{.Actor}} added an affiliation to your account"
+  },
+  {
+    "id": "audit.self.event.affiliation.started.other",
+    "translation": "You added an affiliation to a user's account"
+  },
+  {
+    "id": "audit.self.event.class.enrolled",
+    "translation": "{{.Actor}} enrolled you in {{.Resource}}"
+  },
+  {
+    "id": "audit.self.event.class.enrolled.other",
+    "translation": "You enrolled a user in {{.Resource}}"
+  },
+  {
+    "id": "audit.self.event.class.transferred_in",
+    "translation": "{{.Actor}} transferred you into {{.Resource}}"
+  },
+  {
+    "id": "audit.self.event.class.transferred_in.other",
+    "translation": "You transferred a user into {{.Resource}}"
+  },
+  {
+    "id": "audit.self.event.class.transferred_out",
+    "translation": "{{.Actor}} transferred you out of {{.Resource}}"
+  },
+  {
+    "id": "audit.self.event.class.transferred_out.other",
+    "translation": "You transferred a user out of {{.Resource}}"
+  },
+  {
+    "id": "audit.self.event.class.unenrolled",
+    "translation": "{{.Actor}} removed you from {{.Resource}}"
+  },
+  {
+    "id": "audit.self.event.class.unenrolled.other",
+    "translation": "You removed a user from {{.Resource}}"
+  },
+  {
+    "id": "audit.self.event.desktop.registration_renamed",
+    "translation": "{{.Actor}} renamed one of your desktop devices"
+  },
+  {
+    "id": "audit.self.event.desktop.registration_renamed.other",
+    "translation": "You renamed a user's desktop device"
+  },
+  {
+    "id": "audit.self.event.desktop.registration_revoked",
+    "translation": "{{.Actor}} removed one of your desktop devices"
+  },
+  {
+    "id": "audit.self.event.desktop.registration_revoked.other",
+    "translation": "You removed a user's desktop device"
+  },
+  {
+    "id": "audit.self.event.desktop.signed_in",
+    "translation": "You signed in on the desktop app"
+  },
+  {
+    "id": "audit.self.event.desktop.signed_in.other",
+    "translation": "You signed in on the desktop app"
+  },
+  {
+    "id": "audit.self.event.email.change_undone",
+    "translation": "A change to your email address was undone"
+  },
+  {
+    "id": "audit.self.event.email.change_undone.other",
+    "translation": "You undid a change to a user's email address"
+  },
+  {
+    "id": "audit.self.event.email.changed",
+    "translation": "{{.Actor}} changed your email address"
+  },
+  {
+    "id": "audit.self.event.email.changed.other",
+    "translation": "You changed a user's email address"
+  },
+  {
+    "id": "audit.self.event.email.verified",
+    "translation": "Your email address was verified"
+  },
+  {
+    "id": "audit.self.event.email.verified.other",
+    "translation": "You verified a user's email address"
+  },
+  {
+    "id": "audit.self.event.invitation.accepted",
+    "translation": "You accepted an invitation"
+  },
+  {
+    "id": "audit.self.event.invitation.accepted.other",
+    "translation": "You accepted an invitation"
+  },
+  {
+    "id": "audit.self.event.mfa.disabled",
+    "translation": "{{.Actor}} turned off two-step verification for your account"
+  },
+  {
+    "id": "audit.self.event.mfa.disabled.other",
+    "translation": "You turned off two-step verification for a user"
+  },
+  {
+    "id": "audit.self.event.mfa.enabled",
+    "translation": "{{.Actor}} turned on two-step verification for your account"
+  },
+  {
+    "id": "audit.self.event.mfa.enabled.other",
+    "translation": "You turned on two-step verification"
+  },
+  {
+    "id": "audit.self.event.mfa.recovery_codes_regenerated",
+    "translation": "{{.Actor}} created new recovery codes for your account"
+  },
+  {
+    "id": "audit.self.event.mfa.recovery_codes_regenerated.other",
+    "translation": "You created new recovery codes"
+  },
+  {
+    "id": "audit.self.event.mfa.reset_by_administrator",
+    "translation": "{{.Actor}} reset two-step verification for your account"
+  },
+  {
+    "id": "audit.self.event.mfa.reset_by_administrator.other",
+    "translation": "You reset two-step verification for a user"
+  },
+  {
+    "id": "audit.self.event.mfa.setup_started",
+    "translation": "{{.Actor}} started setting up two-step verification for your account"
+  },
+  {
+    "id": "audit.self.event.mfa.setup_started.other",
+    "translation": "You started setting up two-step verification"
+  },
+  {
+    "id": "audit.self.event.password.changed",
+    "translation": "{{.Actor}} changed your password"
+  },
+  {
+    "id": "audit.self.event.password.changed.other",
+    "translation": "You changed a user's password"
+  },
+  {
+    "id": "audit.self.event.password.enrolled",
+    "translation": "{{.Actor}} added a password to your account"
+  },
+  {
+    "id": "audit.self.event.password.enrolled.other",
+    "translation": "You added a password to a user's account"
+  },
+  {
+    "id": "audit.self.event.password.removed",
+    "translation": "{{.Actor}} removed the password from your account"
+  },
+  {
+    "id": "audit.self.event.password.removed.other",
+    "translation": "You removed the password from a user's account"
+  },
+  {
+    "id": "audit.self.event.password.reset",
+    "translation": "Your password was reset"
+  },
+  {
+    "id": "audit.self.event.password.reset.other",
+    "translation": "You reset a user's password"
+  },
+  {
+    "id": "audit.self.event.personal_access_token.created",
+    "translation": "{{.Actor}} created a personal access token for your account"
+  },
+  {
+    "id": "audit.self.event.personal_access_token.created.other",
+    "translation": "You created a personal access token"
+  },
+  {
+    "id": "audit.self.event.personal_access_token.disabled",
+    "translation": "{{.Actor}} turned off one of your personal access tokens"
+  },
+  {
+    "id": "audit.self.event.personal_access_token.disabled.other",
+    "translation": "You turned off a personal access token"
+  },
+  {
+    "id": "audit.self.event.personal_access_token.enabled",
+    "translation": "{{.Actor}} turned on one of your personal access tokens"
+  },
+  {
+    "id": "audit.self.event.personal_access_token.enabled.other",
+    "translation": "You turned on a personal access token"
+  },
+  {
+    "id": "audit.self.event.personal_access_token.revoked",
+    "translation": "{{.Actor}} revoked one of your personal access tokens"
+  },
+  {
+    "id": "audit.self.event.personal_access_token.revoked.other",
+    "translation": "You revoked a personal access token"
+  },
+  {
+    "id": "audit.self.event.profile.changed",
+    "translation": "{{.Actor}} changed your profile"
+  },
+  {
+    "id": "audit.self.event.profile.changed.other",
+    "translation": "You changed a user's profile"
+  },
+  {
+    "id": "audit.self.event.profile_picture.changed",
+    "translation": "{{.Actor}} changed your profile picture"
+  },
+  {
+    "id": "audit.self.event.profile_picture.changed.other",
+    "translation": "You changed a user's profile picture"
+  },
+  {
+    "id": "audit.self.event.profile_picture.removed",
+    "translation": "{{.Actor}} removed your profile picture"
+  },
+  {
+    "id": "audit.self.event.profile_picture.removed.other",
+    "translation": "You removed a user's profile picture"
+  },
+  {
+    "id": "audit.self.event.provider.unlinked",
+    "translation": "{{.Actor}} unlinked a sign-in provider from your account"
+  },
+  {
+    "id": "audit.self.event.provider.unlinked.other",
+    "translation": "You unlinked a sign-in provider from a user's account"
+  },
+  {
+    "id": "audit.self.event.role.ended",
+    "translation": "{{.Actor}} ended {{.Role}} for you in {{.Resource}}"
+  },
+  {
+    "id": "audit.self.event.role.ended.other",
+    "translation": "You ended a user's role in {{.Resource}}"
+  },
+  {
+    "id": "audit.self.event.role.granted",
+    "translation": "{{.Actor}} gave you {{.Role}} in {{.Resource}}"
+  },
+  {
+    "id": "audit.self.event.role.granted.other",
+    "translation": "You gave a user a role in {{.Resource}}"
+  },
+  {
+    "id": "audit.self.event.session.renamed",
+    "translation": "{{.Actor}} renamed one of your sessions"
+  },
+  {
+    "id": "audit.self.event.session.renamed.other",
+    "translation": "You renamed one of a user's sessions"
+  },
+  {
+    "id": "audit.self.event.session.revoked",
+    "translation": "{{.Actor}} signed out one of your sessions"
+  },
+  {
+    "id": "audit.self.event.session.revoked.other",
+    "translation": "You signed out one of a user's sessions"
+  },
+  {
+    "id": "audit.self.event.sessions.revoked_all",
+    "translation": "{{.Actor}} signed out all your sessions"
+  },
+  {
+    "id": "audit.self.event.sessions.revoked_all.other",
+    "translation": "You signed out all of a user's sessions"
+  },
+  {
+    "id": "audit.self.event.sessions.revoked_others",
+    "translation": "{{.Actor}} signed out your other sessions"
+  },
+  {
+    "id": "audit.self.event.sessions.revoked_others.other",
+    "translation": "You signed out a user's other sessions"
+  },
+  {
+    "id": "audit.self.event.sign_in.failed",
+    "translation": "A sign-in to your account failed"
+  },
+  {
+    "id": "audit.self.event.sign_in.failed.other",
+    "translation": "Your sign-in failed"
+  },
+  {
+    "id": "audit.self.event.sign_in.succeeded",
+    "translation": "You signed in"
+  },
+  {
+    "id": "audit.self.event.sign_in.succeeded.other",
+    "translation": "You signed in"
+  },
+  {
+    "id": "audit.self.event.sign_out",
+    "translation": "You signed out"
+  },
+  {
+    "id": "audit.self.event.sign_out.other",
+    "translation": "You signed out"
+  },
+  {
+    "id": "audit.self.role.named",
+    "translation": "the {{.Name}} role"
+  },
+  {
+    "id": "audit.self.role.unnamed",
+    "translation": "a role"
+  },
+  {
+    "id": "audit.status.attempt",
+    "translation": "{{.Summary}} (not finished)"
+  },
+  {
+    "id": "audit.status.fail",
+    "translation": "{{.Summary}} (failed)"
+  },
+  {
+    "id": "audit.subject.hidden",
+    "translation": "a user"
+  },
+  {
     "id": "authorization.role.system_admin.description",
     "translation": "Protected administrator role for this Proctor installation."
   },

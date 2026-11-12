@@ -247,6 +247,7 @@ const (
 	methodList                                      methodName = "list"
 	methodListSelf                                  methodName = "list_self"
 	methodCountSelf                                 methodName = "count_self"
+	methodListNames                                 methodName = "list_names"
 	methodCount                                     methodName = "count"
 	methodListDirectorySummaries                    methodName = "list_directory_summaries"
 	methodListIdentities                            methodName = "list_identities"

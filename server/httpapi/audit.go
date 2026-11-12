@@ -19,9 +19,9 @@ import (
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 // auditCursor continues one read order; a cursor from the other order is an
@@ -50,6 +50,9 @@ type auditEventResponse struct {
 	IPAddress  string                `json:"ip_address,omitempty"`
 	UserAgent  string                `json:"user_agent,omitempty"`
 	ErrorCode  string                `json:"error_code,omitempty"`
+	// Summary is one sentence describing the event in the request's locale.
+	// It names a person or record only when the caller could see it now.
+	Summary string `json:"summary"`
 	// Reason is the optional account disable reason. Institution-wide readers
 	// receive it; academic-scoped readers never do because their projection
 	// drops parameters.
@@ -63,7 +66,7 @@ type auditResourceResponse struct {
 	ID   string             `json:"id"`
 }
 
-func auditEventResponseFromModel(event *model.AuditEvent) auditEventResponse {
+func auditEventResponseFromModel(request *http.Request, event *model.AuditEvent, names store.AuditNames) auditEventResponse {
 	return auditEventResponse{
 		ID:         event.ID.String(),
 		CreatedAt:  model.FormatRFC3339(event.CreatedAt),
@@ -82,6 +85,7 @@ func auditEventResponseFromModel(event *model.AuditEvent) auditEventResponse {
 		IPAddress:  event.IPAddress,
 		UserAgent:  event.UserAgent,
 		ErrorCode:  event.ErrorCode,
+		Summary:    auditSummary(request, event, names),
 		Reason:     event.AccountDisableReason(),
 	}
 }
@@ -132,7 +136,10 @@ func (h auditHandlers) list(request route.Request) (route.Result, error) {
 	if listErr != nil {
 		return route.Result{}, listErr
 	}
-	envelope, err := route.NewList(page.Items, page.HasMore, auditEventResponseFromModel, func(last *model.AuditEvent) (string, error) {
+	present := func(event *model.AuditEvent) auditEventResponse {
+		return auditEventResponseFromModel(request.HTTP, event, page.Names)
+	}
+	envelope, err := route.NewList(page.Items, page.HasMore, present, func(last *model.AuditEvent) (string, error) {
 		return encodeAuditCursor(auditCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String(), Order: order})
 	})
 	if err != nil {
@@ -243,6 +250,6 @@ func auditCursorSpec() route.CursorSpec[auditCursor] {
 
 // AuditListingApplication is the application port its handlers call; it lists audit events for administrators and for the caller.
 type AuditListingApplication interface {
-	ListAuditEvents(context.Context, invocation.Invocation, administration.ListAuditEventsQuery) (paging.Counted[*model.AuditEvent], error)
+	ListAuditEvents(context.Context, invocation.Invocation, administration.ListAuditEventsQuery) (administration.AuditEventPage, error)
 	ListSelfAuditEvents(context.Context, invocation.Invocation, administration.ListSelfAuditEventsQuery) (administration.SelfAuditPage, error)
 }

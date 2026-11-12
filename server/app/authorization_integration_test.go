@@ -721,9 +721,11 @@ func TestAcademicUnitVisibilityIsBoundedAcrossUsersBindingsAndAudits(t *testing.
 	}
 	require.NoError(t, json.Unmarshal(audits.Body.Bytes(), &auditBody))
 	seenAudits := map[string]bool{}
+	summaries := map[string]any{}
 	for _, event := range auditBody.Events {
 		id, _ := event["id"].(string)
 		seenAudits[id] = true
+		summaries[id] = event["summary"]
 		for _, field := range []string{"session_id", "request_id", "node_id", "client_type", "authentication_method", "ip_address", "user_agent"} {
 			_, leaked := event[field]
 			require.False(t, leaked, "scoped audit %s leaked %s: %#v", id, field, event)
@@ -733,6 +735,11 @@ func TestAcademicUnitVisibilityIsBoundedAcrossUsersBindingsAndAudits(t *testing.
 	require.True(t, seenAudits[classAuditID])
 	require.False(t, seenAudits[siblingAuditID])
 	require.False(t, seenAudits[securityAuditID])
+	// The viewer sees itself through user.view at the root but holds neither
+	// academic_unit.view nor class.view, so the summaries name the actor and
+	// keep the Academic Unit and Class generic.
+	require.Equal(t, "scoped-viewer managed an academic unit", summaries[childAuditID])
+	require.Equal(t, "scoped-viewer managed a class", summaries[classAuditID])
 	institutionAcademicViewer := createUser("institution-academic-auditor")
 	institutionAcademicRole, err := storetest.SaveRole(ctx, persistence, &model.Role{
 		Name: "institution-academic-auditor", DisplayName: "Institution Academic Auditor",

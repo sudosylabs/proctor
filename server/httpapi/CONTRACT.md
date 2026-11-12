@@ -650,6 +650,28 @@ The listing filters `actor_id`, `subject_user_id` (the User an Event is about),
 naming an action outside its catalog or a User outside its subtrees reads
 nothing more.
 
+Each `GET /api/v1/audits` and `GET /api/v1/users/me/audits` item carries a
+`summary`: one sentence written by the server in the locale `Accept-Language`
+negotiates, falling back per message to the installation locale and then
+English, as Problem Details do; the User's `locale` field does not take part.
+The codes stay beside it and remain the only thing a client reasons about.
+Audits store only identifiers, so names are read at request time from the live
+tables, once per page, and only inside the caller's current authority to see
+each record: Users through the User directory's visibility (`user.view` and
+`class.members.view`), Academic Units through `academic_unit.view`, and
+Classes through `class.view`. A record the caller cannot see, an archived one,
+and any other resource type take a generic noun ("a user", "a class"). The
+admin summary is keyed by action, or by action and recorded operation where
+the self-history catalogue distinguishes operations; an academic auditor's
+redacted row has no parameters, so its summary names only the action, actor,
+and resource and never the operation or the User the Event is about. Account
+history keeps its actor mask ("An administrator gave you the Teacher role in
+Mathematics"): it never names another person, names an Academic Unit or Class
+only where the item's resource identity appears, and names a Role only when the
+event bound it to the caller. An unfinished or failed row says so. Runs of
+similar rows are not folded on the server, because folding across pages would
+break cursors and totals.
+
 ## Public local registration
 
 `POST /api/v1/auth/register` is a public strict-JSON API for the local

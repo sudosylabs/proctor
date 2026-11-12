@@ -57,6 +57,9 @@ type ListSelfAuditEventsQuery struct {
 // resource ID is present only when the resource is the caller, the
 // Institution, or an Academic Unit or Class the caller belongs or belonged
 // to. The network identity is present only for the caller's own actions.
+// ResourceName names that related Academic Unit or Class when it is not
+// archived, and Role names the Role a Role Binding change granted the caller
+// or ended for them. No other person is ever named.
 type SelfAuditEvent struct {
 	ID         model.AuditEventID
 	CreatedAt  time.Time
@@ -69,6 +72,9 @@ type SelfAuditEvent struct {
 	ClientType string
 	IPAddress  string
 	UserAgent  string
+
+	ResourceName string
+	Role         store.AuditRoleName
 }
 
 // SelfAuditPage is one page of the caller's history. The first page, read
@@ -128,6 +134,7 @@ func (s *Service) ListSelfAuditEvents(
 	}
 
 	items := make([]SelfAuditEvent, 0, len(entries))
+	roles := make([]model.RoleID, 0, len(entries))
 	for _, entry := range entries {
 		item, ok := selfAuditProjection(principal.UserID, entry)
 		if !ok {
@@ -135,9 +142,13 @@ func (s *Service) ListSelfAuditEvents(
 		}
 
 		items = append(items, item)
+		roles = append(roles, selfAuditRole(principal.UserID, entry))
 	}
 
 	page := SelfAuditPage{Page: paging.New(items, query.Limit), Counted: counted}
+	if err = s.nameSelfAuditEvents(ctx, page.Items, roles); err != nil {
+		return SelfAuditPage{}, err
+	}
 	if !counted {
 		return page, nil
 	}
@@ -226,4 +237,57 @@ func selfAuditProjection(caller model.UserID, entry *store.AuditSelfEntry) (Self
 	}
 
 	return item, true
+}
+
+// selfAuditRole is the Role a Role Binding change bound to the caller, or
+// zero for any other event, including a change the caller made for someone
+// else.
+func selfAuditRole(caller model.UserID, entry *store.AuditSelfEntry) model.RoleID {
+	if entry.SubjectUserID != caller {
+		return ""
+	}
+	return entry.RoleID
+}
+
+// nameSelfAuditEvents reads, in one call, the current names of the related
+// Academic Units and Classes the projection kept and of the Roles bound to
+// the caller. roles holds each projected entry's Role, the page's items
+// first. The projection has already applied the related-resource rule,
+// so the read applies no further visibility; it never names a person.
+func (s *Service) nameSelfAuditEvents(ctx context.Context, items []SelfAuditEvent, roles []model.RoleID) error {
+	options := store.AuditNameOptions{
+		AcademicUnitInstitutionWide: true,
+		ClassVisibility:             store.ClassVisibilityScope{InstitutionWide: true},
+	}
+	for index, item := range items {
+		switch {
+		case item.Resource.ID == "":
+		case item.Resource.Type == model.ResourceAcademicUnit:
+			options.AcademicUnitIDs = append(options.AcademicUnitIDs, model.AcademicUnitID(item.Resource.ID))
+		case item.Resource.Type == model.ResourceClass:
+			options.ClassIDs = append(options.ClassIDs, model.ClassID(item.Resource.ID))
+		}
+		if !roles[index].IsZero() {
+			options.RoleIDs = append(options.RoleIDs, roles[index])
+		}
+	}
+	if len(options.AcademicUnitIDs)+len(options.ClassIDs)+len(options.RoleIDs) == 0 {
+		return nil
+	}
+
+	names, err := s.audits.ListNames(ctx, options)
+	if err != nil {
+		return auditListingError(err)
+	}
+	for index := range items {
+		item := &items[index]
+		switch item.Resource.Type {
+		case model.ResourceAcademicUnit:
+			item.ResourceName = names.AcademicUnits[model.AcademicUnitID(item.Resource.ID)]
+		case model.ResourceClass:
+			item.ResourceName = names.Classes[model.ClassID(item.Resource.ID)]
+		}
+		item.Role = names.Roles[roles[index]]
+	}
+	return nil
 }

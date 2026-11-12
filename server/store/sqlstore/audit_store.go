@@ -487,6 +487,7 @@ type auditSelfRow struct {
 	IPAddress       string             `db:"ip_address"`
 	UserAgent       string             `db:"user_agent"`
 	ErrorCode       string             `db:"error_code"`
+	RoleID          string             `db:"role_id"`
 }
 
 // ListSelf reads the subject and actor relations through their own partial
@@ -513,11 +514,14 @@ func (s SQLAuditStore) ListSelf(ctx context.Context, options store.AuditSelfList
 	order := `ORDER BY e.created_at ` + direction + `, e.id ` + direction
 	branches, args := auditSelfBranches(options, filter, filterArgs, `e.id, e.created_at`, order+` LIMIT ?`, options.Limit)
 	userID := options.UserID.String()
-	args = append(args, userID, userID, userID, userID, userID, options.Limit)
+	args = append(args, string(model.ActionRoleBindingManage), userID, userID, userID, userID, userID, options.Limit)
 	query := auditSelfEventKeysCTE + `, candidates AS (` + strings.Join(branches, " UNION ALL ") + `)
 		SELECT e.id, e.created_at, e.actor_id, e.subject_user_id, e.action,
 			COALESCE(e.parameters->>'operation', '') AS operation, e.status, e.resource_type,
 			e.resource_id, e.client_type, e.ip_address, e.user_agent, e.error_code,
+			CASE WHEN e.action = ? THEN COALESCE(
+				e.parameters->'value'->>'role_id', e.prior_state->>'role_id', ''
+			) ELSE '' END AS role_id,
 			CASE e.resource_type
 				WHEN 'user' THEN e.resource_id = ?
 				WHEN 'institution' THEN TRUE
@@ -734,7 +738,18 @@ func (row auditSelfRow) entry() (*store.AuditSelfEntry, error) {
 		IPAddress:       row.IPAddress,
 		UserAgent:       row.UserAgent,
 		ErrorCode:       row.ErrorCode,
+		RoleID:          auditSelfRoleID(row.RoleID),
 	}, nil
+}
+
+// auditSelfRoleID keeps a Role identifier read from audit values only when
+// it is well formed. The values are writer-owned JSON rather than a typed
+// column, so a malformed one names no Role instead of failing the history.
+func auditSelfRoleID(raw string) model.RoleID {
+	if id := model.RoleID(raw); id.IsValid() {
+		return id
+	}
+	return ""
 }
 
 func newAuditRow(event *model.AuditEvent) auditRow {

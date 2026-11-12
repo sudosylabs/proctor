@@ -72,9 +72,9 @@ type AuditEvent struct {
 }
 
 // AccountDisableReason returns the optional reason recorded on an account
-// disable event, or empty for any other event or when none was given. It is
-// the one audit parameter the institution audit list presents, and only to
-// readers that receive parameters at all.
+// disable event, or empty for any other event or when none was given. Beside
+// Operation, it is the one audit parameter the institution audit list
+// presents, and only to readers that receive parameters at all.
 func (ae *AuditEvent) AccountDisableReason() string {
 	if ae == nil || ae.Action != string(ActionUserManage) || len(ae.Parameters) == 0 {
 		return ""
@@ -89,6 +89,22 @@ func (ae *AuditEvent) AccountDisableReason() string {
 		return ""
 	}
 	return parameters.Value.Reason
+}
+
+// Operation returns the operation name the writer recorded in the event's
+// parameters, or empty when it recorded none or the reader received no
+// parameters. The institution audit list chooses an event's summary by it.
+func (ae *AuditEvent) Operation() string {
+	if ae == nil || len(ae.Parameters) == 0 {
+		return ""
+	}
+	var parameters struct {
+		Operation string `json:"operation"`
+	}
+	if json.Unmarshal(ae.Parameters, &parameters) != nil {
+		return ""
+	}
+	return parameters.Operation
 }
 
 // AuditQuery is the application/store listing filter for audit events.

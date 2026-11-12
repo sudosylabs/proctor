@@ -625,16 +625,16 @@ func NewCandidateExamAttemptFocusLossWarningEvent(
 	}, nil
 }
 
-// NewExamAttemptIntegrityFlaggedEvent tells Sitting viewers that a Focus Loss
-// Integrity Flag was raised on an Attempt. The payload gives the policy
-// outcome and how many evidence episodes were retained and how many
-// overflowed, not the evidence itself. Focus Loss is the only policy kind it
-// reports.
+// NewExamAttemptIntegrityFlaggedEvent tells Sitting viewers that an Integrity
+// Flag was raised on an Attempt. The payload gives the policy that raised it,
+// its outcome, and how many evidence episodes were retained and how many
+// overflowed, not the evidence itself.
 func NewExamAttemptIntegrityFlaggedEvent(
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
 	candidateID model.UserID,
 	flagID model.IntegrityFlagID,
+	kind model.IntegrityPolicyKind,
 	outcome model.IntegrityOutcome,
 	retainedEvidence int,
 	evidenceOverflow int64,
@@ -644,6 +644,7 @@ func NewExamAttemptIntegrityFlaggedEvent(
 		!attemptID.IsValid() ||
 		!candidateID.IsValid() ||
 		!flagID.IsValid() ||
+		!kind.IsValid() ||
 		retainedEvidence < 0 ||
 		retainedEvidence > model.FocusLossMaximumEvidenceEpisodes ||
 		evidenceOverflow < 0 ||
@@ -652,9 +653,7 @@ func NewExamAttemptIntegrityFlaggedEvent(
 		return Event{}, errors.New("manager Exam Attempt integrity Flag event requires valid bounded metadata")
 	}
 
-	switch outcome {
-	case model.IntegrityOutcomeFlag, model.IntegrityOutcomeFlagAndWarn, model.IntegrityOutcomeFlagAndSuspend:
-	default:
+	if !outcome.IsValid() {
 		return Event{}, errors.New("manager Exam Attempt integrity Flag event requires a valid outcome")
 	}
 
@@ -663,7 +662,7 @@ func NewExamAttemptIntegrityFlaggedEvent(
 		ExamAttemptID:     attemptID.String(),
 		CandidateID:       candidateID.String(),
 		FlagID:            flagID.String(),
-		PolicyKind:        string(model.IntegrityPolicyFocusLoss),
+		PolicyKind:        string(kind),
 		Outcome:           string(outcome),
 		RetainedEvidence:  retainedEvidence,
 		EvidenceOverflow:  evidenceOverflow,

@@ -1056,7 +1056,7 @@
         "title": "Focus Loss warning"
       },
       "exam_attempt_integrity_flagged": {
-        "description": "A Focus Loss Integrity Flag was raised on an Attempt. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
+        "description": "An Integrity Flag was raised on an Attempt by the policy policy_kind names, a core policy or a capability's \"\u003cplugin-id\u003e.\u003ckind\u003e\". Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
         "examples": [
           {
             "name": "example",
@@ -1113,7 +1113,7 @@
             }
           ]
         },
-        "summary": "A Focus Loss Integrity Flag was raised on an Attempt.",
+        "summary": "An Integrity Flag was raised on an Attempt.",
         "tags": [
           {
             "name": "event"
@@ -3776,7 +3776,8 @@
             "type": "string"
           },
           "policy_kind": {
-            "const": "focus_loss",
+            "maxLength": 97,
+            "pattern": "^(connection_loss|focus_loss|browser_navigation|[a-z][a-z0-9.-]{0,63}\\.[a-z][a-z0-9_]{0,31})$",
             "type": "string"
           },
           "retained_evidence_count": {

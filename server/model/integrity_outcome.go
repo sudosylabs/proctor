@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"regexp"
+	"time"
 )
 
 // IntegrityOutcome is what an integrity policy does once its rule is met. It
@@ -124,4 +125,24 @@ func validCapabilityEvidenceDetail(detail json.RawMessage) bool {
 	trimmed := bytes.TrimSpace(detail)
 	return len(detail) <= IntegrityEvidenceDetailMaxBytes &&
 		len(trimmed) > 1 && trimmed[0] == '{' && json.Valid(trimmed)
+}
+
+// NewIntegrityPolicySuspension opens the Suspension a policy's decision
+// causes, with the reason that policy declares. A policy that never suspends
+// has none to open.
+func NewIntegrityPolicySuspension(
+	id AttemptSuspensionID,
+	attemptID ExamAttemptID,
+	participationID AttemptParticipationID,
+	flagID IntegrityFlagID,
+	generation int64,
+	kind IntegrityPolicyKind,
+	at time.Time,
+) (*AttemptSuspension, error) {
+	policy, ok := coreIntegrityPolicies[kind]
+	if !ok || policy.SuspensionReason == "" {
+		return nil, invalidModelError("NewIntegrityPolicySuspension", "attempt_suspension", "", "the policy does not suspend", "")
+	}
+
+	return NewPolicyAttemptSuspension(id, attemptID, participationID, flagID, generation, policy.SuspensionReason, at)
 }

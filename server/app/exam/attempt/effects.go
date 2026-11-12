@@ -10,9 +10,11 @@ package attempt
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 // publishCandidateActivityChanged tells the candidate's clients to refetch
@@ -281,12 +283,9 @@ func (s *Service) publishWorkspaceChanged(ctx context.Context, result WorkspaceM
 
 // publishFocusLossEvaluated announces what one Focus Loss report caused. A
 // late report against a sealed Submission publishes only the recorded
-// discrepancy and a Sitting board invalidation. Otherwise the events go out
-// in this order, each only when it applies: the closed Attempt Connection,
-// the Integrity Flag to managers, the policy Suspension to managers and then
-// to the candidate, and the candidate's warning. The Sitting board, the
-// candidate's Exam activity and the unbinding of the closed Connection follow.
-// Nothing is published unless every event that applies can be built.
+// discrepancy and a Sitting board invalidation. Otherwise it publishes the
+// integrity outcome; its invalidations are the Sitting board and the
+// candidate's Exam activity.
 func (s *Service) publishFocusLossEvaluated(ctx context.Context, result FocusLossEvaluation) error {
 	if result.DiscrepancyRecorded {
 		event, err := realtime.NewExamIntegrityDiscrepancyRecordedEvent(
@@ -305,33 +304,99 @@ func (s *Service) publishFocusLossEvaluated(ctx context.Context, result FocusLos
 			realtime.PublishSittingBoardChanged(ctx, s.publisher, result.ExamID, result.SittingID))
 	}
 
-	events := make([]realtime.Event, 0, 5)
+	outcome := integrityOutcome{
+		SittingID:       result.SittingID,
+		AttemptID:       result.AttemptID,
+		CandidateUserID: result.CandidateUserID,
+		At:              result.ReceivedAt,
+		Warning:         result.CandidateWarningCreated,
+		Invalidate: func() error {
+			var joined error
+			if result.GapDetected || result.FlagCreated || result.SuspensionCreated {
+				joined = realtime.PublishSittingBoardChanged(ctx, s.publisher, result.ExamID, result.SittingID)
+			}
+			if result.SuspensionCreated {
+				joined = errors.Join(joined, s.publishCandidateActivityChanged(ctx, result.CandidateUserID))
+			}
+			return joined
+		},
+	}
 	if result.ConnectionClosed {
-		event, err := realtime.NewExamAttemptConnectionClosedEvent(
-			result.SittingID,
-			result.AttemptID,
-			result.CandidateUserID,
-			result.Connection.ID,
-			result.Connection.CloseReason,
-			result.Connection.ClosedAt.Time,
-		)
-		if err != nil {
-			return err
-		}
-
-		events = append(events, event)
+		outcome.ClosedConnection = &result.Connection
 	}
-
 	if result.ManagerNotificationRequired {
-		event, err := realtime.NewExamAttemptIntegrityFlaggedEvent(
-			result.SittingID,
-			result.AttemptID,
-			result.CandidateUserID,
-			result.Flag.ID,
-			result.PolicyOutcome,
-			result.RetainedEvidenceCount,
-			result.EvidenceOverflowCount,
-			result.ReceivedAt,
+		outcome.Flagged = &integrityFlagNotice{
+			FlagID:           result.Flag.ID,
+			Kind:             model.IntegrityPolicyFocusLoss,
+			Outcome:          result.PolicyOutcome,
+			RetainedEvidence: result.RetainedEvidenceCount,
+			EvidenceOverflow: result.EvidenceOverflowCount,
+		}
+	}
+	if result.SuspensionCreated {
+		outcome.Suspension = &integritySuspensionNotice{
+			ConnectionID:    result.Connection.ID,
+			FlagID:          result.Flag.ID,
+			Suspension:      result.Suspension,
+			AttemptRevision: result.Attempt.Revision,
+		}
+	}
+
+	return s.publishIntegrityOutcome(ctx, outcome)
+}
+
+// integrityOutcome is what one integrity policy decision caused, as the
+// realtime effects every policy publishes the same way.
+type integrityOutcome struct {
+	SittingID       model.ExamSittingID
+	AttemptID       model.ExamAttemptID
+	CandidateUserID model.UserID
+	At              time.Time
+	// ClosedConnection is the Connection this decision closed, or nil.
+	ClosedConnection *store.ExamAttemptManagerConnection
+	// Flagged tells managers of the Flag, or is nil when they are not told.
+	Flagged *integrityFlagNotice
+	// Suspension is the policy Suspension this decision opened, or nil.
+	Suspension *integritySuspensionNotice
+	// Warning is whether the candidate is warned.
+	Warning bool
+	// Invalidate publishes the policy's own invalidations, after the events
+	// and before the closed Connection is unbound.
+	Invalidate func() error
+}
+
+type integrityFlagNotice struct {
+	FlagID           model.IntegrityFlagID
+	Kind             model.IntegrityPolicyKind
+	Outcome          model.IntegrityOutcome
+	RetainedEvidence int
+	EvidenceOverflow int64
+}
+
+type integritySuspensionNotice struct {
+	ConnectionID    model.AttemptConnectionID
+	FlagID          model.IntegrityFlagID
+	Suspension      store.ExamAttemptSuspensionView
+	AttemptRevision int64
+}
+
+// publishIntegrityOutcome publishes what an integrity decision caused, each
+// event only when it applies and always in this order: the closed Attempt
+// Connection, the Integrity Flag to managers, the policy Suspension to
+// managers and then to the candidate, and the candidate's warning. The
+// policy's invalidations follow, and the closed Connection is unbound on
+// every node last, so the Desktop client still receives its Suspension.
+// Nothing is published unless every event that applies can be built.
+func (s *Service) publishIntegrityOutcome(ctx context.Context, outcome integrityOutcome) error {
+	events := make([]realtime.Event, 0, 5)
+	if connection := outcome.ClosedConnection; connection != nil {
+		event, err := realtime.NewExamAttemptConnectionClosedEvent(
+			outcome.SittingID,
+			outcome.AttemptID,
+			outcome.CandidateUserID,
+			connection.ID,
+			connection.CloseReason,
+			connection.ClosedAt.Time,
 		)
 		if err != nil {
 			return err
@@ -340,28 +405,47 @@ func (s *Service) publishFocusLossEvaluated(ctx context.Context, result FocusLos
 		events = append(events, event)
 	}
 
-	if result.SuspensionCreated {
+	if flagged := outcome.Flagged; flagged != nil {
+		event, err := realtime.NewExamAttemptIntegrityFlaggedEvent(
+			outcome.SittingID,
+			outcome.AttemptID,
+			outcome.CandidateUserID,
+			flagged.FlagID,
+			flagged.Kind,
+			flagged.Outcome,
+			flagged.RetainedEvidence,
+			flagged.EvidenceOverflow,
+			outcome.At,
+		)
+		if err != nil {
+			return err
+		}
+
+		events = append(events, event)
+	}
+
+	if suspended := outcome.Suspension; suspended != nil {
 		managerEvent, err := realtime.NewExamAttemptPolicySuspendedEvent(
-			result.SittingID,
-			result.AttemptID,
-			result.CandidateUserID,
-			result.Connection.ID,
-			result.Flag.ID,
-			result.Suspension.ID,
-			result.Attempt.Revision,
-			result.ReceivedAt,
+			outcome.SittingID,
+			outcome.AttemptID,
+			outcome.CandidateUserID,
+			suspended.ConnectionID,
+			suspended.FlagID,
+			suspended.Suspension.ID,
+			suspended.AttemptRevision,
+			outcome.At,
 		)
 		if err != nil {
 			return err
 		}
 
 		candidateEvent, err := realtime.NewCandidateExamAttemptSuspendedEvent(
-			result.SittingID,
-			result.AttemptID,
-			result.CandidateUserID,
-			result.Suspension.Source,
-			result.Suspension.CandidateReason,
-			result.ReceivedAt,
+			outcome.SittingID,
+			outcome.AttemptID,
+			outcome.CandidateUserID,
+			suspended.Suspension.Source,
+			suspended.Suspension.CandidateReason,
+			outcome.At,
 		)
 		if err != nil {
 			return err
@@ -370,12 +454,12 @@ func (s *Service) publishFocusLossEvaluated(ctx context.Context, result FocusLos
 		events = append(events, managerEvent, candidateEvent)
 	}
 
-	if result.CandidateWarningCreated {
+	if outcome.Warning {
 		event, err := realtime.NewCandidateExamAttemptFocusLossWarningEvent(
-			result.SittingID,
-			result.AttemptID,
-			result.CandidateUserID,
-			result.ReceivedAt,
+			outcome.SittingID,
+			outcome.AttemptID,
+			outcome.CandidateUserID,
+			outcome.At,
 		)
 		if err != nil {
 			return err
@@ -388,15 +472,11 @@ func (s *Service) publishFocusLossEvaluated(ctx context.Context, result FocusLos
 	for _, event := range events {
 		joined = errors.Join(joined, s.publisher.Publish(ctx, event))
 	}
-
-	if result.GapDetected || result.FlagCreated || result.SuspensionCreated {
-		joined = errors.Join(joined, realtime.PublishSittingBoardChanged(ctx, s.publisher, result.ExamID, result.SittingID))
+	if outcome.Invalidate != nil {
+		joined = errors.Join(joined, outcome.Invalidate())
 	}
-	if result.SuspensionCreated {
-		joined = errors.Join(joined, s.publishCandidateActivityChanged(ctx, result.CandidateUserID))
-	}
-	if result.ConnectionClosed {
-		joined = errors.Join(joined, s.publisher.UnbindExamAttemptConnection(ctx, result.Connection.ID))
+	if outcome.ClosedConnection != nil {
+		joined = errors.Join(joined, s.publisher.UnbindExamAttemptConnection(ctx, outcome.ClosedConnection.ID))
 	}
 
 	return joined

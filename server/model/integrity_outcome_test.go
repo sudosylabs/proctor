@@ -137,3 +137,27 @@ func TestCapabilityIntegrityEvidenceCarriesOnlyItsBoundedDetail(t *testing.T) {
 func oversizedDetail() json.RawMessage {
 	return json.RawMessage(`{"padding":"` + strings.Repeat("x", IntegrityEvidenceDetailMaxBytes) + `"}`)
 }
+
+func TestIntegrityPolicySuspensionTakesThePolicysReason(t *testing.T) {
+	t.Parallel()
+
+	at := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
+	open := func(kind IntegrityPolicyKind) (*AttemptSuspension, error) {
+		return NewIntegrityPolicySuspension(NewAttemptSuspensionID(), NewExamAttemptID(), NewAttemptParticipationID(),
+			NewIntegrityFlagID(), 1, kind, at)
+	}
+
+	connection, err := open(IntegrityPolicyConnectionLoss)
+	require.NoError(t, err)
+	require.Equal(t, AttemptSuspensionSourcePolicy, connection.Source)
+	require.Equal(t, AttemptSuspensionCandidateReasonSecureContinuityLost, connection.CandidateReason)
+
+	focus, err := open(IntegrityPolicyFocusLoss)
+	require.NoError(t, err)
+	require.Equal(t, AttemptSuspensionCandidateReasonFocusLossPolicy, focus.CandidateReason)
+
+	_, err = open(IntegrityPolicyBrowserNavigation)
+	require.Error(t, err, "browser navigation never suspends")
+	_, err = open("display.second_screen")
+	require.Error(t, err, "a capability's reasons are not registered yet")
+}

@@ -374,7 +374,7 @@ func TestFocusLossWarningEffectPublishesBoundedManagerFlagAndNeutralCandidateWar
 	// warned, and the Sitting board is invalidated after both.
 	require.Equal(t, []realtimetest.Call{
 		pub(realtime.NewExamAttemptIntegrityFlaggedEvent(result.SittingID, result.AttemptID, result.CandidateUserID, result.Flag.ID,
-			result.PolicyOutcome, result.RetainedEvidenceCount, result.EvidenceOverflowCount, at)),
+			model.IntegrityPolicyFocusLoss, result.PolicyOutcome, result.RetainedEvidenceCount, result.EvidenceOverflowCount, at)),
 		pub(realtime.NewCandidateExamAttemptFocusLossWarningEvent(result.SittingID, result.AttemptID, result.CandidateUserID, at)),
 		sittingBoardChangedCall(t, result.ExamID, result.SittingID),
 	}, calls)
@@ -411,7 +411,7 @@ func TestFocusLossSuspensionEffectPublishesCloseFlagAndSeparatedSuspensions(t *t
 		pub(realtime.NewExamAttemptConnectionClosedEvent(result.SittingID, result.AttemptID, result.CandidateUserID, result.Connection.ID,
 			result.Connection.CloseReason, result.Connection.ClosedAt.Time)),
 		pub(realtime.NewExamAttemptIntegrityFlaggedEvent(result.SittingID, result.AttemptID, result.CandidateUserID, flagID,
-			result.PolicyOutcome, result.RetainedEvidenceCount, result.EvidenceOverflowCount, at)),
+			model.IntegrityPolicyFocusLoss, result.PolicyOutcome, result.RetainedEvidenceCount, result.EvidenceOverflowCount, at)),
 		pub(realtime.NewExamAttemptPolicySuspendedEvent(result.SittingID, result.AttemptID, result.CandidateUserID, result.Connection.ID,
 			flagID, result.Suspension.ID, result.Attempt.Revision, at)),
 		pub(realtime.NewCandidateExamAttemptSuspendedEvent(result.SittingID, result.AttemptID, result.CandidateUserID,

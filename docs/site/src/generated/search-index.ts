@@ -4862,9 +4862,9 @@ export const searchEntries = [
     "kind": "realtime-message",
     "group": "Realtime",
     "title": "Attempt Integrity Flag raised",
-    "description": "A Focus Loss Integrity Flag was raised on an Attempt.",
+    "description": "An Integrity Flag was raised on an Attempt.",
     "href": "/api/reference/realtime-protocol/exam-attempt-integrity-flagged",
-    "searchText": "exam_attempt_integrity_flagged exam_attempt_integrity_flagged attempt integrity flag raised a focus loss integrity flag was raised on an attempt. delivered to connections that subscribe to exam.sitting.view on the exam sitting. event attempts"
+    "searchText": "exam_attempt_integrity_flagged exam_attempt_integrity_flagged attempt integrity flag raised an integrity flag was raised on an attempt by the policy policy_kind names, a core policy or a capability's \"<plugin-id>.<kind>\". delivered to connections that subscribe to exam.sitting.view on the exam sitting. event attempts"
   },
   {
     "id": "realtime:exam_attempt_reallowed",

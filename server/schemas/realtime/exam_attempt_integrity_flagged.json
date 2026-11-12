@@ -30,7 +30,8 @@
     },
     "policy_kind": {
       "type": "string",
-      "const": "focus_loss"
+      "maxLength": 97,
+      "pattern": "^(connection_loss|focus_loss|browser_navigation|[a-z][a-z0-9.-]{0,63}\\.[a-z][a-z0-9_]{0,31})$"
     },
     "outcome": {
       "type": "string",

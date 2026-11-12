@@ -161,7 +161,7 @@ func conformanceConstructors() map[string]func() (Event, error) {
 			return NewCandidateExamAttemptFocusLossWarningEvent(sittingID, attemptID, candidateID, at)
 		},
 		"exam_attempt_integrity_flagged": func() (Event, error) {
-			return NewExamAttemptIntegrityFlaggedEvent(sittingID, attemptID, candidateID, flagID,
+			return NewExamAttemptIntegrityFlaggedEvent(sittingID, attemptID, candidateID, flagID, model.IntegrityPolicyFocusLoss,
 				model.IntegrityOutcomeFlagAndSuspend, model.FocusLossMaximumEvidenceEpisodes, 3, at)
 		},
 		"exam_attempt_submitted": func() (Event, error) {

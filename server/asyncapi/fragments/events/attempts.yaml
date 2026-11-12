@@ -353,8 +353,8 @@ components:
     exam_attempt_integrity_flagged:
       name: exam_attempt_integrity_flagged
       title: Attempt Integrity Flag raised
-      summary: A Focus Loss Integrity Flag was raised on an Attempt.
-      description: A Focus Loss Integrity Flag was raised on an Attempt. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.
+      summary: An Integrity Flag was raised on an Attempt.
+      description: An Integrity Flag was raised on an Attempt by the policy policy_kind names, a core policy or a capability's "<plugin-id>.<kind>". Delivered to connections that subscribe to exam.sitting.view on the exam sitting.
       tags:
         - name: event
         - name: Attempts

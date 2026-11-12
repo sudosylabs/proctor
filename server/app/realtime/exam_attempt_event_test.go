@@ -189,7 +189,7 @@ func TestFocusLossEventsSeparateNeutralCandidateWarningFromBoundedManagerFlag(t 
 	at := time.Date(2026, time.August, 20, 9, 5, 0, 0, time.UTC)
 	warning, err := NewCandidateExamAttemptFocusLossWarningEvent(sittingID, attemptID, candidateID, at)
 	require.NoError(t, err)
-	flagged, err := NewExamAttemptIntegrityFlaggedEvent(sittingID, attemptID, candidateID, flagID,
+	flagged, err := NewExamAttemptIntegrityFlaggedEvent(sittingID, attemptID, candidateID, flagID, model.IntegrityPolicyFocusLoss,
 		model.IntegrityOutcomeFlagAndWarn, 100, 17, at)
 	require.NoError(t, err)
 	require.Equal(t, "exam_attempt_focus_warning", warning.Name)

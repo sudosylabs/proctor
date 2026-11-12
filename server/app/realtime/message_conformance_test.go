@@ -65,7 +65,21 @@ func conformanceConstructors() map[string]func() (Event, error) {
 		"candidate.exam_activity.changed": func() (Event, error) {
 			return NewCandidateExamActivityChangedEvent(candidateID)
 		},
-		"current_user.context.changed": func() (Event, error) { return NewCurrentUserContextChangedEvent(candidateID) },
+		"current_user.context.changed":  func() (Event, error) { return NewCurrentUserContextChangedEvent(candidateID) },
+		"current_user.sessions.changed": func() (Event, error) { return NewCurrentUserSessionsChangedEvent(candidateID) },
+		"invitation.changed": func() (Event, error) {
+			return NewInvitationChangedEvent(model.NewUserID(), model.NewInvitationID(), model.InvitationAccepted)
+		},
+		// The status-only form is checked by
+		// TestJobAndOnboardingImportEventsCoverEveryStatusAndScope.
+		"job.changed": func() (Event, error) {
+			return NewJobChangedEvent(model.NewInstitutionID(), model.NewJobID(), model.JobTypeOnboardingImportExecute,
+				model.JobStatusRunning, &model.JobProgress{Current: 3, Total: 9, Stage: "executing"})
+		},
+		"onboarding_import.changed": func() (Event, error) {
+			return NewOnboardingImportChangedEvent(model.NewOnboardingImportID(), model.OnboardingImportPreviewReady,
+				model.Resource{Type: model.ResourceClass, ID: model.NewClassID().String()})
+		},
 		"manager.sitting_board.changed": func() (Event, error) {
 			return NewManagerSittingBoardChangedEvent(examID, sittingID)
 		},
@@ -311,6 +325,45 @@ func TestOptionalMembersOfSharedMessagesStayValid(t *testing.T) {
 	opened, err := NewExamAttemptConnectionOpenedEvent(sittingID, attemptID, candidateID, model.NewAttemptConnectionID(), at)
 	require.NoError(t, err)
 	contract.validateData(t, examAttemptConnectionOpenedMessage.key, opened.Data)
+}
+
+// TestJobAndOnboardingImportEventsCoverEveryStatusAndScope covers every Job
+// type and status without progress, and every onboarding import scope and
+// state.
+func TestJobAndOnboardingImportEventsCoverEveryStatusAndScope(t *testing.T) {
+	t.Parallel()
+
+	contract := loadRealtimeContract(t)
+	institutionID := model.NewInstitutionID()
+	for _, jobType := range model.JobTypes() {
+		for _, status := range []model.JobStatus{
+			model.JobStatusQueued, model.JobStatusRunning, model.JobStatusCancelRequested,
+			model.JobStatusSucceeded, model.JobStatusFailed, model.JobStatusCanceled,
+		} {
+			event, err := NewJobChangedEvent(institutionID, model.NewJobID(), jobType, status, nil)
+			require.NoError(t, err)
+			contract.validateData(t, jobChangedMessage.key, event.Data)
+		}
+	}
+
+	scopes := []model.Resource{
+		{Type: model.ResourceInstitution, ID: institutionID.String()},
+		{Type: model.ResourceAcademicUnit, ID: model.NewAcademicUnitID().String()},
+		{Type: model.ResourceClass, ID: model.NewClassID().String()},
+	}
+	for _, scope := range scopes {
+		for _, state := range []model.OnboardingImportState{
+			model.OnboardingImportUploading, model.OnboardingImportParsing, model.OnboardingImportPreviewReady,
+			model.OnboardingImportExecuting, model.OnboardingImportCompleted, model.OnboardingImportCompletedWithErrors,
+			model.OnboardingImportCanceled, model.OnboardingImportFailed,
+		} {
+			event, err := NewOnboardingImportChangedEvent(model.NewOnboardingImportID(), state, scope)
+			require.NoError(t, err)
+			require.NoError(t, event.ValidateForPublish())
+			require.Equal(t, scope, event.Resource)
+			contract.validateData(t, onboardingImportChangedMessage.key, event.Data)
+		}
+	}
 }
 
 func containsMember(list []any, member string) bool {

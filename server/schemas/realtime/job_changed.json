@@ -1,0 +1,40 @@
+{
+  "title": "Job changed",
+  "description": "Names a Job whose status changed or whose progress advanced, so an operator view refetches it. The command, checkpoint, result and errors are never included.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "job_id",
+    "type",
+    "status"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "id.json"
+    },
+    "type": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+(\\.[a-z0-9_]+)+$",
+      "description": "The Job type, as GET /api/v1/jobs reports it."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "running",
+        "cancel_requested",
+        "succeeded",
+        "failed",
+        "canceled"
+      ]
+    },
+    "progress": {
+      "$ref": "job_progress.json"
+    }
+  }
+}

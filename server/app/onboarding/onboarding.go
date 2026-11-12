@@ -183,6 +183,7 @@ type Service struct {
 	sittings store.ExamSittingStore
 	// imports is nil when the Store catalog is too reduced for onboarding
 	// imports; every import use case then refuses (see requireImports).
+	// Otherwise it announces each committed state change (see effects.go).
 	imports store.OnboardingImportStore
 	content OnboardingImportFiles
 
@@ -318,7 +319,8 @@ func New(deps Dependencies) (*Service, Ports, error) {
 
 	ports := Ports{AcceptExternalIdentity: s.acceptExternalIdentity, CountPendingInvitations: s.countPendingInvitations}
 	if enabled {
-		s.imports, s.content, s.wake = catalog.OnboardingImport(), deps.Content, deps.Wake
+		s.imports = announcingImports{OnboardingImportStore: catalog.OnboardingImport(), service: s}
+		s.content, s.wake = deps.Content, deps.Wake
 		ports.CountOpenImports, ports.ImportJobs = s.countOpenOnboardingImports, onboardingImportJobs{service: s}
 	}
 

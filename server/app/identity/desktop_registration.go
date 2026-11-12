@@ -125,7 +125,7 @@ func (s *Service) RenameDesktopRegistration(
 		return nil, apperror.Invalid("desktop_registration.invalid", "display_name").Wrap(err)
 	}
 
-	return access.RunAudited(
+	renamed, err := access.RunAudited(
 		ctx,
 		s.auditor,
 		access.Mutation{
@@ -147,6 +147,12 @@ func (s *Service) RenameDesktopRegistration(
 		},
 		desktopRegistrationRenameStoreErrors.Translate,
 	)
+	if err != nil {
+		return nil, err
+	}
+	// A Desktop Session is listed under its registration's name.
+	s.publishSessionsChanged(ctx, principal.UserID, "desktop_registration.renamed")
+	return renamed, nil
 }
 
 var desktopRegistrationStoreErrors = apperror.StoreTable{

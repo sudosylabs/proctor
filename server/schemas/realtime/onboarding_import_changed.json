@@ -1,0 +1,33 @@
+{
+  "title": "Onboarding import changed",
+  "description": "Names an onboarding import that entered a new state. Rows, counts and the file name are never included.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "import_id",
+    "state"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "import_id": {
+      "$ref": "id.json"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "uploading",
+        "parsing",
+        "preview_ready",
+        "executing",
+        "completed",
+        "completed_with_errors",
+        "canceled",
+        "failed"
+      ]
+    }
+  }
+}

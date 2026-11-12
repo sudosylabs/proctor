@@ -265,6 +265,20 @@ module when a change is not server-only. No module has been released yet.
 
 ### Added
 
+- Server: live updates for the administration views, as refetch signals over
+  `/api/v1/websocket`. `job.changed` (`job_id`, `type`, `status`, and
+  `progress` for a type that reports it) reaches `job.view` subscribers on the
+  institution when a node claims, completes, cancels or retries an
+  operator-visible Job, and on its checkpoints at most once every 2 seconds
+  per Job on each node. `onboarding_import.changed` (`import_id`, `state`)
+  reaches `onboarding_batch.view` subscribers on the import's scope and every
+  scope enclosing it; such a subscription may now name an academic unit or a
+  class, as may any action on an owning scope it accepts.
+  `current_user.sessions.changed` tells a User's other connections that one
+  of their Sessions was revoked or that a Session or Desktop Registration was
+  renamed, and `invitation.changed` (`invitation_id`, `state`) tells the
+  inviter that an Invitation was accepted. Checkpoints, payloads and row data
+  never travel; each event has its schema and AsyncAPI message.
 - Server: audit summaries. Each item of `GET /api/v1/audits` and
   `GET /api/v1/users/me/audits` carries a `summary` sentence in the language
   `Accept-Language` selects, beside the existing codes. Names are read from

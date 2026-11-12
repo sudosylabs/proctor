@@ -97,6 +97,12 @@ func New(deps Dependencies) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	if runtime.engine != nil && deps.Store.Institution() != nil {
+		changes := &jobChangePublisher{publisher: shared.realtime, institutions: deps.Store.Institution()}
+		if err = runtime.engine.AttachChangeListener(changes); err != nil {
+			return nil, err
+		}
+	}
 
 	// Search spans Exams, Users and Classes, and the administration counts
 	// span Invitations, Jobs, mail and onboarding imports, so both are built

@@ -19,6 +19,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -92,6 +93,7 @@ type deviceRenameFixture struct {
 	sessions      *renameSessionStoreFake
 	registrations *renameDesktopRegistrationStoreFake
 	auditor       *mutationAttemptAuditorFake
+	publisher     *realtimetest.Publisher
 	service       *Service
 }
 
@@ -103,9 +105,12 @@ func newDeviceRenameFixture() *deviceRenameFixture {
 	f.sessions = &renameSessionStoreFake{events: &f.events}
 	f.registrations = &renameDesktopRegistrationStoreFake{events: &f.events}
 	f.auditor = &mutationAttemptAuditorFake{events: &f.events, beginID: model.NewID()}
+	f.publisher = &realtimetest.Publisher{Observe: func(call realtimetest.Call) {
+		f.events = append(f.events, string(call.Method)+" "+call.Event.Name)
+	}}
 	f.service = &Service{
 		sessions: f.sessions, desktopRegistrations: f.registrations, auditor: f.auditor,
-		publisher: &realtimetest.Publisher{}, recentAuthenticationTTL: 5 * time.Minute,
+		publisher: f.publisher, recentAuthenticationTTL: 5 * time.Minute,
 		now: func() time.Time { return now },
 	}
 	return f
@@ -126,8 +131,11 @@ func TestRenameSessionRenamesTheCallersOwnSessionUnderAudit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Build server", renamed.DeviceName)
 	// Contract (guardrail 8): the audit attempt begins before the durable
-	// rename, which completes it.
-	require.Equal(t, []string{"get", "begin", "rename"}, f.events)
+	// rename, which completes it; the User's connections hear of it after.
+	require.Equal(t, []string{"get", "begin", "rename", "Publish current_user.sessions.changed"}, f.events)
+	sessionsChanged, err := realtime.NewCurrentUserSessionsChangedEvent(f.principal.UserID)
+	require.NoError(t, err)
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.Publish, Event: sessionsChanged}}, f.publisher.Calls())
 	require.Equal(t, []store.SessionRename{{
 		SessionID: f.sessions.session.ID, UserID: f.principal.UserID, DeviceName: "Build server",
 		AuditEventID: model.AuditEventID(f.auditor.beginID), AuditAt: f.now,
@@ -252,7 +260,10 @@ func TestRenameDesktopRegistrationRenamesUnderAuditWithoutRecentAuthentication(t
 	})
 	require.NoError(t, err)
 	require.Equal(t, "Library laptop", renamed.DisplayName)
-	require.Equal(t, []string{"begin", "rename"}, f.events)
+	require.Equal(t, []string{"begin", "rename", "Publish current_user.sessions.changed"}, f.events)
+	sessionsChanged, err := realtime.NewCurrentUserSessionsChangedEvent(f.principal.UserID)
+	require.NoError(t, err)
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.Publish, Event: sessionsChanged}}, f.publisher.Calls())
 	require.Equal(t, []store.DesktopRegistrationRename{{
 		RegistrationID: registrationID, UserID: f.principal.UserID, DisplayName: "Library laptop",
 		AuditEventID: model.AuditEventID(f.auditor.beginID), AuditAt: f.now,

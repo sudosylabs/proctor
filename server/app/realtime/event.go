@@ -83,6 +83,20 @@ func NewCurrentUserContextChangedEvent(userID model.UserID) (Event, error) {
 	return Event{Name: currentUserContextChangedMessage.name, UserID: userID, Data: data}, nil
 }
 
+// NewCurrentUserSessionsChangedEvent tells the User's connections to refetch
+// their own Session list: one of their Sessions ended, was revoked or was
+// renamed. It names no Session; the connections of an ended Session close.
+func NewCurrentUserSessionsChangedEvent(userID model.UserID) (Event, error) {
+	if !userID.IsValid() {
+		return Event{}, errors.New("current User Sessions invalidation requires a valid User identity")
+	}
+	data, err := json.Marshal(collectionInvalidationData{SchemaVersion: 1})
+	if err != nil {
+		return Event{}, fmt.Errorf("encode current User Sessions invalidation: %w", err)
+	}
+	return Event{Name: currentUserSessionsChangedMessage.name, UserID: userID, Data: data}, nil
+}
+
 // NewManagerSittingBoardChangedEvent constructs a selector-only invalidation
 // for currently authorized Exam Sitting viewers. Candidate and Attempt
 // identities never enter its public payload.
@@ -1571,8 +1585,10 @@ func (e Event) ValidateForPublish() error {
 			return errors.New("realtime event requires a user target or authorized resource")
 		}
 	} else {
+		// An event may address an owning scope the action accepts, as an
+		// onboarding import's Academic Unit or Class.
 		definition, ok := model.DefinitionForAction(e.Action)
-		if !ok || e.Resource.Validate() != nil || definition.ResourceType != e.Resource.Type {
+		if !ok || e.Resource.Validate() != nil || !definition.AcceptsResource(e.Resource.Type) {
 			return errors.New("realtime event authorization target is invalid")
 		}
 	}

@@ -32,6 +32,9 @@
         "current_user.context.changed": {
           "$ref": "#/components/messages/current_user.context.changed"
         },
+        "current_user.sessions.changed": {
+          "$ref": "#/components/messages/current_user.sessions.changed"
+        },
         "exam_archived": {
           "$ref": "#/components/messages/exam_archived"
         },
@@ -125,8 +128,17 @@
         "hello": {
           "$ref": "#/components/messages/hello"
         },
+        "invitation.changed": {
+          "$ref": "#/components/messages/invitation.changed"
+        },
+        "job.changed": {
+          "$ref": "#/components/messages/job.changed"
+        },
         "manager.sitting_board.changed": {
           "$ref": "#/components/messages/manager.sitting_board.changed"
+        },
+        "onboarding_import.changed": {
+          "$ref": "#/components/messages/onboarding_import.changed"
         },
         "ping": {
           "$ref": "#/components/messages/ping"
@@ -586,6 +598,67 @@
           }
         ],
         "title": "Current user context changed"
+      },
+      "current_user.sessions.changed": {
+        "description": "Refetch the current user's Sessions; one of them was revoked, ended or renamed. The connections of a revoked Session close instead. Delivered to the addressed User's connections.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "data": {
+                "schema_version": 1
+              },
+              "event": "current_user.sessions.changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "",
+                "type": ""
+              },
+              "sequence": 43,
+              "user_id": "qtwz47ydgjcx1ia56br8kpous3"
+            }
+          }
+        ],
+        "name": "current_user.sessions.changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "not": {
+                "required": [
+                  "action"
+                ]
+              },
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/collection_invalidation"
+                },
+                "event": {
+                  "const": "current_user.sessions.changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "user_id",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch the current user's Sessions.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Users"
+          }
+        ],
+        "title": "Current user Sessions changed"
       },
       "exam_archived": {
         "description": "The Exam was archived. Delivered to connections that subscribe to exam.view on the exam.",
@@ -2603,6 +2676,137 @@
         ],
         "title": "Hello"
       },
+      "invitation.changed": {
+        "description": "Refetch an Invitation you issued; it reached a new state, today when it is accepted. Delivered to the connections of the User who issued it.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "data": {
+                "invitation_id": "6br8kpous3h9nfemqtwz47ydgj",
+                "schema_version": 1,
+                "state": "accepted"
+              },
+              "event": "invitation.changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "",
+                "type": ""
+              },
+              "sequence": 42,
+              "user_id": "qtwz47ydgjcx1ia56br8kpous3"
+            }
+          }
+        ],
+        "name": "invitation.changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "not": {
+                "required": [
+                  "action"
+                ]
+              },
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/invitation_changed"
+                },
+                "event": {
+                  "const": "invitation.changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "user_id",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch an Invitation you issued; it reached a new state.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Onboarding"
+          }
+        ],
+        "title": "Invitation changed"
+      },
+      "job.changed": {
+        "description": "Refetch the Job; its status changed or its progress advanced. Sent when a node claims, completes, cancels or retries an operator-visible Job, and on its checkpoints at most once every 2 seconds per Job on each node. progress is present only for a Job type that reports progress. Delivered to connections that subscribe to job.view on the institution.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "job.view",
+              "data": {
+                "job_id": "z47ydgjcx1ia56br8kpous3h9n",
+                "progress": {
+                  "current": 120,
+                  "stage": "executing",
+                  "total": 400
+                },
+                "schema_version": 1,
+                "status": "running",
+                "type": "onboarding_import.execute"
+              },
+              "event": "job.changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "ous3h9nfemqtwz47ydgjcx1ia5",
+                "type": "institution"
+              },
+              "sequence": 40
+            }
+          }
+        ],
+        "name": "job.changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "job.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/job_changed"
+                },
+                "event": {
+                  "const": "job.changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch the Job; its status changed or its progress advanced.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Jobs"
+          }
+        ],
+        "title": "Job changed"
+      },
       "manager.sitting_board.changed": {
         "description": "Refetch the manager board of one Sitting. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
         "examples": [
@@ -2664,6 +2868,68 @@
           }
         ],
         "title": "Sitting board changed"
+      },
+      "onboarding_import.changed": {
+        "description": "Refetch the onboarding import; it entered a new state. One event is sent for the import's own scope (the institution, an academic unit or a class) and one for each scope that encloses it, so a connection that subscribes to onboarding_batch.view on any scope that can see the import hears of it, and a connection subscribed at several of those scopes may hear of it more than once. Student progressions are not announced.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "onboarding_batch.view",
+              "data": {
+                "import_id": "z47ydgjcx1ia56br8kpous3h9n",
+                "schema_version": 1,
+                "state": "preview_ready"
+              },
+              "event": "onboarding_import.changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "jcx1ia56br8kpous3h9nfemqtw",
+                "type": "academic_unit"
+              },
+              "sequence": 41
+            }
+          }
+        ],
+        "name": "onboarding_import.changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "onboarding_batch.view",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/onboarding_import_changed"
+                },
+                "event": {
+                  "const": "onboarding_import.changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch the onboarding import; it entered a new state.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Onboarding"
+          }
+        ],
+        "title": "Onboarding import changed"
       },
       "ping": {
         "description": "Has no data. The server replies with pong. It does not renew an Attempt Participation.",
@@ -4075,6 +4341,134 @@
         "title": "Instant",
         "type": "string"
       },
+      "invitation_changed": {
+        "additionalProperties": false,
+        "description": "Names an Invitation the addressed User issued and the state it reached. The accepting User is never included.",
+        "properties": {
+          "invitation_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "schema_version": {
+            "const": 1,
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "accepted",
+              "revoked",
+              "expired",
+              "superseded"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "invitation_id",
+          "state"
+        ],
+        "title": "Invitation changed",
+        "type": "object"
+      },
+      "job_changed": {
+        "additionalProperties": false,
+        "description": "Names a Job whose status changed or whose progress advanced, so an operator view refetches it. The command, checkpoint, result and errors are never included.",
+        "properties": {
+          "job_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/job_progress"
+          },
+          "schema_version": {
+            "const": 1,
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "cancel_requested",
+              "succeeded",
+              "failed",
+              "canceled"
+            ],
+            "type": "string"
+          },
+          "type": {
+            "description": "The Job type, as GET /api/v1/jobs reports it.",
+            "pattern": "^[a-z0-9_]+(\\.[a-z0-9_]+)+$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "job_id",
+          "type",
+          "status"
+        ],
+        "title": "Job changed",
+        "type": "object"
+      },
+      "job_progress": {
+        "additionalProperties": false,
+        "description": "The progress a running Job last checkpointed. Present only for a Job type that reports progress.",
+        "properties": {
+          "current": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "stage": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "total": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "current",
+          "total",
+          "stage"
+        ],
+        "title": "Job progress",
+        "type": "object"
+      },
+      "onboarding_import_changed": {
+        "additionalProperties": false,
+        "description": "Names an onboarding import that entered a new state. Rows, counts and the file name are never included.",
+        "properties": {
+          "import_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "schema_version": {
+            "const": 1,
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "uploading",
+              "parsing",
+              "preview_ready",
+              "executing",
+              "completed",
+              "completed_with_errors",
+              "canceled",
+              "failed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "import_id",
+          "state"
+        ],
+        "title": "Onboarding import changed",
+        "type": "object"
+      },
       "pong": {
         "additionalProperties": false,
         "description": "The reply to ping.",
@@ -4345,6 +4739,9 @@
           "$ref": "#/channels/websocket/messages/current_user.context.changed"
         },
         {
+          "$ref": "#/channels/websocket/messages/current_user.sessions.changed"
+        },
+        {
           "$ref": "#/channels/websocket/messages/user_settings_changed"
         },
         {
@@ -4352,6 +4749,15 @@
         },
         {
           "$ref": "#/channels/websocket/messages/access_policy_changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/job.changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/onboarding_import.changed"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/invitation.changed"
         },
         {
           "$ref": "#/channels/websocket/messages/academic_unit_created"

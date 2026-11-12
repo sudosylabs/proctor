@@ -23,14 +23,28 @@ bearer credential. Non-browser clients may omit Origin.
 
 The connection handshake authenticates one Session but does not grant every
 subscription. Each subscription action and exact resource is authorized
-separately. Candidate admission additionally requires the registered-key
-Desktop Session and the exact Desktop compatibility inputs enforced by the
-Attempt protocol.
+separately; the resource is the one the action protects or, for an action that
+also governs a collection, an owning scope it accepts. Candidate admission
+additionally requires the registered-key Desktop Session and the exact Desktop
+compatibility inputs enforced by the Attempt protocol.
 
 See <Link to="/api/reference/connect-web-socket">Connect WebSocket</Link> for the
 handshake parameters. The <Link to="/api/reference/realtime-protocol/">Realtime Protocol</Link>
 reference describes every frame after the upgrade: the event frame, the
 commands and their replies, the close codes, and each event with its data.
+
+## Refetch Signals
+
+Most events name what changed and carry no more than identifiers, a state
+and a revision; refetch the resource over HTTP to read it. Operator and
+administrator views can follow Jobs (`job.changed`, subscribed with `job.view`
+on the institution) and onboarding imports (`onboarding_import.changed`,
+subscribed with `onboarding_batch.view` on the institution, an academic unit
+or a class; an import is announced at its own scope and at every scope that
+encloses it). A User's own connections hear `current_user.sessions.changed`
+when one of their Sessions is revoked or renamed, and `invitation.changed`
+when an Invitation they issued is accepted. Job progress arrives at most once
+every two seconds per Job; a status change arrives at once.
 
 ## Unknown Events
 

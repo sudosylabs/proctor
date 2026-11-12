@@ -60,13 +60,47 @@ func TestSessionRevocationPublishesAttemptProjectionInvalidations(t *testing.T) 
 	require.Equal(t, candidateID, attempts.candidateID, "attempt invalidation query = candidate")
 	require.Len(t, attempts.sessionIDs, 1, "attempt invalidation query = candidate")
 	require.Equal(t, sessionID, attempts.sessionIDs[0], "attempt invalidation query = candidate")
-	require.Len(t, sink.events, 3)
-	require.Equal(t, "candidate.exam_activity.changed", sink.events[0].Name)
+	require.Len(t, sink.events, 4)
+	require.Equal(t, "current_user.sessions.changed", sink.events[0].Name)
 	require.Equal(t, candidateID, sink.events[0].UserID)
-	require.Equal(t, "manager.sitting_board.changed", sink.events[1].Name)
-	require.Equal(t, target.SittingID.String(), sink.events[1].Resource.ID)
-	require.Equal(t, "current_user.context.changed", sink.events[2].Name)
-	require.Equal(t, candidateID, sink.events[2].UserID)
+	require.Equal(t, "candidate.exam_activity.changed", sink.events[1].Name)
+	require.Equal(t, candidateID, sink.events[1].UserID)
+	require.Equal(t, "manager.sitting_board.changed", sink.events[2].Name)
+	require.Equal(t, target.SittingID.String(), sink.events[2].Resource.ID)
+	require.Equal(t, "current_user.context.changed", sink.events[3].Name)
+	require.Equal(t, candidateID, sink.events[3].UserID)
+}
+
+func TestSessionRevocationTellsOnlyTheUserTheirSessionsChanged(t *testing.T) {
+	t.Parallel()
+	userID := model.NewUserID()
+	service := newTestService(t, &sessionAttemptTargetsFake{})
+	sink := &recordingSink{}
+	require.NoError(t, service.AttachSink(sink))
+	require.NoError(t, service.AttachClusterFanout(&recordingFanout{}))
+
+	service.SessionsRevoked(context.Background(), userID, []model.SessionID{model.NewSessionID()}, nil)
+
+	require.Len(t, sink.events, 1)
+	require.Equal(t, "current_user.sessions.changed", sink.events[0].Name)
+	require.Equal(t, userID, sink.events[0].UserID)
+	require.Empty(t, sink.events[0].Action)
+	require.Equal(t, model.Resource{}, sink.events[0].Resource)
+	require.JSONEq(t, `{"schema_version":1}`, string(sink.events[0].Data))
+}
+
+func TestSessionRevocationOfEveryConnectionPublishesNoSessionsEvent(t *testing.T) {
+	t.Parallel()
+	service := newTestService(t, &sessionAttemptTargetsFake{})
+	sink := &recordingSink{}
+	require.NoError(t, service.AttachSink(sink))
+	require.NoError(t, service.AttachClusterFanout(&recordingFanout{}))
+
+	// No Session IDs closes every connection of the User, so none is left
+	// to tell.
+	service.SessionsRevoked(context.Background(), model.NewUserID(), nil, nil)
+
+	require.Empty(t, sink.events)
 }
 
 func TestServiceRequiresItsCollaborators(t *testing.T) {

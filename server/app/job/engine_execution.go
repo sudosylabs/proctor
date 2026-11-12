@@ -22,6 +22,9 @@ import (
 
 func (r *Engine) executeClaim(parent context.Context, descriptor Descriptor, claim *store.JobClaim) {
 	metricOutcome := ExecutionAbandoned
+	if claim.Job != nil {
+		defer r.progress.forget(claim.Job.ID)
+	}
 	parent, finishSpan := r.trace(parent, descriptor.Type)
 	defer func() { finishSpan(metricOutcome) }()
 	startedAt := time.Now()
@@ -125,7 +128,7 @@ func (r *Engine) newClaimExecution(descriptor Descriptor, claim *store.JobClaim)
 		}
 
 		started := time.Now()
-		_, err := r.deps.Store.Checkpoint(ctx, &store.JobCheckpoint{
+		record, err := r.deps.Store.Checkpoint(ctx, &store.JobCheckpoint{
 			AttemptID:  claim.Attempt.ID,
 			ClaimToken: claim.Attempt.ClaimToken,
 			Progress:   value.Progress,
@@ -138,6 +141,9 @@ func (r *Engine) newClaimExecution(descriptor Descriptor, claim *store.JobClaim)
 			Outcome:   simpleJobOutcome(err),
 			Duration:  time.Since(started),
 		})
+		if err == nil {
+			r.announceProgress(ctx, record)
+		}
 		return err
 	}
 	return execution
@@ -211,7 +217,7 @@ func (r *Engine) completeAttempt(ctx context.Context, descriptor Descriptor, cla
 	}
 
 	started := time.Now()
-	_, err := r.deps.Store.Complete(ctx, completion)
+	record, err := r.deps.Store.Complete(ctx, completion)
 	r.record(Activity{
 		Kind:      "job",
 		Name:      string(descriptor.Type),
@@ -219,9 +225,13 @@ func (r *Engine) completeAttempt(ctx context.Context, descriptor Descriptor, cla
 		Outcome:   simpleJobOutcome(err),
 		Duration:  time.Since(started),
 	})
-	if err != nil && !errors.Is(err, context.Canceled) {
-		r.deps.Diagnostics.ErrorContext(ctx, "complete durable job", logging.Err(err))
+	if err != nil {
+		if !errors.Is(err, context.Canceled) {
+			r.deps.Diagnostics.ErrorContext(ctx, "complete durable job", logging.Err(err))
+		}
+		return
 	}
+	r.announceStatus(ctx, record)
 }
 
 func retryDelay(descriptor Descriptor, jobID model.JobID, attempt int) time.Duration {

@@ -152,6 +152,9 @@ func (s *Service) acceptStudentClassByClaimHash(
 		return nil, invalidInvitationError(err)
 	}
 
+	if !result.Replayed {
+		s.publishInvitationChanged(ctx, result.Invitation, "invitation.changed")
+	}
 	if !result.Replayed && result.ClassMember != nil {
 		if effectErr := academic.PublishClassMembershipChanged(
 			ctx,
@@ -313,6 +316,9 @@ func (s *Service) acceptTeacherAcademicUnitByClaimHash(
 	if err != nil {
 		return nil, invalidInvitationError(err)
 	}
+	if !result.Replayed {
+		s.publishInvitationChanged(ctx, result.Invitation, "invitation.changed")
+	}
 	if !result.Replayed && result.User != nil {
 		s.publisher.InvalidateAuthorization(ctx, result.User.ID)
 	}
@@ -429,6 +435,9 @@ func (s *Service) acceptScopedRoleByClaimHash(
 	}, invalidInvitationError)
 	if err != nil {
 		return nil, err
+	}
+	if !result.Replayed {
+		s.publishInvitationChanged(ctx, result.Invitation, "invitation.changed")
 	}
 	if !result.Replayed && result.User != nil {
 		s.publisher.InvalidateAuthorization(ctx, result.User.ID)

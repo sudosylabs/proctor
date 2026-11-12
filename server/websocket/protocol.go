@@ -98,7 +98,7 @@ func (e *Event) ValidateForPublish() error {
 		}
 	} else {
 		definition, ok := model.DefinitionForAction(e.Action)
-		if !ok || e.Resource.model().Validate() != nil || definition.ResourceType != e.Resource.Type {
+		if !ok || e.Resource.model().Validate() != nil || !definition.AcceptsResource(e.Resource.Type) {
 			return errors.New("websocket event authorization target is invalid")
 		}
 	}
@@ -122,7 +122,7 @@ type Subscription struct {
 // IsValid reports whether the subscription targets a recognized action/resource.
 func (s Subscription) IsValid() bool {
 	definition, ok := model.DefinitionForAction(s.Action)
-	return ok && s.Resource.model().Validate() == nil && definition.ResourceType == s.Resource.Type
+	return ok && s.Resource.model().Validate() == nil && definition.AcceptsResource(s.Resource.Type)
 }
 
 // Key uniquely identifies a subscription for connection-local storage.

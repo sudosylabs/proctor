@@ -123,7 +123,7 @@ func (s *Service) RenameSession(
 			WithField("desktop_registration_id", session.DesktopRegistrationID.String())
 	}
 
-	return access.RunAudited(
+	renamed, err := access.RunAudited(
 		ctx,
 		s.auditor,
 		access.Mutation{
@@ -145,6 +145,11 @@ func (s *Service) RenameSession(
 		},
 		selfSessionRenameStoreErrors.Translate,
 	)
+	if err != nil {
+		return nil, err
+	}
+	s.publishSessionsChanged(ctx, principal.UserID, "session.renamed")
+	return renamed, nil
 }
 
 // RevokeSession revokes one of the caller's own Sessions.

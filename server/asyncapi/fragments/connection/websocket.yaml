@@ -19,12 +19,20 @@ channels:
         $ref: '#/components/messages/resync_required'
       current_user.context.changed:
         $ref: '#/components/messages/current_user.context.changed'
+      current_user.sessions.changed:
+        $ref: '#/components/messages/current_user.sessions.changed'
       user_settings_changed:
         $ref: '#/components/messages/user_settings_changed'
       user_profile_picture_changed:
         $ref: '#/components/messages/user_profile_picture_changed'
       access_policy_changed:
         $ref: '#/components/messages/access_policy_changed'
+      job.changed:
+        $ref: '#/components/messages/job.changed'
+      onboarding_import.changed:
+        $ref: '#/components/messages/onboarding_import.changed'
+      invitation.changed:
+        $ref: '#/components/messages/invitation.changed'
       academic_unit_created:
         $ref: '#/components/messages/academic_unit_created'
       academic_unit_updated:
@@ -143,9 +151,13 @@ operations:
       - $ref: '#/channels/websocket/messages/hello'
       - $ref: '#/channels/websocket/messages/resync_required'
       - $ref: '#/channels/websocket/messages/current_user.context.changed'
+      - $ref: '#/channels/websocket/messages/current_user.sessions.changed'
       - $ref: '#/channels/websocket/messages/user_settings_changed'
       - $ref: '#/channels/websocket/messages/user_profile_picture_changed'
       - $ref: '#/channels/websocket/messages/access_policy_changed'
+      - $ref: '#/channels/websocket/messages/job.changed'
+      - $ref: '#/channels/websocket/messages/onboarding_import.changed'
+      - $ref: '#/channels/websocket/messages/invitation.changed'
       - $ref: '#/channels/websocket/messages/academic_unit_created'
       - $ref: '#/channels/websocket/messages/academic_unit_updated'
       - $ref: '#/channels/websocket/messages/academic_unit_archived'

@@ -322,15 +322,16 @@ func TestDesktopExamAttemptNativeFlow(t *testing.T) {
 	require.Equal(t, model.ScreenClipReady, ready.State)
 
 	// The manager plays it back, byte for byte.
-	played, err := helper.App.Attempts.OpenScreenClip(ctx, managerInv, attempt.OpenScreenClipQuery{
-		ScreenClipQuery: attempt.ScreenClipQuery{ManagedScreenClipQuery: query, ClipID: incident}, Start: 0, Length: int64(len(media)),
-	})
+	played, err := helper.App.Attempts.PlayScreenClip(ctx, managerInv, attempt.ScreenClipQuery{ManagedScreenClipQuery: query, ClipID: incident})
 	require.NoError(t, err)
-	body, err := io.ReadAll(played.Body)
-	require.NoError(t, played.Body.Close())
+	require.Equal(t, "video/mp4", played.MediaType)
+	require.Equal(t, int64(len(media)), played.SizeBytes)
+	reader, err := played.Open(0, int64(len(media)))
+	require.NoError(t, err)
+	body, err := io.ReadAll(reader)
+	require.NoError(t, reader.Close())
 	require.NoError(t, err)
 	require.Equal(t, media, body)
-	require.Equal(t, "video/mp4", played.MediaType)
 
 	// Submission ends the Attempt; the manager's clip, never taken, fails.
 	_, err = helper.App.Attempts.SubmitExamAttempt(ctx, desktop.inv, attempt.SubmitCommand{

@@ -175,8 +175,7 @@ type ExamAttemptApplication interface {
 	) (store.ExamAttemptScreenClipUploadStatus, error)
 	UploadScreenClipChunk(context.Context, invocation.Invocation, attempt.UploadScreenClipChunkCommand) error
 	ListScreenClips(context.Context, invocation.Invocation, attempt.ManagedScreenClipQuery) ([]store.ExamAttemptScreenClipView, error)
-	ReadyScreenClip(context.Context, invocation.Invocation, attempt.ScreenClipQuery) (store.ExamAttemptScreenClipView, error)
-	OpenScreenClip(context.Context, invocation.Invocation, attempt.OpenScreenClipQuery) (attempt.OpenScreenClipResult, error)
+	PlayScreenClip(context.Context, invocation.Invocation, attempt.ScreenClipQuery) (attempt.PlayScreenClipResult, error)
 	CompleteScreenClipUpload(context.Context, invocation.Invocation, attempt.CompleteScreenClipUploadCommand) (store.ExamAttemptScreenClipView, error)
 	SubmitExamAttempt(context.Context, invocation.Invocation, attempt.SubmitCommand) (store.ExamSubmissionReceipt, error)
 	GetExamSubmission(context.Context, invocation.Invocation, attempt.GetSubmissionQuery) (attempt.ManagedSubmission, error)

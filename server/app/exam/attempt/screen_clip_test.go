@@ -143,52 +143,55 @@ func TestScreenClipPlaybackIsAuditedFromItsFirstByteOnly(t *testing.T) {
 	upload := &model.ScreenClipUpload{MediaType: "video/webm", SizeBytes: 100, ChunkSHA256: []string{strings.Repeat("a", 64)}}
 	f.persistence.attemptScreenClip = &store.ExamAttemptScreenClipView{ID: clipID, AttemptID: f.attemptID,
 		State: model.ScreenClipReady, Upload: upload, Signature: strings.Repeat("s", model.DesktopSignatureLength)}
-	query := func(start, length int64) OpenScreenClipQuery {
-		return OpenScreenClipQuery{ScreenClipQuery: ScreenClipQuery{ManagedScreenClipQuery: ManagedScreenClipQuery{
-			ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID,
-		}, ClipID: clipID}, Start: start, Length: length}
-	}
+	query := ScreenClipQuery{ManagedScreenClipQuery: ManagedScreenClipQuery{
+		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID,
+	}, ClipID: clipID}
 
-	opened, err := f.service.OpenScreenClip(context.Background(), f.inv, query(0, 100))
+	clip, err := f.service.PlayScreenClip(context.Background(), f.inv, query)
 	require.NoError(t, err)
-	require.NoError(t, opened.Body.Close())
-	require.Equal(t, "video/webm", opened.MediaType)
+	require.Equal(t, "video/webm", clip.MediaType)
+	require.Equal(t, int64(100), clip.SizeBytes)
+	require.Equal(t, []string{"manager.clip_view", "sitting"}, f.order, "one authorization decides the playback")
+	require.Empty(t, f.audit.operation, "nothing is played yet")
+
+	body, err := clip.Open(0, 100)
+	require.NoError(t, err)
+	require.NoError(t, body.Close())
 	require.Equal(t, ScreenClipPlaybackOperation, f.audit.operation, "starting a playback is audited")
 	require.Equal(t, []string{"manager.clip_view", "sitting", "audit", "audit.complete"}, f.order,
-		"the clip view is authorized before the playback is audited")
+		"opening the clip asks for no second authorization")
 	require.Equal(t, model.ActionExamSittingManage, f.audit.action)
 	require.Equal(t, model.RoleScopeClass, f.audit.scopeType)
 	require.Equal(t, f.sitting.ClassID.String(), f.audit.scopeID, "a manager's playback is audited at the Sitting's Class")
+
+	f.order, f.audit.operation = nil, ""
+	body, err = clip.Open(40, 10)
+	require.NoError(t, err)
+	require.NoError(t, body.Close())
+	require.Empty(t, f.audit.operation, "the ranges a player reads after the start are not audited again")
+	require.Empty(t, f.order)
+
+	for name, r := range map[string][2]int64{"past the end": {95, 10}, "empty": {0, 0}, "negative": {-1, 5}} {
+		_, err = clip.Open(r[0], r[1])
+		require.True(t, apperror.Is(err, "exam.attempt.invalid"), name)
+	}
 
 	// A reviewer of the Submission plays it too, audited as a review.
 	submissionID, unitID := model.NewSubmissionID(), model.NewAcademicUnitID()
 	f.clipViewer = &ScreenClipViewAuthorization{Action: model.ActionSubmissionReview,
 		Resource:  model.Resource{Type: model.ResourceSubmission, ID: submissionID.String()},
 		ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String()}
-	f.order = nil
-	opened, err = f.service.OpenScreenClip(context.Background(), f.inv, query(0, 100))
+	reviewed, err := f.service.PlayScreenClip(context.Background(), f.inv, query)
 	require.NoError(t, err)
-	require.NoError(t, opened.Body.Close())
+	body, err = reviewed.Open(0, 100)
+	require.NoError(t, err)
+	require.NoError(t, body.Close())
 	require.Equal(t, model.ActionSubmissionReview, f.audit.action)
 	require.Equal(t, model.ResourceSubmission, f.audit.resource.Type)
 	require.Equal(t, unitID.String(), f.audit.scopeID, "a reviewer's playback is audited at the Submission's unit")
 	f.clipViewer = nil
 
-	f.order, f.audit.operation = nil, ""
-	_, err = f.service.OpenScreenClip(context.Background(), f.inv, query(40, 10))
-	require.NoError(t, err)
-	require.Empty(t, f.audit.operation, "the ranges a player reads after the start are not audited again")
-
-	for name, q := range map[string]OpenScreenClipQuery{
-		"past the end": query(95, 10),
-		"empty":        query(0, 0),
-		"negative":     query(-1, 5),
-	} {
-		_, err = f.service.OpenScreenClip(context.Background(), f.inv, q)
-		require.True(t, apperror.Is(err, "exam.attempt.invalid"), name)
-	}
-
 	f.persistence.attemptScreenClip.State = model.ScreenClipUploading
-	_, err = f.service.OpenScreenClip(context.Background(), f.inv, query(0, 100))
+	_, err = f.service.PlayScreenClip(context.Background(), f.inv, query)
 	require.True(t, apperror.Is(err, "exam.attempt.state_conflict"), "only a ready clip plays")
 }

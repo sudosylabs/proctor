@@ -312,33 +312,29 @@ func (h examAttemptHandlers) playScreenClip(request route.Request) (route.Protoc
 	if err != nil {
 		return route.ProtocolResult{}, err
 	}
-	clip, err := h.app.ReadyScreenClip(request.Context, request.Invocation(), attempt.ScreenClipQuery{
+	clip, err := h.app.PlayScreenClip(request.Context, request.Invocation(), attempt.ScreenClipQuery{
 		ManagedScreenClipQuery: query, ClipID: clipID,
 	})
 	if err != nil {
 		return route.ProtocolResult{}, err
 	}
-	size := clip.Upload.SizeBytes
-	byteRange, partial, err := route.ParseByteRange(request.HTTP.Header.Get("Range"), size)
+	byteRange, partial, err := route.ParseByteRange(request.HTTP.Header.Get("Range"), clip.SizeBytes)
 	if err != nil {
 		return route.ProtocolResult{}, route.InvalidRequest(err)
 	}
-	opened, err := h.app.OpenScreenClip(request.Context, request.Invocation(), attempt.OpenScreenClipQuery{
-		ScreenClipQuery: attempt.ScreenClipQuery{ManagedScreenClipQuery: query, ClipID: clipID},
-		Start:           byteRange.Start, Length: byteRange.Length,
-	})
+	body, err := clip.Open(byteRange.Start, byteRange.Length)
 	if err != nil {
 		return route.ProtocolResult{}, err
 	}
 	headers := http.Header{
-		"Content-Type":  {opened.MediaType},
+		"Content-Type":  {clip.MediaType},
 		"Cache-Control": {"private, no-store"},
 		"Accept-Ranges": {"bytes"},
 	}
 	if partial {
-		return route.PartialDownload(opened.Body, opened.Start, opened.Length, opened.SizeBytes).WithHeaders(headers), nil
+		return route.PartialDownload(body, byteRange.Start, byteRange.Length, clip.SizeBytes).WithHeaders(headers), nil
 	}
-	return route.BinaryDownload(opened.Body, opened.Length).WithHeaders(headers), nil
+	return route.BinaryDownload(body, byteRange.Length).WithHeaders(headers), nil
 }
 
 // screenClipUploadAccess reads the candidate access of an upload. The Attempt

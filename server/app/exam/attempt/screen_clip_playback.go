@@ -35,21 +35,15 @@ type ScreenClipQuery struct {
 	ClipID model.ScreenClipID
 }
 
-// OpenScreenClipQuery asks for a byte range of a ready clip. Length is the
-// number of bytes from Start; a range past the clip's end is refused.
-type OpenScreenClipQuery struct {
-	ScreenClipQuery
-	Start  int64
-	Length int64
-}
-
-// OpenScreenClipResult is a range of a ready clip's bytes.
-type OpenScreenClipResult struct {
-	Body      io.ReadCloser
+// PlayScreenClipResult is a ready clip a viewer may play: its media type
+// and size, from which the transport reads a Range header, and Open, which
+// returns a byte range of it. Length is the number of bytes from start; a
+// range past the clip's end is refused. Opening from the first byte is a
+// playback, and audited; the ranges a player then reads are not.
+type PlayScreenClipResult struct {
 	MediaType string
 	SizeBytes int64
-	Start     int64
-	Length    int64
+	Open      func(start, length int64) (io.ReadCloser, error)
 }
 
 // ListScreenClips returns every clip requested for an Attempt, for the
@@ -73,67 +67,61 @@ func (s *Service) ListScreenClips(
 	return clips, nil
 }
 
-// ReadyScreenClip returns a ready clip, whose size and media type let the
-// transport read a Range header before opening it.
-func (s *Service) ReadyScreenClip(
+// PlayScreenClip authorizes the caller and loads a ready clip once, so a
+// range request is decided by one authorization.
+func (s *Service) PlayScreenClip(
 	ctx context.Context,
 	inv invocation.Invocation,
 	query ScreenClipQuery,
-) (_ store.ExamAttemptScreenClipView, resultErr error) {
-	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	clip, _, err := s.readyScreenClip(ctx, inv, query.ManagedScreenClipQuery, query.ClipID)
-	if err != nil {
-		return store.ExamAttemptScreenClipView{}, err
-	}
-	return *clip, nil
-}
-
-// OpenScreenClip opens a byte range of a ready clip for a Sitting's Exam
-// Manager. A playback, a range from the clip's first byte, is audited; the
-// ranges a player then reads are not.
-func (s *Service) OpenScreenClip(
-	ctx context.Context,
-	inv invocation.Invocation,
-	query OpenScreenClipQuery,
-) (_ OpenScreenClipResult, resultErr error) {
+) (_ PlayScreenClipResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	clip, viewer, err := s.readyScreenClip(ctx, inv, query.ManagedScreenClipQuery, query.ClipID)
 	if err != nil {
-		return OpenScreenClipResult{}, err
+		return PlayScreenClipResult{}, err
 	}
 	upload := clip.Upload
-	if query.Start < 0 || query.Length < 1 || query.Start+query.Length > upload.SizeBytes {
-		return OpenScreenClipResult{}, apperror.Invalid("exam.attempt.invalid", "screen_clip_range")
-	}
-
-	if query.Start == 0 {
-		auditID, auditErr := s.auditor.Begin(ctx, access.Mutation{
-			Invocation: inv,
-			Action:     viewer.Action,
-			Resource:   viewer.Resource,
-			ScopeType:  viewer.ScopeType,
-			ScopeID:    viewer.ScopeID,
-			Operation:  ScreenClipPlaybackOperation,
-			Value: map[string]any{
-				"exam_attempt_id": query.AttemptID.String(),
-				"screen_clip_id":  query.ClipID.String(),
-			},
-		})
-		if auditErr != nil {
-			return OpenScreenClipResult{}, auditErr
-		}
-		if auditErr = s.auditor.Complete(ctx, auditID, map[string]any{"screen_clip_id": query.ClipID.String()}); auditErr != nil {
-			return OpenScreenClipResult{}, auditErr
-		}
-	}
-
-	return OpenScreenClipResult{
-		Body:      &screenClipReader{ctx: ctx, content: s.content, clipID: query.ClipID, upload: upload, offset: query.Start, remaining: query.Length},
+	return PlayScreenClipResult{
 		MediaType: upload.MediaType,
 		SizeBytes: upload.SizeBytes,
-		Start:     query.Start,
-		Length:    query.Length,
+		Open: func(start, length int64) (_ io.ReadCloser, openErr error) {
+			defer func() { openErr = publicFailures.Conceal(openErr) }()
+			if start < 0 || length < 1 || start+length > upload.SizeBytes {
+				return nil, apperror.Invalid("exam.attempt.invalid", "screen_clip_range")
+			}
+			if start == 0 {
+				if err := s.auditScreenClipPlayback(ctx, inv, viewer, query); err != nil {
+					return nil, err
+				}
+			}
+			return &screenClipReader{ctx: ctx, content: s.content, clipID: query.ClipID, upload: upload, offset: start, remaining: length}, nil
+		},
 	}, nil
+}
+
+// auditScreenClipPlayback records one playback under the decision that
+// allowed it.
+func (s *Service) auditScreenClipPlayback(
+	ctx context.Context,
+	inv invocation.Invocation,
+	viewer ScreenClipViewAuthorization,
+	query ScreenClipQuery,
+) error {
+	auditID, err := s.auditor.Begin(ctx, access.Mutation{
+		Invocation: inv,
+		Action:     viewer.Action,
+		Resource:   viewer.Resource,
+		ScopeType:  viewer.ScopeType,
+		ScopeID:    viewer.ScopeID,
+		Operation:  ScreenClipPlaybackOperation,
+		Value: map[string]any{
+			"exam_attempt_id": query.AttemptID.String(),
+			"screen_clip_id":  query.ClipID.String(),
+		},
+	})
+	if err != nil {
+		return err
+	}
+	return s.auditor.Complete(ctx, auditID, map[string]any{"screen_clip_id": query.ClipID.String()})
 }
 
 func (s *Service) readyScreenClip(

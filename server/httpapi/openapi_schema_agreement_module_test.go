@@ -506,13 +506,13 @@ func evaluateNativeFamilyCodecAgreement(violations []openAPIAgreementViolation, 
 			Const string `json:"const"`
 		}
 		_ = json.Unmarshal(branch.Properties["id"], &id)
-		if id.Const != family.ID() {
+		if id.Const != string(family.ID()) {
 			violations = appendAgreementViolation(violations, target, "family id", fmt.Sprintf("branch %d must identify %s", index, family.ID()))
 		}
 		if string(branch.AdditionalProperties) != "false" {
 			violations = appendAgreementViolation(violations, target, "family shape", "must reject extra fields")
 		}
-		violations = evaluateOpenAPIShapeAgreement(violations, document, target+"."+family.ID(), branch, reflect.StructOf(fields), requestSchema, false, false, false, nil, nil)
+		violations = evaluateOpenAPIShapeAgreement(violations, document, target+"."+string(family.ID()), branch, reflect.StructOf(fields), requestSchema, false, false, false, nil, nil)
 	}
 	return violations
 }

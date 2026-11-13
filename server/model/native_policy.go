@@ -34,19 +34,13 @@ func (m NativeMode) IsValid() bool {
 	return m == NativeModeDisabled || m == NativeModeObserve || m == NativeModeEnforce
 }
 
-func NativeFamilies() []string {
-	return []string{
-		"process_application",
-		"interactive_session",
-		"clipboard",
-		"printing",
-		"removable_storage",
-		"virtualization",
-		"network_configuration",
-		"camera",
-		"microphone",
-		"external_capture",
+// NativeFamilies lists the families in the order every policy carries them.
+func NativeFamilies() []NativeFamilyID {
+	ids := make([]NativeFamilyID, 0, len(nativeFamilyDefinitions))
+	for _, definition := range nativeFamilyDefinitions {
+		ids = append(ids, definition.id)
 	}
+	return ids
 }
 
 // NativeFamilyPolicy is a closed immutable union. Typed fields are private so
@@ -55,17 +49,17 @@ func NativeFamilies() []string {
 type NativeFamilyPolicy struct{ fields nativeFamilyFields }
 
 type nativeFamilyFields struct {
-	ID                        string     `json:"id"`
-	Mode                      NativeMode `json:"mode"`
-	AllowedApplicationIDs     []string   `json:"allowed_application_ids"`
-	Strategy                  string     `json:"strategy"`
-	ObserveOSClipboardChanges bool       `json:"observe_os_clipboard_changes"`
-	CandidatePrintCommands    string     `json:"candidate_print_commands"`
-	MonitoredSpooler          string     `json:"monitored_spooler"`
-	EnabledSubCapabilities    []string   `json:"enabled_sub_capabilities"`
-	Rule                      string     `json:"rule"`
-	RequireReady              bool       `json:"require_ready"`
-	ConcurrentUseCheck        string     `json:"concurrent_use_check"`
+	ID                        NativeFamilyID           `json:"id"`
+	Mode                      NativeMode               `json:"mode"`
+	AllowedApplicationIDs     []string                 `json:"allowed_application_ids"`
+	Strategy                  NativeClipboardStrategy  `json:"strategy"`
+	ObserveOSClipboardChanges bool                     `json:"observe_os_clipboard_changes"`
+	CandidatePrintCommands    NativePrintCommands      `json:"candidate_print_commands"`
+	MonitoredSpooler          NativeSpoolerRequirement `json:"monitored_spooler"`
+	EnabledSubCapabilities    []NativeSubCapability    `json:"enabled_sub_capabilities"`
+	Rule                      NativeVirtualizationRule `json:"rule"`
+	RequireReady              bool                     `json:"require_ready"`
+	ConcurrentUseCheck        NativeConcurrentUseCheck `json:"concurrent_use_check"`
 	// Outcome is what an enforce occurrence of the family leads to: a Flag,
 	// or a Flag and a Suspension. It is flag unless the family enforces.
 	Outcome IntegrityOutcome `json:"outcome"`
@@ -73,7 +67,7 @@ type nativeFamilyFields struct {
 
 var errNativePolicy = errors.New("native policy is invalid")
 
-func (p NativeFamilyPolicy) ID() string                { return p.fields.ID }
+func (p NativeFamilyPolicy) ID() NativeFamilyID        { return p.fields.ID }
 func (p NativeFamilyPolicy) Mode() NativeMode          { return p.fields.Mode }
 func (p NativeFamilyPolicy) Outcome() IntegrityOutcome { return p.fields.Outcome }
 
@@ -83,81 +77,13 @@ func (p NativeFamilyPolicy) Validate() error {
 		return errNativePolicy
 	}
 
-	disabled := f.Mode == NativeModeDisabled
 	if f.Outcome != IntegrityOutcomeFlag && (f.Mode != NativeModeEnforce || f.Outcome != IntegrityOutcomeFlagAndSuspend) {
 		return errNativePolicy
 	}
-	switch f.ID {
-	case "process_application":
-		if validateNativePolicyIDs(f.AllowedApplicationIDs) != nil || disabled && len(f.AllowedApplicationIDs) != 0 {
-			return errNativePolicy
-		}
-	case "interactive_session":
-	case "clipboard":
-		switch f.Mode {
-		case NativeModeDisabled:
-			if f.Strategy != "disabled" || f.ObserveOSClipboardChanges {
-				return errNativePolicy
-			}
-		case NativeModeObserve:
-			if f.Strategy != "disabled" || !f.ObserveOSClipboardChanges {
-				return errNativePolicy
-			}
-		case NativeModeEnforce:
-			if f.Strategy != "private_attempt" {
-				return errNativePolicy
-			}
-		}
-	case "printing":
-		if f.MonitoredSpooler != "required" && f.MonitoredSpooler != "not_required" {
-			return errNativePolicy
-		}
-
-		switch f.Mode {
-		case NativeModeDisabled:
-			if f.CandidatePrintCommands != "not_applied" || f.MonitoredSpooler != "not_required" {
-				return errNativePolicy
-			}
-		case NativeModeObserve:
-			if f.CandidatePrintCommands != "not_applied" || f.MonitoredSpooler != "required" {
-				return errNativePolicy
-			}
-		case NativeModeEnforce:
-			if f.CandidatePrintCommands != "deny" {
-				return errNativePolicy
-			}
-		}
-	case "removable_storage":
-		if validateNativePolicySelection(f.EnabledSubCapabilities, []string{"removable_block_storage", "portable_mtp"}, disabled) != nil {
-			return errNativePolicy
-		}
-	case "virtualization":
-		if disabled && f.Rule != "not_applied" ||
-			!disabled && f.Rule != "block_recognized_guest" && f.Rule != "require_certified_physical_environment" {
-			return errNativePolicy
-		}
-	case "network_configuration":
-		if validateNativePolicySelection(
-			f.EnabledSubCapabilities,
-			[]string{"system_proxy_state", "os_managed_vpn_state", "tunnel_interface_state"},
-			disabled,
-		) != nil {
-			return errNativePolicy
-		}
-	case "camera", "microphone":
-		if f.ConcurrentUseCheck != "not_required" && f.ConcurrentUseCheck != "supported_required" ||
-			disabled && (f.RequireReady || f.ConcurrentUseCheck != "not_required") ||
-			!disabled && !f.RequireReady && f.ConcurrentUseCheck == "not_required" {
-			return errNativePolicy
-		}
-	case "external_capture":
-		if !disabled {
-			return errNativePolicy
-		}
-	default:
+	definition, known := nativeFamilyDefinitionOf(f.ID)
+	if !known || !definition.validate(f, f.Mode == NativeModeDisabled) {
 		return errNativePolicy
 	}
-
 	return nil
 }
 
@@ -174,16 +100,20 @@ func validateNativePolicyIDs(ids []string) error {
 	}
 	return nil
 }
-func validateNativePolicySelection(ids, allowed []string, disabled bool) error {
+
+// validateNativePolicySelection checks the parts of a family an author
+// turned on: none when the family is disabled, at least one otherwise, each
+// allowed and named once.
+func validateNativePolicySelection(ids, allowed []NativeSubCapability, disabled bool) bool {
 	if ids == nil || len(ids) > len(allowed) || disabled && len(ids) != 0 || !disabled && len(ids) == 0 {
-		return errNativePolicy
+		return false
 	}
 	for i, id := range ids {
 		if !slices.Contains(allowed, id) || slices.Contains(ids[:i], id) {
-			return errNativePolicy
+			return false
 		}
 	}
-	return nil
+	return true
 }
 
 func (p NativeFamilyPolicy) MarshalJSON() ([]byte, error) {
@@ -195,23 +125,8 @@ func (p NativeFamilyPolicy) MarshalJSON() ([]byte, error) {
 	// This closed encoding map is constructed only from the typed family value;
 	// it is never populated with arbitrary client members.
 	result := map[string]any{"id": f.ID, "mode": f.Mode, "outcome": f.Outcome}
-	switch f.ID {
-	case "process_application":
-		result["allowed_application_ids"] = f.AllowedApplicationIDs
-	case "clipboard":
-		result["strategy"] = f.Strategy
-		result["observe_os_clipboard_changes"] = f.ObserveOSClipboardChanges
-	case "printing":
-		result["candidate_print_commands"] = f.CandidatePrintCommands
-		result["monitored_spooler"] = f.MonitoredSpooler
-	case "removable_storage", "network_configuration":
-		result["enabled_sub_capabilities"] = f.EnabledSubCapabilities
-	case "virtualization":
-		result["rule"] = f.Rule
-	case "camera", "microphone":
-		result["require_ready"] = f.RequireReady
-		result["concurrent_use_check"] = f.ConcurrentUseCheck
-	}
+	definition, _ := nativeFamilyDefinitionOf(f.ID)
+	definition.members(f, result)
 
 	return json.Marshal(result)
 }
@@ -269,23 +184,9 @@ type NativeScreenRecordingPolicy struct {
 
 func DefaultNativeSecurityPolicy() NativeSecurityPolicy {
 	result := NativeSecurityPolicy{RegistryDigest: NativeRegistryDigest, BaselineID: "desktop_candidate"}
-	for _, id := range NativeFamilies() {
-		f := nativeFamilyFields{ID: id, Mode: NativeModeDisabled, Outcome: IntegrityOutcomeFlag}
-		switch id {
-		case "process_application":
-			f.AllowedApplicationIDs = []string{}
-		case "clipboard":
-			f.Strategy = "disabled"
-		case "printing":
-			f.CandidatePrintCommands = "not_applied"
-			f.MonitoredSpooler = "not_required"
-		case "removable_storage", "network_configuration":
-			f.EnabledSubCapabilities = []string{}
-		case "virtualization":
-			f.Rule = "not_applied"
-		case "camera", "microphone":
-			f.ConcurrentUseCheck = "not_required"
-		}
+	for _, definition := range nativeFamilyDefinitions {
+		f := nativeFamilyFields{ID: definition.id, Mode: NativeModeDisabled, Outcome: IntegrityOutcomeFlag}
+		definition.defaults(&f)
 		result.Families = append(result.Families, NativeFamilyPolicy{fields: f})
 	}
 	return result

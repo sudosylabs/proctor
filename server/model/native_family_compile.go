@@ -12,23 +12,9 @@ import (
 	"strings"
 )
 
-// nativeFamilyCapability is the registry capability each authored family
-// runs on. interactive_session is fully covered by the baseline rule and
-// external_capture has no capability yet, so neither compiles a rule.
-var nativeFamilyCapability = map[string]NativeCapabilityID{
-	"process_application":   "process_application",
-	"clipboard":             "clipboard",
-	"printing":              "printing",
-	"removable_storage":     "removable_storage",
-	"virtualization":        "virtualization",
-	"network_configuration": "network",
-	"camera":                "camera",
-	"microphone":            "microphone",
-}
-
 // nativeNetworkCategories are the network sub-categories each authored
 // network option activates.
-var nativeNetworkCategories = map[string]string{
+var nativeNetworkCategories = map[NativeSubCapability]string{
 	"system_proxy_state":     "system_proxy",
 	"os_managed_vpn_state":   "managed_vpn",
 	"tunnel_interface_state": "tunnel_interfaces",
@@ -59,7 +45,7 @@ func compileNativePolicy(
 			return nil, nil, ErrNativeCoverageUnsupported
 		}
 		for _, family := range families {
-			if _, compiles := nativeFamilyCapability[family.ID()]; compiles && family.Mode() != NativeModeDisabled {
+			if _, compiles := nativeFamilyCapability(family.ID()); compiles && family.Mode() != NativeModeDisabled {
 				return nil, nil, ErrNativeCoverageUnsupported
 			}
 		}
@@ -86,14 +72,15 @@ func compileNativePolicy(
 		if family.Mode() == NativeModeDisabled {
 			continue
 		}
-		capability, compiles := nativeFamilyCapability[family.ID()]
+		capability, compiles := nativeFamilyCapability(family.ID())
 		if !compiles {
 			continue
 		}
 		if _, registered := registry.Capability(capability); !registered {
 			return nil, nil, ErrNativeCoverageUnsupported
 		}
-		compiled := family.rules(registry, capability)
+		definition, _ := nativeFamilyDefinitionOf(family.ID())
+		compiled := definition.compile(nativeRuleBuilder{family: family.fields, capability: capability}, registry)
 		if len(compiled) == 0 {
 			continue
 		}
@@ -140,85 +127,6 @@ func compileNativePolicy(
 	return activations, rules, nil
 }
 
-// rules compiles one enabled family. Each rule's ID is "<family>.<check>",
-// so the server can find the family, and with it the outcome, a rule's
-// occurrence leads to.
-func (p NativeFamilyPolicy) rules(registry *NativeCapabilityRegistry, capability NativeCapabilityID) []NativeRule {
-	f := p.fields
-	mode := NativeRuleObserve
-	if f.Mode == NativeModeEnforce {
-		mode = NativeRuleEnforce
-	}
-	rule := func(check string, phase NativeRulePhase, reason string, requirement NativeCondition) NativeRule {
-		return NativeRule{
-			RuleID: f.ID + "." + check, Capability: capability, Mode: mode, Phase: phase,
-			Reason: string(capability) + "." + reason, Requirement: requirement,
-		}
-	}
-	equals := func(field string, value NativeScalar) NativeCondition {
-		return NativeCondition{Compare: &NativeComparison{Field: string(capability) + "." + field, Op: NativeCompareEq, Value: value}}
-	}
-	none := func(field string) NativeCondition { return equals(field, NativeCount(0)) }
-
-	switch f.ID {
-	case "process_application":
-		// The release's never-allowable applications are always blocked; the
-		// manager's list, when it names any, is the only applications allowed.
-		rules := []NativeRule{}
-		if blocked := registry.neverAllowable(); len(blocked) > 0 {
-			rules = append(rules, rule("blocked", NativeRuleBoth, "blocked_application", NativeCondition{AppsAbsent: blocked}))
-		}
-		if len(f.AllowedApplicationIDs) > 0 {
-			rules = append(rules, rule("allowlist", NativeRuleBoth, "unlisted_application",
-				NativeCondition{AppsOnly: slices.Clone(f.AllowedApplicationIDs)}))
-		}
-		return rules
-	case "clipboard":
-		return []NativeRule{rule("changes", NativeRuleParticipation, "changed", none("changes"))}
-	case "printing":
-		return []NativeRule{rule("candidate_jobs", NativeRuleParticipation, "candidate_job", none("candidate_jobs_since_start"))}
-	case "removable_storage":
-		var attached []NativeCondition
-		if slices.Contains(f.EnabledSubCapabilities, "removable_block_storage") {
-			attached = append(attached, none("summary.block_storage"))
-		}
-		if slices.Contains(f.EnabledSubCapabilities, "portable_mtp") {
-			attached = append(attached, none("summary.portable_devices"))
-		}
-		return []NativeRule{rule("attached", NativeRuleBoth, "attached", NativeCondition{All: attached})}
-	case "virtualization":
-		if f.Rule == "require_certified_physical_environment" {
-			return []NativeRule{rule("physical", NativeRuleBoth, "physical_required",
-				equals("classification", NativeEnum("recognized_physical_or_root")))}
-		}
-		return []NativeRule{rule("guest", NativeRuleBoth, "guest_detected", NativeCondition{
-			Compare: &NativeComparison{Field: "virtualization.classification", Op: NativeCompareNe, Value: NativeEnum("recognized_guest")},
-		})}
-	case "network_configuration":
-		rules := []NativeRule{}
-		for _, sub := range f.EnabledSubCapabilities {
-			switch sub {
-			case "system_proxy_state":
-				rules = append(rules, rule("proxy", NativeRuleBoth, "proxy_detected", equals("system_proxy", NativeEnum("none"))))
-			case "os_managed_vpn_state":
-				rules = append(rules, rule("vpn", NativeRuleBoth, "vpn_detected", equals("managed_vpn", NativeEnum("inactive"))))
-			case "tunnel_interface_state":
-				rules = append(rules, rule("tunnels", NativeRuleBoth, "tunnel_detected", none("summary.tunnels_total")))
-			}
-		}
-		return rules
-	default: // camera and microphone
-		rules := []NativeRule{}
-		if f.RequireReady {
-			rules = append(rules, rule("ready", NativeRuleBoth, "not_ready", equals("ready", NativeEnum("ready"))))
-		}
-		if f.ConcurrentUseCheck == "supported_required" {
-			rules = append(rules, rule("exclusive", NativeRuleBoth, "in_use_by_other_app", equals("in_use_by_other_app", NativeEnum("no"))))
-		}
-		return rules
-	}
-}
-
 // neverAllowable lists the catalog applications no policy may allow, sorted.
 func (r *NativeCapabilityRegistry) neverAllowable() []string {
 	blocked := []string{}
@@ -239,7 +147,7 @@ func (p EffectiveExamSecurityPolicy) NativeRuleOutcome(ruleID string) IntegrityO
 		return IntegrityOutcomeFlag
 	}
 	for _, selected := range p.Capabilities {
-		if selected.ID() == family && selected.Mode() == NativeModeEnforce {
+		if selected.ID() == NativeFamilyID(family) && selected.Mode() == NativeModeEnforce {
 			return selected.Outcome()
 		}
 	}

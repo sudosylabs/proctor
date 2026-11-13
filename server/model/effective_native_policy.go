@@ -196,7 +196,7 @@ func resolvePolicyCoverage(policy EffectiveExamSecurityPolicy, agreement *Deskto
 		return ResolvedNativePolicy{}, ErrNativeCoverageUnsupported
 	}
 	for _, family := range policy.Capabilities {
-		capability, compiles := nativeFamilyCapability[family.ID()]
+		capability, compiles := nativeFamilyCapability(family.ID())
 		if compiles && family.Mode() == NativeModeEnforce && !agreement.EnforceCertified(capability) {
 			return ResolvedNativePolicy{}, ErrNativeCoverageUnsupported
 		}

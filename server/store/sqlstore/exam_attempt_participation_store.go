@@ -773,7 +773,9 @@ func persistParticipationExpiry(
 		return fmt.Errorf("close expired Attempt Connection: %w", err)
 	}
 
-	if err := insertIntegrityFlag(ctx, tx, flag); err != nil {
+	// Connection Loss asks for its clip like any Flag; Desktop finds the
+	// request when it reconnects.
+	if _, err := insertIntegrityFlag(ctx, tx, flag); err != nil {
 		return err
 	}
 	if err := insertIntegrityEvidence(ctx, tx, evidence); err != nil {

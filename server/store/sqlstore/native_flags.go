@@ -78,15 +78,10 @@ func (r *nativeFlagRaiser) raise(ctx context.Context, tx *sqlxTxWrapper, transit
 			if flagErr != nil {
 				return flagErr
 			}
-			if flagErr = insertIntegrityFlag(ctx, tx, flag); flagErr != nil {
+			if clipRequested, flagErr = insertIntegrityFlag(ctx, tx, flag); flagErr != nil {
 				return flagErr
 			}
 			flagID = flag.ID
-			if flagErr = tx.Get(ctx, &clipRequested, `SELECT EXISTS(
-					SELECT 1 FROM exam_attempt_screen_clips WHERE integrity_flag_id = ?
-				)`, flag.ID.String()); flagErr != nil {
-				return flagErr
-			}
 		case err != nil:
 			return err
 		default:

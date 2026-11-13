@@ -142,7 +142,7 @@ func retainBrowserIntegrity(
 		if flagErr != nil {
 			return flagErr
 		}
-		if err = insertIntegrityFlag(ctx, tx, flag); err != nil {
+		if _, err = insertIntegrityFlag(ctx, tx, flag); err != nil {
 			return err
 		}
 		group.Flag = flag.ID.String()

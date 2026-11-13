@@ -24,10 +24,11 @@ import (
 // Connection Loss records itself, in SQL, in the same shape.
 
 // insertIntegrityFlag writes a new open Flag, and asks for an incident screen
-// clip around it when the Attempt records its screen.
-func insertIntegrityFlag(ctx context.Context, tx *sqlxTxWrapper, flag *model.IntegrityFlag) error {
+// clip around it when the Attempt records its screen. It reports whether it
+// asked, so the caller can tell the candidate's Desktop.
+func insertIntegrityFlag(ctx context.Context, tx *sqlxTxWrapper, flag *model.IntegrityFlag) (bool, error) {
 	if err := flag.Validate(); err != nil {
-		return err
+		return false, err
 	}
 
 	if _, err := tx.Exec(
@@ -44,7 +45,7 @@ func insertIntegrityFlag(ctx context.Context, tx *sqlxTxWrapper, flag *model.Int
 		flag.State,
 		flag.CreatedAt,
 	); err != nil {
-		return translateError("integrity_flag", flag.ID.String(), err)
+		return false, translateError("integrity_flag", flag.ID.String(), err)
 	}
 
 	return requestIncidentScreenClip(ctx, tx, flag)

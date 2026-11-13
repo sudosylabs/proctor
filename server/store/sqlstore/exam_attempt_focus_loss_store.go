@@ -264,11 +264,11 @@ func recordFocusLoss(
 		return nil, err
 	}
 
-	connectionClosed, suspensionID, err := applyFocusLossDecision(ctx, tx, input, access, &state, decision)
+	applied, err := applyFocusLossDecision(ctx, tx, input, access, &state, decision)
 	if err != nil {
 		return nil, err
 	}
-	if err = retainFocusLossOutcome(ctx, tx, input, access, state, decision, connectionClosed, suspensionID); err != nil {
+	if err = retainFocusLossOutcome(ctx, tx, input, access, state, decision, applied.connectionClosed, applied.suspensionID); err != nil {
 		return nil, err
 	}
 
@@ -281,6 +281,7 @@ func recordFocusLoss(
 	if err != nil {
 		return nil, err
 	}
+	result.ScreenClipRequested = applied.clipRequested
 	if err = completeFocusLossAudit(ctx, tx, result, input.AuditEventID, input.AuditAt); err != nil {
 		return nil, err
 	}
@@ -434,6 +435,15 @@ func decideFocusLoss(
 	return decision, nil
 }
 
+// focusLossApplied is what applying a decision did beyond the evaluation
+// state: whether the new Flag asked for a screen clip, and the Suspension
+// and closed Connection a suspend decision produced.
+type focusLossApplied struct {
+	clipRequested    bool
+	connectionClosed bool
+	suspensionID     sql.NullString
+}
+
 // applyFocusLossDecision creates the decided Flag, consumes the window and
 // applies any suspension, updating the evaluation state.
 func applyFocusLossDecision(
@@ -443,28 +453,29 @@ func applyFocusLossDecision(
 	access focusLossAccessRow,
 	state *focusLossEvaluationRow,
 	decision model.FocusLossEvaluationDecision,
-) (bool, sql.NullString, error) {
+) (focusLossApplied, error) {
+	var applied focusLossApplied
 	if decision.CreateFlag {
-		flag, flagErr := model.NewIntegrityFlag(
+		flag, err := model.NewIntegrityFlag(
 			input.FlagID,
 			input.Access.AttemptID,
 			input.Access.Generation,
 			model.IntegrityPolicyFocusLoss,
 			access.DatabaseNow,
 		)
-		if flagErr != nil {
-			return false, sql.NullString{}, flagErr
+		if err != nil {
+			return applied, err
 		}
 
 		state.FlagID = sql.NullString{String: flag.ID.String(), Valid: true}
-		if err := insertIntegrityFlag(ctx, tx, flag); err != nil {
-			return false, sql.NullString{}, fmt.Errorf("create Focus Loss Flag: %w", err)
+		if applied.clipRequested, err = insertIntegrityFlag(ctx, tx, flag); err != nil {
+			return applied, fmt.Errorf("create Focus Loss Flag: %w", err)
 		}
 	}
 
 	if decision.ConsumeWindow {
 		if err := consumeFocusLossBucket(ctx, tx, input.Access, state, access.DatabaseNow); err != nil {
-			return false, sql.NullString{}, err
+			return applied, err
 		}
 	}
 
@@ -474,18 +485,16 @@ func applyFocusLossDecision(
 		state.WarningCreated = true
 	}
 
-	connectionClosed := false
-	var suspensionID sql.NullString
 	if decision.Suspend {
-		suspensionID = sql.NullString{String: input.SuspensionID.String(), Valid: true}
+		applied.suspensionID = sql.NullString{String: input.SuspensionID.String(), Valid: true}
 		var err error
-		connectionClosed, err = suspendForIntegrityPolicy(ctx, tx, access, state.FlagID.String, input.SuspensionID, model.IntegrityPolicyFocusLoss)
+		applied.connectionClosed, err = suspendForIntegrityPolicy(ctx, tx, access, state.FlagID.String, input.SuspensionID, model.IntegrityPolicyFocusLoss)
 		if err != nil {
-			return false, sql.NullString{}, err
+			return applied, err
 		}
 	}
 
-	return connectionClosed, suspensionID, nil
+	return applied, nil
 }
 
 // retainFocusLossOutcome writes the signal's decision and the updated
@@ -1181,13 +1190,6 @@ func loadFocusLossResult(
 		result.Flag, err = loadFocusLossFlag(ctx, tx, state.FlagID.String)
 		if err != nil {
 			return nil, err
-		}
-	}
-	if result.FlagCreated && state.FlagID.Valid {
-		if err = tx.Get(ctx, &result.ScreenClipRequested, `SELECT EXISTS(
-				SELECT 1 FROM exam_attempt_screen_clips WHERE integrity_flag_id = ?
-			)`, state.FlagID.String); err != nil {
-			return nil, translateError("exam_attempt_screen_clip", state.FlagID.String, err)
 		}
 	}
 

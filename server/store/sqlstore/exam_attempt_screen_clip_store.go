@@ -322,9 +322,9 @@ func requestScreenClip(
 // Loss, Connection Loss and native Flags qualify; at most
 // model.ScreenClipIncidentRequestLimit are asked for per Attempt, and any
 // further Flag goes without one.
-func requestIncidentScreenClip(ctx context.Context, tx *sqlxTxWrapper, flag *model.IntegrityFlag) error {
+func requestIncidentScreenClip(ctx context.Context, tx *sqlxTxWrapper, flag *model.IntegrityFlag) (bool, error) {
 	if flag.Kind == model.IntegrityPolicyBrowserNavigation {
-		return nil
+		return false, nil
 	}
 	var attempt struct {
 		Recording bool `db:"recording"`
@@ -336,16 +336,16 @@ func requestIncidentScreenClip(ctx context.Context, tx *sqlxTxWrapper, flag *mod
 		FROM exam_attempts a
 		JOIN exam_revisions r ON r.id = a.admission_revision_id
 		WHERE a.id = ?`, model.ScreenClipSourceIncident, flag.AttemptID.String()); err != nil {
-		return translateError("exam_attempt", flag.AttemptID.String(), err)
+		return false, translateError("exam_attempt", flag.AttemptID.String(), err)
 	}
 	if !attempt.Recording || attempt.Incidents >= model.ScreenClipIncidentRequestLimit {
-		return nil
+		return false, nil
 	}
 	clip, err := model.NewIncidentScreenClip(model.NewScreenClipID(), flag.AttemptID, flag.ID, flag.CreatedAt)
 	if err != nil {
-		return err
+		return false, err
 	}
-	return insertScreenClip(ctx, tx, clip)
+	return true, insertScreenClip(ctx, tx, clip)
 }
 
 func insertScreenClip(ctx context.Context, tx *sqlxTxWrapper, clip *model.ScreenClip) error {

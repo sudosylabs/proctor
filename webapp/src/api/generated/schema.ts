@@ -1941,7 +1941,7 @@ export interface paths {
         put?: never;
         /**
          * Declare the screen clip about to be uploaded
-         * @description Declares a taken clip's media type, exact size and the SHA-256 of every chunk in order. Every chunk is chunk_bytes long except the last, which holds the rest. The clip's content digest is the SHA-256 of that manifest. A clip that would take the Attempt's clips past 6 GiB is refused. Declaring the same clip again returns it unchanged.
+         * @description Declares a taken clip's media type, exact size and the SHA-256 of every chunk in order. Every chunk is chunk_bytes long except the last, which holds the rest. The clip's content digest is the SHA-256 of that manifest. A clip that would take the Attempt's clips past 6 GiB is refused. Declaring the same clip again returns it unchanged. Once the Participation that took the clip has closed, as at submission, Desktop continues the upload without the Attempt credential and Connection headers until that Participation's upload deadline; a clip not complete by then fails with upload_deadline.
          */
         post: operations["beginCandidateScreenClipUpload"];
         delete?: never;
@@ -5072,8 +5072,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Inspect minimized native condition transitions for a Submission
-         * @description Requires the same current Submission integrity-view authorization as detailed evidence. Returns selected catalog-validated occurrence transitions without creating a Flag or declaring a violation. Includes original receipt and interpretation times, immutable stream/policy provenance and unresolved-opener state. Operational health, gaps and resets are excluded. Pages contain at most 100 records. Integrity retirement removes this material independently of native operational retention. No-store; cursors are purpose-specific opaque keysets.
+         * Inspect the native rule status changes of a Submission
+         * @description Requires the same current Submission integrity-view authorization as detailed evidence. Returns every change of a native rule's status as the server evaluated it on the facts Desktop reported, with the delivery position that caused it (batch 0 is the state reported at Start), original receipt and interpretation times, and immutable stream and policy provenance. An occurrence opens when a rule becomes not met and closes when it is met again; an enforce occurrence that opens also raises its capability's native Flag. The facts themselves are not returned. Pages contain at most 100 records. Integrity retirement removes this material independently of native operational retention. No-store; cursors are purpose-specific opaque keysets.
          */
         get: operations["listNativeConditions"];
         put?: never;
@@ -8145,7 +8145,7 @@ export interface components {
             ordinal: number;
             policy_id: string;
             /** @constant */
-            registry_digest: "sha256:ab9b69b4bf137b4d646e0b4a0386005e09bd4403614e9f380cbc073bb03ef053";
+            registry_digest: "sha256:43148f1ec806e5f0374d83845692375612597cfc9fc11f25565aa0ac5d3b8a5a";
             resolved_exception_refs: string[];
             /** @constant */
             retention_class_id: "native_minimized";
@@ -9948,6 +9948,33 @@ export interface components {
             request_digest: string;
             stream_id: string;
         };
+        /** @description One activated capability's full minimized state as Desktop observed it, with its envelope. Desktop sends a fact whenever the state or the envelope changes; the server checks it against the capability's published schemas and evaluates the policy's rules on it again. A fact no newer than the latest of its source instance changes nothing. */
+        NativeCapabilityFact: {
+            capability: string;
+            /** @enum {string} */
+            certainty: "complete" | "partial" | "unknown";
+            /** @enum {string} */
+            health: "unsupported" | "healthy" | "degraded" | "failed" | "stopped";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "capability_fact";
+            /**
+             * Format: date-time
+             * @description The device time of the observation, in whole milliseconds.
+             */
+            observed_at: string;
+            /** @enum {string} */
+            permission: "not_determined" | "granted" | "denied" | "restricted" | "unavailable";
+            /** Format: int64 */
+            sequence: number;
+            source_instance_id: string;
+            /** @description The full state, valid against its published state schema. State and summary are at most 16 KiB together. */
+            state: Record<string, never>;
+            /** @description The counts derived from the state, valid against its published summary schema. */
+            summary: Record<string, never>;
+        };
         NativeCapabilityReadiness: {
             capability: string;
             /** @enum {string} */
@@ -10004,7 +10031,6 @@ export interface components {
             /** Format: date-time */
             interpreted_at: string;
             matrix_id: string;
-            occurrence: components["schemas"]["NativeOccurrence"];
             participation_id: string;
             policy_digest: string;
             policy_revision_id: string;
@@ -10013,7 +10039,7 @@ export interface components {
             record_index: number;
             security_session_id: string;
             stream_id: string;
-            unresolved_opener: boolean;
+            transition: components["schemas"]["NativeRuleTransition"];
         };
         NativeConditionInventory: {
             digest: string;
@@ -10047,35 +10073,17 @@ export interface components {
             reason: "initial" | "health_changed" | "permission_changed" | "reconciled" | "stopped";
             source: components["schemas"]["NativeSourceCoverage"];
         };
-        NativeOccurrence: {
-            capability_id: string;
-            /** @enum {string} */
-            certainty: "complete" | "partial" | "unknown";
-            condition_id: string;
-            detector_id: string;
-            /** Format: int64 */
-            detector_version: number;
-            /** Format: date-time */
-            first_observed_at: string;
-            /** Format: int64 */
-            gap_count: number;
+        /** @description Where the exam begins on the stream: Desktop sends it once, when the candidate window mounts after admission. Before it the server applies the policy's readiness rules; from it, the participation rules. */
+        NativeParticipationConfirmed: {
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            kind: "occurrence";
+            kind: "participation_confirmed";
             /** Format: date-time */
-            last_confirmed_at: string;
-            /** @enum {string} */
-            mode: "observe" | "enforce";
-            occurrence_id: string;
-            /** Format: int64 */
-            repeat_count: number;
-            source_ranges: components["schemas"]["NativeSourceRange"][];
-            /** @enum {string} */
-            status: "opened" | "repeated" | "recovered";
+            observed_at: string;
         };
-        NativeRecord: components["schemas"]["NativeOccurrence"] | components["schemas"]["NativeCoverageTransition"] | components["schemas"]["NativeSourceReset"] | components["schemas"]["NativeSourceGap"];
+        NativeRecord: components["schemas"]["NativeCapabilityFact"] | components["schemas"]["NativeParticipationConfirmed"] | components["schemas"]["NativeRuleStatusReport"] | components["schemas"]["NativeCoverageTransition"] | components["schemas"]["NativeSourceReset"] | components["schemas"]["NativeSourceGap"];
         /** @description One requirement, in the rule grammar Desktop publishes. */
         NativeRule: {
             capability: string;
@@ -10097,6 +10105,47 @@ export interface components {
              * @enum {string}
              */
             unknown_cause?: "unavailable" | "gap" | "unhealthy" | "permission" | "partial" | "checking";
+        };
+        /** @description Desktop's own status for one participation rule and whether it is containing the candidate window because of it. The server's status is authoritative; a disagreement is counted, never applied. */
+        NativeRuleStatusReport: {
+            contained: boolean;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "rule_status";
+            /** Format: date-time */
+            observed_at: string;
+            rule_id: string;
+            /** @enum {string} */
+            status: "met" | "not_met" | "unknown";
+            /**
+             * @description Why the rule is unknown; present only when status is unknown.
+             * @enum {string}
+             */
+            unknown_cause?: "unavailable" | "gap" | "unhealthy" | "permission" | "partial" | "checking";
+        };
+        NativeRuleTransition: {
+            /**
+             * Format: date-time
+             * @description The device time of the change; it never moves backwards within a Participation.
+             */
+            at: string;
+            capability: string;
+            /** @enum {string} */
+            event?: "opened" | "closed";
+            from?: components["schemas"]["NativeRuleReport"];
+            /** @enum {string} */
+            mode: "enforce" | "observe";
+            /**
+             * Format: int64
+             * @description The rule's occurrence this change opened or closed, counted from 1 per Participation.
+             */
+            occurrence?: number;
+            /** @description The reason ID Desktop's registry publishes for the rule; Desktop owns its wording. */
+            reason: string;
+            rule_id: string;
+            to: components["schemas"]["NativeRuleReport"];
         };
         /** @description Whether Desktop records the candidate's screen on the device for the whole session, uploading only the ranges the server requests. Off by default; the candidate is told before the Attempt starts. */
         NativeScreenRecordingPolicy: {
@@ -10178,7 +10227,7 @@ export interface components {
                 }
             ];
             /** @constant */
-            registry_digest: "sha256:ab9b69b4bf137b4d646e0b4a0386005e09bd4403614e9f380cbc073bb03ef053";
+            registry_digest: "sha256:43148f1ec806e5f0374d83845692375612597cfc9fc11f25565aa0ac5d3b8a5a";
             screen_recording: components["schemas"]["NativeScreenRecordingPolicy"];
         };
         NativeSecurityStreamStatus: {
@@ -10218,11 +10267,38 @@ export interface components {
             /** Format: int64 */
             terminal_missing_through_sequence: number;
         };
-        /** @description Content-free native condition count and currently live source health. Contains no detector, occurrence or source-instance identities and makes no misconduct finding. */
+        /** @description The candidate's live native standing: how many rule status changes are kept, the live Participation's source health and each enforce rule's status as the server evaluates it, whether Desktop is containing the candidate window, and the Attempt's screen clips by state. It contains no facts, source-instance or application identities, and an application outside the catalog is never named. A rule that is not met is not a misconduct finding; its Flag is reviewed like any other. */
         NativeSecuritySummary: {
+            /** @description Whether Desktop reports it is containing the candidate window right now. */
+            contained: boolean;
             live_coverage_available: boolean;
             /** Format: int64 */
             retained_condition_records: number;
+            /** @description The live Participation's enforce rules, by rule ID; empty when nothing is live. */
+            rules: {
+                capability: string;
+                /** Format: int64 */
+                occurrences: number;
+                /**
+                 * Format: int64
+                 * @description The occurrence open now, counted from 1 in this Participation; absent when none is open.
+                 */
+                open_occurrence?: number;
+                /** @description The registry's reason ID for the rule, such as display.single_display_required. */
+                reason: string;
+                rule_id: string;
+                /** @enum {string} */
+                status: "met" | "not_met" | "unknown";
+                /** @enum {string} */
+                unknown_cause?: "unavailable" | "gap" | "unhealthy" | "permission" | "partial" | "checking";
+            }[];
+            screen_clips: {
+                failed: number;
+                ready: number;
+                recording: number;
+                requested: number;
+                uploading: number;
+            };
             sources: {
                 complete: boolean;
                 /** @enum {string} */
@@ -15580,7 +15656,7 @@ export interface components {
                  *             "mode": "disabled"
                  *           }
                  *         ],
-                 *         "registry_digest": "sha256:ab9b69b4bf137b4d646e0b4a0386005e09bd4403614e9f380cbc073bb03ef053",
+                 *         "registry_digest": "sha256:43148f1ec806e5f0374d83845692375612597cfc9fc11f25565aa0ac5d3b8a5a",
                  *         "screen_recording": {
                  *           "enabled": true
                  *         }
@@ -16237,7 +16313,7 @@ export interface components {
                 /**
                  * @example {
                  *       "configuration_manifest_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                 *       "native_registry_digest": "sha256:ab9b69b4bf137b4d646e0b4a0386005e09bd4403614e9f380cbc073bb03ef053",
+                 *       "native_registry_digest": "sha256:43148f1ec806e5f0374d83845692375612597cfc9fc11f25565aa0ac5d3b8a5a",
                  *       "source_manifest_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                  *     }
                  */
@@ -19237,11 +19313,11 @@ export interface operations {
     getCandidateScreenClipUpload: {
         parameters: {
             query?: never;
-            header: {
-                /** @description Sensitive canonical 32-byte Raw URL-safe base64 continuity credential for the active Participation. Never log, persist, cache, or place this value in a URL. */
-                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
-                /** @description The durable open Attempt Connection bound to the current authenticated Session. */
-                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
+            header?: {
+                /** @description Sensitive canonical 32-byte Raw URL-safe base64 continuity credential for the active Participation. Never log, persist, cache, or place this value in a URL. Required together while the source is live. May be omitted after server-owned closure; omission never establishes historical authority. */
+                "X-Proctor-Attempt-Credential"?: components["parameters"]["NativeDeliveryCredential"];
+                /** @description The durable open Attempt Connection bound to the current authenticated Session. Required together while the source is live. May be omitted after server-owned closure; omission never establishes historical authority. */
+                "X-Proctor-Attempt-Connection-ID"?: components["parameters"]["NativeDeliveryConnectionID"];
             };
             path: {
                 /** @description The Exam Attempt identifier. */
@@ -19266,11 +19342,11 @@ export interface operations {
     beginCandidateScreenClipUpload: {
         parameters: {
             query?: never;
-            header: {
-                /** @description Sensitive canonical 32-byte Raw URL-safe base64 continuity credential for the active Participation. Never log, persist, cache, or place this value in a URL. */
-                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
-                /** @description The durable open Attempt Connection bound to the current authenticated Session. */
-                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
+            header?: {
+                /** @description Sensitive canonical 32-byte Raw URL-safe base64 continuity credential for the active Participation. Never log, persist, cache, or place this value in a URL. Required together while the source is live. May be omitted after server-owned closure; omission never establishes historical authority. */
+                "X-Proctor-Attempt-Credential"?: components["parameters"]["NativeDeliveryCredential"];
+                /** @description The durable open Attempt Connection bound to the current authenticated Session. Required together while the source is live. May be omitted after server-owned closure; omission never establishes historical authority. */
+                "X-Proctor-Attempt-Connection-ID"?: components["parameters"]["NativeDeliveryConnectionID"];
             };
             path: {
                 /** @description The Exam Attempt identifier. */
@@ -19295,11 +19371,11 @@ export interface operations {
     uploadCandidateScreenClipChunk: {
         parameters: {
             query?: never;
-            header: {
-                /** @description Sensitive canonical 32-byte Raw URL-safe base64 continuity credential for the active Participation. Never log, persist, cache, or place this value in a URL. */
-                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
-                /** @description The durable open Attempt Connection bound to the current authenticated Session. */
-                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
+            header?: {
+                /** @description Sensitive canonical 32-byte Raw URL-safe base64 continuity credential for the active Participation. Never log, persist, cache, or place this value in a URL. Required together while the source is live. May be omitted after server-owned closure; omission never establishes historical authority. */
+                "X-Proctor-Attempt-Credential"?: components["parameters"]["NativeDeliveryCredential"];
+                /** @description The durable open Attempt Connection bound to the current authenticated Session. Required together while the source is live. May be omitted after server-owned closure; omission never establishes historical authority. */
+                "X-Proctor-Attempt-Connection-ID"?: components["parameters"]["NativeDeliveryConnectionID"];
             };
             path: {
                 /** @description The Exam Attempt identifier. */
@@ -19326,11 +19402,11 @@ export interface operations {
     completeCandidateScreenClipUpload: {
         parameters: {
             query?: never;
-            header: {
-                /** @description Sensitive canonical 32-byte Raw URL-safe base64 continuity credential for the active Participation. Never log, persist, cache, or place this value in a URL. */
-                "X-Proctor-Attempt-Credential": components["parameters"]["CandidateAttemptCredential"];
-                /** @description The durable open Attempt Connection bound to the current authenticated Session. */
-                "X-Proctor-Attempt-Connection-ID": components["parameters"]["CandidateAttemptConnectionID"];
+            header?: {
+                /** @description Sensitive canonical 32-byte Raw URL-safe base64 continuity credential for the active Participation. Never log, persist, cache, or place this value in a URL. Required together while the source is live. May be omitted after server-owned closure; omission never establishes historical authority. */
+                "X-Proctor-Attempt-Credential"?: components["parameters"]["NativeDeliveryCredential"];
+                /** @description The durable open Attempt Connection bound to the current authenticated Session. Required together while the source is live. May be omitted after server-owned closure; omission never establishes historical authority. */
+                "X-Proctor-Attempt-Connection-ID"?: components["parameters"]["NativeDeliveryConnectionID"];
             };
             path: {
                 /** @description The Exam Attempt identifier. */

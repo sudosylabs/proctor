@@ -119,7 +119,7 @@ components:
                   require_ready: false
                 - id: external_capture
                   mode: disabled
-              registry_digest: sha256:ab9b69b4bf137b4d646e0b4a0386005e09bd4403614e9f380cbc073bb03ef053
+              registry_digest: sha256:43148f1ec806e5f0374d83845692375612597cfc9fc11f25565aa0ac5d3b8a5a
               screen_recording:
                 enabled: true
   schemas:
@@ -163,7 +163,7 @@ components:
           $ref: '#/components/schemas/NativeScreenRecordingPolicy'
         registry_digest:
           type: string
-          const: sha256:ab9b69b4bf137b4d646e0b4a0386005e09bd4403614e9f380cbc073bb03ef053
+          const: sha256:43148f1ec806e5f0374d83845692375612597cfc9fc11f25565aa0ac5d3b8a5a
         baseline_id:
           type: string
           const: desktop_candidate

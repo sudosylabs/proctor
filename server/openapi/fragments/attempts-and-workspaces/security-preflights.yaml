@@ -323,7 +323,7 @@ components:
           schema:
             $ref: '#/components/schemas/PrepareSecurityPreflightRequest'
           example:
-            native_registry_digest: sha256:ab9b69b4bf137b4d646e0b4a0386005e09bd4403614e9f380cbc073bb03ef053
+            native_registry_digest: sha256:43148f1ec806e5f0374d83845692375612597cfc9fc11f25565aa0ac5d3b8a5a
             source_manifest_digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
             configuration_manifest_fingerprint: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
     SecurityPreflightReport:
@@ -554,7 +554,7 @@ components:
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         registry_digest:
           type: string
-          const: sha256:ab9b69b4bf137b4d646e0b4a0386005e09bd4403614e9f380cbc073bb03ef053
+          const: sha256:43148f1ec806e5f0374d83845692375612597cfc9fc11f25565aa0ac5d3b8a5a
         focus_loss_mode:
           type: string
           enum:

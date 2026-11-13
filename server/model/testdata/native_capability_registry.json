@@ -99,6 +99,43 @@
         "type": "object"
       }
     },
+    "clipboard": {
+      "state": {
+        "$defs": {
+          "Coverage": {
+            "enum": [
+              "counter_polling",
+              "unavailable"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "changes": {
+            "description": "Host clipboard changes since this capability was activated.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "coverage": {
+            "$ref": "#/$defs/Coverage"
+          }
+        },
+        "required": [
+          "coverage",
+          "changes"
+        ],
+        "title": "ClipboardState",
+        "type": "object"
+      },
+      "summary": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      }
+    },
     "display": {
       "state": {
         "$defs": {
@@ -334,6 +371,411 @@
           "remote_attachment"
         ],
         "title": "InteractiveSessionState",
+        "type": "object"
+      },
+      "summary": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "network": {
+      "state": {
+        "$defs": {
+          "ManagedVpn": {
+            "enum": [
+              "inactive",
+              "active",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "Proxy": {
+            "enum": [
+              "none",
+              "manual",
+              "automatic_config",
+              "auto_detect",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "Tunnel": {
+            "additionalProperties": false,
+            "description": "One active tunnel. `interface_id` is opaque and stable within one agent session.",
+            "properties": {
+              "class": {
+                "$ref": "#/$defs/TunnelClass"
+              },
+              "interface_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "interface_id",
+              "class"
+            ],
+            "type": "object"
+          },
+          "TunnelClass": {
+            "enum": [
+              "point_to_point",
+              "packet_tunnel",
+              "virtual_ethernet",
+              "managed_vpn",
+              "other"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Only selected sub-categories appear; an unselected one is absent, not empty.",
+        "properties": {
+          "managed_vpn": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ManagedVpn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "route_generation": {
+            "description": "Rises each time the routing table changes. A route change alone is never a violation.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "system_proxy": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Proxy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tunnels": {
+            "items": {
+              "$ref": "#/$defs/Tunnel"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "title": "NetworkState",
+        "type": "object"
+      },
+      "summary": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Tunnel counts by class, derived only from `tunnels`.",
+        "properties": {
+          "managed_vpn_tunnels": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "packet_tunnel": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "point_to_point": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "tunnels_total": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "virtual_ethernet": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tunnels_total",
+          "point_to_point",
+          "packet_tunnel",
+          "virtual_ethernet",
+          "managed_vpn_tunnels"
+        ],
+        "title": "NetworkSummary",
+        "type": "object"
+      }
+    },
+    "printing": {
+      "state": {
+        "$defs": {
+          "Coverage": {
+            "oneOf": [
+              {
+                "enum": [
+                  "unavailable"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "monitored_scheduler",
+                "description": "Every job the scheduler accepts is seen, including jobs that finish between reads.",
+                "type": "string"
+              },
+              {
+                "const": "snapshot_only",
+                "description": "One read of the jobs present now; a job that came and went is not seen.",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "blocked_print_commands": {
+            "description": "Print commands the `CandidateWindow` refused since observation started.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "candidate_jobs": {
+            "description": "Active jobs owned by the candidate's account.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "candidate_jobs_since_start": {
+            "description": "Candidate jobs the scheduler accepted since observation started, finished ones included.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "coverage": {
+            "$ref": "#/$defs/Coverage"
+          },
+          "other_jobs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unknown_jobs": {
+            "description": "Active jobs whose owner the scheduler did not state.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "coverage",
+          "candidate_jobs",
+          "other_jobs",
+          "unknown_jobs",
+          "candidate_jobs_since_start",
+          "blocked_print_commands"
+        ],
+        "title": "PrintState",
+        "type": "object"
+      },
+      "summary": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "candidate_jobs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unknown_jobs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "candidate_jobs",
+          "unknown_jobs"
+        ],
+        "title": "PrintSummary",
+        "type": "object"
+      }
+    },
+    "removable_storage": {
+      "state": {
+        "$defs": {
+          "Coverage": {
+            "oneOf": [
+              {
+                "enum": [
+                  "unavailable"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "block_and_portable",
+                "description": "Disks and portable devices are both read.",
+                "type": "string"
+              },
+              {
+                "const": "block_only",
+                "description": "Disks are read; this platform cannot read portable devices.",
+                "type": "string"
+              }
+            ]
+          },
+          "Device": {
+            "additionalProperties": false,
+            "description": "One attached device. `device_id` is opaque and stable within one agent session.",
+            "properties": {
+              "device_id": {
+                "type": "string"
+              },
+              "kind": {
+                "$ref": "#/$defs/Kind"
+              },
+              "mounted": {
+                "$ref": "#/$defs/Known",
+                "description": "Whether a file system on it is mounted. Unmounted storage still counts as attached."
+              },
+              "transport": {
+                "$ref": "#/$defs/Transport"
+              },
+              "writable": {
+                "$ref": "#/$defs/Known"
+              }
+            },
+            "required": [
+              "device_id",
+              "kind",
+              "transport",
+              "mounted",
+              "writable"
+            ],
+            "type": "object"
+          },
+          "Kind": {
+            "enum": [
+              "block_storage",
+              "portable_device"
+            ],
+            "type": "string"
+          },
+          "Known": {
+            "description": "A yes/no the OS may not state.",
+            "enum": [
+              "yes",
+              "no",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "Transport": {
+            "enum": [
+              "usb",
+              "thunderbolt",
+              "sd",
+              "other",
+              "unknown"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "coverage": {
+            "$ref": "#/$defs/Coverage"
+          },
+          "devices": {
+            "description": "At most [`MAX_DEVICES`], ordered by identity.",
+            "items": {
+              "$ref": "#/$defs/Device"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "coverage",
+          "devices"
+        ],
+        "title": "StorageState",
+        "type": "object"
+      },
+      "summary": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Device counts by kind, derived only from the read devices.",
+        "properties": {
+          "block_storage": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "portable_devices": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "block_storage",
+          "portable_devices"
+        ],
+        "title": "StorageSummary",
+        "type": "object"
+      }
+    },
+    "virtualization": {
+      "state": {
+        "$defs": {
+          "Classification": {
+            "enum": [
+              "recognized_guest",
+              "recognized_physical_or_root",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "Hypervisor": {
+            "enum": [
+              "hyperv",
+              "vmware",
+              "virtualbox",
+              "parallels",
+              "qemu_kvm",
+              "apple_virtualization",
+              "xen",
+              "other",
+              "none_detected"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "classification": {
+            "$ref": "#/$defs/Classification"
+          },
+          "hypervisor": {
+            "$ref": "#/$defs/Hypervisor"
+          }
+        },
+        "required": [
+          "classification",
+          "hypervisor"
+        ],
+        "title": "VirtualizationState",
         "type": "object"
       },
       "summary": {
@@ -627,6 +1069,198 @@
         ],
         "sensitive": true,
         "stability_ms": 2000
+      },
+      {
+        "app_conditions": false,
+        "categories": [],
+        "fields": [
+          {
+            "max": 1000000000,
+            "name": "clipboard.changes",
+            "type": "count"
+          }
+        ],
+        "id": "clipboard",
+        "permission_prompt": false,
+        "reasons": [
+          "clipboard.changed"
+        ],
+        "sensitive": false,
+        "stability_ms": 0
+      },
+      {
+        "app_conditions": false,
+        "categories": [],
+        "fields": [
+          {
+            "name": "virtualization.classification",
+            "type": "symbol",
+            "values": [
+              "recognized_guest",
+              "recognized_physical_or_root",
+              "unknown"
+            ]
+          },
+          {
+            "name": "virtualization.hypervisor",
+            "type": "symbol",
+            "values": [
+              "hyperv",
+              "vmware",
+              "virtualbox",
+              "parallels",
+              "qemu_kvm",
+              "apple_virtualization",
+              "xen",
+              "other",
+              "none_detected"
+            ]
+          }
+        ],
+        "id": "virtualization",
+        "permission_prompt": false,
+        "reasons": [
+          "virtualization.guest_detected",
+          "virtualization.physical_required"
+        ],
+        "sensitive": false,
+        "stability_ms": 0
+      },
+      {
+        "app_conditions": false,
+        "categories": [
+          "system_proxy",
+          "managed_vpn",
+          "tunnel_interfaces",
+          "route_change"
+        ],
+        "fields": [
+          {
+            "name": "network.system_proxy",
+            "type": "symbol",
+            "values": [
+              "none",
+              "manual",
+              "automatic_config",
+              "auto_detect",
+              "unknown"
+            ]
+          },
+          {
+            "name": "network.managed_vpn",
+            "type": "symbol",
+            "values": [
+              "inactive",
+              "active",
+              "unknown"
+            ]
+          },
+          {
+            "max": 1000000000,
+            "name": "network.route_generation",
+            "type": "count"
+          },
+          {
+            "max": 256,
+            "name": "network.summary.tunnels_total",
+            "type": "count"
+          },
+          {
+            "max": 256,
+            "name": "network.summary.point_to_point",
+            "type": "count"
+          },
+          {
+            "max": 256,
+            "name": "network.summary.packet_tunnel",
+            "type": "count"
+          },
+          {
+            "max": 256,
+            "name": "network.summary.virtual_ethernet",
+            "type": "count"
+          },
+          {
+            "max": 256,
+            "name": "network.summary.managed_vpn_tunnels",
+            "type": "count"
+          }
+        ],
+        "id": "network",
+        "permission_prompt": false,
+        "reasons": [
+          "network.proxy_detected",
+          "network.vpn_detected",
+          "network.tunnel_detected"
+        ],
+        "sensitive": true,
+        "stability_ms": 3000
+      },
+      {
+        "app_conditions": false,
+        "categories": [],
+        "fields": [
+          {
+            "max": 1024,
+            "name": "removable_storage.summary.block_storage",
+            "type": "count"
+          },
+          {
+            "max": 1024,
+            "name": "removable_storage.summary.portable_devices",
+            "type": "count"
+          }
+        ],
+        "id": "removable_storage",
+        "permission_prompt": false,
+        "reasons": [
+          "removable_storage.attached"
+        ],
+        "sensitive": true,
+        "stability_ms": 2000
+      },
+      {
+        "app_conditions": false,
+        "categories": [],
+        "fields": [
+          {
+            "max": 1000000,
+            "name": "printing.summary.candidate_jobs",
+            "type": "count"
+          },
+          {
+            "max": 1000000,
+            "name": "printing.summary.unknown_jobs",
+            "type": "count"
+          },
+          {
+            "max": 1000000,
+            "name": "printing.other_jobs",
+            "type": "count"
+          },
+          {
+            "max": 1000000,
+            "name": "printing.candidate_jobs",
+            "type": "count"
+          },
+          {
+            "max": 1000000,
+            "name": "printing.candidate_jobs_since_start",
+            "type": "count"
+          },
+          {
+            "max": 1000000,
+            "name": "printing.blocked_print_commands",
+            "type": "count"
+          }
+        ],
+        "id": "printing",
+        "permission_prompt": false,
+        "reasons": [
+          "printing.candidate_job"
+        ],
+        "sensitive": false,
+        "stability_ms": 0
       }
     ]
   }

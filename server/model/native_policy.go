@@ -16,11 +16,11 @@ import (
 
 // NativeRegistryDigest identifies the reviewed capability registry: the
 // registry document Desktop generates from its Rust types, proctor-desktop
-// native/crates/prctr-capabilities/registry/registry.json at commit 53d3628.
+// native/crates/prctr-capabilities/registry/registry.json at commit b2eb4e8.
 // It does not certify any Desktop release or native implementation; a
 // release's own registry must have exactly this digest. New registry meaning
 // requires coordinated server and Desktop admission.
-const NativeRegistryDigest = "sha256:ab9b69b4bf137b4d646e0b4a0386005e09bd4403614e9f380cbc073bb03ef053"
+const NativeRegistryDigest = "sha256:43148f1ec806e5f0374d83845692375612597cfc9fc11f25565aa0ac5d3b8a5a"
 
 type NativeMode string
 

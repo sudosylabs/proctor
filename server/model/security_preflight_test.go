@@ -102,7 +102,9 @@ func TestSecurityPreflightRejectsForgedReports(t *testing.T) {
 		"policy":             func(r *SecurityPreflightReport) { r.PolicyDigest = SHA256Fingerprint([]byte("other")) },
 		"content":            func(r *SecurityPreflightReport) { r.PolicyContentDigest = SHA256Fingerprint([]byte("other")) },
 		"missing capability": func(r *SecurityPreflightReport) { r.Capabilities = r.Capabilities[1:] },
-		"reordered":          func(r *SecurityPreflightReport) { r.Capabilities[0], r.Capabilities[1] = r.Capabilities[1], r.Capabilities[0] },
+		"reordered": func(r *SecurityPreflightReport) {
+			r.Capabilities[0], r.Capabilities[1] = r.Capabilities[1], r.Capabilities[0]
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			input, resolved, challenge, report := preflightFixture(t)

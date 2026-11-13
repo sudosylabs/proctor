@@ -6,8 +6,6 @@
 // ---------------------------------------------------------------------------------------------
 package model
 
-
-
 // NativeSecuritySummary excludes facts, source-instance and application
 // identities. Health is live coverage, never evidence of misconduct.
 type NativeSecuritySummary struct {
@@ -28,6 +26,7 @@ type NativeSecuritySummary struct {
 type ScreenClipCounts struct {
 	Requested, Recording, Uploading, Ready, Failed int
 }
+
 func (s NativeSecuritySummary) Validate() error {
 	if s.RetainedConditionRecords < 0 ||
 		s.RetainedConditionRecords > DeliveryAttemptRecordLimit ||

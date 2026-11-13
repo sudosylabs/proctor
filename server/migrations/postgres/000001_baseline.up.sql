@@ -2565,6 +2565,11 @@ CREATE TABLE exam_attempt_screen_clips (
     requested_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL CHECK (updated_at >= requested_at),
     revision bigint NOT NULL CHECK (revision > 0),
+    CONSTRAINT exam_attempt_screen_clips_id_canonical_check CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    CONSTRAINT exam_attempt_screen_clips_exam_attempt_id_canonical_check CHECK (exam_attempt_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    CONSTRAINT exam_attempt_screen_clips_requested_by_user_id_canonical_check CHECK (requested_by_user_id IS NULL OR requested_by_user_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    CONSTRAINT exam_attempt_screen_clips_integrity_flag_id_canonical_check CHECK (integrity_flag_id IS NULL OR integrity_flag_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    CONSTRAINT exam_attempt_screen_clips_delivered_pa_d3ddaa2b_canonical_check CHECK (delivered_participation_id IS NULL OR delivered_participation_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
     CONSTRAINT exam_attempt_screen_clips_provenance_check CHECK (
         (source = 'manager' AND requested_by_user_id IS NOT NULL AND integrity_flag_id IS NULL AND
          private_reason = btrim(private_reason) AND char_length(private_reason) BETWEEN 1 AND 1000 AND
@@ -2599,6 +2604,7 @@ CREATE TABLE exam_attempt_screen_clips (
 CREATE TABLE exam_attempt_screen_clip_chunks (
     screen_clip_id varchar(26) NOT NULL REFERENCES exam_attempt_screen_clips(id),
     chunk_index integer NOT NULL CHECK (chunk_index BETWEEN 0 AND 383),
+    CONSTRAINT exam_attempt_screen_clip_chunks_screen_clip_id_canonical_check CHECK (screen_clip_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
     sha256 char(64) NOT NULL CHECK (sha256 ~ '^[0-9a-f]{64}$'),
     size_bytes bigint NOT NULL CHECK (size_bytes BETWEEN 1 AND 8388608),
     received_at timestamptz NOT NULL,
@@ -5043,6 +5049,8 @@ CREATE INDEX retention_purge_objects_pending_idx ON retention_purge_objects (ver
 CREATE TABLE retention_purge_screen_clips (
     retirement_id varchar(26) NOT NULL REFERENCES retention_retirements(id),
     screen_clip_id varchar(26) NOT NULL,
+    CONSTRAINT retention_purge_screen_clips_retirement_id_canonical_check CHECK (retirement_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    CONSTRAINT retention_purge_screen_clips_screen_clip_id_canonical_check CHECK (screen_clip_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
     chunk_count smallint NOT NULL CHECK (chunk_count BETWEEN 1 AND 384),
     absence_verified_at timestamptz,
     verify_after timestamptz NOT NULL DEFAULT '-infinity',

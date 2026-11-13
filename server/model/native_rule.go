@@ -123,10 +123,11 @@ type NativeRule struct {
 
 var errNativeRule = errors.New("native rule is invalid")
 
-// NativeRuleCatalog is what rule validation needs beyond the registry: the
-// catalog application IDs a policy may name.
+// NativeRuleCatalog is the application catalog rules name: whether an
+// application is registered, and whether a policy may allow it. The release
+// registry is the catalog; baseline rules are checked against none.
 type NativeRuleCatalog interface {
-	HasApplication(id string) bool
+	Application(id string) (allowable, known bool)
 }
 
 // ValidateNativeRules checks a rule list against the registry, the activated
@@ -233,7 +234,7 @@ func (c NativeCondition) valid(
 		if c.AppsOnly != nil {
 			apps = c.AppsOnly
 		}
-		return capability.AppConditions && catalog != nil && validNativeAppIDs(apps, catalog)
+		return capability.AppConditions && catalog != nil && validNativeAppIDs(apps, catalog, c.AppsOnly != nil)
 	}
 }
 
@@ -276,12 +277,15 @@ func (s NativeScalar) fits(field NativeFieldDefinition) bool {
 	}
 }
 
-func validNativeAppIDs(ids []string, catalog NativeRuleCatalog) bool {
+// validNativeAppIDs checks an application list: sorted, unique, every ID
+// registered, and, for an allowlist, every application allowable.
+func validNativeAppIDs(ids []string, catalog NativeRuleCatalog, allowlist bool) bool {
 	if len(ids) == 0 || len(ids) > NativeRuleAppIDLimit || !slices.IsSorted(ids) {
 		return false
 	}
 	for i, id := range ids {
-		if (i > 0 && ids[i-1] == id) || !isNativeIdentifier(id) || !catalog.HasApplication(id) {
+		allowable, known := catalog.Application(id)
+		if (i > 0 && ids[i-1] == id) || !isNativeIdentifier(id) || !known || allowlist && !allowable {
 			return false
 		}
 	}

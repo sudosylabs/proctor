@@ -19,8 +19,8 @@ import (
 
 // nativeCapabilityRegistryDigest pins the registry Desktop generates from its
 // Rust types (proctor-desktop native/crates/prctr-capabilities/registry/
-// registry.json, commit b2eb4e8). A new file is copied in, never edited.
-const nativeCapabilityRegistryDigest = "sha256:43148f1ec806e5f0374d83845692375612597cfc9fc11f25565aa0ac5d3b8a5a"
+// registry.json, commit 04b7228). A new file is copied in, never edited.
+const nativeCapabilityRegistryDigest = "sha256:2a3cafc0b4bccad3e06d0a8602cc84692f4d85e99763db6feb40e1417549e099"
 
 func readNativeCapabilityRegistry(t *testing.T) []byte {
 	t.Helper()
@@ -45,6 +45,17 @@ func TestDesktopsCapabilityRegistryParses(t *testing.T) {
 	require.Equal(t, NativeCapabilityID("display"), capability)
 	require.Equal(t, NativeFieldCount, field.Type)
 	require.Equal(t, int64(32), field.Max)
+
+	for id, want := range map[string]bool{"teamviewer": false, "zoom": false, "discord": true, "visual_studio_code": true} {
+		allowable, known := registry.Application(id)
+		require.True(t, known, id)
+		require.Equal(t, want, allowable, id)
+	}
+	_, known := registry.Application("anydesk")
+	require.False(t, known, "the catalog is the release's, nothing else")
+	process, ok := registry.Capability("process_application")
+	require.True(t, ok)
+	require.True(t, process.AppConditions && process.Sensitive)
 
 	baseline := map[string]NativeRule{}
 	for _, rule := range registry.baseline {

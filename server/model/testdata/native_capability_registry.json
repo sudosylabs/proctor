@@ -1,6 +1,101 @@
 {
   "description": "Proctor native capability registry: capabilities, typed rule fields, reasons, baseline rules and fact schemas, generated from the Rust types.",
   "fact_schemas": {
+    "camera": {
+      "state": {
+        "$defs": {
+          "Coverage": {
+            "oneOf": [
+              {
+                "enum": [
+                  "readiness_and_use",
+                  "unavailable"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "readiness_only",
+                "description": "Devices and readiness are read; other-application use is not readable here.",
+                "type": "string"
+              }
+            ]
+          },
+          "Known": {
+            "enum": [
+              "yes",
+              "no",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "Readiness": {
+            "enum": [
+              "ready",
+              "not_ready",
+              "unknown"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "The camera state. The permission is in the envelope.",
+        "properties": {
+          "coverage": {
+            "$ref": "#/$defs/Coverage"
+          },
+          "in_use_by_other_app": {
+            "$ref": "#/$defs/Known"
+          },
+          "physical_devices": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "ready": {
+            "$ref": "#/$defs/Readiness",
+            "description": "A physical camera is connected and not suspended, and the permission is granted."
+          },
+          "virtual_devices": {
+            "description": "Software cameras, and cameras that cannot be classified. They never make the camera ready.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "coverage",
+          "physical_devices",
+          "virtual_devices",
+          "ready",
+          "in_use_by_other_app"
+        ],
+        "title": "CameraState",
+        "type": "object"
+      },
+      "summary": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "physical_devices": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "virtual_devices": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "physical_devices",
+          "virtual_devices"
+        ],
+        "title": "CameraSummary",
+        "type": "object"
+      }
+    },
     "candidate_window": {
       "state": {
         "$defs": {
@@ -379,6 +474,88 @@
         "type": "object"
       }
     },
+    "microphone": {
+      "state": {
+        "$defs": {
+          "Coverage": {
+            "oneOf": [
+              {
+                "enum": [
+                  "readiness_and_use",
+                  "unavailable"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "readiness_only",
+                "description": "Devices and readiness are read; other-application use is not readable here.",
+                "type": "string"
+              }
+            ]
+          },
+          "Known": {
+            "enum": [
+              "yes",
+              "no",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "Readiness": {
+            "enum": [
+              "ready",
+              "not_ready",
+              "unknown"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "The microphone state. The permission is in the envelope.",
+        "properties": {
+          "coverage": {
+            "$ref": "#/$defs/Coverage"
+          },
+          "devices": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "in_use_by_other_app": {
+            "$ref": "#/$defs/Known"
+          },
+          "ready": {
+            "$ref": "#/$defs/Readiness",
+            "description": "A microphone is available and the permission is granted."
+          }
+        },
+        "required": [
+          "coverage",
+          "devices",
+          "ready",
+          "in_use_by_other_app"
+        ],
+        "title": "MicrophoneState",
+        "type": "object"
+      },
+      "summary": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "devices": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "devices"
+        ],
+        "title": "MicrophoneSummary",
+        "type": "object"
+      }
+    },
     "network": {
       "state": {
         "$defs": {
@@ -610,6 +787,99 @@
         "type": "object"
       }
     },
+    "process_application": {
+      "state": {
+        "$defs": {
+          "Coverage": {
+            "oneOf": [
+              {
+                "enum": [
+                  "unavailable"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "full_lifecycle",
+                "description": "Every process start and exit is seen (the privileged components).",
+                "type": "string"
+              },
+              {
+                "const": "snapshot_only",
+                "description": "Periodic snapshots: a short-lived process can come and go unseen.",
+                "type": "string"
+              }
+            ]
+          },
+          "RuleMatch": {
+            "additionalProperties": false,
+            "description": "One application rule's match. `matched` means the condition is violated.",
+            "properties": {
+              "catalog_app_ids": {
+                "description": "Blocklist rules: the catalog applications found. Always empty for allowlist rules.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "matched": {
+                "type": "boolean"
+              },
+              "rule_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "rule_id",
+              "matched",
+              "catalog_app_ids"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "checking": {
+            "description": "New processes whose identity is still being verified.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "coverage": {
+            "$ref": "#/$defs/Coverage"
+          },
+          "rule_matches": {
+            "items": {
+              "$ref": "#/$defs/RuleMatch"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "coverage",
+          "checking",
+          "rule_matches"
+        ],
+        "title": "ProcessState",
+        "type": "object"
+      },
+      "summary": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "checking": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "checking"
+        ],
+        "title": "ProcessSummary",
+        "type": "object"
+      }
+    },
     "removable_storage": {
       "state": {
         "$defs": {
@@ -786,6 +1056,56 @@
     }
   },
   "registry": {
+    "applications": [
+      {
+        "allowable": false,
+        "id": "terminal"
+      },
+      {
+        "allowable": false,
+        "id": "script_editor"
+      },
+      {
+        "allowable": false,
+        "id": "screen_sharing"
+      },
+      {
+        "allowable": false,
+        "id": "quicktime_player"
+      },
+      {
+        "allowable": false,
+        "id": "teamviewer"
+      },
+      {
+        "allowable": false,
+        "id": "zoom"
+      },
+      {
+        "allowable": true,
+        "id": "discord"
+      },
+      {
+        "allowable": true,
+        "id": "slack"
+      },
+      {
+        "allowable": true,
+        "id": "visual_studio_code"
+      },
+      {
+        "allowable": true,
+        "id": "google_chrome"
+      },
+      {
+        "allowable": true,
+        "id": "firefox"
+      },
+      {
+        "allowable": true,
+        "id": "safari"
+      }
+    ],
     "baseline_rules": [
       {
         "capability": "display",
@@ -1261,6 +1581,96 @@
         ],
         "sensitive": false,
         "stability_ms": 0
+      },
+      {
+        "app_conditions": false,
+        "categories": [],
+        "fields": [
+          {
+            "max": 64,
+            "name": "camera.summary.physical_devices",
+            "type": "count"
+          },
+          {
+            "max": 64,
+            "name": "camera.summary.virtual_devices",
+            "type": "count"
+          },
+          {
+            "name": "camera.ready",
+            "type": "symbol",
+            "values": [
+              "ready",
+              "not_ready"
+            ]
+          },
+          {
+            "name": "camera.in_use_by_other_app",
+            "type": "symbol",
+            "values": [
+              "yes",
+              "no"
+            ]
+          }
+        ],
+        "id": "camera",
+        "permission_prompt": true,
+        "reasons": [
+          "camera.not_ready",
+          "camera.in_use_by_other_app",
+          "camera.virtual_device"
+        ],
+        "sensitive": false,
+        "stability_ms": 2000
+      },
+      {
+        "app_conditions": false,
+        "categories": [],
+        "fields": [
+          {
+            "max": 64,
+            "name": "microphone.summary.devices",
+            "type": "count"
+          },
+          {
+            "name": "microphone.ready",
+            "type": "symbol",
+            "values": [
+              "ready",
+              "not_ready"
+            ]
+          },
+          {
+            "name": "microphone.in_use_by_other_app",
+            "type": "symbol",
+            "values": [
+              "yes",
+              "no"
+            ]
+          }
+        ],
+        "id": "microphone",
+        "permission_prompt": true,
+        "reasons": [
+          "microphone.not_ready",
+          "microphone.in_use_by_other_app",
+          "microphone.virtual_device"
+        ],
+        "sensitive": false,
+        "stability_ms": 2000
+      },
+      {
+        "app_conditions": true,
+        "categories": [],
+        "fields": [],
+        "id": "process_application",
+        "permission_prompt": false,
+        "reasons": [
+          "process_application.blocked_application",
+          "process_application.unlisted_application"
+        ],
+        "sensitive": true,
+        "stability_ms": 2000
       }
     ]
   }

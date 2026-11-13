@@ -1407,73 +1407,6 @@
       }
     },
     {
-      "name": "two_app_conditions_in_one_rule_are_refused",
-      "policy": {
-        "activations": [
-          {
-            "capability": "apps",
-            "categories": []
-          }
-        ],
-        "rules": [
-          {
-            "capability": "apps",
-            "mode": "enforce",
-            "phase": "both",
-            "reason": "apps.reason",
-            "requirement": {
-              "All": {
-                "conditions": [
-                  {
-                    "AppsAbsent": {
-                      "catalog_app_ids": [
-                        "a"
-                      ]
-                    }
-                  },
-                  {
-                    "AppsOnly": {
-                      "catalog_app_ids": [
-                        "b"
-                      ]
-                    }
-                  }
-                ]
-              }
-            },
-            "rule_id": "r"
-          }
-        ]
-      }
-    },
-    {
-      "name": "an_app_condition_on_a_capability_without_them_is_refused",
-      "policy": {
-        "activations": [
-          {
-            "capability": "example",
-            "categories": []
-          }
-        ],
-        "rules": [
-          {
-            "capability": "example",
-            "mode": "enforce",
-            "phase": "both",
-            "reason": "example.reason",
-            "requirement": {
-              "AppsAbsent": {
-                "catalog_app_ids": [
-                  "a"
-                ]
-              }
-            },
-            "rule_id": "r"
-          }
-        ]
-      }
-    },
-    {
       "name": "a_value_outside_the_field_type_is_refused",
       "policy": {
         "activations": [
@@ -1578,9 +1511,149 @@
           }
         ]
       }
+    },
+    {
+      "name": "two_app_conditions_in_one_rule_are_refused",
+      "policy": {
+        "activations": [
+          {
+            "capability": "apps",
+            "categories": []
+          }
+        ],
+        "rules": [
+          {
+            "capability": "apps",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "apps.reason",
+            "requirement": {
+              "All": {
+                "conditions": [
+                  {
+                    "AppsAbsent": {
+                      "catalog_app_ids": [
+                        "a"
+                      ]
+                    }
+                  },
+                  {
+                    "AppsOnly": {
+                      "catalog_app_ids": [
+                        "b"
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            "rule_id": "r"
+          }
+        ]
+      }
+    },
+    {
+      "name": "an_unregistered_catalog_application_is_refused",
+      "policy": {
+        "activations": [
+          {
+            "capability": "apps",
+            "categories": []
+          }
+        ],
+        "rules": [
+          {
+            "capability": "apps",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "apps.reason",
+            "requirement": {
+              "AppsAbsent": {
+                "catalog_app_ids": [
+                  "not_in_catalog"
+                ]
+              }
+            },
+            "rule_id": "r"
+          }
+        ]
+      }
+    },
+    {
+      "name": "an_allowlist_naming_a_never_allowable_application_is_refused",
+      "policy": {
+        "activations": [
+          {
+            "capability": "apps",
+            "categories": []
+          }
+        ],
+        "rules": [
+          {
+            "capability": "apps",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "apps.reason",
+            "requirement": {
+              "AppsOnly": {
+                "catalog_app_ids": [
+                  "editor",
+                  "teamviewer"
+                ]
+              }
+            },
+            "rule_id": "r"
+          }
+        ]
+      }
+    },
+    {
+      "name": "an_app_condition_on_a_capability_without_them_is_refused",
+      "policy": {
+        "activations": [
+          {
+            "capability": "example",
+            "categories": []
+          }
+        ],
+        "rules": [
+          {
+            "capability": "example",
+            "mode": "enforce",
+            "phase": "both",
+            "reason": "example.reason",
+            "requirement": {
+              "AppsAbsent": {
+                "catalog_app_ids": [
+                  "a"
+                ]
+              }
+            },
+            "rule_id": "r"
+          }
+        ]
+      }
     }
   ],
   "registry": {
+    "applications": [
+      {
+        "allowable": false,
+        "id": "teamviewer"
+      },
+      {
+        "allowable": true,
+        "id": "editor"
+      },
+      {
+        "allowable": true,
+        "id": "a"
+      },
+      {
+        "allowable": true,
+        "id": "b"
+      }
+    ],
     "baseline_rules": [],
     "capabilities": [
       {

@@ -23,8 +23,16 @@ var nativeFactSchemaKinds = []string{"state", "summary"}
 // of its rule conformance vectors, as Desktop generates it from its Rust
 // types.
 type nativeRegistryWire struct {
-	BaselineRules []json.RawMessage      `json:"baseline_rules"`
-	Capabilities  []nativeCapabilityWire `json:"capabilities"`
+	Applications  []nativeApplicationWire `json:"applications"`
+	BaselineRules []json.RawMessage       `json:"baseline_rules"`
+	Capabilities  []nativeCapabilityWire  `json:"capabilities"`
+}
+
+// nativeApplicationWire is one entry of the release-owned application
+// catalog, which Desktop compiles into the agent.
+type nativeApplicationWire struct {
+	ID        string `json:"id"`
+	Allowable bool   `json:"allowable"`
 }
 
 type nativeCapabilityWire struct {
@@ -122,6 +130,16 @@ func (w nativeRegistryWire) registry() (*NativeCapabilityRegistry, error) {
 	}
 	registry, err := NewNativeCapabilityRegistry(definitions)
 	if err != nil {
+		return nil, err
+	}
+	if w.Applications == nil {
+		return nil, errNativeRegistry
+	}
+	applications := make([]NativeApplication, 0, len(w.Applications))
+	for _, application := range w.Applications {
+		applications = append(applications, NativeApplication(application))
+	}
+	if registry, err = registry.withApplications(applications); err != nil {
 		return nil, err
 	}
 

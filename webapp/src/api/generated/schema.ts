@@ -8145,7 +8145,7 @@ export interface components {
             ordinal: number;
             policy_id: string;
             /** @constant */
-            registry_digest: "sha256:43148f1ec806e5f0374d83845692375612597cfc9fc11f25565aa0ac5d3b8a5a";
+            registry_digest: "sha256:2a3cafc0b4bccad3e06d0a8602cc84692f4d85e99763db6feb40e1417549e099";
             resolved_exception_refs: string[];
             /** @constant */
             retention_class_id: "native_minimized";
@@ -10227,7 +10227,7 @@ export interface components {
                 }
             ];
             /** @constant */
-            registry_digest: "sha256:43148f1ec806e5f0374d83845692375612597cfc9fc11f25565aa0ac5d3b8a5a";
+            registry_digest: "sha256:2a3cafc0b4bccad3e06d0a8602cc84692f4d85e99763db6feb40e1417549e099";
             screen_recording: components["schemas"]["NativeScreenRecordingPolicy"];
         };
         NativeSecurityStreamStatus: {
@@ -15656,7 +15656,7 @@ export interface components {
                  *             "mode": "disabled"
                  *           }
                  *         ],
-                 *         "registry_digest": "sha256:43148f1ec806e5f0374d83845692375612597cfc9fc11f25565aa0ac5d3b8a5a",
+                 *         "registry_digest": "sha256:2a3cafc0b4bccad3e06d0a8602cc84692f4d85e99763db6feb40e1417549e099",
                  *         "screen_recording": {
                  *           "enabled": true
                  *         }
@@ -16313,7 +16313,7 @@ export interface components {
                 /**
                  * @example {
                  *       "configuration_manifest_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                 *       "native_registry_digest": "sha256:43148f1ec806e5f0374d83845692375612597cfc9fc11f25565aa0ac5d3b8a5a",
+                 *       "native_registry_digest": "sha256:2a3cafc0b4bccad3e06d0a8602cc84692f4d85e99763db6feb40e1417549e099",
                  *       "source_manifest_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                  *     }
                  */

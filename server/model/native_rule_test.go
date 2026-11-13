@@ -16,12 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type testAppCatalog map[string]bool
-
-func (c testAppCatalog) HasApplication(id string) bool { return c[id] }
-
-var testApps = testAppCatalog{"anydesk": true, "discord": true, "teamviewer": true}
-
 func testNativeRegistry(t *testing.T) *NativeCapabilityRegistry {
 	t.Helper()
 	registry, err := NewNativeCapabilityRegistry([]NativeCapabilityDefinition{
@@ -44,6 +38,10 @@ func testNativeRegistry(t *testing.T) *NativeCapabilityRegistry {
 			ID: "process_application", Stability: time.Second, Reasons: []string{"process.blocked_app_running"},
 			AppConditions: true,
 		},
+	})
+	require.NoError(t, err)
+	registry, err = registry.withApplications([]NativeApplication{
+		{ID: "anydesk", Allowable: false}, {ID: "discord", Allowable: true}, {ID: "teamviewer", Allowable: false},
 	})
 	require.NoError(t, err)
 	return registry
@@ -71,7 +69,7 @@ func TestNativeRuleRoundTripsThroughDesktopsGrammar(t *testing.T) {
 	var rule NativeRule
 	require.NoError(t, json.Unmarshal([]byte(document), &rule))
 	require.Equal(t, []string{"anydesk", "discord", "teamviewer"}, rule.Requirement.AppsAbsent)
-	require.NoError(t, ValidateNativeRules([]NativeRule{rule}, testNativeRegistry(t), testActivated, testApps))
+	require.NoError(t, ValidateNativeRules([]NativeRule{rule}, testNativeRegistry(t), testActivated, testNativeRegistry(t)))
 	encoded, err := json.Marshal(rule)
 	require.NoError(t, err)
 	require.JSONEq(t, document, string(encoded))
@@ -82,7 +80,7 @@ func TestNativeRuleRoundTripsThroughDesktopsGrammar(t *testing.T) {
 		`{"Not":{"condition":{"Compare":{"field":"camera.virtual_present","op":"eq","value":true}}}},` +
 		`{"Compare":{"field":"camera.ready","op":"in","value":["ready"]}}]}}}`
 	require.NoError(t, json.Unmarshal([]byte(nested), &rule))
-	require.NoError(t, ValidateNativeRules([]NativeRule{rule}, testNativeRegistry(t), testActivated, testApps))
+	require.NoError(t, ValidateNativeRules([]NativeRule{rule}, testNativeRegistry(t), testActivated, testNativeRegistry(t)))
 	encoded, err = json.Marshal(rule)
 	require.NoError(t, err)
 	require.JSONEq(t, nested, string(encoded))
@@ -113,7 +111,7 @@ func TestNativeRuleValidationHoldsTheRegistryAndBounds(t *testing.T) {
 
 	registry := testNativeRegistry(t)
 	valid := singleDisplayRule()
-	require.NoError(t, ValidateNativeRules([]NativeRule{valid}, registry, testActivated, testApps))
+	require.NoError(t, ValidateNativeRules([]NativeRule{valid}, registry, testActivated, registry))
 
 	compare := func(field string, op NativeCompareOp, value NativeScalar) NativeCondition {
 		return NativeCondition{Compare: &NativeComparison{Field: field, Op: op, Value: value}}
@@ -160,28 +158,38 @@ func TestNativeRuleValidationHoldsTheRegistryAndBounds(t *testing.T) {
 	} {
 		rule := singleDisplayRule()
 		change(&rule)
-		require.Error(t, ValidateNativeRules([]NativeRule{rule}, registry, testActivated, testApps), name)
+		require.Error(t, ValidateNativeRules([]NativeRule{rule}, registry, testActivated, registry), name)
 	}
 
 	apps := func(ids ...string) NativeRule {
 		return NativeRule{RuleID: "r1", Capability: "process_application", Mode: NativeRuleEnforce, Phase: NativeRuleBoth,
 			Reason: "process.blocked_app_running", Requirement: NativeCondition{AppsAbsent: ids}}
 	}
-	require.NoError(t, ValidateNativeRules([]NativeRule{apps("anydesk", "discord")}, registry, testActivated, testApps))
-	require.Error(t, ValidateNativeRules([]NativeRule{apps("zoom")}, registry, testActivated, testApps), "not in the catalog")
-	require.Error(t, ValidateNativeRules([]NativeRule{apps("discord", "anydesk")}, registry, testActivated, testApps), "unsorted")
-	require.Error(t, ValidateNativeRules([]NativeRule{apps("discord", "discord")}, registry, testActivated, testApps), "duplicate")
+	require.NoError(t, ValidateNativeRules([]NativeRule{apps("anydesk", "discord")}, registry, testActivated, registry))
+	require.Error(t, ValidateNativeRules([]NativeRule{apps("zoom")}, registry, testActivated, registry), "not in the catalog")
+	require.Error(t, ValidateNativeRules([]NativeRule{apps("discord", "anydesk")}, registry, testActivated, registry), "unsorted")
+	require.Error(t, ValidateNativeRules([]NativeRule{apps("discord", "discord")}, registry, testActivated, registry), "duplicate")
 	twoApps := apps("discord")
 	twoApps.Requirement = NativeCondition{Any: []NativeCondition{{AppsAbsent: []string{"discord"}}, {AppsOnly: []string{"anydesk"}}}}
-	require.Error(t, ValidateNativeRules([]NativeRule{twoApps}, registry, testActivated, testApps), "one application condition per rule")
+	require.Error(t, ValidateNativeRules([]NativeRule{twoApps}, registry, testActivated, registry), "one application condition per rule")
 
-	require.Error(t, ValidateNativeRules([]NativeRule{valid, valid}, registry, testActivated, testApps), "duplicate rule ID")
+	only := apps("discord")
+	only.Requirement = NativeCondition{AppsOnly: []string{"discord"}}
+	require.NoError(t, ValidateNativeRules([]NativeRule{only}, registry, testActivated, registry), "an allowable application may be allowed")
+	only.Requirement = NativeCondition{AppsOnly: []string{"anydesk", "discord"}}
+	require.Error(t, ValidateNativeRules([]NativeRule{only}, registry, testActivated, registry), "a never-allowable application may not be allowed")
+	require.Error(t, ValidateNativeRules([]NativeRule{apps("discord")}, registry, testActivated, nil), "no catalog, no application rules")
+
+	_, err := registry.withApplications([]NativeApplication{{ID: "zoom"}, {ID: "zoom", Allowable: true}})
+	require.Error(t, err, "a catalog names each application once")
+
+	require.Error(t, ValidateNativeRules([]NativeRule{valid, valid}, registry, testActivated, registry), "duplicate rule ID")
 	tooMany := make([]NativeRule, NativeRuleLimit+1)
 	for i := range tooMany {
 		tooMany[i] = singleDisplayRule()
 		tooMany[i].RuleID = fmt.Sprintf("r%d", i)
 	}
-	require.Error(t, ValidateNativeRules(tooMany, registry, testActivated, testApps), "more than the rule limit")
+	require.Error(t, ValidateNativeRules(tooMany, registry, testActivated, registry), "more than the rule limit")
 }
 
 func TestNativeEnvelopeNamesAreNotRuleFields(t *testing.T) {

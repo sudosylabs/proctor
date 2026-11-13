@@ -21,9 +21,9 @@ import (
 
 // nativeRuleConformanceDigest pins the vectors Desktop publishes from its
 // Rust tests (proctor-desktop native/crates/prctr-core/conformance/rules.json,
-// commit 7986e60). Desktop and the server must reach the same status on every
+// commit 04b7228). Desktop and the server must reach the same status on every
 // step, so a new file is copied in, never edited.
-const nativeRuleConformanceDigest = "4efe5b7aff86571c88ce22a894d7f598ec9f3b60379bf1aca2b33dbb65b86049"
+const nativeRuleConformanceDigest = "5598dc7438ea87541e03282f96a61354c190257a577849b6e2800fca3a4a770a"
 
 type conformanceFile struct {
 	Description string             `json:"description"`
@@ -68,11 +68,6 @@ type conformanceState struct {
 	} `json:"apps"`
 }
 
-// anyApplication accepts every catalog ID; the vectors name their own.
-type anyApplication struct{}
-
-func (anyApplication) HasApplication(string) bool { return true }
-
 func loadNativeRuleConformance(t *testing.T) (conformanceFile, *NativeCapabilityRegistry) {
 	t.Helper()
 	raw, err := os.ReadFile("testdata/native_rule_conformance.json")
@@ -103,7 +98,8 @@ func (p conformancePolicy) rules(registry *NativeCapabilityRegistry) ([]NativeRu
 		}
 		rules = append(rules, rule)
 	}
-	return rules, ValidateNativeRules(rules, registry, activated, anyApplication{})
+	// The vectors' registry carries their own application catalog.
+	return rules, ValidateNativeRules(rules, registry, activated, registry)
 }
 
 func (s conformanceState) facts(t *testing.T, registry *NativeCapabilityRegistry) *NativeCapabilityFacts {

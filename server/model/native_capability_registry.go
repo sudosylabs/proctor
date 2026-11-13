@@ -76,6 +76,46 @@ type NativeCapabilityRegistry struct {
 	factSchemas map[NativeCapabilityID]map[string]json.RawMessage
 	// validator checks reported facts against factSchemas.
 	validator NativeFactValidator
+	// applications is the release-owned application catalog: each catalog
+	// ID, and whether a policy may allow it.
+	applications map[string]bool
+}
+
+// NativeApplicationCatalogLimit bounds the release's application catalog.
+const NativeApplicationCatalogLimit = 1024
+
+// NativeApplication is one catalog application. Allowable is false for an
+// application no policy may allow, such as a remote-control tool.
+type NativeApplication struct {
+	ID        string
+	Allowable bool
+}
+
+// withApplications returns the registry with its application catalog.
+func (r *NativeCapabilityRegistry) withApplications(applications []NativeApplication) (*NativeCapabilityRegistry, error) {
+	if len(applications) > NativeApplicationCatalogLimit {
+		return nil, errNativeRegistry
+	}
+	catalog := make(map[string]bool, len(applications))
+	for _, application := range applications {
+		if _, duplicate := catalog[application.ID]; duplicate || !isNativeIdentifier(application.ID) {
+			return nil, errNativeRegistry
+		}
+		catalog[application.ID] = application.Allowable
+	}
+	registry := *r
+	registry.applications = catalog
+	return &registry, nil
+}
+
+// Application reports whether id is in the release's catalog, and whether a
+// policy may allow it.
+func (r *NativeCapabilityRegistry) Application(id string) (allowable, known bool) {
+	if r == nil {
+		return false, false
+	}
+	allowable, known = r.applications[id]
+	return allowable, known
 }
 
 // NativeFactValidator checks a capability's reported state or summary

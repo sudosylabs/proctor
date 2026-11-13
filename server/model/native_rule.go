@@ -264,17 +264,8 @@ func (c NativeComparison) valid(registry *NativeCapabilityRegistry, capability N
 }
 
 func (s NativeScalar) fits(field NativeFieldDefinition) bool {
-	if s.Type != field.Type {
-		return false
-	}
-	switch s.Type {
-	case NativeFieldCount:
-		return s.Count >= 0 && (field.Max == 0 || s.Count <= field.Max) && s.Enum == "" && !s.Boolean
-	case NativeFieldEnum:
-		return s.Count == 0 && !s.Boolean && slices.Contains(field.Values, s.Enum)
-	default:
-		return s.Count == 0 && s.Enum == ""
-	}
+	kind, known := nativeFieldKinds[s.Type]
+	return known && s.Type == field.Type && kind.fits(s, field)
 }
 
 // validNativeAppIDs checks an application list: sorted, unique, every ID
@@ -476,14 +467,10 @@ func (c NativeComparison) encodedValue() (json.RawMessage, error) {
 }
 
 func (s NativeScalar) plain() any {
-	switch s.Type {
-	case NativeFieldCount:
-		return s.Count
-	case NativeFieldEnum:
-		return s.Enum
-	default:
-		return s.Boolean
+	if kind, known := nativeFieldKinds[s.Type]; known {
+		return kind.plain(s)
 	}
+	return nil
 }
 
 func (w nativeCompareWire) comparison() (NativeComparison, error) {

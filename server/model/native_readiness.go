@@ -147,24 +147,11 @@ func nativeFactValue(state, summary map[string]any, name string) (any, bool) {
 }
 
 func nativeFieldValue(field NativeFieldDefinition, value any) (NativeScalar, bool) {
-	switch field.Type {
-	case NativeFieldCount:
-		number, ok := value.(json.Number)
-		if !ok {
-			return NativeScalar{}, false
-		}
-		count, err := number.Int64()
-		if err != nil || count < 0 || field.Max > 0 && count > field.Max {
-			return NativeScalar{}, false
-		}
-		return NativeCount(count), true
-	case NativeFieldEnum:
-		text, ok := value.(string)
-		return NativeEnum(text), ok && slices.Contains(field.Values, text)
-	default:
-		boolean, ok := value.(bool)
-		return NativeBoolean(boolean), ok
+	kind, known := nativeFieldKinds[field.Type]
+	if !known {
+		return NativeScalar{}, false
 	}
+	return kind.read(field, value)
 }
 
 // nativeApplicationFacts reads the process capability's minimized state: the

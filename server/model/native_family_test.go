@@ -48,3 +48,19 @@ func TestEveryNativeFamilyIsDefinedOnceAndRoundTrips(t *testing.T) {
 	require.True(t, compiles)
 	require.Equal(t, NativeCapabilityID("network"), capability)
 }
+
+func TestEveryNativeFieldTypeHasAKind(t *testing.T) {
+	t.Parallel()
+
+	for _, fieldType := range []NativeFieldType{NativeFieldCount, NativeFieldEnum, NativeFieldBoolean} {
+		kind, known := nativeFieldKinds[fieldType]
+		require.True(t, known, fieldType)
+		require.NotNil(t, kind.defines, fieldType)
+		require.NotNil(t, kind.read, fieldType)
+		require.NotNil(t, kind.fits, fieldType)
+		require.NotNil(t, kind.plain, fieldType)
+	}
+	require.Len(t, nativeFieldKinds, 3)
+	require.False(t, validNativeField(NativeFieldDefinition{Name: "display.summary.colour", Type: "colour"}), "an unknown type defines no field")
+	require.False(t, NativeScalar{Type: "colour"}.fits(NativeFieldDefinition{Type: "colour"}))
+}

@@ -27,6 +27,59 @@ const (
 	NativeFieldBoolean NativeFieldType = "boolean"
 )
 
+// nativeFieldKind is everything one field type is: what a registered field
+// of it declares, how a fact's value is read, which values a rule may compare
+// it with, and how such a value is written.
+type nativeFieldKind struct {
+	defines func(NativeFieldDefinition) bool
+	read    func(NativeFieldDefinition, any) (NativeScalar, bool)
+	fits    func(NativeScalar, NativeFieldDefinition) bool
+	plain   func(NativeScalar) any
+}
+
+var nativeFieldKinds = map[NativeFieldType]nativeFieldKind{
+	NativeFieldCount: {
+		defines: func(field NativeFieldDefinition) bool { return len(field.Values) == 0 && field.Max >= 0 },
+		read: func(field NativeFieldDefinition, value any) (NativeScalar, bool) {
+			number, ok := value.(json.Number)
+			if !ok {
+				return NativeScalar{}, false
+			}
+			count, err := number.Int64()
+			if err != nil || count < 0 || field.Max > 0 && count > field.Max {
+				return NativeScalar{}, false
+			}
+			return NativeCount(count), true
+		},
+		fits: func(s NativeScalar, field NativeFieldDefinition) bool {
+			return s.Count >= 0 && (field.Max == 0 || s.Count <= field.Max) && s.Enum == "" && !s.Boolean
+		},
+		plain: func(s NativeScalar) any { return s.Count },
+	},
+	NativeFieldEnum: {
+		defines: func(field NativeFieldDefinition) bool {
+			return len(field.Values) > 0 && len(field.Values) <= 32 && uniqueNativeIdentifiers(field.Values) && field.Max == 0
+		},
+		read: func(field NativeFieldDefinition, value any) (NativeScalar, bool) {
+			text, ok := value.(string)
+			return NativeEnum(text), ok && slices.Contains(field.Values, text)
+		},
+		fits: func(s NativeScalar, field NativeFieldDefinition) bool {
+			return s.Count == 0 && !s.Boolean && slices.Contains(field.Values, s.Enum)
+		},
+		plain: func(s NativeScalar) any { return s.Enum },
+	},
+	NativeFieldBoolean: {
+		defines: func(field NativeFieldDefinition) bool { return len(field.Values) == 0 && field.Max == 0 },
+		read: func(_ NativeFieldDefinition, value any) (NativeScalar, bool) {
+			boolean, ok := value.(bool)
+			return NativeBoolean(boolean), ok
+		},
+		fits:  func(s NativeScalar, _ NativeFieldDefinition) bool { return s.Count == 0 && s.Enum == "" },
+		plain: func(s NativeScalar) any { return s.Boolean },
+	},
+}
+
 // NativeFieldDefinition is one registered fact field. Desktop generates the
 // list from its fact types; a rule may compare nothing else.
 type NativeFieldDefinition struct {
@@ -223,16 +276,8 @@ func validNativeField(field NativeFieldDefinition) bool {
 	if len(field.Name) > 128 || !isNativeFieldName(field.Name) || nativeEnvelopeField(field.Name) {
 		return false
 	}
-	switch field.Type {
-	case NativeFieldCount:
-		return len(field.Values) == 0 && field.Max >= 0
-	case NativeFieldBoolean:
-		return len(field.Values) == 0 && field.Max == 0
-	case NativeFieldEnum:
-		return len(field.Values) > 0 && len(field.Values) <= 32 && uniqueNativeIdentifiers(field.Values) && field.Max == 0
-	default:
-		return false
-	}
+	kind, known := nativeFieldKinds[field.Type]
+	return known && kind.defines(field)
 }
 
 // nativeEnvelopeField reports whether a field name is part of the envelope

@@ -4963,9 +4963,9 @@ export const searchEntries = [
     "kind": "realtime-message",
     "group": "Realtime",
     "title": "Your Attempt was re-allowed",
-    "description": "Tells the candidate their Attempt is active again.",
+    "description": "Tells the candidate their Attempt is ready again; Desktop makes a fresh preflight and connects to resume.",
     "href": "/api/reference/realtime-protocol/exam-attempt-access-reallowed",
-    "searchText": "exam_attempt_access_reallowed exam_attempt_access_reallowed your attempt was re-allowed tells the candidate their attempt is active again. delivered to the addressed user's connections that subscribe to exam.sitting.participate on the exam sitting. event attempts"
+    "searchText": "exam_attempt_access_reallowed exam_attempt_access_reallowed your attempt was re-allowed tells the candidate their attempt is ready again; desktop makes a fresh preflight and connects to resume. delivered to the addressed user's connections that subscribe to exam.sitting.participate on the exam sitting. event attempts"
   },
   {
     "id": "realtime:exam_attempt_access_suspended",
@@ -5035,9 +5035,9 @@ export const searchEntries = [
     "kind": "realtime-message",
     "group": "Realtime",
     "title": "Attempt re-allowed",
-    "description": "An Attempt Suspension was closed and the Attempt is active again.",
+    "description": "An Attempt Suspension was closed and the Attempt is ready again; it becomes active only through a new secure admission.",
     "href": "/api/reference/realtime-protocol/exam-attempt-reallowed",
-    "searchText": "exam_attempt_reallowed exam_attempt_reallowed attempt re-allowed an attempt suspension was closed and the attempt is active again. delivered to connections that subscribe to exam.sitting.view on the exam sitting. event attempts"
+    "searchText": "exam_attempt_reallowed exam_attempt_reallowed attempt re-allowed an attempt suspension was closed and the attempt is ready again; it becomes active only through a new secure admission. delivered to connections that subscribe to exam.sitting.view on the exam sitting. event attempts"
   },
   {
     "id": "realtime:exam_attempt_renew_reply",

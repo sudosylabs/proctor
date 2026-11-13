@@ -32,7 +32,7 @@ func familiesWith(t *testing.T, documents ...string) []NativeFamilyPolicy {
 
 func compiledRules(t *testing.T, families []NativeFamilyPolicy) (map[string]NativeRule, []NativeActivation) {
 	t.Helper()
-	activations, rules, err := compileNativePolicy(checkedRegistry(t), families)
+	activations, rules, err := compileNativePolicy(checkedRegistry(t), families, NativeScreenRecordingPolicy{})
 	require.NoError(t, err)
 	byID := map[string]NativeRule{}
 	for _, rule := range rules {
@@ -87,11 +87,11 @@ func TestAFamilyTheReleaseCannotCheckRefusesThePolicy(t *testing.T) {
 		"unregistered application":    `{"id":"process_application","mode":"enforce","allowed_application_ids":["anydesk"],"outcome":"flag"}`,
 		"never-allowable allowlisted": `{"id":"process_application","mode":"enforce","allowed_application_ids":["teamviewer"],"outcome":"flag"}`,
 	} {
-		_, _, err := compileNativePolicy(registry, familiesWith(t, document))
+		_, _, err := compileNativePolicy(registry, familiesWith(t, document), NativeScreenRecordingPolicy{})
 		require.ErrorIs(t, err, ErrNativeCatalogUnavailable, name)
 	}
 	_, _, err := compileNativePolicy(nil, familiesWith(t,
-		`{"id":"virtualization","mode":"observe","rule":"block_recognized_guest","outcome":"flag"}`))
+		`{"id":"virtualization","mode":"observe","rule":"block_recognized_guest","outcome":"flag"}`), NativeScreenRecordingPolicy{})
 	require.ErrorIs(t, err, ErrNativeCoverageUnsupported, "an enabled family without a registry does nothing, so it is refused")
 }
 

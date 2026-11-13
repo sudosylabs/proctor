@@ -47,7 +47,7 @@ func fixture(t *testing.T) releaseFixture {
 	parsed, err := model.ParseNativeCapabilityRegistry(registry)
 	require.NoError(t, err)
 	for _, capability := range []model.NativeCapabilityID{"camera", "candidate_window", "clipboard", "display", "interactive_session",
-		"microphone", "network", "printing", "process_application", "removable_storage", "virtualization"} {
+		"microphone", "network", "printing", "process_application", "removable_storage", "screen_recording", "virtualization"} {
 		_, registered := parsed.Capability(capability)
 		require.True(t, registered, capability)
 		f.matrix.Capabilities = append(f.matrix.Capabilities, model.NativeCapabilityCertification{

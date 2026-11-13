@@ -8145,7 +8145,7 @@ export interface components {
             ordinal: number;
             policy_id: string;
             /** @constant */
-            registry_digest: "sha256:2a3cafc0b4bccad3e06d0a8602cc84692f4d85e99763db6feb40e1417549e099";
+            registry_digest: "sha256:b8da9b04779e2fa14d7e6d63393c80b9499749291c7132cf41745bddbf0e5313";
             resolved_exception_refs: string[];
             /** @constant */
             retention_class_id: "native_minimized";
@@ -10119,7 +10119,7 @@ export interface components {
             rule_id: string;
             to: components["schemas"]["NativeRuleReport"];
         };
-        /** @description Whether Desktop records the candidate's screen on the device for the whole session, uploading only the ranges the server requests. Off by default; the candidate is told before the Attempt starts. */
+        /** @description Whether Desktop records the candidate's screen on the device for the whole session, uploading only the ranges the server requests. Off by default; the candidate is told before the Attempt starts. When on, the policy activates the screen_recording capability with the readiness rule screen_recording.free_space: Start is refused unless the recorder is permitted and the device has at least 3072 MiB free. */
         NativeScreenRecordingPolicy: {
             enabled: boolean;
         };
@@ -10199,7 +10199,7 @@ export interface components {
                 }
             ];
             /** @constant */
-            registry_digest: "sha256:2a3cafc0b4bccad3e06d0a8602cc84692f4d85e99763db6feb40e1417549e099";
+            registry_digest: "sha256:b8da9b04779e2fa14d7e6d63393c80b9499749291c7132cf41745bddbf0e5313";
             screen_recording: components["schemas"]["NativeScreenRecordingPolicy"];
         };
         NativeSecurityStreamStatus: {
@@ -15584,7 +15584,7 @@ export interface components {
                  *             "outcome": "flag"
                  *           }
                  *         ],
-                 *         "registry_digest": "sha256:2a3cafc0b4bccad3e06d0a8602cc84692f4d85e99763db6feb40e1417549e099",
+                 *         "registry_digest": "sha256:b8da9b04779e2fa14d7e6d63393c80b9499749291c7132cf41745bddbf0e5313",
                  *         "screen_recording": {
                  *           "enabled": true
                  *         }
@@ -16241,7 +16241,7 @@ export interface components {
                 /**
                  * @example {
                  *       "configuration_manifest_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                 *       "native_registry_digest": "sha256:2a3cafc0b4bccad3e06d0a8602cc84692f4d85e99763db6feb40e1417549e099"
+                 *       "native_registry_digest": "sha256:b8da9b04779e2fa14d7e6d63393c80b9499749291c7132cf41745bddbf0e5313"
                  *     }
                  */
                 "application/json": components["schemas"]["PrepareSecurityPreflightRequest"];

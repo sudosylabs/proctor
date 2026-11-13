@@ -56,7 +56,7 @@ func TestTheBaselineCompilesIntoEveryPolicy(t *testing.T) {
 
 	registry, err := ParseNativeCapabilityRegistry(readNativeCapabilityRegistry(t))
 	require.NoError(t, err)
-	activations, rules, err := compileNativePolicy(registry, DefaultNativeSecurityPolicy().Families)
+	activations, rules, err := compileNativePolicy(registry, DefaultNativeSecurityPolicy().Families, NativeScreenRecordingPolicy{})
 	require.NoError(t, err)
 	require.Equal(t, []NativeActivation{
 		{Capability: "candidate_window", Categories: []string{}},
@@ -65,7 +65,7 @@ func TestTheBaselineCompilesIntoEveryPolicy(t *testing.T) {
 	}, activations, "every capability the baseline needs runs, in a stable order")
 	require.Len(t, rules, 3)
 
-	none, noRules, err := compileNativePolicy(nil, DefaultNativeSecurityPolicy().Families)
+	none, noRules, err := compileNativePolicy(nil, DefaultNativeSecurityPolicy().Families, NativeScreenRecordingPolicy{})
 	require.NoError(t, err, "with every family off, no registry is needed")
 	require.Empty(t, none)
 	require.Empty(t, noRules)
@@ -75,7 +75,7 @@ func TestTheServerDecidesReadinessFromTheReportedState(t *testing.T) {
 	t.Parallel()
 
 	registry := checkedRegistry(t)
-	activations, rules, err := compileNativePolicy(registry, DefaultNativeSecurityPolicy().Families)
+	activations, rules, err := compileNativePolicy(registry, DefaultNativeSecurityPolicy().Families, NativeScreenRecordingPolicy{})
 	require.NoError(t, err)
 
 	statuses, blocked, ok := evaluateNativeReadiness(registry, activations, rules, compliantStart())
@@ -169,4 +169,73 @@ func TestReadinessReportsAreBounded(t *testing.T) {
 	require.True(t, NativeRuleReport{RuleID: "baseline.session", Status: NativeRuleUnknown, UnknownCause: NativeUnknownPartial}.validate())
 	require.False(t, NativeRuleReport{RuleID: "baseline.session", Status: NativeRuleUnknown}.validate(), "unknown names its cause")
 	require.False(t, NativeRuleReport{RuleID: "baseline.session", Status: NativeRuleMet, UnknownCause: NativeUnknownGap}.validate())
+}
+
+func TestARecordingExamStartsOnlyWhenTheRecorderIsPermittedAndHasRoom(t *testing.T) {
+	t.Parallel()
+
+	registry := checkedRegistry(t)
+	activations, rules, err := compileNativePolicy(registry, DefaultNativeSecurityPolicy().Families, NativeScreenRecordingPolicy{Enabled: true})
+	require.NoError(t, err)
+	require.Contains(t, activations, NativeActivation{Capability: "screen_recording", Categories: []string{}})
+	require.Contains(t, rules, NativeRule{
+		RuleID: "screen_recording.free_space", Capability: "screen_recording", Mode: NativeRuleEnforce,
+		Phase: NativeRuleReadiness, Reason: "screen_recording.low_disk_space",
+		Requirement: NativeCondition{Compare: &NativeComparison{
+			Field: "screen_recording.summary.free_space_mib", Op: NativeCompareGe, Value: NativeCount(3072),
+		}},
+	})
+
+	start := func(change func(*NativeCapabilityReadiness)) []NativeCapabilityReadiness {
+		recorder := readinessOf("screen_recording", NativeCertaintyComplete, `{"free_space_mib":8192}`, `{"free_space_mib":8192}`)
+		if change != nil {
+			change(&recorder)
+		}
+		facts := compliantStart()
+		return append(facts[:2], append([]NativeCapabilityReadiness{facts[2]}, recorder)...)
+	}
+	recorder := func(statuses []NativeRuleReport) NativeRuleReport {
+		for _, status := range statuses {
+			if status.RuleID == "screen_recording.free_space" {
+				return status
+			}
+		}
+		require.FailNow(t, "the recorder rule was not evaluated")
+		return NativeRuleReport{}
+	}
+
+	statuses, blocked, ok := evaluateNativeReadiness(registry, activations, rules, start(nil))
+	require.True(t, ok)
+	require.False(t, blocked, "a permitted recorder with room starts")
+	require.Equal(t, NativeRuleMet, recorder(statuses).Status)
+
+	for name, test := range map[string]struct {
+		change func(*NativeCapabilityReadiness)
+		want   NativeRuleReport
+	}{
+		"low disk": {func(r *NativeCapabilityReadiness) {
+			r.State, r.Summary = json.RawMessage(`{"free_space_mib":3071}`), json.RawMessage(`{"free_space_mib":3071}`)
+		}, NativeRuleReport{RuleID: "screen_recording.free_space", Status: NativeRuleNotMet}},
+		"permission denied": {func(r *NativeCapabilityReadiness) { r.Permission = NativePermissionDenied },
+			NativeRuleReport{RuleID: "screen_recording.free_space", Status: NativeRuleUnknown, UnknownCause: NativeUnknownPermission}},
+		"free space unreadable": {func(r *NativeCapabilityReadiness) {
+			r.Certainty = NativeCertaintyPartial
+			r.State, r.Summary = json.RawMessage(`{}`), json.RawMessage(`{}`)
+		}, NativeRuleReport{RuleID: "screen_recording.free_space", Status: NativeRuleUnknown, UnknownCause: NativeUnknownUnavailable}},
+	} {
+		statuses, blocked, ok := evaluateNativeReadiness(registry, activations, rules, start(test.change))
+		require.True(t, ok, name)
+		require.True(t, blocked, "%s blocks Start", name)
+		require.Equal(t, test.want, recorder(statuses), name)
+	}
+
+	_, noRecorder, err := compileNativePolicy(registry, DefaultNativeSecurityPolicy().Families, NativeScreenRecordingPolicy{})
+	require.NoError(t, err)
+	require.NotContains(t, noRecorder, NativeRule{RuleID: "screen_recording.free_space"})
+	for _, rule := range noRecorder {
+		require.NotEqual(t, NativeCapabilityID("screen_recording"), rule.Capability, "an Exam that does not record checks no recorder")
+	}
+
+	_, _, err = compileNativePolicy(nil, DefaultNativeSecurityPolicy().Families, NativeScreenRecordingPolicy{Enabled: true})
+	require.ErrorIs(t, err, ErrNativeCoverageUnsupported, "recording without a registry cannot check the recorder")
 }

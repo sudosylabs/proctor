@@ -34,17 +34,30 @@ var nativeNetworkCategories = map[string]string{
 	"tunnel_interface_state": "tunnel_interfaces",
 }
 
+// screenRecordingFreeSpaceMiB is the free disk the recorder needs before
+// Start: one 3-hour session recording is about 1.4 GB, plus room to cut
+// clips from it.
+const screenRecordingFreeSpaceMiB = 3072
+
 // compileNativePolicy turns the release registry and an Exam's family
 // selections into what the policy sends at activation: the baseline rules,
 // unchanged, then one or more rules for each family that is not disabled,
-// and the capabilities they need. Every rule is checked against the
+// the recorder's readiness rule when the Exam records the screen, and the
+// capabilities they need. Every rule is checked against the
 // registry and its application catalog, so a selection the release cannot
 // evaluate refuses the policy.
-func compileNativePolicy(registry *NativeCapabilityRegistry, families []NativeFamilyPolicy) ([]NativeActivation, []NativeRule, error) {
+func compileNativePolicy(
+	registry *NativeCapabilityRegistry,
+	families []NativeFamilyPolicy,
+	screenRecording NativeScreenRecordingPolicy,
+) ([]NativeActivation, []NativeRule, error) {
 	activations, rules := []NativeActivation{}, []NativeRule{}
 	if registry == nil {
 		// Without a registry nothing can be evaluated, so a family that would
 		// compile a rule refuses the policy instead of silently doing nothing.
+		if screenRecording.Enabled {
+			return nil, nil, ErrNativeCoverageUnsupported
+		}
 		for _, family := range families {
 			if _, compiles := nativeFamilyCapability[family.ID()]; compiles && family.Mode() != NativeModeDisabled {
 				return nil, nil, ErrNativeCoverageUnsupported
@@ -92,6 +105,25 @@ func compileNativePolicy(registry *NativeCapabilityRegistry, families []NativeFa
 		}
 		activate(capability, categories...)
 		rules = append(rules, compiled...)
+	}
+
+	if screenRecording.Enabled {
+		// The recorder must be permitted and have room before Start: a denied
+		// permission or unreadable free space is unknown, which blocks too.
+		// It is checked only then; a recording that fails later is a clip
+		// gap, never a Flag.
+		if _, registered := registry.Capability("screen_recording"); !registered {
+			return nil, nil, ErrNativeCoverageUnsupported
+		}
+		activate("screen_recording")
+		rules = append(rules, NativeRule{
+			RuleID: "screen_recording.free_space", Capability: "screen_recording",
+			Mode: NativeRuleEnforce, Phase: NativeRuleReadiness, Reason: "screen_recording.low_disk_space",
+			Requirement: NativeCondition{Compare: &NativeComparison{
+				Field: "screen_recording.summary.free_space_mib", Op: NativeCompareGe,
+				Value: NativeCount(screenRecordingFreeSpaceMiB),
+			}},
+		})
 	}
 
 	slices.SortFunc(activations, func(a, b NativeActivation) int { return strings.Compare(string(a.Capability), string(b.Capability)) })

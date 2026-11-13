@@ -145,7 +145,7 @@ func ResolveNativePolicy(input NativePolicyResolution) (ResolvedNativePolicy, er
 		ScreenRecording:       input.Selections.Native.ScreenRecording,
 	}
 	var err error
-	if policy.Activations, policy.Rules, err = compileNativePolicy(agreement.capabilities, policy.Capabilities); err != nil {
+	if policy.Activations, policy.Rules, err = compileNativePolicy(agreement.capabilities, policy.Capabilities, policy.ScreenRecording); err != nil {
 		return ResolvedNativePolicy{}, err
 	}
 	if input.Selections.FocusLoss.Enabled {

@@ -1005,6 +1005,41 @@
         "type": "object"
       }
     },
+    "screen_recording": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "free_space_mib": {
+            "description": "Free space for this account on the app's data volume; absent when unreadable.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "title": "ScreenRecordingState",
+        "type": "object"
+      },
+      "summary": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "free_space_mib": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "title": "ScreenRecordingSummary",
+        "type": "object"
+      }
+    },
     "virtualization": {
       "state": {
         "$defs": {
@@ -1671,6 +1706,25 @@
         ],
         "sensitive": true,
         "stability_ms": 2000
+      },
+      {
+        "app_conditions": false,
+        "categories": [],
+        "fields": [
+          {
+            "max": 1073741824,
+            "name": "screen_recording.summary.free_space_mib",
+            "type": "count"
+          }
+        ],
+        "id": "screen_recording",
+        "permission_prompt": true,
+        "reasons": [
+          "screen_recording.not_permitted",
+          "screen_recording.low_disk_space"
+        ],
+        "sensitive": false,
+        "stability_ms": 0
       }
     ]
   }

@@ -32,7 +32,9 @@ module when a change is not server-only. No module has been released yet.
   range with a private reason (at most 10 per Attempt), a Flag asks for the
   minute either side of it, Desktop uploads signed 8 MiB chunks, and managers
   play them back with byte ranges. Requests and playback are audited, and
-  integrity retirement purges the chunks.
+  integrity retirement purges the chunks. A recording Exam starts only when
+  the recorder is permitted and has at least 3072 MiB free (registry
+  `b8da9b04`, capability `screen_recording`).
 
 ### Removed
 

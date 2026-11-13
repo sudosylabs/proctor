@@ -2055,7 +2055,11 @@ gap records never enter this evidence endpoint.
 ### Screen clips
 
 When the Exam's policy enables screen recording, Desktop keeps the session on the
-device and uploads only ranges the server asks for. An Exam Manager of the Sitting
+device and uploads only ranges the server asks for. The policy then activates
+`screen_recording` with one enforced readiness rule, `screen_recording.free_space`
+(`summary.free_space_mib >= 3072`): Start is refused while the recorder is not
+permitted or the device has less room, and a recording that fails later is only a
+clip gap, never a Flag. An Exam Manager of the Sitting
 asks with `POST /exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips`,
 a range (from session start, or a start and end) and a private reason kept with
 the request for the Sitting's managers; the request is audited, its reason never

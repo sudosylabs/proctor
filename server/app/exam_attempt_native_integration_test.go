@@ -270,7 +270,7 @@ func TestDesktopExamAttemptNativeFlow(t *testing.T) {
 	query := attempt.ManagedScreenClipQuery{ExamID: created.Exam.ID, SittingID: sittingID, AttemptID: access.AttemptID}
 	_, err = helper.App.Attempts.RequestScreenClip(ctx, managerInv, attempt.ScreenClipRequestCommand{
 		ExamID: created.Exam.ID, SittingID: sittingID, AttemptID: access.AttemptID,
-		Range: model.ScreenClipRange{FromSessionStart: true, End: time.Now().UTC().Truncate(time.Millisecond)},
+		Range:         model.ScreenClipRange{FromSessionStart: true, End: time.Now().UTC().Truncate(time.Millisecond)},
 		PrivateReason: "The candidate looked away", IdempotencyKey: "native-flow-clip",
 	})
 	require.NoError(t, err)

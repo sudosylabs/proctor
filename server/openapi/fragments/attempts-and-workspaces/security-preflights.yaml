@@ -1301,6 +1301,7 @@ components:
         capability_matrix_digest:
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
+          description: SHA-256 of the exact signed bytes of the release's certification document.
         catalog_bindings:
           type: array
           maxItems: 32
@@ -1320,7 +1321,9 @@ components:
         Identifies what the readiness overview shows and Desktop enforces: the activations and rules, family
         selections, recorder switch, and the registry, matrix and catalogs they rest on. Unlike the policy content
         digest it leaves out the policy's own identity, so the overview and the preflight prepared at Start carry the
-        same value exactly when nothing that matters changed.
+        same value exactly when nothing that matters changed. It is the SHA-256 of the canonical JSON object
+        {activations, rules, capabilities, screen_recording, focus_loss_mode, connection_loss_mode, registry_digest,
+        capability_matrix_digest, catalog_bindings}, taken from the policy and its resolution.
     SecurityPolicyResponse:
       type: object
       additionalProperties: false
@@ -1349,6 +1352,7 @@ components:
         capability_matrix_digest:
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
+          description: SHA-256 of the exact signed bytes of the release's certification document.
         catalog_bindings:
           type: array
           minItems: 0

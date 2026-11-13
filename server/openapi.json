@@ -15055,14 +15055,15 @@
           "exam.security.catalog_missing",
           "exam.security.configuration_unsupported",
           "exam.security.control_conflict",
+          "exam.security.interaction_blocked",
           "exam.security.policy_changed",
-          "exam.security.posture_blocked",
           "exam.security.preflight_consumed",
           "exam.security.preflight_expired",
           "exam.security.preflight_rate_limited",
           "exam.security.preflight_report_changed",
           "exam.security.preflight_required",
           "exam.security.preflight_superseded",
+          "exam.security.readiness_unmet",
           "exam.security.resume_required",
           "exam.security.session_changed",
           "exam.security.unsupported_capability",
@@ -24062,7 +24063,7 @@
         "type": "object"
       },
       "ReadinessDigest": {
-        "description": "Identifies what the readiness overview shows and Desktop enforces: the activations and rules, family selections, recorder switch, and the registry, matrix and catalogs they rest on. Unlike the policy content digest it leaves out the policy's own identity, so the overview and the preflight prepared at Start carry the same value exactly when nothing that matters changed.",
+        "description": "Identifies what the readiness overview shows and Desktop enforces: the activations and rules, family selections, recorder switch, and the registry, matrix and catalogs they rest on. Unlike the policy content digest it leaves out the policy's own identity, so the overview and the preflight prepared at Start carry the same value exactly when nothing that matters changed. It is the SHA-256 of the canonical JSON object {activations, rules, capabilities, screen_recording, focus_loss_mode, connection_loss_mode, registry_digest, capability_matrix_digest, catalog_bindings}, taken from the policy and its resolution.",
         "pattern": "^sha256:[0-9a-f]{64}$",
         "type": "string"
       },
@@ -25967,6 +25968,7 @@
             "$ref": "#/components/schemas/BrowserActivityDisclosure"
           },
           "capability_matrix_digest": {
+            "description": "SHA-256 of the exact signed bytes of the release's certification document.",
             "pattern": "^sha256:[0-9a-f]{64}$",
             "type": "string"
           },
@@ -26043,6 +26045,7 @@
             "$ref": "#/components/schemas/BrowserActivityDisclosure"
           },
           "capability_matrix_digest": {
+            "description": "SHA-256 of the exact signed bytes of the release's certification document.",
             "pattern": "^sha256:[0-9a-f]{64}$",
             "type": "string"
           },
@@ -36287,7 +36290,7 @@
         }
       ],
       "post": {
-        "description": "Atomically accepts one closed batch under its original verified release, matrix, policy, source instances, and Participation generation. Live delivery requires exact Connection continuity; closed streams use current owning registered-key authentication until the fixed upload deadline. Exact retries preserve the submitted prior acknowledgement and recover the original receipt. Out-of-order records wait behind recoverable holes; terminal gaps preserve unresolved openers. Native conditions do not automatically create Flags, warnings or suspension. Lifetime quotas include pending bytes, envelopes, receipts and bounded metadata. Repair has reserved headroom. Native append is limited across Sessions and transports to two requests per second with burst eight; replay consumes allowance. A 429 response supplies Retry-After.",
+        "description": "Atomically accepts one closed batch under its original verified release, matrix, policy, source instances, and Participation generation. Live delivery requires exact Connection continuity; closed streams use current owning registered-key authentication until the fixed upload deadline. Exact retries preserve the submitted prior acknowledgement and recover the original receipt. Out-of-order records wait behind recoverable holes; terminal gaps preserve unresolved openers. The server evaluates the policy's rules on the facts in stream order; an enforce rule that stops being met raises its native Flag and, for a flag_and_suspend family, suspends the Attempt. Observe rules, unknown status and gaps never flag. Lifetime quotas include pending bytes, envelopes, receipts and bounded metadata. Repair has reserved headroom. Native append is limited across Sessions and transports to two requests per second with burst eight; replay consumes allowance. A 429 response supplies Retry-After.",
         "operationId": "appendNativeDelivery",
         "parameters": [
           {

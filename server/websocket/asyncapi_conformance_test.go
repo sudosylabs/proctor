@@ -32,10 +32,14 @@ import (
 // sends a real frame for each one.
 var protocolMessages = []string{
 	"command_error",
+	"exam_attempt.renew",
+	"exam_attempt.security.update",
+	"exam_attempt_renew_reply",
 	"hello",
 	"ping",
 	"pong",
 	"resync_required",
+	"security_control_reply",
 	"subscribe",
 	"subscription_reply",
 	"unsubscribe",
@@ -126,6 +130,7 @@ func TestProtocolFramesMatchAsyncAPI(t *testing.T) {
 	contract.requireFrame(t, "command_error", nextInboundResponse(t, connection))
 	connection.enqueueError(6, "websocket.rate_limited", websocketErrorRateLimited)
 	contract.requireFrame(t, "command_error", nextInboundResponse(t, connection))
+	requireExamAttemptControlFrames(t, contract)
 	application.authorizeErr = apperror.New("authorization.denied")
 	connection.handleRequest(context.Background(), requestWithData(t, 7, "subscribe", subscription))
 	contract.requireFrame(t, "command_error", nextInboundResponse(t, connection))
@@ -171,4 +176,51 @@ func TestCloseCodesMatchAsyncAPI(t *testing.T) {
 		"connection_limit":      CloseLimit,
 		"rate_limited":          CloseRateLimited,
 	}, documented)
+}
+
+// requireExamAttemptControlFrames checks the renewal and security update
+// commands as the decoder accepts them, and their replies as the handlers
+// encode them.
+func requireExamAttemptControlFrames(t *testing.T, contract asyncAPIContract) {
+	t.Helper()
+	control := model.SecurityRenewal{
+		ControlSequence: 3, PolicyDigest: model.SHA256Fingerprint([]byte("policy")),
+		SecuritySessionID: "security-session-1", StreamID: "native-stream-1",
+		DeliveryWatermarks: []model.DeliveryWatermark{
+			{Family: "native", SourceID: "native-stream-1", AllocatedThroughSequence: 9, AcknowledgedThroughSequence: 7},
+			{Family: "browser", SourceID: "00000000-0000-4000-8000-000000000001", AllocatedThroughSequence: 2},
+		},
+	}
+	renew := requestWithData(t, 20, examAttemptRenewAction, examAttemptRenewRequest{
+		SecurityControl: control, Generation: 1, Sequence: 4, ContinuityCredential: model.NewCredentialToken(),
+	})
+	_, err := decodeExamAttemptRenewRequest(renew.Data)
+	require.NoError(t, err, "the documented renewal is one the server accepts")
+	contract.requireFrame(t, "exam_attempt.renew", renew)
+
+	update := requestWithData(t, 21, examAttemptSecurityUpdateAction, examAttemptSecurityUpdateRequest{
+		Generation: 1, ContinuityCredential: model.NewCredentialToken(), SecurityControl: control,
+	})
+	_, err = decodeExamAttemptSecurityUpdateRequest(update.Data)
+	require.NoError(t, err, "the documented security update is one the server accepts")
+	contract.requireFrame(t, "exam_attempt.security.update", update)
+
+	digest := model.SHA256Fingerprint([]byte("control"))
+	result := securityControlFrom(model.SecurityRenewalResult{
+		ProcessedControlSequence: 3, ProcessedControlDigest: &digest, SecurityInteractionAllowed: true,
+		DeliveryWatermarkRejections: []model.DeliveryWatermarkRejection{{Family: "browser", SourceID: "00000000-0000-4000-8000-000000000001", Reason: "closed_source"}},
+	})
+	now := time.Now()
+	renewed, err := json.Marshal(examAttemptRenewResponse{
+		SecurityControl: result, Generation: 1, AcceptedSequence: 4,
+		DatabaseTime: model.FormatRFC3339(now), LeaseExpiresAt: model.FormatRFC3339(now.Add(15 * time.Second)),
+	})
+	require.NoError(t, err)
+	contract.requireFrame(t, "exam_attempt_renew_reply", &Response{Status: "ok", Sequence: 20, Data: renewed})
+	processed, err := json.Marshal(result)
+	require.NoError(t, err)
+	contract.requireFrame(t, "security_control_reply", &Response{Status: "ok", Sequence: 21, Data: processed})
+	empty, err := json.Marshal(securityControlFrom(model.SecurityRenewalResult{DeliveryWatermarkRejections: []model.DeliveryWatermarkRejection{}}))
+	require.NoError(t, err)
+	contract.requireFrame(t, "security_control_reply", &Response{Status: "ok", Sequence: 22, Data: empty})
 }

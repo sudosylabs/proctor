@@ -149,7 +149,7 @@ func (s *SQLExamAttemptStore) prepareConnectSecurity(
 		return zero, err
 	}
 	if evaluated.Admission != "eligible" {
-		return zero, preflightConflict("posture_blocked")
+		return zero, preflightConflict("readiness_unmet")
 	}
 
 	if first {
@@ -574,7 +574,7 @@ func startNativeInterpretation(ctx context.Context, tx *sqlxTxWrapper, allocatio
 	}
 	state, opening, err := model.StartNativeInterpretation(allocation.registry, security.Policy, allocation.capabilities, allocation.now)
 	if err != nil {
-		return preflightConflict("posture_blocked")
+		return preflightConflict("readiness_unmet")
 	}
 	raw, err := json.Marshal(state)
 	if err == nil {

@@ -512,10 +512,10 @@ codes:
     description: "The Desktop cannot satisfy the security configuration."
   - code: exam.security.control_conflict
     description: "The security control request conflicts with current state."
+  - code: exam.security.interaction_blocked
+    description: "Native security delivery for the Participation has closed, so the Attempt cannot be changed."
   - code: exam.security.policy_changed
     description: "The security policy changed since the preflight."
-  - code: exam.security.posture_blocked
-    description: "The reported security posture does not permit the Attempt."
   - code: exam.security.preflight_consumed
     description: "The security preflight was already used."
   - code: exam.security.preflight_expired
@@ -528,6 +528,8 @@ codes:
     description: "The Attempt needs a current security preflight."
   - code: exam.security.preflight_superseded
     description: "A newer security preflight replaced this one."
+  - code: exam.security.readiness_unmet
+    description: "The device did not meet the Exam's readiness rules at Start."
   - code: exam.security.resume_required
     description: "The Attempt must resume through security recovery."
   - code: exam.security.session_changed

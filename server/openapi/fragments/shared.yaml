@@ -1150,14 +1150,15 @@ components:
         - exam.security.catalog_missing
         - exam.security.configuration_unsupported
         - exam.security.control_conflict
+        - exam.security.interaction_blocked
         - exam.security.policy_changed
-        - exam.security.posture_blocked
         - exam.security.preflight_consumed
         - exam.security.preflight_expired
         - exam.security.preflight_rate_limited
         - exam.security.preflight_report_changed
         - exam.security.preflight_required
         - exam.security.preflight_superseded
+        - exam.security.readiness_unmet
         - exam.security.resume_required
         - exam.security.session_changed
         - exam.security.unsupported_capability

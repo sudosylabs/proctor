@@ -55,8 +55,11 @@ module when a change is not server-only. No module has been released yet.
   lease renewal's `security_coverage` becomes `security_control`, carrying
   only its sequence, binding and delivery watermarks; `coverage_transition`
   records and source reset receipts are gone, and gaps and resets name their
-  `capability`. The board's `native_security.sources` is removed
-  (**breaking**).
+  `capability`. The board's `native_security.sources` is removed, and
+  `exam.security.posture_blocked` splits into `exam.security.readiness_unmet`
+  (Connect with a report that does not meet the readiness rules) and
+  `exam.security.interaction_blocked` (a change after native delivery has
+  closed) (**breaking**).
 
 - Server: the webapp build manifest and the devseed journal no longer carry
   a `schema_version`; a manifest or journal that does is rejected.

@@ -113,6 +113,14 @@ channels:
         $ref: '#/components/messages/ping'
       pong:
         $ref: '#/components/messages/pong'
+      exam_attempt.renew:
+        $ref: '#/components/messages/exam_attempt.renew'
+      exam_attempt_renew_reply:
+        $ref: '#/components/messages/exam_attempt_renew_reply'
+      exam_attempt.security.update:
+        $ref: '#/components/messages/exam_attempt.security.update'
+      security_control_reply:
+        $ref: '#/components/messages/security_control_reply'
       subscribe:
         $ref: '#/components/messages/subscribe'
       unsubscribe:
@@ -219,6 +227,58 @@ operations:
     x-proctor-error-codes:
       - websocket.request.invalid
       - websocket.rate_limited
+  receiveExamAttemptRenew:
+    action: receive
+    channel:
+      $ref: '#/channels/websocket'
+    title: Renew the Exam Attempt Participation
+    summary: The server extends the lease and processes the security control.
+    messages:
+      - $ref: '#/channels/websocket/messages/exam_attempt.renew'
+    reply:
+      channel:
+        $ref: '#/channels/websocket'
+      messages:
+        - $ref: '#/channels/websocket/messages/exam_attempt_renew_reply'
+        - $ref: '#/channels/websocket/messages/command_error'
+    x-proctor-error-codes:
+      - websocket.request.invalid
+      - websocket.rate_limited
+      - exam.attempt.connection_closed
+      - exam.attempt.connection_lost
+      - exam.attempt.sitting_not_open
+      - exam.attempt.state_conflict
+      - exam.attempt.unavailable
+      - exam.security.control_conflict
+      - exam.security.policy_changed
+      - resource.not_found
+      - authorization.denied
+  receiveExamAttemptSecurityUpdate:
+    action: receive
+    channel:
+      $ref: '#/channels/websocket'
+    title: Update the security control
+    summary: The server processes a security control without extending the lease.
+    messages:
+      - $ref: '#/channels/websocket/messages/exam_attempt.security.update'
+    reply:
+      channel:
+        $ref: '#/channels/websocket'
+      messages:
+        - $ref: '#/channels/websocket/messages/security_control_reply'
+        - $ref: '#/channels/websocket/messages/command_error'
+    x-proctor-error-codes:
+      - websocket.request.invalid
+      - websocket.rate_limited
+      - exam.attempt.connection_closed
+      - exam.attempt.connection_lost
+      - exam.attempt.sitting_not_open
+      - exam.attempt.state_conflict
+      - exam.attempt.unavailable
+      - exam.security.control_conflict
+      - exam.security.policy_changed
+      - resource.not_found
+      - authorization.denied
   receiveSubscribe:
     action: receive
     channel:

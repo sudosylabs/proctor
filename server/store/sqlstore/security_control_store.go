@@ -526,7 +526,7 @@ func lockSecurityInteraction(ctx context.Context, tx *sqlxTxWrapper, attemptID m
 		return translateError("security_owner", attemptID.String(), err)
 	}
 	if !allowed {
-		return preflightConflict("posture_blocked")
+		return preflightConflict("interaction_blocked")
 	}
 	return nil
 }

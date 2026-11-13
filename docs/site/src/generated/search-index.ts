@@ -2482,11 +2482,11 @@ export const searchEntries = [
     "kind": "endpoint",
     "group": "Attempts and workspaces",
     "title": "Append minimized native security evidence",
-    "description": "Atomically accepts one closed batch under its original verified release, matrix, policy, source instances, and Participation generation. Live delivery requires exact Connection continuity; closed streams use current owning registered-key authentication until the fixed upload deadline. Exact retries preserve the submitted prior acknowledgement and recover the original receipt. Out-of-order records wait behind recoverable holes; terminal gaps preserve unresolved openers. Native conditions do not automatically create Flags, warnings or suspension. Lifetime quotas include pending bytes, envelopes, receipts and bounded metadata. Repair has reserved headroom. Native append is limited across Sessions and transports to two requests per second with burst eight; replay consumes allowance. A 429 response supplies Retry-After.",
+    "description": "Atomically accepts one closed batch under its original verified release, matrix, policy, source instances, and Participation generation. Live delivery requires exact Connection continuity; closed streams use current owning registered-key authentication until the fixed upload deadline. Exact retries preserve the submitted prior acknowledgement and recover the original receipt. Out-of-order records wait behind recoverable holes; terminal gaps preserve unresolved openers. The server evaluates the policy's rules on the facts in stream order; an enforce rule that stops being met raises its native Flag and, for a flag_and_suspend family, suspends the Attempt. Observe rules, unknown status and gaps never flag. Lifetime quotas include pending bytes, envelopes, receipts and bounded metadata. Repair has reserved headroom. Native append is limited across Sessions and transports to two requests per second with burst eight; replay consumes allowance. A 429 response supplies Retry-After.",
     "href": "/api/reference/append-native-delivery",
     "method": "POST",
     "path": "/api/v1/exam-attempts/{exam_attempt_id}/security-batches",
-    "searchText": "appendnativedelivery append minimized native security evidence atomically accepts one closed batch under its original verified release, matrix, policy, source instances, and participation generation. live delivery requires exact connection continuity; closed streams use current owning registered-key authentication until the fixed upload deadline. exact retries preserve the submitted prior acknowledgement and recover the original receipt. out-of-order records wait behind recoverable holes; terminal gaps preserve unresolved openers. native conditions do not automatically create flags, warnings or suspension. lifetime quotas include pending bytes, envelopes, receipts and bounded metadata. repair has reserved headroom. native append is limited across sessions and transports to two requests per second with burst eight; replay consumes allowance. a 429 response supplies retry-after. attempts and workspaces post /api/v1/exam-attempts/{exam_attempt_id}/security-batches session_required required audit.unavailable request.invalid resource.not_found exam.attempt.invalid exam.attempt.registered_desktop_required exam.attempt.connection_closed exam.attempt.connection_lost exam.attempt.sitting_not_open exam.attempt.unavailable exam.delivery.upload_expired exam.delivery.declaration_conflict exam.delivery.sequence_limit exam.delivery.detail_budget_exhausted exam.delivery.metadata_capacity exam.delivery.summary_rate_limited idempotency.conflict idempotency.in_progress idempotency.key_required idempotency.key_invalid exam.delivery.batch_conflict exam.delivery.replay_window_exceeded exam.delivery.pending_capacity exam.delivery.append_rate_limited authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
+    "searchText": "appendnativedelivery append minimized native security evidence atomically accepts one closed batch under its original verified release, matrix, policy, source instances, and participation generation. live delivery requires exact connection continuity; closed streams use current owning registered-key authentication until the fixed upload deadline. exact retries preserve the submitted prior acknowledgement and recover the original receipt. out-of-order records wait behind recoverable holes; terminal gaps preserve unresolved openers. the server evaluates the policy's rules on the facts in stream order; an enforce rule that stops being met raises its native flag and, for a flag_and_suspend family, suspends the attempt. observe rules, unknown status and gaps never flag. lifetime quotas include pending bytes, envelopes, receipts and bounded metadata. repair has reserved headroom. native append is limited across sessions and transports to two requests per second with burst eight; replay consumes allowance. a 429 response supplies retry-after. attempts and workspaces post /api/v1/exam-attempts/{exam_attempt_id}/security-batches session_required required audit.unavailable request.invalid resource.not_found exam.attempt.invalid exam.attempt.registered_desktop_required exam.attempt.connection_closed exam.attempt.connection_lost exam.attempt.sitting_not_open exam.attempt.unavailable exam.delivery.upload_expired exam.delivery.declaration_conflict exam.delivery.sequence_limit exam.delivery.detail_budget_exhausted exam.delivery.metadata_capacity exam.delivery.summary_rate_limited idempotency.conflict idempotency.in_progress idempotency.key_required idempotency.key_invalid exam.delivery.batch_conflict exam.delivery.replay_window_exceeded exam.delivery.pending_capacity exam.delivery.append_rate_limited authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid"
   },
   {
     "id": "operation:recoverExamSecurityPolicy",
@@ -4923,6 +4923,24 @@ export const searchEntries = [
     "searchText": "exam_archived exam_archived exam archived the exam was archived. delivered to connections that subscribe to exam.view on the exam. event exams"
   },
   {
+    "id": "realtime:exam_attempt.renew",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Renew the Exam Attempt Participation",
+    "description": "Extends the Participation lease and carries Desktop's security control.",
+    "href": "/api/reference/realtime-protocol/exam-attempt-renew",
+    "searchText": "exam_attempt.renew exam_attempt.renew renew the exam attempt participation sent every renewal interval by the desktop holding the attempt connection. the reply carries the new lease and how the server processed the security control. a repeated renewal sequence is a duplicate and does not extend the lease again. command"
+  },
+  {
+    "id": "realtime:exam_attempt.security.update",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Update the security control",
+    "description": "Carries Desktop's security control between renewals.",
+    "href": "/api/reference/realtime-protocol/exam-attempt-security-update",
+    "searchText": "exam_attempt.security.update exam_attempt.security.update update the security control uses the same processed-control boundary as exam_attempt.renew and never extends the lease. command"
+  },
+  {
     "id": "realtime:exam_attempt_access_reallowed",
     "kind": "realtime-message",
     "group": "Realtime",
@@ -4984,6 +5002,15 @@ export const searchEntries = [
     "description": "An Attempt Suspension was closed and the Attempt is active again.",
     "href": "/api/reference/realtime-protocol/exam-attempt-reallowed",
     "searchText": "exam_attempt_reallowed exam_attempt_reallowed attempt re-allowed an attempt suspension was closed and the attempt is active again. delivered to connections that subscribe to exam.sitting.view on the exam sitting. event attempts"
+  },
+  {
+    "id": "realtime:exam_attempt_renew_reply",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Renewal reply",
+    "description": "The renewed lease and the processed security control.",
+    "href": "/api/reference/realtime-protocol/exam-attempt-renew-reply",
+    "searchText": "exam_attempt_renew_reply exam_attempt_renew_reply renewal reply the renewed lease and the processed security control. reply"
   },
   {
     "id": "realtime:exam_attempt_screen_clips_requested",
@@ -5281,6 +5308,15 @@ export const searchEntries = [
     "description": "Missed events could not be replayed.",
     "href": "/api/reference/realtime-protocol/resync-required",
     "searchText": "resync_required resync_required resynchronization required follows hello when a reconnecting client asked to resume but the node no longer holds the missed events. refetch authoritative state over http before applying further events. protocol"
+  },
+  {
+    "id": "realtime:security_control_reply",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Security control reply",
+    "description": "How the server processed the security control.",
+    "href": "/api/reference/realtime-protocol/security-control-reply",
+    "searchText": "security_control_reply security_control_reply security control reply how the server processed the security control. reply"
   },
   {
     "id": "realtime:subscribe",

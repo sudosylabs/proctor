@@ -1887,10 +1887,11 @@ The required `security_control` in `exam_attempt.renew` and the independent
 A control carries its sequence, the policy digest, security session, stream and
 the delivery watermarks, nothing else; `exam_attempt.security.update` adds
 generation and continuity_credential and never extends the lease. A control is
-bounded at 16 KiB. A renewal never changes whether the candidate may interact;
+bounded at 16 KiB; both commands and their replies are described in the AsyncAPI
+document. A renewal never changes whether the candidate may interact;
 only closing native delivery does. A retained identical sequence replays its
 original outcome with current gates and the latest processed sequence/digest.
-Changed bytes at a retained sequence return `exam.security.control_conflict`; an
+Different content at a retained sequence (compared by the digest of its canonical form) returns `exam.security.control_conflict`; an
 older sequence is answered with the latest processed boundary and changes
 nothing. A control whose policy is no longer the current resolution is refused
 (`policy_changed`).
@@ -1898,7 +1899,8 @@ nothing. A control whose policy is no longer the current resolution is refused
 Active security-policy recovery includes the admitted receipt, frozen
 configuration and the latest processed control projection (`security_control`).
 Its receipt never grants interaction. Workspace mutation and voluntary
-Submission recheck current durable security state in addition to their existing
+Submission recheck current durable security state (refused with
+`exam.security.interaction_blocked` once native delivery has closed) in addition to their existing
 lifecycle and correction gates.
 
 

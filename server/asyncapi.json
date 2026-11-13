@@ -38,6 +38,12 @@
         "exam_archived": {
           "$ref": "#/components/messages/exam_archived"
         },
+        "exam_attempt.renew": {
+          "$ref": "#/components/messages/exam_attempt.renew"
+        },
+        "exam_attempt.security.update": {
+          "$ref": "#/components/messages/exam_attempt.security.update"
+        },
         "exam_attempt_access_reallowed": {
           "$ref": "#/components/messages/exam_attempt_access_reallowed"
         },
@@ -58,6 +64,9 @@
         },
         "exam_attempt_reallowed": {
           "$ref": "#/components/messages/exam_attempt_reallowed"
+        },
+        "exam_attempt_renew_reply": {
+          "$ref": "#/components/messages/exam_attempt_renew_reply"
         },
         "exam_attempt_screen_clips_requested": {
           "$ref": "#/components/messages/exam_attempt_screen_clips_requested"
@@ -157,6 +166,9 @@
         },
         "resync_required": {
           "$ref": "#/components/messages/resync_required"
+        },
+        "security_control_reply": {
+          "$ref": "#/components/messages/security_control_reply"
         },
         "subscribe": {
           "$ref": "#/components/messages/subscribe"
@@ -731,6 +743,129 @@
         ],
         "title": "Exam archived"
       },
+      "exam_attempt.renew": {
+        "description": "Sent every renewal interval by the Desktop holding the Attempt Connection. The reply carries the new lease and how the server processed the security control. A repeated renewal sequence is a duplicate and does not extend the lease again.",
+        "examples": [
+          {
+            "name": "renewal",
+            "payload": {
+              "action": "exam_attempt.renew",
+              "data": {
+                "continuity_credential": "Y29udGludWl0eS1jcmVkZW50aWFsLWV4YW1wbGUtMzI",
+                "generation": 1,
+                "security_control": {
+                  "control_sequence": 12,
+                  "delivery_watermarks": [
+                    {
+                      "acknowledged_through_sequence": 38,
+                      "allocated_through_sequence": 40,
+                      "family": "native",
+                      "source_id": "native-stream-1"
+                    }
+                  ],
+                  "policy_digest": "sha256:4f0c2ad3b81e29e6c5f0b7f3a1d9e8c2b6a4f1e0d3c7b9a2e5f8c1d4b7a0e3f6",
+                  "security_session_id": "security-session-1",
+                  "stream_id": "native-stream-1"
+                },
+                "sequence": 5
+              },
+              "sequence": 8
+            }
+          }
+        ],
+        "name": "exam_attempt.renew",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/command_request"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam_attempt.renew",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_renew"
+                }
+              },
+              "required": [
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Extends the Participation lease and carries Desktop's security control.",
+        "tags": [
+          {
+            "name": "command"
+          }
+        ],
+        "title": "Renew the Exam Attempt Participation"
+      },
+      "exam_attempt.security.update": {
+        "description": "Uses the same processed-control boundary as exam_attempt.renew and never extends the lease.",
+        "examples": [
+          {
+            "name": "security update",
+            "payload": {
+              "action": "exam_attempt.security.update",
+              "data": {
+                "continuity_credential": "Y29udGludWl0eS1jcmVkZW50aWFsLWV4YW1wbGUtMzI",
+                "generation": 1,
+                "security_control": {
+                  "control_sequence": 12,
+                  "delivery_watermarks": [
+                    {
+                      "acknowledged_through_sequence": 38,
+                      "allocated_through_sequence": 40,
+                      "family": "native",
+                      "source_id": "native-stream-1"
+                    }
+                  ],
+                  "policy_digest": "sha256:4f0c2ad3b81e29e6c5f0b7f3a1d9e8c2b6a4f1e0d3c7b9a2e5f8c1d4b7a0e3f6",
+                  "security_session_id": "security-session-1",
+                  "stream_id": "native-stream-1"
+                }
+              },
+              "sequence": 9
+            }
+          }
+        ],
+        "name": "exam_attempt.security.update",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/command_request"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam_attempt.security.update",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_security_update"
+                }
+              },
+              "required": [
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Carries Desktop's security control between renewals.",
+        "tags": [
+          {
+            "name": "command"
+          }
+        ],
+        "title": "Update the security control"
+      },
       "exam_attempt_access_reallowed": {
         "description": "Tells the candidate their Attempt is active again. Delivered to the addressed User's connections that subscribe to exam.sitting.participate on the exam sitting.",
         "examples": [
@@ -1191,6 +1326,56 @@
           }
         ],
         "title": "Attempt re-allowed"
+      },
+      "exam_attempt_renew_reply": {
+        "examples": [
+          {
+            "name": "renewed",
+            "payload": {
+              "data": {
+                "accepted_sequence": 5,
+                "database_time": "2026-11-13T09:00:00.000Z",
+                "duplicate": false,
+                "generation": 1,
+                "lease_expires_at": "2026-11-13T09:00:15.000Z",
+                "security_control": {
+                  "delivery_watermark_rejections": [],
+                  "processed_control_digest": "sha256:9b1e4c7a2d5f8e0b3c6a9d2f5e8b1c4a7d0e3f6b9c2a5d8e1f4b7c0a3d6e9f2b",
+                  "processed_control_sequence": 12,
+                  "security_interaction_allowed": true
+                }
+              },
+              "sequence": 8,
+              "status": "ok"
+            }
+          }
+        ],
+        "name": "exam_attempt_renew_reply",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/command_reply"
+            },
+            {
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_renew_reply"
+                }
+              },
+              "required": [
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "The renewed lease and the processed security control.",
+        "tags": [
+          {
+            "name": "reply"
+          }
+        ],
+        "title": "Renewal reply"
       },
       "exam_attempt_screen_clips_requested": {
         "description": "Tells the candidate's Desktop that its Attempt has screen clip requests it has not taken, after a manager asked for a clip or a Flag asked for an incident clip. Desktop then lists its pending requests; the event carries none of them. Delivered to the addressed User's connections that subscribe to exam.sitting.participate on the exam sitting.",
@@ -3267,6 +3452,49 @@
         ],
         "title": "Resynchronization required"
       },
+      "security_control_reply": {
+        "examples": [
+          {
+            "name": "processed",
+            "payload": {
+              "data": {
+                "delivery_watermark_rejections": [],
+                "processed_control_digest": "sha256:9b1e4c7a2d5f8e0b3c6a9d2f5e8b1c4a7d0e3f6b9c2a5d8e1f4b7c0a3d6e9f2b",
+                "processed_control_sequence": 12,
+                "security_interaction_allowed": true
+              },
+              "sequence": 9,
+              "status": "ok"
+            }
+          }
+        ],
+        "name": "security_control_reply",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/command_reply"
+            },
+            {
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/security_control_result"
+                }
+              },
+              "required": [
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "How the server processed the security control.",
+        "tags": [
+          {
+            "name": "reply"
+          }
+        ],
+        "title": "Security control reply"
+      },
       "subscribe": {
         "description": "Each subscription is authorized on its own; the handshake grants none. Subscribing twice to the same pair succeeds once. A connection holds at most 256 subscriptions.",
         "examples": [
@@ -3903,6 +4131,79 @@
         "title": "Attempt re-allowed",
         "type": "object"
       },
+      "exam_attempt_renew": {
+        "additionalProperties": false,
+        "description": "Renews the Participation lease and carries the security control. The whole data object is at most 16 KiB.",
+        "properties": {
+          "continuity_credential": {
+            "description": "The Attempt Connection's continuity credential.",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "type": "string"
+          },
+          "generation": {
+            "description": "The Participation generation.",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "security_control": {
+            "$ref": "#/components/schemas/security_control"
+          },
+          "sequence": {
+            "description": "The renewal's own sequence within the generation.",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "security_control",
+          "generation",
+          "sequence",
+          "continuity_credential"
+        ],
+        "title": "Exam Attempt renewal",
+        "type": "object"
+      },
+      "exam_attempt_renew_reply": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted_sequence": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "database_time": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "duplicate": {
+            "description": "The renewal sequence was already accepted; the lease was not extended again.",
+            "type": "boolean"
+          },
+          "generation": {
+            "description": "The Participation generation.",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "lease_expires_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "security_control": {
+            "$ref": "#/components/schemas/security_control_result"
+          }
+        },
+        "required": [
+          "security_control",
+          "generation",
+          "accepted_sequence",
+          "database_time",
+          "lease_expires_at",
+          "duplicate"
+        ],
+        "title": "Exam Attempt renewal reply",
+        "type": "object"
+      },
       "exam_attempt_screen_clips_requested": {
         "additionalProperties": false,
         "description": "Tells the candidate's Desktop that its Attempt has screen clip requests it has not taken, so it reads them now instead of at its next poll. Neither the requests nor who made them are included.",
@@ -3923,6 +4224,33 @@
           "changed_at"
         ],
         "title": "Screen clips requested",
+        "type": "object"
+      },
+      "exam_attempt_security_update": {
+        "additionalProperties": false,
+        "description": "Carries a security control between renewals. It never extends the lease. The whole data object is at most 16 KiB.",
+        "properties": {
+          "continuity_credential": {
+            "description": "The Attempt Connection's continuity credential.",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "type": "string"
+          },
+          "generation": {
+            "description": "The Participation generation.",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "security_control": {
+            "$ref": "#/components/schemas/security_control"
+          }
+        },
+        "required": [
+          "generation",
+          "continuity_credential",
+          "security_control"
+        ],
+        "title": "Exam Attempt security update",
         "type": "object"
       },
       "exam_attempt_submitted": {
@@ -4766,6 +5094,146 @@
         "title": "Authorization resource",
         "type": "object"
       },
+      "security_control": {
+        "additionalProperties": false,
+        "description": "Desktop's security control: its sequence, the binding it renews and the delivery watermarks it has allocated. At most 16 KiB. The server identifies a control by the SHA-256 of its canonical JSON (object keys sorted, integers only, JSON.stringify string escaping), so key order and whitespace do not matter; duplicate keys, unknown members and non-integer numbers are refused. A retained sequence sent again with different content is refused with exam.security.control_conflict; an older sequence changes nothing. The server refuses a control whose policy is no longer current with exam.security.policy_changed.",
+        "properties": {
+          "control_sequence": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "delivery_watermarks": {
+            "description": "The admitted native stream and the Browser sources owned by the current Participation, each at most once. At most 50.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "acknowledged_through_sequence": {
+                  "description": "At most allocated_through_sequence.",
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "allocated_through_sequence": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "family": {
+                  "enum": [
+                    "native",
+                    "browser"
+                  ],
+                  "type": "string"
+                },
+                "source_id": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "family",
+                "source_id",
+                "allocated_through_sequence",
+                "acknowledged_through_sequence"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "policy_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "security_session_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "type": "string"
+          },
+          "stream_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "control_sequence",
+          "policy_digest",
+          "security_session_id",
+          "stream_id",
+          "delivery_watermarks"
+        ],
+        "title": "Security control",
+        "type": "object"
+      },
+      "security_control_result": {
+        "additionalProperties": false,
+        "description": "How the server processed Desktop's latest security control. A control never changes whether the candidate may interact; only closing native delivery does.",
+        "properties": {
+          "delivery_watermark_rejections": {
+            "description": "At most 50.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "family": {
+                  "enum": [
+                    "native",
+                    "browser"
+                  ],
+                  "type": "string"
+                },
+                "reason": {
+                  "enum": [
+                    "closed_source",
+                    "position_limit"
+                  ],
+                  "type": "string"
+                },
+                "source_id": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "family",
+                "source_id",
+                "reason"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "processed_control_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "processed_control_sequence": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "security_interaction_allowed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "processed_control_sequence",
+          "processed_control_digest",
+          "security_interaction_allowed",
+          "delivery_watermark_rejections"
+        ],
+        "title": "Security control result",
+        "type": "object"
+      },
       "sha256": {
         "description": "A lowercase hexadecimal SHA-256 digest.",
         "pattern": "^[0-9a-f]{64}$",
@@ -4869,6 +5337,84 @@
     "version": "1.0.0"
   },
   "operations": {
+    "receiveExamAttemptRenew": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/websocket"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt.renew"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/websocket"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/websocket/messages/exam_attempt_renew_reply"
+          },
+          {
+            "$ref": "#/channels/websocket/messages/command_error"
+          }
+        ]
+      },
+      "summary": "The server extends the lease and processes the security control.",
+      "title": "Renew the Exam Attempt Participation",
+      "x-proctor-error-codes": [
+        "websocket.request.invalid",
+        "websocket.rate_limited",
+        "exam.attempt.connection_closed",
+        "exam.attempt.connection_lost",
+        "exam.attempt.sitting_not_open",
+        "exam.attempt.state_conflict",
+        "exam.attempt.unavailable",
+        "exam.security.control_conflict",
+        "exam.security.policy_changed",
+        "resource.not_found",
+        "authorization.denied"
+      ]
+    },
+    "receiveExamAttemptSecurityUpdate": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/websocket"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt.security.update"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/websocket"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/websocket/messages/security_control_reply"
+          },
+          {
+            "$ref": "#/channels/websocket/messages/command_error"
+          }
+        ]
+      },
+      "summary": "The server processes a security control without extending the lease.",
+      "title": "Update the security control",
+      "x-proctor-error-codes": [
+        "websocket.request.invalid",
+        "websocket.rate_limited",
+        "exam.attempt.connection_closed",
+        "exam.attempt.connection_lost",
+        "exam.attempt.sitting_not_open",
+        "exam.attempt.state_conflict",
+        "exam.attempt.unavailable",
+        "exam.security.control_conflict",
+        "exam.security.policy_changed",
+        "resource.not_found",
+        "authorization.denied"
+      ]
+    },
     "receivePing": {
       "action": "receive",
       "channel": {

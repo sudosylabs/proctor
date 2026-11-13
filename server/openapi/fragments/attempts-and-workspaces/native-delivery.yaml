@@ -397,8 +397,9 @@ paths:
         continuity; closed streams use current owning registered-key authentication until the fixed
         upload deadline. Exact retries preserve the submitted prior acknowledgement and recover the
         original receipt. Out-of-order records wait behind recoverable holes; terminal gaps preserve
-        unresolved openers. Native conditions do not automatically create Flags, warnings or
-        suspension. Lifetime quotas include pending bytes, envelopes, receipts and bounded metadata.
+        unresolved openers. The server evaluates the policy's rules on the facts in stream order; an
+        enforce rule that stops being met raises its native Flag and, for a flag_and_suspend family,
+        suspends the Attempt. Observe rules, unknown status and gaps never flag. Lifetime quotas include pending bytes, envelopes, receipts and bounded metadata.
         Repair has reserved headroom. Native append is limited across Sessions and transports to two
         requests per second with burst eight; replay consumes allowance. A 429 response supplies
         Retry-After.

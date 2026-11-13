@@ -969,58 +969,64 @@
                   {
                     "allowed_application_ids": [],
                     "id": "process_application",
-                    "mode": "disabled"
+                    "mode": "disabled",
+                    "outcome": "flag"
                   },
                   {
                     "id": "interactive_session",
-                    "mode": "disabled"
+                    "mode": "disabled",
+                    "outcome": "flag"
                   },
                   {
                     "id": "clipboard",
                     "mode": "disabled",
                     "observe_os_clipboard_changes": false,
+                    "outcome": "flag",
                     "strategy": "disabled"
                   },
                   {
                     "candidate_print_commands": "not_applied",
                     "id": "printing",
                     "mode": "disabled",
-                    "monitored_spooler": "not_required"
+                    "monitored_spooler": "not_required",
+                    "outcome": "flag"
                   },
                   {
-                    "allowed_storage_function_class_ids": [],
                     "enabled_sub_capabilities": [],
                     "id": "removable_storage",
-                    "mode": "disabled"
+                    "mode": "disabled",
+                    "outcome": "flag"
                   },
                   {
                     "id": "virtualization",
                     "mode": "disabled",
+                    "outcome": "flag",
                     "rule": "not_applied"
                   },
                   {
-                    "allowed_adapter_class_ids": [],
-                    "allowed_managed_profile_ids": [],
-                    "allowed_tunnel_class_ids": [],
                     "enabled_sub_capabilities": [],
                     "id": "network_configuration",
-                    "mode": "disabled"
+                    "mode": "disabled",
+                    "outcome": "flag"
                   },
                   {
                     "concurrent_use_check": "not_required",
                     "id": "camera",
                     "mode": "disabled",
+                    "outcome": "flag",
                     "require_ready": false
                   },
                   {
                     "concurrent_use_check": "not_required",
                     "id": "microphone",
                     "mode": "disabled",
+                    "outcome": "flag",
                     "require_ready": false
                   },
                   {
                     "id": "external_capture",
-                    "mode": "disabled"
+                    "mode": "disabled",
+                    "outcome": "flag"
                   }
                 ],
                 "registry_digest": "sha256:2a3cafc0b4bccad3e06d0a8602cc84692f4d85e99763db6feb40e1417549e099",
@@ -13716,7 +13722,7 @@
                   ],
                   "properties": {
                     "allowed_application_ids": {
-                      "description": "Sorted unique opaque catalog IDs; executable paths, names, commands and regular expressions are not accepted.",
+                      "description": "The only catalog applications the candidate may run, sorted and unique: IDs from the Desktop release's application catalog, each one it marks allowable. Empty adds no allowlist. When the family is on, the catalog's never-allowable applications are always blocked.",
                       "items": {
                         "maxLength": 128,
                         "minLength": 1,
@@ -13738,11 +13744,20 @@
                         "enforce"
                       ],
                       "type": "string"
+                    },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
                     "mode",
+                    "outcome",
                     "allowed_application_ids"
                   ],
                   "type": "object"
@@ -13761,11 +13776,20 @@
                         "enforce"
                       ],
                       "type": "string"
+                    },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
-                    "mode"
+                    "mode",
+                    "outcome"
                   ],
                   "type": "object"
                 },
@@ -13843,6 +13867,14 @@
                     "observe_os_clipboard_changes": {
                       "type": "boolean"
                     },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
+                    },
                     "strategy": {
                       "enum": [
                         "disabled",
@@ -13854,6 +13886,7 @@
                   "required": [
                     "id",
                     "mode",
+                    "outcome",
                     "observe_os_clipboard_changes",
                     "strategy"
                   ],
@@ -13943,11 +13976,20 @@
                         "required"
                       ],
                       "type": "string"
+                    },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
                     "mode",
+                    "outcome",
                     "candidate_print_commands",
                     "monitored_spooler"
                   ],
@@ -13966,9 +14008,6 @@
                       },
                       "then": {
                         "properties": {
-                          "allowed_storage_function_class_ids": {
-                            "const": []
-                          },
                           "enabled_sub_capabilities": {
                             "const": []
                           }
@@ -14009,18 +14048,6 @@
                     }
                   ],
                   "properties": {
-                    "allowed_storage_function_class_ids": {
-                      "description": "Sorted unique opaque catalog IDs; executable paths, names, commands and regular expressions are not accepted.",
-                      "items": {
-                        "maxLength": 128,
-                        "minLength": 1,
-                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-                        "type": "string"
-                      },
-                      "maxItems": 256,
-                      "type": "array",
-                      "uniqueItems": true
-                    },
                     "enabled_sub_capabilities": {
                       "items": {
                         "enum": [
@@ -14044,12 +14071,20 @@
                         "enforce"
                       ],
                       "type": "string"
+                    },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
                     "mode",
-                    "allowed_storage_function_class_ids",
+                    "outcome",
                     "enabled_sub_capabilities"
                   ],
                   "type": "object"
@@ -14125,6 +14160,14 @@
                       ],
                       "type": "string"
                     },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
+                    },
                     "rule": {
                       "enum": [
                         "not_applied",
@@ -14137,6 +14180,7 @@
                   "required": [
                     "id",
                     "mode",
+                    "outcome",
                     "rule"
                   ],
                   "type": "object"
@@ -14154,15 +14198,6 @@
                       },
                       "then": {
                         "properties": {
-                          "allowed_adapter_class_ids": {
-                            "const": []
-                          },
-                          "allowed_managed_profile_ids": {
-                            "const": []
-                          },
-                          "allowed_tunnel_class_ids": {
-                            "const": []
-                          },
                           "enabled_sub_capabilities": {
                             "const": []
                           }
@@ -14203,54 +14238,16 @@
                     }
                   ],
                   "properties": {
-                    "allowed_adapter_class_ids": {
-                      "description": "Sorted unique opaque catalog IDs; executable paths, names, commands and regular expressions are not accepted.",
-                      "items": {
-                        "maxLength": 128,
-                        "minLength": 1,
-                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-                        "type": "string"
-                      },
-                      "maxItems": 256,
-                      "type": "array",
-                      "uniqueItems": true
-                    },
-                    "allowed_managed_profile_ids": {
-                      "description": "Sorted unique opaque catalog IDs; executable paths, names, commands and regular expressions are not accepted.",
-                      "items": {
-                        "maxLength": 128,
-                        "minLength": 1,
-                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-                        "type": "string"
-                      },
-                      "maxItems": 256,
-                      "type": "array",
-                      "uniqueItems": true
-                    },
-                    "allowed_tunnel_class_ids": {
-                      "description": "Sorted unique opaque catalog IDs; executable paths, names, commands and regular expressions are not accepted.",
-                      "items": {
-                        "maxLength": 128,
-                        "minLength": 1,
-                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-                        "type": "string"
-                      },
-                      "maxItems": 256,
-                      "type": "array",
-                      "uniqueItems": true
-                    },
                     "enabled_sub_capabilities": {
                       "items": {
                         "enum": [
                           "system_proxy_state",
                           "os_managed_vpn_state",
-                          "tunnel_interface_state",
-                          "route_change",
-                          "network_source_health"
+                          "tunnel_interface_state"
                         ],
                         "type": "string"
                       },
-                      "maxItems": 5,
+                      "maxItems": 3,
                       "type": "array",
                       "uniqueItems": true
                     },
@@ -14265,14 +14262,20 @@
                         "enforce"
                       ],
                       "type": "string"
+                    },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
                     "mode",
-                    "allowed_adapter_class_ids",
-                    "allowed_managed_profile_ids",
-                    "allowed_tunnel_class_ids",
+                    "outcome",
                     "enabled_sub_capabilities"
                   ],
                   "type": "object"
@@ -14350,6 +14353,14 @@
                       ],
                       "type": "string"
                     },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
+                    },
                     "require_ready": {
                       "type": "boolean"
                     }
@@ -14357,6 +14368,7 @@
                   "required": [
                     "id",
                     "mode",
+                    "outcome",
                     "concurrent_use_check",
                     "require_ready"
                   ],
@@ -14435,6 +14447,14 @@
                       ],
                       "type": "string"
                     },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
+                    },
                     "require_ready": {
                       "type": "boolean"
                     }
@@ -14442,6 +14462,7 @@
                   "required": [
                     "id",
                     "mode",
+                    "outcome",
                     "concurrent_use_check",
                     "require_ready"
                   ],
@@ -14459,11 +14480,20 @@
                         "disabled"
                       ],
                       "type": "string"
+                    },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
-                    "mode"
+                    "mode",
+                    "outcome"
                   ],
                   "type": "object"
                 }
@@ -21574,7 +21604,7 @@
                   ],
                   "properties": {
                     "allowed_application_ids": {
-                      "description": "Sorted unique opaque catalog IDs; executable paths, names, commands and regular expressions are not accepted.",
+                      "description": "The only catalog applications the candidate may run, sorted and unique: IDs from the Desktop release's application catalog, each one it marks allowable. Empty adds no allowlist. When the family is on, the catalog's never-allowable applications are always blocked.",
                       "items": {
                         "maxLength": 128,
                         "minLength": 1,
@@ -21596,11 +21626,20 @@
                         "enforce"
                       ],
                       "type": "string"
+                    },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
                     "mode",
+                    "outcome",
                     "allowed_application_ids"
                   ],
                   "type": "object"
@@ -21619,11 +21658,20 @@
                         "enforce"
                       ],
                       "type": "string"
+                    },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
-                    "mode"
+                    "mode",
+                    "outcome"
                   ],
                   "type": "object"
                 },
@@ -21701,6 +21749,14 @@
                     "observe_os_clipboard_changes": {
                       "type": "boolean"
                     },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
+                    },
                     "strategy": {
                       "enum": [
                         "disabled",
@@ -21712,6 +21768,7 @@
                   "required": [
                     "id",
                     "mode",
+                    "outcome",
                     "observe_os_clipboard_changes",
                     "strategy"
                   ],
@@ -21801,11 +21858,20 @@
                         "required"
                       ],
                       "type": "string"
+                    },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
                     "mode",
+                    "outcome",
                     "candidate_print_commands",
                     "monitored_spooler"
                   ],
@@ -21824,9 +21890,6 @@
                       },
                       "then": {
                         "properties": {
-                          "allowed_storage_function_class_ids": {
-                            "const": []
-                          },
                           "enabled_sub_capabilities": {
                             "const": []
                           }
@@ -21867,18 +21930,6 @@
                     }
                   ],
                   "properties": {
-                    "allowed_storage_function_class_ids": {
-                      "description": "Sorted unique opaque catalog IDs; executable paths, names, commands and regular expressions are not accepted.",
-                      "items": {
-                        "maxLength": 128,
-                        "minLength": 1,
-                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-                        "type": "string"
-                      },
-                      "maxItems": 256,
-                      "type": "array",
-                      "uniqueItems": true
-                    },
                     "enabled_sub_capabilities": {
                       "items": {
                         "enum": [
@@ -21902,12 +21953,20 @@
                         "enforce"
                       ],
                       "type": "string"
+                    },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
                     "mode",
-                    "allowed_storage_function_class_ids",
+                    "outcome",
                     "enabled_sub_capabilities"
                   ],
                   "type": "object"
@@ -21983,6 +22042,14 @@
                       ],
                       "type": "string"
                     },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
+                    },
                     "rule": {
                       "enum": [
                         "not_applied",
@@ -21995,6 +22062,7 @@
                   "required": [
                     "id",
                     "mode",
+                    "outcome",
                     "rule"
                   ],
                   "type": "object"
@@ -22012,15 +22080,6 @@
                       },
                       "then": {
                         "properties": {
-                          "allowed_adapter_class_ids": {
-                            "const": []
-                          },
-                          "allowed_managed_profile_ids": {
-                            "const": []
-                          },
-                          "allowed_tunnel_class_ids": {
-                            "const": []
-                          },
                           "enabled_sub_capabilities": {
                             "const": []
                           }
@@ -22061,54 +22120,16 @@
                     }
                   ],
                   "properties": {
-                    "allowed_adapter_class_ids": {
-                      "description": "Sorted unique opaque catalog IDs; executable paths, names, commands and regular expressions are not accepted.",
-                      "items": {
-                        "maxLength": 128,
-                        "minLength": 1,
-                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-                        "type": "string"
-                      },
-                      "maxItems": 256,
-                      "type": "array",
-                      "uniqueItems": true
-                    },
-                    "allowed_managed_profile_ids": {
-                      "description": "Sorted unique opaque catalog IDs; executable paths, names, commands and regular expressions are not accepted.",
-                      "items": {
-                        "maxLength": 128,
-                        "minLength": 1,
-                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-                        "type": "string"
-                      },
-                      "maxItems": 256,
-                      "type": "array",
-                      "uniqueItems": true
-                    },
-                    "allowed_tunnel_class_ids": {
-                      "description": "Sorted unique opaque catalog IDs; executable paths, names, commands and regular expressions are not accepted.",
-                      "items": {
-                        "maxLength": 128,
-                        "minLength": 1,
-                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-                        "type": "string"
-                      },
-                      "maxItems": 256,
-                      "type": "array",
-                      "uniqueItems": true
-                    },
                     "enabled_sub_capabilities": {
                       "items": {
                         "enum": [
                           "system_proxy_state",
                           "os_managed_vpn_state",
-                          "tunnel_interface_state",
-                          "route_change",
-                          "network_source_health"
+                          "tunnel_interface_state"
                         ],
                         "type": "string"
                       },
-                      "maxItems": 5,
+                      "maxItems": 3,
                       "type": "array",
                       "uniqueItems": true
                     },
@@ -22123,14 +22144,20 @@
                         "enforce"
                       ],
                       "type": "string"
+                    },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
                     "mode",
-                    "allowed_adapter_class_ids",
-                    "allowed_managed_profile_ids",
-                    "allowed_tunnel_class_ids",
+                    "outcome",
                     "enabled_sub_capabilities"
                   ],
                   "type": "object"
@@ -22208,6 +22235,14 @@
                       ],
                       "type": "string"
                     },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
+                    },
                     "require_ready": {
                       "type": "boolean"
                     }
@@ -22215,6 +22250,7 @@
                   "required": [
                     "id",
                     "mode",
+                    "outcome",
                     "concurrent_use_check",
                     "require_ready"
                   ],
@@ -22293,6 +22329,14 @@
                       ],
                       "type": "string"
                     },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
+                    },
                     "require_ready": {
                       "type": "boolean"
                     }
@@ -22300,6 +22344,7 @@
                   "required": [
                     "id",
                     "mode",
+                    "outcome",
                     "concurrent_use_check",
                     "require_ready"
                   ],
@@ -22317,11 +22362,20 @@
                         "disabled"
                       ],
                       "type": "string"
+                    },
+                    "outcome": {
+                      "description": "What an enforce occurrence of this family leads to; flag unless mode is enforce.",
+                      "enum": [
+                        "flag",
+                        "flag_and_suspend"
+                      ],
+                      "type": "string"
                     }
                   },
                   "required": [
                     "id",
-                    "mode"
+                    "mode",
+                    "outcome"
                   ],
                   "type": "object"
                 }

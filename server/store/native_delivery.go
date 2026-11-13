@@ -94,6 +94,17 @@ type NativeIntegrityFlagged struct {
 	// ScreenClipRequested reports that the new Flag asked Desktop for an
 	// incident clip.
 	ScreenClipRequested bool
+	// Suspended is the policy Suspension the occurrence opened, when its
+	// family's outcome is flag_and_suspend, or nil.
+	Suspended *NativeIntegritySuspended
+}
+
+// NativeIntegritySuspended is what a native Suspension changed, for the
+// candidate and managers to be told of it.
+type NativeIntegritySuspended struct {
+	Suspension       ExamAttemptSuspensionView
+	AttemptRevision  int64
+	ClosedConnection ExamAttemptManagerConnection
 }
 
 type NativeDeliveryStore interface {

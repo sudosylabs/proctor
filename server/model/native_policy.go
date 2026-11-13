@@ -55,27 +55,27 @@ func NativeFamilies() []string {
 type NativeFamilyPolicy struct{ fields nativeFamilyFields }
 
 type nativeFamilyFields struct {
-	ID                             string     `json:"id"`
-	Mode                           NativeMode `json:"mode"`
-	AllowedApplicationIDs          []string   `json:"allowed_application_ids"`
-	Strategy                       string     `json:"strategy"`
-	ObserveOSClipboardChanges      bool       `json:"observe_os_clipboard_changes"`
-	CandidatePrintCommands         string     `json:"candidate_print_commands"`
-	MonitoredSpooler               string     `json:"monitored_spooler"`
-	EnabledSubCapabilities         []string   `json:"enabled_sub_capabilities"`
-	AllowedStorageFunctionClassIDs []string   `json:"allowed_storage_function_class_ids"`
-	Rule                           string     `json:"rule"`
-	AllowedManagedProfileIDs       []string   `json:"allowed_managed_profile_ids"`
-	AllowedAdapterClassIDs         []string   `json:"allowed_adapter_class_ids"`
-	AllowedTunnelClassIDs          []string   `json:"allowed_tunnel_class_ids"`
-	RequireReady                   bool       `json:"require_ready"`
-	ConcurrentUseCheck             string     `json:"concurrent_use_check"`
+	ID                        string     `json:"id"`
+	Mode                      NativeMode `json:"mode"`
+	AllowedApplicationIDs     []string   `json:"allowed_application_ids"`
+	Strategy                  string     `json:"strategy"`
+	ObserveOSClipboardChanges bool       `json:"observe_os_clipboard_changes"`
+	CandidatePrintCommands    string     `json:"candidate_print_commands"`
+	MonitoredSpooler          string     `json:"monitored_spooler"`
+	EnabledSubCapabilities    []string   `json:"enabled_sub_capabilities"`
+	Rule                      string     `json:"rule"`
+	RequireReady              bool       `json:"require_ready"`
+	ConcurrentUseCheck        string     `json:"concurrent_use_check"`
+	// Outcome is what an enforce occurrence of the family leads to: a Flag,
+	// or a Flag and a Suspension. It is flag unless the family enforces.
+	Outcome IntegrityOutcome `json:"outcome"`
 }
 
 var errNativePolicy = errors.New("native policy is invalid")
 
-func (p NativeFamilyPolicy) ID() string       { return p.fields.ID }
-func (p NativeFamilyPolicy) Mode() NativeMode { return p.fields.Mode }
+func (p NativeFamilyPolicy) ID() string                { return p.fields.ID }
+func (p NativeFamilyPolicy) Mode() NativeMode          { return p.fields.Mode }
+func (p NativeFamilyPolicy) Outcome() IntegrityOutcome { return p.fields.Outcome }
 
 func (p NativeFamilyPolicy) Validate() error {
 	f := p.fields
@@ -84,6 +84,9 @@ func (p NativeFamilyPolicy) Validate() error {
 	}
 
 	disabled := f.Mode == NativeModeDisabled
+	if f.Outcome != IntegrityOutcomeFlag && (f.Mode != NativeModeEnforce || f.Outcome != IntegrityOutcomeFlagAndSuspend) {
+		return errNativePolicy
+	}
 	switch f.ID {
 	case "process_application":
 		if validateNativePolicyIDs(f.AllowedApplicationIDs) != nil || disabled && len(f.AllowedApplicationIDs) != 0 {
@@ -125,9 +128,7 @@ func (p NativeFamilyPolicy) Validate() error {
 			}
 		}
 	case "removable_storage":
-		if validateNativePolicySelection(f.EnabledSubCapabilities, []string{"removable_block_storage", "portable_mtp"}, disabled) != nil ||
-			validateNativePolicyIDs(f.AllowedStorageFunctionClassIDs) != nil ||
-			disabled && len(f.AllowedStorageFunctionClassIDs) != 0 {
+		if validateNativePolicySelection(f.EnabledSubCapabilities, []string{"removable_block_storage", "portable_mtp"}, disabled) != nil {
 			return errNativePolicy
 		}
 	case "virtualization":
@@ -138,13 +139,9 @@ func (p NativeFamilyPolicy) Validate() error {
 	case "network_configuration":
 		if validateNativePolicySelection(
 			f.EnabledSubCapabilities,
-			[]string{"system_proxy_state", "os_managed_vpn_state", "tunnel_interface_state", "route_change", "network_source_health"},
+			[]string{"system_proxy_state", "os_managed_vpn_state", "tunnel_interface_state"},
 			disabled,
-		) != nil ||
-			validateNativePolicyIDs(f.AllowedManagedProfileIDs) != nil ||
-			validateNativePolicyIDs(f.AllowedAdapterClassIDs) != nil ||
-			validateNativePolicyIDs(f.AllowedTunnelClassIDs) != nil ||
-			disabled && (len(f.AllowedManagedProfileIDs) != 0 || len(f.AllowedAdapterClassIDs) != 0 || len(f.AllowedTunnelClassIDs) != 0) {
+		) != nil {
 			return errNativePolicy
 		}
 	case "camera", "microphone":
@@ -197,7 +194,7 @@ func (p NativeFamilyPolicy) MarshalJSON() ([]byte, error) {
 	f := p.fields
 	// This closed encoding map is constructed only from the typed family value;
 	// it is never populated with arbitrary client members.
-	result := map[string]any{"id": f.ID, "mode": f.Mode}
+	result := map[string]any{"id": f.ID, "mode": f.Mode, "outcome": f.Outcome}
 	switch f.ID {
 	case "process_application":
 		result["allowed_application_ids"] = f.AllowedApplicationIDs
@@ -207,16 +204,10 @@ func (p NativeFamilyPolicy) MarshalJSON() ([]byte, error) {
 	case "printing":
 		result["candidate_print_commands"] = f.CandidatePrintCommands
 		result["monitored_spooler"] = f.MonitoredSpooler
-	case "removable_storage":
+	case "removable_storage", "network_configuration":
 		result["enabled_sub_capabilities"] = f.EnabledSubCapabilities
-		result["allowed_storage_function_class_ids"] = f.AllowedStorageFunctionClassIDs
 	case "virtualization":
 		result["rule"] = f.Rule
-	case "network_configuration":
-		result["enabled_sub_capabilities"] = f.EnabledSubCapabilities
-		result["allowed_managed_profile_ids"] = f.AllowedManagedProfileIDs
-		result["allowed_adapter_class_ids"] = f.AllowedAdapterClassIDs
-		result["allowed_tunnel_class_ids"] = f.AllowedTunnelClassIDs
 	case "camera", "microphone":
 		result["require_ready"] = f.RequireReady
 		result["concurrent_use_check"] = f.ConcurrentUseCheck
@@ -279,7 +270,7 @@ type NativeScreenRecordingPolicy struct {
 func DefaultNativeSecurityPolicy() NativeSecurityPolicy {
 	result := NativeSecurityPolicy{RegistryDigest: NativeRegistryDigest, BaselineID: "desktop_candidate"}
 	for _, id := range NativeFamilies() {
-		f := nativeFamilyFields{ID: id, Mode: NativeModeDisabled}
+		f := nativeFamilyFields{ID: id, Mode: NativeModeDisabled, Outcome: IntegrityOutcomeFlag}
 		switch id {
 		case "process_application":
 			f.AllowedApplicationIDs = []string{}
@@ -288,16 +279,10 @@ func DefaultNativeSecurityPolicy() NativeSecurityPolicy {
 		case "printing":
 			f.CandidatePrintCommands = "not_applied"
 			f.MonitoredSpooler = "not_required"
-		case "removable_storage":
+		case "removable_storage", "network_configuration":
 			f.EnabledSubCapabilities = []string{}
-			f.AllowedStorageFunctionClassIDs = []string{}
 		case "virtualization":
 			f.Rule = "not_applied"
-		case "network_configuration":
-			f.EnabledSubCapabilities = []string{}
-			f.AllowedManagedProfileIDs = []string{}
-			f.AllowedAdapterClassIDs = []string{}
-			f.AllowedTunnelClassIDs = []string{}
 		case "camera", "microphone":
 			f.ConcurrentUseCheck = "not_required"
 		}

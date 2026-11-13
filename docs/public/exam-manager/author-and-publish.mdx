@@ -44,6 +44,16 @@ minimum duration, incident threshold, time window, and one closed outcome.
 Browser Policy is a versioned start rule and bounded set of HTTPS origin/path
 rules; blocked navigation is recorded rather than silently broadened.
 
+Desktop security families each have a mode: disabled, observe or enforce. An
+observed family only records. An enforced family stops the candidate starting
+while its check is not met, and raises a Flag when it stops being met during
+the Exam. Choose its outcome: a Flag, or a Flag and a suspension. Turning on
+applications always blocks the apps the Desktop release never allows, such as
+remote-control and screen-sharing tools. Its allowed list may name only apps the
+release marks allowable, and when it names any, no other catalog app may run.
+A family the candidate's Desktop release cannot check refuses the Exam at Start
+rather than being skipped.
+
 ## Review Before Publishing
 
 Check the title, rendered and sanitized instructions, policy values, Browser

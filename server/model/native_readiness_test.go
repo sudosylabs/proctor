@@ -56,7 +56,8 @@ func TestTheBaselineCompilesIntoEveryPolicy(t *testing.T) {
 
 	registry, err := ParseNativeCapabilityRegistry(readNativeCapabilityRegistry(t))
 	require.NoError(t, err)
-	activations, rules := compileNativePolicy(registry)
+	activations, rules, err := compileNativePolicy(registry, DefaultNativeSecurityPolicy().Families)
+	require.NoError(t, err)
 	require.Equal(t, []NativeActivation{
 		{Capability: "candidate_window", Categories: []string{}},
 		{Capability: "display", Categories: []string{}},
@@ -64,7 +65,8 @@ func TestTheBaselineCompilesIntoEveryPolicy(t *testing.T) {
 	}, activations, "every capability the baseline needs runs, in a stable order")
 	require.Len(t, rules, 3)
 
-	none, noRules := compileNativePolicy(nil)
+	none, noRules, err := compileNativePolicy(nil, DefaultNativeSecurityPolicy().Families)
+	require.NoError(t, err, "with every family off, no registry is needed")
 	require.Empty(t, none)
 	require.Empty(t, noRules)
 }
@@ -73,7 +75,8 @@ func TestTheServerDecidesReadinessFromTheReportedState(t *testing.T) {
 	t.Parallel()
 
 	registry := checkedRegistry(t)
-	activations, rules := compileNativePolicy(registry)
+	activations, rules, err := compileNativePolicy(registry, DefaultNativeSecurityPolicy().Families)
+	require.NoError(t, err)
 
 	statuses, blocked, ok := evaluateNativeReadiness(registry, activations, rules, compliantStart())
 	require.True(t, ok)

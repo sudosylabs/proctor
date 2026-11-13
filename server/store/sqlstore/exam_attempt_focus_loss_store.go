@@ -479,7 +479,7 @@ func applyFocusLossDecision(
 	if decision.Suspend {
 		suspensionID = sql.NullString{String: input.SuspensionID.String(), Valid: true}
 		var err error
-		connectionClosed, err = suspendForFocusLoss(ctx, tx, access, state.FlagID.String, input.SuspensionID)
+		connectionClosed, err = suspendForIntegrityPolicy(ctx, tx, access, state.FlagID.String, input.SuspensionID, model.IntegrityPolicyFocusLoss)
 		if err != nil {
 			return false, sql.NullString{}, err
 		}
@@ -557,13 +557,9 @@ func retainFocusLossOutcome(
 	return nil
 }
 
-func lockFocusLossAccess(ctx context.Context, tx *sqlxTxWrapper, input store.ExamAttemptFocusLossAccess) (focusLossAccessRow, error) {
-	var zero focusLossAccessRow
-	var row focusLossAccessRow
-	err := tx.Get(
-		ctx,
-		&row,
-		`SELECT a.exam_id, a.exam_sitting_id AS sitting_id, s.class_id, a.candidate_user_id,
+// focusLossAccessColumns are the columns of a focusLossAccessRow, over a, s,
+// r, p, co, se and u.
+const focusLossAccessColumns = `a.exam_id, a.exam_sitting_id AS sitting_id, s.class_id, a.candidate_user_id,
 			a.id AS attempt_id, a.admission_revision_id, a.state AS attempt_state,
 			a.created_at AS attempt_created_at, a.updated_at AS attempt_updated_at,
 			a.revision AS attempt_revision, a.submitted_at AS attempt_submitted_at,
@@ -578,7 +574,15 @@ func lockFocusLossAccess(ctx context.Context, tx *sqlxTxWrapper, input store.Exa
 			s.scheduled_end_at, r.policy_canonical, se.archived_at AS session_archived_at,
 			se.revoked_at AS session_revoked_at, se.idle_expires_at AS session_idle_expires_at,
 			se.expires_at AS session_expires_at, u.archived_at AS user_archived_at,
-			u.disabled_at AS user_disabled_at
+			u.disabled_at AS user_disabled_at`
+
+func lockFocusLossAccess(ctx context.Context, tx *sqlxTxWrapper, input store.ExamAttemptFocusLossAccess) (focusLossAccessRow, error) {
+	var zero focusLossAccessRow
+	var row focusLossAccessRow
+	err := tx.Get(
+		ctx,
+		&row,
+		`SELECT `+focusLossAccessColumns+`
 		FROM exam_attempts a
 		JOIN exam_sittings s ON s.id = a.exam_sitting_id
 			AND s.exam_id = a.exam_id
@@ -852,12 +856,17 @@ func consumeFocusLossBucket(
 	return nil
 }
 
-func suspendForFocusLoss(
+// suspendForIntegrityPolicy suspends the Attempt of row for the policy kind:
+// it suspends the Attempt, ends the Participation, closes native delivery and
+// the Connection, and opens the policy Suspension linked to the Flag. Focus
+// Loss and native rules share it.
+func suspendForIntegrityPolicy(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	row focusLossAccessRow,
 	flagID string,
 	suspensionID model.AttemptSuspensionID,
+	kind model.IntegrityPolicyKind,
 ) (bool, error) {
 	attempt, participation, connection, err := row.enforcementDomain()
 	if err != nil {
@@ -878,7 +887,7 @@ func suspendForFocusLoss(
 		participation.ID,
 		domainFlagID,
 		row.Generation,
-		model.IntegrityPolicyFocusLoss,
+		kind,
 		row.DatabaseNow,
 	)
 	if err != nil {

@@ -1825,6 +1825,23 @@ and decides admission itself: every readiness rule in enforce mode must be met,
 and unknown blocks (`native_rule_unmet`). Its own statuses are returned; Desktop's
 never override them.
 
+The compiled rules are the release's baseline rules followed by rules for each
+native family the Exam enables, checked against the release's capability
+registry and application catalog; a selection the release cannot evaluate
+refuses resolution instead of compiling nothing. Each family rule's ID is
+`<family>.<check>`, for example `printing.candidate_jobs` or
+`process_application.allowlist`. Enabling the process family always adds a
+rule blocking the catalog's never-allowable applications, and a non-empty
+`allowed_application_ids` adds an allowlist of catalog applications marked
+allowable. Each family carries an `outcome`: `flag`, or, in enforce mode only,
+`flag_and_suspend`. An enforce occurrence of a `flag_and_suspend` family raises
+its native Flag and suspends the Attempt as Focus Loss does (reason
+`native_policy_review_required`): the Participation ends, its Connection and
+native delivery close, and the policy Suspension links the Flag. A Participation
+with no open Connection keeps its Flag without a Suspension. Options the registry
+cannot check (storage function classes, VPN profile, adapter and tunnel class
+allowlists, route change and source health) are not part of the policy.
+
 `exam_attempt.connect` requires a closed `security` union. First admission and
 Ready rejoin use `kind=preflight`, `preflight_id`, and `report_digest`. The atomic
 admission operation rechecks current eligibility, registered key, admitted

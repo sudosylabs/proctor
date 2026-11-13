@@ -306,3 +306,49 @@ func nativeResetWithLongTimestamp(t *testing.T, reset model.NativeSourceReset, z
 	require.NoError(t, json.Unmarshal(raw, &reset))
 	return reset
 }
+
+// TestNativeSuspensionStore covers a family whose outcome is
+// flag_and_suspend: its enforce occurrence raises the Flag and suspends the
+// Attempt as Focus Loss does, ending the Participation and closing its
+// Connection, with the Suspension linked to the Flag.
+func TestNativeSuspensionStore(t *testing.T, ss store.Store) {
+	ctx := context.Background()
+	fixture := newExamAttemptFixtureWithOptions(t, ctx, ss, nil, nil, model.ExamCapacityPolicy{}, false,
+		func(native *model.NativeSecurityPolicy) {
+			for i, family := range native.Families {
+				if family.ID() == "virtualization" {
+					require.NoError(t, json.Unmarshal(
+						[]byte(`{"id":"virtualization","mode":"enforce","rule":"block_recognized_guest","outcome":"flag_and_suspend"}`),
+						&native.Families[i]))
+				}
+			}
+		})
+	connect := &store.ExamAttemptConnect{SittingID: fixture.sitting.ID, CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID, DesktopRegistrationID: fixture.session.DesktopRegistrationID, DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint, AttemptID: model.NewExamAttemptID(), WorkspaceID: model.NewExamAttemptWorkspaceID(), ParticipationID: model.NewAttemptParticipationID(), ConnectionID: model.NewAttemptConnectionID(), ContinuityCredentialHash: model.HashToken(model.NewCredentialToken()), AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
+	prepareExamAttemptConnect(t, ctx, ss, connect)
+	connected, err := ss.ExamAttempt().Connect(ctx, connect, examCommand(fixture.candidate.ID, store.ExamAttemptConnectOperation, "native-suspend-connect", "native-suspend-connect"))
+	require.NoError(t, err)
+	require.Contains(t, connected.Security.Policy.Activations, model.NativeActivation{Capability: "virtualization", Categories: []string{}},
+		"the enforced family runs")
+	access := store.NativeDeliveryAccess{Access: store.CandidateAttemptAccess{AttemptID: connected.Attempt.ID, ConnectionID: connected.Connection.ID, CandidateUserID: connect.CandidateUserID, SessionID: connect.SessionID, DesktopRegistrationID: connect.DesktopRegistrationID, DPoPKeyThumbprint: connect.DPoPKeyThumbprint, ContinuityCredentialHash: connect.ContinuityCredentialHash}, StreamID: connected.Security.DeliveryStreamID, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation}
+
+	guest := nativeFact("virtualization", 2, model.NowUTC().Truncate(time.Millisecond), `{"classification":"recognized_guest","hypervisor":"vmware"}`, `{}`)
+	batch := model.NativeSecurityBatch{StreamID: access.StreamID, BatchSequence: 1, ParticipationID: access.ParticipationID, Generation: access.Generation, SecuritySessionID: connected.Security.SecuritySessionID, PolicyDigest: connected.Security.Policy.Digest, ApplicationReleaseID: connected.Security.Policy.ApplicationReleaseID, MatrixID: connected.Security.Policy.MatrixID, Records: []model.NativeRecord{guest}}
+	raw, err := batch.Canonical()
+	require.NoError(t, err)
+	appended, err := ss.NativeDelivery().AppendNativeDelivery(ctx, &store.NativeDeliveryAppend{Access: access, Batch: batch, DesktopBuild: connect.DesktopBuild, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}, examCommand(fixture.candidate.ID, store.NativeDeliveryAppendOperation, "native-suspend", model.SHA256Fingerprint(raw)))
+	require.NoError(t, err)
+	require.Len(t, appended.Flagged, 1)
+	flagged := appended.Flagged[0]
+	require.Equal(t, model.IntegrityPolicyKind("native.virtualization"), flagged.Kind)
+	require.NotNil(t, flagged.Suspended, "the family's outcome suspends")
+	require.Equal(t, flagged.FlagID, flagged.Suspended.Suspension.FlagID)
+	require.Equal(t, model.AttemptSuspensionCandidateReasonNativePolicy, flagged.Suspended.Suspension.CandidateReason)
+	require.Equal(t, connected.Connection.ID, flagged.Suspended.ClosedConnection.ID)
+
+	snapshot, err := ss.ExamAttempt().Get(ctx, fixture.examID, connected.Attempt.ID)
+	require.NoError(t, err)
+	require.Equal(t, model.ExamAttemptSuspended, snapshot.Attempt.State)
+	require.NotNil(t, snapshot.ActiveSuspension)
+	require.Equal(t, flagged.Suspended.Suspension.ID, snapshot.ActiveSuspension.ID)
+	require.Equal(t, model.AttemptParticipationEndPolicySuspended, snapshot.LatestParticipation.EndReason)
+}

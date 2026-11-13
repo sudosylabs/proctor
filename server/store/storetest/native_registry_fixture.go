@@ -64,6 +64,7 @@ var compliantNativeFacts = map[model.NativeCapabilityID][2]string{
 	"interactive_session": {
 		`{"coverage":"full_lifecycle","console_owner":"candidate","lock":"unlocked","remote_attachment":"absent","other_human_sessions":0}`, `{}`,
 	},
+	"virtualization": {`{"classification":"recognized_physical_or_root","hypervisor":"none_detected"}`, `{}`},
 }
 
 // nativeReadiness reports a capability as Desktop does at Start.

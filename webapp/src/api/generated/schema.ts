@@ -15602,58 +15602,64 @@ export interface components {
                  *           {
                  *             "allowed_application_ids": [],
                  *             "id": "process_application",
-                 *             "mode": "disabled"
+                 *             "mode": "disabled",
+                 *             "outcome": "flag"
                  *           },
                  *           {
                  *             "id": "interactive_session",
-                 *             "mode": "disabled"
+                 *             "mode": "disabled",
+                 *             "outcome": "flag"
                  *           },
                  *           {
                  *             "id": "clipboard",
                  *             "mode": "disabled",
                  *             "observe_os_clipboard_changes": false,
+                 *             "outcome": "flag",
                  *             "strategy": "disabled"
                  *           },
                  *           {
                  *             "candidate_print_commands": "not_applied",
                  *             "id": "printing",
                  *             "mode": "disabled",
-                 *             "monitored_spooler": "not_required"
+                 *             "monitored_spooler": "not_required",
+                 *             "outcome": "flag"
                  *           },
                  *           {
-                 *             "allowed_storage_function_class_ids": [],
                  *             "enabled_sub_capabilities": [],
                  *             "id": "removable_storage",
-                 *             "mode": "disabled"
+                 *             "mode": "disabled",
+                 *             "outcome": "flag"
                  *           },
                  *           {
                  *             "id": "virtualization",
                  *             "mode": "disabled",
+                 *             "outcome": "flag",
                  *             "rule": "not_applied"
                  *           },
                  *           {
-                 *             "allowed_adapter_class_ids": [],
-                 *             "allowed_managed_profile_ids": [],
-                 *             "allowed_tunnel_class_ids": [],
                  *             "enabled_sub_capabilities": [],
                  *             "id": "network_configuration",
-                 *             "mode": "disabled"
+                 *             "mode": "disabled",
+                 *             "outcome": "flag"
                  *           },
                  *           {
                  *             "concurrent_use_check": "not_required",
                  *             "id": "camera",
                  *             "mode": "disabled",
+                 *             "outcome": "flag",
                  *             "require_ready": false
                  *           },
                  *           {
                  *             "concurrent_use_check": "not_required",
                  *             "id": "microphone",
                  *             "mode": "disabled",
+                 *             "outcome": "flag",
                  *             "require_ready": false
                  *           },
                  *           {
                  *             "id": "external_capture",
-                 *             "mode": "disabled"
+                 *             "mode": "disabled",
+                 *             "outcome": "flag"
                  *           }
                  *         ],
                  *         "registry_digest": "sha256:2a3cafc0b4bccad3e06d0a8602cc84692f4d85e99763db6feb40e1417549e099",

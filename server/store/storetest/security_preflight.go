@@ -33,8 +33,17 @@ func syntheticNativeAgreement(t *testing.T, build model.DesktopBuildTuple) *mode
 	for _, item := range []struct {
 		key    string
 		source model.NativeSourceID
-	}{{"baseline.capture", model.NativeSourceCapture}, {"baseline.display", model.NativeSourceDisplay}, {"baseline.window", model.NativeSourceWindow}} {
-		definitions = append(definitions, model.NativeCoverageDefinition{CoverageKey: item.key, CapabilityID: "baseline", SourceID: item.source, SourceSchemaDigest: digest, PermittedClaims: []model.NativeCapabilityClaim{model.NativeClaimEnforce}, RequiredPermissions: []string{}, Baseline: true})
+	}{
+		{"baseline.capture", model.NativeSourceCapture}, {"baseline.display", model.NativeSourceDisplay}, {"baseline.window", model.NativeSourceWindow},
+		// One certified optional family, for policies that enforce it.
+		{"native.recognized_guest.v1", model.NativeSourceVirtualization},
+	} {
+		baseline := strings.HasPrefix(item.key, "baseline.")
+		capability := "baseline"
+		if !baseline {
+			capability = "virtualization"
+		}
+		definitions = append(definitions, model.NativeCoverageDefinition{CoverageKey: item.key, CapabilityID: capability, SourceID: item.source, SourceSchemaDigest: digest, PermittedClaims: []model.NativeCapabilityClaim{model.NativeClaimEnforce}, RequiredPermissions: []string{}, Baseline: baseline})
 		matrix.Entries = append(matrix.Entries, model.NativeCapabilityMatrixEntry{CoverageKey: item.key, SourceSchemaDigest: digest, Claim: model.NativeClaimEnforce, ComponentID: "synthetic-component", AdapterVersion: "synthetic-adapter", RequiredPermissions: []string{}, Limitations: []string{}, Verification: "passed"})
 	}
 	agreement, err := model.NewDesktopNativeAgreement(model.NativeRegistryDigest, model.SHA256Fingerprint([]byte("synthetic-manifest")), model.SHA256Fingerprint([]byte("synthetic-matrix")), model.SHA256Fingerprint([]byte("synthetic-detectors")), definitions, matrix, []model.NativeDetectorDefinition{{DetectorID: "synthetic-baseline", Version: 1, CapabilityID: "baseline", ConditionIDs: []string{"baseline.capture"}, SourceIDs: []model.NativeSourceID{model.NativeSourceCapture}, AllowedModes: []model.NativeCapabilityClaim{model.NativeClaimEnforce}}})

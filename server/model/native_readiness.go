@@ -77,25 +77,6 @@ func (r NativeRuleReport) validate() bool {
 	return isNativeRuleID(r.RuleID) && statusOK && causeOK
 }
 
-// compileNativePolicy turns the release registry into what a policy sends at
-// activation: the baseline rules, unchanged, and the capabilities they need.
-// Managers' family selections compile into further rules once the registry
-// carries those families' capabilities.
-func compileNativePolicy(registry *NativeCapabilityRegistry) ([]NativeActivation, []NativeRule) {
-	activations, rules := []NativeActivation{}, []NativeRule{}
-	if registry == nil {
-		return activations, rules
-	}
-	for _, rule := range registry.baseline {
-		rules = append(rules, rule)
-		if !slices.ContainsFunc(activations, func(a NativeActivation) bool { return a.Capability == rule.Capability }) {
-			activations = append(activations, NativeActivation{Capability: rule.Capability, Categories: []string{}})
-		}
-	}
-	slices.SortFunc(activations, func(a, b NativeActivation) int { return strings.Compare(string(a.Capability), string(b.Capability)) })
-	return activations, rules
-}
-
 // facts reads a capability's registered fields out of its reported fact.
 // "<capability>.summary.<name>" is read from the summary and every other
 // "<capability>.<name>" from the state, so display.summary.active_physical

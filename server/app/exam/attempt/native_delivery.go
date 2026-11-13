@@ -446,7 +446,7 @@ func (s *Service) AppendNativeDelivery(
 	}
 
 	for _, flagged := range value.Flagged {
-		if effectErr := s.publishIntegrityOutcome(ctx, integrityEffects{
+		effects := integrityEffects{
 			SittingID:       target.SittingID,
 			AttemptID:       deliveryAccess.Access.AttemptID,
 			CandidateUserID: deliveryAccess.Access.CandidateUserID,
@@ -460,7 +460,24 @@ func (s *Service) AppendNativeDelivery(
 			Invalidate: func() error {
 				return realtime.PublishSittingBoardChanged(ctx, s.publisher, target.ExamID, target.SittingID)
 			},
-		}); effectErr != nil {
+		}
+		if suspended := flagged.Suspended; suspended != nil {
+			effects.Flagged.Outcome = model.IntegrityOutcomeFlagAndSuspend
+			effects.ClosedConnection = &suspended.ClosedConnection
+			effects.Suspension = &integritySuspensionNotice{
+				ConnectionID:    suspended.ClosedConnection.ID,
+				FlagID:          flagged.FlagID,
+				Suspension:      suspended.Suspension,
+				AttemptRevision: suspended.AttemptRevision,
+			}
+			effects.Invalidate = func() error {
+				return errors.Join(
+					realtime.PublishSittingBoardChanged(ctx, s.publisher, target.ExamID, target.SittingID),
+					s.publishCandidateActivityChanged(ctx, deliveryAccess.Access.CandidateUserID),
+				)
+			}
+		}
+		if effectErr := s.publishIntegrityOutcome(ctx, effects); effectErr != nil {
 			s.publisher.Report(ctx, "exam_attempt_native_flagged", effectErr)
 		}
 	}

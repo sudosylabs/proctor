@@ -17,7 +17,8 @@ import (
 
 func interpretationPolicy(t *testing.T, registry *NativeCapabilityRegistry) EffectiveExamSecurityPolicy {
 	t.Helper()
-	activations, rules := compileNativePolicy(registry)
+	activations, rules, err := compileNativePolicy(registry, DefaultNativeSecurityPolicy().Families)
+	require.NoError(t, err)
 	return EffectiveExamSecurityPolicy{Activations: activations, Rules: rules}
 }
 

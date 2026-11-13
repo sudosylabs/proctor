@@ -17,6 +17,12 @@ module when a change is not server-only. No module has been released yet.
   admission from the reported facts, and it re-evaluates the same rules on the
   facts streamed during the Attempt. An enforce rule that stops being met
   raises a `native.<capability>` Flag.
+- Server: an Exam's native families compile into rules on the release's
+  registry: process applications (the catalog's never-allowable applications
+  always blocked, plus an optional allowlist), clipboard, printing, removable
+  storage, virtualization, network, camera and microphone. Each family has an
+  `outcome`, `flag` or, when enforcing, `flag_and_suspend`, which suspends the
+  Attempt like Focus Loss.
 - Server: screen clips. When the Exam records the screen, managers ask for a
   range with a private reason (at most 10 per Attempt), a Flag asks for the
   minute either side of it, Desktop uploads signed 8 MiB chunks, and managers
@@ -29,6 +35,11 @@ module when a change is not server-only. No module has been released yet.
   `unresolved_opener`. Desktop now sends `capability_fact`,
   `participation_confirmed` and `rule_status` records, and native condition
   evidence is the server's rule status changes (**breaking**).
+- Server: native family options the release cannot check:
+  `allowed_storage_function_class_ids`, `allowed_managed_profile_ids`,
+  `allowed_adapter_class_ids`, `allowed_tunnel_class_ids`, and the
+  `route_change` and `network_source_health` network options. Every family
+  now requires `outcome` (**breaking**).
 
 - Server: the webapp build manifest and the devseed journal no longer carry
   a `schema_version`; a manifest or journal that does is rejected.

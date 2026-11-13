@@ -31,8 +31,8 @@ func nativeResolutionFixture(t *testing.T) NativePolicyResolution {
 	add("baseline.window", "baseline", NativeSourceWindow, true, NativeClaimEnforce)
 	add("native.candidate_private_clipboard.v1", "clipboard", "", false, NativeClaimEnforce)
 	add("native.os_clipboard_change.v1", "clipboard", NativeSourceClipboard, false, NativeClaimObserve)
-	add("native.route_change.v1", "network_configuration", NativeSourceNetwork, false, NativeClaimObserve)
 	add("native.single_interactive_session.v1", "interactive_session", NativeSourceSession, false, NativeClaimObserve, NativeClaimEnforce)
+	add("native.tunnel_interface_state.v1", "network_configuration", NativeSourceNetwork, false, NativeClaimEnforce)
 	matrix := NativeCapabilityMatrix{RegistryDigest: NativeRegistryDigest, MatrixID: "synthetic-matrix", ReleaseID: "synthetic-release", TargetTuple: "synthetic-darwin-arm64"}
 	for _, definition := range definitions {
 		claim, verification := definition.PermittedClaims[0], "passed"
@@ -43,6 +43,8 @@ func nativeResolutionFixture(t *testing.T) NativePolicyResolution {
 		matrix.Entries = append(matrix.Entries, NativeCapabilityMatrixEntry{CoverageKey: definition.CoverageKey, SourceSchemaDigest: schema, Claim: claim, ComponentID: "synthetic-component", AdapterVersion: "synthetic-adapter", RequiredPermissions: []string{}, Limitations: []string{}, Verification: verification})
 	}
 	agreement, err := NewDesktopNativeAgreement(NativeRegistryDigest, SHA256Fingerprint([]byte("manifest")), SHA256Fingerprint([]byte("matrix")), SHA256Fingerprint([]byte("detectors")), definitions, matrix, []NativeDetectorDefinition{})
+	require.NoError(t, err)
+	agreement, err = agreement.WithCapabilityRegistry(checkedRegistry(t))
 	require.NoError(t, err)
 	manifest := EmptyAttemptConfigurationManifest()
 	at := time.Date(2026, 9, 8, 8, 0, 0, 123000000, time.UTC)
@@ -98,33 +100,33 @@ func TestEffectiveNativePolicyContentDigestSurvivesOnlyScopeRebind(t *testing.T)
 }
 func TestNativePolicyResolutionTruthfulObservationAndEffects(t *testing.T) {
 	input := nativeResolutionFixture(t)
-	setNativeFamily(t, &input, 2, `{"id":"clipboard","mode":"enforce","strategy":"private_attempt","observe_os_clipboard_changes":true}`)
-	setNativeFamily(t, &input, 6, `{"id":"network_configuration","mode":"enforce","enabled_sub_capabilities":["route_change"],"allowed_managed_profile_ids":[],"allowed_adapter_class_ids":[],"allowed_tunnel_class_ids":[]}`)
+	setNativeFamily(t, &input, 2, `{"id":"clipboard","mode":"enforce","strategy":"private_attempt","observe_os_clipboard_changes":true,"outcome":"flag"}`)
+	setNativeFamily(t, &input, 6, `{"id":"network_configuration","mode":"enforce","enabled_sub_capabilities":["tunnel_interface_state"],"outcome":"flag"}`)
 	resolved, err := ResolveNativePolicy(input)
 	require.NoError(t, err)
-	require.NotContains(t, resolved.Sources, NativeSourceClipboard, "unavailable observation was opened or route observation omitted")
-	require.Contains(t, resolved.Sources, NativeSourceNetwork, "unavailable observation was opened or route observation omitted")
-	foundEffect, foundUnavailable, foundRoute := false, false, false
+	require.NotContains(t, resolved.Sources, NativeSourceClipboard, "unavailable observation was opened or tunnel observation omitted")
+	require.Contains(t, resolved.Sources, NativeSourceNetwork, "unavailable observation was opened or tunnel observation omitted")
+	foundEffect, foundUnavailable, foundTunnel := false, false, false
 	for _, r := range resolved.Requirements {
 		switch r.CoverageKey {
 		case "native.candidate_private_clipboard.v1":
 			foundEffect = r.SourceID == "" && r.RequiredClaim == NativeClaimEnforce
 		case "native.os_clipboard_change.v1":
 			foundUnavailable = r.Entry.Claim == NativeClaimUnavailable
-		case "native.route_change.v1":
-			foundRoute = r.RequiredClaim == NativeClaimObserve
+		case "native.tunnel_interface_state.v1":
+			foundTunnel = r.RequiredClaim == NativeClaimEnforce
 		}
 	}
-	require.True(t, foundEffect, "lost effect, unavailable claim or route observe rule")
-	require.True(t, foundUnavailable, "lost effect, unavailable claim or route observe rule")
-	require.True(t, foundRoute, "lost effect, unavailable claim or route observe rule")
-	setNativeFamily(t, &input, 1, `{"id":"interactive_session","mode":"enforce"}`)
+	require.True(t, foundEffect, "lost effect, unavailable claim or tunnel rule")
+	require.True(t, foundUnavailable, "lost effect, unavailable claim or tunnel rule")
+	require.True(t, foundTunnel, "lost effect, unavailable claim or tunnel rule")
+	setNativeFamily(t, &input, 1, `{"id":"interactive_session","mode":"enforce","outcome":"flag"}`)
 	_, err = ResolveNativePolicy(input)
 	require.ErrorIs(t, err, ErrNativeCoverageUnsupported, "observe certification granted enforcement")
 }
 func TestNativePolicyResolutionRejectsUnknownCatalogsAndBadProvenance(t *testing.T) {
 	input := nativeResolutionFixture(t)
-	setNativeFamily(t, &input, 0, `{"id":"process_application","mode":"observe","allowed_application_ids":["application-id"]}`)
+	setNativeFamily(t, &input, 0, `{"id":"process_application","mode":"observe","allowed_application_ids":["application-id"],"outcome":"flag"}`)
 	_, err := ResolveNativePolicy(input)
 	require.ErrorIs(t, err, ErrNativeCatalogUnavailable, "invented catalog ownership")
 	for _, mutate := range []func(*NativePolicyResolution){func(i *NativePolicyResolution) { i.Build.NativeAgreement = nil }, func(i *NativePolicyResolution) { i.ActiveFrom = i.ActivationTime.Add(time.Millisecond) }, func(i *NativePolicyResolution) { i.IssuedAt = i.IssuedAt.Add(time.Nanosecond) }, func(i *NativePolicyResolution) { i.Scope.AttemptID = NewExamAttemptID() }, func(i *NativePolicyResolution) { i.Build.CapabilityMatrixIdentity = "other" }} {

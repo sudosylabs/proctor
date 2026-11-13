@@ -1624,6 +1624,12 @@ func TestNativeDeliveryAppendStore(t *testing.T) {
 	})
 }
 
+func TestNativeSuspensionStore(t *testing.T) {
+	s := openTestStore(t)
+	resetTestStore(t, s)
+	storetest.TestNativeSuspensionStore(t, s)
+}
+
 func TestNativeMaximumRecordStore(t *testing.T) {
 	persistence := openTestStore(t)
 	resetTestStore(t, persistence)

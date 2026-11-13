@@ -174,7 +174,10 @@ func ResolveNativePolicy(input NativePolicyResolution) (ResolvedNativePolicy, er
 		Capabilities:          slices.Clone(input.Selections.Native.Families),
 		ScreenRecording:       input.Selections.Native.ScreenRecording,
 	}
-	policy.Activations, policy.Rules = compileNativePolicy(agreement.capabilities)
+	var err error
+	if policy.Activations, policy.Rules, err = compileNativePolicy(agreement.capabilities, policy.Capabilities); err != nil {
+		return ResolvedNativePolicy{}, err
+	}
 	if input.Selections.FocusLoss.Enabled {
 		policy.FocusLossMode = NativeModeObserve
 		if input.Selections.FocusLoss.Outcome == IntegrityOutcomeFlagAndSuspend {
@@ -269,14 +272,6 @@ func resolveNativeRequirements(policy NativeSecurityPolicy, agreement *DesktopNa
 	add := func(id string, claim NativeCapabilityClaim) { selected["native."+id+".v1"] = claim }
 	for _, family := range policy.Families {
 		f := family.fields
-		if len(f.AllowedApplicationIDs)+
-			len(f.AllowedStorageFunctionClassIDs)+
-			len(f.AllowedManagedProfileIDs)+
-			len(f.AllowedAdapterClassIDs)+
-			len(f.AllowedTunnelClassIDs) > 0 {
-			return nil, ErrNativeCatalogUnavailable
-		}
-
 		if f.Mode == NativeModeDisabled {
 			continue
 		}
@@ -303,12 +298,7 @@ func resolveNativeRequirements(policy NativeSecurityPolicy, agreement *DesktopNa
 			}
 		case "removable_storage", "network_configuration":
 			for _, sub := range f.EnabledSubCapabilities {
-				required := claim
-				if sub == "route_change" {
-					required = NativeClaimObserve
-				}
-
-				add(sub, required)
+				add(sub, claim)
 			}
 		case "virtualization":
 			if f.Rule == "block_recognized_guest" {

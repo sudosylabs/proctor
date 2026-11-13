@@ -20,11 +20,11 @@ import (
 func preflightFixture(t *testing.T) (NativePolicyResolution, ResolvedNativePolicy, SecurityPreflightChallenge, SecurityPreflightReport) {
 	t.Helper()
 	input := nativeResolutionFixture(t)
-	setNativeFamily(t, &input, 2, `{"id":"clipboard","mode":"observe","strategy":"disabled","observe_os_clipboard_changes":true}`)
+	setNativeFamily(t, &input, 2, `{"id":"clipboard","mode":"observe","strategy":"disabled","observe_os_clipboard_changes":true,"outcome":"flag"}`)
 	resolved, err := ResolveNativePolicy(input)
 	require.NoError(t, err)
 	challenge := SecurityPreflightChallenge{PreflightID: "synthetic-preflight", Challenge: base64.RawURLEncoding.EncodeToString(make([]byte, 32)), IssuedAt: input.ActivationTime, ExpiresAt: input.ActivationTime.Add(SecurityPreflightLifetime)}
-	report := SecurityPreflightReport{Challenge: challenge.Challenge, PolicyDigest: resolved.Policy.Digest, PolicyContentDigest: resolved.PolicyContentDigest, CapabilityMatrixDigest: resolved.CapabilityMatrixDigest, SecuritySessionID: "synthetic-security-session", SourceManifestDigest: input.Build.NativeAgreement.SourceManifestDigest(), SelectedSourceCategories: resolved.Categories, Sources: []NativeSourceCoverage{}, Coverage: []NativeCoverageClaim{}, Baseline: NativeBaselineReport{ConstrainedWindow: "verified", SinglePhysicalDisplay: "verified", ContentProtection: "verified"}, Posture: "degraded", Capabilities: []NativeCapabilityReadiness{}, Rules: []NativeRuleReport{}, ReportedAt: input.ActivationTime}
+	report := SecurityPreflightReport{Challenge: challenge.Challenge, PolicyDigest: resolved.Policy.Digest, PolicyContentDigest: resolved.PolicyContentDigest, CapabilityMatrixDigest: resolved.CapabilityMatrixDigest, SecuritySessionID: "synthetic-security-session", SourceManifestDigest: input.Build.NativeAgreement.SourceManifestDigest(), SelectedSourceCategories: resolved.Categories, Sources: []NativeSourceCoverage{}, Coverage: []NativeCoverageClaim{}, Baseline: NativeBaselineReport{ConstrainedWindow: "verified", SinglePhysicalDisplay: "verified", ContentProtection: "verified"}, Posture: "degraded", Capabilities: readinessFor(resolved.Policy.Activations), Rules: []NativeRuleReport{}, ReportedAt: input.ActivationTime}
 	for _, source := range resolved.Sources {
 		for _, r := range resolved.Requirements {
 			if r.SourceID == source {
@@ -42,6 +42,26 @@ func preflightFixture(t *testing.T) (NativePolicyResolution, ResolvedNativePolic
 	}
 	return input, resolved, challenge, report
 }
+
+// readinessFor reports every activated capability as compliant, in
+// activation order: the baseline's from compliantStart, and an unchanged
+// clipboard.
+func readinessFor(activations []NativeActivation) []NativeCapabilityReadiness {
+	baseline := map[NativeCapabilityID]NativeCapabilityReadiness{}
+	for _, readiness := range compliantStart() {
+		baseline[readiness.Capability] = readiness
+	}
+	reported := []NativeCapabilityReadiness{}
+	for _, activation := range activations {
+		readiness, ok := baseline[activation.Capability]
+		if !ok {
+			readiness = readinessOf(activation.Capability, NativeCertaintyComplete, `{"changes":0}`, `{}`)
+		}
+		reported = append(reported, readiness)
+	}
+	return reported
+}
+
 func TestSecurityPreflightEligibleDegradedObservation(t *testing.T) {
 	input, resolved, challenge, report := preflightFixture(t)
 	result, err := EvaluateSecurityPreflight(challenge, resolved, input.Build.NativeAgreement, report, input.ActivationTime)

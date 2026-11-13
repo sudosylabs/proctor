@@ -24,11 +24,18 @@ coverage definitions are the reviewed interpretation of that exact registry.
 The release key and pinned artifacts must be admitted together; a signature by
 an arbitrary uploaded key is insufficient.
 
-The current detector interpretation is a finite catalog of exact condition IDs,
-versions, capabilities, source requirements and modes. It accepts no executable
-pattern or native detail bag. Packaged Candidate-safe command/keybinding
-catalogs belong to the configuration manifest; identifiers are not executable
-commands and key chords are not keybinding identifiers.
+The release's capability registry is Desktop's generated `registry.json`: each
+capability's registered fields, reasons, stability time and sensitivity, its
+state and summary fact schemas (JSON Schema draft 2020-12), and the baseline
+rules every policy carries. It is decoded closed and its fact schemas are
+compiled offline by [`internal/factschema`](../internal/factschema); a schema
+that does not compile refuses the release. The server reads facts only through
+those schemas and fields, and never accepts an executable pattern or native
+detail bag. The pinned detector catalog is no longer interpreted: Desktop
+reports facts, and the server evaluates the rules itself. Packaged
+Candidate-safe command/keybinding catalogs belong to the configuration
+manifest; identifiers are not executable commands and key chords are not
+keybinding identifiers.
 
 An enforce claim requires passed certification. Mandatory display, window and
 Proctor-owned protection baseline sources require enforce certification even

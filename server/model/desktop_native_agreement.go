@@ -427,28 +427,3 @@ func (a *DesktopNativeAgreement) Coverage(key string, required NativeCapabilityC
 	entry.Limitations = slices.Clone(entry.Limitations)
 	return entry, nil
 }
-
-func (a *DesktopNativeAgreement) ValidateDetector(
-	id string,
-	version int64,
-	capability, condition string,
-	mode NativeCapabilityClaim,
-	sources []NativeSourceID,
-) error {
-	if a == nil {
-		return errNativeAgreement
-	}
-
-	for _, detector := range a.detectors {
-		if detector.DetectorID == id &&
-			detector.Version == version &&
-			detector.CapabilityID == capability &&
-			slices.Contains(detector.ConditionIDs, condition) &&
-			slices.Contains(detector.AllowedModes, mode) &&
-			slices.Equal(detector.SourceIDs, sources) {
-			return nil
-		}
-	}
-
-	return errNativeAgreement
-}

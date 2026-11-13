@@ -8,7 +8,27 @@ module when a change is not server-only. No module has been released yet.
 
 ## [Unreleased]
 
+### Added
+
+- Server: native capabilities decided on the server. The release's capability
+  registry (fields, reasons, fact schemas, baseline rules) compiles each policy
+  into activations and rules; `GET /api/v1/exam-sittings/{id}/security-policy`
+  gives the readiness overview the policy before Start, the server decides
+  admission from the reported facts, and it re-evaluates the same rules on the
+  facts streamed during the Attempt. An enforce rule that stops being met
+  raises a `native.<capability>` Flag.
+- Server: screen clips. When the Exam records the screen, managers ask for a
+  range with a private reason (at most 10 per Attempt), a Flag asks for the
+  minute either side of it, Desktop uploads signed 8 MiB chunks, and managers
+  play them back with byte ranges. Requests and playback are audited, and
+  integrity retirement purges the chunks.
+
 ### Removed
+
+- Server: native `occurrence` delivery records, their continuity checks and
+  `unresolved_opener`. Desktop now sends `capability_fact`,
+  `participation_confirmed` and `rule_status` records, and native condition
+  evidence is the server's rule status changes (**breaking**).
 
 - Server: the webapp build manifest and the devseed journal no longer carry
   a `schema_version`; a manifest or journal that does is rejected.

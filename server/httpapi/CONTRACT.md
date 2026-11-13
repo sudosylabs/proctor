@@ -1812,6 +1812,19 @@ bounded, nonblocking pages. An exact preparation replay preserves its challenge
 and policy but returns current server time. A report replay preserves its
 original receipt time; it cannot extend admission freshness.
 
+Before Start, the readiness overview reads
+`GET /api/v1/exam-sittings/{exam_sitting_id}/security-policy` with the same
+registered Desktop and current eligibility. It returns the compiled native policy
+(activations and rules, the release baseline included, screen recording) and a
+`readiness_digest`, and creates no challenge or transaction. Preparation returns
+the same digest; Desktop refreshes the overview instead of starting when they
+differ. The report gives each activated capability's full state, summary,
+envelope and where its stream begins, in activation order, with Desktop's own
+rule statuses. The server checks each fact against the release's fact schemas
+and decides admission itself: every readiness rule in enforce mode must be met,
+and unknown blocks (`native_rule_unmet`). Its own statuses are returned; Desktop's
+never override them.
+
 `exam_attempt.connect` requires a closed `security` union. First admission and
 Ready rejoin use `kind=preflight`, `preflight_id`, and `report_digest`. The atomic
 admission operation rechecks current eligibility, registered key, admitted
@@ -1903,9 +1916,14 @@ Native batches are appended to
 The original closed envelope identifies the stream, Participation, generation,
 security session, policy and release/matrix; retries preserve its original
 prior acknowledgement. A batch contains 1..64 minimized records and is bounded
-at 256 KiB before decoding. Source ranges and detector meanings are checked
-against the admitted release catalog, including for historical delivery from a
-new Session. No packaged detector catalog means ingestion remains unavailable.
+at 256 KiB before decoding. Records are `capability_fact` (one activated
+capability's full minimized state and summary with its envelope, at most 16 KiB),
+`participation_confirmed`, `rule_status` (Desktop's own rule status and whether
+it contains the window), `coverage_transition`, `source_reset` and `source_gap`.
+Each fact is checked against the release's published fact schemas and its
+registered fields are read when it arrives, including for historical delivery
+from a new Session; a fact for a capability the policy does not activate, or a
+status for a rule it does not carry, refuses the batch.
 
 Exact batch receipts and current progression commit with counted canonical
 records, envelope, fixed metadata and pending/retained/allocated counters. Native
@@ -1915,13 +1933,27 @@ headroom. Detail and position exhaustion permanently latch the applicable scope;
 retries recover retained receipts without charging retained quota again. Refused
 new bytes never receive a content receipt.
 
-Occurrence interpretation waits for received or terminally omitted earlier
-positions. A missing opener remains explicitly unresolved after later recovery.
-Counts, condition/detector identity and source lifetimes cannot change across an
-occurrence, and recurrence requires another occurrence ID. A live detailed reset
-links its already accepted control edge. A new historical reset establishes only
-evidence continuity, never live coverage or permission. Native operational records
-remain distinct from condition projections and do not create misconduct Flags.
+Interpretation waits for received or terminally omitted earlier positions and
+then applies records in stream order. Connect starts it from the facts the
+consumed preflight reported, in the readiness phase; `participation_confirmed`,
+sent once the candidate window mounts, starts the participation rules. The
+server evaluates every rule of the current phase itself, with the release's
+stability time before a rule recovers; Desktop's `rule_status` never changes it
+and a disagreement is only counted. A fact no newer than the latest of its source
+instance changes nothing. A source gap or reset puts that capability in a gap,
+and a terminally omitted position puts every capability in a gap, until the next
+full state. A live detailed reset links its already accepted control edge. A new
+historical reset establishes only evidence continuity, never live coverage or
+permission.
+
+An occurrence opens when a rule becomes not met while none is open and closes
+when it is met again; an unknown stretch neither opens nor closes one. An enforce
+rule's occurrence that opens raises or reuses the Attempt's `native.<capability>`
+Flag for that generation and adds one evidence row (rule, reason ID, occurrence
+and device time, never the facts), at most 100 per Flag, announced through
+`exam_attempt_integrity_flagged`. Observe rules, unknown status, gaps,
+permission problems and failed sources never flag. A replayed append raises
+nothing.
 
 ### Late delivery and Browser evidence review
 
@@ -1990,11 +2022,38 @@ immutable source slots without allocating again or moving a closure boundary.
 
 `GET /submissions/{submission_id}/native-conditions` uses the existing detailed
 Submission integrity-view authorization, a separate cursor kind, and pages of at
-most 100 immutable occurrence transitions. Each record carries the admitted
-stream, Participation, policy/release provenance, original receipt time and
-ordered interpretation time. Unresolved openers remain explicit. Conditions
-require no Flag, decision row, or automatic consequence; operational health,
-permission, reset and gap records never enter this evidence endpoint.
+most 100 immutable rule status changes as the server evaluated them. Each record
+carries the admitted stream, Participation, policy/release provenance, the
+delivery position that caused it (batch 0 is the state at Start), original
+receipt time and interpretation time, and the transition: rule, capability, mode,
+reason ID, previous and new status with any unknown cause, device time, and the
+occurrence it opened or closed. Facts, operational health, permission, reset and
+gap records never enter this evidence endpoint.
+
+### Screen clips
+
+When the Exam's policy enables screen recording, Desktop keeps the session on the
+device and uploads only ranges the server asks for. An Exam Manager of the Sitting
+asks with `POST /exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips`,
+a range (from session start, or a start and end) and a private reason kept with
+the request for the Sitting's managers; the request is audited, its reason never
+is. At most 10 per Attempt. A Flag that
+opens (Focus Loss, Connection Loss or native) asks for the minute either side of
+it, linked to the Flag, at most 10 per Attempt. Requests are pull-based: the live
+Participation lists and takes them, and `exam_attempt_screen_clips_requested`
+only hints that there are some. A taken clip belongs to that Participation.
+
+Desktop declares the clip's media type, size and the SHA-256 of each 8 MiB chunk,
+sends chunks in any order, and completes with the installation's ES256
+signature over the content digest. Chunks are kept as they arrive and never
+joined. One clip is at most 3 GiB and an Attempt's clips at most 6 GiB.
+Submission fails every request never taken (`attempt_ended`). A taken clip may
+finish uploading without the Attempt credential and Connection, from the same
+registered Desktop, until its Participation's upload deadline; the delivery
+expiry pass then fails it (`upload_deadline`). Managers play a ready clip with a
+byte-range download; playback from its first byte is audited. Integrity
+retirement removes the clips and purges each chunk key, recording the purge only
+once every key is observed absent.
 
 The manager Review projection includes `native_conditions` (retained transition
 count and inventory digest). Finalization binds that exact native inventory
@@ -2007,9 +2066,12 @@ condition evidence and its delivery copies and prevents fresh condition intake;
 security operational retirement cannot delete independent integrity evidence.
 
 The Sitting candidate-status board may include `native_security`: a retained
-condition-record count, whether live coverage is available, and a bounded list
-of source health/permission/completeness. It excludes occurrence, detector,
-condition and source-instance identities and all detailed native records.
+rule-change count, whether live coverage is available, a bounded list of source
+health/permission/completeness, each enforce rule of the live Participation with
+its status, reason ID and any open occurrence, whether Desktop is containing the
+candidate window, and the Attempt's screen clips counted by state. It excludes
+facts, source-instance and application identities and all detailed native
+records. A native Flag tells the board to refetch.
 
 Detail intake has a bounded per-node database admission budget shared by native
 and Browser delivery and by live and historical transports. It uses at most half

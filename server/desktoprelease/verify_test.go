@@ -120,9 +120,6 @@ func TestVerifyExactReleaseAndTruthfulCoverage(t *testing.T) {
 	require.NoError(t, err, "certified effect-only claim rejected")
 	_, err = agreement.Coverage("unknown", model.NativeClaimObserve)
 	require.Error(t, err, "unknown claim admitted")
-	require.NoError(t, agreement.ValidateDetector("synthetic-detector", 1, "clipboard", "clipboard-changed", model.NativeClaimObserve, []model.NativeSourceID{model.NativeSourceClipboard}), "registered detector rejected")
-	require.Error(t, agreement.ValidateDetector("synthetic-detector", 1, "clipboard", "arbitrary-prose", model.NativeClaimObserve, []model.NativeSourceID{model.NativeSourceClipboard}), "unknown condition admitted")
-	require.Error(t, agreement.ValidateDetector("synthetic-detector", 2, "clipboard", "clipboard-changed", model.NativeClaimObserve, []model.NativeSourceID{model.NativeSourceClipboard}), "unknown detector version admitted")
 	f.expected.Coverage[0].PermittedClaims[0] = model.NativeClaimUnavailable
 	copy := agreement.Matrix()
 	copy.Entries[0].Claim = model.NativeClaimUnavailable

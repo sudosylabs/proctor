@@ -113,13 +113,12 @@ func TestProviderAuthorizationCodePKCEAndClaims(t *testing.T) {
 	created, err := settings.build()
 	require.NoError(t, err)
 	provider := created.(*Provider)
-	bridged := externalauth.NewProvider(settings.Envelope(), provider)
 	state := model.NewCredentialToken()
 	proof := model.NewCredentialToken()
 	callbackURL := "https://proctor.example.edu/api/v1/auth/providers/campus-oidc/callback"
-	challenge, err := bridged.Begin(
+	challenge, err := provider.Begin(
 		context.Background(),
-		externalauth.BeginRequest{
+		plugin.BeginRequest{
 			CallbackURL: callbackURL, State: state, Proof: proof,
 		},
 	)
@@ -135,11 +134,11 @@ func TestProviderAuthorizationCodePKCEAndClaims(t *testing.T) {
 	require.Equal(t, oauth2.S256ChallengeFromVerifier(proof), authorizationURL.Query().Get("code_challenge"))
 	require.Equal(t, "S256", authorizationURL.Query().Get("code_challenge_method"))
 	require.NotEmpty(t, nonce)
-	assertion, err := bridged.Complete(
+	assertion, err := provider.Complete(
 		context.Background(),
-		externalauth.CompleteRequest{
+		plugin.CompleteRequest{
 			CallbackURL: callbackURL, State: state, Proof: proof,
-			Callback: model.ExternalAuthenticationCallback{
+			Callback: plugin.Callback{
 				Values: map[string][]string{
 					"state": {state},
 					"code":  {code},
@@ -148,13 +147,12 @@ func TestProviderAuthorizationCodePKCEAndClaims(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	require.Equal(t, "campus-oidc", assertion.ProviderID)
 	require.Equal(t, "opaque-oidc-subject", assertion.Subject)
 	require.Equal(t, "oidc.student", assertion.Username)
 	require.Equal(t, "oidc.student@example.edu", assertion.Email)
 	require.True(t, assertion.EmailVerified)
 	require.Equal(t, "example.edu", assertion.HomeOrganization)
-	require.Equal(t, model.AuthenticationMultiFactor, assertion.AuthenticationStrength)
+	require.Equal(t, plugin.AuthenticationMultiFactor, assertion.AuthenticationStrength)
 	require.Len(t, assertion.Affiliations, 2)
 }
 
@@ -179,22 +177,21 @@ func TestProviderRejectsCallbackAndRedactsExchangeFailure(
 	created, err := settings.build()
 	require.NoError(t, err)
 	provider := created.(*Provider)
-	bridged := externalauth.NewProvider(settings.Envelope(), provider)
 	state := model.NewCredentialToken()
 	proof := model.NewCredentialToken()
 	callbackURL := "https://proctor.example.edu/callback"
-	_, err = bridged.Begin(
+	_, err = provider.Begin(
 		context.Background(),
-		externalauth.BeginRequest{
+		plugin.BeginRequest{
 			CallbackURL: callbackURL, State: state, Proof: proof,
 		},
 	)
 	require.NoError(t, err)
-	_, err = bridged.Complete(
+	_, err = provider.Complete(
 		context.Background(),
-		externalauth.CompleteRequest{
+		plugin.CompleteRequest{
 			CallbackURL: callbackURL, State: state, Proof: proof,
-			Callback: model.ExternalAuthenticationCallback{
+			Callback: plugin.Callback{
 				Values: map[string][]string{
 					"state": {state},
 					"code":  {secretBody},
@@ -202,7 +199,7 @@ func TestProviderRejectsCallbackAndRedactsExchangeFailure(
 			},
 		},
 	)
-	require.ErrorIs(t, err, externalauth.ErrAuthenticationRejected)
+	require.ErrorIs(t, err, plugin.ErrAuthenticationRejected)
 	require.NotContains(t, err.Error(), secretBody)
 }
 
@@ -301,11 +298,10 @@ func TestProviderFreshProofRequiresAuthenticationTimeAfterBoundFlow(t *testing.T
 			created, err := settings.build()
 			require.NoError(t, err)
 			provider := created.(*Provider)
-			bridged := externalauth.NewProvider(settings.Envelope(), provider)
 			provider.now = func() time.Time { return now.Add(500 * time.Millisecond) }
 			state, proof := model.NewCredentialToken(), model.NewCredentialToken()
-			request := externalauth.BeginRequest{CallbackURL: "https://proctor.example.edu/callback", State: state, Proof: proof, FreshAuthentication: true}
-			start, err := bridged.Begin(context.Background(), request)
+			request := plugin.BeginRequest{CallbackURL: "https://proctor.example.edu/callback", State: state, Proof: proof, FreshAuthentication: true}
+			start, err := provider.Begin(context.Background(), request)
 			require.NoError(t, err)
 			u, err := url.Parse(start.RedirectURL)
 			require.NoError(t, err)
@@ -313,13 +309,13 @@ func TestProviderFreshProofRequiresAuthenticationTimeAfterBoundFlow(t *testing.T
 			require.Equal(t, "login", u.Query().Get("prompt"), "fresh OIDC request lacks authenticated freshness constraints")
 			require.Equal(t, "0", u.Query().Get("max_age"), "fresh OIDC request lacks authenticated freshness constraints")
 			require.NotEmpty(t, nonce, "fresh OIDC request lacks authenticated freshness constraints")
-			assertion, err := bridged.Complete(context.Background(), externalauth.CompleteRequest{CallbackURL: request.CallbackURL, State: state, Proof: proof, AuthenticationStartedAt: now.Add(100 * time.Millisecond), Callback: model.ExternalAuthenticationCallback{Values: map[string][]string{"state": {state}, "code": {"fresh-code"}}}})
+			assertion, err := provider.Complete(context.Background(), plugin.CompleteRequest{CallbackURL: request.CallbackURL, State: state, Proof: proof, AuthenticationStartedAt: now.Add(100 * time.Millisecond), Callback: plugin.Callback{Values: map[string][]string{"state": {state}, "code": {"fresh-code"}}}})
 			if test.valid {
 				require.NoError(t, err)
-				require.Equal(t, now.UnixMilli(), assertion.AuthenticatedAt)
+				require.Equal(t, now.UnixMilli(), assertion.AuthenticatedAt.UnixMilli())
 			} else {
 				require.Error(t, err, "unverified primary freshness was accepted")
-				require.Nil(t, assertion, "unverified primary freshness was accepted")
+				require.Zero(t, assertion, "unverified primary freshness was accepted")
 			}
 		})
 	}

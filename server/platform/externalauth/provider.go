@@ -5,10 +5,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package externalauth is what the application sees of an external sign-in
-// provider. Provider is one configured provider: it starts a sign-in, completes
-// the callback and returns a normalized assertion about the person. Registry
+// Package externalauth holds the configured external sign-in providers.
+// Provider is one of them: its descriptor and auto-provisioning from
+// configuration, and the plugin protocol that signs the person in. Registry
 // holds the enabled providers and is rebuilt from configuration on reload.
+// The protocol's requests and failures are the plugin contract's own; the
+// composition root presents them to app/identity.
 //
 // Finding or creating the User, audit and the Session stay in app/identity.
 // The protocols themselves are the built-in plugins plugin/cas and
@@ -17,65 +19,17 @@
 package externalauth
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"slices"
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/plugin"
 )
-
-// A Provider fails with one of these; NewProvider maps the matching
-// plugin.Err* sentinels onto them.
-var (
-	// ErrAuthenticationRejected means the provider or the person declined
-	// the authentication.
-	ErrAuthenticationRejected = errors.New("external authentication rejected")
-	// ErrInvalidResponse means the provider's response failed validation.
-	ErrInvalidResponse = errors.New("external authentication response is invalid")
-	// ErrProviderUnavailable means the provider could not be reached or
-	// failed to answer.
-	ErrProviderUnavailable = errors.New("external authentication provider is unavailable")
-)
-
-type BeginRequest struct {
-	CallbackURL         string
-	State               string
-	Proof               string
-	FreshAuthentication bool
-}
-
-type BeginResponse struct {
-	RedirectURL string
-}
-
-type CompleteRequest struct {
-	CallbackURL             string
-	State                   string
-	Proof                   string
-	Callback                model.ExternalAuthenticationCallback
-	AuthenticationStartedAt time.Time
-}
-
-// Provider owns one configured protocol integration. It returns only a
-// normalized assertion; account resolution, provisioning, auditing, and
-// session creation remain in the application layer.
-type Provider interface {
-	Descriptor() model.ExternalAuthenticationProvider
-	AutoProvision() bool
-	Begin(context.Context, BeginRequest) (*BeginResponse, error)
-	State(model.ExternalAuthenticationCallback) (string, error)
-	Complete(
-		context.Context,
-		CompleteRequest,
-	) (*model.ExternalAuthenticationAssertion, error)
-}
 
 // Registry holds the configured providers, built from the sign-in protocols
 // the plugins offer. Configure rebuilds them from configuration, including on
@@ -88,7 +42,7 @@ type Registry struct {
 
 	mutex       sync.RWMutex
 	types       map[string]plugin.IdentityProviderType
-	providers   map[string]Provider
+	providers   map[string]*Provider
 	unavailable []string
 }
 
@@ -99,7 +53,7 @@ func NewRegistry(types ...plugin.IdentityProviderType) (*Registry, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Registry{types: byName, providers: make(map[string]Provider)}, nil
+	return &Registry{types: byName, providers: make(map[string]*Provider)}, nil
 }
 
 func typesByName(types []plugin.IdentityProviderType) (map[string]plugin.IdentityProviderType, error) {
@@ -158,7 +112,7 @@ func (r *Registry) configure(
 	settings config.ExternalAuthentication,
 	types map[string]plugin.IdentityProviderType,
 ) error {
-	configured := make(map[string]Provider)
+	configured := make(map[string]*Provider)
 	var unavailable []string
 	for _, definition := range settings.Providers {
 		if !definition.Enabled {
@@ -223,7 +177,8 @@ func (r *Registry) Unavailable() []string {
 	return slices.Clone(r.unavailable)
 }
 
-func (r *Registry) Provider(id string) (Provider, bool) {
+// Provider returns the enabled provider with id.
+func (r *Registry) Provider(id string) (*Provider, bool) {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
 	provider, exists := r.providers[id]
@@ -239,7 +194,7 @@ func (r *Registry) Descriptors() []model.ExternalAuthenticationProvider {
 		len(r.providers),
 	)
 	for _, provider := range r.providers {
-		descriptors = append(descriptors, provider.Descriptor())
+		descriptors = append(descriptors, provider.Descriptor)
 	}
 	sort.Slice(descriptors, func(left, right int) bool {
 		return descriptors[left].ID < descriptors[right].ID

@@ -64,10 +64,9 @@ func TestProviderLoginAndAuthentication(t *testing.T) {
 	created, err := settings.build()
 	require.NoError(t, err)
 	provider := created.(*Provider)
-	bridged := externalauth.NewProvider(settings.Envelope(), provider)
-	challenge, err := bridged.Begin(
+	challenge, err := provider.Begin(
 		context.Background(),
-		externalauth.BeginRequest{
+		plugin.BeginRequest{
 			CallbackURL: callbackURL, State: state, Proof: proof,
 		},
 	)
@@ -76,11 +75,11 @@ func TestProviderLoginAndAuthentication(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "/cas/login", parsed.Path)
 	require.Equal(t, serviceURL, parsed.Query().Get("service"))
-	assertion, err := bridged.Complete(
+	assertion, err := provider.Complete(
 		context.Background(),
-		externalauth.CompleteRequest{
+		plugin.CompleteRequest{
 			CallbackURL: callbackURL, State: state, Proof: proof,
-			Callback: model.ExternalAuthenticationCallback{
+			Callback: plugin.Callback{
 				Values: map[string][]string{
 					"state":  {state},
 					"ticket": {ticket},
@@ -89,12 +88,11 @@ func TestProviderLoginAndAuthentication(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	require.Equal(t, "campus-cas", assertion.ProviderID)
 	require.Equal(t, "opaque-subject", assertion.Subject)
 	require.Equal(t, "student.name", assertion.Username)
 	require.Equal(t, "student.name@example.edu", assertion.Email)
 	require.True(t, assertion.EmailVerified)
-	require.Equal(t, model.AuthenticationMultiFactor, assertion.AuthenticationStrength)
+	require.Equal(t, plugin.AuthenticationMultiFactor, assertion.AuthenticationStrength)
 	require.Len(t, assertion.Affiliations, 2)
 }
 
@@ -109,17 +107,17 @@ func TestProviderRejectsFailureAndUnsafeXML(t *testing.T) {
 			response: `<cas:serviceResponse xmlns:cas="urn:cas">
 			  <cas:authenticationFailure code="INVALID_TICKET">rejected</cas:authenticationFailure>
 			</cas:serviceResponse>`,
-			wantError: externalauth.ErrAuthenticationRejected,
+			wantError: plugin.ErrAuthenticationRejected,
 		},
 		{
 			name:      "document type",
 			response:  `<!DOCTYPE serviceResponse><serviceResponse/>`,
-			wantError: externalauth.ErrInvalidResponse,
+			wantError: plugin.ErrInvalidResponse,
 		},
 		{
 			name:      "missing success",
 			response:  `<cas:serviceResponse xmlns:cas="urn:cas"/>`,
-			wantError: externalauth.ErrInvalidResponse,
+			wantError: plugin.ErrInvalidResponse,
 		},
 	}
 	for _, test := range tests {
@@ -135,9 +133,8 @@ func TestProviderRejectsFailureAndUnsafeXML(t *testing.T) {
 			created, err := settings.build()
 			require.NoError(t, err)
 			provider := created.(*Provider)
-			bridged := externalauth.NewProvider(settings.Envelope(), provider)
 			state := model.NewCredentialToken()
-			_, err = bridged.Complete(
+			_, err = provider.Complete(
 				context.Background(),
 				completeRequest(state, "ST-ticket"),
 			)
@@ -152,7 +149,6 @@ func TestProviderRedactsTicketFromTransportErrors(t *testing.T) {
 	created, err := settings.build()
 	require.NoError(t, err)
 	provider := created.(*Provider)
-	bridged := externalauth.NewProvider(settings.Envelope(), provider)
 	cause := errors.New("transport included " + ticket)
 	provider.client.Transport = roundTripperFunc(func(
 		request *http.Request,
@@ -160,7 +156,7 @@ func TestProviderRedactsTicketFromTransportErrors(t *testing.T) {
 		return nil, errors.New(cause.Error() + " " + request.URL.String())
 	})
 	state := model.NewCredentialToken()
-	_, err = bridged.Complete(
+	_, err = provider.Complete(
 		context.Background(),
 		completeRequest(state, ticket),
 	)
@@ -171,12 +167,12 @@ func TestProviderRedactsTicketFromTransportErrors(t *testing.T) {
 func completeRequest(
 	state string,
 	ticket string,
-) externalauth.CompleteRequest {
-	return externalauth.CompleteRequest{
+) plugin.CompleteRequest {
+	return plugin.CompleteRequest{
 		CallbackURL: "https://proctor.example.edu/callback",
 		State:       state,
 		Proof:       model.NewCredentialToken(),
-		Callback: model.ExternalAuthenticationCallback{
+		Callback: plugin.Callback{
 			Values: map[string][]string{
 				"state":  {state},
 				"ticket": {ticket},
@@ -264,24 +260,23 @@ func TestProviderFreshProofRenewsAtLoginAndValidation(t *testing.T) {
 			created, err := settings.build()
 			require.NoError(t, err)
 			provider := created.(*Provider)
-			bridged := externalauth.NewProvider(settings.Envelope(), provider)
 			now := time.Now()
 			provider.now = func() time.Time { return now }
 			state := model.NewCredentialToken()
 			request := completeRequest(state, "ST-fresh")
 			request.AuthenticationStartedAt = now.Add(-time.Second)
-			start, err := bridged.Begin(context.Background(), externalauth.BeginRequest{CallbackURL: request.CallbackURL, State: state, Proof: request.Proof, FreshAuthentication: true})
+			start, err := provider.Begin(context.Background(), plugin.BeginRequest{CallbackURL: request.CallbackURL, State: state, Proof: request.Proof, FreshAuthentication: true})
 			require.NoError(t, err)
 			u, _ := url.Parse(start.RedirectURL)
 			require.Equal(t, "true", u.Query().Get("renew"), "CAS login did not request new primary proof")
-			assertion, err := bridged.Complete(context.Background(), request)
+			assertion, err := provider.Complete(context.Background(), request)
 			require.True(t, validated, "ticket was not validated")
 			if reject {
-				require.ErrorIs(t, err, externalauth.ErrAuthenticationRejected)
-				require.Nil(t, assertion)
+				require.ErrorIs(t, err, plugin.ErrAuthenticationRejected)
+				require.Zero(t, assertion)
 			} else {
 				require.NoError(t, err, "fresh CAS proof")
-				require.Equal(t, request.AuthenticationStartedAt.UnixMilli(), assertion.AuthenticatedAt, "fresh CAS proof")
+				require.Equal(t, request.AuthenticationStartedAt.UnixMilli(), assertion.AuthenticatedAt.UnixMilli(), "fresh CAS proof")
 			}
 		})
 	}

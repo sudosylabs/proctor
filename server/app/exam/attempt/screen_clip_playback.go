@@ -22,21 +22,16 @@ import (
 // ScreenClipPlaybackOperation names a clip playback in the audit log.
 const ScreenClipPlaybackOperation = "exam.attempt.screen_clip.play"
 
-// ManagedScreenClipQuery names one Attempt's clips for an Exam Manager.
-type ManagedScreenClipQuery struct {
+// ScreenClipQuery names one of an Attempt's clips for those who may see it.
+type ScreenClipQuery struct {
 	ExamID    model.ExamID
 	SittingID model.ExamSittingID
 	AttemptID model.ExamAttemptID
+	ClipID    model.ScreenClipID
 }
 
-func (q ManagedScreenClipQuery) clips() store.ExamAttemptClips {
+func (q ScreenClipQuery) clips() store.ExamAttemptClips {
 	return store.ExamAttemptClips{ExamID: q.ExamID, SittingID: q.SittingID, AttemptID: q.AttemptID}
-}
-
-// ScreenClipQuery names one of an Attempt's clips for those who may see it.
-type ScreenClipQuery struct {
-	ManagedScreenClipQuery
-	ClipID model.ScreenClipID
 }
 
 // PlayScreenClipResult is a ready clip a viewer may play: its media type
@@ -55,16 +50,19 @@ type PlayScreenClipResult struct {
 func (s *Service) ListScreenClips(
 	ctx context.Context,
 	inv invocation.Invocation,
-	query ManagedScreenClipQuery,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
 ) (_ []store.ExamAttemptScreenClipView, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	if !query.ExamID.IsValid() || !query.SittingID.IsValid() || !query.AttemptID.IsValid() {
+	attempt := store.ExamAttemptClips{ExamID: examID, SittingID: sittingID, AttemptID: attemptID}
+	if !attempt.IsValid() {
 		return nil, apperror.Invalid("exam.attempt.invalid", "screen_clip")
 	}
-	if _, err := s.authorizeScreenClipView(ctx, inv, query); err != nil {
+	if _, err := s.authorizeScreenClipView(ctx, inv, attempt); err != nil {
 		return nil, err
 	}
-	clips, err := s.attempts.ListAttemptScreenClips(ctx, query.clips())
+	clips, err := s.attempts.ListAttemptScreenClips(ctx, attempt)
 	if err != nil {
 		return nil, storeError(storeErrors, err)
 	}
@@ -79,7 +77,7 @@ func (s *Service) PlayScreenClip(
 	query ScreenClipQuery,
 ) (_ PlayScreenClipResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	clip, viewer, err := s.readyScreenClip(ctx, inv, query.ManagedScreenClipQuery, query.ClipID)
+	clip, viewer, err := s.readyScreenClip(ctx, inv, query)
 	if err != nil {
 		return PlayScreenClipResult{}, err
 	}
@@ -131,17 +129,17 @@ func (s *Service) auditScreenClipPlayback(
 func (s *Service) readyScreenClip(
 	ctx context.Context,
 	inv invocation.Invocation,
-	query ManagedScreenClipQuery,
-	clipID model.ScreenClipID,
+	query ScreenClipQuery,
 ) (*store.ExamAttemptScreenClipView, ScreenClipViewAuthorization, error) {
-	if !query.ExamID.IsValid() || !query.SittingID.IsValid() || !query.AttemptID.IsValid() || !clipID.IsValid() {
+	attempt := query.clips()
+	if !attempt.IsValid() || !query.ClipID.IsValid() {
 		return nil, ScreenClipViewAuthorization{}, apperror.Invalid("exam.attempt.invalid", "screen_clip")
 	}
-	viewer, err := s.authorizeScreenClipView(ctx, inv, query)
+	viewer, err := s.authorizeScreenClipView(ctx, inv, attempt)
 	if err != nil {
 		return nil, ScreenClipViewAuthorization{}, err
 	}
-	clip, err := s.attempts.GetAttemptScreenClip(ctx, query.clips(), clipID)
+	clip, err := s.attempts.GetAttemptScreenClip(ctx, attempt, query.ClipID)
 	if err != nil {
 		return nil, ScreenClipViewAuthorization{}, storeError(storeErrors, err)
 	}
@@ -157,7 +155,7 @@ func (s *Service) readyScreenClip(
 func (s *Service) authorizeScreenClipView(
 	ctx context.Context,
 	inv invocation.Invocation,
-	query ManagedScreenClipQuery,
+	query store.ExamAttemptClips,
 ) (ScreenClipViewAuthorization, error) {
 	viewer, err := s.managers.AuthorizeScreenClipView(ctx, inv, query.SittingID, query.AttemptID)
 	if err != nil {

@@ -159,9 +159,9 @@ type ExamAttemptApplication interface {
 	OpenCandidateExamWorkspaceFile(context.Context, invocation.Invocation, attempt.OpenWorkspaceFileQuery) (attempt.OpenedContent, error)
 	ReallowExamAttempt(context.Context, invocation.Invocation, attempt.ReallowCommand) (attempt.ReallowResult, error)
 	SuspendExamAttempt(context.Context, invocation.Invocation, attempt.ManualSuspensionCommand) (attempt.ManualSuspensionResult, error)
-	RequestScreenClip(context.Context, invocation.Invocation, attempt.ScreenClipRequestCommand) (attempt.ScreenClipRequestResult, error)
+	RequestScreenClip(context.Context, invocation.Invocation, attempt.RequestScreenClipCommand) (attempt.RequestScreenClipResult, error)
 	PendingScreenClips(context.Context, invocation.Invocation, attempt.CandidateAccess) ([]store.ExamAttemptScreenClipView, error)
-	TakeScreenClip(context.Context, invocation.Invocation, attempt.TakeScreenClipCommand) (store.ExamAttemptScreenClipView, error)
+	TakeScreenClip(context.Context, invocation.Invocation, attempt.CandidateAccess, model.ScreenClipID) (store.ExamAttemptScreenClipView, error)
 	BeginScreenClipUpload(
 		context.Context,
 		invocation.Invocation,
@@ -174,7 +174,7 @@ type ExamAttemptApplication interface {
 		model.ScreenClipID,
 	) (store.ExamAttemptScreenClipUploadStatus, error)
 	UploadScreenClipChunk(context.Context, invocation.Invocation, attempt.UploadScreenClipChunkCommand) error
-	ListScreenClips(context.Context, invocation.Invocation, attempt.ManagedScreenClipQuery) ([]store.ExamAttemptScreenClipView, error)
+	ListScreenClips(context.Context, invocation.Invocation, model.ExamID, model.ExamSittingID, model.ExamAttemptID) ([]store.ExamAttemptScreenClipView, error)
 	PlayScreenClip(context.Context, invocation.Invocation, attempt.ScreenClipQuery) (attempt.PlayScreenClipResult, error)
 	CompleteScreenClipUpload(context.Context, invocation.Invocation, attempt.CompleteScreenClipUploadCommand) (store.ExamAttemptScreenClipView, error)
 	SubmitExamAttempt(context.Context, invocation.Invocation, attempt.SubmitCommand) (store.ExamSubmissionReceipt, error)

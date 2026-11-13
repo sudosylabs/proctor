@@ -20,10 +20,10 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ScreenClipRequestCommand is an Exam Manager's request for a range of a
+// RequestScreenClipCommand is an Exam Manager's request for a range of a
 // candidate's recorded screen. End may lie a little in the future; Desktop
 // then waits for it before cutting the clip.
-type ScreenClipRequestCommand struct {
+type RequestScreenClipCommand struct {
 	ExamID         model.ExamID
 	SittingID      model.ExamSittingID
 	AttemptID      model.ExamAttemptID
@@ -32,8 +32,8 @@ type ScreenClipRequestCommand struct {
 	IdempotencyKey string
 }
 
-// ScreenClipRequestResult is a committed request, without its private reason.
-type ScreenClipRequestResult struct {
+// RequestScreenClipResult is a committed request, without its private reason.
+type RequestScreenClipResult struct {
 	Clip     store.ExamAttemptScreenClipView
 	Replayed bool
 }
@@ -45,18 +45,18 @@ type ScreenClipRequestResult struct {
 func (s *Service) RequestScreenClip(
 	ctx context.Context,
 	inv invocation.Invocation,
-	command ScreenClipRequestCommand,
-) (_ ScreenClipRequestResult, resultErr error) {
+	command RequestScreenClipCommand,
+) (_ RequestScreenClipResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	principal := inv.Principal()
 	if principal.Validate() != nil {
-		return ScreenClipRequestResult{}, apperror.New("authentication.token_invalid")
+		return RequestScreenClipResult{}, apperror.New("authentication.token_invalid")
 	}
 	at := s.now()
 	clip, err := model.NewManagerScreenClip(model.NewScreenClipID(), command.AttemptID, principal.UserID,
 		command.PrivateReason, command.Range, at)
 	if err != nil || !command.ExamID.IsValid() || !command.SittingID.IsValid() {
-		return ScreenClipRequestResult{}, apperror.Invalid("exam.attempt.invalid", "screen_clip")
+		return RequestScreenClipResult{}, apperror.Invalid("exam.attempt.invalid", "screen_clip")
 	}
 
 	commandIdempotency, err := idempotency.Require(inv, store.ExamAttemptScreenClipRequestOperation, command.IdempotencyKey, struct {
@@ -72,21 +72,21 @@ func (s *Service) RequestScreenClip(
 		clip.Range.FromSessionStart, optionalInstant(clip.Range.Start), clip.Range.End, command.PrivateReason,
 	})
 	if err != nil {
-		return ScreenClipRequestResult{}, err
+		return RequestScreenClipResult{}, err
 	}
 
 	management, err := s.managers.AuthorizeSittingManage(ctx, inv, command.SittingID)
 	if err != nil {
-		return ScreenClipRequestResult{}, err
+		return RequestScreenClipResult{}, err
 	}
 	if management.Override {
 		// Only the Sitting's Exam Managers may ask for a candidate's screen;
 		// a management override does not reach it.
-		return ScreenClipRequestResult{}, apperror.New("authorization.denied")
+		return RequestScreenClipResult{}, apperror.New("authorization.denied")
 	}
 	sitting, err := s.sittings.Resolve(ctx, command.SittingID)
 	if err != nil {
-		return ScreenClipRequestResult{}, storeError(storeErrors, err)
+		return RequestScreenClipResult{}, storeError(storeErrors, err)
 	}
 
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
@@ -103,10 +103,10 @@ func (s *Service) RequestScreenClip(
 		},
 	})
 	if err != nil {
-		return ScreenClipRequestResult{}, err
+		return RequestScreenClipResult{}, err
 	}
 	if sitting.Sitting.ExamID != command.ExamID {
-		return ScreenClipRequestResult{}, s.failAudit(ctx, auditID, apperror.New("exam.attempt.not_found"))
+		return RequestScreenClipResult{}, s.failAudit(ctx, auditID, apperror.New("exam.attempt.not_found"))
 	}
 
 	stored, err := s.attempts.RequestScreenClip(ctx, &store.ExamAttemptScreenClipRequest{
@@ -114,12 +114,12 @@ func (s *Service) RequestScreenClip(
 		AuditEventID: auditID, AuditAt: at,
 	}, commandIdempotency)
 	if err != nil {
-		return ScreenClipRequestResult{}, s.failAudit(ctx, auditID, storeError(storeErrors, err))
+		return RequestScreenClipResult{}, s.failAudit(ctx, auditID, storeError(storeErrors, err))
 	}
 	if !stored.Replayed {
 		s.publishScreenClipsRequested(ctx, stored.SittingID, stored.Clip.AttemptID, stored.CandidateUserID, stored.Clip.RequestedAt)
 	}
-	return ScreenClipRequestResult{Clip: stored.Clip, Replayed: stored.Replayed}, nil
+	return RequestScreenClipResult{Clip: stored.Clip, Replayed: stored.Replayed}, nil
 }
 
 // publishScreenClipsRequested tells the candidate's Desktop to read its
@@ -160,21 +160,16 @@ func (s *Service) PendingScreenClips(
 	return clips, nil
 }
 
-type TakeScreenClipCommand struct {
-	Access CandidateAccess
-	ClipID model.ScreenClipID
-}
-
 // TakeScreenClip records that the candidate's Desktop took a request and is
 // recording what remains of its range. Taking it again changes nothing.
 func (s *Service) TakeScreenClip(
 	ctx context.Context,
 	inv invocation.Invocation,
-	command TakeScreenClipCommand,
+	candidateAccess CandidateAccess,
+	clipID model.ScreenClipID,
 ) (_ store.ExamAttemptScreenClipView, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	clipID := command.ClipID
-	selector, err := candidateSelector(inv, command.Access)
+	selector, err := candidateSelector(inv, candidateAccess)
 	if err != nil {
 		return store.ExamAttemptScreenClipView{}, err
 	}

@@ -270,20 +270,23 @@ func (s *Service) RecoverExamSecurityPolicy(
 	return result, nil
 }
 
-type UpdateSecurityCommand struct {
+// UpdateExamSecurityCommand is a security update sent on the candidate's live
+// Participation, fenced by its generation.
+type UpdateExamSecurityCommand struct {
 	Access          CandidateAccess
 	ParticipationID model.AttemptParticipationID
 	Generation      int64
 	Control         model.SecurityControl
 }
 
-// UpdateExamSecurity renews the security coverage reported by the
-// candidate's live Attempt Participation, fenced by participation generation
-// and checked against the caller's desktop build.
+// UpdateExamSecurity applies the security control reported on the
+// candidate's live Attempt Participation (its sequence, binding and delivery
+// watermarks), fenced by participation generation and checked against the
+// caller's desktop build.
 func (s *Service) UpdateExamSecurity(
 	ctx context.Context,
 	inv invocation.Invocation,
-	command UpdateSecurityCommand,
+	command UpdateExamSecurityCommand,
 ) (_ model.SecurityControlResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	// Malformed updates are refused before they can occupy the live lane.

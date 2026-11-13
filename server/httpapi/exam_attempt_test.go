@@ -1005,7 +1005,7 @@ type examAttemptHTTPFake struct {
 	workspaceOpen           attempt.OpenWorkspaceFileQuery
 	reallow                 attempt.ReallowCommand
 	suspend                 attempt.ManualSuspensionCommand
-	screenClip              attempt.ScreenClipRequestCommand
+	screenClip              attempt.RequestScreenClipCommand
 	takenClip               model.ScreenClipID
 	clipUpload              model.ScreenClipUpload
 	clipChunk               attempt.UploadScreenClipChunkCommand
@@ -1198,10 +1198,10 @@ func (f *examAttemptHTTPFake) ReallowExamAttempt(_ context.Context, inv invocati
 			EndedAt: model.OptionalTimeFrom(examAttempt.UpdatedAt), ReallowedByUserID: inv.Principal().UserID}}, nil
 }
 
-func (f *examAttemptHTTPFake) RequestScreenClip(_ context.Context, inv invocation.Invocation, command attempt.ScreenClipRequestCommand) (attempt.ScreenClipRequestResult, error) {
+func (f *examAttemptHTTPFake) RequestScreenClip(_ context.Context, inv invocation.Invocation, command attempt.RequestScreenClipCommand) (attempt.RequestScreenClipResult, error) {
 	f.screenClip = command
 	at := f.attempt.UpdatedAt
-	return attempt.ScreenClipRequestResult{Clip: store.ExamAttemptScreenClipView{
+	return attempt.RequestScreenClipResult{Clip: store.ExamAttemptScreenClipView{
 		ID: model.NewScreenClipID(), AttemptID: command.AttemptID, Source: model.ScreenClipSourceManager,
 		RequestedByUserID: inv.Principal().UserID, Range: command.Range, State: model.ScreenClipRequested,
 		RequestedAt: at, UpdatedAt: at, Revision: 1,
@@ -1215,9 +1215,9 @@ func (f *examAttemptHTTPFake) PendingScreenClips(context.Context, invocation.Inv
 func (f *examAttemptHTTPFake) TakeScreenClip(
 	_ context.Context,
 	_ invocation.Invocation,
-	command attempt.TakeScreenClipCommand,
+	access attempt.CandidateAccess,
+	clipID model.ScreenClipID,
 ) (store.ExamAttemptScreenClipView, error) {
-	access, clipID := command.Access, command.ClipID
 	f.takenClip = clipID
 	at := f.attempt.UpdatedAt
 	return store.ExamAttemptScreenClipView{
@@ -1272,7 +1272,7 @@ func (f *examAttemptHTTPFake) CompleteScreenClipUpload(
 	return clip, err
 }
 
-func (f *examAttemptHTTPFake) ListScreenClips(context.Context, invocation.Invocation, attempt.ManagedScreenClipQuery) ([]store.ExamAttemptScreenClipView, error) {
+func (f *examAttemptHTTPFake) ListScreenClips(context.Context, invocation.Invocation, model.ExamID, model.ExamSittingID, model.ExamAttemptID) ([]store.ExamAttemptScreenClipView, error) {
 	return []store.ExamAttemptScreenClipView{}, nil
 }
 

@@ -27,7 +27,7 @@ func TestScreenClipRequestAuthorizesFirstAndKeepsItsReasonPrivate(t *testing.T) 
 	f := newFixture(t)
 	managerID := useManagerCall(f)
 	reason := "candidate seemed to read from a second screen"
-	command := ScreenClipRequestCommand{ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID,
+	command := RequestScreenClipCommand{ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID,
 		Range: model.ScreenClipRange{FromSessionStart: true, End: f.at}, PrivateReason: reason, IdempotencyKey: "clip-key"}
 
 	result, err := f.service.RequestScreenClip(context.Background(), f.inv, command)
@@ -55,7 +55,7 @@ func TestScreenClipRequestRefusesAManagementOverride(t *testing.T) {
 	f := newFixture(t)
 	useManagerCall(f)
 	f.managerOverride = true
-	_, err := f.service.RequestScreenClip(context.Background(), f.inv, ScreenClipRequestCommand{
+	_, err := f.service.RequestScreenClip(context.Background(), f.inv, RequestScreenClipCommand{
 		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID,
 		Range: model.ScreenClipRange{FromSessionStart: true, End: f.at}, PrivateReason: "r", IdempotencyKey: "clip-override",
 	})
@@ -69,7 +69,7 @@ func TestScreenClipRequestValidatesBeforeAuthorizationAndTranslatesRefusals(t *t
 	t.Parallel()
 	f := newFixture(t)
 	useManagerCall(f)
-	_, err := f.service.RequestScreenClip(context.Background(), f.inv, ScreenClipRequestCommand{
+	_, err := f.service.RequestScreenClip(context.Background(), f.inv, RequestScreenClipCommand{
 		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID,
 		Range: model.ScreenClipRange{Start: f.at, End: f.at}, PrivateReason: "r", IdempotencyKey: "clip-bad",
 	})
@@ -84,7 +84,7 @@ func TestScreenClipRequestValidatesBeforeAuthorizationAndTranslatesRefusals(t *t
 		f := newFixture(t)
 		useManagerCall(f)
 		f.persistence.screenClipErr = store.NewErrConflict("screen_clip", constraint, nil)
-		_, err = f.service.RequestScreenClip(context.Background(), f.inv, ScreenClipRequestCommand{
+		_, err = f.service.RequestScreenClip(context.Background(), f.inv, RequestScreenClipCommand{
 			ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID,
 			Range: model.ScreenClipRange{FromSessionStart: true, End: f.at}, PrivateReason: "r", IdempotencyKey: "clip-refused",
 		})
@@ -143,9 +143,7 @@ func TestScreenClipPlaybackIsAuditedFromItsFirstByteOnly(t *testing.T) {
 	upload := &model.ScreenClipUpload{MediaType: "video/webm", SizeBytes: 100, ChunkSHA256: []string{strings.Repeat("a", 64)}}
 	f.persistence.attemptScreenClip = &store.ExamAttemptScreenClipView{ID: clipID, AttemptID: f.attemptID,
 		State: model.ScreenClipReady, Upload: upload, Signature: strings.Repeat("s", model.DesktopSignatureLength)}
-	query := ScreenClipQuery{ManagedScreenClipQuery: ManagedScreenClipQuery{
-		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID,
-	}, ClipID: clipID}
+	query := ScreenClipQuery{ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID, ClipID: clipID}
 
 	clip, err := f.service.PlayScreenClip(context.Background(), f.inv, query)
 	require.NoError(t, err)

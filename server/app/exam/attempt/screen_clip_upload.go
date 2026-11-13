@@ -28,6 +28,8 @@ type UploadScreenClipChunkCommand struct {
 	Size   int64
 }
 
+// BeginScreenClipUploadCommand declares the clip the candidate's Desktop is
+// about to upload.
 type BeginScreenClipUploadCommand struct {
 	Access CandidateAccess
 	ClipID model.ScreenClipID

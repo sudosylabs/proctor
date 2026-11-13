@@ -38,7 +38,7 @@ type ExamAttemptApplication interface {
 	UpdateExamSecurity(
 		context.Context,
 		invocation.Invocation,
-		attempt.UpdateSecurityCommand,
+		attempt.UpdateExamSecurityCommand,
 	) (model.SecurityControlResult, error)
 	RenewExamAttemptParticipation(
 		context.Context,

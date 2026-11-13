@@ -256,7 +256,7 @@ func TestLiveControlRejectsInvalidRenewalsBeforeAdmission(t *testing.T) {
 		var fault *apperror.Error
 		require.ErrorAs(t, err, &fault)
 		require.Equal(t, "exam.attempt.invalid", fault.Code())
-		_, err = f.service.UpdateExamSecurity(context.Background(), f.inv, UpdateSecurityCommand{
+		_, err = f.service.UpdateExamSecurity(context.Background(), f.inv, UpdateExamSecurityCommand{
 			Access: CandidateAccess{AttemptID: f.attemptID}, ParticipationID: participationID, Generation: 0})
 		require.Error(t, err)
 		require.NotEqual(t, "exam.delivery.control_rate_limited", apperror.CodeOf(err, ""))

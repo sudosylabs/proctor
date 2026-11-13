@@ -74,7 +74,7 @@ func (h examAttemptHandlers) requestScreenClip(request route.Request) (route.Res
 		return route.Result{}, route.InvalidRequest(err)
 	}
 
-	result, err := h.app.RequestScreenClip(request.Context, request.Invocation(), attempt.ScreenClipRequestCommand{
+	result, err := h.app.RequestScreenClip(request.Context, request.Invocation(), attempt.RequestScreenClipCommand{
 		ExamID: examID, SittingID: sittingID, AttemptID: attemptID,
 		Range: clipRange, PrivateReason: body.Reason, IdempotencyKey: request.IdempotencyKey,
 	})
@@ -138,7 +138,7 @@ func (h examAttemptHandlers) takeScreenClip(request route.Request) (route.Result
 	if err != nil {
 		return route.Result{}, err
 	}
-	clip, err := h.app.TakeScreenClip(request.Context, request.Invocation(), attempt.TakeScreenClipCommand{Access: access, ClipID: clipID})
+	clip, err := h.app.TakeScreenClip(request.Context, request.Invocation(), access, clipID)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -271,20 +271,12 @@ func screenClipUploadResponseFrom(status store.ExamAttemptScreenClipUploadStatus
 	return response
 }
 
-func managedScreenClipQuery(request route.Request) (attempt.ManagedScreenClipQuery, error) {
-	examID, sittingID, attemptID, err := managedExamAttemptIDs(request)
-	if err != nil {
-		return attempt.ManagedScreenClipQuery{}, err
-	}
-	return attempt.ManagedScreenClipQuery{ExamID: examID, SittingID: sittingID, AttemptID: attemptID}, nil
-}
-
 func (h examAttemptHandlers) listScreenClips(request route.Request) (route.Result, error) {
-	query, err := managedScreenClipQuery(request)
+	examID, sittingID, attemptID, err := managedExamAttemptIDs(request)
 	if err != nil {
 		return route.Result{}, err
 	}
-	clips, err := h.app.ListScreenClips(request.Context, request.Invocation(), query)
+	clips, err := h.app.ListScreenClips(request.Context, request.Invocation(), examID, sittingID, attemptID)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -304,7 +296,7 @@ func (h examAttemptHandlers) listScreenClips(request route.Request) (route.Resul
 // playScreenClip serves a ready clip, whole or by one byte range, so a
 // player can seek without downloading the clip first.
 func (h examAttemptHandlers) playScreenClip(request route.Request) (route.ProtocolResult, error) {
-	query, err := managedScreenClipQuery(request)
+	examID, sittingID, attemptID, err := managedExamAttemptIDs(request)
 	if err != nil {
 		return route.ProtocolResult{}, err
 	}
@@ -313,7 +305,7 @@ func (h examAttemptHandlers) playScreenClip(request route.Request) (route.Protoc
 		return route.ProtocolResult{}, err
 	}
 	clip, err := h.app.PlayScreenClip(request.Context, request.Invocation(), attempt.ScreenClipQuery{
-		ManagedScreenClipQuery: query, ClipID: clipID,
+		ExamID: examID, SittingID: sittingID, AttemptID: attemptID, ClipID: clipID,
 	})
 	if err != nil {
 		return route.ProtocolResult{}, err

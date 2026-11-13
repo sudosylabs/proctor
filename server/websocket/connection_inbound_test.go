@@ -1138,7 +1138,7 @@ func inboundSecurityFixture(t *testing.T, result attempt.ConnectionResult) model
 	return model.AdmittedSecurity{Policy: policy, PolicyContentDigest: resolved.PolicyContentDigest, PreflightID: "fixture-preflight", PreflightReportDigest: model.SHA256Fingerprint([]byte("fixture-report")), PreflightPolicyDigest: resolved.Policy.Digest, ParticipationID: result.Participation.ID, Generation: result.Participation.Generation, SecuritySessionID: "fixture-security-session", DeliveryStreamID: "fixture-delivery", RenewalIntervalSeconds: 5}
 }
 
-func (a *inboundTestApplication) UpdateExamSecurity(context.Context, invocation.Invocation, attempt.UpdateSecurityCommand) (model.SecurityControlResult, error) {
+func (a *inboundTestApplication) UpdateExamSecurity(context.Context, invocation.Invocation, attempt.UpdateExamSecurityCommand) (model.SecurityControlResult, error) {
 	return model.SecurityControlResult{}, errors.New("unexpected security update")
 }
 

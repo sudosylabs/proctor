@@ -278,8 +278,8 @@ func TestDesktopExamAttemptNativeFlow(t *testing.T) {
 	require.Empty(t, renewed.Security.DeliveryWatermarkRejections)
 
 	// A manager also asks for the session so far, with a private reason.
-	query := attempt.ManagedScreenClipQuery{ExamID: created.Exam.ID, SittingID: sittingID, AttemptID: access.AttemptID}
-	_, err = helper.App.Attempts.RequestScreenClip(ctx, managerInv, attempt.ScreenClipRequestCommand{
+	examID := created.Exam.ID
+	_, err = helper.App.Attempts.RequestScreenClip(ctx, managerInv, attempt.RequestScreenClipCommand{
 		ExamID: created.Exam.ID, SittingID: sittingID, AttemptID: access.AttemptID,
 		Range:         model.ScreenClipRange{FromSessionStart: true, End: time.Now().UTC().Truncate(time.Millisecond)},
 		PrivateReason: "The candidate looked away", IdempotencyKey: "native-flow-clip",
@@ -301,7 +301,7 @@ func TestDesktopExamAttemptNativeFlow(t *testing.T) {
 	}
 	require.Len(t, flags, 3, "the display rule and each process rule have their own Flag")
 	require.True(t, incident.IsValid(), "the second display raised a Flag that asked for a clip")
-	_, err = helper.App.Attempts.TakeScreenClip(ctx, desktop.inv, attempt.TakeScreenClipCommand{Access: access, ClipID: incident})
+	_, err = helper.App.Attempts.TakeScreenClip(ctx, desktop.inv, access, incident)
 	require.NoError(t, err)
 	media := bytes.Repeat([]byte("fragmented mp4 "), 4096)
 	chunk := sha256.Sum256(media)
@@ -322,7 +322,7 @@ func TestDesktopExamAttemptNativeFlow(t *testing.T) {
 	require.Equal(t, model.ScreenClipReady, ready.State)
 
 	// The manager plays it back, byte for byte.
-	played, err := helper.App.Attempts.PlayScreenClip(ctx, managerInv, attempt.ScreenClipQuery{ManagedScreenClipQuery: query, ClipID: incident})
+	played, err := helper.App.Attempts.PlayScreenClip(ctx, managerInv, attempt.ScreenClipQuery{ExamID: examID, SittingID: sittingID, AttemptID: access.AttemptID, ClipID: incident})
 	require.NoError(t, err)
 	require.Equal(t, "video/mp4", played.MediaType)
 	require.Equal(t, int64(len(media)), played.SizeBytes)
@@ -341,7 +341,7 @@ func TestDesktopExamAttemptNativeFlow(t *testing.T) {
 		IdempotencyKey: "native-flow-submit",
 	})
 	require.NoError(t, err)
-	clips, err := helper.App.Attempts.ListScreenClips(ctx, managerInv, query)
+	clips, err := helper.App.Attempts.ListScreenClips(ctx, managerInv, examID, sittingID, access.AttemptID)
 	require.NoError(t, err)
 	require.Len(t, clips, 4)
 	for _, clip := range clips {

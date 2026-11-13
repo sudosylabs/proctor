@@ -763,7 +763,7 @@ func (c *connectionRuntime) handleExamAttemptSecurityUpdate(ctx context.Context,
 	result, err := attempts.UpdateExamSecurity(ctx, invocation.New(
 		c.principal,
 		metadata,
-	), attempt.UpdateSecurityCommand{
+	), attempt.UpdateExamSecurityCommand{
 		Access: attempt.CandidateAccess{
 			AttemptID:            binding.attemptID,
 			ConnectionID:         binding.connectionID,

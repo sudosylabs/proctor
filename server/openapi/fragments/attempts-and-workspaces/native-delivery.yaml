@@ -806,44 +806,6 @@ components:
             last_unretained_at:
               type: string
               format: date-time
-    NativeSourceRange:
-      type: object
-      additionalProperties: false
-      required:
-        - source_id
-        - source_instance_id
-        - first_sequence
-        - last_sequence
-      properties:
-        source_id:
-          type: string
-          enum:
-            - display-topology
-            - candidate-window
-            - capture-session
-            - process-application
-            - interactive-session
-            - clipboard
-            - print-spooler
-            - removable-storage
-            - virtualization
-            - network-configuration
-            - media-device
-        source_instance_id:
-          type: string
-          minLength: 1
-          maxLength: 128
-          pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
-        first_sequence:
-          type: integer
-          format: int64
-          minimum: 0
-          maximum: 9007199254740991
-        last_sequence:
-          type: integer
-          format: int64
-          minimum: 0
-          maximum: 9007199254740991
     NativeCapabilityFact:
       type: object
       additionalProperties: false
@@ -971,39 +933,13 @@ components:
         observed_at:
           type: string
           format: date-time
-    NativeCoverageTransition:
-      type: object
-      additionalProperties: false
-      required:
-        - kind
-        - source
-        - occurred_at
-        - reason
-      properties:
-        kind:
-          type: string
-          enum:
-            - coverage_transition
-        source:
-          $ref: '#/components/schemas/NativeSourceCoverage'
-        occurred_at:
-          type: string
-          format: date-time
-        reason:
-          type: string
-          enum:
-            - initial
-            - health_changed
-            - permission_changed
-            - reconciled
-            - stopped
     NativeSourceReset:
       type: object
       additionalProperties: false
       required:
         - kind
         - reset_id
-        - source_id
+        - capability
         - previous_source_instance_id
         - previous_final_sequence
         - new_source_instance_id
@@ -1019,20 +955,10 @@ components:
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
-        source_id:
+        capability:
           type: string
-          enum:
-            - display-topology
-            - candidate-window
-            - capture-session
-            - process-application
-            - interactive-session
-            - clipboard
-            - print-spooler
-            - removable-storage
-            - virtualization
-            - network-configuration
-            - media-device
+          pattern: ^[a-z][a-z0-9_]{0,63}$
+          description: The activated capability whose source this names.
         previous_source_instance_id:
           type: string
           minLength: 1
@@ -1062,7 +988,7 @@ components:
       additionalProperties: false
       required:
         - kind
-        - source_id
+        - capability
         - source_instance_id
         - first_missing_sequence
         - last_missing_sequence
@@ -1073,20 +999,10 @@ components:
           type: string
           enum:
             - source_gap
-        source_id:
+        capability:
           type: string
-          enum:
-            - display-topology
-            - candidate-window
-            - capture-session
-            - process-application
-            - interactive-session
-            - clipboard
-            - print-spooler
-            - removable-storage
-            - virtualization
-            - network-configuration
-            - media-device
+          pattern: ^[a-z][a-z0-9_]{0,63}$
+          description: The activated capability whose source this names.
         source_instance_id:
           type: string
           minLength: 1
@@ -1116,7 +1032,6 @@ components:
         - $ref: '#/components/schemas/NativeCapabilityFact'
         - $ref: '#/components/schemas/NativeParticipationConfirmed'
         - $ref: '#/components/schemas/NativeRuleStatusReport'
-        - $ref: '#/components/schemas/NativeCoverageTransition'
         - $ref: '#/components/schemas/NativeSourceReset'
         - $ref: '#/components/schemas/NativeSourceGap'
       discriminator:
@@ -1125,7 +1040,6 @@ components:
           capability_fact: '#/components/schemas/NativeCapabilityFact'
           participation_confirmed: '#/components/schemas/NativeParticipationConfirmed'
           rule_status: '#/components/schemas/NativeRuleStatusReport'
-          coverage_transition: '#/components/schemas/NativeCoverageTransition'
           source_reset: '#/components/schemas/NativeSourceReset'
           source_gap: '#/components/schemas/NativeSourceGap'
     NativeSecurityBatch:

@@ -325,14 +325,12 @@ func TestExamAttemptParticipationExpiryDueConsistentWithRejectsEachInconsistency
 	})
 }
 
-func securityCoverageResultFixture(t *testing.T) model.SecurityCoverageResult {
+func securityCoverageResultFixture(t *testing.T) model.SecurityRenewalResult {
 	t.Helper()
 	digest := model.SHA256Fingerprint([]byte("renewal-control"))
-	coverage := model.SecurityCoverageResult{
+	coverage := model.SecurityRenewalResult{
 		ProcessedControlSequence:    1,
 		ProcessedControlDigest:      &digest,
-		CoverageResult:              "accepted",
-		SourceResetReceipts:         []model.SourceResetReceipt{},
 		SecurityInteractionAllowed:  true,
 		DeliveryWatermarkRejections: []model.DeliveryWatermarkRejection{},
 	}
@@ -347,7 +345,7 @@ func TestExamAttemptParticipationRenewalResultConsistentWithRejectsEachInconsist
 	const generation, sequence = int64(4), int64(9)
 	consistent := func(t *testing.T) *result {
 		return &result{
-			SecurityCoverage: securityCoverageResultFixture(t),
+			Security:         securityCoverageResultFixture(t),
 			AttemptID:        attemptID,
 			ExamID:           model.NewExamID(),
 			SittingID:        model.NewExamSittingID(),
@@ -365,7 +363,7 @@ func TestExamAttemptParticipationRenewalResultConsistentWithRejectsEachInconsist
 
 	require.False(t, (*result)(nil).ConsistentWith(attemptID, participationID, candidateID, generation, sequence))
 	requireEachInconsistencyRejected(t, consistent, check, []inconsistency[result]{
-		{"invalid security coverage", func(r *result) { r.SecurityCoverage.CoverageResult = "" }},
+		{"invalid security control", func(r *result) { r.Security.DeliveryWatermarkRejections = nil }},
 		{"another Attempt", func(r *result) { r.AttemptID = model.NewExamAttemptID() }},
 		{"another Participation", func(r *result) { r.ParticipationID = model.NewAttemptParticipationID() }},
 		{"no Exam", func(r *result) { r.ExamID = "" }},
@@ -482,10 +480,7 @@ func TestSecurityPolicyRecoveryConsistentWithRejectsEachInconsistency(t *testing
 	attemptID := connected.Attempt.ID
 	consistent := func(t *testing.T) *recovery {
 		return &recovery{
-			CurrentSources:             []model.NativeSourceCoverage{},
-			CurrentCoverage:            []model.NativeCoverageClaim{},
-			SourceResetReceipts:        []model.SourceResetReceipt{},
-			SecurityCoverage:           securityCoverageResultFixture(t),
+			Renewal:                    securityCoverageResultFixture(t),
 			ServerTime:                 consistencyAt,
 			Security:                   connected.Security,
 			FrozenAttemptConfiguration: connected.Configuration.Clone(),
@@ -496,13 +491,7 @@ func TestSecurityPolicyRecoveryConsistentWithRejectsEachInconsistency(t *testing
 	require.False(t, (*recovery)(nil).ConsistentWith(attemptID))
 	requireEachInconsistencyRejected(t, consistent, check, []inconsistency[recovery]{
 		{"no server time", func(r *recovery) { r.ServerTime = time.Time{} }},
-		{"invalid security coverage", func(r *recovery) { r.SecurityCoverage.CoverageResult = "" }},
-		{"absent source list", func(r *recovery) { r.CurrentSources = nil }},
-		{"absent coverage list", func(r *recovery) { r.CurrentCoverage = nil }},
-		{"absent reset receipt list", func(r *recovery) { r.SourceResetReceipts = nil }},
-		{"more than eleven sources", func(r *recovery) { r.CurrentSources = make([]model.NativeSourceCoverage, 12) }},
-		{"more than sixty-four coverage claims", func(r *recovery) { r.CurrentCoverage = make([]model.NativeCoverageClaim, 65) }},
-		{"more than eleven reset receipts", func(r *recovery) { r.SourceResetReceipts = make([]model.SourceResetReceipt, 12) }},
+		{"invalid security control", func(r *recovery) { r.Renewal.DeliveryWatermarkRejections = nil }},
 		{"invalid admitted security", func(r *recovery) { r.Security.RenewalIntervalSeconds = 0 }},
 		{"frozen configuration is invalid", func(r *recovery) { r.FrozenAttemptConfiguration.Digest = "" }},
 	})

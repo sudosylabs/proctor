@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -62,17 +61,7 @@ func TestDeliveryCorruptReads(t *testing.T, ss store.Store, corrupt func(model.A
 		recoveryAccess := store.SecurityPreflightAccess{CandidateUserID: access.CandidateUserID, SessionID: access.SessionID, DesktopRegistrationID: access.DesktopRegistrationID, DPoPKeyThumbprint: access.DPoPKeyThumbprint, DesktopBuild: build, DesktopCompatibilityPolicyRevision: compatibility.Revision}
 		recovery, desktopErr := ss.SecurityPreflight().RecoverSecurityPolicy(ctx, recoveryAccess, connected.Attempt.ID)
 		require.NoError(t, desktopErr)
-		for _, field := range []string{"native_source_sequence", "native_source_id", "native_coverage_state"} {
-			t.Run(field, func(t *testing.T) {
-				restore := corrupt(connected.Participation.ID, "", field)
-				defer restore()
-				_, securityErr := ss.SecurityPreflight().RecoverSecurityPolicy(ctx, recoveryAccess, connected.Attempt.ID)
-				assert.ErrorIs(t, securityErr, store.ErrInvalidState)
-				control := model.SecurityCoverageRenewal{ControlSequence: 1, PolicyDigest: connected.Security.Policy.Digest, SecuritySessionID: connected.Security.SecuritySessionID, StreamID: connected.Security.DeliveryStreamID, Posture: "compliant", Sources: recovery.CurrentSources, Coverage: recovery.CurrentCoverage, SourceResets: []model.NativeSourceReset{}, DeliveryWatermarks: []model.DeliveryWatermark{}}
-				_, securityErr = ss.ExamAttempt().UpdateSecurityCoverage(ctx, &store.ExamAttemptSecurityCoverageUpdate{Access: access, ParticipationID: native.ParticipationID, Generation: native.Generation, DesktopBuild: build, DesktopCompatibilityPolicyRevision: compatibility.Revision, Coverage: control})
-				assert.ErrorIs(t, securityErr, store.ErrInvalidState)
-			})
-		}
+		require.True(t, recovery.ConsistentWith(connected.Attempt.ID))
 		at := model.NowUTC().Truncate(time.Millisecond)
 		appendBatch := func(sequence int64, key string) error {
 			record := secondDisplay(sequence+1, at.Add(time.Duration(sequence)*time.Second))

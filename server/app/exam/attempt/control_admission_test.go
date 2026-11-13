@@ -256,20 +256,20 @@ func TestLiveControlRejectsInvalidRenewalsBeforeAdmission(t *testing.T) {
 		var fault *apperror.Error
 		require.ErrorAs(t, err, &fault)
 		require.Equal(t, "exam.attempt.invalid", fault.Code())
-		_, err = f.service.UpdateExamSecurityCoverage(context.Background(), f.inv, UpdateSecurityCoverageCommand{
+		_, err = f.service.UpdateExamSecurity(context.Background(), f.inv, UpdateSecurityCommand{
 			Access: CandidateAccess{AttemptID: f.attemptID}, ParticipationID: participationID, Generation: 0})
 		require.Error(t, err)
 		require.NotEqual(t, "exam.delivery.control_rate_limited", apperror.CodeOf(err, ""))
 	}
 	require.Empty(t, f.service.liveControls.users, "rejected requests were tracked by admission")
 	require.Empty(t, f.service.liveControls.slots, "rejected requests held a worker")
-	f.persistence.renewResult = &store.ExamAttemptParticipationRenewalResult{SecurityCoverage: renewalCoverageResultFixture(),
+	f.persistence.renewResult = &store.ExamAttemptParticipationRenewalResult{Security: renewalCoverageResultFixture(),
 		AttemptID: f.attemptID, ExamID: f.sitting.ExamID, SittingID: f.sitting.ID,
 		CandidateUserID: f.inv.Principal().UserID, ParticipationID: participationID, Generation: 3, AcceptedSequence: 7,
 		DatabaseTime: f.at, LeaseExpiresAt: f.at.Add(model.AttemptParticipationInitialLease),
 	}
 	_, err := f.service.RenewExamAttemptParticipation(context.Background(), f.inv, RenewParticipationCommand{
-		SecurityCoverage: renewalCoverageFixture(), AttemptID: f.attemptID, ParticipationID: participationID,
+		Security: renewalCoverageFixture(), AttemptID: f.attemptID, ParticipationID: participationID,
 		ConnectionID: f.connectionID, Generation: 3, Sequence: 7, ContinuityCredential: model.NewCredentialToken(),
 	})
 	require.NoError(t, err, "malformed renewals spent the caller's live allowance")

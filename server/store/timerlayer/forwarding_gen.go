@@ -1507,9 +1507,9 @@ func (s *timedExamAttemptStore) RenewParticipation(arg0 context.Context, arg1 *s
 	})
 }
 
-func (s *timedExamAttemptStore) UpdateSecurityCoverage(arg0 context.Context, arg1 *store.ExamAttemptSecurityCoverageUpdate) (model.SecurityCoverageResult, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodUpdateSecurityCoverage), func(callCtx context.Context) (model.SecurityCoverageResult, error) {
-		return s.next.UpdateSecurityCoverage(callCtx, arg1)
+func (s *timedExamAttemptStore) UpdateSecurity(arg0 context.Context, arg1 *store.ExamAttemptSecurityUpdate) (model.SecurityRenewalResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamAttempt, methodUpdateSecurityCoverage), func(callCtx context.Context) (model.SecurityRenewalResult, error) {
+		return s.next.UpdateSecurity(callCtx, arg1)
 	})
 }
 

@@ -27,7 +27,6 @@ type admittedSecurityBinding struct {
 }
 type connectSecurityAllocation struct {
 	binding admittedSecurityBinding
-	report  []byte
 	now     time.Time
 	// registry and capabilities start the server's evaluation of the native
 	// rules from the facts Desktop reported at Start.
@@ -208,7 +207,7 @@ func (s *SQLExamAttemptStore) prepareConnectSecurity(
 	}
 
 	return connectSecurityAllocation{
-		binding: binding, report: row.Report, now: row.DatabaseNow,
+		binding: binding, now: row.DatabaseNow,
 		registry: input.DesktopBuild.NativeAgreement.CapabilityRegistry(), capabilities: report.Capabilities,
 	}, nil
 }
@@ -306,10 +305,10 @@ func persistConnectSecurity(
 		ctx,
 		`INSERT INTO exam_attempt_security_owners(
 			participation_id, exam_attempt_id, delivery_stream_id, security_session_id, session_id,
-			registration_id, key_thumbprint, binding_canonical, latest_report_canonical,
+			registration_id, key_thumbprint, binding_canonical,
 			control_ledger_canonical, reserved_bytes, created_at
 		)
-		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		security.ParticipationID.String(),
 		attemptID,
 		security.DeliveryStreamID,
@@ -318,7 +317,6 @@ func persistConnectSecurity(
 		input.DesktopRegistrationID.String(),
 		input.DPoPKeyThumbprint,
 		binding,
-		allocation.report,
 		ledger,
 		model.NativeOwnerReservationBytes,
 		allocation.now,
@@ -551,7 +549,6 @@ func (s *SQLSecurityPreflightStore) RecoverSecurityPolicy(
 		recovery, err := recoverNativeControl(
 			ctx,
 			tx,
-			attemptID,
 			participationID,
 			security.DeliveryStreamID,
 			guard.State == string(model.ExamSittingOpen),

@@ -23,6 +23,11 @@ module when a change is not server-only. No module has been released yet.
   storage, virtualization, network, camera and microphone. Each family has an
   `outcome`, `flag` or, when enforcing, `flag_and_suspend`, which suspends the
   Attempt like Focus Loss.
+- Server: enforcement certification. Each Desktop release signs, per
+  capability on its target platform, whether enforcement is certified there.
+  Enforce mode and `flag_and_suspend` refuse Start on an uncertified target;
+  observe mode runs anywhere, the baseline always runs, and nothing is
+  certified on Linux.
 - Server: screen clips. When the Exam records the screen, managers ask for a
   range with a private reason (at most 10 per Attempt), a Flag asks for the
   minute either side of it, Desktop uploads signed 8 MiB chunks, and managers
@@ -40,6 +45,14 @@ module when a change is not server-only. No module has been released yet.
   `allowed_adapter_class_ids`, `allowed_tunnel_class_ids`, and the
   `route_change` and `network_source_health` network options. Every family
   now requires `outcome` (**breaking**).
+- Server: the native source and coverage model. The preflight report is now
+  one fresh fact per activated capability plus Desktop's rule statuses, with
+  no `source_manifest_digest`, sources, coverage, baseline or posture; the
+  lease renewal's `security_coverage` becomes `security_control`, carrying
+  only its sequence, binding and delivery watermarks; `coverage_transition`
+  records and source reset receipts are gone, and gaps and resets name their
+  `capability`. The board's `native_security.sources` is removed
+  (**breaking**).
 
 - Server: the webapp build manifest and the devseed journal no longer carry
   a `schema_version`; a manifest or journal that does is rejected.

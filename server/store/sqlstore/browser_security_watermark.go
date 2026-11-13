@@ -30,7 +30,7 @@ func lockBrowserControlSources(
 	input *store.ExamAttemptParticipationRenewal,
 ) (map[string]browserControlSource, error) {
 	sources := make(map[string]browserControlSource)
-	for _, mark := range input.SecurityCoverage.DeliveryWatermarks {
+	for _, mark := range input.Security.DeliveryWatermarks {
 		if mark.Family != "browser" {
 			continue
 		}

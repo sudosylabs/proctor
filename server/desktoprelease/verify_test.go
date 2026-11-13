@@ -38,52 +38,22 @@ func fixture(t *testing.T) releaseFixture {
 	f.expected = Expectation{Build: model.DesktopBuildTuple{DesktopRelease: "1.0.0", DesktopBuildID: "synthetic-test-build",
 		DesktopTarget: "synthetic-darwin-arm64", Platform: model.DesktopPlatformDarwin, Architecture: model.DesktopArchitectureARM64, RealtimeProtocol: 1,
 		DesktopSettingsRegistryFingerprint: "fnv1a64:aaaaaaaaaaaaaaaa", ConfigurationManifest: manifest,
-		AttemptConfigurationManifestFingerprint: manifest.Fingerprint(), CapabilityMatrixIdentity: "synthetic-test-matrix"}, ApplicationReleaseID: "synthetic-release",
-		SourceSchemaDigests: map[model.NativeSourceID]string{}}
+		AttemptConfigurationManifestFingerprint: manifest.Fingerprint(), CapabilityMatrixIdentity: "synthetic-test-matrix"}, ApplicationReleaseID: "synthetic-release"}
 	registry, err := os.ReadFile("../model/testdata/native_capability_registry.json")
 	require.NoError(t, err)
-	f.artifacts = Artifacts{Registry: registry, SourceManifest: canonical(t, model.NativeSources()),
-		Schemas: map[string][]byte{}, ConfigurationManifest: manifest.Canonical(), Matrix: SignedMatrix{KeyID: "synthetic-test-only"}}
-	for _, source := range model.NativeSources() {
-		schema := canonical(t, map[string]string{"synthetic_source": string(source)})
-		digest := model.SHA256Fingerprint(schema)
-		f.artifacts.Schemas[digest] = schema
-		f.expected.SourceSchemaDigests[source] = digest
-	}
-	definitions := []struct {
-		key      string
-		source   model.NativeSourceID
-		baseline bool
-		claims   []model.NativeCapabilityClaim
-	}{
-		{"baseline.capture", model.NativeSourceCapture, true, []model.NativeCapabilityClaim{model.NativeClaimEnforce}},
-		{"baseline.display", model.NativeSourceDisplay, true, []model.NativeCapabilityClaim{model.NativeClaimEnforce}},
-		{"baseline.window", model.NativeSourceWindow, true, []model.NativeCapabilityClaim{model.NativeClaimEnforce}},
-		{"native.effect", "", false, []model.NativeCapabilityClaim{model.NativeClaimEnforce}},
-		{"native.observe", model.NativeSourceClipboard, false, []model.NativeCapabilityClaim{model.NativeClaimObserve}},
-	}
-	effectSchema := []byte(`{"synthetic_effect_schema":true}`)
-	effectDigest := model.SHA256Fingerprint(effectSchema)
-	f.artifacts.Schemas[effectDigest] = effectSchema
+	f.artifacts = Artifacts{Registry: registry, ConfigurationManifest: manifest.Canonical(), Matrix: SignedMatrix{KeyID: "synthetic-test-only"}}
 	f.expected.RegistryDigest = model.SHA256Fingerprint(f.artifacts.Registry)
-	f.expected.SourceManifestDigest = model.SHA256Fingerprint(f.artifacts.SourceManifest)
 	f.matrix = model.NativeCapabilityMatrix{RegistryDigest: f.expected.RegistryDigest, MatrixID: f.expected.Build.CapabilityMatrixIdentity, ReleaseID: f.expected.ApplicationReleaseID, TargetTuple: f.expected.Build.TargetTuple()}
-	for _, d := range definitions {
-		digest := f.expected.SourceSchemaDigests[d.source]
-		if d.source == "" {
-			digest = effectDigest
-		}
-		f.expected.Coverage = append(f.expected.Coverage, model.NativeCoverageDefinition{CoverageKey: d.key, CapabilityID: "clipboard", SourceID: d.source, SourceSchemaDigest: digest, PermittedClaims: d.claims, RequiredPermissions: []string{}, Baseline: d.baseline})
-		claim, verification := model.NativeClaimEnforce, "passed"
-		if d.key == "native.observe" {
-			claim, verification = model.NativeClaimUnavailable, "unavailable"
-		}
-		f.matrix.Entries = append(f.matrix.Entries, model.NativeCapabilityMatrixEntry{CoverageKey: d.key, SourceSchemaDigest: digest, Claim: claim,
-			ComponentID: "synthetic-component", AdapterVersion: "synthetic-adapter", RequiredPermissions: []string{}, Limitations: []string{}, Verification: verification})
+	parsed, err := model.ParseNativeCapabilityRegistry(registry)
+	require.NoError(t, err)
+	for _, capability := range []model.NativeCapabilityID{"camera", "candidate_window", "clipboard", "display", "interactive_session",
+		"microphone", "network", "printing", "process_application", "removable_storage", "virtualization"} {
+		_, registered := parsed.Capability(capability)
+		require.True(t, registered, capability)
+		f.matrix.Capabilities = append(f.matrix.Capabilities, model.NativeCapabilityCertification{
+			Capability: capability, EnforceCertified: capability != "camera",
+		})
 	}
-	detectors := []model.NativeDetectorDefinition{{DetectorID: "synthetic-detector", Version: 1, CapabilityID: "clipboard", ConditionIDs: []string{"clipboard-changed"}, SourceIDs: []model.NativeSourceID{model.NativeSourceClipboard}, AllowedModes: []model.NativeCapabilityClaim{model.NativeClaimObserve}}}
-	f.artifacts.DetectorCatalog = canonical(t, detectors)
-	f.expected.DetectorCatalogDigest = model.SHA256Fingerprint(f.artifacts.DetectorCatalog)
 	f.sign(t)
 	return f
 }
@@ -105,26 +75,20 @@ func (f *releaseFixture) signPayload() {
 	f.expected.MatrixDigest = model.SHA256Fingerprint(f.artifacts.Matrix.Payload)
 }
 
-func TestVerifyExactReleaseAndTruthfulCoverage(t *testing.T) {
+func TestVerifyExactReleaseAndItsCertification(t *testing.T) {
 	t.Parallel()
 	f := fixture(t)
 	build, err := Verify(f.expected, f.artifacts, f.keys)
 	require.NoError(t, err)
 	agreement := build.NativeAgreement
-	observed, err := agreement.Coverage("native.observe", model.NativeClaimObserve)
-	require.NoError(t, err, "observe unavailability was hidden")
-	require.Equal(t, model.NativeClaimUnavailable, observed.Claim, "observe unavailability was hidden")
-	_, err = agreement.Coverage("native.observe", model.NativeClaimEnforce)
-	require.Error(t, err, "unavailable observe source granted enforce")
-	_, err = agreement.Coverage("native.effect", model.NativeClaimEnforce)
-	require.NoError(t, err, "certified effect-only claim rejected")
-	_, err = agreement.Coverage("unknown", model.NativeClaimObserve)
-	require.Error(t, err, "unknown claim admitted")
-	f.expected.Coverage[0].PermittedClaims[0] = model.NativeClaimUnavailable
-	copy := agreement.Matrix()
-	copy.Entries[0].Claim = model.NativeClaimUnavailable
-	_, err = agreement.Coverage("baseline.capture", model.NativeClaimEnforce)
-	require.NoError(t, err, "verified agreement mutated through caller")
+	require.True(t, agreement.EnforceCertified("display"))
+	require.False(t, agreement.EnforceCertified("camera"), "an uncertified capability is reported as such")
+	_, known := agreement.CapabilityRegistry().Application("teamviewer")
+	require.True(t, known, "the registry's application catalog travels with the agreement")
+	copied := agreement.Matrix()
+	copied.Capabilities[0].EnforceCertified = !copied.Capabilities[0].EnforceCertified
+	require.Equal(t, f.matrix.Capabilities[0].EnforceCertified, agreement.Matrix().Capabilities[0].EnforceCertified,
+		"verified agreement mutated through caller")
 }
 
 func TestVerifyRejectsUntrustedOrInconsistentArtifacts(t *testing.T) {
@@ -139,15 +103,7 @@ func TestVerifyRejectsUntrustedOrInconsistentArtifacts(t *testing.T) {
 		"registry bytes": func(f *releaseFixture, t *testing.T) {
 			f.artifacts.Registry = []byte(`{"synthetic_test_registry":false}`)
 		},
-		"source manifest": func(f *releaseFixture, t *testing.T) { f.artifacts.SourceManifest = []byte(`[]`) },
-		"source schema": func(f *releaseFixture, t *testing.T) {
-			f.artifacts.Schemas[f.expected.SourceSchemaDigests[model.NativeSourceWindow]] = []byte(`{}`)
-		},
-		"extra schema": func(f *releaseFixture, t *testing.T) {
-			f.artifacts.Schemas[model.SHA256Fingerprint([]byte(`{}`))] = []byte(`{}`)
-		},
 		"configuration manifest": func(f *releaseFixture, t *testing.T) { f.artifacts.ConfigurationManifest = []byte(`{}`) },
-		"detector catalog":       func(f *releaseFixture, t *testing.T) { f.artifacts.DetectorCatalog = []byte(`[]`) },
 		"release mismatch":       func(f *releaseFixture, t *testing.T) { f.matrix.ReleaseID = "another-release"; f.sign(t) },
 		"target mismatch":        func(f *releaseFixture, t *testing.T) { f.matrix.TargetTuple = "another-target"; f.sign(t) },
 		"matrix ID mismatch":     func(f *releaseFixture, t *testing.T) { f.matrix.MatrixID = "another-matrix"; f.sign(t) },
@@ -155,25 +111,13 @@ func TestVerifyRejectsUntrustedOrInconsistentArtifacts(t *testing.T) {
 			f.matrix.RegistryDigest = model.SHA256Fingerprint([]byte(`{}`))
 			f.sign(t)
 		},
-		"schema binding": func(f *releaseFixture, t *testing.T) {
-			f.matrix.Entries[0].SourceSchemaDigest = f.matrix.Entries[1].SourceSchemaDigest
+		"missing capability": func(f *releaseFixture, t *testing.T) { f.matrix.Capabilities = f.matrix.Capabilities[1:]; f.sign(t) },
+		"unregistered capability": func(f *releaseFixture, t *testing.T) {
+			f.matrix.Capabilities[0].Capability = "teleport"
 			f.sign(t)
 		},
-		"unknown coverage key": func(f *releaseFixture, t *testing.T) { f.matrix.Entries[4].CoverageKey = "native.unknown"; f.sign(t) },
-		"unsupported enforce": func(f *releaseFixture, t *testing.T) {
-			f.matrix.Entries[4].Claim = model.NativeClaimEnforce
-			f.matrix.Entries[4].Verification = "passed"
-			f.sign(t)
-		},
-		"unpassed claim": func(f *releaseFixture, t *testing.T) { f.matrix.Entries[3].Verification = "unavailable"; f.sign(t) },
-		"baseline unavailable": func(f *releaseFixture, t *testing.T) {
-			f.matrix.Entries[0].Claim = model.NativeClaimUnavailable
-			f.matrix.Entries[0].Verification = "unavailable"
-			f.sign(t)
-		},
-		"baseline missing": func(f *releaseFixture, t *testing.T) { f.expected.Coverage[0].Baseline = false },
-		"unknown permission": func(f *releaseFixture, t *testing.T) {
-			f.matrix.Entries[3].RequiredPermissions = []string{"shell"}
+		"out of order": func(f *releaseFixture, t *testing.T) {
+			f.matrix.Capabilities[0], f.matrix.Capabilities[1] = f.matrix.Capabilities[1], f.matrix.Capabilities[0]
 			f.sign(t)
 		},
 		"case alias": func(f *releaseFixture, t *testing.T) {
@@ -189,10 +133,10 @@ func TestVerifyRejectsUntrustedOrInconsistentArtifacts(t *testing.T) {
 			f.signPayload()
 		},
 		"omitted required field": func(f *releaseFixture, t *testing.T) {
-			f.artifacts.Matrix.Payload = []byte(strings.Replace(string(f.artifacts.Matrix.Payload), `"required_permissions":[],`, "", 1))
+			f.artifacts.Matrix.Payload = []byte(strings.Replace(string(f.artifacts.Matrix.Payload), `,"enforce_certified":true}`, "}", 1))
 			f.signPayload()
 		},
-		"null array": func(f *releaseFixture, t *testing.T) { f.matrix.Entries[0].RequiredPermissions = nil; f.sign(t) },
+		"null list": func(f *releaseFixture, t *testing.T) { f.matrix.Capabilities = nil; f.sign(t) },
 	}
 	for name, mutate := range tests {
 		t.Run(name, func(t *testing.T) {

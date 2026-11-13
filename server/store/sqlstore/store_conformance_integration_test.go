@@ -1544,12 +1544,12 @@ func TestSecureConnectStore(t *testing.T) {
 			switch field {
 			case "challenge":
 				prepared.Challenge.Challenge = "invalid"
-			case "categories":
-				prepared.Resolved.Categories = []model.NativeSourceCategory{"unknown"}
-			case "sources":
-				prepared.Resolved.Sources[0] = "unknown"
-			case "requirements":
-				prepared.Resolved.Requirements[0].RequiredClaim = "unknown"
+			case "policy_content_digest":
+				prepared.Resolved.PolicyContentDigest = model.SHA256Fingerprint([]byte("other policy"))
+			case "capability_matrix_digest":
+				prepared.Resolved.CapabilityMatrixDigest = model.SHA256Fingerprint([]byte("other matrix"))
+			case "catalog_bindings":
+				prepared.Resolved.CatalogBindings = nil
 			default:
 				require.FailNow(t, "unknown prepared field")
 			}

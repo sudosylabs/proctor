@@ -21,12 +21,11 @@ func TestSecurityDocumentsPreserveTimestampSpelling(t *testing.T) {
 	_, _, _, report := preflightFixture(t)
 	at := time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)
 	report.ReportedAt = at
-	reset := NativeSourceReset{Kind: "source_reset", ResetID: NewID(), SourceID: NativeSourceCapture, PreviousSourceInstanceID: NewID(), NewSourceInstanceID: NewID(), Reason: "restart", OccurredAt: at}
+	reset := NativeSourceReset{Kind: "source_reset", ResetID: NewID(), Capability: "display", PreviousSourceInstanceID: NewID(), NewSourceInstanceID: NewID(), Reason: "restart", OccurredAt: at}
 	fact := NativeCapabilityFact{Kind: "capability_fact", ObservedAt: at, NativeCapabilityReadiness: readinessOf("display", NativeCertaintyComplete, `{"targets":[]}`, `{}`)}
 	status := NativeRuleStatusReport{Kind: "rule_status", RuleID: "baseline.window", Status: NativeRuleMet, ObservedAt: at}
-	records := []NativeRecord{{Fact: &fact}, {Confirmed: &NativeParticipationConfirmed{Kind: "participation_confirmed", ObservedAt: at}}, {RuleStatus: &status}, {Reset: &reset}, {Gap: &NativeSourceGap{Kind: "source_gap", SourceID: NativeSourceCapture, SourceInstanceID: NewID(), Reason: "overflow", OccurredAt: at}}, {Coverage: &NativeCoverageTransition{Kind: "coverage_transition", Source: report.Sources[0], Reason: "initial", OccurredAt: at}}}
+	records := []NativeRecord{{Fact: &fact}, {Confirmed: &NativeParticipationConfirmed{Kind: "participation_confirmed", ObservedAt: at}}, {RuleStatus: &status}, {Reset: &reset}, {Gap: &NativeSourceGap{Kind: "source_gap", Capability: "display", SourceInstanceID: NewID(), Reason: "overflow", OccurredAt: at}}}
 	batch := NativeSecurityBatch{StreamID: NewID(), BatchSequence: 1, ParticipationID: NewAttemptParticipationID(), Generation: 1, SecuritySessionID: NewID(), PolicyDigest: report.PolicyDigest, ApplicationReleaseID: "release", MatrixID: "matrix", Records: records}
-	control := SecurityCoverageRenewal{ControlSequence: 1, PolicyDigest: report.PolicyDigest, SecuritySessionID: NewID(), StreamID: NewID(), Posture: report.Posture, Sources: report.Sources, Coverage: report.Coverage, SourceResets: []NativeSourceReset{reset}, DeliveryWatermarks: []DeliveryWatermark{}}
 	browser := BrowserActivityEvent{Sequence: 1, Kind: BrowserActivityBlockedNavigation, PolicyRevisionID: NewExamRevisionID(), ClientOccurredAt: at, Location: &BrowserLocation{Scheme: "file"}, BlockReason: func() *BrowserActivityBlockReason { v := BrowserBlockSchemeNotAllowed; return &v }()}
 	cases := []struct {
 		name  string
@@ -35,7 +34,6 @@ func TestSecurityDocumentsPreserveTimestampSpelling(t *testing.T) {
 	}{
 		{"preflight", report, func() any { return new(SecurityPreflightReport) }},
 		{"batch", batch, func() any { return new(NativeSecurityBatch) }},
-		{"control", control, func() any { return new(SecurityCoverageRenewal) }},
 		{"browser", browser, func() any { return new(BrowserActivityEvent) }},
 		{"summary", UnretainedDeliverySummary{SummarySequence: 1, FirstUnretainedAt: &at, LastUnretainedAt: &at}, func() any { return new(UnretainedDeliverySummary) }},
 	}

@@ -376,17 +376,6 @@ func (s *NativeInterpretation) UnmarshalJSON(raw []byte) error {
 	return nil
 }
 
-// NativeSourceCapability names the capability a delivery source reports.
-// Source gaps and resets still name sources; facts name capabilities.
-func NativeSourceCapability(source NativeSourceID) NativeCapabilityID {
-	switch source {
-	case NativeSourceDisplay:
-		return "display"
-	default:
-		return NativeCapabilityID(strings.ReplaceAll(string(source), "-", "_"))
-	}
-}
-
 type nativeScalarWire struct {
 	Type    NativeFieldType `json:"type"`
 	Count   int64           `json:"count,omitempty"`

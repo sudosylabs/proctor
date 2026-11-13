@@ -23,7 +23,6 @@ import (
 type prepareSecurityPreflightRequest struct {
 	AttemptID                        string `json:"attempt_id,omitempty"`
 	NativeRegistryDigest             string `json:"native_registry_digest"`
-	SourceManifestDigest             string `json:"source_manifest_digest"`
 	ConfigurationManifestFingerprint string `json:"configuration_manifest_fingerprint"`
 }
 
@@ -47,7 +46,7 @@ func (r *prepareSecurityPreflightRequest) UnmarshalJSON(data []byte) error {
 
 	for name, value := range members {
 		if !slices.Contains(
-			[]string{"attempt_id", "native_registry_digest", "source_manifest_digest", "configuration_manifest_fingerprint"},
+			[]string{"attempt_id", "native_registry_digest", "configuration_manifest_fingerprint"},
 			name,
 		) ||
 			bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
@@ -57,7 +56,6 @@ func (r *prepareSecurityPreflightRequest) UnmarshalJSON(data []byte) error {
 
 	if decoded.AttemptID != "" && !model.ExamAttemptID(decoded.AttemptID).IsValid() ||
 		!model.IsValidSHA256Fingerprint(decoded.NativeRegistryDigest) ||
-		!model.IsValidSHA256Fingerprint(decoded.SourceManifestDigest) ||
 		!model.IsValidSHA256Fingerprint(decoded.ConfigurationManifestFingerprint) {
 		return errors.New("invalid security preflight identity")
 	}
@@ -71,29 +69,19 @@ func (r *prepareSecurityPreflightRequest) UnmarshalJSON(data []byte) error {
 }
 
 type securityPolicyRecoveryResponse struct {
-	CurrentSources             []model.NativeSourceCoverage `json:"current_sources"`
-	CurrentCoverage            []model.NativeCoverageClaim  `json:"current_coverage"`
-	SourceResetReceipts        []sourceResetReceiptResponse `json:"source_reset_receipts"`
-	SecurityCoverage           securityCoverageResponse     `json:"security_coverage"`
-	ServerTime                 time.Time                    `json:"server_time"`
-	Security                   model.AdmittedSecurity       `json:"security"`
-	FrozenAttemptConfiguration model.AttemptConfiguration   `json:"frozen_attempt_configuration"`
+	SecurityControl            securityControlResponse    `json:"security_control"`
+	ServerTime                 time.Time                  `json:"server_time"`
+	Security                   model.AdmittedSecurity     `json:"security"`
+	FrozenAttemptConfiguration model.AttemptConfiguration `json:"frozen_attempt_configuration"`
 }
 
-// securityCoverageResponse reports how the server processed one native
-// security coverage control.
-type securityCoverageResponse struct {
+// securityControlResponse reports how the server processed Desktop's latest
+// security control.
+type securityControlResponse struct {
 	ProcessedControlSequence    int64                                `json:"processed_control_sequence"`
 	ProcessedControlDigest      *string                              `json:"processed_control_digest"`
-	CoverageResult              string                               `json:"coverage_result"`
-	SourceResetReceipts         []sourceResetReceiptResponse         `json:"source_reset_receipts"`
 	SecurityInteractionAllowed  bool                                 `json:"security_interaction_allowed"`
 	DeliveryWatermarkRejections []deliveryWatermarkRejectionResponse `json:"delivery_watermark_rejections"`
-}
-
-type sourceResetReceiptResponse struct {
-	ResetID     string `json:"reset_id"`
-	ResetDigest string `json:"reset_digest"`
 }
 
 type deliveryWatermarkRejectionResponse struct {
@@ -102,12 +90,10 @@ type deliveryWatermarkRejectionResponse struct {
 	Reason   string `json:"reason"`
 }
 
-func securityCoverageFrom(value model.SecurityCoverageResult) securityCoverageResponse {
-	response := securityCoverageResponse{
+func securityControlFrom(value model.SecurityRenewalResult) securityControlResponse {
+	response := securityControlResponse{
 		ProcessedControlSequence:   value.ProcessedControlSequence,
 		ProcessedControlDigest:     value.ProcessedControlDigest,
-		CoverageResult:             value.CoverageResult,
-		SourceResetReceipts:        sourceResetReceiptsFrom(value.SourceResetReceipts),
 		SecurityInteractionAllowed: value.SecurityInteractionAllowed,
 	}
 	if value.DeliveryWatermarkRejections != nil {
@@ -123,17 +109,6 @@ func securityCoverageFrom(value model.SecurityCoverageResult) securityCoverageRe
 	}
 
 	return response
-}
-
-func sourceResetReceiptsFrom(values []model.SourceResetReceipt) []sourceResetReceiptResponse {
-	if values == nil {
-		return nil
-	}
-	receipts := make([]sourceResetReceiptResponse, 0, len(values))
-	for _, receipt := range values {
-		receipts = append(receipts, sourceResetReceiptResponse{ResetID: receipt.ResetID, ResetDigest: receipt.ResetDigest})
-	}
-	return receipts
 }
 
 type securityPolicyResponse struct {
@@ -163,7 +138,6 @@ func (h examAttemptHandlers) prepareSecurityPreflight(request route.Request) (ro
 		SittingID:                        sittingID,
 		AttemptID:                        model.ExamAttemptID(body.AttemptID),
 		NativeRegistryDigest:             body.NativeRegistryDigest,
-		SourceManifestDigest:             body.SourceManifestDigest,
 		ConfigurationManifestFingerprint: body.ConfigurationManifestFingerprint,
 		IdempotencyKey:                   request.IdempotencyKey,
 	})
@@ -405,10 +379,7 @@ func (h examAttemptHandlers) recoverSecurityPolicy(request route.Request) (route
 	}
 
 	result := securityPolicyRecoveryResponse{
-		CurrentSources:             recovered.CurrentSources,
-		CurrentCoverage:            recovered.CurrentCoverage,
-		SourceResetReceipts:        sourceResetReceiptsFrom(recovered.SourceResetReceipts),
-		SecurityCoverage:           securityCoverageFrom(recovered.SecurityCoverage),
+		SecurityControl:            securityControlFrom(recovered.Renewal),
 		ServerTime:                 recovered.ServerTime,
 		Security:                   recovered.Security,
 		FrozenAttemptConfiguration: recovered.FrozenAttemptConfiguration,

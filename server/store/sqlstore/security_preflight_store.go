@@ -86,7 +86,6 @@ func (s *SQLSecurityPreflightStore) PrepareSecurityPreflight(
 
 	agreement := input.Access.DesktopBuild.NativeAgreement
 	if input.NativeRegistryDigest != agreement.RegistryDigest() ||
-		input.SourceManifestDigest != agreement.SourceManifestDigest() ||
 		input.ConfigurationManifestFingerprint != input.Access.DesktopBuild.ConfigurationManifest.Fingerprint() {
 		return nil, preflightConflict("configuration_unsupported")
 	}
@@ -431,74 +430,28 @@ func (securityPreflightPreparedDocument) outcomeDocument() {}
 // resolvedNativePolicyDocument spells model.ResolvedNativePolicy inside a
 // prepared preflight.
 type resolvedNativePolicyDocument struct {
-	Policy                 model.EffectiveExamSecurityPolicy   `json:"policy"`
-	PolicyContentDigest    string                              `json:"policy_content_digest"`
-	CapabilityMatrixDigest string                              `json:"capability_matrix_digest"`
-	CatalogBindings        []model.SecurityCatalogBinding      `json:"catalog_bindings"`
-	Sources                []model.NativeSourceID              `json:"sources"`
-	Categories             []model.NativeSourceCategory        `json:"categories"`
-	Requirements           []nativeCoverageRequirementDocument `json:"requirements"`
-}
-
-type nativeCoverageRequirementDocument struct {
-	CoverageKey   string                            `json:"coverage_key"`
-	CapabilityID  string                            `json:"capability_id"`
-	SourceID      model.NativeSourceID              `json:"source_id"`
-	RequiredClaim model.NativeCapabilityClaim       `json:"required_claim"`
-	Entry         model.NativeCapabilityMatrixEntry `json:"entry"`
-	Baseline      bool                              `json:"baseline"`
+	Policy                 model.EffectiveExamSecurityPolicy `json:"policy"`
+	PolicyContentDigest    string                            `json:"policy_content_digest"`
+	CapabilityMatrixDigest string                            `json:"capability_matrix_digest"`
+	CatalogBindings        []model.SecurityCatalogBinding    `json:"catalog_bindings"`
 }
 
 func newResolvedNativePolicyDocument(resolved model.ResolvedNativePolicy) resolvedNativePolicyDocument {
-	document := resolvedNativePolicyDocument{
+	return resolvedNativePolicyDocument{
 		Policy:                 resolved.Policy,
 		PolicyContentDigest:    resolved.PolicyContentDigest,
 		CapabilityMatrixDigest: resolved.CapabilityMatrixDigest,
 		CatalogBindings:        resolved.CatalogBindings,
-		Sources:                resolved.Sources,
-		Categories:             resolved.Categories,
 	}
-	if resolved.Requirements != nil {
-		// Keep an empty list distinct from an absent one: connection compares
-		// the canonical spelling of the stored and current resolution.
-		document.Requirements = make([]nativeCoverageRequirementDocument, 0, len(resolved.Requirements))
-	}
-	for _, requirement := range resolved.Requirements {
-		document.Requirements = append(document.Requirements, nativeCoverageRequirementDocument{
-			CoverageKey:   requirement.CoverageKey,
-			CapabilityID:  requirement.CapabilityID,
-			SourceID:      requirement.SourceID,
-			RequiredClaim: requirement.RequiredClaim,
-			Entry:         requirement.Entry,
-			Baseline:      requirement.Baseline,
-		})
-	}
-	return document
 }
 
 func (d resolvedNativePolicyDocument) model() model.ResolvedNativePolicy {
-	resolved := model.ResolvedNativePolicy{
+	return model.ResolvedNativePolicy{
 		Policy:                 d.Policy,
 		PolicyContentDigest:    d.PolicyContentDigest,
 		CapabilityMatrixDigest: d.CapabilityMatrixDigest,
 		CatalogBindings:        d.CatalogBindings,
-		Sources:                d.Sources,
-		Categories:             d.Categories,
 	}
-	if d.Requirements != nil {
-		resolved.Requirements = make([]model.NativeCoverageRequirement, 0, len(d.Requirements))
-	}
-	for _, requirement := range d.Requirements {
-		resolved.Requirements = append(resolved.Requirements, model.NativeCoverageRequirement{
-			CoverageKey:   requirement.CoverageKey,
-			CapabilityID:  requirement.CapabilityID,
-			SourceID:      requirement.SourceID,
-			RequiredClaim: requirement.RequiredClaim,
-			Entry:         requirement.Entry,
-			Baseline:      requirement.Baseline,
-		})
-	}
-	return resolved
 }
 
 func encodePreparedSecurityPreflight(prepared *store.SecurityPreflightPrepared) ([]byte, error) {

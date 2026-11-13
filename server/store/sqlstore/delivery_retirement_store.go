@@ -149,7 +149,6 @@ func retireSubmissionSecurityOperational(ctx context.Context, tx *sqlxTxWrapper,
 		"exam_native_delivery_records",
 		"exam_native_delivery_batches",
 		"exam_native_delivery_declarations",
-		"exam_native_source_resets",
 	} {
 		if _, execErr := tx.Exec(
 			ctx,
@@ -197,7 +196,7 @@ func retireSubmissionSecurityOperational(ctx context.Context, tx *sqlxTxWrapper,
 	if _, execErr := tx.Exec(
 		ctx,
 		`UPDATE exam_attempt_security_owners
-		SET binding_canonical = '{}', latest_report_canonical = '{}',
+		SET binding_canonical = '{}',
 			control_ledger_canonical = '{}', control_body_canonical = NULL,
 			native_interpretation_canonical = NULL,
 			closure_canonical = NULL, upload_expired = true, summary_canonical = NULL,

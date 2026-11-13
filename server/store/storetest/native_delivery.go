@@ -10,7 +10,6 @@ package storetest
 import (
 	"context"
 	"encoding/json"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -108,7 +107,6 @@ func TestNativeDeliveryAppendStore(t *testing.T, ss store.Store, probes ...Nativ
 			require.NoError(t, candidate.NativeSecurity.Validate(), "manager board lacks bounded native coverage summary")
 			require.Equal(t, int64(7), candidate.NativeSecurity.RetainedConditionRecords, "manager board lacks bounded native coverage summary")
 			require.True(t, candidate.NativeSecurity.LiveCoverageAvailable, "manager board lacks bounded native coverage summary")
-			require.NotEmpty(t, candidate.NativeSecurity.Sources, "manager board lacks bounded native coverage summary")
 			rules := candidate.NativeSecurity.Rules
 			require.Len(t, rules, 3, "the board shows every enforce rule of the live Participation")
 			for _, rule := range rules {
@@ -198,27 +196,14 @@ func TestNativeMaximumRecordStore(t *testing.T, ss store.Store) {
 	input := &store.ExamAttemptConnect{CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID, DesktopRegistrationID: fixture.session.DesktopRegistrationID, DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint, AttemptID: model.NewExamAttemptID(), WorkspaceID: model.NewExamAttemptWorkspaceID(), ParticipationID: model.NewAttemptParticipationID(), ConnectionID: model.NewAttemptConnectionID(), ContinuityCredentialHash: model.HashToken(model.NewCredentialToken()), AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
 	prepareExamAttemptConnect(t, ctx, ss, input)
 	input.SittingID = fixture.sitting.ID
-	schema := model.SHA256Fingerprint([]byte("maximum-source-schema"))
-	definitions := []model.NativeCoverageDefinition{}
-	matrix := model.NativeCapabilityMatrix{RegistryDigest: model.NativeRegistryDigest, MatrixID: input.DesktopBuild.CapabilityMatrixIdentity, ReleaseID: "synthetic-release", TargetTuple: input.DesktopBuild.DesktopTarget}
-	for _, source := range model.NativeSources() {
-		key := "baseline." + string(source)
-		definitions = append(definitions, model.NativeCoverageDefinition{CoverageKey: key, CapabilityID: "baseline", SourceID: source, SourceSchemaDigest: schema, PermittedClaims: []model.NativeCapabilityClaim{model.NativeClaimEnforce}, RequiredPermissions: []string{}, Baseline: true})
-		matrix.Entries = append(matrix.Entries, model.NativeCapabilityMatrixEntry{CoverageKey: key, SourceSchemaDigest: schema, Claim: model.NativeClaimEnforce, ComponentID: "synthetic-component", AdapterVersion: "synthetic-adapter", RequiredPermissions: []string{}, Limitations: []string{}, Verification: "passed"})
-	}
-	slices.SortFunc(definitions, func(a, b model.NativeCoverageDefinition) int { return strings.Compare(a.CoverageKey, b.CoverageKey) })
-	slices.SortFunc(matrix.Entries, func(a, b model.NativeCapabilityMatrixEntry) int { return strings.Compare(a.CoverageKey, b.CoverageKey) })
-	agreement, err := model.NewDesktopNativeAgreement(model.NativeRegistryDigest, model.SHA256Fingerprint([]byte("maximum-manifest")), model.SHA256Fingerprint([]byte("maximum-matrix")), model.SHA256Fingerprint([]byte("maximum-detectors")), definitions, matrix, []model.NativeDetectorDefinition{{DetectorID: "synthetic-baseline", Version: 1, CapabilityID: "baseline", ConditionIDs: []string{"baseline.capture"}, SourceIDs: model.NativeSources(), AllowedModes: []model.NativeCapabilityClaim{model.NativeClaimEnforce}}})
-	require.NoError(t, err)
-	agreement = withNativeRegistry(t, agreement)
-	input.DesktopBuild.NativeAgreement = agreement
+	agreement := input.DesktopBuild.NativeAgreement
 	access := store.SecurityPreflightAccess{SittingID: input.SittingID, CandidateUserID: input.CandidateUserID, SessionID: input.SessionID, DesktopRegistrationID: input.DesktopRegistrationID, DPoPKeyThumbprint: input.DPoPKeyThumbprint, DesktopBuild: input.DesktopBuild, DesktopCompatibilityPolicyRevision: input.DesktopCompatibilityPolicyRevision}
-	prepare := &store.SecurityPreflightPrepare{Access: access, PreflightID: model.NewID(), Challenge: model.NewCredentialToken(), NativeRegistryDigest: agreement.RegistryDigest(), SourceManifestDigest: agreement.SourceManifestDigest(), ConfigurationManifestFingerprint: input.ConfigurationManifestFingerprint, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
+	prepare := &store.SecurityPreflightPrepare{Access: access, PreflightID: model.NewID(), Challenge: model.NewCredentialToken(), NativeRegistryDigest: agreement.RegistryDigest(), ConfigurationManifestFingerprint: input.ConfigurationManifestFingerprint, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
 	prepared, err := ss.SecurityPreflight().PrepareSecurityPreflight(ctx, prepare, examCommand(input.CandidateUserID, store.SecurityPreflightPrepareOperation, "maximum-prepare", "maximum-prepare"))
 	require.NoError(t, err)
 	report := syntheticPreflightReport(prepared, agreement)
-	for i := range report.Sources {
-		report.Sources[i].SourceInstanceID = strings.Repeat("i", 128)
+	for i := range report.Capabilities {
+		report.Capabilities[i].SourceInstanceID = strings.Repeat("i", 128)
 	}
 	accepted, err := ss.SecurityPreflight().ReportSecurityPreflight(ctx, &store.SecurityPreflightReport{Access: access, PreflightID: prepare.PreflightID, Report: report, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}, examCommand(input.CandidateUserID, store.SecurityPreflightReportOperation, "maximum-report", "maximum-report"))
 	require.NoError(t, err)
@@ -270,7 +255,7 @@ func TestNativeMaximumRecordStore(t *testing.T, ss store.Store) {
 	page, err := ss.ExamIntegrityReview().ListNativeConditions(ctx, store.NativeConditionListOptions{SubmissionID: sealed.Receipt.SubmissionID, Limit: 10})
 	require.NoError(t, err)
 	require.Len(t, page.Items, 2, "the large fact changed no rule; only Start's statuses are kept")
-	reset := nativeResetWithLongTimestamp(t, model.NativeSourceReset{Kind: "source_reset", ResetID: model.NewID(), SourceID: report.Sources[0].SourceID, PreviousSourceInstanceID: report.Sources[0].SourceInstanceID, PreviousFinalSequence: 1, NewSourceInstanceID: model.NewID(), Reason: "restart", OccurredAt: at}, 240000)
+	reset := nativeResetWithLongTimestamp(t, model.NativeSourceReset{Kind: "source_reset", ResetID: model.NewID(), Capability: report.Capabilities[0].Capability, PreviousSourceInstanceID: report.Capabilities[0].SourceInstanceID, PreviousFinalSequence: 1, NewSourceInstanceID: model.NewID(), Reason: "restart", OccurredAt: at}, 240000)
 	deliveryAccess.Access.ConnectionID = ""
 	deliveryAccess.Access.ContinuityCredentialHash = ""
 	_, err = ss.NativeDelivery().SealNativeDelivery(ctx, &store.NativeDeliveryFinalDeclaration{Access: deliveryAccess, Declaration: model.FinalDeliveryDeclaration{DeclarationID: model.NewID(), FinalSequence: 2, ExpectedDeclarationRevision: 0}, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}, examCommand(fixture.candidate.ID, store.NativeDeliveryFinalOperation, "maximum-final", "maximum-final"))

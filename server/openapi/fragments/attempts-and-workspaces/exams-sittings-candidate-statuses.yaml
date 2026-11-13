@@ -260,15 +260,14 @@ components:
       type: object
       additionalProperties: false
       description: >-
-        The candidate's live native standing: how many rule status changes are kept, the live Participation's source
-        health and each enforce rule's status as the server evaluates it, whether Desktop is containing the
+        The candidate's live native standing: how many rule status changes are kept, whether the live Participation's
+        native delivery is open, each enforce rule's status as the server evaluates it, whether Desktop is containing the
         candidate window, and the Attempt's screen clips by state. It contains no facts, source-instance or
         application identities, and an application outside the catalog is never named. A rule that is not met is
         not a misconduct finding; its Flag is reviewed like any other.
       required:
         - retained_condition_records
         - live_coverage_available
-        - sources
         - rules
         - contained
         - screen_clips
@@ -356,36 +355,4 @@ components:
           maximum: 200000
         live_coverage_available:
           type: boolean
-        sources:
-          type: array
-          maxItems: 11
-          items:
-            type: object
-            additionalProperties: false
-            required:
-              - source_id
-              - health
-              - permission
-              - complete
-            properties:
-              source_id:
-                type: string
-              health:
-                type: string
-                enum:
-                  - starting
-                  - healthy
-                  - degraded
-                  - failed
-                  - recovering
-                  - stopped
-              permission:
-                type: string
-                enum:
-                  - denied
-                  - granted
-                  - not_determined
-                  - restricted
-                  - unavailable
-              complete:
-                type: boolean
+          description: Whether the live Participation's native delivery is open, so rule statuses are current.

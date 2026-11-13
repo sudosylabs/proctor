@@ -199,7 +199,7 @@ func (v *ExamAttemptParticipationView) LifecycleInOrder() bool {
 // crosses the Store seam. Generation and Sequence are client fences, while
 // PostgreSQL supplies the only authoritative decision time.
 type ExamAttemptParticipationRenewal struct {
-	SecurityCoverage                   model.SecurityCoverageRenewal
+	Security                           model.SecurityRenewal
 	DesktopBuild                       model.DesktopBuildTuple
 	AttemptID                          model.ExamAttemptID
 	ParticipationID                    model.AttemptParticipationID
@@ -219,7 +219,7 @@ type ExamAttemptParticipationRenewal struct {
 // current accepted sequence; that case returns the existing authoritative
 // times without extending the lease.
 type ExamAttemptParticipationRenewalResult struct {
-	SecurityCoverage model.SecurityCoverageResult
+	Security         model.SecurityRenewalResult
 	AttemptID        model.ExamAttemptID
 	ExamID           model.ExamID
 	SittingID        model.ExamSittingID
@@ -247,7 +247,7 @@ func (r *ExamAttemptParticipationRenewalResult) ConsistentWith(
 	sequence int64,
 ) bool {
 	return !(r == nil ||
-		r.SecurityCoverage.Validate() != nil ||
+		r.Security.Validate() != nil ||
 		r.AttemptID != attemptID ||
 		r.ParticipationID != participationID ||
 		!r.ExamID.IsValid() ||
@@ -1284,15 +1284,15 @@ type ExamAttemptInvalidationTarget struct {
 	CandidateUserID model.UserID
 }
 
-// ExamAttemptSecurityCoverageUpdate reports security coverage for the active
+// ExamAttemptSecurityUpdate reports security coverage for the active
 // Participation generation over the Candidate's open Connection.
-type ExamAttemptSecurityCoverageUpdate struct {
+type ExamAttemptSecurityUpdate struct {
 	Access                             CandidateAttemptAccess
 	ParticipationID                    model.AttemptParticipationID
 	Generation                         int64
 	DesktopBuild                       model.DesktopBuildTuple
 	DesktopCompatibilityPolicyRevision int64
-	Coverage                           model.SecurityCoverageRenewal
+	Control                            model.SecurityRenewal
 }
 
 // ExamAttemptStore persists the Attempt aggregate: a Candidate's admission
@@ -1313,9 +1313,9 @@ type ExamAttemptStore interface {
 	// generation for the next renewal sequence. Repeating the current sequence
 	// returns the existing lease; an expired generation is a conflict.
 	RenewParticipation(context.Context, *ExamAttemptParticipationRenewal) (*ExamAttemptParticipationRenewalResult, error)
-	// UpdateSecurityCoverage records the security coverage reported over the
-	// Candidate's open Connection without extending the Participation lease.
-	UpdateSecurityCoverage(context.Context, *ExamAttemptSecurityCoverageUpdate) (model.SecurityCoverageResult, error)
+	// UpdateSecurity records the security control sent over the Candidate's
+	// open Connection without extending the Participation lease.
+	UpdateSecurity(context.Context, *ExamAttemptSecurityUpdate) (model.SecurityRenewalResult, error)
 	// ResolveParticipationExpiry returns the named active Participation
 	// generation when its lease has expired, so the caller can begin the audit
 	// for ExpireParticipation. It changes nothing.

@@ -1194,12 +1194,12 @@ func (s *securityPreflightStore) RecoverSecurityPolicy(
 	})
 }
 
-func (s *examAttemptStore) UpdateSecurityCoverage(
+func (s *examAttemptStore) UpdateSecurity(
 	ctx context.Context,
-	input *store.ExamAttemptSecurityCoverageUpdate,
-) (model.SecurityCoverageResult, error) {
-	return retryCall1(ctx, s.layer, func() (model.SecurityCoverageResult, error) {
-		return s.ExamAttemptStore.UpdateSecurityCoverage(ctx, input)
+	input *store.ExamAttemptSecurityUpdate,
+) (model.SecurityRenewalResult, error) {
+	return retryCall1(ctx, s.layer, func() (model.SecurityRenewalResult, error) {
+		return s.ExamAttemptStore.UpdateSecurity(ctx, input)
 	})
 }
 

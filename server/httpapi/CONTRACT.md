@@ -1873,27 +1873,33 @@ Effective native policies have no independent expiry; the Participation lease
 is the live authority. Native evidence and control processing have separate
 owners and do not acquire authority merely by possessing this receipt. Release
 admission remains fail closed while the production signed-artifact catalog is
-empty. A signed matrix restricts claims; authenticated reports do not constitute
-independent attestation of the physical OS or utility-process continuity.
+empty. The release's signed certification list names, for every capability in
+its registry and its one target platform, whether enforcement is certified there.
+A family may use enforce mode or `flag_and_suspend` only where its capability is
+certified on the Attempt's target; otherwise resolution refuses Start. Observe
+mode runs anywhere, the release baseline always runs, and nothing is certified on
+Linux. Authenticated reports do not constitute independent attestation of the
+physical OS or utility-process continuity.
 
 
-The required `security_coverage` in `exam_attempt.renew` and the independent
+The required `security_control` in `exam_attempt.renew` and the independent
 `exam_attempt.security.update` action use one persisted processed-control boundary.
-The latter carries generation, continuity_credential, and security_coverage and
-never extends the lease. Both whole requests are bounded at 64 KiB. Reset faults
-are processed outcomes; a stale or faulted control can accompany a valid renewal
-without restoring interaction. A retained identical sequence replays its original
-outcome with current gates and the latest processed sequence/digest. Changed bytes
-at a retained sequence return `exam.security.control_conflict`; an unknown older
-sequence returns `stale_control`. Faulted source continuity retains the last usable
-source heads until a greater valid control establishes new continuity.
+A control carries its sequence, the policy digest, security session, stream and
+the delivery watermarks, nothing else; `exam_attempt.security.update` adds
+generation and continuity_credential and never extends the lease. A control is
+bounded at 16 KiB. A renewal never changes whether the candidate may interact;
+only closing native delivery does. A retained identical sequence replays its
+original outcome with current gates and the latest processed sequence/digest.
+Changed bytes at a retained sequence return `exam.security.control_conflict`; an
+older sequence is answered with the latest processed boundary and changes
+nothing. A control whose policy is no longer the current resolution is refused
+(`policy_changed`).
 
-Active security-policy recovery includes current sources, coverage, current-head
-reset receipts, and the latest processed control projection. Neither its receipt
-nor a healthy historical outcome grants interaction. Workspace mutation and voluntary
+Active security-policy recovery includes the admitted receipt, frozen
+configuration and the latest processed control projection (`security_control`).
+Its receipt never grants interaction. Workspace mutation and voluntary
 Submission recheck current durable security state in addition to their existing
-lifecycle and correction gates. Source reset facts have separately charged immutable
-receipts; processing and current coverage occupy distinct reserved bounded slots.
+lifecycle and correction gates.
 
 
 Native delivery controls live under
@@ -1936,7 +1942,8 @@ prior acknowledgement. A batch contains 1..64 minimized records and is bounded
 at 256 KiB before decoding. Records are `capability_fact` (one activated
 capability's full minimized state and summary with its envelope, at most 16 KiB),
 `participation_confirmed`, `rule_status` (Desktop's own rule status and whether
-it contains the window), `coverage_transition`, `source_reset` and `source_gap`.
+it contains the window), `source_reset` and `source_gap`. A gap or reset names
+its activated `capability` and `source_instance_id`.
 Each fact is checked against the release's published fact schemas and its
 registered fields are read when it arrives, including for historical delivery
 from a new Session; a fact for a capability the policy does not activate, or a
@@ -1959,9 +1966,7 @@ stability time before a rule recovers; Desktop's `rule_status` never changes it
 and a disagreement is only counted. A fact no newer than the latest of its source
 instance changes nothing. A source gap or reset puts that capability in a gap,
 and a terminally omitted position puts every capability in a gap, until the next
-full state. A live detailed reset links its already accepted control edge. A new
-historical reset establishes only evidence continuity, never live coverage or
-permission.
+full state.
 
 An occurrence opens when a rule becomes not met while none is open and closes
 when it is met again; an unknown stretch neither opens nor closes one. An enforce
@@ -2031,7 +2036,7 @@ Live controls accept at most 50 delivery watermarks: the admitted native stream
 and owned Browser sources in the current Participation. A foreign selector or
 fabricated contiguous acknowledgement rejects the complete control. Owned closed
 Browser sources and position exhaustion return per-source rejections without
-rejecting otherwise valid coverage or lease renewal. Allocations charge the
+rejecting an otherwise valid lease renewal. Allocations charge the
 existing lifetime counters and never fabricate receipts; replays resolve compact
 immutable source slots without allocating again or moving a closure boundary.
 
@@ -2083,8 +2088,7 @@ condition evidence and its delivery copies and prevents fresh condition intake;
 security operational retirement cannot delete independent integrity evidence.
 
 The Sitting candidate-status board may include `native_security`: a retained
-rule-change count, whether live coverage is available, a bounded list of source
-health/permission/completeness, each enforce rule of the live Participation with
+rule-change count, whether live native delivery is open, each enforce rule of the live Participation with
 its status, reason ID and any open occurrence, whether Desktop is containing the
 candidate window, and the Attempt's screen clips counted by state. It excludes
 facts, source-instance and application identities and all detailed native

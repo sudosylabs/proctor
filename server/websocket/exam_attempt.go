@@ -35,11 +35,11 @@ const (
 // of its candidate; composition supplies the application's Attempt service.
 type ExamAttemptApplication interface {
 	ConnectExamAttempt(context.Context, invocation.Invocation, attempt.ConnectCommand) (attempt.ConnectionResult, error)
-	UpdateExamSecurityCoverage(
+	UpdateExamSecurity(
 		context.Context,
 		invocation.Invocation,
-		attempt.UpdateSecurityCoverageCommand,
-	) (model.SecurityCoverageResult, error)
+		attempt.UpdateSecurityCommand,
+	) (model.SecurityRenewalResult, error)
 	RenewExamAttemptParticipation(
 		context.Context,
 		invocation.Invocation,
@@ -155,26 +155,19 @@ type candidateDepartureResponse struct {
 }
 
 type examAttemptRenewRequest struct {
-	SecurityCoverage     model.SecurityCoverageRenewal `json:"security_coverage"`
-	Generation           int64                         `json:"generation"`
-	Sequence             int64                         `json:"sequence"`
-	ContinuityCredential string                        `json:"continuity_credential"`
+	SecurityControl      model.SecurityRenewal `json:"security_control"`
+	Generation           int64                 `json:"generation"`
+	Sequence             int64                 `json:"sequence"`
+	ContinuityCredential string                `json:"continuity_credential"`
 }
 
-// securityCoverageResponse reports how the server processed one native
-// security coverage control.
-type securityCoverageResponse struct {
+// securityControlResponse reports how the server processed Desktop's
+// security control.
+type securityControlResponse struct {
 	ProcessedControlSequence    int64                                `json:"processed_control_sequence"`
 	ProcessedControlDigest      *string                              `json:"processed_control_digest"`
-	CoverageResult              string                               `json:"coverage_result"`
-	SourceResetReceipts         []sourceResetReceiptResponse         `json:"source_reset_receipts"`
 	SecurityInteractionAllowed  bool                                 `json:"security_interaction_allowed"`
 	DeliveryWatermarkRejections []deliveryWatermarkRejectionResponse `json:"delivery_watermark_rejections"`
-}
-
-type sourceResetReceiptResponse struct {
-	ResetID     string `json:"reset_id"`
-	ResetDigest string `json:"reset_digest"`
 }
 
 type deliveryWatermarkRejectionResponse struct {
@@ -183,12 +176,10 @@ type deliveryWatermarkRejectionResponse struct {
 	Reason   string `json:"reason"`
 }
 
-func securityCoverageFrom(value model.SecurityCoverageResult) securityCoverageResponse {
-	response := securityCoverageResponse{
+func securityControlFrom(value model.SecurityRenewalResult) securityControlResponse {
+	response := securityControlResponse{
 		ProcessedControlSequence:   value.ProcessedControlSequence,
 		ProcessedControlDigest:     value.ProcessedControlDigest,
-		CoverageResult:             value.CoverageResult,
-		SourceResetReceipts:        sourceResetReceiptsFrom(value.SourceResetReceipts),
 		SecurityInteractionAllowed: value.SecurityInteractionAllowed,
 	}
 	if value.DeliveryWatermarkRejections != nil {
@@ -206,24 +197,13 @@ func securityCoverageFrom(value model.SecurityCoverageResult) securityCoverageRe
 	return response
 }
 
-func sourceResetReceiptsFrom(values []model.SourceResetReceipt) []sourceResetReceiptResponse {
-	if values == nil {
-		return nil
-	}
-	receipts := make([]sourceResetReceiptResponse, 0, len(values))
-	for _, receipt := range values {
-		receipts = append(receipts, sourceResetReceiptResponse{ResetID: receipt.ResetID, ResetDigest: receipt.ResetDigest})
-	}
-	return receipts
-}
-
 type examAttemptRenewResponse struct {
-	SecurityCoverage securityCoverageResponse `json:"security_coverage"`
-	Generation       int64                    `json:"generation"`
-	AcceptedSequence int64                    `json:"accepted_sequence"`
-	DatabaseTime     string                   `json:"database_time"`
-	LeaseExpiresAt   string                   `json:"lease_expires_at"`
-	Duplicate        bool                     `json:"duplicate"`
+	SecurityControl  securityControlResponse `json:"security_control"`
+	Generation       int64                   `json:"generation"`
+	AcceptedSequence int64                   `json:"accepted_sequence"`
+	DatabaseTime     string                  `json:"database_time"`
+	LeaseExpiresAt   string                  `json:"lease_expires_at"`
+	Duplicate        bool                    `json:"duplicate"`
 }
 
 type examAttemptFocusLossRequest struct {
@@ -479,7 +459,7 @@ func decodeExamAttemptRenewRequest(document json.RawMessage) (examAttemptRenewRe
 	}
 
 	if len(document) > model.SecurityControlMaxBytes ||
-		value.SecurityCoverage.Validate() != nil ||
+		value.SecurityControl.Validate() != nil ||
 		value.Generation < 1 ||
 		value.Sequence < 1 ||
 		!model.IsValidCredentialToken(value.ContinuityCredential) {
@@ -610,13 +590,13 @@ func examAttemptFocusLossError(err error) (apperror.Code, websocketErrorPresenta
 }
 
 type examAttemptSecurityUpdateRequest struct {
-	Generation           int64                         `json:"generation"`
-	ContinuityCredential string                        `json:"continuity_credential"`
-	SecurityCoverage     model.SecurityCoverageRenewal `json:"security_coverage"`
+	Generation           int64                 `json:"generation"`
+	ContinuityCredential string                `json:"continuity_credential"`
+	SecurityControl      model.SecurityRenewal `json:"security_control"`
 }
 
 func decodeExamAttemptSecurityUpdateRequest(raw json.RawMessage) (examAttemptSecurityUpdateRequest, error) {
-	value, err := decodeStrictExamAttemptObject[examAttemptSecurityUpdateRequest](raw, "security coverage update", 3)
+	value, err := decodeStrictExamAttemptObject[examAttemptSecurityUpdateRequest](raw, "security control update", 3)
 	if err != nil {
 		return value, err
 	}
@@ -624,8 +604,8 @@ func decodeExamAttemptSecurityUpdateRequest(raw json.RawMessage) (examAttemptSec
 	if len(raw) > model.SecurityControlMaxBytes ||
 		value.Generation < 1 ||
 		!model.IsValidCredentialToken(value.ContinuityCredential) ||
-		value.SecurityCoverage.Validate() != nil {
-		return value, errors.New("invalid security coverage update")
+		value.SecurityControl.Validate() != nil {
+		return value, errors.New("invalid security control update")
 	}
 
 	return value, nil

@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -20,55 +21,22 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/internal/nativetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
 // This fixture certifies synthetic baseline adapters only inside conformance.
+// syntheticNativeAgreement is a release agreement for build on Desktop's
+// published registry, certifying every capability to enforce.
 func syntheticNativeAgreement(t *testing.T, build model.DesktopBuildTuple) *model.DesktopNativeAgreement {
 	t.Helper()
-	digest := model.SHA256Fingerprint([]byte("synthetic-source-schema"))
-	definitions := []model.NativeCoverageDefinition{}
-	matrix := model.NativeCapabilityMatrix{RegistryDigest: model.NativeRegistryDigest, MatrixID: build.CapabilityMatrixIdentity, ReleaseID: "synthetic-release", TargetTuple: build.DesktopTarget}
-	for _, item := range []struct {
-		key    string
-		source model.NativeSourceID
-	}{
-		{"baseline.capture", model.NativeSourceCapture}, {"baseline.display", model.NativeSourceDisplay}, {"baseline.window", model.NativeSourceWindow},
-		// One certified optional family, for policies that enforce it.
-		{"native.recognized_guest.v1", model.NativeSourceVirtualization},
-	} {
-		baseline := strings.HasPrefix(item.key, "baseline.")
-		capability := "baseline"
-		if !baseline {
-			capability = "virtualization"
-		}
-		definitions = append(definitions, model.NativeCoverageDefinition{CoverageKey: item.key, CapabilityID: capability, SourceID: item.source, SourceSchemaDigest: digest, PermittedClaims: []model.NativeCapabilityClaim{model.NativeClaimEnforce}, RequiredPermissions: []string{}, Baseline: baseline})
-		matrix.Entries = append(matrix.Entries, model.NativeCapabilityMatrixEntry{CoverageKey: item.key, SourceSchemaDigest: digest, Claim: model.NativeClaimEnforce, ComponentID: "synthetic-component", AdapterVersion: "synthetic-adapter", RequiredPermissions: []string{}, Limitations: []string{}, Verification: "passed"})
-	}
-	agreement, err := model.NewDesktopNativeAgreement(model.NativeRegistryDigest, model.SHA256Fingerprint([]byte("synthetic-manifest")), model.SHA256Fingerprint([]byte("synthetic-matrix")), model.SHA256Fingerprint([]byte("synthetic-detectors")), definitions, matrix, []model.NativeDetectorDefinition{{DetectorID: "synthetic-baseline", Version: 1, CapabilityID: "baseline", ConditionIDs: []string{"baseline.capture"}, SourceIDs: []model.NativeSourceID{model.NativeSourceCapture}, AllowedModes: []model.NativeCapabilityClaim{model.NativeClaimEnforce}}})
-	require.NoError(t, err)
-	return withNativeRegistry(t, agreement)
+	return nativetest.NativeAgreement(t, build)
 }
-func syntheticPreflightReport(prepared *store.SecurityPreflightPrepared, agreement *model.DesktopNativeAgreement) model.SecurityPreflightReport {
+
+func syntheticPreflightReport(prepared *store.SecurityPreflightPrepared, _ *model.DesktopNativeAgreement) model.SecurityPreflightReport {
 	resolved := prepared.Resolved
-	report := model.SecurityPreflightReport{Challenge: prepared.Challenge.Challenge, PolicyDigest: resolved.Policy.Digest, PolicyContentDigest: resolved.PolicyContentDigest, CapabilityMatrixDigest: resolved.CapabilityMatrixDigest, SecuritySessionID: model.NewID(), SourceManifestDigest: agreement.SourceManifestDigest(), SelectedSourceCategories: resolved.Categories, Sources: []model.NativeSourceCoverage{}, Coverage: []model.NativeCoverageClaim{}, Baseline: model.NativeBaselineReport{ConstrainedWindow: "verified", SinglePhysicalDisplay: "verified", ContentProtection: "verified"}, Posture: "compliant", Capabilities: compliantReadiness(resolved.Policy.Activations), Rules: []model.NativeRuleReport{}, ReportedAt: time.Now().UTC().Truncate(time.Millisecond)}
-	for _, source := range resolved.Sources {
-		for _, requirement := range resolved.Requirements {
-			if requirement.SourceID == source {
-				report.Sources = append(report.Sources, model.NativeSourceCoverage{SourceID: source, SourceInstanceID: model.NewID(), Sequence: 0, SourceSchemaDigest: requirement.Entry.SourceSchemaDigest, AdapterVersion: requirement.Entry.AdapterVersion, Health: "healthy", Permission: "granted", Complete: true, GapCount: 0})
-				break
-			}
-		}
-	}
-	for _, requirement := range resolved.Requirements {
-		state := "ready"
-		if requirement.Entry.Claim == model.NativeClaimUnavailable {
-			state = "unavailable"
-		}
-		report.Coverage = append(report.Coverage, model.NativeCoverageClaim{CoverageKey: requirement.CoverageKey, SourceSchemaDigest: requirement.Entry.SourceSchemaDigest, Claim: requirement.Entry.Claim, State: state})
-	}
-	return report
+	return model.SecurityPreflightReport{Challenge: prepared.Challenge.Challenge, PolicyDigest: resolved.Policy.Digest, PolicyContentDigest: resolved.PolicyContentDigest, SecuritySessionID: model.NewID(), Capabilities: compliantReadiness(resolved.Policy.Activations), Rules: []model.NativeRuleReport{}, ReportedAt: time.Now().UTC().Truncate(time.Millisecond)}
 }
 
 type SecurityPreflightProbe struct {
@@ -101,7 +69,7 @@ func TestSecurityPreflightStore(t *testing.T, ss store.Store, probes ...Security
 	_, err = ss.SecurityPreflight().ReadSecurityPolicyOverview(ctx, rebound)
 	require.Error(t, err, "the overview is only for the candidate's own eligible Session")
 
-	input := &store.SecurityPreflightPrepare{Access: access, PreflightID: model.NewID(), Challenge: model.NewCredentialToken(), NativeRegistryDigest: build.NativeAgreement.RegistryDigest(), SourceManifestDigest: build.NativeAgreement.SourceManifestDigest(), ConfigurationManifestFingerprint: build.ConfigurationManifest.Fingerprint(), AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
+	input := &store.SecurityPreflightPrepare{Access: access, PreflightID: model.NewID(), Challenge: model.NewCredentialToken(), NativeRegistryDigest: build.NativeAgreement.RegistryDigest(), ConfigurationManifestFingerprint: build.ConfigurationManifest.Fingerprint(), AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
 	command := examCommand(fixture.candidate.ID, store.SecurityPreflightPrepareOperation, "preflight-prepare", "preflight-prepare")
 	prepared, err := ss.SecurityPreflight().PrepareSecurityPreflight(ctx, input, command)
 	require.NoError(t, err)
@@ -148,11 +116,16 @@ func TestSecurityPreflightStore(t *testing.T, ss store.Store, probes ...Security
 		require.Error(t, err, "accepted report without durable audit")
 		require.False(t, probes[0].HasReport(input.PreflightID), "failed audit left a report behind")
 	}
-	report.Report.Baseline.ContentProtection = "unavailable"
+	display := slices.IndexFunc(report.Report.Capabilities, func(c model.NativeCapabilityReadiness) bool { return c.Capability == "display" })
+	require.GreaterOrEqual(t, display, 0)
+	compliant := report.Report.Capabilities[display].Summary
+	report.Report.Capabilities = slices.Clone(report.Report.Capabilities)
+	report.Report.Capabilities[display].Summary = json.RawMessage(displaySummary(2))
 	blocked, err := ss.SecurityPreflight().ReportSecurityPreflight(ctx, report, examCommand(fixture.candidate.ID, store.SecurityPreflightReportOperation, "blocked-report", "blocked-report"))
 	require.NoError(t, err)
-	require.Equal(t, "blocked", blocked.Admission, "missing baseline admitted")
-	report.Report.Baseline.ContentProtection = "verified"
+	require.Equal(t, "blocked", blocked.Admission, "a second display admitted")
+	require.Equal(t, []model.SecurityReasonCode{model.SecurityReasonNativeRuleUnmet}, blocked.ReasonCodes)
+	report.Report.Capabilities[display].Summary = compliant
 	report.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
 	reportCommand := examCommand(fixture.candidate.ID, store.SecurityPreflightReportOperation, "eligible-report", "eligible-report")
 	eligible, err := ss.SecurityPreflight().ReportSecurityPreflight(ctx, report, reportCommand)
@@ -247,13 +220,13 @@ func TestSecureConnectStore(t *testing.T, ss store.Store, probes ...SecureConnec
 	input.SittingID = testSittingID
 	input.DesktopBuild.NativeAgreement = syntheticNativeAgreement(t, input.DesktopBuild)
 	access := store.SecurityPreflightAccess{SittingID: input.SittingID, CandidateUserID: input.CandidateUserID, SessionID: input.SessionID, DesktopRegistrationID: input.DesktopRegistrationID, DPoPKeyThumbprint: input.DPoPKeyThumbprint, DesktopBuild: input.DesktopBuild, DesktopCompatibilityPolicyRevision: input.DesktopCompatibilityPolicyRevision}
-	prepare := &store.SecurityPreflightPrepare{Access: access, PreflightID: model.NewID(), Challenge: model.NewCredentialToken(), NativeRegistryDigest: access.DesktopBuild.NativeAgreement.RegistryDigest(), SourceManifestDigest: access.DesktopBuild.NativeAgreement.SourceManifestDigest(), ConfigurationManifestFingerprint: input.ConfigurationManifestFingerprint, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
+	prepare := &store.SecurityPreflightPrepare{Access: access, PreflightID: model.NewID(), Challenge: model.NewCredentialToken(), NativeRegistryDigest: access.DesktopBuild.NativeAgreement.RegistryDigest(), ConfigurationManifestFingerprint: input.ConfigurationManifestFingerprint, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
 	prepared, err := ss.SecurityPreflight().PrepareSecurityPreflight(ctx, prepare, examCommand(input.CandidateUserID, store.SecurityPreflightPrepareOperation, "secure-prepare", "secure-prepare"))
 	require.NoError(t, err)
 	require.True(t, prepared.ConsistentWith(input.SittingID), "PrepareSecurityPreflight returned a result inconsistent with its request")
 	report := &store.SecurityPreflightReport{Access: access, PreflightID: prepare.PreflightID, Report: syntheticPreflightReport(prepared, access.DesktopBuild.NativeAgreement), AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
 	if len(probes) > 0 && probes[0].CorruptPrepared != nil {
-		for _, field := range []string{"challenge", "categories", "sources", "requirements"} {
+		for _, field := range []string{"challenge", "policy_content_digest", "capability_matrix_digest", "catalog_bindings"} {
 			restore := probes[0].CorruptPrepared(prepare.PreflightID, field)
 			_, reportErr := ss.SecurityPreflight().ReportSecurityPreflight(ctx, report, examCommand(input.CandidateUserID, store.SecurityPreflightReportOperation, "secure-report", "secure-report"))
 			restore()
@@ -424,7 +397,7 @@ func prepareConnectSecurityFixture(t *testing.T, ctx context.Context, ss store.S
 		require.NoError(t, auditErr)
 		return event.ID
 	}
-	prepare := &store.SecurityPreflightPrepare{Access: access, AttemptID: attemptID, PreflightID: model.NewID(), Challenge: model.NewCredentialToken(), NativeRegistryDigest: access.DesktopBuild.NativeAgreement.RegistryDigest(), SourceManifestDigest: access.DesktopBuild.NativeAgreement.SourceManifestDigest(), ConfigurationManifestFingerprint: input.ConfigurationManifestFingerprint, AuditEventID: audit(), AuditAt: model.NowUTC()}
+	prepare := &store.SecurityPreflightPrepare{Access: access, AttemptID: attemptID, PreflightID: model.NewID(), Challenge: model.NewCredentialToken(), NativeRegistryDigest: access.DesktopBuild.NativeAgreement.RegistryDigest(), ConfigurationManifestFingerprint: input.ConfigurationManifestFingerprint, AuditEventID: audit(), AuditAt: model.NowUTC()}
 	key := fmt.Sprintf("fixture-preflight-%s-%s-%d", input.SessionID, input.SittingID, generation)
 	command := examCommand(input.CandidateUserID, store.SecurityPreflightPrepareOperation, key, key)
 	prepared, err := ss.SecurityPreflight().PrepareSecurityPreflight(ctx, prepare, command)
@@ -444,9 +417,6 @@ func prepareConnectSecurityFixture(t *testing.T, ctx context.Context, ss store.S
 	report := syntheticPreflightReport(prepared, access.DesktopBuild.NativeAgreement)
 	report.SecuritySessionID = prepared.Challenge.PreflightID
 	report.ReportedAt = prepared.Challenge.IssuedAt
-	for i := range report.Sources {
-		report.Sources[i].SourceInstanceID = prepared.Challenge.PreflightID
-	}
 	canonical, err := report.Canonical()
 	require.NoError(t, err)
 	reportKey := "fixture-report-" + prepared.Challenge.PreflightID
@@ -464,105 +434,64 @@ func prepareParticipationRenewalCoverage(t *testing.T, ctx context.Context, ss s
 	recovery, err := ss.SecurityPreflight().RecoverSecurityPolicy(ctx, store.SecurityPreflightAccess{CandidateUserID: input.CandidateUserID, SessionID: input.SessionID, DesktopRegistrationID: input.DesktopRegistrationID, DPoPKeyThumbprint: input.DPoPKeyThumbprint, DesktopBuild: input.DesktopBuild, DesktopCompatibilityPolicyRevision: input.DesktopCompatibilityPolicyRevision}, input.AttemptID)
 	require.NoError(t, err)
 	require.True(t, recovery.ConsistentWith(input.AttemptID), "RecoverSecurityPolicy returned a result inconsistent with its request")
-	input.SecurityCoverage = model.SecurityCoverageRenewal{ControlSequence: 1, PolicyDigest: recovery.Security.Policy.Digest, SecuritySessionID: recovery.Security.SecuritySessionID, StreamID: recovery.Security.DeliveryStreamID, Posture: "compliant", Sources: recovery.CurrentSources, Coverage: recovery.CurrentCoverage, SourceResets: []model.NativeSourceReset{}, DeliveryWatermarks: []model.DeliveryWatermark{}}
+	input.Security = model.SecurityRenewal{ControlSequence: 1, PolicyDigest: recovery.Security.Policy.Digest, SecuritySessionID: recovery.Security.SecuritySessionID, StreamID: recovery.Security.DeliveryStreamID, DeliveryWatermarks: []model.DeliveryWatermark{}}
 }
 
-func testProcessedSecurityControl(t *testing.T, ctx context.Context, ss store.Store, connect *store.ExamAttemptConnect, connected *store.ExamAttemptConnectResult, report model.SecurityPreflightReport) {
+func testProcessedSecurityControl(t *testing.T, ctx context.Context, ss store.Store, connect *store.ExamAttemptConnect, connected *store.ExamAttemptConnectResult, _ model.SecurityPreflightReport) {
 	t.Helper()
 	access := store.CandidateAttemptAccess{AttemptID: connected.Attempt.ID, ConnectionID: connected.Connection.ID, CandidateUserID: connect.CandidateUserID, SessionID: connect.SessionID, DesktopRegistrationID: connect.DesktopRegistrationID, DPoPKeyThumbprint: connect.DPoPKeyThumbprint, ContinuityCredentialHash: connect.ContinuityCredentialHash}
-	control := model.SecurityCoverageRenewal{ControlSequence: 9, PolicyDigest: connected.Security.Policy.Digest, SecuritySessionID: connected.Security.SecuritySessionID, StreamID: connected.Security.DeliveryStreamID, Posture: "compliant", Sources: append([]model.NativeSourceCoverage{}, report.Sources...), Coverage: report.Coverage, SourceResets: []model.NativeSourceReset{}, DeliveryWatermarks: []model.DeliveryWatermark{}}
-	update := func(body model.SecurityCoverageRenewal) model.SecurityCoverageResult {
+	control := model.SecurityRenewal{ControlSequence: 9, PolicyDigest: connected.Security.Policy.Digest, SecuritySessionID: connected.Security.SecuritySessionID, StreamID: connected.Security.DeliveryStreamID, DeliveryWatermarks: []model.DeliveryWatermark{}}
+	update := func(body model.SecurityRenewal) model.SecurityRenewalResult {
 		t.Helper()
-		result, err := ss.ExamAttempt().UpdateSecurityCoverage(ctx, &store.ExamAttemptSecurityCoverageUpdate{Access: access, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, DesktopBuild: connect.DesktopBuild, DesktopCompatibilityPolicyRevision: connect.DesktopCompatibilityPolicyRevision, Coverage: body})
+		result, err := ss.ExamAttempt().UpdateSecurity(ctx, &store.ExamAttemptSecurityUpdate{Access: access, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, DesktopBuild: connect.DesktopBuild, DesktopCompatibilityPolicyRevision: connect.DesktopCompatibilityPolicyRevision, Control: body})
 		require.NoError(t, err)
 		require.NoError(t, result.Validate())
 		return result
 	}
-	healthy := update(control)
-	require.Equal(t, int64(9), healthy.ProcessedControlSequence)
-	require.True(t, healthy.SecurityInteractionAllowed)
-	fault := control
-	fault.ControlSequence = 11
-	fault.Sources = append([]model.NativeSourceCoverage{}, control.Sources...)
-	fault.Sources[0].SourceInstanceID = model.NewID()
-	blocked := update(fault)
-	require.Equal(t, "reset_required", blocked.CoverageResult)
-	require.Equal(t, int64(11), blocked.ProcessedControlSequence)
-	require.False(t, blocked.SecurityInteractionAllowed)
+	first := update(control)
+	require.Equal(t, int64(9), first.ProcessedControlSequence)
+	require.True(t, first.SecurityInteractionAllowed, "a renewal never withdraws interaction by itself")
 
-	workspaceAccess := store.ExamAttemptWorkspaceMutationAccess{AttemptID: access.AttemptID, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, ConnectionID: access.ConnectionID, CandidateUserID: access.CandidateUserID, SessionID: access.SessionID, DesktopRegistrationID: access.DesktopRegistrationID, DPoPKeyThumbprint: access.DPoPKeyThumbprint, ContinuityCredentialHash: access.ContinuityCredentialHash}
-	_, gateErr := ss.ExamAttemptWorkspace().ResolveMutationTarget(ctx, workspaceAccess)
-	requireConflictConstraint(t, gateErr, "posture_blocked")
-	_, gateErr = ss.ExamSubmission().ResolveSealTarget(ctx, store.ExamSubmissionSealAccess{AttemptID: access.AttemptID, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, ConnectionID: access.ConnectionID, CandidateUserID: access.CandidateUserID, SessionID: access.SessionID, ContinuityCredentialHash: access.ContinuityCredentialHash, ExpectedCurrentRevisionID: connected.Security.Policy.ExamRevisionID, ExpectedWorkspaceCursor: connected.Workspace.Cursor})
-	requireConflictConstraint(t, gateErr, "posture_blocked")
 	stale := control
-	stale.ControlSequence = 10
+	stale.ControlSequence = 8
 	delayed := update(stale)
-	require.Equal(t, "stale_control", delayed.CoverageResult)
-	require.Equal(t, int64(11), delayed.ProcessedControlSequence)
-	require.False(t, delayed.SecurityInteractionAllowed)
+	require.Equal(t, int64(9), delayed.ProcessedControlSequence, "an older control is stale")
 	replay := update(control)
-	require.Equal(t, "accepted", replay.CoverageResult)
-	require.Equal(t, int64(11), replay.ProcessedControlSequence)
-	require.False(t, replay.SecurityInteractionAllowed)
-	altered := fault
-	altered.Posture = "degraded"
-	_, err := ss.ExamAttempt().UpdateSecurityCoverage(ctx, &store.ExamAttemptSecurityCoverageUpdate{Access: access, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, DesktopBuild: connect.DesktopBuild, DesktopCompatibilityPolicyRevision: connect.DesktopCompatibilityPolicyRevision, Coverage: altered})
+	require.Equal(t, int64(9), replay.ProcessedControlSequence, "an exact replay returns the processed control")
+
+	altered := control
+	altered.DeliveryWatermarks = []model.DeliveryWatermark{{Family: "native", SourceID: control.StreamID, AllocatedThroughSequence: 3, AcknowledgedThroughSequence: 0}}
+	_, err := ss.ExamAttempt().UpdateSecurity(ctx, &store.ExamAttemptSecurityUpdate{Access: access, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, DesktopBuild: connect.DesktopBuild, DesktopCompatibilityPolicyRevision: connect.DesktopCompatibilityPolicyRevision, Control: altered})
 	requireConflictConstraint(t, err, "control_conflict")
-	renewed, err := ss.ExamAttempt().RenewParticipation(ctx, &store.ExamAttemptParticipationRenewal{AttemptID: access.AttemptID, ParticipationID: connected.Participation.ID, ConnectionID: access.ConnectionID, CandidateUserID: access.CandidateUserID, SessionID: access.SessionID, DesktopRegistrationID: access.DesktopRegistrationID, DPoPKeyThumbprint: access.DPoPKeyThumbprint, ContinuityCredentialHash: access.ContinuityCredentialHash, Generation: connected.Participation.Generation, Sequence: 1, DesktopBuild: connect.DesktopBuild, DesktopCompatibilityPolicyRevision: connect.DesktopCompatibilityPolicyRevision, SecurityCoverage: stale})
+
+	foreign := control
+	foreign.ControlSequence = 10
+	foreign.DeliveryWatermarks = []model.DeliveryWatermark{{Family: "native", SourceID: model.NewID(), AllocatedThroughSequence: 1, AcknowledgedThroughSequence: 0}}
+	_, err = ss.ExamAttempt().UpdateSecurity(ctx, &store.ExamAttemptSecurityUpdate{Access: access, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, DesktopBuild: connect.DesktopBuild, DesktopCompatibilityPolicyRevision: connect.DesktopCompatibilityPolicyRevision, Control: foreign})
+	require.True(t, store.IsNotFound(err), "a watermark for another stream is refused")
+
+	renewalControl := control
+	renewalControl.ControlSequence = 11
+	renewed, err := ss.ExamAttempt().RenewParticipation(ctx, &store.ExamAttemptParticipationRenewal{AttemptID: access.AttemptID, ParticipationID: connected.Participation.ID, ConnectionID: access.ConnectionID, CandidateUserID: access.CandidateUserID, SessionID: access.SessionID, DesktopRegistrationID: access.DesktopRegistrationID, DPoPKeyThumbprint: access.DPoPKeyThumbprint, ContinuityCredentialHash: access.ContinuityCredentialHash, Generation: connected.Participation.Generation, Sequence: 1, DesktopBuild: connect.DesktopBuild, DesktopCompatibilityPolicyRevision: connect.DesktopCompatibilityPolicyRevision, Security: renewalControl})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), renewed.AcceptedSequence)
-	require.False(t, renewed.SecurityCoverage.SecurityInteractionAllowed)
-	require.Equal(t, int64(11), renewed.SecurityCoverage.ProcessedControlSequence)
-	control.ControlSequence = 12
-	recovered := update(control)
-	require.True(t, recovered.SecurityInteractionAllowed)
-	require.Equal(t, int64(12), recovered.ProcessedControlSequence)
-	reset := model.NativeSourceReset{Kind: "source_reset", ResetID: model.NewID(), SourceID: control.Sources[0].SourceID, PreviousSourceInstanceID: control.Sources[0].SourceInstanceID, PreviousFinalSequence: control.Sources[0].Sequence, NewSourceInstanceID: fault.Sources[0].SourceInstanceID, Reason: "restart", OccurredAt: time.Now().UTC().Truncate(time.Millisecond)}
-	reset = nativeResetWithLongTimestamp(t, reset, 40000)
-	control.ControlSequence = 13
-	control.Sources = fault.Sources
-	control.SourceResets = []model.NativeSourceReset{reset}
-	accepted := update(control)
-	require.True(t, accepted.SecurityInteractionAllowed)
-	require.Len(t, accepted.SourceResetReceipts, 1)
-	control.ControlSequence = 14
-	replay = update(control)
-	require.True(t, replay.SecurityInteractionAllowed)
-	require.Len(t, replay.SourceResetReceipts, 1)
-	reset.ResetID = model.NewID()
-	reset.PreviousSourceInstanceID = reset.NewSourceInstanceID
-	reset.NewSourceInstanceID = model.NewID()
-	control.Sources = append([]model.NativeSourceCoverage{}, control.Sources...)
-	control.Sources[0].SourceInstanceID = reset.NewSourceInstanceID
-	control.SourceResets = []model.NativeSourceReset{reset}
-	control.ControlSequence = 15
-	conflict := update(control)
-	require.Equal(t, "reset_conflict", conflict.CoverageResult)
-	require.False(t, conflict.SecurityInteractionAllowed)
-	// Eviction forgets a receipt, never the processed high-water boundary. The
-	// last usable source head survives the rejected reset and is recoverable.
-	control.Sources = fault.Sources
-	control.SourceResets = []model.NativeSourceReset{}
-	last := int64(16 + model.SecurityControlReceiptLimit)
-	for seq := int64(16); seq <= last; seq++ {
+	require.Equal(t, int64(11), renewed.Security.ProcessedControlSequence)
+	require.True(t, renewed.Security.SecurityInteractionAllowed)
+
+	// Eviction forgets a receipt, never the processed high-water boundary.
+	last := int64(12 + model.SecurityControlReceiptLimit)
+	for seq := int64(12); seq <= last; seq++ {
 		control.ControlSequence = seq
-		current := update(control)
-		require.True(t, current.SecurityInteractionAllowed, "bounded control cache lost current healthy authority")
-		require.Equal(t, seq, current.ProcessedControlSequence, "bounded control cache lost current healthy authority")
+		require.Equal(t, seq, update(control).ProcessedControlSequence, "bounded control cache lost the processed boundary")
 	}
 	evicted := control
 	evicted.ControlSequence = 9
-	result := update(evicted)
-	require.Equal(t, "stale_control", result.CoverageResult)
-	require.Equal(t, last, result.ProcessedControlSequence)
-	require.True(t, result.SecurityInteractionAllowed)
+	require.Equal(t, last, update(evicted).ProcessedControlSequence)
 	recovery, err := ss.SecurityPreflight().RecoverSecurityPolicy(ctx, store.SecurityPreflightAccess{CandidateUserID: connect.CandidateUserID, SessionID: connect.SessionID, DesktopRegistrationID: connect.DesktopRegistrationID, DPoPKeyThumbprint: connect.DPoPKeyThumbprint, DesktopBuild: connect.DesktopBuild, DesktopCompatibilityPolicyRevision: connect.DesktopCompatibilityPolicyRevision}, connected.Attempt.ID)
 	require.NoError(t, err)
 	require.True(t, recovery.ConsistentWith(connected.Attempt.ID), "RecoverSecurityPolicy returned a result inconsistent with its request")
-	require.Equal(t, last, recovery.SecurityCoverage.ProcessedControlSequence, "fresh recovery lost control boundary or accepted reset receipt")
-	require.True(t, recovery.SecurityCoverage.SecurityInteractionAllowed, "fresh recovery lost control boundary or accepted reset receipt")
-	require.Len(t, recovery.SourceResetReceipts, 1, "fresh recovery lost control boundary or accepted reset receipt")
+	require.Equal(t, last, recovery.Renewal.ProcessedControlSequence, "fresh recovery lost the control boundary")
+	require.True(t, recovery.Renewal.SecurityInteractionAllowed)
 }
 
 func testNativeDeliveryGaps(t *testing.T, ctx context.Context, ss store.Store, connect *store.ExamAttemptConnect, connected *store.ExamAttemptConnectResult, fixture examAttemptFixture) store.NativeDeliveryAccess {

@@ -355,33 +355,17 @@ func checkNativeAppendPosition(
 	return base, nil
 }
 
-// admitNativeBatchSources validates the batch's record sources under the
-// native_sources savepoint and returns the metadata capacity it latched when
-// the sources exceed it.
+// admitNativeBatchSources checks every record of the batch against the
+// admitted policy. It charges no metadata: a batch's records carry their own
+// counted bytes.
 func admitNativeBatchSources(
-	ctx context.Context,
-	tx *sqlxTxWrapper,
+	_ context.Context,
+	_ *sqlxTxWrapper,
 	input *store.NativeDeliveryAppend,
-	owner nativeDeliveryOwner,
+	_ nativeDeliveryOwner,
 	resolved model.ResolvedNativePolicy,
 ) (*model.DeliveryMetadataCapacity, error) {
-	if _, err := tx.Exec(ctx, `SAVEPOINT native_sources`); err != nil {
-		return nil, err
-	}
-	if err := validateNativeBatchSources(ctx, tx, owner, resolved, input.DesktopBuild.NativeAgreement, input.Batch.Records); err != nil {
-		var capacity *model.DeliveryMetadataCapacity
-		if !errors.As(err, &capacity) {
-			return nil, err
-		}
-		if _, err := tx.Exec(ctx, `ROLLBACK TO SAVEPOINT native_sources`); err != nil {
-			return nil, err
-		}
-		if err := latchDeliveryMetadata(ctx, tx, input.Access.Access.AttemptID); err != nil {
-			return nil, err
-		}
-		return capacity, nil
-	}
-	return nil, nil
+	return nil, validateNativeBatchRecords(resolved, input.Batch.Records)
 }
 
 // nativeAppendBatch is the canonical receipt, envelope and records one native

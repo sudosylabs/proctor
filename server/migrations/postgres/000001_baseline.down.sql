@@ -17,7 +17,6 @@ DROP TABLE IF EXISTS browser_delivery_declarations;
 DROP TABLE IF EXISTS exam_native_delivery_records;
 DROP TABLE IF EXISTS exam_native_delivery_batches;
 DROP TABLE IF EXISTS exam_native_delivery_declarations;
-DROP TABLE IF EXISTS exam_native_source_resets;
 DROP TABLE IF EXISTS exam_attempt_security_owners;
 DROP TABLE IF EXISTS exam_attempt_delivery_budgets;
 DROP TABLE IF EXISTS exam_security_preflights;

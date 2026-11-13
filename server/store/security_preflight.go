@@ -36,7 +36,6 @@ type SecurityPreflightPrepare struct {
 	PreflightID                      string
 	Challenge                        string
 	NativeRegistryDigest             string
-	SourceManifestDigest             string
 	ConfigurationManifestFingerprint string
 	AuditEventID                     model.AuditEventID
 	AuditAt                          time.Time
@@ -74,32 +73,22 @@ type SecurityPreflightReport struct {
 // SecurityPolicyRecovery returns privileged admission provenance only to the
 // active owner's registered Session. It does not grant or renew a lease.
 type SecurityPolicyRecovery struct {
-	CurrentSources             []model.NativeSourceCoverage
-	CurrentCoverage            []model.NativeCoverageClaim
-	SourceResetReceipts        []model.SourceResetReceipt
-	SecurityCoverage           model.SecurityCoverageResult
-	ServerTime                 time.Time
 	Security                   model.AdmittedSecurity
+	Renewal                    model.SecurityRenewalResult
+	ServerTime                 time.Time
 	FrozenAttemptConfiguration model.AttemptConfiguration
 }
 
-// ConsistentWith reports whether the recovery carries its server time, valid
-// security coverage, bounded and present source, coverage and reset receipt
-// lists, a valid admitted security posture bound to the given Attempt, and a
-// valid frozen Attempt configuration.
+// ConsistentWith reports whether the recovery carries its server time, a
+// valid renewal result, a valid admitted security binding bound to the given
+// Attempt, and a valid frozen Attempt configuration.
 //
 // It is part of the Store contract: the conformance suite asserts it on
 // every real result.
 func (r *SecurityPolicyRecovery) ConsistentWith(attemptID model.ExamAttemptID) bool {
 	return !(r == nil ||
 		r.ServerTime.IsZero() ||
-		r.SecurityCoverage.Validate() != nil ||
-		r.CurrentSources == nil ||
-		r.CurrentCoverage == nil ||
-		r.SourceResetReceipts == nil ||
-		len(r.CurrentSources) > 11 ||
-		len(r.CurrentCoverage) > 64 ||
-		len(r.SourceResetReceipts) > 11 ||
+		r.Renewal.Validate() != nil ||
 		r.Security.Validate() != nil ||
 		r.Security.Policy.Scope.AttemptID != attemptID ||
 		r.FrozenAttemptConfiguration.Validate() != nil)

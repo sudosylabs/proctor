@@ -131,12 +131,11 @@ type sittingCandidateStatusListResponse struct {
 // nativeSecuritySummaryResponse presents a Candidate's live native standing
 // to the Sitting manager without facts or application identities.
 type nativeSecuritySummaryResponse struct {
-	RetainedConditionRecords int64                               `json:"retained_condition_records"`
-	LiveCoverageAvailable    bool                                `json:"live_coverage_available"`
-	Sources                  []nativeSourceHealthSummaryResponse `json:"sources"`
-	Rules                    []nativeRuleStandingResponse        `json:"rules"`
-	Contained                bool                                `json:"contained"`
-	ScreenClips              screenClipCountsResponse            `json:"screen_clips"`
+	RetainedConditionRecords int64                        `json:"retained_condition_records"`
+	LiveCoverageAvailable    bool                         `json:"live_coverage_available"`
+	Rules                    []nativeRuleStandingResponse `json:"rules"`
+	Contained                bool                         `json:"contained"`
+	ScreenClips              screenClipCountsResponse     `json:"screen_clips"`
 }
 
 // nativeRuleStandingResponse is one enforce rule's live status. Reason is
@@ -159,13 +158,6 @@ type screenClipCountsResponse struct {
 	Failed    int `json:"failed"`
 }
 
-type nativeSourceHealthSummaryResponse struct {
-	SourceID   model.NativeSourceID `json:"source_id"`
-	Health     string               `json:"health"`
-	Permission string               `json:"permission"`
-	Complete   bool                 `json:"complete"`
-}
-
 func nativeSecuritySummaryFrom(value *model.NativeSecuritySummary) *nativeSecuritySummaryResponse {
 	if value == nil {
 		return nil
@@ -185,19 +177,6 @@ func nativeSecuritySummaryFrom(value *model.NativeSecuritySummary) *nativeSecuri
 			OpenOccurrence: rule.OpenOccurrence, Occurrences: rule.Occurrences,
 		})
 	}
-	if value.Sources != nil {
-		response.Sources = make([]nativeSourceHealthSummaryResponse, 0, len(value.Sources))
-	}
-
-	for _, source := range value.Sources {
-		response.Sources = append(response.Sources, nativeSourceHealthSummaryResponse{
-			SourceID:   source.SourceID,
-			Health:     source.Health,
-			Permission: source.Permission,
-			Complete:   source.Complete,
-		})
-	}
-
 	return response
 }
 

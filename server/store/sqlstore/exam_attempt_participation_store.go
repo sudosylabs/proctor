@@ -99,7 +99,7 @@ func validParticipationControl(input *store.ExamAttemptParticipationRenewal, ren
 		input.DesktopCompatibilityPolicyRevision < 1 ||
 		input.DesktopBuild.Validate() != nil ||
 		input.DesktopBuild.NativeAgreement == nil ||
-		input.SecurityCoverage.Validate() != nil ||
+		input.Security.Validate() != nil ||
 		!input.DesktopRegistrationID.IsValid() ||
 		!model.IsValidDPoPKeyThumbprint(input.DPoPKeyThumbprint) ||
 		!model.IsValidTokenHash(input.ContinuityCredentialHash) {
@@ -141,14 +141,14 @@ func (s *SQLExamAttemptStore) changeParticipationControlInTx(
 		return nil, err
 	}
 
-	coverage, err := s.processSecurityCoverage(ctx, tx, input, attempt.SittingState == string(model.ExamSittingOpen), row.DatabaseNow)
+	coverage, err := s.processSecurityRenewal(ctx, tx, input, attempt.SittingState == string(model.ExamSittingOpen), row.DatabaseNow)
 	if err != nil {
 		return nil, err
 	}
 
 	if !renew || input.Sequence == row.RenewalSequence {
 		return &store.ExamAttemptParticipationRenewalResult{
-			SecurityCoverage: coverage,
+			Security:         coverage,
 			AttemptID:        input.AttemptID,
 			ExamID:           examID,
 			SittingID:        sittingID,
@@ -168,7 +168,7 @@ func (s *SQLExamAttemptStore) changeParticipationControlInTx(
 	}
 
 	return &store.ExamAttemptParticipationRenewalResult{
-		SecurityCoverage: coverage,
+		Security:         coverage,
 		AttemptID:        input.AttemptID,
 		ExamID:           examID,
 		SittingID:        sittingID,

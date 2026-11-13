@@ -18,34 +18,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Synthetic certification exercises resolution only, never a production claim.
-func nativeResolutionFixture(t *testing.T) NativePolicyResolution {
+// syntheticAgreement is a release agreement on the fixture registry for
+// target, certifying enforcement for every capability except the uncertified.
+func syntheticAgreement(t *testing.T, target string, uncertified ...NativeCapabilityID) *DesktopNativeAgreement {
 	t.Helper()
-	schema := SHA256Fingerprint([]byte("synthetic schema"))
-	definitions := []NativeCoverageDefinition{}
-	add := func(key, capability string, source NativeSourceID, baseline bool, claims ...NativeCapabilityClaim) {
-		definitions = append(definitions, NativeCoverageDefinition{CoverageKey: key, CapabilityID: capability, SourceID: source, SourceSchemaDigest: schema, PermittedClaims: claims, RequiredPermissions: []string{}, Baseline: baseline})
+	registry := checkedRegistry(t)
+	matrix := NativeCapabilityMatrix{RegistryDigest: NativeRegistryDigest, MatrixID: "synthetic-matrix", ReleaseID: "synthetic-release", TargetTuple: target}
+	for _, capability := range registry.capabilities {
+		matrix.Capabilities = append(matrix.Capabilities, NativeCapabilityCertification{
+			Capability: capability.ID, EnforceCertified: !slices.Contains(uncertified, capability.ID),
+		})
 	}
-	add("baseline.capture", "baseline", NativeSourceCapture, true, NativeClaimEnforce)
-	add("baseline.display", "baseline", NativeSourceDisplay, true, NativeClaimEnforce)
-	add("baseline.window", "baseline", NativeSourceWindow, true, NativeClaimEnforce)
-	add("native.candidate_private_clipboard.v1", "clipboard", "", false, NativeClaimEnforce)
-	add("native.os_clipboard_change.v1", "clipboard", NativeSourceClipboard, false, NativeClaimObserve)
-	add("native.single_interactive_session.v1", "interactive_session", NativeSourceSession, false, NativeClaimObserve, NativeClaimEnforce)
-	add("native.tunnel_interface_state.v1", "network_configuration", NativeSourceNetwork, false, NativeClaimEnforce)
-	matrix := NativeCapabilityMatrix{RegistryDigest: NativeRegistryDigest, MatrixID: "synthetic-matrix", ReleaseID: "synthetic-release", TargetTuple: "synthetic-darwin-arm64"}
-	for _, definition := range definitions {
-		claim, verification := definition.PermittedClaims[0], "passed"
-		if definition.CoverageKey == "native.os_clipboard_change.v1" {
-			claim = NativeClaimUnavailable
-			verification = "unavailable"
-		}
-		matrix.Entries = append(matrix.Entries, NativeCapabilityMatrixEntry{CoverageKey: definition.CoverageKey, SourceSchemaDigest: schema, Claim: claim, ComponentID: "synthetic-component", AdapterVersion: "synthetic-adapter", RequiredPermissions: []string{}, Limitations: []string{}, Verification: verification})
-	}
-	agreement, err := NewDesktopNativeAgreement(NativeRegistryDigest, SHA256Fingerprint([]byte("manifest")), SHA256Fingerprint([]byte("matrix")), SHA256Fingerprint([]byte("detectors")), definitions, matrix, []NativeDetectorDefinition{})
+	slices.SortFunc(matrix.Capabilities, func(a, b NativeCapabilityCertification) int {
+		return strings.Compare(string(a.Capability), string(b.Capability))
+	})
+	agreement, err := NewDesktopNativeAgreement(NativeRegistryDigest, SHA256Fingerprint([]byte("matrix")), matrix, registry)
 	require.NoError(t, err)
-	agreement, err = agreement.WithCapabilityRegistry(checkedRegistry(t))
-	require.NoError(t, err)
+	return agreement
+}
+
+// Synthetic certification exercises resolution only, never a production claim.
+func nativeResolutionFixture(t *testing.T, uncertified ...NativeCapabilityID) NativePolicyResolution {
+	t.Helper()
+	agreement := syntheticAgreement(t, "synthetic-darwin-arm64", uncertified...)
+	matrix := agreement.Matrix()
 	manifest := EmptyAttemptConfigurationManifest()
 	at := time.Date(2026, 9, 8, 8, 0, 0, 123000000, time.UTC)
 	return NativePolicyResolution{PolicyID: "synthetic-policy", Revision: "one", Ordinal: 1, InstitutionID: NewInstitutionID(), ExamRevisionID: NewExamRevisionID(), SittingID: NewExamSittingID(), Scope: SecurityPolicyScope{Kind: "admission", AdmissionScopeID: "synthetic-admission"}, IssuedAt: at, ActiveFrom: at, ActivationTime: at, Selections: DefaultExamPolicySet(), Build: DesktopBuildTuple{DesktopRelease: "1.0.0", DesktopBuildID: "synthetic-build", Platform: DesktopPlatformDarwin, Architecture: DesktopArchitectureARM64, RealtimeProtocol: 1, AttemptConfigurationManifestFingerprint: manifest.Fingerprint(), DesktopSettingsRegistryFingerprint: "fnv1a64:aaaaaaaaaaaaaaaa", CapabilityMatrixIdentity: matrix.MatrixID, ConfigurationManifest: manifest, DesktopTarget: matrix.TargetTuple, NativeAgreement: agreement}}
@@ -71,8 +67,7 @@ func TestEffectiveNativePolicyContentDigestSurvivesOnlyScopeRebind(t *testing.T)
 	input := nativeResolutionFixture(t)
 	resolved, err := ResolveNativePolicy(input)
 	require.NoError(t, err)
-	require.True(t, slices.Equal(resolved.Sources, []NativeSourceID{NativeSourceDisplay, NativeSourceWindow, NativeSourceCapture}), "baseline depends on optional selections")
-	require.Len(t, resolved.Requirements, 3, "baseline depends on optional selections")
+	require.Len(t, resolved.Policy.Rules, 3, "only the baseline runs when every family is off")
 	rebound, err := resolved.Policy.RebindAttempt(NewExamAttemptID(), input.ActivationTime)
 	require.NoError(t, err)
 	digest, err := rebound.ContentDigest(resolved.CatalogBindings, resolved.CapabilityMatrixDigest)
@@ -98,31 +93,42 @@ func TestEffectiveNativePolicyContentDigestSurvivesOnlyScopeRebind(t *testing.T)
 	digest, _ = changed.ContentDigest(resolved.CatalogBindings, resolved.CapabilityMatrixDigest)
 	require.NotEqual(t, resolved.PolicyContentDigest, digest, "revision omitted from content identity")
 }
-func TestNativePolicyResolutionTruthfulObservationAndEffects(t *testing.T) {
+func TestOnlyACertifiedFamilyMayEnforce(t *testing.T) {
+	enforced := `{"id":"virtualization","mode":"enforce","rule":"block_recognized_guest","outcome":"flag_and_suspend"}`
 	input := nativeResolutionFixture(t)
-	setNativeFamily(t, &input, 2, `{"id":"clipboard","mode":"enforce","strategy":"private_attempt","observe_os_clipboard_changes":true,"outcome":"flag"}`)
-	setNativeFamily(t, &input, 6, `{"id":"network_configuration","mode":"enforce","enabled_sub_capabilities":["tunnel_interface_state"],"outcome":"flag"}`)
-	resolved, err := ResolveNativePolicy(input)
-	require.NoError(t, err)
-	require.NotContains(t, resolved.Sources, NativeSourceClipboard, "unavailable observation was opened or tunnel observation omitted")
-	require.Contains(t, resolved.Sources, NativeSourceNetwork, "unavailable observation was opened or tunnel observation omitted")
-	foundEffect, foundUnavailable, foundTunnel := false, false, false
-	for _, r := range resolved.Requirements {
-		switch r.CoverageKey {
-		case "native.candidate_private_clipboard.v1":
-			foundEffect = r.SourceID == "" && r.RequiredClaim == NativeClaimEnforce
-		case "native.os_clipboard_change.v1":
-			foundUnavailable = r.Entry.Claim == NativeClaimUnavailable
-		case "native.tunnel_interface_state.v1":
-			foundTunnel = r.RequiredClaim == NativeClaimEnforce
-		}
-	}
-	require.True(t, foundEffect, "lost effect, unavailable claim or tunnel rule")
-	require.True(t, foundUnavailable, "lost effect, unavailable claim or tunnel rule")
-	require.True(t, foundTunnel, "lost effect, unavailable claim or tunnel rule")
-	setNativeFamily(t, &input, 1, `{"id":"interactive_session","mode":"enforce","outcome":"flag"}`)
+	setNativeFamily(t, &input, 5, enforced)
+	_, err := ResolveNativePolicy(input)
+	require.NoError(t, err, "a certified family enforces")
+
+	input = nativeResolutionFixture(t, "virtualization")
+	setNativeFamily(t, &input, 5, enforced)
 	_, err = ResolveNativePolicy(input)
-	require.ErrorIs(t, err, ErrNativeCoverageUnsupported, "observe certification granted enforcement")
+	require.ErrorIs(t, err, ErrNativeCoverageUnsupported, "an uncertified family may not enforce or suspend")
+
+	setNativeFamily(t, &input, 5, `{"id":"virtualization","mode":"observe","rule":"block_recognized_guest","outcome":"flag"}`)
+	resolved, err := ResolveNativePolicy(input)
+	require.NoError(t, err, "an uncertified family may still be observed")
+	require.Contains(t, resolved.Policy.Activations, NativeActivation{Capability: "virtualization", Categories: []string{}})
+
+	input = nativeResolutionFixture(t, "candidate_window", "display", "interactive_session")
+	_, err = ResolveNativePolicy(input)
+	require.NoError(t, err, "the release's baseline runs whatever it certifies")
+}
+
+func TestNothingIsCertifiedOnLinux(t *testing.T) {
+	registry := checkedRegistry(t)
+	matrix := NativeCapabilityMatrix{RegistryDigest: NativeRegistryDigest, MatrixID: "linux-matrix", ReleaseID: "synthetic-release", TargetTuple: "linux-x64"}
+	for _, capability := range syntheticAgreement(t, "synthetic-darwin-arm64").Matrix().Capabilities {
+		matrix.Capabilities = append(matrix.Capabilities, NativeCapabilityCertification{Capability: capability.Capability})
+	}
+	_, err := NewDesktopNativeAgreement(NativeRegistryDigest, SHA256Fingerprint([]byte("matrix")), matrix, registry)
+	require.NoError(t, err, "Linux may run uncertified")
+	matrix.Capabilities[0].EnforceCertified = true
+	_, err = NewDesktopNativeAgreement(NativeRegistryDigest, SHA256Fingerprint([]byte("matrix")), matrix, registry)
+	require.Error(t, err, "nothing is certified on Linux")
+	matrix.Capabilities = matrix.Capabilities[1:]
+	_, err = NewDesktopNativeAgreement(NativeRegistryDigest, SHA256Fingerprint([]byte("matrix")), matrix, registry)
+	require.Error(t, err, "every registered capability is listed")
 }
 func TestNativePolicyResolutionRejectsUnknownCatalogsAndBadProvenance(t *testing.T) {
 	input := nativeResolutionFixture(t)

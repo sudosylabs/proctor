@@ -50,7 +50,7 @@ func TestRetentionSubmissionPrivacy(t *testing.T) {
 			for _, query := range []string{
 				`SELECT count(*) FROM browser_activity_events WHERE exam_attempt_id=(SELECT exam_attempt_id FROM exam_submissions WHERE id=?)`,
 				`SELECT count(*) FROM browser_activity_sources WHERE exam_attempt_id=(SELECT exam_attempt_id FROM exam_submissions WHERE id=?)`,
-				`SELECT count(*) FROM exam_attempt_security_owners WHERE exam_attempt_id=(SELECT exam_attempt_id FROM exam_submissions WHERE id=?) AND (octet_length(binding_canonical)>2 OR octet_length(latest_report_canonical)>2 OR control_body_canonical IS NOT NULL OR summary_canonical IS NOT NULL)`,
+				`SELECT count(*) FROM exam_attempt_security_owners WHERE exam_attempt_id=(SELECT exam_attempt_id FROM exam_submissions WHERE id=?) AND (octet_length(binding_canonical)>2 OR control_body_canonical IS NOT NULL OR summary_canonical IS NOT NULL)`,
 			} {
 				var count int
 				require.NoError(t, s.GetMaster().Get(ctx, &count, query, id.String()))

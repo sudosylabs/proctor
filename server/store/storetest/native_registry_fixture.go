@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"testing"
 	"time"
 
@@ -22,10 +23,9 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// withNativeRegistry attaches Desktop's published capability registry, its
-// fact schemas compiled, to a synthetic agreement, as release verification
-// does for a signed release.
-func withNativeRegistry(t *testing.T, agreement *model.DesktopNativeAgreement) *model.DesktopNativeAgreement {
+// nativeRegistry is Desktop's published capability registry with its fact
+// schemas compiled, as release verification builds it for a signed release.
+func nativeRegistry(t *testing.T) *model.NativeCapabilityRegistry {
 	t.Helper()
 	_, here, _, ok := runtime.Caller(0)
 	require.True(t, ok)
@@ -37,9 +37,18 @@ func withNativeRegistry(t *testing.T, agreement *model.DesktopNativeAgreement) *
 	require.NoError(t, err)
 	registry, err = registry.WithFactValidator(validator)
 	require.NoError(t, err)
-	agreement, err = agreement.WithCapabilityRegistry(registry)
-	require.NoError(t, err)
-	return agreement
+	return registry
+}
+
+// registeredCapabilities lists the registry's capabilities in order.
+func registeredCapabilities(t *testing.T, registry *model.NativeCapabilityRegistry) []model.NativeCapabilityID {
+	t.Helper()
+	capabilities := []model.NativeCapabilityID{}
+	for capability := range registry.FactSchemas() {
+		capabilities = append(capabilities, capability)
+	}
+	slices.Sort(capabilities)
+	return capabilities
 }
 
 // Facts as Desktop's published schemas describe them.

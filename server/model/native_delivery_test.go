@@ -45,8 +45,21 @@ func TestNativeDeliveryClosedRecords(t *testing.T) {
 		var invalid NativeSecurityBatch
 		require.Error(t, json.Unmarshal([]byte(mutation(string(raw))), &invalid), "accepted non-contract batch")
 	}
-	gap := NativeSourceGap{Kind: "source_gap", SourceID: NativeSourceCapture, SourceInstanceID: NewID(), Reason: "overflow", OccurredAt: at}
+	gap := NativeSourceGap{Kind: "source_gap", Capability: "display", SourceInstanceID: NewID(), Reason: "overflow", OccurredAt: at}
+	require.NoError(t, gap.Validate())
 	require.Error(t, (NativeRecord{Fact: &fact, Gap: &gap}).Validate(), "accepted ambiguous union")
+	reset := NativeSourceReset{Kind: "source_reset", ResetID: NewID(), Capability: "display", PreviousSourceInstanceID: "a", NewSourceInstanceID: "b", Reason: "restart", OccurredAt: at}
+	require.NoError(t, reset.Validate())
+	for name, change := range map[string]func(*NativeSourceReset){
+		"same instance":   func(r *NativeSourceReset) { r.NewSourceInstanceID = r.PreviousSourceInstanceID },
+		"old source name": func(r *NativeSourceReset) { r.Capability = "display-topology" },
+		"unknown reason":  func(r *NativeSourceReset) { r.Reason = "rebooted" },
+		"negative final":  func(r *NativeSourceReset) { r.PreviousFinalSequence = -1 },
+	} {
+		changed := reset
+		change(&changed)
+		require.Error(t, changed.Validate(), name)
+	}
 	batch.Records = nil
 	require.Error(t, batch.Validate(), "accepted empty batch")
 }

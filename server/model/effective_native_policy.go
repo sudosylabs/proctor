@@ -12,7 +12,6 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
-	"strings"
 	"time"
 )
 
@@ -84,43 +83,14 @@ type SecurityCatalogBinding struct {
 	Digest    string `json:"digest"`
 }
 
-// NativeSourceCategory selects a minimized part of a shared native source.
-type NativeSourceCategory string
-
-func NativeSourceCategories() []NativeSourceCategory {
-	return []NativeSourceCategory{
-		"os-clipboard-change",
-		"removable-block-storage",
-		"portable-mtp",
-		"system-proxy-state",
-		"os-managed-vpn-state",
-		"tunnel-interface-state",
-		"route-change",
-		"network-source-health",
-		"camera",
-		"microphone",
-	}
-}
-
-type NativeCoverageRequirement struct {
-	CoverageKey   string
-	CapabilityID  string
-	SourceID      NativeSourceID
-	RequiredClaim NativeCapabilityClaim
-	Entry         NativeCapabilityMatrixEntry
-	Baseline      bool
-}
-
-// ResolvedNativePolicy holds the exact source and claim sets used for preflight
-// validation. Missing observe coverage remains explicit and opens no source.
+// ResolvedNativePolicy is a policy resolved against one verified release:
+// the frozen policy, its content digest, and the certification list it was
+// checked against.
 type ResolvedNativePolicy struct {
 	Policy                 EffectiveExamSecurityPolicy
 	PolicyContentDigest    string
 	CapabilityMatrixDigest string
 	CatalogBindings        []SecurityCatalogBinding
-	Sources                []NativeSourceID
-	Categories             []NativeSourceCategory
-	Requirements           []NativeCoverageRequirement
 }
 
 type NativePolicyResolution struct {
@@ -213,6 +183,10 @@ func (r ResolvedNativePolicy) Validate(agreement *DesktopNativeAgreement, at tim
 	return nil
 }
 
+// resolvePolicyCoverage checks a policy against the release: it must be the
+// release's registry, certification list and target, and every enforced
+// family must be certified to enforce on that target. An uncertified family
+// can still be observed. The baseline is the release's own and always runs.
 func resolvePolicyCoverage(policy EffectiveExamSecurityPolicy, agreement *DesktopNativeAgreement) (ResolvedNativePolicy, error) {
 	matrix := agreement.Matrix()
 	if policy.RegistryDigest != agreement.RegistryDigest() ||
@@ -221,166 +195,25 @@ func resolvePolicyCoverage(policy EffectiveExamSecurityPolicy, agreement *Deskto
 		policy.TargetTuple != matrix.TargetTuple {
 		return ResolvedNativePolicy{}, ErrNativeCoverageUnsupported
 	}
-
-	native := NativeSecurityPolicy{RegistryDigest: policy.RegistryDigest, Families: policy.Capabilities}
-	requirements, err := resolveNativeRequirements(native, agreement)
-	if err != nil {
-		return ResolvedNativePolicy{}, err
+	for _, family := range policy.Capabilities {
+		capability, compiles := nativeFamilyCapability[family.ID()]
+		if compiles && family.Mode() == NativeModeEnforce && !agreement.EnforceCertified(capability) {
+			return ResolvedNativePolicy{}, ErrNativeCoverageUnsupported
+		}
 	}
 
-	bindings := []SecurityCatalogBinding{{
-		Kind:      "detector",
-		CatalogID: "native.detectors",
-		Revision:  agreement.DetectorCatalogDigest(),
-		Digest:    agreement.DetectorCatalogDigest(),
-	}}
+	bindings := []SecurityCatalogBinding{}
 	digest, err := policy.ContentDigest(bindings, agreement.MatrixDigest())
 	if err != nil {
 		return ResolvedNativePolicy{}, err
 	}
 
-	result := ResolvedNativePolicy{
+	return ResolvedNativePolicy{
 		Policy:                 policy,
 		PolicyContentDigest:    digest,
 		CapabilityMatrixDigest: agreement.MatrixDigest(),
 		CatalogBindings:        bindings,
-		Requirements:           requirements,
-		Sources:                []NativeSourceID{},
-		Categories:             selectedNativeCategories(native),
-	}
-	for _, source := range NativeSources() {
-		for _, requirement := range requirements {
-			if requirement.SourceID == source && requirement.Entry.Claim != NativeClaimUnavailable {
-				result.Sources = append(result.Sources, source)
-				break
-			}
-		}
-	}
-
-	return result, nil
-}
-
-func resolveNativeRequirements(policy NativeSecurityPolicy, agreement *DesktopNativeAgreement) ([]NativeCoverageRequirement, error) {
-	selected := map[string]NativeCapabilityClaim{}
-	definitions := agreement.Definitions()
-	for _, definition := range definitions {
-		if definition.Baseline {
-			selected[definition.CoverageKey] = NativeClaimEnforce
-		}
-	}
-
-	add := func(id string, claim NativeCapabilityClaim) { selected["native."+id+".v1"] = claim }
-	for _, family := range policy.Families {
-		f := family.fields
-		if f.Mode == NativeModeDisabled {
-			continue
-		}
-
-		claim := NativeCapabilityClaim(f.Mode)
-		switch f.ID {
-		case "process_application":
-			add("process_application_lifecycle", claim)
-		case "interactive_session":
-			add("single_interactive_session", claim)
-		case "clipboard":
-			if f.Strategy == "private_attempt" {
-				add("candidate_private_clipboard", NativeClaimEnforce)
-			}
-			if f.ObserveOSClipboardChanges {
-				add("os_clipboard_change", NativeClaimObserve)
-			}
-		case "printing":
-			if f.CandidatePrintCommands == "deny" {
-				add("candidate_print_commands", NativeClaimEnforce)
-			}
-			if f.MonitoredSpooler == "required" {
-				add("monitored_spooler_job", claim)
-			}
-		case "removable_storage", "network_configuration":
-			for _, sub := range f.EnabledSubCapabilities {
-				add(sub, claim)
-			}
-		case "virtualization":
-			if f.Rule == "block_recognized_guest" {
-				add("recognized_guest", claim)
-			} else {
-				add("certified_physical_environment", claim)
-			}
-		case "camera", "microphone":
-			if f.RequireReady {
-				add(f.ID+"_ready", claim)
-			}
-
-			if f.ConcurrentUseCheck == "supported_required" {
-				sub := f.ID + "_other_application_use"
-				if f.ID == "microphone" {
-					sub = "microphone_other_stream_running"
-				}
-
-				add(sub, claim)
-			}
-		}
-	}
-
-	if len(selected) > NativeCoverageClaimLimit {
-		return nil, ErrNativeCoverageUnsupported
-	}
-
-	result := make([]NativeCoverageRequirement, 0, len(selected))
-	for _, definition := range definitions {
-		claim, exists := selected[definition.CoverageKey]
-		if !exists {
-			continue
-		}
-
-		entry, err := agreement.Coverage(definition.CoverageKey, claim)
-		if err != nil {
-			return nil, ErrNativeCoverageUnsupported
-		}
-
-		result = append(result, NativeCoverageRequirement{
-			CoverageKey:   definition.CoverageKey,
-			CapabilityID:  definition.CapabilityID,
-			SourceID:      definition.SourceID,
-			RequiredClaim: claim,
-			Entry:         entry,
-			Baseline:      definition.Baseline,
-		})
-	}
-
-	if len(result) != len(selected) {
-		return nil, ErrNativeCoverageUnsupported
-	}
-
-	return result, nil
-}
-func selectedNativeCategories(policy NativeSecurityPolicy) []NativeSourceCategory {
-	selected := map[NativeSourceCategory]bool{}
-	for _, family := range policy.Families {
-		f := family.fields
-		if f.Mode == NativeModeDisabled {
-			continue
-		}
-		switch f.ID {
-		case "clipboard":
-			if f.ObserveOSClipboardChanges {
-				selected["os-clipboard-change"] = true
-			}
-		case "removable_storage", "network_configuration":
-			for _, sub := range f.EnabledSubCapabilities {
-				selected[NativeSourceCategory(strings.ReplaceAll(sub, "_", "-"))] = true
-			}
-		case "camera", "microphone":
-			selected[NativeSourceCategory(f.ID)] = true
-		}
-	}
-	result := []NativeSourceCategory{}
-	for _, category := range NativeSourceCategories() {
-		if selected[category] {
-			result = append(result, category)
-		}
-	}
-	return result
+	}, nil
 }
 
 func isSecurityRevision(value string) bool {

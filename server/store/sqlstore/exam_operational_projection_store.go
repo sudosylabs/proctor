@@ -572,7 +572,7 @@ type sittingCandidateStatusHeaderRow struct {
 
 type sittingCandidateStatusRow struct {
 	NativeConditionRecords   int64          `db:"native_condition_records"`
-	NativeCoverage           []byte         `db:"native_coverage"`
+	NativeLive               bool           `db:"native_live"`
 	NativeInterpretation     []byte         `db:"native_interpretation"`
 	ClipsRequested           int            `db:"clips_requested"`
 	ClipsRecording           int            `db:"clips_recording"`
@@ -825,13 +825,10 @@ func sittingCandidateStatusQuery(
 					THEN COALESCE(delivery_budget.native_condition_records, 0)
 				ELSE 0
 			END AS native_condition_records,
-			CASE
-				WHEN participation.state = 'active'
-					AND participation.lease_expires_at > statement_timestamp()
-					AND delivery_budget.security_retired_at IS NULL
-					THEN native_owner.latest_report_canonical
-				ELSE NULL
-			END AS native_coverage,
+			COALESCE(participation.state = 'active'
+				AND participation.lease_expires_at > statement_timestamp()
+				AND delivery_budget.security_retired_at IS NULL
+				AND native_owner.participation_id IS NOT NULL, false) AS native_live,
 			CASE
 				WHEN participation.state = 'active'
 					AND participation.lease_expires_at > statement_timestamp()
@@ -993,28 +990,14 @@ func (row sittingCandidateStatusRow) item(
 
 	item.NativeSecurity = &model.NativeSecuritySummary{
 		RetainedConditionRecords: row.NativeConditionRecords,
-		Sources:                  []model.NativeSourceHealthSummary{},
+		LiveCoverageAvailable:    row.NativeLive,
 		Rules:                    []model.NativeRuleStanding{},
 		ScreenClips: model.ScreenClipCounts{
 			Requested: row.ClipsRequested, Recording: row.ClipsRecording, Uploading: row.ClipsUploading,
 			Ready: row.ClipsReady, Failed: row.ClipsFailed,
 		},
 	}
-	if row.NativeCoverage != nil {
-		coverage, err := decodeNativeCoverageSnapshot(row.NativeCoverage)
-		if err != nil {
-			return item, err
-		}
-
-		item.NativeSecurity.LiveCoverageAvailable = true
-		for _, source := range coverage.Sources {
-			item.NativeSecurity.Sources = append(item.NativeSecurity.Sources, model.NativeSourceHealthSummary{
-				SourceID:   source.SourceID,
-				Health:     source.Health,
-				Permission: source.Permission,
-				Complete:   source.Complete,
-			})
-		}
+	if row.NativeLive {
 		if len(row.NativeInterpretation) > 0 {
 			var interpretation model.NativeInterpretation
 			if json.Unmarshal(row.NativeInterpretation, &interpretation) != nil {

@@ -1832,8 +1832,7 @@
           "application/json": {
             "example": {
               "configuration_manifest_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              "native_registry_digest": "sha256:2a3cafc0b4bccad3e06d0a8602cc84692f4d85e99763db6feb40e1417549e099",
-              "source_manifest_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              "native_registry_digest": "sha256:2a3cafc0b4bccad3e06d0a8602cc84692f4d85e99763db6feb40e1417549e099"
             },
             "schema": {
               "$ref": "#/components/schemas/PrepareSecurityPreflightRequest"
@@ -2271,24 +2270,13 @@
         "content": {
           "application/json": {
             "example": {
-              "baseline": {
-                "constrained_window": "unavailable",
-                "content_protection": "unavailable",
-                "single_physical_display": "unavailable"
-              },
               "capabilities": [],
-              "capability_matrix_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
               "challenge": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              "coverage": [],
               "policy_content_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
               "policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              "posture": "failed",
               "reported_at": "2026-09-08T08:00:00.000Z",
               "rules": [],
-              "security_session_id": "synthetic-security-session",
-              "selected_source_categories": [],
-              "source_manifest_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              "sources": []
+              "security_session_id": "synthetic-security-session"
             },
             "schema": {
               "$ref": "#/components/schemas/SecurityPreflightReport"
@@ -20615,38 +20603,6 @@
         ],
         "type": "object"
       },
-      "NativeBaselineReport": {
-        "additionalProperties": false,
-        "properties": {
-          "constrained_window": {
-            "enum": [
-              "verified",
-              "unavailable"
-            ],
-            "type": "string"
-          },
-          "content_protection": {
-            "enum": [
-              "verified",
-              "unavailable"
-            ],
-            "type": "string"
-          },
-          "single_physical_display": {
-            "enum": [
-              "verified",
-              "unavailable"
-            ],
-            "type": "string"
-          }
-        },
-        "required": [
-          "constrained_window",
-          "single_physical_display",
-          "content_protection"
-        ],
-        "type": "object"
-      },
       "NativeBatchReceipt": {
         "additionalProperties": false,
         "properties": {
@@ -21114,79 +21070,6 @@
         ],
         "type": "object"
       },
-      "NativeCoverageClaim": {
-        "additionalProperties": false,
-        "properties": {
-          "claim": {
-            "enum": [
-              "enforce",
-              "observe",
-              "unavailable"
-            ],
-            "type": "string"
-          },
-          "coverage_key": {
-            "maxLength": 128,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-            "type": "string"
-          },
-          "source_schema_digest": {
-            "pattern": "^sha256:[0-9a-f]{64}$",
-            "type": "string"
-          },
-          "state": {
-            "enum": [
-              "ready",
-              "degraded",
-              "unavailable"
-            ],
-            "type": "string"
-          }
-        },
-        "required": [
-          "coverage_key",
-          "source_schema_digest",
-          "claim",
-          "state"
-        ],
-        "type": "object"
-      },
-      "NativeCoverageTransition": {
-        "additionalProperties": false,
-        "properties": {
-          "kind": {
-            "enum": [
-              "coverage_transition"
-            ],
-            "type": "string"
-          },
-          "occurred_at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "reason": {
-            "enum": [
-              "initial",
-              "health_changed",
-              "permission_changed",
-              "reconciled",
-              "stopped"
-            ],
-            "type": "string"
-          },
-          "source": {
-            "$ref": "#/components/schemas/NativeSourceCoverage"
-          }
-        },
-        "required": [
-          "kind",
-          "source",
-          "occurred_at",
-          "reason"
-        ],
-        "type": "object"
-      },
       "NativeParticipationConfirmed": {
         "additionalProperties": false,
         "description": "Where the exam begins on the stream: Desktop sends it once, when the candidate window mounts after admission. Before it the server applies the policy's readiness rules; from it, the participation rules.",
@@ -21212,7 +21095,6 @@
         "discriminator": {
           "mapping": {
             "capability_fact": "#/components/schemas/NativeCapabilityFact",
-            "coverage_transition": "#/components/schemas/NativeCoverageTransition",
             "participation_confirmed": "#/components/schemas/NativeParticipationConfirmed",
             "rule_status": "#/components/schemas/NativeRuleStatusReport",
             "source_gap": "#/components/schemas/NativeSourceGap",
@@ -21229,9 +21111,6 @@
           },
           {
             "$ref": "#/components/schemas/NativeRuleStatusReport"
-          },
-          {
-            "$ref": "#/components/schemas/NativeCoverageTransition"
           },
           {
             "$ref": "#/components/schemas/NativeSourceReset"
@@ -22626,13 +22505,14 @@
       },
       "NativeSecuritySummary": {
         "additionalProperties": false,
-        "description": "The candidate's live native standing: how many rule status changes are kept, the live Participation's source health and each enforce rule's status as the server evaluates it, whether Desktop is containing the candidate window, and the Attempt's screen clips by state. It contains no facts, source-instance or application identities, and an application outside the catalog is never named. A rule that is not met is not a misconduct finding; its Flag is reviewed like any other.",
+        "description": "The candidate's live native standing: how many rule status changes are kept, whether the live Participation's native delivery is open, each enforce rule's status as the server evaluates it, whether Desktop is containing the candidate window, and the Attempt's screen clips by state. It contains no facts, source-instance or application identities, and an application outside the catalog is never named. A rule that is not met is not a misconduct finding; its Flag is reviewed like any other.",
         "properties": {
           "contained": {
             "description": "Whether Desktop reports it is containing the candidate window right now.",
             "type": "boolean"
           },
           "live_coverage_available": {
+            "description": "Whether the live Participation's native delivery is open, so rule statuses are current.",
             "type": "boolean"
           },
           "retained_condition_records": {
@@ -22734,149 +22614,25 @@
               "failed"
             ],
             "type": "object"
-          },
-          "sources": {
-            "items": {
-              "additionalProperties": false,
-              "properties": {
-                "complete": {
-                  "type": "boolean"
-                },
-                "health": {
-                  "enum": [
-                    "starting",
-                    "healthy",
-                    "degraded",
-                    "failed",
-                    "recovering",
-                    "stopped"
-                  ],
-                  "type": "string"
-                },
-                "permission": {
-                  "enum": [
-                    "denied",
-                    "granted",
-                    "not_determined",
-                    "restricted",
-                    "unavailable"
-                  ],
-                  "type": "string"
-                },
-                "source_id": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "source_id",
-                "health",
-                "permission",
-                "complete"
-              ],
-              "type": "object"
-            },
-            "maxItems": 11,
-            "type": "array"
           }
         },
         "required": [
           "retained_condition_records",
           "live_coverage_available",
-          "sources",
           "rules",
           "contained",
           "screen_clips"
         ],
         "type": "object"
       },
-      "NativeSourceCoverage": {
-        "additionalProperties": false,
-        "properties": {
-          "adapter_version": {
-            "maxLength": 128,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-            "type": "string"
-          },
-          "complete": {
-            "type": "boolean"
-          },
-          "gap_count": {
-            "format": "int64",
-            "maximum": 9007199254740991,
-            "minimum": 0,
-            "type": "integer"
-          },
-          "health": {
-            "enum": [
-              "starting",
-              "healthy",
-              "degraded",
-              "failed",
-              "recovering",
-              "stopped"
-            ],
-            "type": "string"
-          },
-          "permission": {
-            "enum": [
-              "denied",
-              "granted",
-              "not_determined",
-              "restricted",
-              "unavailable"
-            ],
-            "type": "string"
-          },
-          "sequence": {
-            "format": "int64",
-            "maximum": 9007199254740991,
-            "minimum": 0,
-            "type": "integer"
-          },
-          "source_id": {
-            "enum": [
-              "display-topology",
-              "candidate-window",
-              "capture-session",
-              "process-application",
-              "interactive-session",
-              "clipboard",
-              "print-spooler",
-              "removable-storage",
-              "virtualization",
-              "network-configuration",
-              "media-device"
-            ],
-            "type": "string"
-          },
-          "source_instance_id": {
-            "maxLength": 128,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-            "type": "string"
-          },
-          "source_schema_digest": {
-            "pattern": "^sha256:[0-9a-f]{64}$",
-            "type": "string"
-          }
-        },
-        "required": [
-          "source_id",
-          "source_instance_id",
-          "sequence",
-          "source_schema_digest",
-          "adapter_version",
-          "health",
-          "permission",
-          "complete",
-          "gap_count"
-        ],
-        "type": "object"
-      },
       "NativeSourceGap": {
         "additionalProperties": false,
         "properties": {
+          "capability": {
+            "description": "The activated capability whose source this names.",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          },
           "first_missing_sequence": {
             "format": "int64",
             "maximum": 9007199254740991,
@@ -22907,22 +22663,6 @@
             ],
             "type": "string"
           },
-          "source_id": {
-            "enum": [
-              "display-topology",
-              "candidate-window",
-              "capture-session",
-              "process-application",
-              "interactive-session",
-              "clipboard",
-              "print-spooler",
-              "removable-storage",
-              "virtualization",
-              "network-configuration",
-              "media-device"
-            ],
-            "type": "string"
-          },
           "source_instance_id": {
             "maxLength": 128,
             "minLength": 1,
@@ -22932,7 +22672,7 @@
         },
         "required": [
           "kind",
-          "source_id",
+          "capability",
           "source_instance_id",
           "first_missing_sequence",
           "last_missing_sequence",
@@ -22941,55 +22681,14 @@
         ],
         "type": "object"
       },
-      "NativeSourceRange": {
-        "additionalProperties": false,
-        "properties": {
-          "first_sequence": {
-            "format": "int64",
-            "maximum": 9007199254740991,
-            "minimum": 0,
-            "type": "integer"
-          },
-          "last_sequence": {
-            "format": "int64",
-            "maximum": 9007199254740991,
-            "minimum": 0,
-            "type": "integer"
-          },
-          "source_id": {
-            "enum": [
-              "display-topology",
-              "candidate-window",
-              "capture-session",
-              "process-application",
-              "interactive-session",
-              "clipboard",
-              "print-spooler",
-              "removable-storage",
-              "virtualization",
-              "network-configuration",
-              "media-device"
-            ],
-            "type": "string"
-          },
-          "source_instance_id": {
-            "maxLength": 128,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-            "type": "string"
-          }
-        },
-        "required": [
-          "source_id",
-          "source_instance_id",
-          "first_sequence",
-          "last_sequence"
-        ],
-        "type": "object"
-      },
       "NativeSourceReset": {
         "additionalProperties": false,
         "properties": {
+          "capability": {
+            "description": "The activated capability whose source this names.",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          },
           "kind": {
             "enum": [
               "source_reset"
@@ -23031,28 +22730,12 @@
             "minLength": 1,
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
             "type": "string"
-          },
-          "source_id": {
-            "enum": [
-              "display-topology",
-              "candidate-window",
-              "capture-session",
-              "process-application",
-              "interactive-session",
-              "clipboard",
-              "print-spooler",
-              "removable-storage",
-              "virtualization",
-              "network-configuration",
-              "media-device"
-            ],
-            "type": "string"
           }
         },
         "required": [
           "kind",
           "reset_id",
-          "source_id",
+          "capability",
           "previous_source_instance_id",
           "previous_final_sequence",
           "new_source_instance_id",
@@ -23934,15 +23617,10 @@
           "native_registry_digest": {
             "pattern": "^sha256:[0-9a-f]{64}$",
             "type": "string"
-          },
-          "source_manifest_digest": {
-            "pattern": "^sha256:[0-9a-f]{64}$",
-            "type": "string"
           }
         },
         "required": [
           "native_registry_digest",
-          "source_manifest_digest",
           "configuration_manifest_fingerprint"
         ],
         "type": "object"
@@ -26195,18 +25873,10 @@
         ],
         "type": "object"
       },
-      "SecurityCoverageResult": {
+      "SecurityControlResult": {
         "additionalProperties": false,
+        "description": "How the server processed Desktop's latest security control: the lease renewal and its delivery watermarks. A renewal never changes whether the candidate may interact; only closing native delivery does.",
         "properties": {
-          "coverage_result": {
-            "enum": [
-              "accepted",
-              "stale_control",
-              "reset_required",
-              "reset_conflict"
-            ],
-            "type": "string"
-          },
           "delivery_watermark_rejections": {
             "items": {
               "$ref": "#/components/schemas/DeliveryWatermarkRejection"
@@ -26229,20 +25899,11 @@
           },
           "security_interaction_allowed": {
             "type": "boolean"
-          },
-          "source_reset_receipts": {
-            "items": {
-              "$ref": "#/components/schemas/SourceResetReceipt"
-            },
-            "maxItems": 11,
-            "type": "array"
           }
         },
         "required": [
           "processed_control_sequence",
           "processed_control_digest",
-          "coverage_result",
-          "source_reset_receipts",
           "security_interaction_allowed",
           "delivery_watermark_rejections"
         ],
@@ -26289,49 +25950,25 @@
       "SecurityPolicyRecovery": {
         "additionalProperties": false,
         "properties": {
-          "current_coverage": {
-            "items": {
-              "$ref": "#/components/schemas/NativeCoverageClaim"
-            },
-            "maxItems": 64,
-            "type": "array"
-          },
-          "current_sources": {
-            "items": {
-              "$ref": "#/components/schemas/NativeSourceCoverage"
-            },
-            "maxItems": 11,
-            "type": "array"
-          },
           "frozen_attempt_configuration": {
             "$ref": "#/components/schemas/FrozenAttemptConfiguration"
           },
           "security": {
             "$ref": "#/components/schemas/AdmittedSecurity"
           },
-          "security_coverage": {
-            "$ref": "#/components/schemas/SecurityCoverageResult"
+          "security_control": {
+            "$ref": "#/components/schemas/SecurityControlResult"
           },
           "server_time": {
             "format": "date-time",
             "type": "string"
-          },
-          "source_reset_receipts": {
-            "items": {
-              "$ref": "#/components/schemas/SourceResetReceipt"
-            },
-            "maxItems": 11,
-            "type": "array"
           }
         },
         "required": [
           "server_time",
           "security",
           "frozen_attempt_configuration",
-          "current_sources",
-          "current_coverage",
-          "source_reset_receipts",
-          "security_coverage"
+          "security_control"
         ],
         "type": "object"
       },
@@ -26429,22 +26066,15 @@
       },
       "SecurityPreflightReport": {
         "additionalProperties": false,
-        "description": "Minimized assertions, at most 64 KiB. Source order and categories must match the resolved policy; coverage keys are sorted and exact. No inventories, media, clipboard bytes, OS errors or arbitrary details are accepted. The server computes the report digest. Client reported_at is provenance; server time controls challenge expiry and admission freshness.",
+        "description": "What Desktop observed at Start, at most 128 KiB: one fresh fact for each activated capability and its own status for each readiness rule. No inventories, media, clipboard bytes, OS errors or arbitrary details are accepted. The server evaluates the readiness rules on these facts and its result decides admission. The server computes the report digest. Client reported_at is provenance; server time controls challenge expiry and admission freshness.",
         "properties": {
-          "baseline": {
-            "$ref": "#/components/schemas/NativeBaselineReport"
-          },
           "capabilities": {
-            "description": "Every activated capability's full state at Start, in the policy's activation order.",
+            "description": "One fresh fact for every activated capability at Start, in the policy's activation order.",
             "items": {
               "$ref": "#/components/schemas/NativeCapabilityReadiness"
             },
             "maxItems": 32,
             "type": "array"
-          },
-          "capability_matrix_digest": {
-            "pattern": "^sha256:[0-9a-f]{64}$",
-            "type": "string"
           },
           "challenge": {
             "maxLength": 43,
@@ -26452,29 +26082,12 @@
             "pattern": "^[A-Za-z0-9_-]{43}$",
             "type": "string"
           },
-          "coverage": {
-            "items": {
-              "$ref": "#/components/schemas/NativeCoverageClaim"
-            },
-            "maxItems": 64,
-            "minItems": 0,
-            "type": "array"
-          },
           "policy_content_digest": {
             "pattern": "^sha256:[0-9a-f]{64}$",
             "type": "string"
           },
           "policy_digest": {
             "pattern": "^sha256:[0-9a-f]{64}$",
-            "type": "string"
-          },
-          "posture": {
-            "enum": [
-              "compliant",
-              "degraded",
-              "contained",
-              "failed"
-            ],
             "type": "string"
           },
           "reported_at": {
@@ -26494,53 +26107,13 @@
             "minLength": 1,
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
             "type": "string"
-          },
-          "selected_source_categories": {
-            "items": {
-              "enum": [
-                "os-clipboard-change",
-                "removable-block-storage",
-                "portable-mtp",
-                "system-proxy-state",
-                "os-managed-vpn-state",
-                "tunnel-interface-state",
-                "route-change",
-                "network-source-health",
-                "camera",
-                "microphone"
-              ],
-              "type": "string"
-            },
-            "maxItems": 10,
-            "minItems": 0,
-            "type": "array",
-            "uniqueItems": true
-          },
-          "source_manifest_digest": {
-            "pattern": "^sha256:[0-9a-f]{64}$",
-            "type": "string"
-          },
-          "sources": {
-            "items": {
-              "$ref": "#/components/schemas/NativeSourceCoverage"
-            },
-            "maxItems": 11,
-            "minItems": 0,
-            "type": "array"
           }
         },
         "required": [
           "challenge",
           "policy_digest",
           "policy_content_digest",
-          "capability_matrix_digest",
           "security_session_id",
-          "source_manifest_digest",
-          "selected_source_categories",
-          "sources",
-          "coverage",
-          "baseline",
-          "posture",
           "capabilities",
           "rules",
           "reported_at"
@@ -26570,16 +26143,7 @@
           "reason_codes": {
             "items": {
               "enum": [
-                "policy_changed",
-                "unsupported_capability",
-                "source_unavailable",
-                "permission_required",
-                "baseline_unavailable",
                 "preflight_expired",
-                "preflight_superseded",
-                "posture_blocked",
-                "configuration_unsupported",
-                "session_changed",
                 "native_rule_unmet"
               ],
               "type": "string"
@@ -27368,25 +26932,6 @@
           "id",
           "candidate_reason",
           "reallow_available"
-        ],
-        "type": "object"
-      },
-      "SourceResetReceipt": {
-        "additionalProperties": false,
-        "properties": {
-          "reset_digest": {
-            "pattern": "^sha256:[0-9a-f]{64}$",
-            "type": "string"
-          },
-          "reset_id": {
-            "maxLength": 128,
-            "minLength": 1,
-            "type": "string"
-          }
-        },
-        "required": [
-          "reset_id",
-          "reset_digest"
         ],
         "type": "object"
       },
@@ -38408,7 +37953,7 @@
         }
       ],
       "post": {
-        "description": "Requires an eligible registered Desktop Session and an exact admitted build, registry, source manifest and configuration manifest. Stores one pending 120-second challenge per Session and Sitting; a successor supersedes it. Does not create an Attempt, Workspace or Participation. Ready rejoin returns frozen configuration; active and suspended Attempts cannot obtain a replacement preflight. Unavailable Institution catalogs or enforced native coverage fail closed.",
+        "description": "Requires an eligible registered Desktop Session and an exact admitted build, capability registry and configuration manifest. Stores one pending 120-second challenge per Session and Sitting; a successor supersedes it. Does not create an Attempt, Workspace or Participation. Ready rejoin returns frozen configuration; active and suspended Attempts cannot obtain a replacement preflight. Unavailable Institution catalogs, or a family enforced where the release does not certify enforcement on the candidate's platform, fail closed.",
         "operationId": "prepareSecurityPreflight",
         "parameters": [
           {
@@ -49864,7 +49409,7 @@
         }
       ],
       "post": {
-        "description": "Rechecks the same registered Session, candidate, build, Sitting and policy before storing the bounded report and its canonical digest. Enforced and baseline requirements must be ready; truthful degraded observe-only coverage can remain eligible. A blocked report creates no Attempt or misconduct Flag. Retry preserves the original receipt time; Connect must consume a current eligible report within 30 seconds.",
+        "description": "Rechecks the same registered Session, candidate, build, Sitting and policy before storing the bounded report and its canonical digest. The server evaluates every readiness rule on the reported facts; each enforced and baseline rule must be met, and an unknown status blocks. Observed rules never block. A blocked report creates no Attempt or misconduct Flag. Retry preserves the original receipt time; Connect must consume a current eligible report within 30 seconds.",
         "operationId": "reportSecurityPreflight",
         "parameters": [
           {

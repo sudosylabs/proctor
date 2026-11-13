@@ -5291,7 +5291,6 @@ CREATE TABLE exam_attempt_security_owners (
  registration_id varchar(26) NOT NULL REFERENCES desktop_registrations(id),
  key_thumbprint text NOT NULL,
  binding_canonical bytea NOT NULL CHECK(octet_length(binding_canonical) <= 131072),
- latest_report_canonical bytea NOT NULL CHECK(octet_length(latest_report_canonical) <= 65536),
  control_ledger_canonical bytea NOT NULL CHECK(octet_length(control_ledger_canonical)<=262656),
  control_body_canonical bytea CHECK(octet_length(control_body_canonical)<=65536),
  browser_correction_starts integer NOT NULL DEFAULT 0 CHECK(browser_correction_starts BETWEEN 0 AND 32),
@@ -5325,13 +5324,6 @@ CREATE TABLE exam_attempt_security_owners (
 );
 CREATE INDEX exam_attempt_security_owners_attempt ON exam_attempt_security_owners(exam_attempt_id);
 
-CREATE TABLE exam_native_source_resets (
- participation_id varchar(26) NOT NULL REFERENCES exam_attempt_security_owners(participation_id),
- reset_id text NOT NULL,
- reset_canonical bytea NOT NULL CHECK(octet_length(reset_canonical)<=262656),
- PRIMARY KEY(participation_id,reset_id)
-);
-
 CREATE TABLE exam_native_delivery_declarations (
     participation_id varchar(26) NOT NULL REFERENCES exam_attempt_security_owners(participation_id),
     declaration_id varchar(128) NOT NULL,
@@ -5356,7 +5348,7 @@ CREATE TABLE exam_native_delivery_records (
  participation_id varchar(26) NOT NULL,
  batch_sequence bigint NOT NULL,
  record_index smallint NOT NULL CHECK(record_index BETWEEN 0 AND 63),
- kind varchar(24) NOT NULL CHECK(kind IN ('capability_fact','participation_confirmed','rule_status','coverage_transition','source_reset','source_gap')),
+ kind varchar(24) NOT NULL CHECK(kind IN ('capability_fact','participation_confirmed','rule_status','source_reset','source_gap')),
  record_canonical bytea NOT NULL CHECK(octet_length(record_canonical) <= 262144),
  metadata_canonical bytea NOT NULL CHECK(octet_length(metadata_canonical) <= 65536),
  PRIMARY KEY(participation_id,batch_sequence,record_index),
@@ -5482,10 +5474,6 @@ ALTER TABLE exam_attempt_security_owners
     CHECK (session_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
     ADD CONSTRAINT exam_attempt_security_owners_registration_id_canonical_check
     CHECK (registration_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
-
-ALTER TABLE exam_native_source_resets
-    ADD CONSTRAINT exam_native_source_resets_participation_id_canonical_check
-    CHECK (participation_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
 
 ALTER TABLE exam_native_delivery_declarations
     ADD CONSTRAINT exam_native_delivery_declarations_part_45578e73_canonical_check

@@ -1060,6 +1060,7 @@ func packageOrBelow(packagePath, root string) bool {
 func exemptProductionHelper(packagePath string) bool {
 	return packageOrBelow(packagePath, serverModule+"/testlib") ||
 		packageOrBelow(packagePath, serverModule+"/store/storetest") ||
+		packageOrBelow(packagePath, serverModule+"/internal/nativetest") ||
 		packageOrBelow(packagePath, serverModule+"/app/realtime/realtimetest") ||
 		packageOrBelow(packagePath, serverModule+"/httpapi/route/routetest") ||
 		packageOrBelow(packagePath, serverModule+"/config/configtest")

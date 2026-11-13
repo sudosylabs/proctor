@@ -6,14 +6,15 @@
 // ---------------------------------------------------------------------------------------------
 package model
 
-import "slices"
+
 
 // NativeSecuritySummary excludes facts, source-instance and application
 // identities. Health is live coverage, never evidence of misconduct.
 type NativeSecuritySummary struct {
 	RetainedConditionRecords int64
-	LiveCoverageAvailable    bool
-	Sources                  []NativeSourceHealthSummary
+	// LiveCoverageAvailable reports whether a Participation is live, so the
+	// rules below are current.
+	LiveCoverageAvailable bool
 	// Rules are the live Participation's enforce rules as the server
 	// evaluates them, by rule ID. Contained reports whether Desktop says it
 	// is containing the candidate window right now.
@@ -27,19 +28,9 @@ type NativeSecuritySummary struct {
 type ScreenClipCounts struct {
 	Requested, Recording, Uploading, Ready, Failed int
 }
-type NativeSourceHealthSummary struct {
-	SourceID   NativeSourceID
-	Health     string
-	Permission string
-	Complete   bool
-}
-
 func (s NativeSecuritySummary) Validate() error {
 	if s.RetainedConditionRecords < 0 ||
 		s.RetainedConditionRecords > DeliveryAttemptRecordLimit ||
-		s.Sources == nil ||
-		len(s.Sources) > 11 ||
-		!s.LiveCoverageAvailable && len(s.Sources) > 0 ||
 		s.Rules == nil || len(s.Rules) > NativeRuleLimit ||
 		!s.LiveCoverageAvailable && (len(s.Rules) > 0 || s.Contained) ||
 		!s.ScreenClips.valid() {
@@ -52,22 +43,9 @@ func (s NativeSecuritySummary) Validate() error {
 		}
 	}
 
-	previous := -1
-	for _, source := range s.Sources {
-		order := slices.Index(NativeSources(), source.SourceID)
-		if order <= previous ||
-			!slices.Contains([]string{"starting", "healthy", "degraded", "failed", "recovering", "stopped"}, source.Health) ||
-			!slices.Contains([]string{"denied", "granted", "not_determined", "restricted", "unavailable"}, source.Permission) {
-			return ErrNativeDeliveryInvalid
-		}
-
-		previous = order
-	}
-
 	return nil
 }
 func (s NativeSecuritySummary) Clone() NativeSecuritySummary {
-	s.Sources = append([]NativeSourceHealthSummary{}, s.Sources...)
 	s.Rules = append([]NativeRuleStanding{}, s.Rules...)
 	return s
 }

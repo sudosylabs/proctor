@@ -2385,7 +2385,7 @@ export interface paths {
         put?: never;
         /**
          * Prepare a secure Desktop admission challenge
-         * @description Requires an eligible registered Desktop Session and an exact admitted build, registry, source manifest and configuration manifest. Stores one pending 120-second challenge per Session and Sitting; a successor supersedes it. Does not create an Attempt, Workspace or Participation. Ready rejoin returns frozen configuration; active and suspended Attempts cannot obtain a replacement preflight. Unavailable Institution catalogs or enforced native coverage fail closed.
+         * @description Requires an eligible registered Desktop Session and an exact admitted build, capability registry and configuration manifest. Stores one pending 120-second challenge per Session and Sitting; a successor supersedes it. Does not create an Attempt, Workspace or Participation. Ready rejoin returns frozen configuration; active and suspended Attempts cannot obtain a replacement preflight. Unavailable Institution catalogs, or a family enforced where the release does not certify enforcement on the candidate's platform, fail closed.
          */
         post: operations["prepareSecurityPreflight"];
         delete?: never;
@@ -4865,7 +4865,7 @@ export interface paths {
         put?: never;
         /**
          * Report minimized privileged preflight results
-         * @description Rechecks the same registered Session, candidate, build, Sitting and policy before storing the bounded report and its canonical digest. Enforced and baseline requirements must be ready; truthful degraded observe-only coverage can remain eligible. A blocked report creates no Attempt or misconduct Flag. Retry preserves the original receipt time; Connect must consume a current eligible report within 30 seconds.
+         * @description Rechecks the same registered Session, candidate, build, Sitting and policy before storing the bounded report and its canonical digest. The server evaluates every readiness rule on the reported facts; each enforced and baseline rule must be met, and an unknown status blocks. Observed rules never block. A blocked report creates no Attempt or misconduct Flag. Retry preserves the original receipt time; Connect must consume a current eligible report within 30 seconds.
          */
         post: operations["reportSecurityPreflight"];
         delete?: never;
@@ -9932,14 +9932,6 @@ export interface components {
             /** @description The sub-categories the capability runs; empty means every registered one. */
             categories: string[];
         };
-        NativeBaselineReport: {
-            /** @enum {string} */
-            constrained_window: "verified" | "unavailable";
-            /** @enum {string} */
-            content_protection: "verified" | "unavailable";
-            /** @enum {string} */
-            single_physical_display: "verified" | "unavailable";
-        };
         NativeBatchReceipt: {
             /** Format: int64 */
             batch_sequence: number;
@@ -10053,26 +10045,6 @@ export interface components {
             items: components["schemas"]["NativeConditionEvidence"][];
             next_cursor?: string;
         };
-        NativeCoverageClaim: {
-            /** @enum {string} */
-            claim: "enforce" | "observe" | "unavailable";
-            coverage_key: string;
-            source_schema_digest: string;
-            /** @enum {string} */
-            state: "ready" | "degraded" | "unavailable";
-        };
-        NativeCoverageTransition: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            kind: "coverage_transition";
-            /** Format: date-time */
-            occurred_at: string;
-            /** @enum {string} */
-            reason: "initial" | "health_changed" | "permission_changed" | "reconciled" | "stopped";
-            source: components["schemas"]["NativeSourceCoverage"];
-        };
         /** @description Where the exam begins on the stream: Desktop sends it once, when the candidate window mounts after admission. Before it the server applies the policy's readiness rules; from it, the participation rules. */
         NativeParticipationConfirmed: {
             /**
@@ -10083,7 +10055,7 @@ export interface components {
             /** Format: date-time */
             observed_at: string;
         };
-        NativeRecord: components["schemas"]["NativeCapabilityFact"] | components["schemas"]["NativeParticipationConfirmed"] | components["schemas"]["NativeRuleStatusReport"] | components["schemas"]["NativeCoverageTransition"] | components["schemas"]["NativeSourceReset"] | components["schemas"]["NativeSourceGap"];
+        NativeRecord: components["schemas"]["NativeCapabilityFact"] | components["schemas"]["NativeParticipationConfirmed"] | components["schemas"]["NativeRuleStatusReport"] | components["schemas"]["NativeSourceReset"] | components["schemas"]["NativeSourceGap"];
         /** @description One requirement, in the rule grammar Desktop publishes. */
         NativeRule: {
             capability: string;
@@ -10267,10 +10239,11 @@ export interface components {
             /** Format: int64 */
             terminal_missing_through_sequence: number;
         };
-        /** @description The candidate's live native standing: how many rule status changes are kept, the live Participation's source health and each enforce rule's status as the server evaluates it, whether Desktop is containing the candidate window, and the Attempt's screen clips by state. It contains no facts, source-instance or application identities, and an application outside the catalog is never named. A rule that is not met is not a misconduct finding; its Flag is reviewed like any other. */
+        /** @description The candidate's live native standing: how many rule status changes are kept, whether the live Participation's native delivery is open, each enforce rule's status as the server evaluates it, whether Desktop is containing the candidate window, and the Attempt's screen clips by state. It contains no facts, source-instance or application identities, and an application outside the catalog is never named. A rule that is not met is not a misconduct finding; its Flag is reviewed like any other. */
         NativeSecuritySummary: {
             /** @description Whether Desktop reports it is containing the candidate window right now. */
             contained: boolean;
+            /** @description Whether the live Participation's native delivery is open, so rule statuses are current. */
             live_coverage_available: boolean;
             /** Format: int64 */
             retained_condition_records: number;
@@ -10299,32 +10272,10 @@ export interface components {
                 requested: number;
                 uploading: number;
             };
-            sources: {
-                complete: boolean;
-                /** @enum {string} */
-                health: "starting" | "healthy" | "degraded" | "failed" | "recovering" | "stopped";
-                /** @enum {string} */
-                permission: "denied" | "granted" | "not_determined" | "restricted" | "unavailable";
-                source_id: string;
-            }[];
-        };
-        NativeSourceCoverage: {
-            adapter_version: string;
-            complete: boolean;
-            /** Format: int64 */
-            gap_count: number;
-            /** @enum {string} */
-            health: "starting" | "healthy" | "degraded" | "failed" | "recovering" | "stopped";
-            /** @enum {string} */
-            permission: "denied" | "granted" | "not_determined" | "restricted" | "unavailable";
-            /** Format: int64 */
-            sequence: number;
-            /** @enum {string} */
-            source_id: "display-topology" | "candidate-window" | "capture-session" | "process-application" | "interactive-session" | "clipboard" | "print-spooler" | "removable-storage" | "virtualization" | "network-configuration" | "media-device";
-            source_instance_id: string;
-            source_schema_digest: string;
         };
         NativeSourceGap: {
+            /** @description The activated capability whose source this names. */
+            capability: string;
             /** Format: int64 */
             first_missing_sequence: number;
             /**
@@ -10338,20 +10289,11 @@ export interface components {
             occurred_at: string;
             /** @enum {string} */
             reason: "overflow" | "source_loss" | "corruption";
-            /** @enum {string} */
-            source_id: "display-topology" | "candidate-window" | "capture-session" | "process-application" | "interactive-session" | "clipboard" | "print-spooler" | "removable-storage" | "virtualization" | "network-configuration" | "media-device";
-            source_instance_id: string;
-        };
-        NativeSourceRange: {
-            /** Format: int64 */
-            first_sequence: number;
-            /** Format: int64 */
-            last_sequence: number;
-            /** @enum {string} */
-            source_id: "display-topology" | "candidate-window" | "capture-session" | "process-application" | "interactive-session" | "clipboard" | "print-spooler" | "removable-storage" | "virtualization" | "network-configuration" | "media-device";
             source_instance_id: string;
         };
         NativeSourceReset: {
+            /** @description The activated capability whose source this names. */
+            capability: string;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -10366,8 +10308,6 @@ export interface components {
             /** @enum {string} */
             reason: "restart" | "resume" | "permission_changed";
             reset_id: string;
-            /** @enum {string} */
-            source_id: "display-topology" | "candidate-window" | "capture-session" | "process-application" | "interactive-session" | "clipboard" | "print-spooler" | "removable-storage" | "virtualization" | "network-configuration" | "media-device";
         };
         /** @description Opaque continuation for the next page, omitted on the last page. Clients return it unchanged as cursor. */
         NextCursor: string;
@@ -10571,7 +10511,6 @@ export interface components {
             attempt_id?: string;
             configuration_manifest_fingerprint: string;
             native_registry_digest: string;
-            source_manifest_digest: string;
         };
         ProblemDetails: {
             code: string | components["schemas"]["ErrorCode"];
@@ -11346,15 +11285,13 @@ export interface components {
             kind: "application" | "storage_function" | "managed_network_profile" | "network_adapter_class" | "tunnel_class" | "detector";
             revision: string;
         };
-        SecurityCoverageResult: {
-            /** @enum {string} */
-            coverage_result: "accepted" | "stale_control" | "reset_required" | "reset_conflict";
+        /** @description How the server processed Desktop's latest security control: the lease renewal and its delivery watermarks. A renewal never changes whether the candidate may interact; only closing native delivery does. */
+        SecurityControlResult: {
             delivery_watermark_rejections: components["schemas"]["DeliveryWatermarkRejection"][];
             processed_control_digest: string | null;
             /** Format: int64 */
             processed_control_sequence: number;
             security_interaction_allowed: boolean;
-            source_reset_receipts: components["schemas"]["SourceResetReceipt"][];
         };
         SecurityPolicyOverviewResponse: {
             browser_activity_disclosure: components["schemas"]["BrowserActivityDisclosure"];
@@ -11366,14 +11303,11 @@ export interface components {
             server_time: string;
         };
         SecurityPolicyRecovery: {
-            current_coverage: components["schemas"]["NativeCoverageClaim"][];
-            current_sources: components["schemas"]["NativeSourceCoverage"][];
             frozen_attempt_configuration: components["schemas"]["FrozenAttemptConfiguration"];
             security: components["schemas"]["AdmittedSecurity"];
-            security_coverage: components["schemas"]["SecurityCoverageResult"];
+            security_control: components["schemas"]["SecurityControlResult"];
             /** Format: date-time */
             server_time: string;
-            source_reset_receipts: components["schemas"]["SourceResetReceipt"][];
         };
         /** @description Privileged registered-Desktop response bounded to 128 KiB. Catalog bindings are unique and sorted by kind then catalog_id. First admission returns null configuration; Ready rejoin returns the original immutable configuration. */
         SecurityPolicyResponse: {
@@ -11396,26 +11330,18 @@ export interface components {
             issued_at: string;
             preflight_id: string;
         };
-        /** @description Minimized assertions, at most 64 KiB. Source order and categories must match the resolved policy; coverage keys are sorted and exact. No inventories, media, clipboard bytes, OS errors or arbitrary details are accepted. The server computes the report digest. Client reported_at is provenance; server time controls challenge expiry and admission freshness. */
+        /** @description What Desktop observed at Start, at most 128 KiB: one fresh fact for each activated capability and its own status for each readiness rule. No inventories, media, clipboard bytes, OS errors or arbitrary details are accepted. The server evaluates the readiness rules on these facts and its result decides admission. The server computes the report digest. Client reported_at is provenance; server time controls challenge expiry and admission freshness. */
         SecurityPreflightReport: {
-            baseline: components["schemas"]["NativeBaselineReport"];
-            /** @description Every activated capability's full state at Start, in the policy's activation order. */
+            /** @description One fresh fact for every activated capability at Start, in the policy's activation order. */
             capabilities: components["schemas"]["NativeCapabilityReadiness"][];
-            capability_matrix_digest: string;
             challenge: string;
-            coverage: components["schemas"]["NativeCoverageClaim"][];
             policy_content_digest: string;
             policy_digest: string;
-            /** @enum {string} */
-            posture: "compliant" | "degraded" | "contained" | "failed";
             /** Format: date-time */
             reported_at: string;
             /** @description Desktop's own status for every readiness rule. */
             rules: components["schemas"]["NativeRuleReport"][];
             security_session_id: string;
-            selected_source_categories: ("os-clipboard-change" | "removable-block-storage" | "portable-mtp" | "system-proxy-state" | "os-managed-vpn-state" | "tunnel-interface-state" | "route-change" | "network-source-health" | "camera" | "microphone")[];
-            source_manifest_digest: string;
-            sources: components["schemas"]["NativeSourceCoverage"][];
         };
         SecurityPreflightResult: {
             /** @enum {string} */
@@ -11423,7 +11349,7 @@ export interface components {
             /** Format: date-time */
             expires_at: string;
             preflight_id: string;
-            reason_codes: ("policy_changed" | "unsupported_capability" | "source_unavailable" | "permission_required" | "baseline_unavailable" | "preflight_expired" | "preflight_superseded" | "posture_blocked" | "configuration_unsupported" | "session_changed" | "native_rule_unmet")[];
+            reason_codes: ("preflight_expired" | "native_rule_unmet")[];
             report_digest: string;
             /** @description The server's own status for every readiness rule, evaluated on the reported state. Where it differs from Desktop's, the server's decides admission. */
             rules: components["schemas"]["NativeRuleReport"][];
@@ -11648,10 +11574,6 @@ export interface components {
             candidate_reason: "secure_connectivity_lost" | "focus_policy_review_required" | "native_policy_review_required" | "manager_suspended";
             id: components["schemas"]["ID"];
             reallow_available: boolean;
-        };
-        SourceResetReceipt: {
-            reset_digest: string;
-            reset_id: string;
         };
         /** @description An already-canonical, case-sensitive POSIX-relative path: at most 16 segments and 255 UTF-8 bytes per segment. Empty, absolute, dot, dot-dot, repeated/trailing separators, backslashes, NUL/control characters, and the reserved .proctor root are rejected. */
         StarterWorkspacePath: string;
@@ -16319,8 +16241,7 @@ export interface components {
                 /**
                  * @example {
                  *       "configuration_manifest_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                 *       "native_registry_digest": "sha256:2a3cafc0b4bccad3e06d0a8602cc84692f4d85e99763db6feb40e1417549e099",
-                 *       "source_manifest_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                 *       "native_registry_digest": "sha256:2a3cafc0b4bccad3e06d0a8602cc84692f4d85e99763db6feb40e1417549e099"
                  *     }
                  */
                 "application/json": components["schemas"]["PrepareSecurityPreflightRequest"];
@@ -16680,24 +16601,13 @@ export interface components {
             content: {
                 /**
                  * @example {
-                 *       "baseline": {
-                 *         "constrained_window": "unavailable",
-                 *         "content_protection": "unavailable",
-                 *         "single_physical_display": "unavailable"
-                 *       },
                  *       "capabilities": [],
-                 *       "capability_matrix_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                  *       "challenge": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                 *       "coverage": [],
                  *       "policy_content_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                  *       "policy_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                 *       "posture": "failed",
                  *       "reported_at": "2026-09-08T08:00:00.000Z",
                  *       "rules": [],
-                 *       "security_session_id": "synthetic-security-session",
-                 *       "selected_source_categories": [],
-                 *       "source_manifest_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                 *       "sources": []
+                 *       "security_session_id": "synthetic-security-session"
                  *     }
                  */
                 "application/json": components["schemas"]["SecurityPreflightReport"];

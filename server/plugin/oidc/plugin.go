@@ -7,45 +7,14 @@
 
 package oidc
 
-import (
-	"context"
-
-	"github.com/sudosylabs/proctor/server/plugin"
-)
+import "github.com/sudosylabs/proctor/server/platform/externalauth"
 
 // Type is the provider type a configured OpenID Connect provider selects.
 const Type = "oidc"
 
-// Plugin is the built-in OpenID Connect sign-in plugin. It offers the "oidc"
-// identity provider type, which builds each configured OpenID Connect
-// provider from its own settings and secrets.
-type Plugin struct{}
-
-// NewPlugin returns the OpenID Connect plugin, on by default.
-func NewPlugin() Plugin { return Plugin{} }
-
-var (
-	_ plugin.Plugin               = Plugin{}
-	_ plugin.IdentityProviderType = providerType{}
-)
-
-// Manifest names the plugin. It is on unless the configuration turns it off.
-func (Plugin) Manifest() plugin.Manifest {
-	return plugin.Manifest{ID: Type, Name: "OpenID Connect", EnabledByDefault: true}
-}
-
-// Activate offers the OpenID Connect identity provider type.
-func (Plugin) Activate(_ context.Context, host plugin.Host) error {
-	return host.AddIdentityProviderType(providerType{})
-}
-
-// Deactivate has nothing to release.
-func (Plugin) Deactivate(context.Context) error { return nil }
-
-type providerType struct{}
-
-func (providerType) Type() string { return Type }
-
-func (providerType) New(definition plugin.IdentityProviderDefinition) (plugin.IdentityProvider, error) {
-	return New(definition)
+// NewPlugin returns the built-in OpenID Connect sign-in plugin. It offers
+// the "oidc" identity provider type, which builds each configured OpenID
+// Connect provider from its own settings and secrets.
+func NewPlugin() externalauth.ProtocolPlugin {
+	return externalauth.ProtocolPlugin{Protocol: Type, Name: "OpenID Connect", Build: New}
 }

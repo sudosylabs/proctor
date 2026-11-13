@@ -10,46 +10,10 @@ package storetest
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
-	"runtime"
-	"slices"
-	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-
-	"github.com/sudosylabs/proctor/server/internal/factschema"
 	"github.com/sudosylabs/proctor/server/model"
 )
-
-// nativeRegistry is Desktop's published capability registry with its fact
-// schemas compiled, as release verification builds it for a signed release.
-func nativeRegistry(t *testing.T) *model.NativeCapabilityRegistry {
-	t.Helper()
-	_, here, _, ok := runtime.Caller(0)
-	require.True(t, ok)
-	document, err := os.ReadFile(filepath.Join(filepath.Dir(here), "..", "..", "model", "testdata", "native_capability_registry.json"))
-	require.NoError(t, err)
-	registry, err := model.ParseNativeCapabilityRegistry(document)
-	require.NoError(t, err)
-	validator, err := factschema.Compile(registry.FactSchemas())
-	require.NoError(t, err)
-	registry, err = registry.WithFactValidator(validator)
-	require.NoError(t, err)
-	return registry
-}
-
-// registeredCapabilities lists the registry's capabilities in order.
-func registeredCapabilities(t *testing.T, registry *model.NativeCapabilityRegistry) []model.NativeCapabilityID {
-	t.Helper()
-	capabilities := []model.NativeCapabilityID{}
-	for capability := range registry.FactSchemas() {
-		capabilities = append(capabilities, capability)
-	}
-	slices.Sort(capabilities)
-	return capabilities
-}
 
 // Facts as Desktop's published schemas describe them.
 const (

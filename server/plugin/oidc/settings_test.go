@@ -48,10 +48,10 @@ func TestSettingsAndSecretsAreThePluginsToCheck(t *testing.T) {
 			provider := valid
 			provider.Settings.Scopes = append([]string(nil), valid.Settings.Scopes...)
 			test.change(&provider)
-			_, err := provider.build()
-			require.Error(t, err)
+			_, buildErr := provider.build()
+			require.Error(t, buildErr)
 			for _, want := range test.want {
-				require.Contains(t, err.Error(), want)
+				require.Contains(t, buildErr.Error(), want)
 			}
 			require.NotContains(t, err.Error(), valid.Secrets.ClientSecret, "a settings error exposed the client secret")
 		})

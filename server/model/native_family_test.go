@@ -61,6 +61,6 @@ func TestEveryNativeFieldTypeHasAKind(t *testing.T) {
 		require.NotNil(t, kind.plain, fieldType)
 	}
 	require.Len(t, nativeFieldKinds, 3)
-	require.False(t, validNativeField(NativeFieldDefinition{Name: "display.summary.colour", Type: "colour"}), "an unknown type defines no field")
-	require.False(t, NativeScalar{Type: "colour"}.fits(NativeFieldDefinition{Type: "colour"}))
+	require.False(t, validNativeField(NativeFieldDefinition{Name: "display.summary.shade", Type: "shade"}), "an unknown type defines no field")
+	require.False(t, NativeScalar{Type: "shade"}.fits(NativeFieldDefinition{Type: "shade"}))
 }

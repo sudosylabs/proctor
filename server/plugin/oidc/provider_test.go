@@ -242,7 +242,7 @@ func (p testProvider) definition() plugin.IdentityProviderDefinition {
 	if err != nil {
 		panic(err)
 	}
-	secrets, err := json.Marshal(p.Secrets)
+	secrets, err := json.Marshal(p.Secrets) //nolint:gosec // G117: a test provider's made-up client secret, marshaled as its Secrets document.
 	if err != nil {
 		panic(err)
 	}

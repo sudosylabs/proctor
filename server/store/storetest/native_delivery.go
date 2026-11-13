@@ -173,7 +173,7 @@ func TestNativeDeliveryAppendStore(t *testing.T, ss store.Store, probes ...Nativ
 	// the occurrence already open, so no further Flag evidence.
 	late, err := appendBatch(batch(6, secondDisplay(4, at.Add(5*time.Second))), "native-review-late")
 	require.NoError(t, err)
-	require.Len(t, late.Flagged, 0, "an occurrence still open raises no new evidence")
+	require.Empty(t, late.Flagged, "an occurrence still open raises no new evidence")
 	after, err := ss.ExamIntegrityReview().Get(ctx, sub)
 	require.NoError(t, err)
 	require.Equal(t, model.SubmissionReviewDraft, after.Review.State, "late native evidence inherited finalized review")

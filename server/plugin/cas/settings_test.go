@@ -51,10 +51,10 @@ func TestSettingsAreThePluginsToCheck(t *testing.T) {
 			provider := valid
 			provider.Settings.Claims.AllowedHomeOrganizations = append([]string(nil), valid.Settings.Claims.AllowedHomeOrganizations...)
 			test.change(&provider)
-			_, err := provider.build()
-			require.Error(t, err)
+			_, buildErr := provider.build()
+			require.Error(t, buildErr)
 			for _, want := range test.want {
-				require.Contains(t, err.Error(), want)
+				require.Contains(t, buildErr.Error(), want)
 			}
 		})
 	}

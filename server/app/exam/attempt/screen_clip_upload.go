@@ -105,6 +105,9 @@ func (s *Service) UploadScreenClipChunk(
 	if err != nil {
 		return storeError(storeErrors, err)
 	}
+	if status == nil || status.Clip.ID != command.ClipID {
+		return apperror.New("exam.attempt.unavailable")
+	}
 	upload := status.Clip.Upload
 	switch {
 	case status.Clip.State != model.ScreenClipUploading || upload == nil:

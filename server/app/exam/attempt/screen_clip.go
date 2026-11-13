@@ -79,18 +79,19 @@ func (s *Service) RequestScreenClip(
 	if err != nil {
 		return ScreenClipRequestResult{}, err
 	}
+	if management.Override {
+		// Only the Sitting's Exam Managers may ask for a candidate's screen;
+		// a management override does not reach it.
+		return ScreenClipRequestResult{}, apperror.New("authorization.denied")
+	}
 	sitting, err := s.sittings.Resolve(ctx, command.SittingID)
 	if err != nil {
 		return ScreenClipRequestResult{}, storeError(storeErrors, err)
 	}
-	action := model.ActionExamSittingManage
-	if management.Override {
-		action = model.ActionExamSittingManageOverride
-	}
 
 	auditID, err := s.auditor.Begin(ctx, access.Mutation{
 		Invocation: inv,
-		Action:     action,
+		Action:     model.ActionExamSittingManage,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: command.SittingID.String()},
 		ScopeType:  model.RoleScopeClass,
 		ScopeID:    sitting.Sitting.ClassID.String(),
@@ -110,7 +111,7 @@ func (s *Service) RequestScreenClip(
 
 	stored, err := s.attempts.RequestScreenClip(ctx, &store.ExamAttemptScreenClipRequest{
 		ExamID: command.ExamID, SittingID: command.SittingID, Clip: clip, ManagerOverride: management.Override,
-		AuditEventID: auditID, AuditAt: s.now(),
+		AuditEventID: auditID, AuditAt: at,
 	}, commandIdempotency)
 	if err != nil {
 		return ScreenClipRequestResult{}, s.failAudit(ctx, auditID, storeError(storeErrors, err))

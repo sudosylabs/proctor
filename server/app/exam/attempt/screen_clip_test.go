@@ -50,6 +50,21 @@ func TestScreenClipRequestAuthorizesFirstAndKeepsItsReasonPrivate(t *testing.T) 
 		"the candidate's Desktop is told to read its requests, and nothing more")
 }
 
+func TestScreenClipRequestRefusesAManagementOverride(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	useManagerCall(f)
+	f.managerOverride = true
+	_, err := f.service.RequestScreenClip(context.Background(), f.inv, ScreenClipRequestCommand{
+		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID,
+		Range: model.ScreenClipRange{FromSessionStart: true, End: f.at}, PrivateReason: "r", IdempotencyKey: "clip-override",
+	})
+	require.True(t, apperror.Is(err, "resource.not_found"), "a denial is concealed like any other: err=%v", err)
+	require.Nil(t, f.persistence.screenClipRequest, "nothing is requested")
+	require.Empty(t, f.audit.action, "nothing is audited")
+	require.Empty(t, f.publisher.Calls())
+}
+
 func TestScreenClipRequestValidatesBeforeAuthorizationAndTranslatesRefusals(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)

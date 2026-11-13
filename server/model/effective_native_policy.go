@@ -322,10 +322,8 @@ func validateSecurityBindings(bindings []SecurityCatalogBinding) error {
 	previous := ""
 	for _, binding := range bindings {
 		key := binding.Kind + "\x00" + binding.CatalogID
-		if !slices.Contains(
-			[]string{"application", "storage_function", "managed_network_profile", "network_adapter_class", "tunnel_class", "detector"},
-			binding.Kind,
-		) ||
+		// The release's application catalog is the only bindable catalog.
+		if binding.Kind != "application" ||
 			!IsValidAgreementID(binding.CatalogID) ||
 			!isSecurityRevision(binding.Revision) ||
 			!IsValidSHA256Fingerprint(binding.Digest) ||

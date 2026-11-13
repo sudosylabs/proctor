@@ -5283,7 +5283,7 @@ CREATE TABLE exam_attempt_delivery_budgets (
     browser_summary_only boolean NOT NULL DEFAULT false,
     browser_stop_reason varchar(40) CHECK (browser_stop_reason IN ('records','bytes','positions','metadata','local_loss_inventory_exhausted')),
  native_retained_records bigint NOT NULL DEFAULT 0 CHECK(native_retained_records BETWEEN 0 AND 200000),
- native_retained_bytes bigint NOT NULL DEFAULT 0 CHECK(native_retained_bytes BETWEEN 0 AND 134217728),
+ native_retained_bytes bigint NOT NULL DEFAULT 0 CHECK(native_retained_bytes BETWEEN 0 AND 268435456),
  native_rate_tokens integer NOT NULL DEFAULT 8000 CHECK(native_rate_tokens BETWEEN 0 AND 8000),
     native_rate_at timestamptz,
     native_pending_bytes bigint NOT NULL DEFAULT 0 CHECK(native_pending_bytes BETWEEN 0 AND 2097152)
@@ -5324,7 +5324,7 @@ CREATE TABLE exam_attempt_security_owners (
     summary_final boolean NOT NULL DEFAULT false,
     stop_reason varchar(40) CHECK (stop_reason IN ('records','bytes','positions','metadata','local_loss_inventory_exhausted')),
  retained_records bigint NOT NULL DEFAULT 0 CHECK(retained_records BETWEEN 0 AND 50000),
- retained_bytes bigint NOT NULL DEFAULT 0 CHECK(retained_bytes BETWEEN 0 AND 33554432),
+ retained_bytes bigint NOT NULL DEFAULT 0 CHECK(retained_bytes BETWEEN 0 AND 67108864),
  interpreted_through_sequence bigint NOT NULL DEFAULT 0 CHECK(interpreted_through_sequence BETWEEN 0 AND 20000),
  -- The server's evaluation of the native rules: each capability's latest
  -- facts and each rule's tracker. NULL once retired.

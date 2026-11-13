@@ -23,6 +23,8 @@ module when a change is not server-only. No module has been released yet.
   storage, virtualization, network, camera and microphone. Each family has an
   `outcome`, `flag` or, when enforcing, `flag_and_suspend`, which suspends the
   Attempt like Focus Loss.
+- Server: native delivery keeps up to 64 MiB per Participation and 256 MiB
+  per Attempt, twice Browser's, since every fact carries a full state.
 - Server: the AsyncAPI document describes Desktop's Attempt commands,
   `exam_attempt.connect`, `exam_attempt.renew`, `exam_attempt.security.update`
   and `exam_attempt.focus_loss`, with their replies; the connect reply's nested

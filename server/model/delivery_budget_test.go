@@ -43,6 +43,10 @@ func TestDeliveryMetadataReservations(t *testing.T) {
 	}
 }
 func TestDeliveryQuotaBoundariesAndStickyStop(t *testing.T) {
+	require.Equal(t, int64(64<<20), NewDeliveryQuotaUsage(true, false).ByteLimit, "a native Participation keeps 64 MiB")
+	require.Equal(t, int64(256<<20), NewDeliveryQuotaUsage(true, true).ByteLimit, "a native Attempt keeps 256 MiB")
+	require.Equal(t, int64(32<<20), NewDeliveryQuotaUsage(false, false).ByteLimit, "Browser keeps its own limits")
+	require.Equal(t, int64(128<<20), NewDeliveryQuotaUsage(false, true).ByteLimit, "Browser keeps its own limits")
 	for _, native := range []bool{false, true} {
 		for _, attempt := range []bool{false, true} {
 			initial := NewDeliveryQuotaUsage(native, attempt)

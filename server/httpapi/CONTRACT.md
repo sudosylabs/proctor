@@ -2059,7 +2059,8 @@ gap records never enter this evidence endpoint.
 ### Screen clips
 
 When the Exam's policy enables screen recording, Desktop keeps the session on the
-device and uploads only ranges the server asks for. The policy then activates
+device and uploads only ranges the server asks for. A management override does
+not reach clip requests. The policy then activates
 `screen_recording` with one enforced readiness rule, `screen_recording.free_space`
 (`summary.free_space_mib >= 3072`): Start is refused while the recorder is not
 permitted or the device has less room, and a recording that fails later is only a

@@ -11308,7 +11308,7 @@ export interface components {
             catalog_id: string;
             digest: string;
             /** @enum {string} */
-            kind: "application" | "storage_function" | "managed_network_profile" | "network_adapter_class" | "tunnel_class" | "detector";
+            kind: "application";
             revision: string;
         };
         /** @description How the server processed Desktop's latest security control: the lease renewal and its delivery watermarks. A renewal never changes whether the candidate may interact; only closing native delivery does. */

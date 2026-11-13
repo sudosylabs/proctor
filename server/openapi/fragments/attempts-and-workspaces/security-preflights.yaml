@@ -1124,11 +1124,6 @@ components:
           type: string
           enum:
             - application
-            - storage_function
-            - managed_network_profile
-            - network_adapter_class
-            - tunnel_class
-            - detector
         catalog_id:
           type: string
           minLength: 1

@@ -506,8 +506,8 @@ func retainNativeAppendBatch(
 	}
 
 	repair := b.BatchSequence == base+1
-	if !model.CanRetainPendingDelivery(budget.Pending, part.Bytes, model.DeliveryParticipationByteLimit, batch.counted, repair, !repair) ||
-		!model.CanRetainPendingDelivery(budget.Pending, budget.Bytes, model.DeliveryAttemptByteLimit, batch.counted, repair, !repair) {
+	if !model.CanRetainPendingDelivery(budget.Pending, part.Bytes, model.NativeParticipationByteLimit, batch.counted, repair, !repair) ||
+		!model.CanRetainPendingDelivery(budget.Pending, budget.Bytes, model.NativeAttemptByteLimit, batch.counted, repair, !repair) {
 		return nil, nativeAppendConflict("pending_capacity")
 	}
 

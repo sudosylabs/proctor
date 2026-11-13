@@ -58,6 +58,7 @@ type FocusLossEvaluation struct {
 	EvidenceOverflowCount       int64
 	Flag                        model.IntegrityFlag
 	FlagCreated                 bool
+	ScreenClipRequested         bool
 	CandidateWarningCreated     bool
 	ManagerNotificationRequired bool
 	Attempt                     model.ExamAttempt
@@ -152,6 +153,11 @@ func (s *Service) EvaluateExamAttemptFocusLoss(
 		if effectErr := s.publishFocusLossEvaluated(ctx, result); effectErr != nil {
 			s.publisher.Report(ctx, "exam_attempt_focus_loss_evaluated", effectErr)
 		}
+	}
+	if !result.Duplicate && result.ScreenClipRequested {
+		// The Flag asked for the minute either side of it; Desktop reads its
+		// clip requests when told there are some.
+		s.publishScreenClipsRequested(ctx, result.SittingID, result.AttemptID, result.CandidateUserID, result.ReceivedAt)
 	}
 
 	return result, nil
@@ -304,6 +310,7 @@ func projectFocusLoss(stored *store.ExamAttemptFocusLossResult, command FocusLos
 		PolicyOutcome:               stored.PolicyOutcome,
 		RetainedEvidenceCount:       stored.RetainedEvidenceCount,
 		FlagCreated:                 stored.FlagCreated,
+		ScreenClipRequested:         stored.ScreenClipRequested,
 		CandidateWarningCreated:     stored.CandidateWarningCreated,
 		ManagerNotificationRequired: stored.ManagerNotificationRequired,
 		ConnectionClosed:            stored.ConnectionClosed,
@@ -383,6 +390,10 @@ func validFocusLossEnforcement(result *store.ExamAttemptFocusLossResult) bool {
 			return false
 		}
 	} else if result.PolicyOutcome != "" {
+		return false
+	}
+
+	if result.ScreenClipRequested && !result.FlagCreated {
 		return false
 	}
 

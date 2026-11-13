@@ -90,27 +90,30 @@ type ExamAttemptFocusLossSignal struct {
 // created. FlagAndSuspend atomically ends Participation and Connection as
 // policy_suspended, suspends the Attempt, and returns the safe episode views.
 type ExamAttemptFocusLossResult struct {
-	ExamID                      model.ExamID
-	SittingID                   model.ExamSittingID
-	ClassID                     model.ClassID
-	CandidateUserID             model.UserID
-	AttemptID                   model.ExamAttemptID
-	ParticipationID             model.AttemptParticipationID
-	Generation                  int64
-	Signal                      *model.FocusLossSignal
-	AcceptedSequence            int64
-	DatabaseTime                time.Time
-	CollectionEnabled           bool
-	Qualified                   bool
-	MissingBefore               int64
-	WindowIncidentCount         int
-	ThresholdCrossed            bool
-	PolicyOutcome               model.IntegrityOutcome
-	RetainedEvidenceCount       int
-	Overflow                    *model.FocusLossEvidenceOverflow
-	DiagnosticCount             int64
-	Flag                        *model.IntegrityFlag
-	FlagCreated                 bool
+	ExamID                model.ExamID
+	SittingID             model.ExamSittingID
+	ClassID               model.ClassID
+	CandidateUserID       model.UserID
+	AttemptID             model.ExamAttemptID
+	ParticipationID       model.AttemptParticipationID
+	Generation            int64
+	Signal                *model.FocusLossSignal
+	AcceptedSequence      int64
+	DatabaseTime          time.Time
+	CollectionEnabled     bool
+	Qualified             bool
+	MissingBefore         int64
+	WindowIncidentCount   int
+	ThresholdCrossed      bool
+	PolicyOutcome         model.IntegrityOutcome
+	RetainedEvidenceCount int
+	Overflow              *model.FocusLossEvidenceOverflow
+	DiagnosticCount       int64
+	Flag                  *model.IntegrityFlag
+	FlagCreated           bool
+	// ScreenClipRequested reports that the created Flag asked Desktop for
+	// the minute either side of it, because the Attempt records its screen.
+	ScreenClipRequested         bool
 	CandidateWarningCreated     bool
 	ManagerNotificationRequired bool
 	Attempt                     *model.ExamAttempt

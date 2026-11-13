@@ -1183,6 +1183,13 @@ func loadFocusLossResult(
 			return nil, err
 		}
 	}
+	if result.FlagCreated && state.FlagID.Valid {
+		if err = tx.Get(ctx, &result.ScreenClipRequested, `SELECT EXISTS(
+				SELECT 1 FROM exam_attempt_screen_clips WHERE integrity_flag_id = ?
+			)`, state.FlagID.String); err != nil {
+			return nil, translateError("exam_attempt_screen_clip", state.FlagID.String, err)
+		}
+	}
 
 	if state.LastSuspensionID.Valid {
 		if err = loadFocusLossSuspensionResult(ctx, tx, access, state.LastSuspensionID.String, result); err != nil {

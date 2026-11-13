@@ -110,7 +110,7 @@ func (s *Service) RequestScreenClip(
 	}
 
 	stored, err := s.attempts.RequestScreenClip(ctx, &store.ExamAttemptScreenClipRequest{
-		ExamID: command.ExamID, SittingID: command.SittingID, Clip: clip, ManagerOverride: management.Override,
+		ExamID: command.ExamID, SittingID: command.SittingID, Clip: clip,
 		AuditEventID: auditID, AuditAt: at,
 	}, commandIdempotency)
 	if err != nil {

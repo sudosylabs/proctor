@@ -29,6 +29,10 @@ type ManagedScreenClipQuery struct {
 	AttemptID model.ExamAttemptID
 }
 
+func (q ManagedScreenClipQuery) clips() store.ExamAttemptClips {
+	return store.ExamAttemptClips{ExamID: q.ExamID, SittingID: q.SittingID, AttemptID: q.AttemptID}
+}
+
 // ScreenClipQuery names one of an Attempt's clips for those who may see it.
 type ScreenClipQuery struct {
 	ManagedScreenClipQuery
@@ -60,7 +64,7 @@ func (s *Service) ListScreenClips(
 	if _, err := s.authorizeScreenClipView(ctx, inv, query); err != nil {
 		return nil, err
 	}
-	clips, err := s.attempts.ListAttemptScreenClips(ctx, query.ExamID, query.SittingID, query.AttemptID)
+	clips, err := s.attempts.ListAttemptScreenClips(ctx, query.clips())
 	if err != nil {
 		return nil, storeError(storeErrors, err)
 	}
@@ -137,7 +141,7 @@ func (s *Service) readyScreenClip(
 	if err != nil {
 		return nil, ScreenClipViewAuthorization{}, err
 	}
-	clip, err := s.attempts.GetAttemptScreenClip(ctx, query.ExamID, query.SittingID, query.AttemptID, clipID)
+	clip, err := s.attempts.GetAttemptScreenClip(ctx, query.clips(), clipID)
 	if err != nil {
 		return nil, ScreenClipViewAuthorization{}, storeError(storeErrors, err)
 	}

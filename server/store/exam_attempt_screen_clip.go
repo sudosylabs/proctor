@@ -22,12 +22,24 @@ const ExamAttemptScreenClipRequestOperation = "exam.attempt.screen_clip.request"
 // Store checks it against the Attempt and the Exam's policy in the same
 // transaction that saves it.
 type ExamAttemptScreenClipRequest struct {
-	ExamID          model.ExamID
-	SittingID       model.ExamSittingID
-	Clip            *model.ScreenClip
-	ManagerOverride bool
-	AuditEventID    model.AuditEventID
-	AuditAt         time.Time
+	ExamID       model.ExamID
+	SittingID    model.ExamSittingID
+	Clip         *model.ScreenClip
+	AuditEventID model.AuditEventID
+	AuditAt      time.Time
+}
+
+// ExamAttemptClips names an Attempt of an exact Exam and Sitting, whose
+// screen clips are read.
+type ExamAttemptClips struct {
+	ExamID    model.ExamID
+	SittingID model.ExamSittingID
+	AttemptID model.ExamAttemptID
+}
+
+// Valid reports whether every identifier is.
+func (a ExamAttemptClips) Valid() bool {
+	return a.ExamID.IsValid() && a.SittingID.IsValid() && a.AttemptID.IsValid()
 }
 
 // ExamAttemptScreenClipResult is a committed request.

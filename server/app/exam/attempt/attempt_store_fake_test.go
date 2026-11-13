@@ -233,15 +233,13 @@ func (f *attemptStoreFake) CompleteScreenClipUpload(_ context.Context, input *st
 	return nil, store.NewErrNotFound("screen_clip", input.ClipID.String())
 }
 
-func (f *attemptStoreFake) ListAttemptScreenClips(context.Context, model.ExamID, model.ExamSittingID, model.ExamAttemptID) ([]store.ExamAttemptScreenClipView, error) {
+func (f *attemptStoreFake) ListAttemptScreenClips(context.Context, store.ExamAttemptClips) ([]store.ExamAttemptScreenClipView, error) {
 	return []store.ExamAttemptScreenClipView{}, nil
 }
 
 func (f *attemptStoreFake) GetAttemptScreenClip(
 	_ context.Context,
-	_ model.ExamID,
-	_ model.ExamSittingID,
-	_ model.ExamAttemptID,
+	_ store.ExamAttemptClips,
 	clipID model.ScreenClipID,
 ) (*store.ExamAttemptScreenClipView, error) {
 	if f.attemptScreenClip == nil {

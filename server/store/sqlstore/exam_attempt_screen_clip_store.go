@@ -770,11 +770,9 @@ func (s *SQLExamAttemptStore) CompleteScreenClipUpload(
 // ListAttemptScreenClips returns every clip requested for an Attempt.
 func (s *SQLExamAttemptStore) ListAttemptScreenClips(
 	ctx context.Context,
-	examID model.ExamID,
-	sittingID model.ExamSittingID,
-	attemptID model.ExamAttemptID,
+	attempt store.ExamAttemptClips,
 ) ([]store.ExamAttemptScreenClipView, error) {
-	if !examID.IsValid() || !sittingID.IsValid() || !attemptID.IsValid() {
+	if !attempt.Valid() {
 		return nil, store.NewErrInvalidInput("screen_clip", "attempt", nil)
 	}
 	var rows []screenClipRow
@@ -784,7 +782,7 @@ func (s *SQLExamAttemptStore) ListAttemptScreenClips(
 		WHERE a.id = ? AND a.exam_id = ? AND a.exam_sitting_id = ?
 		ORDER BY c.requested_at DESC, c.id DESC
 		LIMIT ?`,
-		attemptID.String(), examID.String(), sittingID.String(),
+		attempt.AttemptID.String(), attempt.ExamID.String(), attempt.SittingID.String(),
 		model.ScreenClipManagerRequestLimit+model.ScreenClipIncidentRequestLimit); err != nil {
 		return nil, fmt.Errorf("list Attempt screen clips: %w", err)
 	}
@@ -802,12 +800,10 @@ func (s *SQLExamAttemptStore) ListAttemptScreenClips(
 // GetAttemptScreenClip returns one clip of an Attempt.
 func (s *SQLExamAttemptStore) GetAttemptScreenClip(
 	ctx context.Context,
-	examID model.ExamID,
-	sittingID model.ExamSittingID,
-	attemptID model.ExamAttemptID,
+	attempt store.ExamAttemptClips,
 	clipID model.ScreenClipID,
 ) (*store.ExamAttemptScreenClipView, error) {
-	if !examID.IsValid() || !sittingID.IsValid() || !attemptID.IsValid() || !clipID.IsValid() {
+	if !attempt.Valid() || !clipID.IsValid() {
 		return nil, store.NewErrInvalidInput("screen_clip", "id", nil)
 	}
 	var row screenClipRow
@@ -815,7 +811,7 @@ func (s *SQLExamAttemptStore) GetAttemptScreenClip(
 		FROM exam_attempt_screen_clips c
 		JOIN exam_attempts a ON a.id = c.exam_attempt_id
 		WHERE c.id = ? AND a.id = ? AND a.exam_id = ? AND a.exam_sitting_id = ?`,
-		clipID.String(), attemptID.String(), examID.String(), sittingID.String())
+		clipID.String(), attempt.AttemptID.String(), attempt.ExamID.String(), attempt.SittingID.String())
 	if err != nil {
 		return nil, translateError("screen_clip", clipID.String(), err)
 	}

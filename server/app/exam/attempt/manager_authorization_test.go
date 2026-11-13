@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -116,6 +117,11 @@ func TestExamAttemptSubmissionAuthorizationAuditsSelfDenialFailClosed(t *testing
 type submissionAuthorizationStoreFake struct {
 	store.ExamSubmissionStore
 	authorization *store.ExamSubmissionAuthorization
+	err           error
+}
+
+func (f *submissionAuthorizationStoreFake) ResolveAttempt(context.Context, model.ExamAttemptID) (*store.ExamSubmissionAuthorization, error) {
+	return f.authorization, f.err
 }
 
 func (f *submissionAuthorizationStoreFake) Resolve(context.Context, model.SubmissionID) (*store.ExamSubmissionAuthorization, error) {
@@ -127,6 +133,20 @@ type submissionAuthorizationSittingFake struct {
 	inv          invocation.Invocation
 	examID       model.ExamID
 	submissionID model.SubmissionID
+	manageErr    error
+	reviewErr    error
+	reviewed     bool
+}
+
+func (f *submissionAuthorizationSittingFake) AuthorizeSittingManage(context.Context, invocation.Invocation, model.ExamSittingID) (access.ManagerAuthorization, error) {
+	return access.ManagerAuthorization{}, f.manageErr
+}
+
+func (f *submissionAuthorizationSittingFake) AuthorizeSubmissionReview(_ context.Context, _ invocation.Invocation,
+	examID model.ExamID, submissionID model.SubmissionID,
+) (access.ManagerAuthorization, error) {
+	f.reviewed, f.examID, f.submissionID = true, examID, submissionID
+	return access.ManagerAuthorization{}, f.reviewErr
 }
 
 func (f *submissionAuthorizationSittingFake) AuthorizeSubmissionView(_ context.Context, inv invocation.Invocation,
@@ -141,4 +161,51 @@ func examAttemptPrincipal() model.Principal {
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientDesktop, AuthenticatedAt: time.Date(2026, time.August, 17, 9, 0, 0, 0, time.UTC)}
+}
+
+func TestScreenClipsAreForTheSittingsManagersAndTheSubmissionsReviewers(t *testing.T) {
+	t.Parallel()
+	principal := examAttemptPrincipal()
+	call := invocation.New(principal, model.RequestMetadata{RequestID: "clip-view"})
+	sittingID, attemptID, unitID := model.NewExamSittingID(), model.NewExamAttemptID(), model.NewAcademicUnitID()
+	submission := &store.ExamSubmissionAuthorization{SubmissionID: model.NewSubmissionID(), ExamID: model.NewExamID(),
+		SittingID: sittingID, AttemptID: attemptID, CandidateUserID: model.NewUserID(), AcademicUnitID: unitID}
+	denied := apperror.New("authorization.denied")
+
+	manager := SittingManagerAuthorizer{Sittings: &submissionAuthorizationSittingFake{},
+		Submissions: &submissionAuthorizationStoreFake{authorization: submission}}
+	viewer, err := manager.AuthorizeScreenClipView(context.Background(), call, sittingID, attemptID)
+	require.NoError(t, err)
+	require.Equal(t, model.ActionExamSittingManage, viewer.Action)
+	require.Equal(t, model.RoleScopeClass, viewer.ScopeType)
+
+	sittings := &submissionAuthorizationSittingFake{manageErr: denied}
+	reviewer := SittingManagerAuthorizer{Sittings: sittings, Submissions: &submissionAuthorizationStoreFake{authorization: submission}}
+	viewer, err = reviewer.AuthorizeScreenClipView(context.Background(), call, sittingID, attemptID)
+	require.NoError(t, err, "a reviewer of the Submission sees its clips")
+	require.Equal(t, model.ActionSubmissionReview, viewer.Action)
+	require.Equal(t, model.Resource{Type: model.ResourceSubmission, ID: submission.SubmissionID.String()}, viewer.Resource)
+	require.Equal(t, unitID.String(), viewer.ScopeID)
+	require.Equal(t, submission.SubmissionID, sittings.submissionID)
+
+	for name, adapter := range map[string]SittingManagerAuthorizer{
+		"not submitted": {Sittings: &submissionAuthorizationSittingFake{manageErr: denied},
+			Submissions: &submissionAuthorizationStoreFake{err: store.NewErrNotFound("exam_submission", attemptID.String())}},
+		"not a reviewer": {Sittings: &submissionAuthorizationSittingFake{manageErr: denied, reviewErr: denied},
+			Submissions: &submissionAuthorizationStoreFake{authorization: submission}},
+		"another Sitting's Submission": {Sittings: &submissionAuthorizationSittingFake{manageErr: denied},
+			Submissions: &submissionAuthorizationStoreFake{authorization: &store.ExamSubmissionAuthorization{
+				SubmissionID: submission.SubmissionID, SittingID: model.NewExamSittingID(), AttemptID: attemptID}}},
+	} {
+		_, err = adapter.AuthorizeScreenClipView(context.Background(), call, sittingID, attemptID)
+		require.ErrorIs(t, err, denied, name)
+	}
+
+	own := *submission
+	own.CandidateUserID = principal.UserID
+	sittings = &submissionAuthorizationSittingFake{manageErr: denied}
+	_, err = SittingManagerAuthorizer{Sittings: sittings, Submissions: &submissionAuthorizationStoreFake{authorization: &own}}.
+		AuthorizeScreenClipView(context.Background(), call, sittingID, attemptID)
+	require.ErrorIs(t, err, denied, "the candidate never sees their own clips")
+	require.False(t, sittings.reviewed, "the candidate is refused before any review decision")
 }

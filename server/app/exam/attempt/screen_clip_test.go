@@ -154,8 +154,25 @@ func TestScreenClipPlaybackIsAuditedFromItsFirstByteOnly(t *testing.T) {
 	require.NoError(t, opened.Body.Close())
 	require.Equal(t, "video/webm", opened.MediaType)
 	require.Equal(t, ScreenClipPlaybackOperation, f.audit.operation, "starting a playback is audited")
-	require.Equal(t, []string{"manager.manage", "sitting", "audit", "audit.complete"}, f.order,
-		"the Sitting is authorized before the playback is audited")
+	require.Equal(t, []string{"manager.clip_view", "sitting", "audit", "audit.complete"}, f.order,
+		"the clip view is authorized before the playback is audited")
+	require.Equal(t, model.ActionExamSittingManage, f.audit.action)
+	require.Equal(t, model.RoleScopeClass, f.audit.scopeType)
+	require.Equal(t, f.sitting.ClassID.String(), f.audit.scopeID, "a manager's playback is audited at the Sitting's Class")
+
+	// A reviewer of the Submission plays it too, audited as a review.
+	submissionID, unitID := model.NewSubmissionID(), model.NewAcademicUnitID()
+	f.clipViewer = &ScreenClipViewAuthorization{Action: model.ActionSubmissionReview,
+		Resource:  model.Resource{Type: model.ResourceSubmission, ID: submissionID.String()},
+		ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String()}
+	f.order = nil
+	opened, err = f.service.OpenScreenClip(context.Background(), f.inv, query(0, 100))
+	require.NoError(t, err)
+	require.NoError(t, opened.Body.Close())
+	require.Equal(t, model.ActionSubmissionReview, f.audit.action)
+	require.Equal(t, model.ResourceSubmission, f.audit.resource.Type)
+	require.Equal(t, unitID.String(), f.audit.scopeID, "a reviewer's playback is audited at the Submission's unit")
+	f.clipViewer = nil
 
 	f.order, f.audit.operation = nil, ""
 	_, err = f.service.OpenScreenClip(context.Background(), f.inv, query(40, 10))

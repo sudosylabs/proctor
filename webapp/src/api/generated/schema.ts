@@ -3200,7 +3200,7 @@ export interface paths {
         };
         /**
          * Play a ready screen clip
-         * @description Streams a ready clip to one of the Sitting's Exam Managers, whole or by one byte range so a player can seek. Each playback, a request from the clip's first byte, is audited. Multiple ranges, or a range past the clip's end, are refused.
+         * @description Streams a ready clip to one of the Sitting's Exam Managers, or once the Attempt is submitted to someone allowed to review its Submission, whole or by one byte range so a player can seek. Each playback, a request from the clip's first byte, is audited. Multiple ranges, or a range past the clip's end, are refused.
          */
         get: operations["playExamAttemptScreenClip"];
         put?: never;

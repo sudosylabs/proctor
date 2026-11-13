@@ -363,6 +363,11 @@ func (f *submissionStoreFake) Resolve(context.Context, model.SubmissionID) (*sto
 	return f.authorization, f.err
 }
 
+func (f *submissionStoreFake) ResolveAttempt(context.Context, model.ExamAttemptID) (*store.ExamSubmissionAuthorization, error) {
+	f.f.order = append(f.f.order, "submission.resolve_attempt")
+	return f.authorization, f.err
+}
+
 func (f *submissionStoreFake) Get(context.Context, model.SubmissionID) (*model.ExamSubmission, error) {
 	f.f.order = append(f.f.order, "submission.get")
 	return f.submission, f.err

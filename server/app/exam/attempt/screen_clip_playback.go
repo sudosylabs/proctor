@@ -58,7 +58,7 @@ func (s *Service) ListScreenClips(
 	if !query.ExamID.IsValid() || !query.SittingID.IsValid() || !query.AttemptID.IsValid() {
 		return nil, apperror.Invalid("exam.attempt.invalid", "screen_clip")
 	}
-	if _, err := s.managers.AuthorizeSittingManage(ctx, inv, query.SittingID); err != nil {
+	if _, err := s.authorizeScreenClipView(ctx, inv, query); err != nil {
 		return nil, err
 	}
 	clips, err := s.attempts.ListAttemptScreenClips(ctx, query.ExamID, query.SittingID, query.AttemptID)
@@ -93,7 +93,7 @@ func (s *Service) OpenScreenClip(
 	query OpenScreenClipQuery,
 ) (_ OpenedScreenClip, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	clip, classID, err := s.readyScreenClip(ctx, inv, query.ManagedScreenClipQuery, query.ClipID)
+	clip, viewer, err := s.readyScreenClip(ctx, inv, query.ManagedScreenClipQuery, query.ClipID)
 	if err != nil {
 		return OpenedScreenClip{}, err
 	}
@@ -105,10 +105,10 @@ func (s *Service) OpenScreenClip(
 	if query.Start == 0 {
 		auditID, auditErr := s.auditor.Begin(ctx, access.Mutation{
 			Invocation: inv,
-			Action:     model.ActionExamSittingManage,
-			Resource:   model.Resource{Type: model.ResourceExamSitting, ID: query.SittingID.String()},
-			ScopeType:  model.RoleScopeClass,
-			ScopeID:    classID.String(),
+			Action:     viewer.Action,
+			Resource:   viewer.Resource,
+			ScopeType:  viewer.ScopeType,
+			ScopeID:    viewer.ScopeID,
 			Operation:  ScreenClipPlaybackOperation,
 			Value: map[string]any{
 				"exam_attempt_id": query.AttemptID.String(),
@@ -137,25 +137,47 @@ func (s *Service) readyScreenClip(
 	inv invocation.Invocation,
 	query ManagedScreenClipQuery,
 	clipID model.ScreenClipID,
-) (*store.ExamAttemptScreenClipView, model.ClassID, error) {
+) (*store.ExamAttemptScreenClipView, ScreenClipViewAuthorization, error) {
 	if !query.ExamID.IsValid() || !query.SittingID.IsValid() || !query.AttemptID.IsValid() || !clipID.IsValid() {
-		return nil, "", apperror.Invalid("exam.attempt.invalid", "screen_clip")
+		return nil, ScreenClipViewAuthorization{}, apperror.Invalid("exam.attempt.invalid", "screen_clip")
 	}
-	if _, err := s.managers.AuthorizeSittingManage(ctx, inv, query.SittingID); err != nil {
-		return nil, "", err
-	}
-	sitting, err := s.sittings.Resolve(ctx, query.SittingID)
+	viewer, err := s.authorizeScreenClipView(ctx, inv, query)
 	if err != nil {
-		return nil, "", storeError(storeErrors, err)
+		return nil, ScreenClipViewAuthorization{}, err
 	}
 	clip, err := s.attempts.GetAttemptScreenClip(ctx, query.ExamID, query.SittingID, query.AttemptID, clipID)
 	if err != nil {
-		return nil, "", storeError(storeErrors, err)
+		return nil, ScreenClipViewAuthorization{}, storeError(storeErrors, err)
 	}
 	if clip.State != model.ScreenClipReady || clip.Upload == nil {
-		return nil, "", apperror.New("exam.attempt.state_conflict")
+		return nil, ScreenClipViewAuthorization{}, apperror.New("exam.attempt.state_conflict")
 	}
-	return clip, sitting.Sitting.ClassID, nil
+	return clip, viewer, nil
+}
+
+// authorizeScreenClipView asks whether the caller may see the Attempt's
+// clips: as one of the Sitting's Exam Managers, or as a reviewer of its
+// Submission.
+func (s *Service) authorizeScreenClipView(
+	ctx context.Context,
+	inv invocation.Invocation,
+	query ManagedScreenClipQuery,
+) (ScreenClipViewAuthorization, error) {
+	viewer, err := s.managers.AuthorizeScreenClipView(ctx, inv, query.SittingID, query.AttemptID)
+	if err != nil {
+		return ScreenClipViewAuthorization{}, err
+	}
+	sitting, err := s.sittings.Resolve(ctx, query.SittingID)
+	if err != nil {
+		return ScreenClipViewAuthorization{}, storeError(storeErrors, err)
+	}
+	if sitting.Sitting.ExamID != query.ExamID {
+		return ScreenClipViewAuthorization{}, apperror.New("exam.attempt.not_found")
+	}
+	if viewer.ScopeType == model.RoleScopeClass {
+		viewer.ScopeID = sitting.Sitting.ClassID.String()
+	}
+	return viewer, nil
 }
 
 // screenClipReader reads a byte range across a clip's chunks, opening each

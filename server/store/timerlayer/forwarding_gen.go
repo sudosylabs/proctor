@@ -1957,6 +1957,12 @@ func (s *timedExamSubmissionStore) Resolve(arg0 context.Context, arg1 model.Subm
 	})
 }
 
+func (s *timedExamSubmissionStore) ResolveAttempt(arg0 context.Context, arg1 model.ExamAttemptID) (*store.ExamSubmissionAuthorization, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamSubmission, methodResolveAttempt), func(callCtx context.Context) (*store.ExamSubmissionAuthorization, error) {
+		return s.next.ResolveAttempt(callCtx, arg1)
+	})
+}
+
 func (s *timedExamSubmissionStore) Get(arg0 context.Context, arg1 model.SubmissionID) (*model.ExamSubmission, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamSubmission, methodGet), func(callCtx context.Context) (*model.ExamSubmission, error) {
 		return s.next.Get(callCtx, arg1)

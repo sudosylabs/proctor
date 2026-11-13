@@ -467,6 +467,8 @@ type ExamSubmissionStore interface {
 	PrepareAutomaticSeal(context.Context, ExamSubmissionAutomaticSealTarget) (*ExamSubmissionAutomaticSealPreparation, error)
 	SealForSittingClose(context.Context, *ExamSubmissionAutomaticSeal) (*ExamSubmissionAutomaticSealResult, error)
 	Resolve(context.Context, model.SubmissionID) (*ExamSubmissionAuthorization, error)
+	// ResolveAttempt is Resolve for the sealed Submission of an Attempt.
+	ResolveAttempt(context.Context, model.ExamAttemptID) (*ExamSubmissionAuthorization, error)
 	Get(context.Context, model.SubmissionID) (*model.ExamSubmission, error)
 	ListManifest(context.Context, ExamSubmissionManifestListOptions) (*ExamSubmissionManifestPage, error)
 	ResolveFile(context.Context, model.SubmissionID, model.AttemptWorkspaceEntryID) (*ExamSubmissionFileSelector, error)

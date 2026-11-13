@@ -27,6 +27,9 @@ type ManagerAuthorizer interface {
 	AuthorizeSittingManage(context.Context, invocation.Invocation, model.ExamSittingID) (access.ManagerAuthorization, error)
 	AuthorizeSubmissionView(context.Context, invocation.Invocation, model.SubmissionID) error
 	AuthorizeBrowserActivityView(context.Context, invocation.Invocation, model.ExamSittingID) (access.BrowserActivityAuthorization, error)
+	AuthorizeScreenClipView(
+		context.Context, invocation.Invocation, model.ExamSittingID, model.ExamAttemptID,
+	) (ScreenClipViewAuthorization, error)
 }
 
 // Auditor is the part of *access.Auditor the Attempt use cases call. Begin

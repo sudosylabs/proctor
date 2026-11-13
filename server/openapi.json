@@ -42083,7 +42083,7 @@
     },
     "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips/{screen_clip_id}/content": {
       "get": {
-        "description": "Streams a ready clip to one of the Sitting's Exam Managers, whole or by one byte range so a player can seek. Each playback, a request from the clip's first byte, is audited. Multiple ranges, or a range past the clip's end, are refused.",
+        "description": "Streams a ready clip to one of the Sitting's Exam Managers, or once the Attempt is submitted to someone allowed to review its Submission, whole or by one byte range so a player can seek. Each playback, a request from the clip's first byte, is audited. Multiple ranges, or a range past the clip's end, are refused.",
         "operationId": "playExamAttemptScreenClip",
         "parameters": [
           {

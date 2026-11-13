@@ -129,6 +129,7 @@ type fixture struct {
 	publisher                 *realtimetest.Publisher
 	content                   *contentFake
 	managerOverride           bool
+	clipViewer                *ScreenClipViewAuthorization
 	managerErr                error
 	focusSignalID             model.FocusLossSignalID
 	focusFlagID               model.IntegrityFlagID
@@ -302,6 +303,20 @@ func (f *managerFake) AuthorizeSubmissionView(_ context.Context, _ invocation.In
 	f.f.order = append(f.f.order, "submission.authorize")
 	f.f.submissionAuthorizationID = submissionID
 	return nil
+}
+func (f *managerFake) AuthorizeScreenClipView(_ context.Context, _ invocation.Invocation, sittingID model.ExamSittingID,
+	_ model.ExamAttemptID,
+) (ScreenClipViewAuthorization, error) {
+	f.f.order = append(f.f.order, "manager.clip_view")
+	if f.f.managerErr != nil {
+		return ScreenClipViewAuthorization{}, f.f.managerErr
+	}
+	if f.f.clipViewer != nil {
+		return *f.f.clipViewer, nil
+	}
+	return ScreenClipViewAuthorization{Action: model.ActionExamSittingManage,
+		Resource:  model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
+		ScopeType: model.RoleScopeClass}, nil
 }
 func (f *managerFake) AuthorizeBrowserActivityView(context.Context, invocation.Invocation, model.ExamSittingID) (access.BrowserActivityAuthorization, error) {
 	f.f.order = append(f.f.order, "browser.authorize")

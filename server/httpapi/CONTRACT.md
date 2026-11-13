@@ -2087,7 +2087,9 @@ joined. One clip is at most 3 GiB and an Attempt's clips at most 6 GiB.
 Submission fails every request never taken (`attempt_ended`). A taken clip may
 finish uploading without the Attempt credential and Connection, from the same
 registered Desktop, until its Participation's upload deadline; the delivery
-expiry pass then fails it (`upload_deadline`). Managers play a ready clip with a
+expiry pass then fails it (`upload_deadline`). The Sitting's Exam Managers, and
+once the Attempt is submitted those allowed to review its Submission (never its
+candidate), list and play a ready clip with a
 byte-range download; playback from its first byte is audited. Integrity
 retirement removes the clips and purges each chunk key, recording the purge only
 once every key is observed absent.

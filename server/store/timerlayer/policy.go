@@ -307,6 +307,7 @@ const (
 	methodReplace                                   methodName = "replace"
 	methodReleaseObjectCleanup                      methodName = "release_object_cleanup"
 	methodResolve                                   methodName = "resolve"
+	methodResolveAttempt                            methodName = "resolve_attempt"
 	methodResolveSealTarget                         methodName = "resolve_seal_target"
 	methodPrepareAutomaticSeal                      methodName = "prepare_automatic_seal"
 	methodPrepareManagerEnd                         methodName = "prepare_manager_end"

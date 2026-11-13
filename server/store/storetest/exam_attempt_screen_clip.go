@@ -313,6 +313,17 @@ func testIncidentScreenClip(t *testing.T, ctx context.Context, ss store.Store) {
 	require.Len(t, pending, 1, "only a new Flag asks for a clip")
 	incident := pending[0].ID
 
+	// Desktop's own rule statuses are measured against the server's: the
+	// display rule is not met, so "met" disagrees and "not met" agrees.
+	disagreeing := model.NativeRuleStatusReport{Kind: "rule_status", RuleID: "baseline.single_display",
+		Status: model.NativeRuleMet, ObservedAt: later.Add(3 * time.Second)}
+	agreeing := model.NativeRuleStatusReport{Kind: "rule_status", RuleID: "baseline.single_display",
+		Status: model.NativeRuleNotMet, Contained: true, ObservedAt: later.Add(4 * time.Second)}
+	measured := appendRecords(3, model.NativeRecord{RuleStatus: &disagreeing}, model.NativeRecord{RuleStatus: &agreeing})
+	require.Equal(t, int64(1), measured.StatusDiscrepancies, "one status disagreed with the server")
+	replayed := appendRecords(3, model.NativeRecord{RuleStatus: &disagreeing}, model.NativeRecord{RuleStatus: &agreeing})
+	require.Zero(t, replayed.StatusDiscrepancies, "a replay counts nothing")
+
 	// A manager clip Desktop took before submission may finish uploading
 	// after it, without the Connection; one never taken fails.
 	taken := screenClipRequest(t, ctx, ss, fixture, connected.Attempt.ID)

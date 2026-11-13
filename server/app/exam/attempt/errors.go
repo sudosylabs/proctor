@@ -167,6 +167,15 @@ func (s *Service) failAudit(ctx context.Context, auditID model.AuditEventID, err
 	return mapped
 }
 
+// recordStatusDiscrepancies counts, as operational events, the native rule
+// statuses on which Desktop disagreed with the server. The server's status
+// always decides; a disagreement is only measured.
+func (s *Service) recordStatusDiscrepancies(count int64) {
+	for range count {
+		s.recordOperational("native_status_discrepancy", nil)
+	}
+}
+
 func (s *Service) recordOperational(event string, err error) {
 	if s.operational != nil {
 		s.operational.RecordOperational("exam_attempt", event, err)

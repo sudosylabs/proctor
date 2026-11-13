@@ -84,8 +84,10 @@ type nativeAppendOutcome struct {
 	Receipt  *model.NativeBatchReceipt
 	Refusal  string
 	Progress model.NativeDeliveryProgress
-	// Flagged is never persisted: a replay raises nothing.
-	Flagged []store.NativeIntegrityFlagged
+	// Flagged and StatusDiscrepancies are never persisted: a replay raises
+	// and counts nothing.
+	Flagged             []store.NativeIntegrityFlagged
+	StatusDiscrepancies int64
 }
 
 // nativeAppendOutcomeDocument is the persisted outcome of a native append.
@@ -163,8 +165,9 @@ func (s *SQLNativeDeliveryStore) AppendNativeDelivery(
 	}
 
 	return &store.NativeDeliveryAppended{
-		Acknowledgement: &model.NativeSecurityAcknowledgement{Receipt: *result.Value.Receipt, NativeDeliveryProgress: result.Value.Progress},
-		Flagged:         result.Value.Flagged,
+		Acknowledgement:     &model.NativeSecurityAcknowledgement{Receipt: *result.Value.Receipt, NativeDeliveryProgress: result.Value.Progress},
+		Flagged:             result.Value.Flagged,
+		StatusDiscrepancies: result.Value.StatusDiscrepancies,
 	}, nil
 }
 
@@ -516,12 +519,12 @@ func retainNativeAppendBatch(
 	}
 	// Pending records cannot become authoritative ahead of a gap, so only the
 	// settled prefix is interpreted.
-	flagged, err := advanceNativeInterpretation(ctx, tx, *owner)
+	effects, err := advanceNativeInterpretation(ctx, tx, *owner)
 	if err != nil {
 		return nil, err
 	}
 
-	return &nativeAppendOutcome{Receipt: &batch.receipt, Flagged: flagged}, nil
+	return &nativeAppendOutcome{Receipt: &batch.receipt, Flagged: effects.Flagged, StatusDiscrepancies: effects.StatusDiscrepancies}, nil
 }
 
 // storeNativeAppendBatch inserts the batch and its records and writes the

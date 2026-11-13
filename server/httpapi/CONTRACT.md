@@ -1967,7 +1967,9 @@ latest facts; the mounted window's `capability_fact` must precede it, or the
 window rule fails on the window reported at Start. The
 server evaluates every rule of the current phase itself, with the release's
 stability time before a rule recovers; Desktop's `rule_status` never changes it
-and a disagreement is only counted. A fact no newer than the latest of its source
+and a disagreement is only counted, as the operational event
+`exam_attempt.native_status_discrepancy`; Start counts the readiness statuses
+Desktop reported differently the same way. A fact no newer than the latest of its source
 instance changes nothing. A source gap or reset puts that capability in a gap,
 and a terminally omitted position puts every capability in a gap, until the next
 full state.

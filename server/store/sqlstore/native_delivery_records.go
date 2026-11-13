@@ -104,15 +104,15 @@ func advanceNativeInterpretation(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	owner nativeDeliveryOwner,
-) ([]store.NativeIntegrityFlagged, error) {
+) (nativeInterpretationEffects, error) {
 	received, gaps, err := nativeDeliveryRanges(ctx, tx, owner)
 	if err != nil {
-		return nil, err
+		return nativeInterpretationEffects{}, err
 	}
 
 	progress, err := model.ResolveDeliveryProgress(owner.Allocated, received, gaps, owner.TerminalThrough)
 	if err != nil {
-		return nil, invalidPersistedState("delivery", "progress", err)
+		return nativeInterpretationEffects{}, invalidPersistedState("delivery", "progress", err)
 	}
 
 	var rows []nativeStoredRecord
@@ -129,12 +129,12 @@ func advanceNativeInterpretation(
 		owner.ParticipationID,
 		progress.SettledThrough,
 	); selectErr != nil {
-		return nil, selectErr
+		return nativeInterpretationEffects{}, selectErr
 	}
 
-	flagged, err := interpretNativeRecords(ctx, tx, owner, rows, gaps)
+	effects, err := interpretNativeRecords(ctx, tx, owner, rows, gaps)
 	if err != nil {
-		return nil, err
+		return nativeInterpretationEffects{}, err
 	}
 
 	var released int64
@@ -149,7 +149,7 @@ func advanceNativeInterpretation(
 		owner.ParticipationID,
 		progress.SettledThrough,
 	); getErr != nil {
-		return nil, getErr
+		return nativeInterpretationEffects{}, getErr
 	}
 
 	if _, execErr := tx.Exec(
@@ -162,7 +162,7 @@ func advanceNativeInterpretation(
 		owner.ParticipationID,
 		progress.SettledThrough,
 	); execErr != nil {
-		return nil, execErr
+		return nativeInterpretationEffects{}, execErr
 	}
 
 	if _, execErr := tx.Exec(
@@ -177,7 +177,7 @@ func advanceNativeInterpretation(
 		released,
 		owner.ParticipationID,
 	); execErr != nil {
-		return nil, execErr
+		return nativeInterpretationEffects{}, execErr
 	}
 
 	_, err = tx.Exec(
@@ -190,9 +190,9 @@ func advanceNativeInterpretation(
 		owner.ParticipationID,
 	)
 	if err != nil {
-		return nil, err
+		return nativeInterpretationEffects{}, err
 	}
-	return flagged, nil
+	return effects, nil
 }
 
 // interpretNativeRecords advances the stored interpretation over rows. A
@@ -204,7 +204,7 @@ func interpretNativeRecords(
 	owner nativeDeliveryOwner,
 	rows []nativeStoredRecord,
 	gaps []model.SequenceRange,
-) ([]store.NativeIntegrityFlagged, error) {
+) (nativeInterpretationEffects, error) {
 	var stored []byte
 	if err := tx.Get(
 		ctx,
@@ -212,21 +212,22 @@ func interpretNativeRecords(
 		`SELECT native_interpretation_canonical FROM exam_attempt_security_owners WHERE participation_id = ?`,
 		owner.ParticipationID,
 	); err != nil {
-		return nil, err
+		return nativeInterpretationEffects{}, err
 	}
 	if len(stored) == 0 || len(rows) == 0 {
-		return nil, nil
+		return nativeInterpretationEffects{}, nil
 	}
 
 	var binding admittedSecurityBinding
 	if json.Unmarshal(owner.Binding, &binding) != nil || binding.Security.Validate() != nil {
-		return nil, invalidPersistedState("native_interpretation", "binding", model.ErrNativeDeliveryInvalid)
+		return nativeInterpretationEffects{}, invalidPersistedState("native_interpretation", "binding", model.ErrNativeDeliveryInvalid)
 	}
 	var state model.NativeInterpretation
 	if json.Unmarshal(stored, &state) != nil {
-		return nil, invalidPersistedState("native_interpretation", "state", model.ErrNativeDeliveryInvalid)
+		return nativeInterpretationEffects{}, invalidPersistedState("native_interpretation", "state", model.ErrNativeDeliveryInvalid)
 	}
 	rules := binding.Security.Policy.Rules
+	disagreedBefore := nativeDiscrepancies(&state)
 
 	flags := nativeFlagRaiser{owner: owner, binding: binding}
 	interrupted := int64(0)
@@ -234,7 +235,7 @@ func interpretNativeRecords(
 		var record model.NativeRecord
 		var meta nativeRecordMetadata
 		if json.Unmarshal(row.Raw, &record) != nil || json.Unmarshal(row.Metadata, &meta) != nil {
-			return nil, invalidPersistedState("native_delivery", "record", model.ErrNativeDeliveryInvalid)
+			return nativeInterpretationEffects{}, invalidPersistedState("native_delivery", "record", model.ErrNativeDeliveryInvalid)
 		}
 
 		transitions := []model.NativeRuleTransition{}
@@ -246,7 +247,7 @@ func interpretNativeRecords(
 		switch {
 		case record.Fact != nil:
 			if meta.Fact == nil {
-				return nil, invalidPersistedState("native_delivery", "record", model.ErrNativeDeliveryInvalid)
+				return nativeInterpretationEffects{}, invalidPersistedState("native_delivery", "record", model.ErrNativeDeliveryInvalid)
 			}
 			transitions = append(transitions, state.ApplyFact(rules, *meta.Fact)...)
 		case record.Confirmed != nil:
@@ -261,10 +262,10 @@ func interpretNativeRecords(
 			transitions = append(transitions, state.ApplyGap(rules, record.Reset.Capability, record.Reset.OccurredAt)...)
 		}
 		if err := retainNativeTransitions(ctx, tx, owner, binding, row.Sequence, row.Index, transitions); err != nil {
-			return nil, err
+			return nativeInterpretationEffects{}, err
 		}
 		if err := flags.raise(ctx, tx, transitions); err != nil {
-			return nil, err
+			return nativeInterpretationEffects{}, err
 		}
 	}
 
@@ -273,7 +274,7 @@ func interpretNativeRecords(
 		raw, err = canonicaljson.Canonicalize(raw, model.NativeInterpretationMaxBytes)
 	}
 	if err != nil {
-		return nil, err
+		return nativeInterpretationEffects{}, err
 	}
 	if _, err = tx.Exec(
 		ctx,
@@ -281,9 +282,28 @@ func interpretNativeRecords(
 		raw,
 		owner.ParticipationID,
 	); err != nil {
-		return nil, err
+		return nativeInterpretationEffects{}, err
 	}
-	return flags.flagged, nil
+	return nativeInterpretationEffects{
+		Flagged:             flags.flagged,
+		StatusDiscrepancies: nativeDiscrepancies(&state) - disagreedBefore,
+	}, nil
+}
+
+// nativeInterpretationEffects is what one interpretation pass did that the
+// application acts on: the Flags it raised, and how often Desktop's own rule
+// status disagreed with the server's.
+type nativeInterpretationEffects struct {
+	Flagged             []store.NativeIntegrityFlagged
+	StatusDiscrepancies int64
+}
+
+func nativeDiscrepancies(state *model.NativeInterpretation) int64 {
+	var total int64
+	for _, standing := range state.Standings() {
+		total += standing.Discrepancies
+	}
+	return total
 }
 
 // nativeLostBefore returns the latest batch position before sequence that

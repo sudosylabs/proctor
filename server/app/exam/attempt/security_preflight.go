@@ -223,6 +223,7 @@ func (s *Service) ReportExamSecurityPreflight(
 		return nil, apperror.New("exam.attempt.unavailable").Wrap(errors.New("preflight Store returned an invalid report receipt"))
 	}
 
+	s.recordStatusDiscrepancies(preflightStatusDiscrepancies(command.Report.Rules, result.Rules))
 	return result, nil
 }
 
@@ -345,4 +346,20 @@ func (s *Service) SecurityPolicyOverview(
 		return nil, storeError(securityPreflightStoreErrors, err)
 	}
 	return overview, nil
+}
+
+// preflightStatusDiscrepancies counts the readiness rules whose status
+// Desktop reported differently from the server's own.
+func preflightStatusDiscrepancies(desktop, server []model.NativeRuleReport) int64 {
+	decided := make(map[string]model.NativeRuleReport, len(server))
+	for _, status := range server {
+		decided[status.RuleID] = status
+	}
+	var disagreed int64
+	for _, status := range desktop {
+		if own, known := decided[status.RuleID]; known && own != status {
+			disagreed++
+		}
+	}
+	return disagreed
 }

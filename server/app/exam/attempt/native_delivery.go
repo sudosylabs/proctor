@@ -444,6 +444,7 @@ func (s *Service) AppendNativeDelivery(
 		value.Acknowledgement.Receipt.BatchSequence != command.Batch.BatchSequence {
 		return nil, apperror.New("exam.attempt.unavailable").Wrap(model.ErrNativeDeliveryInvalid)
 	}
+	s.recordStatusDiscrepancies(value.StatusDiscrepancies)
 
 	for _, flagged := range value.Flagged {
 		effects := integrityEffects{

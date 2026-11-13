@@ -83,6 +83,9 @@ func (e *NativeDeliveryRefusal) Error() string { return "native delivery detail 
 type NativeDeliveryAppended struct {
 	Acknowledgement *model.NativeSecurityAcknowledgement
 	Flagged         []NativeIntegrityFlagged
+	// StatusDiscrepancies counts the rule statuses in the append on which
+	// Desktop disagreed with the server.
+	StatusDiscrepancies int64
 }
 
 // NativeIntegrityFlagged is a native Flag an append raised or added

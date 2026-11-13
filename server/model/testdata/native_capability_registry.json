@@ -400,6 +400,30 @@
     "interactive_session": {
       "state": {
         "$defs": {
+          "ComponentStatus": {
+            "description": "Whether the privileged component is installed and running, as the OS's service manager\n(Windows) or launchd registration (macOS) reports it.",
+            "oneOf": [
+              {
+                "enum": [
+                  "not_installed",
+                  "stopped",
+                  "running",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "requires_approval",
+                "description": "Installed but waiting for the user's approval (macOS Login Items).",
+                "type": "string"
+              },
+              {
+                "const": "unsupported",
+                "description": "This platform has no privileged component.",
+                "type": "string"
+              }
+            ]
+          },
           "ConsoleOwner": {
             "enum": [
               "candidate",
@@ -437,6 +461,10 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "additionalProperties": false,
         "properties": {
+          "component": {
+            "$ref": "#/$defs/ComponentStatus",
+            "description": "The privileged component this capability needs on Windows and macOS."
+          },
           "console_owner": {
             "$ref": "#/$defs/ConsoleOwner"
           },
@@ -463,7 +491,8 @@
           "coverage",
           "console_owner",
           "lock",
-          "remote_attachment"
+          "remote_attachment",
+          "component"
         ],
         "title": "InteractiveSessionState",
         "type": "object"
@@ -790,6 +819,30 @@
     "process_application": {
       "state": {
         "$defs": {
+          "ComponentStatus": {
+            "description": "Whether the privileged component is installed and running, as the OS's service manager\n(Windows) or launchd registration (macOS) reports it.",
+            "oneOf": [
+              {
+                "enum": [
+                  "not_installed",
+                  "stopped",
+                  "running",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "requires_approval",
+                "description": "Installed but waiting for the user's approval (macOS Login Items).",
+                "type": "string"
+              },
+              {
+                "const": "unsupported",
+                "description": "This platform has no privileged component.",
+                "type": "string"
+              }
+            ]
+          },
           "Coverage": {
             "oneOf": [
               {
@@ -845,6 +898,10 @@
             "minimum": 0,
             "type": "integer"
           },
+          "component": {
+            "$ref": "#/$defs/ComponentStatus",
+            "description": "The privileged component this capability needs on Windows and macOS."
+          },
           "coverage": {
             "$ref": "#/$defs/Coverage"
           },
@@ -858,7 +915,8 @@
         "required": [
           "coverage",
           "checking",
-          "rule_matches"
+          "rule_matches",
+          "component"
         ],
         "title": "ProcessState",
         "type": "object"

@@ -38,7 +38,7 @@ func compliantStart() []NativeCapabilityReadiness {
 		readinessOf("candidate_window", NativeCertaintyComplete, `{"presence":"absent"}`, `{}`),
 		readinessOf("display", NativeCertaintyComplete, `{"targets":[]}`, `{"active_physical":1,"connected_total":1}`),
 		readinessOf("interactive_session", NativeCertaintyComplete,
-			`{"console_owner":"candidate","lock":"unlocked","remote_attachment":"absent","other_human_sessions":0}`, `{}`),
+			`{"console_owner":"candidate","lock":"unlocked","remote_attachment":"absent","other_human_sessions":0,"component":"running"}`, `{}`),
 	}
 }
 
@@ -102,7 +102,7 @@ func TestTheServerDecidesReadinessFromTheReportedState(t *testing.T) {
 
 	uncounted := compliantStart()
 	uncounted[2] = readinessOf("interactive_session", NativeCertaintyComplete,
-		`{"console_owner":"candidate","lock":"unlocked","remote_attachment":"absent"}`, `{}`)
+		`{"console_owner":"candidate","lock":"unlocked","remote_attachment":"absent","component":"running"}`, `{}`)
 	statuses, _, ok = evaluateNativeReadiness(registry, activations, rules, uncounted)
 	require.True(t, ok)
 	require.Contains(t, statuses, NativeRuleReport{RuleID: "baseline.session", Status: NativeRuleUnknown, UnknownCause: NativeUnknownUnavailable},
@@ -123,7 +123,7 @@ func TestTheServerDecidesReadinessFromTheReportedState(t *testing.T) {
 			return r
 		},
 		"unregistered symbol": func(r []NativeCapabilityReadiness) []NativeCapabilityReadiness {
-			r[2].State = json.RawMessage(`{"console_owner":"someone","lock":"unlocked","remote_attachment":"absent","other_human_sessions":0}`)
+			r[2].State = json.RawMessage(`{"console_owner":"someone","lock":"unlocked","remote_attachment":"absent","other_human_sessions":0,"component":"running"}`)
 			return r
 		},
 	} {

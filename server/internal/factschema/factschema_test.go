@@ -34,10 +34,11 @@ func TestDesktopsFactSchemasCheckReportedFacts(t *testing.T) {
 		kind       string
 		document   string
 	}{
-		"display state":       {"display", "state", `{"targets":[]}`},
-		"display summary":     {"display", "summary", displaySummary},
-		"window summary":      {"candidate_window", "summary", `{}`},
-		"session uncountable": {"interactive_session", "state", `{"coverage":"snapshot_only","console_owner":"candidate","lock":"unlocked","remote_attachment":"absent"}`},
+		"display state":             {"display", "state", `{"targets":[]}`},
+		"display summary":           {"display", "summary", displaySummary},
+		"window summary":            {"candidate_window", "summary", `{}`},
+		"session uncountable":       {"interactive_session", "state", `{"coverage":"snapshot_only","console_owner":"candidate","lock":"unlocked","remote_attachment":"absent","component":"not_installed"}`},
+		"session awaiting approval": {"interactive_session", "state", `{"coverage":"snapshot_only","console_owner":"candidate","lock":"unlocked","remote_attachment":"absent","component":"requires_approval"}`},
 	} {
 		require.NoError(t, validator.ValidateFact(fact.capability, fact.kind, []byte(fact.document)), name)
 	}
@@ -49,7 +50,9 @@ func TestDesktopsFactSchemasCheckReportedFacts(t *testing.T) {
 	}{
 		"summary missing a count": {"display", "summary", `{"active_physical":1}`},
 		"unpublished member":      {"display", "state", `{"targets":[],"monitor_name":"Studio Display"}`},
-		"unregistered value":      {"interactive_session", "state", `{"coverage":"snapshot_only","console_owner":"someone","lock":"unlocked","remote_attachment":"absent"}`},
+		"unregistered value":      {"interactive_session", "state", `{"coverage":"snapshot_only","console_owner":"someone","lock":"unlocked","remote_attachment":"absent","component":"running"}`},
+		"no component status":     {"interactive_session", "state", `{"coverage":"snapshot_only","console_owner":"candidate","lock":"unlocked","remote_attachment":"absent"}`},
+		"unknown component":       {"interactive_session", "state", `{"coverage":"snapshot_only","console_owner":"candidate","lock":"unlocked","remote_attachment":"absent","component":"paused"}`},
 		"no such capability":      {"printing", "state", `{}`},
 		"no such kind":            {"display", "changes", `{}`},
 		"not JSON":                {"display", "state", `{`},

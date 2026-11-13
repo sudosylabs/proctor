@@ -19,8 +19,8 @@ import (
 
 // nativeCapabilityRegistryDigest pins the registry Desktop generates from its
 // Rust types (proctor-desktop native/crates/prctr-capabilities/registry/
-// registry.json, commit 3488676). A new file is copied in, never edited.
-const nativeCapabilityRegistryDigest = "sha256:b8da9b04779e2fa14d7e6d63393c80b9499749291c7132cf41745bddbf0e5313"
+// registry.json, commit 808b9e3). A new file is copied in, never edited.
+const nativeCapabilityRegistryDigest = "sha256:be7d0c62fe770b76cad13e36874d1acde3ca81bd53655d3abd263b6bc74e17fa"
 
 func readNativeCapabilityRegistry(t *testing.T) []byte {
 	t.Helper()

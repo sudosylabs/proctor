@@ -71,7 +71,7 @@ var compliantNativeFacts = map[model.NativeCapabilityID][2]string{
 	"candidate_window": {windowAbsent, `{}`},
 	"display":          {oneDisplayTarget, displaySummary(1)},
 	"interactive_session": {
-		`{"coverage":"full_lifecycle","console_owner":"candidate","lock":"unlocked","remote_attachment":"absent","other_human_sessions":0}`, `{}`,
+		`{"coverage":"full_lifecycle","console_owner":"candidate","lock":"unlocked","remote_attachment":"absent","other_human_sessions":0,"component":"running"}`, `{}`,
 	},
 	"virtualization":   {`{"classification":"recognized_physical_or_root","hypervisor":"none_detected"}`, `{}`},
 	"screen_recording": {`{"free_space_mib":8192}`, `{"free_space_mib":8192}`},

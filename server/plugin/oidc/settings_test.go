@@ -35,13 +35,13 @@ func TestSettingsAndSecretsAreThePluginsToCheck(t *testing.T) {
 		"subject other than sub and no openid scope": {func(p *testProvider) {
 			p.Settings.Claims.Subject = "uid"
 			p.Settings.Scopes = []string{"profile"}
-		}, []string{"claims.subject: must be sub for an oidc provider", "scopes: must include openid"}},
-		"issuer with a trailing slash":  {func(p *testProvider) { p.Settings.Issuer = "https://sso.example.edu/" }, []string{"issuer: must not contain a query, fragment, or trailing slash"}},
-		"public HTTP issuer":            {func(p *testProvider) { p.Settings.Issuer = "http://sso.example.edu" }, []string{"issuer: must be an HTTPS URL"}},
-		"no client":                     {func(p *testProvider) { p.Settings.ClientID = "" }, []string{"client_id"}},
-		"no client secret":              {func(p *testProvider) { p.Secrets.ClientSecret = "" }, []string{"secrets.client_secret"}},
-		"repeated scope":                {func(p *testProvider) { p.Settings.Scopes = []string{"openid", "openid"} }, []string{"scopes[1]: must be unique"}},
-		"no username to provision from": {func(p *testProvider) { p.Settings.Claims.Username = "" }, []string{"claims.username: is required when auto_provision is enabled"}},
+		}, []string{"Settings.Claims.Subject: must be sub for an oidc provider", "Settings.Scopes: must include openid"}},
+		"issuer with a trailing slash":  {func(p *testProvider) { p.Settings.Issuer = "https://sso.example.edu/" }, []string{"Settings.Issuer: must not contain a query, fragment, or trailing slash"}},
+		"public HTTP issuer":            {func(p *testProvider) { p.Settings.Issuer = "http://sso.example.edu" }, []string{"Settings.Issuer: must be an HTTPS URL"}},
+		"no client":                     {func(p *testProvider) { p.Settings.ClientID = "" }, []string{"Settings.ClientID"}},
+		"no client secret":              {func(p *testProvider) { p.Secrets.ClientSecret = "" }, []string{"Secrets.ClientSecret"}},
+		"repeated scope":                {func(p *testProvider) { p.Settings.Scopes = []string{"openid", "openid"} }, []string{"Settings.Scopes[1]: must be unique"}},
+		"no username to provision from": {func(p *testProvider) { p.Settings.Claims.Username = "" }, []string{"Settings.Claims.Username: is required when AutoProvision is enabled"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

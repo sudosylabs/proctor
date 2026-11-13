@@ -42,7 +42,8 @@ type ClaimMapping struct {
 }
 
 // SettingsErrors collects the problems a protocol plugin finds in its
-// provider settings, each under the settings field it concerns.
+// provider settings, each under the configuration path it concerns, such as
+// Settings.BaseURL, so an operator finds it in the file.
 type SettingsErrors struct {
 	problems []string
 }
@@ -97,10 +98,10 @@ func ValidateHTTPSURL(field, value string, problems *SettingsErrors) {
 // ValidateHTTPBounds bounds a provider request's timeout and response size.
 func ValidateHTTPBounds(timeout time.Duration, maxResponseBytes int64, problems *SettingsErrors) {
 	if timeout < time.Second || timeout > 30*time.Second {
-		problems.Add("timeout", "must be between 1s and 30s")
+		problems.Add("Settings.Timeout", "must be between 1s and 30s")
 	}
 	if maxResponseBytes < 1024 || maxResponseBytes > 2<<20 {
-		problems.Add("max_response_bytes", "must be between 1024 and 2097152")
+		problems.Add("Settings.MaxResponseBytes", "must be between 1024 and 2097152")
 	}
 }
 
@@ -111,38 +112,38 @@ func ValidateClaims(claims ClaimMapping, autoProvision bool, problems *SettingsE
 		field string
 		value string
 	}{
-		{"subject", claims.Subject},
-		{"username", claims.Username},
-		{"email", claims.Email},
-		{"email_verified_claim", claims.EmailVerifiedClaim},
-		{"first_name", claims.FirstName},
-		{"last_name", claims.LastName},
-		{"display_name", claims.DisplayName},
-		{"home_organization", claims.HomeOrganization},
-		{"affiliation", claims.Affiliation},
-		{"multi_factor_attribute", claims.MultiFactorAttribute},
+		{"Subject", claims.Subject},
+		{"Username", claims.Username},
+		{"Email", claims.Email},
+		{"EmailVerifiedClaim", claims.EmailVerifiedClaim},
+		{"FirstName", claims.FirstName},
+		{"LastName", claims.LastName},
+		{"DisplayName", claims.DisplayName},
+		{"HomeOrganization", claims.HomeOrganization},
+		{"Affiliation", claims.Affiliation},
+		{"MultiFactorAttribute", claims.MultiFactorAttribute},
 	} {
 		if claim.value != "" && claim.value != "user" && !validClaimName(claim.value) {
-			problems.Add("claims."+claim.field, "must be user or a valid released-attribute name")
+			problems.Add("Settings.Claims."+claim.field, "must be user or a valid released-attribute name")
 		}
 	}
 
 	if claims.Subject == "" {
-		problems.Add("claims.subject", "is required")
+		problems.Add("Settings.Claims.Subject", "is required")
 	}
 	if autoProvision {
 		if claims.Username == "" {
-			problems.Add("claims.username", "is required when auto_provision is enabled")
+			problems.Add("Settings.Claims.Username", "is required when AutoProvision is enabled")
 		}
 		if claims.Email == "" {
-			problems.Add("claims.email", "is required when auto_provision is enabled")
+			problems.Add("Settings.Claims.Email", "is required when AutoProvision is enabled")
 		}
 	}
 
 	seenOrganizations := make(map[string]struct{}, len(claims.AllowedHomeOrganizations))
 	for index, organization := range claims.AllowedHomeOrganizations {
 		organization = strings.ToLower(strings.TrimSpace(organization))
-		field := fmt.Sprintf("claims.allowed_home_organizations[%d]", index)
+		field := fmt.Sprintf("Settings.Claims.AllowedHomeOrganizations[%d]", index)
 		if len(organization) == 0 ||
 			len(organization) > 255 ||
 			strings.ContainsAny(organization, "\x00\r\n @/") {
@@ -154,13 +155,13 @@ func ValidateClaims(claims ClaimMapping, autoProvision bool, problems *SettingsE
 		}
 	}
 	if len(claims.AllowedHomeOrganizations) != 0 && claims.HomeOrganization == "" {
-		problems.Add("claims.home_organization", "is required when allowed_home_organizations is configured")
+		problems.Add("Settings.Claims.HomeOrganization", "is required when Settings.Claims.AllowedHomeOrganizations is configured")
 	}
 
 	seenMFAValues := make(map[string]struct{}, len(claims.MultiFactorValues))
 	for index, value := range claims.MultiFactorValues {
 		value = strings.TrimSpace(value)
-		field := fmt.Sprintf("claims.multi_factor_values[%d]", index)
+		field := fmt.Sprintf("Settings.Claims.MultiFactorValues[%d]", index)
 		if value == "" || len(value) > 256 || strings.ContainsAny(value, "\x00\r\n") {
 			problems.Add(field, "must contain between 1 and 256 safe characters")
 		} else if _, exists := seenMFAValues[value]; exists {
@@ -170,7 +171,7 @@ func ValidateClaims(claims ClaimMapping, autoProvision bool, problems *SettingsE
 		}
 	}
 	if (claims.MultiFactorAttribute == "") != (len(claims.MultiFactorValues) == 0) {
-		problems.Add("claims.multi_factor_values", "must be configured together with multi_factor_attribute")
+		problems.Add("Settings.Claims.MultiFactorValues", "must be configured together with Settings.Claims.MultiFactorAttribute")
 	}
 }
 

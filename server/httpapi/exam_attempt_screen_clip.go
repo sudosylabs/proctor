@@ -120,9 +120,7 @@ func (h examAttemptHandlers) pendingScreenClips(request route.Request) (route.Re
 		request,
 		"screen_clip_request",
 		clips,
-		func(clip store.ExamAttemptScreenClipView) route.BoundedKey {
-			return route.BoundedKey{At: clip.RequestedAt, ID: clip.ID.String()}
-		},
+		screenClipListKey,
 		screenClipResponseFromView,
 	)
 	if err != nil {
@@ -140,7 +138,7 @@ func (h examAttemptHandlers) takeScreenClip(request route.Request) (route.Result
 	if err != nil {
 		return route.Result{}, err
 	}
-	clip, err := h.app.TakeScreenClip(request.Context, request.Invocation(), access, clipID)
+	clip, err := h.app.TakeScreenClip(request.Context, request.Invocation(), attempt.TakeScreenClipCommand{Access: access, ClipID: clipID})
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -188,8 +186,9 @@ func (h examAttemptHandlers) beginScreenClipUpload(request route.Request) (route
 	if err = request.DecodeJSON(&body); err != nil {
 		return route.Result{}, err
 	}
-	clip, err := h.app.BeginScreenClipUpload(request.Context, request.Invocation(), access, clipID, model.ScreenClipUpload{
-		MediaType: body.MediaType, SizeBytes: body.SizeBytes, ChunkSHA256: body.ChunkSHA256,
+	clip, err := h.app.BeginScreenClipUpload(request.Context, request.Invocation(), attempt.BeginScreenClipUploadCommand{
+		Access: access, ClipID: clipID,
+		Upload: model.ScreenClipUpload{MediaType: body.MediaType, SizeBytes: body.SizeBytes, ChunkSHA256: body.ChunkSHA256},
 	})
 	if err != nil {
 		return route.Result{}, err
@@ -229,7 +228,7 @@ func (h examAttemptHandlers) uploadScreenClipChunk(request route.Request) (route
 		request.HTTP.ContentLength < 1 || request.HTTP.ContentLength > model.ScreenClipChunkBytes {
 		return route.ProtocolResult{}, route.InvalidRequest(errors.New("a chunk number and its exact Content-Length are required"))
 	}
-	if err = h.app.UploadScreenClipChunk(request.Context, request.Invocation(), attempt.ScreenClipChunkCommand{
+	if err = h.app.UploadScreenClipChunk(request.Context, request.Invocation(), attempt.UploadScreenClipChunkCommand{
 		Access: access, ClipID: clipID, Index: number - 1, Body: request.HTTP.Body, Size: request.HTTP.ContentLength,
 	}); err != nil {
 		return route.ProtocolResult{}, err
@@ -250,7 +249,7 @@ func (h examAttemptHandlers) completeScreenClipUpload(request route.Request) (ro
 	if err = request.DecodeJSON(&body); err != nil {
 		return route.Result{}, err
 	}
-	clip, err := h.app.CompleteScreenClipUpload(request.Context, request.Invocation(), attempt.ScreenClipCompletion{
+	clip, err := h.app.CompleteScreenClipUpload(request.Context, request.Invocation(), attempt.CompleteScreenClipUploadCommand{
 		Access: access, ClipID: clipID, ContentDigest: body.ContentDigest, Signature: body.Signature,
 	})
 	if err != nil {
@@ -293,9 +292,7 @@ func (h examAttemptHandlers) listScreenClips(request route.Request) (route.Resul
 		request,
 		"screen_clip",
 		clips,
-		func(clip store.ExamAttemptScreenClipView) route.BoundedKey {
-			return route.BoundedKey{At: clip.RequestedAt, ID: clip.ID.String()}
-		},
+		screenClipListKey,
 		screenClipResponseFromView,
 	)
 	if err != nil {
@@ -315,7 +312,9 @@ func (h examAttemptHandlers) playScreenClip(request route.Request) (route.Protoc
 	if err != nil {
 		return route.ProtocolResult{}, err
 	}
-	clip, err := h.app.SizeOfScreenClip(request.Context, request.Invocation(), query, clipID)
+	clip, err := h.app.ReadyScreenClip(request.Context, request.Invocation(), attempt.ScreenClipQuery{
+		ManagedScreenClipQuery: query, ClipID: clipID,
+	})
 	if err != nil {
 		return route.ProtocolResult{}, err
 	}
@@ -325,7 +324,8 @@ func (h examAttemptHandlers) playScreenClip(request route.Request) (route.Protoc
 		return route.ProtocolResult{}, route.InvalidRequest(err)
 	}
 	opened, err := h.app.OpenScreenClip(request.Context, request.Invocation(), attempt.OpenScreenClipQuery{
-		ManagedScreenClipQuery: query, ClipID: clipID, Start: byteRange.Start, Length: byteRange.Length,
+		ScreenClipQuery: attempt.ScreenClipQuery{ManagedScreenClipQuery: query, ClipID: clipID},
+		Start:           byteRange.Start, Length: byteRange.Length,
 	})
 	if err != nil {
 		return route.ProtocolResult{}, err
@@ -360,4 +360,9 @@ func screenClipUploadAccess(request route.Request) (attempt.CandidateAccess, err
 		access.ConnectionID, access.ContinuityCredential = headers.ConnectionID, headers.ContinuityCredential
 	}
 	return access, nil
+}
+
+// screenClipListKey orders clips by when they were requested.
+func screenClipListKey(clip store.ExamAttemptScreenClipView) route.BoundedKey {
+	return route.BoundedKey{At: clip.RequestedAt, ID: clip.ID.String()}
 }

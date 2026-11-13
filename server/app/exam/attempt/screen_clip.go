@@ -163,16 +163,21 @@ func (s *Service) PendingScreenClips(
 	return clips, nil
 }
 
+type TakeScreenClipCommand struct {
+	Access CandidateAccess
+	ClipID model.ScreenClipID
+}
+
 // TakeScreenClip records that the candidate's Desktop took a request and is
 // recording what remains of its range. Taking it again changes nothing.
 func (s *Service) TakeScreenClip(
 	ctx context.Context,
 	inv invocation.Invocation,
-	candidateAccess CandidateAccess,
-	clipID model.ScreenClipID,
+	command TakeScreenClipCommand,
 ) (_ store.ExamAttemptScreenClipView, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	selector, err := candidateSelector(inv, candidateAccess)
+	clipID := command.ClipID
+	selector, err := candidateSelector(inv, command.Access)
 	if err != nil {
 		return store.ExamAttemptScreenClipView{}, err
 	}

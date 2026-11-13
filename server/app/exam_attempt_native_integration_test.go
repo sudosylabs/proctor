@@ -301,19 +301,21 @@ func TestDesktopExamAttemptNativeFlow(t *testing.T) {
 	}
 	require.Len(t, flags, 3, "the display rule and each process rule have their own Flag")
 	require.True(t, incident.IsValid(), "the second display raised a Flag that asked for a clip")
-	_, err = helper.App.Attempts.TakeScreenClip(ctx, desktop.inv, access, incident)
+	_, err = helper.App.Attempts.TakeScreenClip(ctx, desktop.inv, attempt.TakeScreenClipCommand{Access: access, ClipID: incident})
 	require.NoError(t, err)
 	media := bytes.Repeat([]byte("fragmented mp4 "), 4096)
 	chunk := sha256.Sum256(media)
 	upload := model.ScreenClipUpload{MediaType: "video/mp4", SizeBytes: int64(len(media)), ChunkSHA256: []string{hex.EncodeToString(chunk[:])}}
-	_, err = helper.App.Attempts.BeginScreenClipUpload(ctx, desktop.inv, access, incident, upload)
+	_, err = helper.App.Attempts.BeginScreenClipUpload(ctx, desktop.inv, attempt.BeginScreenClipUploadCommand{
+		Access: access, ClipID: incident, Upload: upload,
+	})
 	require.NoError(t, err)
-	err = helper.App.Attempts.UploadScreenClipChunk(ctx, desktop.inv, attempt.ScreenClipChunkCommand{
+	err = helper.App.Attempts.UploadScreenClipChunk(ctx, desktop.inv, attempt.UploadScreenClipChunkCommand{
 		Access: access, ClipID: incident, Index: 0, Body: bytes.NewReader(media), Size: int64(len(media)),
 	})
 	require.NoError(t, err)
 	digest := upload.Digest()
-	ready, err := helper.App.Attempts.CompleteScreenClipUpload(ctx, desktop.inv, attempt.ScreenClipCompletion{
+	ready, err := helper.App.Attempts.CompleteScreenClipUpload(ctx, desktop.inv, attempt.CompleteScreenClipUploadCommand{
 		Access: access, ClipID: incident, ContentDigest: digest, Signature: signDigest(t, desktop.key, digest),
 	})
 	require.NoError(t, err)
@@ -321,7 +323,7 @@ func TestDesktopExamAttemptNativeFlow(t *testing.T) {
 
 	// The manager plays it back, byte for byte.
 	played, err := helper.App.Attempts.OpenScreenClip(ctx, managerInv, attempt.OpenScreenClipQuery{
-		ManagedScreenClipQuery: query, ClipID: incident, Start: 0, Length: int64(len(media)),
+		ScreenClipQuery: attempt.ScreenClipQuery{ManagedScreenClipQuery: query, ClipID: incident}, Start: 0, Length: int64(len(media)),
 	})
 	require.NoError(t, err)
 	body, err := io.ReadAll(played.Body)

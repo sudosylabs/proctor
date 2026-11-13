@@ -1005,9 +1005,9 @@ type examAttemptHTTPFake struct {
 	screenClip              attempt.ScreenClipRequestCommand
 	takenClip               model.ScreenClipID
 	clipUpload              model.ScreenClipUpload
-	clipChunk               attempt.ScreenClipChunkCommand
+	clipChunk               attempt.UploadScreenClipChunkCommand
 	clipChunkBytes          []byte
-	clipCompletion          attempt.ScreenClipCompletion
+	clipCompletion          attempt.CompleteScreenClipUploadCommand
 	clipContent             string
 	journalQuery            attempt.WorkspaceJournalQuery
 	journalPage             attempt.WorkspaceJournalPage
@@ -1210,9 +1210,9 @@ func (f *examAttemptHTTPFake) PendingScreenClips(context.Context, invocation.Inv
 func (f *examAttemptHTTPFake) TakeScreenClip(
 	_ context.Context,
 	_ invocation.Invocation,
-	access attempt.CandidateAccess,
-	clipID model.ScreenClipID,
+	command attempt.TakeScreenClipCommand,
 ) (store.ExamAttemptScreenClipView, error) {
+	access, clipID := command.Access, command.ClipID
 	f.takenClip = clipID
 	at := f.attempt.UpdatedAt
 	return store.ExamAttemptScreenClipView{
@@ -1225,10 +1225,9 @@ func (f *examAttemptHTTPFake) TakeScreenClip(
 func (f *examAttemptHTTPFake) BeginScreenClipUpload(
 	_ context.Context,
 	_ invocation.Invocation,
-	access attempt.CandidateAccess,
-	clipID model.ScreenClipID,
-	upload model.ScreenClipUpload,
+	command attempt.BeginScreenClipUploadCommand,
 ) (store.ExamAttemptScreenClipView, error) {
+	access, clipID, upload := command.Access, command.ClipID, command.Upload
 	f.clipUpload = upload
 	at := f.attempt.UpdatedAt
 	return store.ExamAttemptScreenClipView{
@@ -1245,11 +1244,11 @@ func (f *examAttemptHTTPFake) ScreenClipUploadStatus(
 	access attempt.CandidateAccess,
 	clipID model.ScreenClipID,
 ) (store.ExamAttemptScreenClipUploadStatus, error) {
-	clip, err := f.BeginScreenClipUpload(ctx, inv, access, clipID, f.clipUpload)
+	clip, err := f.BeginScreenClipUpload(ctx, inv, attempt.BeginScreenClipUploadCommand{Access: access, ClipID: clipID, Upload: f.clipUpload})
 	return store.ExamAttemptScreenClipUploadStatus{Clip: clip, Received: []int{0}}, err
 }
 
-func (f *examAttemptHTTPFake) UploadScreenClipChunk(_ context.Context, _ invocation.Invocation, command attempt.ScreenClipChunkCommand) error {
+func (f *examAttemptHTTPFake) UploadScreenClipChunk(_ context.Context, _ invocation.Invocation, command attempt.UploadScreenClipChunkCommand) error {
 	body, err := io.ReadAll(command.Body)
 	f.clipChunk, f.clipChunkBytes = command, body
 	return err
@@ -1258,10 +1257,12 @@ func (f *examAttemptHTTPFake) UploadScreenClipChunk(_ context.Context, _ invocat
 func (f *examAttemptHTTPFake) CompleteScreenClipUpload(
 	ctx context.Context,
 	inv invocation.Invocation,
-	command attempt.ScreenClipCompletion,
+	command attempt.CompleteScreenClipUploadCommand,
 ) (store.ExamAttemptScreenClipView, error) {
 	f.clipCompletion = command
-	clip, err := f.BeginScreenClipUpload(ctx, inv, command.Access, command.ClipID, f.clipUpload)
+	clip, err := f.BeginScreenClipUpload(ctx, inv, attempt.BeginScreenClipUploadCommand{
+		Access: command.Access, ClipID: command.ClipID, Upload: f.clipUpload,
+	})
 	clip.State, clip.Signature = model.ScreenClipReady, command.Signature
 	return clip, err
 }
@@ -1270,19 +1271,18 @@ func (f *examAttemptHTTPFake) ListScreenClips(context.Context, invocation.Invoca
 	return []store.ExamAttemptScreenClipView{}, nil
 }
 
-func (f *examAttemptHTTPFake) SizeOfScreenClip(
+func (f *examAttemptHTTPFake) ReadyScreenClip(
 	_ context.Context,
 	_ invocation.Invocation,
-	query attempt.ManagedScreenClipQuery,
-	clipID model.ScreenClipID,
+	query attempt.ScreenClipQuery,
 ) (store.ExamAttemptScreenClipView, error) {
-	return store.ExamAttemptScreenClipView{ID: clipID, AttemptID: query.AttemptID, State: model.ScreenClipReady,
+	return store.ExamAttemptScreenClipView{ID: query.ClipID, AttemptID: query.AttemptID, State: model.ScreenClipReady,
 		Upload: &model.ScreenClipUpload{MediaType: "video/mp4", SizeBytes: int64(len(f.clipContent))}}, nil
 }
 
-func (f *examAttemptHTTPFake) OpenScreenClip(_ context.Context, _ invocation.Invocation, query attempt.OpenScreenClipQuery) (attempt.OpenedScreenClip, error) {
+func (f *examAttemptHTTPFake) OpenScreenClip(_ context.Context, _ invocation.Invocation, query attempt.OpenScreenClipQuery) (attempt.OpenScreenClipResult, error) {
 	content := f.clipContent[query.Start : query.Start+query.Length]
-	return attempt.OpenedScreenClip{Body: io.NopCloser(strings.NewReader(content)), MediaType: "video/mp4",
+	return attempt.OpenScreenClipResult{Body: io.NopCloser(strings.NewReader(content)), MediaType: "video/mp4",
 		SizeBytes: int64(len(f.clipContent)), Start: query.Start, Length: query.Length}, nil
 }
 

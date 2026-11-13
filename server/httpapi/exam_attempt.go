@@ -161,18 +161,11 @@ type ExamAttemptApplication interface {
 	SuspendExamAttempt(context.Context, invocation.Invocation, attempt.ManualSuspensionCommand) (attempt.ManualSuspensionResult, error)
 	RequestScreenClip(context.Context, invocation.Invocation, attempt.ScreenClipRequestCommand) (attempt.ScreenClipRequestResult, error)
 	PendingScreenClips(context.Context, invocation.Invocation, attempt.CandidateAccess) ([]store.ExamAttemptScreenClipView, error)
-	TakeScreenClip(
-		context.Context,
-		invocation.Invocation,
-		attempt.CandidateAccess,
-		model.ScreenClipID,
-	) (store.ExamAttemptScreenClipView, error)
+	TakeScreenClip(context.Context, invocation.Invocation, attempt.TakeScreenClipCommand) (store.ExamAttemptScreenClipView, error)
 	BeginScreenClipUpload(
 		context.Context,
 		invocation.Invocation,
-		attempt.CandidateAccess,
-		model.ScreenClipID,
-		model.ScreenClipUpload,
+		attempt.BeginScreenClipUploadCommand,
 	) (store.ExamAttemptScreenClipView, error)
 	ScreenClipUploadStatus(
 		context.Context,
@@ -180,16 +173,11 @@ type ExamAttemptApplication interface {
 		attempt.CandidateAccess,
 		model.ScreenClipID,
 	) (store.ExamAttemptScreenClipUploadStatus, error)
-	UploadScreenClipChunk(context.Context, invocation.Invocation, attempt.ScreenClipChunkCommand) error
+	UploadScreenClipChunk(context.Context, invocation.Invocation, attempt.UploadScreenClipChunkCommand) error
 	ListScreenClips(context.Context, invocation.Invocation, attempt.ManagedScreenClipQuery) ([]store.ExamAttemptScreenClipView, error)
-	SizeOfScreenClip(
-		context.Context,
-		invocation.Invocation,
-		attempt.ManagedScreenClipQuery,
-		model.ScreenClipID,
-	) (store.ExamAttemptScreenClipView, error)
-	OpenScreenClip(context.Context, invocation.Invocation, attempt.OpenScreenClipQuery) (attempt.OpenedScreenClip, error)
-	CompleteScreenClipUpload(context.Context, invocation.Invocation, attempt.ScreenClipCompletion) (store.ExamAttemptScreenClipView, error)
+	ReadyScreenClip(context.Context, invocation.Invocation, attempt.ScreenClipQuery) (store.ExamAttemptScreenClipView, error)
+	OpenScreenClip(context.Context, invocation.Invocation, attempt.OpenScreenClipQuery) (attempt.OpenScreenClipResult, error)
+	CompleteScreenClipUpload(context.Context, invocation.Invocation, attempt.CompleteScreenClipUploadCommand) (store.ExamAttemptScreenClipView, error)
 	SubmitExamAttempt(context.Context, invocation.Invocation, attempt.SubmitCommand) (store.ExamSubmissionReceipt, error)
 	GetExamSubmission(context.Context, invocation.Invocation, attempt.GetSubmissionQuery) (attempt.ManagedSubmission, error)
 	ListExamSubmissionManifest(

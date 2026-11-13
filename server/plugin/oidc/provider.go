@@ -56,24 +56,24 @@ type Secrets struct {
 // create accounts.
 func (s Settings) Validate(secrets Secrets, autoProvision bool) error {
 	var problems externalauth.SettingsErrors
-	externalauth.ValidateHTTPSURL("issuer", s.Issuer, &problems)
+	externalauth.ValidateHTTPSURL("Settings.Issuer", s.Issuer, &problems)
 	if parsed, _ := url.Parse(s.Issuer); parsed != nil &&
 		(parsed.RawQuery != "" ||
 			parsed.Fragment != "" ||
 			(parsed.Path != "" && strings.HasSuffix(parsed.Path, "/"))) {
-		problems.Add("issuer", "must not contain a query, fragment, or trailing slash")
+		problems.Add("Settings.Issuer", "must not contain a query, fragment, or trailing slash")
 	}
 	if s.ClientID == "" || len(s.ClientID) > 512 || strings.ContainsAny(s.ClientID, "\x00\r\n") {
-		problems.Add("client_id", "must contain between 1 and 512 safe characters")
+		problems.Add("Settings.ClientID", "must contain between 1 and 512 safe characters")
 	}
 	if secrets.ClientSecret == "" ||
 		len(secrets.ClientSecret) > 4096 ||
 		strings.ContainsAny(secrets.ClientSecret, "\x00\r\n") {
-		problems.Add("secrets.client_secret", "must contain between 1 and 4096 safe characters")
+		problems.Add("Secrets.ClientSecret", "must contain between 1 and 4096 safe characters")
 	}
 	seenScopes := make(map[string]struct{}, len(s.Scopes))
 	for index, scope := range s.Scopes {
-		field := fmt.Sprintf("scopes[%d]", index)
+		field := fmt.Sprintf("Settings.Scopes[%d]", index)
 		if scope == "" || len(scope) > 128 || strings.ContainsAny(scope, "\x00\r\n \t") {
 			problems.Add(field, "must contain between 1 and 128 safe characters")
 			continue
@@ -84,12 +84,12 @@ func (s Settings) Validate(secrets Secrets, autoProvision bool) error {
 		seenScopes[scope] = struct{}{}
 	}
 	if _, exists := seenScopes["openid"]; !exists {
-		problems.Add("scopes", "must include openid")
+		problems.Add("Settings.Scopes", "must include openid")
 	}
 	externalauth.ValidateHTTPBounds(s.Timeout.Duration, s.MaxResponseBytes, &problems)
 	externalauth.ValidateClaims(s.Claims, autoProvision, &problems)
 	if s.Claims.Subject != "sub" {
-		problems.Add("claims.subject", "must be sub for an oidc provider")
+		problems.Add("Settings.Claims.Subject", "must be sub for an oidc provider")
 	}
 	return problems.Err()
 }

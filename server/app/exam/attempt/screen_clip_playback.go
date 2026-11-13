@@ -29,17 +29,22 @@ type ManagedScreenClipQuery struct {
 	AttemptID model.ExamAttemptID
 }
 
+// ScreenClipQuery names one of an Attempt's clips for those who may see it.
+type ScreenClipQuery struct {
+	ManagedScreenClipQuery
+	ClipID model.ScreenClipID
+}
+
 // OpenScreenClipQuery asks for a byte range of a ready clip. Length is the
 // number of bytes from Start; a range past the clip's end is refused.
 type OpenScreenClipQuery struct {
-	ManagedScreenClipQuery
-	ClipID model.ScreenClipID
+	ScreenClipQuery
 	Start  int64
 	Length int64
 }
 
-// OpenedScreenClip is a range of a ready clip's bytes.
-type OpenedScreenClip struct {
+// OpenScreenClipResult is a range of a ready clip's bytes.
+type OpenScreenClipResult struct {
 	Body      io.ReadCloser
 	MediaType string
 	SizeBytes int64
@@ -68,16 +73,15 @@ func (s *Service) ListScreenClips(
 	return clips, nil
 }
 
-// SizeOfScreenClip returns a ready clip's size and media type, so the
-// transport can read a Range header before opening it.
-func (s *Service) SizeOfScreenClip(
+// ReadyScreenClip returns a ready clip, whose size and media type let the
+// transport read a Range header before opening it.
+func (s *Service) ReadyScreenClip(
 	ctx context.Context,
 	inv invocation.Invocation,
-	query ManagedScreenClipQuery,
-	clipID model.ScreenClipID,
+	query ScreenClipQuery,
 ) (_ store.ExamAttemptScreenClipView, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	clip, _, err := s.readyScreenClip(ctx, inv, query, clipID)
+	clip, _, err := s.readyScreenClip(ctx, inv, query.ManagedScreenClipQuery, query.ClipID)
 	if err != nil {
 		return store.ExamAttemptScreenClipView{}, err
 	}
@@ -91,15 +95,15 @@ func (s *Service) OpenScreenClip(
 	ctx context.Context,
 	inv invocation.Invocation,
 	query OpenScreenClipQuery,
-) (_ OpenedScreenClip, resultErr error) {
+) (_ OpenScreenClipResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	clip, viewer, err := s.readyScreenClip(ctx, inv, query.ManagedScreenClipQuery, query.ClipID)
 	if err != nil {
-		return OpenedScreenClip{}, err
+		return OpenScreenClipResult{}, err
 	}
 	upload := clip.Upload
 	if query.Start < 0 || query.Length < 1 || query.Start+query.Length > upload.SizeBytes {
-		return OpenedScreenClip{}, apperror.Invalid("exam.attempt.invalid", "screen_clip_range")
+		return OpenScreenClipResult{}, apperror.Invalid("exam.attempt.invalid", "screen_clip_range")
 	}
 
 	if query.Start == 0 {
@@ -116,14 +120,14 @@ func (s *Service) OpenScreenClip(
 			},
 		})
 		if auditErr != nil {
-			return OpenedScreenClip{}, auditErr
+			return OpenScreenClipResult{}, auditErr
 		}
 		if auditErr = s.auditor.Complete(ctx, auditID, map[string]any{"screen_clip_id": query.ClipID.String()}); auditErr != nil {
-			return OpenedScreenClip{}, auditErr
+			return OpenScreenClipResult{}, auditErr
 		}
 	}
 
-	return OpenedScreenClip{
+	return OpenScreenClipResult{
 		Body:      &screenClipReader{ctx: ctx, content: s.content, clipID: query.ClipID, upload: upload, offset: query.Start, remaining: query.Length},
 		MediaType: upload.MediaType,
 		SizeBytes: upload.SizeBytes,

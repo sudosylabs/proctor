@@ -35,16 +35,16 @@ func TestSettingsAreThePluginsToCheck(t *testing.T) {
 		"public HTTP and no email to provision from": {func(p *testProvider) {
 			p.Settings.BaseURL = "http://cas.example.edu"
 			p.Settings.Claims.Email = ""
-		}, []string{"base_url: must be an HTTPS URL", "claims.email: is required when auto_provision is enabled"}},
-		"query in base URL":        {func(p *testProvider) { p.Settings.BaseURL = "https://cas.example.edu/cas?x=1" }, []string{"base_url: must not contain a query or fragment"}},
-		"relative validation path": {func(p *testProvider) { p.Settings.ValidationPath = "serviceValidate" }, []string{"validation_path"}},
+		}, []string{"Settings.BaseURL: must be an HTTPS URL", "Settings.Claims.Email: is required when AutoProvision is enabled"}},
+		"query in base URL":        {func(p *testProvider) { p.Settings.BaseURL = "https://cas.example.edu/cas?x=1" }, []string{"Settings.BaseURL: must not contain a query or fragment"}},
+		"relative validation path": {func(p *testProvider) { p.Settings.ValidationPath = "serviceValidate" }, []string{"Settings.ValidationPath"}},
 		"slow and unbounded": {func(p *testProvider) {
 			p.Settings.Timeout = config.Duration{}
 			p.Settings.MaxResponseBytes = 0
-		}, []string{"timeout: must be between 1s and 30s", "max_response_bytes"}},
-		"unknown subject attribute":                   {func(p *testProvider) { p.Settings.Claims.Subject = "1user" }, []string{"claims.subject"}},
-		"organizations without their attribute":       {func(p *testProvider) { p.Settings.Claims.HomeOrganization = "" }, []string{"claims.home_organization"}},
-		"multi-factor values without their attribute": {func(p *testProvider) { p.Settings.Claims.MultiFactorAttribute = "" }, []string{"claims.multi_factor_values"}},
+		}, []string{"Settings.Timeout: must be between 1s and 30s", "Settings.MaxResponseBytes"}},
+		"unknown subject attribute":                   {func(p *testProvider) { p.Settings.Claims.Subject = "1user" }, []string{"Settings.Claims.Subject"}},
+		"organizations without their attribute":       {func(p *testProvider) { p.Settings.Claims.HomeOrganization = "" }, []string{"Settings.Claims.HomeOrganization"}},
+		"multi-factor values without their attribute": {func(p *testProvider) { p.Settings.Claims.MultiFactorAttribute = "" }, []string{"Settings.Claims.MultiFactorValues"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

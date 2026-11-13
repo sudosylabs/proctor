@@ -103,7 +103,7 @@ func TestScreenClipChunksAreStagedAgainstTheirDeclaredHashThenRecorded(t *testin
 		ID: clipID, AttemptID: f.attemptID, State: model.ScreenClipUploading, Upload: upload,
 	}}
 	chunk := func(index int, size int64) error {
-		return f.service.UploadScreenClipChunk(context.Background(), f.inv, ScreenClipChunkCommand{
+		return f.service.UploadScreenClipChunk(context.Background(), f.inv, UploadScreenClipChunkCommand{
 			Access: access, ClipID: clipID, Index: index, Body: strings.NewReader(strings.Repeat("x", int(size))), Size: size,
 		})
 	}
@@ -144,9 +144,9 @@ func TestScreenClipPlaybackIsAuditedFromItsFirstByteOnly(t *testing.T) {
 	f.persistence.attemptScreenClip = &store.ExamAttemptScreenClipView{ID: clipID, AttemptID: f.attemptID,
 		State: model.ScreenClipReady, Upload: upload, Signature: strings.Repeat("s", model.DesktopSignatureLength)}
 	query := func(start, length int64) OpenScreenClipQuery {
-		return OpenScreenClipQuery{ManagedScreenClipQuery: ManagedScreenClipQuery{
+		return OpenScreenClipQuery{ScreenClipQuery: ScreenClipQuery{ManagedScreenClipQuery: ManagedScreenClipQuery{
 			ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID,
-		}, ClipID: clipID, Start: start, Length: length}
+		}, ClipID: clipID}, Start: start, Length: length}
 	}
 
 	opened, err := f.service.OpenScreenClip(context.Background(), f.inv, query(0, 100))

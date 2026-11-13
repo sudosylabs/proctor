@@ -256,7 +256,7 @@ func requestScreenClip(
 		Recording       bool   `db:"recording"`
 	}
 	err := tx.Get(ctx, &attempt, `SELECT a.exam_id, a.exam_sitting_id, a.candidate_user_id, a.state,
-			COALESCE((r.policy_document #>> '{native,screen_recording,enabled}')::boolean, false) AS recording
+			`+screenRecordingEnabledSQL+` AS recording
 		FROM exam_attempts a
 		JOIN exam_revisions r ON r.id = a.admission_revision_id
 		WHERE a.id = ?
@@ -274,11 +274,10 @@ func requestScreenClip(
 		return nil, store.NewErrConflict("screen_clip", "screen_recording_disabled", nil)
 	}
 
-	var databaseNow time.Time
-	if err = tx.Get(ctx, &databaseNow, `SELECT statement_timestamp()`); err != nil {
-		return nil, fmt.Errorf("read screen clip request time: %w", err)
+	databaseNow, err := databaseTime(ctx, tx)
+	if err != nil {
+		return nil, err
 	}
-	databaseNow = model.TimeUTC(databaseNow)
 	if clip.Range.End.After(databaseNow.Add(screenClipMaxFuture)) {
 		return nil, store.NewErrInvalidInput("screen_clip", "range", nil)
 	}
@@ -332,7 +331,7 @@ func requestIncidentScreenClip(ctx context.Context, tx *sqlxTxWrapper, flag *mod
 		Incidents int  `db:"incidents"`
 	}
 	if err := tx.Get(ctx, &attempt, `SELECT
-			COALESCE((r.policy_document #>> '{native,screen_recording,enabled}')::boolean, false) AS recording,
+			`+screenRecordingEnabledSQL+` AS recording,
 			(SELECT count(*) FROM exam_attempt_screen_clips c WHERE c.exam_attempt_id = a.id AND c.source = ?) AS incidents
 		FROM exam_attempts a
 		JOIN exam_revisions r ON r.id = a.admission_revision_id
@@ -566,10 +565,15 @@ func failExpiredScreenClipUploads(ctx context.Context, tx *sqlxTxWrapper, partic
 	return nil
 }
 
+// screenRecordingEnabledSQL reads whether an Attempt's admitted Revision
+// records the screen, from exam_revisions r.
+const screenRecordingEnabledSQL = `COALESCE((r.policy_document #>> '{native,screen_recording,enabled}')::boolean, false)`
+
+// databaseTime reads the database's time for the current statement.
 func databaseTime(ctx context.Context, tx *sqlxTxWrapper) (time.Time, error) {
 	var now time.Time
 	if err := tx.Get(ctx, &now, `SELECT statement_timestamp()`); err != nil {
-		return time.Time{}, fmt.Errorf("read screen clip time: %w", err)
+		return time.Time{}, fmt.Errorf("read database time: %w", err)
 	}
 	return model.TimeUTC(now), nil
 }

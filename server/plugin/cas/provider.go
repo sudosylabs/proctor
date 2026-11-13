@@ -41,15 +41,15 @@ type Settings struct {
 // accounts.
 func (s Settings) Validate(autoProvision bool) error {
 	var problems externalauth.SettingsErrors
-	externalauth.ValidateHTTPSURL("base_url", s.BaseURL, &problems)
+	externalauth.ValidateHTTPSURL("Settings.BaseURL", s.BaseURL, &problems)
 	if parsed, _ := url.Parse(s.BaseURL); parsed != nil && (parsed.RawQuery != "" || parsed.Fragment != "") {
-		problems.Add("base_url", "must not contain a query or fragment")
+		problems.Add("Settings.BaseURL", "must not contain a query or fragment")
 	}
 	if s.ValidationPath == "" ||
 		!strings.HasPrefix(s.ValidationPath, "/") ||
 		strings.HasPrefix(s.ValidationPath, "//") ||
 		strings.ContainsAny(s.ValidationPath, "?#\x00\r\n") {
-		problems.Add("validation_path", "must be an absolute path without a query or fragment")
+		problems.Add("Settings.ValidationPath", "must be an absolute path without a query or fragment")
 	}
 	externalauth.ValidateHTTPBounds(s.Timeout.Duration, s.MaxResponseBytes, &problems)
 	externalauth.ValidateClaims(s.Claims, autoProvision, &problems)
@@ -63,7 +63,7 @@ func New(definition plugin.IdentityProviderDefinition) (plugin.IdentityProvider,
 		return nil, err
 	}
 	if definition.Secrets != nil {
-		return nil, errors.New("invalid provider settings: secrets: CAS takes no secrets")
+		return nil, errors.New("invalid provider settings: Secrets: CAS takes no secrets")
 	}
 	if err := settings.Validate(definition.AutoProvision); err != nil {
 		return nil, err

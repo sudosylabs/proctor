@@ -18,14 +18,20 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ScreenClipChunkCommand is one chunk of a clip, sent by the candidate's
+// UploadScreenClipChunkCommand is one chunk of a clip, sent by the candidate's
 // Desktop through its live Connection.
-type ScreenClipChunkCommand struct {
+type UploadScreenClipChunkCommand struct {
 	Access CandidateAccess
 	ClipID model.ScreenClipID
 	Index  int
 	Body   io.Reader
 	Size   int64
+}
+
+type BeginScreenClipUploadCommand struct {
+	Access CandidateAccess
+	ClipID model.ScreenClipID
+	Upload model.ScreenClipUpload
 }
 
 // BeginScreenClipUpload records the clip the candidate's Desktop is about to
@@ -34,12 +40,11 @@ type ScreenClipChunkCommand struct {
 func (s *Service) BeginScreenClipUpload(
 	ctx context.Context,
 	inv invocation.Invocation,
-	candidateAccess CandidateAccess,
-	clipID model.ScreenClipID,
-	upload model.ScreenClipUpload,
+	command BeginScreenClipUploadCommand,
 ) (_ store.ExamAttemptScreenClipView, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	selector, err := screenClipUploadSelector(inv, candidateAccess)
+	clipID, upload := command.ClipID, command.Upload
+	selector, err := screenClipUploadSelector(inv, command.Access)
 	if err != nil {
 		return store.ExamAttemptScreenClipView{}, err
 	}
@@ -91,7 +96,7 @@ func (s *Service) ScreenClipUploadStatus(
 func (s *Service) UploadScreenClipChunk(
 	ctx context.Context,
 	inv invocation.Invocation,
-	command ScreenClipChunkCommand,
+	command UploadScreenClipChunkCommand,
 ) (resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	selector, err := screenClipUploadSelector(inv, command.Access)
@@ -131,9 +136,9 @@ func (s *Service) UploadScreenClipChunk(
 	return nil
 }
 
-// ScreenClipCompletion finishes an upload: the clip's content digest and the
+// CompleteScreenClipUploadCommand finishes an upload: the clip's content digest and the
 // installation key's ES256 signature over it.
-type ScreenClipCompletion struct {
+type CompleteScreenClipUploadCommand struct {
 	Access        CandidateAccess
 	ClipID        model.ScreenClipID
 	ContentDigest string
@@ -145,7 +150,7 @@ type ScreenClipCompletion struct {
 func (s *Service) CompleteScreenClipUpload(
 	ctx context.Context,
 	inv invocation.Invocation,
-	command ScreenClipCompletion,
+	command CompleteScreenClipUploadCommand,
 ) (_ store.ExamAttemptScreenClipView, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	selector, err := screenClipUploadSelector(inv, command.Access)

@@ -10045,7 +10045,7 @@ export interface components {
             items: components["schemas"]["NativeConditionEvidence"][];
             next_cursor?: string;
         };
-        /** @description Where the exam begins on the stream: Desktop sends it once, when the candidate window mounts after admission. Before it the server applies the policy's readiness rules; from it, the participation rules. */
+        /** @description Where the exam begins on the stream: Desktop sends it once, when the candidate window mounts after admission. Before it the server applies the policy's readiness rules; from it, the participation rules, on the latest facts. Send the mounted candidate window's fact before it, in the same or an earlier batch; otherwise the window rule is evaluated on the window Desktop reported at Start and fails. */
         NativeParticipationConfirmed: {
             /**
              * @description discriminator enum property added by openapi-typescript

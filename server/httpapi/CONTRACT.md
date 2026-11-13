@@ -1962,7 +1962,9 @@ new bytes never receive a content receipt.
 Interpretation waits for received or terminally omitted earlier positions and
 then applies records in stream order. Connect starts it from the facts the
 consumed preflight reported, in the readiness phase; `participation_confirmed`,
-sent once the candidate window mounts, starts the participation rules. The
+sent once the candidate window mounts, starts the participation rules on the
+latest facts; the mounted window's `capability_fact` must precede it, or the
+window rule fails on the window reported at Start. The
 server evaluates every rule of the current phase itself, with the release's
 stability time before a rule recovers; Desktop's `rule_status` never changes it
 and a disagreement is only counted. A fact no newer than the latest of its source

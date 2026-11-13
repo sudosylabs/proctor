@@ -47,6 +47,7 @@ type SecurityPreflightProbe struct {
 
 func TestSecurityPreflightStore(t *testing.T, ss store.Store, probes ...SecurityPreflightProbe) {
 	ctx := context.Background()
+	t.Run("ScreenRecordingDisclosure", func(t *testing.T) { testScreenRecordingDisclosure(t, ctx, ss) })
 	fixture := newExamAttemptFixture(t, ctx, ss)
 	connection := &store.ExamAttemptConnect{CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID}
 	prepareExamAttemptConnect(t, ctx, ss, connection)
@@ -57,6 +58,7 @@ func TestSecurityPreflightStore(t *testing.T, ss store.Store, probes ...Security
 	require.NoError(t, err)
 	require.False(t, overview.ServerTime.IsZero())
 	require.Equal(t, fixture.sitting.ID, overview.Resolved.Policy.SittingID)
+	require.Nil(t, overview.ScreenRecordingDisclosure, "an Exam that does not record the screen shows no recorder notice")
 	again, err := ss.SecurityPreflight().ReadSecurityPolicyOverview(ctx, access)
 	require.NoError(t, err)
 	overviewDigest, err := overview.Resolved.ReadinessDigest()
@@ -79,6 +81,7 @@ func TestSecurityPreflightStore(t *testing.T, ss store.Store, probes ...Security
 	require.True(t, prepared.ConsistentWith(fixture.sitting.ID), "PrepareSecurityPreflight returned a result inconsistent with its request")
 	require.False(t, prepared.Replayed)
 	require.Nil(t, prepared.FrozenAttemptConfiguration)
+	require.Nil(t, prepared.ScreenRecordingDisclosure)
 	require.Equal(t, input.PreflightID, prepared.Challenge.PreflightID)
 	require.Equal(t, model.SecurityPreflightLifetime, prepared.Challenge.ExpiresAt.Sub(prepared.Challenge.IssuedAt))
 	requireSuccessfulAudit(t, ctx, ss, input.AuditEventID)
@@ -558,4 +561,45 @@ func testClosedNativeDelivery(t *testing.T, ctx context.Context, ss store.Store,
 		_, err := ss.NativeDelivery().NativeDeliveryStatus(ctx, foreign)
 		require.True(t, store.IsNotFound(err), "foreign historical delivery")
 	}
+}
+
+// testScreenRecordingDisclosure checks that a recording Exam's overview and
+// prepared preflight both carry the recorder notice, with the integrity
+// retention period its clips follow, and that a replay keeps it.
+func testScreenRecordingDisclosure(t *testing.T, ctx context.Context, ss store.Store) {
+	fixture := newExamAttemptFixtureWithScreenRecording(t, ctx, ss)
+	connection := &store.ExamAttemptConnect{CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID}
+	prepareExamAttemptConnect(t, ctx, ss, connection)
+	build := connection.DesktopBuild
+	build.NativeAgreement = syntheticNativeAgreement(t, build)
+	access := store.SecurityPreflightAccess{SittingID: fixture.sitting.ID, CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID, DesktopRegistrationID: fixture.session.DesktopRegistrationID, DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint, DesktopBuild: build, DesktopCompatibilityPolicyRevision: connection.DesktopCompatibilityPolicyRevision}
+	retention, err := ss.RetentionPolicy().Get(ctx)
+	require.NoError(t, err)
+	want, err := model.NewScreenRecordingDisclosure(model.NativeScreenRecordingPolicy{Enabled: true}, retention)
+	require.NoError(t, err)
+	require.Equal(t, &model.ScreenRecordingDisclosure{
+		NoticeID: "screen_recording", Audience: "exam_managers_of_the_sitting",
+		LocalRecording: "whole_session_deleted_at_submission", Uploads: "requested_and_flagged_ranges_only",
+		RetentionPolicyRevision: retention.Revision, ClipRetentionDays: retention.IntegrityRetentionDays,
+		RetentionAnchor: "eligible_closed_sitting_records_completion",
+	}, want)
+
+	overview, err := ss.SecurityPreflight().ReadSecurityPolicyOverview(ctx, access)
+	require.NoError(t, err)
+	require.True(t, overview.Resolved.Policy.ScreenRecording.Enabled)
+	require.Equal(t, want, overview.ScreenRecordingDisclosure, "the overview tells the candidate the Exam records the screen")
+
+	input := &store.SecurityPreflightPrepare{Access: access, PreflightID: model.NewID(), Challenge: model.NewCredentialToken(), NativeRegistryDigest: build.NativeAgreement.RegistryDigest(), ConfigurationManifestFingerprint: build.ConfigurationManifest.Fingerprint(), AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
+	command := examCommand(fixture.candidate.ID, store.SecurityPreflightPrepareOperation, "recording-prepare", "recording-prepare")
+	prepared, err := ss.SecurityPreflight().PrepareSecurityPreflight(ctx, input, command)
+	require.NoError(t, err)
+	require.Equal(t, want, prepared.ScreenRecordingDisclosure, "Start shows the same notice")
+	replay := *input
+	replay.PreflightID = model.NewID()
+	replay.Challenge = model.NewCredentialToken()
+	replay.AuditEventID = saveExamAttemptAudit(t, ctx, ss, fixture).ID
+	repeated, err := ss.SecurityPreflight().PrepareSecurityPreflight(ctx, &replay, command)
+	require.NoError(t, err)
+	require.True(t, repeated.Replayed)
+	require.Equal(t, want, repeated.ScreenRecordingDisclosure, "a replay keeps the notice")
 }

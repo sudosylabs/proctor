@@ -1236,6 +1236,49 @@ components:
         Localized collection notice, not consent or history-read authority. Zero days means no configured
         automatic expiry. Holds, approval, grace and source reconciliation still apply; minimized integrity
         evidence can have a different period.
+    ScreenRecordingDisclosure:
+      type: object
+      additionalProperties: false
+      required:
+        - notice_id
+        - audience
+        - local_recording
+        - uploads
+        - retention_policy_revision
+        - clip_retention_days
+        - retention_anchor
+      properties:
+        notice_id:
+          type: string
+          const: screen_recording
+        audience:
+          type: string
+          const: exam_managers_of_the_sitting
+          description: Who may play an uploaded clip.
+        local_recording:
+          type: string
+          const: whole_session_deleted_at_submission
+          description: Desktop records the whole session on the device and deletes it at submission.
+        uploads:
+          type: string
+          const: requested_and_flagged_ranges_only
+          description: Only ranges the Sitting's Exam Managers ask for, or the minute either side of a Flag, leave the device.
+        retention_policy_revision:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9007199254740991
+        clip_retention_days:
+          type: integer
+          minimum: 0
+          maximum: 36500
+          description: Uploaded clips are integrity evidence and follow its retention period.
+        retention_anchor:
+          type: string
+          const: eligible_closed_sitting_records_completion
+      description: >-
+        Localized recorder notice, not consent or playback authority. Zero days means no configured automatic
+        expiry; holds still apply.
     SecurityPolicyOverviewResponse:
       type: object
       additionalProperties: false
@@ -1246,6 +1289,7 @@ components:
         - capability_matrix_digest
         - catalog_bindings
         - browser_activity_disclosure
+        - screen_recording_disclosure
       properties:
         server_time:
           type: string
@@ -1264,6 +1308,11 @@ components:
             $ref: '#/components/schemas/SecurityCatalogBinding'
         browser_activity_disclosure:
           $ref: '#/components/schemas/BrowserActivityDisclosure'
+        screen_recording_disclosure:
+          description: The recorder notice to show before Start; null when the Exam does not record the screen.
+          oneOf:
+            - $ref: '#/components/schemas/ScreenRecordingDisclosure'
+            - type: 'null'
     ReadinessDigest:
       type: string
       pattern: ^sha256:[0-9a-f]{64}$
@@ -1285,6 +1334,7 @@ components:
         - preflight_challenge
         - frozen_attempt_configuration
         - browser_activity_disclosure
+        - screen_recording_disclosure
       properties:
         server_time:
           type: string
@@ -1313,6 +1363,11 @@ components:
             - type: 'null'
         browser_activity_disclosure:
           $ref: '#/components/schemas/BrowserActivityDisclosure'
+        screen_recording_disclosure:
+          description: The recorder notice to show before Start; null when the Exam does not record the screen.
+          oneOf:
+            - $ref: '#/components/schemas/ScreenRecordingDisclosure'
+            - type: 'null'
       description: >-
         Privileged registered-Desktop response bounded to 128 KiB. Catalog bindings are unique and sorted by
         kind then catalog_id. First admission returns null configuration; Ready rejoin returns the original

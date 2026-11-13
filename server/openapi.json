@@ -25705,6 +25705,57 @@
         ],
         "type": "object"
       },
+      "ScreenRecordingDisclosure": {
+        "additionalProperties": false,
+        "description": "Localized recorder notice, not consent or playback authority. Zero days means no configured automatic expiry; holds still apply.",
+        "properties": {
+          "audience": {
+            "const": "exam_managers_of_the_sitting",
+            "description": "Who may play an uploaded clip.",
+            "type": "string"
+          },
+          "clip_retention_days": {
+            "description": "Uploaded clips are integrity evidence and follow its retention period.",
+            "maximum": 36500,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "local_recording": {
+            "const": "whole_session_deleted_at_submission",
+            "description": "Desktop records the whole session on the device and deletes it at submission.",
+            "type": "string"
+          },
+          "notice_id": {
+            "const": "screen_recording",
+            "type": "string"
+          },
+          "retention_anchor": {
+            "const": "eligible_closed_sitting_records_completion",
+            "type": "string"
+          },
+          "retention_policy_revision": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "uploads": {
+            "const": "requested_and_flagged_ranges_only",
+            "description": "Only ranges the Sitting's Exam Managers ask for, or the minute either side of a Flag, leave the device.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "notice_id",
+          "audience",
+          "local_recording",
+          "uploads",
+          "retention_policy_revision",
+          "clip_retention_days",
+          "retention_anchor"
+        ],
+        "type": "object"
+      },
       "SearchClassItem": {
         "additionalProperties": false,
         "description": "An unarchived Class within the caller's class.view scope.",
@@ -25932,6 +25983,17 @@
           "readiness_digest": {
             "$ref": "#/components/schemas/ReadinessDigest"
           },
+          "screen_recording_disclosure": {
+            "description": "The recorder notice to show before Start; null when the Exam does not record the screen.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ScreenRecordingDisclosure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "server_time": {
             "format": "date-time",
             "type": "string"
@@ -25943,7 +26005,8 @@
           "readiness_digest",
           "capability_matrix_digest",
           "catalog_bindings",
-          "browser_activity_disclosure"
+          "browser_activity_disclosure",
+          "screen_recording_disclosure"
         ],
         "type": "object"
       },
@@ -26014,6 +26077,17 @@
           "readiness_digest": {
             "$ref": "#/components/schemas/ReadinessDigest"
           },
+          "screen_recording_disclosure": {
+            "description": "The recorder notice to show before Start; null when the Exam does not record the screen.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ScreenRecordingDisclosure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "server_time": {
             "format": "date-time",
             "type": "string"
@@ -26028,7 +26102,8 @@
           "catalog_bindings",
           "preflight_challenge",
           "frozen_attempt_configuration",
-          "browser_activity_disclosure"
+          "browser_activity_disclosure",
+          "screen_recording_disclosure"
         ],
         "type": "object"
       },

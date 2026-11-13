@@ -41,8 +41,11 @@ type SecurityPreflightPrepare struct {
 	AuditAt                          time.Time
 }
 type SecurityPreflightPrepared struct {
-	ServerTime                 time.Time
-	BrowserActivityDisclosure  model.BrowserActivityDisclosure
+	ServerTime                time.Time
+	BrowserActivityDisclosure model.BrowserActivityDisclosure
+	// ScreenRecordingDisclosure is set exactly when the policy records the
+	// screen.
+	ScreenRecordingDisclosure  *model.ScreenRecordingDisclosure
 	Challenge                  model.SecurityPreflightChallenge
 	Resolved                   model.ResolvedNativePolicy
 	FrozenAttemptConfiguration *model.AttemptConfiguration
@@ -124,4 +127,5 @@ type SecurityPolicyOverview struct {
 	ServerTime                time.Time
 	Resolved                  model.ResolvedNativePolicy
 	BrowserActivityDisclosure model.BrowserActivityDisclosure
+	ScreenRecordingDisclosure *model.ScreenRecordingDisclosure
 }

@@ -134,6 +134,10 @@ func (s *SQLSecurityPreflightStore) PrepareSecurityPreflight(
 			if err != nil {
 				return err
 			}
+			value.ScreenRecordingDisclosure, err = model.NewScreenRecordingDisclosure(value.Resolved.Policy.ScreenRecording, retention)
+			if err != nil {
+				return err
+			}
 
 			value.ServerTime = row.DatabaseNow
 			return completeSecurityPreflightAudit(ctx, tx, input.AuditEventID, input.AuditAt, value.Challenge.PreflightID, true)
@@ -211,10 +215,15 @@ func (s *SQLSecurityPreflightStore) prepareSecurityPreflight(
 	if err != nil {
 		return nil, err
 	}
+	recording, err := model.NewScreenRecordingDisclosure(resolved.Policy.ScreenRecording, retention)
+	if err != nil {
+		return nil, err
+	}
 
 	prepared := &store.SecurityPreflightPrepared{
 		ServerTime:                now,
 		BrowserActivityDisclosure: disclosure,
+		ScreenRecordingDisclosure: recording,
 		Challenge: model.SecurityPreflightChallenge{
 			PreflightID: input.PreflightID,
 			Challenge:   input.Challenge,
@@ -420,6 +429,7 @@ func (securityPreflightResultOutcome) outcomeDocument() {}
 type securityPreflightPreparedDocument struct {
 	ServerTime                 time.Time                        `json:"server_time"`
 	BrowserActivityDisclosure  model.BrowserActivityDisclosure  `json:"browser_activity_disclosure"`
+	ScreenRecordingDisclosure  *model.ScreenRecordingDisclosure `json:"screen_recording_disclosure"`
 	Challenge                  model.SecurityPreflightChallenge `json:"challenge"`
 	Resolved                   resolvedNativePolicyDocument     `json:"resolved"`
 	FrozenAttemptConfiguration *model.AttemptConfiguration      `json:"frozen_attempt_configuration,omitempty"`
@@ -458,6 +468,7 @@ func encodePreparedSecurityPreflight(prepared *store.SecurityPreflightPrepared) 
 	return encodeOutcome(securityPreflightPreparedDocument{
 		ServerTime:                 prepared.ServerTime,
 		BrowserActivityDisclosure:  prepared.BrowserActivityDisclosure,
+		ScreenRecordingDisclosure:  prepared.ScreenRecordingDisclosure,
 		Challenge:                  prepared.Challenge,
 		Resolved:                   newResolvedNativePolicyDocument(prepared.Resolved),
 		FrozenAttemptConfiguration: prepared.FrozenAttemptConfiguration,
@@ -472,6 +483,7 @@ func decodePreparedSecurityPreflight(raw []byte, agreement *model.DesktopNativeA
 	prepared := store.SecurityPreflightPrepared{
 		ServerTime:                 document.ServerTime,
 		BrowserActivityDisclosure:  document.BrowserActivityDisclosure,
+		ScreenRecordingDisclosure:  document.ScreenRecordingDisclosure,
 		Challenge:                  document.Challenge,
 		Resolved:                   document.Resolved.model(),
 		FrozenAttemptConfiguration: document.FrozenAttemptConfiguration,
@@ -480,6 +492,7 @@ func decodePreparedSecurityPreflight(raw []byte, agreement *model.DesktopNativeA
 		!prepared.ServerTime.Equal(prepared.Challenge.IssuedAt) ||
 		prepared.Resolved.Validate(agreement, prepared.ServerTime) != nil ||
 		prepared.BrowserActivityDisclosure.Validate() != nil ||
+		model.ValidateScreenRecordingDisclosure(prepared.ScreenRecordingDisclosure, prepared.Resolved.Policy.ScreenRecording) != nil ||
 		(prepared.FrozenAttemptConfiguration != nil && prepared.FrozenAttemptConfiguration.Validate() != nil) {
 		return prepared, invalidPersistedState("security_preflight", "prepared", model.ErrSecurityPreflightInvalid)
 	}
@@ -763,6 +776,13 @@ func (s *SQLSecurityPreflightStore) ReadSecurityPolicyOverview(
 		if err != nil {
 			return nil, err
 		}
-		return &store.SecurityPolicyOverview{ServerTime: now, Resolved: resolved, BrowserActivityDisclosure: disclosure}, nil
+		recording, err := model.NewScreenRecordingDisclosure(resolved.Policy.ScreenRecording, retention)
+		if err != nil {
+			return nil, err
+		}
+		return &store.SecurityPolicyOverview{
+			ServerTime: now, Resolved: resolved,
+			BrowserActivityDisclosure: disclosure, ScreenRecordingDisclosure: recording,
+		}, nil
 	})
 }

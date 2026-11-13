@@ -2059,7 +2059,12 @@ device and uploads only ranges the server asks for. The policy then activates
 `screen_recording` with one enforced readiness rule, `screen_recording.free_space`
 (`summary.free_space_mib >= 3072`): Start is refused while the recorder is not
 permitted or the device has less room, and a recording that fails later is only a
-clip gap, never a Flag. An Exam Manager of the Sitting
+clip gap, never a Flag. The readiness overview and the prepared preflight then
+carry `screen_recording_disclosure`, the recorder notice Desktop words before
+Start: the whole session is recorded on the device and deleted at submission,
+only requested and Flag ranges are uploaded, the Sitting's Exam Managers play
+them, and clips follow the integrity retention period. It is `null` when the
+Exam does not record. An Exam Manager of the Sitting
 asks with `POST /exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips`,
 a range (from session start, or a start and end) and a private reason kept with
 the request for the Sitting's managers; the request is audited, its reason never

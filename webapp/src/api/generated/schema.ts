@@ -11232,6 +11232,32 @@ export interface components {
             /** @description The numbers, from 1, of the chunks that arrived, in order. */
             received_chunks: number[];
         };
+        /** @description Localized recorder notice, not consent or playback authority. Zero days means no configured automatic expiry; holds still apply. */
+        ScreenRecordingDisclosure: {
+            /**
+             * @description Who may play an uploaded clip.
+             * @constant
+             */
+            audience: "exam_managers_of_the_sitting";
+            /** @description Uploaded clips are integrity evidence and follow its retention period. */
+            clip_retention_days: number;
+            /**
+             * @description Desktop records the whole session on the device and deletes it at submission.
+             * @constant
+             */
+            local_recording: "whole_session_deleted_at_submission";
+            /** @constant */
+            notice_id: "screen_recording";
+            /** @constant */
+            retention_anchor: "eligible_closed_sitting_records_completion";
+            /** Format: int64 */
+            retention_policy_revision: number;
+            /**
+             * @description Only ranges the Sitting's Exam Managers ask for, or the minute either side of a Flag, leave the device.
+             * @constant
+             */
+            uploads: "requested_and_flagged_ranges_only";
+        };
         /** @description An unarchived Class within the caller's class.view scope. */
         SearchClassItem: {
             display_name: string;
@@ -11299,6 +11325,8 @@ export interface components {
             catalog_bindings: components["schemas"]["SecurityCatalogBinding"][];
             policy: components["schemas"]["EffectiveExamSecurityPolicy"];
             readiness_digest: components["schemas"]["ReadinessDigest"];
+            /** @description The recorder notice to show before Start; null when the Exam does not record the screen. */
+            screen_recording_disclosure: components["schemas"]["ScreenRecordingDisclosure"] | null;
             /** Format: date-time */
             server_time: string;
         };
@@ -11319,6 +11347,8 @@ export interface components {
             policy_content_digest: string;
             preflight_challenge: components["schemas"]["SecurityPreflightChallenge"];
             readiness_digest: components["schemas"]["ReadinessDigest"];
+            /** @description The recorder notice to show before Start; null when the Exam does not record the screen. */
+            screen_recording_disclosure: components["schemas"]["ScreenRecordingDisclosure"] | null;
             /** Format: date-time */
             server_time: string;
         };

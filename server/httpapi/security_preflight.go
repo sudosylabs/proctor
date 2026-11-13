@@ -121,6 +121,7 @@ type securityPolicyResponse struct {
 	PreflightChallenge         model.SecurityPreflightChallenge  `json:"preflight_challenge"`
 	FrozenAttemptConfiguration *model.AttemptConfiguration       `json:"frozen_attempt_configuration"`
 	BrowserActivityDisclosure  model.BrowserActivityDisclosure   `json:"browser_activity_disclosure"`
+	ScreenRecordingDisclosure  *model.ScreenRecordingDisclosure  `json:"screen_recording_disclosure"`
 }
 
 func (h examAttemptHandlers) prepareSecurityPreflight(request route.Request) (route.Result, error) {
@@ -162,6 +163,7 @@ func (h examAttemptHandlers) prepareSecurityPreflight(request route.Request) (ro
 		PreflightChallenge:         prepared.Challenge,
 		FrozenAttemptConfiguration: prepared.FrozenAttemptConfiguration,
 		BrowserActivityDisclosure:  prepared.BrowserActivityDisclosure,
+		ScreenRecordingDisclosure:  prepared.ScreenRecordingDisclosure,
 	}
 	encoded, err := json.Marshal(result)
 	if err != nil || len(encoded) > model.SecurityPolicyResponseMaxBytes {
@@ -181,6 +183,7 @@ type securityPolicyOverviewResponse struct {
 	CapabilityMatrixDigest    string                            `json:"capability_matrix_digest"`
 	CatalogBindings           []model.SecurityCatalogBinding    `json:"catalog_bindings"`
 	BrowserActivityDisclosure model.BrowserActivityDisclosure   `json:"browser_activity_disclosure"`
+	ScreenRecordingDisclosure *model.ScreenRecordingDisclosure  `json:"screen_recording_disclosure"`
 }
 
 func (h examAttemptHandlers) securityPolicyOverview(request route.Request) (route.Result, error) {
@@ -203,6 +206,7 @@ func (h examAttemptHandlers) securityPolicyOverview(request route.Request) (rout
 		ServerTime: overview.ServerTime, Policy: overview.Resolved.Policy, ReadinessDigest: readiness,
 		CapabilityMatrixDigest: overview.Resolved.CapabilityMatrixDigest, CatalogBindings: overview.Resolved.CatalogBindings,
 		BrowserActivityDisclosure: overview.BrowserActivityDisclosure,
+		ScreenRecordingDisclosure: overview.ScreenRecordingDisclosure,
 	}
 	encoded, err := json.Marshal(result)
 	if err != nil || len(encoded) > model.SecurityPolicyResponseMaxBytes {

@@ -106,7 +106,7 @@ func (s *Service) UploadScreenClipChunk(
 	}
 	upload := status.Clip.Upload
 	switch {
-	case status.Clip.State != model.ScreenClipUploading || upload == nil:
+	case status.Clip.State != model.ScreenClipUploading:
 		return apperror.New("exam.attempt.state_conflict")
 	case command.Index < 0 || command.Index >= upload.ChunkCount() || command.Size != upload.ChunkSize(command.Index):
 		return apperror.Invalid("exam.attempt.invalid", "screen_clip_chunk")

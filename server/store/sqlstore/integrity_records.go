@@ -117,9 +117,6 @@ func insertPolicySuspension(
 	suspension *model.AttemptSuspension,
 	attemptRevision int64,
 ) error {
-	if suspension == nil || suspension.Source != model.AttemptSuspensionSourcePolicy {
-		return invalidPersistedState("attempt_suspension", "source", nil)
-	}
 	if err := suspension.Validate(); err != nil {
 		return err
 	}

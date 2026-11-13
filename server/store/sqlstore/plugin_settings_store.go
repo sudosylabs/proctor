@@ -114,9 +114,6 @@ func (s SQLPluginSettingsStore) Replace(
 				return replacePluginSettings(ctx, tx, input)
 			},
 			encode: func(outcome pluginSettingsReplacementOutcome) ([]byte, error) {
-				if outcome.Settings == nil {
-					return nil, store.NewErrInvalidInput("plugin_settings", "outcome", nil)
-				}
 				return encodeOutcome(pluginSettingsReplacementDocument{
 					Settings: pluginSettingsDocument(*outcome.Settings),
 					Changed:  outcome.Changed,

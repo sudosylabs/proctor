@@ -47,13 +47,11 @@ func encodeNativeRecord(
 	switch {
 	case record.Fact != nil:
 		row.Kind = "capability_fact"
-		if registry != nil {
-			fact, ok := registry.ObserveFact(*record.Fact)
-			if !ok {
-				return row, model.ErrNativeDeliveryInvalid
-			}
-			meta.Fact = &fact
+		fact, ok := registry.ObserveFact(*record.Fact)
+		if !ok {
+			return row, model.ErrNativeDeliveryInvalid
 		}
+		meta.Fact = &fact
 	case record.Confirmed != nil:
 		row.Kind = "participation_confirmed"
 	case record.RuleStatus != nil:

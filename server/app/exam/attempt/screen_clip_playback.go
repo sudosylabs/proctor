@@ -145,7 +145,7 @@ func (s *Service) readyScreenClip(
 	if err != nil {
 		return nil, ScreenClipViewAuthorization{}, storeError(storeErrors, err)
 	}
-	if clip.State != model.ScreenClipReady || clip.Upload == nil {
+	if clip.State != model.ScreenClipReady {
 		return nil, ScreenClipViewAuthorization{}, apperror.New("exam.attempt.state_conflict")
 	}
 	return clip, viewer, nil

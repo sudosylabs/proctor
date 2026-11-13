@@ -75,9 +75,6 @@ type ExamAttemptSubmittedEvent struct {
 func NewExamAttemptSubmittedEvent(spec ExamAttemptSubmittedEvent) (*DomainEvent, error) {
 	data := examAttemptSubmittedData{SubmissionID: spec.SubmissionID, AttemptID: spec.AttemptID,
 		SittingID: spec.SittingID, ExamID: spec.ExamID}
-	if !data.valid() {
-		return nil, invalidModelError("NewExamAttemptSubmittedEvent", "domain_event", "data", "invalid exam.attempt.submitted identifiers", "")
-	}
 	encoded, err := json.Marshal(data)
 	if err != nil {
 		return nil, invalidModelError("NewExamAttemptSubmittedEvent", "domain_event", "data", "encode exam.attempt.submitted data", "")
@@ -143,8 +140,8 @@ func DecodeDomainEventDispatchCommand(raw json.RawMessage) (DomainEventDispatchC
 // NewDomainEventDispatchJob builds the queued Job that delivers event. The
 // event ID is the dedupe key and the Job starts at the event's instant.
 func NewDomainEventDispatchJob(id JobID, event *DomainEvent) (*Job, error) {
-	if err := event.Validate(); err != nil {
-		return nil, err
+	if event == nil {
+		return nil, invalidModelError("NewDomainEventDispatchJob", "domain_event_job", "", "missing domain event", "")
 	}
 	command, err := EncodeDomainEventDispatchCommand(DomainEventDispatchCommand{EventID: event.ID})
 	if err != nil {

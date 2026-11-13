@@ -224,7 +224,7 @@ func (h examAttemptHandlers) uploadScreenClipChunk(request route.Request) (route
 		return route.ProtocolResult{}, err
 	}
 	number, err := strconv.Atoi(request.Params["chunk"])
-	if err != nil || number < 1 || request.HTTP == nil || request.HTTP.Body == nil ||
+	if err != nil || request.HTTP == nil || request.HTTP.Body == nil ||
 		request.HTTP.ContentLength < 1 || request.HTTP.ContentLength > model.ScreenClipChunkBytes {
 		return route.ProtocolResult{}, route.InvalidRequest(errors.New("a chunk number and its exact Content-Length are required"))
 	}

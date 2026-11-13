@@ -42,8 +42,8 @@
     },
     "renewal_interval_seconds": {
       "type": "integer",
-      "minimum": 1,
-      "description": "How often to send exam_attempt.renew."
+      "const": 5,
+      "description": "How often to send exam_attempt.renew, in seconds. The same value as AdmittedSecurity.renewal_interval_seconds."
     },
     "started_at": {
       "$ref": "instant.json"

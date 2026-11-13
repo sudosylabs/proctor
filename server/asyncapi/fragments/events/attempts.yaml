@@ -140,8 +140,8 @@ components:
     exam_attempt_reallowed:
       name: exam_attempt_reallowed
       title: Attempt re-allowed
-      summary: An Attempt Suspension was closed and the Attempt is active again.
-      description: An Attempt Suspension was closed and the Attempt is active again. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.
+      summary: An Attempt Suspension was closed and the Attempt is ready again; it becomes active only through a new secure admission.
+      description: An Attempt Suspension was closed and the Attempt is ready again; it becomes active only through a new secure admission. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.
       tags:
         - name: event
         - name: Attempts
@@ -225,8 +225,8 @@ components:
     exam_attempt_access_reallowed:
       name: exam_attempt_access_reallowed
       title: Your Attempt was re-allowed
-      summary: Tells the candidate their Attempt is active again.
-      description: Tells the candidate their Attempt is active again. Delivered to the addressed User's connections that subscribe to exam.sitting.participate on the exam sitting.
+      summary: Tells the candidate their Attempt is ready again; Desktop makes a fresh preflight and connects to resume.
+      description: Tells the candidate their Attempt is ready again; Desktop makes a fresh preflight and connects to resume. Delivered to the addressed User's connections that subscribe to exam.sitting.participate on the exam sitting.
       tags:
         - name: event
         - name: Attempts

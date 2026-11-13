@@ -46,9 +46,10 @@ type ReallowResult struct {
 }
 
 // ReallowExamAttempt idempotently closes the active Attempt Suspension and
-// returns the Attempt to active, fenced by ExpectedAttemptRevision. It
-// authorizes Sitting management on the exact Sitting before reading the
-// Attempt and preserves all evidence.
+// returns the Attempt to ready, fenced by ExpectedAttemptRevision; only a
+// new secure admission makes it active again. It authorizes Sitting
+// management on the exact Sitting before reading the Attempt and preserves
+// all evidence.
 func (s *Service) ReallowExamAttempt(
 	ctx context.Context,
 	inv invocation.Invocation,

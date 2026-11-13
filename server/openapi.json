@@ -8051,6 +8051,7 @@
         "additionalProperties": false,
         "properties": {
           "delivery_stream_id": {
+            "description": "The native delivery stream this admission opened. Desktop sends it as the security control's stream_id and as the native delivery watermark's source_id.",
             "maxLength": 128,
             "minLength": 1,
             "type": "string"
@@ -36122,6 +36123,19 @@
             "$ref": "#/components/parameters/NativeDeliveryConnectionID"
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "format": "binary",
+                "maxLength": 8388608,
+                "type": "string"
+              }
+            }
+          },
+          "description": "The chunk's raw bytes, exactly the size the declared upload gives that chunk: 8 MiB (8388608 bytes) for every chunk but the last.",
+          "required": true
+        },
         "responses": {
           "200": {
             "$ref": "#/components/responses/ScreenClipChunkOK"
@@ -37074,7 +37088,7 @@
         "x-codeSamples": [
           {
             "lang": "Shell",
-            "source": "curl --fail-with-body \\\n  --request POST \\\n  --url 'https://proctor.example.edu/api/v1/exam-attempts/\u003cexam-attempt-id\u003e/submissions' \\\n  --header 'Authorization: DPoP \u003cdesktop-session-access-credential\u003e' \\\n  --header 'DPoP: \u003cfresh-proof-for-this-post-target-and-current-nonce\u003e' \\\n  --header 'X-Proctor-Attempt-Credential: \u003cattempt-credential\u003e' \\\n  --header 'X-Proctor-Attempt-Connection-ID: \u003cattempt-connection-id\u003e' \\\n  --header 'Idempotency-Key: docs-submit-001' \\\n  --header 'Content-Type: application/json' \\\n  --data '{\"participation_id\":\"\u003cparticipation-id\u003e\",\"generation\":2,\"expected_current_revision_id\":\"\u003crevision-id\u003e\",\"expected_workspace_cursor\":18,\"final_focus_loss_sequence\":3,\"browser_activity\":{\"state\":\"not_applicable\"}}'"
+            "source": "curl --fail-with-body \\\n  --request POST \\\n  --url 'https://proctor.example.edu/api/v1/exam-attempts/\u003cexam-attempt-id\u003e/submissions' \\\n  --header 'Authorization: DPoP \u003cdesktop-session-access-credential\u003e' \\\n  --header 'DPoP: \u003cfresh-proof-for-this-post-target-and-current-nonce\u003e' \\\n  --header 'X-Proctor-Attempt-Credential: \u003cattempt-credential\u003e' \\\n  --header 'X-Proctor-Attempt-Connection-ID: \u003cattempt-connection-id\u003e' \\\n  --header 'Idempotency-Key: docs-submit-001' \\\n  --header 'Content-Type: application/json' \\\n  --data '{\"participation_id\":\"\u003cparticipation-id\u003e\",\"generation\":2,\"expected_current_revision_id\":\"\u003crevision-id\u003e\",\"expected_workspace_cursor\":18,\"final_focus_loss_sequence\":3}'"
           }
         ],
         "x-proctor-auth": "session_required",

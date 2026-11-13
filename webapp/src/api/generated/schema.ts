@@ -6545,6 +6545,7 @@ export interface components {
             pending_invitations_is_lower_bound?: boolean;
         };
         AdmittedSecurity: {
+            /** @description The native delivery stream this admission opened. Desktop sends it as the security control's stream_id and as the native delivery watermark's source_id. */
             delivery_stream_id: string;
             /** Format: int64 */
             generation: number;
@@ -19335,7 +19336,12 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        /** @description The chunk's raw bytes, exactly the size the declared upload gives that chunk: 8 MiB (8388608 bytes) for every chunk but the last. */
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
         responses: {
             200: components["responses"]["ScreenClipChunkOK"];
             400: components["responses"]["BadRequest"];

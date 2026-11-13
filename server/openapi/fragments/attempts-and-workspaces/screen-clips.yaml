@@ -484,6 +484,17 @@ paths:
       parameters:
         - $ref: '#/components/parameters/NativeDeliveryCredential'
         - $ref: '#/components/parameters/NativeDeliveryConnectionID'
+      requestBody:
+        required: true
+        description: >-
+          The chunk's raw bytes, exactly the size the declared upload gives that chunk: 8 MiB (8388608 bytes) for
+          every chunk but the last.
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+              maxLength: 8388608
       x-codeSamples:
         - lang: Shell
           source: |-

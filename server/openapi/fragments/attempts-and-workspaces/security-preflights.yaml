@@ -1520,6 +1520,9 @@ components:
           type: string
           minLength: 1
           maxLength: 128
+          description: >-
+            The native delivery stream this admission opened. Desktop sends it as the security control's stream_id
+            and as the native delivery watermark's source_id.
         renewal_interval_seconds:
           type: integer
           format: int64

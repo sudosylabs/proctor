@@ -792,7 +792,7 @@ func NewCandidateExamAttemptSuspendedEvent(
 }
 
 // NewCandidateExamAttemptReallowedEvent tells the candidate alone that their
-// suspended Attempt was re-allowed and is active again. Unlike the suspension
+// suspended Attempt was re-allowed and is ready again. Unlike the suspension
 // event it carries no reason code.
 func NewCandidateExamAttemptReallowedEvent(
 	sittingID model.ExamSittingID,

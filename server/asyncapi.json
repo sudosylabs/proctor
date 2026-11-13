@@ -984,7 +984,7 @@
         "title": "Update the security control"
       },
       "exam_attempt_access_reallowed": {
-        "description": "Tells the candidate their Attempt is active again. Delivered to the addressed User's connections that subscribe to exam.sitting.participate on the exam sitting.",
+        "description": "Tells the candidate their Attempt is ready again; Desktop makes a fresh preflight and connects to resume. Delivered to the addressed User's connections that subscribe to exam.sitting.participate on the exam sitting.",
         "examples": [
           {
             "name": "example",
@@ -1037,7 +1037,7 @@
             }
           ]
         },
-        "summary": "Tells the candidate their Attempt is active again.",
+        "summary": "Tells the candidate their Attempt is ready again; Desktop makes a fresh preflight and connects to resume.",
         "tags": [
           {
             "name": "event"
@@ -1482,7 +1482,7 @@
         "title": "Attempt Integrity Flag raised"
       },
       "exam_attempt_reallowed": {
-        "description": "An Attempt Suspension was closed and the Attempt is active again. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
+        "description": "An Attempt Suspension was closed and the Attempt is ready again; it becomes active only through a new secure admission. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
         "examples": [
           {
             "name": "example",
@@ -1535,7 +1535,7 @@
             }
           ]
         },
-        "summary": "An Attempt Suspension was closed and the Attempt is active again.",
+        "summary": "An Attempt Suspension was closed and the Attempt is ready again; it becomes active only through a new secure admission.",
         "tags": [
           {
             "name": "event"
@@ -4318,8 +4318,8 @@
             "$ref": "#/components/schemas/id"
           },
           "renewal_interval_seconds": {
-            "description": "How often to send exam_attempt.renew.",
-            "minimum": 1,
+            "const": 5,
+            "description": "How often to send exam_attempt.renew, in seconds. The same value as AdmittedSecurity.renewal_interval_seconds.",
             "type": "integer"
           },
           "replayed": {
@@ -5627,6 +5627,7 @@
                   "type": "string"
                 },
                 "source_id": {
+                  "description": "For the native family, the admitted delivery_stream_id; for a Browser source, that source's ID.",
                   "maxLength": 128,
                   "minLength": 1,
                   "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
@@ -5654,6 +5655,7 @@
             "type": "string"
           },
           "stream_id": {
+            "description": "The admitted native delivery stream: exactly AdmittedSecurity.delivery_stream_id from the connect reply. A control naming another stream is refused.",
             "maxLength": 128,
             "minLength": 1,
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",

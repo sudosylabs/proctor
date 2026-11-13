@@ -168,10 +168,6 @@ func (s *Service) ReplacePluginSettings(
 	if err != nil {
 		return PluginView{}, err
 	}
-	if stored == nil || stored.Settings == nil || stored.Settings.Validate() != nil || stored.Settings.PluginID != command.PluginID {
-		return PluginView{}, apperror.New("plugin.unavailable")
-	}
-
 	if stored.Changed && !stored.Replayed {
 		s.plugins.PluginSettingsChanged()
 		s.publishPluginSettingsChanged(ctx, institution.ID, stored.Settings)
@@ -197,7 +193,7 @@ func (s *Service) authorizePlugins(ctx context.Context, inv invocation.Invocatio
 		return nil, model.Resource{}, apperror.New("plugin.unavailable")
 	}
 	institution, err := s.institutions.GetSingleton(ctx)
-	if err != nil || institution == nil || !institution.ID.IsValid() {
+	if err != nil {
 		return nil, model.Resource{}, pluginSettingsStoreErrors.Translate(err)
 	}
 	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}

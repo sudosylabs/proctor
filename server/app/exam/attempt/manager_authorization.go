@@ -181,7 +181,7 @@ func (a SittingManagerAuthorizer) AuthorizeScreenClipView(
 		return ScreenClipViewAuthorization{}, err
 	}
 	submission, resolveErr := a.Submissions.ResolveAttempt(ctx, attemptID)
-	if resolveErr != nil || submission.AttemptID != attemptID || submission.SittingID != sittingID ||
+	if resolveErr != nil || submission.SittingID != sittingID ||
 		submission.CandidateUserID == inv.Principal().UserID {
 		return ScreenClipViewAuthorization{}, err
 	}

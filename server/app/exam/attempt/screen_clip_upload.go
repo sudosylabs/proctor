@@ -57,9 +57,6 @@ func (s *Service) BeginScreenClipUpload(
 	if err != nil {
 		return store.ExamAttemptScreenClipView{}, storeError(storeErrors, err)
 	}
-	if clip == nil || clip.ID != clipID {
-		return store.ExamAttemptScreenClipView{}, apperror.New("exam.attempt.unavailable")
-	}
 	return *clip, nil
 }
 
@@ -79,9 +76,6 @@ func (s *Service) ScreenClipUploadStatus(
 	status, err := s.attempts.GetScreenClipUpload(ctx, selector, clipID)
 	if err != nil {
 		return store.ExamAttemptScreenClipUploadStatus{}, storeError(storeErrors, err)
-	}
-	if status == nil || status.Clip.ID != clipID {
-		return store.ExamAttemptScreenClipUploadStatus{}, apperror.New("exam.attempt.unavailable")
 	}
 	if status.Clip.Upload == nil {
 		// Desktop has not declared the clip yet: there is no upload to read.
@@ -109,9 +103,6 @@ func (s *Service) UploadScreenClipChunk(
 	status, err := s.attempts.GetScreenClipUpload(ctx, selector, command.ClipID)
 	if err != nil {
 		return storeError(storeErrors, err)
-	}
-	if status == nil || status.Clip.ID != command.ClipID {
-		return apperror.New("exam.attempt.unavailable")
 	}
 	upload := status.Clip.Upload
 	switch {
@@ -167,7 +158,7 @@ func (s *Service) CompleteScreenClipUpload(
 	if err != nil {
 		return store.ExamAttemptScreenClipView{}, storeError(storeErrors, err)
 	}
-	if clip == nil || clip.ID != clipID || clip.State != model.ScreenClipReady {
+	if clip.State != model.ScreenClipReady {
 		return store.ExamAttemptScreenClipView{}, apperror.New("exam.attempt.unavailable")
 	}
 	return *clip, nil

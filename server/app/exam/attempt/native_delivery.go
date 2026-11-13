@@ -438,7 +438,7 @@ func (s *Service) AppendNativeDelivery(
 		return nil, s.failAudit(ctx, audit, s.nativeDeliveryFailure(ctx, deliveryAccess, err))
 	}
 
-	if value == nil || value.Acknowledgement == nil ||
+	if value == nil ||
 		value.Acknowledgement.Receipt.Validate() != nil ||
 		value.Acknowledgement.Receipt.StreamID != deliveryAccess.StreamID ||
 		value.Acknowledgement.Receipt.BatchSequence != command.Batch.BatchSequence {

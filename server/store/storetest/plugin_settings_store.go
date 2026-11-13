@@ -48,6 +48,8 @@ func TestPluginSettingsStore(t *testing.T, stores store.Store) {
 	require.False(t, result.Replayed)
 	require.True(t, result.Changed)
 	require.Equal(t, int64(1), result.Settings.Revision)
+	require.Equal(t, model.PluginID("display-topology"), result.Settings.PluginID, "the settings saved are the named plugin's")
+	require.NoError(t, result.Settings.Validate())
 	require.True(t, result.Settings.Enabled)
 	require.JSONEq(t, `{"mode":"observe","threshold":1.5}`, string(result.Settings.Settings))
 	assertPluginSettingsAuditIsSafe(t, ctx, stores, first.AuditEventID)

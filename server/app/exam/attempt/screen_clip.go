@@ -116,9 +116,6 @@ func (s *Service) RequestScreenClip(
 	if err != nil {
 		return ScreenClipRequestResult{}, s.failAudit(ctx, auditID, storeError(storeErrors, err))
 	}
-	if stored == nil || stored.Clip.ID != clip.ID && !stored.Replayed || stored.Clip.AttemptID != command.AttemptID {
-		return ScreenClipRequestResult{}, apperror.New("exam.attempt.unavailable")
-	}
 	if !stored.Replayed {
 		s.publishScreenClipsRequested(ctx, stored.SittingID, stored.Clip.AttemptID, stored.CandidateUserID, stored.Clip.RequestedAt)
 	}
@@ -187,9 +184,6 @@ func (s *Service) TakeScreenClip(
 	clip, err := s.attempts.DeliverScreenClip(ctx, &store.ExamAttemptScreenClipDelivery{Access: selector, ClipID: clipID})
 	if err != nil {
 		return store.ExamAttemptScreenClipView{}, storeError(storeErrors, err)
-	}
-	if clip == nil || clip.ID != clipID {
-		return store.ExamAttemptScreenClipView{}, apperror.New("exam.attempt.unavailable")
 	}
 	return *clip, nil
 }

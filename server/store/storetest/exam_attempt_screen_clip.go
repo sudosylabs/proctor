@@ -89,6 +89,7 @@ func TestExamAttemptScreenClipStore(t *testing.T, ss store.Store) {
 
 	delivered, err := ss.ExamAttempt().DeliverScreenClip(ctx, &store.ExamAttemptScreenClipDelivery{Access: access, ClipID: first.Clip.ID})
 	require.NoError(t, err)
+	require.Equal(t, first.Clip.ID, delivered.ID, "the taken clip is the one asked for")
 	require.Equal(t, model.ScreenClipRecording, delivered.State)
 	require.Equal(t, connected.Participation.ID, delivered.DeliveredParticipationID)
 	again, err := ss.ExamAttempt().DeliverScreenClip(ctx, &store.ExamAttemptScreenClipDelivery{Access: access, ClipID: first.Clip.ID})
@@ -186,6 +187,7 @@ func testScreenClipUpload(t *testing.T, ctx context.Context, ss store.Store, acc
 		ChunkSHA256: []string{strings.Repeat("a", 64), strings.Repeat("b", 64)}}
 	begun, err := ss.ExamAttempt().BeginScreenClipUpload(ctx, &store.ExamAttemptScreenClipUploadBegin{Access: access, ClipID: clipID, Upload: upload})
 	require.NoError(t, err)
+	require.Equal(t, clipID, begun.ID, "the declared clip is the one asked for")
 	require.Equal(t, model.ScreenClipUploading, begun.State)
 	require.Equal(t, upload.Digest(), begun.Upload.Digest())
 	again, err := ss.ExamAttempt().BeginScreenClipUpload(ctx, &store.ExamAttemptScreenClipUploadBegin{Access: access, ClipID: clipID, Upload: upload})
@@ -218,6 +220,7 @@ func testScreenClipUpload(t *testing.T, ctx context.Context, ss store.Store, acc
 	requireConflictConstraint(t, err, "screen_clip_incomplete")
 	status, err := ss.ExamAttempt().GetScreenClipUpload(ctx, access, clipID)
 	require.NoError(t, err)
+	require.Equal(t, clipID, status.Clip.ID)
 	require.Equal(t, []int{1}, status.Received, "Desktop resumes with what is missing")
 
 	require.NoError(t, chunk(0, strings.Repeat("a", 64), model.ScreenClipChunkBytes))

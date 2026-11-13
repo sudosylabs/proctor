@@ -150,6 +150,8 @@ established principal.
 | `Authentication.External.Providers[].Enabled`<br />Default: no providers | Makes the provider available for new login starts when `true`. Keeping a definition disabled preserves its stable ID without advertising it. |
 | `Authentication.External.Providers[].AutoProvision`<br />Default: no providers | Creates a Proctor User after a valid assertion when no linked identity exists. When enabled, both username and email mappings are required and returned profile values must satisfy the User model. |
 | `Authentication.External.Providers[].Settings`<br />Default: no providers | The protocol's own settings, a JSON object of at most `65536` bytes, described below for CAS and OIDC. The sign-in plugin reads and checks it when it builds the provider and rejects an unknown field. |
+| `Authentication.External.Providers[].Settings.Timeout`<br />Default: no providers | Deadline for each HTTP request the provider makes: a CAS ticket validation, or OIDC discovery, token, key, and UserInfo work. Must be between `1s` and `30s`. |
+| `Authentication.External.Providers[].Settings.MaxResponseBytes`<br />Default: no providers | Maximum accepted response body from the provider. Must be between `1024` and `2097152` bytes. |
 | `Authentication.External.Providers[].Secrets`<br />Default: `null` | The protocol's own secret values, a JSON object of at most `65536` bytes or `null`. Always shown as `"[redacted]"`. CAS takes none; OIDC takes its client secret. |
 
 Provider IDs participate in external identity links. Do not rename an ID as a
@@ -196,8 +198,6 @@ object and place it in `Authentication.External.Providers`.
 | --- | --- |
 | `Authentication.External.Providers[].Settings.BaseURL`<br />Default: no CAS providers | CAS server root. Must be HTTPS, except loopback HTTP is accepted for development, and must contain no credentials, query, or fragment. |
 | `Authentication.External.Providers[].Settings.ValidationPath`<br />Default: no CAS providers | CAS ticket-validation endpoint path, such as `/p3/serviceValidate`. Must start with one `/` and contain no query, fragment, or control characters. |
-| `Authentication.External.Providers[].Settings.Timeout`<br />Default: no CAS providers | Deadline for a CAS validation request. Must be between `1s` and `30s`. |
-| `Authentication.External.Providers[].Settings.MaxResponseBytes`<br />Default: no CAS providers | Maximum CAS response body. Must be between `1024` and `2097152` bytes. |
 
 `Settings.Claims.Subject: "user"` selects the `<cas:user>` value; another released
 attribute may be selected explicitly. Proctor never assumes that `<cas:user>`
@@ -220,8 +220,6 @@ object and place it in `Authentication.External.Providers`.
 | `Authentication.External.Providers[].Secrets.ClientSecret`<br />Default: no OIDC providers | Registered OAuth client secret. Must contain `1`–`4096` safe characters. Secret; use protected delivery. |
 | `Authentication.External.Providers[].Settings.Scopes[]`<br />Default: no OIDC providers | Unique requested scopes, each `1`–`128` characters without whitespace or controls. The list must include `openid`; add only scopes needed for mapped claims. |
 | `Authentication.External.Providers[].Settings.UseUserInfo`<br />Default: `false` per provider | Fetches the OIDC UserInfo endpoint after token verification to supplement profile claims. Security claims remain constrained; the returned subject must match the ID token. |
-| `Authentication.External.Providers[].Settings.Timeout`<br />Default: no OIDC providers | Deadline for OIDC discovery, token, key, and UserInfo HTTP work. Must be between `1s` and `30s`. |
-| `Authentication.External.Providers[].Settings.MaxResponseBytes`<br />Default: no OIDC providers | Maximum accepted external HTTP response body. Must be between `1024` and `2097152` bytes. |
 
 OIDC uses issuer discovery, the Authorization Code flow, S256 PKCE, and a
 transaction-bound nonce. Proctor verifies the ID token's signature, issuer,

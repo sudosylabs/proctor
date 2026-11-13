@@ -313,7 +313,7 @@ const (
 	methodEndByManager                              methodName = "end_by_manager"
 	methodResolveCandidateResource                  methodName = "resolve_candidate_resource"
 	methodResolveSecurityPreflightSitting           methodName = "resolve_security_preflight_sitting"
-	methodUpdateSecurityCoverage                    methodName = "update_security_coverage"
+	methodUpdateSecurity                            methodName = "update_security"
 	methodRecoverSecurityPolicy                     methodName = "recover_security_policy"
 	methodPrepareSecurityPreflight                  methodName = "prepare_security_preflight"
 	methodReportSecurityPreflight                   methodName = "report_security_preflight"

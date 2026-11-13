@@ -77,7 +77,7 @@ type SecurityPreflightReport struct {
 // active owner's registered Session. It does not grant or renew a lease.
 type SecurityPolicyRecovery struct {
 	Security                   model.AdmittedSecurity
-	Renewal                    model.SecurityRenewalResult
+	Control                    model.SecurityControlResult
 	ServerTime                 time.Time
 	FrozenAttemptConfiguration model.AttemptConfiguration
 }
@@ -91,7 +91,7 @@ type SecurityPolicyRecovery struct {
 func (r *SecurityPolicyRecovery) ConsistentWith(attemptID model.ExamAttemptID) bool {
 	return !(r == nil ||
 		r.ServerTime.IsZero() ||
-		r.Renewal.Validate() != nil ||
+		r.Control.Validate() != nil ||
 		r.Security.Validate() != nil ||
 		r.Security.Policy.Scope.AttemptID != attemptID ||
 		r.FrozenAttemptConfiguration.Validate() != nil)

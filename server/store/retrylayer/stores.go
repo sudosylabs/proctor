@@ -1197,8 +1197,8 @@ func (s *securityPreflightStore) RecoverSecurityPolicy(
 func (s *examAttemptStore) UpdateSecurity(
 	ctx context.Context,
 	input *store.ExamAttemptSecurityUpdate,
-) (model.SecurityRenewalResult, error) {
-	return retryCall1(ctx, s.layer, func() (model.SecurityRenewalResult, error) {
+) (model.SecurityControlResult, error) {
+	return retryCall1(ctx, s.layer, func() (model.SecurityControlResult, error) {
 		return s.ExamAttemptStore.UpdateSecurity(ctx, input)
 	})
 }

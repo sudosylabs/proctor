@@ -428,12 +428,12 @@ func syntheticNativeAgreement(t *testing.T, build model.DesktopBuildTuple) *mode
 	return nativetest.NativeAgreement(t, build)
 }
 
-func renewalCoverageFixture() model.SecurityRenewal {
-	return model.SecurityRenewal{ControlSequence: 1, PolicyDigest: model.SHA256Fingerprint([]byte("renewal-policy")), SecuritySessionID: model.NewID(), StreamID: model.NewID(), DeliveryWatermarks: []model.DeliveryWatermark{}}
+func securityControlFixture() model.SecurityControl {
+	return model.SecurityControl{ControlSequence: 1, PolicyDigest: model.SHA256Fingerprint([]byte("renewal-policy")), SecuritySessionID: model.NewID(), StreamID: model.NewID(), DeliveryWatermarks: []model.DeliveryWatermark{}}
 }
-func renewalCoverageResultFixture() model.SecurityRenewalResult {
+func securityControlResultFixture() model.SecurityControlResult {
 	digest := model.SHA256Fingerprint([]byte("renewal-control"))
-	return model.SecurityRenewalResult{ProcessedControlSequence: 1, ProcessedControlDigest: &digest, SecurityInteractionAllowed: true, DeliveryWatermarkRejections: []model.DeliveryWatermarkRejection{}}
+	return model.SecurityControlResult{ProcessedControlSequence: 1, ProcessedControlDigest: &digest, SecurityInteractionAllowed: true, DeliveryWatermarkRejections: []model.DeliveryWatermarkRejection{}}
 }
 
 func (f *desktopBuildResolverFake) ResolveNativeDeliveryBuild(context.Context, NativeDeliveryBuildIdentity) (model.DesktopBuildTuple, error) {

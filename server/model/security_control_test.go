@@ -16,10 +16,10 @@ import (
 )
 
 func TestSecurityControlStrictCodec(t *testing.T) {
-	control := SecurityRenewal{ControlSequence: 1, PolicyDigest: SHA256Fingerprint([]byte("policy")), SecuritySessionID: "security-session", StreamID: "stream", DeliveryWatermarks: []DeliveryWatermark{}}
+	control := SecurityControl{ControlSequence: 1, PolicyDigest: SHA256Fingerprint([]byte("policy")), SecuritySessionID: "security-session", StreamID: "stream", DeliveryWatermarks: []DeliveryWatermark{}}
 	raw, err := control.Canonical()
 	require.NoError(t, err)
-	var decoded SecurityRenewal
+	var decoded SecurityControl
 	require.NoError(t, json.Unmarshal(raw, &decoded))
 	for _, bad := range []string{
 		strings.Replace(string(raw), "\"delivery_watermarks\":[]", "\"delivery_watermarks\":null", 1),

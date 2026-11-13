@@ -44,20 +44,12 @@ type ExternalAuthenticationProvider struct {
 
 // SettingsDocument returns Settings, or nil when it is absent or JSON null.
 func (p ExternalAuthenticationProvider) SettingsDocument() json.RawMessage {
-	return presentDocument(p.Settings)
+	return plugin.PresentDocument(p.Settings)
 }
 
 // SecretsDocument returns Secrets, or nil when it is absent or JSON null.
 func (p ExternalAuthenticationProvider) SecretsDocument() json.RawMessage {
-	return presentDocument(p.Secrets)
-}
-
-func presentDocument(document json.RawMessage) json.RawMessage {
-	trimmed := bytes.TrimSpace(document)
-	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
-		return nil
-	}
-	return document
+	return plugin.PresentDocument(p.Secrets)
 }
 
 type ExternalAuthentication struct {

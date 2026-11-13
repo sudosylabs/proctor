@@ -33,8 +33,8 @@ type DeliveryWatermark struct {
 	AcknowledgedThroughSequence int64  `json:"acknowledged_through_sequence"`
 }
 
-// SecurityRenewal is Desktop's security control on one renewal.
-type SecurityRenewal struct {
+// SecurityControl is Desktop's security control on one renewal.
+type SecurityControl struct {
 	ControlSequence    int64               `json:"control_sequence"`
 	PolicyDigest       string              `json:"policy_digest"`
 	SecuritySessionID  string              `json:"security_session_id"`
@@ -42,7 +42,7 @@ type SecurityRenewal struct {
 	DeliveryWatermarks []DeliveryWatermark `json:"delivery_watermarks"`
 }
 
-func (c SecurityRenewal) Validate() error {
+func (c SecurityControl) Validate() error {
 	if c.ControlSequence <= 0 ||
 		!securitySafeInt(c.ControlSequence) ||
 		!IsValidSHA256Fingerprint(c.PolicyDigest) ||
@@ -77,25 +77,25 @@ func (c SecurityRenewal) Validate() error {
 	return nil
 }
 
-func (c SecurityRenewal) Canonical() ([]byte, error) {
+func (c SecurityControl) Canonical() ([]byte, error) {
 	if c.Validate() != nil {
 		return nil, ErrSecurityControlInvalid
 	}
 	return encodeCanonicalExamDocument(c)
 }
 
-func (c *SecurityRenewal) UnmarshalJSON(raw []byte) error {
+func (c *SecurityControl) UnmarshalJSON(raw []byte) error {
 	if c == nil || len(raw) > SecurityControlMaxBytes || validateExamDocumentJSON(raw) != nil {
 		return ErrSecurityControlInvalid
 	}
-	type wire SecurityRenewal
+	type wire SecurityControl
 	var value wire
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(&value) != nil {
 		return ErrSecurityControlInvalid
 	}
-	candidate := SecurityRenewal(value)
+	candidate := SecurityControl(value)
 	expected, err := candidate.Canonical()
 	if err != nil {
 		return err
@@ -114,17 +114,17 @@ type DeliveryWatermarkRejection struct {
 	Reason   string
 }
 
-// SecurityRenewalResult is what the server made of a renewal's security
+// SecurityControlResult is what the server made of a renewal's security
 // control: the control it has processed, whether the candidate may still
 // interact, and any watermark it refused.
-type SecurityRenewalResult struct {
+type SecurityControlResult struct {
 	ProcessedControlSequence    int64
 	ProcessedControlDigest      *string
 	SecurityInteractionAllowed  bool
 	DeliveryWatermarkRejections []DeliveryWatermarkRejection
 }
 
-func (r SecurityRenewalResult) Validate() error {
+func (r SecurityControlResult) Validate() error {
 	if !securitySafeInt(r.ProcessedControlSequence) ||
 		(r.ProcessedControlSequence == 0) != (r.ProcessedControlDigest == nil) ||
 		r.ProcessedControlDigest != nil && !IsValidSHA256Fingerprint(*r.ProcessedControlDigest) ||

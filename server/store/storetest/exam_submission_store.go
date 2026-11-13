@@ -735,7 +735,7 @@ func testAutomaticExamSubmissionSealing(t *testing.T, ctx context.Context, ss st
 			DesktopRegistrationID: fixture.session.DesktopRegistrationID, DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint,
 			Sequence: 1, ContinuityCredentialHash: activeAccess.ContinuityCredentialHash,
 		}
-		prepareParticipationRenewalCoverage(t, ctx, ss, renewal)
+		prepareParticipationSecurityControl(t, ctx, ss, renewal)
 		closeAt := model.NowUTC()
 		closing, err := ss.ExamSitting().EarlyClose(ctx, &store.ExamSittingManagerTransition{ExamID: fixture.examID,
 			SittingID: fixture.sitting.ID, ActorUserID: fixture.manager.ID, ExpectedRevision: fixture.sitting.Revision,

@@ -35,11 +35,7 @@ type Plugin struct {
 
 // SecretsDocument returns Secrets, or nil when it is absent or JSON null.
 func (p Plugin) SecretsDocument() json.RawMessage {
-	trimmed := bytes.TrimSpace(p.Secrets)
-	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
-		return nil
-	}
-	return p.Secrets
+	return plugin.PresentDocument(p.Secrets)
 }
 
 // validatePlugins checks each plugin key and Secrets document. Whether a key

@@ -265,7 +265,7 @@ func TestDesktopExamAttemptNativeFlow(t *testing.T) {
 	require.Equal(t, int64(1), acknowledged.Receipt.BatchSequence)
 
 	renewed, err := helper.App.Attempts.RenewExamAttemptParticipation(ctx, desktop.inv, attempt.RenewParticipationCommand{
-		Security: model.SecurityRenewal{ControlSequence: 1, PolicyDigest: security.Policy.Digest,
+		Security: model.SecurityControl{ControlSequence: 1, PolicyDigest: security.Policy.Digest,
 			SecuritySessionID: security.SecuritySessionID, StreamID: security.DeliveryStreamID,
 			DeliveryWatermarks: []model.DeliveryWatermark{{Family: "native", SourceID: security.DeliveryStreamID,
 				AllocatedThroughSequence: 1, AcknowledgedThroughSequence: 1}}},

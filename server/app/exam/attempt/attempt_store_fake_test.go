@@ -360,8 +360,8 @@ func (f *attemptStoreFake) RecoverSecurityPolicy(context.Context, store.Security
 	return nil, errors.New("unexpected security recovery")
 }
 
-func (f *attemptStoreFake) UpdateSecurity(context.Context, *store.ExamAttemptSecurityUpdate) (model.SecurityRenewalResult, error) {
-	return model.SecurityRenewalResult{}, errors.New("unexpected security update")
+func (f *attemptStoreFake) UpdateSecurity(context.Context, *store.ExamAttemptSecurityUpdate) (model.SecurityControlResult, error) {
+	return model.SecurityControlResult{}, errors.New("unexpected security update")
 }
 
 func (f *attemptStoreFake) NativeDeliveryStatus(context.Context, store.NativeDeliveryAccess) (*model.NativeSecurityStreamStatus, error) {

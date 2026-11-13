@@ -90,7 +90,7 @@ type deliveryWatermarkRejectionResponse struct {
 	Reason   string `json:"reason"`
 }
 
-func securityControlFrom(value model.SecurityRenewalResult) securityControlResponse {
+func securityControlFrom(value model.SecurityControlResult) securityControlResponse {
 	response := securityControlResponse{
 		ProcessedControlSequence:   value.ProcessedControlSequence,
 		ProcessedControlDigest:     value.ProcessedControlDigest,
@@ -383,7 +383,7 @@ func (h examAttemptHandlers) recoverSecurityPolicy(request route.Request) (route
 	}
 
 	result := securityPolicyRecoveryResponse{
-		SecurityControl:            securityControlFrom(recovered.Renewal),
+		SecurityControl:            securityControlFrom(recovered.Control),
 		ServerTime:                 recovered.ServerTime,
 		Security:                   recovered.Security,
 		FrozenAttemptConfiguration: recovered.FrozenAttemptConfiguration,

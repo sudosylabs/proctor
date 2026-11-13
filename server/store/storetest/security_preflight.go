@@ -429,7 +429,7 @@ func prepareConnectSecurityFixture(t *testing.T, ctx context.Context, ss store.S
 	input.Security = model.ConnectSecurity{Kind: "preflight", PreflightID: prepared.Challenge.PreflightID, ReportDigest: result.ReportDigest}
 }
 
-func prepareParticipationRenewalCoverage(t *testing.T, ctx context.Context, ss store.Store, input *store.ExamAttemptParticipationRenewal) {
+func prepareParticipationSecurityControl(t *testing.T, ctx context.Context, ss store.Store, input *store.ExamAttemptParticipationRenewal) {
 	t.Helper()
 	connect := &store.ExamAttemptConnect{CandidateUserID: input.CandidateUserID, SessionID: input.SessionID}
 	prepareExamAttemptConnect(t, ctx, ss, connect)
@@ -437,14 +437,14 @@ func prepareParticipationRenewalCoverage(t *testing.T, ctx context.Context, ss s
 	recovery, err := ss.SecurityPreflight().RecoverSecurityPolicy(ctx, store.SecurityPreflightAccess{CandidateUserID: input.CandidateUserID, SessionID: input.SessionID, DesktopRegistrationID: input.DesktopRegistrationID, DPoPKeyThumbprint: input.DPoPKeyThumbprint, DesktopBuild: input.DesktopBuild, DesktopCompatibilityPolicyRevision: input.DesktopCompatibilityPolicyRevision}, input.AttemptID)
 	require.NoError(t, err)
 	require.True(t, recovery.ConsistentWith(input.AttemptID), "RecoverSecurityPolicy returned a result inconsistent with its request")
-	input.Security = model.SecurityRenewal{ControlSequence: 1, PolicyDigest: recovery.Security.Policy.Digest, SecuritySessionID: recovery.Security.SecuritySessionID, StreamID: recovery.Security.DeliveryStreamID, DeliveryWatermarks: []model.DeliveryWatermark{}}
+	input.Security = model.SecurityControl{ControlSequence: 1, PolicyDigest: recovery.Security.Policy.Digest, SecuritySessionID: recovery.Security.SecuritySessionID, StreamID: recovery.Security.DeliveryStreamID, DeliveryWatermarks: []model.DeliveryWatermark{}}
 }
 
 func testProcessedSecurityControl(t *testing.T, ctx context.Context, ss store.Store, connect *store.ExamAttemptConnect, connected *store.ExamAttemptConnectResult, _ model.SecurityPreflightReport) {
 	t.Helper()
 	access := store.CandidateAttemptAccess{AttemptID: connected.Attempt.ID, ConnectionID: connected.Connection.ID, CandidateUserID: connect.CandidateUserID, SessionID: connect.SessionID, DesktopRegistrationID: connect.DesktopRegistrationID, DPoPKeyThumbprint: connect.DPoPKeyThumbprint, ContinuityCredentialHash: connect.ContinuityCredentialHash}
-	control := model.SecurityRenewal{ControlSequence: 9, PolicyDigest: connected.Security.Policy.Digest, SecuritySessionID: connected.Security.SecuritySessionID, StreamID: connected.Security.DeliveryStreamID, DeliveryWatermarks: []model.DeliveryWatermark{}}
-	update := func(body model.SecurityRenewal) model.SecurityRenewalResult {
+	control := model.SecurityControl{ControlSequence: 9, PolicyDigest: connected.Security.Policy.Digest, SecuritySessionID: connected.Security.SecuritySessionID, StreamID: connected.Security.DeliveryStreamID, DeliveryWatermarks: []model.DeliveryWatermark{}}
+	update := func(body model.SecurityControl) model.SecurityControlResult {
 		t.Helper()
 		result, err := ss.ExamAttempt().UpdateSecurity(ctx, &store.ExamAttemptSecurityUpdate{Access: access, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, DesktopBuild: connect.DesktopBuild, DesktopCompatibilityPolicyRevision: connect.DesktopCompatibilityPolicyRevision, Control: body})
 		require.NoError(t, err)
@@ -493,8 +493,8 @@ func testProcessedSecurityControl(t *testing.T, ctx context.Context, ss store.St
 	recovery, err := ss.SecurityPreflight().RecoverSecurityPolicy(ctx, store.SecurityPreflightAccess{CandidateUserID: connect.CandidateUserID, SessionID: connect.SessionID, DesktopRegistrationID: connect.DesktopRegistrationID, DPoPKeyThumbprint: connect.DPoPKeyThumbprint, DesktopBuild: connect.DesktopBuild, DesktopCompatibilityPolicyRevision: connect.DesktopCompatibilityPolicyRevision}, connected.Attempt.ID)
 	require.NoError(t, err)
 	require.True(t, recovery.ConsistentWith(connected.Attempt.ID), "RecoverSecurityPolicy returned a result inconsistent with its request")
-	require.Equal(t, last, recovery.Renewal.ProcessedControlSequence, "fresh recovery lost the control boundary")
-	require.True(t, recovery.Renewal.SecurityInteractionAllowed)
+	require.Equal(t, last, recovery.Control.ProcessedControlSequence, "fresh recovery lost the control boundary")
+	require.True(t, recovery.Control.SecurityInteractionAllowed)
 }
 
 func testNativeDeliveryGaps(t *testing.T, ctx context.Context, ss store.Store, connect *store.ExamAttemptConnect, connected *store.ExamAttemptConnectResult, fixture examAttemptFixture) store.NativeDeliveryAccess {

@@ -263,13 +263,13 @@ func TestLiveControlRejectsInvalidRenewalsBeforeAdmission(t *testing.T) {
 	}
 	require.Empty(t, f.service.liveControls.users, "rejected requests were tracked by admission")
 	require.Empty(t, f.service.liveControls.slots, "rejected requests held a worker")
-	f.persistence.renewResult = &store.ExamAttemptParticipationRenewalResult{Security: renewalCoverageResultFixture(),
+	f.persistence.renewResult = &store.ExamAttemptParticipationRenewalResult{Security: securityControlResultFixture(),
 		AttemptID: f.attemptID, ExamID: f.sitting.ExamID, SittingID: f.sitting.ID,
 		CandidateUserID: f.inv.Principal().UserID, ParticipationID: participationID, Generation: 3, AcceptedSequence: 7,
 		DatabaseTime: f.at, LeaseExpiresAt: f.at.Add(model.AttemptParticipationInitialLease),
 	}
 	_, err := f.service.RenewExamAttemptParticipation(context.Background(), f.inv, RenewParticipationCommand{
-		Security: renewalCoverageFixture(), AttemptID: f.attemptID, ParticipationID: participationID,
+		Security: securityControlFixture(), AttemptID: f.attemptID, ParticipationID: participationID,
 		ConnectionID: f.connectionID, Generation: 3, Sequence: 7, ContinuityCredential: model.NewCredentialToken(),
 	})
 	require.NoError(t, err, "malformed renewals spent the caller's live allowance")

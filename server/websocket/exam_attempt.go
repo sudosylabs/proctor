@@ -39,7 +39,7 @@ type ExamAttemptApplication interface {
 		context.Context,
 		invocation.Invocation,
 		attempt.UpdateSecurityCommand,
-	) (model.SecurityRenewalResult, error)
+	) (model.SecurityControlResult, error)
 	RenewExamAttemptParticipation(
 		context.Context,
 		invocation.Invocation,
@@ -155,7 +155,7 @@ type candidateDepartureResponse struct {
 }
 
 type examAttemptRenewRequest struct {
-	SecurityControl      model.SecurityRenewal `json:"security_control"`
+	SecurityControl      model.SecurityControl `json:"security_control"`
 	Generation           int64                 `json:"generation"`
 	Sequence             int64                 `json:"sequence"`
 	ContinuityCredential string                `json:"continuity_credential"`
@@ -176,7 +176,7 @@ type deliveryWatermarkRejectionResponse struct {
 	Reason   string `json:"reason"`
 }
 
-func securityControlFrom(value model.SecurityRenewalResult) securityControlResponse {
+func securityControlFrom(value model.SecurityControlResult) securityControlResponse {
 	response := securityControlResponse{
 		ProcessedControlSequence:   value.ProcessedControlSequence,
 		ProcessedControlDigest:     value.ProcessedControlDigest,
@@ -592,7 +592,7 @@ func examAttemptFocusLossError(err error) (apperror.Code, websocketErrorPresenta
 type examAttemptSecurityUpdateRequest struct {
 	Generation           int64                 `json:"generation"`
 	ContinuityCredential string                `json:"continuity_credential"`
-	SecurityControl      model.SecurityRenewal `json:"security_control"`
+	SecurityControl      model.SecurityControl `json:"security_control"`
 }
 
 func decodeExamAttemptSecurityUpdateRequest(raw json.RawMessage) (examAttemptSecurityUpdateRequest, error) {

@@ -11,7 +11,9 @@
 // holds the enabled providers and is rebuilt from configuration on reload.
 //
 // Finding or creating the User, audit and the Session stay in app/identity.
-// The protocols themselves are the child packages cas and oidc.
+// The protocols themselves are the built-in plugins plugin/cas and
+// plugin/oidc; this package also holds what they share, ProtocolPlugin, the
+// settings helpers and the profile mapping, which only they call.
 package externalauth
 
 import (

@@ -274,7 +274,7 @@ type UpdateSecurityCommand struct {
 	Access          CandidateAccess
 	ParticipationID model.AttemptParticipationID
 	Generation      int64
-	Control         model.SecurityRenewal
+	Control         model.SecurityControl
 }
 
 // UpdateExamSecurity renews the security coverage reported by the
@@ -284,26 +284,26 @@ func (s *Service) UpdateExamSecurity(
 	ctx context.Context,
 	inv invocation.Invocation,
 	command UpdateSecurityCommand,
-) (_ model.SecurityRenewalResult, resultErr error) {
+) (_ model.SecurityControlResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	// Malformed updates are refused before they can occupy the live lane.
 	selector, err := candidateSelector(inv, command.Access)
 	if err != nil {
-		return model.SecurityRenewalResult{}, err
+		return model.SecurityControlResult{}, err
 	}
 	if !command.ParticipationID.IsValid() || command.Generation < 1 || command.Control.Validate() != nil {
-		return model.SecurityRenewalResult{}, apperror.Invalid("exam.attempt.invalid", "security_control")
+		return model.SecurityControlResult{}, apperror.Invalid("exam.attempt.invalid", "security_control")
 	}
 
 	release, admissionErr := s.enterControl(ctx, inv, true)
 	if admissionErr != nil {
-		return model.SecurityRenewalResult{}, admissionErr
+		return model.SecurityControlResult{}, admissionErr
 	}
 	defer release()
 
 	build, err := s.desktopBuilds.ResolveAttemptDesktopBuild(ctx, inv.Principal())
 	if err != nil || build.Build.Validate() != nil || build.Build.NativeAgreement == nil || build.CompatibilityPolicyRevision < 1 {
-		return model.SecurityRenewalResult{}, apperror.New("exam.attempt.desktop_incompatible").Wrap(err)
+		return model.SecurityControlResult{}, apperror.New("exam.attempt.desktop_incompatible").Wrap(err)
 	}
 
 	result, err := s.attempts.UpdateSecurity(ctx, &store.ExamAttemptSecurityUpdate{
@@ -315,10 +315,10 @@ func (s *Service) UpdateExamSecurity(
 		Control:                            command.Control,
 	})
 	if err != nil {
-		return model.SecurityRenewalResult{}, storeError(securityPreflightStoreErrors, err)
+		return model.SecurityControlResult{}, storeError(securityPreflightStoreErrors, err)
 	}
 	if result.Validate() != nil {
-		return model.SecurityRenewalResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent security control result"))
+		return model.SecurityControlResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent security control result"))
 	}
 
 	return result, nil

@@ -17,10 +17,14 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/sudosylabs/proctor/server/plugin"
 )
 
-// This file holds what the built-in sign-in protocol plugins share to read
-// and check their own provider settings. The core never reads them.
+// This file is the sign-in plugins' support: what the built-in protocol
+// plugins share to read and check their own provider settings. Only those
+// plugins call it; the application never reads a provider's settings or
+// secrets.
 
 // ClaimMapping names the released attributes a protocol plugin reads from
 // its provider's response. The plugin normalizes its protocol's
@@ -67,11 +71,10 @@ func (e *SettingsErrors) Err() error {
 // DecodeSettings strictly decodes one provider document into target: an
 // unknown field or trailing data fails. An absent document decodes as {}.
 func DecodeSettings(document json.RawMessage, target any) error {
-	trimmed := bytes.TrimSpace(document)
-	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
-		trimmed = []byte("{}")
+	if plugin.PresentDocument(document) == nil {
+		document = json.RawMessage(`{}`)
 	}
-	decoder := json.NewDecoder(bytes.NewReader(trimmed))
+	decoder := json.NewDecoder(bytes.NewReader(document))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
 		return fmt.Errorf("decode provider settings: %w", err)

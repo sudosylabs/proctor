@@ -34,18 +34,18 @@ type securityControlBudget struct {
 	SummaryOnly bool  `db:"native_summary_only"`
 }
 
-// processSecurityRenewal runs under the existing Attempt/Participation/Session
+// processSecurityControl runs under the existing Attempt/Participation/Session
 // locks. It deliberately does not renew or expire the Participation lease.
 // It checks the control against the admitted policy, replays a processed
 // control, and applies the delivery watermarks.
-func (s *SQLExamAttemptStore) processSecurityRenewal(
+func (s *SQLExamAttemptStore) processSecurityControl(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
 	input *store.ExamAttemptParticipationRenewal,
 	sittingOpen bool,
 	now time.Time,
-) (model.SecurityRenewalResult, error) {
-	var zero model.SecurityRenewalResult
+) (model.SecurityControlResult, error) {
+	var zero model.SecurityControlResult
 	control := input.Security
 	raw, err := control.Canonical()
 	if err != nil {
@@ -234,7 +234,7 @@ func checkSecurityControlPolicy(
 // owner's stream within its acknowledgement. Native ownership exists at
 // admission; Browser watermarks are installed by their separate source
 // owner, and no caller-supplied selector establishes one.
-func checkSecurityControlWatermarks(control model.SecurityRenewal, admitted model.AdmittedSecurity, owner nativeControlOwnerRow) error {
+func checkSecurityControlWatermarks(control model.SecurityControl, admitted model.AdmittedSecurity, owner nativeControlOwnerRow) error {
 	for _, watermark := range control.DeliveryWatermarks {
 		if watermark.Family == "browser" {
 			continue
@@ -386,8 +386,8 @@ func projectSecurityControl(
 	ledger nativeControlLedger,
 	receipt *securityControlReceipt,
 	allowed, sittingOpen bool,
-) (model.SecurityRenewalResult, error) {
-	result := model.SecurityRenewalResult{
+) (model.SecurityControlResult, error) {
+	result := model.SecurityControlResult{
 		ProcessedControlSequence:    ledger.ProcessedSequence,
 		ProcessedControlDigest:      ledger.ProcessedDigest,
 		SecurityInteractionAllowed:  allowed && sittingOpen,
@@ -441,9 +441,9 @@ func projectSecurityControl(
 func (s *SQLExamAttemptStore) UpdateSecurity(
 	ctx context.Context,
 	input *store.ExamAttemptSecurityUpdate,
-) (model.SecurityRenewalResult, error) {
+) (model.SecurityControlResult, error) {
 	if input == nil {
-		return model.SecurityRenewalResult{}, store.NewErrInvalidInput("security_control", "update", nil)
+		return model.SecurityControlResult{}, store.NewErrInvalidInput("security_control", "update", nil)
 	}
 	result, err := s.changeParticipationControl(
 		ctx,
@@ -464,7 +464,7 @@ func (s *SQLExamAttemptStore) UpdateSecurity(
 		false,
 	)
 	if err != nil {
-		return model.SecurityRenewalResult{}, err
+		return model.SecurityControlResult{}, err
 	}
 	return result.Security, nil
 }
@@ -504,7 +504,7 @@ func recoverNativeControl(
 	if err != nil {
 		return nil, err
 	}
-	return &store.SecurityPolicyRecovery{Renewal: result}, nil
+	return &store.SecurityPolicyRecovery{Control: result}, nil
 }
 
 // lockSecurityInteraction is called only by mutation owners, after

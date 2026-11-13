@@ -21,10 +21,10 @@ import (
 
 // RenewParticipationCommand renews the Participation Lease of one Attempt
 // Participation Generation on a named Attempt Connection. Sequence orders
-// renewals within the generation, and the continuity credential and security
-// coverage renewal authenticate it.
+// renewals within the generation; the continuity credential authenticates
+// it, and Security carries Desktop's security control.
 type RenewParticipationCommand struct {
-	Security             model.SecurityRenewal
+	Security             model.SecurityControl
 	AttemptID            model.ExamAttemptID
 	ParticipationID      model.AttemptParticipationID
 	ConnectionID         model.AttemptConnectionID
@@ -37,7 +37,7 @@ type RenewParticipationCommand struct {
 // application renewal. It contains authoritative database time but no raw or
 // hashed credential material.
 type ParticipationRenewal struct {
-	Security         model.SecurityRenewalResult
+	Security         model.SecurityControlResult
 	AttemptID        model.ExamAttemptID
 	ExamID           model.ExamID
 	SittingID        model.ExamSittingID

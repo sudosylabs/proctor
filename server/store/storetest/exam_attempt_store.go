@@ -706,7 +706,7 @@ func testExamAttemptParticipationExpiry(t *testing.T, ctx context.Context, ss st
 			ConnectionID: connected.Connection.ID, CandidateUserID: candidate.ID, SessionID: session.ID,
 			DesktopRegistrationID: session.DesktopRegistrationID, DPoPKeyThumbprint: session.DPoPKeyThumbprint,
 			Generation: connected.Participation.Generation, Sequence: 1, ContinuityCredentialHash: credentialHash}
-		prepareParticipationRenewalCoverage(t, ctx, ss, renewal)
+		prepareParticipationSecurityControl(t, ctx, ss, renewal)
 		renewErr := probe.FenceRenewalPastDeadline(t, ctx, connected.Participation.ID, func() error {
 			_, contenderErr := ss.ExamAttempt().RenewParticipation(ctx, renewal)
 			return contenderErr
@@ -1026,7 +1026,7 @@ func testExamAttemptParticipationRenewal(t *testing.T, ctx context.Context, ss s
 		DesktopRegistrationID: fixture.session.DesktopRegistrationID, DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint,
 		Sequence: 1, ContinuityCredentialHash: credentialHash,
 	}
-	prepareParticipationRenewalCoverage(t, ctx, ss, input)
+	prepareParticipationSecurityControl(t, ctx, ss, input)
 	renewed, err := ss.ExamAttempt().RenewParticipation(ctx, input)
 	require.NoError(t, err)
 	require.True(t, renewed.ConsistentWith(input.AttemptID, input.ParticipationID, fixture.candidate.ID, input.Generation, input.Sequence), "RenewParticipation returned a result inconsistent with its request")

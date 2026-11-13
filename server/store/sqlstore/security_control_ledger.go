@@ -59,7 +59,7 @@ func (r securityControlReceipt) clone() securityControlReceipt {
 	return r
 }
 
-// nativeControlLedger keeps processed ordering independently of usable coverage.
+// nativeControlLedger keeps the order in which security controls were processed.
 // Only authenticated, structurally valid, owner-bound controls reach this owner.
 // Its receipt does not grant authority: callers always project current gates.
 type nativeControlLedger struct {

@@ -199,7 +199,7 @@ func (v *ExamAttemptParticipationView) LifecycleInOrder() bool {
 // crosses the Store seam. Generation and Sequence are client fences, while
 // PostgreSQL supplies the only authoritative decision time.
 type ExamAttemptParticipationRenewal struct {
-	Security                           model.SecurityRenewal
+	Security                           model.SecurityControl
 	DesktopBuild                       model.DesktopBuildTuple
 	AttemptID                          model.ExamAttemptID
 	ParticipationID                    model.AttemptParticipationID
@@ -219,7 +219,7 @@ type ExamAttemptParticipationRenewal struct {
 // current accepted sequence; that case returns the existing authoritative
 // times without extending the lease.
 type ExamAttemptParticipationRenewalResult struct {
-	Security         model.SecurityRenewalResult
+	Security         model.SecurityControlResult
 	AttemptID        model.ExamAttemptID
 	ExamID           model.ExamID
 	SittingID        model.ExamSittingID
@@ -1292,7 +1292,7 @@ type ExamAttemptSecurityUpdate struct {
 	Generation                         int64
 	DesktopBuild                       model.DesktopBuildTuple
 	DesktopCompatibilityPolicyRevision int64
-	Control                            model.SecurityRenewal
+	Control                            model.SecurityControl
 }
 
 // ExamAttemptStore persists the Attempt aggregate: a Candidate's admission
@@ -1315,7 +1315,7 @@ type ExamAttemptStore interface {
 	RenewParticipation(context.Context, *ExamAttemptParticipationRenewal) (*ExamAttemptParticipationRenewalResult, error)
 	// UpdateSecurity records the security control sent over the Candidate's
 	// open Connection without extending the Participation lease.
-	UpdateSecurity(context.Context, *ExamAttemptSecurityUpdate) (model.SecurityRenewalResult, error)
+	UpdateSecurity(context.Context, *ExamAttemptSecurityUpdate) (model.SecurityControlResult, error)
 	// ResolveParticipationExpiry returns the named active Participation
 	// generation when its lease has expired, so the caller can begin the audit
 	// for ExpireParticipation. It changes nothing.

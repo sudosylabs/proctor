@@ -150,3 +150,13 @@ type Host interface {
 	// most one handler to each topic, during Activate.
 	AddEventHandler(topic EventTopic, handler EventHandler) error
 }
+
+// PresentDocument returns document, or nil when it is absent, empty or JSON
+// null, so a settings or secrets document that was not given reads as none.
+func PresentDocument(document json.RawMessage) json.RawMessage {
+	trimmed := bytes.TrimSpace(document)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil
+	}
+	return document
+}

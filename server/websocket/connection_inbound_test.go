@@ -568,7 +568,7 @@ func TestConnectionRuntimeRenewsBoundParticipationWithoutTreatingPingAsRenewal(t
 			ID: participationID, AttemptID: examAttempt.ID, State: model.AttemptParticipationActive, Generation: 4,
 			StartedAt: at, UpdatedAt: at, LeaseExpiresAt: at.Add(model.AttemptParticipationInitialLease),
 		}, Connection: *connection, ClassID: model.NewClassID(), FirstAdmission: true,
-	}, renewResult: attempt.ParticipationRenewal{Security: renewalCoverageResultFixture(),
+	}, renewResult: attempt.ParticipationRenewal{Security: securityControlResultFixture(),
 		AttemptID: examAttempt.ID, ParticipationID: participationID, Generation: 4, AcceptedSequence: 1,
 		DatabaseTime: databaseNow, LeaseExpiresAt: databaseNow.Add(model.AttemptParticipationInitialLease),
 	}}
@@ -587,7 +587,7 @@ func TestConnectionRuntimeRenewsBoundParticipationWithoutTreatingPingAsRenewal(t
 		require.FailNow(t, "WebSocket ping renewed the Participation")
 	}
 	application.mu.Unlock()
-	runtime.handleRequest(context.Background(), requestWithData(t, 42, examAttemptRenewAction, examAttemptRenewRequest{SecurityControl: renewalCoverageFixture(),
+	runtime.handleRequest(context.Background(), requestWithData(t, 42, examAttemptRenewAction, examAttemptRenewRequest{SecurityControl: securityControlFixture(),
 		Generation: 4, Sequence: 1, ContinuityCredential: credential,
 	}))
 	response := nextInboundResponse(t, runtime)
@@ -792,7 +792,7 @@ func TestConnectionRuntimeRenewalUsesStrictPayloadAndSafeConnectionLossMessage(t
 	runtime.attempt = &examAttemptBinding{attemptID: model.NewExamAttemptID(), participationID: model.NewAttemptParticipationID(),
 		connectionID: model.NewAttemptConnectionID(), generation: 1}
 	credential := model.NewCredentialToken()
-	runtime.handleRequest(context.Background(), requestWithData(t, 51, examAttemptRenewAction, examAttemptRenewRequest{SecurityControl: renewalCoverageFixture(),
+	runtime.handleRequest(context.Background(), requestWithData(t, 51, examAttemptRenewAction, examAttemptRenewRequest{SecurityControl: securityControlFixture(),
 		Generation: 1, Sequence: 2, ContinuityCredential: credential,
 	}))
 	response = nextInboundResponse(t, runtime)
@@ -865,7 +865,7 @@ func TestConnectionRuntimeSubmitsBoundFocusLossAndClearsPolicySuspendedBinding(t
 	require.Equal(t, model.FocusLossSourceFullscreenExited, calls[0].Source)
 	require.Equal(t, credential, calls[0].ContinuityCredential)
 
-	runtime.handleRequest(context.Background(), requestWithData(t, 62, examAttemptRenewAction, examAttemptRenewRequest{SecurityControl: renewalCoverageFixture(),
+	runtime.handleRequest(context.Background(), requestWithData(t, 62, examAttemptRenewAction, examAttemptRenewRequest{SecurityControl: securityControlFixture(),
 		Generation: 4, Sequence: 4, ContinuityCredential: credential,
 	}))
 	rejected := nextInboundResponse(t, runtime)
@@ -1138,16 +1138,16 @@ func inboundSecurityFixture(t *testing.T, result attempt.ConnectionResult) model
 	return model.AdmittedSecurity{Policy: policy, PolicyContentDigest: resolved.PolicyContentDigest, PreflightID: "fixture-preflight", PreflightReportDigest: model.SHA256Fingerprint([]byte("fixture-report")), PreflightPolicyDigest: resolved.Policy.Digest, ParticipationID: result.Participation.ID, Generation: result.Participation.Generation, SecuritySessionID: "fixture-security-session", DeliveryStreamID: "fixture-delivery", RenewalIntervalSeconds: 5}
 }
 
-func (a *inboundTestApplication) UpdateExamSecurity(context.Context, invocation.Invocation, attempt.UpdateSecurityCommand) (model.SecurityRenewalResult, error) {
-	return model.SecurityRenewalResult{}, errors.New("unexpected security update")
+func (a *inboundTestApplication) UpdateExamSecurity(context.Context, invocation.Invocation, attempt.UpdateSecurityCommand) (model.SecurityControlResult, error) {
+	return model.SecurityControlResult{}, errors.New("unexpected security update")
 }
 
-func renewalCoverageFixture() model.SecurityRenewal {
-	return model.SecurityRenewal{ControlSequence: 1, PolicyDigest: model.SHA256Fingerprint([]byte("renewal-policy")), SecuritySessionID: model.NewID(), StreamID: model.NewID(), DeliveryWatermarks: []model.DeliveryWatermark{}}
+func securityControlFixture() model.SecurityControl {
+	return model.SecurityControl{ControlSequence: 1, PolicyDigest: model.SHA256Fingerprint([]byte("renewal-policy")), SecuritySessionID: model.NewID(), StreamID: model.NewID(), DeliveryWatermarks: []model.DeliveryWatermark{}}
 }
-func renewalCoverageResultFixture() model.SecurityRenewalResult {
+func securityControlResultFixture() model.SecurityControlResult {
 	digest := model.SHA256Fingerprint([]byte("renewal-control"))
-	return model.SecurityRenewalResult{ProcessedControlSequence: 1, ProcessedControlDigest: &digest, SecurityInteractionAllowed: true, DeliveryWatermarkRejections: []model.DeliveryWatermarkRejection{}}
+	return model.SecurityControlResult{ProcessedControlSequence: 1, ProcessedControlDigest: &digest, SecurityInteractionAllowed: true, DeliveryWatermarkRejections: []model.DeliveryWatermarkRejection{}}
 }
 
 type deliveryRecoveryTestError struct {
@@ -1208,7 +1208,7 @@ func TestConnectionRuntimeAppendBackpressurePreservesRenewalAndCancelsWorker(t *
 	runtime.attempts = application
 	attemptID, participationID := model.NewExamAttemptID(), model.NewAttemptParticipationID()
 	runtime.attempt = &examAttemptBinding{attemptID: attemptID, participationID: participationID, connectionID: model.NewAttemptConnectionID(), generation: 1}
-	application.renewResult = attempt.ParticipationRenewal{Security: renewalCoverageResultFixture(), AttemptID: attemptID,
+	application.renewResult = attempt.ParticipationRenewal{Security: securityControlResultFixture(), AttemptID: attemptID,
 		ParticipationID: participationID, Generation: 1, AcceptedSequence: 1, DatabaseTime: at, LeaseExpiresAt: at.Add(model.AttemptParticipationInitialLease)}
 	credential, revision := model.NewCredentialToken(), model.NewExamRevisionID().String()
 	event, err := json.Marshal(examAttemptBrowserEventRequest{Sequence: 1, Kind: string(model.BrowserActivityOpened), PolicyRevisionID: revision, ClientOccurredAt: at.Format(time.RFC3339Nano)})
@@ -1234,7 +1234,7 @@ func TestConnectionRuntimeAppendBackpressurePreservesRenewalAndCancelsWorker(t *
 	// The second request occupies the single waiting slot; the third is refused.
 	socket.reads <- inboundReadResult{request: *requestWithData(t, 2, examAttemptBrowserAppendAction, body)}
 	socket.reads <- inboundReadResult{request: *requestWithData(t, 3, examAttemptBrowserAppendAction, body)}
-	socket.reads <- inboundReadResult{request: *requestWithData(t, 4, examAttemptRenewAction, examAttemptRenewRequest{Generation: 1, Sequence: 1, ContinuityCredential: credential, SecurityControl: renewalCoverageFixture()})}
+	socket.reads <- inboundReadResult{request: *requestWithData(t, 4, examAttemptRenewAction, examAttemptRenewRequest{Generation: 1, Sequence: 1, ContinuityCredential: credential, SecurityControl: securityControlFixture()})}
 	refused := nextInboundResponse(t, runtime)
 	require.Equal(t, int64(3), refused.Sequence)
 	require.NotNil(t, refused.Error)

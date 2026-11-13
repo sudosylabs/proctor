@@ -325,10 +325,10 @@ func TestExamAttemptParticipationExpiryDueConsistentWithRejectsEachInconsistency
 	})
 }
 
-func securityCoverageResultFixture(t *testing.T) model.SecurityRenewalResult {
+func securityControlResultFixture(t *testing.T) model.SecurityControlResult {
 	t.Helper()
 	digest := model.SHA256Fingerprint([]byte("renewal-control"))
-	coverage := model.SecurityRenewalResult{
+	coverage := model.SecurityControlResult{
 		ProcessedControlSequence:    1,
 		ProcessedControlDigest:      &digest,
 		SecurityInteractionAllowed:  true,
@@ -345,7 +345,7 @@ func TestExamAttemptParticipationRenewalResultConsistentWithRejectsEachInconsist
 	const generation, sequence = int64(4), int64(9)
 	consistent := func(t *testing.T) *result {
 		return &result{
-			Security:         securityCoverageResultFixture(t),
+			Security:         securityControlResultFixture(t),
 			AttemptID:        attemptID,
 			ExamID:           model.NewExamID(),
 			SittingID:        model.NewExamSittingID(),
@@ -480,7 +480,7 @@ func TestSecurityPolicyRecoveryConsistentWithRejectsEachInconsistency(t *testing
 	attemptID := connected.Attempt.ID
 	consistent := func(t *testing.T) *recovery {
 		return &recovery{
-			Renewal:                    securityCoverageResultFixture(t),
+			Control:                    securityControlResultFixture(t),
 			ServerTime:                 consistencyAt,
 			Security:                   connected.Security,
 			FrozenAttemptConfiguration: connected.Configuration.Clone(),
@@ -491,7 +491,7 @@ func TestSecurityPolicyRecoveryConsistentWithRejectsEachInconsistency(t *testing
 	require.False(t, (*recovery)(nil).ConsistentWith(attemptID))
 	requireEachInconsistencyRejected(t, consistent, check, []inconsistency[recovery]{
 		{"no server time", func(r *recovery) { r.ServerTime = time.Time{} }},
-		{"invalid security control", func(r *recovery) { r.Renewal.DeliveryWatermarkRejections = nil }},
+		{"invalid security control", func(r *recovery) { r.Control.DeliveryWatermarkRejections = nil }},
 		{"invalid admitted security", func(r *recovery) { r.Security.RenewalIntervalSeconds = 0 }},
 		{"frozen configuration is invalid", func(r *recovery) { r.FrozenAttemptConfiguration.Digest = "" }},
 	})

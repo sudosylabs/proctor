@@ -190,7 +190,7 @@ func TestCloseCodesMatchAsyncAPI(t *testing.T) {
 // encode them.
 func requireExamAttemptControlFrames(t *testing.T, contract asyncAPIContract) {
 	t.Helper()
-	control := model.SecurityRenewal{
+	control := model.SecurityControl{
 		ControlSequence: 3, PolicyDigest: model.SHA256Fingerprint([]byte("policy")),
 		SecuritySessionID: "security-session-1", StreamID: "native-stream-1",
 		DeliveryWatermarks: []model.DeliveryWatermark{
@@ -213,7 +213,7 @@ func requireExamAttemptControlFrames(t *testing.T, contract asyncAPIContract) {
 	contract.requireFrame(t, "exam_attempt.security.update", update)
 
 	digest := model.SHA256Fingerprint([]byte("control"))
-	result := securityControlFrom(model.SecurityRenewalResult{
+	result := securityControlFrom(model.SecurityControlResult{
 		ProcessedControlSequence: 3, ProcessedControlDigest: &digest, SecurityInteractionAllowed: true,
 		DeliveryWatermarkRejections: []model.DeliveryWatermarkRejection{{Family: "browser", SourceID: "00000000-0000-4000-8000-000000000001", Reason: "closed_source"}},
 	})
@@ -227,7 +227,7 @@ func requireExamAttemptControlFrames(t *testing.T, contract asyncAPIContract) {
 	processed, err := json.Marshal(result)
 	require.NoError(t, err)
 	contract.requireFrame(t, "security_control_reply", &Response{Status: "ok", Sequence: 21, Data: processed})
-	empty, err := json.Marshal(securityControlFrom(model.SecurityRenewalResult{DeliveryWatermarkRejections: []model.DeliveryWatermarkRejection{}}))
+	empty, err := json.Marshal(securityControlFrom(model.SecurityControlResult{DeliveryWatermarkRejections: []model.DeliveryWatermarkRejection{}}))
 	require.NoError(t, err)
 	contract.requireFrame(t, "security_control_reply", &Response{Status: "ok", Sequence: 22, Data: empty})
 }

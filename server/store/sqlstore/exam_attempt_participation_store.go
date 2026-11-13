@@ -110,7 +110,7 @@ func validParticipationControl(input *store.ExamAttemptParticipationRenewal, ren
 }
 
 // changeParticipationControlInTx locks and checks the Attempt, Participation,
-// Session and Connection, processes security coverage, and advances the lease
+// Session and Connection, processes the security control, and advances the lease
 // when renew carries a new sequence.
 func (s *SQLExamAttemptStore) changeParticipationControlInTx(
 	ctx context.Context,
@@ -141,14 +141,14 @@ func (s *SQLExamAttemptStore) changeParticipationControlInTx(
 		return nil, err
 	}
 
-	coverage, err := s.processSecurityRenewal(ctx, tx, input, attempt.SittingState == string(model.ExamSittingOpen), row.DatabaseNow)
+	control, err := s.processSecurityControl(ctx, tx, input, attempt.SittingState == string(model.ExamSittingOpen), row.DatabaseNow)
 	if err != nil {
 		return nil, err
 	}
 
 	if !renew || input.Sequence == row.RenewalSequence {
 		return &store.ExamAttemptParticipationRenewalResult{
-			Security:         coverage,
+			Security:         control,
 			AttemptID:        input.AttemptID,
 			ExamID:           examID,
 			SittingID:        sittingID,
@@ -168,7 +168,7 @@ func (s *SQLExamAttemptStore) changeParticipationControlInTx(
 	}
 
 	return &store.ExamAttemptParticipationRenewalResult{
-		Security:         coverage,
+		Security:         control,
 		AttemptID:        input.AttemptID,
 		ExamID:           examID,
 		SittingID:        sittingID,

@@ -360,7 +360,7 @@ func testRetentionSubmissionPrivacy(t *testing.T, ss store.Store, probe Retentio
 func appendRetirementNativeCondition(t *testing.T, ctx context.Context, ss store.Store, f examAttemptFixture, connected *store.ExamAttemptConnectResult, access store.CandidateAttemptAccess) *store.NativeDeliveryAppend {
 	t.Helper()
 	renewal := &store.ExamAttemptParticipationRenewal{AttemptID: access.AttemptID, ParticipationID: connected.Participation.ID, ConnectionID: access.ConnectionID, CandidateUserID: access.CandidateUserID, SessionID: access.SessionID, DesktopRegistrationID: access.DesktopRegistrationID, DPoPKeyThumbprint: access.DPoPKeyThumbprint, ContinuityCredentialHash: access.ContinuityCredentialHash, Generation: connected.Participation.Generation, DesktopCompatibilityPolicyRevision: 1}
-	prepareParticipationRenewalCoverage(t, ctx, ss, renewal)
+	prepareParticipationSecurityControl(t, ctx, ss, renewal)
 	at := model.NowUTC().Truncate(time.Millisecond)
 	// Desktop agrees the window rule is met: no rule changes, so the Attempt's
 	// native evidence is the two readiness rule statuses kept at Start.

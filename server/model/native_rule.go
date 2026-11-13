@@ -39,6 +39,9 @@ const (
 	NativeRuleObserve NativeRuleMode = "observe"
 )
 
+// IsValid reports whether the mode is enforce or observe.
+func (m NativeRuleMode) IsValid() bool { return m == NativeRuleEnforce || m == NativeRuleObserve }
+
 // NativeRulePhase is when a rule is evaluated.
 type NativeRulePhase string
 
@@ -47,6 +50,11 @@ const (
 	NativeRuleParticipation NativeRulePhase = "participation"
 	NativeRuleBoth          NativeRulePhase = "both"
 )
+
+// IsValid reports whether the phase is a known one.
+func (p NativeRulePhase) IsValid() bool {
+	return p == NativeRuleReadiness || p == NativeRuleParticipation || p == NativeRuleBoth
+}
 
 // AppliesTo reports whether a rule of this phase is evaluated in phase.
 func (p NativeRulePhase) AppliesTo(phase NativeRulePhase) bool {
@@ -158,8 +166,7 @@ func (r NativeRule) validate(
 ) error {
 	capability, ok := registry.Capability(r.Capability)
 	if !ok || !activated[r.Capability] || !isNativeRuleID(r.RuleID) ||
-		(r.Mode != NativeRuleEnforce && r.Mode != NativeRuleObserve) ||
-		(r.Phase != NativeRuleReadiness && r.Phase != NativeRuleParticipation && r.Phase != NativeRuleBoth) ||
+		!r.Mode.IsValid() || !r.Phase.IsValid() ||
 		!slices.Contains(capability.Reasons, r.Reason) {
 		return errNativeRule
 	}

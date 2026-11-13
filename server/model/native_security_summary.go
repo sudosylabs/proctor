@@ -36,7 +36,7 @@ func (s NativeSecuritySummary) Validate() error {
 		return ErrNativeDeliveryInvalid
 	}
 	for i, rule := range s.Rules {
-		if rule.Mode != NativeRuleEnforce || !rule.Rule.validate() ||
+		if rule.Mode != NativeRuleEnforce || !rule.Rule.valid() ||
 			i > 0 && s.Rules[i-1].Rule.RuleID >= rule.Rule.RuleID {
 			return ErrNativeDeliveryInvalid
 		}

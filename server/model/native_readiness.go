@@ -10,7 +10,6 @@ package model
 import (
 	"bytes"
 	"encoding/json"
-	"slices"
 	"strings"
 )
 
@@ -52,14 +51,9 @@ type NativeRuleReport struct {
 	UnknownCause NativeUnknownCause `json:"unknown_cause,omitempty"`
 }
 
-func (r NativeCapabilityReadiness) validate() bool {
+func (r NativeCapabilityReadiness) valid() bool {
 	return isNativeIdentifier(string(r.Capability)) && IsValidAgreementID(r.SourceInstanceID) &&
-		securitySafeInt(r.Sequence) &&
-		slices.Contains([]NativeFactPermission{NativePermissionNotDetermined, NativePermissionGranted, NativePermissionDenied,
-			NativePermissionRestricted, NativePermissionUnavailable}, r.Permission) &&
-		slices.Contains([]NativeFactHealth{NativeHealthUnsupported, NativeHealthHealthy, NativeHealthDegraded,
-			NativeHealthFailed, NativeHealthStopped}, r.Health) &&
-		slices.Contains([]NativeFactCertainty{NativeCertaintyComplete, NativeCertaintyPartial, NativeCertaintyUnknown}, r.Certainty) &&
+		securitySafeInt(r.Sequence) && r.Permission.IsValid() && r.Health.IsValid() && r.Certainty.IsValid() &&
 		nativeFactObject(r.State) && nativeFactObject(r.Summary)
 }
 
@@ -69,12 +63,10 @@ func nativeFactObject(document json.RawMessage) bool {
 	return len(document) <= NativeCapabilityStateMaxBytes && len(trimmed) > 1 && trimmed[0] == '{' && json.Valid(trimmed)
 }
 
-func (r NativeRuleReport) validate() bool {
-	statusOK := slices.Contains([]NativeRuleStatus{NativeRuleMet, NativeRuleNotMet, NativeRuleUnknown}, r.Status)
+func (r NativeRuleReport) valid() bool {
 	causeOK := (r.Status == NativeRuleUnknown) == (r.UnknownCause != "") &&
-		(r.UnknownCause == "" || slices.Contains([]NativeUnknownCause{NativeUnknownUnavailable, NativeUnknownGap,
-			NativeUnknownUnhealthy, NativeUnknownPermission, NativeUnknownPartial, NativeUnknownChecking}, r.UnknownCause))
-	return isNativeRuleID(r.RuleID) && statusOK && causeOK
+		(r.UnknownCause == "" || r.UnknownCause.IsValid())
+	return isNativeRuleID(r.RuleID) && r.Status.IsValid() && causeOK
 }
 
 // facts reads a capability's registered fields out of its reported fact.

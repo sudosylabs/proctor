@@ -38,7 +38,7 @@ type NativeCapabilityFact struct {
 const NativeCapabilityFactMaxBytes = 16 * 1024
 
 func (v NativeCapabilityFact) Validate() error {
-	if v.Kind != "capability_fact" || !securityInstant(v.ObservedAt) || !v.validate() ||
+	if v.Kind != "capability_fact" || !securityInstant(v.ObservedAt) || !v.valid() ||
 		len(v.State)+len(v.Summary) > NativeCapabilityFactMaxBytes {
 		return ErrNativeDeliveryInvalid
 	}
@@ -78,7 +78,7 @@ type NativeRuleStatusReport struct {
 
 func (v NativeRuleStatusReport) Validate() error {
 	if v.Kind != "rule_status" || !securityInstant(v.ObservedAt) ||
-		!(NativeRuleReport{RuleID: v.RuleID, Status: v.Status, UnknownCause: v.UnknownCause}).validate() {
+		!(NativeRuleReport{RuleID: v.RuleID, Status: v.Status, UnknownCause: v.UnknownCause}).valid() {
 		return ErrNativeDeliveryInvalid
 	}
 	return nil

@@ -20,6 +20,11 @@ const (
 	NativeRuleUnknown NativeRuleStatus = "unknown"
 )
 
+// IsValid reports whether the status is met, not met or unknown.
+func (s NativeRuleStatus) IsValid() bool {
+	return s == NativeRuleMet || s == NativeRuleNotMet || s == NativeRuleUnknown
+}
+
 // NativeUnknownCause says why a rule is unknown.
 type NativeUnknownCause string
 
@@ -32,6 +37,12 @@ const (
 	NativeUnknownChecking    NativeUnknownCause = "checking"
 )
 
+// IsValid reports whether the cause is a known one.
+func (c NativeUnknownCause) IsValid() bool {
+	return slices.Contains([]NativeUnknownCause{NativeUnknownUnavailable, NativeUnknownUnhealthy, NativeUnknownPermission,
+		NativeUnknownPartial, NativeUnknownGap, NativeUnknownChecking}, c)
+}
+
 // NativeFactPermission is a capability's OS permission state.
 type NativeFactPermission string
 
@@ -42,6 +53,12 @@ const (
 	NativePermissionRestricted    NativeFactPermission = "restricted"
 	NativePermissionUnavailable   NativeFactPermission = "unavailable"
 )
+
+// IsValid reports whether the permission state is a known one.
+func (p NativeFactPermission) IsValid() bool {
+	return slices.Contains([]NativeFactPermission{NativePermissionNotDetermined, NativePermissionGranted,
+		NativePermissionDenied, NativePermissionRestricted, NativePermissionUnavailable}, p)
+}
 
 // NativeFactHealth is a capability's health, separate from its permission.
 type NativeFactHealth string
@@ -54,6 +71,12 @@ const (
 	NativeHealthStopped     NativeFactHealth = "stopped"
 )
 
+// IsValid reports whether the health is a known one.
+func (h NativeFactHealth) IsValid() bool {
+	return slices.Contains([]NativeFactHealth{NativeHealthUnsupported, NativeHealthHealthy, NativeHealthDegraded,
+		NativeHealthFailed, NativeHealthStopped}, h)
+}
+
 // NativeFactCertainty is how sure a capability's state is, covering its
 // coverage too. Only a complete state can meet or fail a rule; anything less
 // is unknown.
@@ -64,6 +87,11 @@ const (
 	NativeCertaintyPartial  NativeFactCertainty = "partial"
 	NativeCertaintyUnknown  NativeFactCertainty = "unknown"
 )
+
+// IsValid reports whether the certainty is a known one.
+func (c NativeFactCertainty) IsValid() bool {
+	return c == NativeCertaintyComplete || c == NativeCertaintyPartial || c == NativeCertaintyUnknown
+}
 
 // NativeRuleMatch is what Desktop's on-device application matching found for
 // one rule. Matched means the rule's application condition is violated: a

@@ -37,8 +37,8 @@ type ExamAttemptClips struct {
 	AttemptID model.ExamAttemptID
 }
 
-// Valid reports whether every identifier is.
-func (a ExamAttemptClips) Valid() bool {
+// IsValid reports whether every identifier is.
+func (a ExamAttemptClips) IsValid() bool {
 	return a.ExamID.IsValid() && a.SittingID.IsValid() && a.AttemptID.IsValid()
 }
 

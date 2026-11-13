@@ -153,7 +153,7 @@ func TestReadinessReportsAreBounded(t *testing.T) {
 	t.Parallel()
 
 	valid := readinessOf("display", NativeCertaintyComplete, `{"targets":[]}`, `{}`)
-	require.True(t, valid.validate())
+	require.True(t, valid.valid())
 	for name, change := range map[string]func(*NativeCapabilityReadiness){
 		"array state":       func(r *NativeCapabilityReadiness) { r.State = json.RawMessage(`[]`) },
 		"no summary":        func(r *NativeCapabilityReadiness) { r.Summary = nil },
@@ -163,12 +163,12 @@ func TestReadinessReportsAreBounded(t *testing.T) {
 	} {
 		changed := valid
 		change(&changed)
-		require.False(t, changed.validate(), name)
+		require.False(t, changed.valid(), name)
 	}
 
-	require.True(t, NativeRuleReport{RuleID: "baseline.session", Status: NativeRuleUnknown, UnknownCause: NativeUnknownPartial}.validate())
-	require.False(t, NativeRuleReport{RuleID: "baseline.session", Status: NativeRuleUnknown}.validate(), "unknown names its cause")
-	require.False(t, NativeRuleReport{RuleID: "baseline.session", Status: NativeRuleMet, UnknownCause: NativeUnknownGap}.validate())
+	require.True(t, NativeRuleReport{RuleID: "baseline.session", Status: NativeRuleUnknown, UnknownCause: NativeUnknownPartial}.valid())
+	require.False(t, NativeRuleReport{RuleID: "baseline.session", Status: NativeRuleUnknown}.valid(), "unknown names its cause")
+	require.False(t, NativeRuleReport{RuleID: "baseline.session", Status: NativeRuleMet, UnknownCause: NativeUnknownGap}.valid())
 }
 
 func TestARecordingExamStartsOnlyWhenTheRecorderIsPermittedAndHasRoom(t *testing.T) {

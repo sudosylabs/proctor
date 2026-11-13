@@ -772,7 +772,7 @@ func (s *SQLExamAttemptStore) ListAttemptScreenClips(
 	ctx context.Context,
 	attempt store.ExamAttemptClips,
 ) ([]store.ExamAttemptScreenClipView, error) {
-	if !attempt.Valid() {
+	if !attempt.IsValid() {
 		return nil, store.NewErrInvalidInput("screen_clip", "attempt", nil)
 	}
 	var rows []screenClipRow
@@ -803,7 +803,7 @@ func (s *SQLExamAttemptStore) GetAttemptScreenClip(
 	attempt store.ExamAttemptClips,
 	clipID model.ScreenClipID,
 ) (*store.ExamAttemptScreenClipView, error) {
-	if !attempt.Valid() || !clipID.IsValid() {
+	if !attempt.IsValid() || !clipID.IsValid() {
 		return nil, store.NewErrInvalidInput("screen_clip", "id", nil)
 	}
 	var row screenClipRow

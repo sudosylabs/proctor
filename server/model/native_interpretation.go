@@ -69,9 +69,9 @@ type NativeRuleTransition struct {
 
 func (t NativeRuleTransition) Validate() error {
 	if !isNativeRuleID(t.RuleID) || !isNativeIdentifier(string(t.Capability)) ||
-		t.Mode != NativeRuleEnforce && t.Mode != NativeRuleObserve || !isNativeReasonID(t.Reason) ||
-		t.From != nil && (!t.From.validate() || t.From.RuleID != t.RuleID) ||
-		!t.To.validate() || t.To.RuleID != t.RuleID || !securityInstant(t.At) ||
+		!t.Mode.IsValid() || !isNativeReasonID(t.Reason) ||
+		t.From != nil && (!t.From.valid() || t.From.RuleID != t.RuleID) ||
+		!t.To.valid() || t.To.RuleID != t.RuleID || !securityInstant(t.At) ||
 		t.Occurrence < 0 || !securitySafeInt(t.Occurrence) ||
 		(t.Event != "") != (t.Occurrence > 0) ||
 		t.Event != "" && t.Event != NativeOccurrenceOpened && t.Event != NativeOccurrenceClosed {
@@ -366,9 +366,9 @@ func (s *NativeInterpretation) UnmarshalJSON(raw []byte) error {
 	}
 	for id, track := range wire.Rules {
 		if track == nil || !isNativeRuleID(id) || track.Occurrences < 0 || track.Discrepancies < 0 ||
-			!isNativeIdentifier(string(track.Capability)) || track.Mode != NativeRuleEnforce && track.Mode != NativeRuleObserve ||
+			!isNativeIdentifier(string(track.Capability)) || !track.Mode.IsValid() ||
 			!isNativeReasonID(track.Reason) ||
-			track.Open && track.Occurrences == 0 || track.Desktop != nil && !track.Desktop.validate() {
+			track.Open && track.Occurrences == 0 || track.Desktop != nil && !track.Desktop.valid() {
 			return ErrNativeDeliveryInvalid
 		}
 	}

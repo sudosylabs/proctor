@@ -130,12 +130,12 @@ func (r SecurityPreflightReport) Validate() error {
 		return ErrSecurityPreflightInvalid
 	}
 	for _, capability := range r.Capabilities {
-		if !capability.validate() {
+		if !capability.valid() {
 			return ErrSecurityPreflightInvalid
 		}
 	}
 	for _, rule := range r.Rules {
-		if !rule.validate() {
+		if !rule.valid() {
 			return ErrSecurityPreflightInvalid
 		}
 	}

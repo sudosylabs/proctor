@@ -90,7 +90,7 @@ func (t *NativeRuleTracker) UnmarshalJSON(raw []byte) error {
 	if wire.MetSince != nil {
 		value.metSince = *wire.MetSince
 	}
-	if wire.Observed && !(NativeRuleReport{RuleID: "rule", Status: wire.Status, UnknownCause: wire.UnknownCause}).validate() ||
+	if wire.Observed && !(NativeRuleReport{RuleID: "rule", Status: wire.Status, UnknownCause: wire.UnknownCause}).valid() ||
 		!wire.Observed && (wire.Status != "" || wire.MetSince != nil) {
 		return ErrNativeDeliveryInvalid
 	}

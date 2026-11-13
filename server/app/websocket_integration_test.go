@@ -362,11 +362,7 @@ func TestWebSocketTwoNodeConformance(t *testing.T) {
 		administration.UpdateRoleCommand{ID: role.ID, DisplayName: &updatedDisplayName},
 	)
 	require.NoError(t, err)
-	_ = connection.SetReadDeadline(time.Now().Add(5 * time.Second))
-	_, _, err = connection.ReadMessage()
-	var closeError *gwebsocket.CloseError
-	require.ErrorAs(t, err, &closeError)
-	require.Equal(t, websocket.CloseAuthorizationChanged, closeError.Code)
+	require.Equal(t, websocket.CloseAuthorizationChanged, readWebSocketClose(t, connection).Code)
 
 	connection, response, err = gwebsocket.DefaultDialer.Dial(socketURL, headers)
 	if err != nil {
@@ -380,11 +376,7 @@ func TestWebSocketTwoNodeConformance(t *testing.T) {
 		invocation.New(*principal, model.RequestMetadata{}),
 		login.Session.ID,
 	))
-	_ = connection.SetReadDeadline(time.Now().Add(5 * time.Second))
-	_, _, err = connection.ReadMessage()
-	closeError = nil
-	require.ErrorAs(t, err, &closeError)
-	require.Equal(t, websocket.CloseSessionRevoked, closeError.Code)
+	require.Equal(t, websocket.CloseSessionRevoked, readWebSocketClose(t, connection).Code)
 }
 
 func startIntegrationServer(t *testing.T, helper *testlib.Helper) {
@@ -440,6 +432,26 @@ func readWebSocketEvent(
 	var event websocket.Event
 	require.NoError(t, json.Unmarshal(payload, &event))
 	return &event
+}
+
+// readWebSocketClose reads until the server closes the connection and
+// returns its close frame. The change that closes a connection may also be
+// announced to the User's connections, on its own path, so events that
+// arrive before the close are skipped; anything else fails the test.
+func readWebSocketClose(t *testing.T, connection *gwebsocket.Conn) *gwebsocket.CloseError {
+	t.Helper()
+	_ = connection.SetReadDeadline(time.Now().Add(5 * time.Second))
+	for {
+		_, payload, err := connection.ReadMessage()
+		if err != nil {
+			var closeError *gwebsocket.CloseError
+			require.ErrorAs(t, err, &closeError)
+			return closeError
+		}
+		var event websocket.Event
+		require.NoError(t, json.Unmarshal(payload, &event))
+		require.NotEmpty(t, event.Event, "only events may precede the close: %s", payload)
+	}
 }
 
 func readWebSocketResponse(

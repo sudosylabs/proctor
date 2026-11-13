@@ -138,13 +138,21 @@ func TestDesktopExamAttemptNativeFlow(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// The Exam records the screen; the release baseline checks one display.
+	// The Exam records the screen; the release baseline checks one display;
+	// the process family enforces two rules on one capability: the release's
+	// never-allowable applications are blocked, and only Discord may run.
 	created, err := helper.App.ExamAuthoring.CreateExam(ctx, managerInv, exam.CreateCommand{
 		AcademicUnitID: unit.ID, Title: "Native Flow", InstructionsMarkdown: "Answer.", IdempotencyKey: "native-flow-create",
 	})
 	require.NoError(t, err)
 	native := model.DefaultNativeSecurityPolicy()
 	native.ScreenRecording.Enabled = true
+	for i := range native.Families {
+		if native.Families[i].ID() == "process_application" {
+			require.NoError(t, json.Unmarshal([]byte(
+				`{"id":"process_application","mode":"enforce","allowed_application_ids":["discord"],"outcome":"flag"}`), &native.Families[i]))
+		}
+	}
 	configured, err := helper.App.ExamAuthoring.ConfigureExamDraftNativePolicy(ctx, managerInv, exam.ConfigureDraftNativePolicyCommand{
 		ExamID: created.Exam.ID, ExpectedDraftRevision: created.Draft.Revision, NativePolicy: native, IdempotencyKey: "native-flow-policy",
 	})
@@ -248,6 +256,9 @@ func TestDesktopExamAttemptNativeFlow(t *testing.T) {
 				streamFact("candidate_window", 2, at, flowWindowMounted, `{}`),
 				{Confirmed: &model.NativeParticipationConfirmed{Kind: "participation_confirmed", ObservedAt: at}},
 				streamFact("display", 2, at.Add(time.Second), flowOneDisplay, flowDisplaySummary(2)),
+				// TeamViewer starts: it is never allowable and not on the list,
+				// so both process rules stop being met.
+				streamFact("process_application", 2, at.Add(2*time.Second), flowProcesses(true), `{"checking":0}`),
 			}},
 	})
 	require.NoError(t, err)
@@ -278,14 +289,17 @@ func TestDesktopExamAttemptNativeFlow(t *testing.T) {
 	// Desktop lists both requests, takes the Flag's, uploads it and signs it.
 	pending, err := helper.App.Attempts.PendingScreenClips(ctx, desktop.inv, access)
 	require.NoError(t, err)
-	require.Len(t, pending, 2, "only the display Flag's clip and the manager's: %#v", pending)
+	require.Len(t, pending, 4, "one clip for each rule's Flag, and the manager's: %#v", pending)
 	var incident model.ScreenClipID
+	flags := map[model.IntegrityFlagID]bool{}
 	for _, clip := range pending {
 		if clip.Source == model.ScreenClipSourceIncident {
 			incident = clip.ID
 			require.True(t, clip.FlagID.IsValid(), "the incident clip is linked to the Flag")
+			flags[clip.FlagID] = true
 		}
 	}
+	require.Len(t, flags, 3, "the display rule and each process rule have their own Flag")
 	require.True(t, incident.IsValid(), "the second display raised a Flag that asked for a clip")
 	_, err = helper.App.Attempts.TakeScreenClip(ctx, desktop.inv, access, incident)
 	require.NoError(t, err)
@@ -326,7 +340,7 @@ func TestDesktopExamAttemptNativeFlow(t *testing.T) {
 	require.NoError(t, err)
 	clips, err := helper.App.Attempts.ListScreenClips(ctx, managerInv, query)
 	require.NoError(t, err)
-	require.Len(t, clips, 2)
+	require.Len(t, clips, 4)
 	for _, clip := range clips {
 		if clip.ID == incident {
 			require.Equal(t, model.ScreenClipReady, clip.State)
@@ -350,6 +364,17 @@ const (
 	flowSession       = `{"coverage":"full_lifecycle","console_owner":"candidate","lock":"unlocked","remote_attachment":"absent","other_human_sessions":0,"component":"running"}`
 )
 
+// flowProcesses is the process state with both rules matched or not.
+func flowProcesses(matched bool) string {
+	blocked := `[]`
+	if matched {
+		blocked = `["teamviewer"]`
+	}
+	return fmt.Sprintf(`{"coverage":"full_lifecycle","checking":0,"component":"running","rule_matches":[`+
+		`{"rule_id":"process_application.blocked","matched":%t,"catalog_app_ids":%s},`+
+		`{"rule_id":"process_application.allowlist","matched":%t,"catalog_app_ids":[]}]}`, matched, blocked, matched)
+}
+
 func flowDisplaySummary(physical int) string {
 	return fmt.Sprintf(`{"active_physical":%d,"active_total":%d,"connected_total":%d,"mirrored":0,"virtual":0,"wireless":0,"remote":0,"specialized":0,"unknown_kind":0}`,
 		physical, physical, physical)
@@ -365,6 +390,7 @@ func startFacts(t *testing.T, activations []model.NativeActivation, freeSpace in
 		"display":             {flowOneDisplay, flowDisplaySummary(1)},
 		"interactive_session": {flowSession, `{}`},
 		"screen_recording":    {recorder, recorder},
+		"process_application": {flowProcesses(false), `{"checking":0}`},
 	}
 	reported := []model.NativeCapabilityReadiness{}
 	for _, activation := range activations {

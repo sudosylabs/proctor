@@ -2351,10 +2351,16 @@ CREATE TABLE integrity_flags (
         policy_kind IN ('connection_loss', 'focus_loss', 'browser_navigation') OR
         policy_kind ~ '^[a-z][a-z0-9.-]{0,63}\.[a-z][a-z0-9_]{0,31}$'
     ),
+    native_rule_id varchar(128) CHECK (
+        native_rule_id ~ '^[a-z][a-z0-9_]{0,63}(\.[a-z][a-z0-9_]{0,63})*$'
+    ),
     state varchar(16) NOT NULL CHECK (state = 'open'),
     created_at timestamptz NOT NULL,
 
-    UNIQUE (id, exam_attempt_id, generation)
+    UNIQUE (id, exam_attempt_id, generation),
+    CONSTRAINT integrity_flags_native_rule_check CHECK (
+        (policy_kind LIKE 'native.%') = (native_rule_id IS NOT NULL)
+    )
 );
 
 CREATE TABLE integrity_evidence (
@@ -2403,6 +2409,7 @@ CREATE TABLE integrity_evidence (
 );
 
 CREATE UNIQUE INDEX integrity_flags_legacy_group_idx ON integrity_flags(exam_attempt_id,generation,policy_kind) WHERE policy_kind IN ('connection_loss', 'focus_loss');
+CREATE UNIQUE INDEX integrity_flags_native_rule_idx ON integrity_flags(exam_attempt_id,generation,native_rule_id) WHERE native_rule_id IS NOT NULL;
 CREATE UNIQUE INDEX integrity_evidence_legacy_sequence_idx ON integrity_evidence(exam_attempt_id,generation,policy_kind,sequence) WHERE policy_kind IN ('connection_loss', 'focus_loss');
 
 -- One bounded mutable evaluator exists per Participation generation. It keeps

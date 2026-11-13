@@ -16,7 +16,7 @@ module when a change is not server-only. No module has been released yet.
   gives the readiness overview the policy before Start, the server decides
   admission from the reported facts, and it re-evaluates the same rules on the
   facts streamed during the Attempt. An enforce rule that stops being met
-  raises a `native.<capability>` Flag.
+  raises its own `native.<capability>` Flag, one per rule.
 - Server: an Exam's native families compile into rules on the release's
   registry: process applications (the catalog's never-allowable applications
   always blocked, plus an optional allowlist), clipboard, printing, removable

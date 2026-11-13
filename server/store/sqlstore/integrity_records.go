@@ -33,13 +33,14 @@ func insertIntegrityFlag(ctx context.Context, tx *sqlxTxWrapper, flag *model.Int
 	if _, err := tx.Exec(
 		ctx,
 		`INSERT INTO integrity_flags (
-			id, exam_attempt_id, generation, policy_kind, state, created_at
+			id, exam_attempt_id, generation, policy_kind, native_rule_id, state, created_at
 		)
-		VALUES (?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, NULLIF(?, ''), ?, ?)`,
 		flag.ID.String(),
 		flag.AttemptID.String(),
 		flag.Generation,
 		flag.Kind,
+		flag.NativeRuleID,
 		flag.State,
 		flag.CreatedAt,
 	); err != nil {

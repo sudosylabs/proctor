@@ -1974,8 +1974,9 @@ full state.
 
 An occurrence opens when a rule becomes not met while none is open and closes
 when it is met again; an unknown stretch neither opens nor closes one. An enforce
-rule's occurrence that opens raises or reuses the Attempt's `native.<capability>`
-Flag for that generation and adds one evidence row (rule, reason ID, occurrence
+rule's occurrence that opens raises or reuses that rule's own Flag, of kind
+`native.<capability>`, for the generation, so two rules on one capability are
+two Flags; it adds one evidence row (rule, reason ID, occurrence
 and device time, never the facts), at most 100 per Flag, announced through
 `exam_attempt_integrity_flagged`. Observe rules, unknown status, gaps,
 permission problems and failed sources never flag. A replayed append raises

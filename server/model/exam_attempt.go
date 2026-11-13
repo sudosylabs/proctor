@@ -581,8 +581,11 @@ type IntegrityFlag struct {
 	AttemptID  ExamAttemptID
 	Generation int64
 	Kind       IntegrityPolicyKind
-	State      IntegrityFlagState
-	CreatedAt  time.Time
+	// NativeRuleID is the rule a native Flag is for: each rule that stops
+	// being met has its own Flag. It is empty for every other kind.
+	NativeRuleID string
+	State        IntegrityFlagState
+	CreatedAt    time.Time
 }
 
 func NewIntegrityFlag(
@@ -600,6 +603,25 @@ func NewIntegrityFlag(
 	return flag, nil
 }
 
+// NewNativeIntegrityFlag opens the Flag of one native rule on its
+// capability.
+func NewNativeIntegrityFlag(
+	id IntegrityFlagID,
+	attemptID ExamAttemptID,
+	generation int64,
+	capability NativeCapabilityID,
+	ruleID string,
+	at time.Time,
+) (*IntegrityFlag, error) {
+	flag := &IntegrityFlag{ID: id, AttemptID: attemptID, Generation: generation, Kind: NativeIntegrityPolicyKind(capability),
+		NativeRuleID: ruleID, State: IntegrityFlagOpen, CreatedAt: TimeUTC(at)}
+	if err := flag.Validate(); err != nil {
+		return nil, err
+	}
+
+	return flag, nil
+}
+
 func (f *IntegrityFlag) Validate() error {
 	if f == nil ||
 		!f.ID.IsValid() ||
@@ -607,7 +629,9 @@ func (f *IntegrityFlag) Validate() error {
 		f.Generation < 1 ||
 		!f.Kind.IsValid() ||
 		f.State != IntegrityFlagOpen ||
-		f.CreatedAt.IsZero() {
+		f.CreatedAt.IsZero() ||
+		strings.HasPrefix(string(f.Kind), NativeIntegrityPolicyNamespace+".") != (f.NativeRuleID != "") ||
+		f.NativeRuleID != "" && !isNativeRuleID(f.NativeRuleID) {
 		return invalidModelError("IntegrityFlag.Validate", "integrity_flag", "", "invalid Integrity Flag", "")
 	}
 

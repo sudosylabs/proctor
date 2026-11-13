@@ -151,6 +151,7 @@ func TestNativeDeliveryAppendStore(t *testing.T, ss store.Store, probes ...Nativ
 	require.NoError(t, err)
 	require.Len(t, flags.Items, 1, "the enforce occurrence raised one native Flag")
 	require.Equal(t, model.IntegrityPolicyKind("native.display"), flags.Items[0].Flag.Kind)
+	require.Equal(t, "baseline.single_display", flags.Items[0].Flag.NativeRuleID, "the Flag is the display rule's")
 	require.Equal(t, 1, flags.Items[0].EvidenceCount)
 	access.Access.ConnectionID = ""
 	access.Access.ContinuityCredentialHash = ""

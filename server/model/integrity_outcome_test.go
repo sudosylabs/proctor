@@ -184,3 +184,25 @@ func TestNativeCapabilityPoliciesContainAndSuspendWithTheNativeReason(t *testing
 	require.True(t, AttemptSuspensionCandidateReasonNativePolicy.IsPolicy(), "a native suspension can be re-allowed")
 	require.True(t, AttemptSuspensionCandidateReasonNativePolicy.IsValid())
 }
+
+func TestANativeFlagIsForOneRule(t *testing.T) {
+	t.Parallel()
+
+	at := time.Date(2026, 11, 13, 9, 0, 0, 0, time.UTC)
+	flag, err := NewNativeIntegrityFlag(NewIntegrityFlagID(), NewExamAttemptID(), 1, "process_application", "process_application.allowlist", at)
+	require.NoError(t, err)
+	require.Equal(t, IntegrityPolicyKind("native.process_application"), flag.Kind)
+	require.Equal(t, "process_application.allowlist", flag.NativeRuleID)
+
+	_, err = NewNativeIntegrityFlag(NewIntegrityFlagID(), NewExamAttemptID(), 1, "process_application", "", at)
+	require.Error(t, err, "a native Flag names its rule")
+	_, err = NewNativeIntegrityFlag(NewIntegrityFlagID(), NewExamAttemptID(), 1, "process_application", "Not A Rule", at)
+	require.Error(t, err)
+	_, err = NewIntegrityFlag(NewIntegrityFlagID(), NewExamAttemptID(), 1, "native.display", at)
+	require.Error(t, err, "a native Flag is opened for a rule")
+
+	focus, err := NewIntegrityFlag(NewIntegrityFlagID(), NewExamAttemptID(), 1, IntegrityPolicyFocusLoss, at)
+	require.NoError(t, err)
+	focus.NativeRuleID = "baseline.single_display"
+	require.Error(t, focus.Validate(), "only native Flags name a rule")
+}

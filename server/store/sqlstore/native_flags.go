@@ -18,7 +18,7 @@ import (
 )
 
 // nativeFlagRaiser raises the native Flags of one interpretation pass. Each
-// capability has one Flag per Participation generation; every enforce
+// rule has one Flag per Participation generation; every enforce
 // occurrence that opens adds one piece of evidence to it, up to
 // model.NativeFlagEvidenceLimit. Observe rules, unknown stretches and closed
 // occurrences raise nothing.
@@ -63,19 +63,18 @@ func (r *nativeFlagRaiser) raise(ctx context.Context, tx *sqlxTxWrapper, transit
 			&existing,
 			`SELECT f.id, (SELECT count(*) FROM integrity_evidence e WHERE e.integrity_flag_id = f.id) AS evidence
 			FROM integrity_flags f
-			WHERE f.exam_attempt_id = ? AND f.generation = ? AND f.policy_kind = ?
-			ORDER BY f.created_at, f.id
-			LIMIT 1
+			WHERE f.exam_attempt_id = ? AND f.generation = ? AND f.native_rule_id = ?
 			FOR UPDATE OF f`,
 			attempt.String(),
 			security.Generation,
-			kind,
+			transition.RuleID,
 		)
 		var flagID model.IntegrityFlagID
 		clipRequested := false
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
-			flag, flagErr := model.NewIntegrityFlag(model.NewIntegrityFlagID(), attempt, security.Generation, kind, r.owner.Now)
+			flag, flagErr := model.NewNativeIntegrityFlag(model.NewIntegrityFlagID(), attempt, security.Generation,
+				transition.Capability, transition.RuleID, r.owner.Now)
 			if flagErr != nil {
 				return flagErr
 			}

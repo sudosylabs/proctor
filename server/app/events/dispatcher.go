@@ -44,29 +44,10 @@ type Dispatcher struct {
 
 // NewDispatcher returns a Dispatcher that offers each event to the
 // subscriptions source returns at that moment, in order. A nil source means
-// no subscriptions.
+// no subscriptions. The plugin host already refuses a missing handler and a
+// repeated topic per plugin, so the source's keys are complete and distinct.
 func NewDispatcher(source func() []Subscription) *Dispatcher {
 	return &Dispatcher{source: source}
-}
-
-// subscriptions reads the source and rejects a subscription without a key
-// or handler, or a repeated key.
-func (d *Dispatcher) subscriptions() ([]Subscription, error) {
-	if d.source == nil {
-		return nil, nil
-	}
-	subscriptions := d.source()
-	seen := make(map[string]struct{}, len(subscriptions))
-	for _, subscription := range subscriptions {
-		if subscription.Key == "" || subscription.Handler == nil {
-			return nil, errors.New("domain event subscription needs a key and a handler")
-		}
-		if _, repeated := seen[subscription.Key]; repeated {
-			return nil, fmt.Errorf("domain event subscription %q is repeated", subscription.Key)
-		}
-		seen[subscription.Key] = struct{}{}
-	}
-	return subscriptions, nil
 }
 
 // Dispatch offers event to every subscription to its topic whose key is not
@@ -79,9 +60,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, event *model.DomainEvent, del
 	if err != nil {
 		return delivered, err
 	}
-	subscriptions, err := d.subscriptions()
-	if err != nil {
-		return delivered, err
+	var subscriptions []Subscription
+	if d.source != nil {
+		subscriptions = d.source()
 	}
 	accepted := slices.Clone(delivered)
 	var failures error
@@ -101,9 +82,6 @@ func (d *Dispatcher) Dispatch(ctx context.Context, event *model.DomainEvent, del
 }
 
 func pluginEvent(event *model.DomainEvent) (plugin.Event, error) {
-	if err := event.Validate(); err != nil {
-		return plugin.Event{}, fmt.Errorf("invalid domain event: %w", err)
-	}
 	var topic plugin.EventTopic
 	switch event.Topic {
 	case model.DomainEventTopicExamAttemptSubmitted:

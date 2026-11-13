@@ -116,9 +116,6 @@ func (s *Service) ReplacePluginSettings(
 	if err != nil {
 		return PluginView{}, apperror.Invalid("plugin.invalid", "settings")
 	}
-	if command.IdempotencyKey == "" {
-		return PluginView{}, apperror.New("idempotency.key_required")
-	}
 	if err = s.plugins.ValidatePluginSettings(ctx, command.PluginID, settings); err != nil {
 		// The plugin's reason is its own; the administrator learns only that
 		// the settings were refused.
@@ -126,7 +123,7 @@ func (s *Service) ReplacePluginSettings(
 	}
 
 	change := model.PluginSettingsChange{Enabled: command.Enabled, Settings: settings}
-	prepared, err := idempotency.Prepare(inv, store.PluginSettingsReplaceOperation, command.IdempotencyKey, struct {
+	prepared, err := idempotency.Require(inv, store.PluginSettingsReplaceOperation, command.IdempotencyKey, struct {
 		PluginID         model.PluginID  `json:"plugin_id"`
 		ExpectedRevision int64           `json:"expected_revision"`
 		Enabled          bool            `json:"enabled"`

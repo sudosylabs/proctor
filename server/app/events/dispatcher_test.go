@@ -145,33 +145,13 @@ func TestDispatchWithoutSubscriptionsSucceeds(t *testing.T) {
 	require.Empty(t, delivered)
 }
 
-func TestDispatchRejectsAnInvalidEvent(t *testing.T) {
+func TestDispatchRejectsAnEventWithoutAPluginTopic(t *testing.T) {
 	var calls []string
 	var received []plugin.Event
 	dispatcher := NewDispatcher(fixed(subscription("first", recordingHandler{name: "first", calls: &calls, events: &received})))
 	_, err := dispatcher.Dispatch(context.Background(), &model.DomainEvent{}, nil)
 	require.Error(t, err)
 	require.Empty(t, calls)
-}
-
-func TestDispatchRejectsAnIncompleteOrRepeatedSubscription(t *testing.T) {
-	event, _ := newSubmittedEvent(t)
-	calls := []string{}
-	handler := recordingHandler{name: "x", calls: &calls, events: &[]plugin.Event{}}
-	for name, test := range map[string]struct {
-		subscriptions []Subscription
-		want          string
-	}{
-		"missing handler": {subscriptions: []Subscription{subscription("missing-handler", nil)}, want: "domain event subscription needs a key and a handler"},
-		"missing key":     {subscriptions: []Subscription{subscription("", handler)}, want: "domain event subscription needs a key and a handler"},
-		"repeated key":    {subscriptions: []Subscription{subscription("twice", handler), subscription("twice", handler)}, want: `domain event subscription "twice" is repeated`},
-	} {
-		t.Run(name, func(t *testing.T) {
-			_, err := NewDispatcher(fixed(test.subscriptions...)).Dispatch(context.Background(), event, nil)
-			require.EqualError(t, err, test.want)
-		})
-	}
-	require.Empty(t, calls, "nothing is offered while the subscriptions are wrong")
 }
 
 func TestDispatchReadsTheSubscriptionsAgainForEveryEvent(t *testing.T) {

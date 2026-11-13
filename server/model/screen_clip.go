@@ -185,11 +185,9 @@ type ScreenClipRange struct {
 
 // Validate checks the range is whole and bounded.
 func (r ScreenClipRange) Validate() error {
-	switch {
-	case r.End.IsZero():
-	case r.FromSessionStart && r.Start.IsZero():
-		return nil
-	case !r.FromSessionStart && !r.Start.IsZero() && r.Start.Before(r.End) && r.End.Sub(r.Start) <= ScreenClipMaxRange:
+	valid := !r.End.IsZero() && (r.FromSessionStart && r.Start.IsZero() ||
+		!r.FromSessionStart && !r.Start.IsZero() && r.Start.Before(r.End) && r.End.Sub(r.Start) <= ScreenClipMaxRange)
+	if valid {
 		return nil
 	}
 	return invalidModelError("ScreenClipRange.Validate", "screen_clip", "range", "is invalid", "")

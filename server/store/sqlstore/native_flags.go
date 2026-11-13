@@ -33,26 +33,26 @@ type nativeFlagRaiser struct {
 func (r *nativeFlagRaiser) raise(ctx context.Context, tx *sqlxTxWrapper, transitions []model.NativeRuleTransition) error {
 	security := r.binding.Security
 	attempt := security.Policy.Scope.AttemptID
+	if !slices.ContainsFunc(transitions, func(t model.NativeRuleTransition) bool { return t.RaisesFlag() }) {
+		return nil
+	}
+	// A Submission whose integrity records were retired takes no new Flag.
+	var retired bool
+	if err := tx.Get(
+		ctx,
+		&retired,
+		`SELECT EXISTS(
+			SELECT 1 FROM exam_submissions
+			WHERE exam_attempt_id = ? AND integrity_retired_at IS NOT NULL
+		)`,
+		attempt.String(),
+	); err != nil || retired {
+		return err
+	}
 	for _, transition := range transitions {
 		if !transition.RaisesFlag() {
 			continue
 		}
-		var retired bool
-		if err := tx.Get(
-			ctx,
-			&retired,
-			`SELECT EXISTS(
-				SELECT 1 FROM exam_submissions
-				WHERE exam_attempt_id = ? AND integrity_retired_at IS NOT NULL
-			)`,
-			attempt.String(),
-		); err != nil {
-			return err
-		}
-		if retired {
-			return nil
-		}
-
 		kind := model.NativeIntegrityPolicyKind(transition.Capability)
 		var existing struct {
 			ID       string `db:"id"`

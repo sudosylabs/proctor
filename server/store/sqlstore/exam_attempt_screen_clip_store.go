@@ -26,12 +26,16 @@ import (
 // end, so Desktop never waits long for the future part of a range.
 const screenClipMaxFuture = 10 * time.Minute
 
-const screenClipColumns = `id, exam_attempt_id, source, requested_by_user_id, private_reason, integrity_flag_id,
-	range_from_session_start, range_start, range_end, state, failure, delivered_participation_id,
-	media_type, size_bytes, chunk_sha256, content_digest, content_signature, requested_at, updated_at, revision`
+var screenClipColumnNames = []string{"id", "exam_attempt_id", "source", "requested_by_user_id", "private_reason",
+	"integrity_flag_id", "range_from_session_start", "range_start", "range_end", "state", "failure",
+	"delivered_participation_id", "media_type", "size_bytes", "chunk_sha256", "content_digest", "content_signature",
+	"requested_at", "updated_at", "revision"}
 
-// prefixedScreenClipColumns are screenClipColumns read through the alias c.
-var prefixedScreenClipColumns = "c." + strings.ReplaceAll(strings.Join(strings.Fields(screenClipColumns), " "), ", ", ", c.")
+var (
+	screenClipColumns = strings.Join(screenClipColumnNames, ", ")
+	// prefixedScreenClipColumns are screenClipColumns read through the alias c.
+	prefixedScreenClipColumns = "c." + strings.Join(screenClipColumnNames, ", c.")
+)
 
 type screenClipRow struct {
 	ID                       string         `db:"id"`
@@ -274,7 +278,7 @@ func requestScreenClip(
 		return nil, store.NewErrConflict("screen_clip", "screen_recording_disabled", nil)
 	}
 
-	databaseNow, err := databaseTime(ctx, tx)
+	databaseNow, err := screenClipStatementTime(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
@@ -423,7 +427,7 @@ func (s *SQLExamAttemptStore) DeliverScreenClip(
 			return nil, store.NewErrConflict("screen_clip", "screen_clip_state", nil)
 		}
 
-		now, err := databaseTime(ctx, tx)
+		now, err := screenClipStatementTime(ctx, tx)
 		if err != nil {
 			return nil, err
 		}
@@ -524,7 +528,7 @@ func lockClosedScreenClip(
 	if err != nil {
 		return nil, "", err
 	}
-	now, err := databaseTime(ctx, tx)
+	now, err := screenClipStatementTime(ctx, tx)
 	if err != nil {
 		return nil, "", err
 	}
@@ -569,8 +573,9 @@ func failExpiredScreenClipUploads(ctx context.Context, tx *sqlxTxWrapper, partic
 // records the screen, from exam_revisions r.
 const screenRecordingEnabledSQL = `COALESCE((r.policy_document #>> '{native,screen_recording,enabled}')::boolean, false)`
 
-// databaseTime reads the database's time for the current statement.
-func databaseTime(ctx context.Context, tx *sqlxTxWrapper) (time.Time, error) {
+// screenClipStatementTime reads the database's time for the current
+// statement, the instant a clip transition is decided and stamped at.
+func screenClipStatementTime(ctx context.Context, tx *sqlxTxWrapper) (time.Time, error) {
 	var now time.Time
 	if err := tx.Get(ctx, &now, `SELECT statement_timestamp()`); err != nil {
 		return time.Time{}, fmt.Errorf("read database time: %w", err)
@@ -634,7 +639,7 @@ func (s *SQLExamAttemptStore) BeginScreenClipUpload(
 			return nil, store.NewErrConflict("screen_clip", "screen_clip_bytes", nil)
 		}
 
-		now, err := databaseTime(ctx, tx)
+		now, err := screenClipStatementTime(ctx, tx)
 		if err != nil {
 			return nil, err
 		}
@@ -691,7 +696,7 @@ func (s *SQLExamAttemptStore) RecordScreenClipChunk(ctx context.Context, input *
 			input.SHA256 != clip.Upload.ChunkSHA256[input.Index] || input.SizeBytes != clip.Upload.ChunkSize(input.Index) {
 			return struct{}{}, store.NewErrInvalidInput("screen_clip", "chunk", nil)
 		}
-		now, err := databaseTime(ctx, tx)
+		now, err := screenClipStatementTime(ctx, tx)
 		if err != nil {
 			return struct{}{}, err
 		}
@@ -756,7 +761,7 @@ func (s *SQLExamAttemptStore) CompleteScreenClipUpload(
 		if !publicKey.VerifySignature([]byte(digest), input.Signature) {
 			return nil, store.NewErrInvalidInput("screen_clip", "signature", nil)
 		}
-		now, err := databaseTime(ctx, tx)
+		now, err := screenClipStatementTime(ctx, tx)
 		if err != nil {
 			return nil, err
 		}

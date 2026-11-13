@@ -38,6 +38,30 @@ type roleBindingStoreFake struct {
 	createErr    error
 	endErr       error
 	visibility   store.UserVisibilityScope
+	roleOptions  []store.RoleBindingRoleListOptions
+	countMaximum int
+	countTotal   int
+	holderInput  *store.RoleHolderCountOptions
+	holders      []store.RoleHolderCount
+}
+
+func (s *roleBindingStoreFake) ListCurrentByRoles(_ context.Context, options store.RoleBindingRoleListOptions) ([]*model.RoleBinding, error) {
+	*s.events = append(*s.events, "list-current-by-roles")
+	s.roleOptions = append(s.roleOptions, options)
+	return s.list, s.listErr
+}
+
+func (s *roleBindingStoreFake) CountCurrentByRoles(_ context.Context, options store.RoleBindingRoleListOptions, maximum int) (int, error) {
+	*s.events = append(*s.events, "count-current-by-roles")
+	s.roleOptions = append(s.roleOptions, options)
+	s.countMaximum = maximum
+	return s.countTotal, nil
+}
+
+func (s *roleBindingStoreFake) CountHoldersByRoles(_ context.Context, options store.RoleHolderCountOptions) ([]store.RoleHolderCount, error) {
+	*s.events = append(*s.events, "count-holders-by-roles")
+	s.holderInput = &options
+	return s.holders, nil
 }
 
 func (s *roleBindingStoreFake) Get(context.Context, model.RoleBindingID) (*model.RoleBinding, error) {
@@ -78,6 +102,14 @@ type roleBindingRoleStoreFake struct {
 	events *[]string
 	role   *model.Role
 	err    error
+	// found are the Roles GetByIDs finds: unknown and archived Roles are
+	// absent from it.
+	found []*model.Role
+}
+
+func (s *roleBindingRoleStoreFake) GetByIDs(context.Context, []model.RoleID) ([]*model.Role, error) {
+	*s.events = append(*s.events, "get-roles")
+	return s.found, s.err
 }
 
 func (s *roleBindingRoleStoreFake) Get(context.Context, model.RoleID) (*model.Role, error) {
@@ -187,7 +219,7 @@ func TestRoleBindingListByUserAuthorizesThenReads(t *testing.T) {
 	service := &Service{roleBindings: &roleBindingStoreFake{events: &events, list: []*model.RoleBinding{{ID: model.NewRoleBindingID(), UserID: model.UserID(userID)}}}, roles: &roleBindingRoleStoreFake{events: &events}, users: relationshipUserStoreTestFake{}, institutions: institutions, authorizer: authorizer, capabilities: &accessPolicyCapabilitiesFake{}, auditor: &institutionAuditorFake{events: &events}, mail: &relationshipMailPreparerTestFake{}, publisher: publisherIn(&events), now: time.Now}
 	got, err := service.ListRoleBindings(context.Background(), invocation.Invocation{}, ListRoleBindingsQuery{UserID: model.UserID(userID)})
 	require.NoError(t, err, "list")
-	require.Len(t, got, 1, "list")
+	require.Len(t, got.Items, 1, "list")
 	// Contract: authorization precedes the read.
 	require.Equal(t, []string{"authorize-binding-list", "list-visible-by-user"}, events)
 	id := institutions.institution.ID.String()

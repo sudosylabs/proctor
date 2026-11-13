@@ -9,9 +9,16 @@ package httpapi
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"errors"
 	"net/http"
+	"net/url"
+	"slices"
+	"strings"
 
 	"github.com/sudosylabs/proctor/server/app/administration"
+	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
@@ -119,6 +126,10 @@ func roleBindingResource(app RoleBindingApplication) route.Resource {
 
 func (h roleBindingHandlers) list(request route.Request) (route.Result, error) {
 	values := request.HTTP.URL.Query()
+	if _, byRole := values["role_id"]; byRole {
+		return h.listByRoles(request, values)
+	}
+
 	bindings, err := h.app.ListRoleBindings(
 		request.Context,
 		request.Invocation(),
@@ -135,7 +146,7 @@ func (h roleBindingHandlers) list(request route.Request) (route.Result, error) {
 	envelope, err := route.BoundedList(
 		request,
 		"Role Binding",
-		bindings,
+		bindings.Items,
 		func(binding *model.RoleBinding) route.BoundedKey {
 			return route.BoundedKey{At: binding.CreatedAt, ID: binding.ID.String()}
 		},
@@ -150,7 +161,7 @@ func (h roleBindingHandlers) list(request route.Request) (route.Result, error) {
 	continued := values.Get("cursor") != ""
 	total := paging.Total{}
 	if !continued {
-		total = paging.CountWhole(len(bindings))
+		total = paging.CountWhole(len(bindings.Items))
 	}
 	response, err := route.WithPageTotal(envelope, total, continued)
 	if err != nil {
@@ -158,6 +169,111 @@ func (h roleBindingHandlers) list(request route.Request) (route.Result, error) {
 	}
 
 	return route.JSON(http.StatusOK, response), nil
+}
+
+// listByRoles pages the current holders of the repeatable role_id, newest
+// first. Its cursor is bound to the requested Role set, so it cannot continue
+// a listing of other Roles.
+func (h roleBindingHandlers) listByRoles(request route.Request, values url.Values) (route.Result, error) {
+	page, err := request.Page()
+	if err != nil {
+		return route.Result{}, err
+	}
+	cursor, continued, err := route.DecodePageCursor(page, roleHolderCursorSpec())
+	if err != nil {
+		return route.Result{}, err
+	}
+
+	query := administration.ListRoleBindingsQuery{
+		UserID:    model.UserID(values.Get("user_id")),
+		ScopeType: model.RoleScopeType(values.Get("scope_type")),
+		ScopeID:   values.Get("scope_id"),
+		Limit:     page.Limit,
+	}
+	for _, raw := range values["role_id"] {
+		id, parseErr := model.ParseRoleID(raw)
+		if parseErr != nil {
+			return route.Result{}, apperror.Invalid("request.invalid", "role_id")
+		}
+		query.RoleIDs = append(query.RoleIDs, id)
+	}
+	roles := roleSetDigest(query.RoleIDs)
+	if continued {
+		if cursor.Roles != roles {
+			return route.Result{}, route.InvalidRequest(errors.New("cursor belongs to another Role set"))
+		}
+		query.BeforeCreatedAt, _ = model.ParseRFC3339(cursor.CreatedAt)
+		query.BeforeID = model.RoleBindingID(cursor.ID)
+	}
+
+	bindings, err := h.app.ListRoleBindings(request.Context, request.Invocation(), query)
+	if err != nil {
+		return route.Result{}, err
+	}
+
+	envelope, err := route.NewList(
+		bindings.Items,
+		bindings.HasMore,
+		roleBindingResponseFromModel,
+		func(last *model.RoleBinding) (string, error) {
+			return route.EncodeCursor(roleHolderCursor{
+				Roles:     roles,
+				CreatedAt: model.FormatRFC3339(last.CreatedAt),
+				ID:        last.ID.String(),
+			}, roleHolderCursorSpec())
+		},
+	)
+	if err != nil {
+		return route.Result{}, err
+	}
+
+	response, err := route.WithPageTotal(envelope, bindings.Total, continued)
+	if err != nil {
+		return route.Result{}, err
+	}
+
+	return route.JSON(http.StatusOK, response), nil
+}
+
+// roleHolderCursor continues a Role holder listing after the binding created
+// at CreatedAt with ID. Roles is the digest of the Role set it lists.
+type roleHolderCursor struct {
+	Roles     string `json:"roles"`
+	CreatedAt string `json:"created_at"`
+	ID        string `json:"id"`
+}
+
+func roleHolderCursorSpec() route.CursorSpec[roleHolderCursor] {
+	return route.CursorSpec[roleHolderCursor]{
+		Label:                "Role holder",
+		MaximumEncodedLength: route.DefaultMaximumCursorLength,
+		Members:              []string{"roles", "created_at", "id"},
+		Validate: func(cursor roleHolderCursor) error {
+			createdAt, err := model.ParseRFC3339(cursor.CreatedAt)
+			if err != nil || createdAt.IsZero() || len(cursor.Roles) != roleSetDigestLength ||
+				!model.RoleBindingID(cursor.ID).IsValid() {
+				return errors.New("invalid Role holder keyset")
+			}
+			return nil
+		},
+	}
+}
+
+// roleSetDigestLength is the length of an encoded roleSetDigest.
+var roleSetDigestLength = base64.RawURLEncoding.EncodedLen(sha256.Size)
+
+// roleSetDigest names a set of Roles independently of order and repeats, so a
+// cursor binds to the set a client asked for rather than to its spelling.
+func roleSetDigest(ids []model.RoleID) string {
+	set := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if !slices.Contains(set, id.String()) {
+			set = append(set, id.String())
+		}
+	}
+	slices.Sort(set)
+	sum := sha256.Sum256([]byte(strings.Join(set, "\n")))
+	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
 func (h roleBindingHandlers) create(request route.Request) (route.Result, error) {
@@ -208,7 +324,7 @@ func (h roleBindingHandlers) end(request route.Request) (route.Result, error) {
 
 // RoleBindingApplication is the application port its handlers call; it lists, creates and ends Role Bindings.
 type RoleBindingApplication interface {
-	ListRoleBindings(context.Context, invocation.Invocation, administration.ListRoleBindingsQuery) ([]*model.RoleBinding, error)
+	ListRoleBindings(context.Context, invocation.Invocation, administration.ListRoleBindingsQuery) (paging.Counted[*model.RoleBinding], error)
 	CreateRoleBinding(context.Context, invocation.Invocation, administration.CreateRoleBindingCommand) (*model.RoleBinding, error)
 	EndRoleBinding(context.Context, invocation.Invocation, administration.EndRoleBindingCommand) (*model.RoleBinding, error)
 }

@@ -19,9 +19,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// selfAuditEventResponse is the self audit projection of one event. It
-// names no other person: the actor is a kind, and the resource ID and
-// network identity appear only under the application's projection rule.
+// selfAuditEventResponse is the self audit projection of one event. The
+// actor is a kind, never a person, and the resource ID and network identity
+// appear only under the application's projection rule.
 type selfAuditEventResponse struct {
 	ID         string                    `json:"id"`
 	CreatedAt  string                    `json:"created_at"`
@@ -35,7 +35,16 @@ type selfAuditEventResponse struct {
 	IPAddress  string                    `json:"ip_address,omitempty"`
 	UserAgent  string                    `json:"user_agent,omitempty"`
 	// Summary is one sentence describing the event in the request's locale.
-	// It never names another person.
+	// It never names who acted on the caller, and names the User the caller
+	// acted on only while the caller can see them.
+	Summary string `json:"summary"`
+}
+
+// selfAuditRunResponse is one run of similar consecutive items on the page,
+// with its plural sentence. Start indexes items.
+type selfAuditRunResponse struct {
+	Start   int    `json:"start"`
+	Length  int    `json:"length"`
 	Summary string `json:"summary"`
 }
 
@@ -65,11 +74,13 @@ func selfAuditEventResponseFromApplication(request *http.Request, event administ
 	}
 }
 
-// selfAuditListResponse is the collection envelope plus the history size,
-// which only the first page carries. The count is bounded per User, so the
-// total is exact below store.MaximumAuditSelfCount and a lower bound at it.
+// selfAuditListResponse is the collection envelope plus the page's runs and
+// the history size, which only the first page carries. The count is bounded
+// per User, so the total is exact below store.MaximumAuditSelfCount and a
+// lower bound at it.
 type selfAuditListResponse struct {
 	Items             []selfAuditEventResponse `json:"items"`
+	Runs              []selfAuditRunResponse   `json:"runs,omitempty"`
 	NextCursor        string                   `json:"next_cursor,omitempty"`
 	Total             *int                     `json:"total,omitempty"`
 	TotalIsLowerBound *bool                    `json:"total_is_lower_bound,omitempty"`
@@ -145,6 +156,16 @@ func (h auditHandlers) listSelf(request route.Request) (route.Result, error) {
 	}
 
 	response := selfAuditListResponse{Items: envelope.Items, NextCursor: envelope.NextCursor}
+	for _, run := range result.Runs {
+		if run.Start < 0 || run.Length < 2 || run.Start+run.Length > len(result.Items) {
+			return route.Result{}, route.ErrUnpresentable
+		}
+		response.Runs = append(response.Runs, selfAuditRunResponse{
+			Start:   run.Start,
+			Length:  run.Length,
+			Summary: selfAuditRunSummary(request.HTTP, result.Items[run.Start], run.Length),
+		})
+	}
 	if result.Counted {
 		total, lowerBound := result.Total, result.TotalIsLowerBound
 		response.Total, response.TotalIsLowerBound = &total, &lowerBound

@@ -16,13 +16,15 @@ import (
 
 // AuditListOptions narrows an audit listing inside Visibility. ActorID,
 // SubjectUserID, Status and Resource each match exactly; Actions are
-// alternatives, at most MaximumAuditListActions of them. Every filter narrows
-// the visibility, so an academic visibility still reads only its subtrees and
-// AllowedActions catalog.
+// alternatives, at most MaximumAuditListActions of them; Kind keeps the
+// actions of that model.AuditKind, or every action when empty. Every filter
+// narrows the visibility and the others, so an academic visibility still reads
+// only its subtrees and AllowedActions catalog.
 type AuditListOptions struct {
 	ActorID       model.UserID
 	SubjectUserID model.UserID
 	Actions       []string
+	Kind          model.AuditKind
 	Status        model.AuditStatus
 	Resource      *model.Resource
 	// Since is an inclusive and Until an exclusive bound on created_at; a

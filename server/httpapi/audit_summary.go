@@ -32,7 +32,10 @@ import (
 // parameters, so it always reads the action's message and names no subject.
 // Self history keys a summary by event name, with one message for an event
 // about the caller's account and another for one the caller performed on
-// anyone or nothing else; its actor is a kind, never a person.
+// anyone or nothing else; its actor is a kind, never a person. The User the
+// caller acted on is named only when the caller can see that User now. A run
+// of similar rows reads one plural message per event and relation, counted
+// by its rows.
 const (
 	auditSummaryActorHidden = "audit.actor.hidden"
 	auditSummaryActorSystem = "audit.actor.system"
@@ -40,6 +43,10 @@ const (
 	auditSummaryUnknown     = "audit.resource.unknown"
 	auditSummaryRoleNamed   = "audit.self.role.named"
 	auditSummaryRoleUnnamed = "audit.self.role.unnamed"
+
+	// selfAuditRunCount is the template variable that carries a run's
+	// length and selects its plural form.
+	selfAuditRunCount = "Count"
 )
 
 // auditOperation is one action and the operation its writer recorded.
@@ -76,7 +83,8 @@ func auditSummaryLocalizationDefinitions() []localization.Definition {
 	}
 
 	definitions := make([]localization.Definition, 0, len(plain)+len(auditActionSummaryVariables)+
-		len(auditOperationSummaryVariables)+len(selfAuditSummaryVariables)*2+len(auditSummaryStatuses)+1)
+		len(auditOperationSummaryVariables)+len(selfAuditSummaryVariables)*2+len(selfAuditRunSummaryVariables)*2+
+		len(auditSummaryStatuses)+1)
 	for _, id := range plain {
 		definitions = append(definitions, localization.Definition{ID: id, Origin: localizationOrigin})
 	}
@@ -96,6 +104,14 @@ func auditSummaryLocalizationDefinitions() []localization.Definition {
 		definitions = append(definitions,
 			localization.Definition{ID: selfAuditSummaryID(event, store.AuditSelfRelationSubject), Origin: localizationOrigin, Variables: variables.about},
 			localization.Definition{ID: selfAuditSummaryID(event, store.AuditSelfRelationActor), Origin: localizationOrigin, Variables: variables.other},
+		)
+	}
+	for event, variables := range selfAuditRunSummaryVariables {
+		definitions = append(definitions,
+			localization.Definition{ID: selfAuditRunSummaryID(event, store.AuditSelfRelationSubject), Origin: localizationOrigin,
+				Variables: variables.about, PluralVariable: selfAuditRunCount},
+			localization.Definition{ID: selfAuditRunSummaryID(event, store.AuditSelfRelationActor), Origin: localizationOrigin,
+				Variables: variables.other, PluralVariable: selfAuditRunCount},
 		)
 	}
 	sort.Slice(definitions, func(i, j int) bool { return definitions[i].ID < definitions[j].ID })
@@ -123,6 +139,13 @@ func selfAuditSummaryID(event model.AuditSelfEvent, relation store.AuditSelfRela
 		return "audit.self.event." + string(event) + ".other"
 	}
 	return "audit.self.event." + string(event)
+}
+
+func selfAuditRunSummaryID(event model.AuditSelfEvent, relation store.AuditSelfRelation) string {
+	if relation == store.AuditSelfRelationActor {
+		return "audit.self.run." + string(event) + ".other"
+	}
+	return "audit.self.run." + string(event)
 }
 
 // auditSummary writes the institution audit list's sentence for one event.
@@ -189,8 +212,8 @@ func auditStatusSummary(request *http.Request, status model.AuditStatus, summary
 
 // selfAuditSummary writes the self history's sentence for one event. The
 // actor is "you", "an administrator", or "the system"; the resource is named
-// only where the projection kept it, and the Role only when it was bound to
-// the caller.
+// only where the projection kept it, the Role only when it was bound to the
+// caller, and the User the caller acted on only when the caller can see them.
 func selfAuditSummary(request *http.Request, event administration.SelfAuditEvent) string {
 	resource := event.ResourceName
 	if resource == "" {
@@ -208,16 +231,41 @@ func selfAuditSummary(request *http.Request, event administration.SelfAuditEvent
 		}, name)
 	}
 
+	subject := event.SubjectName
+	if subject == "" {
+		subject = route.Translate(request, auditSummarySubject, "")
+	}
+
 	summary := route.TranslateRequest(request, localization.Request{
 		ID: selfAuditSummaryID(event.Event, event.Relation),
 		TemplateData: map[string]string{
 			"Actor":    route.Translate(request, selfAuditActorID(event.ActorKind), ""),
 			"Resource": resource,
 			"Role":     role,
+			"Subject":  subject,
 		},
 	}, string(event.Event))
+	return selfAuditOutcomeSummary(request, event, summary)
+}
+
+// selfAuditRunSummary writes the plural sentence for a run of length rows
+// that read like first, such as "You changed 5 profile pictures".
+func selfAuditRunSummary(request *http.Request, first administration.SelfAuditEvent, length int) string {
+	summary := route.TranslateRequest(request, localization.Request{
+		ID: selfAuditRunSummaryID(first.Event, first.Relation),
+		TemplateData: map[string]any{
+			"Actor":           route.Translate(request, selfAuditActorID(first.ActorKind), ""),
+			selfAuditRunCount: length,
+		},
+		PluralCount: length,
+	}, string(first.Event))
+	return selfAuditOutcomeSummary(request, first, summary)
+}
+
+// selfAuditOutcomeSummary marks a failed self-history sentence, except a
+// failed sign-in, whose event name already says it failed.
+func selfAuditOutcomeSummary(request *http.Request, event administration.SelfAuditEvent, summary string) string {
 	if event.Event == model.AuditSelfEventSignInFailed {
-		// The event name already says the sign-in failed.
 		return summary
 	}
 	return auditStatusSummary(request, event.Status, summary)
@@ -374,48 +422,96 @@ var auditOperationSummaryVariables = map[auditOperation][]string{
 }
 
 var selfAuditSummaryVariables = map[model.AuditSelfEvent]selfAuditSummaryVariableSet{
-	model.AuditSelfEventAcademicUnitJoined:              {about: []string{"Actor", "Resource"}, other: []string{"Resource"}},
-	model.AuditSelfEventAcademicUnitLeft:                {about: []string{"Actor", "Resource"}, other: []string{"Resource"}},
-	model.AuditSelfEventAccountDisabled:                 {about: []string{"Actor"}, other: nil},
-	model.AuditSelfEventAccountEnabled:                  {about: []string{"Actor"}, other: nil},
-	model.AuditSelfEventAccountRecoveredByAdministrator: {about: []string{"Actor"}, other: nil},
-	model.AuditSelfEventAffiliationEnded:                {about: []string{"Actor"}, other: nil},
-	model.AuditSelfEventAffiliationStarted:              {about: []string{"Actor"}, other: nil},
-	model.AuditSelfEventClassEnrolled:                   {about: []string{"Actor", "Resource"}, other: []string{"Resource"}},
-	model.AuditSelfEventClassTransferredIn:              {about: []string{"Actor", "Resource"}, other: []string{"Resource"}},
-	model.AuditSelfEventClassTransferredOut:             {about: []string{"Actor", "Resource"}, other: []string{"Resource"}},
-	model.AuditSelfEventClassUnenrolled:                 {about: []string{"Actor", "Resource"}, other: []string{"Resource"}},
-	model.AuditSelfEventDesktopRegistrationRenamed:      {about: []string{"Actor"}, other: nil},
-	model.AuditSelfEventDesktopRegistrationRevoked:      {about: []string{"Actor"}, other: nil},
+	model.AuditSelfEventAcademicUnitJoined:              {about: []string{"Actor", "Resource"}, other: []string{"Resource", "Subject"}},
+	model.AuditSelfEventAcademicUnitLeft:                {about: []string{"Actor", "Resource"}, other: []string{"Resource", "Subject"}},
+	model.AuditSelfEventAccountDisabled:                 {about: []string{"Actor"}, other: []string{"Subject"}},
+	model.AuditSelfEventAccountEnabled:                  {about: []string{"Actor"}, other: []string{"Subject"}},
+	model.AuditSelfEventAccountRecoveredByAdministrator: {about: []string{"Actor"}, other: []string{"Subject"}},
+	model.AuditSelfEventAffiliationEnded:                {about: []string{"Actor"}, other: []string{"Subject"}},
+	model.AuditSelfEventAffiliationStarted:              {about: []string{"Actor"}, other: []string{"Subject"}},
+	model.AuditSelfEventClassEnrolled:                   {about: []string{"Actor", "Resource"}, other: []string{"Resource", "Subject"}},
+	model.AuditSelfEventClassTransferredIn:              {about: []string{"Actor", "Resource"}, other: []string{"Resource", "Subject"}},
+	model.AuditSelfEventClassTransferredOut:             {about: []string{"Actor", "Resource"}, other: []string{"Resource", "Subject"}},
+	model.AuditSelfEventClassUnenrolled:                 {about: []string{"Actor", "Resource"}, other: []string{"Resource", "Subject"}},
+	model.AuditSelfEventDesktopRegistrationRenamed:      {about: []string{"Actor"}, other: []string{"Subject"}},
+	model.AuditSelfEventDesktopRegistrationRevoked:      {about: []string{"Actor"}, other: []string{"Subject"}},
 	model.AuditSelfEventDesktopSignedIn:                 {about: nil, other: nil},
-	model.AuditSelfEventEmailChangeUndone:               {about: nil, other: nil},
-	model.AuditSelfEventEmailChanged:                    {about: []string{"Actor"}, other: nil},
-	model.AuditSelfEventEmailVerified:                   {about: nil, other: nil},
+	model.AuditSelfEventEmailChangeUndone:               {about: nil, other: []string{"Subject"}},
+	model.AuditSelfEventEmailChanged:                    {about: []string{"Actor"}, other: []string{"Subject"}},
+	model.AuditSelfEventEmailVerified:                   {about: nil, other: []string{"Subject"}},
 	model.AuditSelfEventInvitationAccepted:              {about: nil, other: nil},
-	model.AuditSelfEventMFADisabled:                     {about: []string{"Actor"}, other: nil},
+	model.AuditSelfEventMFADisabled:                     {about: []string{"Actor"}, other: []string{"Subject"}},
 	model.AuditSelfEventMFAEnabled:                      {about: []string{"Actor"}, other: nil},
 	model.AuditSelfEventMFARecoveryCodesRegenerated:     {about: []string{"Actor"}, other: nil},
-	model.AuditSelfEventMFAResetByAdministrator:         {about: []string{"Actor"}, other: nil},
+	model.AuditSelfEventMFAResetByAdministrator:         {about: []string{"Actor"}, other: []string{"Subject"}},
 	model.AuditSelfEventMFASetupStarted:                 {about: []string{"Actor"}, other: nil},
-	model.AuditSelfEventPasswordChanged:                 {about: []string{"Actor"}, other: nil},
-	model.AuditSelfEventPasswordEnrolled:                {about: []string{"Actor"}, other: nil},
-	model.AuditSelfEventPasswordRemoved:                 {about: []string{"Actor"}, other: nil},
-	model.AuditSelfEventPasswordReset:                   {about: nil, other: nil},
+	model.AuditSelfEventPasswordChanged:                 {about: []string{"Actor"}, other: []string{"Subject"}},
+	model.AuditSelfEventPasswordEnrolled:                {about: []string{"Actor"}, other: []string{"Subject"}},
+	model.AuditSelfEventPasswordRemoved:                 {about: []string{"Actor"}, other: []string{"Subject"}},
+	model.AuditSelfEventPasswordReset:                   {about: nil, other: []string{"Subject"}},
 	model.AuditSelfEventTokenCreated:                    {about: []string{"Actor"}, other: nil},
 	model.AuditSelfEventTokenDisabled:                   {about: []string{"Actor"}, other: nil},
 	model.AuditSelfEventTokenEnabled:                    {about: []string{"Actor"}, other: nil},
 	model.AuditSelfEventTokenRevoked:                    {about: []string{"Actor"}, other: nil},
-	model.AuditSelfEventProfileChanged:                  {about: []string{"Actor"}, other: nil},
-	model.AuditSelfEventProfilePictureChanged:           {about: []string{"Actor"}, other: nil},
-	model.AuditSelfEventProfilePictureRemoved:           {about: []string{"Actor"}, other: nil},
-	model.AuditSelfEventProviderUnlinked:                {about: []string{"Actor"}, other: nil},
-	model.AuditSelfEventRoleEnded:                       {about: []string{"Actor", "Resource", "Role"}, other: []string{"Resource"}},
-	model.AuditSelfEventRoleGranted:                     {about: []string{"Actor", "Resource", "Role"}, other: []string{"Resource"}},
-	model.AuditSelfEventSessionRenamed:                  {about: []string{"Actor"}, other: nil},
-	model.AuditSelfEventSessionRevoked:                  {about: []string{"Actor"}, other: nil},
-	model.AuditSelfEventSessionsRevokedAll:              {about: []string{"Actor"}, other: nil},
-	model.AuditSelfEventSessionsRevokedOthers:           {about: []string{"Actor"}, other: nil},
+	model.AuditSelfEventProfileChanged:                  {about: []string{"Actor"}, other: []string{"Subject"}},
+	model.AuditSelfEventProfilePictureChanged:           {about: []string{"Actor"}, other: []string{"Subject"}},
+	model.AuditSelfEventProfilePictureRemoved:           {about: []string{"Actor"}, other: []string{"Subject"}},
+	model.AuditSelfEventProviderUnlinked:                {about: []string{"Actor"}, other: []string{"Subject"}},
+	model.AuditSelfEventRoleEnded:                       {about: []string{"Actor", "Resource", "Role"}, other: []string{"Resource", "Subject"}},
+	model.AuditSelfEventRoleGranted:                     {about: []string{"Actor", "Resource", "Role"}, other: []string{"Resource", "Subject"}},
+	model.AuditSelfEventSessionRenamed:                  {about: []string{"Actor"}, other: []string{"Subject"}},
+	model.AuditSelfEventSessionRevoked:                  {about: []string{"Actor"}, other: []string{"Subject"}},
+	model.AuditSelfEventSessionsRevokedAll:              {about: []string{"Actor"}, other: []string{"Subject"}},
+	model.AuditSelfEventSessionsRevokedOthers:           {about: []string{"Actor"}, other: []string{"Subject"}},
 	model.AuditSelfEventSignInFailed:                    {about: nil, other: nil},
 	model.AuditSelfEventSignInSucceeded:                 {about: nil, other: nil},
 	model.AuditSelfEventSignedOut:                       {about: nil, other: nil},
+}
+
+// selfAuditRunSummaryVariables declares the plural messages of the events
+// that repeat (model.AuditSelfEvent.Repeats): one for a run about the
+// caller's account and one for a run the caller performed. A run's sentence
+// counts its rows and names no resource or person, because its rows may
+// differ in both.
+var selfAuditRunSummaryVariables = map[model.AuditSelfEvent]selfAuditSummaryVariableSet{
+	model.AuditSelfEventAcademicUnitJoined:          {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventAcademicUnitLeft:            {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventAccountDisabled:             {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventAccountEnabled:              {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventAffiliationEnded:            {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventAffiliationStarted:          {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventClassEnrolled:               {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventClassTransferredIn:          {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventClassTransferredOut:         {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventClassUnenrolled:             {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventDesktopRegistrationRenamed:  {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventDesktopRegistrationRevoked:  {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventDesktopSignedIn:             {about: []string{"Count"}, other: []string{"Count"}},
+	model.AuditSelfEventEmailChanged:                {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventEmailVerified:               {about: []string{"Count"}, other: []string{"Count"}},
+	model.AuditSelfEventInvitationAccepted:          {about: []string{"Count"}, other: []string{"Count"}},
+	model.AuditSelfEventMFADisabled:                 {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventMFARecoveryCodesRegenerated: {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventMFAResetByAdministrator:     {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventMFASetupStarted:             {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventPasswordChanged:             {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventPasswordEnrolled:            {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventPasswordRemoved:             {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventPasswordReset:               {about: []string{"Count"}, other: []string{"Count"}},
+	model.AuditSelfEventTokenCreated:                {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventTokenDisabled:               {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventTokenEnabled:                {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventTokenRevoked:                {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventProfileChanged:              {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventProfilePictureChanged:       {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventProfilePictureRemoved:       {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventProviderUnlinked:            {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventRoleEnded:                   {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventRoleGranted:                 {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventSessionRenamed:              {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventSessionRevoked:              {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventSessionsRevokedAll:          {about: []string{"Actor", "Count"}, other: []string{"Count"}},
+	model.AuditSelfEventSignInFailed:                {about: []string{"Count"}, other: []string{"Count"}},
+	model.AuditSelfEventSignInSucceeded:             {about: []string{"Count"}, other: []string{"Count"}},
+	model.AuditSelfEventSignedOut:                   {about: []string{"Count"}, other: []string{"Count"}},
 }

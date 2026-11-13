@@ -82,3 +82,14 @@ func TestAuditSelfEventsNameDeviceRenames(t *testing.T) {
 		})
 	}
 }
+
+func TestOnlyCatalogueEventsRepeat(t *testing.T) {
+	t.Parallel()
+	for _, event := range singularAuditSelfEvents {
+		require.True(t, event.IsValid(), event)
+		require.False(t, event.Repeats(), event)
+	}
+	require.True(t, AuditSelfEventSignInSucceeded.Repeats())
+	require.True(t, AuditSelfEventProfilePictureChanged.Repeats())
+	require.False(t, AuditSelfEvent("not.an_event").Repeats())
+}

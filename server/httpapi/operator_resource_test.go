@@ -58,11 +58,15 @@ type focusedRoleApplication struct {
 	create administration.CreateRoleCommand
 }
 
-func (f *focusedRoleApplication) ListRoles(context.Context, invocation.Invocation) ([]*model.Role, error) {
-	return f.roles, nil
+func (f *focusedRoleApplication) ListRoles(context.Context, invocation.Invocation, administration.ListRolesQuery) (paging.Page[administration.RoleResult], error) {
+	results := make([]administration.RoleResult, 0, len(f.roles))
+	for _, role := range f.roles {
+		results = append(results, administration.RoleResult{Role: role})
+	}
+	return paging.Page[administration.RoleResult]{Items: results}, nil
 }
-func (f *focusedRoleApplication) GetRole(context.Context, invocation.Invocation, model.RoleID) (*model.Role, error) {
-	return f.roles[0], nil
+func (f *focusedRoleApplication) GetRole(context.Context, invocation.Invocation, model.RoleID) (administration.RoleResult, error) {
+	return administration.RoleResult{Role: f.roles[0]}, nil
 }
 func (f *focusedRoleApplication) CreateRole(_ context.Context, _ invocation.Invocation, command administration.CreateRoleCommand) (*model.Role, error) {
 	f.create = command
@@ -95,8 +99,8 @@ type focusedRoleBindingApplication struct {
 	end     administration.EndRoleBindingCommand
 }
 
-func (*focusedRoleBindingApplication) ListRoleBindings(context.Context, invocation.Invocation, administration.ListRoleBindingsQuery) ([]*model.RoleBinding, error) {
-	return []*model.RoleBinding{}, nil
+func (*focusedRoleBindingApplication) ListRoleBindings(context.Context, invocation.Invocation, administration.ListRoleBindingsQuery) (paging.Counted[*model.RoleBinding], error) {
+	return paging.Counted[*model.RoleBinding]{Page: paging.Page[*model.RoleBinding]{Items: []*model.RoleBinding{}}}, nil
 }
 func (f *focusedRoleBindingApplication) CreateRoleBinding(context.Context, invocation.Invocation, administration.CreateRoleBindingCommand) (*model.RoleBinding, error) {
 	return f.binding, nil
@@ -135,6 +139,7 @@ type focusedAuditApplication struct {
 	err       error
 	selfQuery administration.ListSelfAuditEventsQuery
 	self      []administration.SelfAuditEvent
+	selfRuns  []administration.SelfAuditRun
 	selfCalls int
 	selfTotal int
 	names     store.AuditNames
@@ -144,7 +149,9 @@ type focusedAuditApplication struct {
 func (f *focusedAuditApplication) ListSelfAuditEvents(_ context.Context, _ invocation.Invocation, query administration.ListSelfAuditEventsQuery) (administration.SelfAuditPage, error) {
 	f.selfQuery = query
 	f.selfCalls++
-	page := administration.SelfAuditPage{Page: paging.Page[administration.SelfAuditEvent]{Items: f.self, HasMore: f.hasMore}, Counted: query.BeforeID.IsZero()}
+	page := administration.SelfAuditPage{
+		Page: paging.Page[administration.SelfAuditEvent]{Items: f.self, HasMore: f.hasMore}, Runs: f.selfRuns, Counted: query.BeforeID.IsZero(),
+	}
 	if page.Counted {
 		page.Total, page.TotalIsLowerBound = f.selfTotal, f.selfTotal == store.MaximumAuditSelfCount
 	}

@@ -232,6 +232,7 @@ func TestAuditStore(t *testing.T, ss store.Store) {
 	testAuditNames(t, ctx, ss, institution.ID.String())
 	testAuditListCreatedRange(t, ctx, ss, institution.ID.String())
 	testAuditListFilters(t, ctx, ss, institution.ID.String())
+	testAuditListKind(t, ctx, ss, institution.ID.String())
 }
 
 // testAuditListFilters proves the subject, status and repeatable action
@@ -322,6 +323,68 @@ func testAuditListFilters(t *testing.T, ctx context.Context, ss store.Store, ins
 			require.ErrorAs(t, err, &invalid)
 		})
 	}
+}
+
+// testAuditListKind proves the kind filter: it keeps the actions of one kind,
+// intersects the action filter rather than adding to it, and never reaches
+// past an academic visibility's subtrees or catalog.
+func testAuditListKind(t *testing.T, ctx context.Context, ss store.Store, institutionID string) {
+	actor := saveUser(t, ctx, ss)
+	root := saveAcademicUnit(t, ctx, ss, institutionID, "", "audit-kind-root")
+	sibling := saveAcademicUnit(t, ctx, ss, institutionID, "", "audit-kind-sibling")
+	view, members, search := string(model.ActionAcademicUnitView), string(model.ActionAcademicUnitMembersManage), string(model.ActionUserSearch)
+	save := func(action string, unit *model.AcademicUnit) model.AuditEventID {
+		t.Helper()
+		saved, err := ss.Audit().Save(ctx, &model.AuditEvent{
+			ActorID: actor.ID, Action: action, Resource: model.Resource{Type: model.ResourceAcademicUnit, ID: unit.ID.String()},
+			ScopeType: model.RoleScopeAcademicUnit, ScopeID: unit.ID.String(), Status: model.AuditStatusSuccess, NodeID: "test-node",
+		})
+		require.NoError(t, err)
+		return saved.ID
+	}
+	rootView, rootMembers, rootSearch := save(view, root), save(members, root), save(search, root)
+	siblingView, siblingMembers := save(view, sibling), save(members, sibling)
+
+	institution := store.AuditVisibilityScope{InstitutionWide: true}
+	academic := store.AuditVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{root.ID}, AllowedActions: []string{view, members}}
+	list := func(options store.AuditListOptions) []model.AuditEventID {
+		t.Helper()
+		options.ActorID, options.Limit = actor.ID, 20
+		events, err := ss.Audit().List(ctx, options)
+		require.NoError(t, err)
+		ids := make([]model.AuditEventID, 0, len(events))
+		for _, event := range events {
+			ids = append(ids, event.ID)
+		}
+		total, err := ss.Audit().Count(ctx, options, store.MaximumListCount)
+		require.NoError(t, err)
+		require.Len(t, ids, total, "Count agrees with List")
+		return ids
+	}
+
+	require.ElementsMatch(t, []model.AuditEventID{rootMembers, siblingMembers},
+		list(store.AuditListOptions{Kind: model.AuditKindChange, Visibility: institution}), "changes only")
+	require.ElementsMatch(t, []model.AuditEventID{rootView, rootSearch, siblingView},
+		list(store.AuditListOptions{Kind: model.AuditKindRead, Visibility: institution}), "reads only")
+	require.Empty(t, list(store.AuditListOptions{Kind: model.AuditKindChange, Actions: []string{view, search}, Visibility: institution}),
+		"the kind intersects the actions rather than adding to them")
+	require.ElementsMatch(t, []model.AuditEventID{rootView, siblingView},
+		list(store.AuditListOptions{Kind: model.AuditKindRead, Actions: []string{view, members}, Visibility: institution}))
+
+	require.Equal(t, []model.AuditEventID{rootView},
+		list(store.AuditListOptions{Kind: model.AuditKindRead, Visibility: academic}),
+		"an academic subtree reads its own reads, never a sibling's or an action outside its catalog")
+	require.Equal(t, []model.AuditEventID{rootMembers},
+		list(store.AuditListOptions{Kind: model.AuditKindChange, Visibility: academic}))
+	require.Empty(t, list(store.AuditListOptions{Kind: model.AuditKindRead, Actions: []string{search}, Visibility: academic}),
+		"a read outside the academic catalog stays hidden")
+
+	var invalid *store.ErrInvalidInput
+	options := store.AuditListOptions{Kind: "other", Limit: 10, Visibility: institution}
+	_, err := ss.Audit().List(ctx, options)
+	require.ErrorAs(t, err, &invalid)
+	_, err = ss.Audit().Count(ctx, options, store.MaximumListCount)
+	require.ErrorAs(t, err, &invalid)
 }
 
 // testAuditListCreatedRange proves the operator list's created_at range:

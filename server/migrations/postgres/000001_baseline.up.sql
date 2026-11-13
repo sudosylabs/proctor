@@ -5631,7 +5631,10 @@ CREATE INDEX external_identities_user_id_provider_idx
     ON external_identities (user_id, provider) WHERE archived_at IS NULL;
 CREATE INDEX class_members_user_id_academic_period_id_idx
     ON class_members (user_id, academic_period_id) WHERE archived_at IS NULL;
-CREATE INDEX role_bindings_role_id_idx ON role_bindings (role_id) WHERE archived_at IS NULL;
+-- A Role's holders, newest first; the predicate is the time-independent part
+-- of a current binding, which start_at and end_at narrow at read time.
+CREATE INDEX role_bindings_role_id_created_at_idx
+    ON role_bindings (role_id, created_at DESC, id DESC) WHERE archived_at IS NULL;
 CREATE INDEX role_bindings_origin_academic_unit_member_id_idx
     ON role_bindings (origin_academic_unit_member_id) WHERE origin_academic_unit_member_id IS NOT NULL;
 CREATE INDEX exam_sittings_class_id_idx ON exam_sittings (class_id);

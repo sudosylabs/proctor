@@ -689,7 +689,7 @@ func TestAcademicUnitVisibilityIsBoundedAcrossUsersBindingsAndAudits(t *testing.
 	bindings, listErr := helper.App.Administration.ListRoleBindings(ctx, inv, administration.ListRoleBindingsQuery{UserID: bindingUser.ID})
 	require.NoError(t, listErr)
 	seenBindings := map[string]bool{}
-	for _, binding := range bindings {
+	for _, binding := range bindings.Items {
 		seenBindings[binding.ID.String()] = true
 		require.Equal(t, model.RoleScopeAcademicUnit, binding.ScopeType)
 		require.Equal(t, child.ID.String(), binding.ScopeID)

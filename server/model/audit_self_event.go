@@ -200,3 +200,24 @@ func AuditSelfEventKeys(events []AuditSelfEvent, status AuditStatus) []AuditSelf
 	}
 	return keys
 }
+
+// singularAuditSelfEvents are the events whose rows never follow one another
+// in one actor's history, so a history never folds them into a run. Each
+// needs a change in between before it can happen again and is never done to
+// many people at once: two-step verification is turned on only by the User
+// for themself, an email change is undone once through its own link, offline
+// administrator recovery restores one account at a time, and signing out the
+// other Sessions leaves none to sign out until the User signs in again.
+var singularAuditSelfEvents = []AuditSelfEvent{
+	AuditSelfEventMFAEnabled,
+	AuditSelfEventEmailChangeUndone,
+	AuditSelfEventAccountRecoveredByAdministrator,
+	AuditSelfEventSessionsRevokedOthers,
+}
+
+// Repeats reports whether consecutive rows of this event may be presented as
+// one run, such as an administrator's change to many people's profiles or a
+// User's repeated sign-ins.
+func (e AuditSelfEvent) Repeats() bool {
+	return e.IsValid() && !slices.Contains(singularAuditSelfEvents, e)
+}

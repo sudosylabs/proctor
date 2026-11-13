@@ -1366,6 +1366,65 @@ func (s SQLUserStore) ListDisplayNames(ctx context.Context, userIDs []model.User
 	return result, nil
 }
 
+func (s SQLUserStore) ListVisibleDisplayNames(
+	ctx context.Context,
+	userIDs []model.UserID,
+	visibility store.UserVisibilityScope,
+) ([]store.UserDisplayName, error) {
+	ids, err := distinctIdentifiers(userIDs, store.MaximumUserDisplayNames)
+	if err != nil {
+		return nil, store.NewErrInvalidInput("user", "user_ids", err)
+	}
+	if !validVisibilityIDs(visibility.AcademicUnitRootIDs) ||
+		!validVisibilityIDs(visibility.ClassMemberAcademicUnitRootIDs) ||
+		!validVisibilityIDs(visibility.ClassIDs) {
+		return nil, store.NewErrInvalidInput("user", "visibility", nil)
+	}
+	result := make([]store.UserDisplayName, 0, len(ids))
+	if len(ids) == 0 {
+		return result, nil
+	}
+	query, err := visibleUserNamesQuery(ids, visibility)
+	if err != nil {
+		return nil, err
+	}
+	var rows []struct {
+		ID          string `db:"id"`
+		Name        string `db:"name"`
+		DisplayName string `db:"display_name"`
+	}
+	if err = s.GetMaster().SelectBuilder(ctx, &rows, query.OrderBy("users.id")); err != nil {
+		return nil, translateError("user", "visible_display_names", err)
+	}
+	for _, row := range rows {
+		id, err := parsePersistedID("user", "id", row.ID, model.ParseUserID)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, store.UserDisplayName{UserID: id, DisplayName: row.DisplayName})
+	}
+	return result, nil
+}
+
+// visibleUserNamesQuery selects the presentable names of the listed
+// unarchived Users visible through visibility as the User directory applies
+// it, so a scoped visibility never names a disabled User. The audit page
+// names and the mail delivery recipients read Users through it.
+func visibleUserNamesQuery(ids []string, visibility store.UserVisibilityScope) (sq.SelectBuilder, error) {
+	query, err := filterUserListVisibility(sq.Select(
+		"users.id",
+		"users.username AS name",
+		"COALESCE(NULLIF(users.display_name, ''), users.username) AS display_name",
+	).From("users").Where("users.id = ANY(?)", pq.Array(ids)).Where(sq.Eq{"users.archived_at": nil}), visibility)
+	if err != nil {
+		return query, err
+	}
+	if !visibility.InstitutionWide {
+		query = query.Where(sq.Eq{"users.disabled_at": nil})
+	}
+	return query, nil
+}
+
 func newUserRow(user *model.User) userRow {
 	return userRow{
 		ID:                          user.ID.String(),

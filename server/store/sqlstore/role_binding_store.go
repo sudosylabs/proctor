@@ -651,6 +651,166 @@ func (s SQLRoleBindingStore) ListByScope(
 		OrderBy("role_bindings.start_at", "role_bindings.id"), "list role bindings by scope")
 }
 
+// maximumHolderCountRoles bounds the Roles one CountHoldersByRoles reads: one
+// page of the Role collection.
+const maximumHolderCountRoles = 200
+
+// currentRoleBindingScopePredicate keeps role_bindings rows whose scope is an
+// unarchived Institution, Academic Unit or Class, as a current binding's
+// scope must be.
+const currentRoleBindingScopePredicate = `(
+	(role_bindings.scope_type = 'institution' AND EXISTS (
+		SELECT 1 FROM institutions scope_institution
+		WHERE scope_institution.id = role_bindings.scope_id AND scope_institution.archived_at IS NULL))
+	OR (role_bindings.scope_type = 'academic_unit' AND EXISTS (
+		SELECT 1 FROM academic_units scope_unit
+		WHERE scope_unit.id = role_bindings.scope_id AND scope_unit.archived_at IS NULL))
+	OR (role_bindings.scope_type = 'class' AND EXISTS (
+		SELECT 1 FROM classes scope_class
+		WHERE scope_class.id = role_bindings.scope_id AND scope_class.archived_at IS NULL))
+)`
+
+// validRoleBindingRoleVisibility reports whether a Role read names canonical
+// Roles, carries its instant, and bounds its visibility as ListVisibleByUser
+// does.
+func validRoleBindingRoleVisibility(roleIDs []model.RoleID, visibility store.UserVisibilityScope) bool {
+	return validVisibilityIDs(roleIDs) &&
+		!visibility.ActiveAt.IsZero() &&
+		len(visibility.AcademicUnitRootIDs)+len(visibility.ClassIDs) <= 256 &&
+		validVisibilityIDs(visibility.AcademicUnitRootIDs) &&
+		validVisibilityIDs(visibility.ClassIDs)
+}
+
+// validRoleBindingRoleListOptions reports whether a Role listing names one to
+// MaximumRoleBindingListRoles Roles, a coherent keyset, and a probe size.
+func validRoleBindingRoleListOptions(options store.RoleBindingRoleListOptions) bool {
+	return len(options.RoleIDs) > 0 &&
+		len(options.RoleIDs) <= store.MaximumRoleBindingListRoles &&
+		validRoleBindingRoleVisibility(options.RoleIDs, options.Visibility) &&
+		options.BeforeCreatedAt.IsZero() == options.BeforeID.IsZero() &&
+		(options.BeforeID.IsZero() || options.BeforeID.IsValid()) &&
+		options.Limit >= 1 && options.Limit <= 201
+}
+
+// currentRoleBindingsByRoles selects columns from the bindings of roleIDs
+// current at the visibility's instant, with an unarchived Role and scope,
+// whose scope lies within the visibility. The listing and its count share it,
+// so a total always counts the listed rows.
+func (s SQLRoleBindingStore) currentRoleBindingsByRoles(
+	columns []string,
+	roleIDs []model.RoleID,
+	visibility store.UserVisibilityScope,
+) sq.SelectBuilder {
+	activeAt := model.TimeUTC(visibility.ActiveAt)
+	query := s.getQueryBuilder().Select(columns...).From("role_bindings").
+		Join("roles ON roles.id = role_bindings.role_id AND roles.archived_at IS NULL").
+		Where("role_bindings.role_id = ANY(?)", pq.Array(idStrings(roleIDs))).
+		Where(sq.Eq{"role_bindings.archived_at": nil}).
+		Where(sq.LtOrEq{"role_bindings.start_at": activeAt}).
+		Where(sq.Or{sq.Eq{"role_bindings.end_at": nil}, sq.Gt{"role_bindings.end_at": activeAt}}).
+		Where(currentRoleBindingScopePredicate)
+	if !visibility.InstitutionWide {
+		units, unitArgs, predicate, predicateArgs := roleBindingVisibilityPredicate(visibility)
+		if units != "" {
+			query = query.Prefix("WITH RECURSIVE "+units, unitArgs...)
+		}
+		query = query.Where(predicate, predicateArgs...)
+	}
+	return query
+}
+
+// ListCurrentByRoles returns one page, newest first by creation then ID, of
+// the visible current bindings of the listed Roles.
+func (s SQLRoleBindingStore) ListCurrentByRoles(
+	ctx context.Context,
+	options store.RoleBindingRoleListOptions,
+) ([]*model.RoleBinding, error) {
+	if !validRoleBindingRoleListOptions(options) {
+		return nil, store.NewErrInvalidInput("role_binding", "role_list_options", nil)
+	}
+	query := s.currentRoleBindingsByRoles(roleBindingSliceColumns(), options.RoleIDs, options.Visibility)
+	if !options.BeforeID.IsZero() {
+		query = query.Where("(role_bindings.created_at, role_bindings.id) < (?, ?)",
+			model.TimeUTC(options.BeforeCreatedAt), options.BeforeID.String())
+	}
+	return s.selectBindings(ctx, query.
+		OrderBy("role_bindings.created_at DESC", "role_bindings.id DESC").
+		Limit(uint64(options.Limit)), "list current role bindings by roles") //nolint:gosec // G115: validRoleBindingRoleListOptions bounds Limit to 1..201.
+}
+
+// CountCurrentByRoles counts the bindings ListCurrentByRoles pages, without
+// its keyset or limit, reading at most one row past maximum.
+func (s SQLRoleBindingStore) CountCurrentByRoles(
+	ctx context.Context,
+	options store.RoleBindingRoleListOptions,
+	maximum int,
+) (int, error) {
+	if !store.ValidCountMaximum(maximum) {
+		return 0, store.NewErrInvalidInput("role_binding", "count_maximum", maximum)
+	}
+	if !validRoleBindingRoleListOptions(options) {
+		return 0, store.NewErrInvalidInput("role_binding", "role_list_options", nil)
+	}
+	query := s.currentRoleBindingsByRoles([]string{"role_bindings.id"}, options.RoleIDs, options.Visibility)
+	return countBounded(ctx, s.GetMaster(), query, maximum, "current role bindings by roles")
+}
+
+// CountHoldersByRoles counts, per listed Role, the visible current bindings,
+// their distinct Users and their distinct scopes. Each Role reads at most
+// maximum bindings, so one page of Roles bounds the statement's work.
+func (s SQLRoleBindingStore) CountHoldersByRoles(
+	ctx context.Context,
+	options store.RoleHolderCountOptions,
+) ([]store.RoleHolderCount, error) {
+	if len(options.RoleIDs) > maximumHolderCountRoles ||
+		!validRoleBindingRoleVisibility(options.RoleIDs, options.Visibility) ||
+		!store.ValidCountMaximum(options.Maximum) {
+		return nil, store.NewErrInvalidInput("role_binding", "holder_count_options", nil)
+	}
+	if len(options.RoleIDs) == 0 {
+		return []store.RoleHolderCount{}, nil
+	}
+
+	bindings := s.currentRoleBindingsByRoles(
+		[]string{"role_bindings.user_id", "role_bindings.scope_type", "role_bindings.scope_id"},
+		options.RoleIDs,
+		options.Visibility,
+	).Where("role_bindings.role_id = requested.role_id").Limit(uint64(options.Maximum)) //nolint:gosec // G115: Maximum is 1..MaximumListCount.
+	counted, countedArgs, err := bindings.PlaceholderFormat(sq.Question).ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build role holder count: %w", err)
+	}
+
+	type holderRow struct {
+		RoleID   string `db:"role_id"`
+		Bindings int    `db:"bindings"`
+		Users    int    `db:"users"`
+		Scopes   int    `db:"scopes"`
+	}
+	rows := []holderRow{}
+	args := append([]any{pq.Array(idStrings(options.RoleIDs))}, countedArgs...)
+	if err := s.GetMaster().Select(ctx, &rows, `SELECT requested.role_id,
+			count(*) AS bindings,
+			count(DISTINCT counted.user_id) AS users,
+			count(DISTINCT (counted.scope_type, counted.scope_id)) AS scopes
+		FROM (SELECT DISTINCT role_id FROM unnest(?::text[]) AS listed(role_id)) requested
+		CROSS JOIN LATERAL (`+counted+`) counted
+		GROUP BY requested.role_id
+		ORDER BY requested.role_id`, args...); err != nil {
+		return nil, fmt.Errorf("count role holders: %w", err)
+	}
+
+	counts := make([]store.RoleHolderCount, 0, len(rows))
+	for _, row := range rows {
+		roleID, err := model.ParseRoleID(row.RoleID)
+		if err != nil {
+			return nil, invalidPersistedState("role_binding", "role_id", err)
+		}
+		counts = append(counts, store.RoleHolderCount{RoleID: roleID, Bindings: row.Bindings, Users: row.Users, Scopes: row.Scopes})
+	}
+	return counts, nil
+}
+
 // ListActiveByUser returns the unarchived role bindings of userID active at at.
 func (s SQLRoleBindingStore) ListActiveByUser(ctx context.Context, userID model.UserID, at time.Time) ([]*model.RoleBinding, error) {
 	at = model.TimeUTC(at)

@@ -9,6 +9,7 @@ package administration
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -19,16 +20,24 @@ import (
 	"github.com/sudosylabs/proctor/server/app/internal/batchitem"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ListRoleBindingsQuery names either one User or one scope whose Role
-// Bindings to list.
+// ListRoleBindingsQuery names exactly one of: one User, one scope, or up to
+// store.MaximumRoleBindingListRoles Roles whose Role Bindings to list. Only a
+// Role listing is paged: BeforeCreatedAt and BeforeID, both set or both zero,
+// continue after the previous page's last binding, and Limit is its page
+// size.
 type ListRoleBindingsQuery struct {
-	UserID    model.UserID
-	ScopeType model.RoleScopeType
-	ScopeID   string
+	UserID          model.UserID
+	ScopeType       model.RoleScopeType
+	ScopeID         string
+	RoleIDs         []model.RoleID
+	BeforeCreatedAt time.Time
+	BeforeID        model.RoleBindingID
+	Limit           int
 }
 
 // CreateRoleBindingCommand binds a User to a Role at a scope.
@@ -53,51 +62,130 @@ type EndRoleBindingCommand struct {
 }
 
 // ListRoleBindings lists one User's Role Bindings within the caller's
-// visibility, or every Role Binding at one scope the caller may view.
+// visibility, every Role Binding at one scope the caller may view, or one
+// page of the current Role Bindings of the named Roles within the caller's
+// visibility. A User or scope listing returns every binding, uncounted; a
+// Role listing returns one keyset page, newest first, whose first page also
+// carries its total.
 func (s *Service) ListRoleBindings(
 	ctx context.Context,
 	inv invocation.Invocation,
 	query ListRoleBindingsQuery,
-) ([]*model.RoleBinding, error) {
+) (paging.Counted[*model.RoleBinding], error) {
 	userID := strings.TrimSpace(query.UserID.String())
 	scopeID := strings.TrimSpace(query.ScopeID)
+	byScope := query.ScopeType != "" || scopeID != ""
 	switch {
-	case userID != "" && query.ScopeType == "" && scopeID == "":
+	case len(query.RoleIDs) > 0 && userID == "" && !byScope:
+		return s.listRoleHolders(ctx, inv, query)
+	case len(query.RoleIDs) > 0 || query.Limit != 0 || !query.BeforeID.IsZero() || !query.BeforeCreatedAt.IsZero():
+		return paging.Counted[*model.RoleBinding]{}, apperror.Invalid("request.invalid", "scope")
+	case userID != "" && !byScope:
 		if !model.UserID(userID).IsValid() {
-			return nil, apperror.New("request.invalid").WithField("field", "user_id")
+			return paging.Counted[*model.RoleBinding]{}, apperror.Invalid("request.invalid", "user_id")
 		}
 
 		visibility, err := s.authorizeRoleBindingList(ctx, inv, model.ActionRoleBindingView)
 		if err != nil {
-			return nil, err
+			return paging.Counted[*model.RoleBinding]{}, err
 		}
 
 		bindings, err := s.roleBindings.ListVisibleByUser(ctx, model.UserID(userID), visibility)
 		if err != nil {
-			return nil, RoleBindingStoreErrors.Translate(err)
-		}
-		if bindings == nil {
-			bindings = []*model.RoleBinding{}
+			return paging.Counted[*model.RoleBinding]{}, RoleBindingStoreErrors.Translate(err)
 		}
 
-		return bindings, nil
+		return paging.Counted[*model.RoleBinding]{Page: paging.New(bindings, len(bindings))}, nil
 	case userID == "" && query.ScopeType.IsValid() && model.IsValidOpaqueID(scopeID):
 		if _, err := s.authorizer.AuthorizeRoleBindingScope(ctx, inv, model.ActionRoleBindingView, query.ScopeType, scopeID); err != nil {
-			return nil, err
+			return paging.Counted[*model.RoleBinding]{}, err
 		}
 
 		bindings, err := s.roleBindings.ListByScope(ctx, query.ScopeType, scopeID)
 		if err != nil {
-			return nil, RoleBindingStoreErrors.Translate(err)
-		}
-		if bindings == nil {
-			bindings = []*model.RoleBinding{}
+			return paging.Counted[*model.RoleBinding]{}, RoleBindingStoreErrors.Translate(err)
 		}
 
-		return bindings, nil
+		return paging.Counted[*model.RoleBinding]{Page: paging.New(bindings, len(bindings))}, nil
 	default:
-		return nil, apperror.New("request.invalid").WithField("field", "scope")
+		return paging.Counted[*model.RoleBinding]{}, apperror.Invalid("request.invalid", "scope")
 	}
+}
+
+// listRoleHolders pages the current Role Bindings of the named Roles inside
+// the caller's role_binding.view visibility, recording that one decision. A
+// Role is seen through Institution-wide role.view, so without it, or for a
+// Role that does not exist or is archived, every requested Role is refused
+// alike as request.invalid on role_id, never revealing which Roles exist.
+func (s *Service) listRoleHolders(
+	ctx context.Context,
+	inv invocation.Invocation,
+	query ListRoleBindingsQuery,
+) (paging.Counted[*model.RoleBinding], error) {
+	var roleIDs []model.RoleID
+	for _, id := range query.RoleIDs {
+		if !id.IsValid() {
+			return paging.Counted[*model.RoleBinding]{}, apperror.Invalid("request.invalid", "role_id")
+		}
+		if !slices.Contains(roleIDs, id) {
+			roleIDs = append(roleIDs, id)
+		}
+	}
+	if len(roleIDs) > store.MaximumRoleBindingListRoles {
+		return paging.Counted[*model.RoleBinding]{}, apperror.Invalid("request.invalid", "role_id")
+	}
+	if query.BeforeID.IsZero() != query.BeforeCreatedAt.IsZero() || (!query.BeforeID.IsZero() && !query.BeforeID.IsValid()) {
+		return paging.Counted[*model.RoleBinding]{}, apperror.Invalid("request.invalid", "cursor")
+	}
+	limit, probe, err := paging.ResolveLimit(query.Limit, "limit")
+	if err != nil {
+		return paging.Counted[*model.RoleBinding]{}, err
+	}
+
+	visibility, err := s.authorizeRoleBindingList(ctx, inv, model.ActionRoleBindingView)
+	if err != nil {
+		return paging.Counted[*model.RoleBinding]{}, err
+	}
+	visible, err := s.authorizer.CanViewRoles(ctx, inv)
+	if err != nil {
+		return paging.Counted[*model.RoleBinding]{}, err
+	}
+	if !visible {
+		return paging.Counted[*model.RoleBinding]{}, apperror.Invalid("request.invalid", "role_id")
+	}
+	roles, err := s.roles.GetByIDs(ctx, roleIDs)
+	if err != nil {
+		return paging.Counted[*model.RoleBinding]{}, roleStoreErrors.Translate(err)
+	}
+	if len(roles) != len(roleIDs) {
+		return paging.Counted[*model.RoleBinding]{}, apperror.Invalid("request.invalid", "role_id")
+	}
+
+	visibility.ActiveAt = model.TimeUTC(s.now())
+	options := store.RoleBindingRoleListOptions{
+		RoleIDs:         roleIDs,
+		Visibility:      visibility,
+		BeforeCreatedAt: query.BeforeCreatedAt,
+		BeforeID:        query.BeforeID,
+		Limit:           probe,
+	}
+	bindings, err := s.roleBindings.ListCurrentByRoles(ctx, options)
+	if err != nil {
+		return paging.Counted[*model.RoleBinding]{}, RoleBindingStoreErrors.Translate(err)
+	}
+
+	page := paging.New(bindings, limit)
+	total, consistent, err := paging.CountFirst(query.BeforeID.IsZero(), len(page.Items), func(maximum int) (int, error) {
+		return s.roleBindings.CountCurrentByRoles(ctx, options, maximum)
+	})
+	if err != nil {
+		return paging.Counted[*model.RoleBinding]{}, RoleBindingStoreErrors.Translate(err)
+	}
+	if !consistent {
+		return paging.Counted[*model.RoleBinding]{}, apperror.New("administration.unavailable")
+	}
+
+	return paging.Counted[*model.RoleBinding]{Page: page, Total: total}, nil
 }
 
 // CreateRoleBinding binds a User to a Role at a scope the caller manages,

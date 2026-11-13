@@ -15,10 +15,13 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"net/http"
+	"unicode/utf8"
 
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -46,6 +49,37 @@ type roleResponse struct {
 	Description string   `json:"description"`
 	Permissions []string `json:"permissions"`
 	BuiltIn     bool     `json:"built_in"`
+	// Holders is present only on reads, and only for a caller holding
+	// role_binding.view somewhere.
+	Holders *roleHoldersResponse `json:"holders,omitempty"`
+}
+
+// roleHoldersResponse counts a Role's current Role Bindings the caller can
+// see, each stopped at 10,000 with its lower-bound flag.
+type roleHoldersResponse struct {
+	Bindings             int  `json:"bindings"`
+	Users                int  `json:"users"`
+	Scopes               int  `json:"scopes"`
+	BindingsIsLowerBound bool `json:"bindings_is_lower_bound"`
+	UsersIsLowerBound    bool `json:"users_is_lower_bound"`
+	ScopesIsLowerBound   bool `json:"scopes_is_lower_bound"`
+}
+
+// roleResponseFromResult presents a read Role with its holders, when the
+// application counted them.
+func roleResponseFromResult(request *http.Request, result administration.RoleResult) roleResponse {
+	response := roleResponseFromModel(request, result.Role)
+	if holders := result.Holders; holders != nil {
+		response.Holders = &roleHoldersResponse{
+			Bindings:             holders.Bindings,
+			Users:                holders.Users,
+			Scopes:               holders.Scopes,
+			BindingsIsLowerBound: holders.BindingsIsLowerBound,
+			UsersIsLowerBound:    holders.UsersIsLowerBound,
+			ScopesIsLowerBound:   holders.ScopesIsLowerBound,
+		}
+	}
+	return response
 }
 
 func roleResponseFromModel(request *http.Request, role *model.Role) roleResponse {
@@ -166,28 +200,59 @@ func operatorMutationErrorCodes(specific ...string) []string {
 }
 
 func (h roleHandlers) list(request route.Request) (route.Result, error) {
-	roles, err := h.app.ListRoles(
-		request.Context,
-		request.Invocation(),
-	)
+	page, err := request.Page()
+	if err != nil {
+		return route.Result{}, err
+	}
+	cursor, continued, err := route.DecodePageCursor(page, roleCursorSpec())
+	if err != nil {
+		return route.Result{}, err
+	}
+	query := administration.ListRolesQuery{NameQuery: paging.NameQuery{Limit: page.Limit}}
+	if continued {
+		query.AfterName, query.AfterID = cursor.Name, cursor.ID
+	}
+
+	roles, err := h.app.ListRoles(request.Context, request.Invocation(), query)
 	if err != nil {
 		return route.Result{}, err
 	}
 
-	response, err := route.BoundedList(
-		request,
-		"Role",
-		roles,
-		func(role *model.Role) route.BoundedKey {
-			return route.BoundedKey{Name: role.Name, ID: role.ID.String()}
+	response, err := route.NewList(
+		roles.Items,
+		roles.HasMore,
+		func(result administration.RoleResult) roleResponse {
+			return roleResponseFromResult(request.HTTP, result)
 		},
-		func(role *model.Role) roleResponse { return roleResponseFromModel(request.HTTP, role) },
+		func(last administration.RoleResult) (string, error) {
+			return route.EncodeCursor(roleCursor{Name: last.Role.Name, ID: last.Role.ID.String()}, roleCursorSpec())
+		},
 	)
 	if err != nil {
 		return route.Result{}, err
 	}
 
 	return route.JSON(http.StatusOK, response), nil
+}
+
+// roleCursor continues the Role listing after the Role with Name and ID.
+type roleCursor struct {
+	Name string `json:"name"`
+	ID   string `json:"id"`
+}
+
+func roleCursorSpec() route.CursorSpec[roleCursor] {
+	return route.CursorSpec[roleCursor]{
+		Label:                "Role",
+		MaximumEncodedLength: route.DefaultMaximumCursorLength,
+		Members:              []string{"name", "id"},
+		Validate: func(cursor roleCursor) error {
+			if cursor.Name == "" || len(cursor.Name) > 256 || !utf8.ValidString(cursor.Name) || !model.RoleID(cursor.ID).IsValid() {
+				return errors.New("invalid Role keyset")
+			}
+			return nil
+		},
+	}
 }
 
 func (h roleHandlers) get(request route.Request) (route.Result, error) {
@@ -203,7 +268,7 @@ func (h roleHandlers) get(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
-	return route.JSON(http.StatusOK, roleResponseFromModel(request.HTTP, role)), nil
+	return route.JSON(http.StatusOK, roleResponseFromResult(request.HTTP, role)), nil
 }
 
 func (h roleHandlers) create(request route.Request) (route.Result, error) {
@@ -274,8 +339,8 @@ func (h roleHandlers) archive(request route.Request) (route.Result, error) {
 
 // RoleApplication is the application port its handlers call; it reads and changes Roles.
 type RoleApplication interface {
-	ListRoles(context.Context, invocation.Invocation) ([]*model.Role, error)
-	GetRole(context.Context, invocation.Invocation, model.RoleID) (*model.Role, error)
+	ListRoles(context.Context, invocation.Invocation, administration.ListRolesQuery) (paging.Page[administration.RoleResult], error)
+	GetRole(context.Context, invocation.Invocation, model.RoleID) (administration.RoleResult, error)
 	CreateRole(context.Context, invocation.Invocation, administration.CreateRoleCommand) (*model.Role, error)
 	UpdateRole(context.Context, invocation.Invocation, administration.UpdateRoleCommand) (*model.Role, error)
 	ArchiveRole(context.Context, invocation.Invocation, model.RoleID) error

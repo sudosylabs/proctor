@@ -14,36 +14,28 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/plugin"
 )
 
+// ProfileMapper maps one provider's released attributes to an Assertion.
 type ProfileMapper struct {
-	descriptor    model.ExternalAuthenticationProvider
+	providerID    string
 	autoProvision bool
-	claims        config.ExternalClaimMapping
+	claims        ClaimMapping
 }
 
-func NewProfileMapper(
-	settings config.ExternalAuthenticationProvider,
-) *ProfileMapper {
-	return &ProfileMapper{
-		descriptor: model.ExternalAuthenticationProvider{
-			ID:          settings.ID,
-			DisplayName: settings.DisplayName,
-			Type:        settings.Type,
-		},
-		autoProvision: settings.AutoProvision,
-		claims:        settings.Claims,
-	}
+// NewProfileMapper returns the mapper for the provider providerID names.
+func NewProfileMapper(providerID string, autoProvision bool, claims ClaimMapping) *ProfileMapper {
+	return &ProfileMapper{providerID: providerID, autoProvision: autoProvision, claims: claims}
 }
 
-func (m *ProfileMapper) Descriptor() model.ExternalAuthenticationProvider {
-	return m.descriptor
+// ProviderID is the configured provider's identifier.
+func (m *ProfileMapper) ProviderID() string {
+	return m.providerID
 }
 
-func (m *ProfileMapper) Claims() config.ExternalClaimMapping {
+func (m *ProfileMapper) Claims() ClaimMapping {
 	return m.claims
 }
 

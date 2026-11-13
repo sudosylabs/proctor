@@ -331,13 +331,9 @@ func TestAcceptClosesOwnedResourcesOnProviderConfigurationFailure(t *testing.T) 
 	require.NoError(t, err)
 	settings := configuration.Get()
 	settings.Authentication.External.Providers = []config.ExternalAuthenticationProvider{{
-		ID: "missing-factory", Type: config.ExternalAuthenticationTypeCAS,
+		ID: "missing-factory", Type: "cas",
 		DisplayName: "Missing", Enabled: true,
-		CAS: &config.CASProvider{
-			BaseURL: "https://cas.example.test", ValidationPath: "/p3/serviceValidate",
-			Timeout: config.Duration{Duration: 5 * time.Second}, MaxResponseBytes: 64 << 10,
-		},
-		Claims: config.ExternalClaimMapping{Subject: "user"},
+		Settings: json.RawMessage(`{"BaseURL":"https://cas.example.test"}`),
 	}}
 	_, _, err = configuration.Set(context.Background(), settings)
 	require.NoError(t, err)
@@ -363,13 +359,9 @@ func TestAcceptStartsWithoutAProviderWhosePluginIsOff(t *testing.T) {
 	require.NoError(t, err)
 	settings := configuration.Get()
 	settings.Authentication.External.Providers = []config.ExternalAuthenticationProvider{{
-		ID: "campus-cas", Type: config.ExternalAuthenticationTypeCAS,
+		ID: "campus-cas", Type: "cas",
 		DisplayName: "Campus", Enabled: true,
-		CAS: &config.CASProvider{
-			BaseURL: "https://cas.example.test", ValidationPath: "/p3/serviceValidate",
-			Timeout: config.Duration{Duration: 5 * time.Second}, MaxResponseBytes: 64 << 10,
-		},
-		Claims: config.ExternalClaimMapping{Subject: "user"},
+		Settings: json.RawMessage(`{"BaseURL":"https://cas.example.test"}`),
 	}}
 	_, _, err = configuration.Set(context.Background(), settings)
 	require.NoError(t, err)
@@ -612,15 +604,9 @@ func TestServiceAtomicallyReconfiguresExternalProviders(t *testing.T) {
 	initial := configuration.Get()
 	initial.Authentication.External.Providers =
 		[]config.ExternalAuthenticationProvider{{
-			ID: "campus-cas", Type: config.ExternalAuthenticationTypeCAS,
+			ID: "campus-cas", Type: "cas",
 			DisplayName: "Campus CAS", Enabled: true,
-			CAS: &config.CASProvider{
-				BaseURL:          "https://cas.example.edu/cas",
-				ValidationPath:   "/p3/serviceValidate",
-				Timeout:          config.Duration{Duration: 5 * time.Second},
-				MaxResponseBytes: 64 * 1024,
-			},
-			Claims: config.ExternalClaimMapping{Subject: "user"},
+			Settings: json.RawMessage(`{"BaseURL":"https://cas.example.edu/cas","ValidationPath":"/p3/serviceValidate","Timeout":"5s","MaxResponseBytes":65536,"Claims":{"Subject":"user"}}`),
 		}}
 	_, _, err = configuration.Set(
 		context.Background(),
@@ -773,15 +759,9 @@ func TestServiceReloadRollsBackEveryConsumerWhenOneCannotApply(t *testing.T) {
 	require.NoError(t, err)
 	initial := configuration.Get()
 	initial.Authentication.External.Providers = []config.ExternalAuthenticationProvider{{
-		ID: "campus-cas", Type: config.ExternalAuthenticationTypeCAS,
+		ID: "campus-cas", Type: "cas",
 		DisplayName: "Campus CAS", Enabled: true,
-		CAS: &config.CASProvider{
-			BaseURL:          "https://cas.example.edu/cas",
-			ValidationPath:   "/p3/serviceValidate",
-			Timeout:          config.Duration{Duration: 5 * time.Second},
-			MaxResponseBytes: 64 * 1024,
-		},
-		Claims: config.ExternalClaimMapping{Subject: "user"},
+		Settings: json.RawMessage(`{"BaseURL":"https://cas.example.edu/cas","ValidationPath":"/p3/serviceValidate","Timeout":"5s","MaxResponseBytes":65536,"Claims":{"Subject":"user"}}`),
 	}}
 	_, _, err = configuration.Set(context.Background(), initial)
 	require.NoError(t, err)
@@ -814,7 +794,7 @@ func TestServiceReloadRollsBackEveryConsumerWhenOneCannotApply(t *testing.T) {
 // settings, as a protocol does when it cannot build a configured provider.
 type failingProviderType struct{}
 
-func (failingProviderType) Type() string { return config.ExternalAuthenticationTypeCAS }
+func (failingProviderType) Type() string { return "cas" }
 
 func (failingProviderType) New(plugin.IdentityProviderDefinition) (plugin.IdentityProvider, error) {
 	return nil, errors.New("settings rejected")

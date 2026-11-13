@@ -58,14 +58,14 @@ func (p *recordingIdentityProvider) Complete(_ context.Context, request plugin.C
 
 func bridgeSettings() config.ExternalAuthenticationProvider {
 	return config.ExternalAuthenticationProvider{
-		ID: "campus", DisplayName: "Campus Sign-In", Type: config.ExternalAuthenticationTypeOIDC,
+		ID: "campus", DisplayName: "Campus Sign-In", Type: "oidc",
 		Enabled: true, AutoProvision: true,
 	}
 }
 
 func TestPluginProviderTakesItsDescriptorFromConfiguration(t *testing.T) {
 	provider := NewProvider(bridgeSettings(), &recordingIdentityProvider{})
-	require.Equal(t, model.ExternalAuthenticationProvider{ID: "campus", DisplayName: "Campus Sign-In", Type: config.ExternalAuthenticationTypeOIDC}, provider.Descriptor())
+	require.Equal(t, model.ExternalAuthenticationProvider{ID: "campus", DisplayName: "Campus Sign-In", Type: "oidc"}, provider.Descriptor())
 	require.True(t, provider.AutoProvision())
 	settings := bridgeSettings()
 	settings.AutoProvision = false
@@ -148,12 +148,12 @@ func TestPluginProviderMapsProviderFailures(t *testing.T) {
 }
 
 func TestRegistryPresentsConfiguredPluginProviders(t *testing.T) {
-	registry, err := NewRegistry(fakeFactory{providerType: config.ExternalAuthenticationTypeOIDC})
+	registry, err := NewRegistry(fakeFactory{providerType: "oidc"})
 	require.NoError(t, err)
 	require.NoError(t, registry.Configure(config.ExternalAuthentication{Providers: []config.ExternalAuthenticationProvider{bridgeSettings()}}))
 	provider, exists := registry.Provider("campus")
 	require.True(t, exists)
-	require.Equal(t, model.ExternalAuthenticationProvider{ID: "campus", DisplayName: "Campus Sign-In", Type: config.ExternalAuthenticationTypeOIDC}, provider.Descriptor())
+	require.Equal(t, model.ExternalAuthenticationProvider{ID: "campus", DisplayName: "Campus Sign-In", Type: "oidc"}, provider.Descriptor())
 	require.True(t, provider.AutoProvision())
 	_, err = provider.Complete(context.Background(), CompleteRequest{})
 	require.ErrorIs(t, err, ErrAuthenticationRejected)

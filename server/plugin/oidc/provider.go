@@ -34,34 +34,97 @@ import (
 	"github.com/sudosylabs/proctor/server/plugin"
 )
 
-type Factory struct{}
-
-func NewFactory() Factory {
-	return Factory{}
+// Settings is an OpenID Connect provider's settings document. Issuer
+// discovery is deliberate: it keeps the issuer consistent and lets a
+// standards-compliant provider rotate endpoints and signing keys.
+type Settings struct {
+	Issuer           string                    `json:"Issuer"`
+	ClientID         string                    `json:"ClientID"`
+	Scopes           []string                  `json:"Scopes"`
+	UseUserInfo      bool                      `json:"UseUserInfo"`
+	Timeout          config.Duration           `json:"Timeout"`
+	MaxResponseBytes int64                     `json:"MaxResponseBytes"`
+	Claims           externalauth.ClaimMapping `json:"Claims"`
 }
 
-func (Factory) New(
-	settings config.ExternalAuthenticationProvider,
-) (plugin.IdentityProvider, error) {
-	if settings.OIDC == nil {
-		return nil, errors.New("OIDC settings are missing")
+// Secrets is an OpenID Connect provider's secrets document.
+type Secrets struct {
+	ClientSecret string `json:"ClientSecret"`
+}
+
+// Validate checks settings and secrets for a provider that may or may not
+// create accounts.
+func (s Settings) Validate(secrets Secrets, autoProvision bool) error {
+	var problems externalauth.SettingsErrors
+	externalauth.ValidateHTTPSURL("issuer", s.Issuer, &problems)
+	if parsed, _ := url.Parse(s.Issuer); parsed != nil &&
+		(parsed.RawQuery != "" ||
+			parsed.Fragment != "" ||
+			(parsed.Path != "" && strings.HasSuffix(parsed.Path, "/"))) {
+		problems.Add("issuer", "must not contain a query, fragment, or trailing slash")
+	}
+	if s.ClientID == "" || len(s.ClientID) > 512 || strings.ContainsAny(s.ClientID, "\x00\r\n") {
+		problems.Add("client_id", "must contain between 1 and 512 safe characters")
+	}
+	if secrets.ClientSecret == "" ||
+		len(secrets.ClientSecret) > 4096 ||
+		strings.ContainsAny(secrets.ClientSecret, "\x00\r\n") {
+		problems.Add("secrets.client_secret", "must contain between 1 and 4096 safe characters")
+	}
+	seenScopes := make(map[string]struct{}, len(s.Scopes))
+	for index, scope := range s.Scopes {
+		field := fmt.Sprintf("scopes[%d]", index)
+		if scope == "" || len(scope) > 128 || strings.ContainsAny(scope, "\x00\r\n \t") {
+			problems.Add(field, "must contain between 1 and 128 safe characters")
+			continue
+		}
+		if _, exists := seenScopes[scope]; exists {
+			problems.Add(field, "must be unique")
+		}
+		seenScopes[scope] = struct{}{}
+	}
+	if _, exists := seenScopes["openid"]; !exists {
+		problems.Add("scopes", "must include openid")
+	}
+	externalauth.ValidateHTTPBounds(s.Timeout.Duration, s.MaxResponseBytes, &problems)
+	externalauth.ValidateClaims(s.Claims, autoProvision, &problems)
+	if s.Claims.Subject != "sub" {
+		problems.Add("claims.subject", "must be sub for an oidc provider")
+	}
+	return problems.Err()
+}
+
+// New builds the OpenID Connect provider definition describes.
+func New(definition plugin.IdentityProviderDefinition) (plugin.IdentityProvider, error) {
+	var settings Settings
+	if err := externalauth.DecodeSettings(definition.Settings, &settings); err != nil {
+		return nil, err
+	}
+	var secrets Secrets
+	if err := externalauth.DecodeSettings(definition.Secrets, &secrets); err != nil {
+		return nil, errors.New("decode provider secrets: invalid document")
+	}
+	if err := settings.Validate(secrets, definition.AutoProvision); err != nil {
+		return nil, err
 	}
 	return &Provider{
-		mapper:   externalauth.NewProfileMapper(settings),
-		settings: *settings.OIDC,
+		mapper:       externalauth.NewProfileMapper(definition.ID, definition.AutoProvision, settings.Claims),
+		settings:     settings,
+		clientSecret: secrets.ClientSecret,
 		client: externalauth.NewHTTPClient(
-			settings.OIDC.Timeout.Duration,
-			settings.OIDC.MaxResponseBytes,
+			settings.Timeout.Duration,
+			settings.MaxResponseBytes,
 		),
 		now: time.Now,
 	}, nil
 }
 
 type Provider struct {
-	mapper   *externalauth.ProfileMapper
-	settings config.OIDCProvider
-	client   *http.Client
-	now      func() time.Time
+	mapper       *externalauth.ProfileMapper
+	settings     Settings
+	clientSecret string
+	client       *http.Client
+	now          func() time.Time
 
 	discoveryMutex sync.Mutex
 	discovered     *coreoidc.Provider
@@ -99,7 +162,7 @@ func (p *Provider) Begin(
 	oauthConfig := p.oauthConfig(discovered, request.CallbackURL)
 	options := []oauth2.AuthCodeOption{
 		oauth2.S256ChallengeOption(request.Proof),
-		oauth2.SetAuthURLParam("nonce", transactionNonce(p.mapper.Descriptor().ID, request.Proof)),
+		oauth2.SetAuthURLParam("nonce", transactionNonce(p.mapper.ProviderID(), request.Proof)),
 	}
 	if request.FreshAuthentication {
 		options = append(options, oauth2.SetAuthURLParam("prompt", "login"), oauth2.SetAuthURLParam("max_age", "0"))
@@ -200,7 +263,7 @@ func (p *Provider) Complete(
 	}
 
 	expectedNonce := transactionNonce(
-		p.mapper.Descriptor().ID,
+		p.mapper.ProviderID(),
 		request.Proof,
 	)
 	if subtle.ConstantTimeCompare(
@@ -373,7 +436,7 @@ func (p *Provider) oauthConfig(
 ) oauth2.Config {
 	return oauth2.Config{
 		ClientID:     p.settings.ClientID,
-		ClientSecret: p.settings.ClientSecret,
+		ClientSecret: p.clientSecret,
 		Endpoint:     discovered.Endpoint(),
 		RedirectURL:  callbackURL,
 		Scopes:       append([]string(nil), p.settings.Scopes...),

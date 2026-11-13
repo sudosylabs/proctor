@@ -129,12 +129,8 @@ func TestSignInProvidersFollowTheirPluginBeingTurnedOffAndOn(t *testing.T) {
 
 	settings := config.Default()
 	settings.Authentication.External.Providers = []config.ExternalAuthenticationProvider{{
-		ID: "campus-cas", Type: config.ExternalAuthenticationTypeCAS, DisplayName: "Campus", Enabled: true,
-		CAS: &config.CASProvider{
-			BaseURL: "https://cas.example.test/cas", ValidationPath: "/p3/serviceValidate",
-			Timeout: config.Duration{Duration: 5 * time.Second}, MaxResponseBytes: 64 << 10,
-		},
-		Claims: config.ExternalClaimMapping{Subject: "user"},
+		ID: "campus-cas", Type: "cas", DisplayName: "Campus", Enabled: true,
+		Settings: json.RawMessage(`{"BaseURL":"https://cas.example.test/cas","ValidationPath":"/p3/serviceValidate","Timeout":"5s","MaxResponseBytes":65536,"Claims":{"Subject":"user"}}`),
 	}}
 	encoded, err := json.Marshal(settings)
 	require.NoError(t, err)

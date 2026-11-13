@@ -16,7 +16,6 @@ package externalauth
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -170,16 +169,12 @@ func (r *Registry) configure(
 			continue
 		}
 
-		settings, err := json.Marshal(definition)
-		if err != nil {
-			return fmt.Errorf(
-				"encode external authentication provider %q settings: %w",
-				definition.ID,
-				err,
-			)
-		}
-
-		provider, err := providerType.New(plugin.IdentityProviderDefinition{ID: definition.ID, Settings: settings})
+		provider, err := providerType.New(plugin.IdentityProviderDefinition{
+			ID:            definition.ID,
+			AutoProvision: definition.AutoProvision,
+			Settings:      definition.SettingsDocument(),
+			Secrets:       definition.SecretsDocument(),
+		})
 		if errors.Is(err, plugin.ErrUnavailable) {
 			unavailable = append(unavailable, definition.ID)
 			continue

@@ -51,14 +51,8 @@ func TestPluginOffersTheProviderTypeThatBuildsConfiguredProviders(t *testing.T) 
 	require.Len(t, host.types, 1)
 	require.Equal(t, "oidc", host.types[0].Type())
 
-	settings := testSettings("https://oidc.example.test")
-	encoded, err := json.Marshal(settings)
-	require.NoError(t, err)
-	built, err := host.types[0].New(plugin.IdentityProviderDefinition{ID: settings.ID, Settings: encoded})
+	built, err := host.types[0].New(testSettings("https://oidc.example.test").definition())
 	require.NoError(t, err)
 	require.IsType(t, &Provider{}, built)
-
-	_, err = host.types[0].New(plugin.IdentityProviderDefinition{ID: "another", Settings: encoded})
-	require.EqualError(t, err, "provider settings name a different provider")
 	require.NoError(t, NewPlugin().Deactivate(context.Background()))
 }

@@ -152,7 +152,7 @@ func (p *panickingProtocol) recorded() []string {
 
 type panickingType struct{}
 
-func (panickingType) Type() string { return config.ExternalAuthenticationTypeCAS }
+func (panickingType) Type() string { return "cas" }
 
 func (panickingType) New(plugin.IdentityProviderDefinition) (plugin.IdentityProvider, error) {
 	panic("cannot build a provider")
@@ -168,8 +168,8 @@ func casProviderConfiguration(t *testing.T) *config.Store {
 		config.NewMemoryStore([]byte(`{
 			"Authentication": {"External": {"LoginStateTTL": "10m", "Providers": [{
 				"ID": "campus-cas", "Type": "cas", "DisplayName": "Campus", "Enabled": true, "AutoProvision": false,
-				"Claims": {"Subject": "user"},
-				"CAS": {"BaseURL": "https://cas.example.test/cas", "ValidationPath": "/p3/serviceValidate", "Timeout": "5s", "MaxResponseBytes": 65536}
+				"Settings": {"BaseURL": "https://cas.example.test/cas", "ValidationPath": "/p3/serviceValidate", "Timeout": "5s", "MaxResponseBytes": 65536,
+					"Claims": {"Subject": "user"}}
 			}]}}
 		}`)),
 		config.StoreOptions{LookupEnv: func(string) (string, bool) { return "", false }},

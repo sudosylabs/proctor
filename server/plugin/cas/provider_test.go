@@ -9,6 +9,7 @@ package cas
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +23,7 @@ import (
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/platform/externalauth"
+	"github.com/sudosylabs/proctor/server/plugin"
 )
 
 func TestProviderLoginAndAuthentication(t *testing.T) {
@@ -59,10 +61,10 @@ func TestProviderLoginAndAuthentication(t *testing.T) {
 	defer server.Close()
 
 	settings := testSettings(server.URL + "/cas")
-	created, err := NewFactory().New(settings)
+	created, err := settings.build()
 	require.NoError(t, err)
 	provider := created.(*Provider)
-	bridged := externalauth.NewProvider(settings, provider)
+	bridged := externalauth.NewProvider(settings.Envelope(), provider)
 	challenge, err := bridged.Begin(
 		context.Background(),
 		externalauth.BeginRequest{
@@ -130,10 +132,10 @@ func TestProviderRejectsFailureAndUnsafeXML(t *testing.T) {
 			}))
 			defer server.Close()
 			settings := testSettings(server.URL)
-			created, err := NewFactory().New(settings)
+			created, err := settings.build()
 			require.NoError(t, err)
 			provider := created.(*Provider)
-			bridged := externalauth.NewProvider(settings, provider)
+			bridged := externalauth.NewProvider(settings.Envelope(), provider)
 			state := model.NewCredentialToken()
 			_, err = bridged.Complete(
 				context.Background(),
@@ -147,10 +149,10 @@ func TestProviderRejectsFailureAndUnsafeXML(t *testing.T) {
 func TestProviderRedactsTicketFromTransportErrors(t *testing.T) {
 	const ticket = "ST-must-not-appear"
 	settings := testSettings("http://127.0.0.1:1")
-	created, err := NewFactory().New(settings)
+	created, err := settings.build()
 	require.NoError(t, err)
 	provider := created.(*Provider)
-	bridged := externalauth.NewProvider(settings, provider)
+	bridged := externalauth.NewProvider(settings.Envelope(), provider)
 	cause := errors.New("transport included " + ticket)
 	provider.client.Transport = roundTripperFunc(func(
 		request *http.Request,
@@ -183,27 +185,53 @@ func completeRequest(
 	}
 }
 
+// testProvider is a configured CAS provider: Proctor's envelope and the
+// plugin's own settings.
+type testProvider struct {
+	ID            string
+	AutoProvision bool
+	Settings      Settings
+}
+
 func testSettings(
 	baseURL string,
-) config.ExternalAuthenticationProvider {
-	return config.ExternalAuthenticationProvider{
-		ID: "campus-cas", Type: config.ExternalAuthenticationTypeCAS,
-		DisplayName: "Campus CAS", Enabled: true, AutoProvision: true,
-		CAS: &config.CASProvider{
+) testProvider {
+	return testProvider{
+		ID: "campus-cas", AutoProvision: true,
+		Settings: Settings{
 			BaseURL: baseURL, ValidationPath: "/p3/serviceValidate",
 			Timeout:          config.Duration{Duration: 5 * time.Second},
 			MaxResponseBytes: 64 * 1024,
+			Claims: externalauth.ClaimMapping{
+				Subject: "user", Username: "uid", Email: "mail",
+				FirstName: "givenName", LastName: "sn",
+				HomeOrganization:         "schacHomeOrganization",
+				Affiliation:              "eduPersonAffiliation",
+				AllowedHomeOrganizations: []string{"example.edu"},
+				TrustEmail:               true,
+				MultiFactorAttribute:     "authnContext",
+				MultiFactorValues:        []string{"mfa"},
+			},
 		},
-		Claims: config.ExternalClaimMapping{
-			Subject: "user", Username: "uid", Email: "mail",
-			FirstName: "givenName", LastName: "sn",
-			HomeOrganization:         "schacHomeOrganization",
-			Affiliation:              "eduPersonAffiliation",
-			AllowedHomeOrganizations: []string{"example.edu"},
-			TrustEmail:               true,
-			MultiFactorAttribute:     "authnContext",
-			MultiFactorValues:        []string{"mfa"},
-		},
+	}
+}
+
+func (p testProvider) definition() plugin.IdentityProviderDefinition {
+	encoded, err := json.Marshal(p.Settings)
+	if err != nil {
+		panic(err)
+	}
+	return plugin.IdentityProviderDefinition{ID: p.ID, AutoProvision: p.AutoProvision, Settings: encoded}
+}
+
+func (p testProvider) build() (plugin.IdentityProvider, error) {
+	return New(p.definition())
+}
+
+func (p testProvider) Envelope() config.ExternalAuthenticationProvider {
+	return config.ExternalAuthenticationProvider{
+		ID: p.ID, Type: Type, DisplayName: "Campus CAS", Enabled: true,
+		AutoProvision: p.AutoProvision, Settings: p.definition().Settings,
 	}
 }
 
@@ -232,11 +260,11 @@ func TestProviderFreshProofRenewsAtLoginAndValidation(t *testing.T) {
 			defer server.Close()
 			settings := testSettings(server.URL)
 			settings.AutoProvision = false
-			settings.Claims.AllowedHomeOrganizations = nil
-			created, err := NewFactory().New(settings)
+			settings.Settings.Claims.AllowedHomeOrganizations = nil
+			created, err := settings.build()
 			require.NoError(t, err)
 			provider := created.(*Provider)
-			bridged := externalauth.NewProvider(settings, provider)
+			bridged := externalauth.NewProvider(settings.Envelope(), provider)
 			now := time.Now()
 			provider.now = func() time.Time { return now }
 			state := model.NewCredentialToken()

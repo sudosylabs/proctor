@@ -28,6 +28,7 @@ import (
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/platform/externalauth"
+	"github.com/sudosylabs/proctor/server/plugin"
 )
 
 func TestProviderAuthorizationCodePKCEAndClaims(t *testing.T) {
@@ -109,10 +110,10 @@ func TestProviderAuthorizationCodePKCEAndClaims(t *testing.T) {
 	oidcServer.SetIssuer(server.URL)
 
 	settings := testSettings(server.URL)
-	created, err := NewFactory().New(settings)
+	created, err := settings.build()
 	require.NoError(t, err)
 	provider := created.(*Provider)
-	bridged := externalauth.NewProvider(settings, provider)
+	bridged := externalauth.NewProvider(settings.Envelope(), provider)
 	state := model.NewCredentialToken()
 	proof := model.NewCredentialToken()
 	callbackURL := "https://proctor.example.edu/api/v1/auth/providers/campus-oidc/callback"
@@ -175,10 +176,10 @@ func TestProviderRejectsCallbackAndRedactsExchangeFailure(
 	defer server.Close()
 	oidcServer.SetIssuer(server.URL)
 	settings := testSettings(server.URL)
-	created, err := NewFactory().New(settings)
+	created, err := settings.build()
 	require.NoError(t, err)
 	provider := created.(*Provider)
-	bridged := externalauth.NewProvider(settings, provider)
+	bridged := externalauth.NewProvider(settings.Envelope(), provider)
 	state := model.NewCredentialToken()
 	proof := model.NewCredentialToken()
 	callbackURL := "https://proctor.example.edu/callback"
@@ -205,29 +206,61 @@ func TestProviderRejectsCallbackAndRedactsExchangeFailure(
 	require.NotContains(t, err.Error(), secretBody)
 }
 
+// testProvider is a configured OpenID Connect provider: Proctor's envelope
+// and the plugin's own settings and secrets.
+type testProvider struct {
+	ID            string
+	AutoProvision bool
+	Settings      Settings
+	Secrets       Secrets
+}
+
 func testSettings(
 	issuer string,
-) config.ExternalAuthenticationProvider {
-	return config.ExternalAuthenticationProvider{
-		ID: "campus-oidc", Type: config.ExternalAuthenticationTypeOIDC,
-		DisplayName: "Campus OIDC", Enabled: true, AutoProvision: true,
-		OIDC: &config.OIDCProvider{
+) testProvider {
+	return testProvider{
+		ID: "campus-oidc", AutoProvision: true,
+		Settings: Settings{
 			Issuer: issuer, ClientID: "proctor-client",
-			ClientSecret:     "proctor-secret",
 			Scopes:           []string{"openid", "profile", "email"},
 			Timeout:          config.Duration{Duration: 5 * time.Second},
 			MaxResponseBytes: 64 * 1024,
+			Claims: externalauth.ClaimMapping{
+				Subject: "sub", Username: "preferred_username",
+				Email: "email", EmailVerifiedClaim: "email_verified",
+				FirstName: "given_name", LastName: "family_name",
+				HomeOrganization:         "schacHomeOrganization",
+				Affiliation:              "eduPersonAffiliation",
+				AllowedHomeOrganizations: []string{"example.edu"},
+				MultiFactorAttribute:     "amr",
+				MultiFactorValues:        []string{"mfa"},
+			},
 		},
-		Claims: config.ExternalClaimMapping{
-			Subject: "sub", Username: "preferred_username",
-			Email: "email", EmailVerifiedClaim: "email_verified",
-			FirstName: "given_name", LastName: "family_name",
-			HomeOrganization:         "schacHomeOrganization",
-			Affiliation:              "eduPersonAffiliation",
-			AllowedHomeOrganizations: []string{"example.edu"},
-			MultiFactorAttribute:     "amr",
-			MultiFactorValues:        []string{"mfa"},
-		},
+		Secrets: Secrets{ClientSecret: "proctor-secret"},
+	}
+}
+
+func (p testProvider) definition() plugin.IdentityProviderDefinition {
+	settings, err := json.Marshal(p.Settings)
+	if err != nil {
+		panic(err)
+	}
+	secrets, err := json.Marshal(p.Secrets)
+	if err != nil {
+		panic(err)
+	}
+	return plugin.IdentityProviderDefinition{ID: p.ID, AutoProvision: p.AutoProvision, Settings: settings, Secrets: secrets}
+}
+
+func (p testProvider) build() (plugin.IdentityProvider, error) {
+	return New(p.definition())
+}
+
+func (p testProvider) Envelope() config.ExternalAuthenticationProvider {
+	definition := p.definition()
+	return config.ExternalAuthenticationProvider{
+		ID: p.ID, Type: Type, DisplayName: "Campus OIDC", Enabled: true,
+		AutoProvision: p.AutoProvision, Settings: definition.Settings, Secrets: definition.Secrets,
 	}
 }
 
@@ -264,11 +297,11 @@ func TestProviderFreshProofRequiresAuthenticationTimeAfterBoundFlow(t *testing.T
 			discovery.SetIssuer(issuer)
 			settings := testSettings(issuer)
 			settings.AutoProvision = false
-			settings.Claims.AllowedHomeOrganizations = nil
-			created, err := NewFactory().New(settings)
+			settings.Settings.Claims.AllowedHomeOrganizations = nil
+			created, err := settings.build()
 			require.NoError(t, err)
 			provider := created.(*Provider)
-			bridged := externalauth.NewProvider(settings, provider)
+			bridged := externalauth.NewProvider(settings.Envelope(), provider)
 			provider.now = func() time.Time { return now.Add(500 * time.Millisecond) }
 			state, proof := model.NewCredentialToken(), model.NewCredentialToken()
 			request := externalauth.BeginRequest{CallbackURL: "https://proctor.example.edu/callback", State: state, Proof: proof, FreshAuthentication: true}

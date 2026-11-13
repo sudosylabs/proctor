@@ -118,16 +118,15 @@ func TestOIDCExternalAuthenticationIntegration(t *testing.T) {
 		invitationProviderID: model.ProviderAdmissionInvitationRequired,
 	})
 	oidcProvider := config.ExternalAuthenticationProvider{
-		ID: providerID, Type: config.ExternalAuthenticationTypeOIDC, DisplayName: "Campus OIDC",
+		ID: providerID, Type: "oidc", DisplayName: "Campus OIDC",
 		Enabled: true, AutoProvision: true,
-		OIDC: &config.OIDCProvider{Issuer: issuer, ClientID: clientID, ClientSecret: "client-secret",
-			Scopes: []string{"openid", "profile", "email"}, Timeout: config.Duration{Duration: 5 * time.Second}, MaxResponseBytes: 64 * 1024},
-		Claims: config.ExternalClaimMapping{
-			Subject: "sub", Username: "preferred_username", Email: "email", EmailVerifiedClaim: "email_verified",
-			FirstName: "given_name", LastName: "family_name", HomeOrganization: "schacHomeOrganization",
-			Affiliation: "eduPersonAffiliation", AllowedHomeOrganizations: []string{"example.edu"},
-			MultiFactorAttribute: "amr", MultiFactorValues: []string{"mfa"},
-		},
+		Settings: json.RawMessage(`{"Issuer":"` + issuer + `","ClientID":"` + clientID + `",` +
+			`"Scopes":["openid","profile","email"],"Timeout":"5s","MaxResponseBytes":65536,` +
+			`"Claims":{"Subject":"sub","Username":"preferred_username","Email":"email","EmailVerifiedClaim":"email_verified",` +
+			`"FirstName":"given_name","LastName":"family_name","HomeOrganization":"schacHomeOrganization",` +
+			`"Affiliation":"eduPersonAffiliation","AllowedHomeOrganizations":["example.edu"],` +
+			`"MultiFactorAttribute":"amr","MultiFactorValues":["mfa"]}}`),
+		Secrets: json.RawMessage(`{"ClientSecret":"client-secret"}`),
 	}
 	invitationProvider := oidcProvider
 	invitationProvider.ID = invitationProviderID
@@ -228,7 +227,7 @@ func TestOIDCExternalAuthenticationIntegration(t *testing.T) {
 	)
 	require.NoError(t, err, "OIDC session")
 	require.Len(t, sessions, 1, "OIDC session")
-	require.Equal(t, config.ExternalAuthenticationTypeOIDC, sessions[0].AuthenticationMethod, "OIDC session")
+	require.Equal(t, "oidc", sessions[0].AuthenticationMethod, "OIDC session")
 	require.Equal(t, providerID, sessions[0].AuthenticationProviderID, "OIDC session")
 	require.Equal(t, identity.ID, sessions[0].ExternalIdentityID, "OIDC session")
 	require.Equal(t, model.AuthenticationMultiFactor, sessions[0].AuthenticationStrength, "OIDC session")
@@ -288,7 +287,7 @@ func TestOIDCExternalAuthenticationIntegration(t *testing.T) {
 		Actions: []string{"invitation.accept"}, Limit: 10, Visibility: store.AuditVisibilityScope{InstitutionWide: true}})
 	require.NoError(t, err, "OIDC Invitation acceptance audits")
 	require.Len(t, invitationAudits, 1, "OIDC Invitation acceptance audits")
-	require.Equal(t, config.ExternalAuthenticationTypeOIDC, invitationAudits[0].AuthMethod, "OIDC Invitation acceptance audits")
+	require.Equal(t, "oidc", invitationAudits[0].AuthMethod, "OIDC Invitation acceptance audits")
 	invitationReplayRequest := httptest.NewRequest(http.MethodGet, invitationCallbackPath, nil)
 	invitationReplayRequest.AddCookie(invitationBinding)
 	invitationReplay := httptest.NewRecorder()
@@ -343,7 +342,7 @@ func TestOIDCExternalAuthenticationIntegration(t *testing.T) {
 	require.NoError(t, err, "OIDC login audits")
 	require.Len(t, loginAudits, 2, "OIDC login audits")
 	for _, event := range loginAudits {
-		require.Equal(t, config.ExternalAuthenticationTypeOIDC, event.AuthMethod)
+		require.Equal(t, "oidc", event.AuthMethod)
 	}
 
 	loginAgain := func() *httptest.ResponseRecorder {

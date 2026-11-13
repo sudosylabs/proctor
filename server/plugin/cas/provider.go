@@ -28,36 +28,63 @@ import (
 	"github.com/sudosylabs/proctor/server/plugin"
 )
 
-type Factory struct{}
-
-func NewFactory() Factory {
-	return Factory{}
+// Settings is a CAS provider's settings document.
+type Settings struct {
+	BaseURL          string                    `json:"BaseURL"`
+	ValidationPath   string                    `json:"ValidationPath"`
+	Timeout          config.Duration           `json:"Timeout"`
+	MaxResponseBytes int64                     `json:"MaxResponseBytes"`
+	Claims           externalauth.ClaimMapping `json:"Claims"`
 }
 
-func (Factory) New(
-	settings config.ExternalAuthenticationProvider,
-) (plugin.IdentityProvider, error) {
-	if settings.CAS == nil {
-		return nil, errors.New("CAS settings are missing")
+// Validate checks settings for a provider that may or may not create
+// accounts.
+func (s Settings) Validate(autoProvision bool) error {
+	var problems externalauth.SettingsErrors
+	externalauth.ValidateHTTPSURL("base_url", s.BaseURL, &problems)
+	if parsed, _ := url.Parse(s.BaseURL); parsed != nil && (parsed.RawQuery != "" || parsed.Fragment != "") {
+		problems.Add("base_url", "must not contain a query or fragment")
 	}
-	base, err := url.Parse(settings.CAS.BaseURL)
+	if s.ValidationPath == "" ||
+		!strings.HasPrefix(s.ValidationPath, "/") ||
+		strings.HasPrefix(s.ValidationPath, "//") ||
+		strings.ContainsAny(s.ValidationPath, "?#\x00\r\n") {
+		problems.Add("validation_path", "must be an absolute path without a query or fragment")
+	}
+	externalauth.ValidateHTTPBounds(s.Timeout.Duration, s.MaxResponseBytes, &problems)
+	externalauth.ValidateClaims(s.Claims, autoProvision, &problems)
+	return problems.Err()
+}
+
+// New builds the CAS provider definition describes. CAS takes no secrets.
+func New(definition plugin.IdentityProviderDefinition) (plugin.IdentityProvider, error) {
+	var settings Settings
+	if err := externalauth.DecodeSettings(definition.Settings, &settings); err != nil {
+		return nil, err
+	}
+	if definition.Secrets != nil {
+		return nil, errors.New("invalid provider settings: secrets: CAS takes no secrets")
+	}
+	if err := settings.Validate(definition.AutoProvision); err != nil {
+		return nil, err
+	}
+	base, err := url.Parse(settings.BaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse base URL: %w", err)
 	}
 	loginURL := *base
 	loginURL.Path = strings.TrimSuffix(base.Path, "/") + "/login"
 	validateURL := *base
-	validateURL.Path = strings.TrimSuffix(base.Path, "/") +
-		settings.CAS.ValidationPath
+	validateURL.Path = strings.TrimSuffix(base.Path, "/") + settings.ValidationPath
 	return &Provider{
-		mapper:      externalauth.NewProfileMapper(settings),
+		mapper:      externalauth.NewProfileMapper(definition.ID, definition.AutoProvision, settings.Claims),
 		loginURL:    &loginURL,
 		validateURL: &validateURL,
 		client: externalauth.NewHTTPClient(
-			settings.CAS.Timeout.Duration,
-			settings.CAS.MaxResponseBytes,
+			settings.Timeout.Duration,
+			settings.MaxResponseBytes,
 		),
-		maximumResponseBytes: settings.CAS.MaxResponseBytes,
+		maximumResponseBytes: settings.MaxResponseBytes,
 		now:                  time.Now,
 	}, nil
 }
@@ -280,7 +307,7 @@ func (p *Provider) mapperEmailVerified(values map[string][]string) bool {
 	return false
 }
 
-func (p *Provider) mapperClaims() config.ExternalClaimMapping {
+func (p *Provider) mapperClaims() externalauth.ClaimMapping {
 	return p.mapper.Claims()
 }
 

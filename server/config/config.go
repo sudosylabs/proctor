@@ -15,6 +15,7 @@ import (
 	"net"
 	netmail "net/mail"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -179,32 +180,8 @@ func (c Config) Clone() Config {
 
 	for index := range cloned.Authentication.External.Providers {
 		provider := &cloned.Authentication.External.Providers[index]
-		sourceProvider := c.Authentication.External.Providers[index]
-		source := sourceProvider.Claims
-		if source.AllowedHomeOrganizations != nil {
-			provider.Claims.AllowedHomeOrganizations = append(
-				make([]string, 0, len(source.AllowedHomeOrganizations)),
-				source.AllowedHomeOrganizations...,
-			)
-		}
-
-		if source.MultiFactorValues != nil {
-			provider.Claims.MultiFactorValues = append(
-				make([]string, 0, len(source.MultiFactorValues)),
-				source.MultiFactorValues...,
-			)
-		}
-
-		if sourceProvider.CAS != nil {
-			cas := *sourceProvider.CAS
-			provider.CAS = &cas
-		}
-
-		if sourceProvider.OIDC != nil {
-			oidc := *sourceProvider.OIDC
-			oidc.Scopes = cloneSlice(sourceProvider.OIDC.Scopes)
-			provider.OIDC = &oidc
-		}
+		provider.Settings = slices.Clone(provider.Settings)
+		provider.Secrets = slices.Clone(provider.Secrets)
 	}
 
 	return cloned
@@ -265,10 +242,8 @@ func (c Config) Redacted() Config {
 	)
 	for index := range redacted.Authentication.External.Providers {
 		provider := &redacted.Authentication.External.Providers[index]
-		if provider.OIDC != nil {
-			provider.OIDC.ClientSecret = redactSecret(
-				provider.OIDC.ClientSecret,
-			)
+		if provider.SecretsDocument() != nil {
+			provider.Secrets = json.RawMessage(`"[redacted]"`)
 		}
 	}
 

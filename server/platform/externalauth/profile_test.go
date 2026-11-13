@@ -13,18 +13,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/plugin"
 )
 
 func TestProfileMapperRejectsControlCharactersInProvisioningNames(t *testing.T) {
 	t.Parallel()
 
-	mapper := NewProfileMapper(config.ExternalAuthenticationProvider{
-		ID: "campus", Type: "oidc", AutoProvision: true,
-		Claims: config.ExternalClaimMapping{Subject: "sub", Username: "preferred_username", Email: "email",
-			DisplayName: "name", FirstName: "given_name", LastName: "family_name"},
-	})
+	mapper := NewProfileMapper("campus", true, ClaimMapping{Subject: "sub", Username: "preferred_username", Email: "email",
+		DisplayName: "name", FirstName: "given_name", LastName: "family_name"})
 	claims := func(name, given, family string) map[string][]string {
 		return map[string][]string{"sub": {"subject-1"}, "preferred_username": {"student"}, "email": {"student@example.edu"},
 			"name": {name}, "given_name": {given}, "family_name": {family}}

@@ -43,6 +43,13 @@ them all. The architecture gate enforces both rules.
 A plugin that needs Desktop has a matching folder there, built against the
 same contract.
 
+A sign-in protocol owns everything about its providers except their identity.
+Proctor keeps each configured provider's ID, type, name, whether it is on and
+whether it may create accounts; the protocol's `Settings` and `Secrets` are
+documents only its plugin decodes and validates, handed over in
+`plugin.IdentityProviderDefinition`. Proctor bounds both and always redacts
+`Secrets`. Adding a protocol therefore changes no configuration type.
+
 ## Seams
 
 | Seam | Status | What it lets a plugin do |

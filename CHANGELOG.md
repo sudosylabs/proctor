@@ -61,6 +61,12 @@ module when a change is not server-only. No module has been released yet.
 
 ### Changed
 
+- Server: each external sign-in provider's protocol settings belong to its
+  plugin. A provider keeps `ID`, `Type`, `DisplayName`, `Enabled` and
+  `AutoProvision`; the `CAS`, `OIDC` and `Claims` blocks become one
+  `Settings` document (claims under `Settings.Claims`) and the OIDC client
+  secret moves to `Secrets.ClientSecret`, always redacted. The plugin checks
+  them when it builds the provider (**breaking**).
 - Server: list filters. `GET /api/v1/users` takes repeatable `role_id` (at
   most 16; current Role Bindings inside the caller's `role_binding.view`
   scopes, and only for a caller with Institution-wide `role.view`, else

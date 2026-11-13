@@ -269,23 +269,15 @@ func TestRootSelectsConfiguredSMTPVFSAndIdentityAdapters(t *testing.T) {
 	external := settings.Authentication.External
 	external.Providers = []config.ExternalAuthenticationProvider{
 		{
-			ID: "campus-cas", Type: config.ExternalAuthenticationTypeCAS,
+			ID: "campus-cas", Type: "cas",
 			DisplayName: "Campus CAS", Enabled: true,
-			CAS: &config.CASProvider{
-				BaseURL: "https://cas.example.test/cas", ValidationPath: "/p3/serviceValidate",
-				Timeout: config.Duration{Duration: 5 * time.Second}, MaxResponseBytes: 64 << 10,
-			},
-			Claims: config.ExternalClaimMapping{Subject: "user"},
+			Settings: json.RawMessage(`{"BaseURL":"https://cas.example.test/cas","ValidationPath":"/p3/serviceValidate","Timeout":"5s","MaxResponseBytes":65536,"Claims":{"Subject":"user"}}`),
 		},
 		{
-			ID: "campus-oidc", Type: config.ExternalAuthenticationTypeOIDC,
+			ID: "campus-oidc", Type: "oidc",
 			DisplayName: "Campus OIDC", Enabled: true,
-			OIDC: &config.OIDCProvider{
-				Issuer: "https://oidc.example.test", ClientID: "proctor",
-				Scopes: []string{"openid"}, Timeout: config.Duration{Duration: 5 * time.Second},
-				MaxResponseBytes: 64 << 10,
-			},
-			Claims: config.ExternalClaimMapping{Subject: "sub"},
+			Settings: json.RawMessage(`{"Issuer":"https://oidc.example.test","ClientID":"proctor","Scopes":["openid"],"Timeout":"5s","MaxResponseBytes":65536,"Claims":{"Subject":"sub"}}`),
+			Secrets:  json.RawMessage(`{"ClientSecret":"proctor-secret"}`),
 		},
 	}
 	require.NoError(t, providers.Configure(external))

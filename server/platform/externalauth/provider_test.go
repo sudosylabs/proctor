@@ -9,6 +9,7 @@ package externalauth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -66,9 +67,34 @@ func TestRegistryLeavesOutAProviderWhosePluginHasFailed(t *testing.T) {
 	}), "bad issuer", "a provider that cannot be built from its settings still fails Configure")
 }
 
+func TestRegistryHandsTheProtocolItsOwnDocumentsUnread(t *testing.T) {
+	var built []plugin.IdentityProviderDefinition
+	registry, err := NewRegistry(fakeFactory{providerType: "first", built: &built})
+	require.NoError(t, err)
+	require.NoError(t, registry.Configure(config.ExternalAuthentication{
+		Providers: []config.ExternalAuthenticationProvider{
+			{
+				ID: "campus", Type: "first", Enabled: true, AutoProvision: true,
+				Settings: json.RawMessage(`{"Issuer":"https://sso.example.edu"}`),
+				Secrets:  json.RawMessage(`{"ClientSecret":"secret"}`),
+			},
+			{ID: "bare", Type: "first", Enabled: true, Settings: json.RawMessage(`null`)},
+		},
+	}))
+	require.Equal(t, []plugin.IdentityProviderDefinition{
+		{
+			ID: "campus", AutoProvision: true,
+			Settings: json.RawMessage(`{"Issuer":"https://sso.example.edu"}`),
+			Secrets:  json.RawMessage(`{"ClientSecret":"secret"}`),
+		},
+		{ID: "bare"},
+	}, built)
+}
+
 type fakeFactory struct {
 	providerType string
 	err          error
+	built        *[]plugin.IdentityProviderDefinition
 }
 
 func (f fakeFactory) Type() string {
@@ -83,6 +109,9 @@ func (f fakeFactory) New(
 	}
 	if definition.ID == "" {
 		return nil, errors.New("missing id")
+	}
+	if f.built != nil {
+		*f.built = append(*f.built, definition)
 	}
 	return fakeProvider{}, nil
 }

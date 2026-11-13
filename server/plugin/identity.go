@@ -58,14 +58,24 @@ type IdentityProviderType interface {
 	New(definition IdentityProviderDefinition) (IdentityProvider, error)
 }
 
-// IdentityProviderDefinition is one configured identity provider.
+// IdentityProviderDefinition is one configured identity provider. Proctor
+// owns its identity and whether it may create accounts; everything else is
+// the protocol's own, in two documents only the plugin reads.
 type IdentityProviderDefinition struct {
 	// ID is the provider's configured identifier.
 	ID string
-	// Settings is the provider's configuration document, as it appears in
-	// the server's external authentication settings. Its shape belongs to
-	// the protocol.
+	// AutoProvision is whether Proctor may create an account for a person
+	// this provider authenticates, so the protocol must release enough to
+	// create one.
+	AutoProvision bool
+	// Settings is the protocol's settings document for this provider, nil
+	// when it is absent. The plugin decodes and validates it, and fails
+	// rather than guess.
 	Settings json.RawMessage
+	// Secrets is the protocol's document of secret values for this
+	// provider, such as a client secret, or nil. Proctor always redacts it
+	// when showing the configuration.
+	Secrets json.RawMessage
 }
 
 // BeginRequest asks a provider to start authentication.

@@ -4923,6 +4923,24 @@ export const searchEntries = [
     "searchText": "exam_archived exam_archived exam archived the exam was archived. delivered to connections that subscribe to exam.view on the exam. event exams"
   },
   {
+    "id": "realtime:exam_attempt.connect",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Connect to the Exam Attempt",
+    "description": "Binds this WebSocket to the candidate's Attempt as its Attempt Connection.",
+    "href": "/api/reference/realtime-protocol/exam-attempt-connect",
+    "searchText": "exam_attempt.connect exam_attempt.connect connect to the exam attempt sent by the registered desktop. first admission and ready rejoin consume a reported preflight (kind preflight); a same-generation reconnect resumes the current participation (kind resume). a connection holds at most one attempt binding. the reply starts the lease; renew it with exam_attempt.renew. command"
+  },
+  {
+    "id": "realtime:exam_attempt.focus_loss",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Report a Focus Loss",
+    "description": "Reports one completed loss of focus of the candidate window.",
+    "href": "/api/reference/realtime-protocol/exam-attempt-focus-loss",
+    "searchText": "exam_attempt.focus_loss exam_attempt.focus_loss report a focus loss the server applies the exam's focus loss policy. when it raises a flag on an exam that records the screen, it also asks for the minute either side of it and sends exam_attempt_screen_clips_requested. command"
+  },
+  {
     "id": "realtime:exam_attempt.renew",
     "kind": "realtime-message",
     "group": "Realtime",
@@ -4959,6 +4977,15 @@ export const searchEntries = [
     "searchText": "exam_attempt_access_suspended exam_attempt_access_suspended your attempt was suspended tells the candidate their attempt is suspended, with a safe reason. delivered to the addressed user's connections that subscribe to exam.sitting.participate on the exam sitting. event attempts"
   },
   {
+    "id": "realtime:exam_attempt_connect_reply",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Connect reply",
+    "description": "The admitted Attempt, its Participation lease and what the candidate may do.",
+    "href": "/api/reference/realtime-protocol/exam-attempt-connect-reply",
+    "searchText": "exam_attempt_connect_reply exam_attempt_connect_reply connect reply security, candidate_runtime_capabilities, browser_policy and live_corrections have exactly the shapes of the openapi components admittedsecurity, candidateruntimecapabilities, candidatebrowserpolicy and candidatelivecorrection. reply"
+  },
+  {
     "id": "realtime:exam_attempt_connection_closed",
     "kind": "realtime-message",
     "group": "Realtime",
@@ -4975,6 +5002,15 @@ export const searchEntries = [
     "description": "A candidate's desktop was admitted and holds an open Attempt Connection.",
     "href": "/api/reference/realtime-protocol/exam-attempt-connection-opened",
     "searchText": "exam_attempt_connection_opened exam_attempt_connection_opened attempt connection opened a candidate's desktop was admitted and holds an open attempt connection. delivered to connections that subscribe to exam.sitting.view on the exam sitting. event attempts"
+  },
+  {
+    "id": "realtime:exam_attempt_focus_loss_reply",
+    "kind": "realtime-message",
+    "group": "Realtime",
+    "title": "Focus Loss reply",
+    "description": "Acknowledges the Focus Loss and says what the candidate's Desktop must act on.",
+    "href": "/api/reference/realtime-protocol/exam-attempt-focus-loss-reply",
+    "searchText": "exam_attempt_focus_loss_reply exam_attempt_focus_loss_reply focus loss reply acknowledges the focus loss and says what the candidate's desktop must act on. reply"
   },
   {
     "id": "realtime:exam_attempt_focus_warning",

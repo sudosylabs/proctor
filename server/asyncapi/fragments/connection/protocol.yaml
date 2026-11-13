@@ -124,6 +124,146 @@ components:
             sequence: 1
             data:
               pong: true
+    exam_attempt.connect:
+      name: exam_attempt.connect
+      title: Connect to the Exam Attempt
+      summary: Binds this WebSocket to the candidate's Attempt as its Attempt Connection.
+      description: >-
+        Sent by the registered Desktop. First admission and Ready rejoin consume a reported preflight
+        (kind preflight); a same-generation reconnect resumes the current Participation (kind resume). A connection
+        holds at most one Attempt binding. The reply starts the lease; renew it with exam_attempt.renew.
+      tags:
+        - name: command
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/command_request.json'
+          - type: object
+            required:
+              - action
+              - data
+            properties:
+              action:
+                type: string
+                const: exam_attempt.connect
+              data:
+                $ref: '../../../schemas/realtime/exam_attempt_connect.json'
+      examples:
+        - name: first admission
+          payload:
+            sequence: 4
+            action: exam_attempt.connect
+            data:
+              security:
+                kind: preflight
+                preflight_id: preflight-1
+                report_digest: sha256:9b1e4c7a2d5f8e0b3c6a9d2f5e8b1c4a7d0e3f6b9c2a5d8e1f4b7c0a3d6e9f2b
+              exam_sitting_id: h9nfemqtwz47ydgjcx1ia56br8
+              idempotency_key: connect-1
+              continuity_credential: Y29udGludWl0eS1jcmVkZW50aWFsLWV4YW1wbGUtMzI
+              configuration_manifest_fingerprint: sha256:4f0c2ad3b81e29e6c5f0b7f3a1d9e8c2b6a4f1e0d3c7b9a2e5f8c1d4b7a0e3f6
+    exam_attempt_connect_reply:
+      name: exam_attempt_connect_reply
+      title: Connect reply
+      summary: The admitted Attempt, its Participation lease and what the candidate may do.
+      description: >-
+        security, candidate_runtime_capabilities, browser_policy and live_corrections have exactly the shapes of
+        the OpenAPI components AdmittedSecurity, CandidateRuntimeCapabilities, CandidateBrowserPolicy and
+        CandidateLiveCorrection.
+      tags:
+        - name: reply
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/command_reply.json'
+          - type: object
+            required:
+              - data
+            properties:
+              data:
+                $ref: '../../../schemas/realtime/exam_attempt_connect_reply.json'
+      examples:
+        - name: admitted
+          payload:
+            status: ok
+            sequence: 4
+            data:
+              security: {}
+              attempt_id: qtwz47ydgjcx1ia56br8kpous3
+              workspace_id: br8kpous3h9nfemqtwz47ydgjc
+              participation_id: 8kpous3h9nfemqtwz47ydgjcx1
+              attempt_connection_id: nfemqtwz47ydgjcx1ia56br8kp
+              generation: 1
+              renewal_interval_seconds: 5
+              started_at: '2026-11-13T09:00:00.000Z'
+              lease_expires_at: '2026-11-13T09:00:15.000Z'
+              first_admission: true
+              replayed: false
+              candidate_runtime_capabilities: {}
+              browser_policy: null
+              live_corrections: []
+    exam_attempt.focus_loss:
+      name: exam_attempt.focus_loss
+      title: Report a Focus Loss
+      summary: Reports one completed loss of focus of the candidate window.
+      description: >-
+        The server applies the Exam's Focus Loss policy. When it raises a Flag on an Exam that records the screen,
+        it also asks for the minute either side of it and sends exam_attempt_screen_clips_requested.
+      tags:
+        - name: command
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/command_request.json'
+          - type: object
+            required:
+              - action
+              - data
+            properties:
+              action:
+                type: string
+                const: exam_attempt.focus_loss
+              data:
+                $ref: '../../../schemas/realtime/exam_attempt_focus_loss.json'
+      examples:
+        - name: window hidden
+          payload:
+            sequence: 10
+            action: exam_attempt.focus_loss
+            data:
+              schema_version: 1
+              generation: 1
+              sequence: 3
+              duration_milliseconds: 2500
+              source: document_hidden
+              continuity_credential: Y29udGludWl0eS1jcmVkZW50aWFsLWV4YW1wbGUtMzI
+    exam_attempt_focus_loss_reply:
+      name: exam_attempt_focus_loss_reply
+      title: Focus Loss reply
+      summary: Acknowledges the Focus Loss and says what the candidate's Desktop must act on.
+      tags:
+        - name: reply
+      payload:
+        allOf:
+          - $ref: '../../../schemas/realtime/command_reply.json'
+          - type: object
+            required:
+              - data
+            properties:
+              data:
+                $ref: '../../../schemas/realtime/exam_attempt_focus_loss_reply.json'
+      examples:
+        - name: warned
+          payload:
+            status: ok
+            sequence: 10
+            data:
+              generation: 1
+              accepted_sequence: 3
+              received_at: '2026-11-13T09:05:00.000Z'
+              duplicate: false
+              gap_detected: false
+              policy_disabled: false
+              warning_created: true
+              suspension_created: false
+              discrepancy_recorded: false
     exam_attempt.renew:
       name: exam_attempt.renew
       title: Renew the Exam Attempt Participation

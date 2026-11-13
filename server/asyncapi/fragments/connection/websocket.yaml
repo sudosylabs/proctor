@@ -113,6 +113,14 @@ channels:
         $ref: '#/components/messages/ping'
       pong:
         $ref: '#/components/messages/pong'
+      exam_attempt.connect:
+        $ref: '#/components/messages/exam_attempt.connect'
+      exam_attempt_connect_reply:
+        $ref: '#/components/messages/exam_attempt_connect_reply'
+      exam_attempt.focus_loss:
+        $ref: '#/components/messages/exam_attempt.focus_loss'
+      exam_attempt_focus_loss_reply:
+        $ref: '#/components/messages/exam_attempt_focus_loss_reply'
       exam_attempt.renew:
         $ref: '#/components/messages/exam_attempt.renew'
       exam_attempt_renew_reply:
@@ -227,6 +235,67 @@ operations:
     x-proctor-error-codes:
       - websocket.request.invalid
       - websocket.rate_limited
+  receiveExamAttemptConnect:
+    action: receive
+    channel:
+      $ref: '#/channels/websocket'
+    title: Connect to the Exam Attempt
+    summary: The server admits, rejoins or resumes the Attempt and binds this connection.
+    messages:
+      - $ref: '#/channels/websocket/messages/exam_attempt.connect'
+    reply:
+      channel:
+        $ref: '#/channels/websocket'
+      messages:
+        - $ref: '#/channels/websocket/messages/exam_attempt_connect_reply'
+        - $ref: '#/channels/websocket/messages/command_error'
+    x-proctor-error-codes:
+      - websocket.request.invalid
+      - websocket.rate_limited
+      - exam.attempt.already_connected
+      - exam.attempt.unavailable
+      - exam.attempt.sitting_not_open
+      - exam.attempt.state_conflict
+      - exam.delivery.metadata_capacity
+      - exam.security.attempt_not_ready
+      - exam.security.catalog_missing
+      - exam.security.configuration_unsupported
+      - exam.security.policy_changed
+      - exam.security.preflight_consumed
+      - exam.security.preflight_expired
+      - exam.security.preflight_report_changed
+      - exam.security.preflight_required
+      - exam.security.preflight_superseded
+      - exam.security.readiness_unmet
+      - exam.security.resume_required
+      - exam.security.session_changed
+      - resource.not_found
+      - authorization.denied
+  receiveExamAttemptFocusLoss:
+    action: receive
+    channel:
+      $ref: '#/channels/websocket'
+    title: Report a Focus Loss
+    summary: The server applies the Exam's Focus Loss policy to the signal.
+    messages:
+      - $ref: '#/channels/websocket/messages/exam_attempt.focus_loss'
+    reply:
+      channel:
+        $ref: '#/channels/websocket'
+      messages:
+        - $ref: '#/channels/websocket/messages/exam_attempt_focus_loss_reply'
+        - $ref: '#/channels/websocket/messages/command_error'
+    x-proctor-error-codes:
+      - websocket.request.invalid
+      - websocket.rate_limited
+      - authentication.token_invalid
+      - exam.attempt.connection_closed
+      - exam.attempt.connection_lost
+      - exam.attempt.focus_loss_conflict
+      - exam.attempt.sitting_not_open
+      - exam.attempt.state_conflict
+      - exam.attempt.unavailable
+      - resource.not_found
   receiveExamAttemptRenew:
     action: receive
     channel:

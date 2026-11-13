@@ -1,0 +1,80 @@
+{
+  "title": "Exam Attempt connect reply",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "security",
+    "attempt_id",
+    "workspace_id",
+    "participation_id",
+    "attempt_connection_id",
+    "generation",
+    "renewal_interval_seconds",
+    "started_at",
+    "lease_expires_at",
+    "first_admission",
+    "replayed",
+    "candidate_runtime_capabilities",
+    "browser_policy",
+    "live_corrections"
+  ],
+  "properties": {
+    "security": {
+      "type": "object",
+      "description": "Exactly the OpenAPI component AdmittedSecurity. The immutable admitted binding receipt, including the effective native policy."
+    },
+    "attempt_id": {
+      "$ref": "id.json"
+    },
+    "workspace_id": {
+      "$ref": "id.json"
+    },
+    "participation_id": {
+      "$ref": "id.json"
+    },
+    "attempt_connection_id": {
+      "$ref": "id.json"
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "renewal_interval_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "How often to send exam_attempt.renew."
+    },
+    "started_at": {
+      "$ref": "instant.json"
+    },
+    "lease_expires_at": {
+      "$ref": "instant.json"
+    },
+    "first_admission": {
+      "type": "boolean"
+    },
+    "replayed": {
+      "type": "boolean",
+      "description": "The connect repeated an earlier one with the same idempotency key."
+    },
+    "candidate_runtime_capabilities": {
+      "type": "object",
+      "description": "Exactly the OpenAPI component CandidateRuntimeCapabilities."
+    },
+    "browser_policy": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Exactly the OpenAPI component CandidateBrowserPolicy, or null when the Exam has no Browser policy."
+    },
+    "live_corrections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "description": "Exactly the OpenAPI component CandidateLiveCorrection."
+      }
+    }
+  }
+}

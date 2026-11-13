@@ -23,6 +23,12 @@ module when a change is not server-only. No module has been released yet.
   storage, virtualization, network, camera and microphone. Each family has an
   `outcome`, `flag` or, when enforcing, `flag_and_suspend`, which suspends the
   Attempt like Focus Loss.
+- Server: the AsyncAPI document describes Desktop's Attempt commands,
+  `exam_attempt.connect`, `exam_attempt.renew`, `exam_attempt.security.update`
+  and `exam_attempt.focus_loss`, with their replies; the connect reply's nested
+  objects are checked against their OpenAPI components. A Focus Loss Flag on
+  an Exam that records the screen now tells Desktop to fetch its clip request,
+  as native Flags do.
 - Server: enforcement certification. Each Desktop release signs, per
   capability on its target platform, whether enforcement is certified there.
   Enforce mode and `flag_and_suspend` refuse Start on an uncertified target;

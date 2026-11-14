@@ -9,7 +9,7 @@ type ApiContract = {
 };
 
 type ApiFrontMatter = {
-  api?: ApiContract;
+  proctor_contract?: ApiContract;
 };
 
 const authenticationLabels: Record<string, string> = {
@@ -33,15 +33,15 @@ function humanize(value: string): string {
 
 export default function ApiContractPanel(): JSX.Element | null {
   const {frontMatter} = useDoc() as {frontMatter: ApiFrontMatter};
-  const api = frontMatter.api;
+  const contract = frontMatter.proctor_contract;
 
-  if (!api) {
+  if (!contract) {
     return null;
   }
 
-  const authentication = api['x-proctor-auth'];
-  const idempotency = api['x-proctor-idempotency'];
-  const errorCodes = api['x-proctor-error-codes'] ?? [];
+  const authentication = contract['x-proctor-auth'];
+  const idempotency = contract['x-proctor-idempotency'];
+  const errorCodes = contract['x-proctor-error-codes'] ?? [];
 
   return (
     <aside className={styles.panel} aria-labelledby="api-contract-heading">

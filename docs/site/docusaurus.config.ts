@@ -104,14 +104,15 @@ const config: Config = {
         docsPluginId: 'api',
         config: {
           proctor: {
-            specPath: '../../server/openapi.json',
+            // The reference reads a copy narrowed to each operation's error codes;
+            // see scripts/openapi-reference-input.mjs.
+            specPath: '.openapi/reference.json',
             outputDir: '../api/reference',
             template: './templates/api.mdx.mustache',
             downloadUrl: '/openapi/openapi.json',
             hideSendButton: true,
             showInfoPage: false,
             showSchemas: false,
-            disableCompression: true,
             externalJsonProps: true,
             sidebarOptions: {
               groupPathsBy: 'tag',

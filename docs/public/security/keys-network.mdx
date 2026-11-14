@@ -1,54 +1,62 @@
 ---
-title: Keys, Certificates, and Network Boundaries
-description: Assign key ownership, rotation responsibility, listener exposure, and outbound dependency trust for Proctor installations.
+title: Keys, certificates and network boundaries
+description: Who owns each key, who rotates it, which listeners are exposed, and how far Proctor trusts each outbound connection.
 audience: security-reviewer
 maturity: preview
 ---
 
-# Keys, Certificates, and Network Boundaries
+# Keys, certificates and network boundaries
 
-Keys with different purposes are never interchangeable. Rotation preserves the
-old read/decrypt key only for the bounded convergence window of that purpose.
+Keys made for different purposes are never interchangeable. When you rotate a
+key, Proctor keeps the old key for reading or decrypting only for that
+purpose's limited changeover window, while every part of the system catches
+up.
 
-## Key and Certificate Responsibility
+## Who is responsible for each key and certificate
 
 | Material | Owner and location | Responsibility |
 | --- | --- | --- |
-| Desktop P-256 private key | Proctor Desktop secure local storage | never sent to server; signs fresh DPoP proof |
-| Desktop public JWK/thumbprint | Registration and Session authority | bind exact client; revoke Registration and all bound Sessions together |
-| MFA encryption keyring | operator configuration | canonical base64 32-byte primary plus bounded old decrypt keys |
-| Mail secret-sealing keyring | operator configuration | encrypt durable recipient/content bundle; rotate independently of MFA |
-| Memberlist keyring | all application nodes | same primary and staged fallback keys; private cluster network |
-| Public TLS certificate/key | load balancer or Proctor static TLS | hostname-valid chain, protected key file, coordinated renewal |
-| Let's Encrypt account/cache | one local-backend node only | persistent protected cache; public DNS and ports 80/443 |
-| Metrics TLS key and bearer token | operator monitoring boundary | both required when metrics listen beyond loopback |
-| PostgreSQL/Redis/S3/SMTP credentials | operator secret delivery | least privilege, TLS as configured, never committed or logged |
+| Desktop P-256 private key | Secure local storage in Proctor Desktop | Never sent to the server. Signs each fresh DPoP proof |
+| Desktop public JWK and thumbprint | Stored with the Registration and the Session | Binds the exact client. Revoking the Registration revokes every Session bound to it at the same time |
+| MFA encryption keyring | Operator configuration | One primary key, 32 bytes in canonical base64, plus a limited number of old keys kept for decryption |
+| Mail secret-sealing keyring | Operator configuration | Encrypts the stored recipient and content bundle. Rotated independently of MFA |
+| Memberlist keyring | Every application node | The same primary key and staged fallback keys on every node, on a private cluster network |
+| Public TLS certificate and key | The load balancer, or Proctor in static TLS mode | A chain valid for the hostname, a protected key file, and renewal coordinated across nodes |
+| Let's Encrypt account and cache | Only one node, using the local backend | A cache that persists and is protected, plus public DNS and ports 80 and 443 |
+| Metrics TLS key and bearer token | The operator's monitoring setup | Both are required when metrics listen on anything other than loopback |
+| PostgreSQL, Redis, S3 and SMTP credentials | Delivered by the operator's secret handling | Least privilege, TLS as configured, never committed to a repository or logged |
 
-## Inbound Listener Matrix
+## Inbound listeners
 
 | Listener | Default | Protocol and exposure | Protection |
 | --- | --- | --- | --- |
-| Application HTTP/WebSocket | `127.0.0.1:8065` | TCP; public only behind selected TLS boundary | built-in static/Let's Encrypt TLS or trusted external termination |
-| Optional HTTP forward/challenge | `127.0.0.1:8080` | TCP; used only with configured HTTPS forwarding/ACME | redirects plus ACME HTTP-01 handling under same runtime lifecycle |
-| Metrics | `127.0.0.1:8067` | TCP; scrape each node directly | loopback by default; non-loopback requires TLS and 32–512-byte bearer token |
-| Memberlist | `127.0.0.1:7946` | TCP and UDP between cluster nodes | private bind/advertise network plus shared keyring; public bind rejected by default |
+| Application HTTP and WebSocket | `127.0.0.1:8065` | TCP. Public only behind the TLS setup you chose | Built-in static or Let's Encrypt TLS, or HTTPS handled by a trusted proxy in front |
+| Optional HTTP redirect and challenge | `127.0.0.1:8080` | TCP. Used only when HTTPS redirect or ACME is configured | Redirects, plus ACME HTTP-01 challenges, started and stopped with the rest of the server |
+| Metrics | `127.0.0.1:8067` | TCP. Scrape each node directly | Loopback only by default. Any other address needs TLS and a bearer token of 32 to 512 bytes |
+| Memberlist | `127.0.0.1:7946` | TCP and UDP between cluster nodes | A private bind and advertise network plus the shared keyring. A public bind address is rejected by default |
 
-Health endpoints share the application listener. Profiling endpoints are not
-mounted on metrics. The Compose example's host ports are development or
-pre-production examples and loopback-bound by default, not a firewall policy.
+Health endpoints are served on the application listener. Profiling endpoints
+are not served on the metrics listener. The host ports in the Compose example
+are for development or pre-production. They bind to loopback by default and
+are not a firewall policy.
 
-## Outbound Dependency Matrix
+## Outbound connections
 
-| Destination | Purpose | Required boundary |
+| Destination | Purpose | What must protect it |
 | --- | --- | --- |
-| PostgreSQL | durable authority, locks, database time, audit, migrations | installation-scoped database role and protected TLS/network path |
-| Redis | shared disposable cache and cluster-wide security counters | required in Memberlist mode; protected credentials/TLS/network |
-| S3-compatible VFS | opaque managed bytes | shared in multi-node mode; private bucket/prefix and protected TLS/credentials |
-| SMTP relay | transactional delivery | selected TLS/auth mode; accepted transport is not final delivery proof |
-| External identity providers | browser authentication and claims | exact issuer/provider ID, TLS, state/nonce/PKCE and opaque subject |
-| ACME service | certificate issuance in single-node local mode | public DNS and HTTP-01 reachability with persistent protected cache |
+| PostgreSQL | The source of truth for stored data, plus locks, database time, audit and migrations | A database role scoped to this installation, and a protected TLS or network path |
+| Redis | A shared cache that can be thrown away, and security counters shared across the cluster | Required in Memberlist mode. Protected credentials, TLS and network |
+| S3-compatible VFS | Managed file bytes, stored without meaning | Shared across nodes in multi-node mode. A private bucket or prefix, and protected TLS and credentials |
+| SMTP relay | Transactional mail | The TLS and authentication mode you chose. A relay accepting a message doesn't prove final delivery |
+| External identity providers | Browser sign-in and identity claims | The exact issuer and provider ID, TLS, state, nonce and PKCE, and an opaque subject |
+| ACME service | Certificates for a single node in local mode | Public DNS, HTTP-01 reachability and a cache that persists and is protected |
 
-Cluster nodes require the same application build/protocol compatibility, shared
-PostgreSQL/Redis/VFS, and unique stable node IDs. Node-local Let's Encrypt is
-rejected in Memberlist mode; use redundant external termination or coordinated
-static certificates.
+Every node in a cluster needs:
+
+- the same application build, so the protocols are compatible;
+- the same PostgreSQL, Redis and VFS;
+- its own unique node ID that doesn't change.
+
+Proctor rejects per-node Let's Encrypt in Memberlist mode. Use redundant HTTPS
+handling in front of the nodes, or static certificates coordinated across
+them.

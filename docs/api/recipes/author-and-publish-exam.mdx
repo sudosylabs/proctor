@@ -1,6 +1,6 @@
 ---
-title: Author and Publish an Exam
-description: Create a revision-fenced Exam Draft, attach typed policies and protected material, govern Managers, and publish one complete immutable Revision.
+title: Write and publish an Exam
+description: Create an Exam, edit its Draft against the current revision, add policies and protected material, manage its Managers, and publish one complete Revision that never changes.
 audience: api-consumer
 maturity: preview
 sidebar_position: 8
@@ -8,19 +8,19 @@ sidebar_position: 8
 
 import Link from '@docusaurus/Link';
 
-# Author and Publish an Exam
+# Write and publish an Exam
 
-An Exam owns stable identity, creator provenance, current owner, Managers,
-archive state, and one mutable Draft. Publication freezes the complete Draft as
-the next immutable numbered Revision. Sittings select a Revision and never
-follow later Draft changes.
+An Exam has a stable identity, a record of who created it, a current owner,
+Managers, an archive state and one Draft you can edit. Publishing freezes the
+whole Draft as the next numbered Revision, which never changes. A Sitting
+picks one Revision and never follows later changes to the Draft.
 
 <GovernedFigure asset="exam-publication-delivery-lifecycle" />
 
-## 1. Create the Exam in Its Academic Unit
+## 1. Create the Exam in its Academic Unit
 
-Call <Link to="/api/reference/create-exam">Create Exam</Link>. The creator
-becomes immutable provenance, owner, and first Manager.
+Call <Link to="/api/reference/create-exam">Create Exam</Link>. The creator is
+recorded permanently as the creator, and becomes the owner and first Manager.
 
 ```json
 {
@@ -30,14 +30,14 @@ becomes immutable provenance, owner, and first Manager.
 }
 ```
 
-Retain the Exam ID, Exam revision, and Draft revision. They fence different
-transitions: Manager and ownership changes compare the Exam revision; authored
-content compares the Draft revision.
+Keep the Exam ID, the Exam revision and the Draft revision from the response.
+They guard different changes. Manager and ownership changes check the Exam
+revision. Changes to the written content check the Draft revision.
 
-## 2. Edit Text Through the Draft Revision
+## 2. Edit the text against the Draft revision
 
-<Link to="/api/reference/edit-exam-draft-text">Edit Draft text</Link> requires
-the exact `expected_revision`.
+<Link to="/api/reference/edit-exam-draft-text">Edit Draft text</Link> needs the
+exact `expected_revision`.
 
 ```json
 {
@@ -47,18 +47,20 @@ the exact `expected_revision`.
 }
 ```
 
-Omitting a PATCH field leaves it unchanged; an empty instructions value clears
-instructions. After every successful mutation, replace the local Draft model
-with the response. On `exam.draft.revision_conflict`, refetch and compare every
-authored area—never increment a stale revision by guess.
+A field you leave out of the PATCH stays as it is. An empty instructions value
+clears the instructions. After every successful change, replace your local copy
+of the Draft with the response. If you get `exam.draft.revision_conflict`,
+fetch the Draft again and compare every part of it. Never guess the next
+revision by adding one to a stale value.
 
-## 3. Configure Typed Policies
+## 3. Set the Browser Policy and Focus Loss rule
 
-Replace Browser Policy with
+Replace the Browser Policy with
 <Link to="/api/reference/configure-exam-draft-browser-policy">Configure Draft Browser Policy</Link>.
-An enabled policy has schema version 1, an exact start rule, and one to 64
-HTTPS rules with closed host matching, path prefix, redirect, and recorded
-blocked-navigation behavior.
+An enabled policy has schema version 1, one start rule, and between 1 and 64
+HTTPS rules. Each rule sets a closed host match, a path prefix, whether
+redirects are allowed, and what happens to a blocked navigation, which is
+recorded.
 
 ```json
 {
@@ -81,7 +83,8 @@ blocked-navigation behavior.
 
 Replace the Focus Loss rule with
 <Link to="/api/reference/configure-exam-draft-focus-loss">Configure Draft Focus Loss</Link>.
-Its duration, threshold, time window, and outcome are one coherent rule.
+The duration, number of incidents, time window and outcome work together as
+one rule.
 
 ```json
 {
@@ -94,58 +97,61 @@ Its duration, threshold, time window, and outcome are one coherent rule.
 }
 ```
 
-Connection Loss remains the fixed `flag_and_suspend` outcome. Do not invent a
-generic policy object or encode grades, rubrics, or pass/fail in these fields.
+Connection Loss always uses the `flag_and_suspend` outcome, and you can't
+change it. Don't invent a general policy object, and don't put grades, rubrics
+or pass/fail values in these fields.
 
-## 4. Attach Protected Resources
+## 4. Attach protected Resources
 
-Use <Link to="/api/reference/create-exam-draft-resource">Create Draft Resource</Link>
-for metadata, then
-<Link to="/api/reference/replace-exam-draft-resource-content">Replace Draft Resource content</Link>
-through the documented strict multipart flow. Replacing bytes creates an
-immutable File Revision; previously published Revisions retain the old one.
+Call <Link to="/api/reference/create-exam-draft-resource">Create Draft Resource</Link>
+for the metadata. Then upload the content with
+<Link to="/api/reference/replace-exam-draft-resource-content">Replace Draft Resource content</Link>,
+following its strict multipart format. Each upload creates a new File Revision
+that never changes. Revisions you already published keep the old file.
 
-Use <Link to="/api/reference/reorder-exam-draft-resources">Reorder Draft Resources</Link>
-with the complete expected active order. Removal closes the Draft order gap
-without deleting published history. Read content only through the protected
-inline operation; no storage key or public URL is part of the contract.
+Call <Link to="/api/reference/reorder-exam-draft-resources">Reorder Draft Resources</Link>
+with the complete order of active Resources you expect. Removing a Resource
+closes the gap in the Draft's order without deleting published history. Read
+content only through the protected inline call. The API never gives you a
+storage key or a public URL.
 
 ## 5. Build the Starter Workspace
 
-Start from <Link to="/api/reference/list-exam-draft-starter-workspace">List Draft Starter Workspace</Link>.
-Create directories and files with the dedicated operations, then move or
-replace exact Entries using their current content versions and Draft revision.
+Start with <Link to="/api/reference/list-exam-draft-starter-workspace">List Draft Starter Workspace</Link>.
+Create directories and files with their own calls. Then move or replace
+specific Entries, passing their current content versions and the Draft
+revision.
 
-Paths are canonical case-sensitive POSIX-relative values. Reject traversal,
-backslashes, repeated separators, and `.proctor`. Deleting a non-empty
-directory is not recursive. Apply the Institution's current entry, per-file,
-and total-byte policy before upload while still handling authoritative
-mutation-time rejection.
+Paths are case-sensitive, relative POSIX paths in one standard form. Reject
+traversal, backslashes, repeated separators and `.proctor`.
+Deleting a directory that isn't empty doesn't delete its contents. Check the
+Institution's current limits on entries, size per file and total bytes before
+you upload, but still handle a rejection from Proctor when you make the change.
 
-## 6. Govern Managers and Ownership
+## 6. Manage Managers and ownership
 
-Use <Link to="/api/reference/list-exam-managers">List Exam Managers</Link> for
-bounded relationship provenance. An added Manager must be active and currently
-belong to the Exam's exact Academic Unit.
+Call <Link to="/api/reference/list-exam-managers">List Exam Managers</Link> to
+see each Manager and how they were added. A new Manager must be active and
+belong to the Exam's exact Academic Unit right now.
 
-- <Link to="/api/reference/add-exam-manager">Add Exam Manager</Link> grants
-  equal responsibility without changing owner.
+- <Link to="/api/reference/add-exam-manager">Add Exam Manager</Link> gives
+  someone equal responsibility without changing the owner.
 - <Link to="/api/reference/transfer-exam-ownership">Transfer Exam ownership</Link>
-  changes the protected owner; the previous owner remains a Manager.
+  changes the protected owner. The previous owner stays on as a Manager.
 - <Link to="/api/reference/remove-exam-manager">Remove Exam Manager</Link>
-  cannot remove the current owner.
+  can't remove the current owner.
 
-All three compare `expected_revision`, require idempotency, preserve
-provenance, and commit the matching safe notice without duplicating it on exact
-replay.
+All three check `expected_revision`, require an idempotency key and keep the
+history of who was added by whom. Each one sends a matching safe notice in the
+same transaction, and resending the identical request doesn't send it twice.
 
-## 7. Publish the Complete Snapshot
+## 7. Publish the complete Draft
 
-Fetch the complete current authoring view and confirm title, rendered
-instructions, typed policies, Resource order/content, Starter Workspace,
-capacity totals, and Draft revision. Then call
+Fetch the complete current authoring view and check the title, rendered
+instructions, policies, Resource order and content, Starter Workspace,
+capacity totals and Draft revision. Then call
 <Link to="/api/reference/publish-exam-revision">Publish Exam Revision</Link>
-with a required idempotency key.
+with an idempotency key, which is required.
 
 ```bash
 curl --request POST \
@@ -156,12 +162,16 @@ curl --request POST \
   --data '{"expected_revision":12}'
 ```
 
-Publication validates and freezes the entire Draft, current capacity values,
-publisher, time, and content digests in one transaction. An unchanged Draft
-returns a no-changes outcome rather than another Revision. Retain the Revision
-ID for Sitting scheduling.
+In one transaction, Proctor checks and freezes the whole Draft, the current
+capacity values, the publisher, the time and the content digests. If the Draft
+hasn't changed since the last Revision, you get a no-changes result instead of
+a new Revision. Keep the Revision ID. You need it to schedule a Sitting.
 
-On timeout, replay only the exact body with the same key. On a stale Draft,
-refetch and review. On failed content or image validation, repair the named
-Draft area and publish with a new key after its revision advances. Do not create
-a second Exam to evade a failed stage.
+What to do when publishing doesn't succeed:
+
+- After a timeout, resend exactly the same body with the same key.
+- If the Draft is stale, fetch it again and review it.
+- If content or image checks fail, fix the part of the Draft that the error
+  names. Once its revision has moved on, publish with a new key.
+
+Don't create a second Exam to get around a failed step.

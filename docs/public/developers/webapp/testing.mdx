@@ -1,155 +1,164 @@
 ---
-title: Test the Hosted Webapp
-description: Use focused unit evidence and three-engine Playwright scenarios to prove generated contracts, semantic state, interaction, accessibility, and responsive presentation.
+title: Test the hosted webapp
+description: Use focused unit tests and Playwright scenarios in three browser engines to prove generated contracts, state, interaction, accessibility and responsive layout.
 audience: developer
 maturity: preview
 slug: /developers/webapp/testing/
 ---
 
-# Test the Hosted Webapp
+# Test the hosted webapp
 
-Webapp tests prove decisions at the boundary that owns them. A unit test can
-show that a feature action accepts only HTTP 204. A browser test can show that
-the resulting form replacement removes sensitive values, announces completion,
-and focuses the new heading. Neither result substitutes for the other.
+Webapp tests prove each decision in the part of the code that owns it. A
+unit test can show that a feature action accepts only HTTP 204. A browser
+test can show that when the form is replaced, sensitive values disappear,
+completion is announced and the new heading gets focus. Neither one can
+stand in for the other.
 
-## Choose the Narrowest Evidence
+## Choose the narrowest test
 
-| Change | First evidence |
+| Change | Test it first with |
 | --- | --- |
-| Pure parsing, CSRF, fragment, or result mapping | Focused Vitest unit test |
-| Component semantic markup and ARIA association | Component unit test |
-| Generated route, API, i18n, token, or brand adapter | Owning generator check |
-| Page state transition, focus, history, or navigation | Playwright scenario |
-| Responsive, theme, zoom, reduced-motion, or geometry behavior | Playwright in the real page |
-| Production asset and route packaging | Vite production build |
+| Pure parsing, CSRF, fragment or result mapping | A focused Vitest unit test |
+| A component's semantic markup and ARIA links | A component unit test |
+| A generated route, API, i18n, token or brand adapter | The check of the generator that owns it |
+| A page's state changes, focus, history or navigation | A Playwright scenario |
+| Responsive layout, theme, zoom, reduced motion or geometry | Playwright on the real page |
+| Packaging of production assets and routes | The Vite production build |
 
-Write the smallest test that can prove the decision, then add the widest
-relevant evidence for the assembled behavior.
+Write the smallest test that can prove the decision. Then add the widest
+test that matters for the assembled behavior.
 
-## Unit-Test Feature Actions as Closed Mappings
+## Unit-test feature actions as closed mappings
 
-A feature action test uses the same typed client boundary while replacing the
-request method with an in-memory result. Cover:
+A feature action test uses the same typed client, but replaces the request
+method with a result held in memory. Cover:
 
-- the exact declared success response;
-- an unexpected 2xx response;
-- each allowlisted Problem Details code that changes feature behavior;
-- an unknown problem code;
-- a malformed or missing problem body; and
-- a rejected request.
+- the exact declared success response
+- an unexpected 2xx response
+- each allowlisted Problem Details code that changes how the feature behaves
+- an unknown problem code
+- a malformed or missing problem body
+- a rejected request
 
-Assert the small semantic union, not implementation calls that do not affect
-behavior. Do not snapshot an entire generated schema or duplicate OpenAPI
-fixtures inside every feature test.
+Assert on the small union of results, not on calls inside the code that
+don't change behavior. Don't snapshot a whole generated schema, or copy
+OpenAPI fixtures into every feature test.
 
-## Unit-Test Components at Their Contract
+## Unit-test components against their contract
 
-Component tests verify native element choice and stable relationships:
+Component tests check the choice of native element and the relationships
+that must stay stable:
 
-- a visible label targets the correct control;
-- required, invalid, described-by, live-region, and busy semantics exist;
-- an icon-only disclosure control has a localized accessible name and title;
-- a task replacement keeps one `h1` and a grouped action region; and
-- shared diagnostic attributes remain present where browser tests use them.
+- a visible label points at the right control
+- the required, invalid, described-by, live-region and busy semantics are
+  there
+- a show-password control that has only an icon has a localized accessible
+  name and title
+- a task replacement keeps one `h1` and a grouped region of actions
+- the shared diagnostic attributes that browser tests use are still there
 
-Avoid asserting every CSS class or serialized markup character. Those tests
-make harmless refactors expensive without proving interaction.
+Don't assert every CSS class or every character of the serialized markup.
+Those tests make harmless refactoring expensive and prove nothing about
+interaction.
 
-## Use Playwright for User-Visible Outcomes
+## Use Playwright for what users see
 
-The pinned suite runs the same scenarios in Chromium, Firefox, and WebKit. Its
-Vite server uses `127.0.0.1:5173`, matching the canonical origin in synthetic
-discovery fixtures.
+The pinned suite runs the same scenarios in Chromium, Firefox and WebKit.
+Its Vite server runs on `127.0.0.1:5173`, which matches the installation
+address in the made-up discovery fixtures.
 
-Browser tests intercept only the operations required by the scenario. Use
-bounded synthetic data, explicit statuses, and complete response shapes. A
-test must never depend on a developer's running server, account, browser
-profile, clock, or Institution data.
+Browser tests intercept only the requests the scenario needs. Use small,
+made-up data, explicit statuses and complete response shapes. A test must
+never depend on a developer's running server, account, browser profile,
+clock or Institution data.
 
-A complete route scenario should prove the relevant combination of:
+A complete route scenario proves whichever of these apply:
 
-- exact initial URL and history sanitization;
-- document title, one page heading, and route purpose;
-- request method and bounded body;
-- semantic ready, failure, retry, and terminal states;
-- value preservation or clearing;
-- focus and live announcement;
-- safe fixed navigation;
-- absence of credentials and sensitive form values from the DOM and URL; and
-- responsive and theme behavior.
+- the exact starting URL, and that history is cleaned
+- the document title, one page heading and the route's purpose
+- the request method, and a body of limited size
+- the ready, failure, retry and final states
+- which values are kept and which are cleared
+- focus and live announcements
+- safe, fixed navigation
+- that credentials and sensitive form values are absent from the DOM and the
+  URL
+- responsive and theme behavior
 
-## Prefer Resilient Selectors
+## Prefer selectors that survive refactoring
 
-Select the interface as a user or accessibility API would:
+Select the interface the way a user or an accessibility API would, in this
+order of preference:
 
-1. role plus accessible name;
-2. visible label;
-3. stable form-control ID when the ID is itself part of the contract;
-4. a narrow diagnostic `data-proctor-*` hook owned by a component contract;
-5. CSS structure only for a real geometry or ordering assertion.
+1. Role plus accessible name.
+2. Visible label.
+3. A stable form control ID, when the ID is itself part of the contract.
+4. A narrow diagnostic `data-proctor-*` hook that a component contract owns.
+5. CSS structure, only for a real geometry or ordering assertion.
 
-Do not select generated class names, DOM depth, English text fragments when an
-accessible role exists, or arbitrary `data-testid` values that restate
-implementation structure.
+Don't select by generated class names or DOM depth. Don't select by pieces of
+English text when an accessible role exists. Don't add arbitrary
+`data-testid` values that just repeat the code's structure.
 
-A diagnostic hook may locate the persistent form-feedback lane or notice tone.
-Product code never branches on that hook.
+A diagnostic hook may find the persistent form feedback area or the tone of a
+notice. Product code never branches on that hook.
 
-## Assert Geometry Only When Geometry Carries Meaning
+## Assert geometry only when it means something
 
-Geometry assertions are valuable when they prove stability or containment:
+Geometry assertions are worth having when they prove stability or
+containment, for example:
 
-- the submit action does not move when ordinary failure copy appears;
-- an inline disclosure button stays vertically aligned with its field;
-- a responsive two-column pair becomes one-dimensional when narrow;
-- the page has no unexpected horizontal overflow at zoom; or
-- a focus outline is not clipped by a container.
+- the submit button doesn't move when ordinary failure text appears
+- a show-password button stays vertically aligned with its field
+- a responsive pair of columns becomes a single column on narrow screens
+- the page has no unexpected horizontal overflow when zoomed
+- a container doesn't clip a focus outline
 
-Measure document coordinates rather than screenshot pixels when the claim is
-structural. Use screenshots as additional review evidence, not as the only test
-for semantic behavior.
+When the claim is about structure, measure document coordinates, not
+screenshot pixels. Treat screenshots as extra evidence for review, never as
+the only test of behavior.
 
-## Exercise the Browser Matrix
+## Cover the browser matrix
 
-The minimum acceptance viewports are:
+These are the minimum viewports for acceptance:
 
-| Name | Size | Purpose |
+| Name | Size | What it checks |
 | --- | --- | --- |
-| Compact | `390×844` | Narrow one-dimensional task and touch target behavior |
-| Tablet | `768×1024` | Intermediate wrapping and layout transition |
-| Desktop | `1440×1024` | Full frame, reading measure, and intentional whitespace |
+| Compact | `390×844` | A narrow, single-column task and touch target behavior |
+| Tablet | `768×1024` | Wrapping and layout changes in between |
+| Desktop | `1440×1024` | The full frame, reading width and deliberate whitespace |
 
-For a visible slice, exercise:
+For a visible feature, cover:
 
-- Chromium, Firefox, and WebKit;
-- light, dark, and system theme modes;
-- keyboard traversal and focus-visible behavior;
-- 200% browser zoom;
-- reduced motion;
-- short and long localized copy;
-- pending, success, recoverable failure, and terminal failure that the feature
-  can enter; and
-- forced colors or high-contrast behavior where automated support exists,
-  followed by manual review where it does not.
+- Chromium, Firefox and WebKit
+- light, dark and system theme modes
+- moving through with the keyboard, and visible focus
+- 200% browser zoom
+- reduced motion
+- short and long localized text
+- the pending, success, recoverable failure and final failure states the
+  feature can reach
+- forced colors or high contrast where automated support exists, followed by
+  manual review where it doesn't
 
-WebKit automation is not a claim of complete Safari coverage. A
-platform-specific feature still requires evidence in the actual supported
-platform.
+WebKit automation doesn't mean complete Safari coverage. A feature that is
+specific to a platform still needs evidence on that real, supported platform.
 
-## Keep Fixtures Safe and Deterministic
+## Keep fixtures safe and repeatable
 
-Synthetic fixture values should be obvious, minimal, and bounded. Use fixed
-example names and loopback origins. Keep credentials recognizable as private
-test placeholders and assert that they disappear from the URL and DOM.
+Made-up fixture values should be obvious, minimal and of limited size. Use
+fixed example names and loopback addresses. Make credentials easy to
+recognize as private test placeholders, and assert that they disappear from
+the URL and the DOM.
 
-Do not reuse production exports, realistic answer content, personal email,
-unbounded random strings, or wall-clock deadlines when a fixed value will do.
-Failure output must remain safe even when the complete fixture is printed.
+Don't reuse production exports, realistic answer content, personal email,
+random strings of unlimited length or real-time deadlines when a fixed value
+will do. Failure output must stay safe even when the whole fixture is
+printed.
 
-## Run Focused Checks
+## Run focused checks
 
-During implementation:
+While you build:
 
 ~~~sh
 cd webapp
@@ -159,7 +168,7 @@ npm test
 npm run test:browser
 ~~~
 
-Run generators for the sources you changed:
+Run the generators for the sources you changed:
 
 ~~~sh
 npm run routes:generate
@@ -168,20 +177,20 @@ npm run i18n:generate
 npm run design-system:generate
 ~~~
 
-Before handoff:
+Before you hand off:
 
 ~~~sh
 npm run check
 ~~~
 
-The complete gate verifies brand assets and design tokens, rejects stale API,
-localization, and route adapters, type-checks, lints, runs unit and browser
-tests, and builds the production bundle.
+The full check verifies brand assets and design tokens, and rejects API,
+localization and route adapters that are out of date. It also type-checks,
+lints, runs the unit and browser tests and builds the production bundle.
 
-Use browser developer tools and Playwright traces for browser-only failures.
-The tracked VS Code browser launch configurations and the repository-owned Go
-debug entry points are documented in
-[tooling and debugging](../tooling-and-debugging.mdx). Keep the API server's
-public origin aligned with Vite when debugging an origin-sensitive flow.
+For failures that only happen in the browser, use the browser's developer
+tools and Playwright traces. [Tooling and debugging](../tooling-and-debugging.mdx)
+covers the VS Code browser launch configurations kept in the repository and
+the repository's Go debug entry points. When you debug a flow that depends on
+the origin, keep the API server's public address the same as Vite's.
 
 Continue with the [visual review guide](./visual-review.mdx).

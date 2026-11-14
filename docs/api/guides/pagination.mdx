@@ -1,6 +1,6 @@
 ---
 title: Pagination
-description: Traverse Proctor collections safely with bounded opaque keyset cursors.
+description: Page through Proctor collections safely with opaque keyset cursors.
 audience: api-consumer
 maturity: preview
 sidebar_position: 4
@@ -8,8 +8,9 @@ sidebar_position: 4
 
 # Pagination
 
-List operations return a response object with a non-null `items` array and,
-when more results are available, a `next_cursor` value.
+List operations return an object with an `items` array, which is never
+null. When there are more results, the object also has a `next_cursor`
+value.
 
 ```json
 {
@@ -23,17 +24,17 @@ when more results are available, a `next_cursor` value.
 }
 ```
 
-The cursor is opaque, versioned, and tied to a canonical query. Never decode,
-modify, synthesize, or persist assumptions about its contents.
+The cursor is opaque and versioned, and it belongs to one exact query. Never
+decode it, change it or build your own, and don't rely on what it contains.
 
-## Traverse a Collection
+## Page through a collection
 
-1. Send the first request with the desired filters, ordering, and `limit`.
-2. Process every element of `items`. An empty collection is `"items": []`, not
-   `null` and not a missing field.
-3. If `next_cursor` is present, repeat the same query and add that exact value
-   as `cursor`.
-4. Stop when `next_cursor` is absent.
+1. Send the first request with the filters, ordering and `limit` you want.
+2. Process every element of `items`. An empty collection is `"items": []`,
+   not `null` and not a missing field.
+3. If `next_cursor` is present, send the same query again with that exact
+   value as `cursor`.
+4. Stop when there is no `next_cursor`.
 
 ```bash
 curl --get \
@@ -43,29 +44,33 @@ curl --get \
   --data-urlencode 'cursor=<next-cursor-from-previous-response>'
 ```
 
-Changing a filter, order, or scope while reusing a cursor is invalid. Start a
-new traversal instead. Do not concatenate cursor values into a URL without URL
-encoding them.
+You can't change a filter, the order or the scope and keep using the same
+cursor. Start a new pass through the collection instead. When you add a
+cursor to a URL, URL-encode it.
 
-Keyset pagination is designed for collections that may change during
-traversal. It does not promise a transactionally frozen snapshot unless the
-individual endpoint explicitly says so. Consumers that reconcile durable
-state should make their processing idempotent.
+Keyset pagination is built for collections that may change while you page
+through them. It doesn't promise a frozen snapshot, unless the endpoint says
+so explicitly. If you reconcile stored state from a collection, make your
+processing idempotent.
 
-## First-Page Totals
+## Totals on the first page
 
 Some collections also report `total` and `total_is_lower_bound` on the first
-page, the one read without a `cursor`: the User directory, Invitations, Jobs,
-audit Events, mail deliveries, and the current User's own audit history. The
-total counts every item the same filters and the caller's visibility match
-across all pages. It is exact below 10,000; at 10,000 counting stops and
-`total_is_lower_bound` is `true`. Later pages carry neither member, so keep the
-first page's values. A total is a size hint, not a position: there is no
-offset paging, and items may change while you traverse.
+page, the one you read without a `cursor`. These are the User directory,
+Invitations, Jobs, audit Events, mail deliveries and the current User's own
+audit history.
 
-## Search Is One Bounded Page
+The total counts every item, across all pages, that matches the same filters
+and that the caller can see. It is exact below 10,000. At 10,000 Proctor
+stops counting and sets `total_is_lower_bound` to `true`. Later pages carry
+neither field, so keep the values from the first page.
+
+A total tells you the size, not your position. There is no offset paging,
+and items may change while you page through them.
+
+## Search returns one page
 
 `GET /api/v1/search` uses the same `items` envelope but never continues. It
-returns at most `limit` matches of each requested type, so `next_cursor` is
-always absent and a `cursor` parameter is rejected. To see more results of one
-type, use that type's own list operation with its filters and cursor.
+returns at most `limit` matches of each type you ask for. So `next_cursor` is
+always absent, and Proctor rejects a `cursor` parameter. To see more results
+of one type, use that type's own list operation with its filters and cursor.

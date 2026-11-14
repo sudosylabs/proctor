@@ -1,48 +1,48 @@
 ---
-title: Transactional Mail
-description: Diagnose committed mail intent, durable delivery work, rendering, SMTP acceptance, retry, suppression, and local Mailpit behavior.
+title: Transactional mail
+description: Track down problems with saved mail requests, delivery work, rendering, SMTP acceptance, retries, suppression and local Mailpit.
 audience: developer
 maturity: preview
 ---
 
-# Transactional Mail
+# Transactional mail
 
-“No email arrived” does not identify a failing layer. Proctor first commits
-business state and mail intent, then durable work renders the message and
-submits it to SMTP. The SMTP server can accept the message without guaranteeing
-that an inbox provider will deliver it.
+"No email arrived" doesn't tell you which step failed. Proctor first saves the
+change and the request to send mail. Then a background Job renders the
+message and hands it to SMTP. The SMTP server can accept the message without
+any guarantee that the recipient's mail provider will put it in their inbox.
 
-## Locate the Furthest Durable State
+## Find the furthest step that was saved
 
-Follow the pipeline in order:
+Go through the steps in order:
 
-1. Was the business mutation committed?
-2. Was the exact mail occurrence and Mail Delivery committed with it?
-3. Does the related Job exist and have runnable state?
-4. Did template rendering and portable message validation succeed?
-5. What SMTP outcome was recorded?
-6. In local development, does Mailpit show the synthetic message?
+1. Was the change itself saved?
+2. Was the exact mail occurrence and its Mail Delivery saved with it?
+3. Does the related Job exist, and is it in a state where it can run?
+4. Did the template render, and did the message pass its checks?
+5. What SMTP outcome did Proctor record?
+6. In local development, does Mailpit show the test message?
 
-Do not repeat the original mutation until you know its idempotency outcome. A
-retry may replay an already committed result rather than create a second mail
-occurrence.
+Don't repeat the original change until you know its idempotency outcome. A
+retry may return the result that was already saved, rather than create a
+second mail occurrence.
 
-## Read the Delivery State Precisely
+## What each delivery state means
 
-| State | Meaning | Diagnostic direction |
+| State | What it means | Where to look |
 | --- | --- | --- |
-| `Queued` | Durable delivery work awaits execution | Inspect Job claiming and queue latency |
-| `Sending` | A worker owns the current send attempt | Inspect the current attempt and lease |
-| `Accepted` | SMTP accepted the completed DATA transaction | Check Mailpit locally or downstream delivery externally |
-| `Failed` | The delivery reached a terminal failure | Inspect bounded outcome and attempt history |
-| `Suppressed` | Policy deliberately prevents submission | Identify the suppression reason; do not force-send |
-| `Canceled` | The durable work was canceled | Identify the owning cancellation decision |
+| `Queued` | The delivery work is saved and waiting to run | Job claiming and queue latency |
+| `Sending` | A worker owns the current send attempt | The current attempt and its lease |
+| `Accepted` | SMTP accepted the finished DATA transaction | Mailpit locally, or delivery further along outside Proctor |
+| `Failed` | The delivery failed for good | The outcome and the attempt history |
+| `Suppressed` | A policy stops the message from being sent, on purpose | The reason it was suppressed. Don't force it through |
+| `Canceled` | The delivery work was cancelled | The decision that cancelled it, and who owns that decision |
 
-`Accepted` is not an inbox-delivery receipt. Conversely, an empty Mailpit inbox
-with no committed Delivery indicates a failure before SMTP, not a Mailpit
-problem.
+`Accepted` doesn't prove the message reached an inbox. On the other hand, if
+Mailpit is empty and no Delivery was saved, the failure happened before SMTP.
+It isn't a Mailpit problem.
 
-## Prove the Local SMTP Boundary
+## Check local SMTP
 
 ```sh
 make dev-doctor
@@ -51,35 +51,33 @@ docker compose -f build/compose/dependencies.yaml \
   logs --no-color --tail=100 mailpit
 ```
 
-Open the local Mailpit interface from the URL documented in
-[Local services](../local-services.mdx). Use only the guarded synthetic
-fixture. The Mailpit UI contains complete message bodies and recipient
-addresses; do not screenshot or export it when real or personal data is
-present.
+Open the local Mailpit interface at the URL in
+[Local services](../local-services.mdx). Use only the protected test fixture.
+The Mailpit UI shows full message bodies and recipient addresses, so don't
+take screenshots of it or export from it when it holds real or personal data.
 
-For portable composition or SMTP adapter defects, run the mail module tests
-with workspace assistance disabled:
+For bugs in how messages are put together, or in the SMTP adapter, run the
+mail module tests with Go workspace mode turned off:
 
 ```sh
 GOWORK=off go test ./...
 GOWORK=off go test -race ./...
 ```
 
-Run those commands from `packages/mail`. Server-owned templates, localization,
-recipient selection, retry policy, and durable delivery state remain server
-responsibilities and need their focused server tests.
+Run those commands from `packages/mail`. Templates, translations, choosing
+recipients, the retry policy and delivery state all belong to the server, and
+need their own focused server tests.
 
-## Use Metrics Without Exposing Messages
+## Use metrics without exposing messages
 
-The following metric families expose bounded outcomes rather than message
-bodies:
+These metric families report outcomes, not message content:
 
 - `proctor_mail_health`
 - `proctor_mail_queue`
 - `proctor_mail_deliveries_total`
 - `proctor_smtp_messages_total`
 
-Query one family through local Prometheus:
+To query one family through local Prometheus:
 
 ```sh
 curl --silent --get \
@@ -88,29 +86,29 @@ curl --silent --get \
   | jq '.data.result'
 ```
 
-Use identifiers and bounded state or outcome labels to correlate a synthetic
-failure. Never add recipient addresses, subjects, template payloads, SMTP
-credentials, reset links, invitation claims, or message bodies to metrics or
-ordinary logs.
+Use IDs and state or outcome labels to match up a test failure. Never add
+recipient addresses, subjects, template data, SMTP credentials, reset links,
+invitation claims or message bodies to metrics or ordinary logs.
 
-## Choose the Correct Recovery
+## Choose the right fix
 
-| Finding | Recovery |
+| What you found | What to do |
 | --- | --- |
-| Business state committed but no delivery intent exists | Fix the owning aggregate transaction and add a regression test |
-| Delivery is queued but no attempt starts | Diagnose the durable Job runner; if its Job already failed, use the authorized operator retry |
-| Rendering fails | Correct the server-owned template, locale data, or frozen payload contract |
-| SMTP is temporarily unavailable | Preserve durable work and let bounded retry policy operate |
-| Delivery is terminally failed | Use the authorized operator retry only after correcting the cause |
-| Delivery is suppressed | Correct the policy or configuration decision; do not bypass it per message |
+| The change was saved but no delivery request exists | Fix the aggregate transaction that owns it, and add a regression test |
+| The delivery is queued but no attempt starts | Look at the Job runner. If its Job already failed, use the operator retry, with permission |
+| Rendering fails | Fix the server's template, the locale data, or the contract for the frozen payload |
+| SMTP is down for a while | Keep the delivery work, and let the retry policy handle it within its limits |
+| The delivery failed for good | Fix the cause first, then use the operator retry, with permission |
+| The delivery is suppressed | Fix the policy or configuration behind it. Don't bypass it for single messages |
 
-Disabling mail terminally suppresses outstanding mail work. It is an operator
-policy change, not a pause switch for a temporary SMTP outage.
+Turning mail off suppresses all outstanding mail work for good. It changes
+the operator's policy, and isn't a way to pause mail while SMTP is briefly
+down.
 
-## Prove the Recovery
+## Confirm the fix
 
-Create one new synthetic occurrence through the real application use case.
-Confirm the business state, Delivery, and Job commit as one intended outcome;
-observe the state transition to `Accepted`; and confirm the message in local
-Mailpit. Then run the focused server test and the mail module conformance gates
-for the boundary you changed.
+Create one new test occurrence through the real application use case. Check
+that the change, the Delivery and the Job are saved together as one outcome.
+Watch the state change to `Accepted`, and find the message in local Mailpit.
+Then run the focused server test and the mail module's conformance checks for
+the part you changed.

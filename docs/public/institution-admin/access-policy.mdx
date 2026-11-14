@@ -1,141 +1,170 @@
 ---
-title: Govern Account Access
-description: Change the revisioned Access Policy without removing the last administrator path or confusing policy with deployment capability.
+title: Govern account access
+description: Change the Access Policy one revision at a time without removing the last way an administrator can sign in, and without mixing up policy with what the deployment supports.
 audience: institution-administrator
 maturity: preview
 ---
 
 import Link from '@docusaurus/Link';
 
-# Govern Account Access
+# Govern account access
 
-The <Term id="access-policy">Access Policy</Term> is durable Institution data.
-It chooses among capabilities the operator has already configured: local
-login, public local registration, local credential enrollment, Invitation
-admission, external-provider admission, and Desktop Authorization. It never
-contains provider secrets, TLS material, SMTP credentials, or deployment
-configuration.
+The <Term id="access-policy">Access Policy</Term> is Institution data that
+Proctor stores and keeps a history of. It chooses among features the operator
+has already set up:
 
-## Read Capability and Policy Separately
+- local sign-in;
+- public local registration;
+- adding a local password to an account;
+- admission by Invitation;
+- admission through an external provider;
+- Desktop Authorization.
 
-Public discovery reports the signed-out methods currently available, along
-with two deployment facts hosted pages present: the optional support mailbox
-and the minimum password length. The authenticated policy view includes its
-opaque ID, revision, settings, and bounded transition history. A configured provider can be selected by policy;
-an absent or invalid deployment capability cannot be made available merely by
-writing its provider ID into policy.
+It never holds provider secrets, TLS files, SMTP credentials or any other
+deployment configuration.
 
-Provider modes have different admission effects:
+## What the deployment supports and what the policy allows are separate
 
-| Mode | Existing linked identity | Unlinked identity |
+Public discovery, which anyone can read before signing in, lists the sign-in
+methods available right now. It also gives two facts from the deployment that
+hosted pages show: the optional support mailbox and the minimum password
+length.
+
+The policy view, which needs you to be signed in, shows the policy's opaque
+ID, its revision, its settings and a limited history of changes.
+
+The policy can select a provider the operator has configured. Writing a
+provider's ID into the policy does not make it available if the deployment
+doesn't have that provider, or has it set up incorrectly.
+
+Each provider mode treats people differently:
+
+| Mode | Someone already linked to this provider | Someone not yet linked |
 | --- | --- | --- |
-| disabled | cannot log in | cannot enter |
-| linked only | may log in | rejected without revealing another account |
-| Invitation required | may log in | must enter through the exact Invitation-bound provider journey |
-| auto provision | may log in | may create a relationship-free User only after configured eligibility passes |
+| disabled | Cannot sign in | Cannot get in |
+| linked only | May sign in | Refused, without revealing whether another account exists |
+| Invitation required | May sign in | Must come in through the provider journey tied to their specific Invitation |
+| auto provision | May sign in | May get a new User with no relationships, but only after the configured eligibility checks pass |
 
-Auto-provisioning creates no Affiliation, membership, or Role Binding. Provider
-email and username are candidate profile fields, never account-merge keys.
+Auto-provisioning creates no Affiliation, membership or Role Binding. The email
+address and username from a provider are suggestions for the profile. Proctor
+never uses them to merge accounts.
 
-## Preflight Every Path-removing Change
+## Preflight any change that removes a way in
 
 Call <Link to="/api/reference/preflight-access-policy">Preflight access policy</Link>
-with the intended settings and expected revision. Resolve every blocker before
-replacement. Preflight is advisory: the server rechecks current PostgreSQL
-policy, active administrators, methods, provider capability, and mail health
-atomically when the change commits.
+with the settings you intend and the revision you expect. Resolve every blocker
+it reports before you replace the policy.
 
-The shared lockout fence prevents concurrent operations from each removing a
-path the other assumed would remain. It also protects User disablement, ending
-the last `system_admin` binding, password removal, and provider unlinking.
+Preflight is only advice. When the change is committed, the server checks
+again in one step against the current policy in PostgreSQL, the active
+administrators, their sign-in methods, which providers are available, and
+whether mail is working.
 
-Before disabling local login:
+A shared lockout guard stops two changes made at the same time from each
+removing a way in that the other assumed would stay. The same guard also
+covers disabling a User, ending the last `system_admin` binding, removing a
+password and unlinking a provider.
+
+Before you turn off local sign-in:
 
 1. verify the first administrator's mailbox;
 2. configure and test mail;
-3. enable and test the intended external provider;
-4. deliberately link an immutable provider identity to an active system
-   administrator; and
-5. preferably establish a second administrator with an independent usable
-   path.
+3. enable and test the external provider you plan to use;
+4. link an active system administrator to a provider identity on purpose
+   (the provider identity can't change once linked);
+5. ideally, set up a second administrator who has a separate working way to
+   sign in.
 
-## Decide Whether to Revoke Existing Sessions
+## Decide whether to end existing Sessions
 
-Disabling a method controls new authentication. It does not revoke existing
-Sessions unless the one transition sets `revoke_existing_sessions`. When set,
-the policy replacement and revocation of Sessions authenticated through newly
-disabled methods commit atomically. Sessions using retained methods are not
-touched. This is a one-shot transition decision, not a standing policy field.
+Turning off a sign-in method affects new sign-ins only. Existing Sessions keep
+working unless the same change sets `revoke_existing_sessions`.
 
-## Require Two-step Verification for Role Holders
+When it is set, Proctor replaces the policy and ends the Sessions that signed in
+through the newly disabled methods, all in one step. Sessions that used methods
+you kept are left alone. `revoke_existing_sessions` applies to that one change
+only. It is not a setting that stays in the policy.
+
+## Require two-step verification for Role holders
 
 The policy setting `role_holder_mfa_required` requires a second factor from
-every role holder: any User with a current Role Binding at any scope, system
-administrators included.
+every Role holder. A Role holder is any User with a current Role Binding at any
+scope, and that includes system administrators.
 
-- A role holder without a second factor who signs in on the web receives a
-  Session marked `mfa_enrollment_required`. Until activation or a challenge
-  makes it multi-factor, that Session reaches only the MFA status, setup,
-  activation, and challenge operations, reauthentication, and logout.
-- A CLI or Desktop sign-in, a Desktop code exchange, or a refresh of a
-  single-factor Session of such a User fails with
-  `authentication.mfa.enrollment_required`. A Web refresh restricts the
-  Session instead, so becoming a role holder mid-Session takes effect at the
-  next refresh.
-- While the rule applies, a role holder cannot disable MFA; the request fails
+- If a Role holder without a second factor signs in on the web, they get a
+  Session marked `mfa_enrollment_required`. That Session can only reach the MFA
+  status, setup, activation and challenge operations, reauthentication and
+  sign-out. This lasts until they activate a second factor or pass a challenge,
+  which makes the Session multi-factor.
+- For such a User, a CLI or Desktop sign-in, a Desktop code exchange, or a
+  refresh of a single-factor Session fails with
+  `authentication.mfa.enrollment_required`. A web refresh restricts the Session
+  instead. So if someone becomes a Role holder partway through a Session, the
+  rule takes effect at their next refresh.
+- While the rule applies, a Role holder can't turn off MFA. The request fails
   with `mfa.required_by_policy`.
 
-Turning the rule on together with `revoke_existing_sessions` also revokes role
-holders' Sessions that have not proved a second factor. Preflight refuses the
-rule with the `mfa_unavailable` blocker while the operator has MFA disabled in
-deployment configuration. If MFA is disabled after the rule is on, the rule
-pauses rather than locking people out: nothing is restricted or refused, the
-node logs one warning, and the policy view reports
-`role_holder_mfa_enforced: false`.
+If you turn the rule on in the same change as `revoke_existing_sessions`, Proctor
+also ends Role holders' Sessions that haven't proved a second factor.
 
-## Shorten Session Lengths
+Preflight refuses the rule, with the `mfa_unavailable` blocker, while the
+operator has MFA turned off in the deployment configuration. If the operator
+turns MFA off after the rule is on, the rule pauses instead of locking people
+out. Nothing is restricted or refused, the node logs one warning, and the
+policy view reports `role_holder_mfa_enforced: false`.
 
-The operator's configured idle and absolute Session lifetimes are the default
-Session lengths and also their ceiling. The policy may shorten either with
-`session_idle_minutes` and `session_absolute_minutes`; `null` keeps the
-default. The policy view reports each default and the longest length the
+## Shorten Session lengths
+
+The idle and absolute Session lifetimes the operator configures are the default
+lengths, and also the maximum. The policy can shorten either one with
+`session_idle_minutes` and `session_absolute_minutes`. A value of `null` keeps
+the default. The policy view shows each default and the longest length the
 policy may set.
 
-An idle length must outlast the configured access-credential lifetime and
-activity-update interval by at least a minute and can never exceed the
-effective absolute length. An absolute length must outlast the configured
-recent-authentication window and the idle minimum.
+The lengths have these limits:
 
-New Sessions, activity, Web and Desktop refresh, and the Desktop code exchange
-use the shortened lengths. Access, refresh, and activity-interval lifetimes
-stay in deployment configuration. Shortening a length pulls in the deadlines
-of live Sessions and their credentials within the same replacement;
-lengthening one never extends a running Session.
+- An idle length must be at least a minute longer than both the configured
+  access-credential lifetime and the activity-update interval. It can never be
+  longer than the absolute length in effect.
+- An absolute length must be longer than the configured recent-authentication
+  window and the minimum idle length.
 
-## Govern Desktop Admission
+The shorter lengths apply to new Sessions, activity, web and Desktop refresh,
+and the Desktop code exchange. The access, refresh and activity-interval
+lifetimes stay in the deployment configuration.
 
-Access Policy enables or disables the Desktop Authorization capability. The
-separate Desktop Compatibility Policy narrows the verified build catalog with
-a minimum release, bounded revoked build IDs, availability state, optional
-retry time, and bounded administrator message. It cannot make an unknown build
-valid.
+Shortening a length brings forward the deadlines of live Sessions and their
+credentials, as part of the same policy change. Making a length longer never
+extends a Session that is already running.
 
-Use request-specific `system/ping` results when helping one client. Use the
-authenticated policy view when reviewing Institution intent. Do not publish
-update URLs or tell users to falsify build selectors.
+## Control who can use Desktop
 
-## Commit and Verify
+The Access Policy turns the Desktop Authorization feature on or off.
 
-Replace policy with the expected revision and an `Idempotency-Key`. A revision
-conflict means the policy changed after it was read: fetch it again, reconsider
-the complete desired state, and use a new idempotency key. Do not mechanically
-overwrite another administrator's change.
+A separate Desktop Compatibility Policy narrows the list of verified builds. It
+can set a minimum release, a limited list of revoked build IDs, an availability
+state, an optional time to try again, and a short message from the
+administrator. It cannot make an unknown build valid.
 
-After success:
+When you are helping one person with their client, use the `system/ping`
+result for their request. When you are reviewing what the Institution intends,
+use the policy view, which needs you to be signed in. Don't publish update URLs,
+and don't tell people to fake the values that select a build.
+
+## Commit the change and check it
+
+Replace the policy with the revision you expect and an `Idempotency-Key`. A
+revision conflict means someone changed the policy after you read it. Fetch it
+again, think through the whole state you want, and use a new idempotency key.
+Don't simply overwrite another administrator's change.
+
+After the change succeeds:
 
 - read the new revision;
-- verify signed-out discovery from the canonical origin;
-- inspect safe audit/history fields for the exact changed setting names;
-- verify intended Session revocations separately; and
-- test every retained administrator authentication path before ending the
+- check signed-out discovery from the public address;
+- check the safe audit and history fields for the exact setting names that
+  changed;
+- check separately that the Sessions you meant to end were ended;
+- test every administrator sign-in method you kept before you end the
   maintenance window.

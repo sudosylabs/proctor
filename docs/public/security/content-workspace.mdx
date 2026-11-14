@@ -1,44 +1,57 @@
 ---
-title: Content, Workspace, and Submission Security
-description: Review semantic metadata authority, opaque byte storage, protected Workspace operations, immutable Submission access.
+title: Content, Workspace and Submission security
+description: How PostgreSQL decides what stored content means and who can reach it, while file bytes stay opaque, Workspace changes are protected and Submissions can't change.
 audience: security-reviewer
 maturity: preview
 ---
 
-# Content, Workspace, and Submission Security
+# Content, Workspace and Submission security
 
-PostgreSQL decides what content means and who may access it. VFS stores opaque
-bytes. None of those outer
-systems can grant application authority from an object key, path,
-or local filesystem state.
+PostgreSQL decides what a piece of content is and who may access it. The VFS
+only stores bytes, without knowing what they mean. Neither the VFS nor any
+other outside system can grant access in the application, whether through an
+object key, a path or the state of a local filesystem.
 
-## Managed Content
+## Managed content
 
-Uploads are bounded before and during streaming, content-typed from bytes, and
-staged under private unguessable keys. Required inspection and renditions finish
-before a named Store operation makes metadata Available. Unknown database
-outcomes retain staged objects until reference-aware cleanup can prove deletion
-safe.
+Proctor limits the size of an upload before it starts and while it streams in.
+It works out the content type from the bytes themselves, and stages the upload
+under a private key that can't be guessed. Any required inspection and
+renditions finish before a named Store operation marks the metadata Available.
 
-Protected downloads authorize semantic metadata before opening bytes. They
-return explicit media type, length, ETag, private/no-store cache policy, and
-`nosniff` behavior. Proctor does not expose public or signed object-storage URLs.
+If Proctor can't tell whether a database write succeeded, it keeps the staged
+objects. They stay until cleanup, which checks for references, can prove it is
+safe to delete them.
+
+A protected download checks permission on the metadata before it opens any
+bytes. The response sets an explicit media type, length and ETag, a
+`private`, `no-store` cache policy, and `nosniff`. Proctor doesn't hand out
+public or signed object-storage URLs.
 
 ## Attempt Workspace and Submission
 
-Workspace paths are normalized, bounded, case-sensitive POSIX-relative metadata.
-Traversal, links, devices, sockets, and `.proctor` candidate writes are denied.
-Every mutation fences current Participation, generation, credential, Session,
-Connection, expected entry/path/version state, and Attempt-scoped idempotency.
+Workspace paths are stored as metadata. They are normalized, limited in
+length, case-sensitive and relative, in POSIX form. Proctor refuses path
+traversal, links, devices, sockets, and writes by the candidate to `.proctor`.
 
-Submission pins acknowledged logical entries and content versions without
-duplicating bytes. Managers can inspect the immutable Submission only after
-sealing and cannot read live Workspace content. Candidates receive a safe
-receipt and do not browse the sealed manifest or files.
+Every change to a Workspace is checked against all of these, and is refused if
+any of them no longer match:
+
+- the current Participation and its generation;
+- the credential, Session and Connection;
+- the expected entry, path and version;
+- the idempotency key for that Attempt.
+
+A Submission records exactly which logical entries and content versions were
+acknowledged, without copying the bytes. Exam Managers can inspect a Submission
+only after it is sealed, and it can't change after that. They can't read the
+live Workspace. Candidates get a safe receipt. They can't browse the sealed
+list of files or the files themselves.
 
 <GovernedFigure asset="submission-provenance-boundary" />
 
 ## Governed Browser
 
-The governed Browser follows a frozen allowlist and records minimized top-level
-activity. Browser page content does not enter evidence.
+The governed Browser follows a frozen allowlist, one that can't change. It
+records a minimal account of top-level page visits. The content of the pages
+never becomes evidence.

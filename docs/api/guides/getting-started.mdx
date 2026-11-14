@@ -1,6 +1,6 @@
 ---
-title: Getting Started
-description: Make your first Proctor API request and learn how the versioned contract is organized.
+title: Getting started
+description: Make your first request to the Proctor API and learn how the versioned contract is laid out.
 audience: api-consumer
 maturity: preview
 sidebar_position: 1
@@ -8,19 +8,19 @@ sidebar_position: 1
 
 import Link from '@docusaurus/Link';
 
-# Getting Started
+# Getting started
 
-The Proctor API is served by each Proctor installation. Use the installation's
-origin followed by the versioned `/api/v1` path; there is no shared Proctor
-cloud API hostname.
+Each Proctor installation serves its own API. Use the installation's address
+followed by the versioned `/api/v1` path. There is no shared Proctor cloud
+API hostname.
 
 ```text
 https://proctor.example.edu/api/v1
 ```
 
 Start with <Link to="/api/reference/get-public-access-discovery">public access discovery</Link>
-to learn which sign-in methods the installation exposes. Public discovery is
-safe to show before authentication and does not reveal private provider
+to find out which sign-in methods the installation offers. You can show its
+response before anyone signs in. It doesn't reveal private provider
 configuration.
 
 ```bash
@@ -29,50 +29,58 @@ curl --request GET \
   --header 'Accept: application/json'
 ```
 
-## Choose a Credential
+## Choose a credential
 
-Browser clients normally establish a Web Session through
-<Link to="/api/reference/login">login</Link>. Non-browser integrations use a Personal Access
-Token only on operations whose **Authentication** panel permits a principal
-credential. A token cannot stand in for a recent or strongly authenticated
-interactive Session. Proctor Desktop establishes a registered-key Desktop
-Session through the separate browser-authorization and DPoP exchange; do not
-send a Desktop credential in the bearer example below.
+Browser clients usually get a Web Session through
+<Link to="/api/reference/login">login</Link>. Integrations that don't run in a
+browser use a Personal Access Token, and only on operations whose
+**Authentication** panel accepts a principal credential. A token can't stand
+in for a recent or strongly authenticated interactive Session.
 
-Read [Authentication and Assurance](./authentication.mdx) before making a
+Proctor Desktop gets a registered-key Desktop Session through its own
+browser authorization and DPoP exchange. Don't send a Desktop credential the
+way the bearer example below does.
+
+Read [Authentication and assurance](./authentication.mdx) before you make a
 protected request.
 
-## Read an Endpoint Page
+## Read an endpoint page
 
-Every generated endpoint page contains four pieces of contract information:
+Every generated endpoint page gives you four pieces of contract information:
 
-1. **Authentication** says what kind of principal and assurance the operation
-   requires.
-2. **Idempotency** says whether `Idempotency-Key` is forbidden, optional, or
+1. **Authentication** says what kind of principal and level of assurance the
+   operation needs.
+2. **Idempotency** says whether `Idempotency-Key` is forbidden, optional or
    required.
-3. **Stable error codes** lists the application codes a client may branch on.
-4. Request and response schemas define the closed wire objects and their
-   validation rules.
+3. **Stable error codes** lists the application codes your client can branch
+   on.
+4. The request and response schemas define the closed objects sent over the
+   wire and the rules Proctor checks them against.
 
-The downloadable <a href="/openapi/openapi.json" download>OpenAPI 3.1 contract</a> is the same
-artifact checked against server route declarations. Generated pages are a view
-of it, not a separate description of the API.
+The downloadable <a href="/openapi/openapi.json" download>OpenAPI 3.1 contract</a> is
+the same file that is checked against the server's route declarations. The
+generated pages are a view of it, not a separate description of the API.
 
-## Send JSON Deliberately
+## Send JSON with care
 
-Proctor JSON objects are closed unless a schema explicitly declares an
-extension point. Send one JSON value, use the exact `snake_case` field names,
-and omit fields you do not intend to change. An omitted optional field and an
-explicit `null` can have different meanings where the schema permits both.
+Proctor JSON objects are closed, unless a schema explicitly declares an
+extension point. Send one JSON value and use the exact `snake_case` field
+names. Leave out any field you don't mean to change. Where a schema allows
+both, leaving out an optional field and sending an explicit `null` can mean
+different things.
 
-Every timestamp, in bodies and query parameters alike, is an RFC 3339 string.
-Lifecycle events use past-tense names such as `created_at`, `updated_at`, and
-`archived_at`. Responses use UTC with up to microsecond precision and drop
-trailing fractional zeros, for example `2026-08-01T09:30:00.123Z`. Requests
-may use any RFC 3339 offset. A response omits a timestamp that has no value,
-such as `archived_at` on an active resource, instead of sending `null` or
-zero. Server-owned fields such as `id` and `created_at` are never accepted
-in create requests.
+Every timestamp is an RFC 3339 string, in bodies and query parameters alike.
+
+- Lifecycle events have past-tense names such as `created_at`, `updated_at`
+  and `archived_at`.
+- Responses use UTC, with up to microsecond precision and no trailing
+  fractional zeros, for example `2026-08-01T09:30:00.123Z`.
+- Requests may use any RFC 3339 offset.
+- When a timestamp has no value, such as `archived_at` on an active resource,
+  the response leaves it out instead of sending `null` or zero.
+
+Proctor sets fields such as `id` and `created_at` itself, and never accepts
+them in create requests.
 
 ```bash
 curl --request GET \
@@ -81,14 +89,16 @@ curl --request GET \
   --header 'Authorization: Bearer ${PROCTOR_TOKEN}'
 ```
 
-Never put access tokens, invitation secrets, attempt credentials, answers, or
-other sensitive material in a URL, example fixture, or application log.
+Never put access tokens, invitation secrets, attempt credentials, answers or
+other sensitive material in a URL, an example fixture or an application log.
 
-## Versioning and Compatibility
+## Versions and compatibility
 
-Before the first supported Proctor release, `/api/v1` may change in place when
-the server, reviewed contract, and compatible clients are activated together.
-Pin the exact OpenAPI artifact used by an integration. After the first
-supported release, established meanings evolve additively unless an explicit
-compatibility decision introduces another version and migration. See
-[Limits and Compatibility](./limits-and-compatibility.mdx) for the client rules.
+Before the first supported Proctor release, `/api/v1` may change in place.
+When it does, the server, the reviewed contract and compatible clients are
+switched over together. Pin the exact OpenAPI file your integration uses.
+
+After the first supported release, existing meanings only gain additions,
+unless an explicit compatibility decision introduces another version and a
+migration. See [Limits and compatibility](./limits-and-compatibility.mdx) for
+the rules your client should follow.

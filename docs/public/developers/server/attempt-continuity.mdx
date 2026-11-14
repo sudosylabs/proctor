@@ -1,101 +1,127 @@
 ---
-title: Develop Attempt Continuity
-description: Keep Participation renewal, database-time expiry, Connection teardown, corrections, Workspace recovery, and manager re-allow causally exact.
+title: Attempt continuity
+description: How Participation renews, how database time decides expiry, how Connections are torn down, and how corrections, Workspace recovery and manager re-allow stay in exact order.
 audience: developer
 maturity: preview
 slug: /developers/server/attempt-continuity/
 ---
 
-# Develop Attempt Continuity
+# Attempt continuity
 
-Attempt continuity is durable domain state, not WebSocket liveness. A ping can
-show that bytes crossed a transport. Only authenticated monotonic renewal can
-extend a Participation lease, and only PostgreSQL time can decide expiry.
+Attempt continuity is durable domain state. It is not the same thing as a
+WebSocket staying alive. A ping only shows that bytes crossed a transport.
+Only an authenticated, monotonic renewal can extend a Participation lease, and
+only PostgreSQL's clock can decide that a lease has expired.
 
 <GovernedFigure asset="participation-lease-timeline" />
 
-## Start in the Owning Package
+## Start in the owning package
 
-`server/app/exam/attempt` owns admission, Participation and Connection fencing,
-renewal, expiry enforcement, Focus Loss, correction acknowledgement, protected
-Workspace access, Submission sealing, and manager inspection. `app.App` names
-the Attempt service in its `Attempts` field, and the service publishes its own
-post-commit effects. `server/app/jobs/exam_attempt_expiry.go` only
-schedules bounded scans; it does not decide expiry semantics.
+`server/app/exam/attempt` owns all of this:
 
-The domain model owns valid states and transitions. The bounded Store contract
-owns atomic lock order, database-time comparison, idempotent outcomes, and
-cross-row invariants. The transport owns socket envelopes and teardown. Keep
-those three roles separate.
+- admission
+- Participation and Connection fencing
+- renewal and expiry enforcement
+- Focus Loss
+- correction acknowledgement
+- protected Workspace access
+- Submission sealing
+- manager inspection
 
-## Model the Current Generation Exactly
+`app.App` names the Attempt service in its `Attempts` field, and the service
+publishes its own effects after commit.
+`server/app/jobs/exam_attempt_expiry.go` only schedules bounded scans. It does
+not decide what expiry means.
 
-One unresolved Attempt has at most one current Participation generation and one
-current Connection. The Participation binds the exact Desktop Session, hashed
-continuity credential, generation, renewal sequence, and lease. Protected HTTP
-access must also name the current Connection and pass DPoP authentication.
+Three roles stay separate:
 
-Never authorize from an Attempt ID plus a valid Session alone. Never let a new
-generation revive an old continuity credential or sequence. Connection IDs,
-Participation IDs, generation numbers, and credential hashes are selectors with
-different meanings; do not collapse them into one token field.
+- The domain model owns valid states and transitions.
+- The bounded Store contract owns lock order, the database-time comparison,
+  idempotent outcomes and invariants across rows, all in one atomic
+  operation.
+- The transport owns socket envelopes and teardown.
 
-## Renew Monotonically
+## Model the current generation exactly
 
-The renewal Store operation compares the current generation, bound Session,
-credential hash, Connection, lease, and sequence under lock. An exact duplicate
-returns its retained result. A stale or changed sequence cannot extend the
-lease. The new expiry derives from database time, not client time or application
-node time.
+An unresolved Attempt has at most one current Participation generation and
+one current Connection. The Participation binds the exact Desktop Session, the
+hashed continuity credential, the generation, the renewal sequence and the
+lease. Protected HTTP access must also name the current Connection and pass
+DPoP authentication.
 
-The initial runtime uses a 5-second renewal interval, 20-second lease, and
-2-second bounded expiry scan. Treat those as server-owned values, not permanent
-client constants. The client schedules from the admission result.
+Never authorize from an Attempt ID and a valid Session alone. Never let a new
+generation bring an old continuity credential or sequence back to life.
+Connection IDs, Participation IDs, generation numbers and credential hashes
+are all selectors, and each means something different. Don't merge them into
+one token field.
 
-## Expire Once and Fence Forever
+## Renew monotonically
 
-At `expires_at <= database_now`, the generation is dead. The named atomic
-operation closes the Connection, ends Participation, records neutral Connection
-Loss evidence, opens one Suspension episode and Flag, and advances Attempt
-state. Retry returns the retained terminal outcome rather than duplicating the
+The renewal Store operation locks the row and compares the current generation,
+bound Session, credential hash, Connection, lease and sequence. An exact
+duplicate gets back the result that was kept the first time. A stale or
+changed sequence cannot extend the lease. The new expiry comes from database
+time, not from the client's clock or the application node's clock.
+
+The first runtime renews every 5 seconds, grants a 20-second lease and runs a
+bounded expiry scan every 2 seconds. These values belong to the server. Don't
+treat them as permanent client constants. The client takes its schedule from
+the admission result.
+
+## Expire once and fence forever
+
+Once `expires_at <= database_now`, the generation is dead. One named atomic
+operation then:
+
+1. closes the Connection
+2. ends Participation
+3. records neutral Connection Loss evidence
+4. opens one Suspension episode and one Flag
+5. moves the Attempt state on
+
+A retry gets back the kept terminal outcome. It does not open a second
 episode.
 
-Effects follow commit: close local transport, publish candidate-safe Suspension,
-notify manager subscriptions, and fan out to peers. Failure of those effects
-does not roll durable state back. A missed event triggers authoritative refetch.
+Effects follow the commit. The server closes the local transport, publishes a
+Suspension that is safe for the candidate to see, notifies manager
+subscriptions and fans out to peers. If any of those effects fail, the durable
+state does not roll back. A client that misses an event fetches the
+authoritative state again.
 
-One failed HTTP request, socket close, or ping is not Connection Loss. Do not
-add an eager application timer that races PostgreSQL and produces accusation
-from transient network noise.
+One failed HTTP request, one socket close or one missed ping is not Connection
+Loss. Don't add an eager application timer that races PostgreSQL and turns
+brief network noise into an accusation.
 
-## Recover Without Overwriting Authority
+## Recover without overwriting authority
 
-Before expiry, reconnect may replace the Connection while retaining the
-generation if current policy permits. The client then refetches presentation and
-replays the bounded Workspace journal from its last acknowledged cursor. If the
-journal cannot bridge the gap, it replaces its local projection from a complete
-manifest.
+Before expiry, a reconnect may replace the Connection and keep the same
+generation, if current policy allows it. The client then fetches its
+presentation again and replays the bounded Workspace journal from its last
+acknowledged cursor. If the journal cannot cover the gap, the client replaces
+its local copy from a complete manifest.
 
-After expiry, Kick, or Suspension, only revision-fenced manager re-allow can
-close the exact episode. Fresh admission creates the next generation. It
-preserves the Attempt, Workspace, frozen configuration, Flags, evidence, and
-prior Suspension provenance.
+After expiry, a Kick or a Suspension, only a manager re-allow can close that
+exact episode, and the re-allow is fenced by revision. A fresh admission then
+creates the next generation. The Attempt, Workspace, frozen configuration,
+Flags, evidence and the record of earlier Suspensions all carry over.
 
-## Keep Corrections Attempt-Scoped
+## Keep corrections scoped to the Attempt
 
-A required live-correction acknowledgement belongs to the Attempt, not a
-Participation. It therefore survives reconnect and re-allow. Pending
-acknowledgement blocks governed navigation, Workspace mutation,
-and voluntary submission, while protected reads, renewal, integrity delivery,
-and the acknowledgement itself remain available.
+When a live correction needs acknowledging, that requirement belongs to the
+Attempt, not to a Participation. So it survives reconnect and re-allow.
 
-Acknowledgements are oldest-first, revision-fenced, idempotent, and bound to
-the current Participation, generation, Session, credential, and Connection.
-Do not clear the requirement from a socket-local handler.
+While an acknowledgement is pending, the candidate cannot use governed
+navigation, change the Workspace or submit voluntarily. Protected reads,
+renewal, integrity delivery and the acknowledgement itself still work.
 
-## Focused Verification
+Acknowledgements go oldest first. Each is fenced by revision, idempotent, and
+bound to the current Participation, generation, Session, credential and
+Connection. Never clear the requirement from a handler that only knows about
+one socket.
 
-From `server/` run:
+## Focused tests
+
+From `server/`, run:
 
 ```sh
 go test ./app/exam/attempt -run 'Test.*Participation|Test.*Expiry|Test.*Reconnect|Test.*Correction'
@@ -105,7 +131,14 @@ go test -race ./app/exam/attempt ./app
 make architecture
 ```
 
-Cover duplicate and stale renewal, exact expiry, two scanners racing, effect
-failure after commit, reconnect before and after expiry, old-generation access,
-two managers re-allowing, correction survival across generations, and journal
-gap recovery.
+Cover these cases:
+
+- duplicate and stale renewal
+- expiry at the exact boundary
+- two scanners racing
+- an effect failing after commit
+- reconnect before and after expiry
+- access from an old generation
+- two managers re-allowing
+- a correction surviving across generations
+- recovery from a journal gap

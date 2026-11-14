@@ -1,47 +1,48 @@
 ---
-title: Configure the Development Runtime
-description: Override local ports, origins, images, and generated state without editing tracked topology files or committing secrets.
+title: Configure the development runtime
+description: Change local ports, addresses, images and generated state without editing tracked topology files or committing secrets.
 audience: developer
 maturity: preview
 slug: /developers/development-configuration/
 ---
 
-# Configure the Development Runtime
+# Configure the development runtime
 
-The root Makefile is the supported configuration boundary for local product
-development. Use its variables to avoid port conflicts or to test a controlled
-image upgrade. Do not edit Compose files, generated JSON, or generated secrets
-for a personal workstation preference.
+Configure local development through the root Makefile. Use its variables to
+avoid port clashes or to try an image upgrade under control. Don't edit the
+Compose files, generated JSON or generated secrets to suit your own machine.
 
-## Know the Precedence
+## Which value wins
 
-For the root Make lifecycle, the highest-precedence value wins:
+For the root Make lifecycle, the first source in this list that sets a value
+wins:
 
-1. a command-line Make value;
-2. an assignment in the ignored root `config.override.mk`;
-3. an environment value; then
+1. a value on the Make command line;
+2. an assignment in the root `config.override.mk`, which Git ignores;
+3. an environment variable;
 4. the tracked default in `build/make/config.mk`.
 
-This precedence applies to operational settings such as ports, origins, and
-images. The Go version, `GOTOOLCHAIN`, `GOWORK`, `GOFLAGS`, pinned-tool module
-and install directories, and individual pinned-tool paths are repository
-authority. They ignore environment and `config.override.mk` values so a
-contributor's shell cannot silently change shared checks; only an explicit
-Make command-line value can override them for a deliberate experiment.
+This order applies to operational settings such as ports, addresses and
+images. The repository fixes some values for everyone: the Go version,
+`GOTOOLCHAIN`, `GOWORK`, `GOFLAGS`, the module and install directories for
+pinned tools, and the path to each pinned tool. These ignore the environment
+and `config.override.mk`, so your shell can't quietly change the checks that
+everyone shares. Only an explicit value on the Make command line overrides
+them, for a deliberate experiment.
 
-Use the command line for one experiment:
+For a one-off experiment, use the command line:
 
 ```sh
 make PROCTOR_SERVER_PORT=18080 run-server
 ```
 
-Use the environment when a parent tool owns the value:
+When a parent tool sets the value, use the environment:
 
 ```sh
 PROCTOR_SERVER_PORT=18080 make run-server
 ```
 
-Use `config.override.mk` for a stable workstation preference:
+For a setting you always want on your machine, use `config.override.mk`:
 
 ```makefile title="config.override.mk"
 PROCTOR_SERVER_PORT := 18080
@@ -49,37 +50,39 @@ PROCTOR_POSTGRES_PORT := 25432
 PROCTOR_REDIS_PORT := 26379
 ```
 
-`config.override.mk` is ignored by Git. Keep it local. Never place production
-credentials or a shared environment's connection details in it.
+Git ignores `config.override.mk`. Keep it on your machine. Never put
+production credentials or the connection details of a shared environment in
+it.
 
-## Keep the Listener and Public Origin Distinct
+## The listener port and the public address are separate
 
-`PROCTOR_SERVER_PORT` selects the loopback listener. The default
-`PROCTOR_SERVER_PUBLIC_URL` is `http://localhost:` followed by that port. The
-public URL is the canonical browser origin used for redirects, browser
-transactions, and local mail action links.
+`PROCTOR_SERVER_PORT` chooses the port the server listens on, on loopback.
+`PROCTOR_SERVER_PUBLIC_URL` defaults to `http://localhost:` followed by that
+port. The public URL is the browser address Proctor uses for redirects,
+browser transactions and the action links in local mail.
 
-For the compiled hosted webapp, overriding only the port is enough:
+For the compiled hosted webapp, changing only the port is enough:
 
 ```sh
 make PROCTOR_SERVER_PORT=18080 run-server
 ```
 
-For an origin-sensitive Vite flow, the public URL must instead match Vite:
+For a Vite flow that depends on the address, set the public URL to match Vite
+instead:
 
 ```sh
 make PROCTOR_SERVER_PUBLIC_URL=http://127.0.0.1:5173 run-server
 ```
 
-`localhost` and `127.0.0.1` are both loopback, but browsers treat them as
-different origins. Use the exact configured scheme, host, and port throughout
-one flow.
+`localhost` and `127.0.0.1` both point at loopback, but browsers treat them as
+different origins. Use the exact scheme, host and port you configured for the
+whole flow.
 
-Local HTTP action links are accepted only for an explicitly loopback public
-origin. A non-loopback HTTP public URL remains invalid; production origins use
-HTTPS.
+Proctor accepts plain HTTP action links only when the public URL is explicitly a
+loopback address. A plain HTTP public URL that isn't loopback is still invalid.
+Production addresses use HTTPS.
 
-## Common Port and Project Overrides
+## Common port and project overrides
 
 | Make variable | Default | Consumer |
 | --- | --- | --- |
@@ -103,18 +106,20 @@ HTTPS.
 | `PROCTOR_OTEL_OTLP_HTTP_PORT` | `14318` | Collector OTLP/HTTP trace receiver |
 | `PROCTOR_JAEGER_UI_PORT` | `16686` | Jaeger trace UI |
 
-When you change a service port through Make, the generated server configuration,
-Compose binding, and relevant test address receive the same value. If a custom
-tool bypasses Make, it owns that coordination itself.
+When you change a service port through Make, the generated server
+configuration, the Compose binding and the matching test address all get the
+same value. If your own tool bypasses Make, it has to keep those in step
+itself.
 
-Use a different `PROCTOR_COMPOSE_PROJECT_NAME` when two repository checkouts
-must run simultaneously. Also assign distinct host ports; project names isolate
-containers and volumes, not host listeners.
+To run two checkouts of the repository at the same time, give each a
+different `PROCTOR_COMPOSE_PROJECT_NAME`. Give them different host ports as
+well. A project name keeps containers and volumes apart, but not the ports
+they listen on.
 
-## Controlled Image Overrides
+## Override an image under control
 
-Tracked defaults select exact service versions and immutable multi-platform
-digests. The corresponding variables are:
+The tracked defaults pin each service to an exact version and an immutable
+multi-platform digest. These variables select the images:
 
 ```text
 PROCTOR_POSTGRES_IMAGE
@@ -132,16 +137,18 @@ PROCTOR_RUNTIME_IMAGE
 PROCTOR_BUILDENV_IMAGE
 ```
 
-Override an image only for an intentional compatibility or upgrade test. Record
-the exact tag and digest in review evidence. A mutable tag alone does not prove
-which artifact passed. `PROCTOR_GO_IMAGE` supplies the maintainer build-environment
-base; keep its Go tag synchronized with the version in `go.work` and always
-pair that tag with its immutable digest.
+Override an image only when you mean to test compatibility or an upgrade.
+Record the exact tag and digest in your review evidence. A tag alone can move,
+so it doesn't prove which image passed.
 
-## Understand Generated `.build/dev` State
+`PROCTOR_GO_IMAGE` is the base of the maintainer build environment. Keep its
+Go tag in step with the version in `go.work`, and always pair the tag with its
+immutable digest.
 
-`make dev-state` recreates derived configuration while preserving existing
-generated secrets. The default ignored tree contains:
+## Generated state in `.build/dev`
+
+`make dev-state` rebuilds the derived configuration and keeps any secrets it
+already generated. By default, this ignored directory contains:
 
 | Path | Meaning | Safe to commit? |
 | --- | --- | --- |
@@ -158,39 +165,42 @@ generated secrets. The default ignored tree contains:
 | `.build/dev/diagnostics/` | Focused local test profiles and execution traces | No |
 | `.build/bin/` | Repository-pinned Go developer binaries | No |
 
-These files are outputs, not documentation or configuration authority. Change
-the tracked server example, build scripts, Make variables, or topology owner
-that generates them. A direct edit can disappear on the next lifecycle run and
-cannot be reviewed reliably.
+These files are output. They are not documentation, and they are not where
+configuration is defined. To change them, change what generates them: the
+tracked server example, the build scripts, the Make variables or the topology
+files. A direct edit can vanish on the next lifecycle run, and nobody can
+review it properly.
 
-## Preserve or Recreate Secrets Intentionally
+## Keep or replace secrets on purpose
 
-Generated secret creation is idempotent: ordinary `make run-server`,
-`make run-cluster`, and `make dev-state` runs reuse existing values. This keeps
-encrypted local payloads and protected metrics readable across restarts.
+Generating secrets is idempotent. Ordinary runs of `make run-server`,
+`make run-cluster` and `make dev-state` reuse the values that already exist.
+That keeps encrypted local data and protected metrics readable across
+restarts.
 
-`make dev-down` stops containers and preserves generated state. `make dev-reset`
-deletes Compose named volumes and guarded seed files, but it does not present
-itself as a general-purpose deletion command for all ignored build output.
-Treat deliberate secret rotation or removal as a separate local maintenance
-decision; stale encrypted payloads become unreadable when their key is removed.
+`make dev-down` stops the containers and keeps the generated state.
+`make dev-reset` deletes the Compose named volumes and the guarded seed files.
+It is not meant as a general command for deleting all ignored build output.
 
-## Diagnose an Override Before Changing Code
+Treat rotating or removing a secret as a separate maintenance decision on your
+machine. Once a key is gone, the old data it encrypted can no longer be read.
 
-When an override appears ineffective:
+## When an override seems to have no effect
 
-1. check whether the same variable was supplied on the Make command line;
-2. inspect `config.override.mk` for a higher-precedence local assignment;
-3. check the exported environment;
-4. confirm the spelling against `make help` and `build/make/config.mk`;
-5. restart the process or containers that consume immutable startup
-   configuration; and
-6. verify the resulting listener or generated file without printing secrets.
+Check these before you change any code:
 
-Avoid copying all of `.build/dev/secrets/environment` into a terminal or issue.
-Inspect only the non-secret field needed for diagnosis, and redact values before
-sharing output.
+1. Check whether the same variable was set on the Make command line.
+2. Look in `config.override.mk` for a local assignment that takes priority.
+3. Check the exported environment.
+4. Compare the spelling with `make help` and `build/make/config.mk`.
+5. Restart the process or containers that only read their configuration at
+   startup.
+6. Check the resulting listener or generated file, without printing secrets.
 
-Return to [local setup](./local-setup.mdx) for the first-success sequence or
-continue to [cluster development](./cluster-development.mdx) for the three-node
+Don't paste all of `.build/dev/secrets/environment` into a terminal or an
+issue. Look only at the non-secret field you need, and redact values before you
+share any output.
+
+Go back to [local setup](./local-setup.mdx) for the first-run steps, or move on
+to [cluster development](./cluster-development.mdx) for the three-node
 topology.

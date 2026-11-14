@@ -1,132 +1,162 @@
 ---
-title: Secure Your Account
-description: Protect authentication methods, MFA, Web and Desktop Sessions, Desktop Registrations, and Personal Access Tokens.
+title: Secure your account
+description: Look after your password, MFA, Web and Desktop Sessions, Desktop Registrations and Personal Access Tokens.
 audience: account-holder
 maturity: preview
 ---
 
-# Secure Your Account
+# Secure your account
 
-Account security is a collection of independent controls. A password or
-external identity proves the User; MFA raises assurance; a Session keeps one
-authenticated client active; a Desktop Registration records a trusted public
-key; and a <Term id="personal-access-token">Personal Access Token</Term> is an
-automation credential. Treating them as one “login token” hides important
-revocation consequences.
+Your account's security is made up of several separate controls, and each does
+a different job:
 
-## Choose and Change a Password
+- A password or an external identity proves that you are the User.
+- MFA makes that proof stronger.
+- A Session keeps one signed-in app or browser active.
+- A Desktop Registration records a public key you have chosen to trust.
+- A <Term id="personal-access-token">Personal Access Token</Term> is a
+  credential for automation.
 
-Proctor follows NIST SP 800-63B: there are no required character classes and
-no scheduled expiry. Length matters most. A new password is refused, each with
-its own message, when it:
+It helps to keep them apart in your head. If you think of them all as one
+“login token”, it is easy to miss what happens when you revoke one of them.
 
-- is shorter or longer than the installation's configured bounds;
-- is one repeated character, a short repeated unit such as `abcabc…`, a run
-  such as `abcdef…` or `98765…`, or a keyboard row such as `qwerty…`;
-- appears on a bundled list of commonly used passwords, in any letter case, or
-  is such a password followed only by digits and symbols (`sunshine2026!`);
+## Choose and change a password
+
+Proctor follows NIST SP 800-63B. You don't have to mix particular kinds of
+character, and passwords don't expire on a schedule. Length matters most.
+Proctor refuses a new password, with a message explaining why, when it:
+
+- is shorter or longer than the limits set for your installation;
+- is one character repeated, a short repeated pattern such as `abcabc…`, a
+  run such as `abcdef…` or `98765…`, or a row of the keyboard such as
+  `qwerty…`;
+- is on a built-in list of common passwords, in any mix of upper and lower
+  case, or is one of those passwords followed only by digits and symbols
+  (`sunshine2026!`);
 - contains your username, the part of your email address before `@`, or your
   name;
-- matches one of your recent passwords. The number remembered is set by the
-  operator (five by default); the comparison happens on the server and no
-  password is ever sent to an outside breach service.
+- matches one of your recent passwords. Your operator decides how many are
+  remembered (five by default). The check happens on the Proctor server, and
+  your password is never sent to an outside breach-checking service.
 
-The same rules apply when the account is created, when an Invitation is
-accepted, and when a password is enrolled, changed, or reset. A passphrase of
-several unrelated words is the easiest way to satisfy them.
+The same rules apply when your account is created, when you accept an
+Invitation, and when you set, change or reset a password. A passphrase of
+several unrelated words is the easiest way to meet them.
 
-Changing a password from the account requires a strong recent Session. The
-browser that makes the change stays signed in; every other Session of the
-account is signed out, any unused password-reset link stops working, and a
-"password changed" notice goes to the account address.
+To change your password from your account, you need a Session where you
+signed in recently and strongly. The browser you use to make the change stays
+signed in. When the change goes through:
 
-## Undo an Unexpected Email Change
+- every other Session on your account is signed out;
+- any unused password-reset link stops working;
+- a "password changed" notice goes to your account's email address.
 
-When the email address on an account changes, Proctor sends the previous
-address a notice with a single-use **Undo this change** link, valid for a
-limited window after the change (72 hours by default). If you did not expect
-the change, open the link: the page names the previous address it will put
-back, the new address in masked form, and when the change happened. Choose
-**Undo change** to proceed. Proctor puts
-the previous address back (verified, because the link proved you control it),
-signs out every Session of the account, cancels pending verification and
-password-reset links for the replaced address, and records the undo in the
-audit history. If another account now uses the previous address, the undo is
-refused; contact your institution. The link never signs you in: sign in again
-afterwards, resetting the password if you need to.
+## Undo an email change you didn't expect
 
-## Add MFA and Keep Recovery Codes Offline
+When the email address on your account changes, Proctor emails the previous
+address. The message contains a single-use **Undo this change** link, which
+works for a limited time after the change (72 hours by default).
 
-MFA setup is a two-stage operation: begin setup, then activate it by proving a
-valid code. Do not consider an unactivated setup protective. Store recovery
-codes offline and separate from the password. Each recovery code is one-use;
-regenerating the set invalidates the previous set.
+If you didn't expect the change, open the link. The page shows the previous
+address it will put back, the new address partly hidden, and when the change
+happened. Choose **Undo change** to go ahead. Proctor then:
 
-The account security page shows when your password last changed, how many of
-your recovery codes are left out of a full set, and how long a fresh
-confirmation lasts on this installation. Disabling MFA and regenerating
-recovery codes require the operation's declared recent or strong Session. If the Session is too old, reauthenticate through the
-interactive account journey instead of substituting a Personal Access Token.
+- puts the previous address back and marks it as verified, because opening
+  the link proved you can read that mailbox;
+- signs out every Session on the account;
+- cancels any pending verification and password-reset links for the address
+  that was replaced;
+- records the undo in the audit history.
 
-## Review Authentication Methods Before Removing One
+If another account now uses the previous address, Proctor refuses the undo.
+Contact your institution if that happens. The link never signs you in.
+Afterwards, sign in again, and reset your password if you need to.
 
-An account may have a local password and one or more external identities. A
-provider connection begins from an authenticated, purpose-bound browser
-journey and links the provider's immutable subject. It does not select an
-account by email.
+## Add MFA and keep recovery codes offline
 
-Before removing a password or unlinking a provider, confirm another usable
-method remains under the current Access Policy. Proctor rejects removal of the
-last usable method. Unlinking one external identity revokes only Sessions that
-were authenticated through that exact identity, including Desktop Sessions
-approved through such a Web Session; unrelated provider identities remain
-separate.
+Setting up MFA takes two steps. First you start the setup, then you turn it on
+by entering a valid code. Until you have finished the second step, MFA isn't
+protecting you.
 
-## Review and Revoke Sessions
+Keep your recovery codes offline, and somewhere separate from your password.
+Each recovery code works once. If you create a new set, the old set stops
+working.
 
-The Session list is security history, not a device inventory inferred from
-user-agent strings. Use the creation time, last-seen projection, method, client
-type, and revocation state to decide whether a Session is expected.
+Your account security page shows when you last changed your password, how
+many recovery codes you have left out of a full set, and how long a fresh
+confirmation lasts on this installation. Turning off MFA and creating new
+recovery codes both need a Session that is recent or strong enough for that
+action. If your Session is too old, sign in again through the normal account
+pages. A Personal Access Token can't be used instead.
 
-- Revoke one current Session when a browser or client is no longer trusted.
-- Revoke all current-User Sessions after suspected credential theft. Expect
-  the current browser to sign out too.
-- An administrator can revoke Sessions for a disabled or compromised User, but
-  that does not erase the User or their audit history.
+## Check your sign-in methods before removing one
 
-Revocation is durable. Closing a browser window is not equivalent to revoking
-the server-side Session.
+Your account can have a local password and one or more external identities.
+You connect a provider while signed in, through browser pages made for that
+one purpose. Proctor links the provider's fixed identifier for you. It never
+picks an account by matching email addresses.
 
-## Treat Desktop Registrations as Permanent Security History
+Before you remove a password or unlink a provider, make sure you will still
+have another method you can use under the current Access Policy. Proctor won't
+let you remove your last usable method.
 
-A Desktop Registration binds one User, Institution, and P-256 public-key
-thumbprint. Its private key stays with the Desktop client. The account view
-deliberately omits the public JWK and thumbprint; it exposes the bounded device,
-platform, build, creation, last-used, and revocation facts needed for review.
+Unlinking one external identity signs out only the Sessions that were signed in
+through that exact identity. That includes Desktop Sessions you approved from
+one of those Web Sessions. Your other provider identities aren't affected.
 
-Revoking a Desktop Registration is irreversible. It revokes every Session and
-credential bound to that registration. A legitimate device must complete a
-fresh browser approval with a new key to return. Do not promise an “undo” or
-silently recreate a revoked registration.
+## Review and sign out Sessions
 
-## Keep Personal Access Tokens Narrow
+The Session list is a security record. It isn't a list of devices guessed from
+browser details. To decide whether you expect a Session, look at when it was
+created, when it was last seen, how it signed in, what type of app it is, and
+whether it has been revoked.
 
-Personal Access Tokens are bearer credentials for automation on operations
-that permit them. They are not Web Sessions, cannot satisfy Session-only or
-recent-assurance operations, and are never valid for the candidate Desktop
-Attempt path. Copy the raw value only when it is created, place it in a secret
-manager, and revoke it when the integration is retired or suspected of
-exposure.
+- Revoke a single Session when you no longer trust that browser or app.
+- Revoke all of your Sessions if you think someone has stolen your sign-in
+  details. Your current browser will be signed out too.
+- An administrator can revoke Sessions for a User who is disabled or whose
+  account has been taken over. That doesn't delete the User or their audit
+  history.
 
-## Respond to Suspected Compromise
+A revoked Session stays revoked. Closing a browser window is not the same as
+revoking the Session on the server.
 
-1. From a known-good browser and canonical server origin, revoke the affected
-   Session, Desktop Registration, or Personal Access Token.
-2. If the boundary is unclear, revoke all current-User Sessions and change the
-   local password or recover the affected external provider. If the account's
-   email address was changed without your consent, use the undo link sent to
-   the previous address first.
-3. Regenerate MFA recovery codes if a stored set may have been read.
-4. Ask an administrator to inspect bounded audit events by time and resource.
-5. Never attach credentials, raw provider claims, Exam answers, or unbounded
-   browser data to the report.
+## Desktop Registrations are permanent records
+
+A Desktop Registration ties together one User, one Institution and the
+thumbprint of one P-256 public key. The matching private key stays in the
+Desktop app. The account page doesn't show the public JWK or the thumbprint on
+purpose. It shows what you need to review the registration: the device, the
+platform, the build, when it was created, when it was last used, and whether
+it has been revoked.
+
+Revoking a Desktop Registration can't be undone. It revokes every Session and
+credential tied to that registration. To use that device again, you need to
+approve it again in the browser, and Desktop creates a new key. Proctor
+doesn't offer an “undo”, and it never quietly recreates a revoked
+registration.
+
+## Keep Personal Access Tokens limited
+
+Personal Access Tokens are bearer credentials for automation, and they only
+work on actions that allow them. They are not Web Sessions. They can't be
+used for actions that need a Session or a recent sign-in, and they never work
+for taking an Exam in Desktop.
+
+You can copy a token's value only once, when you create it. Store it in a
+secret manager. Revoke it when you stop using the integration, or if you think
+it may have been exposed.
+
+## If you think your account has been compromised
+
+1. From a browser you trust, at your Institution's Proctor address, revoke the
+   affected Session, Desktop Registration or Personal Access Token.
+2. If you aren't sure what was affected, revoke all of your Sessions and
+   change your local password, or recover the affected external provider
+   account. If your account's email address was changed without your
+   permission, use the undo link sent to the previous address first.
+3. Create new MFA recovery codes if someone may have read the ones you stored.
+4. Ask an administrator to look at the relevant audit events, by time and by
+   what was affected.
+5. Never attach credentials, raw provider data, Exam answers or large amounts
+   of browser data to your report.

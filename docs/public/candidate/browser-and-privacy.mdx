@@ -1,58 +1,77 @@
 ---
-title: Understand the Governed Browser and Activity Privacy
-description: See what Browser Policy permits, what top-level activity is minimized, and what Proctor deliberately does not collect.
+title: The Exam browser and your privacy
+description: What the Browser Policy lets you open, what Proctor records about the pages you visit, and what it never collects.
 audience: candidate
 maturity: preview
 ---
 
-# Understand the Governed Browser and Activity Privacy
+# The Exam browser and your privacy
 
-When the selected Revision enables Browser Policy, Desktop exposes one governed
-Browser surface. Its allowlist controls top-level HTTPS origin, host matching,
-path prefix, redirects, and start rule. It does not turn arbitrary web browsing
-into an Exam capability.
+When the Exam's selected Revision turns on Browser Policy, Desktop gives you
+one Exam browser. Its allowlist decides which pages you can open at the top
+level. It can match on HTTPS address, host, start of the path, redirects, and
+a rule for which page you start on. It doesn't turn general web browsing into
+part of the Exam.
 
 <GovernedFigure asset="browser-activity-privacy-boundary" />
 
-## What Can Be Recorded
+## What can be recorded
 
-Browser Activity covers browser open/close, allowed top-level navigation or
-redirect, and blocked top-level navigation. A retained event has server-bound
-Participation/source/sequence facts, current policy Revision, client time, one
-closed reason, and a minimized location.
+Browser Activity covers opening and closing the browser, top-level navigation
+or redirects that were allowed, and top-level navigation that was blocked.
+Each event that is kept has:
 
-- Allowed HTTPS navigation may retain canonical host, optional non-default
-  port, and path.
-- Blocked HTTP may retain the same network fields with scheme `http`.
-- Other disallowed schemes retain only the lowercase scheme.
-- Invalid URLs retain empty scheme, host, and path.
+- details the server attaches, about your Participation, the event's source
+  and its sequence number;
+- the policy Revision in force at the time;
+- the time on your computer;
+- one reason, from a fixed list;
+- a cut-down version of the address.
 
-## What Is Deliberately Excluded
+How much of the address is kept depends on what happened:
 
-Query strings, fragments, URL credentials, page content, titles, referrers,
-headers, cookies, DOM data, downloads, local paths, and scheme payloads are not
-policy or telemetry fields. Initial integrity evidence also excludes
-screenshots, webcam, clipboard, source code, and arbitrary
-unbounded payloads.
+- For allowed HTTPS navigation, Proctor may keep the host in its standard
+  form, the port if it isn't the default one, and the path.
+- For blocked HTTP, it may keep the same parts, with the scheme `http`.
+- For any other scheme that isn't allowed, it keeps only the scheme, in lower
+  case.
+- For an invalid URL, it keeps an empty scheme, host and path.
 
-Activity is privacy-minimized evidence, not a verdict. Client time and claims
-do not decide severity or guilt. Missing or gapped records become explicit
-uncertainty; the server does not invent navigation.
+## What Proctor never collects
 
-Delivery may continue while the Sitting is paused or a correction awaits
-acknowledgement so the stream can converge without granting interaction.
+Query strings, fragments, user names or passwords in URLs, page content, page
+titles, referrers, headers, cookies, page structure (DOM data), downloads,
+local file paths and anything carried inside a scheme are not part of the
+policy and are not recorded. The first version of integrity evidence also
+leaves out screenshots, webcam, clipboard, source code and any other
+open-ended data.
 
-## Who Can Read It and How Long It Stays
+Activity is evidence kept to a minimum to protect your privacy. It isn't a
+verdict. Neither the time on your computer nor anything Desktop claims decides
+how serious something is, or whether you did anything wrong. If records are
+missing or have gaps, Proctor marks that uncertainty openly. The server never
+invents navigation that didn't happen.
 
-Ordinary Browser history is available only to the Exam's designated Managers who
-also have the Browser Activity permission. A general administrative override does
-not grant this history access. A qualifying blocked navigation may create a
-separate, minimized integrity evidence copy for authorized Review.
+Desktop may keep sending records while the Sitting is paused, or while a
+correction is waiting for you to acknowledge it. That lets the records catch
+up, but it doesn't let you interact with the Exam.
 
-The server provides a current collection notice with the Institution's Browser
-retention period and whether the policy may create integrity evidence. Zero days
-means no configured expiry. The retention clock depends on eligible completion of
-the closed Sitting's records. Preservation holds and incomplete records can extend
-retention. Integrity evidence has its own retention period, so ordinary history
-may expire while a Review copy remains. This notice describes collection; it is
-not a request to grant a new permission or consent.
+## Who can see it and how long it is kept
+
+Your ordinary browser history is visible only to the Exam's appointed Managers
+who also have the Browser Activity permission. A general administrator
+override doesn't give anyone access to this history. Some blocked navigation
+may also create a separate, cut-down copy as integrity evidence, for
+authorized Review.
+
+The server gives you a current collection notice. It shows your Institution's
+retention period for browser records, and whether the policy may create
+integrity evidence. A retention period of zero days means no expiry has been
+set.
+
+The retention clock depends on the records for the closed Sitting being
+complete in a way that counts as eligible. Preservation holds and incomplete records can
+mean records are kept longer. Integrity evidence has its own retention period,
+so your ordinary history may expire while a copy kept for Review remains. The
+notice tells you what is collected. It isn't asking you to grant a new
+permission or give consent.

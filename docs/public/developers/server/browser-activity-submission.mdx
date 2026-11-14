@@ -1,111 +1,163 @@
 ---
-title: Develop Browser Activity and Submission
-description: Preserve privacy-minimized Browser Activity, explicit gaps, acknowledged Workspace fences, and one immutable terminal Submission.
+title: Browser Activity and Submission
+description: Keep Browser Activity to the minimum, record gaps honestly, fence on acknowledged Workspace state, and seal exactly one immutable Submission.
 audience: developer
 maturity: preview
 slug: /developers/server/browser-activity-submission/
 ---
 
-# Develop Browser Activity and Submission
+# Browser Activity and Submission
 
-Browser Activity is a narrow integrity stream, not browser surveillance.
-Submission is a terminal snapshot of acknowledged authority, not a copy of
-whatever happens to be in a local editor buffer.
+Browser Activity is a narrow stream of integrity evidence. It is not a way to
+watch a candidate's browsing. Submission is a final snapshot of the Workspace
+state the server has acknowledged. It is not a copy of whatever happens to be
+in a local editor buffer.
 
 <GovernedFigure asset="browser-activity-privacy-boundary" />
 
-## Keep Collection Inside the Frozen Policy
+## Collect only what the frozen policy allows
 
-Browser Policy is authored as a typed Draft field and frozen into an immutable
-Exam Revision. It governs one Desktop Browser surface through reviewed HTTPS
-origin, host, path, redirect, and start rules. Candidate admission exposes the
-exact frozen policy; a Desktop client must not widen it locally.
+An author writes the Browser Policy as a typed field on the Draft, and it is
+frozen into an immutable Exam Revision. It governs one Desktop Browser surface
+through reviewed rules for HTTPS origin, host, path, redirects and start
+pages. Candidate admission exposes the exact frozen policy. A Desktop client
+must not widen it locally.
 
-`server/model/browser_activity.go` owns closed event, reason, and minimized
-location shapes. `server/app/exam/attempt/browser_activity.go` owns current
-Attempt access and collection behavior. SQL persistence owns source sequencing,
-reorder bounds, exact replay, and retained gaps.
+Ownership is split three ways:
 
-Do not add a generic telemetry envelope. New event or field meaning requires a
-privacy review, strict model validation, wire versioning, retention decision,
-and updated terminal accounting.
+- `server/model/browser_activity.go` owns the closed shapes for events,
+  reasons and minimized locations.
+- `server/app/exam/attempt/browser_activity.go` owns access to the current
+  Attempt and how collection behaves.
+- SQL persistence owns source sequencing, reorder limits, exact replay and
+  the gaps it keeps.
 
-## Minimize Before Persistence
+Don't add a generic telemetry envelope. A new event, or a new meaning for a
+field, needs a privacy review, strict model validation, wire versioning, a
+retention decision and updated terminal accounting.
 
-Retain only top-level browser open/close, allowed navigation or redirect, and
-blocked navigation. Query, fragment, URL credentials, page content, title,
-referrer, headers, cookies, DOM, downloaded bodies, local paths, and scheme
-payloads are excluded. Other integrity evidence also excludes screenshots,
-webcam, clipboard, source code, and arbitrary payloads.
+## Minimize before anything is stored
 
-Minimization happens before durable persistence and before logs, metrics, audit,
-or realtime publication. A manager response is a bounded projection that omits
-Session, Registration, Connection, credentials, and private Review state.
+Proctor keeps only three kinds of event:
 
-## Preserve Source and Sequence Semantics
+- a top-level browser opening or closing
+- an allowed navigation or redirect
+- a blocked navigation
 
-Each Participation allows one initial source, up to 32 policy-correction starts,
-and up to 16 runtime resets: at most 49 source identities in total. A reset names
-its predecessor and one closed reason; prior source boundaries remain immutable. Batches
-contain 1–64 events and at most 256 KiB. Persistence accepts exact replay,
-rejects changed duplicates and a reorder distance above 4,096, and returns the
-highest contiguous and seen sequences with at most 32 missing ranges.
+It leaves out the query, fragment, credentials in the URL, page content,
+title, referrer, headers, cookies, DOM, downloaded bodies, local paths and
+scheme payloads. Other integrity evidence also leaves out screenshots, webcam,
+clipboard, source code and arbitrary payloads.
 
-A gap is evidence of uncertainty. Never synthesize a navigation event to close
-it. Delivery may continue while the Sitting is paused or a correction awaits
-acknowledgement because convergence does not grant candidate interaction.
+Minimizing happens before anything is stored durably, and before anything
+reaches logs, metrics, audit or realtime publication. What a manager receives
+is a bounded view that leaves out Session, Registration, Connection,
+credentials and private Review state.
 
-## Keep Review Evidence Independent
+## Keep sources and sequences exact
 
-Only a validated blocked navigation attributed to a frozen rule that selects
-integrity evidence can create a Browser Flag. A group is scoped to Participation,
-policy Revision and rule. It retains at most 100 detail copies; the Attempt has
-limits of 256 groups, 10,000 copies and 8 MiB of copied evidence. Further validated
-events update bounded overflow counts. Receipt replay never creates another copy.
+Each Participation allows:
 
-Ordinary history requires both the exact Exam Manager relationship and
-`exam.attempt.browser_activity.view`; scoped overrides cannot grant it. Review
-uses independently retained minimized copies under Review authorization. Deleting
-ordinary Browser history does not delete those copies.
+| Source kind | Limit |
+| --- | --- |
+| Initial source | 1 |
+| Policy-correction starts | Up to 32 |
+| Runtime resets | Up to 16 |
+| Source identities in total | At most 49 |
 
-## Seal Only Acknowledged Workspace State
+A reset names the source it replaces and one reason from a closed list.
+Earlier source boundaries never change.
 
-Voluntary submission first denies new edits, settles Workspace mutation,
-reconciles Focus Loss and Browser Activity terminal accounting, then calls one
-named atomic Store operation. The request fences current Revision, Workspace
-Cursor, final Focus Loss sequence, Participation,
-generation, credential, bound Session, and open Connection.
+A batch holds 1 to 64 events and at most 256 KiB. Persistence accepts an exact
+replay. It rejects a duplicate whose content changed, and it rejects a reorder
+distance above 4,096. It returns the highest contiguous sequence, the highest
+sequence seen, and at most 32 missing ranges.
 
-Browser settlement is derived by the server across every source owned by the
-Attempt. Clients never submit a Browser settlement claim. No recorded source means
-`not_applicable`; otherwise the response exposes source counts and truthful gaps.
-A gap does not prevent sealing. Closing a source fixes its known allocation
-boundary and historical-upload deadline. Receipts acknowledge actual records;
-loss declarations settle uncertainty without manufacturing receipts.
+A gap is evidence that something is uncertain. Never invent a navigation event
+to fill it. Delivery may carry on while the Sitting is paused or a correction
+is waiting for acknowledgement, because catching up on evidence does not give
+the candidate any way to interact.
+
+## Keep Review evidence independent
+
+A Browser Flag can come only from a validated blocked navigation that is
+attributed to a frozen rule which selects integrity evidence. Each group of
+evidence is scoped to one Participation, policy Revision and rule.
+
+| Limit | Value |
+| --- | --- |
+| Detail copies per group | 100 |
+| Groups per Attempt | 256 |
+| Copies per Attempt | 10,000 |
+| Copied evidence per Attempt | 8 MiB |
+
+Once a limit is reached, further validated events only update bounded
+overflow counts. Replaying a receipt never creates another copy.
+
+Seeing ordinary history needs both the exact Exam Manager relationship and
+`exam.attempt.browser_activity.view`. A scoped override cannot grant it.
+Review works from its own minimized copies, kept separately and read under
+Review authorization. Deleting ordinary Browser history does not delete those
+copies.
+
+## Seal only acknowledged Workspace state
+
+Voluntary submission runs in this order:
+
+1. Refuse new edits.
+2. Settle Workspace changes.
+3. Reconcile the terminal accounting for Focus Loss and Browser Activity.
+4. Call one named atomic Store operation.
+
+The request fences on the current Revision, Workspace Cursor, final Focus Loss
+sequence, Participation, generation, credential, bound Session and open
+Connection.
+
+The server works out Browser settlement itself, across every source the
+Attempt owns. Clients never send a claim about Browser settlement. If no
+source was recorded, the result is `not_applicable`. Otherwise the response
+shows source counts and the gaps as they really are. A gap does not stop
+sealing.
+
+Closing a source fixes its known allocation boundary and its deadline for
+historical uploads. Receipts acknowledge records that actually arrived. A loss
+declaration settles uncertainty without inventing receipts.
 
 <GovernedFigure asset="submission-provenance-boundary" />
 
-The atomic operation creates one immutable manifest, marks the Attempt
-Submitted, ends Participation, retains the candidate-safe idempotent receipt,
-and commits audit. Candidate, manager-ended, and Sitting-closed provenance use
-the same immutable Submission contract. They differ in prerequisites and
-provenance, not in whether acknowledged state is authoritative.
+The atomic operation does all of this together:
 
-## Keep Terminal State Terminal
+- creates one immutable manifest
+- marks the Attempt Submitted
+- ends Participation
+- keeps the idempotent receipt that is safe for the candidate to see
+- commits the audit
 
-There is no reopen, resubmit, or post-seal Workspace mutation. Late Focus Loss
-with an exact retained causal selector enters a bounded discrepancy stream; it
-does not change sealed work. New qualifying Browser or native condition evidence
-accepted within its historical window invalidates current Review approval and
-Sitting Records Completion. Historical finalization snapshots remain immutable;
-managers must acknowledge the changed inventory before releasing again. A no-show has no
-Attempt and no Submission.
+A Submission made by the candidate, ended by a manager, or closed with the
+Sitting all use the same immutable Submission contract. They differ in their
+prerequisites and in the provenance they record. In every case the
+acknowledged state is what counts.
 
-After an uncertain voluntary response, exact replay uses the same semantic body
-and idempotency key with fresh transport proof. Changed retry content conflicts.
-Post-commit realtime or runtime-unbind failure must not produce a second seal.
+## Keep terminal state terminal
 
-## Focused Verification
+There is no reopen, no resubmit, and no change to the Workspace after the
+seal.
+
+- A late Focus Loss that carries an exact, kept causal selector goes into a
+  bounded discrepancy stream. It does not change the sealed work.
+- New qualifying Browser or native condition evidence, accepted within its
+  historical window, invalidates the current Review approval and Sitting
+  Records Completion. Earlier finalization snapshots stay as they were.
+  Managers must acknowledge the changed inventory before they release again.
+- A no-show has no Attempt and no Submission.
+
+If the response to a voluntary submission is uncertain, an exact replay sends
+the same body, with the same meaning, and the same idempotency key, with fresh
+transport proof. A retry with different content is a conflict. If a realtime
+publish or runtime unbind fails after commit, that must never cause a second
+seal.
+
+## Focused tests
 
 ```sh
 cd server
@@ -117,7 +169,16 @@ go test -race ./app/exam/attempt
 make architecture
 ```
 
-Test private-field rejection, malformed and oversized batches, source reset,
-changed duplicate, reorder gaps, correction and pause collection, every
-submission fence, exact retry, automatic close, manager end, and late evidence
-serialization against finalization.
+Cover these cases:
+
+- rejecting private fields
+- malformed and oversized batches
+- source reset
+- a duplicate with changed content
+- reorder gaps
+- collection during a correction and during a pause
+- every submission fence
+- exact retry
+- automatic close
+- manager end
+- late evidence ordered against finalization

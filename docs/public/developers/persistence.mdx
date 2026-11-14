@@ -1,62 +1,64 @@
 ---
-title: Change Persistence and Migrations
-description: Evolve Proctor Store contracts, PostgreSQL operations, constraints, caches, and the current pre-release schema baseline safely.
+title: Change persistence and migrations
+description: Safely change Proctor's Store contracts, PostgreSQL operations, constraints and caches, and the schema baseline used before the first release.
 audience: developer
 maturity: preview
 slug: /developers/persistence/
 ---
 
-# Change Persistence and Migrations
+# Change persistence and migrations
 
-PostgreSQL is authoritative for durable Proctor application state. Persistence
-does more than execute queries: it owns locking, database-time decisions,
-constraints, optimistic concurrency, and named atomic guarantees required by
-application use cases.
+PostgreSQL is the source of truth for Proctor's durable application state.
+Persistence does more than run queries. It owns locking, decisions based on
+database time, constraints, optimistic concurrency, and the named atomic
+guarantees that application use cases rely on.
 
-Redis, in-process caches, cluster messages, and runtime projections remain
-disposable and reconstructible. Never make them the sole copy of state that
-must survive restart or failover.
+Redis, in-process caches, cluster messages and runtime projections can all be
+thrown away and rebuilt. Never let one of them hold the only copy of state that
+must survive a restart or a failover.
 
-## Start from the Application Guarantee
+## Start from what the application needs
 
-Before writing SQL, name the complete operation the application needs. A
-cross-model mutation should become a typed, named Store operation such as a
-bootstrap, transfer, command-outcome, or lifecycle transition—not a generic
-transaction callback exposed to application code.
+Before you write SQL, name the whole operation the application needs. A change
+that spans several models should become a typed, named Store operation, such
+as a bootstrap, a transfer, a command outcome or a lifecycle transition. It
+should not be a generic transaction callback handed to application code.
 
-The application owns policy and transaction intent. The SQL adapter owns:
+The application owns the policy and what the transaction is meant to do. The
+SQL adapter owns:
 
-- row and advisory locking;
-- PostgreSQL-time evaluation;
+- row and advisory locks;
+- evaluating time in PostgreSQL;
 - uniqueness and referential constraints;
 - revision and idempotency fences;
-- statement ordering;
-- commit or rollback; and
-- translation into portable Store outcomes.
+- the order of statements;
+- commit or rollback;
+- translating results into portable Store outcomes.
 
-Raw SQL transactions, SQL handles, and `WithTransaction(func(Store))` do not
-cross into `server/app`.
+Raw SQL transactions, SQL handles and `WithTransaction(func(Store))` never
+reach `server/app`.
 
-## Implement a Store Change
+## Make a Store change
 
 1. Add or refine the smallest cohesive Store contract under `server/store`.
-2. Add conformance cases that express observable results and race guarantees.
-3. Implement the contract in `server/store/sqlstore` with explicit bounded
+2. Add conformance cases that describe the results callers can observe and
+   which writer wins a race.
+3. Implement the contract in `server/store/sqlstore`, with explicit, bounded
    queries and constraints.
-4. Update memory or test adapters used by consumers; do not weaken the contract
-   to make a fake easier to write.
-5. Add application integration coverage through the real composition graph
-   when transaction behavior affects a use case.
-6. Update metrics through the existing bounded recorder or wrapper rather than
-   adding query text, resource IDs, or error text as labels.
+4. Update the memory or test adapters that consumers use. Don't weaken the
+   contract to make a fake easier to write.
+5. When transaction behavior affects a use case, add application integration
+   tests that run through the real composition graph.
+6. Record metrics through the existing bounded recorder or wrapper. Don't add
+   query text, resource IDs or error text as labels.
 
-Read paths must remain bounded and authorization-aware where visibility is
-part of the query. Avoid loading an unrestricted collection and filtering it
-in application memory.
+Read paths must stay bounded. Where visibility is part of the query, they must
+also take authorization into account. Don't load a whole collection and then
+filter it in application memory.
 
-## Use Precise Lookup Semantics
+## Say exactly what "not found" means
 
-Store methods use three distinct absence contracts:
+Store methods handle a missing record in three different ways:
 
 | Operation | Meaning when no record exists |
 | --- | --- |
@@ -64,59 +66,59 @@ Store methods use three distinct absence contracts:
 | `Find` | Return the explicit `found` value as false |
 | `List` | Return an empty collection |
 
-`(nil, nil)` never means “not found.” A returned record is rehydrated into a
-domain type and validated before it crosses the adapter boundary. An invalid
-persisted record is an integrity failure, not an absent record.
+`(nil, nil)` never means "not found". Before a record leaves the adapter, it is
+turned back into a domain type and checked. A stored record that fails the
+check is an integrity failure, not a missing record.
 
-Store contracts return domain values or explicit Store-owned projections and
-aggregate results. Keep SQL rows, nullable driver types, query builders,
-column names, and transaction handles private to `sqlstore`.
+Store contracts return domain values, or projections and aggregate results
+that the Store defines explicitly. SQL rows, nullable driver types, query
+builders, column names and transaction handles stay private to `sqlstore`.
 
-## Name the Atomic Guarantee
+## Name the atomic guarantee
 
-A named Store operation is valuable when its name and parameters expose the
-complete race that must be resolved. For example, a conditional replacement
-may need to:
+A named Store operation is worth having when its name and parameters show the
+whole race it has to settle. For example, a conditional replacement might
+need to:
 
 1. lock the current aggregate;
-2. resolve an existing idempotent outcome;
+2. look up an existing idempotent outcome;
 3. compare the expected revision;
 4. write the new state;
-5. write required audit;
-6. retain a bounded replay result; and
-7. commit all of those facts together.
+5. write the required audit;
+6. keep a bounded result for replay;
+7. commit all of these together.
 
-The application prepares the policy-bearing inputs. The Store contract states
-what wins under concurrency. The SQL implementation chooses row locks,
-advisory locks, constraints, and statement order.
+The application prepares the inputs that carry policy. The Store contract says
+who wins when writers compete. The SQL implementation chooses the row locks,
+advisory locks, constraints and statement order.
 
-Do not split a guarantee into a sequence of public Store calls merely because
-each call would be smaller. Another node can act between those calls.
+Don't split a guarantee into several public Store calls just to make each call
+smaller. Another node can act between those calls.
 
-## Use Constraints and Locks Together
+## Use constraints and locks together
 
-Choose the narrowest PostgreSQL mechanism that protects the invariant:
+Choose the narrowest PostgreSQL mechanism that protects the rule:
 
-- a unique, foreign-key, check, or exclusion constraint for facts that must be
-  true regardless of caller;
-- `SELECT … FOR UPDATE` when one current row serializes a transition;
-- a transaction-scoped advisory lock for a bounded namespace that has no
-  natural row yet; and
-- `SKIP LOCKED` for work claiming or bounded maintenance where several nodes
-  may safely divide eligible rows.
+- A unique, foreign-key, check or exclusion constraint, for facts that must
+  hold no matter who the caller is.
+- `SELECT … FOR UPDATE`, when one current row puts a transition in order.
+- A transaction-scoped advisory lock, for a bounded namespace that doesn't
+  have a natural row yet.
+- `SKIP LOCKED`, for claiming work or for bounded maintenance where several
+  nodes can safely share out the eligible rows.
 
-Application prechecks can improve error quality but never replace the
-constraint or lock that closes the race. Translate expected constraint
-outcomes into typed Store errors; preserve unexpected driver detail only in the
-wrapped internal cause.
+Checks in the application can give better error messages, but they never
+replace the constraint or lock that closes the race. Translate expected
+constraint outcomes into typed Store errors. Keep unexpected driver detail only
+in the wrapped internal cause.
 
-Keep a canonical lock order when a transaction touches several aggregates.
-Review existing named operations that touch the same rows before adding
-another order.
+When a transaction touches several aggregates, lock them in one agreed order.
+Before you add another order, review the existing named operations that touch
+the same rows.
 
-## Separate Revisions, Time, and Idempotency
+## Keep revisions, time and idempotency apart
 
-These mechanisms answer different questions:
+Each of these answers a different question:
 
 | Mechanism | Question |
 | --- | --- |
@@ -125,107 +127,112 @@ These mechanisms answer different questions:
 | Idempotency key | Has this authenticated semantic command already completed? |
 | Unique constraint | Can two durable records with this identity coexist? |
 
-Do not use timestamps as optimistic revisions. Do not treat an idempotency key
-as permission to skip current authorization. An exact replay returns its
-retained result only after the current use case has repeated the checks required
-by its contract.
+Don't use timestamps as optimistic revisions. Don't treat an idempotency key as
+permission to skip the current authorization check. An exact replay returns
+its saved result only after the current use case has repeated the checks its
+contract requires.
 
-Retry only operations on an explicit safe allowlist. A transient database
-failure may occur after an unknown commit outcome, so an operation is not safe
-to retry merely because the SQL text looks simple. The retry layer remains
-nearest SQL; timing wraps the complete cache-miss path; and cache sits outside
-both so a hit does not pretend database work happened.
+Retry only operations on an explicit list of safe ones. A temporary database
+failure can happen after a commit whose outcome you can't know. So an
+operation isn't safe to retry just because its SQL looks simple.
 
-## Maintain Store Conformance
+The layers stack in a fixed order. Retry sits closest to SQL. Timing wraps the
+whole path taken on a cache miss. The cache sits outside both, so a cache hit
+doesn't look as if database work happened.
 
-Each Store contract’s reusable conformance suite is the executable statement
-of its portable behavior. Add cases for:
+## Keep Store conformance up to date
 
-- invalid input and exact absence semantics;
-- successful and no-op outcomes;
+Each Store contract has a reusable conformance suite. It is the runnable
+description of the contract's portable behavior. Add cases for:
+
+- invalid input, and exactly how a missing record is reported;
+- successful outcomes and outcomes that change nothing;
 - stale revisions and competing writers;
 - idempotent replay, conflict, and in-progress states;
-- required audit failure;
-- database-time expiry or lease fences; and
-- unknown-outcome or adapter error translation.
+- failure to write required audit;
+- expiry or lease fences based on database time;
+- unknown outcomes and translation of adapter errors.
 
-The PostgreSQL adapter must pass the same observable suite as any test or
-memory adapter. Add a PostgreSQL-specific race test where the guarantee depends
-on actual locking or constraints rather than a sequential fake.
+The PostgreSQL adapter must pass the same suite as any test or memory adapter.
+When a guarantee depends on real locking or constraints, which a sequential
+fake can't show, add a race test that runs against PostgreSQL.
 
-## Current Pre-Release Migration Rule
+## How migrations work before the first release
 
-The repository currently owns one rewritable schema baseline:
+For now, the repository has one schema baseline that you rewrite in place:
 
 ```text
 server/migrations/postgres/000001_baseline.up.sql
 server/migrations/postgres/000001_baseline.down.sql
 ```
 
-Before the first stable release, incompatible development schemas are not
-upgraded. Schema work updates that baseline and its round-trip tests; affected
-developer databases must be discarded and recreated. Do not add a chain of
-historical development migrations that pretends to be a supported upgrade
-contract.
+Until the first stable release, Proctor doesn't upgrade development schemas
+that are incompatible. Schema work changes that baseline and its round-trip
+tests. Developers with affected databases must throw them away and create them
+again. Don't add a chain of historical development migrations that looks like
+a supported upgrade path.
 
-Reset the repository-owned local environment with:
+Reset the local environment the repository manages with:
 
 ```sh
 make dev-reset
 ```
 
-The command deletes local developer containers and volumes. Preserve anything
-you need before running it.
+This deletes your local developer containers and volumes. Save anything you
+need before you run it.
 
 {/* TODO(migration-policy): Before the first stable release, define and
 publish the append-only migration, compatibility window, rollback, backup, and
 mixed-version deployment policy. Replace the rewritable-baseline instructions
 only after that production decision is accepted. */}
 
-## Run Focused PostgreSQL Tests
+## Run focused PostgreSQL tests
 
-Start with the affected package or conformance test, then run the repository
-target that provisions and removes its PostgreSQL dependency:
+Start with the affected package or conformance test. Then run the repository
+target, which starts PostgreSQL for the tests and removes it afterwards:
 
 ```sh
 make -C server integration-postgres
 ```
 
 The target covers Store conformance, migrations, application transactions,
-identity and authorization races, Jobs, files, mail, examinations, and other
-PostgreSQL-backed behavior. An invoked integration suite fails when PostgreSQL
-is unavailable rather than skipping.
+identity and authorization races, Jobs, files, mail, examinations and other
+behavior that relies on PostgreSQL. When you run an integration suite and
+PostgreSQL isn't available, the suite fails. It doesn't skip.
 
-The hermetic server gate remains required:
+You still need the hermetic server gate:
 
 ```sh
 make -C server check
 ```
 
-## Treat Caches as Adapters
+## Caches are adapters
 
 The Store read-through cache is a bounded local optimization. The application
-cache may use memory or Redis. Neither changes PostgreSQL authority.
+cache can use memory or Redis. Neither one changes PostgreSQL's role as the
+source of truth.
 
-Commit durable state first, then invalidate or publish. A missed invalidation
-must recover through bounded TTL, current reads, revalidation, or client
-resynchronization. Do not use cache presence as proof of authorization or
-cluster delivery as proof that another node observed a commit.
+Commit durable state first, then invalidate or publish. If an invalidation is
+missed, the system must recover through a bounded TTL, current reads,
+revalidation or client resynchronization. Don't treat a cache entry as proof of
+authorization. Don't treat cluster delivery as proof that another node has
+seen a commit.
 
-## Review Persistence Safety
+## Review persistence safety
 
-- Are lists, scans, retries, and retained fields bounded?
-- Does a named operation expose the complete atomic guarantee?
-- Are current authority and database-time conditions checked inside the
-  transaction where races matter?
-- Do constraints protect invariants even when two nodes act concurrently?
-- Are retries safe against unknown commit outcomes?
-- Do logs, metrics, errors, and audit data omit SQL text, secrets, answers,
-  content, and uncontrolled values?
-- Does the change pass migration round-trip and the affected conformance suite?
+- Are lists, scans, retries and saved fields bounded?
+- Does each named operation show the whole atomic guarantee?
+- Where races matter, are current authority and database-time conditions
+  checked inside the transaction?
+- Do constraints protect the rules even when two nodes act at the same time?
+- Are retries safe when the commit outcome is unknown?
+- Do logs, metrics, errors and audit data leave out SQL text, secrets,
+  answers, content and values nobody controls?
+- Does the change pass the migration round trip and the affected conformance
+  suite?
 
 ## Next
 
-- Coordinate [application behavior](./server-workflow.mdx).
+- Coordinate the [application behavior](./server-workflow.mdx).
 - Add or update the [HTTP contract](./http-and-openapi.mdx).
 - Choose the [integration and CI gates](./testing.mdx).

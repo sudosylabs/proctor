@@ -1,22 +1,24 @@
 ---
-title: HTTP Access and Authorization
-description: Diagnose Problem Details, request correlation, credentials, CSRF, Origin, assurance, authorization, and concealed resources.
+title: HTTP access and authorization
+description: Track down Problem Details errors, request IDs, credentials, CSRF, Origin, assurance, authorization and resources Proctor hides from you.
 audience: developer
 maturity: preview
 ---
 
-# HTTP Access and Authorization
+# HTTP access and authorization
 
-An HTTP failure is most useful when reduced to its status, stable error code,
-and request ID. Those three fields identify the class of failure without
-exposing a credential or private denial reason.
+An HTTP failure is easiest to work with once you have its status, its stable
+error code and its request ID. Those three fields tell you what kind of
+failure it is, without exposing a credential or the private reason a request
+was denied.
 
 <GovernedFigure asset="developer-request-diagnostic-path" />
 
-## Preserve the Safe Response Fields
+## Keep the safe fields from the response
 
-Proctor error responses use Problem Details. When reproducing a synthetic
-request, keep the headers separately and project the body to safe fields:
+Proctor's error responses use Problem Details. When you reproduce a request
+with test data, save the headers separately and keep only the safe fields of
+the body:
 
 ```sh
 curl --silent --show-error \
@@ -25,110 +27,115 @@ curl --silent --show-error \
   | jq '{type, title, status, code, request_id}'
 ```
 
-Replace the safe version path with the operation under test. Do not paste an
-`Authorization`, cookie, CSRF, invitation, or reset credential into a shell
-history or issue. Use only synthetic local credentials and redact the request
-before sharing it.
+Replace the version path, which is safe to call, with the operation you're
+testing. Don't paste an `Authorization`, cookie, CSRF, invitation or reset
+credential into your shell history or an issue. Use only local test
+credentials, and redact the request before you share it.
 
-The `X-Request-ID` response header and body `request_id` correlate the response
-with structured server records. The server generates the ID; a client-supplied
-`X-Request-ID` is ignored unless it comes from a configured trusted proxy. For the default local file log, search for one
-known identifier rather than publishing the entire file:
+The `X-Request-ID` response header and the `request_id` in the body link the
+response to the server's structured records. The server generates the ID. It
+ignores an `X-Request-ID` sent by a client, unless it comes from a configured
+trusted proxy. In the default local log file, search for the one ID you know
+rather than sharing the whole file:
 
 ```sh
 rg -n '"request_id":"<request-id>"' .build/dev/logs/local/server.log
 ```
 
-Unexpected failures deliberately return a generic `server.internal` problem. The
-correlated server record owns the internal cause; the public response does not.
+Unexpected failures return a generic `server.internal` problem on purpose. The
+internal cause is in the matching server record, not in the public response.
 
-## Interpret the Boundary That Rejected the Request
+## Work out which part rejected the request
 
-| Status | First question | Common owner |
+| Status | First question | Usually comes from |
 | --- | --- | --- |
-| `400` | Did decoding, validation, or CSRF proof fail? | HTTP boundary or request schema |
-| `401` | Is exactly one permitted credential present and valid? | Credential verification |
-| `403` | Does the principal meet assurance and current authority? | Route assurance or owning use case |
-| `404` | Is the route wrong, the resource absent, or denial intentionally concealed? | Router or resource authorization |
-| `409` | Did a revision, idempotency key, or state transition conflict? | Owning application use case |
-| `429` | Which bounded policy rejected excess attempts? | Authentication or request rate policy |
-| `500` | What does the correlated internal record report? | Server implementation or dependency |
-| `503` | Which required serving capability is unavailable? | Runtime readiness or application dependency |
+| `400` | Did decoding, validation or the CSRF check fail? | The HTTP layer or the request schema |
+| `401` | Is exactly one allowed credential present, and is it valid? | Credential verification |
+| `403` | Does the caller have the assurance and the current permission needed? | The route's assurance check or the use case that owns the action |
+| `404` | Is the route wrong, is the resource missing, or is a denial being hidden on purpose? | The router or resource authorization |
+| `409` | Did a revision, idempotency key or state change conflict? | The application use case that owns the action |
+| `429` | Which limit refused the extra attempts? | Authentication or request rate limits |
+| `500` | What does the matching internal record say? | The server code or a service it depends on |
+| `503` | Which service that Proctor needs to serve is unavailable? | Runtime readiness or an application dependency |
 
-The stable `code` is more precise than the localized title. Use it when writing
-a regression test.
+The stable `code` is more precise than the translated title. Use it when you
+write a regression test.
 
-## Diagnose Credential Selection
+## How Proctor picks a credential
 
-Each route declares the credential kinds and assurance it accepts. Proctor
-rejects ambiguous combinations rather than choosing one silently.
+Each route declares which kinds of credential it accepts and the assurance it
+needs. If a request carries an ambiguous mix, Proctor rejects it rather than
+quietly picking one.
 
 - Web Sessions use host-only, `HttpOnly`, `SameSite=Lax` cookies.
-- Unsafe cookie-authenticated requests also require the rotating signed
-  double-submit `X-Proctor-CSRF-Token` proof.
-- Web Session access credentials and Personal Access Tokens can use bearer
-  transport only when the route permits that credential kind. They do not use
-  the cookie CSRF proof.
-- Desktop Sessions use `Authorization: DPoP …` plus a newly signed `DPoP`
-  proof for the exact method, public target, access-credential hash, proof ID,
-  and current server nonce. A Desktop credential presented as `Bearer` is
-  invalid.
-- Mixed DPoP, bearer, and cookie credentials, or duplicate authentication
-  cookies, are rejected.
-- A Personal Access Token never silently gains interactive-session assurance.
+- A cookie request that changes data also needs the `X-Proctor-CSRF-Token`
+  header, a rotating, signed double-submit proof.
+- Web Session access credentials and Personal Access Tokens can be sent as a
+  bearer token only when the route allows that kind of credential. They don't
+  use the cookie CSRF proof.
+- Desktop Sessions use `Authorization: DPoP …` plus a freshly signed `DPoP`
+  proof. The proof covers the exact method, the public target, the hash of the
+  access credential, a proof ID and the server's current nonce. A Desktop
+  credential sent as `Bearer` is invalid.
+- Proctor rejects a mix of DPoP, bearer and cookie credentials, and duplicate
+  authentication cookies.
+- A Personal Access Token never gains the assurance of an interactive session
+  behind the scenes.
 
-In the browser network panel, inspect whether the request mode is cookie,
-bearer, or DPoP without copying the credential value. Confirm the route's
-declared requirement in the <a href="/api/">API reference</a>, then reproduce
-only that mode.
+In the browser's network panel, check whether the request uses a cookie, a
+bearer token or DPoP, without copying the credential value. Check what the
+route requires in the <a href="/api/">API reference</a>, then reproduce the
+request with only that kind of credential.
 
-For `authentication.dpop.use_nonce`, retain the replacement `DPoP-Nonce`
-response header and sign a new proof before a safe retry. Do not replay the
-rejected proof. For `authentication.dpop.replayed`, inspect proof-ID generation
-and shared retry code; each network attempt needs a unique signed proof even
+For `authentication.dpop.use_nonce`, keep the new `DPoP-Nonce` response header
+and sign a new proof before you retry safely. Don't resend the rejected proof.
+For `authentication.dpop.replayed`, look at how proof IDs are generated and at
+any shared retry code. Every network attempt needs its own signed proof, even
 when an idempotent operation reuses the same body and `Idempotency-Key`.
 
-## Separate Assurance From Permission
+## Assurance is not permission
 
-Authentication establishes an immutable principal: identity, credential kind,
-Session identity where applicable, and assurance. It does not grant permission.
-The owning application use case combines that principal with an exact action
-and resource, reads current authority from PostgreSQL, and records the
-security-sensitive decision where the contract requires it.
+Authentication establishes who is calling, and that doesn't change for the
+request: the identity, the kind of credential, the Session where there is one,
+and the assurance. It doesn't grant permission. The application use case that
+owns the action combines the caller with the exact action and resource, reads
+the current permissions from PostgreSQL, and records the security-sensitive
+decision where the contract asks for it.
 
-A request can therefore fail even when login is valid:
+So a request can fail even when the sign-in is valid:
 
-- the route requires MFA or recent authentication;
-- the Session was revoked after the credential was issued;
-- current role bindings no longer allow the action;
-- the exact resource is outside the principal's scope; or
-- denial is returned as `404` to avoid disclosing whether a sensitive resource
-  exists.
+- The route needs MFA or a recent sign-in.
+- The Session was revoked after the credential was issued.
+- The caller's current role bindings no longer allow the action.
+- The exact resource is outside the caller's scope.
+- Proctor returns the denial as `404` so that it doesn't reveal whether a
+  sensitive resource exists.
 
-Do not “fix” this by trusting role or membership claims cached in a token. Test
-the current authority and the exact resource selector.
+Don't "fix" this by trusting role or membership claims stored in a token. Test
+against the current permissions and the exact resource.
 
-## Check Origin and Browser Transport
+## Check the Origin and how the browser connects
 
-The configured public origin includes the exact scheme, host, and port. Cookie
-WebSocket handshakes must present that exact Origin. A valid cookie sent from a
-different development port is not the same security context.
+The configured public origin includes the exact scheme, host and port. A
+WebSocket handshake that uses a cookie must send exactly that Origin. A valid
+cookie sent from a different development port is a different security
+context.
 
-When an interaction works with a direct client but not in the browser, compare:
+When something works from a direct client but not in the browser, compare:
 
-1. the browser's visible origin;
-2. the configured Proctor public URL;
-3. the Vite proxy target when HMR is running;
-4. cookie versus bearer request mode; and
-5. the CSRF header on unsafe cookie requests.
+1. The origin the browser shows.
+2. The Proctor public URL you configured.
+3. The Vite proxy target, when HMR is running.
+4. Whether the request uses a cookie or a bearer token.
+5. The CSRF header on cookie requests that change data.
 
-Do not disable Origin or CSRF enforcement for convenience. Correct the local
-origin and proxy inputs instead.
+Don't turn off Origin or CSRF checks to make things easier. Fix the local
+origin and proxy settings instead.
 
-## Prove the Recovery
+## Confirm the fix
 
-Add or run the narrowest transport or application test that represents the
-rejection. If the public operation changed, regenerate and verify OpenAPI as
+Add or run the smallest transport or application test that covers the
+rejection. If the public operation changed, regenerate and check OpenAPI as
 described in [HTTP and OpenAPI](../http-and-openapi.mdx). Finish by repeating
-the exact synthetic request and confirming both its result and its correlated
-structured record.
+the exact test request, and check both its result and the matching structured
+record.

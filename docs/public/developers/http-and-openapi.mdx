@@ -1,6 +1,6 @@
 ---
 title: Change HTTP and OpenAPI
-description: Keep Proctor routes, DTOs, authentication requirements, public errors, authored YAML, generated JSON, and rendered API reference in agreement.
+description: Keep Proctor's routes, DTOs, authentication requirements, public errors, YAML sources, generated JSON and rendered API reference in agreement.
 audience: developer
 maturity: preview
 slug: /developers/http-and-openapi/
@@ -8,56 +8,58 @@ slug: /developers/http-and-openapi/
 
 # Change HTTP and OpenAPI
 
-Proctor's public API has one human authoring system and several verified
-consumers. Resource-oriented YAML modules under `server/openapi` own the wire
-contract and reference prose. The compiler produces `server/openapi.json`;
-runtime agreement tests, the webapp type generator, and the documentation site
-consume that reviewed artifact.
+Proctor's public API is written by hand in one place and read by several
+checked consumers. YAML modules under `server/openapi`, organized by resource,
+define the wire contract and the reference text. The compiler turns them into
+`server/openapi.json`. The runtime agreement tests, the webapp type generator
+and the documentation site all read that reviewed file.
 
-Never edit `server/openapi.json` or generated endpoint pages by hand.
+Never edit `server/openapi.json` or the generated endpoint pages by hand.
 
-## Find the Existing Owner
+## Find the file that owns the operation
 
-Search by path or stable operation ID:
+Search by path or by stable operation ID:
 
 ```sh
 rg -n '/api/v1/exams|operationId: createExam' server/openapi/fragments
 ```
 
-Choose the existing product-area directory and narrowest resource module.
-Create another descriptive YAML file only when no existing resource is a
-natural owner. Files are discovered recursively; there is no manifest to edit.
+Pick the existing product-area directory and the narrowest resource module.
+Only create another YAML file, with a descriptive name, when no existing
+resource is a natural home. Files are found recursively, so there is no
+manifest to update.
 
-Definitions used by one resource stay in that resource file. Promote a schema,
-parameter, request body, or response to a product-area `shared.yaml` only when
-several resources in that area consume it. The root `shared.yaml` is for
-genuinely cross-area definitions.
+Definitions that one resource uses stay in that resource's file. Move a schema,
+parameter, request body or response into the product area's `shared.yaml` only
+when several resources in that area use it. The root `shared.yaml` is for
+definitions that truly span product areas.
 
-## Implement One Complete Operation
+## Build one complete operation
 
-An operation change normally touches these surfaces together:
+Changing an operation usually means changing all of these together:
 
-1. **Application capability** — typed command or query and result.
-2. **HTTP resource** — strict request DTO, explicit domain mapping, typed
-   result, and allowlisted public errors.
-3. **Route catalog** — one explicit credential and assurance requirement.
-4. **OpenAPI source** — exact path, method, schema, prose, examples, and Proctor
-   extensions.
-5. **DTO registry** — register each new request or response DTO in the
-   DTO→schema registry; route, authentication, idempotency, public-error, and
-   DTO/schema agreement is derived.
-6. **Consumer adapters** — regenerate webapp API types or update authored API
-   recipes when the public contract requires it.
+1. **Application capability.** A typed command or query, and its result.
+2. **HTTP resource.** A strict request DTO, an explicit mapping into the
+   domain, a typed result, and an allowlist of public errors.
+3. **Route catalog.** One explicit credential and assurance requirement.
+4. **OpenAPI source.** The exact path, method, schema, prose, examples and
+   Proctor extensions.
+5. **DTO registry.** Register each new request or response DTO in the
+   DTO→schema registry. Agreement on routes, authentication, idempotency,
+   public errors and DTO schemas is worked out from it.
+6. **Consumer adapters.** Regenerate the webapp API types, or update the
+   hand-written API recipes, when the public contract requires it.
 
-The HTTP Routing Kernel, package `server/httpapi/route`, is sealed before
-serving. Resources in `server/httpapi` are written against its exported names
-and never reach behind them. Add the resource to the explicit production
-catalog in `server/httpapi/resources.go`; do not register routes through initialization,
-expose router internals, or add a generic response-writer escape hatch.
+The HTTP Routing Kernel, package `server/httpapi/route`, is sealed before the
+server starts serving. Resources in `server/httpapi` use its exported names and
+never reach past them. Add your resource to the explicit production catalog in
+`server/httpapi/resources.go`. Don't register routes during initialization,
+expose the router's internals, or add a general-purpose way to write raw
+responses.
 
-## Trace the Sealed Route Catalog
+## Follow the sealed route catalog
 
-The production route path is intentionally searchable:
+The production route path is easy to search for on purpose:
 
 ```text
 httpapi.New
@@ -70,107 +72,117 @@ httpapi.New
 
 The resource constructor declares each route as one `route.Endpoint` struct
 literal with named fields: `Method`, `Path`, `Auth`, `Errors`, and the
-operation in `Handle`. `Auth` is always written, including `route.AuthPublic`.
-The handler receives a `route.Request` and returns a `route.Result` or the
-application's error. A route sets
-`Idempotency`, `MaxBodyBytes`, or a named `Protocol` operation only when it
-needs one. It retains only its narrow application capability.
-It never retains the complete HTTP options, application facade, router, root
-Store, platform, or concrete adapter.
+operation in `Handle`. You always write `Auth`, even for `route.AuthPublic`.
 
-The catalog rejects duplicate normalized method/path shapes, unknown parameter
-kinds, invalid authentication requirements, and incomplete public-error
-mappings before the server can accept traffic. Every entry point—including
-the WebSocket upgrade—appears in this catalog.
+The handler receives a `route.Request` and returns either a `route.Result` or
+the application's error. A route sets `Idempotency`, `MaxBodyBytes` or a named
+`Protocol` operation only when it needs one.
 
-## Keep Handlers Mechanical
+A route keeps only the narrow application capability it uses. It never keeps
+the full HTTP options, the application facade, the router, the root Store, the
+platform or a concrete adapter.
 
-An ordinary handler should be easy to review in one pass:
+Before the server can accept traffic, the catalog rejects:
 
-1. decode a bounded request into a transport-owned DTO;
-2. parse canonical IDs and other wire values;
-3. map them explicitly into one typed application command or query;
-4. call one application capability with the immutable invocation; and
-5. map the safe result into a response DTO.
+- two routes with the same normalized method and path;
+- unknown parameter kinds;
+- invalid authentication requirements;
+- incomplete public-error mappings.
 
-Apply the body limit before decoding. JSON requests accept exactly one value,
-reject unknown fields and trailing content, and distinguish omission, zero,
-and explicit null with `Optional[T]` when the contract needs that distinction.
-Only a named bounded extension object may accept unknown keys.
+Every entry point appears in this catalog, including the WebSocket upgrade.
 
-Domain models never double as request or response DTOs. An innocent field
-added to a domain record must not silently become a new public field.
+## Keep handlers mechanical
 
-Ordinary operations return a typed status/body result and `error`. Redirects,
-uploads, downloads, and upgrade transfer use reviewed named result types. The
-WebSocket handshake is the sole raw-response exception because a successful
-upgrade transfers connection ownership to the sibling transport.
+A normal handler should be easy to review in one read:
 
-## Declare Credential and Assurance Separately
+1. Decode a request, within its size limit, into a DTO that the transport
+   owns.
+2. Parse the canonical IDs and other wire values.
+3. Map them explicitly into one typed application command or query.
+4. Call one application capability with the immutable invocation.
+5. Map the safe result into a response DTO.
 
-Every route declares what establishes its principal: public, authenticated,
-interactive Session, refresh credential, strong authentication, recent
-reauthentication, or a composed requirement. Administrative permission is not
-a route authentication class; the application use case evaluates it against
-the current resource.
+Apply the body limit before you decode. A JSON request must contain exactly
+one value. Proctor rejects unknown fields and trailing content. Use
+`Optional[T]` when the contract needs to tell apart a missing field, a zero
+value and an explicit null. Only a named extension object with its own limits
+may accept unknown keys.
 
-Cookie-authenticated unsafe requests also require the route’s CSRF proof.
-Bearer and cookie sources cannot be mixed and resolved by precedence. Keep the
-runtime declaration, OpenAPI `security`, and `x-proctor-auth` value in exact
-agreement.
+A domain model is never used as a request or response DTO. Adding a harmless
+field to a domain record must never quietly add a public field.
 
-## Map Expected Failures Exhaustively
+Ordinary operations return a typed status and body result, and an `error`.
+Redirects, uploads, downloads and upgrade transfer use reviewed, named result
+types. The WebSocket handshake is the only operation allowed to write a raw
+response, because a successful upgrade hands the connection over to the
+WebSocket transport.
 
-An expected application failure uses a stable dotted code with explicitly safe
-fields. It contains no HTTP status, localized prose, request ID, SQL detail, or
-stack trace. The transport maps only allowlisted codes to declared RFC 9457
-Problem Details responses.
+## Declare credentials and assurance separately
 
-Unknown or undeclared errors become a generic correlated internal failure and
-are logged once at the outer operational boundary. Never improvise a status
-from an error string. The derived route agreement proves each route's
-public-error set against OpenAPI.
+Every route declares what identifies its principal. The options are public,
+authenticated, interactive Session, refresh credential, strong authentication,
+recent reauthentication, or a combination of these. Administrative permission
+is not one of these classes. The application use case checks it against the
+current resource.
+
+An unsafe request authenticated by cookie also needs the route's CSRF proof.
+A request can't mix bearer and cookie credentials and have Proctor pick one by
+priority. Keep the runtime declaration, the OpenAPI `security` and the
+`x-proctor-auth` value in exact agreement.
+
+## Map every expected failure
+
+An expected application failure uses a stable dotted code and only fields
+that are explicitly safe. It contains no HTTP status, localized text, request
+ID, SQL detail or stack trace. The transport maps only allowlisted codes to
+the declared RFC 9457 Problem Details responses.
+
+Any unknown or undeclared error becomes a generic internal failure with a
+correlation ID. It is logged once, at the outer operational boundary. Never
+make up a status from an error string. The derived route agreement checks each
+route's public errors against OpenAPI.
 
 Read [authorization, errors, and audit](./server/authorization-errors-audit.mdx)
-before deciding whether a denied exact resource is safely forbidden or
-concealed as not found.
+before you decide whether to answer a denied request for a specific resource
+with forbidden, or to hide it as not found.
 
-## Design Collections and Cursors
+## Design collections and cursors
 
-New collections return an object with a non-null `items` array and optional
-`next_cursor`. Unbounded collections use keyset pagination, not growing
-offsets.
+A new collection returns an object with an `items` array that is never null,
+and an optional `next_cursor`. A collection without a size limit uses keyset
+pagination, not growing offsets.
 
-Cursors are opaque, versioned, bounded, and untrusted. Clients return them
-unchanged. The shared envelope validates canonical encoding and object shape;
-the resource owns the keyset fields, stable ordering, semantic validation, and
-any compatibility window. Never include a private Workspace path, credential,
-or unbounded filter in a cursor.
+Cursors are opaque, versioned, limited in size, and untrusted. Clients send
+them back unchanged. The shared envelope checks that a cursor is canonically
+encoded and has the right shape. The resource owns the keyset fields, a stable
+order, checking what the values mean, and any compatibility window. Never put
+a private Workspace path, a credential or an unbounded filter in a cursor.
 
-## Supply the Full Contract
+## Fill in the whole contract
 
-Every operation has exactly one public product-area tag and all of the
+Every operation has exactly one public product-area tag, and all of the
 following:
 
-- concise imperative `summary`;
-- substantive behavioral `description`;
-- explicit OpenAPI `security`;
-- `x-proctor-auth` matching the runtime route;
-- `x-proctor-error-codes` matching declared responses;
-- `x-proctor-idempotency` set to `none`, `optional`, or `required`;
-- a purpose description for every parameter and request body; and
-- a schema-valid synthetic request example for mutations, or an executable
-  `x-codeSamples` example for bodyless and multipart mutations.
+- a short `summary` in the imperative;
+- a `description` that explains the behavior in substance;
+- an explicit OpenAPI `security`;
+- `x-proctor-auth`, matching the runtime route;
+- `x-proctor-error-codes`, matching the declared responses;
+- `x-proctor-idempotency`, set to `none`, `optional` or `required`;
+- a description of the purpose of every parameter and request body;
+- for mutations, a synthetic request example that is valid against the
+  schema, or for bodyless and multipart mutations, an executable
+  `x-codeSamples` example.
 
 Public failures use RFC 9457 Problem Details and stable application codes.
-Unknown application errors fail closed; do not turn an undeclared internal
-error into an improvised public response.
+Unknown application errors fail closed. Don't turn an undeclared internal
+error into a public response you made up.
 
 Examples must never contain real Institutions, Users, Exams, answers,
-credentials, email addresses, object keys, hostnames, or local paths. Use
-clearly synthetic values and explicit credential placeholders.
+credentials, email addresses, object keys, hostnames or local paths. Use
+values that are obviously synthetic, and clear placeholders for credentials.
 
-## Build and Prove Agreement
+## Build and check agreement
 
 Regenerate the reviewed artifact:
 
@@ -178,19 +190,20 @@ Regenerate the reviewed artifact:
 make -C server openapi-build
 ```
 
-Review the `server/openapi.json` diff, then validate source-to-artifact drift:
+Review the diff in `server/openapi.json`. Then check that the source and the
+artifact haven't drifted apart:
 
 ```sh
 make -C server openapi-check
 ```
 
-Prove agreement with the registered HTTP surface:
+Check agreement with the registered HTTP routes:
 
 ```sh
 make -C server openapi-agreement
 ```
 
-For a reference-content or presentation change, also run:
+If you changed reference content or how it is presented, also run:
 
 ```sh
 cd docs/site
@@ -199,12 +212,12 @@ npm run test:openapi-audit
 npm run test:openapi-reference
 ```
 
-Finish with `make docs-check` when endpoint pages, product-area navigation, API
-recipes, or reference presentation changed.
+Finish with `make docs-check` when you changed endpoint pages, product-area
+navigation, API recipes or how the reference is presented.
 
-## Regenerate Browser Types
+## Regenerate the browser types
 
-When a changed schema is consumed by the hosted webapp:
+When the hosted webapp uses a schema you changed:
 
 ```sh
 cd webapp
@@ -212,22 +225,22 @@ npm run api:generate
 npm run api:check
 ```
 
-The generated TypeScript schema is a consumer of the reviewed OpenAPI artifact.
-Do not patch it to compensate for an incomplete source contract.
+The generated TypeScript schema is built from the reviewed OpenAPI artifact.
+Don't patch it to make up for a source contract that is incomplete.
 
-## Preserve Compatibility
+## Compatibility
 
-The current public API is namespaced under `/api/v1`, but Proctor has not yet
-made its first supported-release API commitment. During this pre-release
-period, a contract can change in place only when the server, reviewed OpenAPI
-artifact, agreement tests, and compatible clients move together. Do not create
-a parallel version solely to preserve an old development contract.
+The public API lives under `/api/v1`, but Proctor hasn't yet made its first
+API commitment for a supported release. Until then, you can change a contract
+in place, but only when the server, the reviewed OpenAPI artifact, the
+agreement tests and the clients that depend on it all change together. Don't
+create a parallel version only to keep an old development contract alive.
 
-After the first supported release, established meanings evolve additively
-unless an explicit compatibility decision introduces another version and
-migration path. Renaming a field, narrowing an accepted value, changing
-concealment behavior, or removing a public error may be breaking even when Go
-compilation succeeds.
+After the first supported release, an established meaning can only grow by
+adding to it. The exception is an explicit compatibility decision that
+introduces another version and a migration path. Renaming a field, narrowing
+the values accepted, changing what is hidden, or removing a public error can be
+a breaking change even when the Go code still compiles.
 
 {/* TODO(api-sdks): Decide whether generated client SDKs belong in this
 repository, which languages are supported, and how they are versioned before
@@ -235,7 +248,8 @@ adding SDK generation or publication instructions. */}
 
 ## Next
 
-- Coordinate the owning [server use case](./server-workflow.mdx).
-- Update the [hosted webapp](./webapp-workflow.mdx) when it consumes the
+- Coordinate with the [server use case](./server-workflow.mdx) that owns the
+  behavior.
+- Update the [hosted webapp](./webapp-workflow.mdx) when it uses the
   contract.
-- Select the complete [verification level](./testing.mdx).
+- Choose the right [level of testing](./testing.mdx).

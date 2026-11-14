@@ -1,64 +1,75 @@
 ---
-title: Change a Reusable Go Module
-description: Preserve the independent cache, mail, and VFS contracts while adding portable behavior or an adapter.
+title: Change a reusable Go module
+description: Add portable behavior or a new adapter to the cache, mail or VFS module without breaking the contract each module keeps on its own.
 audience: developer
 maturity: preview
 slug: /developers/reusable-modules/
 ---
 
-# Change a Reusable Go Module
+# Change a reusable Go module
 
-`packages/cache`, `packages/mail`, and `packages/vfs` are independent Go
-modules. Their exported contracts must remain useful without importing the
-Proctor server or assigning Proctor-specific meaning to portable operations.
+`packages/cache`, `packages/mail` and `packages/vfs` are separate Go modules.
+Their exported contracts must stay useful to a program that doesn't import the
+Proctor server. They must not give portable operations a meaning that only
+makes sense in Proctor.
 
-## Choose the Correct Module
+## Pick the right module
 
 ### Cache
 
-The cache module owns encoded memory and Redis behavior, key validation, TTL
-normalization, conditional writes, counters, capabilities, and reusable backend
-conformance. It does not own durable state, authorization, cache eligibility,
-namespaces, broad prefix deletion, or distributed locking.
+The cache module covers encoded memory and Redis caching, key validation, TTL
+normalization, conditional writes, counters, capabilities, and a conformance
+suite that every backend reuses.
+
+It doesn't cover durable state, authorization, deciding what may be cached,
+namespaces, deleting by broad prefix, or distributed locking.
 
 [Read the cache contract](https://github.com/sudosylabs/Proctor/blob/main/packages/cache/README.md).
 
 ### Mail
 
-The mail module owns transport-neutral messages, validation, MIME composition,
-SMTP security, bounded delivery, and portable delivery-outcome classification.
-It does not own Proctor templates, recipients, localization, queueing, retry,
+The mail module covers messages that don't depend on a transport, validation,
+MIME composition, SMTP security, delivery with limits, and a portable way to
+classify delivery outcomes.
+
+It doesn't cover Proctor templates, recipients, localization, queueing, retry,
 rate limits, or provider webhooks.
 
 [Read the mail contract](https://github.com/sudosylabs/Proctor/blob/main/packages/mail/README.md).
 
 ### VFS
 
-The VFS module owns portable streaming file operations, normalized relative
+The VFS module covers portable streaming file operations, normalized relative
 paths, opaque conditional revisions, range reads, listing, capabilities, and
-memory, local, and S3-compatible backends. It does not own Users, Exams,
-authorization, retention, metadata, object keys, or workspace policy.
+the memory, local and S3-compatible backends.
+
+It doesn't cover Users, Exams, authorization, retention, metadata, object keys,
+or Workspace policy.
 
 [Read the VFS contract](https://github.com/sudosylabs/Proctor/blob/main/packages/vfs/README.md).
 
-## Change the Contract Safely
+## Change the contract safely
 
-1. State the portable behavior and explicit exclusions in the module README.
-2. Update the core interface only when every conforming backend can implement
-   the guarantee. Use a narrow optional capability when support is not
-   universal.
-3. Add behavior to the shared conformance suite before or with adapter work.
-4. Keep errors portable through `errors.Is` or `errors.As`.
-5. Prove cancellation, bounds, ownership, and concurrency semantics—not only
-   the happy path.
-6. Update the server consumer separately through its narrow inward contract.
+1. Describe the portable behavior, and what is explicitly out of scope, in the
+   module README.
+2. Change the core interface only when every conforming backend can provide
+   the guarantee. When only some backends can, add a narrow optional
+   capability instead.
+3. Add the behavior to the shared conformance suite before the adapter work,
+   or with it.
+4. Keep errors portable, so callers can match them with `errors.Is` or
+   `errors.As`.
+5. Test cancellation, limits, ownership and concurrency, not only the happy
+   path.
+6. Update the server's use of the module separately, through the server's own
+   narrow contract.
 
-An adapter owns protocol mechanics. The application using the adapter owns
-policy. For example, the Redis adapter may implement atomic counter behavior;
-the Proctor server decides what is counted and whether an unavailable counter
-must fail closed.
+An adapter owns the protocol details. The application that uses it owns the
+policy. For example, the Redis adapter can implement an atomic counter, but the
+Proctor server decides what to count, and whether it must fail closed when the
+counter is unavailable.
 
-## Run Each Module Independently
+## Run each module on its own
 
 For cache:
 
@@ -84,53 +95,55 @@ GOWORK=off go vet ./...
 GOWORK=off go build ./...
 ```
 
-The S3-compatible VFS conformance and server file-content integration are
-owned by the server integration target:
+The S3-compatible VFS conformance tests and the server's file content
+integration tests run from the server integration target:
 
 ```sh
 make -C server integration-s3
 ```
 
-After any reusable-module or cross-module change, run all four modules outside
-workspace assistance:
+After you change a reusable module, or anything that spans modules, run all
+four modules without the Go workspace:
 
 ```sh
 make independent-modules
 ```
 
-## Add a Backend
+## Add a backend
 
 A new backend must:
 
-- depend only on the portable module contract and its implementation library;
-- report optional capabilities explicitly;
+- depend only on the module's portable contract and the library it wraps;
+- report its optional capabilities explicitly;
 - pass the shared conformance suite;
-- document configuration and ownership of any supplied client;
-- avoid logging values, credentials, message content, file content, or unsafe
-  backend error details; and
-- retain cancellation, size, timeout, and cleanup behavior under failure.
+- document its configuration, and who owns any client passed into it;
+- never log values, credentials, message content, file content, or backend
+  error details that aren't safe to show;
+- keep its cancellation, size, timeout and cleanup behavior when something
+  fails.
 
-Do not add an adapter solely for symmetry. There must be a concrete consumer
-and a deployment or test path that exercises it.
+Don't add an adapter only so the set looks complete. It needs a real consumer,
+and a deployment or test that actually runs it.
 
-## Protect the License Boundary
+## Respect the license boundary
 
-Reusable modules are Apache-2.0. The combined server and webapp are
-AGPL-3.0-only. Do not move server implementation into a reusable module or copy
-AGPL, source-available, or commercial upstream code into `packages`.
+The reusable modules are licensed Apache-2.0. The server and webapp together
+are AGPL-3.0-only. Don't move server code into a reusable module. Don't copy
+AGPL, source-available or commercial upstream code into `packages`.
 
-Direct or substantial upstream adaptation must retain the required notices and
-record the exact repository, revision, path, license, and nature of the
-adaptation. A conceptual pattern is not permission to copy expression.
+If you adapt upstream code directly or substantially, keep the notices it
+requires. Record the exact repository, revision, path and license, and what
+kind of adaptation you made. Borrowing an idea is not permission to copy how
+it was written.
 
 ## Compatibility
 
-All three modules are pre-v1. Exported APIs may still change, but compatibility
-cost is real: update every repository consumer, conformance suite, example, and
-README in the same coherent slice.
+All three modules are still before v1, so their exported APIs can change. Each
+change still has a cost. Update every consumer in the repository, the
+conformance suite, the examples and the README in the same change.
 
 ## Next
 
-- Understand the [server consumption boundary](./server-workflow.mdx).
-- Run the complete [testing ladder](./testing.mdx).
-- Use the [contribution checklist](./contribution-checklist.mdx).
+- See how the [server uses these modules](./server-workflow.mdx).
+- Run the full [testing ladder](./testing.mdx).
+- Work through the [contribution checklist](./contribution-checklist.mdx).

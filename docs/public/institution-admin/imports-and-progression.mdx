@@ -1,82 +1,102 @@
 ---
-title: Run Imports and Student Progression
-description: Review immutable CSV previews, commit independent rows, cancel safely, and retain membership history during transfer or progression.
+title: Run imports and student progression
+description: Review a CSV preview that can't change, commit rows independently, cancel safely, and keep membership history when students transfer or progress.
 audience: institution-administrator
 maturity: preview
 ---
 
 import Link from '@docusaurus/Link';
 
-# Run Imports and Student Progression
+# Run imports and student progression
 
-Use bounded JSON batches for at most 200 typed items. Use CSV imports for
-larger file-driven work. Neither surface is an arbitrary command interpreter:
-identity attachment, password assignment, MFA removal, permanent deletion, and
-bulk User merge remain outside these workflows.
+For up to 200 typed items, send a JSON batch. For larger work that comes from a
+file, use a CSV import. Neither one runs arbitrary commands. Linking identities,
+setting passwords, removing MFA, permanently deleting data and merging Users in
+bulk all stay outside these workflows.
 
 <GovernedFigure asset="onboarding-import-timeline" />
 
-## Select Scope Outside the File
+## Choose the scope in the request, not in the file
 
-Student Class and teacher Academic Unit imports select their exact target in
-the request, not in a user-editable row. Institution-wide onboarding may use
-canonical target names defined by the schema. Existing-User academic
-administration selects one Institution, Unit, or Class scope outside the file;
-no row can escape it.
+Student Class imports and teacher Academic Unit imports name their exact target
+in the request, not in a row someone can edit. Institution-wide onboarding may
+use the target names that its schema defines. Administration of existing Users
+picks one Institution, Unit or Class scope outside the file, and no row can go
+beyond it.
 
-The initial CSV boundary is 10 MiB and 50,000 data rows, UTF-8 with optional
-BOM, RFC 4180-compatible quoting, unique bounded headers and fields, and no NUL
-or invalid Unicode. Unknown columns are ignored only as documented and their
-names are surfaced once in preview so misspellings are visible.
+A CSV file must meet these limits:
 
-## Treat Preview as the Review Boundary
+- at most 10 MiB and 50,000 data rows;
+- UTF-8, with an optional BOM;
+- quoting compatible with RFC 4180;
+- unique headers, and headers and fields within their size limits;
+- no NUL characters and no invalid Unicode.
 
-Upload creates a validation Job and performs no account, membership, Role, or
-delivery mutation. Complete validation resolves canonical names to exact IDs
-and revisions, normalizes rows, deletes the original CSV bytes, and freezes an
-immutable content-digested preview.
+Proctor ignores unknown columns only where the import documents it. It lists
+their names once in the preview, so you can spot a misspelled header.
 
-Review:
+## Review the preview before anything changes
 
-- scope, mode, digest, total rows, unknown headers, and validation counts;
+Uploading a file starts a validation Job. It does not change any account,
+membership or Role, and it sends nothing. When validation finishes, Proctor:
+
+- turns names into exact IDs and revisions;
+- normalizes the rows;
+- deletes the original CSV bytes;
+- freezes a preview that can't change, identified by a digest of its content.
+
+In the preview, review:
+
+- the scope, mode, digest, total rows, unknown headers and validation counts;
 - every invalid or duplicate row;
-- resolved User, relationship, target and Role revisions; and
-- effective bounds and explicit no-op outcomes.
+- the resolved Users, relationships, targets and Role revisions;
+- the dates each grant is valid for, and the rows that will change nothing.
 
-Choose `require_all_valid` to refuse commit when any preview row is invalid, or
-`valid_rows_only` to skip invalid preview rows. Runtime state can still change
-after preview, so execution reauthorizes and revalidates each row.
+Then choose how to commit. `require_all_valid` refuses to commit if any row in
+the preview is invalid. `valid_rows_only` skips the invalid rows. Things can
+still change after the preview, so Proctor checks permissions and validity
+again for each row as it runs.
 
-## Understand Partial Completion
+## Expect partial completion
 
-Each row commits as one named atomic aggregate and rows remain independent.
-A later conflict yields `completed_with_errors`; it does not roll back earlier
-successful rows. Cancellation stops new rows and lets a row already committing
-finish. It never rolls back completed work.
+Each row commits on its own, as one complete unit, and rows don't depend on
+each other. If a later row hits a conflict, the import ends as
+`completed_with_errors`. Rows that already succeeded are not rolled back.
 
-Recovery is explicit compensation: inspect the retained report, decide which
-successful effects should be reversed, and invoke their normal end, revoke, or
-replacement use cases with fresh authorization. Do not rerun the entire file
-under new row keys merely to hide partial results.
+Cancelling stops new rows from starting and lets a row that is already
+committing finish. It never rolls back finished work.
 
-Reports retain source row number, safe reference, normalized operation, status,
-created IDs, and public error code for the bounded retention window. Download
-reauthorizes and escapes spreadsheet formulas. Generic Job views, logs, metrics,
-and audit contain safe IDs, counts, timing, and closed codes—not full rows or
-recipient lists.
+To recover, you undo effects yourself:
 
-## Transfer or Progress Students
+1. read the report that Proctor keeps;
+2. decide which successful effects to reverse;
+3. reverse each one through its normal end, revoke or replace operation, which
+   checks your permissions again.
 
-Student progression always names exact source and destination Periods and
-Classes plus an effective instant. Dry-run every student conflict before
-commit.
+Don't run the whole file again under new row keys just to hide partial
+results.
 
-- A same-Period transfer atomically ends and replaces the active Class
-  membership.
-- Progression into another Period creates new history without rewriting the
-  old membership.
-- Every student commits independently; failures remain in the report.
-- A student may have at most one active Class membership in an Academic Period.
+For the limited time it keeps them, each report has the source row number, a
+safe reference, the normalized operation, the status, the IDs created and the
+public error code. Downloading a report checks your permissions again and
+escapes spreadsheet formulas.
 
-For exact request and Job transitions, follow
+General Job views, logs, metrics and audit hold only safe IDs, counts, timing
+and codes from a fixed list. They never hold full rows or lists of recipients.
+
+## Transfer or progress students
+
+Progression always names the exact source and destination Periods and Classes,
+and the moment it takes effect. Do a dry run to see every student conflict
+before you commit.
+
+- A transfer within the same Period ends the active Class membership and
+  replaces it, in one step.
+- Progressing into another Period adds new history. The old membership is not
+  rewritten.
+- Each student commits on their own. Failures stay in the report.
+- A student can have at most one active Class membership in an Academic
+  Period.
+
+For the exact requests and Job states, follow
 <Link to="/api/recipes/onboarding-imports-and-progression">Onboarding Imports and Progression</Link>.

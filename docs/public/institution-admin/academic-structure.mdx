@@ -1,88 +1,94 @@
 ---
-title: Build the Academic Structure
-description: Model Academic Units, Programmes, Programme Levels, Academic Periods, and Classes with exact ownership and retained history.
+title: Build the academic structure
+description: Set up Academic Units, Programmes, Programme Levels, Academic Periods and Classes, with clear ownership and history that is kept.
 audience: institution-administrator
 maturity: preview
 ---
 
 import Link from '@docusaurus/Link';
 
-# Build the Academic Structure
+# Build the academic structure
 
-Proctor models one Institution. Its Academic Units can represent faculties,
-schools, departments, or another hierarchy chosen by the Institution; those
-presentation names do not change authorization semantics.
+Proctor models one Institution. Its Academic Units can stand for faculties,
+schools, departments or any other hierarchy your Institution uses. What you
+call them is only presentation. The names don't change how permissions work.
 
 <GovernedFigure asset="academic-structure-ownership-map" />
 
-## Create in Ownership Order
+## Create things in ownership order
 
-1. Create root <Term id="academic-unit">Academic Units</Term>, then children.
-   A unit has at most one parent and cycles are forbidden.
-2. Create each <Term id="programme">Programme</Term> under exactly one Academic
-   Unit.
-3. Create <Term id="programme-level">Programme Levels</Term> under the owning
-   Programme.
-4. Create <Term id="academic-period">Academic Periods</Term> at Institution or
-   Academic Unit scope.
-5. Create each <Term id="class">Class</Term> under one Programme Level and name
-   exactly one applicable Academic Period.
+1. Create the top-level <Term id="academic-unit">Academic Units</Term>, then
+   their children. A Unit has at most one parent, and a Unit can't end up as
+   its own ancestor.
+2. Create each <Term id="programme">Programme</Term> under exactly one
+   Academic Unit.
+3. Create <Term id="programme-level">Programme Levels</Term> under the
+   Programme they belong to.
+4. Create <Term id="academic-period">Academic Periods</Term> at the
+   Institution or at an Academic Unit.
+5. Create each <Term id="class">Class</Term> under one Programme Level, and
+   name exactly one Academic Period that applies to it.
 
-An Institution-owned Period applies everywhere. An Academic-Unit-owned Period
-applies to that Unit and its descendants. It does not override another Period,
-and dates may overlap. Proctor never infers a global “current year”; every
-Class, progression, and transfer names the exact Period involved.
+A Period owned by the Institution applies everywhere. A Period owned by an
+Academic Unit applies to that Unit and everything below it. Neither overrides
+another Period, and their dates may overlap.
 
-## Choose Stable Canonical Names
+Proctor never guesses a "current year". Every Class, progression and transfer
+names the exact Period it uses.
 
-`name` is the stable machine-facing canonical name within the owning scope.
-`display_name` is reader-facing presentation. Use the description to explain
-purpose, not to encode hierarchy or permission. IDs are opaque and contain no
-ordering or scope meaning.
+## Choose names that won't need to change
 
-Before creating a Class, verify the selected Period is applicable to the
-Programme's Academic Unit. A failed applicability check is a model error to
-correct, not a reason to create a duplicate Period at another scope.
+`name` is the stable name that software uses. It must be unique within the
+owner. `display_name` is what people read. Use the description to explain what
+something is for, not to encode its place in the hierarchy or any permission.
+IDs are opaque. They say nothing about order or scope.
 
-## Reparent Deliberately
+Before you create a Class, check that the Period you picked applies to the
+Programme's Academic Unit. If it doesn't, the structure has a mistake to fix.
+Don't work around it by creating a duplicate Period somewhere else.
 
-Moving an Academic Unit changes the lineage through which Programme, Class,
-Period applicability, and scoped authorization are resolved. The server checks
-both the old and new sides and rejects cycles, cross-Institution moves, or
-stale dependencies atomically. Before moving a Unit:
+## Move a Unit with care
 
-- inventory child Units, Programmes, unit-owned Periods, active memberships,
-  and Role Bindings;
-- determine which inherited authorities will gain or lose reach;
-- perform the update once; and
-- inspect the resulting hierarchy and audit event before continuing.
+Moving an Academic Unit to a new parent changes the chain Proctor follows to
+work out Programmes, Classes, which Periods apply, and scoped permissions. The
+server checks both the old and the new position in one step. It rejects a move
+that would create a loop, cross into another Institution, or rely on
+out-of-date dependencies.
 
-## Archive; Do Not Describe It as Deletion
+Before you move a Unit:
 
-Archive retains identifiers, lineage, timestamps, and audit history. It does
-not cascade through active descendants or relationships.
+- list its child Units, Programmes, Periods it owns, active memberships and
+  Role Bindings;
+- work out which inherited permissions will reach further or less far;
+- make the change once;
+- check the resulting hierarchy and the audit event before you carry on.
 
-| Resource | Typical blockers to resolve first |
+## Archive, don't delete
+
+Archiving keeps the IDs, the place in the hierarchy, the timestamps and the
+audit history. It does not cascade to active children or relationships, so you
+resolve those first.
+
+| Resource | What usually has to be resolved first |
 | --- | --- |
-| Academic Unit | active descendants, Programmes, memberships, or authority dependencies |
-| Programme | active Programme Levels or Classes below those levels |
-| Programme Level | active Classes |
-| Academic Period | Classes or memberships that still rely on the exact Period |
-| Class | active membership or examination dependencies |
+| Academic Unit | Active child Units, Programmes, memberships, or permissions that depend on it |
+| Programme | Active Programme Levels, or Classes under those levels |
+| Programme Level | Active Classes |
+| Academic Period | Classes or memberships that still use this exact Period |
+| Class | Active memberships or exam dependencies |
 
-Resolve blockers through their owning lifecycle. Never erase a parent to
-avoid ending a membership or Role Binding. Historic Classes and Periods remain
-useful audit context after archive.
+Resolve each blocker through its own lifecycle. Never remove a parent just to
+avoid ending a membership or a Role Binding. Old Classes and Periods stay
+useful context for audit after you archive them.
 
-## Verify Every Structural Task
+## Check every structural change
 
-After a create, update, reparent, or archive:
+After you create, update, move or archive something:
 
-1. read the exact resource through its canonical endpoint;
-2. list its immediate owner or children rather than reconstructing a tree from
-   names;
-3. confirm the caller's expected scope still exposes it; and
-4. inspect the bounded audit event for action, resource, scope, and outcome.
+1. read the resource itself through its own endpoint;
+2. list its direct owner or children, rather than rebuilding a tree from names;
+3. confirm it is still visible at the scope you expect;
+4. check the audit event for the action, resource, scope and outcome.
 
-For request bodies, idempotency behavior, and conflict recovery, follow the
-<Link to="/api/recipes/academic-structure">Academic Structure API recipe</Link>.
+For request bodies, how retries work and how to recover from conflicts, follow
+the <Link to="/api/recipes/academic-structure">Academic Structure API recipe</Link>.

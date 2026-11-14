@@ -1,29 +1,35 @@
 ---
-title: Develop the Hosted Webapp
-description: Build an accessible browser feature without duplicating route, API, localization, authentication, or design-system authority.
+title: Develop the hosted webapp
+description: Build an accessible browser feature that uses the server's routes, API shapes, messages, sign-in rules and design system instead of redefining them.
 audience: developer
 maturity: preview
 slug: /developers/webapp-workflow/
 ---
 
-# Develop the Hosted Webapp
+# Develop the hosted webapp
 
-The private `webapp` package builds the React and Vite application served by
-Proctor. Its current product surface is the bounded family of access and
-onboarding pages: setup, sign-in, registration, Invitation acceptance,
-password recovery, email verification, Desktop authorization, provider
-connection, and terminal Session confirmation.
+The private `webapp` package builds the React and Vite application that
+Proctor serves. Today it covers a fixed set of access and onboarding pages:
 
-The browser owns presentation and interaction. It does not become an
-alternative authority for routes, HTTP shapes, localization messages,
-authentication policy, or durable application state. A complete feature
-therefore consumes generated adapters, classifies remote outcomes into a small
-feature state, and renders that state through components whose contracts
-already match the behavior.
+- setup
+- sign-in
+- registration
+- Invitation acceptance
+- password recovery
+- email verification
+- Desktop authorization
+- provider connection
+- terminal Session confirmation
+
+The browser owns presentation and interaction. It doesn't get to redefine
+routes, HTTP shapes, localization messages, authentication policy or durable
+application state. So a complete feature uses the generated adapters, sorts
+what the server returns into a small set of feature states, and renders each
+state with components whose contracts already fit the behavior.
 
 <GovernedFigure asset="developer-webapp-feature-ownership" />
 
-## Follow the Manual
+## Chapters in this manual
 
 | If you need to understand… | Read… |
 | --- | --- |
@@ -35,7 +41,7 @@ already match the behavior.
 | How one implemented password-reset route crosses every browser boundary | [Password-reset vertical slice](./webapp/password-reset-slice.mdx) |
 | What to check before requesting review | [Webapp review checklists](./webapp/review-checklists.mdx) |
 
-## Place Each Decision Once
+## Make each decision in one place
 
 | Decision | Owner |
 | --- | --- |
@@ -52,15 +58,15 @@ already match the behavior.
 | Reset and document defaults | `webapp/src/styles` |
 | Feature and component styling | Colocated CSS Modules |
 
-When two rows appear to own the same choice, stop and resolve the duplication.
-For example, OpenAPI says which error codes an operation may return. The
-feature action decides which of those codes produce the same safe visible
-outcome. A presentation component receives that outcome; it does not compare
-HTTP statuses or Problem Details itself.
+If two rows seem to own the same choice, stop and remove the duplicate. For
+example, OpenAPI lists the error codes an operation can return. The feature's
+API action decides which of those codes lead to the same safe outcome on
+screen. The presentation component receives that outcome. It never checks HTTP
+statuses or Problem Details itself.
 
-## Work from States, Not from Screens
+## Start from states, not screens
 
-Before changing code, write a feature map:
+Before you change any code, write a feature map:
 
 ~~~text
 Purpose:          what task can the person complete?
@@ -76,42 +82,45 @@ Components:       which existing contracts apply, and what remains local?
 Evidence:         which unit and browser tests prove behavior and presentation?
 ~~~
 
-Do not start with a page mockup and then force every state into it. A loading
-view may have no form. A terminal result may remove the invoking action and
-move focus to a replacement heading. An ordinary submission failure should
-usually preserve the fields, action position, and focus.
+Don't start from a page mockup and then squeeze every state into it. A loading
+view might have no form at all. A terminal result might remove the button that
+triggered it and move focus to a heading that replaces it. An ordinary failed
+submission should usually keep the field values, the position of the action
+and the focus where they were.
 
-## Preserve the Browser Trust Boundary
+## Keep the browser's trust boundary
 
-The hosted webapp always addresses the Installation that served it. It has no
-remote API-base option. Cookie credentials remain same-origin, unsafe methods
-add the CSRF header when the server cookie is present, and sensitive fragment
-credentials are removed from browser history before React renders.
+The hosted webapp always talks to the Installation that served it. There is no
+setting to point it at a different API. Cookie credentials stay same-origin.
+Unsafe methods add the CSRF header when the server's cookie is present.
+Sensitive credentials in the URL fragment are removed from browser history
+before React renders.
 
-The browser may improve guidance, but the server still validates input,
-authenticates the principal, authorizes actions, and commits durable state.
-Never render arbitrary server error text, infer permission from a hidden
-control, or treat browser storage as an authority.
+The browser can give better guidance, but the server still checks input,
+authenticates the principal, authorizes actions and commits durable state.
+Never render arbitrary error text from the server. Never assume a permission
+because a control is hidden. Never treat browser storage as a source of truth.
 
-## Know the Live Authorities
+## Where the details live
 
-This manual explains contributor tasks rather than duplicating every route or
-component. During implementation, read:
+This manual explains contributor tasks. It doesn't repeat every route or
+component. While you work, read:
 
 - the [webapp package guide](https://github.com/sudosylabs/Proctor/blob/main/webapp/README.md);
 - the [product design-system contract](https://github.com/sudosylabs/Proctor/blob/main/webapp/DESIGN_SYSTEM.md);
-- the feature and component `CONTRACT.md` files beside the changed code;
-- the reviewed OpenAPI YAML for public HTTP behavior;
-- the server localization catalog for visible messages; and
-- current unit and Playwright tests for executable evidence.
+- the `CONTRACT.md` files next to the features and components you change;
+- the reviewed OpenAPI YAML, for public HTTP behavior;
+- the server localization catalog, for visible messages;
+- the current unit and Playwright tests, for behavior you can run.
 
-## First Change Route
+## Your first change
 
 Read the [password-reset vertical slice](./webapp/password-reset-slice.mdx)
-before implementing another hosted page. It demonstrates credential-safe
-bootstrap, generated routing and API types, feature-owned result mapping,
-field and form errors, terminal replacement, localization, shared components,
-and browser evidence without presenting a copy-and-paste page template.
+before you build another hosted page. It shows bootstrap that keeps credentials
+safe, generated routing and API types, a feature that maps its own results,
+field and form errors, a terminal result that replaces the page, localization,
+shared components and browser evidence. It is an explanation, not a page
+template to copy.
 
 Finish with the [webapp review checklists](./webapp/review-checklists.mdx) and
-the repository [verification ladder](./testing.mdx).
+the repository [testing ladder](./testing.mdx).

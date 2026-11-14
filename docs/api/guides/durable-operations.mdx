@@ -1,6 +1,6 @@
 ---
-title: Durable Jobs and Mail
-description: Inspect and control Proctor's durable background work and mail delivery without exposing payloads or credentials.
+title: Durable Jobs and mail
+description: Inspect and control Proctor's background work and mail delivery without exposing payloads or credentials.
 audience: api-consumer
 maturity: preview
 sidebar_position: 8
@@ -8,140 +8,168 @@ sidebar_position: 8
 
 import Link from '@docusaurus/Link';
 
-# Durable Jobs and Mail
+# Durable Jobs and mail
 
-Proctor commits authoritative application state before scheduling background
-effects. A successful command can therefore be complete even while its Job or
-mail delivery is still queued. Use these administration routes to observe and
-control durable work; do not infer application state from a worker process or
+Proctor commits the application's state before it schedules any background
+effects. So a command can have succeeded while its Job or its mail is still
+queued. Use the administration routes on this page to watch and control that
+work. Don't judge application state by looking at a worker process or an
 SMTP connection.
 
-## Understand the Durable Boundary
+## What makes work durable
 
-A Job is a finite, versioned command whose descriptor closes retry policy,
-timeout, concurrency, lease, checkpoint, cancellation, visibility, and
-retention. PostgreSQL owns queue state and claiming. A worker lease and claim
-token fence stale executors; handler logic remains idempotent because process
-loss can repeat work.
+A Job is a finite, versioned command. Its descriptor fixes the retry policy,
+timeout, concurrency, lease, checkpoints, cancellation, visibility and
+retention. PostgreSQL holds the queue and decides which worker claims each
+Job. A worker's lease and claim token stop an out-of-date worker from acting.
+Handlers are still written to be idempotent, because a lost process can mean
+the same work runs again.
 
-The business transaction commits domain state and Job intent together when the
-effect must survive process loss. Ordinary realtime, cache, and cluster effects
-do not become Jobs: clients recover those best-effort hints by refetching
-authority.
+When an effect must survive a lost process, the same transaction commits the
+domain change and the intent to run the Job. Ordinary realtime, cache and
+cluster effects don't become Jobs. Clients make up for any they miss by
+reading the resource again.
 
-Mail has two durable layers. The occurrence records why the application needs a
-message and freezes its semantic recipient set. The encrypted Delivery owns the
-rendered transport attempt, stable Message-ID, retry, cancellation, expiry, and
-public failure. SMTP acceptance means only that the selected relay accepted the
-message; it does not prove inbox delivery.
+Mail is durable in two layers:
 
-## Inspect Durable Jobs
+- The occurrence records why the application needs to send a message, and
+  fixes the set of people it is for.
+- The encrypted Delivery covers sending the rendered message: its stable
+  Message-ID, retries, cancellation, expiry and public failure.
 
-<Link to="/api/reference/list-jobs">List Jobs</Link> returns a bounded,
-cursor-paginated operational projection. Filter by documented type or state,
-then use <Link to="/api/reference/get-job">Get Job</Link> for the authoritative
-current record and <Link to="/api/reference/list-job-attempts">List Job Attempts</Link>
-for bounded execution history.
+When SMTP accepts a message, it only means the chosen relay took it. It
+doesn't prove the message reached an inbox.
 
-The projections deliberately omit raw descriptors, credentials, student data,
-and unbounded worker errors. Store the stable Job ID and public failure code in
-client telemetry; do not copy internal worker state into another source of
-truth.
+## Inspect Jobs
 
-Read attempts chronologically. A claim can end because the handler completed,
-failed, timed out, lost its lease, observed cancellation, or relinquished work
-to a compatible node. The current Job record decides whether more work remains;
-the last attempt alone does not.
+<Link to="/api/reference/list-jobs">List Jobs</Link> returns an operational
+view of Jobs, in pages with a cursor. Filter by a documented type or state.
+Then use <Link to="/api/reference/get-job">Get Job</Link> for the current
+record, which is the one to trust, and
+<Link to="/api/reference/list-job-attempts">List Job Attempts</Link> for a
+limited history of each run.
 
-For checkpointed work, progress is durable domain progress—not merely the
-number of loop iterations. Sitting closure, onboarding imports, progression,
-mail expansion, and key rotation may resume from a stable cursor after process
-loss. A reserved-but-not-checkpointed batch can remain intentionally consumed
-to preserve a hard work cap.
+These views deliberately leave out raw descriptors, credentials, student
+data and worker errors of unlimited length. Store the stable Job ID and the
+public failure code in your client telemetry. Don't copy internal worker
+state into another system and treat it as the truth.
 
-## Cancel or Retry Intentionally
+Read attempts in order. A claim can end because the handler:
 
-<Link to="/api/reference/cancel-job">Cancel Job</Link> requests cooperative
-cancellation. A worker may already have committed an idempotent effect, so read
-the returned Job state instead of assuming that cancellation rolled back work.
+- completed
+- failed
+- timed out
+- lost its lease
+- saw a cancellation
+- handed the work to a compatible node
 
-Cancellation prevents new bounded work after the handler observes it. Earlier
-row-atomic or idempotent commits remain authoritative and may require a separate
-domain compensation. Do not repeatedly cancel a terminal Job or mutate domain
-records to make its history look rolled back.
+The current Job record decides whether there is more work to do. The last
+attempt on its own doesn't.
 
-<Link to="/api/reference/retry-job">Retry Job</Link> is available only for Job
-types whose descriptor explicitly permits a safe retry. It creates bounded new
-execution history; it does not erase the prior failure or bypass current
-authorization.
+For work that saves checkpoints, progress means progress in the domain that
+has been saved, not just how many times a loop has run. Sitting closure,
+onboarding imports, progression, mail expansion and key rotation can resume
+from a stable cursor after a lost process. A batch that was reserved but not
+checkpointed can stay used up on purpose, so the hard cap on work still
+holds.
 
-Before retrying, verify the failed dependency or configuration is healthy and
-that the owning domain state still permits the operation. Retry uses the same
-versioned payload meaning; it is not an endpoint for editing hidden Job data.
+## Cancel or retry on purpose
 
-## Inspect Mail Delivery
+<Link to="/api/reference/cancel-job">Cancel Job</Link> asks the Job to stop,
+and the handler stops when it notices. A worker may already have committed
+an idempotent effect. Read the Job state that comes back, instead of assuming
+the cancellation undid any work.
+
+Once the handler sees the cancellation, it doesn't start any new work.
+Changes it committed earlier, row by row or idempotently, stay in place, and
+undoing them may need a separate correction in the domain. Don't cancel a
+finished Job again and again, and don't edit domain records to make its
+history look undone.
+
+<Link to="/api/reference/retry-job">Retry Job</Link> only works for Job types
+whose descriptor explicitly allows a safe retry. It adds a new, limited run
+to the history. It doesn't erase the earlier failure or skip the current
+authorization check.
+
+Before you retry, check that the dependency or configuration that failed is
+healthy again, and that the domain state still allows the operation. A retry
+uses the same versioned payload with the same meaning. You can't use it to
+edit hidden Job data.
+
+## Inspect mail delivery
 
 <Link to="/api/reference/list-mail-deliveries">List Mail Deliveries</Link> and
-<Link to="/api/reference/get-mail-delivery">Get Mail Delivery</Link> expose safe
-delivery metadata and lifecycle state. They never return the rendered message,
-recipient secrets, Invitation claims, provider credentials, or encryption key
-material.
+<Link to="/api/reference/get-mail-delivery">Get Mail Delivery</Link> show
+delivery metadata that is safe to expose, and where each delivery is in its
+lifecycle. They never return the rendered message, recipient secrets,
+Invitation claims, provider credentials or encryption keys.
 
 Use <Link to="/api/reference/cancel-mail-delivery">Cancel Mail Delivery</Link>
-only while a delivery remains cancellable. Use
+only while a delivery can still be cancelled. Use
 <Link to="/api/reference/retry-mail-delivery">Retry Mail Delivery</Link> for a
-failed delivery whose current state permits an audited retry. Neither operation
-changes the application command that originally queued the message.
+failed delivery whose current state allows an audited retry. Neither one
+changes the application command that queued the message in the first place.
 
-Recipient relevance is rechecked where the template contract requires it.
-Resend or retry cannot revive a revoked Invitation, terminal Submission state,
-or otherwise superseded purpose. Delivery projections omit recipient address,
-subject/body, claims, ciphertext, provider detail, and internal failure text.
+Where the template contract requires it, Proctor checks again that the
+message is still relevant to the recipient. A resend or retry can't bring
+back a revoked Invitation, a Submission in a final state, or any other
+purpose that has been replaced. Delivery views leave out the recipient's
+address, the subject and body, claims, ciphertext, provider details and
+internal failure text.
 
-## Operate Mail Safely
+## Run mail safely
 
 - <Link to="/api/reference/get-mail-metrics">Get mail metrics</Link> returns
-  bounded operational counts, not message contents.
+  operational counts within fixed limits, never message contents.
 - <Link to="/api/reference/inspect-mail-key-state">Inspect mail key state</Link>
-  reports safe key-version status without revealing key bytes.
+  reports the status of each key version without revealing key bytes.
 - <Link to="/api/reference/start-mail-rekey">Start mail rekey</Link> creates
-  durable work; follow it through
+  durable work. Follow it with
   <Link to="/api/reference/get-mail-rekey-status">Get mail rekey status</Link>.
 - <Link to="/api/reference/send-controlled-test-mail">Send controlled test mail</Link>
-  exercises the configured delivery path with a bounded server-owned template.
-  It is not a general-purpose arbitrary-message endpoint.
+  tests the configured delivery path with a fixed template the server owns.
+  It can't send a message of your choosing.
 
-Treat `503` as an authoritative dependency failure and use the operation's
-stable Problem Details code to decide whether to back off. Do not create a
-parallel retry loop when Proctor already owns durable delivery and retry state.
+Treat a `503` as a real dependency failure, and use the stable Problem
+Details code to decide whether to back off. Proctor already owns durable
+delivery and retries, so don't build a second retry loop beside it.
 
-## Recover an Operational Backlog
+## Clear a backlog
 
-1. Confirm the application node is ready and the expected Job workers are
-   running; do not infer this from process existence alone.
-2. Page the affected type/state and record bounded counts, oldest creation
-   time, public failure codes, and stable IDs without exporting payloads.
-3. Inspect attempts for one representative Job and verify the owning dependency
-   through its protected diagnostics.
-4. Fix the dependency, configuration, compatibility, or domain prerequisite.
-5. Retry only the explicitly retryable failed records, then observe the
-   authoritative Job or Delivery transition.
-6. Escalate a repeated permanent failure with request/Job correlation and safe
-   code—not credentials, recipients, content, or raw worker errors.
+1. Check that the application node is ready and the expected Job workers are
+   running. A running process alone doesn't tell you this.
+2. Page through the affected type and state. Note the counts, the oldest
+   creation time, the public failure codes and the stable IDs, without
+   exporting payloads.
+3. Look at the attempts for one typical Job, and check the dependency it
+   relies on through that dependency's protected diagnostics.
+4. Fix the dependency, the configuration, the compatibility problem or the
+   missing domain prerequisite.
+5. Retry only the failed records that are explicitly retryable. Then watch
+   the Job or Delivery record change state.
+6. If a permanent failure keeps coming back, escalate it with the request or
+   Job correlation and the safe code. Never include credentials, recipients,
+   content or raw worker errors.
 
-In a multi-node installation, workers claim from shared PostgreSQL. Restarting
-or adding an application node does not transfer authority from the Job record,
-and killing a process is not cancellation. Lease expiry makes abandoned work
-claimable according to the descriptor.
+In an installation with several nodes, workers claim Jobs from the shared
+PostgreSQL database. Restarting or adding a node doesn't move control away
+from the Job record, and killing a process doesn't cancel a Job. When a lease
+expires, abandoned work becomes available to claim again, as the descriptor
+allows.
 
-## Watch the Administration Summary
+## Watch the administration summary
 
-`GET /api/v1/administration/counts` answers the counts behind administration
-navigation badges: `failed_jobs` (operator-visible Jobs that failed in the last
-seven days), `failed_mail_deliveries` (deliveries in the `failed` terminal
-state), `pending_invitations`, and `open_onboarding_imports`. Each count stops
-at 1,000 and comes with a `_is_lower_bound` flag. Each runs the authorization
-of its own list, so a count the caller may not list is absent rather than
-zero. Use it to decide when to open a list, then page that list: the first
-page of `GET /api/v1/jobs` and `GET /api/v1/mail/deliveries` reports a `total`
-for the same filters.
+`GET /api/v1/administration/counts` returns the counts behind the badges in
+administration navigation:
+
+- `failed_jobs`: Jobs operators can see that failed in the last seven days
+- `failed_mail_deliveries`: deliveries in the final `failed` state
+- `pending_invitations`
+- `open_onboarding_imports`
+
+Each count stops at 1,000 and comes with an `_is_lower_bound` flag. Each one
+runs the same authorization as its own list, so if the caller can't see a
+list, its count is missing rather than zero. Use the counts to decide when to
+open a list, then page through that list. The first page of
+`GET /api/v1/jobs` and `GET /api/v1/mail/deliveries` reports a `total` for the
+same filters.

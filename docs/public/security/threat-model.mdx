@@ -1,74 +1,86 @@
 ---
-title: Threat Model and Trust Boundaries
-description: Identify protected assets, trusted components, untrusted inputs, attackers, and the controls that preserve one Proctor installation.
+title: Threat model and trust boundaries
+description: What a Proctor installation protects, which components it trusts, which inputs it doesn't, who might attack it, and the controls that defend it.
 audience: security-reviewer
 maturity: preview
 ---
 
-# Threat Model and Trust Boundaries
+# Threat model and trust boundaries
 
-One Proctor installation represents one Institution. Several application nodes
-sharing authoritative state are one installation, not tenants. The threat model
-therefore protects institution-wide academic and identity boundaries without
-pretending that a tenant column or node-local state provides isolation.
+One Proctor installation serves one Institution. Several application nodes
+that share the same stored state are still one installation, not separate
+tenants. So the threat model protects the academic and identity boundaries
+across the whole Institution. It does not pretend that a tenant column or
+state held on one node keeps anything isolated.
 
-## Protected Assets
+## What is protected
 
-The highest-sensitivity assets are authentication credentials and keys,
-password and recovery material, provider tokens, Invitation claims, Session and
-Attempt continuity credentials, Exam instructions and Resources, candidate
-Workspace and Submission content, integrity evidence and private Review text,
-student identity and membership, audit evidence, and operator secrets.
+The most sensitive assets are:
 
-Availability-sensitive assets include Sitting schedules and closure, active
-Participation leases, Jobs and mail occurrences, VFS reachability, and the serving-node lease.
+- authentication credentials and keys;
+- password and recovery material;
+- provider tokens;
+- Invitation claims;
+- Session and Attempt continuity credentials;
+- Exam instructions and Resources;
+- candidates' Workspace and Submission content;
+- integrity evidence and private Review text;
+- student identity and membership;
+- audit evidence;
+- operator secrets.
 
-## Actors and Capabilities
+Some assets matter mainly because they must stay available: Sitting schedules
+and closing, active Participation leases, Jobs and mail occurrences, being able
+to reach the VFS, and the serving-node lease.
 
-| Actor | Expected capability | Not trusted to decide |
+## Actors and what they can do
+
+| Actor | What it is expected to do | What it is not trusted to decide |
 | --- | --- | --- |
-| Unauthenticated network client | public discovery, bootstrap while pristine, login and recovery entry points | identity, Role, resource existence, rate-limit result |
-| Authenticated User | actions allowed by current account, credential, Role, Binding, relationship, and resource state | its own scope, assurance, audit projection, or stale permission |
-| Registered Desktop | prove one P-256 key and operate supported delivery protocols | current Exam eligibility, policy outcome, server time, guilt, or severity |
-| Exam Manager | manage one authorized Exam and inspect sealed Submissions | live candidate Workspace, broader student data, grading, or hidden operator state |
-| System administrator | explicit audited installation actions and override actions | bypass of intrinsic lifecycle, immutable publication, or concealment contracts |
-| Application node | execute the same validated build and current configuration | node-local cache or peer messages as durable authority |
-| Infrastructure operator | supply trusted runtime, network, database, storage, mail, TLS, and secrets | silent weakening of product invariants without a changed validated configuration |
+| Unauthenticated network client | Public discovery, bootstrap while the installation is still new, and the entry points for sign-in and recovery | Identity, Role, whether a resource exists, or the result of a rate limit |
+| Authenticated User | Actions allowed by its current account, credential, Role, binding, relationships and resource state | Its own scope, its assurance, what audit shows, or permissions that are out of date |
+| Registered Desktop | Prove one P-256 key, and run the supported delivery protocols | Whether it is currently eligible for an Exam, a policy outcome, server time, guilt or severity |
+| Exam Manager | Manage one Exam it is authorized for, and inspect sealed Submissions | The live candidate Workspace, wider student data, grading, or operator state it can't see |
+| System administrator | Explicit, audited installation actions and override actions | Bypassing the lifecycle built into a resource, a publication that can't change, or the rules that hide protected resources |
+| Application node | Run the same validated build with the current configuration | Treating its own cache or messages from peers as the source of truth |
+| Infrastructure operator | Provide a trusted runtime, network, database, storage, mail, TLS and secrets | Quietly weakening the product's guarantees without a changed configuration that passes validation |
 
-## Boundary Map
+## How the boundaries fit together
 
 <GovernedFigure asset="installation-authority-topology" />
 
-The public listener and metrics listener are separate. HTTP and WebSocket input
-are untrusted until strict transport validation and authentication complete.
-Application use cases authorize current action/resource pairs. Named Store
-operations commit durable state and required audit. Only afterward may cache,
-Memberlist, WebSocket, or mail effects proceed.
+The public listener and the metrics listener are separate. HTTP and WebSocket
+input is untrusted until strict transport checks and authentication finish.
+The application logic then checks permission for the current action on the
+current resource. Named Store operations commit the stored state and any
+required audit. Only after that can cache, Memberlist, WebSocket or mail
+effects go ahead.
 
-PostgreSQL is trusted for durable application facts and database time. VFS is
-trusted to retain opaque bytes selected through PostgreSQL metadata, not to
-decide identity or authorization. Redis and Memberlist are disposable
-coordination accelerators. SMTP acceptance is not proof of final delivery.
+Proctor trusts PostgreSQL for stored application facts and for database time.
+It trusts the VFS to keep the bytes that PostgreSQL metadata points to, but
+not to decide identity or permission. Redis and Memberlist only speed up
+coordination, and their data can be thrown away. An SMTP server accepting mail
+doesn't prove the mail was finally delivered.
 
-## Principal Threats and Controls
+## Main threats and controls
 
-| Threat | Primary controls |
+| Threat | Main controls |
 | --- | --- |
-| Credential theft or replay | hashed durable credentials, rotation/revocation, DPoP binding, fresh nonce and unique proof, HttpOnly cookies, CSRF and Origin checks |
-| Horizontal or stale access | canonical resource resolution, current Store-backed authorization, scope intersection, concealment, audit |
-| Cross-node inconsistency | PostgreSQL authority, shared Redis security counters in cluster mode, commit-before-effect, refetch after event gaps |
-| Malicious or malformed input | bounded bodies and batches, strict decoding, closed enums, normalized paths, VFS streaming limits |
-| Untrusted Desktop claims | registered build/key, compatibility policy, server-derived identity/time, generation and sequence fences |
-| Content disclosure | purpose-specific reads, private/no-store caching, no storage URLs, redacted logs and projections |
-| Evidence overcollection | typed policies, privacy minimization before persistence, explicit gaps, bounded inventories, separate private Review |
-| Operational secret exposure | protected config/environment files, purpose-specific keyrings, redacted display, non-root service, minimal writable paths |
+| Credential theft or replay | Credentials stored as hashes, rotation and revocation, DPoP binding, a fresh nonce and a unique proof each time, HttpOnly cookies, CSRF and Origin checks |
+| Access across users, or with out-of-date permissions | Looking up the resource itself, authorization against current data in the Store, intersecting scopes, hiding protected resources, audit |
+| Nodes disagreeing with each other | PostgreSQL as the source of truth, security counters shared in Redis in cluster mode, committing before any side effect, fetching again after gaps in events |
+| Malicious or malformed input | Limited bodies and batches, strict decoding, fixed lists of allowed values, normalized paths, streaming limits for the VFS |
+| Claims from a Desktop that can't be trusted | A registered build and key, the compatibility policy, identity and time worked out by the server, generation and sequence checks |
+| Content leaking | Reads allowed only for a specific purpose, `private`/`no-store` caching, no storage URLs, redacted logs and views |
+| Collecting too much evidence | Typed policies, minimizing data for privacy before it is stored, explicit gaps, limited inventories, a separate private Review |
+| Operational secrets leaking | Protected configuration and environment files, a separate keyring for each purpose, redacted display, a service that doesn't run as root, as few writable paths as possible |
 
-## Out of Scope and Unresolved Policy
+## Out of scope, and policy not yet decided
 
-The code does not make a compromised PostgreSQL, VFS, operating
-system, or operator account safe. Deployments must isolate and monitor those
-systems. Proctor's current server controls also do not constitute a certified
-production environment or academic appeals process.
+The code does not make a compromised PostgreSQL, VFS, operating system or
+operator account safe. Deployments must isolate and monitor those systems.
+Proctor's current server controls are also not a certified production
+environment or an academic appeals process.
 
 {/* TODO(security-retention-policy): Define product-owned retention, purge,
 legal-hold, and deletion guarantees before promising lifecycle behavior for

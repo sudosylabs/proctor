@@ -1,99 +1,128 @@
 ---
-title: Develop Integrity Review and Result Release
-description: Keep evidence collection, private manager interpretation, immutable finalization, and narrow candidate release as separate capabilities.
+title: Integrity Review and result release
+description: Keep collecting evidence, the manager's private interpretation, immutable finalization and the narrow release to candidates as separate capabilities.
 audience: developer
 maturity: preview
 slug: /developers/server/integrity-review-release/
 ---
 
-# Develop Integrity Review and Result Release
+# Integrity Review and result release
 
-Integrity collection and Review deliberately live on opposite sides of the
-Submission boundary. Collection creates bounded facts and uncertainty. Review
-adds manager interpretation. Release exposes only approved candidate-facing
-remarks. Do not merge these stages into one mutable “result” object.
+Integrity collection and Review sit on opposite sides of the Submission
+boundary, on purpose. Each stage does one thing:
+
+- Collection produces bounded facts, and records where it is uncertain.
+- Review adds the manager's interpretation.
+- Release shows the candidate only the remarks a manager approved for them.
+
+Don't merge these stages into one mutable "result" object.
 
 <GovernedFigure asset="integrity-review-release-boundary" />
 
-## Work in the Review Module
+## Work in the Review module
 
-`server/app/exam/review` owns post-Submission inspection, revision-fenced
-decisions and draft remarks, finalization, release, late-discrepancy inspection,
-and the candidate projection. It depends on the bounded Review Store contract,
-authorization, audit, safe Markdown, and realtime ports. It does not own
-collection, Submission sealing or content, HTTP, SQL, grading, or academic
-outcomes.
+`server/app/exam/review` owns:
+
+- inspection after Submission
+- decisions and draft remarks, fenced by revision
+- finalization and release
+- inspection of late discrepancies
+- the view the candidate sees
+
+It depends on the bounded Review Store contract, authorization, audit, safe
+Markdown and the realtime ports. It does not own collection, Submission
+sealing or content, HTTP, SQL, grading or academic outcomes.
 
 `app.App` names the Review service in its `Reviews` field, so its exported use
-cases are the public application surface.
-`server/app/exam/review/manager_authorization.go` holds Submission
-authorization: it resolves the canonical Submission, refuses the candidate who
+cases are the public application API.
+`server/app/exam/review/manager_authorization.go` handles Submission
+authorization. It resolves the canonical Submission, refuses the candidate who
 made it, and then asks the Sitting service for the current Exam Manager
-decision. HTTP DTOs and
-route declarations live in `server/httpapi/exam_review.go`. Authored schemas
-live in `server/openapi/fragments/integrity-review` and the candidate result
-fragment under `submissions`.
+decision.
 
-## Treat Every Manager Edit as Concurrent
+The rest lives elsewhere:
 
-One Review revision advances for private notes, student remarks, decisions,
-finalization, and release. Each Flag has one decision revision as an additional
-fence. Initial creation uses zero; later mutations require the exact current
-identities and revisions. A stale command conflicts rather than silently
-overwriting another manager.
+- HTTP DTOs and route declarations are in `server/httpapi/exam_review.go`.
+- The authored schemas are in `server/openapi/fragments/integrity-review`.
+- The candidate result fragment is under `submissions`.
 
-Outcomes are closed to `confirmed`, `dismissed`, and `inconclusive`. They are
-non-academic integrity dispositions. The private rationale is required,
-trimmed, bounded, and absent from candidate projections. Student Markdown is
-bounded, stored as reviewed text, and sanitized again when projected.
+## Treat every manager edit as concurrent
 
-## Finalize a Complete Frozen Inventory
+A single Review revision moves forward for private notes, student remarks,
+decisions, finalization and release. Each Flag also has its own decision
+revision as a second fence. The first creation uses zero. Every later change
+must name the exact current identities and revisions. A stale command gets a
+conflict instead of quietly overwriting another manager's work.
 
-Finalization requires terminal `settled` or `gapped` collection and one current
-decision for every Flag. The named Store operation locks the Submission and
-Review, verifies the exact revision, and freezes stable Flag, evidence,
-discrepancy, decision, and decision-revision identities in a canonical SHA-256
-digest.
+There are exactly three outcomes: `confirmed`, `dismissed` and
+`inconclusive`. They are integrity dispositions, not academic ones. The
+private rationale is required, trimmed and bounded, and it never appears in
+anything the candidate sees. Student Markdown is bounded and stored as the
+reviewed text. It is sanitized again whenever it is shown.
 
-Finalization combines the bounded existing integrity inventory with Browser
-groups, retained copies and overflow, and the ordered native-condition digest.
-Native conditions do not become Flags or require invented per-condition decisions.
-Do not silently truncate an inventory to make finalization succeed.
+## Finalize a complete, frozen inventory
 
-Historical finalization snapshots are immutable. Fresh qualifying Browser or
-native condition records invalidate current approval, withhold a released result,
-and make any Review waiver and Records Completion stale. Replayed receipts do not.
-A Browser group whose inventory changed also requires a fresh decision. A waiver
-must acknowledge the current delivery inventory revision even when no Review
-exists. Refinalization creates a new immutable snapshot and needs explicit release;
-its release notification has a distinct revision-bound occurrence.
+Finalization needs collection to have reached a terminal `settled` or
+`gapped` state, and one current decision for every Flag. The named Store
+operation:
 
-## Release Less Than Managers Can See
+1. locks the Submission and the Review
+2. checks the exact revision
+3. freezes the stable identities of each Flag, piece of evidence,
+   discrepancy, decision and decision revision into a canonical SHA-256 digest
 
-Release is a separate authorization action, audit record, revision fence, and
-idempotent Store transition. Before release, the candidate selector returns the
-same concealed not-found shape as an unavailable result. After release, it
-returns only Review, Submission, and Attempt IDs, sanitized approved remarks,
-and release time.
+Finalization combines the existing bounded integrity inventory with the
+Browser groups, their kept copies and overflow, and the ordered digest of
+native conditions. Native conditions do not become Flags, and they don't need
+made-up decisions for each condition. Never quietly cut an inventory short to
+make finalization succeed.
 
-Never reuse the manager Review DTO for the candidate. A future field added to
-that DTO must not leak evidence, decisions, private notes, rationale, manifest,
-or academic data. Keep an independently declared candidate response schema and
-an explicit mapper with omission tests.
+Earlier finalization snapshots never change. When fresh qualifying Browser or
+native condition records arrive, they:
 
-## Order State and Effects
+- invalidate the current approval
+- withhold a result that was already released
+- make any Review waiver and Records Completion stale
 
-Authorization and required audit prepare before the named atomic mutation.
-Durable Review state, audit, and idempotent outcome commit together. Only then
-publish minimal manager or candidate refetch events. Events contain safe IDs,
-state, revision, and time—not remarks, rationale, evidence, or files.
+Replayed receipts do none of this. A Browser group whose inventory changed
+also needs a fresh decision. A waiver must acknowledge the current delivery
+inventory revision, even when there is no Review. Finalizing again creates a
+new immutable snapshot that needs its own explicit release. Its release
+notification is a separate occurrence, tied to that revision.
 
-An exact replay repeats current authorization and audit policy but returns the
-retained result without duplicating publication. A post-commit event failure is
-observable operationally and recoverable by refetch; it never rolls release
-back.
+## Release less than managers can see
 
-## Focused Verification
+Release has its own authorization action, audit record, revision fence and
+idempotent Store transition.
+
+- Before release, the candidate's selector returns the same concealed
+  not-found shape as a result that isn't available.
+- After release, it returns only the Review, Submission and Attempt IDs, the
+  sanitized approved remarks and the release time.
+
+Never reuse the manager's Review DTO for the candidate. A field added to that
+DTO later must not leak evidence, decisions, private notes, rationale, the
+manifest or academic data. Keep a candidate response schema that is declared
+on its own, and an explicit mapper with tests that prove fields are left out.
+
+## Order state and effects
+
+1. Authorization and the required audit are prepared before the named atomic
+   mutation.
+2. The durable Review state, the audit and the idempotent outcome commit
+   together.
+3. Only then are minimal refetch events published to managers or the
+   candidate.
+
+Events carry safe IDs, state, revision and time. They never carry remarks,
+rationale, evidence or files.
+
+An exact replay applies current authorization and audit policy again, but
+returns the kept result and doesn't publish a second time. If an event fails
+after commit, operators can see it and clients recover by refetching. It never
+rolls a release back.
+
+## Focused tests
 
 ```sh
 cd server
@@ -106,8 +135,19 @@ make openapi-agreement
 make architecture
 ```
 
-Cover initial creation, stale Review and decision revisions, every disposition,
-missing decisions, nonterminal collection, inventory limits, concurrent late
-records, finalization immutability, pre-release concealment, candidate-field
-omission, exact retry, authorization revocation, audit failure, and post-commit
-effect failure.
+Cover these cases:
+
+- first creation
+- stale Review and decision revisions
+- every disposition
+- missing decisions
+- collection that hasn't reached a terminal state
+- inventory limits
+- late records arriving concurrently
+- finalization staying immutable
+- concealment before release
+- fields left out of the candidate view
+- exact retry
+- authorization being revoked
+- audit failure
+- an effect failing after commit

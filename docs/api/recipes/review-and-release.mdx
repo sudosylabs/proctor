@@ -1,6 +1,6 @@
 ---
-title: Review Integrity and Release a Result
-description: Inspect immutable Submission state, assess bounded evidence, revision-fence non-academic decisions, finalize the inventory, and explicitly release the candidate projection.
+title: Review integrity and release a result
+description: Inspect a sealed Submission, assess the evidence, record decisions against the current revision, finalize the inventory, and release the candidate's result explicitly.
 audience: api-consumer
 maturity: preview
 sidebar_position: 7
@@ -8,55 +8,63 @@ sidebar_position: 7
 
 import Link from '@docusaurus/Link';
 
-# Review Integrity and Release a Result
+# Review integrity and release a result
 
-Submission, integrity Review, and candidate result are separate resources with
-separate authority. A Submission preserves acknowledged work and terminal
-provenance. A Review preserves private manager interpretation. Explicit release
-creates a smaller candidate projection. None of them is a grade calculation or
-an automatic guilt verdict.
+The Submission, the integrity Review and the candidate's result are separate
+resources, each with its own permissions:
+
+- The Submission keeps the acknowledged work and a record of how the Attempt
+  ended.
+- The Review keeps the managers' private interpretation.
+- Releasing creates a smaller view for the candidate.
+
+None of them calculates a grade or decides guilt automatically.
 
 <GovernedFigure asset="submission-provenance-boundary" />
 
-## 1. Authorize and Inspect the Submission
+## 1. Check access and inspect the Submission
 
-Begin with <Link to="/api/reference/get-exam-submission">Get Submission</Link>.
-The server authorizes the canonical Submission resource first, rechecks the
-current Exam Manager relationship and scope, then conceals mismatched nested
-Exam, Sitting, or Attempt selectors as not found.
+Start with <Link to="/api/reference/get-exam-submission">Get Submission</Link>.
+Proctor first checks permission on the Submission itself, then checks the
+caller's current Exam Manager relationship and scope. If the Exam, Sitting or
+Attempt in the path doesn't match, Proctor answers as if it wasn't found.
 
-The header pins the Submission's terminal provenance, governing Revision,
-acknowledged Workspace Cursor, integrity state, discrepancy count, and time.
-Page the <Link to="/api/reference/list-exam-submission-manifest">immutable manifest</Link>
+The header records how the Attempt ended, the Revision it ran on, the
+acknowledged Workspace Cursor, the integrity state, the number of
+discrepancies and the time. Page through the
+<Link to="/api/reference/list-exam-submission-manifest">manifest, which never changes</Link>,
 by stable Entry identity. Fetch file bytes only through the protected
 <Link to="/api/reference/get-exam-submission-file-content">Submission content route</Link>.
-Do not construct storage URLs or treat VFS keys as hierarchy.
+Don't build storage URLs, and don't treat VFS keys as a folder structure.
 
-Managers may inspect files only after sealing; there is no manager endpoint for
-reading a live candidate Workspace. A no-show has no fabricated Attempt or
-Submission.
+Managers can look at files only after the Workspace is sealed. No manager
+endpoint reads a candidate's live Workspace. A no-show has no Attempt or
+Submission, and Proctor doesn't create one.
 
-## 2. Load the Complete Review Context
+## 2. Load everything the Review needs
 
 Call <Link to="/api/reference/get-exam-integrity-review">Get integrity review</Link>,
 then page through <Link to="/api/reference/list-exam-integrity-flags">Flags</Link>,
-purpose-specific <Link to="/api/reference/list-exam-integrity-evidence">evidence</Link>,
-and <Link to="/api/reference/list-exam-integrity-discrepancies">discrepancies</Link>
-as needed. Keep these private records out of general analytics, ordinary logs,
-and candidate-visible caches.
+<Link to="/api/reference/list-exam-integrity-evidence">evidence</Link> for the
+purpose you need, and
+<Link to="/api/reference/list-exam-integrity-discrepancies">discrepancies</Link>
+as needed. Keep these private records out of general analytics, ordinary logs
+and any cache a candidate can see.
 
 <GovernedFigure asset="integrity-review-release-boundary" />
 
-Interpret the chain in order: observation, signal, finding, evidence, Flag,
-then Review outcome. A Flag groups detected policy evidence; it does not declare
-intent. A discrepancy retains uncertainty such as a sequence gap, incomplete
-Browser Activity source, missing correction acknowledgement, or late Focus Loss.
+Read the chain in this order: observation, signal, finding, evidence, Flag,
+then the Review's outcome. A Flag groups evidence that matched a policy. It
+doesn't say the candidate meant to do anything. A discrepancy records
+something uncertain, such as a gap in a sequence, an incomplete Browser
+Activity source, a missing correction acknowledgement or a late Focus Loss.
 
-## 3. Create or Update Review Text
+## 3. Create or update the Review text
 
 <Link to="/api/reference/update-exam-integrity-review">Update integrity review</Link>
-conditionally replaces both mutable text fields. Use zero when the command
-creates the Review; otherwise send its identity and exact current revision.
+replaces both editable text fields if the revision matches. Send zero when
+this call creates the Review. Otherwise send the Review's ID and its exact
+current revision.
 
 ```json
 {
@@ -67,15 +75,15 @@ creates the Review; otherwise send its identity and exact current revision.
 }
 ```
 
-`manager_notes` remain private. `student_remarks_markdown` is optional approved
-candidate-facing content and is sanitized again on projection. Neither field
-should contain credentials, secrets, unnecessary student data, or an academic
-grade that Proctor does not model.
+`manager_notes` stays private. `student_remarks_markdown` is optional, approved
+text for the candidate, and Proctor sanitizes it again when it shows it.
+Neither field should hold credentials, secrets, student data you don't need, or
+an academic grade, which Proctor doesn't model.
 
-## 4. Record One Decision for Every Flag
+## 4. Record a decision for every Flag
 
-Use the Review's current revision and the current decision revision. Zero means
-create; a positive value must equal the current revision.
+Send the Review's current revision and the decision's current revision. Zero
+means create. A positive value must match the current revision.
 
 ```json
 {
@@ -88,19 +96,20 @@ create; a positive value must equal the current revision.
 ```
 
 <Link to="/api/reference/save-exam-integrity-decision">Save integrity decision</Link>
-accepts only `confirmed`, `dismissed`, or `inconclusive`. The outcome is a
-non-academic disposition, never a grade or guilt verdict. The trimmed rationale
-is required and manager-only.
+accepts only `confirmed`, `dismissed` or `inconclusive`. The outcome is a
+non-academic disposition. It is never a grade or a finding of guilt. The
+rationale is required, is trimmed, and only managers can see it.
 
-Every text or decision mutation advances the one Review revision. On a conflict,
-reread the snapshot and reconcile concurrent work; never guess the next number.
-Use a stable idempotency key for exact retries.
+Every change to the text or a decision moves the single Review revision
+forward. On a conflict, read the snapshot again and reconcile with the other
+person's work. Never guess the next number. Use a stable idempotency key for
+exact retries.
 
-## 5. Finalize the Bounded Inventory
+## 5. Finalize the inventory
 
-Fetch a fresh snapshot and verify that integrity collection is terminal as
-`settled` or `gapped` and every current Flag has a current decision. Then call
-<Link to="/api/reference/finalize-exam-integrity-review">Finalize review</Link>:
+Fetch a fresh snapshot. Check that integrity collection has finished as
+`settled` or `gapped`, and that every current Flag has a current decision.
+Then call <Link to="/api/reference/finalize-exam-integrity-review">Finalize review</Link>:
 
 ```json
 {
@@ -109,22 +118,23 @@ Fetch a fresh snapshot and verify that integrity collection is terminal as
 }
 ```
 
-Finalization locks the Submission and freezes stable identities and decision
-revisions into a canonical digest, including Browser groups and overflow plus the
-ordered native-condition inventory. A limit error is not permission to omit records.
-Every historical finalization snapshot remains immutable.
+Finalizing locks the Submission. It freezes the stable identities and decision
+revisions into a canonical digest, including Browser groups and overflow, and
+the ordered inventory of native conditions. A limit error doesn't let you
+leave records out. Every past finalization snapshot stays unchanged.
 
-New qualifying Browser or native condition records withdraw current approval and
-withhold the released result. The Review returns to draft; affected Browser Flag
-decisions become stale. Refetch the Review, inspect the updated inventory, refresh
-those decisions, then finalize and release again. Exact receipt replay cannot
-invalidate approval repeatedly.
+If new qualifying Browser or native condition records arrive, Proctor
+withdraws the current approval and holds back the released result. The Review
+goes back to draft, and the affected Browser Flag decisions become stale. Fetch
+the Review again, look at the updated inventory, refresh those decisions, then
+finalize and release again. Replaying the same receipt can't withdraw approval
+again and again.
 
-## 6. Release Explicitly
+## 6. Release the result
 
 <Link to="/api/reference/release-student-exam-result">Release student result</Link>
-is a separate revision-fenced, idempotent transition for the approved snapshot using the same
-terminal request shape:
+is a separate, idempotent step that checks the revision. It releases the
+approved snapshot and takes the same request shape as finalizing:
 
 ```json
 {
@@ -133,13 +143,14 @@ terminal request shape:
 }
 ```
 
-Before this succeeds, <Link to="/api/reference/get-student-exam-result">the
-candidate result route</Link> is concealed as not found. After release it
-returns only the Review, Submission, and Attempt identities, sanitized approved
-remarks, and release time. It never returns Flags, evidence, discrepancies,
-decisions, private rationale or notes, Workspace content, grade, score, rubric,
-pass/fail, or another academic outcome.
+Until the release succeeds,
+<Link to="/api/reference/get-student-exam-result">the candidate result route</Link>
+answers as if the result doesn't exist. After release, it returns only the
+Review, Submission and Attempt IDs, the sanitized approved remarks and the
+release time. It never returns Flags, evidence, discrepancies, decisions,
+private rationale or notes, Workspace content, a grade, a score, a rubric,
+pass/fail or any other academic outcome.
 
-If a finalization or release response is lost, retry the exact body and
-idempotency key after creating the transport proof required for the new HTTP
-request. Do not invent a new key for the same logical operation.
+If you lose the response to a finalize or release call, retry with the exact
+same body and idempotency key, after creating whatever transport proof the new
+HTTP request needs. Don't make up a new key for the same logical operation.

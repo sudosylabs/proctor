@@ -1,75 +1,78 @@
 ---
-title: Localization and Logging Configuration
-description: Reference Proctor's installation locale and dynamically reconfigurable bounded logging pipeline.
+title: Localization and logging settings
+description: Settings for Proctor's installation locale and for log targets, which you can change while the server runs.
 audience: operator
 maturity: preview
 slug: /reference/configuration/localization-and-logging/
 ---
 
-# Localization and Logging Configuration
+# Localization and logging settings
 
-Localization chooses the installation fallback language. Logging defines one or
-more bounded output targets. Localization changes require a restart; a valid log
-configuration is applied dynamically after reload.
+Localization sets the language Proctor falls back to for the installation.
+Logging sets one or more places where logs go, each with limits. You need to
+restart the process after you change localization. Proctor applies a valid
+logging configuration after a reload, without a restart.
 
 ## Localization
 
-| Path and default | Meaning and accepted value |
+| Path and default | What it does and accepted values |
 | --- | --- |
-| `Localization.DefaultLocale`<br />Default: `en` | Installation-wide fallback locale. It must be a trimmed language identifier no longer than `35` characters. Hyphen-separated segments must contain `1`–`8` letters, with digits also allowed after the first segment. Runtime composition additionally requires a matching bundled catalog. |
+| `Localization.DefaultLocale`<br />Default: `en` | The fallback locale for the whole installation. It must be a language tag with no leading or trailing spaces, no longer than `35` characters. Each part between hyphens must be `1` to `8` letters, and parts after the first can also contain digits. At startup, Proctor also needs a bundled catalog that matches. |
 
-Use a locale actually shipped with the server. Syntax validation alone cannot
-promise that a catalog exists; the localization module performs that authority
-check while the runtime is composed.
+Use a locale that ships with the server. Checking the format can't tell
+whether a catalog exists. The localization module checks that when the server
+starts.
 
 ## Logging pipeline
 
-The logging pipeline truncates oversized fields, bounds queue growth, and gives
-enqueue, flush, and shutdown work finite deadlines. At least one target is
-required.
+The logging pipeline cuts down fields that are too large, limits how far its
+queues grow, and gives queueing, flushing and shutdown a fixed deadline. You
+need at least one target.
 
-| Path and default | Meaning and accepted value |
+| Path and default | What it does and accepted values |
 | --- | --- |
-| `Log.MaxFieldBytes`<br />Default: `16384` (16 KiB) | Maximum encoded size retained for an individual structured field. Must be between `256` and `1048576` bytes. This is a log-safety bound, not permission to log secrets or unbounded user content. |
-| `Log.QueueSize`<br />Default: `1024` | Shared asynchronous pipeline capacity. Must be between `1` and `1048576`. |
-| `Log.EnqueueTimeout`<br />Default: `250ms` | Maximum wait to enqueue a record under pressure. Must be greater than zero and no more than `1m`. |
-| `Log.FlushTimeout`<br />Default: `5s` | Deadline for an explicit pipeline flush. Must be greater than zero and no more than `1m`. |
-| `Log.ShutdownTimeout`<br />Default: `10s` | Deadline for draining and closing logging during shutdown or replacement. Must be greater than zero and no more than `1m`. |
+| `Log.MaxFieldBytes`<br />Default: `16384` (16 KiB) | The largest encoded size Proctor keeps for one structured field. Must be between `256` and `1048576` bytes. This limit keeps logs safe. It doesn't make it acceptable to log secrets or user content of any size. |
+| `Log.QueueSize`<br />Default: `1024` | How many records the shared background queue holds. Must be between `1` and `1048576`. |
+| `Log.EnqueueTimeout`<br />Default: `250ms` | The longest Proctor waits to queue a record when the queue is busy. Must be greater than zero and no more than `1m`. |
+| `Log.FlushTimeout`<br />Default: `5s` | The deadline when Proctor is asked to flush the pipeline. Must be greater than zero and no more than `1m`. |
+| `Log.ShutdownTimeout`<br />Default: `10s` | The deadline for draining and closing logging at shutdown or when Proctor replaces the pipeline. Must be greater than zero and no more than `1m`. |
 
-Queue sizes multiply memory use and can defer visibility when a target is slow.
-Treat persistent queue pressure as an output or capacity failure, not a reason
-to increase every bound without measurement.
+Bigger queues use more memory, and they can delay when records appear if a
+target is slow. If a queue stays under pressure, treat it as a problem with
+the output or with capacity. Don't raise every limit without measuring first.
 
 ## Log targets
 
-The default contains one human-readable console target. Target names must be
-unique. `Type`, `Level`, and `Format` values are case-insensitive, but lower-case
-keeps configuration consistent.
+By default there is one console target in readable text. Target names must be
+unique. `Type`, `Level` and `Format` values ignore case, but writing them in
+lower case keeps the configuration consistent.
 
-| Path and default | Meaning and accepted value |
+| Path and default | What it does and accepted values |
 | --- | --- |
-| `Log.Targets[].Name`<br />Default: `console` | Required stable target name, unique within the list. It identifies the output in runtime diagnostics and configuration diffs. |
-| `Log.Targets[].Type`<br />Default: `console` | Output implementation: `console` or `file`. |
-| `Log.Targets[].Level`<br />Default: `info` | Minimum emitted severity: `trace`, `debug`, `info`, `warn`, or `error`. Do not enable verbose levels for long periods without reviewing data exposure and volume. |
-| `Log.Targets[].Format`<br />Default: `text` | Record encoding: `text` for human reading or `json` for structured collection. |
-| `Log.Targets[].File`<br />Default: empty | Destination path for a `file` target. It is required for file output, must contain no null or line-break characters, and must be empty for `console`. Relative paths use the process working directory. |
-| `Log.Targets[].QueueSize`<br />Default: `256` | Per-target asynchronous queue capacity. Must be between `1` and `1048576`. A slow target cannot consume unbounded memory. |
-| `Log.Targets[].MaxSizeMB`<br />Default: `0` for console | Rotation size for a `file` target, in MiB. File targets require a value between `1` and `10240`; it is not used by console output. |
-| `Log.Targets[].MaxAgeDays`<br />Default: `0` | Maximum age of rotated file logs. For file targets, must be between `0` and `3650`; `0` disables age-based removal. |
-| `Log.Targets[].MaxBackups`<br />Default: `0` | Maximum retained rotated file count. For file targets, must be between `0` and `10000`; `0` disables count-based removal. |
-| `Log.Targets[].Compress`<br />Default: `false` | Compresses rotated file logs when `true`. It has no effect on console output. |
+| `Log.Targets[].Name`<br />Default: `console` | A stable name for the target, unique in the list. Required. It identifies the output in diagnostics and when you compare configurations. |
+| `Log.Targets[].Type`<br />Default: `console` | Where the output goes: `console` or `file`. |
+| `Log.Targets[].Level`<br />Default: `info` | The lowest severity written: `trace`, `debug`, `info`, `warn` or `error`. Don't leave the verbose levels on for long without checking what data they expose and how much they write. |
+| `Log.Targets[].Format`<br />Default: `text` | How records are written: `text` for people to read, or `json` for log collectors. |
+| `Log.Targets[].File`<br />Default: empty | The file a `file` target writes to. Required for file output. It can't contain null or line break characters, and must be empty for `console`. A relative path starts from the process working directory. |
+| `Log.Targets[].QueueSize`<br />Default: `256` | How many records this target's background queue holds. Must be between `1` and `1048576`. This stops a slow target from using unlimited memory. |
+| `Log.Targets[].MaxSizeMB`<br />Default: `0` for console | The size, in MiB, at which a `file` target starts a new file. File targets need a value between `1` and `10240`. Console output doesn't use it. |
+| `Log.Targets[].MaxAgeDays`<br />Default: `0` | The oldest a rotated log file can get before Proctor removes it. For file targets, must be between `0` and `3650`. `0` turns off removal by age. |
+| `Log.Targets[].MaxBackups`<br />Default: `0` | The most rotated files Proctor keeps. For file targets, must be between `0` and `10000`. `0` turns off removal by count. |
+| `Log.Targets[].Compress`<br />Default: `false` | When `true`, Proctor compresses rotated log files. It has no effect on console output. |
 
-For production collection, JSON usually preserves fields more reliably than
-parsing text. File rotation is application-owned only for `file` targets;
-console retention belongs to the process supervisor or container log pipeline.
+If you collect logs in production, JSON usually keeps fields intact better
+than parsing text. Proctor rotates files only for `file` targets. For console
+output, your process supervisor or container log pipeline decides how long
+logs are kept.
 
-## Dynamic replacement
+## Changing logging while the server runs
 
-A configuration reload validates the entire document before constructing the
-replacement logging pipeline. If logger reconfiguration fails, Proctor reports
-the failure through the existing logger rather than silently pretending the
-new target is active. Verify the expected target after every change.
+On a reload, Proctor checks the whole configuration file before it builds the
+new logging pipeline. If the new logging setup fails, Proctor reports the
+error through the logger it already has, rather than acting as if the new
+target is working. Check that the target you expect is working after every
+change.
 
-Logging configuration never relaxes the repository's data rules: credentials,
-secrets, student data, exam answers, and unbounded user-controlled content do
-not belong in ordinary logs.
+Logging settings never loosen the repository's rules on data. Credentials,
+secrets, student data, exam answers, and user content of unlimited size don't
+belong in ordinary logs.

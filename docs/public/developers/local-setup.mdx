@@ -1,60 +1,60 @@
 ---
-title: Set Up Proctor for Local Development
-description: Go from a clean contributor machine to a verified local Installation, synthetic development data, captured mail, and observable server.
+title: Set up Proctor for local development
+description: Go from a clean machine to a working local Installation with synthetic data, captured mail and live metrics and logs.
 audience: developer
 maturity: preview
 slug: /developers/local-setup/
 ---
 
-# Set Up Proctor for Local Development
+# Set up Proctor for local development
 
-This is the shortest supported path from a clean machine to a local Proctor
-Installation you can sign in to and change. Follow it once without substituting
-services or hand-editing generated configuration. The result is a realistic
-single-node server, not a reduced mock.
+This is the shortest supported way to go from a clean machine to a local
+Proctor Installation that you can sign in to and change. Follow it once as
+written, without swapping in other services or editing the generated
+configuration by hand. You end up with a real single-node server, not a
+cut-down mock.
 
-At the end you will have:
+When you finish, you'll have:
 
-- a running Proctor server and hosted webapp;
+- a running Proctor server and hosted webapp
 - a synthetic Institution, academic structure, Exam Manager, Candidate, Exam,
-  published Revision, and future Sitting;
-- captured invitation mail in Mailpit; and
-- live metrics, dashboards, and structured logs.
+  published Revision and future Sitting
+- invitation mail captured in Mailpit
+- live metrics, dashboards and structured logs
 
 <GovernedFigure asset="developer-local-runtime" />
 
-## 1. Use a Supported Contributor Environment
+## 1. Check that your system is supported
 
 | Environment | Support | Notes |
 | --- | --- | --- |
-| macOS | Supported | Use Docker Desktop and a POSIX shell. Both Apple silicon and Intel hosts use the repository's pinned multi-platform images. |
-| Linux | Supported | CI exercises Ubuntu 24.04. Other current distributions may work when Docker Engine and the required host tools are available. |
-| Windows with WSL 2 | Supported | Work inside the Linux distribution, keep the checkout in its Linux filesystem, and enable Docker Desktop's WSL integration. |
-| Native Windows shell | Not supported | The tracked Make and build scripts require POSIX shell behavior. Use WSL 2 instead of PowerShell or Command Prompt for repository commands. |
+| macOS | Supported | Use Docker Desktop and a POSIX shell. Apple silicon and Intel Macs both use the repository's pinned multi-platform images. |
+| Linux | Supported | CI runs on Ubuntu 24.04. Other current distributions may work if Docker Engine and the host tools below are available. |
+| Windows with WSL 2 | Supported | Work inside the Linux distribution, keep the checkout on its Linux filesystem, and turn on Docker Desktop's WSL integration. |
+| Native Windows shell | Not supported | The tracked Make and build scripts need a POSIX shell. Use WSL 2 rather than PowerShell or Command Prompt to run repository commands. |
 
-Install these host tools before cloning:
+Install these tools on your machine before you clone:
 
-| Tool | Required version or behavior | Installation source |
+| Tool | Version or behavior you need | Where to get it |
 | --- | --- | --- |
 | Git | A current Git 2.x release | [Install Git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git) |
-| Go | The patched version declared by the root `go.work` | [Install Go](https://go.dev/doc/install) |
-| Node.js and npm | Use the Node version pinned in `webapp/.nvmrc` and its bundled npm | [Download Node.js](https://nodejs.org/en/download) |
+| Go | The patched version declared in the root `go.work` | [Install Go](https://go.dev/doc/install) |
+| Node.js and npm | The Node version pinned in `webapp/.nvmrc`, with the npm that comes with it | [Download Node.js](https://nodejs.org/en/download) |
 | Docker | A running Docker Engine with the Compose plugin | [Docker Desktop for macOS](https://docs.docker.com/desktop/setup/install/mac-install/) or [Docker Engine for Linux](https://docs.docker.com/engine/install/) |
-| Shell utilities | POSIX `sh`, `make`, `jq`, `curl`, and `openssl` | Use the operating system's package manager |
+| Shell utilities | POSIX `sh`, `make`, `jq`, `curl` and `openssl` | Your operating system's package manager |
 
-For Windows, configure [Docker Desktop with WSL 2](https://docs.docker.com/desktop/features/wsl/)
-and clone below a Linux path such as `~/src`, not `/mnt/c`. Native Windows
-filesystem mounts make dependency installation and file watching needlessly
-slow.
+On Windows, set up [Docker Desktop with WSL 2](https://docs.docker.com/desktop/features/wsl/)
+and clone into a Linux path such as `~/src`, not `/mnt/c`. Installing
+dependencies and watching files is needlessly slow on mounted Windows drives.
 
-You do **not** need to install PostgreSQL, Redis, MinIO, Mailpit, Prometheus,
-Grafana, Loki, or the OpenTelemetry Collector on the host. Docker Compose owns
-their local lifecycle.
+You **don't** need to install PostgreSQL, Redis, MinIO, Mailpit, Prometheus,
+Grafana, Loki or the OpenTelemetry Collector yourself. Docker Compose starts
+and stops them for you.
 
-## 2. Fork and Clone the Repository
+## 2. Fork and clone the repository
 
-Create a fork in GitHub when you intend to contribute changes. Then clone your
-fork and retain the canonical repository as `upstream`:
+If you plan to contribute changes, fork the repository on GitHub first. Then
+clone your fork and add the main repository as `upstream`:
 
 ```sh
 git clone https://github.com/YOUR-USERNAME/Proctor.git
@@ -63,7 +63,7 @@ git remote add upstream https://github.com/sudosylabs/Proctor.git
 git remote -v
 ```
 
-If you only need to inspect or build Proctor, clone the canonical repository
+If you only want to read or build Proctor, clone the main repository
 directly:
 
 ```sh
@@ -71,51 +71,53 @@ git clone https://github.com/sudosylabs/Proctor.git
 cd Proctor
 ```
 
-All commands in this guide run from the repository root—the directory that
-contains `Makefile`, `go.work`, `server/`, `packages/`, `webapp/`, and `docs/`.
-Start a focused branch before editing:
+Run every command in this guide from the repository root. That's the
+directory that contains `Makefile`, `go.work`, `server/`, `packages/`,
+`webapp/` and `docs/`. Create a branch for your change before you edit
+anything:
 
 ```sh
 git switch -c feat/short-description
 ```
 
-## 3. Prove the Host Toolchain
+## 3. Check your tools
 
-Run the repository-owned check:
+Run the repository's own check:
 
 ```sh
 make dev-tools
 ```
 
-Success is quiet: the command returns to the prompt with exit status zero. It
-checks Go and Node compatibility, npm, `jq`, `curl`, `openssl`, Docker Compose,
-and access to the running Docker daemon. A failure names the first missing or
-unsupported capability.
+If everything is in place, the command prints nothing and exits with status
+zero. It checks that your Go and Node versions are compatible, and that npm,
+`jq`, `curl`, `openssl` and Docker Compose are present and the Docker daemon is
+running. If something is wrong, it names the first missing or unsupported
+item.
 
-Common first-run failures are straightforward:
+The usual first-run problems are easy to fix:
 
-- `docker daemon is not available`: start Docker Desktop or the Docker Engine;
-- an unsupported Node version: activate the version from `webapp/.nvmrc`;
-- a missing `jq`, `curl`, or `openssl`: install it with the host package
-  manager, then rerun the command.
+- `docker daemon is not available`: start Docker Desktop or Docker Engine.
+- An unsupported Node version: switch to the version in `webapp/.nvmrc`.
+- A missing `jq`, `curl` or `openssl`: install it with your package manager,
+  then run the command again.
 
-Do not continue until `make dev-tools` succeeds.
+Don't go on until `make dev-tools` succeeds.
 
-Install the repository-pinned Go tools and locked JavaScript dependencies:
+Next, install the pinned Go tools and the locked JavaScript dependencies:
 
 ```sh
 make bootstrap
 make tools-check
 ```
 
-The Go binaries are written below ignored `.build/bin`; no global Go-tool
-installation is required. `bootstrap` is safe to rerun. Go's build cache and
-npm's download cache reduce repeated work, while the lockfiles keep each npm
-installation reproducible. See
-[tooling and debugging](./tooling-and-debugging.mdx) for the formatter, linter,
-vulnerability scanner, language server, debugger, and editor workflows.
+The Go binaries go into the ignored `.build/bin` directory, so you don't need
+to install any Go tools globally. You can run `bootstrap` again safely. Go's
+build cache and npm's download cache cut down on repeated work, and the
+lockfiles make every npm install the same. See
+[tooling and debugging](./tooling-and-debugging.mdx) for the formatter,
+linter, vulnerability scanner, language server, debugger and editor setups.
 
-## 4. Start the Single-Node Product
+## 4. Start Proctor on one node
 
 In terminal 1, run:
 
@@ -124,41 +126,41 @@ make run-server
 ```
 
 The first run downloads pinned container images and installs locked webapp
-dependencies, so it takes longer than later starts. The command then:
+dependencies, so it takes longer than later runs. The command then:
 
-1. compiles the server-hosted React webapp;
-2. generates ignored development secrets and configuration without replacing
-   secrets from an earlier run;
-3. starts and health-checks PostgreSQL, Redis, MinIO, Mailpit, Prometheus,
-   Grafana, Loki, and the OpenTelemetry Collector; and
-4. runs the Go server in the foreground at `http://localhost:8065`.
+1. compiles the React webapp that the server hosts
+2. generates ignored development secrets and configuration, keeping any
+   secrets from an earlier run
+3. starts PostgreSQL, Redis, MinIO, Mailpit, Prometheus, Grafana, Loki and the
+   OpenTelemetry Collector, and waits until each one is healthy
+4. runs the Go server in the foreground at `http://localhost:8065`
 
-The server is ready when its output contains a `server started` record with
-`listen_address` set to `127.0.0.1:8065`. Keep this terminal open. Server
-shutdown logs and request failures remain visible here, while the same
-structured records are also written to `.build/dev/logs/local/server.log`.
+The server is ready when its output includes a `server started` record with
+`listen_address` set to `127.0.0.1:8065`. Leave this terminal open. You'll see
+shutdown logs and request failures here, and the same structured records are
+also written to `.build/dev/logs/local/server.log`.
 
-## 5. Verify Liveness and Readiness
+## 5. Check liveness and readiness
 
-In terminal 2, check the process before creating any application state:
+In terminal 2, check the process before you create any data:
 
 ```sh
 curl --fail --silent --show-error http://127.0.0.1:8065/health/live
 curl --fail --silent --show-error http://127.0.0.1:8065/health/ready
 ```
 
-Expected responses are:
+You should get:
 
 ```json
 {"status":"ok"}
 {"status":"ok"}
 ```
 
-Liveness means the process can serve HTTP. Readiness additionally means the
-node has completed startup and may receive application traffic. Use readiness,
-not liveness, when diagnosing a dependency or migration failure.
+Liveness means the process can serve HTTP. Readiness also means the node has
+finished starting up and can take application traffic. When you're tracking
+down a dependency or migration problem, look at readiness, not liveness.
 
-You can also confirm that this is still a pristine Installation:
+You can also check that the Installation is still untouched:
 
 ```sh
 curl --fail --silent --show-error http://127.0.0.1:8065/api/v1/bootstrap
@@ -170,27 +172,28 @@ Before the first bootstrap, the response is:
 {"initialized":false}
 ```
 
-## 6. Create the Guarded Development Fixture
+## 6. Create the development fixture
 
-With terminal 1 still running, execute in terminal 2:
+Leave terminal 1 running, and in terminal 2 run:
 
 ```sh
 make dev-seed
 ```
 
-The seed uses the public HTTP API and the invitation claims delivered to the
-local Mailpit inbox. It never imports SQL or bypasses authorization. It creates
-the synthetic **Northbridge University** Installation, then adds:
+The seed works through the public HTTP API and uses the invitation claims
+delivered to the local Mailpit inbox. It never imports SQL and never skips
+authorization. It creates the synthetic **Northbridge University**
+Installation, then adds:
 
-- a system administrator;
+- a system administrator
 - the School of Computing, BSc Computer Science, Level 100, a rolling Academic
-  Period, and one Class;
-- Ada Lovelace as an Academic Unit member and Exam Manager;
-- Samira Okafor as a Candidate in the Class; and
+  Period and one Class
+- Ada Lovelace as an Academic Unit member and Exam Manager
+- Samira Okafor as a Candidate in the Class
 - an Introduction to Programming Exam with a published Revision and a Sitting
-  scheduled seven days ahead.
+  scheduled seven days ahead
 
-Successful output identifies two private local files:
+When it succeeds, it names two private local files:
 
 ```text
 Development fixture is ready.
@@ -198,62 +201,64 @@ Fixture summary: .../.build/dev/seed/fixture.json
 Local credentials: .../.build/dev/seed/credentials.json (mode 600; do not share or commit)
 ```
 
-Both files are ignored and mode `0600`. The credentials are randomly generated
-for this Installation. To read only the administrator login in a private local
-terminal:
+Both files are ignored by Git and have mode `0600`. The credentials are
+randomly generated for this Installation. To print only the administrator
+login, in a private local terminal:
 
 ```sh
 jq -r '.users.administrator | "username=\(.username)\npassword=\(.password)"' \
   .build/dev/seed/credentials.json
 ```
 
-That command prints a password. Do not run it in recorded terminals, paste the
-result into an issue, or commit either seed file.
+That command prints a password. Don't run it in a terminal that's being
+recorded, don't paste the output into an issue, and don't commit either seed
+file.
 
-The guardrails are deliberate:
+The seed protects itself on purpose:
 
-- only loopback Proctor and Mailpit URLs are accepted;
-- an already initialized Installation not created by this seed is refused;
-- an interrupted partial seed is refused rather than guessed forward; and
-- rerunning a completed seed reports the existing fixture without mutating it.
+- It only accepts loopback Proctor and Mailpit URLs.
+- It refuses an Installation that's already set up, unless this seed set it up.
+- It refuses to carry on from a partial, interrupted run rather than guess
+  what's missing.
+- If you run it again after it has finished, it reports the existing fixture
+  and changes nothing.
 
-If seeding stops after bootstrap or another mutation, use `make dev-reset` and
-start again. The generated in-progress marker explains this requirement.
+If the seed stops after bootstrap or after any other change, run
+`make dev-reset` and start again. The marker file it leaves behind explains
+why.
 
-## 7. Sign In Through the Browser
+## 7. Sign in through the browser
 
-Open `http://localhost:8065/login` and sign in with the
-administrator username and password from the local credentials file. A
-successful login reaches the authenticated session confirmation screen. You
-have now exercised the compiled webapp, password authentication, browser
-Session cookie, PostgreSQL-backed identity, and server-hosted route fallback.
+Open `http://localhost:8065/login` and sign in with the administrator username
+and password from the local credentials file. After you sign in, you'll see
+the screen that confirms your session. You've now exercised the compiled
+webapp, password sign-in, the browser Session cookie, identity stored in
+PostgreSQL, and the server's fallback route for webapp pages.
 
-For role-specific work, the same credentials file contains the synthetic Exam
-Manager and Candidate accounts:
+For work that needs a particular role, the same credentials file holds the
+synthetic Exam Manager and Candidate accounts:
 
 ```sh
 jq -r '.users | to_entries[] | "\(.key): \(.value.username)"' \
   .build/dev/seed/credentials.json
 ```
 
-Open Mailpit at `http://127.0.0.1:18025` and confirm that the Exam Manager and
-Candidate invitation messages were captured. Acceptance notices may follow as
-the durable delivery Jobs complete. The messages contain only synthetic local
-data.
+Open Mailpit at `http://127.0.0.1:18025` and check that the Exam Manager and
+Candidate invitations arrived. Acceptance notices may follow as the delivery
+Jobs finish. The messages contain only synthetic local data.
 
-## 8. Confirm Telemetry
+## 8. Check metrics, logs and traces
 
-Print the maintained observability endpoints:
+Print the observability addresses:
 
 ```sh
 make metrics-urls
 ```
 
-Open the Proctor overview dashboard at
-`http://127.0.0.1:13000/d/proctor-overview/proctor-overview`
-in Grafana. Anonymous local access is read-only. Within a few scrape intervals,
-the dashboard should show one ready Proctor target. You can also query
-Prometheus directly:
+In Grafana, open the Proctor overview dashboard at
+`http://127.0.0.1:13000/d/proctor-overview/proctor-overview`. Anonymous local
+access is read-only. Within a few scrape intervals, the dashboard should show
+one ready Proctor target. You can also ask Prometheus directly:
 
 ```sh
 curl --fail --silent --get \
@@ -261,74 +266,74 @@ curl --fail --silent --get \
   http://127.0.0.1:19090/api/v1/query | jq '.data.result'
 ```
 
-The local server exports traces to the development collector, which forwards
-them to Jaeger. Open `http://127.0.0.1:16686`, choose the `proctor` service, and
-select **Find Traces** to see recent requests, store operations, and Jobs.
+The local server sends traces to the development collector, which passes them
+on to Jaeger. Open `http://127.0.0.1:16686`, choose the `proctor` service, and
+select **Find Traces** to see recent requests, Store operations and Jobs.
 
-For service-by-service checks and failure symptoms, use the
-[local services handbook](./local-services.mdx).
+For checks and failure symptoms for each service, see
+[local services](./local-services.mdx).
 
-## 9. Use Vite for Browser Changes
+## 9. Use Vite for browser changes
 
-The hosted build at port 8065 is the correct first success. When changing
-browser source, keep the server running and start Vite in terminal 3:
+The hosted build on port 8065 is the right place to get things working first.
+When you change browser code, leave the server running and start Vite in
+terminal 3:
 
 ```sh
 make run-webapp
 ```
 
-Open `http://127.0.0.1:5173`. Vite provides hot module
-replacement and proxies `/api` plus WebSocket traffic to
-`http://127.0.0.1:8065`.
+Open `http://127.0.0.1:5173`. Vite reloads modules as you edit them and passes
+`/api` and WebSocket traffic to `http://127.0.0.1:8065`.
 
-Some authentication, callback, and redirect flows bind state to the configured
-public origin. For those flows, restart terminal 1 with the Vite origin:
+Some sign-in, callback and redirect flows are tied to the configured public
+address. For those, restart terminal 1 with the Vite address:
 
 ```sh
 make PROCTOR_SERVER_PUBLIC_URL=http://127.0.0.1:5173 run-server
 ```
 
-Then browse only the matching Vite URL. A mismatched `localhost` and
-`127.0.0.1`, scheme, or port is a different origin and can invalidate an
-otherwise correct browser transaction.
+Then use only that Vite URL in the browser. `localhost` and `127.0.0.1` count
+as different origins, as do a different scheme or port. A mismatch can break a
+browser flow that is otherwise correct.
 
-## 10. Stop or Reset Deliberately
+## 10. Stop or reset
 
 Stop the foreground server with <kbd>Control</kbd>+<kbd>C</kbd>. Its dependency
-containers remain running so the next server start is fast.
+containers keep running, so the server starts quickly next time.
 
-| Command | What it does | Data outcome |
+| Command | What it does | What happens to your data |
 | --- | --- | --- |
-| `make dev-down` | Stops dependency and observability containers | Preserves PostgreSQL, MinIO, Mailpit, Grafana, and Loki volumes, generated secrets, and seed files |
-| `make run-server` | Restarts the single-node lifecycle | Reuses preserved local state and generated secrets |
-| `make dev-reset` | Removes development containers, persistent volumes, and guarded seed files | Permanently deletes the local Installation and synthetic credentials |
+| `make dev-down` | Stops the dependency and observability containers | Keeps the PostgreSQL, MinIO, Mailpit, Grafana and Loki volumes, the generated secrets and the seed files |
+| `make run-server` | Starts the single-node stack again | Reuses the kept local state and generated secrets |
+| `make dev-reset` | Removes the development containers, persistent volumes and protected seed files | Permanently deletes the local Installation and the synthetic credentials |
 
-`make dev-reset` is intentionally destructive. Use it for first-run testing,
-an interrupted seed, or a pre-release schema reset—not as the ordinary way to
-stop work.
+`make dev-reset` deletes data on purpose. Use it to test a first run, to
+recover from an interrupted seed, or to reset the schema before a release.
+Don't use it as your usual way to stop work.
 
-## Your First-Success Checkpoint
+## Check your setup
 
-Before moving on, verify all of these statements:
+Before you move on, make sure that:
 
-- `make dev-tools` succeeds;
-- both health endpoints return their expected JSON;
-- `make dev-seed` reports a ready fixture;
-- the administrator can sign in through the browser;
-- Mailpit contains synthetic invitation mail;
-- Prometheus reports the local Proctor target and Grafana opens the overview;
-- you know whether `dev-down` or `dev-reset` matches the state you want to keep.
+- `make dev-tools` succeeds
+- both health endpoints return the JSON shown above
+- `make dev-seed` reports a ready fixture
+- the administrator can sign in through the browser
+- Mailpit holds the synthetic invitation mail
+- Prometheus reports the local Proctor target and Grafana opens the overview
+- you know whether `dev-down` or `dev-reset` keeps the data you want to keep
 
-## Choose the Next Guide
+## Where to go next
 
-| If you plan to… | Continue with… |
+| If you plan to… | Read |
 | --- | --- |
-| understand which package owns a change | [Repository boundaries](./repository-boundaries.mdx) |
+| find out which package a change belongs in | [Repository boundaries](./repository-boundaries.mdx) |
 | change application or domain behavior | [Server workflow](./server-workflow.mdx) |
 | change browser behavior | [Webapp workflow](./webapp-workflow.mdx) |
 | change an HTTP operation | [HTTP and OpenAPI](./http-and-openapi.mdx) |
-| change SQL or durable state | [Persistence workflow](./persistence.mdx) |
+| change SQL or stored data | [Persistence workflow](./persistence.mdx) |
 | run and inspect each dependency | [Local services](./local-services.mdx) |
-| exercise three active nodes | [Cluster development](./cluster-development.mdx) |
-| keep persistent local overrides | [Development configuration](./development-configuration.mdx) |
+| run three active nodes | [Cluster development](./cluster-development.mdx) |
+| keep local overrides between runs | [Development configuration](./development-configuration.mdx) |
 | decide which checks to run | [Testing and verification](./testing.mdx) |

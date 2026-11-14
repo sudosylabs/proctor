@@ -1,6 +1,6 @@
 ---
-title: Change the Access Policy Safely
-description: Inspect, preflight, and revision-fence an installation Access Policy change while preserving a usable administrator path.
+title: Change the Access Policy safely
+description: Read the Access Policy, preflight your change, and replace it against the revision you read, without locking every administrator out.
 audience: api-consumer
 maturity: preview
 sidebar_position: 4
@@ -8,102 +8,111 @@ sidebar_position: 4
 
 import Link from '@docusaurus/Link';
 
-# Change the Access Policy Safely
+# Change the Access Policy safely
 
-The Access Policy is revisioned application data for one installation. It
-controls public registration, local login and credential enrollment,
-Invitation admission, provider admission modes, and Desktop Authorization.
-It does not contain provider credentials, SMTP configuration, Institution
-profile data, or deployment capability.
+The Access Policy is a versioned record that belongs to one installation. It
+decides whether people can register themselves, whether they can sign in and
+enroll credentials locally, whether Invitations admit people, how each
+provider admits people, and whether Desktop Authorization is available. It does
+not hold provider credentials, SMTP settings, Institution profile data or what
+the deployment is capable of.
 
-Changing it is a three-step read, preflight, and replace workflow. Preflight is
-advice against one observed state; the replacement transaction remains the
-authority.
+A change takes three calls: read, preflight, replace. The preflight only
+advises you about the state it saw. The replace call makes the final decision.
 
-## 1. Read Policy and Deployment Capabilities
+## 1. Read the policy and what the deployment supports
 
-Call <Link to="/api/reference/get-access-policy">Get Access Policy</Link> with
-an authorized principal. Retain the opaque policy ID, current revision,
-complete policy fields, safe configured-provider capabilities, and bounded
-transition history.
+Call <Link to="/api/reference/get-access-policy">Get Access Policy</Link> as an
+authorized principal. Keep the opaque policy ID, the current revision, every
+policy field, the safe list of configured provider capabilities and the
+recent change history.
 
-Build a complete replacement document. Do not PATCH from a stale form or omit
-fields that the operator did not edit. A provider may be selected only when it
-is present in the returned validated capability set; deployment configuration
-still owns issuer URLs, client secrets, certificates, and claim mappings.
+Build a complete replacement document. Don't patch from a stale form, and
+don't drop fields the operator didn't edit. You can select a provider only if
+it appears in the capability list the response returned. Issuer URLs, client
+secrets, certificates and claim mappings stay in deployment configuration.
 
-Omitting a configured provider from `provider_admissions` disables its
-admission. An included provider accepts exactly one of three modes, each with a
-distinct consequence:
+Leaving a configured provider out of `provider_admissions` turns off admission
+through it. A provider you include takes exactly one of three modes:
 
-- `linked_only` accepts an already linked immutable provider subject;
-- `invitation_required` admits an unlinked subject only inside a valid,
-  purpose-bound Invitation transaction; and
-- `auto_provision` may create a relationship-free User only when validated
-  provider eligibility also permits it.
+- `linked_only` accepts an immutable provider subject that is already linked.
+- `invitation_required` admits an unlinked subject only while it accepts a
+  valid Invitation issued for that purpose.
+- `auto_provision` may create a User with no relationships, but only when the
+  provider's checked eligibility also allows it.
 
-None of these modes grants membership, an Affiliation, or a Role Binding.
+None of these modes grants a membership, an Affiliation or a Role Binding.
 
-## 2. Preflight the Exact Proposed Replacement
+## 2. Preflight the exact replacement
 
 Call <Link to="/api/reference/preflight-access-policy">Preflight Access Policy</Link>
-with a strong, recently authenticated interactive Session, current CSRF proof
-on cookie transport, the observed revision, the complete proposed policy, and
-the one-shot `revoke_existing_sessions` choice.
+with:
 
-Review every blocker rather than reducing the response to one boolean. The
-server evaluates configured providers, Invitation delivery, policy validity,
-and usable authentication paths for active system administrators. Enabling an
-Invitation-dependent mode can fail when durable mail delivery is unavailable.
-Disabling a provider or local login can fail when that would remove the last
-usable administrator path.
+- a strong, recently authenticated interactive Session;
+- current CSRF proof, if you use cookies;
+- the revision you read;
+- the complete proposed policy;
+- your one-time `revoke_existing_sessions` choice.
 
-Preflight makes no durable change and reserves neither the revision nor an
-administrator path. Another administrator or node may change current state
-immediately afterward.
+Read every blocker in the response. Don't reduce it to a single yes or no.
+Proctor checks the configured providers, Invitation mail delivery, whether the
+policy is valid, and whether every active system administrator can still sign
+in. Turning on a mode that depends on Invitations can fail if durable mail
+delivery is unavailable. Turning off a provider or local login can fail if
+that would remove the last way an administrator can sign in.
 
-## 3. Replace Under the Revision Fence
+A preflight changes nothing. It doesn't reserve the revision or an
+administrator's sign-in path. Another administrator or node can change the
+state straight afterwards.
+
+## 3. Replace the policy against the revision you read
 
 Call <Link to="/api/reference/replace-access-policy">Replace Access Policy</Link>
-with the exact preflighted document, the expected revision, a fresh
-`Idempotency-Key`, strong recent Session assurance, and CSRF proof when using
-cookies.
+with:
 
-The authoritative transaction repeats every capability and lockout check. It
-serializes with path-removing credential, User, and system-administrator
-binding changes; records the attempt; advances the revision; and commits before
-cache invalidation, cluster fan-out, or the content-free realtime revision
-event.
+- the exact document you preflighted;
+- the expected revision;
+- a new `Idempotency-Key`;
+- strong, recent Session assurance;
+- CSRF proof, if you use cookies.
 
-`revoke_existing_sessions` is not a persisted policy field. It is a one-shot
-transition choice. When true, Sessions authenticated through methods newly
-disabled by this exact transition are revoked atomically; Sessions using
-retained methods remain active. When false, the disabled method cannot create
-new Sessions, but already established Sessions keep their ordinary lifecycle.
+The replace call runs every capability and lockout check again. It is
+serialized with any change to credentials, Users or system-administrator
+bindings that could remove a sign-in path. It records the attempt, moves the
+revision forward and commits. Only after the commit does Proctor clear caches,
+notify other nodes and send the realtime revision event, which carries no
+policy content.
 
-## 4. Verify the Applied State
+`revoke_existing_sessions` is not stored in the policy. It applies to this one
+change. When it is true, Proctor revokes, in the same transaction, the Sessions
+that signed in with a method this change turns off. Sessions that used a method
+you kept stay active. When it is false, the method you turned off can't create
+new Sessions, but Sessions that already exist carry on as normal.
 
-Read the policy again and require the returned revision and fields to match the
-replacement outcome. Then verify one safe login path for each administrator
-method you intend to retain. Do not use public discovery as the replacement
-receipt: discovery is a privacy-safe projection and may be transiently cached.
+## 4. Check the result
 
-If post-commit cache, realtime, or cluster publication reports a transient
-failure, the durable replacement still won. Reread PostgreSQL-backed policy
-through the API rather than submitting a compensating replacement from stale
-state.
+Read the policy again. The revision and fields must match what you sent. Then
+try one safe sign-in for each administrator method you meant to keep. Don't
+use public discovery as proof of the change. Discovery is a privacy-safe view
+and may be cached for a short time.
 
-## Conflict and Recovery Rules
+If clearing the cache, sending the realtime event or notifying other nodes
+fails briefly after the commit, the change still stands. Read the policy again
+through the API, which reads it from PostgreSQL. Don't send a corrective
+replacement built from stale state.
 
-| Result | Recovery |
+## Conflicts and recovery
+
+| Result | What to do |
 | --- | --- |
-| revision conflict | Read the current policy, merge the human decision, preflight again, and use a new idempotency key. |
-| policy blocked | Preserve the current policy and repair the named administrator path, provider capability, or mail dependency first. |
-| idempotency in progress | Back off, then read the policy before replaying the exact same request and key. |
-| idempotency conflict | The key was reused for different input; choose a fresh key only after reviewing the intended replacement. |
-| assurance required | Reauthenticate through a supported strong method; never substitute a Personal Access Token. |
-| every administrator path is lost despite the invariant | Stop every node and use the documented offline host recovery; there is no network bypass route. |
+| revision conflict | Read the current policy, merge the human decision, preflight again and use a new idempotency key. |
+| policy blocked | Keep the current policy. First fix the administrator sign-in path, provider capability or mail delivery the response names. |
+| idempotency in progress | Back off, then read the policy before you resend the exact same request and key. |
+| idempotency conflict | The key was used for different input. Review the replacement you intend, then choose a new key. |
+| assurance required | Sign in again with a supported strong method. A Personal Access Token never counts. |
+| every administrator path is lost despite the safeguard | Stop every node and use the documented offline host recovery. There is no network route around it. |
 
-For the person-facing consequences of method changes, read
-<Link to="/account/access">Account access and recovery</Link>. For deployment-owned provider
-configuration, read <Link to="/operator/configuration-and-secrets">Configuration and secrets</Link>.
+For what method changes mean for people, read
+<Link to="/account/access">Account access and recovery</Link>. For provider
+settings that belong to the deployment, read
+<Link to="/operator/configuration-and-secrets">Configuration and secrets</Link>.

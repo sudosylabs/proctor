@@ -7,13 +7,146 @@ import styles from './styles.module.css';
 export type Field = {
   name: string;
   type: string;
+  typeHref: string | null;
   required: boolean;
   description: string;
   rules: string[];
   pattern: string | null;
   values: string[] | null;
+  valuesOpen?: boolean;
   children: Field[];
+  variants: {label: string; description: string; fields: Field[]}[];
+  map?: boolean;
+  standard: {text: string; href: string; label: string} | null;
 };
+
+// Where a field list sits decides which marker matters: what a caller must
+// send, or what a response may leave out.
+export type FieldMode = 'request' | 'response';
+
+function Chevron(): ReactNode {
+  return (
+    <svg aria-hidden="true" height="10" viewBox="0 0 12 12" width="10">
+      <path d="M4.5 2.5L8 6l-3.5 3.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+// Long descriptions open on their first sentence; the rest is one click away.
+function Description({text}: {text: string}): ReactNode {
+  const [open, setOpen] = useState(false);
+  const split = text.length > 180 ? text.match(/^(.{40,}?[.!?])\s+(?=[A-Z`"(])/) : null;
+  if (!split) return <p className={styles.propDesc}>{text}</p>;
+  return (
+    <p className={styles.propDesc}>
+      {open ? text : split[1]}{' '}
+      <button aria-expanded={open} className={styles.moreText} onClick={() => setOpen(!open)} type="button">
+        {open ? 'Less' : 'More'}
+      </button>
+    </p>
+  );
+}
+
+function Disclosure({label, children}: {label: string; children: ReactNode}): ReactNode {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button aria-expanded={open} className={styles.disclose} onClick={() => setOpen(!open)} type="button">
+        <Chevron />
+        {open ? 'Hide' : 'Show'} {label}
+      </button>
+      {open ? <div className={styles.kids}>{children}</div> : null}
+    </>
+  );
+}
+
+function count(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+function FieldRow({field, mode}: {field: Field; mode: FieldMode}): ReactNode {
+  return (
+    <div className={styles.prop}>
+      <div className={styles.propHead}>
+        <span className={styles.propName}>{field.name}</span>
+        {field.typeHref ? (
+          <Link className={styles.propTypeLink} to={field.typeHref}>
+            {field.type}
+          </Link>
+        ) : (
+          <span className={styles.propType}>{field.type}</span>
+        )}
+        {mode === 'request' && field.required ? <span className={styles.required}>required</span> : null}
+        {mode === 'response' && !field.required ? <span className={styles.optional}>optional</span> : null}
+      </div>
+      {field.standard ? (
+        <p className={styles.propDesc}>
+          {field.standard.text} <Link to={field.standard.href}>{field.standard.label}</Link>
+        </p>
+      ) : field.description ? (
+        <Description text={field.description} />
+      ) : null}
+      {field.rules.length > 0 || field.values ? (
+        <div className={styles.rules}>
+          {field.rules.map((rule) => (
+            <span key={rule}>{rule}</span>
+          ))}
+          {field.values ? (
+            <span className={styles.values}>
+              {field.valuesOpen ? 'Known values' : 'One of'}
+              {field.values.map((value) => (
+                <code key={value}>{value}</code>
+              ))}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      {field.valuesOpen ? <p className={styles.valuesNote}>New values may be added later, so handle ones you don’t recognise.</p> : null}
+      {field.pattern ? (
+        <details className={styles.pattern}>
+          <summary>
+            <Chevron />
+            Exact pattern
+          </summary>
+          <code>{field.pattern}</code>
+        </details>
+      ) : null}
+      {field.variants.length > 0 ? (
+        <Disclosure label={count(field.variants.length, 'shape', 'shapes')}>
+          {field.variants.map((variant) => (
+            <div className={styles.variant} key={variant.label}>
+              <p className={styles.variantLabel}>
+                <code>{variant.label}</code>
+              </p>
+              {variant.description ? <Description text={variant.description} /> : null}
+              {variant.fields.map((child) => (
+                <FieldRow field={child} key={child.name} mode={mode} />
+              ))}
+            </div>
+          ))}
+        </Disclosure>
+      ) : null}
+      {field.children.length > 0 ? (
+        <Disclosure label={field.map ? 'what each value holds' : count(field.children.length, 'field', 'fields')}>
+          {field.children.map((child) => (
+            <FieldRow field={child} key={child.name} mode={mode} />
+          ))}
+        </Disclosure>
+      ) : null}
+    </div>
+  );
+}
+
+export function Fields({fields, mode = 'request'}: {fields: Field[]; mode?: FieldMode}): ReactNode {
+  return (
+    <div className={styles.props}>
+      {fields.map((field) => (
+        <FieldRow field={field} key={field.name} mode={mode} />
+      ))}
+    </div>
+  );
+}
+
 
 type Example = {status: number; label: string; ok: boolean; code: string; errorCode?: string; fromContract?: boolean};
 type Sample = {id: string; label: string; language: string; code: string; highlight: string};
@@ -38,6 +171,7 @@ export type Endpoint = {
   cookies: Field[];
   body: {contentType: string; required: boolean; description: string; fields: Field[]; closed: boolean; list: boolean} | null;
   response: {status: number; label: string; contentType: string | null; description: string; fields: Field[]; list: boolean} | null;
+  otherResponse: {status: number; label: string; description: string; headers: {name: string; description: string; type: string}[]} | null;
   errors: {status: number; label: string; codes: {code: string; meaning: string}[]}[];
   errorCount: number;
   examples: Example[];
@@ -45,14 +179,6 @@ export type Endpoint = {
   more: Summary[];
   kernel: {code: string; meaning: string}[];
 };
-
-function Chevron(): ReactNode {
-  return (
-    <svg aria-hidden="true" height="10" viewBox="0 0 12 12" width="10">
-      <path d="M4.5 2.5L8 6l-3.5 3.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
-    </svg>
-  );
-}
 
 export function PathText({path}: {path: string}): ReactNode {
   return (
@@ -79,69 +205,6 @@ export function PathText({path}: {path: string}): ReactNode {
         ),
       )}
     </>
-  );
-}
-
-function FieldRow({field, showRequired}: {field: Field; showRequired: boolean}): ReactNode {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className={styles.prop}>
-      <div className={styles.propHead}>
-        <span className={styles.propName}>{field.name}</span>
-        <span className={styles.propType}>{field.type}</span>
-        {showRequired && field.required ? <span className={styles.required}>required</span> : null}
-      </div>
-      {field.description ? <p className={styles.propDesc}>{field.description}</p> : null}
-      {field.rules.length > 0 || field.values ? (
-        <div className={styles.rules}>
-          {field.rules.map((rule) => (
-            <span key={rule}>{rule}</span>
-          ))}
-          {field.values ? (
-            <span className={styles.values}>
-              One of
-              {field.values.map((value) => (
-                <code key={value}>{value}</code>
-              ))}
-            </span>
-          ) : null}
-        </div>
-      ) : null}
-      {field.pattern ? (
-        <details className={styles.pattern}>
-          <summary>
-            <Chevron />
-            Exact pattern
-          </summary>
-          <code>{field.pattern}</code>
-        </details>
-      ) : null}
-      {field.children.length > 0 ? (
-        <>
-          <button aria-expanded={open} className={styles.disclose} onClick={() => setOpen(!open)} type="button">
-            <Chevron />
-            {open ? 'Hide' : 'Show'} {field.children.length} {field.children.length === 1 ? 'field' : 'fields'}
-          </button>
-          {open ? (
-            <div className={styles.kids}>
-              {field.children.map((child) => (
-                <FieldRow field={child} key={child.name} showRequired={showRequired} />
-              ))}
-            </div>
-          ) : null}
-        </>
-      ) : null}
-    </div>
-  );
-}
-
-function Fields({fields, showRequired = true}: {fields: Field[]; showRequired?: boolean}): ReactNode {
-  return (
-    <div className={styles.props}>
-      {fields.map((field) => (
-        <FieldRow field={field} key={field.name} showRequired={showRequired} />
-      ))}
-    </div>
   );
 }
 
@@ -315,7 +378,42 @@ export default function EndpointPage({data}: {data: Endpoint}): ReactNode {
             }
             title="Response">
             {data.response.description ? <p className={styles.sectionLead}>{data.response.description}</p> : null}
-            {data.response.fields.length > 0 ? <Fields fields={data.response.fields} showRequired={false} /> : null}
+            {data.response.fields.length > 0 ? <Fields fields={data.response.fields} mode="response" /> : null}
+          </Section>
+        ) : null}
+
+        {data.otherResponse ? (
+          <Section
+            meta={
+              <>
+                <span className={styles.ok}>{data.otherResponse.status}</span> {data.otherResponse.label}
+              </>
+            }
+            title="Response">
+            <p className={styles.sectionLead}>
+              {data.otherResponse.status === 101
+                ? 'The connection switches to the WebSocket protocol. There is no response body; messages follow on the socket.'
+                : 'There is no response body. The browser follows the Location header to the next step of sign-in.'}{' '}
+              {data.otherResponse.status === 101 ? <Link to="/api/reference/realtime-protocol">How the protocol works</Link> : null}
+            </p>
+            {data.otherResponse.headers.length > 0 ? (
+              <Fields
+                fields={data.otherResponse.headers.map((header) => ({
+                  name: header.name,
+                  type: header.type,
+                  typeHref: null,
+                  required: true,
+                  description: header.description,
+                  rules: [],
+                  pattern: null,
+                  values: null,
+                  children: [],
+                  variants: [],
+                  standard: null,
+                }))}
+                mode="response"
+              />
+            ) : null}
           </Section>
         ) : null}
 

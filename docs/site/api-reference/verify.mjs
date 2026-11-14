@@ -2,7 +2,17 @@
 // operation, one page per area, one sidebar entry each, and the Proctor
 // extensions carried through unchanged.
 
-export function verifyReference({operations, tags}, files) {
+// Every link to a shared type must reach a generated type page.
+function typeLinks(fields, found = []) {
+  for (const field of fields ?? []) {
+    if (field.typeHref) found.push(field.typeHref);
+    typeLinks(field.children, found);
+    for (const variant of field.variants ?? []) typeLinks(variant.fields, found);
+  }
+  return found;
+}
+
+export function verifyReference({operations, tags, types = []}, files) {
   const failures = [];
   const ids = new Set();
   for (const operation of operations) {
@@ -25,6 +35,17 @@ export function verifyReference({operations, tags}, files) {
   for (const tag of tags) {
     if (!files.has(`${tag.slug}.mdx`)) failures.push(`${tag.name}: area page is missing`);
     if (tag.operations.length === 0) failures.push(`${tag.name}: area has no endpoints`);
+  }
+  const typeRoutes = new Set(types.map((type) => `/api/reference/types/${type.slug}`));
+  for (const type of types) {
+    if (!files.has(`types/${type.slug}.mdx`)) failures.push(`${type.name}: type page is missing`);
+  }
+  const sources = [
+    ...operations.map((operation) => [operation.operationId, [operation.pathParams, operation.query, operation.headers, operation.body?.fields, operation.response?.fields].flat().filter(Boolean)]),
+    ...types.map((type) => [type.name, type.fields]),
+  ];
+  for (const [owner, fields] of sources) {
+    for (const href of typeLinks(fields)) if (!typeRoutes.has(href)) failures.push(`${owner}: links to ${href}, which has no page`);
   }
   if (failures.length > 0) throw new Error(failures.join('\n'));
   return {operationCount: operations.length, tagCount: tags.length};

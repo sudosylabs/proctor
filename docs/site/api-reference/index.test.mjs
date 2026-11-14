@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {describeRules, humanizeOperation, loadReference, renderReferenceFiles} from './index.mjs';
+import {describeRules, humanizeOperation, loadReference, patternRule, renderReferenceFiles} from './index.mjs';
 import {verifyReference} from './verify.mjs';
 
 const reference = await loadReference();
@@ -50,6 +50,32 @@ test('errors are grouped by status and keep every declared code', () => {
 test('response examples come from the contract or the schema, never placeholders', () => {
   const success = submit.examples.find((example) => example.ok);
   assert.equal(success.status, 201);
-  assert.match(success.code, /"receipt_code": "MBY3-KBMN-EB83-TFW1"/);
-  assert.doesNotMatch(success.code, /"string"/);
+  assert.match(success.code, /"receipt_code": "[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}"/);
+  assert.doesNotMatch(success.code, /"string"|"<[a-z_-]+>"/);
+  const fromSchema = reference.operations.flatMap((operation) => operation.examples).filter((example) => example.ok && !example.fromContract);
+  for (const example of fromSchema) assert.doesNotMatch(example.code, /"<[a-z_-]+>"/);
+});
+
+test('common patterns read as plain rules', () => {
+  assert.equal(patternRule('^sha256:[0-9a-f]{64}$'), 'sha256: followed by 64 lowercase hex characters');
+  assert.equal(patternRule('^[a-z0-9_-]{1,64}$'), '1 to 64 characters: lowercase letters, digits and _ -');
+  assert.equal(patternRule('^unknown(a|b)$'), null);
+});
+
+test('reused object types link to a page that lists where they are used', () => {
+  const linked = reference.types.find((type) => type.name === 'SessionResponse');
+  assert(linked, 'SessionResponse has a type page');
+  assert(linked.usedBy.length > 1);
+  assert(files.has('types/session-response.mdx'));
+  assert.match(files.get('sidebar.ts'), /"reference\/types\/session-response"/);
+});
+
+test('nullable choices, discriminated variants and upgrades read plainly', () => {
+  const append = reference.operations.find((operation) => operation.operationId === 'appendHistoricalBrowserDelivery');
+  const events = append.body.fields.find((field) => field.name === 'events');
+  assert.equal(events.variants[0].label, 'kind: "browser_opened"');
+  const nullable = reference.types.flatMap((type) => type.fields).concat(reference.operations.flatMap((operation) => operation.response?.fields ?? []));
+  assert(!nullable.some((field) => field.variants.some((variant) => /^Shape \d/.test(variant.label) && field.variants.length === 2)));
+  const websocket = reference.operations.find((operation) => operation.operationId === 'connectWebSocket');
+  assert.equal(websocket.otherResponse.status, 101);
 });

@@ -226,6 +226,11 @@ const sidebars: SidebarsConfig = {
             },
             {
               type: 'doc',
+              id: 'developers/server/execution-environment',
+              label: 'Execution Environment',
+            },
+            {
+              type: 'doc',
               id: 'developers/server/user-settings-slice',
               label: 'Complete Vertical Slice',
             },

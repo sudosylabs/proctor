@@ -64,6 +64,10 @@ documents only its plugin decodes and validates, handed over in
 | Signal verdicts | built for native capabilities | Evaluate rules on the facts Desktop reports during an Attempt and flag what an enforce rule finds |
 | Evidence kinds | storage built | Declare evidence the core stores, seals, exports and shows in review |
 
+The first plugin to need most of the seams that are still missing is the
+terminal. [Design the Execution Environment](execution-environment.mdx)
+records which seams it needs and why.
+
 Native capabilities live in the core's registry, which the signed Desktop
 release supplies: each capability's fields, reasons, stability time and fact
 schemas, and the baseline rules every policy carries. The server compiles a

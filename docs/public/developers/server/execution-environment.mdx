@@ -1,0 +1,376 @@
+---
+title: Design the Execution Environment
+description: How the terminal plugin gives a candidate a real shell over their Attempt Workspace on execenv, while the core keeps authority over files, Submission and evidence.
+audience: developer
+maturity: planned
+slug: /developers/server/execution-environment/
+---
+
+# Design the Execution Environment
+
+The execution environment gives a candidate a real shell beside the editor in a
+programming exam. It is a first-party plugin built on
+[execenv](https://github.com/sudosylabs/execenv), which runs each candidate in
+an isolated microVM with one terminal and a projected `/workspace`.
+
+Most institutions will never turn it on, so the plugin is fully absent when off.
+When it is on, it must not weaken anything the core guarantees:
+
+- the Attempt Workspace remains the only authority for the candidate's files;
+- a Submission seals only acknowledged state;
+- no plugin code runs before commit on admission, Submission, evidence,
+  authorization or audit;
+- the core verifies everything the plugin hands it.
+
+This page records the design the owner settled. It is planned work: nothing
+here is built yet. Proctor and execenv are both in active development, so where
+this design changes a contract, the old form is removed, not kept alongside.
+
+## What execenv gives us, and what it does not
+
+One execenv `Host` is one Linux machine. `Ensure` occupies a grant, which
+cold-boots a microVM from a baked catalog Image. The grant has a fixed share of
+CPU, memory and disk, and holds at most one terminal. Files move through a
+journal: the caller projects a tree into `/workspace` with stable entry IDs and
+opaque versions, and receives an ordered stream of the changes the guest makes,
+each acknowledged once the caller has stored it.
+
+What execenv leaves to the caller is just as important:
+
+- **Placement.** Spreading grants across hosts and recovering from a lost host
+  are the caller's job.
+- **Lifetime.** A grant has no lease or time limit, and does not survive a
+  daemon restart.
+- **Terminal output.** Before the changes below, a dropped connection kills
+  the shell, and nothing replays its output.
+
+## Turning it on
+
+The plugin is always compiled in and is off by default. An administrator turns
+it on through the existing plugin settings. While it is off:
+
+- its routes are not mounted;
+- its workers do not start;
+- Desktop never shows a terminal;
+- readiness ignores it.
+
+Its tables come from its own migrations, and the core never reads them.
+
+An Exam asks for a terminal only through the plugin's `execution` policy
+section, frozen into the Exam Revision and its digest. The section names the
+catalog Image, the network (`none` for now) and whether terminal input is
+recorded. The rest of the Exam is unchanged.
+
+Disabling the plugin is refused while any Sitting that is not Closed or
+Canceled uses a Revision with the section. Publishing such a Revision is
+refused while the plugin is off. Both rules read only core data, so no plugin
+code runs.
+
+A plugin that *fails* is different from one that is off. Attempts carry on
+without a terminal, the editor and Submission keep working, and the missing
+coverage is recorded as a gap. Admission never waits on the plugin.
+
+We rejected a build tag, which would mean two binaries and drifting
+migrations. We also rejected letting an administrator switch the plugin off in
+the middle of an exam, which would take the terminal away from candidates
+partway through.
+
+## Where execenv runs
+
+execenv runs on separate Linux hosts that Proctor dials over TLS. It needs
+root, KVM and amd64, so it cannot run inside the server. As a sidecar it would
+tie exam capacity to the size of the Proctor nodes. The host list, with each
+host's address, certificate authority and token, lives in the plugin's
+secrets.
+
+The work splits into two planes.
+
+- **Grant owner.** For every live grant, one Proctor node holds a PostgreSQL
+  lease row with a fence, in the style of the serving lease. That node creates,
+  freezes, thaws and revokes the grant, and runs both file sync loops.
+- **Terminal traffic.** Desktop opens a binary terminal socket to whichever
+  node it reaches, and that node attaches through its own connection to the
+  host. Terminal bytes never travel over cluster peer delivery, which is best
+  effort and drops the oldest messages.
+
+Serving the terminal from any node needs one change in execenv: the terminal
+must survive the loss of its client.
+
+- **A grace period.** A detached shell is kept alive for a while.
+- **An output ring.** The host keeps recent output with byte offsets.
+- **A screen snapshot.** A headless terminal emulator keeps the current screen,
+  so a resumed vim, top or less redraws correctly, which raw byte replay cannot
+  do.
+- **Resume and takeover.** `Attach` can resume from an offset, through any
+  connection, and a fenced takeover replaces the previous attacher.
+
+### When something fails
+
+| What fails | What the candidate sees | What survives |
+| --- | --- | --- |
+| A Proctor node | A brief reconnect | The shell, its processes and its output |
+| The network | A reconnect, resumed from the last offset | The shell, its processes and its output |
+| The host or the grant | "Environment restarted" | All synced files |
+
+When a Proctor node dies, its leases move to another node. When a host or grant
+dies, the owner creates a new grant, with the incarnation counter raised by one,
+on any host. It projects the Attempt Workspace into the new grant, and the
+candidate gets a new shell. Guest changes that were not yet harvested are lost,
+at most about ten seconds of them, and the loss is recorded as a gap.
+
+### Capacity
+
+Hosts have a fixed number of slots, and every grant cold-boots.
+
+- **Creating grants.** A grant is created after the Attempt starts, driven by
+  an event carrying only IDs, so capacity never gates admission.
+- **Pre-warming.** When a Sitting opens, the owner pre-warms as many grants as
+  the Class needs and the hosts can hold. Only a pristine grant, never attached
+  and with an empty `/workspace`, can be adopted for an Attempt.
+- **Running out.** When slots run out, the terminal waits for capacity and
+  retries. The editor and Submission are unaffected, time is not extended, and
+  the wait is recorded as a gap.
+
+We rejected reserving slots for every Class member when a Sitting is scheduled.
+That would need a capacity calendar across hosts, and it wastes slots on absent
+students.
+
+## Files into the environment
+
+The Attempt Workspace is the only source. The Starter Workspace reaches the
+guest only through the Attempt Workspace it seeded.
+
+The plugin uses only execenv's journal protocol:
+
+1. At start, the owner initializes the projection from the Workspace manifest
+   at cursor C.
+2. It then applies the Workspace journal after C. A Workspace Content Version
+   becomes the execenv version, and a Workspace Entry becomes the execenv entry
+   identity.
+3. Content travels by SHA-256, so unchanged bytes are never sent twice.
+4. If the journal says a refresh is required, the owner initializes again from
+   the manifest.
+
+execenv drops its older tree API, its unfenced freeze and thaw, and the
+`user-kernel` isolation class. Every host is a `vm` host, and the journal is the
+only file protocol.
+
+The Attempt Workspace always wins. If the editor and the guest change the same
+file, the first commit to the Attempt Workspace stands, and the guest is brought
+back in line with it.
+
+## Files back from the environment
+
+### What is kept: `.proctorignore`
+
+Every Attempt Workspace has a `/workspace/.proctorignore` in gitignore syntax.
+
+- **Who controls it.** The candidate can edit it, and nothing about containers
+  belongs in it. Its one job is to name paths that stay on the grant and are
+  never forwarded to the server or the editor.
+- **Defaults.** If the author's Starter Workspace has none, publishing the Exam
+  adds Proctor's default, which plays the part of a standard `.gitignore`. It
+  lists `node_modules/`, `.venv/`, `__pycache__/`, `target/`, `build/`, `dist/`,
+  `*.o`, `*.class` and similar build output. The file is added at publication,
+  never at admission.
+- **The git rule.** A pattern only stops *new* paths from being forwarded.
+  Anything already in the Attempt Workspace keeps syncing: a starter file, a
+  file saved in the editor, or one harvested earlier. A careless `*.py` can
+  therefore never empty a Submission. To stop syncing a file, the candidate
+  deletes it in the editor.
+- **The file always syncs itself.** It can never ignore itself, and it is
+  submitted, so a reviewer can see what the candidate kept off the record.
+- **What staying on the grant means.** An ignored path never appears in the
+  editor, is never in the Submission, and is lost if the host dies. The terminal
+  says so once, when the first ignored path appears.
+
+execenv does not know the name `.proctorignore`. The caller names its ignore
+file, plus fallback patterns for when that file is missing or does not parse,
+when it initializes the projection. The guest agent then watches and applies the
+file. execenv owns the general rules: projected paths and the ignore file itself
+are always observed. Filtering in the guest keeps an `npm install` from flooding
+the observation stream.
+
+The core still checks everything. Before storing a harvest, the owner tests
+each change against the Attempt Workspace's own copy of `.proctorignore`, and
+drops anything that file would ignore.
+
+We rejected two other rules. In one, ignoring an already-synced path drops it,
+which silently empties a Submission. In the other, the server copy freezes at
+its last version, so the Submission would differ from what the candidate ran.
+We also rejected a subset of devcontainer.json: its container fields do not map
+to execenv's baked Images, and most of them would let an author reach the host.
+
+### How changes are harvested
+
+The owner reads the guest's observation stream and writes through a core use
+case, *Apply Execution Environment Changes*. It acts as the plugin principal
+and is bound to one Attempt and its current Participation generation. The core:
+
+- authorizes the call;
+- re-hashes every content stream;
+- enforces paths and the capacity policy;
+- accepts nothing unless the Attempt is Active, the Sitting is Open and the
+  deadline has not passed.
+
+Only after the commit does the owner acknowledge the observations. A change
+that is refused, for being too large, over quota or in conflict, stays on the
+grant, and the terminal says why in one line. The journal records each change's
+origin, `editor` or `environment`, and the usual workspace-changed hint tells
+Desktop to refresh.
+
+The harvest is built to stay cheap:
+
+- **Coalescing.** A file rewritten ten times in a window becomes one change,
+  and a create followed by a delete cancels out.
+- **No-op skipping.** A change whose SHA-256 matches the current content is
+  dropped, which is common when a build rewrites identical output.
+- **Cadence.** A path is harvested once it has been quiet for two seconds, and
+  no change waits longer than ten.
+- **Budgets.** Each Attempt has mutation and byte budgets, and each node bounds
+  how many harvests run at once. When a budget runs out, saving pauses and the
+  shell keeps running.
+
+### Submission
+
+- **A voluntary submit.** Desktop first asks the plugin to flush: the grant
+  freezes, the last changes are committed, and Desktop gets back the Workspace
+  cursor. It then submits with that cursor, exactly as it does today. If the
+  candidate backs out, or no Submission arrives within thirty seconds, the grant
+  thaws. A failed flush still lets the candidate submit what was saved.
+- **Time-up.** The owner harvests continuously and drains one last time two
+  seconds before the scheduled end. The core seal never waits for the plugin.
+  Anything that had not landed is not in the Submission, and the gap is
+  recorded.
+
+Only Attempt Workspace content counts. Terminal output, shell history, the
+scratch home and ignored paths never do.
+
+## One write path for every writer
+
+Today one file save costs about 61 SQL round trips, five commits and two audit
+writes. With the terminal harvesting files, that would multiply. One batch
+operation, *Apply Workspace Batch*, therefore replaces the single-file path
+for every writer, the Desktop editor and the environment alike.
+
+- **Size.** One batch carries 1 to 128 mutations, each with the per-entry fence
+  it has today.
+- **All or nothing.** If any item fails, nothing is applied. The problem's
+  `item` field names the mutation that refused the batch, with its own code. A
+  partial batch could seal an inconsistent tree.
+- **One unit of work.** A batch is one access check, one idempotency outcome,
+  one audit pair holding counts, bytes, the cursor range and the origin (never
+  paths), one multi-row journal insert and one realtime hint.
+- **Capacity.** It is checked once per batch, against the state the batch
+  leaves, instead of before every single write. A usage counter kept on the
+  workspace row can later replace even that one count.
+- **Staging.** Content is staged to VFS first, in parallel within per-Attempt
+  and per-node bounds, with one reservation per batch.
+- **HTTP.** One multipart batch route replaces the per-entry create, replace,
+  move and delete routes. Reads are unchanged, and Desktop batches what it saves
+  within a short window.
+
+For a batch of 20 changes this is roughly twenty times less SQL work and twenty
+times fewer commits.
+
+The same change fixes three problems the measurements found:
+
+- command outcomes are pruned without a daily cap;
+- the two lookups that block object reclaim get indexes;
+- each Attempt gets write-rate limits.
+
+## Evidence
+
+Commands are recorded by default. execenv's guest agent runs outside the
+candidate's unprivileged workload and records every process it starts: the
+bounded command line, the working directory, the start time, the exit status
+and the duration.
+
+- **How the log leaves.** The agent sends it at once over the guest link it
+  owns, and the host relays it as a numbered stream. It is acknowledged only
+  after Proctor has stored it.
+- **Tampering.** The workload cannot read or change the log, and records
+  already sent are out of reach. A gap in the sequence, or a silent agent, is
+  itself recorded.
+- **Attribution.** execenv knows only an opaque grant ID and epoch. Before a
+  grant is first used, the owner binds it to an Attempt and its Participation
+  generation through the core. The core stores a record only if it matches
+  that binding, and drops duplicates. Grant IDs and epochs are never reused.
+- **Limits.** Candidates are told that commands are logged. Work that starts no
+  process, such as `exec()` inside Python, is invisible. A command line can
+  hold an answer, so the log is sealed evidence that only reviewers see.
+
+An Exam may also opt in to recording terminal input. It is captured at the
+Proctor node that receives the terminal socket, so it never passes through the
+guest. It holds keystrokes and pastes with their timing, plus window size
+changes, and never output. It is capped per Attempt, sealed with the
+Submission, and shown to reviewers beside the process log.
+
+The remaining environment events are recorded as gaps, never as Flags:
+
+- the environment was unavailable;
+- the candidate waited for capacity;
+- the environment restarted;
+- harvested changes were lost;
+- the process log broke off.
+
+An `environment` origin on a file is review context, not an accusation.
+
+## What has to change
+
+**In execenv**
+
+1. **Remove what this design does not use:**
+   - the `user-kernel` class;
+   - the tree API;
+   - the unfenced freeze and thaw;
+   - the journal opt-in switch.
+2. **Terminals that survive client loss:** a grace period, an output ring with
+   offsets, a screen snapshot, resume, and fenced takeover.
+3. **Per-terminal flow control and a bounded client buffer.** A slow candidate
+   then stalls only their own terminal.
+4. **Certification of the journal on `vm` hosts.**
+5. **Host housekeeping:** a guest-exit watcher that frees the slot, and
+   draining before an upgrade restarts the daemon.
+6. **A caller-named ignore file** with fallback patterns.
+7. **The process-log stream.**
+
+**In the plugin seams**
+
+1. **A plugin principal.**
+2. **Plugin routes,** authorized and audited by the core before the handler
+   runs.
+3. **A continuous worker** with leased ownership.
+4. **Plugin migrations.**
+5. **The Exam policy section.**
+6. **Events that carry only IDs:**
+   - Participation started and suspended;
+   - Sitting paused, resumed and closing.
+7. **Workspace access for the plugin:** a read capability and the harvest use
+   case.
+8. **An environment-to-Attempt binding.**
+9. **Evidence kinds that are sealed, exported and shown in review.**
+10. **A Desktop capability for the terminal pane.**
+
+**In the core**
+
+1. **Apply Workspace Batch,** with the cleanup fixes above.
+2. **An origin field on the journal.**
+3. **The rule that refuses disabling the plugin while it is in use.**
+4. **Checks at publication:**
+   - the capacity policy against execenv's limits;
+   - the default `.proctorignore`.
+
+## Open risks
+
+- **Cold boot.** Cold boot at the start of an exam is the main latency risk.
+  Pre-warming helps, and execenv's deferred snapshot restore would help more.
+- **Host upgrades.** Restarting a host destroys its grants, so upgrades must
+  drain first and should not run while a Sitting is open.
+- **Lost changes.** Up to ten seconds of unharvested changes can be lost at
+  time-up or after a host dies.
+- **Load from builds.** Builds across a whole Class load VFS and PostgreSQL.
+  The design bounds that load, but nobody has measured it yet. A load test
+  must come before the first large Sitting.
+- **Local VFS.** Local VFS publishes under one lock per node. Installations
+  that turn the terminal on should use S3.

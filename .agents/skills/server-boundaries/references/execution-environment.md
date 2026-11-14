@@ -14,8 +14,14 @@ This file holds only the rules that must not drift.
   The plugin flushes before a voluntary submit and drains before the deadline.
   Anything it misses is a recorded gap.
 - The plugin writes only through the core use case bound to one Attempt and
-  its current Participation generation, as the plugin principal. It never
-  touches stores directly.
+  its current Participation generation. A harvested change is written on the
+  candidate's behalf, with origin `environment`, and audited as the candidate;
+  there is no plugin principal. The plugin never touches stores directly: it
+  keeps its own state in the core record store and holds work under core
+  leases.
+- Plugin routes live under `/api/v1/plugins/{plugin_id}/` and run only after a
+  core guard; plugin Exam settings are a plugin section frozen into the
+  Revision, and admission never calls plugin code to read them.
 - Every harvested write and every evidence record is checked against the
   Attempt's current binding to grant, epoch and incarnation. Grant IDs and
   epochs are never reused.

@@ -209,8 +209,13 @@ to execenv's baked Images, and most of them would let an author reach the host.
 ### How changes are harvested
 
 The owner reads the guest's observation stream and writes through a core use
-case, *Apply Execution Environment Changes*. It acts as the plugin principal
-and is bound to one Attempt and its current Participation generation. The core:
+case, *Apply Execution Environment Changes*. A harvested change is the
+candidate's own work, so it is written on their behalf through their current
+Participation, with journal origin `environment`, and audit names the candidate.
+There is no plugin principal. In place of Desktop's Session, key and Connection,
+the core checks an environment binding it holds itself. The binding ties the
+grant and its epoch to the Attempt and its current Participation generation,
+and it ends when that generation ends. The core:
 
 - authorizes the call;
 - re-hashes every content stream;
@@ -343,20 +348,32 @@ An `environment` origin on a file is review context, not an accusation.
 
 **In the plugin seams**
 
-1. **A plugin principal.**
-2. **Plugin routes,** authorized and audited by the core before the handler
-   runs.
-3. **A continuous worker** with leased ownership.
-4. **Plugin migrations.**
-5. **The Exam policy section.**
+1. **Environment binding.** A core table binds a grant and its epoch to an
+   Attempt and its current Participation generation. Harvested writes and
+   evidence are accepted only while the binding is current, and are attributed
+   to the candidate.
+2. **Plugin sections.** Exam drafts and Revisions carry `plugin_sections`, one
+   JSON object of at most 64 KiB per plugin, frozen into the Revision and its
+   digest. The plugin supplies the section's schema for the authoring form, and
+   validates it on save and at publication. Admission reads the frozen section
+   and never calls the plugin.
+3. **Plugin routes behind core guards.** Routes live under a `plugins/` prefix
+   of the API, then the plugin's ID. Each picks one guard from a closed core
+   list, such as candidate Attempt access. The core runs the guard, rate limits
+   and audit before the handler, and mounts nothing while the plugin is off.
+4. **Leased workers.** A plugin registers a worker the core starts and stops. It
+   claims keys under fenced leases in a core table; a dead node's leases expire
+   and another node claims them.
+5. **A record store.** Each plugin keeps documents of at most 64 KiB, keyed by
+   kind and key, with compare-and-swap on a revision, in one core table. There is
+   no plugin SQL and there are no plugin migrations.
 6. **Events that carry only IDs:**
    - Participation started and suspended;
    - Sitting paused, resumed and closing.
 7. **Workspace access for the plugin:** a read capability and the harvest use
    case.
-8. **An environment-to-Attempt binding.**
-9. **Evidence kinds that are sealed, exported and shown in review.**
-10. **A Desktop capability for the terminal pane.**
+8. **Evidence kinds that are sealed, exported and shown in review.**
+9. **A Desktop capability for the terminal pane.**
 
 **In the core**
 

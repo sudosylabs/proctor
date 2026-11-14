@@ -1,0 +1,180 @@
+# Written guidance for error-code pages at /problems/<code>.
+#
+# The error catalog (server/httpapi/route/error_catalog.yaml) owns each code,
+# its status and its one-line meaning. Add an entry here when a code needs more
+# than the general advice for its kind of error. Every key must be a catalogued
+# code; `npm run generate:problems` fails otherwise.
+#
+# Fields, all optional:
+#   means:  a short paragraph on what happened, beyond the catalog line
+#   causes: what usually leads to it, most common first
+#   fix:    ordered steps that resolve it
+#   retry:  one short answer to "can I retry?"
+#   note:   one warning shown after the steps
+#
+# Write for the person handling the error. Inline code uses backticks.
+
+access_policy.revision_conflict:
+  means: >-
+    Every replacement of the Access Policy names the revision it was based on
+    in `expected_revision`. Proctor accepts it only while that revision is
+    still current. Here it was not, so nothing changed. The response carries
+    the current revision in `fields.current_revision`.
+  causes:
+    - Another administrator saved a change while you were editing.
+    - A script read the policy once and kept reusing that revision after its first update succeeded.
+    - A retry used a new `Idempotency-Key` after the first attempt had already saved, so the retry arrived as a second change based on an old revision.
+  fix:
+    - Read the current policy with `GET /api/v1/access-policy`.
+    - Apply your change to the policy you just read, and check it still makes sense next to the other change.
+    - Send `PUT /api/v1/access-policy` again with the new `expected_revision` and a new `Idempotency-Key`.
+  retry: Only after reading the current revision.
+  note: >-
+    Do not resend the same request. Its revision will never be current again,
+    so it fails every time.
+
+idempotency.conflict:
+  means: >-
+    Proctor remembers each `Idempotency-Key` together with the request it
+    arrived with. This key arrived before with a different request, so Proctor
+    refused to treat the two as the same action.
+  causes:
+    - The client reused one key for two different actions.
+    - The client changed the body or parameters while retrying, for example by regenerating a timestamp.
+    - Keys are derived from something that repeats, such as the user or the endpoint, instead of the action.
+  fix:
+    - When retrying the same action, send exactly the same request with the same key.
+    - For a new action, generate a new key.
+    - Create keys once per action, from a random source, and store them with the action until it completes.
+  retry: Not with this key and this request.
+
+idempotency.in_progress:
+  means: >-
+    The first request sent with this `Idempotency-Key` is still running.
+    Proctor will not start the same action twice.
+  causes:
+    - A retry went out before the first request finished, often after a client-side timeout.
+    - Two tabs or workers sent the same action at the same moment.
+  fix:
+    - Wait a moment.
+    - Send the same request with the same key again. Once the first request finishes, Proctor answers with its outcome.
+  retry: Yes, with the same key and request, after a short wait.
+
+authentication.rate_limited:
+  causes:
+    - Repeated failed sign-in attempts for the same account or from the same address.
+    - Proctor sits behind a reverse proxy that is not listed in `Server.TrustedProxies`, so every visitor appears to come from the proxy and shares one limit.
+  fix:
+    - Wait a few minutes before trying again.
+    - If many people are affected at once, ask the operator to check `Server.TrustedProxies` in the server configuration.
+  retry: Yes, after waiting.
+
+authentication.dpop.use_nonce:
+  means: >-
+    Proctor wants this DPoP proof to carry a server-issued nonce. The response
+    includes a `DPoP-Nonce` header with the value to use. This is a normal part
+    of DPoP, not a failure of your credential.
+  causes:
+    - The proof carried no nonce, or a nonce the server no longer accepts.
+  fix:
+    - Keep the value of the `DPoP-Nonce` response header.
+    - Create a completely new DPoP proof that includes that nonce.
+    - Retry the request once with the new proof, if the operation is otherwise safe to retry.
+  retry: Once, with a new proof carrying the nonce.
+  note: >-
+    Never resend the rejected proof. A proof can be used only once.
+
+authentication.required:
+  causes:
+    - The request carried no credential at all.
+    - A client cleared its stored credential, or a proxy removed the `Authorization` header.
+  fix:
+    - Sign in, or obtain a credential for the client.
+    - Send it with the request. The endpoint page says which credential it needs.
+  retry: After signing in.
+
+authentication.session_required:
+  causes:
+    - The endpoint is for the web app and needs a browser Session, but the request came from a script or Desktop credential.
+    - The Session cookie was not sent, for example because the request crossed origins.
+  fix:
+    - Call the endpoint from a signed-in browser Session on the same origin as `Server.PublicURL`.
+    - If you are integrating from a script, look for the endpoint meant for your credential in the API reference.
+  retry: Not with this credential.
+
+authentication.strong_required:
+  causes:
+    - The action needs a Session that was signed in with a second factor, and this one was not.
+    - The account has no second factor enrolled yet.
+  fix:
+    - Sign in again and complete two-step sign-in.
+    - If the account has no second factor, enroll one first.
+  retry: After signing in with a second factor.
+
+request.invalid:
+  means: >-
+    Proctor could not accept the request as written. When it can tell which
+    input it rejected, the response names it in `fields`, with the constraint
+    as the value.
+  causes:
+    - The body is not valid JSON, or contains more than one JSON value.
+    - The body contains a field the endpoint does not accept. Unknown fields are rejected, not ignored.
+    - A parameter or field has the wrong type, format or range.
+  fix:
+    - Read `fields` in the response, if present.
+    - Compare your request with the endpoint’s schema in the API reference.
+    - Correct the request and send it again.
+  retry: No. Correct the request first.
+
+request.too_large:
+  causes:
+    - The request body is larger than this endpoint allows.
+    - A file was sent in a request meant for metadata, instead of through the upload flow.
+  fix:
+    - Make the body smaller, or split the work into several requests.
+    - For files, use the upload endpoints described in Uploads and content.
+  retry: No. Resending the same body fails the same way.
+
+route.not_found:
+  causes:
+    - The path has a typo, or is missing the `/api/v1` prefix.
+    - The client was built for a different version of Proctor.
+  fix:
+    - Check the path against the API reference.
+    - Check that the client was built for the Proctor release the server runs.
+  retry: No.
+
+server.internal:
+  means: >-
+    Proctor hit an error it did not expect. This is a fault in the server, not
+    in your request.
+  causes:
+    - A bug in Proctor.
+    - A failure in a dependency that Proctor did not classify.
+  fix:
+    - Retry once. For a write, send the same `Idempotency-Key` so it cannot apply twice.
+    - If it fails again, report it with the `request_id` from the response. Operators can find the matching log entries by that ID.
+  retry: Once. Report it if it happens again.
+
+exam.attempt.workspace.cursor_conflict:
+  means: >-
+    The request named the Workspace cursor it was based on, and the Attempt
+    Workspace has changed since. Proctor refuses to act on an outdated view of
+    the candidate’s files.
+  causes:
+    - Another change to the Workspace was acknowledged after the client read its cursor.
+    - The client sent a cursor it stored before reconnecting.
+  fix:
+    - Read the Workspace again to get the current cursor.
+    - Check that the action still makes sense against the current files.
+    - Send it again with the new cursor and a new `Idempotency-Key`.
+  retry: Only after reading the current cursor.
+
+exam.attempt.unavailable:
+  causes:
+    - A dependency of the Attempt, such as the database, was briefly unavailable.
+    - The server was restarting or shedding load.
+  fix:
+    - Retry after a short backoff. For a write, keep the same `Idempotency-Key`.
+    - If it continues, tell the operator of the installation.
+  retry: Yes, after a short wait.

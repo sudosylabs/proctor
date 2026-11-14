@@ -1,62 +1,41 @@
 .notice {
-  background: color-mix(in srgb, var(--proctor-sidebar) 64%, transparent);
-  border: 0;
-  border-left: var(--proctor-stroke-flow) solid var(--proctor-attention);
-  border-radius: 0;
+  border: 1px solid var(--proctor-border);
+  border-radius: 10px;
+  color: var(--proctor-ink-soft);
   display: grid;
-  gap: var(--proctor-space-4);
-  grid-template-columns: minmax(8.5rem, auto) minmax(0, 1fr);
-  margin: var(--proctor-space-5) 0 var(--proctor-space-7);
-  max-width: 74ch;
-  padding: var(--proctor-space-4) var(--proctor-space-5);
+  font-size: 0.9rem;
+  gap: 12px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  line-height: 1.6;
+  margin: 24px 0;
+  padding: 14px 16px;
+}
+
+.notice svg {
+  color: var(--proctor-ink-muted);
+  margin-top: 3px;
 }
 
 .notice strong {
-  align-items: center;
-  align-self: start;
+  color: var(--proctor-ink);
+  font-weight: 600;
+}
+
+/* Children may be one paragraph or several; keep the label on the first line. */
+.notice div > p {
+  display: inline;
+  margin: 0;
+}
+
+.notice div > p + p {
+  display: block;
+  margin-top: 8px;
+}
+
+.planned svg {
   color: var(--proctor-attention);
-  display: flex;
-  font-size: var(--proctor-type-caption-size);
-  font-weight: 700;
-  gap: 0.45rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
-.notice strong i {
-  background: currentColor;
-  border-radius: 50%;
-  height: 0.45rem;
-  width: 0.45rem;
-}
-
-.notice div {
-  color: var(--proctor-ink-soft);
-  font-size: var(--proctor-type-body-small-size);
-  line-height: var(--proctor-type-body-small-line);
-}
-
-.notice div > :last-child {
-  margin-bottom: 0;
-}
-
-.available {
-  background: color-mix(in srgb, var(--proctor-complete-soft) 64%, transparent);
-  border-left-color: var(--proctor-complete);
-}
-
-.available strong {
+.available svg {
   color: var(--proctor-complete);
-}
-
-.planned {
-  background: color-mix(in srgb, var(--proctor-attention-soft) 64%, transparent);
-}
-
-@media (max-width: 640px) {
-  .notice {
-    gap: var(--proctor-space-2);
-    grid-template-columns: 1fr;
-    padding-inline: var(--proctor-space-4);
-  }
 }

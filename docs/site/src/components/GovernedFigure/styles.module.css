@@ -28,13 +28,10 @@
 }
 
 .kind {
-  color: var(--proctor-primary-strong);
+  color: var(--proctor-ink);
   flex: none;
-  font-family: var(--ifm-font-family-monospace);
-  font-size: var(--proctor-type-caption-size);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-weight: 500;
+  text-transform: capitalize;
 }
 
 .fullSize {

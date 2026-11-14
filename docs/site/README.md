@@ -36,13 +36,14 @@ homepage from the reader. Scoped CSS owns reading widths; avoid selectors
 against generated CSS-module names. The homepage is a compact guide directory,
 not a second description of product architecture.
 
-The navigation and footer retain the flat Proctor Docs lockup. Browser icons
-use the 2.5D mark and follow the browser's color preference independently of the
-site's reading theme. These are reviewed package-local assets; their tests
+The header carries the flat Proctor Docs lockup: purple mark and ink lettering
+on the light theme, all white on the dark one. Browser icons use the 2.5D mark
+and follow the browser's color preference independently of the site's reading
+theme. These are reviewed package-local assets; their tests
 validate the bundled copies without reading repository brand masters.
 
 The tracked [documentation visual-system reference](../../.agents/skills/docs-site/references/design-system.md)
-owns the brand palette, semantic colors, IBM Plex typography, spacing,
+owns the brand palette, semantic colors, Geist typography, spacing,
 geometry, and illustration grammar. Human changes begin in
 `design-system/tokens.mjs`; `src/css/tokens.css` is generated:
 
@@ -61,6 +62,8 @@ npm run test:search
 npm run test:navigation
 npm run generate:technical-reference
 npm run check:technical-reference
+npm run generate:problems
+npm run test:problems
 ```
 
 The check rejects stale generated CSS, literal colors outside the token module,
@@ -99,6 +102,18 @@ or API guidance against the reviewed OpenAPI path and method set. It understands
 documentary placeholders and deliberately ignores API-shaped paths on explicit
 external origins such as the local Prometheus API. Generated endpoint pages are
 excluded because their paths already come directly from OpenAPI.
+
+## Error-code pages
+
+`problems/index.mjs` renders one page per code in
+`server/httpapi/route/error_catalog.yaml` into the ignored `docs/problems/`
+content root, served at `/problems/<code>`. The catalog owns the code, status
+and meaning; `server/openapi.json` owns which endpoints declare it;
+`server/i18n/en.json` supplies the example title and detail. Causes and fixes
+come from the general advice for the code's kind of error unless
+[`docs/api/problem-guidance.yaml`](../api/problem-guidance.yaml) has a written
+entry for it. `npm run generate:problems` runs before `start` and `build` and
+rejects guidance for a code the catalog does not contain.
 
 `documentation-coverage.json` is the human-edited routing table from every
 OpenAPI product area and named multi-operation workflow to its authored entry
@@ -152,21 +167,20 @@ server openapi-build` after changing a route, description, example, or schema.
 the ignored `static/openapi/openapi.json` publication path. The generated copy
 is never edited or treated as an authority.
 
-`docusaurus-plugin-openapi-docs` renders that same contract into the ignored
-`docs/api/reference/` directory. `scripts/finalize-openapi-reference.mjs` adds
-the Proctor contract panel between each operation introduction and its request
-details. The local `ApiExplorer/MethodEndpoint` theme adapter presents the
-exact OpenAPI path without joining it to a display-only server URL. These
-adapters own presentation only; they never rewrite route or contract data.
-The `ApiExplorer/CodeTabs` adapter synchronizes the generator with the active
-language panel after Docusaurus restores a saved tab. Verify a page reload after
-selecting JavaScript or Python: the highlighted language must match the sample,
-not only after a fresh click. The configured variants are cURL, Fetch, and
-Requests; unsupported extra variants do not appear in the reader.
-`scripts/verify-openapi-reference.mjs` then proves that all operations,
-product-area tags, sidebar entries, and `x-proctor-*` declarations are present
-exactly once.
-The authored `docs/api/index.mdx` overview and generator template remain small;
+`scripts/generate-api-reference.mjs` renders that same contract into the
+ignored `docs/api/reference/` directory: one page per operation, one page per
+product area, and the sidebar. `api-reference/index.mjs` owns the reading
+model. It turns schema constraints into plain rules ("26-character Proctor
+ID", "1 to 128 characters") while keeping the exact pattern beside them,
+groups each operation's `x-proctor-error-codes` by status with their catalog
+meanings, and builds curl, JavaScript, Python and HTTP samples. Samples use
+the contract's own request example; a response without one gets an example
+built from its schema. `src/components/EndpointPage` and `AreaPage` render the
+pages. Page IDs are the lodash-style kebab case of each `operationId`, so
+endpoint URLs and search links stay stable. `api-reference/verify.mjs` fails
+generation unless every operation, area and sidebar entry appears exactly once
+and every declared error code is rendered.
+The authored `docs/api/index.mdx` overview remains small;
 route descriptions and schemas stay with their human-owned OpenAPI YAML
 fragments.
 
@@ -194,14 +208,8 @@ The reference UI deliberately disables request sending. It documents the
 contract and produces client-ready examples without turning a documentation
 deployment into a credential-bearing API console.
 
-The package-local `.npmrc` disables dependency lifecycle scripts. The OpenAPI
-theme's `postman-code-generators` dependency otherwise detects and launches
-foreign package managers inside `node_modules`, making a clean install depend
-on ambient developer tooling and network timing. Its published runtime already
-contains the generator registry and all required dependencies; the codegen
-smoke test exercises curl, JavaScript Fetch, and Python Requests output after a
-script-free install, and the production build is the final guard. Re-enable
-lifecycle scripts only after reviewing every dependency that would execute.
+The package-local `.npmrc` disables dependency lifecycle scripts. Re-enable
+them only after reviewing every dependency that would execute.
 
 ## Dependency advisories
 
@@ -212,34 +220,21 @@ compromised or crashing build dependency affects what is published.
 The `package.json` overrides hold patched transitive releases that the
 upstream declarations do not yet admit:
 
-- `js-yaml` 4.3.2 and `yaml` 1.10.3 under the OpenAPI converter
-  (`openapi-to-postmanv2`);
 - `tinypool` 2.2.0 for Docusaurus' static-rendering worker pool, the version
-  line the next Docusaurus major already declares; and
+  line the next Docusaurus major already declares;
 - `postcss-selector-parser` 7.1.7 under the cssnano 6 minifier chain, which
-  otherwise resolves an unpatched 6.x release.
+  otherwise resolves an unpatched 6.x release; and
+- `serialize-javascript`, `uuid` and `yaml` at patched releases.
 
-Remove an override once its upstream declares a patched range. The snippet
-smoke test and the production build, which renders through the worker pool and
-minifies every stylesheet, cover their runtime compatibility.
+Remove an override once its upstream declares a patched range. The production
+build, which renders through the worker pool and minifies every stylesheet,
+covers their runtime compatibility.
 
-Two high-severity advisories have no compatible fix and are accepted:
-
-- [`braces` GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)
-  has no patched release. It reaches the build through `micromatch`,
-  `fast-glob`, and the development-server file watcher, which expand only
-  glob patterns written in this repository; no reader input reaches them.
-- [`@faker-js/faker` GHSA-qxc2-j82w-r537](https://github.com/advisories/GHSA-qxc2-j82w-r537)
-  affects `helpers.fake`. The OpenAPI theme's `postman-collection` pins faker
-  5.5.3 for Postman dynamic variables and never calls `helpers.fake`; the
-  patched faker major removed the API it uses, so it cannot be overridden.
-
-Every other high advisory npm reports stems from these two. The vulnerability
-workflow audits this lockfile with `build/ci/npm-audit.mjs`, which fails on
-any high or critical advisory except these two IDs; accepting another one
-means listing it here and in that workflow. Re-run the audit after each
-Docusaurus or OpenAPI plugin upgrade and drop an accepted advisory as soon as
-a compatible fix exists.
+With the OpenAPI plugin removed, `npm audit --omit=dev` reports no high or
+critical advisory. The vulnerability workflow still accepts
+`GHSA-vfj7-8cjw-p6xm` and `GHSA-qxc2-j82w-r537`; both came from the plugin's
+dependency tree and can be dropped from `.github/workflows/security.yml` and
+`build/ci/npm-audit.test.mjs`. Re-run the audit after each Docusaurus upgrade.
 
 ## Image boundary
 

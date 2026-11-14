@@ -1,0 +1,128 @@
+.panel {
+  background: var(--proctor-code-block);
+  border: 1px solid var(--proctor-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.head {
+  align-items: center;
+  background: var(--proctor-code-block-head);
+  border-bottom: 1px solid var(--proctor-border);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 40px;
+  padding: 0 6px 0 8px;
+}
+
+.tabs {
+  align-self: stretch;
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tab {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--proctor-ink-muted);
+  cursor: pointer;
+  display: inline-flex;
+  font: 500 0.78rem var(--ifm-font-family-base);
+  min-height: 40px;
+  padding: 0 9px;
+  position: relative;
+  transition: color 120ms ease;
+  white-space: nowrap;
+}
+
+.tab:hover,
+.tab[aria-selected="true"] {
+  color: var(--proctor-ink);
+}
+
+.tab[aria-selected="true"]::after {
+  background: var(--proctor-ink);
+  border-radius: 1px;
+  bottom: -1px;
+  content: "";
+  height: 1.5px;
+  left: 9px;
+  position: absolute;
+  right: 9px;
+}
+
+.tab:focus-visible {
+  outline-offset: -3px;
+}
+
+.status {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.75rem;
+}
+
+.dot {
+  border-radius: 50%;
+  height: 6px;
+  margin-right: 7px;
+  width: 6px;
+}
+
+.ok .dot {
+  background: var(--proctor-complete);
+}
+
+.bad .dot {
+  background: var(--proctor-danger);
+}
+
+.copy {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--proctor-ink-muted);
+  cursor: pointer;
+  display: inline-flex;
+  flex: none;
+  font: 500 0.78rem var(--ifm-font-family-base);
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+}
+
+.copy:hover {
+  background: var(--proctor-surface-hover);
+  color: var(--proctor-ink);
+}
+
+/* The panel draws the frame; the code block inside only draws code. */
+.body :global(.theme-code-block) {
+  border: 0;
+  border-radius: 0;
+  margin: 0;
+}
+
+.body :global([class*="buttonGroup"]) {
+  display: none;
+}
+
+.body :global(pre) {
+  max-height: 34rem;
+}
+
+.foot {
+  border-top: 1px solid var(--proctor-border);
+  color: var(--proctor-ink-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  padding: 9px 14px;
+}
+
+.foot code {
+  font-size: 0.72rem;
+}

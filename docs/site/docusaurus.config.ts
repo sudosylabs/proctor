@@ -1,7 +1,7 @@
-import {themes as prismThemes} from 'prism-react-renderer';
 import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
-import {guides, referenceLinks} from './navigation.mjs';
+import {guides, referenceLinks, sourceRepository} from './navigation.mjs';
+import codeTheme from './src/code-theme';
 
 const baseUrl = (process.env.BASE_URL ?? '/').replace(/\/?$/, '/');
 
@@ -91,47 +91,25 @@ const config: Config = {
         path: '../api',
         routeBasePath: '/api',
         sidebarPath: './sidebars.api.ts',
-        docItemComponent: '@theme/ApiItem',
         editUrl: ({docPath}: {docPath: string}) =>
           `https://github.com/sudosylabs/Proctor/edit/main/docs/api/${docPath}`,
         breadcrumbs: true,
       },
     ],
     [
-      'docusaurus-plugin-openapi-docs',
+      '@docusaurus/plugin-content-docs',
       {
-        id: 'api-generator',
-        docsPluginId: 'api',
-        config: {
-          proctor: {
-            specPath: '../../server/openapi.json',
-            outputDir: '../api/reference',
-            template: './templates/api.mdx.mustache',
-            downloadUrl: '/openapi/openapi.json',
-            hideSendButton: true,
-            showInfoPage: false,
-            showSchemas: false,
-            disableCompression: true,
-            externalJsonProps: true,
-            sidebarOptions: {
-              groupPathsBy: 'tag',
-              categoryLinkSource: 'tag',
-            },
-          },
-        },
+        // Generated from the server error catalog by npm run generate:problems.
+        id: 'problems',
+        path: '../problems',
+        routeBasePath: '/problems',
+        sidebarPath: './sidebars.problems.ts',
+        breadcrumbs: true,
       },
     ],
   ],
 
-  themes: ['docusaurus-theme-openapi-docs'],
-
   themeConfig: {
-    // Keep the generated examples focused on the three client paths we test.
-    languageTabs: [
-      {language: 'curl', variant: 'cURL', variants: ['cURL']},
-      {language: 'javascript', variant: 'Fetch', variants: ['Fetch']},
-      {language: 'python', variant: 'Requests', variants: ['Requests']},
-    ],
     metadata: [
       {
         name: 'keywords',
@@ -140,16 +118,10 @@ const config: Config = {
     ],
     colorMode: {
       defaultMode: 'light',
-      respectPrefersColorScheme: false,
+      respectPrefersColorScheme: true,
     },
     navbar: {
-      logo: {
-        alt: 'Proctor Docs',
-        src: 'img/brand/proctor-docs-lockup-white.svg',
-        srcDark: 'img/brand/proctor-docs-lockup-white.svg',
-        width: 216,
-        height: 28,
-      },
+      hideOnScroll: false,
       items: [
         {
           type: 'dropdown',
@@ -161,72 +133,26 @@ const config: Config = {
             sidebarId,
           })),
         },
-        {
-          type: 'docSidebar',
-          sidebarId: 'developerSidebar',
-          label: 'Developers',
-          position: 'left',
-        },
-        {to: '/api/', label: 'API reference', position: 'left'},
+        {to: '/api/', label: 'API', position: 'left', activeBasePath: '/api'},
         {
           type: 'dropdown',
           label: 'Reference',
           position: 'left',
           items: referenceLinks,
         },
-        {
-          href: 'https://github.com/sudosylabs/Proctor',
-          label: 'GitHub',
-          position: 'right',
-        },
+        {to: '/problems/', label: 'Error codes', position: 'left', activeBasePath: '/problems'},
         {type: 'search', position: 'right'},
-      ],
-    },
-    footer: {
-      style: 'dark',
-      logo: {
-        alt: 'Proctor Docs',
-        src: 'img/brand/proctor-docs-lockup-white.svg',
-        srcDark: 'img/brand/proctor-docs-lockup-white.svg',
-        width: 192,
-        height: 25,
-      },
-      links: [
         {
-          title: 'Use Proctor',
-          items: [
-            {label: 'Your account', to: '/account/'},
-            {label: 'Take an exam', to: '/candidate/'},
-            {label: 'Manage exams', to: '/exam-manager/'},
-          ],
-        },
-        {
-          title: 'Run Proctor',
-          items: [
-            {label: 'Deployment Guide', to: '/operator/'},
-            {label: 'Institution Setup', to: '/institution-admin/'},
-            {label: 'Security Review', to: '/security/'},
-          ],
-        },
-        {
-          title: 'Build With Proctor',
-          items: [
-            {label: 'Developer Guide', to: '/developers/'},
-            {label: 'API Reference', to: '/api/'},
-            {label: 'Glossary', to: '/glossary/'},
-            {
-              label: 'Source Repository',
-              href: 'https://github.com/sudosylabs/Proctor',
-            },
-          ],
+          type: 'html',
+          position: 'right',
+          value: `<a class="header-source-link" href="${sourceRepository}" aria-label="Source code on GitHub" rel="noopener noreferrer" target="_blank"></a>`,
         },
       ],
-      copyright: 'Proctor is open-source examination infrastructure.',
     },
     prism: {
-      theme: prismThemes.dracula,
-      darkTheme: prismThemes.dracula,
-      additionalLanguages: ['bash', 'json', 'go'],
+      theme: codeTheme,
+      darkTheme: codeTheme,
+      additionalLanguages: ['bash', 'json', 'go', 'python', 'http'],
     },
   } satisfies Preset.ThemeConfig,
 };

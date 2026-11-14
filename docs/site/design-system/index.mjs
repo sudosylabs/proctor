@@ -53,12 +53,16 @@ ${infimaVariables(designTokens.infima.light)}
   --ifm-heading-font-weight: 600;
   --ifm-heading-color: var(--proctor-ink);
   --ifm-font-color-base: var(--proctor-ink-soft);
-  --ifm-navbar-height: 4rem;
+  --ifm-navbar-height: 3.75rem;
   --ifm-navbar-shadow: none;
   --ifm-global-radius: var(--proctor-radius-control);
-  --ifm-code-font-size: 0.875rem;
-  --ifm-container-width-xl: 1440px;
-  --doc-sidebar-width: 17.5rem;
+  --ifm-code-font-size: 0.86em;
+  --ifm-container-width-xl: 1360px;
+  --ifm-toc-border-color: var(--proctor-border);
+  --ifm-color-emphasis-300: var(--proctor-border);
+  --ifm-hr-background-color: var(--proctor-border);
+  --docusaurus-highlighted-code-line-bg: color-mix(in srgb, var(--proctor-primary) 7%, transparent);
+  --doc-sidebar-width: 16.5rem;
 }
 
 [data-theme="dark"] {
@@ -142,7 +146,7 @@ function validateTokenContract() {
     }
   }
 
-  const standardWeights = new Set([400, 500, 600, 700]);
+  const standardWeights = new Set([400, 500, 600]);
   for (const weight of designTokens.typography.sans.weights) {
     if (!standardWeights.has(weight)) {
       failures.push(`unsupported sans font weight ${weight}`);
@@ -181,13 +185,13 @@ function validateAuthoredCSS(source, name) {
     failures.push(`${name}: named colors belong in design-system/tokens.mjs`);
   }
   for (const match of source.matchAll(/\bfont-weight\s*:\s*(\d+)/g)) {
-    if (![400, 500, 600, 700].includes(Number(match[1]))) {
-      failures.push(`${name}: font weight ${match[1]} is outside the IBM Plex scale`);
+    if (!designTokens.typography.sans.weights.includes(Number(match[1]))) {
+      failures.push(`${name}: font weight ${match[1]} is outside the bundled Geist scale`);
     }
   }
   for (const match of source.matchAll(/\bfont\s*:\s*(\d+)\b/g)) {
-    if (![400, 500, 600, 700].includes(Number(match[1]))) {
-      failures.push(`${name}: font shorthand weight ${match[1]} is outside the IBM Plex scale`);
+    if (!designTokens.typography.sans.weights.includes(Number(match[1]))) {
+      failures.push(`${name}: font shorthand weight ${match[1]} is outside the bundled Geist scale`);
     }
   }
   for (const match of source.matchAll(/\{([^{}]*)\}/gs)) {
@@ -198,7 +202,7 @@ function validateAuthoredCSS(source, name) {
     const weight = declaration.match(/\bfont-weight\s*:\s*(\d+)/)?.[1];
     if (weight && !designTokens.typography.mono.weights.includes(Number(weight))) {
       failures.push(
-        `${name}: monospace font weight ${weight} is not bundled for IBM Plex Mono`,
+        `${name}: monospace font weight ${weight} is not bundled for Geist Mono`,
       );
     }
   }

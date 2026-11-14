@@ -1,0 +1,76 @@
+.page {
+  padding: 112px var(--proctor-space-6) 96px;
+  width: 100%;
+}
+
+.inner {
+  margin: 0 auto;
+  max-width: 35rem;
+}
+
+.code {
+  color: var(--proctor-ink-muted);
+  font: 400 0.84rem var(--ifm-font-family-monospace);
+  margin: 0 0 14px;
+}
+
+.title {
+  color: var(--proctor-ink);
+  font-size: 2.125rem;
+  font-weight: 600;
+  letter-spacing: -0.028em;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.lead {
+  color: var(--proctor-ink-soft);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  margin: 14px 0 32px;
+  overflow-wrap: anywhere;
+}
+
+.note {
+  color: var(--proctor-ink-muted);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  margin: 24px 0 0;
+}
+
+.note a {
+  color: var(--proctor-primary);
+}
+
+.note kbd {
+  background: var(--proctor-canvas);
+  border: 1px solid var(--proctor-border);
+  border-radius: 4px;
+  box-shadow: none;
+  font: 500 0.6875rem/1 var(--ifm-font-family-monospace);
+  padding: 3px 5px;
+}
+
+@media (max-width: 720px) {
+  .page {
+    padding: 64px var(--proctor-space-4) 64px;
+  }
+
+  .title {
+    font-size: 1.75rem;
+  }
+}
+
+.inlineButton {
+  background: none;
+  border: 0;
+  color: var(--proctor-primary);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+
+.inlineButton:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

@@ -5,17 +5,14 @@ import styles from './styles.module.css';
 
 export default function ApiOverviewHero(): React.JSX.Element {
   const endpointCount = searchEntries.filter((entry) => entry.kind === 'endpoint').length;
-  const productAreaCount = searchEntries.filter(
-    (entry) => entry.kind === 'product-area',
-  ).length;
+  const productAreaCount = searchEntries.filter((entry) => entry.kind === 'product-area').length;
 
   return (
     <header className={styles.hero}>
-      <div className={styles.eyebrow}>Reviewed OpenAPI contract</div>
       <h1>Proctor API</h1>
-      <p>
-        Integrate with one explicit contract for authentication, assurance,
-        idempotency, stable failures, protected content, and realtime recovery.
+      <p className={styles.lead}>
+        One HTTP and WebSocket contract for everything the web app and Proctor Desktop do. Start
+        with authentication and errors, then follow a recipe for the task you are building.
       </p>
       <div className={styles.actions}>
         <Link className="button button--primary" to="/api/guides/getting-started">
@@ -25,20 +22,13 @@ export default function ApiOverviewHero(): React.JSX.Element {
           Download OpenAPI
         </a>
       </div>
-      <dl className={styles.record} aria-label="API reference coverage">
-        <div>
-          <dt>Specification</dt>
-          <dd>OpenAPI 3.1</dd>
-        </div>
-        <div>
-          <dt>Reference</dt>
-          <dd>{endpointCount} operations / {productAreaCount} product areas</dd>
-        </div>
-        <div>
-          <dt>Console policy</dt>
-          <dd>Request sending disabled</dd>
-        </div>
-      </dl>
+      <p className={styles.facts}>
+        <span>OpenAPI 3.1</span>
+        <span>
+          {endpointCount} endpoints in {productAreaCount} areas
+        </span>
+        <span>These pages never send requests</span>
+      </p>
     </header>
   );
 }

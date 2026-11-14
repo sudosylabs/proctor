@@ -1,344 +1,450 @@
+/*
+ * Proctor documentation, reading theme.
+ *
+ * One sans family and neutral greys. The accent is reserved for links, focus,
+ * the reader's current location and a few syntax roles. Structure comes from
+ * hairlines and whitespace, never from tinted boxes.
+ */
+
 html {
   scroll-padding-top: calc(var(--ifm-navbar-height) + var(--proctor-space-5));
 }
 
 body {
   background: var(--proctor-canvas);
-  font-kerning: normal;
+  color: var(--proctor-ink);
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
 
 ::selection {
-  background: var(--proctor-primary-soft);
-  color: var(--proctor-ink);
+  background: color-mix(in srgb, var(--proctor-primary) 22%, transparent);
 }
 
 a,
 button,
 summary {
   touch-action: manipulation;
-  -webkit-tap-highlight-color: color-mix(
-    in srgb,
-    var(--proctor-primary) 18%,
-    transparent
-  );
+  -webkit-tap-highlight-color: transparent;
 }
 
-a:focus-visible,
-button:focus-visible,
-input:focus-visible,
-select:focus-visible,
-summary:focus-visible,
-textarea:focus-visible {
-  outline: 3px solid
-    color-mix(in srgb, var(--proctor-primary) 70%, var(--proctor-on-action));
-  outline-offset: 3px;
+a {
+  transition:
+    color 120ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease;
 }
 
-/* Global handbook navigation */
+:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--proctor-primary);
+  outline-offset: 2px;
+}
+
+/* Header ------------------------------------------------------------------ */
 
 .navbar {
-  background: var(--proctor-action);
-  border-bottom: var(--proctor-stroke-hairline) solid
-    color-mix(in srgb, var(--proctor-on-action) 20%, transparent);
+  background: transparent;
+  border-bottom: 1px solid var(--proctor-border);
   box-shadow: none;
+  height: var(--ifm-navbar-height);
+  padding: 0;
+}
+
+/* The translucent fill lives on a pseudo-element: a backdrop-filter on the
+   navbar itself would become the containing block of the fixed mobile drawer
+   and clip it to the header's height. */
+.navbar::before {
+  backdrop-filter: saturate(1.4) blur(10px);
+  background: color-mix(in srgb, var(--proctor-canvas) 88%, transparent);
+  content: "";
+  inset: 0;
+  position: absolute;
+  z-index: -1;
 }
 
 .navbar__inner {
-  gap: var(--proctor-space-4);
-  margin: 0 auto;
-  max-width: 1512px;
-  padding-inline: var(--proctor-space-5);
+  gap: var(--proctor-space-6);
+  margin: 0;
+  max-width: none;
+  padding-inline: var(--proctor-space-6);
+}
+
+.navbar__items {
+  gap: var(--proctor-space-1);
+}
+
+.navbar__items--right {
+  gap: 6px;
 }
 
 .navbar__brand {
-  color: var(--proctor-on-action);
-  margin-right: var(--proctor-space-6);
+  color: var(--proctor-ink);
+  margin-right: var(--proctor-space-5);
 }
 
-.navbar__brand:hover,
-.navbar__brand:focus-visible {
-  color: var(--proctor-on-action);
-  text-decoration: none;
-}
-
-.navbar__logo {
-  height: 1.75rem;
-  margin-right: 0;
-  width: auto;
-}
-
-.navbar__logo img {
-  height: 100%;
-  width: auto;
+.navbar__brand:hover {
+  color: var(--proctor-ink);
 }
 
 .navbar__link {
-  align-items: center;
-  color: color-mix(in srgb, var(--proctor-on-action) 82%, transparent);
-  display: inline-flex;
-  font-size: var(--proctor-type-body-small-size);
-  font-weight: 500;
-  height: calc(var(--ifm-navbar-height) - var(--proctor-stroke-component));
-  padding: 0 var(--proctor-space-3);
-  position: relative;
+  border-radius: 6px;
+  color: var(--proctor-ink-muted);
+  font-size: 0.875rem;
+  font-weight: 400;
+  padding: 6px 10px;
 }
 
-.navbar__link:hover,
+.navbar__link:hover {
+  color: var(--proctor-ink);
+}
+
 .navbar__link--active {
-  color: var(--proctor-on-action);
-  text-decoration: none;
+  color: var(--proctor-ink);
+  font-weight: 500;
 }
 
-.navbar__link:not([aria-haspopup])::after {
-  background: transparent;
-  bottom: 0;
-  content: "";
-  height: var(--proctor-stroke-flow);
-  left: var(--proctor-space-3);
-  position: absolute;
-  right: var(--proctor-space-3);
-}
-
-.navbar__link--active:not([aria-haspopup])::after {
-  background: var(--proctor-on-action);
-}
-
-.navbar__items--right .navbar__link[href*="github.com"] {
-  border: var(--proctor-stroke-hairline) solid
-    color-mix(in srgb, var(--proctor-on-action) 34%, transparent);
-  border-radius: var(--proctor-radius-control);
-  height: 2.5rem;
-  margin-right: var(--proctor-space-2);
-  padding-inline: var(--proctor-space-4);
-}
-
-.navbar__items--right .navbar__link[href*="github.com"]::after {
-  display: none;
-}
-
-.navbar__items--right .navbar__link[href*="github.com"]:hover {
-  background: color-mix(in srgb, var(--proctor-on-action) 10%, transparent);
-  border-color: color-mix(in srgb, var(--proctor-on-action) 60%, transparent);
-}
-
-.navbar .clean-btn {
-  color: color-mix(in srgb, var(--proctor-on-action) 84%, transparent);
-}
-
-.navbar .clean-btn:hover {
-  background: color-mix(in srgb, var(--proctor-on-action) 10%, transparent);
-  color: var(--proctor-on-action);
+.navbar__link[aria-haspopup]::after {
+  border-width: 0.3em 0.3em 0;
+  margin-left: 0.45em;
+  opacity: 0.6;
+  top: 1px;
 }
 
 .dropdown__menu {
   background: var(--proctor-surface-raised);
-  border: var(--proctor-stroke-hairline) solid var(--proctor-border);
-  border-radius: var(--proctor-radius-card);
+  border: 1px solid var(--proctor-border);
+  border-radius: 12px;
   box-shadow: var(--proctor-shadow);
-  padding: var(--proctor-space-2);
   min-width: 15rem;
+  padding: 6px;
 }
 
 .dropdown__link {
-  border-radius: var(--proctor-radius-control);
+  border-radius: 7px;
   color: var(--proctor-ink-soft);
-  font-size: var(--proctor-type-body-small-size);
-  line-height: var(--proctor-type-body-small-line);
-  padding: var(--proctor-space-2) var(--proctor-space-3);
-  white-space: normal;
+  font-size: 0.875rem;
+  padding: 7px 10px;
 }
 
-.navbar__link[aria-haspopup]::after {
-  margin-left: var(--proctor-space-2);
-  top: 0;
+.dropdown__link:hover {
+  background: var(--proctor-surface);
+  color: var(--proctor-ink);
 }
 
-.navbar a:focus-visible,
-.navbar button:focus-visible {
-  outline-color: var(--proctor-on-action);
-}
-
-.navbar .dropdown__menu a:focus-visible,
-.navbar dialog a:focus-visible,
-.navbar dialog button:focus-visible {
-  outline-color: var(--proctor-primary);
-}
-
-.navbar-sidebar__items a:focus-visible,
-.navbar-sidebar__items button:focus-visible {
-  outline-color: var(--proctor-primary);
-}
-
-.dropdown__link:hover,
 .dropdown__link--active {
-  background: var(--proctor-primary-soft);
-  color: var(--proctor-primary-strong);
+  background: transparent;
+  color: var(--proctor-ink);
+  font-weight: 500;
 }
 
-.theme-layout-navbar-right {
-  gap: var(--proctor-space-1);
+/* Icon-only header controls: theme toggle, source link, menu. */
+.navbar .clean-btn:not(.navbar__toggle, .navbar-sidebar__back),
+.header-source-link {
+  align-items: center;
+  border-radius: 8px;
+  color: var(--proctor-ink-muted);
+  display: inline-flex;
+  height: 36px;
+  justify-content: center;
+  width: 36px;
+}
+
+.navbar__toggle {
+  border-radius: 8px;
+  color: var(--proctor-ink-muted);
+  margin-right: 4px;
+  padding: 6px;
+}
+
+.navbar .clean-btn:hover,
+.navbar__toggle:hover,
+.header-source-link:hover {
+  background: var(--proctor-surface);
+  color: var(--proctor-ink);
+}
+
+.header-source-link {
+  padding: 0;
+}
+
+.header-source-link::before {
+  background: currentColor;
+  content: "";
+  height: 16px;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 1.5a6.5 6.5 0 0 0-2.06 12.67c.33.06.44-.14.44-.31v-1.1c-1.8.39-2.18-.87-2.18-.87-.3-.75-.72-.95-.72-.95-.59-.4.04-.39.04-.39.65.05 1 .67 1 .67.58 1 1.52.71 1.89.54.06-.42.23-.71.41-.87-1.44-.16-2.95-.72-2.95-3.2 0-.71.25-1.29.67-1.74-.07-.17-.29-.83.06-1.72 0 0 .55-.18 1.79.66a6.2 6.2 0 0 1 3.26 0c1.24-.84 1.79-.66 1.79-.66.35.89.13 1.55.06 1.72.42.45.67 1.03.67 1.74 0 2.49-1.52 3.04-2.96 3.2.23.2.44.6.44 1.21v1.79c0 .17.11.38.45.31A6.5 6.5 0 0 0 8 1.5z'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  width: 16px;
+}
+
+.header-source-link svg {
+  display: none;
 }
 
 .navbar-sidebar {
-  background: var(--proctor-sidebar);
+  background: var(--proctor-canvas);
+  box-shadow: none;
 }
 
 .navbar-sidebar__brand {
-  background: var(--proctor-action);
-  border-bottom: var(--proctor-stroke-hairline) solid
-    color-mix(in srgb, var(--proctor-on-action) 20%, transparent);
+  border-bottom: 1px solid var(--proctor-border);
+  box-shadow: none;
 }
 
-.navbar-sidebar__brand .navbar__brand,
-.navbar-sidebar__brand .clean-btn {
-  color: var(--proctor-on-action);
+.navbar-sidebar__back {
+  background: transparent;
+  color: var(--proctor-ink-muted);
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 
-.navbar .navbar-sidebar__back,
-.navbar .navbar-sidebar__back:hover {
-  color: var(--proctor-ink);
-  background: var(--proctor-sidebar);
-}
-
-/* Left navigation */
+/* Sidebar ----------------------------------------------------------------- */
 
 .theme-doc-sidebar-container {
-  background: var(--proctor-sidebar);
-  border-right: var(--proctor-stroke-hairline) solid var(--proctor-border) !important;
+  border-right: 0 !important;
 }
 
 .theme-doc-sidebar-menu {
-  padding: var(--proctor-space-5) var(--proctor-space-3) var(--proctor-space-8);
+  font-size: 0.875rem;
+  padding: 40px 0 48px;
 }
 
-.menu {
-  font-size: var(--proctor-type-body-small-size);
-  overflow-x: hidden;
+.theme-doc-sidebar-container .menu {
+  font-weight: 400;
+  padding: 0 !important;
 }
 
-.menu__list-item {
-  min-width: 0;
+/* Sidebars, the outline and the menu drawer scroll without a visible bar. */
+.theme-doc-sidebar-container .menu,
+.theme-doc-sidebar-container [class*="sidebarViewport"],
+.theme-doc-toc-desktop,
+.navbar-sidebar__items,
+.navbar-sidebar__item {
+  scrollbar-width: none;
 }
 
-.theme-doc-sidebar-menu > .menu__list-item > .menu__list {
-  border-left: 0;
-  margin-left: 0;
+.theme-doc-sidebar-container .menu::-webkit-scrollbar,
+.theme-doc-sidebar-container [class*="sidebarViewport"]::-webkit-scrollbar,
+.theme-doc-toc-desktop::-webkit-scrollbar,
+.navbar-sidebar__items::-webkit-scrollbar,
+.navbar-sidebar__item::-webkit-scrollbar {
+  display: none;
+}
+
+.menu__list {
+  margin: 0;
+}
+
+.menu__list-item:not(:first-child) {
+  margin-top: 0;
+}
+
+.menu__link,
+.menu__list-item-collapsible > .menu__link {
+  border-radius: 0;
+  color: var(--proctor-ink-muted);
+  line-height: 1.45;
+  padding: 5px 0 5px 14px;
+}
+
+.menu__link:hover,
+.menu__list-item-collapsible:hover {
+  background: transparent;
+  color: var(--proctor-ink);
+}
+
+.menu__link--active:not(.menu__link--sublist) {
+  background: transparent;
+  color: var(--proctor-ink);
+  font-weight: 500;
+}
+
+/* Rail: each list of pages hangs from one hairline, and the current page is
+   marked by darkening its own segment of that line. */
+.menu__list .menu__list {
+  border-left: 1px solid var(--proctor-border);
+  margin: 4px 0 0;
+  padding: 0;
+}
+
+.menu__list .menu__list .menu__link {
+  border-left: 1px solid transparent;
+  margin-left: -1px;
+}
+
+.menu__list .menu__list .menu__link:not(.menu__link--sublist):hover {
+  border-left-color: var(--proctor-border-strong);
+}
+
+.menu__list .menu__list .menu__link--active:not(.menu__link--sublist) {
+  border-left-color: var(--proctor-ink);
+}
+
+/* A guide's single category is its title: it heads the sidebar. */
+.theme-doc-sidebar-menu > .menu__list-item:only-child > .menu__list-item-collapsible > .menu__link {
+  color: var(--proctor-ink);
+  font-weight: 600;
+  margin-bottom: 14px;
   padding-left: 0;
 }
 
-.theme-doc-sidebar-menu > .menu__list-item > .menu__list-item-collapsible > .menu__link {
+.theme-doc-sidebar-menu > .menu__list-item:only-child > .menu__list-item-collapsible > .menu__link--active {
   color: var(--proctor-ink);
-  font-size: var(--proctor-type-body-size);
-  font-weight: 600;
-  margin-bottom: var(--proctor-space-3);
-  padding-block: var(--proctor-space-2);
 }
 
-.theme-doc-sidebar-menu > .menu__list-item > .menu__list-item-collapsible > .menu__link:not([aria-current="page"]) {
-  background: transparent;
-  border-left-color: transparent;
+.theme-doc-sidebar-menu > .menu__list-item:only-child > .menu__list {
+  border-left: 1px solid var(--proctor-border);
+  margin-top: 0;
 }
 
-.menu__list-item-collapsible {
-  border-radius: 0;
+/* Sidebars with several groups (API, error codes) list them as plain rows. */
+.theme-doc-sidebar-menu > .menu__list-item:not(:only-child) > .menu__link,
+.theme-doc-sidebar-menu > .menu__list-item:not(:only-child) > .menu__list-item-collapsible > .menu__link {
+  color: var(--proctor-ink-soft);
+  padding-left: 0;
 }
 
-.menu__list .menu__list .menu__list-item-collapsible {
-  margin-top: var(--proctor-space-3);
+.theme-doc-sidebar-menu > .menu__list-item:not(:only-child) > .menu__link--active,
+.theme-doc-sidebar-menu > .menu__list-item:not(:only-child) > .menu__list-item-collapsible > .menu__link--active {
+  color: var(--proctor-ink);
+  font-weight: 500;
 }
 
-.menu__list-item-collapsible:hover {
-  background: transparent;
+.theme-doc-sidebar-menu > .menu__list-item:not(:only-child) > .menu__list {
+  margin: 4px 0 10px;
 }
 
-.menu__list-item-collapsible > .menu__link--sublist {
+/* Inside a guide, nested groups read as labels above their own rail. */
+.theme-doc-sidebar-menu > .menu__list-item:only-child .menu__list .menu__list-item-collapsible {
+  margin-top: 14px;
+}
+
+.theme-doc-sidebar-menu > .menu__list-item:only-child .menu__list .menu__list-item-collapsible > .menu__link--sublist {
   color: var(--proctor-ink-muted);
-  font-family: var(--ifm-font-family-base);
-  font-size: var(--proctor-type-body-small-size);
-  font-weight: 600;
-  letter-spacing: 0.005em;
-  padding-block: var(--proctor-space-1);
-  text-transform: none;
+  font-size: 0.8rem;
+  font-weight: 500;
 }
 
-.menu__list-item-collapsible > .menu__link--active {
-  color: var(--proctor-primary-strong);
+.menu__list .menu__list .menu__list .menu__link {
+  padding-left: 26px;
 }
 
-.menu__caret {
-  background: transparent;
+.menu__caret,
+.menu__link--sublist-caret::after {
+  opacity: 0.5;
 }
 
 .menu__caret::before,
 .menu__link--sublist-caret::after {
-  background-size: 1rem;
-  opacity: 0.7;
+  background-size: 1.1rem;
 }
 
-.menu__list .menu__list {
-  border-left: var(--proctor-stroke-hairline) solid var(--proctor-border);
-  margin: var(--proctor-space-2) 0 0 var(--proctor-space-3);
-  padding-left: var(--proctor-space-3);
+.menu__caret:hover {
+  background: transparent;
+  opacity: 1;
 }
 
-.menu__link {
-  border-left: var(--proctor-stroke-component) solid transparent;
-  border-radius: 0;
-  color: var(--proctor-ink-soft);
-  font-weight: 400;
-  line-height: 1.45;
+/* Page frame -------------------------------------------------------------- */
+
+/* The page uses the whole window: the sidebar sits at the left edge, the
+   outline at the right, and the article is centred in the space between, at
+   a reading width. Wide pages (endpoints, the error-code index) use it all. */
+[class*="docRoot"] {
+  max-width: none;
+  padding: 0 var(--proctor-space-6);
+  width: 100%;
+}
+
+main[class*="docMainContainer"] {
+  flex-grow: 1;
+  max-width: none;
   min-width: 0;
-  overflow-wrap: anywhere;
-  padding: var(--proctor-space-2) var(--proctor-space-3);
 }
 
-.menu__link:hover {
-  background: color-mix(in srgb, var(--proctor-border) 34%, transparent);
-  color: var(--proctor-ink);
-  text-decoration: none;
+/* Infima's padding utilities on this container are layered !important
+   declarations, so the vertical rhythm is set on the row instead. */
+main[class*="docMainContainer"] > .container {
+  max-width: none;
+  min-width: 0;
+  padding-inline: 0;
+  width: 100%;
 }
 
-.menu__link--active:not(.menu__link--sublist) {
-  background: color-mix(in srgb, var(--proctor-primary-soft) 58%, transparent);
-  border-left-color: var(--proctor-primary);
-  color: var(--proctor-primary-strong);
-  font-weight: 600;
+main[class*="docMainContainer"] > .container > .row {
+  flex-wrap: nowrap;
+  gap: 64px;
+  margin: 24px 0 48px;
 }
 
-/* Main reading layout */
+main[class*="docMainContainer"] > .container > .row > .col {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0;
+}
+
+[class*="docItemContainer"] {
+  margin: 0 auto;
+  max-width: 46rem;
+}
+
+main[class*="docMainContainer"] > .container > .row > .col.col--3 {
+  flex: 0 0 13rem;
+  max-width: 13rem;
+  padding: 0;
+}
+
+.theme-doc-breadcrumbs {
+  margin-bottom: 14px;
+}
 
 .breadcrumbs {
   color: var(--proctor-ink-muted);
-  font-size: var(--proctor-type-caption-size);
-  margin-bottom: var(--proctor-space-6);
+  font-size: 0.85rem;
 }
 
 .breadcrumbs__item:not(:last-child)::after {
-  opacity: 0.55;
+  background: none;
+  color: var(--proctor-border-strong);
+  content: "/";
+  filter: none;
+  margin: 0 6px;
+  opacity: 1;
 }
 
 .breadcrumbs__link {
-  background: transparent;
+  background: transparent !important;
   border-radius: 0;
   color: var(--proctor-ink-muted);
-  padding-inline: var(--proctor-space-1);
+  font-size: inherit;
+  padding: 0;
 }
 
-.breadcrumbs__link:hover {
-  color: var(--proctor-primary-strong);
+.breadcrumbs__item--active .breadcrumbs__link {
+  color: var(--proctor-ink-muted);
 }
 
-.docs-doc-id-index .breadcrumbs {
+a.breadcrumbs__link:hover {
+  color: var(--proctor-ink);
+}
+
+.breadcrumbs__item:first-child:has(a[aria-label="Home page"]) {
   display: none;
 }
 
 .theme-doc-markdown {
   color: var(--proctor-ink-soft);
-  font-size: var(--proctor-type-body-size);
-  line-height: var(--proctor-type-body-line);
+  font-size: 1rem;
+  line-height: 1.72;
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+}
+
+.markdown > header {
+  border-bottom: 1px solid var(--proctor-border);
+  margin-bottom: 24px;
+  padding-bottom: 24px;
 }
 
 .theme-doc-markdown h1,
@@ -347,42 +453,43 @@ textarea:focus-visible {
 .theme-doc-markdown h4 {
   color: var(--proctor-ink);
   font-weight: 600;
-  letter-spacing: -0.022em;
   scroll-margin-top: calc(var(--ifm-navbar-height) + var(--proctor-space-5));
   text-wrap: balance;
 }
 
 .theme-doc-markdown h1 {
-  font-size: clamp(2.15rem, 4.5vw, var(--proctor-type-heading-large-size));
-  line-height: var(--proctor-type-heading-large-line);
-  margin: 0 0 var(--proctor-space-4);
-  max-width: 22ch;
+  font-size: 2.125rem;
+  letter-spacing: -0.028em;
+  line-height: 1.15;
+  margin: 0;
 }
 
-.theme-doc-markdown h1 + p {
+/* The first paragraph after the title is the page's lead. */
+.markdown > header + p,
+.markdown > h1:first-child + p {
   color: var(--proctor-ink-soft);
-  font-size: 1.0625rem;
-  line-height: 1.7;
-  margin-bottom: var(--proctor-space-6);
-  max-width: 68ch;
+  font-size: 1.125rem;
+  line-height: 1.6;
 }
 
 .theme-doc-markdown h2 {
-  font-size: var(--proctor-type-heading-medium-size);
-  line-height: var(--proctor-type-heading-medium-line);
-  margin: var(--proctor-space-8) 0 var(--proctor-space-4);
+  font-size: 1.375rem;
+  letter-spacing: -0.018em;
+  line-height: 1.3;
+  margin: 56px 0 16px;
 }
 
 .theme-doc-markdown h3 {
-  font-size: var(--proctor-type-heading-small-size);
-  line-height: var(--proctor-type-heading-small-line);
-  margin: var(--proctor-space-7) 0 var(--proctor-space-3);
+  font-size: 1.0625rem;
+  letter-spacing: -0.01em;
+  line-height: 1.4;
+  margin: 36px 0 12px;
 }
 
 .theme-doc-markdown h4 {
-  font-size: var(--proctor-type-body-size);
+  font-size: 1rem;
   line-height: 1.45;
-  margin: var(--proctor-space-6) 0 var(--proctor-space-2);
+  margin: 28px 0 8px;
 }
 
 .theme-doc-markdown p,
@@ -390,483 +497,633 @@ textarea:focus-visible {
   text-wrap: pretty;
 }
 
-.theme-doc-markdown > p,
-.theme-doc-markdown > ul,
-.theme-doc-markdown > ol {
-  max-width: 74ch;
+.theme-doc-markdown p,
+.theme-doc-markdown ul,
+.theme-doc-markdown ol,
+.theme-doc-markdown dl {
+  margin-bottom: 20px;
 }
 
 .theme-doc-markdown ul,
 .theme-doc-markdown ol {
-  padding-left: 1.45rem;
+  padding-left: 22px;
 }
 
-.theme-doc-markdown li {
-  margin-block: 0.35rem;
-  padding-left: var(--proctor-space-1);
+.theme-doc-markdown li + li {
+  margin-top: 8px;
 }
 
 .theme-doc-markdown li::marker {
+  color: var(--proctor-ink-muted);
+}
+
+.theme-doc-markdown strong {
+  color: var(--proctor-ink);
+  font-weight: 600;
+}
+
+.theme-doc-markdown a:not(.button, .hash-link, [class*="card"], [data-plain-link] a, [data-plain-link]) {
   color: var(--proctor-primary);
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--proctor-primary) 35%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
 }
 
-.theme-doc-markdown a:not(.button) {
-  font-weight: 600;
-  text-decoration-color: color-mix(
-    in srgb,
-    var(--proctor-primary) 38%,
-    transparent
-  );
-  text-decoration-thickness: 0.08em;
-  text-underline-offset: 0.18em;
-}
-
-.theme-doc-markdown a:not(.button):hover {
+.theme-doc-markdown a:not(.button, .hash-link, [class*="card"], [data-plain-link] a, [data-plain-link]):hover {
   color: var(--proctor-primary-strong);
   text-decoration-color: currentColor;
 }
 
+.hash-link {
+  color: var(--proctor-ink-muted);
+  opacity: 0;
+  padding-left: 0.4rem;
+}
+
+.hash-link::before {
+  content: "#";
+}
+
+*:hover > .hash-link,
+.hash-link:focus-visible {
+  opacity: 1;
+}
+
 .theme-doc-markdown hr {
-  border-color: var(--proctor-border);
-  margin-block: var(--proctor-space-8);
+  background: var(--proctor-border);
+  height: 1px;
+  margin: 40px 0;
 }
 
 .theme-doc-markdown blockquote {
-  background: transparent;
-  border-left: var(--proctor-stroke-flow) solid var(--proctor-primary);
+  border-left: 1px solid var(--proctor-border-strong);
   color: var(--proctor-ink-soft);
-  margin: var(--proctor-space-6) 0;
-  padding: var(--proctor-space-2) 0 var(--proctor-space-2) var(--proctor-space-5);
+  margin: 0 0 18px;
+  padding: 0 0 0 18px;
 }
 
-.theme-doc-markdown blockquote > :last-child {
-  margin-bottom: 0;
+.theme-doc-markdown dt {
+  color: var(--proctor-ink);
+  font-weight: 500;
 }
 
-/* Tables read as records, not boxed spreadsheets. */
+.theme-doc-markdown dd {
+  margin: 4px 0 14px;
+}
 
+/* Tables: ruled records, no boxes and no zebra stripes. */
 .theme-doc-markdown table {
-  border: 0;
-  border-bottom: var(--proctor-stroke-hairline) solid var(--proctor-border-strong);
   border-collapse: collapse;
-  border-top: var(--proctor-stroke-component) solid var(--proctor-ink);
-  display: table;
-  font-size: var(--proctor-type-body-small-size);
+  display: block;
+  font-size: 0.9rem;
   line-height: 1.55;
-  margin-block: var(--proctor-space-6);
-  table-layout: auto;
+  margin-bottom: 24px;
+  max-width: 100%;
+  overflow-x: auto;
   width: 100%;
 }
 
 .theme-doc-markdown thead {
-  background: var(--proctor-sidebar);
+  background: transparent;
+  border: 0;
+}
+
+.theme-doc-markdown tr,
+.theme-doc-markdown tr:nth-child(2n) {
+  background: transparent;
+  border: 0;
 }
 
 .theme-doc-markdown th {
-  color: var(--proctor-ink);
-  font-size: var(--proctor-type-body-small-size);
-  font-weight: 600;
-  hyphens: none;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--proctor-border-strong);
+  color: var(--proctor-ink-muted);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  padding: 0 16px 10px 0;
   text-align: left;
-  word-break: normal;
+  white-space: nowrap;
 }
 
-.theme-doc-markdown th,
 .theme-doc-markdown td {
   border: 0;
-  border-bottom: var(--proctor-stroke-hairline) solid var(--proctor-border);
-  padding: var(--proctor-space-3) var(--proctor-space-4);
+  border-bottom: 1px solid var(--proctor-border);
+  color: var(--proctor-ink-soft);
+  padding: 11px 16px 11px 0;
   vertical-align: top;
 }
 
+.theme-doc-markdown td:first-child {
+  color: var(--proctor-ink);
+}
+
 .theme-doc-markdown tbody tr:last-child td {
-  border-bottom: 0;
+  border-bottom-color: transparent;
 }
 
-.theme-doc-markdown tbody tr:hover {
-  background: color-mix(in srgb, var(--proctor-sidebar) 62%, transparent);
-}
-
-/* Configuration paths stay readable beside prose instead of collapsing into
-   a narrow spreadsheet column. */
-
-[class*="docs-doc-id-reference/configuration/"]
-  .theme-doc-markdown
-  th:first-child,
-[class*="docs-doc-id-reference/configuration/"]
-  .theme-doc-markdown
-  td:first-child {
-  width: 40%;
-}
-
-[class*="docs-doc-id-reference/configuration/"]
-  .theme-doc-markdown
-  td:first-child
-  code {
-  font-size: 0.82em;
-}
-
-/* Code and technical controls */
-
+/* Inline code */
 :not(pre) > code {
   background: var(--proctor-code);
-  border: var(--proctor-stroke-hairline) solid var(--proctor-border);
-  border-radius: var(--proctor-radius-control);
+  border: 1px solid var(--proctor-border);
+  border-radius: 5px;
   color: var(--proctor-ink);
-  font-size: 0.88em;
-  line-height: 1.25;
-  padding: 0.08em 0.32em;
+  font-size: 0.86em;
+  padding: 0.1em 0.35em;
+  vertical-align: baseline;
 }
 
-.theme-doc-markdown pre,
+a > code,
+.theme-doc-markdown a:not(.button) > code {
+  color: inherit;
+}
+
+/* Code blocks: one frame for every snippet. */
 .theme-code-block {
-  border: var(--proctor-stroke-hairline) solid var(--proctor-border-strong);
-  border-radius: var(--proctor-radius-card);
-  box-shadow: none;
-}
-
-.theme-doc-markdown pre,
-.theme-doc-markdown pre code,
-.theme-code-block pre,
-.theme-code-block code {
+  --prism-background-color: var(--proctor-code-block);
   background: var(--proctor-code-block);
-  border: 0;
-  color: var(--proctor-code-block-ink);
-}
-
-.theme-doc-markdown pre {
-  line-height: 1.6;
-  overflow-x: auto;
-}
-
-.theme-code-block button {
-  border-radius: var(--proctor-radius-control);
-}
-
-.alert {
-  --ifm-alert-background-color: var(--proctor-sidebar);
-  --ifm-alert-border-color: var(--proctor-primary);
-  --ifm-alert-foreground-color: var(--proctor-ink-soft);
-  border: 0;
-  border-left: var(--proctor-stroke-flow) solid var(--ifm-alert-border-color);
-  border-radius: 0;
+  border: 1px solid var(--proctor-border);
+  border-radius: 12px;
   box-shadow: none;
-  padding: var(--proctor-space-4) var(--proctor-space-5);
+  margin-bottom: 24px;
+  overflow: hidden;
 }
 
-.alert--success {
-  --ifm-alert-background-color: var(--proctor-complete-soft);
-  --ifm-alert-border-color: var(--proctor-complete);
+.theme-code-block [class*="codeBlockTitle"] {
+  background: var(--proctor-code-block-head);
+  border-bottom: 1px solid var(--proctor-border);
+  color: var(--proctor-ink-muted);
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.75rem;
+  font-weight: 400;
+  padding: 11px 14px;
 }
 
-.alert--warning {
-  --ifm-alert-background-color: var(--proctor-attention-soft);
-  --ifm-alert-border-color: var(--proctor-attention);
+.theme-code-block pre,
+.theme-code-block .prism-code {
+  background: transparent !important;
+  color: var(--proctor-code-block-ink);
+  font-size: 0.797rem;
+  line-height: 1.72;
+  margin: 0;
+  padding: 14px 18px 16px;
+  font-variant-ligatures: none;
+  tab-size: 2;
 }
 
-.alert--danger {
-  --ifm-alert-background-color: var(--proctor-danger-soft);
-  --ifm-alert-border-color: var(--proctor-danger);
+.theme-code-block code {
+  font-family: var(--ifm-font-family-monospace);
+  padding: 0;
 }
 
-.alert__heading {
+.theme-code-block [class*="codeLineNumber"] {
+  color: var(--proctor-line-number);
+  padding-left: 0;
+  padding-right: 18px;
+  text-align: right;
+  width: 3.25rem;
+}
+
+.theme-code-block pre:has([class*="codeLineNumber"]) {
+  padding-left: 0;
+}
+
+.theme-code-block .theme-code-block-highlighted-line {
+  margin: 0 -18px;
+  padding: 0 18px;
+}
+
+.theme-code-block [class*="buttonGroup"] {
+  right: 6px;
+  top: 6px;
+}
+
+.theme-code-block [class*="buttonGroup"] button {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--proctor-ink-muted);
+  opacity: 0;
+}
+
+.theme-code-block:hover [class*="buttonGroup"] button,
+.theme-code-block [class*="buttonGroup"] button:focus-visible {
+  opacity: 1;
+}
+
+.theme-code-block [class*="buttonGroup"] button:hover {
+  background: var(--proctor-surface-hover);
   color: var(--proctor-ink);
-  font-size: var(--proctor-type-body-small-size);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
-/* Right-hand outline */
+.theme-code-block:has([class*="codeBlockTitle"]) [class*="buttonGroup"] {
+  top: 4px;
+}
+
+/* Language tabs above a code block. */
+.theme-tabs-container > .tabs {
+  border-bottom: 1px solid var(--proctor-border);
+  gap: 2px;
+  margin-bottom: 12px;
+}
+
+.tabs__item {
+  border: 0;
+  border-radius: 0;
+  color: var(--proctor-ink-muted);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  margin-bottom: -1px;
+  padding: 9px 10px;
+}
+
+.tabs__item:hover {
+  background: transparent;
+  color: var(--proctor-ink);
+}
+
+.tabs__item--active {
+  border-bottom: 1.5px solid var(--proctor-ink);
+  color: var(--proctor-ink);
+}
+
+/* Admonitions: bordered, never tinted. The icon carries the tone. */
+.theme-admonition,
+.alert {
+  --ifm-alert-background-color: transparent;
+  --ifm-alert-background-color-highlight: transparent;
+  --ifm-alert-foreground-color: var(--proctor-ink-soft);
+  --ifm-alert-border-color: var(--proctor-border);
+  background: transparent;
+  border: 1px solid var(--proctor-border);
+  border-radius: 10px;
+  box-shadow: none;
+  color: var(--proctor-ink-soft);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  margin-bottom: 24px;
+  padding: 14px 16px;
+}
+
+.theme-admonition [class*="admonitionHeading"] {
+  color: var(--proctor-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+  text-transform: none;
+}
+
+.theme-admonition [class*="admonitionIcon"] svg {
+  fill: var(--proctor-ink-muted);
+  height: 1rem;
+  width: 1rem;
+}
+
+.theme-admonition.alert--warning [class*="admonitionIcon"] svg,
+.theme-admonition-caution [class*="admonitionIcon"] svg {
+  fill: var(--proctor-attention);
+}
+
+.theme-admonition.alert--danger [class*="admonitionIcon"] svg {
+  fill: var(--proctor-danger);
+}
+
+.theme-admonition.alert--success [class*="admonitionIcon"] svg {
+  fill: var(--proctor-complete);
+}
+
+.theme-admonition [class*="admonitionContent"] > :last-child {
+  margin-bottom: 0;
+}
+
+/* On this page ------------------------------------------------------------ */
+
+.theme-doc-toc-desktop {
+  top: calc(var(--ifm-navbar-height) + var(--proctor-space-5));
+}
 
 .table-of-contents {
-  border-left: var(--proctor-stroke-hairline) solid var(--proctor-border);
-  font-size: var(--proctor-type-body-small-size);
-  line-height: 1.45;
-  margin-top: var(--proctor-space-7);
-  padding: 0 0 0 var(--proctor-space-4);
+  border-left: 0;
+  font-size: 0.84rem;
+  padding: 0;
 }
 
-.table-of-contents::before {
+.theme-doc-toc-desktop .table-of-contents::before {
   color: var(--proctor-ink);
   content: "On this page";
   display: block;
-  font-size: var(--proctor-type-caption-size);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  margin-bottom: var(--proctor-space-3);
-  text-transform: uppercase;
+  font-weight: 500;
+  margin-bottom: 10px;
+}
+
+.table-of-contents li {
+  margin: 0;
+}
+
+.table-of-contents ul {
+  padding-left: 12px;
 }
 
 .table-of-contents__link {
   color: var(--proctor-ink-muted);
   display: block;
-  overflow-wrap: anywhere;
-  padding-block: 0.22rem;
+  line-height: 1.45;
+  padding: 4px 0;
 }
 
-.table-of-contents__link:hover,
-.table-of-contents__link--active {
-  color: var(--proctor-primary-strong);
-  text-decoration: none;
-}
-
-.table-of-contents__link--active {
-  font-weight: 600;
-}
-
-/* Shared actions and article closure */
-
-.button {
-  border-radius: var(--proctor-radius-control);
-  font-size: var(--proctor-type-body-small-size);
-  font-weight: 600;
-  letter-spacing: 0;
-}
-
-.button.button--primary {
-  --ifm-button-color: var(--proctor-on-action);
-  background: var(--proctor-action);
-  border-color: var(--proctor-action);
-  color: var(--proctor-on-action);
-}
-
-.button.button--primary:hover,
-.button.button--primary:active {
-  background: var(--proctor-action-hover);
-  border-color: var(--proctor-action-hover);
-  color: var(--proctor-on-action);
-}
-
-.button.button--secondary {
-  --ifm-button-color: var(--proctor-ink);
-  background: var(--proctor-surface);
-  border-color: var(--proctor-border-strong);
+.table-of-contents__link:hover {
   color: var(--proctor-ink);
 }
 
-.button.button--secondary:hover,
-.button.button--secondary:active {
-  background: var(--proctor-sidebar);
-  border-color: var(--proctor-primary);
-  color: var(--proctor-primary-strong);
+.table-of-contents__link--active {
+  color: var(--proctor-primary);
 }
 
-.theme-edit-this-page {
+.theme-doc-toc-mobile {
+  border: 1px solid var(--proctor-border);
+  border-radius: 10px;
+  margin: 0 0 24px;
+}
+
+.theme-doc-toc-mobile button {
+  color: var(--proctor-ink);
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 12px 14px;
+}
+
+/* End of page: an edit row above one ruled pager -------------------------- */
+
+.theme-doc-footer {
+  margin-top: 64px;
+}
+
+.theme-doc-footer .row {
+  align-items: center;
+  margin: 0;
+}
+
+.theme-doc-footer .col {
+  padding: 0;
+}
+
+.theme-edit-this-page,
+.doc-footer-report {
+  align-items: center;
   color: var(--proctor-ink-muted);
-  font-size: var(--proctor-type-body-small-size);
+  display: inline-flex;
+  font-size: 0.8125rem;
+  gap: 6px;
+}
+
+.theme-edit-this-page:hover,
+.doc-footer-report:hover {
+  color: var(--proctor-ink);
+  text-decoration: none;
+}
+
+.theme-edit-this-page svg {
+  height: 13px;
+  margin: 0;
+  width: 13px;
+}
+
+.theme-last-updated {
+  color: var(--proctor-ink-muted);
+  font-size: 0.8125rem;
+  font-style: normal;
 }
 
 .pagination-nav {
-  border-top: var(--proctor-stroke-hairline) solid var(--proctor-border);
-  gap: var(--proctor-space-6);
-  margin-top: var(--proctor-space-8);
-  padding-top: var(--proctor-space-5);
+  border-top: 1px solid var(--proctor-border);
+  display: grid;
+  gap: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 20px;
 }
 
 .pagination-nav__link {
   background: transparent;
   border: 0;
   border-radius: 0;
-  padding: var(--proctor-space-2) 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 20px 0 4px;
 }
 
 .pagination-nav__link:hover {
-  background: transparent;
+  border-color: transparent;
+  text-decoration: none;
+}
+
+.pagination-nav__link--next {
+  align-items: flex-end;
+  grid-column: 2;
+  text-align: right;
+}
+
+.pagination-nav__link--prev + .pagination-nav__link--next {
+  border-left: 1px solid var(--proctor-border);
+  padding-left: 24px;
+}
+
+.pagination-nav__sublabel {
+  align-items: center;
+  color: var(--proctor-ink-muted);
+  display: inline-flex;
+  font-size: 0.8125rem;
+  font-weight: 400;
+  gap: 6px;
+  margin: 0;
 }
 
 .pagination-nav__label {
   color: var(--proctor-ink);
-  font-weight: 600;
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 140ms ease;
+  white-space: nowrap;
+}
+
+/* Infima draws its own arrows; the swizzled paginator draws chevrons. */
+.pagination-nav__link--prev .pagination-nav__label::before,
+.pagination-nav__link--next .pagination-nav__label::after {
+  content: none;
 }
 
 .pagination-nav__link:hover .pagination-nav__label {
-  color: var(--proctor-primary-strong);
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
+  color: var(--proctor-primary);
 }
 
-.footer {
-  background: var(--proctor-footer);
-  border-top: var(--proctor-stroke-hairline) solid var(--proctor-footer-border);
-  padding-bottom: calc(var(--proctor-space-7) + env(safe-area-inset-bottom));
+.pagination-nav .pager-arrow {
+  transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.footer__title,
-.footer__link-item,
-.footer__copyright {
+.pagination-nav__link--prev:hover .pager-arrow {
+  transform: translateX(-3px);
+}
+
+.pagination-nav__link--next:hover .pager-arrow {
+  transform: translateX(3px);
+}
+
+/* Buttons ----------------------------------------------------------------- */
+
+.button {
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.button.button--primary {
+  background: var(--proctor-ink);
+  border-color: var(--proctor-ink);
+  color: var(--proctor-canvas);
+}
+
+.button.button--primary:hover {
+  background: var(--proctor-ink-soft);
+  border-color: var(--proctor-ink-soft);
+}
+
+.button.button--secondary {
+  background: transparent;
+  border-color: var(--proctor-border);
+  color: var(--proctor-ink);
+}
+
+.button.button--secondary:hover {
+  border-color: var(--proctor-border-strong);
+}
+
+/* Footer ------------------------------------------------------------------ */
+
+.site-footer {
+  border-top: 1px solid var(--proctor-footer-border);
   color: var(--proctor-footer-ink);
+  font-size: 0.84rem;
 }
 
-.footer__title {
-  font-size: var(--proctor-type-caption-size);
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+.site-footer__inner {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  margin: 0;
+  max-width: none;
+  padding: 24px var(--proctor-space-6) 32px;
 }
 
-.footer__logo {
-  display: block;
-  height: auto;
-  margin-inline: auto;
+.site-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  margin-left: auto;
 }
 
-.footer__bottom {
-  border-top: var(--proctor-stroke-hairline) solid var(--proctor-footer-border);
-  margin-top: var(--proctor-space-6);
-  padding-top: var(--proctor-space-6);
+.site-footer a {
+  color: inherit;
 }
+
+.site-footer a:hover {
+  color: var(--proctor-ink);
+  text-decoration: none;
+}
+
+/* Responsive -------------------------------------------------------------- */
 
 @media (min-width: 997px) {
   .theme-doc-sidebar-container {
-    width: var(--doc-sidebar-width) !important;
+    clip-path: none;
+    margin-top: 0;
+    width: 15rem !important;
+  }
+
+  .theme-doc-sidebar-container > div {
+    height: calc(100vh - var(--ifm-navbar-height));
+    max-height: none;
+    top: var(--ifm-navbar-height);
+  }
+
+  .theme-doc-sidebar-container > div > div {
+    padding-top: 0;
+  }
+
+  main[class*="docMainContainer"] {
+    padding-left: 64px;
   }
 }
 
-@media (max-width: 1180px) {
-  .navbar__inner {
-    padding-inline: var(--proctor-space-4);
+@media (min-width: 997px) and (max-width: 1280px) {
+  main[class*="docMainContainer"] {
+    padding-left: 48px;
   }
 
-  .navbar__brand {
-    margin-right: var(--proctor-space-3);
+  main[class*="docMainContainer"] > .container > .row {
+    gap: 48px;
   }
+}
 
-  .navbar__link {
-    padding-inline: var(--proctor-space-2);
-  }
-
-  .navbar__link:not([aria-haspopup])::after {
-    left: var(--proctor-space-2);
-    right: var(--proctor-space-2);
+/* Below this width the outline would squeeze the article. Docusaurus shows
+   its collapsible outline above the article from 996px down. */
+@media (min-width: 997px) and (max-width: 1100px) {
+  main[class*="docMainContainer"] > .container > .row > .col.col--3 {
+    display: none;
   }
 }
 
 @media (max-width: 996px) {
-  .navbar__items:not(.navbar__items--right) > .navbar__item {
-    display: none;
-  }
-
-  .navbar__items--right > .navbar__item {
-    display: none;
-  }
-
-  .breadcrumbs {
-    margin-bottom: var(--proctor-space-6);
-  }
-
-  .theme-doc-markdown table {
-    display: block;
-    max-width: 100%;
-    overflow-x: auto;
-  }
-
-  .theme-doc-markdown th {
-    min-width: 8rem;
-  }
-
-  .theme-doc-markdown td {
-    min-width: 11rem;
-  }
-}
-
-@media (max-width: 576px) {
   .navbar__inner {
-    padding-inline: var(--proctor-space-3);
+    padding-inline: var(--proctor-space-4);
   }
 
-  .navbar__logo {
-    height: 1.5rem;
+  [class*="docRoot"] {
+    padding: 0 var(--proctor-space-4);
   }
 
-  .breadcrumbs {
-    margin-bottom: var(--proctor-space-5);
+  main[class*="docMainContainer"] > .container > .row {
+    margin: 8px 0 64px;
   }
 
   .theme-doc-markdown h1 {
-    font-size: 2rem;
+    font-size: 1.75rem;
   }
 
-  .theme-doc-markdown h1 + p {
-    font-size: var(--proctor-type-body-size);
+  .markdown > header + p,
+  .markdown > h1:first-child + p {
+    font-size: 1.0625rem;
   }
 
-  .theme-doc-markdown h2 {
-    font-size: 1.45rem;
-    margin-top: var(--proctor-space-7);
+  .site-footer__inner {
+    padding-inline: var(--proctor-space-4);
   }
 
-  [class*="docs-doc-id-reference/configuration/"]
-    .theme-doc-markdown
-    table {
-    border-top: 0;
-    display: block;
-    overflow: visible;
-  }
-
-  [class*="docs-doc-id-reference/configuration/"]
-    .theme-doc-markdown
-    thead {
-    border: 0;
-    clip: rect(0 0 0 0);
-    clip-path: inset(50%);
-    height: 1px;
-    overflow: hidden;
-    position: absolute;
-    white-space: nowrap;
-    width: 1px;
-  }
-
-  [class*="docs-doc-id-reference/configuration/"]
-    .theme-doc-markdown
-    tbody,
-  [class*="docs-doc-id-reference/configuration/"]
-    .theme-doc-markdown
-    tr,
-  [class*="docs-doc-id-reference/configuration/"]
-    .theme-doc-markdown
-    td {
-    display: block;
-    min-width: 0;
-    width: 100%;
-  }
-
-  [class*="docs-doc-id-reference/configuration/"]
-    .theme-doc-markdown
-    tr {
-    border-bottom: var(--proctor-stroke-hairline) solid
-      var(--proctor-border-strong);
-    padding-block: var(--proctor-space-2);
-  }
-
-  [class*="docs-doc-id-reference/configuration/"]
-    .theme-doc-markdown
-    td {
-    border-bottom: 0;
-    padding: var(--proctor-space-2) var(--proctor-space-3);
-  }
-
-  [class*="docs-doc-id-reference/configuration/"]
-    .theme-doc-markdown
-    td:first-child {
-    color: var(--proctor-ink);
-    font-weight: 500;
-    width: 100%;
-  }
-
-  .pagination-nav {
-    gap: var(--proctor-space-4);
+  .site-footer nav {
+    margin-left: 0;
   }
 }
 
-@media (max-width: 360px) {
-  .navbar__logo {
-    height: 1.25rem;
+@media (max-width: 560px) {
+  .pagination-nav {
+    grid-template-columns: 1fr;
   }
 
-  .navbar__inner {
-    gap: var(--proctor-space-2);
-    padding-inline: var(--proctor-space-2);
+  .pagination-nav__link--next {
+    grid-column: 1;
+  }
+
+  .pagination-nav__link--prev + .pagination-nav__link--next {
+    border-left: 0;
+    border-top: 1px solid var(--proctor-border);
+    margin-top: 16px;
+    padding-left: 0;
   }
 }
 
@@ -874,14 +1131,14 @@ textarea:focus-visible {
   .navbar,
   .theme-doc-sidebar-container,
   .theme-doc-toc-desktop,
+  .theme-doc-footer,
   .pagination-nav,
-  .footer {
+  .site-footer {
     display: none !important;
   }
 
   .theme-doc-markdown {
     color: var(--proctor-print-ink);
-    max-width: none;
   }
 }
 
@@ -892,4 +1149,127 @@ textarea:focus-visible {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Lockup ------------------------------------------------------------------ */
+
+.site-brand {
+  align-items: center;
+  display: inline-flex;
+}
+
+.site-brand__lockup {
+  display: block;
+  height: 22px;
+  width: auto;
+}
+
+/* Edit row ---------------------------------------------------------------- */
+
+.doc-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  justify-content: space-between;
+  margin-top: 64px;
+  padding-bottom: 0;
+}
+
+.doc-footer + nav.pagination-nav,
+.theme-doc-footer + nav {
+  margin-top: 20px;
+}
+
+/* Error-code pages ---------------------------------------------------------- */
+
+.problem-source {
+  border-top: 1px solid var(--proctor-border);
+  color: var(--proctor-ink-muted);
+  font-size: 0.8rem;
+  margin-top: 40px !important;
+  padding-top: 16px;
+}
+
+.plugin-id-problems .menu__list .menu__list .menu__link:not(.menu__link--sublist) {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.75rem;
+}
+
+/* Corrections ------------------------------------------------------------- */
+
+.theme-doc-markdown h1 {
+  text-wrap: pretty;
+}
+
+/* Infima tints the active category and its hover; the rail already marks it. */
+.menu__list-item-collapsible--active,
+.menu__list-item-collapsible--active:hover,
+.menu__link--active,
+.menu__link--active:hover,
+.menu__link:hover {
+  background: transparent !important;
+}
+
+.navbar__link {
+  white-space: nowrap;
+}
+
+@media (min-width: 997px) and (max-width: 1100px) {
+  .navbar__inner {
+    gap: var(--proctor-space-4);
+  }
+
+  .navbar__brand {
+    margin-right: var(--proctor-space-3);
+  }
+
+  .navbar__link {
+    padding-inline: 8px;
+  }
+}
+
+.navbar-sidebar__items .menu {
+  padding: 16px !important;
+}
+
+.navbar-sidebar__back {
+  border-radius: 0;
+  margin: 0 0 8px;
+  padding: 8px 0;
+  text-align: left;
+  width: 100%;
+}
+
+.navbar-sidebar .theme-doc-sidebar-menu {
+  padding-top: 8px;
+}
+
+.theme-doc-toc-mobile {
+  background: transparent;
+}
+
+[class*="docItemContainer"]:has([data-problem-index]) {
+  max-width: 60rem;
+}
+
+/* Spacing rhythm ------------------------------------------------------------
+   One 4px scale. Blocks that interrupt prose (code, tables, notes, figures)
+   get equal room above and below; straight after a heading they sit at the
+   heading's own distance, so the heading still reads as theirs. */
+
+.theme-doc-markdown .theme-code-block,
+.theme-doc-markdown table,
+.theme-doc-markdown .theme-admonition,
+.theme-doc-markdown figure,
+.theme-doc-markdown .tabs-container {
+  margin-bottom: 28px;
+  margin-top: 28px;
+}
+
+.theme-doc-markdown :is(h2, h3, h4) + :is(.theme-code-block, table, .theme-admonition, figure, .tabs-container, ul, ol) {
+  margin-top: 0;
+}
+
+.theme-doc-markdown :is(ul, ol) :is(ul, ol) {
+  margin: 8px 0 0;
 }

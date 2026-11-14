@@ -48,7 +48,7 @@
 
 .tooltipTerm {
   color: var(--proctor-primary-strong);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 @media (prefers-reduced-motion: reduce) {

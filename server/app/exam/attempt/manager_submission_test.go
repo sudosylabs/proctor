@@ -53,6 +53,8 @@ func TestManagerEndSealsWithPrivateReasonOutsideCandidateReceipt(t *testing.T) {
 	require.NotNil(t, f.submissions.managerInput, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
 	require.Equal(t, privateReason, f.submissions.managerInput.Request.PrivateReason, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
 	require.Equal(t, managerID, f.submissions.managerInput.Request.ActorUserID, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
+	require.True(t, f.submissions.managerInput.DomainEventID.IsValid(), "the proposed domain event reaches the manager seal")
+	require.True(t, f.submissions.managerInput.DomainEventJobID.IsValid(), "the proposed dispatch Job reaches the manager seal")
 	require.Equal(t, model.ExamSubmissionManagerEndedAttempt, f.mail.request.Provenance, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
 	require.NotContains(t, fmt.Sprintf("%#v", f.audit.values), privateReason, "private reason entered ordinary audit fields: %#v", f.audit.values)
 	wantIdempotency, prepareErr := prepareManagerEndIdempotency(f.inv, ManagerEndCommand{ExamID: target.ExamID,

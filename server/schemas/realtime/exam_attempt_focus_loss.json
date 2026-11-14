@@ -1,0 +1,49 @@
+{
+  "title": "Exam Attempt Focus Loss",
+  "description": "Reports one completed loss of focus of the candidate window. Sequences are per generation and increase by one; a skipped sequence is recorded as a gap.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generation",
+    "sequence",
+    "duration_milliseconds",
+    "continuity_credential"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "duration_milliseconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 86400000
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "window_blur",
+        "document_hidden",
+        "application_backgrounded",
+        "fullscreen_exited"
+      ],
+      "description": "Optional classification of what lost focus."
+    },
+    "continuity_credential": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$",
+      "description": "The Attempt Connection's continuity credential, chosen by Desktop at connect."
+    }
+  }
+}

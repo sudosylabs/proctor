@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -70,39 +69,6 @@ func TestRetainedDeliveryDeclarationValidation(t *testing.T) {
 			require.False(t, !tc.valid && !errors.Is(err, store.ErrInvalidState), "valid=%v err=%v", tc.valid, err)
 		})
 	}
-}
-
-func TestRetainedNativeResetBinding(t *testing.T) {
-	part := model.NewAttemptParticipationID()
-	reset := model.NativeSourceReset{Kind: "source_reset", ResetID: model.NewID(), SourceID: model.NativeSourceCapture, PreviousSourceInstanceID: model.NewID(), NewSourceInstanceID: model.NewID(), Reason: "restart", OccurredAt: time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)}
-	canonical, err := reset.Canonical()
-	require.NoError(t, err)
-	valid := nativeResetRecord{ParticipationID: part, Reset: reset, Digest: model.SHA256Fingerprint(canonical)}
-	for _, tc := range []struct {
-		name   string
-		change func(*nativeResetRecord)
-	}{
-		{"digest", func(r *nativeResetRecord) { r.Digest = model.SHA256Fingerprint([]byte("other")) }},
-		{"participation", func(r *nativeResetRecord) { r.ParticipationID = model.NewAttemptParticipationID() }},
-		{"reset identity", func(r *nativeResetRecord) {
-			r.Reset.ResetID = model.NewID()
-			raw, _ := r.Reset.Canonical()
-			r.Digest = model.SHA256Fingerprint(raw)
-		}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			value := valid
-			tc.change(&value)
-			raw, marshalErr := json.Marshal(value)
-			require.NoError(t, marshalErr)
-			_, marshalErr = decodeNativeResetRecord(raw, part, reset.ResetID)
-			require.ErrorIs(t, marshalErr, store.ErrInvalidState)
-		})
-	}
-	raw, err := json.Marshal(valid)
-	require.NoError(t, err)
-	_, err = decodeNativeResetRecord(raw, part, reset.ResetID)
-	require.NoError(t, err)
 }
 
 func TestRetainedSourceRefusalValidation(t *testing.T) {

@@ -268,6 +268,12 @@ type candidateExamAttemptWorkspaceChangedData struct {
 	ChangedAt     string `json:"changed_at"`
 }
 
+type candidateScreenClipsRequestedData struct {
+	ExamSittingID string `json:"exam_sitting_id"`
+	ExamAttemptID string `json:"exam_attempt_id"`
+	ChangedAt     string `json:"changed_at"`
+}
+
 type candidateExamAttemptFocusLossWarningData struct {
 	ExamSittingID string `json:"exam_sitting_id"`
 	ExamAttemptID string `json:"exam_attempt_id"`
@@ -625,17 +631,49 @@ func NewCandidateExamAttemptFocusLossWarningEvent(
 	}, nil
 }
 
-// NewExamAttemptIntegrityFlaggedEvent tells Sitting viewers that a Focus Loss
-// Integrity Flag was raised on an Attempt. The payload gives the policy
-// outcome and how many evidence episodes were retained and how many
-// overflowed, not the evidence itself. Focus Loss is the only policy kind it
-// reports.
+// NewCandidateScreenClipsRequestedEvent tells the candidate's Desktop that
+// its Attempt has screen clip requests to take. It carries none of them:
+// Desktop lists its pending requests, which only its live Participation
+// sees.
+func NewCandidateScreenClipsRequestedEvent(
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+	candidateID model.UserID,
+	changedAt time.Time,
+) (Event, error) {
+	if !sittingID.IsValid() || !attemptID.IsValid() || !candidateID.IsValid() || changedAt.IsZero() {
+		return Event{}, errors.New("candidate screen clip request hint requires valid bounded metadata")
+	}
+
+	data, err := json.Marshal(candidateScreenClipsRequestedData{
+		ExamSittingID: sittingID.String(),
+		ExamAttemptID: attemptID.String(),
+		ChangedAt:     model.FormatRFC3339(changedAt),
+	})
+	if err != nil {
+		return Event{}, err
+	}
+
+	return Event{
+		Name:     examAttemptScreenClipsRequestedMessage.name,
+		UserID:   candidateID,
+		Action:   model.ActionExamSittingParticipate,
+		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
+		Data:     data,
+	}, nil
+}
+
+// NewExamAttemptIntegrityFlaggedEvent tells Sitting viewers that an Integrity
+// Flag was raised on an Attempt. The payload gives the policy that raised it,
+// its outcome, and how many evidence episodes were retained and how many
+// overflowed, not the evidence itself.
 func NewExamAttemptIntegrityFlaggedEvent(
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
 	candidateID model.UserID,
 	flagID model.IntegrityFlagID,
-	outcome model.IntegrityThresholdOutcome,
+	kind model.IntegrityPolicyKind,
+	outcome model.IntegrityOutcome,
 	retainedEvidence int,
 	evidenceOverflow int64,
 	changedAt time.Time,
@@ -644,6 +682,7 @@ func NewExamAttemptIntegrityFlaggedEvent(
 		!attemptID.IsValid() ||
 		!candidateID.IsValid() ||
 		!flagID.IsValid() ||
+		!kind.IsValid() ||
 		retainedEvidence < 0 ||
 		retainedEvidence > model.FocusLossMaximumEvidenceEpisodes ||
 		evidenceOverflow < 0 ||
@@ -652,9 +691,7 @@ func NewExamAttemptIntegrityFlaggedEvent(
 		return Event{}, errors.New("manager Exam Attempt integrity Flag event requires valid bounded metadata")
 	}
 
-	switch outcome {
-	case model.IntegrityOutcomeFlag, model.IntegrityOutcomeFlagAndWarn, model.IntegrityOutcomeFlagAndSuspend:
-	default:
+	if !outcome.IsValid() {
 		return Event{}, errors.New("manager Exam Attempt integrity Flag event requires a valid outcome")
 	}
 
@@ -663,7 +700,7 @@ func NewExamAttemptIntegrityFlaggedEvent(
 		ExamAttemptID:     attemptID.String(),
 		CandidateID:       candidateID.String(),
 		FlagID:            flagID.String(),
-		PolicyKind:        string(model.IntegrityPolicyFocusLoss),
+		PolicyKind:        string(kind),
 		Outcome:           string(outcome),
 		RetainedEvidence:  retainedEvidence,
 		EvidenceOverflow:  evidenceOverflow,
@@ -755,7 +792,7 @@ func NewCandidateExamAttemptSuspendedEvent(
 }
 
 // NewCandidateExamAttemptReallowedEvent tells the candidate alone that their
-// suspended Attempt was re-allowed and is active again. Unlike the suspension
+// suspended Attempt was re-allowed and is ready again. Unlike the suspension
 // event it carries no reason code.
 func NewCandidateExamAttemptReallowedEvent(
 	sittingID model.ExamSittingID,

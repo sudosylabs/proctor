@@ -28,12 +28,12 @@ func TestRenewParticipationBindsAuthenticatedConnectionAndPassesOnlyCredentialHa
 	credential := model.NewCredentialToken()
 	participationID := model.NewAttemptParticipationID()
 	databaseNow := f.at.Add(5 * time.Second)
-	f.persistence.renewResult = &store.ExamAttemptParticipationRenewalResult{SecurityCoverage: renewalCoverageResultFixture(),
+	f.persistence.renewResult = &store.ExamAttemptParticipationRenewalResult{Security: securityControlResultFixture(),
 		AttemptID: f.attemptID, ExamID: f.sitting.ExamID, SittingID: f.sitting.ID,
 		CandidateUserID: f.inv.Principal().UserID, ParticipationID: participationID, Generation: 3, AcceptedSequence: 7,
 		DatabaseTime: databaseNow, LeaseExpiresAt: databaseNow.Add(model.AttemptParticipationInitialLease),
 	}
-	result, err := f.service.RenewExamAttemptParticipation(context.Background(), f.inv, RenewParticipationCommand{SecurityCoverage: renewalCoverageFixture(),
+	result, err := f.service.RenewExamAttemptParticipation(context.Background(), f.inv, RenewParticipationCommand{Security: securityControlFixture(),
 		AttemptID: f.attemptID, ParticipationID: participationID, ConnectionID: f.connectionID,
 		Generation: 3, Sequence: 7, ContinuityCredential: credential,
 	})
@@ -60,12 +60,12 @@ func TestDuplicateParticipationRenewalDoesNotRepublishRenewal(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	participationID := model.NewAttemptParticipationID()
-	f.persistence.renewResult = &store.ExamAttemptParticipationRenewalResult{SecurityCoverage: renewalCoverageResultFixture(),
+	f.persistence.renewResult = &store.ExamAttemptParticipationRenewalResult{Security: securityControlResultFixture(),
 		AttemptID: f.attemptID, ExamID: f.sitting.ExamID, SittingID: f.sitting.ID,
 		CandidateUserID: f.inv.Principal().UserID, ParticipationID: participationID, Generation: 2,
 		AcceptedSequence: 4, DatabaseTime: f.at, LeaseExpiresAt: f.at.Add(model.AttemptParticipationInitialLease), Duplicate: true,
 	}
-	_, err := f.service.RenewExamAttemptParticipation(context.Background(), f.inv, RenewParticipationCommand{SecurityCoverage: renewalCoverageFixture(),
+	_, err := f.service.RenewExamAttemptParticipation(context.Background(), f.inv, RenewParticipationCommand{Security: securityControlFixture(),
 		AttemptID: f.attemptID, ParticipationID: participationID, ConnectionID: f.connectionID,
 		Generation: 2, Sequence: 4, ContinuityCredential: model.NewCredentialToken(),
 	})
@@ -87,7 +87,7 @@ func TestRenewParticipationRejectsInvalidPrincipalAndFieldsBeforeStore(t *testin
 		func(_ *fixture, command *RenewParticipationCommand) { command.ContinuityCredential = "not-canonical" },
 	} {
 		f := newFixture(t)
-		command := RenewParticipationCommand{SecurityCoverage: renewalCoverageFixture(), AttemptID: f.attemptID, ParticipationID: model.NewAttemptParticipationID(),
+		command := RenewParticipationCommand{Security: securityControlFixture(), AttemptID: f.attemptID, ParticipationID: model.NewAttemptParticipationID(),
 			ConnectionID: f.connectionID, Generation: 1, Sequence: 1, ContinuityCredential: model.NewCredentialToken()}
 		mutate(f, &command)
 		_, err := f.service.RenewExamAttemptParticipation(context.Background(), f.inv, command)
@@ -103,11 +103,11 @@ func TestRenewParticipationRejectsInconsistentStoreProjection(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	participationID := model.NewAttemptParticipationID()
-	f.persistence.renewResult = &store.ExamAttemptParticipationRenewalResult{SecurityCoverage: renewalCoverageResultFixture(),
+	f.persistence.renewResult = &store.ExamAttemptParticipationRenewalResult{Security: securityControlResultFixture(),
 		AttemptID: f.attemptID, ParticipationID: participationID, Generation: 1,
 		AcceptedSequence: 2, DatabaseTime: f.at, LeaseExpiresAt: f.at.Add(model.AttemptParticipationInitialLease),
 	}
-	_, err := f.service.RenewExamAttemptParticipation(context.Background(), f.inv, RenewParticipationCommand{SecurityCoverage: renewalCoverageFixture(),
+	_, err := f.service.RenewExamAttemptParticipation(context.Background(), f.inv, RenewParticipationCommand{Security: securityControlFixture(),
 		AttemptID: f.attemptID, ParticipationID: participationID, ConnectionID: f.connectionID,
 		Generation: 1, Sequence: 1, ContinuityCredential: model.NewCredentialToken(),
 	})
@@ -129,7 +129,7 @@ func TestRenewParticipationMapsStableCandidateFaults(t *testing.T) {
 			t.Parallel()
 			f := newFixture(t)
 			f.persistence.renewErr = store.NewErrConflict("attempt_participation", test.constraint, nil)
-			_, err := f.service.RenewExamAttemptParticipation(context.Background(), f.inv, RenewParticipationCommand{SecurityCoverage: renewalCoverageFixture(),
+			_, err := f.service.RenewExamAttemptParticipation(context.Background(), f.inv, RenewParticipationCommand{Security: securityControlFixture(),
 				AttemptID: f.attemptID, ParticipationID: model.NewAttemptParticipationID(), ConnectionID: f.connectionID,
 				Generation: 1, Sequence: 1, ContinuityCredential: model.NewCredentialToken(),
 			})
@@ -145,7 +145,7 @@ func TestLateRenewalUsesExactExpiryTransitionAndReturnsSafeConnectionLoss(t *tes
 	f.persistence.renewErr = store.NewErrConflict("attempt_participation", "attempt_participation_expired", nil)
 	f.persistence.resolvedExpiry = &due
 	f.persistence.expireResult = expiryResultFixture(t, f, due, false)
-	_, err := f.service.RenewExamAttemptParticipation(context.Background(), f.inv, RenewParticipationCommand{SecurityCoverage: renewalCoverageFixture(),
+	_, err := f.service.RenewExamAttemptParticipation(context.Background(), f.inv, RenewParticipationCommand{Security: securityControlFixture(),
 		AttemptID: due.AttemptID, ParticipationID: due.ParticipationID, ConnectionID: f.connectionID,
 		Generation: due.Generation, Sequence: 5, ContinuityCredential: model.NewCredentialToken(),
 	})
@@ -163,7 +163,7 @@ func TestLateRenewalConcealsScannerWinningBeforeTargetResolution(t *testing.T) {
 	f := newFixture(t)
 	f.persistence.renewErr = store.NewErrConflict("attempt_participation", "attempt_participation_expired", nil)
 	f.persistence.resolveExpiryErr = store.NewErrNotFound("attempt_participation", "ended")
-	_, err := f.service.RenewExamAttemptParticipation(context.Background(), f.inv, RenewParticipationCommand{SecurityCoverage: renewalCoverageFixture(),
+	_, err := f.service.RenewExamAttemptParticipation(context.Background(), f.inv, RenewParticipationCommand{Security: securityControlFixture(),
 		AttemptID: f.attemptID, ParticipationID: model.NewAttemptParticipationID(), ConnectionID: f.connectionID,
 		Generation: 2, Sequence: 5, ContinuityCredential: model.NewCredentialToken(),
 	})

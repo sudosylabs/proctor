@@ -53,6 +53,7 @@ const (
 type NativeDeliveryTarget struct {
 	Security     model.AdmittedSecurity
 	MatrixDigest string
+	ExamID       model.ExamID
 	SittingID    model.ExamSittingID
 	ClassID      model.ClassID
 }
@@ -77,6 +78,38 @@ func (e *NativeDeliveryRefusal) Error() string { return "native delivery detail 
 // Desktop delivers for one Participation: appended batches and their receipts,
 // declared gaps, the final declaration, and the summary of what was not
 // retained.
+// NativeDeliveryAppended is an append's acknowledgement and the native Flags
+// its records raised.
+type NativeDeliveryAppended struct {
+	Acknowledgement *model.NativeSecurityAcknowledgement
+	Flagged         []NativeIntegrityFlagged
+	// StatusDiscrepancies counts the rule statuses in the append on which
+	// Desktop disagreed with the server.
+	StatusDiscrepancies int64
+}
+
+// NativeIntegrityFlagged is a native Flag an append raised or added
+// evidence to, for managers to be told of it.
+type NativeIntegrityFlagged struct {
+	FlagID           model.IntegrityFlagID
+	Kind             model.IntegrityPolicyKind
+	RetainedEvidence int
+	// ScreenClipRequested reports that the new Flag asked Desktop for an
+	// incident clip.
+	ScreenClipRequested bool
+	// Suspended is the policy Suspension the occurrence opened, when its
+	// family's outcome is flag_and_suspend, or nil.
+	Suspended *NativeIntegritySuspended
+}
+
+// NativeIntegritySuspended is what a native Suspension changed, for the
+// candidate and managers to be told of it.
+type NativeIntegritySuspended struct {
+	Suspension       ExamAttemptSuspensionView
+	AttemptRevision  int64
+	ClosedConnection ExamAttemptManagerConnection
+}
+
 type NativeDeliveryStore interface {
 	// ResolveNativeDeliveryTarget returns the Sitting, Class and admitted
 	// security binding that own the stream.
@@ -87,8 +120,9 @@ type NativeDeliveryStore interface {
 	// given sequence.
 	NativeDeliveryReceipt(context.Context, NativeDeliveryAccess, int64) (*model.NativeBatchReceipt, error)
 	// AppendNativeDelivery appends one batch to the stream and returns its
-	// acknowledgement. A replayed command returns the original receipt.
-	AppendNativeDelivery(context.Context, *NativeDeliveryAppend, *CommandIdempotency) (*model.NativeSecurityAcknowledgement, error)
+	// acknowledgement and the native Flags it raised. A replayed command
+	// returns the original receipt and raises nothing.
+	AppendNativeDelivery(context.Context, *NativeDeliveryAppend, *CommandIdempotency) (*NativeDeliveryAppended, error)
 	// DeclareNativeDeliveryGaps records the gaps the stream declares in what
 	// it delivered. A refused declaration is a *NativeDeliveryRefusal.
 	DeclareNativeDeliveryGaps(context.Context, *NativeDeliveryGapDeclaration, *CommandIdempotency) (*model.DeliveryGapReceipt, error)

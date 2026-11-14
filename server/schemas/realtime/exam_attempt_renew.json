@@ -1,0 +1,34 @@
+{
+  "title": "Exam Attempt renewal",
+  "description": "Renews the Participation lease and carries the security control. The whole data object is at most 16 KiB.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "security_control",
+    "generation",
+    "sequence",
+    "continuity_credential"
+  ],
+  "properties": {
+    "security_control": {
+      "$ref": "security_control.json"
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "The Participation generation."
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "The renewal's own sequence within the generation."
+    },
+    "continuity_credential": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$",
+      "description": "The Attempt Connection's continuity credential."
+    }
+  }
+}

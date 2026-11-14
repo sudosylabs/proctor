@@ -1,6 +1,6 @@
 {
   "title": "Attempt Integrity Flag raised",
-  "description": "A Focus Loss Integrity Flag, its policy outcome and how many evidence episodes were kept or overflowed. The evidence itself is never included.",
+  "description": "An Integrity Flag a policy raised or added evidence to (Focus Loss, or native.<capability> when an enforce rule's occurrence opens), its policy outcome and how many evidence episodes were kept or overflowed. The evidence itself is never included.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -30,7 +30,8 @@
     },
     "policy_kind": {
       "type": "string",
-      "const": "focus_loss"
+      "maxLength": 97,
+      "pattern": "^(connection_loss|focus_loss|browser_navigation|[a-z][a-z0-9.-]{0,63}\\.[a-z][a-z0-9_]{0,31})$"
     },
     "outcome": {
       "type": "string",

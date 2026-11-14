@@ -70,6 +70,8 @@ type localCacheStores struct {
 	fileOnce                       sync.Once
 	job                            store.JobStore
 	jobOnce                        sync.Once
+	domainEvent                    store.DomainEventStore
+	domainEventOnce                sync.Once
 	mail                           store.MailStore
 	mailOnce                       sync.Once
 	externalIdentity               store.ExternalIdentityStore
@@ -114,6 +116,8 @@ type localCacheStores struct {
 	accessPolicyOnce               sync.Once
 	desktopCompatibilityPolicy     store.DesktopCompatibilityPolicyStore
 	desktopCompatibilityPolicyOnce sync.Once
+	pluginSettings                 store.PluginSettingsStore
+	pluginSettingsOnce             sync.Once
 	retentionPolicy                store.RetentionPolicyStore
 	retentionPolicyOnce            sync.Once
 	retention                      store.RetentionStore
@@ -261,6 +265,11 @@ type jobStore struct {
 	layer *Layer
 }
 
+type domainEventStore struct {
+	store.DomainEventStore
+	layer *Layer
+}
+
 type mailStore struct {
 	store.MailStore
 	layer *Layer
@@ -368,6 +377,11 @@ type accessPolicyStore struct {
 
 type desktopCompatibilityPolicyStore struct {
 	store.DesktopCompatibilityPolicyStore
+	layer *Layer
+}
+
+type pluginSettingsStore struct {
+	store.PluginSettingsStore
 	layer *Layer
 }
 
@@ -666,6 +680,16 @@ func (l *Layer) Job() store.JobStore {
 	return l.stores.job
 }
 
+func (l *Layer) DomainEvent() store.DomainEventStore {
+	l.stores.domainEventOnce.Do(func() {
+		next := l.Store.DomainEvent()
+		if next != nil {
+			l.stores.domainEvent = &domainEventStore{DomainEventStore: next, layer: l}
+		}
+	})
+	return l.stores.domainEvent
+}
+
 func (l *Layer) Mail() store.MailStore {
 	l.stores.mailOnce.Do(func() {
 		next := l.Store.Mail()
@@ -886,6 +910,16 @@ func (l *Layer) DesktopCompatibilityPolicy() store.DesktopCompatibilityPolicySto
 	return l.stores.desktopCompatibilityPolicy
 }
 
+func (l *Layer) PluginSettings() store.PluginSettingsStore {
+	l.stores.pluginSettingsOnce.Do(func() {
+		next := l.Store.PluginSettings()
+		if next != nil {
+			l.stores.pluginSettings = &pluginSettingsStore{PluginSettingsStore: next, layer: l}
+		}
+	})
+	return l.stores.pluginSettings
+}
+
 func (l *Layer) RetentionPolicy() store.RetentionPolicyStore {
 	l.stores.retentionPolicyOnce.Do(func() {
 		next := l.Store.RetentionPolicy()
@@ -965,6 +999,7 @@ var (
 	_ store.UserSettingsStore               = (*userSettingsStore)(nil)
 	_ store.FileStore                       = (*fileStore)(nil)
 	_ store.JobStore                        = (*jobStore)(nil)
+	_ store.DomainEventStore                = (*domainEventStore)(nil)
 	_ store.MailStore                       = (*mailStore)(nil)
 	_ store.ExternalIdentityStore           = (*externalIdentityStore)(nil)
 	_ store.ExternalLoginStateStore         = (*externalLoginStateStore)(nil)
@@ -987,6 +1022,7 @@ var (
 	_ store.InstallationStore               = (*installationStore)(nil)
 	_ store.AccessPolicyStore               = (*accessPolicyStore)(nil)
 	_ store.DesktopCompatibilityPolicyStore = (*desktopCompatibilityPolicyStore)(nil)
+	_ store.PluginSettingsStore             = (*pluginSettingsStore)(nil)
 	_ store.RetentionPolicyStore            = (*retentionPolicyStore)(nil)
 	_ store.RetentionStore                  = (*retentionStore)(nil)
 	_ store.ClusterDiscoveryStore           = (*clusterDiscoveryStore)(nil)

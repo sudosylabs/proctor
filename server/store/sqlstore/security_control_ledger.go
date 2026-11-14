@@ -16,15 +16,12 @@ import (
 )
 
 // securityControlReceipt is the compact persisted outcome of one processed
-// native security control, not a transport response. Reset IDs refer to
-// separately charged immutable reset facts. Rejections use immutable
+// security control, not a transport response. Rejections use immutable
 // owner-slot indexes (native=0, browser=1..49) and reason 0=closed,
 // 1=position_limit. The owning aggregate resolves these references on replay.
 type securityControlReceipt struct {
 	Sequence   int64      `json:"sequence"`
 	Digest     string     `json:"digest"`
-	Result     string     `json:"result"`
-	ResetIDs   []string   `json:"resets"`
 	Rejections [][2]int64 `json:"rejections"`
 }
 
@@ -32,18 +29,9 @@ func (r securityControlReceipt) Validate() error {
 	if r.Sequence <= 0 ||
 		!securityControlSafeInt(r.Sequence) ||
 		!model.IsValidSHA256Fingerprint(r.Digest) ||
-		!slices.Contains([]string{"accepted", "reset_required", "reset_conflict"}, r.Result) ||
-		r.ResetIDs == nil ||
-		len(r.ResetIDs) > 11 ||
 		r.Rejections == nil ||
 		len(r.Rejections) > 50 {
 		return model.ErrSecurityControlInvalid
-	}
-
-	for i, id := range r.ResetIDs {
-		if !model.IsValidAgreementID(id) || slices.Contains(r.ResetIDs[:i], id) {
-			return model.ErrSecurityControlInvalid
-		}
 	}
 
 	for i, rejection := range r.Rejections {
@@ -67,12 +55,11 @@ func (r securityControlReceipt) Validate() error {
 }
 
 func (r securityControlReceipt) clone() securityControlReceipt {
-	r.ResetIDs = slices.Clone(r.ResetIDs)
 	r.Rejections = slices.Clone(r.Rejections)
 	return r
 }
 
-// nativeControlLedger keeps processed ordering independently of usable coverage.
+// nativeControlLedger keeps the order in which security controls were processed.
 // Only authenticated, structurally valid, owner-bound controls reach this owner.
 // Its receipt does not grant authority: callers always project current gates.
 type nativeControlLedger struct {
@@ -115,7 +102,7 @@ func (l nativeControlLedger) Validate() error {
 	return nil
 }
 
-// Lookup runs before interpreting reset edges or watermarks. A retained replay
+// Lookup runs before interpreting watermarks. A retained replay
 // returns its original bounded outcome; an evicted older sequence is stale.
 func (l nativeControlLedger) Lookup(sequence int64, digest string) (*securityControlReceipt, bool, error) {
 	if l.Validate() != nil || sequence <= 0 || !securityControlSafeInt(sequence) || !model.IsValidSHA256Fingerprint(digest) {
@@ -133,7 +120,7 @@ func (l nativeControlLedger) Lookup(sequence int64, digest string) (*securityCon
 	return nil, sequence <= l.ProcessedSequence, nil
 }
 
-// Record advances every processed outcome, including reset faults. It cannot
+// Record advances every processed outcome. It cannot
 // modify a previously processed boundary, even after cache eviction or restart.
 func (l nativeControlLedger) Record(receipt securityControlReceipt) (nativeControlLedger, error) {
 	if l.Validate() != nil || receipt.Validate() != nil || receipt.Sequence <= l.ProcessedSequence {

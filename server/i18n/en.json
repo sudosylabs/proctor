@@ -736,6 +736,10 @@
     "translation": "{{.Actor}} revoked a personal access token"
   },
   {
+    "id": "audit.action.plugin.manage",
+    "translation": "{{.Actor}} changed a plugin's settings"
+  },
+  {
     "id": "audit.action.programme.manage",
     "translation": "{{.Actor}} managed {{.Resource}}"
   },

@@ -1,0 +1,78 @@
+{
+  "title": "Security control",
+  "description": "Desktop's security control: its sequence, the binding it renews and the delivery watermarks it has allocated. At most 16 KiB. The server identifies a control by the SHA-256 of its canonical JSON (object keys sorted, integers only, JSON.stringify string escaping), so key order and whitespace do not matter; duplicate keys, unknown members and non-integer numbers are refused. A retained sequence sent again with different content is refused with exam.security.control_conflict; an older sequence changes nothing. The server refuses a control whose policy is no longer current with exam.security.policy_changed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "control_sequence",
+    "policy_digest",
+    "security_session_id",
+    "stream_id",
+    "delivery_watermarks"
+  ],
+  "properties": {
+    "control_sequence": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "policy_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "security_session_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "stream_id": {
+      "type": "string",
+      "description": "The admitted native delivery stream: exactly AdmittedSecurity.delivery_stream_id from the connect reply. A control naming another stream is refused.",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "delivery_watermarks": {
+      "type": "array",
+      "description": "The admitted native stream and the Browser sources owned by the current Participation, each at most once. At most 50.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "family",
+          "source_id",
+          "allocated_through_sequence",
+          "acknowledged_through_sequence"
+        ],
+        "properties": {
+          "family": {
+            "type": "string",
+            "enum": [
+              "native",
+              "browser"
+            ]
+          },
+          "source_id": {
+            "type": "string",
+            "description": "For the native family, the admitted delivery_stream_id; for a Browser source, that source's ID.",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "allocated_through_sequence": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "acknowledged_through_sequence": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "At most allocated_through_sequence."
+          }
+        }
+      }
+    }
+  }
+}

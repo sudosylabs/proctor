@@ -1,0 +1,60 @@
+{
+  "title": "Connect security",
+  "description": "Which admission the connect consumes: a fresh preflight for first admission and Ready rejoin, or the current Participation for a same-generation reconnect.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "preflight_id",
+        "report_digest"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "preflight"
+        },
+        "preflight_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "report_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "The digest the report receipt returned; the report must be at most 30 seconds old."
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "participation_id",
+        "generation",
+        "policy_digest"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "resume"
+        },
+        "participation_id": {
+          "$ref": "id.json"
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "policy_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    }
+  ]
+}

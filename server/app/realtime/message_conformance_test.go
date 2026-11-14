@@ -59,6 +59,9 @@ func conformanceConstructors() map[string]func() (Event, error) {
 		"access_policy_changed": func() (Event, error) {
 			return NewAccessPolicyChangedEvent(model.NewInstitutionID(), 7)
 		},
+		"plugin_settings_changed": func() (Event, error) {
+			return NewPluginSettingsChangedEvent(model.NewInstitutionID(), "display-topology", 3)
+		},
 		"academic_unit_created":  func() (Event, error) { return NewAcademicUnitCreatedEvent(model.NewAcademicUnitID()) },
 		"academic_unit_updated":  func() (Event, error) { return NewAcademicUnitUpdatedEvent(model.NewAcademicUnitID()) },
 		"academic_unit_archived": func() (Event, error) { return NewAcademicUnitArchivedEvent(model.NewAcademicUnitID()) },
@@ -154,11 +157,14 @@ func conformanceConstructors() map[string]func() (Event, error) {
 			return NewCandidateExamAttemptWorkspaceChangedEvent(sittingID, attemptID, candidateID,
 				model.NewAttemptWorkspaceEntryID(), model.AttemptWorkspaceMutationMoveEntry, 9, at)
 		},
+		"exam_attempt_screen_clips_requested": func() (Event, error) {
+			return NewCandidateScreenClipsRequestedEvent(sittingID, attemptID, candidateID, at)
+		},
 		"exam_attempt_focus_warning": func() (Event, error) {
 			return NewCandidateExamAttemptFocusLossWarningEvent(sittingID, attemptID, candidateID, at)
 		},
 		"exam_attempt_integrity_flagged": func() (Event, error) {
-			return NewExamAttemptIntegrityFlaggedEvent(sittingID, attemptID, candidateID, flagID,
+			return NewExamAttemptIntegrityFlaggedEvent(sittingID, attemptID, candidateID, flagID, model.IntegrityPolicyFocusLoss,
 				model.IntegrityOutcomeFlagAndSuspend, model.FocusLossMaximumEvidenceEpisodes, 3, at)
 		},
 		"exam_attempt_submitted": func() (Event, error) {

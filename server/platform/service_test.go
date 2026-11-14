@@ -26,8 +26,10 @@ import (
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/platform/externalauth"
-	"github.com/sudosylabs/proctor/server/platform/externalauth/cas"
-	"github.com/sudosylabs/proctor/server/platform/externalauth/oidc"
+	"github.com/sudosylabs/proctor/server/plugin"
+	"github.com/sudosylabs/proctor/server/plugin/cas"
+	"github.com/sudosylabs/proctor/server/plugin/oidc"
+	"github.com/sudosylabs/proctor/server/pluginhost"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
@@ -44,6 +46,7 @@ func (unavailableMailer) Test(context.Context) error {
 
 func (testStore) File() store.FileStore                                   { return nil }
 func (testStore) Job() store.JobStore                                     { return nil }
+func (testStore) DomainEvent() store.DomainEventStore                     { return nil }
 func (testStore) Mail() store.MailStore                                   { return nil }
 func (testStore) BrowserAuthentication() store.BrowserAuthenticationStore { return nil }
 func (testStore) DesktopRegistration() store.DesktopRegistrationStore     { return nil }
@@ -90,10 +93,15 @@ func completeOwnedResources(t *testing.T, configuration *config.Store) OwnedReso
 	t.Helper()
 	logger, err := logging.New()
 	require.NoError(t, err)
-	providers, err := externalauth.NewRegistry(
-		cas.NewFactory(),
-		oidc.NewFactory(),
-	)
+	plugins, err := pluginhost.Activate(context.Background(), pluginhost.Dependencies{
+		Plugins: []plugin.Plugin{cas.NewPlugin(), oidc.NewPlugin()},
+		Logger:  logger.Slog(),
+	})
+	if err != nil {
+		_ = logger.Shutdown()
+		require.NoError(t, err)
+	}
+	providers, err := externalauth.NewRegistry(plugins.IdentityProviderTypes()...)
 	if err != nil {
 		_ = logger.Shutdown()
 		require.NoError(t, err)
@@ -323,18 +331,14 @@ func TestAcceptClosesOwnedResourcesOnProviderConfigurationFailure(t *testing.T) 
 	require.NoError(t, err)
 	settings := configuration.Get()
 	settings.Authentication.External.Providers = []config.ExternalAuthenticationProvider{{
-		ID: "missing-factory", Type: config.ExternalAuthenticationTypeCAS,
+		ID: "missing-factory", Type: "cas",
 		DisplayName: "Missing", Enabled: true,
-		CAS: &config.CASProvider{
-			BaseURL: "https://cas.example.test", ValidationPath: "/p3/serviceValidate",
-			Timeout: config.Duration{Duration: 5 * time.Second}, MaxResponseBytes: 64 << 10,
-		},
-		Claims: config.ExternalClaimMapping{Subject: "user"},
+		Settings: json.RawMessage(`{"BaseURL":"https://cas.example.test"}`),
 	}}
 	_, _, err = configuration.Set(context.Background(), settings)
 	require.NoError(t, err)
 	resources := completeOwnedResources(t, configuration)
-	providers, err := externalauth.NewRegistry()
+	providers, err := externalauth.NewRegistry(failingProviderType{})
 	require.NoError(t, err)
 	persistence := &trackedStore{}
 	resources.Persistence = persistence
@@ -342,8 +346,36 @@ func TestAcceptClosesOwnedResourcesOnProviderConfigurationFailure(t *testing.T) 
 	service, _, err := Accept(context.Background(), resources)
 	require.Nil(t, service, "Accept(provider failure)")
 	require.Error(t, err, "Accept(provider failure)")
-	require.Contains(t, err.Error(), "unregistered type", "Accept(provider failure)")
+	require.Contains(t, err.Error(), "configure external authentication provider \"missing-factory\": settings rejected", "Accept(provider failure)")
 	require.True(t, persistence.closed.Load(), "provider configuration failure did not close accepted Store")
+}
+
+func TestAcceptStartsWithoutAProviderWhosePluginIsOff(t *testing.T) {
+	t.Parallel()
+
+	configuration, err := config.NewStore(
+		context.Background(), config.NewMemoryStore(nil), config.StoreOptions{},
+	)
+	require.NoError(t, err)
+	settings := configuration.Get()
+	settings.Authentication.External.Providers = []config.ExternalAuthenticationProvider{{
+		ID: "campus-cas", Type: "cas",
+		DisplayName: "Campus", Enabled: true,
+		Settings: json.RawMessage(`{"BaseURL":"https://cas.example.test"}`),
+	}}
+	_, _, err = configuration.Set(context.Background(), settings)
+	require.NoError(t, err)
+	resources := completeOwnedResources(t, configuration)
+	providers, err := externalauth.NewRegistry()
+	require.NoError(t, err)
+	resources.ExternalAuthentication = providers
+
+	service, _, err := Accept(context.Background(), resources)
+	require.NoError(t, err, "a sign-in provider whose plugin is off does not stop the platform")
+	t.Cleanup(func() { _ = service.Close(context.Background()) })
+	_, exists := providers.Provider("campus-cas")
+	require.False(t, exists)
+	require.Equal(t, []string{"campus-cas"}, providers.Unavailable())
 }
 
 func TestAcceptRejectsClosedConfigurationListenerRegistration(t *testing.T) {
@@ -364,8 +396,9 @@ func TestAcceptRejectsClosedConfigurationListenerRegistration(t *testing.T) {
 	require.True(t, persistence.closed.Load(), "listener registration failure did not close accepted Store")
 }
 
-func (testStore) Institution() store.InstitutionStore   { return nil }
-func (testStore) AccessPolicy() store.AccessPolicyStore { return nil }
+func (testStore) Institution() store.InstitutionStore       { return nil }
+func (testStore) AccessPolicy() store.AccessPolicyStore     { return nil }
+func (testStore) PluginSettings() store.PluginSettingsStore { return nil }
 func (testStore) DesktopCompatibilityPolicy() store.DesktopCompatibilityPolicyStore {
 	return nil
 }
@@ -571,15 +604,9 @@ func TestServiceAtomicallyReconfiguresExternalProviders(t *testing.T) {
 	initial := configuration.Get()
 	initial.Authentication.External.Providers =
 		[]config.ExternalAuthenticationProvider{{
-			ID: "campus-cas", Type: config.ExternalAuthenticationTypeCAS,
+			ID: "campus-cas", Type: "cas",
 			DisplayName: "Campus CAS", Enabled: true,
-			CAS: &config.CASProvider{
-				BaseURL:          "https://cas.example.edu/cas",
-				ValidationPath:   "/p3/serviceValidate",
-				Timeout:          config.Duration{Duration: 5 * time.Second},
-				MaxResponseBytes: 64 * 1024,
-			},
-			Claims: config.ExternalClaimMapping{Subject: "user"},
+			Settings: json.RawMessage(`{"BaseURL":"https://cas.example.edu/cas","ValidationPath":"/p3/serviceValidate","Timeout":"5s","MaxResponseBytes":65536,"Claims":{"Subject":"user"}}`),
 		}}
 	_, _, err = configuration.Set(
 		context.Background(),
@@ -732,15 +759,9 @@ func TestServiceReloadRollsBackEveryConsumerWhenOneCannotApply(t *testing.T) {
 	require.NoError(t, err)
 	initial := configuration.Get()
 	initial.Authentication.External.Providers = []config.ExternalAuthenticationProvider{{
-		ID: "campus-cas", Type: config.ExternalAuthenticationTypeCAS,
+		ID: "campus-cas", Type: "cas",
 		DisplayName: "Campus CAS", Enabled: true,
-		CAS: &config.CASProvider{
-			BaseURL:          "https://cas.example.edu/cas",
-			ValidationPath:   "/p3/serviceValidate",
-			Timeout:          config.Duration{Duration: 5 * time.Second},
-			MaxResponseBytes: 64 * 1024,
-		},
-		Claims: config.ExternalClaimMapping{Subject: "user"},
+		Settings: json.RawMessage(`{"BaseURL":"https://cas.example.edu/cas","ValidationPath":"/p3/serviceValidate","Timeout":"5s","MaxResponseBytes":65536,"Claims":{"Subject":"user"}}`),
 	}}
 	_, _, err = configuration.Set(context.Background(), initial)
 	require.NoError(t, err)
@@ -767,4 +788,14 @@ func TestServiceReloadRollsBackEveryConsumerWhenOneCannotApply(t *testing.T) {
 		require.True(t, configuration.Get().Authentication.External.Providers[0].Enabled)
 		require.Len(t, providers.Descriptors(), 1, "external providers were not restored")
 	}
+}
+
+// failingProviderType offers the CAS protocol but rejects every provider's
+// settings, as a protocol does when it cannot build a configured provider.
+type failingProviderType struct{}
+
+func (failingProviderType) Type() string { return "cas" }
+
+func (failingProviderType) New(plugin.IdentityProviderDefinition) (plugin.IdentityProvider, error) {
+	return nil, errors.New("settings rejected")
 }

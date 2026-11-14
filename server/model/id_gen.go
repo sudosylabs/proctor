@@ -97,6 +97,9 @@ func NewIntegrityDiscrepancyID() IntegrityDiscrepancyID { return IntegrityDiscre
 // NewAttemptSuspensionID returns a freshly generated attempt-suspension identifier.
 func NewAttemptSuspensionID() AttemptSuspensionID { return AttemptSuspensionID(NewID()) }
 
+// NewScreenClipID returns a freshly generated screen-clip identifier.
+func NewScreenClipID() ScreenClipID { return ScreenClipID(NewID()) }
+
 // NewAttemptWorkspaceEntryID returns a freshly generated attempt-workspace-entry identifier.
 func NewAttemptWorkspaceEntryID() AttemptWorkspaceEntryID { return AttemptWorkspaceEntryID(NewID()) }
 
@@ -170,6 +173,9 @@ func NewMailOccurrenceID() MailOccurrenceID { return MailOccurrenceID(NewID()) }
 
 // NewMailDeliveryID returns a freshly generated mail-delivery identifier.
 func NewMailDeliveryID() MailDeliveryID { return MailDeliveryID(NewID()) }
+
+// NewDomainEventID returns a freshly generated domain-event identifier.
+func NewDomainEventID() DomainEventID { return DomainEventID(NewID()) }
 
 // NewExternalLoginStateID returns a freshly generated external-login-state identifier.
 func NewExternalLoginStateID() ExternalLoginStateID { return ExternalLoginStateID(NewID()) }
@@ -336,6 +342,11 @@ func ParseAttemptSuspensionID(value string) (AttemptSuspensionID, error) {
 	return parseID[AttemptSuspensionID](value, "attempt_suspension_id")
 }
 
+// ParseScreenClipID validates and converts the shared identifier representation.
+func ParseScreenClipID(value string) (ScreenClipID, error) {
+	return parseID[ScreenClipID](value, "screen_clip_id")
+}
+
 // ParseAttemptWorkspaceEntryID validates and converts the shared identifier representation.
 func ParseAttemptWorkspaceEntryID(value string) (AttemptWorkspaceEntryID, error) {
 	return parseID[AttemptWorkspaceEntryID](value, "attempt_workspace_entry_id")
@@ -454,6 +465,11 @@ func ParseMailOccurrenceID(value string) (MailOccurrenceID, error) {
 // ParseMailDeliveryID validates and converts the shared identifier representation.
 func ParseMailDeliveryID(value string) (MailDeliveryID, error) {
 	return parseID[MailDeliveryID](value, "mail_delivery_id")
+}
+
+// ParseDomainEventID validates and converts the shared identifier representation.
+func ParseDomainEventID(value string) (DomainEventID, error) {
+	return parseID[DomainEventID](value, "domain_event_id")
 }
 
 // ParseExternalLoginStateID validates and converts the shared identifier representation.
@@ -575,6 +591,9 @@ func (id IntegrityDiscrepancyID) IsZero() bool { return id == "" }
 // IsZero reports whether the attempt-suspension is the empty zero value.
 func (id AttemptSuspensionID) IsZero() bool { return id == "" }
 
+// IsZero reports whether the screen-clip is the empty zero value.
+func (id ScreenClipID) IsZero() bool { return id == "" }
+
 // IsZero reports whether the attempt-workspace-entry is the empty zero value.
 func (id AttemptWorkspaceEntryID) IsZero() bool { return id == "" }
 
@@ -646,6 +665,9 @@ func (id MailOccurrenceID) IsZero() bool { return id == "" }
 
 // IsZero reports whether the mail-delivery is the empty zero value.
 func (id MailDeliveryID) IsZero() bool { return id == "" }
+
+// IsZero reports whether the domain-event is the empty zero value.
+func (id DomainEventID) IsZero() bool { return id == "" }
 
 // IsZero reports whether the external-login-state is the empty zero value.
 func (id ExternalLoginStateID) IsZero() bool { return id == "" }
@@ -752,6 +774,9 @@ func (id IntegrityDiscrepancyID) IsValid() bool { return IsValidOpaqueID(string(
 // IsValid reports whether the attempt-suspension is a canonical non-zero ID.
 func (id AttemptSuspensionID) IsValid() bool { return IsValidOpaqueID(string(id)) }
 
+// IsValid reports whether the screen-clip is a canonical non-zero ID.
+func (id ScreenClipID) IsValid() bool { return IsValidOpaqueID(string(id)) }
+
 // IsValid reports whether the attempt-workspace-entry is a canonical non-zero ID.
 func (id AttemptWorkspaceEntryID) IsValid() bool { return IsValidOpaqueID(string(id)) }
 
@@ -823,6 +848,9 @@ func (id MailOccurrenceID) IsValid() bool { return IsValidOpaqueID(string(id)) }
 
 // IsValid reports whether the mail-delivery is a canonical non-zero ID.
 func (id MailDeliveryID) IsValid() bool { return IsValidOpaqueID(string(id)) }
+
+// IsValid reports whether the domain-event is a canonical non-zero ID.
+func (id DomainEventID) IsValid() bool { return IsValidOpaqueID(string(id)) }
 
 // IsValid reports whether the external-login-state is a canonical non-zero ID.
 func (id ExternalLoginStateID) IsValid() bool { return IsValidOpaqueID(string(id)) }
@@ -929,6 +957,9 @@ func (id IntegrityDiscrepancyID) String() string { return string(id) }
 // String returns the attempt-suspension wire/database representation.
 func (id AttemptSuspensionID) String() string { return string(id) }
 
+// String returns the screen-clip wire/database representation.
+func (id ScreenClipID) String() string { return string(id) }
+
 // String returns the attempt-workspace-entry wire/database representation.
 func (id AttemptWorkspaceEntryID) String() string { return string(id) }
 
@@ -1000,6 +1031,9 @@ func (id MailOccurrenceID) String() string { return string(id) }
 
 // String returns the mail-delivery wire/database representation.
 func (id MailDeliveryID) String() string { return string(id) }
+
+// String returns the domain-event wire/database representation.
+func (id DomainEventID) String() string { return string(id) }
 
 // String returns the external-login-state wire/database representation.
 func (id ExternalLoginStateID) String() string { return string(id) }
@@ -1106,6 +1140,9 @@ func (id IntegrityDiscrepancyID) MarshalText() ([]byte, error) { return marshalI
 // MarshalText encodes the attempt-suspension as its canonical string.
 func (id AttemptSuspensionID) MarshalText() ([]byte, error) { return marshalID(id) }
 
+// MarshalText encodes the screen-clip as its canonical string.
+func (id ScreenClipID) MarshalText() ([]byte, error) { return marshalID(id) }
+
 // MarshalText encodes the attempt-workspace-entry as its canonical string.
 func (id AttemptWorkspaceEntryID) MarshalText() ([]byte, error) { return marshalID(id) }
 
@@ -1177,6 +1214,9 @@ func (id MailOccurrenceID) MarshalText() ([]byte, error) { return marshalID(id) 
 
 // MarshalText encodes the mail-delivery as its canonical string.
 func (id MailDeliveryID) MarshalText() ([]byte, error) { return marshalID(id) }
+
+// MarshalText encodes the domain-event as its canonical string.
+func (id DomainEventID) MarshalText() ([]byte, error) { return marshalID(id) }
 
 // MarshalText encodes the external-login-state as its canonical string.
 func (id ExternalLoginStateID) MarshalText() ([]byte, error) { return marshalID(id) }
@@ -1339,6 +1379,11 @@ func (id *AttemptSuspensionID) UnmarshalText(data []byte) error {
 	return unmarshalID(id, data, ParseAttemptSuspensionID)
 }
 
+// UnmarshalText decodes and validates the screen-clip when non-empty.
+func (id *ScreenClipID) UnmarshalText(data []byte) error {
+	return unmarshalID(id, data, ParseScreenClipID)
+}
+
 // UnmarshalText decodes and validates the attempt-workspace-entry when non-empty.
 func (id *AttemptWorkspaceEntryID) UnmarshalText(data []byte) error {
 	return unmarshalID(id, data, ParseAttemptWorkspaceEntryID)
@@ -1457,6 +1502,11 @@ func (id *MailOccurrenceID) UnmarshalText(data []byte) error {
 // UnmarshalText decodes and validates the mail-delivery when non-empty.
 func (id *MailDeliveryID) UnmarshalText(data []byte) error {
 	return unmarshalID(id, data, ParseMailDeliveryID)
+}
+
+// UnmarshalText decodes and validates the domain-event when non-empty.
+func (id *DomainEventID) UnmarshalText(data []byte) error {
+	return unmarshalID(id, data, ParseDomainEventID)
 }
 
 // UnmarshalText decodes and validates the external-login-state when non-empty.
@@ -1578,6 +1628,9 @@ func (id IntegrityDiscrepancyID) MarshalJSON() ([]byte, error) { return marshalI
 // MarshalJSON encodes the attempt-suspension as a JSON string.
 func (id AttemptSuspensionID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
 
+// MarshalJSON encodes the screen-clip as a JSON string.
+func (id ScreenClipID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
+
 // MarshalJSON encodes the attempt-workspace-entry as a JSON string.
 func (id AttemptWorkspaceEntryID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
 
@@ -1649,6 +1702,9 @@ func (id MailOccurrenceID) MarshalJSON() ([]byte, error) { return marshalIDJSON(
 
 // MarshalJSON encodes the mail-delivery as a JSON string.
 func (id MailDeliveryID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
+
+// MarshalJSON encodes the domain-event as a JSON string.
+func (id DomainEventID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
 
 // MarshalJSON encodes the external-login-state as a JSON string.
 func (id ExternalLoginStateID) MarshalJSON() ([]byte, error) { return marshalIDJSON(id) }
@@ -1811,6 +1867,11 @@ func (id *AttemptSuspensionID) UnmarshalJSON(data []byte) error {
 	return unmarshalIDJSON(id, data, ParseAttemptSuspensionID)
 }
 
+// UnmarshalJSON decodes a JSON string into the screen-clip.
+func (id *ScreenClipID) UnmarshalJSON(data []byte) error {
+	return unmarshalIDJSON(id, data, ParseScreenClipID)
+}
+
 // UnmarshalJSON decodes a JSON string into the attempt-workspace-entry.
 func (id *AttemptWorkspaceEntryID) UnmarshalJSON(data []byte) error {
 	return unmarshalIDJSON(id, data, ParseAttemptWorkspaceEntryID)
@@ -1929,6 +1990,11 @@ func (id *MailOccurrenceID) UnmarshalJSON(data []byte) error {
 // UnmarshalJSON decodes a JSON string into the mail-delivery.
 func (id *MailDeliveryID) UnmarshalJSON(data []byte) error {
 	return unmarshalIDJSON(id, data, ParseMailDeliveryID)
+}
+
+// UnmarshalJSON decodes a JSON string into the domain-event.
+func (id *DomainEventID) UnmarshalJSON(data []byte) error {
+	return unmarshalIDJSON(id, data, ParseDomainEventID)
 }
 
 // UnmarshalJSON decodes a JSON string into the external-login-state.

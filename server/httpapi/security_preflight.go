@@ -23,7 +23,6 @@ import (
 type prepareSecurityPreflightRequest struct {
 	AttemptID                        string `json:"attempt_id,omitempty"`
 	NativeRegistryDigest             string `json:"native_registry_digest"`
-	SourceManifestDigest             string `json:"source_manifest_digest"`
 	ConfigurationManifestFingerprint string `json:"configuration_manifest_fingerprint"`
 }
 
@@ -47,7 +46,7 @@ func (r *prepareSecurityPreflightRequest) UnmarshalJSON(data []byte) error {
 
 	for name, value := range members {
 		if !slices.Contains(
-			[]string{"attempt_id", "native_registry_digest", "source_manifest_digest", "configuration_manifest_fingerprint"},
+			[]string{"attempt_id", "native_registry_digest", "configuration_manifest_fingerprint"},
 			name,
 		) ||
 			bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
@@ -57,7 +56,6 @@ func (r *prepareSecurityPreflightRequest) UnmarshalJSON(data []byte) error {
 
 	if decoded.AttemptID != "" && !model.ExamAttemptID(decoded.AttemptID).IsValid() ||
 		!model.IsValidSHA256Fingerprint(decoded.NativeRegistryDigest) ||
-		!model.IsValidSHA256Fingerprint(decoded.SourceManifestDigest) ||
 		!model.IsValidSHA256Fingerprint(decoded.ConfigurationManifestFingerprint) {
 		return errors.New("invalid security preflight identity")
 	}
@@ -71,29 +69,19 @@ func (r *prepareSecurityPreflightRequest) UnmarshalJSON(data []byte) error {
 }
 
 type securityPolicyRecoveryResponse struct {
-	CurrentSources             []model.NativeSourceCoverage `json:"current_sources"`
-	CurrentCoverage            []model.NativeCoverageClaim  `json:"current_coverage"`
-	SourceResetReceipts        []sourceResetReceiptResponse `json:"source_reset_receipts"`
-	SecurityCoverage           securityCoverageResponse     `json:"security_coverage"`
-	ServerTime                 time.Time                    `json:"server_time"`
-	Security                   model.AdmittedSecurity       `json:"security"`
-	FrozenAttemptConfiguration model.AttemptConfiguration   `json:"frozen_attempt_configuration"`
+	SecurityControl            securityControlResponse    `json:"security_control"`
+	ServerTime                 time.Time                  `json:"server_time"`
+	Security                   model.AdmittedSecurity     `json:"security"`
+	FrozenAttemptConfiguration model.AttemptConfiguration `json:"frozen_attempt_configuration"`
 }
 
-// securityCoverageResponse reports how the server processed one native
-// security coverage control.
-type securityCoverageResponse struct {
+// securityControlResponse reports how the server processed Desktop's latest
+// security control.
+type securityControlResponse struct {
 	ProcessedControlSequence    int64                                `json:"processed_control_sequence"`
 	ProcessedControlDigest      *string                              `json:"processed_control_digest"`
-	CoverageResult              string                               `json:"coverage_result"`
-	SourceResetReceipts         []sourceResetReceiptResponse         `json:"source_reset_receipts"`
 	SecurityInteractionAllowed  bool                                 `json:"security_interaction_allowed"`
 	DeliveryWatermarkRejections []deliveryWatermarkRejectionResponse `json:"delivery_watermark_rejections"`
-}
-
-type sourceResetReceiptResponse struct {
-	ResetID     string `json:"reset_id"`
-	ResetDigest string `json:"reset_digest"`
 }
 
 type deliveryWatermarkRejectionResponse struct {
@@ -102,12 +90,10 @@ type deliveryWatermarkRejectionResponse struct {
 	Reason   string `json:"reason"`
 }
 
-func securityCoverageFrom(value model.SecurityCoverageResult) securityCoverageResponse {
-	response := securityCoverageResponse{
+func securityControlFrom(value model.SecurityControlResult) securityControlResponse {
+	response := securityControlResponse{
 		ProcessedControlSequence:   value.ProcessedControlSequence,
 		ProcessedControlDigest:     value.ProcessedControlDigest,
-		CoverageResult:             value.CoverageResult,
-		SourceResetReceipts:        sourceResetReceiptsFrom(value.SourceResetReceipts),
 		SecurityInteractionAllowed: value.SecurityInteractionAllowed,
 	}
 	if value.DeliveryWatermarkRejections != nil {
@@ -125,26 +111,17 @@ func securityCoverageFrom(value model.SecurityCoverageResult) securityCoverageRe
 	return response
 }
 
-func sourceResetReceiptsFrom(values []model.SourceResetReceipt) []sourceResetReceiptResponse {
-	if values == nil {
-		return nil
-	}
-	receipts := make([]sourceResetReceiptResponse, 0, len(values))
-	for _, receipt := range values {
-		receipts = append(receipts, sourceResetReceiptResponse{ResetID: receipt.ResetID, ResetDigest: receipt.ResetDigest})
-	}
-	return receipts
-}
-
 type securityPolicyResponse struct {
 	ServerTime                 time.Time                         `json:"server_time"`
 	Policy                     model.EffectiveExamSecurityPolicy `json:"policy"`
 	PolicyContentDigest        string                            `json:"policy_content_digest"`
+	ReadinessDigest            string                            `json:"readiness_digest"`
 	CapabilityMatrixDigest     string                            `json:"capability_matrix_digest"`
 	CatalogBindings            []model.SecurityCatalogBinding    `json:"catalog_bindings"`
 	PreflightChallenge         model.SecurityPreflightChallenge  `json:"preflight_challenge"`
 	FrozenAttemptConfiguration *model.AttemptConfiguration       `json:"frozen_attempt_configuration"`
 	BrowserActivityDisclosure  model.BrowserActivityDisclosure   `json:"browser_activity_disclosure"`
+	ScreenRecordingDisclosure  *model.ScreenRecordingDisclosure  `json:"screen_recording_disclosure"`
 }
 
 func (h examAttemptHandlers) prepareSecurityPreflight(request route.Request) (route.Result, error) {
@@ -162,7 +139,6 @@ func (h examAttemptHandlers) prepareSecurityPreflight(request route.Request) (ro
 		SittingID:                        sittingID,
 		AttemptID:                        model.ExamAttemptID(body.AttemptID),
 		NativeRegistryDigest:             body.NativeRegistryDigest,
-		SourceManifestDigest:             body.SourceManifestDigest,
 		ConfigurationManifestFingerprint: body.ConfigurationManifestFingerprint,
 		IdempotencyKey:                   request.IdempotencyKey,
 	})
@@ -173,15 +149,21 @@ func (h examAttemptHandlers) prepareSecurityPreflight(request route.Request) (ro
 		return route.Result{}, route.ErrUnpresentable
 	}
 
+	readiness, err := prepared.Resolved.ReadinessDigest()
+	if err != nil {
+		return route.Result{}, route.ErrUnpresentable
+	}
 	result := securityPolicyResponse{
 		ServerTime:                 prepared.ServerTime,
 		Policy:                     prepared.Resolved.Policy,
 		PolicyContentDigest:        prepared.Resolved.PolicyContentDigest,
+		ReadinessDigest:            readiness,
 		CapabilityMatrixDigest:     prepared.Resolved.CapabilityMatrixDigest,
 		CatalogBindings:            prepared.Resolved.CatalogBindings,
 		PreflightChallenge:         prepared.Challenge,
 		FrozenAttemptConfiguration: prepared.FrozenAttemptConfiguration,
 		BrowserActivityDisclosure:  prepared.BrowserActivityDisclosure,
+		ScreenRecordingDisclosure:  prepared.ScreenRecordingDisclosure,
 	}
 	encoded, err := json.Marshal(result)
 	if err != nil || len(encoded) > model.SecurityPolicyResponseMaxBytes {
@@ -190,6 +172,49 @@ func (h examAttemptHandlers) prepareSecurityPreflight(request route.Request) (ro
 
 	return route.JSON(http.StatusOK, result), nil
 }
+
+// securityPolicyOverviewResponse is the policy the readiness overview checks
+// the machine against. readiness_digest is compared with the one the
+// preflight prepared at Start returns.
+type securityPolicyOverviewResponse struct {
+	ServerTime                time.Time                         `json:"server_time"`
+	Policy                    model.EffectiveExamSecurityPolicy `json:"policy"`
+	ReadinessDigest           string                            `json:"readiness_digest"`
+	CapabilityMatrixDigest    string                            `json:"capability_matrix_digest"`
+	CatalogBindings           []model.SecurityCatalogBinding    `json:"catalog_bindings"`
+	BrowserActivityDisclosure model.BrowserActivityDisclosure   `json:"browser_activity_disclosure"`
+	ScreenRecordingDisclosure *model.ScreenRecordingDisclosure  `json:"screen_recording_disclosure"`
+}
+
+func (h examAttemptHandlers) securityPolicyOverview(request route.Request) (route.Result, error) {
+	sittingID, err := route.PathID[model.ExamSittingID](request, "exam_sitting_id")
+	if err != nil {
+		return route.Result{}, err
+	}
+	overview, err := h.app.SecurityPolicyOverview(request.Context, request.Invocation(), sittingID)
+	if err != nil {
+		return route.Result{}, err
+	}
+	if overview == nil {
+		return route.Result{}, route.ErrUnpresentable
+	}
+	readiness, err := overview.Resolved.ReadinessDigest()
+	if err != nil {
+		return route.Result{}, route.ErrUnpresentable
+	}
+	result := securityPolicyOverviewResponse{
+		ServerTime: overview.ServerTime, Policy: overview.Resolved.Policy, ReadinessDigest: readiness,
+		CapabilityMatrixDigest: overview.Resolved.CapabilityMatrixDigest, CatalogBindings: overview.Resolved.CatalogBindings,
+		BrowserActivityDisclosure: overview.BrowserActivityDisclosure,
+		ScreenRecordingDisclosure: overview.ScreenRecordingDisclosure,
+	}
+	encoded, err := json.Marshal(result)
+	if err != nil || len(encoded) > model.SecurityPolicyResponseMaxBytes {
+		return route.Result{}, route.ErrUnpresentable
+	}
+	return route.JSON(http.StatusOK, result).WithHeaders(privateNoStoreHeaders()), nil
+}
+
 func (h examAttemptHandlers) reportSecurityPreflight(request route.Request) (route.Result, error) {
 	id, err := route.OpaquePathID(request, "security_preflight_id")
 	if err != nil {
@@ -287,6 +312,25 @@ func securityPreflightResource(app ExamAttemptApplication) route.Resource {
 			Handle: h.prepareSecurityPreflight,
 		},
 		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   "/exam-sittings/{exam_sitting_id}/security-policy",
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.registered_desktop_required",
+				"exam.attempt.desktop_incompatible",
+				"exam.attempt.sitting_not_open",
+				"exam.attempt.management_authority_conflict",
+				"exam.attempt.unavailable",
+				"exam.security.unsupported_capability",
+				"exam.security.catalog_missing",
+				"exam.delivery.metadata_capacity",
+			},
+			Handle: h.securityPolicyOverview,
+		},
+		route.Endpoint{
 			Method:      http.MethodPost,
 			Path:        "/security-preflights/{security_preflight_id}/report",
 			Auth:        route.AuthSessionRequired,
@@ -339,10 +383,7 @@ func (h examAttemptHandlers) recoverSecurityPolicy(request route.Request) (route
 	}
 
 	result := securityPolicyRecoveryResponse{
-		CurrentSources:             recovered.CurrentSources,
-		CurrentCoverage:            recovered.CurrentCoverage,
-		SourceResetReceipts:        sourceResetReceiptsFrom(recovered.SourceResetReceipts),
-		SecurityCoverage:           securityCoverageFrom(recovered.SecurityCoverage),
+		SecurityControl:            securityControlFrom(recovered.Control),
 		ServerTime:                 recovered.ServerTime,
 		Security:                   recovered.Security,
 		FrozenAttemptConfiguration: recovered.FrozenAttemptConfiguration,

@@ -11,6 +11,8 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"strings"
 	"testing"
 	"time"
@@ -89,3 +91,38 @@ func TestDeviceLabelNormalization(t *testing.T) {
 		})
 	}
 }
+
+func TestDesktopKeysVerifyRawES256Signatures(t *testing.T) {
+	t.Parallel()
+
+	private, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	public := DesktopPublicJWK{Kty: "EC", Crv: "P-256",
+		X: base64.RawURLEncoding.EncodeToString(private.X.FillBytes(make([]byte, 32))),
+		Y: base64.RawURLEncoding.EncodeToString(private.Y.FillBytes(make([]byte, 32)))}
+	message := []byte(strings.Repeat("ab", 32))
+	digest := sha256.Sum256(message)
+	r, s, err := ecdsa.Sign(rand.Reader, private, digest[:])
+	require.NoError(t, err)
+	signature := base64.RawURLEncoding.EncodeToString(append(r.FillBytes(make([]byte, 32)), s.FillBytes(make([]byte, 32))...))
+
+	require.True(t, public.VerifySignature(message, signature))
+	require.False(t, public.VerifySignature([]byte("another digest"), signature), "the signature binds its message")
+	tampered := []byte(signature)
+	tampered[10] ^= 1
+	require.False(t, public.VerifySignature(message, string(tampered)), "a changed signature fails")
+	last := strings.IndexByte(base64URLAlphabet, signature[DesktopSignatureLength-1])
+	respelled := signature[:DesktopSignatureLength-1] + string(base64URLAlphabet[last|1])
+	if respelled != signature {
+		require.False(t, public.VerifySignature(message, respelled), "a second spelling of the same bytes is refused")
+	}
+	require.False(t, public.VerifySignature(message, signature+"=="), "padding is not accepted")
+	other, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	otherPublic := DesktopPublicJWK{Kty: "EC", Crv: "P-256",
+		X: base64.RawURLEncoding.EncodeToString(other.X.FillBytes(make([]byte, 32))),
+		Y: base64.RawURLEncoding.EncodeToString(other.Y.FillBytes(make([]byte, 32)))}
+	require.False(t, otherPublic.VerifySignature(message, signature), "only the signing installation's key verifies")
+}
+
+const base64URLAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"

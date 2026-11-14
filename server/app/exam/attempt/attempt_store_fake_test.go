@@ -18,6 +18,15 @@ import (
 
 type attemptStoreFake struct {
 	f                               *fixture
+	screenClipRequest               *store.ExamAttemptScreenClipRequest
+	screenClipErr                   error
+	screenClipReplayed              bool
+	screenClipUpload                *store.ExamAttemptScreenClipUploadStatus
+	overview                        *store.SecurityPolicyOverview
+	attemptScreenClip               *store.ExamAttemptScreenClipView
+	overviewErr                     error
+	overviewAccess                  *store.SecurityPreflightAccess
+	screenClipChunk                 *store.ExamAttemptScreenClipChunk
 	connect                         *store.ExamAttemptConnect
 	connectErr                      error
 	getErr                          error
@@ -182,6 +191,68 @@ func (f *attemptStoreFake) SuspendAttempt(_ context.Context, input *store.ExamAt
 	return f.manualSuspensionResult, f.manualSuspensionErr
 }
 
+func (f *attemptStoreFake) RequestScreenClip(
+	_ context.Context,
+	input *store.ExamAttemptScreenClipRequest,
+	command *store.CommandIdempotency,
+) (*store.ExamAttemptScreenClipResult, error) {
+	f.f.order = append(f.f.order, "screen_clip")
+	f.screenClipRequest, f.idempotency = input, command
+	if f.screenClipErr != nil {
+		return nil, f.screenClipErr
+	}
+	return &store.ExamAttemptScreenClipResult{ExamID: input.ExamID, SittingID: input.SittingID, CandidateUserID: f.f.userID,
+		Clip: store.NewExamAttemptScreenClipView(input.Clip), Replayed: f.screenClipReplayed}, nil
+}
+
+func (f *attemptStoreFake) ListPendingScreenClips(context.Context, store.CandidateAttemptAccess) ([]store.ExamAttemptScreenClipView, error) {
+	return []store.ExamAttemptScreenClipView{}, nil
+}
+
+func (f *attemptStoreFake) BeginScreenClipUpload(context.Context, *store.ExamAttemptScreenClipUploadBegin) (*store.ExamAttemptScreenClipView, error) {
+	return nil, store.NewErrNotFound("screen_clip", "")
+}
+
+func (f *attemptStoreFake) GetScreenClipUpload(
+	_ context.Context,
+	_ store.CandidateAttemptAccess,
+	clipID model.ScreenClipID,
+) (*store.ExamAttemptScreenClipUploadStatus, error) {
+	if f.screenClipUpload == nil {
+		return nil, store.NewErrNotFound("screen_clip", clipID.String())
+	}
+	return f.screenClipUpload, nil
+}
+
+func (f *attemptStoreFake) RecordScreenClipChunk(_ context.Context, input *store.ExamAttemptScreenClipChunk) error {
+	f.screenClipChunk = input
+	return nil
+}
+
+func (f *attemptStoreFake) CompleteScreenClipUpload(_ context.Context, input *store.ExamAttemptScreenClipCompletion) (*store.ExamAttemptScreenClipView, error) {
+	return nil, store.NewErrNotFound("screen_clip", input.ClipID.String())
+}
+
+func (f *attemptStoreFake) ListAttemptScreenClips(context.Context, store.ExamAttemptClips) ([]store.ExamAttemptScreenClipView, error) {
+	return []store.ExamAttemptScreenClipView{}, nil
+}
+
+func (f *attemptStoreFake) GetAttemptScreenClip(
+	_ context.Context,
+	_ store.ExamAttemptClips,
+	clipID model.ScreenClipID,
+) (*store.ExamAttemptScreenClipView, error) {
+	if f.attemptScreenClip == nil {
+		return nil, store.NewErrNotFound("screen_clip", clipID.String())
+	}
+	clip := *f.attemptScreenClip
+	return &clip, nil
+}
+
+func (f *attemptStoreFake) DeliverScreenClip(_ context.Context, input *store.ExamAttemptScreenClipDelivery) (*store.ExamAttemptScreenClipView, error) {
+	return nil, store.NewErrNotFound("screen_clip", input.ClipID.String())
+}
+
 func (f *attemptStoreFake) CloseConnection(_ context.Context, input *store.ExamAttemptConnectionClose) (*store.ExamAttemptConnectionCloseResult, error) {
 	f.f.order = append(f.f.order, "close")
 	if input.CandidateUserID != f.connect.CandidateUserID || input.SessionID != f.connect.SessionID {
@@ -278,12 +349,17 @@ func (f *attemptStoreFake) ResolveSecurityPreflightSitting(context.Context, stri
 	return "", errors.New("unexpected preflight lookup")
 }
 
+func (f *attemptStoreFake) ReadSecurityPolicyOverview(_ context.Context, access store.SecurityPreflightAccess) (*store.SecurityPolicyOverview, error) {
+	f.overviewAccess = &access
+	return f.overview, f.overviewErr
+}
+
 func (f *attemptStoreFake) RecoverSecurityPolicy(context.Context, store.SecurityPreflightAccess, model.ExamAttemptID) (*store.SecurityPolicyRecovery, error) {
 	return nil, errors.New("unexpected security recovery")
 }
 
-func (f *attemptStoreFake) UpdateSecurityCoverage(context.Context, *store.ExamAttemptSecurityCoverageUpdate) (model.SecurityCoverageResult, error) {
-	return model.SecurityCoverageResult{}, errors.New("unexpected security update")
+func (f *attemptStoreFake) UpdateSecurity(context.Context, *store.ExamAttemptSecurityUpdate) (model.SecurityControlResult, error) {
+	return model.SecurityControlResult{}, errors.New("unexpected security update")
 }
 
 func (f *attemptStoreFake) NativeDeliveryStatus(context.Context, store.NativeDeliveryAccess) (*model.NativeSecurityStreamStatus, error) {
@@ -310,7 +386,7 @@ func (f *attemptStoreFake) ResolveNativeDeliveryTarget(context.Context, store.Na
 	return nil, errors.New("unexpected native delivery target")
 }
 
-func (f *attemptStoreFake) AppendNativeDelivery(context.Context, *store.NativeDeliveryAppend, *store.CommandIdempotency) (*model.NativeSecurityAcknowledgement, error) {
+func (f *attemptStoreFake) AppendNativeDelivery(context.Context, *store.NativeDeliveryAppend, *store.CommandIdempotency) (*store.NativeDeliveryAppended, error) {
 	return nil, errors.New("unexpected AppendNativeDelivery")
 }
 

@@ -147,7 +147,7 @@ type FocusLossEvaluationDecision struct {
 	WindowIncidentCount    int
 	ThresholdCrossed       bool
 	ConsumeWindow          bool
-	PolicyOutcome          IntegrityThresholdOutcome
+	PolicyOutcome          IntegrityOutcome
 	CreateFlag             bool
 	CreateCandidateWarning bool
 	NotifyManagers         bool

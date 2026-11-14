@@ -145,6 +145,7 @@ func runLayerConformance(
 		{"UserSettings", storetest.TestUserSettingsStore},
 		{"File", storetest.TestFileStore},
 		{"Job", storetest.TestJobStore},
+		{"DomainEvent", storetest.TestDomainEventStore},
 		{"Mail", storetest.TestMailStore},
 		{"ExternalIdentity", storetest.TestExternalIdentityStore},
 		{"ExternalLoginState", func(t *testing.T, decorated store.Store) {
@@ -182,13 +183,14 @@ func runLayerConformance(
 			storetest.TestAccessPolicySessionLengthStore(t, decorated)
 		}},
 		{"DesktopCompatibilityPolicy", storetest.TestDesktopCompatibilityPolicyStore},
+		{"PluginSettings", storetest.TestPluginSettingsStore},
 		{"RetentionPolicy", storetest.TestRetentionPolicyStore},
 		{"CommandOutcome", storetest.TestCommandOutcomeStore},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			switch test.name {
-			case "Installation", "AdministratorMFAReset", "AdministratorMFAResetExternal", "AccessPolicy", "AccessPolicyRoleHolderMFA", "AccessPolicySessionLength", "DesktopCompatibilityPolicy", "RetentionPolicy", "RetentionExpiry", "RetentionCleanupAuditExpiry":
+			case "Installation", "AdministratorMFAReset", "AdministratorMFAResetExternal", "AccessPolicy", "AccessPolicyRoleHolderMFA", "AccessPolicySessionLength", "DesktopCompatibilityPolicy", "PluginSettings", "RetentionPolicy", "RetentionExpiry", "RetentionCleanupAuditExpiry":
 				resetPristineTestStore(t, sqlStore)
 			case "PasswordCredential":
 				resetPristineTestStore(t, sqlStore)
@@ -1410,6 +1412,10 @@ func TestDesktopCompatibilityPolicyStore(t *testing.T) {
 	PristineStoreTest(t, storetest.TestDesktopCompatibilityPolicyStore)
 }
 
+func TestPluginSettingsStore(t *testing.T) {
+	PristineStoreTest(t, storetest.TestPluginSettingsStore)
+}
+
 func TestRetentionPolicyStore(t *testing.T) {
 	PristineStoreTest(t, storetest.TestRetentionPolicyStore)
 }
@@ -1424,6 +1430,10 @@ func TestSessionExpiryAttemptFence(t *testing.T) {
 
 func TestExamAttemptManualSuspensionStore(t *testing.T) {
 	StoreTestWithAuthenticationPolicy(t, nil, storetest.TestExamAttemptManualSuspensionStore)
+}
+
+func TestExamAttemptScreenClipStore(t *testing.T) {
+	StoreTestWithAuthenticationPolicy(t, nil, storetest.TestExamAttemptScreenClipStore)
 }
 
 func TestExamAttemptManagementLockAdmitsSittingRenewals(t *testing.T) {
@@ -1534,12 +1544,12 @@ func TestSecureConnectStore(t *testing.T) {
 			switch field {
 			case "challenge":
 				prepared.Challenge.Challenge = "invalid"
-			case "categories":
-				prepared.Resolved.Categories = []model.NativeSourceCategory{"unknown"}
-			case "sources":
-				prepared.Resolved.Sources[0] = "unknown"
-			case "requirements":
-				prepared.Resolved.Requirements[0].RequiredClaim = "unknown"
+			case "policy_content_digest":
+				prepared.Resolved.PolicyContentDigest = model.SHA256Fingerprint([]byte("other policy"))
+			case "capability_matrix_digest":
+				prepared.Resolved.CapabilityMatrixDigest = model.SHA256Fingerprint([]byte("other matrix"))
+			case "catalog_bindings":
+				prepared.Resolved.CatalogBindings = nil
 			default:
 				require.FailNow(t, "unknown prepared field")
 			}
@@ -1592,27 +1602,32 @@ func TestSecureConnectStore(t *testing.T) {
 func TestNativeDeliveryAppendStore(t *testing.T) {
 	s := openTestStore(t)
 	resetTestStore(t, s)
-	storetest.TestNativeDeliveryAppendStore(t, s, func(part model.AttemptParticipationID, records, occurrences int64) {
+	storetest.TestNativeDeliveryAppendStore(t, s, func(part model.AttemptParticipationID, records, flags int64) {
 		var row struct {
-			Records     int64 `db:"records"`
-			Occurrences int64 `db:"occurrences"`
-			Unresolved  int64 `db:"unresolved"`
-			Pending     int64 `db:"pending"`
-			Flags       int64 `db:"flags"`
-			Bytes       int64 `db:"bytes"`
-			Counted     int64 `db:"counted"`
-			Metadata    int64 `db:"metadata"`
+			Records        int64  `db:"records"`
+			Pending        int64  `db:"pending"`
+			Flags          int64  `db:"flags"`
+			Bytes          int64  `db:"bytes"`
+			Counted        int64  `db:"counted"`
+			Metadata       int64  `db:"metadata"`
+			Interpretation []byte `db:"interpretation"`
 		}
-		err := s.GetMaster().Get(context.Background(), &row, `SELECT o.retained_records AS records,(SELECT count(*) FROM exam_native_occurrences WHERE participation_id=o.participation_id) AS occurrences,(SELECT count(*) FROM exam_native_occurrences WHERE participation_id=o.participation_id AND unresolved_opener) AS unresolved,b.native_pending_bytes AS pending,(SELECT count(*) FROM integrity_flags WHERE exam_attempt_id=o.exam_attempt_id) AS flags,o.retained_bytes AS bytes,(SELECT sum(counted_bytes) FROM exam_native_delivery_batches WHERE participation_id=o.participation_id) AS counted,b.control_metadata_bytes AS metadata FROM exam_attempt_security_owners o JOIN exam_attempt_delivery_budgets b USING(exam_attempt_id) WHERE o.participation_id=?`, part.String())
+		err := s.GetMaster().Get(context.Background(), &row, `SELECT o.retained_records AS records,b.native_pending_bytes AS pending,(SELECT count(*) FROM integrity_flags WHERE exam_attempt_id=o.exam_attempt_id) AS flags,o.retained_bytes AS bytes,(SELECT sum(counted_bytes) FROM exam_native_delivery_batches WHERE participation_id=o.participation_id) AS counted,b.control_metadata_bytes AS metadata,o.native_interpretation_canonical AS interpretation FROM exam_attempt_security_owners o JOIN exam_attempt_delivery_budgets b USING(exam_attempt_id) WHERE o.participation_id=?`, part.String())
 		require.NoError(t, err)
 		require.Equal(t, records, row.Records)
-		require.Equal(t, occurrences, row.Occurrences)
-		require.Equal(t, int64(1), row.Unresolved)
 		require.Equal(t, int64(0), row.Pending)
-		require.Equal(t, int64(0), row.Flags)
+		require.Equal(t, flags, row.Flags)
 		require.Equal(t, row.Counted, row.Bytes)
 		require.Greater(t, row.Metadata, model.NativeOwnerReservationBytes)
+		var interpretation model.NativeInterpretation
+		require.NoError(t, json.Unmarshal(row.Interpretation, &interpretation), "the interpretation is kept with the owner")
 	})
+}
+
+func TestNativeSuspensionStore(t *testing.T) {
+	s := openTestStore(t)
+	resetTestStore(t, s)
+	storetest.TestNativeSuspensionStore(t, s)
 }
 
 func TestNativeMaximumRecordStore(t *testing.T) {

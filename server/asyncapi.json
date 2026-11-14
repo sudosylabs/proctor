@@ -38,17 +38,35 @@
         "exam_archived": {
           "$ref": "#/components/messages/exam_archived"
         },
+        "exam_attempt.connect": {
+          "$ref": "#/components/messages/exam_attempt.connect"
+        },
+        "exam_attempt.focus_loss": {
+          "$ref": "#/components/messages/exam_attempt.focus_loss"
+        },
+        "exam_attempt.renew": {
+          "$ref": "#/components/messages/exam_attempt.renew"
+        },
+        "exam_attempt.security.update": {
+          "$ref": "#/components/messages/exam_attempt.security.update"
+        },
         "exam_attempt_access_reallowed": {
           "$ref": "#/components/messages/exam_attempt_access_reallowed"
         },
         "exam_attempt_access_suspended": {
           "$ref": "#/components/messages/exam_attempt_access_suspended"
         },
+        "exam_attempt_connect_reply": {
+          "$ref": "#/components/messages/exam_attempt_connect_reply"
+        },
         "exam_attempt_connection_closed": {
           "$ref": "#/components/messages/exam_attempt_connection_closed"
         },
         "exam_attempt_connection_opened": {
           "$ref": "#/components/messages/exam_attempt_connection_opened"
+        },
+        "exam_attempt_focus_loss_reply": {
+          "$ref": "#/components/messages/exam_attempt_focus_loss_reply"
         },
         "exam_attempt_focus_warning": {
           "$ref": "#/components/messages/exam_attempt_focus_warning"
@@ -58,6 +76,12 @@
         },
         "exam_attempt_reallowed": {
           "$ref": "#/components/messages/exam_attempt_reallowed"
+        },
+        "exam_attempt_renew_reply": {
+          "$ref": "#/components/messages/exam_attempt_renew_reply"
+        },
+        "exam_attempt_screen_clips_requested": {
+          "$ref": "#/components/messages/exam_attempt_screen_clips_requested"
         },
         "exam_attempt_submitted": {
           "$ref": "#/components/messages/exam_attempt_submitted"
@@ -146,11 +170,17 @@
         "ping": {
           "$ref": "#/components/messages/ping"
         },
+        "plugin_settings_changed": {
+          "$ref": "#/components/messages/plugin_settings_changed"
+        },
         "pong": {
           "$ref": "#/components/messages/pong"
         },
         "resync_required": {
           "$ref": "#/components/messages/resync_required"
+        },
+        "security_control_reply": {
+          "$ref": "#/components/messages/security_control_reply"
         },
         "subscribe": {
           "$ref": "#/components/messages/subscribe"
@@ -725,8 +755,236 @@
         ],
         "title": "Exam archived"
       },
+      "exam_attempt.connect": {
+        "description": "Sent by the registered Desktop. First admission and Ready rejoin consume a reported preflight (kind preflight); a same-generation reconnect resumes the current Participation (kind resume). A connection holds at most one Attempt binding. The reply starts the lease; renew it with exam_attempt.renew.",
+        "examples": [
+          {
+            "name": "first admission",
+            "payload": {
+              "action": "exam_attempt.connect",
+              "data": {
+                "configuration_manifest_fingerprint": "sha256:4f0c2ad3b81e29e6c5f0b7f3a1d9e8c2b6a4f1e0d3c7b9a2e5f8c1d4b7a0e3f6",
+                "continuity_credential": "Y29udGludWl0eS1jcmVkZW50aWFsLWV4YW1wbGUtMzI",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "idempotency_key": "connect-1",
+                "security": {
+                  "kind": "preflight",
+                  "preflight_id": "preflight-1",
+                  "report_digest": "sha256:9b1e4c7a2d5f8e0b3c6a9d2f5e8b1c4a7d0e3f6b9c2a5d8e1f4b7c0a3d6e9f2b"
+                }
+              },
+              "sequence": 4
+            }
+          }
+        ],
+        "name": "exam_attempt.connect",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/command_request"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam_attempt.connect",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_connect"
+                }
+              },
+              "required": [
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Binds this WebSocket to the candidate's Attempt as its Attempt Connection.",
+        "tags": [
+          {
+            "name": "command"
+          }
+        ],
+        "title": "Connect to the Exam Attempt"
+      },
+      "exam_attempt.focus_loss": {
+        "description": "The server applies the Exam's Focus Loss policy. When it raises a Flag on an Exam that records the screen, it also asks for the minute either side of it and sends exam_attempt_screen_clips_requested.",
+        "examples": [
+          {
+            "name": "window hidden",
+            "payload": {
+              "action": "exam_attempt.focus_loss",
+              "data": {
+                "continuity_credential": "Y29udGludWl0eS1jcmVkZW50aWFsLWV4YW1wbGUtMzI",
+                "duration_milliseconds": 2500,
+                "generation": 1,
+                "schema_version": 1,
+                "sequence": 3,
+                "source": "document_hidden"
+              },
+              "sequence": 10
+            }
+          }
+        ],
+        "name": "exam_attempt.focus_loss",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/command_request"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam_attempt.focus_loss",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_focus_loss"
+                }
+              },
+              "required": [
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Reports one completed loss of focus of the candidate window.",
+        "tags": [
+          {
+            "name": "command"
+          }
+        ],
+        "title": "Report a Focus Loss"
+      },
+      "exam_attempt.renew": {
+        "description": "Sent every renewal interval by the Desktop holding the Attempt Connection. The reply carries the new lease and how the server processed the security control. A repeated renewal sequence is a duplicate and does not extend the lease again.",
+        "examples": [
+          {
+            "name": "renewal",
+            "payload": {
+              "action": "exam_attempt.renew",
+              "data": {
+                "continuity_credential": "Y29udGludWl0eS1jcmVkZW50aWFsLWV4YW1wbGUtMzI",
+                "generation": 1,
+                "security_control": {
+                  "control_sequence": 12,
+                  "delivery_watermarks": [
+                    {
+                      "acknowledged_through_sequence": 38,
+                      "allocated_through_sequence": 40,
+                      "family": "native",
+                      "source_id": "native-stream-1"
+                    }
+                  ],
+                  "policy_digest": "sha256:4f0c2ad3b81e29e6c5f0b7f3a1d9e8c2b6a4f1e0d3c7b9a2e5f8c1d4b7a0e3f6",
+                  "security_session_id": "security-session-1",
+                  "stream_id": "native-stream-1"
+                },
+                "sequence": 5
+              },
+              "sequence": 8
+            }
+          }
+        ],
+        "name": "exam_attempt.renew",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/command_request"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam_attempt.renew",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_renew"
+                }
+              },
+              "required": [
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Extends the Participation lease and carries Desktop's security control.",
+        "tags": [
+          {
+            "name": "command"
+          }
+        ],
+        "title": "Renew the Exam Attempt Participation"
+      },
+      "exam_attempt.security.update": {
+        "description": "Uses the same processed-control boundary as exam_attempt.renew and never extends the lease.",
+        "examples": [
+          {
+            "name": "security update",
+            "payload": {
+              "action": "exam_attempt.security.update",
+              "data": {
+                "continuity_credential": "Y29udGludWl0eS1jcmVkZW50aWFsLWV4YW1wbGUtMzI",
+                "generation": 1,
+                "security_control": {
+                  "control_sequence": 12,
+                  "delivery_watermarks": [
+                    {
+                      "acknowledged_through_sequence": 38,
+                      "allocated_through_sequence": 40,
+                      "family": "native",
+                      "source_id": "native-stream-1"
+                    }
+                  ],
+                  "policy_digest": "sha256:4f0c2ad3b81e29e6c5f0b7f3a1d9e8c2b6a4f1e0d3c7b9a2e5f8c1d4b7a0e3f6",
+                  "security_session_id": "security-session-1",
+                  "stream_id": "native-stream-1"
+                }
+              },
+              "sequence": 9
+            }
+          }
+        ],
+        "name": "exam_attempt.security.update",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/command_request"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam_attempt.security.update",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_security_update"
+                }
+              },
+              "required": [
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Carries Desktop's security control between renewals.",
+        "tags": [
+          {
+            "name": "command"
+          }
+        ],
+        "title": "Update the security control"
+      },
       "exam_attempt_access_reallowed": {
-        "description": "Tells the candidate their Attempt is active again. Delivered to the addressed User's connections that subscribe to exam.sitting.participate on the exam sitting.",
+        "description": "Tells the candidate their Attempt is ready again; Desktop makes a fresh preflight and connects to resume. Delivered to the addressed User's connections that subscribe to exam.sitting.participate on the exam sitting.",
         "examples": [
           {
             "name": "example",
@@ -779,7 +1037,7 @@
             }
           ]
         },
-        "summary": "Tells the candidate their Attempt is active again.",
+        "summary": "Tells the candidate their Attempt is ready again; Desktop makes a fresh preflight and connects to resume.",
         "tags": [
           {
             "name": "event"
@@ -855,6 +1113,60 @@
           }
         ],
         "title": "Your Attempt was suspended"
+      },
+      "exam_attempt_connect_reply": {
+        "description": "security, candidate_runtime_capabilities, browser_policy and live_corrections have exactly the shapes of the OpenAPI components AdmittedSecurity, CandidateRuntimeCapabilities, CandidateBrowserPolicy and CandidateLiveCorrection.",
+        "examples": [
+          {
+            "name": "admitted",
+            "payload": {
+              "data": {
+                "attempt_connection_id": "nfemqtwz47ydgjcx1ia56br8kp",
+                "attempt_id": "qtwz47ydgjcx1ia56br8kpous3",
+                "browser_policy": null,
+                "candidate_runtime_capabilities": {},
+                "first_admission": true,
+                "generation": 1,
+                "lease_expires_at": "2026-11-13T09:00:15.000Z",
+                "live_corrections": [],
+                "participation_id": "8kpous3h9nfemqtwz47ydgjcx1",
+                "renewal_interval_seconds": 5,
+                "replayed": false,
+                "security": {},
+                "started_at": "2026-11-13T09:00:00.000Z",
+                "workspace_id": "br8kpous3h9nfemqtwz47ydgjc"
+              },
+              "sequence": 4,
+              "status": "ok"
+            }
+          }
+        ],
+        "name": "exam_attempt_connect_reply",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/command_reply"
+            },
+            {
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_connect_reply"
+                }
+              },
+              "required": [
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "The admitted Attempt, its Participation lease and what the candidate may do.",
+        "tags": [
+          {
+            "name": "reply"
+          }
+        ],
+        "title": "Connect reply"
       },
       "exam_attempt_connection_closed": {
         "description": "An Attempt Connection closed, and why. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
@@ -987,6 +1299,54 @@
         ],
         "title": "Attempt Connection opened"
       },
+      "exam_attempt_focus_loss_reply": {
+        "examples": [
+          {
+            "name": "warned",
+            "payload": {
+              "data": {
+                "accepted_sequence": 3,
+                "discrepancy_recorded": false,
+                "duplicate": false,
+                "gap_detected": false,
+                "generation": 1,
+                "policy_disabled": false,
+                "received_at": "2026-11-13T09:05:00.000Z",
+                "suspension_created": false,
+                "warning_created": true
+              },
+              "sequence": 10,
+              "status": "ok"
+            }
+          }
+        ],
+        "name": "exam_attempt_focus_loss_reply",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/command_reply"
+            },
+            {
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_focus_loss_reply"
+                }
+              },
+              "required": [
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Acknowledges the Focus Loss and says what the candidate's Desktop must act on.",
+        "tags": [
+          {
+            "name": "reply"
+          }
+        ],
+        "title": "Focus Loss reply"
+      },
       "exam_attempt_focus_warning": {
         "description": "Warns the candidate that their Focus Loss crossed the policy threshold. Delivered to the addressed User's connections that subscribe to exam.sitting.participate on the exam sitting.",
         "examples": [
@@ -1053,7 +1413,7 @@
         "title": "Focus Loss warning"
       },
       "exam_attempt_integrity_flagged": {
-        "description": "A Focus Loss Integrity Flag was raised on an Attempt. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
+        "description": "An Integrity Flag was raised on an Attempt by the policy policy_kind names, a core policy or a capability's \"\u003cplugin-id\u003e.\u003ckind\u003e\". Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
         "examples": [
           {
             "name": "example",
@@ -1110,7 +1470,7 @@
             }
           ]
         },
-        "summary": "A Focus Loss Integrity Flag was raised on an Attempt.",
+        "summary": "An Integrity Flag was raised on an Attempt.",
         "tags": [
           {
             "name": "event"
@@ -1122,7 +1482,7 @@
         "title": "Attempt Integrity Flag raised"
       },
       "exam_attempt_reallowed": {
-        "description": "An Attempt Suspension was closed and the Attempt is active again. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
+        "description": "An Attempt Suspension was closed and the Attempt is ready again; it becomes active only through a new secure admission. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
         "examples": [
           {
             "name": "example",
@@ -1175,7 +1535,7 @@
             }
           ]
         },
-        "summary": "An Attempt Suspension was closed and the Attempt is active again.",
+        "summary": "An Attempt Suspension was closed and the Attempt is ready again; it becomes active only through a new secure admission.",
         "tags": [
           {
             "name": "event"
@@ -1185,6 +1545,120 @@
           }
         ],
         "title": "Attempt re-allowed"
+      },
+      "exam_attempt_renew_reply": {
+        "examples": [
+          {
+            "name": "renewed",
+            "payload": {
+              "data": {
+                "accepted_sequence": 5,
+                "database_time": "2026-11-13T09:00:00.000Z",
+                "duplicate": false,
+                "generation": 1,
+                "lease_expires_at": "2026-11-13T09:00:15.000Z",
+                "security_control": {
+                  "delivery_watermark_rejections": [],
+                  "processed_control_digest": "sha256:9b1e4c7a2d5f8e0b3c6a9d2f5e8b1c4a7d0e3f6b9c2a5d8e1f4b7c0a3d6e9f2b",
+                  "processed_control_sequence": 12,
+                  "security_interaction_allowed": true
+                }
+              },
+              "sequence": 8,
+              "status": "ok"
+            }
+          }
+        ],
+        "name": "exam_attempt_renew_reply",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/command_reply"
+            },
+            {
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_renew_reply"
+                }
+              },
+              "required": [
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "The renewed lease and the processed security control.",
+        "tags": [
+          {
+            "name": "reply"
+          }
+        ],
+        "title": "Renewal reply"
+      },
+      "exam_attempt_screen_clips_requested": {
+        "description": "Tells the candidate's Desktop that its Attempt has screen clip requests it has not taken, after a manager asked for a clip or a Flag asked for an incident clip. Desktop then lists its pending requests; the event carries none of them. Delivered to the addressed User's connections that subscribe to exam.sitting.participate on the exam sitting.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "exam.sitting.participate",
+              "data": {
+                "changed_at": "2026-08-01T09:31:00Z",
+                "exam_attempt_id": "dgjcx1ia56br8kpous3h9nfemq",
+                "exam_sitting_id": "h9nfemqtwz47ydgjcx1ia56br8"
+              },
+              "event": "exam_attempt_screen_clips_requested",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "h9nfemqtwz47ydgjcx1ia56br8",
+                "type": "exam_sitting"
+              },
+              "sequence": 48,
+              "user_id": "qtwz47ydgjcx1ia56br8kpous3"
+            }
+          }
+        ],
+        "name": "exam_attempt_screen_clips_requested",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "exam.sitting.participate",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/exam_attempt_screen_clips_requested"
+                },
+                "event": {
+                  "const": "exam_attempt_screen_clips_requested",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "user_id",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Tells the candidate's Desktop that its Attempt has screen clip requests to take.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Attempts"
+          }
+        ],
+        "title": "Screen clips requested"
       },
       "exam_attempt_submitted": {
         "description": "An Attempt was submitted. Sent to Sitting viewers. Delivered to connections that subscribe to exam.sitting.view on the exam sitting.",
@@ -3036,6 +3510,67 @@
         ],
         "title": "Ping"
       },
+      "plugin_settings_changed": {
+        "description": "Refetch the plugins; the event names the plugin and its new settings revision, never setting values. Delivered to connections that subscribe to plugin.manage on the institution.",
+        "examples": [
+          {
+            "name": "example",
+            "payload": {
+              "action": "plugin.manage",
+              "data": {
+                "plugin_id": "display-topology",
+                "revision": 3
+              },
+              "event": "plugin_settings_changed",
+              "id": "8kpous3h9nfemqtwz47ydgjcx1",
+              "resource": {
+                "id": "ous3h9nfemqtwz47ydgjcx1ia5",
+                "type": "institution"
+              },
+              "sequence": 41
+            }
+          }
+        ],
+        "name": "plugin_settings_changed",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/event_frame"
+            },
+            {
+              "properties": {
+                "action": {
+                  "const": "plugin.manage",
+                  "type": "string"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/plugin_settings_changed"
+                },
+                "event": {
+                  "const": "plugin_settings_changed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "event",
+                "action",
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "Refetch the plugins; the event names the plugin and its new settings revision.",
+        "tags": [
+          {
+            "name": "event"
+          },
+          {
+            "name": "Institution"
+          }
+        ],
+        "title": "Plugin settings changed"
+      },
       "pong": {
         "examples": [
           {
@@ -3135,6 +3670,49 @@
           }
         ],
         "title": "Resynchronization required"
+      },
+      "security_control_reply": {
+        "examples": [
+          {
+            "name": "processed",
+            "payload": {
+              "data": {
+                "delivery_watermark_rejections": [],
+                "processed_control_digest": "sha256:9b1e4c7a2d5f8e0b3c6a9d2f5e8b1c4a7d0e3f6b9c2a5d8e1f4b7c0a3d6e9f2b",
+                "processed_control_sequence": 12,
+                "security_interaction_allowed": true
+              },
+              "sequence": 9,
+              "status": "ok"
+            }
+          }
+        ],
+        "name": "security_control_reply",
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/command_reply"
+            },
+            {
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/security_control_result"
+                }
+              },
+              "required": [
+                "data"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "summary": "How the server processed the security control.",
+        "tags": [
+          {
+            "name": "reply"
+          }
+        ],
+        "title": "Security control reply"
       },
       "subscribe": {
         "description": "Each subscription is authorized on its own; the handshake grants none. Subscribing twice to the same pair succeeds once. A connection holds at most 256 subscriptions.",
@@ -3498,6 +4076,66 @@
         "title": "Command request",
         "type": "object"
       },
+      "connect_security": {
+        "description": "Which admission the connect consumes: a fresh preflight for first admission and Ready rejoin, or the current Participation for a same-generation reconnect.",
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "preflight",
+                "type": "string"
+              },
+              "preflight_id": {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                "type": "string"
+              },
+              "report_digest": {
+                "description": "The digest the report receipt returned; the report must be at most 30 seconds old.",
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "preflight_id",
+              "report_digest"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "generation": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "kind": {
+                "const": "resume",
+                "type": "string"
+              },
+              "participation_id": {
+                "$ref": "#/components/schemas/id"
+              },
+              "policy_digest": {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "participation_id",
+              "generation",
+              "policy_digest"
+            ],
+            "type": "object"
+          }
+        ],
+        "title": "Connect security"
+      },
       "event_frame": {
         "additionalProperties": false,
         "description": "The envelope of every server-to-client event. sequence is assigned by the connection, increases by one per event, and is what a reconnecting client offers as sequence_number.",
@@ -3577,6 +4215,7 @@
             "enum": [
               "secure_connectivity_lost",
               "focus_policy_review_required",
+              "native_policy_review_required",
               "manager_suspended"
             ],
             "type": "string"
@@ -3596,6 +4235,125 @@
           "changed_at"
         ],
         "title": "Attempt access changed",
+        "type": "object"
+      },
+      "exam_attempt_connect": {
+        "additionalProperties": false,
+        "description": "Binds this WebSocket to the candidate's Attempt in the Sitting: admits a new Attempt, rejoins a Ready one, or resumes the current Participation.",
+        "properties": {
+          "configuration_manifest_fingerprint": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "continuity_credential": {
+            "description": "The Attempt Connection's continuity credential, chosen by Desktop at connect.",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "type": "string"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "idempotency_key": {
+            "description": "Repeating the same connect with the same key replays its result.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "initial_configuration": {
+            "description": "Exactly the OpenAPI component AttemptConfigurationCandidate. Sent on first admission; omitted when rejoining or resuming.",
+            "type": "object"
+          },
+          "security": {
+            "$ref": "#/components/schemas/connect_security"
+          }
+        },
+        "required": [
+          "security",
+          "exam_sitting_id",
+          "idempotency_key",
+          "continuity_credential",
+          "configuration_manifest_fingerprint"
+        ],
+        "title": "Exam Attempt connect",
+        "type": "object"
+      },
+      "exam_attempt_connect_reply": {
+        "additionalProperties": false,
+        "properties": {
+          "attempt_connection_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "browser_policy": {
+            "description": "Exactly the OpenAPI component CandidateBrowserPolicy, or null when the Exam has no Browser policy.",
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "candidate_runtime_capabilities": {
+            "description": "Exactly the OpenAPI component CandidateRuntimeCapabilities.",
+            "type": "object"
+          },
+          "first_admission": {
+            "type": "boolean"
+          },
+          "generation": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "lease_expires_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "live_corrections": {
+            "items": {
+              "description": "Exactly the OpenAPI component CandidateLiveCorrection.",
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "participation_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "renewal_interval_seconds": {
+            "const": 5,
+            "description": "How often to send exam_attempt.renew, in seconds. The same value as AdmittedSecurity.renewal_interval_seconds.",
+            "type": "integer"
+          },
+          "replayed": {
+            "description": "The connect repeated an earlier one with the same idempotency key.",
+            "type": "boolean"
+          },
+          "security": {
+            "description": "Exactly the OpenAPI component AdmittedSecurity. The immutable admitted binding receipt, including the effective native policy.",
+            "type": "object"
+          },
+          "started_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "workspace_id": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "security",
+          "attempt_id",
+          "workspace_id",
+          "participation_id",
+          "attempt_connection_id",
+          "generation",
+          "renewal_interval_seconds",
+          "started_at",
+          "lease_expires_at",
+          "first_admission",
+          "replayed",
+          "candidate_runtime_capabilities",
+          "browser_policy",
+          "live_corrections"
+        ],
+        "title": "Exam Attempt connect reply",
         "type": "object"
       },
       "exam_attempt_connection_changed": {
@@ -3649,6 +4407,108 @@
         "title": "Attempt Connection changed",
         "type": "object"
       },
+      "exam_attempt_focus_loss": {
+        "additionalProperties": false,
+        "description": "Reports one completed loss of focus of the candidate window. Sequences are per generation and increase by one; a skipped sequence is recorded as a gap.",
+        "properties": {
+          "continuity_credential": {
+            "description": "The Attempt Connection's continuity credential, chosen by Desktop at connect.",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "type": "string"
+          },
+          "duration_milliseconds": {
+            "maximum": 86400000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "generation": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "schema_version": {
+            "const": 1,
+            "type": "integer"
+          },
+          "sequence": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "source": {
+            "description": "Optional classification of what lost focus.",
+            "enum": [
+              "window_blur",
+              "document_hidden",
+              "application_backgrounded",
+              "fullscreen_exited"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "generation",
+          "sequence",
+          "duration_milliseconds",
+          "continuity_credential"
+        ],
+        "title": "Exam Attempt Focus Loss",
+        "type": "object"
+      },
+      "exam_attempt_focus_loss_reply": {
+        "additionalProperties": false,
+        "description": "Acknowledges the signal. It tells the candidate's Desktop only what it must act on: never the threshold, outcome or Flag.",
+        "properties": {
+          "accepted_sequence": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "discrepancy_recorded": {
+            "type": "boolean"
+          },
+          "duplicate": {
+            "type": "boolean"
+          },
+          "gap_detected": {
+            "type": "boolean"
+          },
+          "generation": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "policy_disabled": {
+            "description": "The Exam does not collect Focus Loss; the signal was only acknowledged.",
+            "type": "boolean"
+          },
+          "received_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "suspension_created": {
+            "description": "The Attempt was suspended and this Connection closed.",
+            "type": "boolean"
+          },
+          "warning_created": {
+            "description": "Show the candidate the Focus Loss warning.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "generation",
+          "accepted_sequence",
+          "received_at",
+          "duplicate",
+          "gap_detected",
+          "policy_disabled",
+          "warning_created",
+          "suspension_created",
+          "discrepancy_recorded"
+        ],
+        "title": "Exam Attempt Focus Loss reply",
+        "type": "object"
+      },
       "exam_attempt_focus_warning": {
         "additionalProperties": false,
         "description": "Warns the candidate that their Focus Loss crossed the policy threshold. No counts, thresholds or evidence are included.",
@@ -3678,7 +4538,7 @@
       },
       "exam_attempt_integrity_flagged": {
         "additionalProperties": false,
-        "description": "A Focus Loss Integrity Flag, its policy outcome and how many evidence episodes were kept or overflowed. The evidence itself is never included.",
+        "description": "An Integrity Flag a policy raised or added evidence to (Focus Loss, or native.\u003ccapability\u003e when an enforce rule's occurrence opens), its policy outcome and how many evidence episodes were kept or overflowed. The evidence itself is never included.",
         "properties": {
           "candidate_user_id": {
             "$ref": "#/components/schemas/id"
@@ -3712,7 +4572,8 @@
             "type": "string"
           },
           "policy_kind": {
-            "const": "focus_loss",
+            "maxLength": 97,
+            "pattern": "^(connection_loss|focus_loss|browser_navigation|[a-z][a-z0-9.-]{0,63}\\.[a-z][a-z0-9_]{0,31})$",
             "type": "string"
           },
           "retained_evidence_count": {
@@ -3768,6 +4629,128 @@
           "changed_at"
         ],
         "title": "Attempt re-allowed",
+        "type": "object"
+      },
+      "exam_attempt_renew": {
+        "additionalProperties": false,
+        "description": "Renews the Participation lease and carries the security control. The whole data object is at most 16 KiB.",
+        "properties": {
+          "continuity_credential": {
+            "description": "The Attempt Connection's continuity credential.",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "type": "string"
+          },
+          "generation": {
+            "description": "The Participation generation.",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "security_control": {
+            "$ref": "#/components/schemas/security_control"
+          },
+          "sequence": {
+            "description": "The renewal's own sequence within the generation.",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "security_control",
+          "generation",
+          "sequence",
+          "continuity_credential"
+        ],
+        "title": "Exam Attempt renewal",
+        "type": "object"
+      },
+      "exam_attempt_renew_reply": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted_sequence": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "database_time": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "duplicate": {
+            "description": "The renewal sequence was already accepted; the lease was not extended again.",
+            "type": "boolean"
+          },
+          "generation": {
+            "description": "The Participation generation.",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "lease_expires_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "security_control": {
+            "$ref": "#/components/schemas/security_control_result"
+          }
+        },
+        "required": [
+          "security_control",
+          "generation",
+          "accepted_sequence",
+          "database_time",
+          "lease_expires_at",
+          "duplicate"
+        ],
+        "title": "Exam Attempt renewal reply",
+        "type": "object"
+      },
+      "exam_attempt_screen_clips_requested": {
+        "additionalProperties": false,
+        "description": "Tells the candidate's Desktop that its Attempt has screen clip requests it has not taken, so it reads them now instead of at its next poll. Neither the requests nor who made them are included.",
+        "properties": {
+          "changed_at": {
+            "$ref": "#/components/schemas/instant"
+          },
+          "exam_attempt_id": {
+            "$ref": "#/components/schemas/id"
+          },
+          "exam_sitting_id": {
+            "$ref": "#/components/schemas/id"
+          }
+        },
+        "required": [
+          "exam_sitting_id",
+          "exam_attempt_id",
+          "changed_at"
+        ],
+        "title": "Screen clips requested",
+        "type": "object"
+      },
+      "exam_attempt_security_update": {
+        "additionalProperties": false,
+        "description": "Carries a security control between renewals. It never extends the lease. The whole data object is at most 16 KiB.",
+        "properties": {
+          "continuity_credential": {
+            "description": "The Attempt Connection's continuity credential.",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "type": "string"
+          },
+          "generation": {
+            "description": "The Participation generation.",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "security_control": {
+            "$ref": "#/components/schemas/security_control"
+          }
+        },
+        "required": [
+          "generation",
+          "continuity_credential",
+          "security_control"
+        ],
+        "title": "Exam Attempt security update",
         "type": "object"
       },
       "exam_attempt_submitted": {
@@ -4535,6 +5518,26 @@
         "title": "Onboarding import changed",
         "type": "object"
       },
+      "plugin_settings_changed": {
+        "additionalProperties": false,
+        "description": "The plugin whose settings an administrator changed, and their revision after the committed change. No setting values are included.",
+        "properties": {
+          "plugin_id": {
+            "pattern": "^[a-z][a-z0-9.-]{0,63}$",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "plugin_id",
+          "revision"
+        ],
+        "title": "Plugin settings changed",
+        "type": "object"
+      },
       "pong": {
         "additionalProperties": false,
         "description": "The reply to ping.",
@@ -4589,6 +5592,148 @@
           "id"
         ],
         "title": "Authorization resource",
+        "type": "object"
+      },
+      "security_control": {
+        "additionalProperties": false,
+        "description": "Desktop's security control: its sequence, the binding it renews and the delivery watermarks it has allocated. At most 16 KiB. The server identifies a control by the SHA-256 of its canonical JSON (object keys sorted, integers only, JSON.stringify string escaping), so key order and whitespace do not matter; duplicate keys, unknown members and non-integer numbers are refused. A retained sequence sent again with different content is refused with exam.security.control_conflict; an older sequence changes nothing. The server refuses a control whose policy is no longer current with exam.security.policy_changed.",
+        "properties": {
+          "control_sequence": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "delivery_watermarks": {
+            "description": "The admitted native stream and the Browser sources owned by the current Participation, each at most once. At most 50.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "acknowledged_through_sequence": {
+                  "description": "At most allocated_through_sequence.",
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "allocated_through_sequence": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "family": {
+                  "enum": [
+                    "native",
+                    "browser"
+                  ],
+                  "type": "string"
+                },
+                "source_id": {
+                  "description": "For the native family, the admitted delivery_stream_id; for a Browser source, that source's ID.",
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "family",
+                "source_id",
+                "allocated_through_sequence",
+                "acknowledged_through_sequence"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "policy_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "security_session_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "type": "string"
+          },
+          "stream_id": {
+            "description": "The admitted native delivery stream: exactly AdmittedSecurity.delivery_stream_id from the connect reply. A control naming another stream is refused.",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "control_sequence",
+          "policy_digest",
+          "security_session_id",
+          "stream_id",
+          "delivery_watermarks"
+        ],
+        "title": "Security control",
+        "type": "object"
+      },
+      "security_control_result": {
+        "additionalProperties": false,
+        "description": "How the server processed Desktop's latest security control. A control never changes whether the candidate may interact; only closing native delivery does.",
+        "properties": {
+          "delivery_watermark_rejections": {
+            "description": "At most 50.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "family": {
+                  "enum": [
+                    "native",
+                    "browser"
+                  ],
+                  "type": "string"
+                },
+                "reason": {
+                  "enum": [
+                    "closed_source",
+                    "position_limit"
+                  ],
+                  "type": "string"
+                },
+                "source_id": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "family",
+                "source_id",
+                "reason"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "processed_control_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "processed_control_sequence": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "security_interaction_allowed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "processed_control_sequence",
+          "processed_control_digest",
+          "security_interaction_allowed",
+          "delivery_watermark_rejections"
+        ],
+        "title": "Security control result",
         "type": "object"
       },
       "sha256": {
@@ -4694,6 +5839,171 @@
     "version": "1.0.0"
   },
   "operations": {
+    "receiveExamAttemptConnect": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/websocket"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt.connect"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/websocket"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/websocket/messages/exam_attempt_connect_reply"
+          },
+          {
+            "$ref": "#/channels/websocket/messages/command_error"
+          }
+        ]
+      },
+      "summary": "The server admits, rejoins or resumes the Attempt and binds this connection.",
+      "title": "Connect to the Exam Attempt",
+      "x-proctor-error-codes": [
+        "websocket.request.invalid",
+        "websocket.rate_limited",
+        "exam.attempt.already_connected",
+        "exam.attempt.unavailable",
+        "exam.attempt.sitting_not_open",
+        "exam.attempt.state_conflict",
+        "exam.delivery.metadata_capacity",
+        "exam.security.attempt_not_ready",
+        "exam.security.catalog_missing",
+        "exam.security.configuration_unsupported",
+        "exam.security.policy_changed",
+        "exam.security.preflight_consumed",
+        "exam.security.preflight_expired",
+        "exam.security.preflight_report_changed",
+        "exam.security.preflight_required",
+        "exam.security.preflight_superseded",
+        "exam.security.readiness_unmet",
+        "exam.security.resume_required",
+        "exam.security.session_changed",
+        "resource.not_found",
+        "authorization.denied"
+      ]
+    },
+    "receiveExamAttemptFocusLoss": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/websocket"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt.focus_loss"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/websocket"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/websocket/messages/exam_attempt_focus_loss_reply"
+          },
+          {
+            "$ref": "#/channels/websocket/messages/command_error"
+          }
+        ]
+      },
+      "summary": "The server applies the Exam's Focus Loss policy to the signal.",
+      "title": "Report a Focus Loss",
+      "x-proctor-error-codes": [
+        "websocket.request.invalid",
+        "websocket.rate_limited",
+        "authentication.token_invalid",
+        "exam.attempt.connection_closed",
+        "exam.attempt.connection_lost",
+        "exam.attempt.focus_loss_conflict",
+        "exam.attempt.sitting_not_open",
+        "exam.attempt.state_conflict",
+        "exam.attempt.unavailable",
+        "resource.not_found"
+      ]
+    },
+    "receiveExamAttemptRenew": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/websocket"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt.renew"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/websocket"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/websocket/messages/exam_attempt_renew_reply"
+          },
+          {
+            "$ref": "#/channels/websocket/messages/command_error"
+          }
+        ]
+      },
+      "summary": "The server extends the lease and processes the security control.",
+      "title": "Renew the Exam Attempt Participation",
+      "x-proctor-error-codes": [
+        "websocket.request.invalid",
+        "websocket.rate_limited",
+        "exam.attempt.connection_closed",
+        "exam.attempt.connection_lost",
+        "exam.attempt.sitting_not_open",
+        "exam.attempt.state_conflict",
+        "exam.attempt.unavailable",
+        "exam.security.control_conflict",
+        "exam.security.policy_changed",
+        "resource.not_found",
+        "authorization.denied"
+      ]
+    },
+    "receiveExamAttemptSecurityUpdate": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/websocket"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt.security.update"
+        }
+      ],
+      "reply": {
+        "channel": {
+          "$ref": "#/channels/websocket"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/websocket/messages/security_control_reply"
+          },
+          {
+            "$ref": "#/channels/websocket/messages/command_error"
+          }
+        ]
+      },
+      "summary": "The server processes a security control without extending the lease.",
+      "title": "Update the security control",
+      "x-proctor-error-codes": [
+        "websocket.request.invalid",
+        "websocket.rate_limited",
+        "exam.attempt.connection_closed",
+        "exam.attempt.connection_lost",
+        "exam.attempt.sitting_not_open",
+        "exam.attempt.state_conflict",
+        "exam.attempt.unavailable",
+        "exam.security.control_conflict",
+        "exam.security.policy_changed",
+        "resource.not_found",
+        "authorization.denied"
+      ]
+    },
     "receivePing": {
       "action": "receive",
       "channel": {
@@ -4817,6 +6127,9 @@
           "$ref": "#/channels/websocket/messages/access_policy_changed"
         },
         {
+          "$ref": "#/channels/websocket/messages/plugin_settings_changed"
+        },
+        {
           "$ref": "#/channels/websocket/messages/job.changed"
         },
         {
@@ -4908,6 +6221,9 @@
         },
         {
           "$ref": "#/channels/websocket/messages/exam_attempt_focus_warning"
+        },
+        {
+          "$ref": "#/channels/websocket/messages/exam_attempt_screen_clips_requested"
         },
         {
           "$ref": "#/channels/websocket/messages/exam_attempt_integrity_flagged"

@@ -1,0 +1,39 @@
+{
+  "title": "Exam Attempt renewal reply",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "security_control",
+    "generation",
+    "accepted_sequence",
+    "database_time",
+    "lease_expires_at",
+    "duplicate"
+  ],
+  "properties": {
+    "security_control": {
+      "$ref": "security_control_result.json"
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "The Participation generation."
+    },
+    "accepted_sequence": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "database_time": {
+      "$ref": "instant.json"
+    },
+    "lease_expires_at": {
+      "$ref": "instant.json"
+    },
+    "duplicate": {
+      "type": "boolean",
+      "description": "The renewal sequence was already accepted; the lease was not extended again."
+    }
+  }
+}

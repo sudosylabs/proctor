@@ -131,6 +131,11 @@ func assertExampleContainsEveryField(
 		}
 		typeOf = typeOf.Elem()
 	}
+	// A document with its own encoding, such as a provider's Settings, is
+	// checked by its owner.
+	if implementsJSONMarshaler(typeOf) {
+		return
+	}
 	if typeOf.Kind() == reflect.Slice {
 		var elements []json.RawMessage
 		require.NoError(t, json.Unmarshal(data, &elements), "%s must be an array", path)
@@ -144,7 +149,7 @@ func assertExampleContainsEveryField(
 		}
 		return
 	}
-	if typeOf.Kind() != reflect.Struct || implementsJSONMarshaler(typeOf) {
+	if typeOf.Kind() != reflect.Struct {
 		return
 	}
 	var object map[string]json.RawMessage

@@ -29,6 +29,13 @@ groups:
         annotations:
           summary: Proctor HTTP 5xx ratio is high
           description: More than 5% of requests to {{ $labels.node }} failed over five minutes.
+      - alert: ProctorPluginFailed
+        expr: max by (instance, node, topology, plugin) (proctor_plugin_state{state="failed"}) == 1
+        labels:
+          severity: warning
+        annotations:
+          summary: A Proctor plugin has failed
+          description: Plugin {{ $labels.plugin }} on {{ $labels.node }} failed; the node serves without it until it restarts.
       - alert: ProctorJobFailures
         expr: sum by (instance, node, topology) (increase(proctor_jobs_executions_total{outcome!="succeeded"}[10m])) > 0
         labels:

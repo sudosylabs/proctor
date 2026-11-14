@@ -19,8 +19,8 @@ import (
 
 func TestNativeDeliveryClosedRecords(t *testing.T) {
 	at := time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC)
-	occurrence := NativeOccurrence{Kind: "occurrence", OccurrenceID: NewID(), ConditionID: "capture.active", DetectorID: "capture", DetectorVersion: 1, CapabilityID: "capture", Mode: NativeClaimObserve, Status: "opened", FirstObservedAt: at, LastConfirmedAt: at, RepeatCount: 1, Certainty: "complete", SourceRanges: []NativeSourceRange{{SourceID: NativeSourceCapture, SourceInstanceID: NewID(), FirstSequence: 0, LastSequence: 1}}}
-	batch := NativeSecurityBatch{StreamID: NewID(), BatchSequence: 1, ParticipationID: NewAttemptParticipationID(), Generation: 1, SecuritySessionID: NewID(), PolicyDigest: SHA256Fingerprint([]byte("policy")), ApplicationReleaseID: "release", MatrixID: "matrix", Records: []NativeRecord{{Occurrence: &occurrence}}}
+	fact := NativeCapabilityFact{Kind: "capability_fact", ObservedAt: at, NativeCapabilityReadiness: readinessOf("display", NativeCertaintyComplete, `{"targets":[]}`, `{"active_physical":1}`)}
+	batch := NativeSecurityBatch{StreamID: NewID(), BatchSequence: 1, ParticipationID: NewAttemptParticipationID(), Generation: 1, SecuritySessionID: NewID(), PolicyDigest: SHA256Fingerprint([]byte("policy")), ApplicationReleaseID: "release", MatrixID: "matrix", Records: []NativeRecord{{Fact: &fact}}}
 	raw, err := batch.Canonical()
 	require.NoError(t, err)
 	var roundtrip NativeSecurityBatch
@@ -30,22 +30,36 @@ func TestNativeDeliveryClosedRecords(t *testing.T) {
 	require.True(t, bytes.Equal(raw, encoded))
 	for _, mutation := range []func(string) string{
 		func(s string) string {
-			return strings.Replace(s, `"occurrence_id":`, `"raw_inventory":"secret","occurrence_id":`, 1)
+			return strings.Replace(s, `"sequence":1,`, `"raw_inventory":"secret","sequence":1,`, 1)
 		},
 		func(s string) string { return strings.Replace(s, `"batch_sequence":1`, `"batch_sequence":1.0`, 1) },
 		func(s string) string { return strings.Replace(s, `"generation":1`, `"generation":1,"generation":1`, 1) },
-		func(s string) string { return strings.Replace(s, `"kind":"occurrence"`, `"kind":"arbitrary"`, 1) },
-		func(s string) string {
-			return strings.Replace(s, `"repeat_count":1`, `"repeat_count":9007199254740992`, 1)
-		},
+		func(s string) string { return strings.Replace(s, `"kind":"capability_fact"`, `"kind":"arbitrary"`, 1) },
+		func(s string) string { return strings.Replace(s, `"sequence":1,`, `"sequence":9007199254740992,`, 1) },
+		func(s string) string { return strings.Replace(s, `"state":{"targets":[]}`, `"state":[]`, 1) },
 		func(s string) string { return strings.Replace(s, `"prior_acknowledgement":0,`, ``, 1) },
-		func(s string) string { return strings.Replace(s, `"gap_count":0`, `"Gap_count":0`, 1) },
+		func(s string) string {
+			return strings.Replace(s, `"certainty":"complete"`, `"Certainty":"complete"`, 1)
+		},
 	} {
 		var invalid NativeSecurityBatch
 		require.Error(t, json.Unmarshal([]byte(mutation(string(raw))), &invalid), "accepted non-contract batch")
 	}
-	gap := NativeSourceGap{Kind: "source_gap", SourceID: NativeSourceCapture, SourceInstanceID: NewID(), Reason: "overflow", OccurredAt: at}
-	require.Error(t, (NativeRecord{Occurrence: &occurrence, Gap: &gap}).Validate(), "accepted ambiguous union")
+	gap := NativeSourceGap{Kind: "source_gap", Capability: "display", SourceInstanceID: NewID(), Reason: "overflow", OccurredAt: at}
+	require.NoError(t, gap.Validate())
+	require.Error(t, (NativeRecord{Fact: &fact, Gap: &gap}).Validate(), "accepted ambiguous union")
+	reset := NativeSourceReset{Kind: "source_reset", ResetID: NewID(), Capability: "display", PreviousSourceInstanceID: "a", NewSourceInstanceID: "b", Reason: "restart", OccurredAt: at}
+	require.NoError(t, reset.Validate())
+	for name, change := range map[string]func(*NativeSourceReset){
+		"same instance":   func(r *NativeSourceReset) { r.NewSourceInstanceID = r.PreviousSourceInstanceID },
+		"old source name": func(r *NativeSourceReset) { r.Capability = "display-topology" },
+		"unknown reason":  func(r *NativeSourceReset) { r.Reason = "rebooted" },
+		"negative final":  func(r *NativeSourceReset) { r.PreviousFinalSequence = -1 },
+	} {
+		changed := reset
+		change(&changed)
+		require.Error(t, changed.Validate(), name)
+	}
 	batch.Records = nil
 	require.Error(t, batch.Validate(), "accepted empty batch")
 }
@@ -67,48 +81,4 @@ func TestUnretainedDeliverySummaryPreservesUncertainty(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(`{"summary_sequence":1,"unretained_record_count":0,"count_complete":false}`), &decoded), "rejected omitted absent instants")
 	require.Nil(t, decoded.FirstUnretainedAt)
 	require.Error(t, json.Unmarshal([]byte(`{"summary_sequence":1,"unretained_record_count":0,"count_complete":false,"first_unretained_at":null}`), &decoded), "accepted an explicit null instant")
-}
-
-func TestNativeOccurrenceContinuity(t *testing.T) {
-	at := time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC)
-	opened := NativeOccurrence{Kind: "occurrence", OccurrenceID: NewID(), ConditionID: "capture.active", DetectorID: "capture", DetectorVersion: 1, CapabilityID: "capture", Mode: NativeClaimObserve, Status: "opened", FirstObservedAt: at, LastConfirmedAt: at, RepeatCount: 1, Certainty: "complete", SourceRanges: []NativeSourceRange{{SourceID: NativeSourceCapture, SourceInstanceID: NewID(), FirstSequence: 1, LastSequence: 2}}}
-	prior, err := AdvanceNativeOccurrence(nil, opened, false)
-	require.NoError(t, err)
-	repeat := cloneNativeOccurrence(opened)
-	repeat.Status = "repeated"
-	repeat.RepeatCount = 2
-	repeat.SourceRanges[0].LastSequence = 3
-	// Local clock rollback is provenance, not a source-lifetime ordering.
-	repeat.LastConfirmedAt = at.Add(-time.Second)
-	next, err := AdvanceNativeOccurrence(&prior, repeat, false)
-	require.NoError(t, err)
-	for _, mutate := range []func(*NativeOccurrence){
-		func(o *NativeOccurrence) { o.SourceRanges[0].SourceInstanceID = NewID() },
-		func(o *NativeOccurrence) { o.SourceRanges[0].FirstSequence++ },
-		func(o *NativeOccurrence) { o.SourceRanges[0].LastSequence = 1 },
-		func(o *NativeOccurrence) { o.RepeatCount = 1 },
-		func(o *NativeOccurrence) { o.ConditionID = "capture.other" },
-		func(o *NativeOccurrence) { o.Status = "opened" },
-	} {
-		invalid := cloneNativeOccurrence(repeat)
-		mutate(&invalid)
-		_, err = AdvanceNativeOccurrence(&next, invalid, false)
-		require.Error(t, err, "accepted incompatible occurrence transition")
-	}
-	recovered := cloneNativeOccurrence(repeat)
-	recovered.Status = "recovered"
-	closed, err := AdvanceNativeOccurrence(&next, recovered, false)
-	require.NoError(t, err)
-	_, err = AdvanceNativeOccurrence(&closed, recovered, true)
-	require.Error(t, err, "recovered twice")
-	_, err = AdvanceNativeOccurrence(nil, recovered, false)
-	require.Error(t, err, "invented opener without a preceding hole")
-	unresolved, err := AdvanceNativeOccurrence(nil, repeat, true)
-	require.NoError(t, err, "lost missing opener provenance")
-	require.True(t, unresolved.UnresolvedOpener, "lost missing opener provenance")
-	unresolved, err = AdvanceNativeOccurrence(&unresolved, recovered, false)
-	require.NoError(t, err, "recovery promoted missing opener to proven condition")
-	require.True(t, unresolved.UnresolvedOpener, "recovery promoted missing opener to proven condition")
-	recovered.SourceRanges[0].LastSequence = 99
-	require.NotEqual(t, int64(99), unresolved.Latest.SourceRanges[0].LastSequence, "caller mutated retained range")
 }

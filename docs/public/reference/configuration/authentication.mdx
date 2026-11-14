@@ -137,17 +137,22 @@ names the key.
 
 The external registry supports at most `64` providers and is the only
 authentication block that reloads dynamically. A reload replaces the registry
-only after the complete candidate configuration validates; existing Web
-Sessions keep their established principal.
+only after the complete candidate configuration validates and every enabled
+provider's sign-in plugin accepts its settings; existing Web Sessions keep their
+established principal.
 
 | Path and default | Meaning and accepted value |
 | --- | --- |
 | `Authentication.External.LoginStateTTL`<br />Default: `10m` | Lifetime of the one-time state binding an external login start to its callback. Must be between `1m` and `30m`. |
 | `Authentication.External.Providers[].ID`<br />Default: no providers | Stable provider identifier. Must be unique, contain `1`–`64` lower-case letters, numbers, dots, underscores, or hyphens, and start with a letter or number. Treat it as durable once identities are linked. |
-| `Authentication.External.Providers[].Type`<br />Default: no providers | Protocol discriminator: `cas` or `oidc`. Exactly the matching protocol block must be present; the other must be `null` or omitted. |
+| `Authentication.External.Providers[].Type`<br />Default: no providers | The sign-in plugin that builds the provider: `cas` or `oidc`. A provider whose plugin is turned off or has failed is left out with a warning while the others keep working. |
 | `Authentication.External.Providers[].DisplayName`<br />Default: no providers | Sign-in label shown to users. Must contain `1`–`128` safe characters. Use the institution's recognizable identity-provider name. |
 | `Authentication.External.Providers[].Enabled`<br />Default: no providers | Makes the provider available for new login starts when `true`. Keeping a definition disabled preserves its stable ID without advertising it. |
 | `Authentication.External.Providers[].AutoProvision`<br />Default: no providers | Creates a Proctor User after a valid assertion when no linked identity exists. When enabled, both username and email mappings are required and returned profile values must satisfy the User model. |
+| `Authentication.External.Providers[].Settings`<br />Default: no providers | The protocol's own settings, a JSON object of at most `65536` bytes, described below for CAS and OIDC. The sign-in plugin reads and checks it when it builds the provider and rejects an unknown field. |
+| `Authentication.External.Providers[].Settings.Timeout`<br />Default: no providers | Deadline for each HTTP request the provider makes: a CAS ticket validation, or OIDC discovery, token, key, and UserInfo work. Must be between `1s` and `30s`. |
+| `Authentication.External.Providers[].Settings.MaxResponseBytes`<br />Default: no providers | Maximum accepted response body from the provider. Must be between `1024` and `2097152` bytes. |
+| `Authentication.External.Providers[].Secrets`<br />Default: `null` | The protocol's own secret values, a JSON object of at most `65536` bytes or `null`. Always shown as `"[redacted]"`. CAS takes none; OIDC takes its client secret. |
 
 Provider IDs participate in external identity links. Do not rename an ID as a
 cosmetic change. Disabling a provider blocks new starts without pretending its
@@ -155,27 +160,27 @@ previously linked subjects belonged to another provider.
 
 ## External claim mapping
 
-Claim mapping tells Proctor exactly which released provider values it may
-consume. A mapping name may be empty where optional, the special CAS attribute
+Each protocol's settings carry a `Claims` mapping, which names exactly the
+released provider values the sign-in plugin may consume. A mapping name may be empty where optional, the special CAS attribute
 `user`, or a `1`–`128` character released-attribute name. Attribute names may
 contain letters, numbers, `.`, `_`, `:`, and `-`; the first character must be a
 letter or underscore. OIDC subjects must map to `sub`.
 
 | Path and default | Meaning and accepted value |
 | --- | --- |
-| `Authentication.External.Providers[].Claims.Subject`<br />Default: no providers | Required immutable provider subject. Must be `sub` for OIDC. A CAS provider may use `user` or another released attribute. This value, together with provider ID, links the external identity. |
-| `Authentication.External.Providers[].Claims.Username`<br />Default: no providers | Released username claim. Required when auto-provisioning. |
-| `Authentication.External.Providers[].Claims.Email`<br />Default: no providers | Released email claim. Required when auto-provisioning. |
-| `Authentication.External.Providers[].Claims.EmailVerifiedClaim`<br />Default: no providers | Optional boolean-like claim used to decide whether the released email is verified. For CAS, a value equal to `true` ignoring case is accepted; for OIDC, the mapped JSON claim may be boolean `true` or the case-insensitive string `"true"`. |
-| `Authentication.External.Providers[].Claims.FirstName`<br />Default: no providers | Optional released first-name claim used for profile mapping. |
-| `Authentication.External.Providers[].Claims.LastName`<br />Default: no providers | Optional released last-name claim used for profile mapping. |
-| `Authentication.External.Providers[].Claims.DisplayName`<br />Default: no providers | Optional released display-name claim used for profile mapping. |
-| `Authentication.External.Providers[].Claims.HomeOrganization`<br />Default: no providers | Optional released home-organization claim. Required when an allowlist is configured. The returned value is trimmed and compared case-insensitively. |
-| `Authentication.External.Providers[].Claims.Affiliation`<br />Default: no providers | Optional multi-valued released affiliation claim. These are provider assertions, not durable Proctor Affiliation records. |
-| `Authentication.External.Providers[].Claims.AllowedHomeOrganizations[]`<br />Default: empty list per provider | Optional allowlist of unique DNS-style organization identifiers, each `1`–`255` characters without whitespace, `@`, or `/`. An empty list admits any returned home organization. |
-| `Authentication.External.Providers[].Claims.TrustEmail`<br />Default: `false` per provider | Treats every email released by this provider as verified. Enable only when the provider contract guarantees verified ownership; otherwise map `EmailVerifiedClaim`. |
-| `Authentication.External.Providers[].Claims.MultiFactorAttribute`<br />Default: no providers | Optional released attribute carrying authentication-method or context values. It must be configured together with `MultiFactorValues`. |
-| `Authentication.External.Providers[].Claims.MultiFactorValues[]`<br />Default: empty list per provider | Unique provider values that prove multi-factor authentication. Each must contain `1`–`256` safe characters. An exact match upgrades the assertion's authentication strength. |
+| `Authentication.External.Providers[].Settings.Claims.Subject`<br />Default: no providers | Required immutable provider subject. Must be `sub` for OIDC. A CAS provider may use `user` or another released attribute. This value, together with provider ID, links the external identity. |
+| `Authentication.External.Providers[].Settings.Claims.Username`<br />Default: no providers | Released username claim. Required when auto-provisioning. |
+| `Authentication.External.Providers[].Settings.Claims.Email`<br />Default: no providers | Released email claim. Required when auto-provisioning. |
+| `Authentication.External.Providers[].Settings.Claims.EmailVerifiedClaim`<br />Default: no providers | Optional boolean-like claim used to decide whether the released email is verified. For CAS, a value equal to `true` ignoring case is accepted; for OIDC, the mapped JSON claim may be boolean `true` or the case-insensitive string `"true"`. |
+| `Authentication.External.Providers[].Settings.Claims.FirstName`<br />Default: no providers | Optional released first-name claim used for profile mapping. |
+| `Authentication.External.Providers[].Settings.Claims.LastName`<br />Default: no providers | Optional released last-name claim used for profile mapping. |
+| `Authentication.External.Providers[].Settings.Claims.DisplayName`<br />Default: no providers | Optional released display-name claim used for profile mapping. |
+| `Authentication.External.Providers[].Settings.Claims.HomeOrganization`<br />Default: no providers | Optional released home-organization claim. Required when an allowlist is configured. The returned value is trimmed and compared case-insensitively. |
+| `Authentication.External.Providers[].Settings.Claims.Affiliation`<br />Default: no providers | Optional multi-valued released affiliation claim. These are provider assertions, not durable Proctor Affiliation records. |
+| `Authentication.External.Providers[].Settings.Claims.AllowedHomeOrganizations[]`<br />Default: empty list per provider | Optional allowlist of unique DNS-style organization identifiers, each `1`–`255` characters without whitespace, `@`, or `/`. An empty list admits any returned home organization. |
+| `Authentication.External.Providers[].Settings.Claims.TrustEmail`<br />Default: `false` per provider | Treats every email released by this provider as verified. Enable only when the provider contract guarantees verified ownership; otherwise map `EmailVerifiedClaim`. |
+| `Authentication.External.Providers[].Settings.Claims.MultiFactorAttribute`<br />Default: no providers | Optional released attribute carrying authentication-method or context values. It must be configured together with `MultiFactorValues`. |
+| `Authentication.External.Providers[].Settings.Claims.MultiFactorValues[]`<br />Default: empty list per provider | Unique provider values that prove multi-factor authentication. Each must contain `1`–`256` safe characters. An exact match upgrades the assertion's authentication strength. |
 
 Claim validation proves naming and required relationships, not that the
 provider actually releases the attributes or that their semantics are
@@ -183,7 +188,7 @@ trustworthy. Test non-provisioned login, first-time provisioning, missing
 claims, rejected organizations, email verification, and single- versus
 multi-factor assertions before enabling a provider for users.
 
-## CAS provider block
+## CAS provider settings
 
 Start from the complete
 [`cas-provider.json`](https://github.com/sudosylabs/Proctor/blob/main/server/config/examples/cas-provider.json)
@@ -191,12 +196,10 @@ object and place it in `Authentication.External.Providers`.
 
 | Path and default | Meaning and accepted value |
 | --- | --- |
-| `Authentication.External.Providers[].CAS.BaseURL`<br />Default: no CAS providers | CAS server root. Must be HTTPS, except loopback HTTP is accepted for development, and must contain no credentials, query, or fragment. |
-| `Authentication.External.Providers[].CAS.ValidationPath`<br />Default: no CAS providers | CAS ticket-validation endpoint path, such as `/p3/serviceValidate`. Must start with one `/` and contain no query, fragment, or control characters. |
-| `Authentication.External.Providers[].CAS.Timeout`<br />Default: no CAS providers | Deadline for a CAS validation request. Must be between `1s` and `30s`. |
-| `Authentication.External.Providers[].CAS.MaxResponseBytes`<br />Default: no CAS providers | Maximum CAS response body. Must be between `1024` and `2097152` bytes. |
+| `Authentication.External.Providers[].Settings.BaseURL`<br />Default: no CAS providers | CAS server root. Must be HTTPS, except loopback HTTP is accepted for development, and must contain no credentials, query, or fragment. |
+| `Authentication.External.Providers[].Settings.ValidationPath`<br />Default: no CAS providers | CAS ticket-validation endpoint path, such as `/p3/serviceValidate`. Must start with one `/` and contain no query, fragment, or control characters. |
 
-`Claims.Subject: "user"` selects the `<cas:user>` value; another released
+`Settings.Claims.Subject: "user"` selects the `<cas:user>` value; another released
 attribute may be selected explicitly. Proctor never assumes that `<cas:user>`
 is an ePPN and never uses email as the external identity key.
 
@@ -204,7 +207,7 @@ CAS does not standardize email-verification semantics. Leave `TrustEmail` false
 unless the provider contract guarantees ownership, and map an explicit
 boolean-like released attribute when available.
 
-## OIDC provider block
+## OIDC provider settings
 
 Start from the complete
 [`oidc-provider.json`](https://github.com/sudosylabs/Proctor/blob/main/server/config/examples/oidc-provider.json)
@@ -212,13 +215,11 @@ object and place it in `Authentication.External.Providers`.
 
 | Path and default | Meaning and accepted value |
 | --- | --- |
-| `Authentication.External.Providers[].OIDC.Issuer`<br />Default: no OIDC providers | Discovery issuer URL. Must be HTTPS, except loopback HTTP is accepted for development, and contain no credentials, query, fragment, or trailing slash. It must exactly match the issuer asserted by the provider. |
-| `Authentication.External.Providers[].OIDC.ClientID`<br />Default: no OIDC providers | Registered OAuth client identifier. Must contain `1`–`512` safe characters. |
-| `Authentication.External.Providers[].OIDC.ClientSecret`<br />Default: no OIDC providers | Registered OAuth client secret. Must contain `1`–`4096` safe characters. Secret; use protected delivery. |
-| `Authentication.External.Providers[].OIDC.Scopes[]`<br />Default: no OIDC providers | Unique requested scopes, each `1`–`128` characters without whitespace or controls. The list must include `openid`; add only scopes needed for mapped claims. |
-| `Authentication.External.Providers[].OIDC.UseUserInfo`<br />Default: `false` per provider | Fetches the OIDC UserInfo endpoint after token verification to supplement profile claims. Security claims remain constrained; the returned subject must match the ID token. |
-| `Authentication.External.Providers[].OIDC.Timeout`<br />Default: no OIDC providers | Deadline for OIDC discovery, token, key, and UserInfo HTTP work. Must be between `1s` and `30s`. |
-| `Authentication.External.Providers[].OIDC.MaxResponseBytes`<br />Default: no OIDC providers | Maximum accepted external HTTP response body. Must be between `1024` and `2097152` bytes. |
+| `Authentication.External.Providers[].Settings.Issuer`<br />Default: no OIDC providers | Discovery issuer URL. Must be HTTPS, except loopback HTTP is accepted for development, and contain no credentials, query, fragment, or trailing slash. It must exactly match the issuer asserted by the provider. |
+| `Authentication.External.Providers[].Settings.ClientID`<br />Default: no OIDC providers | Registered OAuth client identifier. Must contain `1`–`512` safe characters. |
+| `Authentication.External.Providers[].Secrets.ClientSecret`<br />Default: no OIDC providers | Registered OAuth client secret. Must contain `1`–`4096` safe characters. Secret; use protected delivery. |
+| `Authentication.External.Providers[].Settings.Scopes[]`<br />Default: no OIDC providers | Unique requested scopes, each `1`–`128` characters without whitespace or controls. The list must include `openid`; add only scopes needed for mapped claims. |
+| `Authentication.External.Providers[].Settings.UseUserInfo`<br />Default: `false` per provider | Fetches the OIDC UserInfo endpoint after token verification to supplement profile claims. Security claims remain constrained; the returned subject must match the ID token. |
 
 OIDC uses issuer discovery, the Authorization Code flow, S256 PKCE, and a
 transaction-bound nonce. Proctor verifies the ID token's signature, issuer,

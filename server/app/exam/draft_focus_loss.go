@@ -27,7 +27,7 @@ type ConfigureDraftFocusLossCommand struct {
 	MinimumDuration       time.Duration
 	IncidentCount         int
 	Window                time.Duration
-	Outcome               model.IntegrityThresholdOutcome
+	Outcome               model.IntegrityOutcome
 	IdempotencyKey        string
 }
 
@@ -61,13 +61,13 @@ func (a *Authoring) ConfigureExamDraftFocusLoss(
 	}
 
 	commandIdempotency, err := idempotency.Require(inv, idempotencyOperationConfigureDraftFocusLoss, command.IdempotencyKey, struct {
-		ExamID                      string                          `json:"exam_id"`
-		ExpectedDraftRevision       int64                           `json:"expected_draft_revision"`
-		Enabled                     bool                            `json:"enabled"`
-		MinimumDurationMilliseconds int64                           `json:"minimum_duration_milliseconds"`
-		IncidentCount               int                             `json:"incident_count"`
-		WindowMilliseconds          int64                           `json:"window_milliseconds"`
-		Outcome                     model.IntegrityThresholdOutcome `json:"outcome"`
+		ExamID                      string                 `json:"exam_id"`
+		ExpectedDraftRevision       int64                  `json:"expected_draft_revision"`
+		Enabled                     bool                   `json:"enabled"`
+		MinimumDurationMilliseconds int64                  `json:"minimum_duration_milliseconds"`
+		IncidentCount               int                    `json:"incident_count"`
+		WindowMilliseconds          int64                  `json:"window_milliseconds"`
+		Outcome                     model.IntegrityOutcome `json:"outcome"`
 	}{
 		ExamID:                      command.ExamID.String(),
 		ExpectedDraftRevision:       command.ExpectedDraftRevision,

@@ -27,7 +27,7 @@ import (
 // testSupportPackages exist only for tests to import, so nothing in a
 // production binary reaches them.
 var testSupportPackages = []string{
-	"app/realtime/realtimetest", "config/configtest", "httpapi/route/routetest", "internal/errorflow", "store/storetest", "testlib",
+	"app/realtime/realtimetest", "config/configtest", "httpapi/route/routetest", "internal/errorflow", "internal/nativetest", "store/storetest", "testlib",
 }
 
 // reachableOnlyFromTests names every production function that no server

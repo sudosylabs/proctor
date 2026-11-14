@@ -8,10 +8,14 @@
 package model
 
 const (
-	DeliveryParticipationRecordLimit  int64 = 50_000
-	DeliveryAttemptRecordLimit        int64 = 200_000
-	DeliveryParticipationByteLimit    int64 = 32 * 1024 * 1024
-	DeliveryAttemptByteLimit          int64 = 128 * 1024 * 1024
+	DeliveryParticipationRecordLimit int64 = 50_000
+	DeliveryAttemptRecordLimit       int64 = 200_000
+	DeliveryParticipationByteLimit   int64 = 32 * 1024 * 1024
+	DeliveryAttemptByteLimit         int64 = 128 * 1024 * 1024
+	// Native delivery has twice the bytes: every fact carries a capability's
+	// full minimized state.
+	NativeParticipationByteLimit      int64 = 64 * 1024 * 1024
+	NativeAttemptByteLimit            int64 = 256 * 1024 * 1024
 	NativeParticipationPositionLimit  int64 = 20_000
 	NativeAttemptPositionLimit        int64 = 80_000
 	BrowserParticipationPositionLimit int64 = 50_000
@@ -88,6 +92,7 @@ func NewDeliveryQuotaUsage(native, attempt bool) DeliveryQuotaUsage {
 		PositionLimit: BrowserParticipationPositionLimit,
 	}
 	if native {
+		usage.ByteLimit = NativeParticipationByteLimit
 		usage.PositionLimit = NativeParticipationPositionLimit
 	}
 
@@ -96,6 +101,7 @@ func NewDeliveryQuotaUsage(native, attempt bool) DeliveryQuotaUsage {
 		usage.ByteLimit = DeliveryAttemptByteLimit
 		usage.PositionLimit = BrowserAttemptPositionLimit
 		if native {
+			usage.ByteLimit = NativeAttemptByteLimit
 			usage.PositionLimit = NativeAttemptPositionLimit
 		}
 	}

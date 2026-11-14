@@ -88,6 +88,7 @@ type ExamAttemptApplication interface {
 		attempt.NativeDeliverySummaryCommand,
 	) (*model.NativeSecurityStreamStatus, error)
 	RecoverExamSecurityPolicy(context.Context, invocation.Invocation, model.ExamAttemptID) (*store.SecurityPolicyRecovery, error)
+	SecurityPolicyOverview(context.Context, invocation.Invocation, model.ExamSittingID) (*store.SecurityPolicyOverview, error)
 	PrepareExamSecurityPreflight(
 		context.Context,
 		invocation.Invocation,
@@ -158,6 +159,24 @@ type ExamAttemptApplication interface {
 	OpenCandidateExamWorkspaceFile(context.Context, invocation.Invocation, attempt.OpenWorkspaceFileQuery) (attempt.OpenedContent, error)
 	ReallowExamAttempt(context.Context, invocation.Invocation, attempt.ReallowCommand) (attempt.ReallowResult, error)
 	SuspendExamAttempt(context.Context, invocation.Invocation, attempt.ManualSuspensionCommand) (attempt.ManualSuspensionResult, error)
+	RequestScreenClip(context.Context, invocation.Invocation, attempt.RequestScreenClipCommand) (attempt.RequestScreenClipResult, error)
+	PendingScreenClips(context.Context, invocation.Invocation, attempt.CandidateAccess) ([]store.ExamAttemptScreenClipView, error)
+	TakeScreenClip(context.Context, invocation.Invocation, attempt.CandidateAccess, model.ScreenClipID) (store.ExamAttemptScreenClipView, error)
+	BeginScreenClipUpload(
+		context.Context,
+		invocation.Invocation,
+		attempt.BeginScreenClipUploadCommand,
+	) (store.ExamAttemptScreenClipView, error)
+	ScreenClipUploadStatus(
+		context.Context,
+		invocation.Invocation,
+		attempt.CandidateAccess,
+		model.ScreenClipID,
+	) (store.ExamAttemptScreenClipUploadStatus, error)
+	UploadScreenClipChunk(context.Context, invocation.Invocation, attempt.UploadScreenClipChunkCommand) error
+	ListScreenClips(context.Context, invocation.Invocation, model.ExamID, model.ExamSittingID, model.ExamAttemptID) ([]store.ExamAttemptScreenClipView, error)
+	PlayScreenClip(context.Context, invocation.Invocation, attempt.ScreenClipQuery) (attempt.PlayScreenClipResult, error)
+	CompleteScreenClipUpload(context.Context, invocation.Invocation, attempt.CompleteScreenClipUploadCommand) (store.ExamAttemptScreenClipView, error)
 	SubmitExamAttempt(context.Context, invocation.Invocation, attempt.SubmitCommand) (store.ExamSubmissionReceipt, error)
 	GetExamSubmission(context.Context, invocation.Invocation, attempt.GetSubmissionQuery) (attempt.ManagedSubmission, error)
 	ListExamSubmissionManifest(
@@ -195,6 +214,8 @@ func examAttemptResource(app ExamAttemptApplication) route.Resource {
 	managerSubmissionContent := managerSubmission + "/files/{attempt_workspace_entry_id}/content"
 	reallow := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/reallow"
 	suspend := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/suspend"
+	screenClips := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/screen-clips"
+	screenClipRequests := "/exam-attempts/{exam_attempt_id}/screen-clip-requests"
 	return route.NewResource("exam-attempts",
 		route.Endpoint{
 			Method: http.MethodGet,
@@ -350,6 +371,164 @@ func examAttemptResource(app ExamAttemptApplication) route.Resource {
 				"exam.sitting.unavailable",
 			},
 			Handle: h.suspend,
+		},
+		route.Endpoint{
+			Method:      http.MethodPost,
+			Path:        screenClips,
+			Auth:        route.AuthPrincipalRequired,
+			Idempotency: route.IdempotencyRequired,
+			Errors: []string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.state_conflict",
+				"exam.attempt.screen_recording_off",
+				"exam.attempt.screen_clip_limit_reached",
+				"exam.attempt.unavailable",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+				"exam.delivery.metadata_capacity",
+				"exam.sitting.invalid",
+				"exam.sitting.unavailable",
+			},
+			Handle: h.requestScreenClip,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   screenClips,
+			Auth:   route.AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.unavailable",
+				"exam.delivery.metadata_capacity",
+				"exam.sitting.invalid",
+				"exam.sitting.unavailable",
+			},
+			Handle: h.listScreenClips,
+		},
+		route.Endpoint{
+			Method:       http.MethodGet,
+			Path:         screenClips + "/{screen_clip_id}/content",
+			Auth:         route.AuthPrincipalRequired,
+			ProtocolName: "exam-attempt-screen-clip-content",
+			ProtocolKind: route.ProtocolBinaryDownload,
+			Errors: []string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.state_conflict",
+				"exam.attempt.unavailable",
+				"exam.delivery.metadata_capacity",
+				"exam.sitting.invalid",
+				"exam.sitting.unavailable",
+			},
+			Protocol: h.playScreenClip,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   screenClipRequests,
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.unavailable",
+				"exam.attempt.registered_desktop_required",
+				"exam.delivery.metadata_capacity",
+			},
+			Handle: h.pendingScreenClips,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   screenClipRequests + "/{screen_clip_id}/take",
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.state_conflict",
+				"exam.attempt.unavailable",
+				"exam.attempt.registered_desktop_required",
+				"exam.delivery.metadata_capacity",
+			},
+			Handle: h.takeScreenClip,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   screenClipRequests + "/{screen_clip_id}/upload",
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.state_conflict",
+				"exam.attempt.unavailable",
+				"exam.attempt.registered_desktop_required",
+				"exam.delivery.metadata_capacity",
+				"exam.attempt.screen_clip_too_large",
+			},
+			Handle: h.beginScreenClipUpload,
+		},
+		route.Endpoint{
+			Method: http.MethodGet,
+			Path:   screenClipRequests + "/{screen_clip_id}/upload",
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.state_conflict",
+				"exam.attempt.unavailable",
+				"exam.attempt.registered_desktop_required",
+				"exam.delivery.metadata_capacity",
+			},
+			Handle: h.screenClipUploadStatus,
+		},
+		route.Endpoint{
+			Method:       http.MethodPut,
+			Path:         screenClipRequests + "/{screen_clip_id}/upload/chunks/{chunk:sequence}",
+			Auth:         route.AuthSessionRequired,
+			MaxBodyBytes: model.ScreenClipChunkBytes,
+			ProtocolName: "candidate-screen-clip-chunk-upload",
+			ProtocolKind: route.ProtocolStreamingUpload,
+			Errors: []string{
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.state_conflict",
+				"exam.attempt.unavailable",
+				"exam.attempt.registered_desktop_required",
+				"exam.delivery.metadata_capacity",
+			},
+			Protocol: h.uploadScreenClipChunk,
+		},
+		route.Endpoint{
+			Method: http.MethodPost,
+			Path:   screenClipRequests + "/{screen_clip_id}/upload/complete",
+			Auth:   route.AuthSessionRequired,
+			Errors: []string{
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.state_conflict",
+				"exam.attempt.unavailable",
+				"exam.attempt.registered_desktop_required",
+				"exam.delivery.metadata_capacity",
+				"exam.attempt.screen_clip_incomplete",
+			},
+			Handle: h.completeScreenClipUpload,
 		},
 		route.Endpoint{
 			Method: http.MethodGet,

@@ -191,6 +191,36 @@ func testExamAttemptFocusLossPolicies(t *testing.T, ctx context.Context, ss stor
 		require.False(t, second.DatabaseTime.Before(first.DatabaseTime), "receipt-time rolling window = %#v, %#v", first, second)
 	})
 
+	t.Run("a Flag on a recording Exam asks for the minute around it", func(t *testing.T) {
+		policy := model.FocusLossPolicy{Enabled: true, MinimumDuration: 500 * time.Millisecond, IncidentCount: 1,
+			Window: 10 * time.Second, Outcome: model.IntegrityOutcomeFlag}
+		fixture := newExamAttemptFixtureWithOptions(t, ctx, ss, &policy, nil, model.ExamCapacityPolicy{}, false,
+			func(native *model.NativeSecurityPolicy) { native.ScreenRecording.Enabled = true })
+		_, access := connectFocusLossFixture(t, ctx, ss, fixture, "focus-recording")
+		candidate := store.CandidateAttemptAccess{
+			AttemptID: access.AttemptID, ConnectionID: access.ConnectionID, ContinuityCredentialHash: access.ContinuityCredentialHash,
+			CandidateUserID: fixture.candidate.ID, SessionID: fixture.session.ID,
+			DesktopRegistrationID: fixture.session.DesktopRegistrationID, DPoPKeyThumbprint: fixture.session.DPoPKeyThumbprint,
+		}
+
+		first := recordFocusLoss(t, ctx, ss, fixture, access, 1, 900, "")
+		require.True(t, first.FlagCreated)
+		require.True(t, first.ScreenClipRequested, "the new Focus Loss Flag asks for its clip")
+		pending, err := ss.ExamAttempt().ListPendingScreenClips(ctx, candidate)
+		require.NoError(t, err)
+		require.Len(t, pending, 1)
+		require.Equal(t, model.ScreenClipSourceIncident, pending[0].Source)
+		require.Equal(t, first.Flag.ID, pending[0].FlagID, "the clip is linked to the Focus Loss Flag")
+		require.Equal(t, 2*model.ScreenClipIncidentMargin, pending[0].Range.End.Sub(pending[0].Range.Start))
+
+		again := recordFocusLoss(t, ctx, ss, fixture, access, 2, 900, "")
+		require.False(t, again.FlagCreated)
+		require.False(t, again.ScreenClipRequested, "more evidence on the same Flag asks for nothing new")
+		pending, err = ss.ExamAttempt().ListPendingScreenClips(ctx, candidate)
+		require.NoError(t, err)
+		require.Len(t, pending, 1)
+	})
+
 	t.Run("flag evidence is capped and overflow is bounded", func(t *testing.T) {
 		policy := model.FocusLossPolicy{Enabled: true, MinimumDuration: 500 * time.Millisecond, IncidentCount: 1,
 			Window: 10 * time.Second, Outcome: model.IntegrityOutcomeFlag}
@@ -209,6 +239,7 @@ func testExamAttemptFocusLossPolicies(t *testing.T, ctx context.Context, ss stor
 				firstFlag = result.Flag.ID
 				require.True(t, result.FlagCreated)
 				require.True(t, result.ManagerNotificationRequired)
+				require.False(t, result.ScreenClipRequested, "an Exam that does not record asks for no clip")
 			} else {
 				require.Equal(t, firstFlag, result.Flag.ID, "reused Focus Loss Flag %d", sequence)
 				require.False(t, result.FlagCreated, "reused Focus Loss Flag %d", sequence)

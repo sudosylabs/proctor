@@ -21,6 +21,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
+	"github.com/sudosylabs/proctor/server/internal/nativetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -128,6 +129,7 @@ type fixture struct {
 	publisher                 *realtimetest.Publisher
 	content                   *contentFake
 	managerOverride           bool
+	clipViewer                *ScreenClipViewAuthorization
 	managerErr                error
 	focusSignalID             model.FocusLossSignalID
 	focusFlagID               model.IntegrityFlagID
@@ -208,6 +210,8 @@ func newFixture(t *testing.T) *fixture {
 			}
 			return model.NewSubmissionReceiptCode()
 		},
+		NewDomainEvent: model.NewDomainEventID,
+		NewJob:         model.NewJobID,
 	})
 	require.NoError(t, err)
 	f.service = service
@@ -300,6 +304,20 @@ func (f *managerFake) AuthorizeSubmissionView(_ context.Context, _ invocation.In
 	f.f.submissionAuthorizationID = submissionID
 	return nil
 }
+func (f *managerFake) AuthorizeScreenClipView(_ context.Context, _ invocation.Invocation, sittingID model.ExamSittingID,
+	_ model.ExamAttemptID,
+) (ScreenClipViewAuthorization, error) {
+	f.f.order = append(f.f.order, "manager.clip_view")
+	if f.f.managerErr != nil {
+		return ScreenClipViewAuthorization{}, f.f.managerErr
+	}
+	if f.f.clipViewer != nil {
+		return *f.f.clipViewer, nil
+	}
+	return ScreenClipViewAuthorization{Action: model.ActionExamSittingManage,
+		Resource:  model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
+		ScopeType: model.RoleScopeClass}, nil
+}
 func (f *managerFake) AuthorizeBrowserActivityView(context.Context, invocation.Invocation, model.ExamSittingID) (access.BrowserActivityAuthorization, error) {
 	f.f.order = append(f.f.order, "browser.authorize")
 	return access.BrowserActivityAuthorization{AcademicUnitID: model.NewAcademicUnitID()}, f.f.managerErr
@@ -372,6 +390,19 @@ type contentFake struct {
 	attemptContent  *model.AttemptWorkspaceContent
 	openAttemptID   model.AttemptWorkspaceObjectID
 	openAttemptBody string
+	clipChunkSHA256 string
+	clipChunkErr    error
+}
+
+func (f *contentFake) OpenScreenClipChunk(context.Context, model.ScreenClipID, int, int64, int64) (io.ReadCloser, error) {
+	return io.NopCloser(strings.NewReader("")), nil
+}
+
+func (f *contentFake) StageScreenClipChunk(_ context.Context, _ model.ScreenClipID, _ int, body io.Reader, _ int64, expected string) error {
+	f.f.order = append(f.f.order, "content.stage_clip_chunk")
+	f.clipChunkSHA256 = expected
+	_, _ = io.Copy(io.Discard, body)
+	return f.clipChunkErr
 }
 
 func (f *contentFake) StageAttemptWorkspaceObject(_ context.Context, id model.AttemptWorkspaceObjectID, _ io.Reader, _ int64, _ string) (*model.AttemptWorkspaceContent, error) {
@@ -394,27 +425,15 @@ func (f *contentFake) OpenStarterWorkspaceObject(_ context.Context, id model.Sta
 
 func syntheticNativeAgreement(t *testing.T, build model.DesktopBuildTuple) *model.DesktopNativeAgreement {
 	t.Helper()
-	digest := model.SHA256Fingerprint([]byte("synthetic-source-schema"))
-	definitions := []model.NativeCoverageDefinition{}
-	matrix := model.NativeCapabilityMatrix{RegistryDigest: model.NativeRegistryDigest, MatrixID: build.CapabilityMatrixIdentity, ReleaseID: "synthetic-release", TargetTuple: build.DesktopTarget}
-	for _, item := range []struct {
-		key    string
-		source model.NativeSourceID
-	}{{"baseline.capture", model.NativeSourceCapture}, {"baseline.display", model.NativeSourceDisplay}, {"baseline.window", model.NativeSourceWindow}} {
-		definitions = append(definitions, model.NativeCoverageDefinition{CoverageKey: item.key, CapabilityID: "baseline", SourceID: item.source, SourceSchemaDigest: digest, PermittedClaims: []model.NativeCapabilityClaim{model.NativeClaimEnforce}, RequiredPermissions: []string{}, Baseline: true})
-		matrix.Entries = append(matrix.Entries, model.NativeCapabilityMatrixEntry{CoverageKey: item.key, SourceSchemaDigest: digest, Claim: model.NativeClaimEnforce, ComponentID: "synthetic-component", AdapterVersion: "synthetic-adapter", RequiredPermissions: []string{}, Limitations: []string{}, Verification: "passed"})
-	}
-	agreement, err := model.NewDesktopNativeAgreement(model.NativeRegistryDigest, model.SHA256Fingerprint([]byte("synthetic-manifest")), model.SHA256Fingerprint([]byte("synthetic-matrix")), model.SHA256Fingerprint([]byte("synthetic-detectors")), definitions, matrix, []model.NativeDetectorDefinition{})
-	require.NoError(t, err)
-	return agreement
+	return nativetest.NativeAgreement(t, build)
 }
 
-func renewalCoverageFixture() model.SecurityCoverageRenewal {
-	return model.SecurityCoverageRenewal{ControlSequence: 1, PolicyDigest: model.SHA256Fingerprint([]byte("renewal-policy")), SecuritySessionID: model.NewID(), StreamID: model.NewID(), Posture: "compliant", Sources: []model.NativeSourceCoverage{}, Coverage: []model.NativeCoverageClaim{}, SourceResets: []model.NativeSourceReset{}, DeliveryWatermarks: []model.DeliveryWatermark{}}
+func securityControlFixture() model.SecurityControl {
+	return model.SecurityControl{ControlSequence: 1, PolicyDigest: model.SHA256Fingerprint([]byte("renewal-policy")), SecuritySessionID: model.NewID(), StreamID: model.NewID(), DeliveryWatermarks: []model.DeliveryWatermark{}}
 }
-func renewalCoverageResultFixture() model.SecurityCoverageResult {
+func securityControlResultFixture() model.SecurityControlResult {
 	digest := model.SHA256Fingerprint([]byte("renewal-control"))
-	return model.SecurityCoverageResult{ProcessedControlSequence: 1, ProcessedControlDigest: &digest, CoverageResult: "accepted", SourceResetReceipts: []model.SourceResetReceipt{}, SecurityInteractionAllowed: true, DeliveryWatermarkRejections: []model.DeliveryWatermarkRejection{}}
+	return model.SecurityControlResult{ProcessedControlSequence: 1, ProcessedControlDigest: &digest, SecurityInteractionAllowed: true, DeliveryWatermarkRejections: []model.DeliveryWatermarkRejection{}}
 }
 
 func (f *desktopBuildResolverFake) ResolveNativeDeliveryBuild(context.Context, NativeDeliveryBuildIdentity) (model.DesktopBuildTuple, error) {

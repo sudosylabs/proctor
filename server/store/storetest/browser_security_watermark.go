@@ -23,11 +23,11 @@ func TestBrowserSecurityWatermarks(t *testing.T, ss store.Store) {
 	_, err := startBrowserSourceFixture(t, ctx, ss, &store.BrowserActivitySourceStart{Access: access, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, SourceSessionID: first})
 	require.NoError(t, err)
 	renewal := &store.ExamAttemptParticipationRenewal{AttemptID: access.AttemptID, ParticipationID: connected.Participation.ID, ConnectionID: access.ConnectionID, CandidateUserID: access.CandidateUserID, SessionID: access.SessionID, DesktopRegistrationID: access.DesktopRegistrationID, DPoPKeyThumbprint: access.DPoPKeyThumbprint, ContinuityCredentialHash: access.ContinuityCredentialHash, Generation: connected.Participation.Generation, DesktopCompatibilityPolicyRevision: 1}
-	prepareParticipationRenewalCoverage(t, ctx, ss, renewal)
-	control := renewal.SecurityCoverage
+	prepareParticipationSecurityControl(t, ctx, ss, renewal)
+	control := renewal.Security
 	control.DeliveryWatermarks = []model.DeliveryWatermark{{Family: "browser", SourceID: string(first), AllocatedThroughSequence: 3}}
-	update := func(body model.SecurityCoverageRenewal) (model.SecurityCoverageResult, error) {
-		return ss.ExamAttempt().UpdateSecurityCoverage(ctx, &store.ExamAttemptSecurityCoverageUpdate{Access: access, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, DesktopBuild: renewal.DesktopBuild, DesktopCompatibilityPolicyRevision: 1, Coverage: body})
+	update := func(body model.SecurityControl) (model.SecurityControlResult, error) {
+		return ss.ExamAttempt().UpdateSecurity(ctx, &store.ExamAttemptSecurityUpdate{Access: access, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, DesktopBuild: renewal.DesktopBuild, DesktopCompatibilityPolicyRevision: 1, Control: body})
 	}
 	result, err := update(control)
 	require.NoError(t, err)
@@ -58,7 +58,7 @@ func TestBrowserSecurityWatermarks(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	replay, err := update(control)
 	require.NoError(t, err)
-	require.Equal(t, "accepted", replay.CoverageResult, "exact replay reinterpreted closed source")
+	require.Equal(t, int64(1), replay.ProcessedControlSequence, "exact replay reinterpreted closed source")
 	require.Empty(t, replay.DeliveryWatermarkRejections, "exact replay reinterpreted closed source")
 	require.Equal(t, int64(3), budget().Browser.Participation.AllocatedPositions, "exact replay reinterpreted closed source")
 	control.ControlSequence = 2

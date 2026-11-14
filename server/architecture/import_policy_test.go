@@ -175,6 +175,33 @@ var dependencyRules = []dependencyRule{
 		thirdParty: allImports(),
 	},
 	{
+		name:    "plugin contracts",
+		sources: []pathPattern{exact(serverModule + "/plugin")},
+	},
+	{
+		// A plugin is one folder below the contracts. It reaches the core
+		// only through the contracts, the domain model and configuration
+		// types, and the support packages named for it; only the
+		// composition root imports a plugin.
+		name:    "plugins",
+		sources: []pathPattern{descendants(serverModule + "/plugin")},
+		project: only(
+			exact(serverModule+"/plugin"),
+			exact(serverModule+"/model"),
+			exact(serverModule+"/config"),
+			exact(serverModule+"/platform/externalauth"),
+		),
+		thirdParty: allImports(),
+	},
+	{
+		// The host runs plugins and knows nothing of the application: the
+		// composition root hands what plugins register to their consumers.
+		name:           "plugin host",
+		sources:        []pathPattern{exact(serverModule + "/pluginhost")},
+		deniedStandard: standardInfrastructure,
+		project:        only(exact(serverModule + "/plugin")),
+	},
+	{
 		name:    "model build tools",
 		sources: []pathPattern{subtree(serverModule + "/model/internal/idgen")},
 	},
@@ -216,6 +243,15 @@ var dependencyRules = []dependencyRule{
 			exact("github.com/santhosh-tekuri/jsonschema/v6"),
 			exact("gopkg.in/yaml.v3"),
 		),
+	},
+	{
+		// Desktop's fact schemas are JSON Schema; the release adapter
+		// compiles them with the library the realtime compiler uses.
+		name:           "native fact schemas",
+		sources:        []pathPattern{exact(serverModule + "/internal/factschema")},
+		deniedStandard: standardInfrastructure,
+		project:        only(exact(serverModule + "/model")),
+		thirdParty:     only(exact("github.com/santhosh-tekuri/jsonschema/v6")),
 	},
 	{
 		name:           "error catalog compiler",
@@ -297,6 +333,7 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app/exam"),
 			exact(serverModule+"/app/exam/attempt"),
 			exact(serverModule+"/app/exam/sitting"),
+			exact(serverModule+"/app/events"),
 		),
 	},
 	{
@@ -313,6 +350,15 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app/access"),
 			exact(serverModule+"/app/apperror"),
 			exact(serverModule+"/app/invocation"),
+		),
+	},
+	{
+		name:           "domain event dispatch",
+		sources:        []pathPattern{subtree(serverModule + "/app/events")},
+		deniedStandard: standardInfrastructure,
+		project: only(
+			exact(serverModule+"/model"),
+			exact(serverModule+"/plugin"),
 		),
 	},
 	{
@@ -452,6 +498,7 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app/exam"),
 			exact(serverModule+"/app/user"),
 			exact(serverModule+"/model"),
+			exact(serverModule+"/plugin"),
 			exact(repositoryModule+"/packages/vfs"),
 		),
 		thirdParty: only(
@@ -465,7 +512,11 @@ var dependencyRules = []dependencyRule{
 		name:           "Desktop release verification",
 		sources:        []pathPattern{exact(serverModule + "/desktoprelease")},
 		deniedStandard: standardInfrastructure,
-		project:        only(exact(serverModule+"/model"), exact(serverModule+"/internal/canonicaljson")),
+		project: only(
+			exact(serverModule+"/model"),
+			exact(serverModule+"/internal/canonicaljson"),
+			exact(serverModule+"/internal/factschema"),
+		),
 	},
 	{
 		name:           "secret sealing",
@@ -644,6 +695,7 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/store"),
 			exact(serverModule+"/app/job"),
 			exact(serverModule+"/app/jobs"),
+			exact(serverModule+"/app/events"),
 			exact(serverModule+"/app/realtime"),
 			exact(serverModule+"/app/mail"),
 			exact(serverModule+"/app/search"),
@@ -766,7 +818,7 @@ var dependencyRules = []dependencyRule{
 		project: only(
 			exact(serverModule+"/config"),
 			exact(serverModule+"/model"),
-			exact(serverModule+"/platform/externalauth"),
+			exact(serverModule+"/plugin"),
 		),
 		thirdParty: allImports(),
 	},
@@ -863,7 +915,7 @@ var dependencyRules = []dependencyRule{
 	{
 		name:       "configuration",
 		sources:    []pathPattern{exact(serverModule + "/config")},
-		project:    only(exact(serverModule + "/model")),
+		project:    only(exact(serverModule+"/model"), exact(serverModule+"/plugin")),
 		thirdParty: allImports(),
 	},
 	{
@@ -908,6 +960,7 @@ func TestDependencyRulePrecedence(t *testing.T) {
 		wantRule    string
 	}{
 		{packagePath: serverModule + "/app/jobs", wantRule: "concrete jobs"},
+		{packagePath: serverModule + "/app/events", wantRule: "domain event dispatch"},
 		{packagePath: serverModule + "/app/idempotency", wantRule: "idempotency application"},
 		{packagePath: serverModule + "/app/invocation", wantRule: "invocation application"},
 		{packagePath: serverModule + "/app/apperror", wantRule: "application error vocabulary"},
@@ -928,7 +981,8 @@ func TestDependencyRulePrecedence(t *testing.T) {
 		{packagePath: serverModule + "/app/internal/batchitem", wantRule: "batch item context"},
 		{packagePath: serverModule + "/app", wantRule: "application"},
 		{packagePath: serverModule + "/store/sqlstore", wantRule: "SQL store adapter"},
-		{packagePath: serverModule + "/platform/externalauth/oidc", wantRule: "external-auth adapters"},
+		{packagePath: serverModule + "/platform/externalauth", wantRule: "external-auth adapters"},
+		{packagePath: serverModule + "/plugin/oidc", wantRule: "plugins"},
 		{packagePath: serverModule + "/internal/openapidoc", wantRule: "OpenAPI compiler"},
 		{packagePath: serverModule + "/internal/asyncapidoc", wantRule: "AsyncAPI compiler"},
 		{packagePath: serverModule + "/internal/errorcatalog", wantRule: "error catalog compiler"},
@@ -1006,6 +1060,7 @@ func packageOrBelow(packagePath, root string) bool {
 func exemptProductionHelper(packagePath string) bool {
 	return packageOrBelow(packagePath, serverModule+"/testlib") ||
 		packageOrBelow(packagePath, serverModule+"/store/storetest") ||
+		packageOrBelow(packagePath, serverModule+"/internal/nativetest") ||
 		packageOrBelow(packagePath, serverModule+"/app/realtime/realtimetest") ||
 		packageOrBelow(packagePath, serverModule+"/httpapi/route/routetest") ||
 		packageOrBelow(packagePath, serverModule+"/config/configtest")

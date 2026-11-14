@@ -21,10 +21,10 @@ import (
 
 // RenewParticipationCommand renews the Participation Lease of one Attempt
 // Participation Generation on a named Attempt Connection. Sequence orders
-// renewals within the generation, and the continuity credential and security
-// coverage renewal authenticate it.
+// renewals within the generation; the continuity credential authenticates
+// it, and Security carries Desktop's security control.
 type RenewParticipationCommand struct {
-	SecurityCoverage     model.SecurityCoverageRenewal
+	Security             model.SecurityControl
 	AttemptID            model.ExamAttemptID
 	ParticipationID      model.AttemptParticipationID
 	ConnectionID         model.AttemptConnectionID
@@ -37,7 +37,7 @@ type RenewParticipationCommand struct {
 // application renewal. It contains authoritative database time but no raw or
 // hashed credential material.
 type ParticipationRenewal struct {
-	SecurityCoverage model.SecurityCoverageResult
+	Security         model.SecurityControlResult
 	AttemptID        model.ExamAttemptID
 	ExamID           model.ExamID
 	SittingID        model.ExamSittingID
@@ -76,7 +76,7 @@ func (s *Service) RenewExamAttemptParticipation(
 		!command.ConnectionID.IsValid() ||
 		command.Generation < 1 ||
 		command.Sequence < 1 ||
-		command.SecurityCoverage.Validate() != nil ||
+		command.Security.Validate() != nil ||
 		!model.IsValidCredentialToken(command.ContinuityCredential) {
 		return ParticipationRenewal{}, apperror.Invalid("exam.attempt.invalid", "renewal")
 	}
@@ -93,7 +93,7 @@ func (s *Service) RenewExamAttemptParticipation(
 	}
 
 	stored, err := s.attempts.RenewParticipation(ctx, &store.ExamAttemptParticipationRenewal{
-		SecurityCoverage:                   command.SecurityCoverage,
+		Security:                           command.Security,
 		DesktopBuild:                       build.Build,
 		AttemptID:                          command.AttemptID,
 		ParticipationID:                    command.ParticipationID,
@@ -121,7 +121,7 @@ func (s *Service) RenewExamAttemptParticipation(
 	}
 
 	result := ParticipationRenewal{
-		SecurityCoverage: stored.SecurityCoverage,
+		Security:         stored.Security,
 		AttemptID:        stored.AttemptID,
 		ExamID:           stored.ExamID,
 		SittingID:        stored.SittingID,

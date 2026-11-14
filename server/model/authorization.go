@@ -89,19 +89,22 @@ const (
 	ActionAccessPolicyView                 Action = "access_policy.view"
 	ActionAccessPolicyManage               Action = "access_policy.manage"
 	ActionDesktopCompatibilityPolicyManage Action = "desktop_compatibility_policy.manage"
-	ActionRetentionPolicyView              Action = "retention_policy.view"
-	ActionRetentionPolicyManage            Action = "retention_policy.manage"
-	ActionRetentionCleanupManage           Action = "retention_cleanup.manage"
-	ActionUserMFAReset                     Action = "user.mfa.reset"
-	ActionInvitationView                   Action = "invitation.view"
-	ActionInvitationCreate                 Action = "invitation.create"
-	ActionInvitationManage                 Action = "invitation.manage"
-	ActionOnboardingBatchView              Action = "onboarding_batch.view"
-	ActionOnboardingBatchManage            Action = "onboarding_batch.manage"
-	ActionExternalIdentityManage           Action = "external_identity.manage"
-	ActionRoleView                         Action = "role.view"
-	ActionRoleBindingView                  Action = "role_binding.view"
-	ActionRoleBindingManage                Action = "role_binding.manage"
+	// ActionPluginManage views and changes the plugins compiled into the
+	// server: whether each one runs, and its settings.
+	ActionPluginManage           Action = "plugin.manage"
+	ActionRetentionPolicyView    Action = "retention_policy.view"
+	ActionRetentionPolicyManage  Action = "retention_policy.manage"
+	ActionRetentionCleanupManage Action = "retention_cleanup.manage"
+	ActionUserMFAReset           Action = "user.mfa.reset"
+	ActionInvitationView         Action = "invitation.view"
+	ActionInvitationCreate       Action = "invitation.create"
+	ActionInvitationManage       Action = "invitation.manage"
+	ActionOnboardingBatchView    Action = "onboarding_batch.view"
+	ActionOnboardingBatchManage  Action = "onboarding_batch.manage"
+	ActionExternalIdentityManage Action = "external_identity.manage"
+	ActionRoleView               Action = "role.view"
+	ActionRoleBindingView        Action = "role_binding.view"
+	ActionRoleBindingManage      Action = "role_binding.manage"
 )
 
 // ResourceType identifies an authorization target.
@@ -653,6 +656,13 @@ var actionDefinitions = map[Action]ActionDefinition{
 	},
 	ActionDesktopCompatibilityPolicyManage: {
 		Action:                       ActionDesktopCompatibilityPolicyManage,
+		ResourceType:                 ResourceInstitution,
+		InheritInstitutionScope:      true,
+		PersonalAccessTokenForbidden: true,
+		SystemAdministratorOnly:      true,
+	},
+	ActionPluginManage: {
+		Action:                       ActionPluginManage,
 		ResourceType:                 ResourceInstitution,
 		InheritInstitutionScope:      true,
 		PersonalAccessTokenForbidden: true,

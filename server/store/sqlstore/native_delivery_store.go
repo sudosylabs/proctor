@@ -475,7 +475,7 @@ func nativeDeliveryStatus(
 	owner nativeDeliveryOwner,
 	streamID string,
 ) (*model.NativeSecurityStreamStatus, error) {
-	if err := advanceNativeInterpretation(ctx, tx, owner); err != nil {
+	if _, err := advanceNativeInterpretation(ctx, tx, owner); err != nil {
 		return nil, err
 	}
 	return projectNativeDeliveryStatus(ctx, tx, owner, streamID)
@@ -1262,13 +1262,14 @@ func (s *SQLNativeDeliveryStore) ResolveNativeDeliveryTarget(
 		}
 
 		var row struct {
+			ExamID    string `db:"exam_id"`
 			SittingID string `db:"sitting_id"`
 			ClassID   string `db:"class_id"`
 		}
 		if getErr := tx.Get(
 			ctx,
 			&row,
-			`SELECT s.id AS sitting_id, s.class_id
+			`SELECT s.exam_id, s.id AS sitting_id, s.class_id
 			FROM exam_attempts a
 			JOIN exam_sittings s ON s.id = a.exam_sitting_id
 			WHERE a.id = ?`,
@@ -1287,7 +1288,13 @@ func (s *SQLNativeDeliveryStore) ResolveNativeDeliveryTarget(
 			return nil, err
 		}
 
+		examID, err := model.ParseExamID(row.ExamID)
+		if err != nil {
+			return nil, err
+		}
+
 		return &store.NativeDeliveryTarget{
+			ExamID:       examID,
 			SittingID:    sittingID,
 			ClassID:      classID,
 			Security:     binding.Security,

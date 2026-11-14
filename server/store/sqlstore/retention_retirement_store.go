@@ -496,16 +496,29 @@ func retireSubmissionIntegrity(ctx context.Context, tx *sqlxTxWrapper, id model.
 	// to the database's immutable-record guards.
 	// Export creation retains only an Export ID; its independently expiring
 	// archive and exact retry survive source retirement without copying content.
+	// Screen clips are integrity evidence. Their chunk keys are reserved for
+	// File Content's purge before their rows go.
+	if _, err := tx.Exec(ctx, `INSERT INTO retention_purge_screen_clips(retirement_id, screen_clip_id, chunk_count)
+		SELECT r.id, c.id, cardinality(c.chunk_sha256)
+		FROM exam_attempt_screen_clips c
+		JOIN exam_submissions sub ON sub.exam_attempt_id = c.exam_attempt_id
+		JOIN retention_retirements r ON r.submission_id = sub.id AND r.category = 'integrity' AND r.state <> 'canceled'
+		WHERE sub.id = ?
+			AND c.chunk_sha256 IS NOT NULL
+		ON CONFLICT DO NOTHING`, id.String()); err != nil {
+		return err
+	}
 	queries := []string{
-		`DELETE FROM native_condition_evidence WHERE exam_attempt_id = (SELECT exam_attempt_id FROM exam_submissions WHERE id = ?)`,
-		`DELETE FROM exam_native_occurrences
-		WHERE participation_id IN (
-			SELECT participation_id
-			FROM exam_attempt_security_owners
+		`DELETE FROM exam_attempt_screen_clip_chunks WHERE screen_clip_id IN (
+			SELECT id FROM exam_attempt_screen_clips
 			WHERE exam_attempt_id = (SELECT exam_attempt_id FROM exam_submissions WHERE id = ?)
 		)`,
+		`DELETE FROM exam_attempt_screen_clips WHERE exam_attempt_id = (SELECT exam_attempt_id FROM exam_submissions WHERE id = ?)`,
+		`DELETE FROM native_condition_evidence WHERE exam_attempt_id = (SELECT exam_attempt_id FROM exam_submissions WHERE id = ?)`,
+		`UPDATE exam_attempt_security_owners SET native_interpretation_canonical = NULL
+		WHERE exam_attempt_id = (SELECT exam_attempt_id FROM exam_submissions WHERE id = ?)`,
 		`DELETE FROM exam_native_delivery_records
-		WHERE kind = 'occurrence'
+		WHERE kind IN ('capability_fact', 'rule_status')
 			AND participation_id IN (
 				SELECT participation_id
 				FROM exam_attempt_security_owners
@@ -670,9 +683,54 @@ func (s *SQLRetentionStore) BeginPurgeBatch(ctx context.Context, limit int) ([]s
 				RetirementID: model.RetentionRetirementID(row.RetirementID),
 				ObjectID:     model.AttemptWorkspaceObjectID(row.ObjectID),
 			}
-			if !result[i].RetirementID.IsValid() || !result[i].ObjectID.IsValid() {
+			if !result[i].Valid() {
 				return nil, invalidPersistedState("retention_purge", "identity", errors.New("invalid identity"))
 			}
+		}
+		if len(result) == limit {
+			return result, nil
+		}
+
+		// The rest of the batch goes to retired screen clips.
+		var clips []struct {
+			RetirementID string `db:"retirement_id"`
+			ClipID       string `db:"screen_clip_id"`
+			Chunks       int    `db:"chunk_count"`
+		}
+		if err = tx.Select(ctx, &clips, `WITH candidates AS MATERIALIZED (
+				SELECT p.retirement_id, p.screen_clip_id, p.chunk_count, p.verify_after
+				FROM retention_purge_screen_clips p
+				JOIN retention_retirements r ON r.id = p.retirement_id
+				WHERE p.absence_verified_at IS NULL
+					AND p.verify_after <= clock_timestamp()
+					AND r.state = 'retired'
+				ORDER BY p.verify_after, p.retirement_id, p.screen_clip_id
+				LIMIT ?
+				FOR UPDATE OF p SKIP LOCKED
+			), deferred AS (
+				UPDATE retention_purge_screen_clips p
+				SET verify_after = clock_timestamp()+interval '1 hour'
+				FROM candidates c
+				WHERE p.retirement_id = c.retirement_id
+					AND p.screen_clip_id = c.screen_clip_id
+				RETURNING p.retirement_id, p.screen_clip_id
+			)
+			SELECT d.retirement_id, d.screen_clip_id, c.chunk_count
+			FROM deferred d
+			JOIN candidates c USING(retirement_id, screen_clip_id)
+			ORDER BY c.verify_after, d.retirement_id, d.screen_clip_id`, limit-len(result)); err != nil {
+			return nil, err
+		}
+		for _, clip := range clips {
+			object := store.RetentionPurgeObject{
+				RetirementID: model.RetentionRetirementID(clip.RetirementID),
+				ScreenClipID: model.ScreenClipID(clip.ClipID),
+				ChunkCount:   clip.Chunks,
+			}
+			if !object.Valid() {
+				return nil, invalidPersistedState("retention_purge", "identity", errors.New("invalid identity"))
+			}
+			result = append(result, object)
 		}
 
 		return result, nil
@@ -680,6 +738,9 @@ func (s *SQLRetentionStore) BeginPurgeBatch(ctx context.Context, limit int) ([]s
 }
 
 func (s *SQLRetentionStore) CompletePurge(ctx context.Context, input *store.RetentionPurgeCompletion) error {
+	if input != nil && input.ScreenClipID != "" {
+		return s.completeScreenClipPurge(ctx, input)
+	}
 	if input == nil || !input.RetirementID.IsValid() || !input.ObjectID.IsValid() {
 		return store.NewErrInvalidInput("retention_purge", "completion", nil)
 	}
@@ -757,6 +818,28 @@ func (s *SQLRetentionStore) CompletePurge(ctx context.Context, input *store.Rete
 		return true, err
 	})
 	return err
+}
+
+// completeScreenClipPurge records that every chunk key of a retired clip was
+// observed absent.
+func (s *SQLRetentionStore) completeScreenClipPurge(ctx context.Context, input *store.RetentionPurgeCompletion) error {
+	if !input.RetirementID.IsValid() || !input.ScreenClipID.IsValid() || input.ObjectID != "" {
+		return store.NewErrInvalidInput("retention_purge", "completion", nil)
+	}
+	result, err := s.GetMaster().Exec(ctx, `UPDATE retention_purge_screen_clips p
+		SET absence_verified_at = COALESCE(p.absence_verified_at, clock_timestamp()), verify_after = clock_timestamp()
+		FROM retention_retirements r
+		WHERE r.id = p.retirement_id
+			AND r.state = 'retired'
+			AND p.retirement_id = ?
+			AND p.screen_clip_id = ?`, input.RetirementID.String(), input.ScreenClipID.String())
+	if err != nil {
+		return err
+	}
+	if affected, rowsErr := result.RowsAffected(); rowsErr != nil || affected != 1 {
+		return store.NewErrNotFound("retention_purge", input.ScreenClipID.String())
+	}
+	return nil
 }
 
 var _ store.RetentionStore = (*SQLRetentionStore)(nil)

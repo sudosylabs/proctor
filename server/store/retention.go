@@ -82,14 +82,31 @@ type RetentionReconciliationResult struct {
 // references were released. Keys remain internal to the content boundary. A
 // successful delete acknowledgement does not complete this record: completion
 // requires a subsequent independent observation that the current key is absent.
+//
+// It names either an Attempt Workspace object or a screen clip, whose
+// ChunkCount keys are purged together.
 type RetentionPurgeObject struct {
 	RetirementID model.RetentionRetirementID
 	ObjectID     model.AttemptWorkspaceObjectID
+	ScreenClipID model.ScreenClipID
+	ChunkCount   int
+}
+
+// Valid reports whether the record names exactly one kind of content.
+func (o RetentionPurgeObject) Valid() bool {
+	if !o.RetirementID.IsValid() {
+		return false
+	}
+	if o.ScreenClipID == "" {
+		return o.ObjectID.IsValid() && o.ChunkCount == 0
+	}
+	return o.ObjectID == "" && o.ScreenClipID.IsValid() && o.ChunkCount > 0 && o.ChunkCount <= model.ScreenClipMaxChunks
 }
 
 type RetentionPurgeCompletion struct {
 	RetirementID model.RetentionRetirementID
 	ObjectID     model.AttemptWorkspaceObjectID
+	ScreenClipID model.ScreenClipID
 }
 
 type RetentionNoticeMail struct {

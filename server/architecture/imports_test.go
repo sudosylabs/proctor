@@ -129,7 +129,12 @@ func TestDependencyPolicyRejectsForbiddenImports(t *testing.T) {
 		{name: "tracing cannot import the store timing layer", from: serverModule + "/tracing", imported: serverModule + "/store/timerlayer"},
 		{name: "cluster adapter cannot import platform", from: serverModule + "/cluster/memberlist", imported: serverModule + "/platform"},
 		{name: "cluster adapter cannot import persistence", from: serverModule + "/cluster/memberlist", imported: serverModule + "/store"},
-		{name: "external adapter cannot import HTTP", from: serverModule + "/platform/externalauth/oidc", imported: serverModule + "/httpapi"},
+		{name: "external adapter cannot import HTTP", from: serverModule + "/platform/externalauth", imported: serverModule + "/httpapi"},
+		{name: "plugin cannot import HTTP", from: serverModule + "/plugin/oidc", imported: serverModule + "/httpapi"},
+		{name: "plugin cannot import the application", from: serverModule + "/plugin/zipexport", imported: serverModule + "/app"},
+		{name: "plugin cannot import a Store", from: serverModule + "/plugin/cas", imported: serverModule + "/store"},
+		{name: "application cannot import a plugin", from: serverModule + "/app", imported: serverModule + "/plugin/cas"},
+		{name: "file content cannot import a plugin", from: serverModule + "/filecontent", imported: serverModule + "/plugin/zipexport"},
 
 		// Executables and commands.
 		{name: "operator executable cannot bypass its command tree", from: serverModule + "/cmd/proctor", imported: serverModule},

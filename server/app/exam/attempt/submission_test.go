@@ -65,6 +65,8 @@ func TestSubmitSealsExactAcknowledgedStateBeforePublishingEffects(t *testing.T) 
 	require.NotNil(t, f.submissions.seal, "access=%#v seal=%#v result=%#v effects=%#v", sealAccess, f.submissions.seal, result, f.publisher.Calls())
 	require.True(t, f.submissions.seal.SubmissionID.IsValid(), "access=%#v seal=%#v result=%#v effects=%#v", sealAccess, f.submissions.seal, result, f.publisher.Calls())
 	require.True(t, f.submissions.seal.AuditEventID.IsValid(), "access=%#v seal=%#v result=%#v effects=%#v", sealAccess, f.submissions.seal, result, f.publisher.Calls())
+	require.True(t, f.submissions.seal.DomainEventID.IsValid(), "the proposed domain event reaches the seal")
+	require.True(t, f.submissions.seal.DomainEventJobID.IsValid(), "the proposed dispatch Job reaches the seal")
 	require.Equal(t, submissionID, result.SubmissionID, "access=%#v seal=%#v result=%#v effects=%#v", sealAccess, f.submissions.seal, result, f.publisher.Calls())
 	require.Equal(t, receiptCode, f.submissions.seal.ReceiptCode, "the proposed receipt code reaches the seal")
 	require.Equal(t, receiptCode, result.ReceiptCode, "the sealed receipt code reaches the candidate")
@@ -358,6 +360,11 @@ func (f *submissionStoreFake) Seal(_ context.Context, input *store.ExamSubmissio
 
 func (f *submissionStoreFake) Resolve(context.Context, model.SubmissionID) (*store.ExamSubmissionAuthorization, error) {
 	f.f.order = append(f.f.order, "submission.resolve_owner")
+	return f.authorization, f.err
+}
+
+func (f *submissionStoreFake) ResolveAttempt(context.Context, model.ExamAttemptID) (*store.ExamSubmissionAuthorization, error) {
+	f.f.order = append(f.f.order, "submission.resolve_attempt")
 	return f.authorization, f.err
 }
 

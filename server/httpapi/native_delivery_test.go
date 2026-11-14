@@ -124,7 +124,7 @@ func TestNativeDeliveryAppendClosedBodyAndBounds(t *testing.T) {
 	logger, _ := routetest.NewLogger(t)
 	api := newFocusedResourceAPI(t, logger, f, nativeDeliveryResource(f))
 	path := "/api/v1/exam-attempts/" + f.attempt.ID.String() + "/security-batches"
-	batch := model.NativeSecurityBatch{StreamID: model.NewID(), BatchSequence: 1, ParticipationID: model.NewAttemptParticipationID(), Generation: 1, SecuritySessionID: model.NewID(), PolicyDigest: model.SHA256Fingerprint([]byte("synthetic-policy")), ApplicationReleaseID: "synthetic-release", MatrixID: "synthetic-matrix", Records: []model.NativeRecord{{Gap: &model.NativeSourceGap{Kind: "source_gap", SourceID: model.NativeSourceCapture, SourceInstanceID: model.NewID(), Reason: "source_loss", OccurredAt: time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC)}}}}
+	batch := model.NativeSecurityBatch{StreamID: model.NewID(), BatchSequence: 1, ParticipationID: model.NewAttemptParticipationID(), Generation: 1, SecuritySessionID: model.NewID(), PolicyDigest: model.SHA256Fingerprint([]byte("synthetic-policy")), ApplicationReleaseID: "synthetic-release", MatrixID: "synthetic-matrix", Records: []model.NativeRecord{{Gap: &model.NativeSourceGap{Kind: "source_gap", Capability: "display", SourceInstanceID: model.NewID(), Reason: "source_loss", OccurredAt: time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC)}}}}
 	raw, err := json.Marshal(batch)
 	require.NoError(t, err)
 	for _, body := range [][]byte{raw, bytes.Replace(raw, []byte(`"kind":"source_gap"`), []byte(`"raw_inventory":"forbidden","kind":"source_gap"`), 1), append(bytes.Repeat([]byte(" "), 256*1024), raw...)} {

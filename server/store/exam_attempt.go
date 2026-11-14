@@ -199,7 +199,7 @@ func (v *ExamAttemptParticipationView) LifecycleInOrder() bool {
 // crosses the Store seam. Generation and Sequence are client fences, while
 // PostgreSQL supplies the only authoritative decision time.
 type ExamAttemptParticipationRenewal struct {
-	SecurityCoverage                   model.SecurityCoverageRenewal
+	Security                           model.SecurityControl
 	DesktopBuild                       model.DesktopBuildTuple
 	AttemptID                          model.ExamAttemptID
 	ParticipationID                    model.AttemptParticipationID
@@ -219,7 +219,7 @@ type ExamAttemptParticipationRenewal struct {
 // current accepted sequence; that case returns the existing authoritative
 // times without extending the lease.
 type ExamAttemptParticipationRenewalResult struct {
-	SecurityCoverage model.SecurityCoverageResult
+	Security         model.SecurityControlResult
 	AttemptID        model.ExamAttemptID
 	ExamID           model.ExamID
 	SittingID        model.ExamSittingID
@@ -247,7 +247,7 @@ func (r *ExamAttemptParticipationRenewalResult) ConsistentWith(
 	sequence int64,
 ) bool {
 	return !(r == nil ||
-		r.SecurityCoverage.Validate() != nil ||
+		r.Security.Validate() != nil ||
 		r.AttemptID != attemptID ||
 		r.ParticipationID != participationID ||
 		!r.ExamID.IsValid() ||
@@ -416,8 +416,7 @@ func (v *ExamAttemptSuspensionView) validProvenance() bool {
 // may re-allow. Active and closed validation share it so the post-commit
 // check cannot reject an outcome the Store deliberately committed.
 func reallowableSuspensionReason(reason model.AttemptSuspensionCandidateReason) bool {
-	return reason == model.AttemptSuspensionCandidateReasonSecureContinuityLost ||
-		reason == model.AttemptSuspensionCandidateReasonFocusLossPolicy
+	return reason.IsPolicy()
 }
 
 // ExamAttemptParticipationExpiryResult is the retained, safe committed
@@ -1285,15 +1284,15 @@ type ExamAttemptInvalidationTarget struct {
 	CandidateUserID model.UserID
 }
 
-// ExamAttemptSecurityCoverageUpdate reports security coverage for the active
+// ExamAttemptSecurityUpdate reports security coverage for the active
 // Participation generation over the Candidate's open Connection.
-type ExamAttemptSecurityCoverageUpdate struct {
+type ExamAttemptSecurityUpdate struct {
 	Access                             CandidateAttemptAccess
 	ParticipationID                    model.AttemptParticipationID
 	Generation                         int64
 	DesktopBuild                       model.DesktopBuildTuple
 	DesktopCompatibilityPolicyRevision int64
-	Coverage                           model.SecurityCoverageRenewal
+	Control                            model.SecurityControl
 }
 
 // ExamAttemptStore persists the Attempt aggregate: a Candidate's admission
@@ -1314,9 +1313,9 @@ type ExamAttemptStore interface {
 	// generation for the next renewal sequence. Repeating the current sequence
 	// returns the existing lease; an expired generation is a conflict.
 	RenewParticipation(context.Context, *ExamAttemptParticipationRenewal) (*ExamAttemptParticipationRenewalResult, error)
-	// UpdateSecurityCoverage records the security coverage reported over the
-	// Candidate's open Connection without extending the Participation lease.
-	UpdateSecurityCoverage(context.Context, *ExamAttemptSecurityCoverageUpdate) (model.SecurityCoverageResult, error)
+	// UpdateSecurity records the security control sent over the Candidate's
+	// open Connection without extending the Participation lease.
+	UpdateSecurity(context.Context, *ExamAttemptSecurityUpdate) (model.SecurityControlResult, error)
 	// ResolveParticipationExpiry returns the named active Participation
 	// generation when its lease has expired, so the caller can begin the audit
 	// for ExpireParticipation. It changes nothing.
@@ -1342,6 +1341,40 @@ type ExamAttemptStore interface {
 	// Attempt, at the expected revision, to a state the Candidate can reconnect
 	// from. It keeps all evidence and creates no Participation.
 	ReallowAttempt(context.Context, *ExamAttemptReallow, *CommandIdempotency) (*ExamAttemptReallowResult, error)
+
+	// RequestScreenClip saves an Exam Manager's request for a range of the
+	// candidate's recorded screen. It refuses a request when the Exam does not
+	// record the screen, when the Attempt has ended, and beyond the per-Attempt
+	// limit. A request made while the Attempt is suspended waits until the
+	// candidate resumes.
+	RequestScreenClip(context.Context, *ExamAttemptScreenClipRequest, *CommandIdempotency) (*ExamAttemptScreenClipResult, error)
+	// ListPendingScreenClips returns, oldest first, the requests the Desktop of
+	// the live Connection has not taken yet. Private reasons are cleared.
+	ListPendingScreenClips(context.Context, CandidateAttemptAccess) ([]ExamAttemptScreenClipView, error)
+	// DeliverScreenClip records that the Desktop of the live Connection took a
+	// request. Taking it again through the same Participation returns it
+	// unchanged.
+	DeliverScreenClip(context.Context, *ExamAttemptScreenClipDelivery) (*ExamAttemptScreenClipView, error)
+	// BeginScreenClipUpload records the clip Desktop is about to upload. It
+	// refuses a clip beyond the Attempt's byte limit. Declaring the same clip
+	// again returns it unchanged.
+	BeginScreenClipUpload(context.Context, *ExamAttemptScreenClipUploadBegin) (*ExamAttemptScreenClipView, error)
+	// GetScreenClipUpload returns a clip and the chunks of it that arrived.
+	GetScreenClipUpload(context.Context, CandidateAttemptAccess, model.ScreenClipID) (*ExamAttemptScreenClipUploadStatus, error)
+	// RecordScreenClipChunk records a stored chunk that matches its declared
+	// hash. Recording it again changes nothing.
+	RecordScreenClipChunk(context.Context, *ExamAttemptScreenClipChunk) error
+	// CompleteScreenClipUpload makes a clip whose every chunk arrived ready to
+	// play, once the installation's signature over its content digest
+	// verifies with the key of the Desktop registration uploading it.
+	// Completing it again returns it unchanged.
+	CompleteScreenClipUpload(context.Context, *ExamAttemptScreenClipCompletion) (*ExamAttemptScreenClipView, error)
+	// ListAttemptScreenClips returns, newest first, every clip requested for
+	// an Attempt of the exact Exam and Sitting. Private reasons are cleared.
+	ListAttemptScreenClips(context.Context, ExamAttemptClips) ([]ExamAttemptScreenClipView, error)
+	// GetAttemptScreenClip returns one clip of an Attempt of the exact Exam
+	// and Sitting.
+	GetAttemptScreenClip(context.Context, ExamAttemptClips, model.ScreenClipID) (*ExamAttemptScreenClipView, error)
 
 	// ResolveCorrectionAcknowledgementTarget validates an acknowledgement and
 	// returns the scope its audit is recorded under. It changes nothing.

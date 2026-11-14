@@ -14,6 +14,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/platform/externalauth"
+	"github.com/sudosylabs/proctor/server/plugin"
 )
 
 // externalProviderRegistryAdapter exposes the platform registry through the
@@ -36,23 +37,26 @@ func (a externalProviderRegistryAdapter) Provider(
 	return externalIdentityProviderAdapter{provider: provider}, true
 }
 
+// externalIdentityProviderAdapter runs a configured provider's plugin
+// protocol for app/identity: it carries identity's requests to the plugin
+// contract and the plugin's failures to identity's sentinels.
 type externalIdentityProviderAdapter struct {
-	provider externalauth.Provider
+	provider *externalauth.Provider
 }
 
 func (a externalIdentityProviderAdapter) Descriptor() model.ExternalAuthenticationProvider {
-	return a.provider.Descriptor()
+	return a.provider.Descriptor
 }
 
 func (a externalIdentityProviderAdapter) AutoProvision() bool {
-	return a.provider.AutoProvision()
+	return a.provider.AutoProvision
 }
 
 func (a externalIdentityProviderAdapter) Begin(
 	ctx context.Context,
 	request identity.ExternalProviderBeginRequest,
 ) (*identity.ExternalProviderBeginResponse, error) {
-	response, err := a.provider.Begin(ctx, externalauth.BeginRequest{
+	response, err := a.provider.Protocol.Begin(ctx, plugin.BeginRequest{
 		CallbackURL:         request.CallbackURL,
 		State:               request.State,
 		Proof:               request.Proof,
@@ -61,16 +65,13 @@ func (a externalIdentityProviderAdapter) Begin(
 	if err != nil {
 		return nil, mapExternalProviderError(err)
 	}
-	if response == nil {
-		return nil, nil
-	}
 	return &identity.ExternalProviderBeginResponse{RedirectURL: response.RedirectURL}, nil
 }
 
 func (a externalIdentityProviderAdapter) State(
 	callback model.ExternalAuthenticationCallback,
 ) (string, error) {
-	state, err := a.provider.State(callback)
+	state, err := a.provider.Protocol.State(plugin.Callback{Values: callback.Values})
 	if err != nil {
 		return "", mapExternalProviderError(err)
 	}
@@ -81,26 +82,28 @@ func (a externalIdentityProviderAdapter) Complete(
 	ctx context.Context,
 	request identity.ExternalProviderCompleteRequest,
 ) (*model.ExternalAuthenticationAssertion, error) {
-	assertion, err := a.provider.Complete(ctx, externalauth.CompleteRequest{
+	assertion, err := a.provider.Protocol.Complete(ctx, plugin.CompleteRequest{
 		CallbackURL:             request.CallbackURL,
 		State:                   request.State,
 		Proof:                   request.Proof,
-		Callback:                request.Callback,
+		Callback:                plugin.Callback{Values: request.Callback.Values},
 		AuthenticationStartedAt: request.AuthenticationStartedAt,
 	})
 	if err != nil {
 		return nil, mapExternalProviderError(err)
 	}
-	return assertion, nil
+	return a.provider.Assertion(assertion), nil
 }
 
+// mapExternalProviderError classifies a plugin failure with identity's
+// sentinel; an unclassified failure passes through unchanged.
 func mapExternalProviderError(err error) error {
 	switch {
-	case errors.Is(err, externalauth.ErrAuthenticationRejected):
+	case errors.Is(err, plugin.ErrAuthenticationRejected):
 		return identity.ErrExternalAuthenticationRejected
-	case errors.Is(err, externalauth.ErrInvalidResponse):
+	case errors.Is(err, plugin.ErrInvalidResponse):
 		return identity.ErrExternalAuthenticationInvalid
-	case errors.Is(err, externalauth.ErrProviderUnavailable):
+	case errors.Is(err, plugin.ErrProviderUnavailable):
 		return identity.ErrExternalAuthenticationUnavailable
 	default:
 		return err

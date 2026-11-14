@@ -86,40 +86,48 @@ components:
                 - allowed_application_ids: []
                   id: process_application
                   mode: disabled
+                  outcome: flag
                 - id: interactive_session
                   mode: disabled
+                  outcome: flag
                 - id: clipboard
                   mode: disabled
+                  outcome: flag
                   observe_os_clipboard_changes: false
                   strategy: disabled
                 - candidate_print_commands: not_applied
                   id: printing
                   mode: disabled
+                  outcome: flag
                   monitored_spooler: not_required
-                - allowed_storage_function_class_ids: []
-                  enabled_sub_capabilities: []
+                - enabled_sub_capabilities: []
                   id: removable_storage
                   mode: disabled
+                  outcome: flag
                 - id: virtualization
                   mode: disabled
+                  outcome: flag
                   rule: not_applied
-                - allowed_adapter_class_ids: []
-                  allowed_managed_profile_ids: []
-                  allowed_tunnel_class_ids: []
-                  enabled_sub_capabilities: []
+                - enabled_sub_capabilities: []
                   id: network_configuration
                   mode: disabled
+                  outcome: flag
                 - concurrent_use_check: not_required
                   id: camera
                   mode: disabled
+                  outcome: flag
                   require_ready: false
                 - concurrent_use_check: not_required
                   id: microphone
                   mode: disabled
+                  outcome: flag
                   require_ready: false
                 - id: external_capture
                   mode: disabled
-              registry_digest: sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0
+                  outcome: flag
+              registry_digest: sha256:e4c05771fa6f34c08c0f01aa98e33f88973baacf832c67d760457f2b4f9d734d
+              screen_recording:
+                enabled: true
   schemas:
     ConfigureExamDraftNativePolicyRequest:
       type: object
@@ -134,6 +142,19 @@ components:
           minimum: 1
         native:
           $ref: '#/components/schemas/NativeSecurityPolicy'
+    NativeScreenRecordingPolicy:
+      type: object
+      additionalProperties: false
+      description: >-
+        Whether Desktop records the candidate's screen on the device for the whole session, uploading only the ranges
+        the server requests. Off by default; the candidate is told before the Attempt starts. When on, the policy
+        activates the screen_recording capability with the readiness rule screen_recording.free_space: Start is
+        refused unless the recorder is permitted and the device has at least 3072 MiB free.
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
     NativeSecurityPolicy:
       type: object
       additionalProperties: false
@@ -144,10 +165,13 @@ components:
         - registry_digest
         - baseline_id
         - families
+        - screen_recording
       properties:
+        screen_recording:
+          $ref: '#/components/schemas/NativeScreenRecordingPolicy'
         registry_digest:
           type: string
-          const: sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0
+          const: sha256:e4c05771fa6f34c08c0f01aa98e33f88973baacf832c67d760457f2b4f9d734d
         baseline_id:
           type: string
           const: desktop_candidate
@@ -165,6 +189,7 @@ components:
                 required:
                   - id
                   - mode
+                  - outcome
                   - allowed_application_ids
                 properties:
                   id:
@@ -176,13 +201,20 @@ components:
                       - disabled
                       - observe
                       - enforce
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
                   allowed_application_ids:
                     type: array
                     maxItems: 256
                     uniqueItems: true
                     description: >-
-                      Sorted unique opaque catalog IDs; executable paths, names, commands and regular expressions are
-                      not accepted.
+                      The only catalog applications the candidate may run, sorted and unique: IDs from the Desktop release's
+                      application catalog, each one it marks allowable. Empty adds no allowlist. When the family is on, the
+                      catalog's never-allowable applications are always blocked.
                     items:
                       type: string
                       minLength: 1
@@ -202,6 +234,7 @@ components:
                 required:
                   - id
                   - mode
+                  - outcome
                 properties:
                   id:
                     type: string
@@ -212,11 +245,18 @@ components:
                       - disabled
                       - observe
                       - enforce
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
               - type: object
                 additionalProperties: false
                 required:
                   - id
                   - mode
+                  - outcome
                   - observe_os_clipboard_changes
                   - strategy
                 properties:
@@ -229,6 +269,12 @@ components:
                       - disabled
                       - observe
                       - enforce
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
                   observe_os_clipboard_changes:
                     type: boolean
                   strategy:
@@ -270,6 +316,7 @@ components:
                 required:
                   - id
                   - mode
+                  - outcome
                   - candidate_print_commands
                   - monitored_spooler
                 properties:
@@ -282,6 +329,12 @@ components:
                       - disabled
                       - observe
                       - enforce
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
                   candidate_print_commands:
                     type: string
                     enum:
@@ -326,7 +379,7 @@ components:
                 required:
                   - id
                   - mode
-                  - allowed_storage_function_class_ids
+                  - outcome
                   - enabled_sub_capabilities
                 properties:
                   id:
@@ -338,18 +391,12 @@ components:
                       - disabled
                       - observe
                       - enforce
-                  allowed_storage_function_class_ids:
-                    type: array
-                    maxItems: 256
-                    uniqueItems: true
-                    description: >-
-                      Sorted unique opaque catalog IDs; executable paths, names, commands and regular expressions are
-                      not accepted.
-                    items:
-                      type: string
-                      minLength: 1
-                      maxLength: 128
-                      pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
                   enabled_sub_capabilities:
                     type: array
                     maxItems: 2
@@ -366,8 +413,6 @@ components:
                           const: disabled
                     then:
                       properties:
-                        allowed_storage_function_class_ids:
-                          const: []
                         enabled_sub_capabilities:
                           const: []
                   - if:
@@ -391,6 +436,7 @@ components:
                 required:
                   - id
                   - mode
+                  - outcome
                   - rule
                 properties:
                   id:
@@ -402,6 +448,12 @@ components:
                       - disabled
                       - observe
                       - enforce
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
                   rule:
                     type: string
                     enum:
@@ -442,9 +494,7 @@ components:
                 required:
                   - id
                   - mode
-                  - allowed_adapter_class_ids
-                  - allowed_managed_profile_ids
-                  - allowed_tunnel_class_ids
+                  - outcome
                   - enabled_sub_capabilities
                 properties:
                   id:
@@ -456,45 +506,15 @@ components:
                       - disabled
                       - observe
                       - enforce
-                  allowed_adapter_class_ids:
-                    type: array
-                    maxItems: 256
-                    uniqueItems: true
-                    description: >-
-                      Sorted unique opaque catalog IDs; executable paths, names, commands and regular expressions are
-                      not accepted.
-                    items:
-                      type: string
-                      minLength: 1
-                      maxLength: 128
-                      pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
-                  allowed_managed_profile_ids:
-                    type: array
-                    maxItems: 256
-                    uniqueItems: true
-                    description: >-
-                      Sorted unique opaque catalog IDs; executable paths, names, commands and regular expressions are
-                      not accepted.
-                    items:
-                      type: string
-                      minLength: 1
-                      maxLength: 128
-                      pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
-                  allowed_tunnel_class_ids:
-                    type: array
-                    maxItems: 256
-                    uniqueItems: true
-                    description: >-
-                      Sorted unique opaque catalog IDs; executable paths, names, commands and regular expressions are
-                      not accepted.
-                    items:
-                      type: string
-                      minLength: 1
-                      maxLength: 128
-                      pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
                   enabled_sub_capabilities:
                     type: array
-                    maxItems: 5
+                    maxItems: 3
                     uniqueItems: true
                     items:
                       type: string
@@ -502,8 +522,6 @@ components:
                         - system_proxy_state
                         - os_managed_vpn_state
                         - tunnel_interface_state
-                        - route_change
-                        - network_source_health
                 allOf:
                   - if:
                       properties:
@@ -511,12 +529,6 @@ components:
                           const: disabled
                     then:
                       properties:
-                        allowed_adapter_class_ids:
-                          const: []
-                        allowed_managed_profile_ids:
-                          const: []
-                        allowed_tunnel_class_ids:
-                          const: []
                         enabled_sub_capabilities:
                           const: []
                   - if:
@@ -540,6 +552,7 @@ components:
                 required:
                   - id
                   - mode
+                  - outcome
                   - concurrent_use_check
                   - require_ready
                 properties:
@@ -552,6 +565,12 @@ components:
                       - disabled
                       - observe
                       - enforce
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
                   concurrent_use_check:
                     type: string
                     enum:
@@ -589,6 +608,7 @@ components:
                 required:
                   - id
                   - mode
+                  - outcome
                   - concurrent_use_check
                   - require_ready
                 properties:
@@ -601,6 +621,12 @@ components:
                       - disabled
                       - observe
                       - enforce
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
                   concurrent_use_check:
                     type: string
                     enum:
@@ -638,6 +664,7 @@ components:
                 required:
                   - id
                   - mode
+                  - outcome
                 properties:
                   id:
                     type: string
@@ -646,6 +673,12 @@ components:
                     type: string
                     enum:
                       - disabled
+                  outcome:
+                    type: string
+                    description: What an enforce occurrence of this family leads to; flag unless mode is enforce.
+                    enum:
+                      - flag
+                      - flag_and_suspend
           prefixItems:
             - properties:
                 id:

@@ -1,0 +1,22 @@
+{
+  "title": "Screen clips requested",
+  "description": "Tells the candidate's Desktop that its Attempt has screen clip requests it has not taken, so it reads them now instead of at its next poll. Neither the requests nor who made them are included.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "exam_sitting_id",
+    "exam_attempt_id",
+    "changed_at"
+  ],
+  "properties": {
+    "exam_sitting_id": {
+      "$ref": "id.json"
+    },
+    "exam_attempt_id": {
+      "$ref": "id.json"
+    },
+    "changed_at": {
+      "$ref": "instant.json"
+    }
+  }
+}

@@ -5,124 +5,136 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package externalauth is what the application sees of an external sign-in
-// provider. Provider is one configured provider: it starts a sign-in, completes
-// the callback and returns a normalized assertion about the person. Registry
+// Package externalauth holds the configured external sign-in providers.
+// Provider is one of them: its descriptor and auto-provisioning from
+// configuration, and the plugin protocol that signs the person in. Registry
 // holds the enabled providers and is rebuilt from configuration on reload.
+// The protocol's requests and failures are the plugin contract's own; the
+// composition root presents them to app/identity.
 //
 // Finding or creating the User, audit and the Session stay in app/identity.
-// The protocols themselves are the child packages cas and oidc.
+// The protocols themselves are the built-in plugins plugin/cas and
+// plugin/oidc; this package also holds what they share, ProtocolPlugin, the
+// settings helpers and the profile mapping, which only they call.
 package externalauth
 
 import (
-	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/plugin"
 )
 
-var (
-	ErrAuthenticationRejected = errors.New("external authentication rejected")
-	ErrInvalidResponse        = errors.New("external authentication response is invalid")
-	ErrProviderUnavailable    = errors.New("external authentication provider is unavailable")
-)
-
-type BeginRequest struct {
-	CallbackURL         string
-	State               string
-	Proof               string
-	FreshAuthentication bool
-}
-
-type BeginResponse struct {
-	RedirectURL string
-}
-
-type CompleteRequest struct {
-	CallbackURL             string
-	State                   string
-	Proof                   string
-	Callback                model.ExternalAuthenticationCallback
-	AuthenticationStartedAt time.Time
-}
-
-// Provider owns one configured protocol integration. It returns only a
-// normalized assertion; account resolution, provisioning, auditing, and
-// session creation remain in the application layer.
-type Provider interface {
-	Descriptor() model.ExternalAuthenticationProvider
-	AutoProvision() bool
-	Begin(context.Context, BeginRequest) (*BeginResponse, error)
-	State(model.ExternalAuthenticationCallback) (string, error)
-	Complete(
-		context.Context,
-		CompleteRequest,
-	) (*model.ExternalAuthenticationAssertion, error)
-}
-
-// Factory constructs one protocol adapter. Factories are registered on an
-// instance Registry at the platform composition root; there is no process-wide
-// mutable provider map or init-time side effect.
-type Factory interface {
-	Type() string
-	New(config.ExternalAuthenticationProvider) (Provider, error)
-}
-
+// Registry holds the configured providers, built from the sign-in protocols
+// the plugins offer. Configure rebuilds them from configuration, including on
+// reload, and Reload also takes a new set of protocols when plugins change;
+// there is no process-wide provider map or init-time side effect.
 type Registry struct {
-	mutex     sync.RWMutex
-	factories map[string]Factory
-	providers map[string]Provider
+	// rebuild serializes Configure and Reload, so a slower rebuild cannot
+	// overwrite a newer one.
+	rebuild sync.Mutex
+
+	mutex       sync.RWMutex
+	types       map[string]plugin.IdentityProviderType
+	providers   map[string]*Provider
+	unavailable []string
 }
 
-func NewRegistry(factories ...Factory) (*Registry, error) {
-	registry := &Registry{
-		factories: make(map[string]Factory, len(factories)),
-		providers: make(map[string]Provider),
+// NewRegistry returns a Registry that builds providers with types, one per
+// protocol Type.
+func NewRegistry(types ...plugin.IdentityProviderType) (*Registry, error) {
+	byName, err := typesByName(types)
+	if err != nil {
+		return nil, err
 	}
-	for _, factory := range factories {
-		if factory == nil {
-			return nil, errors.New("external authentication factory is nil")
+	return &Registry{types: byName, providers: make(map[string]*Provider)}, nil
+}
+
+func typesByName(types []plugin.IdentityProviderType) (map[string]plugin.IdentityProviderType, error) {
+	byName := make(map[string]plugin.IdentityProviderType, len(types))
+	for _, providerType := range types {
+		if providerType == nil {
+			return nil, errors.New("external authentication provider type is nil")
 		}
-		providerType := strings.TrimSpace(factory.Type())
-		if providerType == "" {
-			return nil, errors.New("external authentication factory type is empty")
+		name := strings.TrimSpace(providerType.Type())
+		if name == "" {
+			return nil, errors.New("external authentication provider type name is empty")
 		}
-		if _, exists := registry.factories[providerType]; exists {
+		if _, exists := byName[name]; exists {
 			return nil, fmt.Errorf(
-				"external authentication factory %q is duplicated",
-				providerType,
+				"external authentication provider type %q is duplicated",
+				name,
 			)
 		}
-		registry.factories[providerType] = factory
+		byName[name] = providerType
 	}
-	return registry, nil
+	return byName, nil
 }
 
+// Reload takes the protocols the plugins now offer and rebuilds the
+// providers from settings, as Configure does. A failure keeps the previous
+// protocols and providers.
+func (r *Registry) Reload(settings config.ExternalAuthentication, types ...plugin.IdentityProviderType) error {
+	byName, err := typesByName(types)
+	if err != nil {
+		return err
+	}
+	r.rebuild.Lock()
+	defer r.rebuild.Unlock()
+	return r.configure(settings, byName)
+}
+
+// Configure rebuilds the providers from settings. A provider whose protocol
+// no active plugin offers, because its plugin is turned off or has failed,
+// is left out and reported by Unavailable: sign-in through it is unavailable
+// while the server and every other provider keep working. Any other problem
+// with a provider fails Configure and keeps the previous providers.
 func (r *Registry) Configure(
 	settings config.ExternalAuthentication,
 ) error {
-	configured := make(map[string]Provider)
+	r.rebuild.Lock()
+	defer r.rebuild.Unlock()
+	r.mutex.RLock()
+	types := r.types
+	r.mutex.RUnlock()
+	return r.configure(settings, types)
+}
+
+// configure builds the providers with types and installs both; r.rebuild is
+// held.
+func (r *Registry) configure(
+	settings config.ExternalAuthentication,
+	types map[string]plugin.IdentityProviderType,
+) error {
+	configured := make(map[string]*Provider)
+	var unavailable []string
 	for _, definition := range settings.Providers {
 		if !definition.Enabled {
 			continue
 		}
 
-		factory, exists := r.factories[definition.Type]
+		providerType, exists := types[definition.Type]
 		if !exists {
-			return fmt.Errorf(
-				"external authentication provider %q uses unregistered type %q",
-				definition.ID,
-				definition.Type,
-			)
+			unavailable = append(unavailable, definition.ID)
+			continue
 		}
 
-		provider, err := factory.New(definition)
+		provider, err := providerType.New(plugin.IdentityProviderDefinition{
+			ID:            definition.ID,
+			AutoProvision: definition.AutoProvision,
+			Settings:      definition.SettingsDocument(),
+			Secrets:       definition.SecretsDocument(),
+		})
+		if errors.Is(err, plugin.ErrUnavailable) {
+			unavailable = append(unavailable, definition.ID)
+			continue
+		}
 		if err != nil {
 			return fmt.Errorf(
 				"configure external authentication provider %q: %w",
@@ -138,32 +150,35 @@ func (r *Registry) Configure(
 			)
 		}
 
-		descriptor := provider.Descriptor()
-		if descriptor.ID != definition.ID ||
-			descriptor.Type != definition.Type {
+		if _, exists := configured[definition.ID]; exists {
 			return fmt.Errorf(
-				"external authentication provider %q returned a mismatched descriptor",
+				"external authentication provider %q is duplicated",
 				definition.ID,
 			)
 		}
 
-		if _, exists := configured[descriptor.ID]; exists {
-			return fmt.Errorf(
-				"external authentication provider %q is duplicated",
-				descriptor.ID,
-			)
-		}
-
-		configured[descriptor.ID] = provider
+		configured[definition.ID] = NewProvider(definition, provider)
 	}
 
 	r.mutex.Lock()
+	r.types = types
 	r.providers = configured
+	r.unavailable = unavailable
 	r.mutex.Unlock()
 	return nil
 }
 
-func (r *Registry) Provider(id string) (Provider, bool) {
+// Unavailable returns the IDs of the enabled providers the last Configure
+// left out because their protocol's plugin is turned off or has failed, in
+// configuration order.
+func (r *Registry) Unavailable() []string {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+	return slices.Clone(r.unavailable)
+}
+
+// Provider returns the enabled provider with id.
+func (r *Registry) Provider(id string) (*Provider, bool) {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
 	provider, exists := r.providers[id]
@@ -179,7 +194,7 @@ func (r *Registry) Descriptors() []model.ExternalAuthenticationProvider {
 		len(r.providers),
 	)
 	for _, provider := range r.providers {
-		descriptors = append(descriptors, provider.Descriptor())
+		descriptors = append(descriptors, provider.Descriptor)
 	}
 	sort.Slice(descriptors, func(left, right int) bool {
 		return descriptors[left].ID < descriptors[right].ID
@@ -189,7 +204,8 @@ func (r *Registry) Descriptors() []model.ExternalAuthenticationProvider {
 
 // OperationError exposes a stable classification without allowing provider
 // URLs, authorization codes, tickets, tokens, claims, or response bodies from
-// the wrapped diagnostic error to appear through Error().
+// the wrapped diagnostic error to appear through Error(). Kind is one of the
+// plugin.Err* sentinels.
 type OperationError struct {
 	Kind      error
 	Operation string
@@ -208,25 +224,28 @@ func (e *OperationError) Is(target error) bool {
 	return target == e.Kind || errors.Is(e.Cause, target)
 }
 
+// Rejected classifies cause as plugin.ErrAuthenticationRejected.
 func Rejected(operation string, cause error) error {
 	return &OperationError{
-		Kind:      ErrAuthenticationRejected,
+		Kind:      plugin.ErrAuthenticationRejected,
 		Operation: operation,
 		Cause:     cause,
 	}
 }
 
+// InvalidResponse classifies cause as plugin.ErrInvalidResponse.
 func InvalidResponse(operation string, cause error) error {
 	return &OperationError{
-		Kind:      ErrInvalidResponse,
+		Kind:      plugin.ErrInvalidResponse,
 		Operation: operation,
 		Cause:     cause,
 	}
 }
 
+// Unavailable classifies cause as plugin.ErrProviderUnavailable.
 func Unavailable(operation string, cause error) error {
 	return &OperationError{
-		Kind:      ErrProviderUnavailable,
+		Kind:      plugin.ErrProviderUnavailable,
 		Operation: operation,
 		Cause:     cause,
 	}

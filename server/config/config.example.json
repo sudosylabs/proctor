@@ -3,6 +3,7 @@
   "Server": {
     "ListenAddress": "127.0.0.1:8065",
     "PublicURL": "http://localhost:8065",
+    "DocumentationURL": "",
     "WebappDirectory": "./webapp/dist",
     "TLS": {
       "Mode": "disabled",

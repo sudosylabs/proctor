@@ -115,6 +115,7 @@ func newAPI(settings Settings, authenticator route.Authenticator, resources ...r
 		Tracing:                 settings.Tracing,
 		Localizer:               settings.Localizer,
 		PublicURL:               settings.PublicURL,
+		DocumentationURL:        settings.DocumentationURL,
 		MaxBodyBytes:            settings.MaxBodyBytes,
 		ReadTimeout:             settings.ReadTimeout,
 		WriteTimeout:            settings.WriteTimeout,

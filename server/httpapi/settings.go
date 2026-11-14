@@ -36,14 +36,17 @@ type Health interface {
 // observation and localization ports, node health, build information, and
 // the server's request limits. New validates it before compiling any route.
 type Settings struct {
-	Logger       *logging.Logger
-	Metrics      route.Metrics
-	Tracing      route.Tracing
-	Localizer    route.Localizer
-	Health       Health
-	BuildInfo    BuildInfo
-	PublicURL    string
-	MaxBodyBytes int64
+	Logger    *logging.Logger
+	Metrics   route.Metrics
+	Tracing   route.Tracing
+	Localizer route.Localizer
+	Health    Health
+	BuildInfo BuildInfo
+	PublicURL string
+	// DocumentationURL is the installation's documentation site, which Problem
+	// Details link to. Empty sends type "about:blank".
+	DocumentationURL string
+	MaxBodyBytes     int64
 	// ReadTimeout and WriteTimeout repeat the server-wide connection
 	// deadlines. Streaming upload and binary download routes extend them by
 	// the time their declared size takes at the minimum admitted throughput.

@@ -101,7 +101,7 @@ func (h systemHandlers) liveness(request route.Request) (route.Result, error) {
 	if !h.health.Live() {
 		title, detail := route.ProblemPresentation(request.HTTP, "not_live")
 		return route.ProblemResult(route.Problem{
-			Type:      route.ProblemType(healthNotLiveCode),
+			Type:      route.ProblemType(request.HTTP, healthNotLiveCode),
 			Title:     title,
 			Status:    http.StatusServiceUnavailable,
 			Detail:    detail,
@@ -117,7 +117,7 @@ func (h systemHandlers) readiness(request route.Request) (route.Result, error) {
 	if !h.health.Ready() {
 		title, detail := route.ProblemPresentation(request.HTTP, "not_ready")
 		return route.ProblemResult(route.Problem{
-			Type:      route.ProblemType(healthNotReadyCode),
+			Type:      route.ProblemType(request.HTTP, healthNotReadyCode),
 			Title:     title,
 			Status:    http.StatusServiceUnavailable,
 			Detail:    detail,

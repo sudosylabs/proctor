@@ -8,8 +8,12 @@
 package route
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -59,15 +63,54 @@ const (
 	requestTooLargeCode       = "request.too_large"
 )
 
-// ProblemType is the documentation URI of a Problem Details code.
-func ProblemType(code string) string {
-	return "https://proctor.sudosylabs.com/problems/" + code
+// ProblemType is the type URI of a Problem Details code: its page on the
+// installation's documentation site, or "about:blank" when none is configured.
+// Clients act on code; type only points a person at the explanation.
+func ProblemType(request *http.Request, code string) string {
+	if request != nil {
+		if base, ok := request.Context().Value(problemDocumentationContextKey{}).(string); ok && base != "" {
+			return base + code
+		}
+	}
+	return "about:blank"
+}
+
+type problemDocumentationContextKey struct{}
+
+// WithProblemDocumentation attaches the documentation base that ProblemType
+// reads, such as "https://docs.example.edu/problems/". The API does this for
+// every request; a test uses it to build a Problem outside one.
+func WithProblemDocumentation(ctx context.Context, base string) context.Context {
+	return context.WithValue(ctx, problemDocumentationContextKey{}, base)
+}
+
+// problemDocumentationBase turns the configured documentation URL into the
+// prefix of every problem page. Empty stays empty.
+func problemDocumentationBase(raw string) (string, error) {
+	if raw == "" {
+		return "", nil
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" ||
+		parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", errors.New("documentation URL must be an absolute HTTP or HTTPS URL without query or fragment")
+	}
+	return strings.TrimSuffix(raw, "/") + "/problems/", nil
+}
+
+// prepare attaches what every request needs before routing: its negotiated
+// locale and where its Problem Details link to.
+func (a *API) prepare(request *http.Request) *http.Request {
+	if a.problemDocumentation != "" {
+		request = request.WithContext(WithProblemDocumentation(request.Context(), a.problemDocumentation))
+	}
+	return a.localize(request)
 }
 
 func internalProblem(request *http.Request) Problem {
 	title, detail := localizedProblemPresentation(request, http.StatusInternalServerError)
 	return Problem{
-		Type:      ProblemType(serverInternalCode),
+		Type:      ProblemType(request, serverInternalCode),
 		Title:     title,
 		Status:    http.StatusInternalServerError,
 		Detail:    detail,

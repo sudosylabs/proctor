@@ -183,6 +183,9 @@ var environmentOverrideCatalog = []environmentOverride{
 	stringEnvironmentOverride("PROCTOR_SERVER_PUBLIC_URL", func(cfg *Config) *string {
 		return &cfg.Server.PublicURL
 	}),
+	stringEnvironmentOverride("PROCTOR_SERVER_DOCUMENTATION_URL", func(cfg *Config) *string {
+		return &cfg.Server.DocumentationURL
+	}),
 	stringEnvironmentOverride("PROCTOR_SERVER_WEBAPP_DIRECTORY", func(cfg *Config) *string {
 		return &cfg.Server.WebappDirectory
 	}),

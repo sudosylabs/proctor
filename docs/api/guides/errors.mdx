@@ -15,7 +15,7 @@ parse.
 
 ```json
 {
-  "type": "https://proctor.sudosylabs.com/problems/exam.invalid",
+  "type": "https://docs.example.edu/problems/exam.invalid",
   "title": "Invalid request",
   "status": 400,
   "detail": "The request is invalid.",
@@ -28,9 +28,14 @@ parse.
 }
 ```
 
-The `type` URI points to documentation. The `code` comes from a fixed set
-and is what your integration uses in program logic. Each endpoint page lists
-the codes it can return under **Stable error codes**.
+The `code` comes from a fixed set and is what your integration uses in
+program logic. Each endpoint page lists the codes it can return under
+**Errors**.
+
+The `type` links to the error's page on your installation's documentation
+site, at `<documentation site>/problems/<code>`. An operator sets the site
+with the server's `DocumentationURL` setting. When it isn't set, `type` is
+`about:blank`, so never rely on it to tell errors apart.
 
 ## How codes are built
 

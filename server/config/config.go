@@ -312,6 +312,7 @@ func (c Config) Validate() error {
 	}
 	validateListenAddress(c.Server.ListenAddress, add)
 	validatePublicURL(c.Server.PublicURL, add)
+	validateDocumentationURL(c.Server.DocumentationURL, add)
 	if strings.TrimSpace(c.Server.WebappDirectory) == "" || strings.ContainsRune(c.Server.WebappDirectory, '\x00') {
 		add("server.webapp_directory", "must be a non-empty path without null bytes")
 	}

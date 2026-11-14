@@ -27,6 +27,7 @@ The defaults shown here are the values built into Proctor, and they match the
 | --- | --- |
 | `Server.ListenAddress`<br />Default: `127.0.0.1:8065` | The TCP address for client traffic. Must be `host:port`. Port `0` is allowed so tests can use a temporary port. In production you normally use a fixed port. |
 | `Server.PublicURL`<br />Default: `http://localhost:8065` | The address browsers use. Proctor builds every URL it shows outside the server from it. Must be an absolute `http` or `https` URL with a host, and no credentials, query or fragment. The path must be empty or `/`. Built-in TLS needs `https`. |
+| `Server.DocumentationURL`<br />Default: empty | Where you publish the Proctor documentation, such as `https://docs.example.edu`. Each API error's `type` then links to `<DocumentationURL>/problems/<code>`. Empty sends `about:blank`. Must be empty or an absolute `http` or `https` URL with no credentials, query or fragment. Needs a restart. |
 | `Server.WebappDirectory`<br />Default: `./webapp/dist` | The folder that holds the built webapp Proctor serves. Must be a non-empty path with no null byte. A relative path starts from the process working directory. |
 | `Server.ReadHeaderTimeout`<br />Default: `10s` | The longest Proctor waits to read the request headers. Must be greater than zero. |
 | `Server.ReadTimeout`<br />Default: `30s` | The longest Proctor waits to read the whole request. For a signed-in streaming upload, Proctor adds the time the route's body limit takes at 64 KiB/s. Must be greater than zero. |

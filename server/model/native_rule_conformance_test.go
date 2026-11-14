@@ -20,9 +20,9 @@ import (
 )
 
 // nativeRuleConformanceDigest pins the vectors Desktop publishes from its
-// Rust tests (proctor-desktop native/crates/prctr-core/conformance/rules.json,
-// commit 04b7228). Desktop and the server must reach the same status on every
-// step, so a new file is copied in, never edited.
+// Rust tests (proctor-desktop native/crates/prctr-core/conformance/rules.json);
+// the digest names the version. Desktop and the server must reach the same
+// status on every step, so a new file is copied in, never edited.
 const nativeRuleConformanceDigest = "5598dc7438ea87541e03282f96a61354c190257a577849b6e2800fca3a4a770a"
 
 type conformanceFile struct {

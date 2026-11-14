@@ -13,14 +13,14 @@ paths:
         required: true
         schema:
           $ref: '#/components/schemas/ID'
-        description: The supported durable Job for which cancellation is requested.
+        description: ID of the Job to cancel. Its type must support cancellation.
     post:
       operationId: cancelJob
       summary: Request cancellation of a supported Job
       tags:
         - Jobs
       description: >-
-        Records a cooperative cancellation request for an authorized Job type that supports cancellation. Success reports the current durable Job projection; it does not claim that in-flight work stopped before the response, and a terminal or unsupported Job fails without rewriting history.
+        Asks a Job to stop. Only Job types that support cancellation accept the request. A queued Job is canceled at once. A running Job moves to `cancel_requested` and stops when its worker next checks, so a successful response returns the Job's current state but doesn't mean the work has already stopped. A Job that has already finished, or whose type doesn't support cancellation, is rejected and its history is left unchanged.
       x-codeSamples:
         - lang: Shell
           source: |-

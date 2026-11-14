@@ -12,12 +12,7 @@ paths:
     post:
       operationId: prepareSecurityPreflight
       summary: Prepare a secure Desktop admission challenge
-      description: >-
-        Requires an eligible registered Desktop Session and an exact admitted build, registry, source manifest
-        and configuration manifest. Stores one pending 120-second challenge per Session and Sitting; a
-        successor supersedes it. Does not create an Attempt, Workspace or Participation. Ready rejoin returns
-        frozen configuration; active and suspended Attempts cannot obtain a replacement preflight. Unavailable
-        Institution catalogs or enforced native coverage fail closed.
+      description: Starts a security preflight for a Sitting. You need an eligible registered Desktop Session, and the build, native registry, source manifest and configuration manifest must exactly match an admitted release. The server keeps one pending challenge per Session and Sitting, valid for 120 seconds, and a new request replaces it. This creates no Attempt, Workspace or Participation. When a Ready Attempt is entered again, the response includes its fixed Attempt Configuration. An active or suspended Attempt can't get a new preflight. If an Institution catalog is unavailable, or native coverage the policy enforces is missing, the request fails.
       tags:
         - Attempts and workspaces
       x-proctor-auth: session_required
@@ -93,12 +88,7 @@ paths:
     post:
       operationId: reportSecurityPreflight
       summary: Report minimized privileged preflight results
-      description: >-
-        Rechecks the same registered Session, candidate, build, Sitting and policy before storing the bounded
-        report and its canonical digest. Enforced and baseline requirements must be ready; truthful degraded
-        observe-only coverage can remain eligible. A blocked report creates no Attempt or misconduct Flag.
-        Retry preserves the original receipt time; Connect must consume a current eligible report within 30
-        seconds.
+      description: Records the Desktop's preflight report. The server checks again that the registered Session, candidate, build, Sitting and policy are the same, then stores the report and its digest. Every enforced and baseline requirement must be ready. Coverage that is honestly reported as degraded but is only observed may still be eligible. A blocked report creates no Attempt and no Integrity Flag. A retry keeps the original receipt time. Connect must use a current eligible report within 30 seconds.
       tags:
         - Attempts and workspaces
       x-proctor-auth: session_required
@@ -174,11 +164,7 @@ paths:
     get:
       operationId: recoverExamSecurityPolicy
       summary: Recover the active Desktop security receipt
-      description: >-
-        Returns the exact active Participation binding and original frozen configuration to its owning
-        registered Desktop Session after transport ambiguity. Checks current Session, key, compatibility,
-        eligibility and lease. An open transport Connection is not required. Ready reentry uses a fresh
-        preflight. This read creates no authority and never renews the lease.
+      description: Returns the active Participation's security binding and its original fixed Attempt Configuration to the registered Desktop Session that owns it. Use it when a transport failure left the Desktop unsure of the outcome. The server checks the current Session, key, compatibility, eligibility and lease. An open Connection is not needed. To enter a Ready Attempt again, start a new preflight instead. This read grants no new permission and never renews the lease.
       tags:
         - Attempts and workspaces
       x-proctor-auth: session_required
@@ -245,7 +231,7 @@ components:
       name: security_preflight_id
       in: path
       required: true
-      description: Server-issued canonical preflight transaction ID returned by preparation.
+      description: ID of the security preflight, returned when you started it.
       schema:
         type: string
         minLength: 26
@@ -254,29 +240,29 @@ components:
   requestBodies:
     PrepareSecurityPreflightRequest:
       required: true
-      description: Complete bounded artifact identities and optional Ready Attempt selector.
+      description: Digests of the Desktop release artifacts, and optionally the Ready Attempt to enter again.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/PrepareSecurityPreflightRequest'
           example:
             native_registry_digest: sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0
-            source_manifest_digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-            configuration_manifest_fingerprint: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+            source_manifest_digest: sha256:2c624232cdd221771294dfbb310aca000a0df6ac8b66b696d90ef06fdefb64a3
+            configuration_manifest_fingerprint: sha256:19581e27de7ced00ff1ce50b2047e7a567c76b1cbaebabe5ef03f7c3017bb5b7
     SecurityPreflightReport:
       required: true
-      description: Complete bounded minimized preflight report, with no native content or inventory.
+      description: The Desktop's preflight report. It holds only the minimum the check needs, with no native content or inventories.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/SecurityPreflightReport'
           example:
-            challenge: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-            policy_digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-            policy_content_digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-            capability_matrix_digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-            security_session_id: synthetic-security-session
-            source_manifest_digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+            challenge: Xq3vR8tNw2LmYp7KdF0sJc5HbZ1gUe9AoT4iVk6Ex2M
+            policy_digest: sha256:8527a891e224136950ff32ca212b45bc93f69fbb801c3b1ebedac52775f99e61
+            policy_content_digest: sha256:e629fa6598d732768f7c726b4b621285f9c3b85303900aa912017db7617d8bdb
+            capability_matrix_digest: sha256:b17ef6d19c7a5b1ee83b907c595526dcb1eb06db8227d650d5dda0a9f4ce8cd9
+            security_session_id: sec-session-7f3a2c
+            source_manifest_digest: sha256:2c624232cdd221771294dfbb310aca000a0df6ac8b66b696d90ef06fdefb64a3
             selected_source_categories: []
             sources: []
             coverage: []
@@ -288,21 +274,108 @@ components:
             reported_at: '2026-09-08T08:00:00.000Z'
   responses:
     SecurityPolicyResponseOK:
-      description: Authenticated security preflight result.
+      description: The security policy and a new preflight challenge.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/SecurityPolicyResponse'
+          example:
+            server_time: '2026-08-01T08:59:58.120Z'
+            policy:
+              policy_id: exam-security-default
+              revision: rev-2026.07.15
+              ordinal: 1
+              digest: "sha256:8527a891e224136950ff32ca212b45bc93f69fbb801c3b1ebedac52775f99e61"
+              institution_id: ccrzmhoygspnzijnponpyw4zmu
+              exam_revision_id: p6y6sf8ac6m5if373fkkebj7j6
+              sitting_id: 889766ufjgio6kbpzjbufozksq
+              scope:
+                kind: admission
+                admission_scope_id: adm-4f81c2
+              issued_at: '2026-08-01T08:59:58.120Z'
+              active_from: '2026-08-01T08:59:58.120Z'
+              application_release_id: desktop-2026.7.2
+              matrix_id: matrix-2026.7.2-macos-arm64
+              target_tuple: darwin-arm64
+              registry_digest: "sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0"
+              focus_loss_mode: observe
+              connection_loss_mode: enforce
+              resolved_exception_refs: []
+              evidence_class_id: native_integrity
+              visibility_class_id: examiner_restricted
+              retention_class_id: native_minimized
+              capabilities:
+                - id: process_application
+                  mode: observe
+                  allowed_application_ids: []
+                - id: interactive_session
+                  mode: observe
+                - id: clipboard
+                  mode: enforce
+                  observe_os_clipboard_changes: true
+                  strategy: private_attempt
+                - id: printing
+                  mode: disabled
+                  candidate_print_commands: not_applied
+                  monitored_spooler: not_required
+                - id: removable_storage
+                  mode: disabled
+                  allowed_storage_function_class_ids: []
+                  enabled_sub_capabilities: []
+                - id: virtualization
+                  mode: disabled
+                  rule: not_applied
+                - id: network_configuration
+                  mode: disabled
+                  allowed_adapter_class_ids: []
+                  allowed_managed_profile_ids: []
+                  allowed_tunnel_class_ids: []
+                  enabled_sub_capabilities: []
+                - id: camera
+                  mode: disabled
+                  concurrent_use_check: not_required
+                  require_ready: false
+                - id: microphone
+                  mode: disabled
+                  concurrent_use_check: not_required
+                  require_ready: false
+                - id: external_capture
+                  mode: disabled
+            policy_content_digest: "sha256:e629fa6598d732768f7c726b4b621285f9c3b85303900aa912017db7617d8bdb"
+            capability_matrix_digest: "sha256:b17ef6d19c7a5b1ee83b907c595526dcb1eb06db8227d650d5dda0a9f4ce8cd9"
+            catalog_bindings:
+              - kind: application
+                catalog_id: campus-applications
+                revision: rev-12
+                digest: "sha256:0b918943df0962bc7a1824c0555a389347b4febdc7cf9d1254406d80ce44e3f9"
+            preflight_challenge:
+              preflight_id: jxcnnw8a7u4ux5azhhmby97xh7
+              challenge: Xq3vR8tNw2LmYp7KdF0sJc5HbZ1gUe9AoT4iVk6Ex2M
+              issued_at: '2026-08-01T08:59:58.120Z'
+              expires_at: '2026-08-01T09:01:58.120Z'
+            frozen_attempt_configuration: null
+            browser_activity_disclosure:
+              notice_id: integrated_browser_activity
+              audience: exam_managers_with_browser_activity_permission
+              retention_policy_revision: 2
+              browser_activity_retention_days: 180
+              retention_anchor: eligible_closed_sitting_records_completion
+              may_create_integrity_evidence: false
     SecurityPreflightResultOK:
-      description: Authenticated security preflight result.
+      description: Whether the preflight report makes the candidate eligible to connect.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/SecurityPreflightResult'
+          example:
+            preflight_id: jxcnnw8a7u4ux5azhhmby97xh7
+            report_digest: "sha256:ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb"
+            admission: eligible
+            reason_codes: []
+            server_time: '2026-08-01T09:00:03.410Z'
+            expires_at: '2026-08-01T09:01:58.120Z'
     SecurityPolicyRecoveryOK:
-      description: >-
-        The exact retained active security receipt and frozen configuration for its owning registered Desktop
-        Session.
+      description: The active security binding and fixed Attempt Configuration, for the registered Desktop Session that owns them.
       headers:
         Cache-Control:
           schema:
@@ -312,8 +385,141 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/SecurityPolicyRecovery'
+          example:
+            server_time: '2026-08-01T09:12:40.005Z'
+            security:
+              policy:
+                policy_id: exam-security-default
+                revision: rev-2026.07.15
+                ordinal: 1
+                digest: "sha256:2e7d2c03a9507ae265ecf5b5356885a53393a2029d241394997265a1a25aefc6"
+                institution_id: ccrzmhoygspnzijnponpyw4zmu
+                exam_revision_id: p6y6sf8ac6m5if373fkkebj7j6
+                sitting_id: 889766ufjgio6kbpzjbufozksq
+                scope:
+                  kind: attempt
+                  attempt_id: 1asb7sk89dp1ex339fkh3te5t4
+                issued_at: '2026-08-01T08:59:58.120Z'
+                active_from: '2026-08-01T08:59:58.120Z'
+                application_release_id: desktop-2026.7.2
+                matrix_id: matrix-2026.7.2-macos-arm64
+                target_tuple: darwin-arm64
+                registry_digest: "sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0"
+                focus_loss_mode: observe
+                connection_loss_mode: enforce
+                resolved_exception_refs: []
+                evidence_class_id: native_integrity
+                visibility_class_id: examiner_restricted
+                retention_class_id: native_minimized
+                capabilities:
+                  - id: process_application
+                    mode: observe
+                    allowed_application_ids: []
+                  - id: interactive_session
+                    mode: observe
+                  - id: clipboard
+                    mode: enforce
+                    observe_os_clipboard_changes: true
+                    strategy: private_attempt
+                  - id: printing
+                    mode: disabled
+                    candidate_print_commands: not_applied
+                    monitored_spooler: not_required
+                  - id: removable_storage
+                    mode: disabled
+                    allowed_storage_function_class_ids: []
+                    enabled_sub_capabilities: []
+                  - id: virtualization
+                    mode: disabled
+                    rule: not_applied
+                  - id: network_configuration
+                    mode: disabled
+                    allowed_adapter_class_ids: []
+                    allowed_managed_profile_ids: []
+                    allowed_tunnel_class_ids: []
+                    enabled_sub_capabilities: []
+                  - id: camera
+                    mode: disabled
+                    concurrent_use_check: not_required
+                    require_ready: false
+                  - id: microphone
+                    mode: disabled
+                    concurrent_use_check: not_required
+                    require_ready: false
+                  - id: external_capture
+                    mode: disabled
+              policy_content_digest: "sha256:e629fa6598d732768f7c726b4b621285f9c3b85303900aa912017db7617d8bdb"
+              preflight_id: jxcnnw8a7u4ux5azhhmby97xh7
+              preflight_report_digest: "sha256:ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb"
+              preflight_policy_digest: "sha256:8527a891e224136950ff32ca212b45bc93f69fbb801c3b1ebedac52775f99e61"
+              participation_id: 6xoche483hwrx5rpu8jzjoe7qg
+              generation: 1
+              security_session_id: sec-session-7f3a2c
+              delivery_stream_id: hmyjmj68dw6gdxctnghbrhwcth
+              renewal_interval_seconds: 5
+            frozen_attempt_configuration:
+              manifest_fingerprint: "sha256:19581e27de7ced00ff1ce50b2047e7a567c76b1cbaebabe5ef03f7c3017bb5b7"
+              registry_fingerprint: "fnv1a64:8c3f0d2b91a4e657"
+              desktop_build: desktop-2026.7.2
+              desktop_target: darwin-arm64
+              user_settings_revision: rpn96r4g3jfk3t41u4dus44bzc
+              presentation:
+                color_theme: dark
+                prefer_high_contrast: false
+                zoom_percent: 100
+                editor_font_size_px: 14
+                editor_line_height_px: 22
+                reduced_motion: false
+                screen_reader_mode: auto
+                announcement_mode: auto
+                cursor_style: line
+                cursor_blinking: blink
+              approved_commands:
+                - editor.action.formatDocument
+                - workbench.action.files.save
+              approved_keybindings:
+                - workbench.action.files.save
+              attempt_configuration_revision: cfg-1
+              digest: "sha256:ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d"
+            current_sources:
+              - source_id: display-topology
+                source_instance_id: display-1
+                sequence: 42
+                source_schema_digest: "sha256:18ac3e7343f016890c510e93f935261169d9e3f565436429830faf0934f4f8e4"
+                adapter_version: 1.4.0
+                health: healthy
+                permission: granted
+                complete: true
+                gap_count: 0
+              - source_id: clipboard
+                source_instance_id: clipboard-1
+                sequence: 17
+                source_schema_digest: "sha256:3f39d5c348e5b79d06e842c114e6cc571583bbf44e4b0ebfda1a01ec05745d43"
+                adapter_version: 1.2.1
+                health: healthy
+                permission: granted
+                complete: true
+                gap_count: 0
+            current_coverage:
+              - coverage_key: clipboard.private_attempt
+                source_schema_digest: "sha256:3f39d5c348e5b79d06e842c114e6cc571583bbf44e4b0ebfda1a01ec05745d43"
+                claim: enforce
+                state: ready
+              - coverage_key: display.single_physical
+                source_schema_digest: "sha256:18ac3e7343f016890c510e93f935261169d9e3f565436429830faf0934f4f8e4"
+                claim: enforce
+                state: ready
+            source_reset_receipts: []
+            security_coverage:
+              processed_control_sequence: 148
+              processed_control_digest: "sha256:3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d"
+              coverage_result: accepted
+              source_reset_receipts: []
+              security_interaction_allowed: true
+              delivery_watermark_rejections: []
   schemas:
     PrepareSecurityPreflightRequest:
+      description: Digests of the Desktop release artifacts.
       type: object
       additionalProperties: false
       required:
@@ -322,20 +528,25 @@ components:
         - configuration_manifest_fingerprint
       properties:
         attempt_id:
+          description: ID of a Ready Attempt the candidate is entering again. Leave it out for a first entry.
           type: string
           minLength: 26
           maxLength: 26
           pattern: ^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$
         native_registry_digest:
+          description: SHA-256 digest of the native registry in the Desktop build, prefixed with sha256:.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
         source_manifest_digest:
+          description: SHA-256 digest of the native source manifest in the Desktop build, prefixed with sha256:.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
         configuration_manifest_fingerprint:
+          description: SHA-256 fingerprint of the Attempt Configuration manifest in the Desktop build, prefixed with sha256:.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
     SecurityPreflightChallenge:
+      description: A one-time challenge the preflight report must echo.
       type: object
       additionalProperties: false
       required:
@@ -345,19 +556,23 @@ components:
         - expires_at
       properties:
         preflight_id:
+          description: ID of the preflight. Use it in the report URL.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         challenge:
+          description: 'Random challenge: 32 bytes as URL-safe base64 without padding. Send it back unchanged in the report.'
           type: string
           minLength: 43
           maxLength: 43
           pattern: ^[A-Za-z0-9_-]{43}$
         issued_at:
+          description: When the server issued the challenge.
           type: string
           format: date-time
         expires_at:
+          description: When the challenge stops being accepted, 120 seconds after issued_at.
           type: string
           format: date-time
     EffectiveExamSecurityPolicy:
@@ -387,102 +602,125 @@ components:
         - capabilities
       properties:
         policy_id:
+          description: ID of the security policy.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         revision:
+          description: Revision label of the policy.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[ -~]+$
         ordinal:
+          description: Participation Generation this policy was issued for.
           type: integer
           format: int64
           minimum: 1
           maximum: 9007199254740991
         digest:
+          description: SHA-256 digest of the whole policy except this member, prefixed with sha256:.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
         institution_id:
+          description: ID of the Institution that owns the Exam.
           type: string
           minLength: 26
           maxLength: 26
           pattern: ^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$
         exam_revision_id:
+          description: ID of the Exam Revision the policy comes from.
           type: string
           minLength: 26
           maxLength: 26
           pattern: ^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$
         sitting_id:
+          description: ID of the Exam Sitting.
           type: string
           minLength: 26
           maxLength: 26
           pattern: ^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$
         scope:
+          description: 'What the policy is bound to: one admission in progress, or one Attempt once the candidate has connected.'
           oneOf:
             - type: object
+              description: Bound to one admission in progress.
               additionalProperties: false
               required:
                 - kind
                 - admission_scope_id
               properties:
                 kind:
+                  description: Always admission.
                   type: string
                   const: admission
                 admission_scope_id:
+                  description: ID of the admission.
                   type: string
                   minLength: 1
                   maxLength: 128
                   pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
             - type: object
+              description: Bound to one Attempt.
               additionalProperties: false
               required:
                 - kind
                 - attempt_id
               properties:
                 kind:
+                  description: Always attempt.
                   type: string
                   const: attempt
                 attempt_id:
+                  description: ID of the Exam Attempt.
                   type: string
                   minLength: 26
                   maxLength: 26
                   pattern: ^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$
         issued_at:
+          description: When the server issued the policy.
           type: string
           format: date-time
         active_from:
+          description: When the policy took effect.
           type: string
           format: date-time
         application_release_id:
+          description: ID of the verified Desktop release the policy was resolved for.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         matrix_id:
+          description: ID of that release's capability matrix.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         target_tuple:
+          description: Platform target of the Desktop build.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         registry_digest:
+          description: SHA-256 digest of the native registry the policy uses, prefixed with sha256:.
           type: string
           const: sha256:79faa1141236b073dff2ff802ce67abce3082417a7a4fa2954615e4226acd1e0
         focus_loss_mode:
+          description: 'How Focus Loss is handled: not at all, observed only, or enforced.'
           type: string
           enum:
             - disabled
             - observe
             - enforce
         connection_loss_mode:
+          description: How Connection Loss is handled. Always enforce.
           type: string
           const: enforce
         resolved_exception_refs:
+          description: Policy exceptions that apply. Currently always empty.
           type: array
           minItems: 0
           maxItems: 0
@@ -492,24 +730,26 @@ components:
             maxLength: 128
             pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         evidence_class_id:
+          description: Class of the Integrity Evidence the policy produces.
           type: string
           const: native_integrity
         visibility_class_id:
+          description: Who may see that evidence.
           type: string
           const: examiner_restricted
         retention_class_id:
+          description: How long that evidence is kept.
           type: string
           const: native_minimized
         capabilities:
           type: array
           minItems: 10
           maxItems: 10
-          description: >-
-            Exactly one family in this order: process_application, interactive_session, clipboard, printing,
-            removable_storage, virtualization, network_configuration, camera, microphone, external_capture.
+          description: 'Settings for each native capability family, exactly one per family in this order: process_application, interactive_session, clipboard, printing, removable_storage, virtualization, network_configuration, camera, microphone, external_capture.'
           items:
             oneOf:
               - type: object
+                description: Settings for watching running applications.
                 additionalProperties: false
                 required:
                   - id
@@ -517,9 +757,11 @@ components:
                   - allowed_application_ids
                 properties:
                   id:
+                    description: Always process_application.
                     type: string
                     const: process_application
                   mode:
+                    description: Whether the family is off, observed only, or enforced.
                     type: string
                     enum:
                       - disabled
@@ -529,9 +771,7 @@ components:
                     type: array
                     maxItems: 256
                     uniqueItems: true
-                    description: >-
-                      Sorted unique opaque catalog IDs; executable paths, names, commands and regular
-                      expressions are not accepted.
+                    description: IDs of allowed applications from the Institution application catalog, sorted and without duplicates. Executable paths, names, commands and regular expressions are not accepted. Empty when mode is disabled.
                     items:
                       type: string
                       minLength: 1
@@ -547,21 +787,25 @@ components:
                         allowed_application_ids:
                           const: []
               - type: object
+                description: Settings for watching the interactive session.
                 additionalProperties: false
                 required:
                   - id
                   - mode
                 properties:
                   id:
+                    description: Always interactive_session.
                     type: string
                     const: interactive_session
                   mode:
+                    description: Whether the family is off, observed only, or enforced.
                     type: string
                     enum:
                       - disabled
                       - observe
                       - enforce
               - type: object
+                description: Settings for the clipboard.
                 additionalProperties: false
                 required:
                   - id
@@ -570,17 +814,21 @@ components:
                   - strategy
                 properties:
                   id:
+                    description: Always clipboard.
                     type: string
                     const: clipboard
                   mode:
+                    description: Whether the family is off, observed only, or enforced.
                     type: string
                     enum:
                       - disabled
                       - observe
                       - enforce
                   observe_os_clipboard_changes:
+                    description: Whether changes to the operating system clipboard are observed. True when mode is observe, false when it is disabled.
                     type: boolean
                   strategy:
+                    description: private_attempt gives the Attempt its own clipboard, and is required when mode is enforce. Otherwise disabled.
                     type: string
                     enum:
                       - disabled
@@ -615,6 +863,7 @@ components:
                         strategy:
                           const: private_attempt
               - type: object
+                description: Settings for printing.
                 additionalProperties: false
                 required:
                   - id
@@ -623,20 +872,24 @@ components:
                   - monitored_spooler
                 properties:
                   id:
+                    description: Always printing.
                     type: string
                     const: printing
                   mode:
+                    description: Whether the family is off, observed only, or enforced.
                     type: string
                     enum:
                       - disabled
                       - observe
                       - enforce
                   candidate_print_commands:
+                    description: deny blocks print commands in the candidate interface, and is required when mode is enforce. Otherwise not_applied.
                     type: string
                     enum:
                       - not_applied
                       - deny
                   monitored_spooler:
+                    description: Whether the print spooler must be monitored. required when mode is observe, not_required when it is disabled.
                     type: string
                     enum:
                       - not_required
@@ -671,6 +924,7 @@ components:
                         candidate_print_commands:
                           const: deny
               - type: object
+                description: Settings for removable storage.
                 additionalProperties: false
                 required:
                   - id
@@ -679,9 +933,11 @@ components:
                   - enabled_sub_capabilities
                 properties:
                   id:
+                    description: Always removable_storage.
                     type: string
                     const: removable_storage
                   mode:
+                    description: Whether the family is off, observed only, or enforced.
                     type: string
                     enum:
                       - disabled
@@ -691,15 +947,14 @@ components:
                     type: array
                     maxItems: 256
                     uniqueItems: true
-                    description: >-
-                      Sorted unique opaque catalog IDs; executable paths, names, commands and regular
-                      expressions are not accepted.
+                    description: IDs of allowed storage function classes from the Institution catalog, sorted and without duplicates. Executable paths, names, commands and regular expressions are not accepted. Empty when mode is disabled.
                     items:
                       type: string
                       minLength: 1
                       maxLength: 128
                       pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
                   enabled_sub_capabilities:
+                    description: Which kinds of removable storage are watched. At least one when the family is on, none when it is disabled.
                     type: array
                     maxItems: 2
                     uniqueItems: true
@@ -736,6 +991,7 @@ components:
                         enabled_sub_capabilities:
                           minItems: 1
               - type: object
+                description: Settings for virtual machine detection.
                 additionalProperties: false
                 required:
                   - id
@@ -743,15 +999,18 @@ components:
                   - rule
                 properties:
                   id:
+                    description: Always virtualization.
                     type: string
                     const: virtualization
                   mode:
+                    description: Whether the family is off, observed only, or enforced.
                     type: string
                     enum:
                       - disabled
                       - observe
                       - enforce
                   rule:
+                    description: block_recognized_guest acts on a recognized virtual machine. require_certified_physical_environment requires a certified physical machine. not_applied when mode is disabled.
                     type: string
                     enum:
                       - not_applied
@@ -787,6 +1046,7 @@ components:
                             - block_recognized_guest
                             - require_certified_physical_environment
               - type: object
+                description: Settings for network configuration.
                 additionalProperties: false
                 required:
                   - id
@@ -797,9 +1057,11 @@ components:
                   - enabled_sub_capabilities
                 properties:
                   id:
+                    description: Always network_configuration.
                     type: string
                     const: network_configuration
                   mode:
+                    description: Whether the family is off, observed only, or enforced.
                     type: string
                     enum:
                       - disabled
@@ -809,9 +1071,7 @@ components:
                     type: array
                     maxItems: 256
                     uniqueItems: true
-                    description: >-
-                      Sorted unique opaque catalog IDs; executable paths, names, commands and regular
-                      expressions are not accepted.
+                    description: IDs of allowed network adapter classes from the Institution catalog, sorted and without duplicates. Empty when mode is disabled.
                     items:
                       type: string
                       minLength: 1
@@ -821,9 +1081,7 @@ components:
                     type: array
                     maxItems: 256
                     uniqueItems: true
-                    description: >-
-                      Sorted unique opaque catalog IDs; executable paths, names, commands and regular
-                      expressions are not accepted.
+                    description: IDs of allowed managed network profiles from the Institution catalog, sorted and without duplicates. Empty when mode is disabled.
                     items:
                       type: string
                       minLength: 1
@@ -833,15 +1091,14 @@ components:
                     type: array
                     maxItems: 256
                     uniqueItems: true
-                    description: >-
-                      Sorted unique opaque catalog IDs; executable paths, names, commands and regular
-                      expressions are not accepted.
+                    description: IDs of allowed tunnel classes from the Institution catalog, sorted and without duplicates. Empty when mode is disabled.
                     items:
                       type: string
                       minLength: 1
                       maxLength: 128
                       pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
                   enabled_sub_capabilities:
+                    description: Which parts of the network configuration are watched. At least one when the family is on, none when it is disabled.
                     type: array
                     maxItems: 5
                     uniqueItems: true
@@ -885,6 +1142,7 @@ components:
                         enabled_sub_capabilities:
                           minItems: 1
               - type: object
+                description: Settings for the camera.
                 additionalProperties: false
                 required:
                   - id
@@ -893,20 +1151,24 @@ components:
                   - require_ready
                 properties:
                   id:
+                    description: Always camera.
                     type: string
                     const: camera
                   mode:
+                    description: Whether the family is off, observed only, or enforced.
                     type: string
                     enum:
                       - disabled
                       - observe
                       - enforce
                   concurrent_use_check:
+                    description: supported_required means the Desktop must be able to tell when another application is using the camera.
                     type: string
                     enum:
                       - not_required
                       - supported_required
                   require_ready:
+                    description: Whether the camera must be ready before the candidate can connect.
                     type: boolean
                 allOf:
                   - if:
@@ -934,6 +1196,7 @@ components:
                             concurrent_use_check:
                               const: supported_required
               - type: object
+                description: Settings for the microphone.
                 additionalProperties: false
                 required:
                   - id
@@ -942,20 +1205,24 @@ components:
                   - require_ready
                 properties:
                   id:
+                    description: Always microphone.
                     type: string
                     const: microphone
                   mode:
+                    description: Whether the family is off, observed only, or enforced.
                     type: string
                     enum:
                       - disabled
                       - observe
                       - enforce
                   concurrent_use_check:
+                    description: supported_required means the Desktop must be able to tell when another application is using the microphone.
                     type: string
                     enum:
                       - not_required
                       - supported_required
                   require_ready:
+                    description: Whether the microphone must be ready before the candidate can connect.
                     type: boolean
                 allOf:
                   - if:
@@ -983,15 +1250,18 @@ components:
                             concurrent_use_check:
                               const: supported_required
               - type: object
+                description: Settings for external capture.
                 additionalProperties: false
                 required:
                   - id
                   - mode
                 properties:
                   id:
+                    description: Always external_capture.
                     type: string
                     const: external_capture
                   mode:
+                    description: Whether the family is on. Currently always disabled.
                     type: string
                     enum:
                       - disabled
@@ -1026,12 +1296,9 @@ components:
             - properties:
                 id:
                   const: external_capture
-      description: >-
-        Frozen native semantics for a Participation. issued_at and active_from use millisecond UTC precision,
-        with issued_at <= active_from <= activation time. There is no policy expiry; the renewable
-        Participation lease is the sole live authority. The digest excludes only digest; scope rebinding
-        preserves the separately computed content digest.
+      description: The native security rules fixed for a Participation, with where they came from. issued_at and active_from are UTC with millisecond precision, and issued_at is never later than active_from. The policy has no expiry. Only the renewable Participation Lease keeps it in force. The digest covers every member except digest itself. When the scope moves from the admission to the Attempt, the separately computed content digest stays the same.
     SecurityCatalogBinding:
+      description: One Institution catalog the policy refers to, pinned to a revision.
       type: object
       additionalProperties: false
       required:
@@ -1041,6 +1308,7 @@ components:
         - digest
       properties:
         kind:
+          description: What the catalog lists.
           type: string
           enum:
             - application
@@ -1050,19 +1318,23 @@ components:
             - tunnel_class
             - detector
         catalog_id:
+          description: ID of the catalog.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         revision:
+          description: Revision of the catalog the policy uses.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[ -~]+$
         digest:
+          description: SHA-256 digest of that catalog revision, prefixed with sha256:.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
     FrozenAttemptConfiguration:
+      description: The Attempt Configuration fixed at first admission, with where it came from.
       type: object
       additionalProperties: false
       required:
@@ -1078,26 +1350,30 @@ components:
         - digest
       properties:
         manifest_fingerprint:
+          description: Fingerprint of the Attempt Configuration manifest of the Desktop build that was admitted, prefixed with sha256:.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
         registry_fingerprint:
+          description: Fingerprint of the Desktop settings registry of that build, prefixed with fnv1a64:.
           type: string
           pattern: ^fnv1a64:[0-9a-f]{16}$
         desktop_build:
+          description: ID of the Desktop build that was admitted.
           type: string
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         desktop_target:
+          description: Target platform of that build.
           type: string
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         user_settings_revision:
+          description: Revision of the User Settings Document the configuration was built from.
           $ref: '#/components/schemas/ID'
         presentation:
+          description: Presentation settings fixed for the Attempt.
           $ref: '#/components/schemas/AttemptConfigurationPresentation'
         approved_commands:
           type: array
-          description: >-
-            Sorted unique approved catalog IDs; keybindings must resolve to selected commands. Raw key chords
-            are rejected.
+          description: IDs of approved commands from the Desktop settings catalog, sorted and without duplicates. Raw key chords are rejected.
           maxItems: 128
           uniqueItems: true
           items:
@@ -1105,20 +1381,20 @@ components:
             pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         approved_keybindings:
           type: array
-          description: >-
-            Sorted unique approved catalog IDs; keybindings must resolve to selected commands. Raw key chords
-            are rejected.
+          description: IDs of approved keybindings from the Desktop settings catalog, sorted and without duplicates. Each keybinding must map to one of the approved commands. Raw key chords are rejected.
           maxItems: 128
           uniqueItems: true
           items:
             type: string
             pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         attempt_configuration_revision:
+          description: Server-assigned revision of the Attempt Configuration.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[ -~]+$
         digest:
+          description: SHA-256 digest of the configuration, prefixed with sha256:.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
     BrowserActivityDisclosure:
@@ -1133,29 +1409,32 @@ components:
         - may_create_integrity_evidence
       properties:
         notice_id:
+          description: ID of the notice text. Always integrated_browser_activity.
           type: string
           const: integrated_browser_activity
         audience:
+          description: 'Who can see the collected activity: Exam Managers who hold the Browser Activity permission.'
           type: string
           const: exam_managers_with_browser_activity_permission
         retention_policy_revision:
+          description: Revision of the Institution Retention Policy the notice reflects.
           type: integer
           format: int64
           minimum: 1
           maximum: 9007199254740991
         browser_activity_retention_days:
+          description: How many days browser activity is kept after the retention starting point. Zero means no automatic expiry is set.
           type: integer
           minimum: 0
           maximum: 36500
         retention_anchor:
+          description: 'When the retention period starts: when Sitting Records Completion is recorded for a Closed Sitting.'
           type: string
           const: eligible_closed_sitting_records_completion
         may_create_integrity_evidence:
+          description: Whether a blocked navigation can become Integrity Evidence under this Browser Policy.
           type: boolean
-      description: >-
-        Localized collection notice, not consent or history-read authority. Zero days means no configured
-        automatic expiry. Holds, approval, grace and source reconciliation still apply; minimized integrity
-        evidence can have a different period.
+      description: A notice to show the candidate about browser activity collection, shown in their language. It is not consent and gives no right to read history. Zero days means no automatic expiry is set. Holds, approval, grace periods and source reconciliation still apply, and minimized Integrity Evidence can be kept for a different period.
     SecurityPolicyResponse:
       type: object
       additionalProperties: false
@@ -1170,35 +1449,41 @@ components:
         - browser_activity_disclosure
       properties:
         server_time:
+          description: Server time when the response was made.
           type: string
           format: date-time
         policy:
+          description: The native security policy resolved for this admission.
           $ref: '#/components/schemas/EffectiveExamSecurityPolicy'
         policy_content_digest:
+          description: SHA-256 digest of the policy content, prefixed with sha256:. It stays the same when the policy's scope moves to the Attempt.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
         capability_matrix_digest:
+          description: SHA-256 digest of the capability matrix of the Desktop release, prefixed with sha256:.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
         catalog_bindings:
+          description: Institution catalogs the policy refers to.
           type: array
           minItems: 0
           maxItems: 32
           items:
             $ref: '#/components/schemas/SecurityCatalogBinding'
         preflight_challenge:
+          description: The challenge the preflight report must echo.
           $ref: '#/components/schemas/SecurityPreflightChallenge'
         frozen_attempt_configuration:
+          description: The Attempt's fixed configuration when a Ready Attempt is entered again. Null for a first admission.
           oneOf:
             - $ref: '#/components/schemas/FrozenAttemptConfiguration'
             - type: 'null'
         browser_activity_disclosure:
+          description: Notice to show the candidate about browser activity collection.
           $ref: '#/components/schemas/BrowserActivityDisclosure'
-      description: >-
-        Privileged registered-Desktop response bounded to 128 KiB. Catalog bindings are unique and sorted by
-        kind then catalog_id. First admission returns null configuration; Ready rejoin returns the original
-        immutable configuration.
+      description: The security policy for the Sitting and a new preflight challenge, for a registered Desktop only. At most 128 KiB. Catalog bindings are unique and sorted by kind, then catalog_id. A first admission returns a null configuration. Entering a Ready Attempt again returns its original configuration, which can't change.
     NativeSourceCoverage:
+      description: The state of one native source, as the Desktop reports it.
       type: object
       additionalProperties: false
       required:
@@ -1213,6 +1498,7 @@ components:
         - gap_count
       properties:
         source_id:
+          description: The native source.
           type: string
           enum:
             - display-topology
@@ -1227,24 +1513,29 @@ components:
             - network-configuration
             - media-device
         source_instance_id:
+          description: ID of the running instance of the source. It changes when the source resets.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         sequence:
+          description: Latest sequence number of the source instance.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         source_schema_digest:
+          description: SHA-256 digest of the source's schema, prefixed with sha256:.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
         adapter_version:
+          description: Version of the adapter that runs the source.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         health:
+          description: Health of the source.
           type: string
           enum:
             - starting
@@ -1254,6 +1545,7 @@ components:
             - recovering
             - stopped
         permission:
+          description: Whether the operating system lets the source run.
           type: string
           enum:
             - denied
@@ -1262,13 +1554,16 @@ components:
             - restricted
             - unavailable
         complete:
+          description: Whether the source reports complete coverage.
           type: boolean
         gap_count:
+          description: Number of gaps the source instance has had. It never goes down.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
     NativeCoverageClaim:
+      description: What the Desktop can do for one coverage requirement.
       type: object
       additionalProperties: false
       required:
@@ -1278,26 +1573,31 @@ components:
         - state
       properties:
         coverage_key:
+          description: Key of the coverage requirement from the native registry.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         source_schema_digest:
+          description: SHA-256 digest of the schema of the source behind it, prefixed with sha256:.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
         claim:
+          description: 'What the Desktop claims it can do: enforce, observe, or nothing.'
           type: string
           enum:
             - enforce
             - observe
             - unavailable
         state:
+          description: Whether that coverage is ready, degraded or unavailable.
           type: string
           enum:
             - ready
             - degraded
             - unavailable
     NativeBaselineReport:
+      description: Whether the Desktop verified the baseline protections every Exam needs.
       type: object
       additionalProperties: false
       required:
@@ -1306,16 +1606,19 @@ components:
         - content_protection
       properties:
         constrained_window:
+          description: Whether the Desktop verified that the exam window is constrained.
           type: string
           enum:
             - verified
             - unavailable
         single_physical_display:
+          description: Whether the Desktop verified that a single physical display is in use.
           type: string
           enum:
             - verified
             - unavailable
         content_protection:
+          description: Whether the Desktop verified content protection for the exam window.
           type: string
           enum:
             - verified
@@ -1338,28 +1641,35 @@ components:
         - reported_at
       properties:
         challenge:
+          description: The challenge from the preflight response, unchanged.
           type: string
           minLength: 43
           maxLength: 43
           pattern: ^[A-Za-z0-9_-]{43}$
         policy_digest:
+          description: digest of the policy from the preflight response.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
         policy_content_digest:
+          description: policy_content_digest from the preflight response.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
         capability_matrix_digest:
+          description: capability_matrix_digest from the preflight response.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
         security_session_id:
+          description: ID the Desktop gives its security session.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         source_manifest_digest:
+          description: SHA-256 digest of the native source manifest in the Desktop build, prefixed with sha256:.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
         selected_source_categories:
+          description: Source categories the policy selected, in the order the policy gives.
           type: array
           minItems: 0
           maxItems: 10
@@ -1378,20 +1688,24 @@ components:
               - microphone
           uniqueItems: true
         sources:
+          description: State of each native source the policy needs, in policy order.
           type: array
           minItems: 0
           maxItems: 11
           items:
             $ref: '#/components/schemas/NativeSourceCoverage'
         coverage:
+          description: What the Desktop can do for each coverage requirement, sorted by coverage_key.
           type: array
           minItems: 0
           maxItems: 64
           items:
             $ref: '#/components/schemas/NativeCoverageClaim'
         baseline:
+          description: Result of the baseline protection checks.
           $ref: '#/components/schemas/NativeBaselineReport'
         posture:
+          description: Overall security state the Desktop reports.
           type: string
           enum:
             - compliant
@@ -1399,14 +1713,12 @@ components:
             - contained
             - failed
         reported_at:
+          description: When the Desktop made the report, by its own clock. Kept only as a record.
           type: string
           format: date-time
-      description: >-
-        Minimized assertions, at most 64 KiB. Source order and categories must match the resolved policy;
-        coverage keys are sorted and exact. No inventories, media, clipboard bytes, OS errors or arbitrary
-        details are accepted. The server computes the report digest. Client reported_at is provenance; server
-        time controls challenge expiry and admission freshness.
+      description: Minimal assertions from the Desktop, at most 64 KiB. Sources and categories must match the resolved policy, in its order, and coverage keys must be sorted and exact. Inventories, media, clipboard content, operating system errors and free-form details are not accepted. The server computes the report digest. reported_at is kept only as a record. Server time decides when the challenge expires and whether the report is still fresh enough to connect.
     SecurityPreflightResult:
+      description: The outcome of a preflight report.
       type: object
       additionalProperties: false
       required:
@@ -1418,19 +1730,23 @@ components:
         - expires_at
       properties:
         preflight_id:
+          description: ID of the preflight.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         report_digest:
+          description: SHA-256 digest of the stored report, prefixed with sha256:.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
         admission:
+          description: eligible when the candidate may connect, blocked otherwise.
           type: string
           enum:
             - eligible
             - blocked
         reason_codes:
+          description: Why the report was blocked. Empty when admission is eligible.
           type: array
           minItems: 0
           maxItems: 16
@@ -1449,12 +1765,15 @@ components:
               - session_changed
           uniqueItems: true
         server_time:
+          description: Server time when the result was made.
           type: string
           format: date-time
         expires_at:
+          description: When the preflight challenge expires. After this, Connect can't use the result.
           type: string
           format: date-time
     AdmittedSecurity:
+      description: The security binding of the active Participation.
       type: object
       additionalProperties: false
       required:
@@ -1470,44 +1789,52 @@ components:
         - renewal_interval_seconds
       properties:
         policy:
+          description: The native security policy, now bound to the Attempt.
           $ref: '#/components/schemas/EffectiveExamSecurityPolicy'
         policy_content_digest:
+          description: SHA-256 digest of the policy content, prefixed with sha256:. It is the same as at preflight.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
         preflight_id:
+          description: ID of the preflight Connect used.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         preflight_report_digest:
+          description: SHA-256 digest of that preflight report, prefixed with sha256:.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
         preflight_policy_digest:
+          description: Policy digest the preflight was checked against, prefixed with sha256:.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
         participation_id:
-          type: string
-          pattern: ^[a-z0-9]{26}$
-          minLength: 26
-          maxLength: 26
+          description: ID of the active Attempt Participation.
+          $ref: '#/components/schemas/ID'
         generation:
+          description: Participation Generation. It equals the policy ordinal.
           type: integer
           format: int64
           minimum: 1
           maximum: 9007199254740991
         security_session_id:
+          description: ID of the Desktop security session.
           type: string
           minLength: 1
           maxLength: 128
         delivery_stream_id:
+          description: ID of the native security stream for this Participation.
           type: string
           minLength: 1
           maxLength: 128
         renewal_interval_seconds:
+          description: How often the Desktop must renew the Participation, in seconds. Always 5.
           type: integer
           format: int64
           const: 5
     SecurityPolicyRecovery:
+      description: 'What a Desktop needs to resume after a lost response: its security binding, fixed configuration and the latest coverage the server accepted.'
       type: object
       additionalProperties: false
       required:
@@ -1520,30 +1847,38 @@ components:
         - security_coverage
       properties:
         server_time:
+          description: Server time when the response was made.
           type: string
           format: date-time
         security:
+          description: The security binding of the active Participation.
           $ref: '#/components/schemas/AdmittedSecurity'
         frozen_attempt_configuration:
+          description: The Attempt Configuration fixed at first admission.
           $ref: '#/components/schemas/FrozenAttemptConfiguration'
         current_sources:
+          description: Latest state of each native source the server accepted.
           type: array
           maxItems: 11
           items:
             $ref: '#/components/schemas/NativeSourceCoverage'
         current_coverage:
+          description: Latest coverage claims the server accepted.
           type: array
           maxItems: 64
           items:
             $ref: '#/components/schemas/NativeCoverageClaim'
         source_reset_receipts:
+          description: Receipts for the source resets the server has recorded.
           type: array
           maxItems: 11
           items:
             $ref: '#/components/schemas/SourceResetReceipt'
         security_coverage:
+          description: Result of the latest coverage renewal the server processed.
           $ref: '#/components/schemas/SecurityCoverageResult'
     SourceResetReceipt:
+      description: Receipt for one recorded source reset.
       type: object
       additionalProperties: false
       required:
@@ -1551,13 +1886,16 @@ components:
         - reset_digest
       properties:
         reset_id:
+          description: ID the Desktop gave the reset.
           type: string
           minLength: 1
           maxLength: 128
         reset_digest:
+          description: SHA-256 digest of the recorded reset, prefixed with sha256:.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
     DeliveryWatermarkRejection:
+      description: A delivery position report from the Desktop that the server rejected.
       type: object
       additionalProperties: false
       required:
@@ -1566,20 +1904,24 @@ components:
         - reason
       properties:
         family:
+          description: 'Delivery family of the source: native or browser.'
           type: string
           enum:
             - native
             - browser
         source_id:
+          description: ID of the native stream or browser activity source.
           type: string
           minLength: 1
           maxLength: 128
         reason:
+          description: closed_source when the source is already closed. position_limit when the reported positions are over the limit.
           type: string
           enum:
             - closed_source
             - position_limit
     SecurityCoverageResult:
+      description: Result of the latest coverage renewal the server processed.
       type: object
       additionalProperties: false
       required:
@@ -1591,14 +1933,17 @@ components:
         - delivery_watermark_rejections
       properties:
         processed_control_sequence:
+          description: Control sequence number of the latest renewal processed. Zero when none has been processed.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         processed_control_digest:
+          description: SHA-256 digest of that renewal, prefixed with sha256:. Null when none has been processed.
           type: [string, 'null']
           pattern: ^sha256:[0-9a-f]{64}$
         coverage_result:
+          description: accepted when the coverage was recorded. stale_control when no newer renewal was applied. reset_required when a source changed instance without a reset record. reset_conflict when a reset record or sequence number conflicts with what the server already recorded.
           type: string
           enum:
             - accepted
@@ -1606,13 +1951,16 @@ components:
             - reset_required
             - reset_conflict
         source_reset_receipts:
+          description: Receipts for the source resets in that renewal.
           type: array
           maxItems: 11
           items:
             $ref: '#/components/schemas/SourceResetReceipt'
         security_interaction_allowed:
+          description: Whether the current security coverage still lets the candidate interact with the Attempt.
           type: boolean
         delivery_watermark_rejections:
+          description: Delivery position reports in the renewal that the server rejected.
           type: array
           maxItems: 50
           items:

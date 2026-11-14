@@ -15,7 +15,7 @@ paths:
       tags:
         - Users
       description: >-
-        Replaces the target User's email only after strong recent authentication, marks the new address unverified, and starts the bounded account-recovery notification path: the new address receives a verification link and the previous address receives a single-use undo link valid for the configured undo window. Changes to one account share the account-recovery rate limit. It never treats possession of administrator authority as proof that the new address is owned.
+        Changes a User's email address. You must have signed in recently with a strong method. The new address starts unverified. The new address gets a verification link, and the old address gets a one-time link to undo the change, valid for the configured undo period. Changes to one account count against its account-recovery rate limit. Your administrator permissions are never taken as proof that the User owns the new address.
       x-proctor-auth: strong_recent_session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -76,12 +76,12 @@ paths:
       tags:
         - Users
       description: >-
-        Marks the target User's current email as verified through a distinct strongly authenticated administrative transition. It does not change the address, revive a disabled account, restore Sessions, or bypass current authorization.
+        Marks a User's current email address as verified, as an administrator action. You must have signed in recently with a strong method. It does not change the address, enable a disabled account, bring back Sessions, or skip the usual permission checks.
       x-codeSamples:
         - lang: Shell
           source: |-
             curl --request POST \
-              --url 'https://proctor.example.edu/api/v1/users/<user-id>/email/verify' \
+              --url 'https://proctor.example.edu/api/v1/users/wj3drgzdpnf54rxf5d8qd3dqne/email/verify' \
               --header 'Authorization: Bearer <interactive-session-access-token>' \
               --header 'X-Proctor-CSRF-Token: <session-csrf-token>'
       x-proctor-auth: strong_recent_session_required
@@ -131,7 +131,7 @@ paths:
 components:
   requestBodies:
     ChangeUserEmail:
-      description: The complete replacement email address; successful change always requires later verification.
+      description: The new email address. After the change, the User must verify it.
       required: true
       content:
         application/json:
@@ -141,14 +141,17 @@ components:
             email: amina.diallo@example.edu
   responses:
     UserEmailStateOK:
-      description: Narrow result of an explicit email-security transition
+      description: The User's email verification state after the change
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/UserEmailStateResponse'
+          example:
+            id: wj3drgzdpnf54rxf5d8qd3dqne
+            email_verified: false
   schemas:
     UserEmailStateResponse:
-      description: Narrow identity and verification state after an email-security transition.
+      description: The User and whether their email address is verified, after an email change or verification.
       type: object
       additionalProperties: false
       required:
@@ -157,11 +160,12 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/ID'
+          description: The User.
         email_verified:
           type: boolean
-          description: Whether the target User's current email has completed verification.
+          description: True when the User's current email address is verified.
     ChangeUserEmailRequest:
-      description: New email address to store in an unverified state.
+      description: The new email address. It is stored as unverified.
       type: object
       additionalProperties: false
       required:
@@ -170,4 +174,4 @@ components:
         email:
           type: string
           format: email
-          description: Complete replacement address; it must satisfy canonical email validation and uniqueness.
+          description: The new address. It must be a valid email address that no other User has.

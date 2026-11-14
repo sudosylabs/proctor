@@ -15,7 +15,9 @@ paths:
       tags:
         - Sittings
       description: >-
-        Lists Sittings for one authorized Exam in stable descending schedule order, with optional Class, state, and overlap filters. The response is manager-safe and contains no candidate credentials, private reasons, answer content, or integrity evidence.
+        Lists the Sittings of one Exam, latest scheduled start first. You can filter by Class, by state,
+        and by a time window the Sitting overlaps. The response never includes candidate credentials,
+        private reasons, answers or integrity evidence.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -42,11 +44,13 @@ paths:
           required: false
           schema:
             $ref: '#/components/schemas/ID'
-          description: Return only Sittings targeting this exact Class.
+          description: Return only Sittings for this Class.
         - name: state
           in: query
           required: false
-          description: Repeated values are accepted and deduplicated before applying the filter.
+          description: >-
+            Return only Sittings in these states. Repeat the parameter to match several states; duplicates
+            are ignored.
           style: form
           explode: true
           schema:
@@ -57,14 +61,18 @@ paths:
         - name: ends_after
           in: query
           required: false
-          description: Paired with starts_before; selects half-open Sittings whose end is after this instant.
+          description: >-
+            Return only Sittings that end after this time. Send it together with `starts_before`, and make
+            it earlier than `starts_before`.
           schema:
             type: string
             format: date-time
         - name: starts_before
           in: query
           required: false
-          description: Paired with ends_after; selects half-open Sittings whose start is before this instant.
+          description: >-
+            Return only Sittings that start before this time. Send it together with `ends_after`. The two
+            together select Sittings that overlap the window.
           schema:
             type: string
             format: date-time
@@ -80,7 +88,9 @@ paths:
         - name: cursor
           in: query
           required: false
-          description: Opaque cursor over descending scheduled start and Sitting identity; clients return it unchanged.
+          description: >-
+            The `next_cursor` from the previous page. Pass it back unchanged and do not parse or build it
+            yourself.
           schema:
             type: string
       responses:
@@ -104,7 +114,9 @@ paths:
       tags:
         - Sittings
       description: >-
-        Schedules one published immutable Exam Revision for one eligible Class inside its Academic Period. The authoritative transaction rechecks Exam ownership, Revision provenance, Class eligibility, future time bounds, and overlap constraints before committing.
+        Schedules a published Exam Revision for one Class, within the Class's Academic Period. Before
+        saving, the server checks that the Revision belongs to this Exam, that the Class is eligible, and
+        that the window is in the future.
       x-proctor-auth: principal_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -168,7 +180,8 @@ paths:
       tags:
         - Sittings
       description: >-
-        Returns the current bounded manager projection of one authorized Sitting after validating its nested Exam ownership. Lifecycle timestamps and revision are durable; private manager reasons and candidate-sensitive state are not returned here.
+        Returns one Sitting of the Exam, including its lifecycle times and current revision. Private
+        manager reasons and candidate details are not included.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -210,7 +223,10 @@ paths:
       tags:
         - Sittings
       description: >-
-        Conditionally changes one still-scheduled Sitting under its exact revision fence. Once opening begins, delivery inputs are immutable except through explicit live-correction and lifecycle operations.
+        Changes the Exam Revision, Class or schedule of a Sitting that has not opened yet. Send the
+        Sitting's current revision; the request fails if the Sitting changed since you read it. After
+        the Sitting opens, these values can't change here. Use live corrections or the lifecycle
+        operations (pause, resume, extend, close) instead.
       x-proctor-auth: principal_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -270,7 +286,7 @@ paths:
 components:
   requestBodies:
     ScheduleExamSitting:
-      description: Published Exam Revision, eligible Class, and future delivery window for a new Sitting.
+      description: The published Exam Revision, the Class, and the future time window for the new Sitting.
       required: true
       content:
         application/json:
@@ -282,7 +298,7 @@ components:
             scheduled_start_at: "2026-12-14T09:00:00Z"
             scheduled_end_at: "2026-12-14T11:00:00Z"
     UpdateExamSittingSchedule:
-      description: Exact Sitting revision plus at least one pre-open delivery input to change.
+      description: The Sitting's current revision and at least one value to change.
       required: true
       content:
         application/json:
@@ -294,7 +310,7 @@ components:
             scheduled_end_at: "2026-12-14T11:30:00Z"
   responses:
     ExamSittingCreated:
-      description: Exam Sitting scheduled
+      description: The Sitting was scheduled.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -302,8 +318,19 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ExamSittingResponse'
+          example:
+            id: 14j8umgczgrdp95w77zuxmxfu9
+            exam_id: wj3drgzdpnf54rxf5d8qd3dqne
+            exam_revision_id: ih1r84kij94nrwis97rft6rduh
+            class_id: 1asb7sk89dp1ex339fkh3te5t4
+            scheduled_start_at: '2026-12-14T09:00:00Z'
+            scheduled_end_at: '2026-12-14T11:00:00Z'
+            state: scheduled
+            created_at: '2026-11-20T14:12:05Z'
+            updated_at: '2026-11-20T14:12:05Z'
+            revision: 1
     ExamSittingListOK:
-      description: Bounded Exam Sitting collection
+      description: One page of Sittings.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -312,10 +339,35 @@ components:
           schema:
             $ref: '#/components/schemas/ExamSittingListResponse'
           example:
-            items: []
+            items:
+              - id: 14j8umgczgrdp95w77zuxmxfu9
+                exam_id: wj3drgzdpnf54rxf5d8qd3dqne
+                exam_revision_id: ih1r84kij94nrwis97rft6rduh
+                class_id: 1asb7sk89dp1ex339fkh3te5t4
+                scheduled_start_at: '2026-12-14T09:00:00Z'
+                scheduled_end_at: '2026-12-14T11:00:00Z'
+                state: scheduled
+                created_at: '2026-11-20T14:12:05Z'
+                updated_at: '2026-11-20T14:12:05Z'
+                revision: 1
+              - id: saqjfmjqqy9mo1yj4zwed73333
+                exam_id: wj3drgzdpnf54rxf5d8qd3dqne
+                exam_revision_id: g63dcrphk8idgyjgzbrpajosz6
+                class_id: 1asb7sk89dp1ex339fkh3te5t4
+                scheduled_start_at: '2026-12-07T09:00:00Z'
+                scheduled_end_at: '2026-12-07T11:00:00Z'
+                state: closed
+                created_at: '2026-11-18T10:30:00Z'
+                updated_at: '2026-12-07T11:00:41Z'
+                opened_at: '2026-12-07T09:00:01Z'
+                closing_at: '2026-12-07T11:00:00Z'
+                closed_at: '2026-12-07T11:00:41Z'
+                reason_code: scheduled_end_reached
+                revision: 4
+            next_cursor: eyJzdGFydF9hdCI6IjIwMjYtMTItMDdUMDk6MDA6MDBaIiwiaWQiOiJzYXFqZm1qcXF5OW1vMXlqNHp3ZWQ3MzMzMyJ9
   schemas:
     ScheduleExamSittingRequest:
-      description: Complete immutable Revision target, Class target, and initial delivery window.
+      description: The Exam Revision, Class and time window for a new Sitting.
       type: object
       additionalProperties: false
       required:
@@ -326,16 +378,22 @@ components:
       properties:
         exam_revision_id:
           $ref: '#/components/schemas/ID'
+          description: The published Exam Revision to deliver. It must belong to this Exam.
         class_id:
           $ref: '#/components/schemas/ID'
+          description: The Class whose members can take the Sitting.
         scheduled_start_at:
           type: string
           format: date-time
+          description: When the Sitting opens. It must be in the future and inside the Class's Academic Period.
         scheduled_end_at:
           type: string
           format: date-time
+          description: The Sitting's deadline. It must be after the start and inside the Class's Academic Period.
     UpdateExamSittingScheduleRequest:
-      description: Revision-fenced partial update admitted only before the Sitting opens.
+      description: >-
+        Changes to a Sitting that has not opened yet. Send the current revision and at least one value to
+        change. Members you leave out keep their current value.
       type: object
       additionalProperties: false
       required:
@@ -354,19 +412,25 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: Exact current Sitting revision used as an optimistic concurrency fence.
+          description: >-
+            The Sitting's current revision, as last read. The request fails with a conflict if the Sitting
+            has changed since.
         exam_revision_id:
           $ref: '#/components/schemas/ID'
+          description: A different published Revision of this Exam to deliver.
         class_id:
           $ref: '#/components/schemas/ID'
+          description: A different Class to deliver the Sitting to.
         scheduled_start_at:
           type: string
           format: date-time
+          description: A new opening time. It must be in the future and inside the Class's Academic Period.
         scheduled_end_at:
           type: string
           format: date-time
+          description: A new deadline. It must be after the start and inside the Class's Academic Period.
     ExamSittingListResponse:
-      description: One bounded page of authorized Exam Sittings.
+      description: One page of Sittings, latest scheduled start first.
       type: object
       additionalProperties: false
       required:
@@ -375,8 +439,11 @@ components:
         items:
           type: array
           maxItems: 200
+          description: The Sittings on this page, at most `limit`.
           items:
             $ref: '#/components/schemas/ExamSittingResponse'
         next_cursor:
           type: string
-          description: Opaque cursor over descending scheduled start and Sitting identity; clients return it unchanged.
+          description: >-
+            Pass this as `cursor` to get the next page. Omitted on the last page. Don't parse or
+            build it yourself.

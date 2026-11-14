@@ -13,7 +13,9 @@ paths:
       operationId: issueInstitutionRoleInvitation
       summary: Invite an existing User to one exact Institution Role package
       description: >-
-        Issues an immutable Institution-scoped Role package after strong recent authentication and last-administrator safety checks. Acceptance cannot narrow or expand the recorded Role and scope, and the one-time claim remains confidential.
+        Invites an existing User to one Role scoped to the Institution. It needs a strong, recent Session and runs
+        the checks that keep the Institution from losing its last administrator. Acceptance cannot narrow or widen
+        the Role and scope the Invitation records, and the one-time claim is kept secret.
       tags:
         - Invitations and onboarding
       x-proctor-auth: strong_recent_session_required
@@ -47,7 +49,9 @@ paths:
         - sessionCookie: []
           csrfToken: []
       requestBody:
-        description: Existing recipient, exact eligible Role, and optional effective interval for the route Institution.
+        description: >-
+          The existing User's address, the Role to grant, and an optional start and end at the Institution in the
+          path.
         required: true
         content:
           application/json:
@@ -59,11 +63,21 @@ paths:
               start_at: '2026-08-01T00:00:00Z'
       responses:
         "201":
-          description: Invitation issued without claim or mailbox disclosure
+          description: The Invitation was issued. The response contains neither the claim nor mailbox details.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/InvitationResponse'
+              example:
+                id: 1mm4jpw9qo8zmr1ydipa3i3a4z
+                purpose: institution_role
+                state: pending
+                role_id: ybndrfg8ejkmcpqxot1uwisza3
+                role_actions:
+                  - user.view
+                  - audit.view
+                start_at: '2026-08-01T00:00:00Z'
+                expires_at: '2026-07-21T09:30:00Z'
         "400":
           $ref: '#/components/responses/BadRequest'
         "401":
@@ -86,4 +100,4 @@ components:
       required: true
       schema:
         $ref: '#/components/schemas/ID'
-      description: The Institution identifier for this installation.
+      description: The ID of this installation's Institution.

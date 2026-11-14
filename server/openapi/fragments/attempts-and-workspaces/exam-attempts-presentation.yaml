@@ -12,12 +12,7 @@ paths:
     get:
       operationId: getCandidateExamPresentation
       summary: Get the protected current presentation for one candidate Attempt
-      description: >-
-        Returns the Exam title, bounded Markdown instructions, admitted capacity policy, and ordered resource manifest
-        visible to the active candidate Attempt. The request rechecks the Session-bound Attempt credential and open
-        Connection; no answer or manager-only state is included. Capacity is frozen to the original admission
-        Revision and does not change with Institution policy updates or live corrections. Instructions and
-        resources follow the current Sitting Revision.
+      description: 'Returns what the active candidate Attempt may see: the Exam title, the Markdown instructions, the capacity limits that apply, and the ordered list of Exam Resources. The server checks the Attempt credential bound to the Session and the open Connection again. The response contains no answers and nothing meant only for Exam Managers. Capacity limits come from the Exam Revision the Attempt was admitted with. They don''t change when Institution policy changes or a live correction is published. Instructions and resources follow the current Exam Revision of the Sitting.'
       tags:
         - Attempts and workspaces
       x-proctor-auth: session_required
@@ -65,7 +60,7 @@ paths:
 components:
   responses:
     CandidateExamPresentationOK:
-      description: Protected current Exam presentation for one active Attempt Connection
+      description: What the active Attempt may currently see, for this Connection.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -73,8 +68,101 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/CandidateExamPresentationResponse'
+          example:
+            attempt_id: 1asb7sk89dp1ex339fkh3te5t4
+            exam_sitting_id: 889766ufjgio6kbpzjbufozksq
+            title: Data Structures Final Exam
+            instructions_markdown: |-
+              Answer all three questions. Put each answer in its own file under `answers/`.
+            capacity:
+              resource_maximum_count: 20
+              resource_maximum_bytes: 10485760
+              workspace_maximum_entries: 500
+              workspace_maximum_file_bytes: 5242880
+              workspace_maximum_total_bytes: 52428800
+            candidate_runtime_capabilities:
+              schema_version: 1
+              server_time: '2026-08-01T09:30:00Z'
+              interaction_state: interactive
+              attempt_configuration:
+                attempt_configuration_revision: cfg-1
+                presentation:
+                  color_theme: dark
+                  prefer_high_contrast: false
+                  zoom_percent: 100
+                  editor_font_size_px: 14
+                  editor_line_height_px: 22
+                  reduced_motion: false
+                  screen_reader_mode: auto
+                  announcement_mode: auto
+                  cursor_style: line
+                  cursor_blinking: blink
+                approved_commands:
+                  - editor.action.formatDocument
+                  - workbench.action.files.save
+                approved_keybindings:
+                  - workbench.action.files.save
+                digest: sha256:ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d
+              focus_loss_collection_enabled: true
+              pending_correction_capabilities: []
+              workspace_mutation_allowed: true
+              submission_allowed: true
+              browser:
+                state: available
+                policy_revision_id: iqcx3qc9sbbt6ocshszfqgq6ci
+                policy_digest: sha256:4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a
+              exam_revision:
+                admission_revision_id: p6y6sf8ac6m5if373fkkebj7j6
+                current_revision_id: iqcx3qc9sbbt6ocshszfqgq6ci
+                acknowledgement_required: false
+              departure:
+                allowed: false
+                reason: attempt_in_progress
+            browser_policy:
+              enabled: true
+              start_rule_id: language-docs
+              rules:
+                - rule_id: language-docs
+                  origin: https://docs.example.org
+                  path_prefix: /reference
+                  host_match: exact
+                  allow_redirects: false
+                  blocked_navigation_outcome: record
+                  institution_http_exception: false
+              policy_revision_id: iqcx3qc9sbbt6ocshszfqgq6ci
+              policy_digest: sha256:4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a
+              policy_revision_number: 3
+              browser_activity_disclosure:
+                notice_id: integrated_browser_activity
+                audience: exam_managers_with_browser_activity_permission
+                retention_policy_revision: 2
+                browser_activity_retention_days: 180
+                retention_anchor: eligible_closed_sitting_records_completion
+                may_create_integrity_evidence: false
+            live_corrections:
+              - revision_id: iqcx3qc9sbbt6ocshszfqgq6ci
+                revision_number: 3
+                effective_at: '2026-08-01T09:20:00Z'
+                summary: Question 2 now asks for the worst-case running time, not the average.
+                changed_areas:
+                  - instructions
+                affected_capabilities:
+                  - submission
+                  - workspace
+                acknowledgement_required: true
+                acknowledgement_state: acknowledged
+                acknowledged_at: '2026-08-01T09:24:12Z'
+            resources:
+              - id: sjebyge5cpbop1xwo4eds74ejb
+                display_name: Reference sheet
+                description_markdown: Common complexity bounds.
+                position: 0
+                media_type: application/pdf
+                size: 182044
+                sha256: 5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9
   schemas:
     CandidateExamResourceResponse:
+      description: One Exam Resource the candidate can open during the Attempt.
       type: object
       additionalProperties: false
       required:
@@ -87,28 +175,36 @@ components:
         - sha256
       properties:
         id:
+          description: ID of the Exam Resource. Use it to fetch the resource content.
           $ref: '#/components/schemas/ID'
         display_name:
+          description: Name of the resource to show the candidate.
           type: string
           minLength: 1
           maxLength: 255
         description_markdown:
+          description: Description of the resource written by the Exam author, in Markdown. Empty when the author gave none.
           type: string
           maxLength: 16384
         position:
+          description: Zero-based place of the resource in the list. Resources are returned in this order.
           type: integer
           minimum: 0
           maximum: 99
         media_type:
+          description: Media type of the resource content.
           $ref: '#/components/schemas/ExamResourceMediaType'
         size:
+          description: Size of the resource content in bytes.
           type: integer
           format: int64
           minimum: 0
           maximum: 104857600
         sha256:
+          description: Lowercase hexadecimal SHA-256 digest of the resource content. The content response uses it as its entity tag.
           $ref: '#/components/schemas/SHA256'
     CandidateExamPresentationResponse:
+      description: What the candidate sees and may do in the Attempt right now.
       type: object
       additionalProperties: false
       required:
@@ -123,31 +219,38 @@ components:
         - resources
       properties:
         attempt_id:
+          description: ID of the Exam Attempt.
           $ref: '#/components/schemas/ID'
         exam_sitting_id:
+          description: ID of the Exam Sitting the Attempt belongs to.
           $ref: '#/components/schemas/ID'
         title:
+          description: Title of the Exam.
           type: string
           minLength: 1
           maxLength: 200
         instructions_markdown:
           type: string
-          description: Current Sitting Revision instructions as bounded authored Markdown.
+          description: Exam Instructions from the current Exam Revision of the Sitting, in Markdown.
         capacity:
           $ref: '#/components/schemas/ExamCapacityPolicy'
-          description: Exam Capacity Policy frozen to the original admission Revision, including the enforced Workspace entry, per-file, and total-byte limits.
+          description: Exam Capacity Policy from the Exam Revision the Attempt was admitted with. It sets the limits the server enforces on Workspace entries, file size and total Workspace size, and it can't change during the Attempt.
         candidate_runtime_capabilities:
+          description: What the candidate may do right now, such as change the Workspace or submit.
           $ref: '#/components/schemas/CandidateRuntimeCapabilities'
         browser_policy:
+          description: The current Browser Policy and its collection notice. Null while the candidate still has to acknowledge a live correction that changes the Browser Policy.
           oneOf:
             - $ref: '#/components/schemas/CandidateBrowserPolicy'
             - type: 'null'
         live_corrections:
+          description: Live corrections published to the Sitting after the Attempt was admitted.
           type: array
           maxItems: 32
           items:
             $ref: '#/components/schemas/CandidateLiveCorrection'
         resources:
+          description: Exam Resources from the current Exam Revision, in position order.
           type: array
           maxItems: 100
           items:
@@ -163,28 +266,35 @@ components:
         - browser_activity_disclosure
       properties:
         enabled:
+          description: Whether the integrated browser is turned on for this Exam.
           type: boolean
         start_rule_id:
+          description: ID of the rule the browser starts from. Present only when enabled is true.
           type: string
           minLength: 1
           maxLength: 64
         rules:
+          description: Rules that list where the browser may go. Present only when enabled is true.
           type: array
           minItems: 1
           maxItems: 128
           items:
             $ref: '#/components/schemas/BrowserPolicyRule'
         policy_revision_id:
+          description: ID of the Exam Revision this Browser Policy comes from, which is the current Revision of the Sitting.
           $ref: '#/components/schemas/ID'
         policy_digest:
+          description: SHA-256 digest of the Browser Policy, prefixed with sha256:.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
         policy_revision_number:
+          description: Number of the Exam Revision this Browser Policy comes from. It only goes up.
           type: integer
           format: int64
           minimum: 1
           maximum: 9007199254740991
         browser_activity_disclosure:
+          description: Notice to show the candidate about what browser activity is collected and how long it is kept.
           $ref: '#/components/schemas/BrowserActivityDisclosure'
       oneOf:
         - properties:
@@ -202,11 +312,9 @@ components:
           required:
             - start_rule_id
             - rules
-      description: >-
-        Current Browser Policy and separately revisioned collection notice. Revision number is a monotonic ordinal. The
-        sha256-prefixed digest covers only canonical BrowserPolicy bytes, excluding revision metadata and disclosure.
-        Disabled policies omit start_rule_id and rules.
+      description: The current Browser Policy and its collection notice, which has its own revision. The revision number only goes up. The digest, prefixed with sha256:, covers only the policy itself, not its revision details or the notice. A disabled policy has no start_rule_id or rules.
     CandidateLiveCorrection:
+      description: One live correction published to the Sitting while the Attempt is in progress.
       type: object
       additionalProperties: false
       required:
@@ -220,19 +328,24 @@ components:
         - acknowledgement_state
       properties:
         revision_id:
+          description: ID of the Exam Revision that carries the correction. Use it to acknowledge the correction.
           $ref: '#/components/schemas/ID'
         revision_number:
+          description: Number of the Exam Revision that carries the correction.
           type: integer
           format: int64
           minimum: 1
         effective_at:
+          description: When the correction took effect.
           type: string
           format: date-time
         summary:
+          description: Short explanation of the correction to show the candidate.
           type: string
           minLength: 1
           maxLength: 500
         changed_areas:
+          description: Which parts of the Exam the correction changed.
           type: array
           minItems: 1
           maxItems: 3
@@ -244,10 +357,13 @@ components:
               - instructions
               - resources
         affected_capabilities:
+          description: Capabilities the correction affects. When acknowledgement is required, they stay blocked until the candidate acknowledges it.
           $ref: '#/components/schemas/CorrectionCapabilitySelection'
         acknowledgement_required:
+          description: Whether the candidate must acknowledge the correction before using the affected capabilities again.
           type: boolean
         acknowledgement_state:
+          description: Whether this candidate has acknowledged the correction. not_required means no acknowledgement is needed.
           type: string
           enum:
             - not_required
@@ -256,8 +372,9 @@ components:
         acknowledged_at:
           type: string
           format: date-time
-          description: Present exactly when acknowledgement_state is acknowledged.
+          description: When the candidate acknowledged the correction. Present only when acknowledgement_state is acknowledged.
     CandidateRuntimeCapabilities:
+      description: What the candidate may do in the Attempt at the moment the server answered.
       type: object
       additionalProperties: false
       required:
@@ -274,45 +391,52 @@ components:
         - departure
       properties:
         schema_version:
+          description: Version of this object's layout. Currently always 1.
           type: integer
           enum:
             - 1
         server_time:
+          description: Server time when these capabilities were worked out.
           type: string
           format: date-time
         interaction_state:
+          description: interactive while the Sitting is Open. sitting_paused while it is Paused, when Workspace changes and submission are blocked.
           type: string
           enum:
             - interactive
             - sitting_paused
         attempt_configuration:
+          description: The Attempt Configuration fixed when the candidate was admitted.
           $ref: '#/components/schemas/CandidateAttemptConfiguration'
         focus_loss_collection_enabled:
+          description: Whether the Exam collects Focus Loss observations from the client.
           type: boolean
         pending_correction_capabilities:
           type: array
           maxItems: 3
           uniqueItems: true
-          description: Sorted union of capabilities selected by currently pending required acknowledgements.
+          description: Capabilities blocked by live corrections that still need acknowledgement, sorted and without duplicates. Empty when nothing is waiting.
           items:
             $ref: '#/components/schemas/CandidateCapability'
         workspace_mutation_allowed:
+          description: Whether the candidate may change the Workspace now. False while the Sitting is paused or a correction that affects the Workspace awaits acknowledgement.
           type: boolean
         submission_allowed:
+          description: Whether the candidate may submit now. False while the Sitting is paused or a correction that affects submission awaits acknowledgement.
           type: boolean
         browser:
+          description: Whether the integrated browser can be used now.
           $ref: '#/components/schemas/CandidateBrowserCapability'
         exam_revision:
+          description: The Exam Revision the Attempt was admitted with, and the current one.
           $ref: '#/components/schemas/CandidateExamRevisionCapability'
         departure:
+          description: Whether the candidate may leave the Attempt now.
           $ref: '#/components/schemas/CandidateDepartureCapability'
     CandidateAttemptConfiguration:
       type: object
       additionalProperties: false
-      description: >-
-        Effective presentation and approved identifiers for the candidate renderer. The revision and digest identify the
-        frozen configuration; private build, registry and User Settings provenance are delivered only to the owning
-        privileged Desktop.
+      description: The presentation settings and approved command IDs the candidate interface uses for this Attempt. The revision and digest identify the configuration, which was fixed at admission. Where it came from (the Desktop build, settings catalog and User Settings) is sent only to the Desktop that owns the Attempt.
       required:
         - attempt_configuration_revision
         - presentation
@@ -321,16 +445,16 @@ components:
         - digest
       properties:
         attempt_configuration_revision:
+          description: Server-assigned revision of the Attempt Configuration.
           type: string
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         presentation:
+          description: Presentation settings to apply.
           $ref: '#/components/schemas/AttemptConfigurationPresentation'
         approved_commands:
           type: array
-          description: >-
-            Sorted unique approved catalog IDs; keybindings must resolve to selected commands. Raw key chords are
-            rejected.
+          description: IDs of approved commands from the Desktop settings catalog, sorted and without duplicates. Raw key chords are rejected.
           maxItems: 128
           uniqueItems: true
           items:
@@ -338,25 +462,20 @@ components:
             pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         approved_keybindings:
           type: array
-          description: >-
-            Sorted unique approved catalog IDs; keybindings must resolve to selected commands. Raw key chords are
-            rejected.
+          description: IDs of approved keybindings from the Desktop settings catalog, sorted and without duplicates. Each keybinding must map to one of the approved commands. Raw key chords are rejected.
           maxItems: 128
           uniqueItems: true
           items:
             type: string
             pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         digest:
+          description: SHA-256 digest of the full Attempt Configuration, prefixed with sha256:.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
     AttemptConfigurationCandidate:
       type: object
       additionalProperties: false
-      description: >-
-        Complete proposed configuration, bounded at 16 KiB canonical bytes. Initial admission checks the acknowledged
-        User Settings revision, exact admitted build and target, packaged registry and manifest, and Candidate-safe
-        catalog membership. Out-of-range values are rejected without clamping. The digest of a frozen configuration
-        covers this entire candidate, including its original provenance.
+      description: Sent as `initial_configuration` when Proctor Desktop connects to an Exam Attempt over the WebSocket, so no HTTP operation uses it. A complete proposed Attempt Configuration, at most 16 KiB once encoded. At first admission the server checks the acknowledged User Settings revision, the exact Desktop build and target, the packaged settings registry and manifest, and that every item is safe for candidates. Values out of range are rejected, not adjusted. The digest of the fixed configuration covers this whole object, including where it came from.
       required:
         - manifest_fingerprint
         - registry_fingerprint
@@ -368,26 +487,30 @@ components:
         - approved_keybindings
       properties:
         manifest_fingerprint:
+          description: Fingerprint of the Attempt Configuration manifest packaged with the Desktop build, prefixed with sha256:. It must match the admitted build.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
         registry_fingerprint:
+          description: Fingerprint of the Desktop settings registry packaged with the build, prefixed with fnv1a64:. It must match the admitted build.
           type: string
           pattern: ^fnv1a64:[0-9a-f]{16}$
         desktop_build:
+          description: ID of the Desktop build. It must match the admitted build.
           type: string
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         desktop_target:
+          description: Target platform of the Desktop build. It must match the admitted build.
           type: string
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         user_settings_revision:
+          description: Revision of the User Settings Document the configuration was built from.
           $ref: '#/components/schemas/ID'
         presentation:
+          description: Presentation settings to fix for the Attempt.
           $ref: '#/components/schemas/AttemptConfigurationPresentation'
         approved_commands:
           type: array
-          description: >-
-            Sorted unique approved catalog IDs; keybindings must resolve to selected commands. Raw key chords are
-            rejected.
+          description: IDs of approved commands from the Desktop settings catalog, sorted and without duplicates. Raw key chords are rejected.
           maxItems: 128
           uniqueItems: true
           items:
@@ -395,15 +518,14 @@ components:
             pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         approved_keybindings:
           type: array
-          description: >-
-            Sorted unique approved catalog IDs; keybindings must resolve to selected commands. Raw key chords are
-            rejected.
+          description: IDs of approved keybindings from the Desktop settings catalog, sorted and without duplicates. Each keybinding must map to one of the approved commands. Raw key chords are rejected.
           maxItems: 128
           uniqueItems: true
           items:
             type: string
             pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
     AttemptConfigurationPresentation:
+      description: Presentation settings fixed for the Attempt. Stricter accessibility needs may change how they are applied at run time, never these stored values.
       type: object
       additionalProperties: false
       required:
@@ -419,6 +541,7 @@ components:
         - cursor_blinking
       properties:
         color_theme:
+          description: Color theme. hcLight and hcDark are the high-contrast themes.
           type: string
           enum:
             - light
@@ -426,44 +549,52 @@ components:
             - hcLight
             - hcDark
         prefer_high_contrast:
+          description: Whether the candidate prefers high-contrast colors.
           type: boolean
         zoom_percent:
+          description: Interface zoom, as a percentage.
           type: integer
           minimum: 80
           maximum: 200
           default: 100
         editor_font_size_px:
+          description: Editor font size, in pixels.
           type: integer
           minimum: 12
           maximum: 24
           default: 14
         editor_line_height_px:
           type: integer
-          description: Pixel height with bounds independent of font size.
+          description: Editor line height, in pixels. Its limits don't depend on the font size.
           minimum: 16
           maximum: 40
           default: 22
         reduced_motion:
+          description: Whether to reduce motion and animation.
           type: boolean
         screen_reader_mode:
+          description: Whether the editor is optimized for screen readers. auto lets the client decide.
           type: string
           enum:
             - auto
             - 'on'
             - 'off'
         announcement_mode:
+          description: How much detail the interface announces to assistive technology.
           type: string
           enum:
             - auto
             - verbose
             - minimal
         cursor_style:
+          description: Shape of the editor text cursor.
           type: string
           enum:
             - line
             - block
             - underline
         cursor_blinking:
+          description: How the editor text cursor blinks. solid means it does not blink.
           type: string
           enum:
             - blink
@@ -472,12 +603,14 @@ components:
             - expand
             - solid
     CandidateBrowserCapability:
+      description: Whether the integrated browser can be used right now. Policy details are left out when the browser is disabled.
       type: object
       additionalProperties: false
       required:
         - state
       properties:
         state:
+          description: disabled means the Exam has no integrated browser. available means it can be used. sitting_paused means the Sitting is paused. acknowledgement_required means a live correction to the Browser Policy must be acknowledged first. temporarily_unavailable means the server could not start a new browser activity source after the browser was reset, for example because a limit was reached.
           type: string
           enum:
             - disabled
@@ -486,8 +619,10 @@ components:
             - acknowledgement_required
             - temporarily_unavailable
         policy_revision_id:
+          description: ID of the Exam Revision whose Browser Policy applies. Omitted when state is disabled.
           $ref: '#/components/schemas/ID'
         policy_digest:
+          description: SHA-256 digest of the Browser Policy that applies, prefixed with sha256:. Omitted when state is disabled.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
       oneOf:
@@ -516,6 +651,7 @@ components:
               type: string
               pattern: ^sha256:[0-9a-f]{64}$
     CandidateExamRevisionCapability:
+      description: The Exam Revisions that apply to the Attempt.
       type: object
       additionalProperties: false
       required:
@@ -524,12 +660,16 @@ components:
         - acknowledgement_required
       properties:
         admission_revision_id:
+          description: ID of the Exam Revision the Attempt was admitted with. Capacity limits come from this Revision.
           $ref: '#/components/schemas/ID'
         current_revision_id:
+          description: ID of the current Exam Revision of the Sitting. Instructions, resources and the Browser Policy come from this Revision.
           $ref: '#/components/schemas/ID'
         acknowledgement_required:
+          description: True when at least one live correction still needs the candidate to acknowledge it.
           type: boolean
     CandidateDepartureCapability:
+      description: Whether the candidate may leave the Attempt now.
       type: object
       additionalProperties: false
       required:
@@ -537,10 +677,12 @@ components:
         - reason
       properties:
         allowed:
+          description: Always false while the Attempt is in progress.
           type: boolean
           enum:
             - false
         reason:
+          description: Why the candidate may not leave.
           type: string
           enum:
             - attempt_in_progress

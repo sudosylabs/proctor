@@ -13,19 +13,17 @@ paths:
       tags:
         - System
       description: >-
-        Returns a request-specific, fail-closed compatibility result for one declared Proctor Desktop build. The declarations are consistency metadata rather than binary attestation. Every well-formed request returns 200, including unsupported builds and temporary unavailability; malformed selectors return Problem Details. The response deliberately omits Installation identity, authentication policy, providers, build provenance, and update destinations.
+        Tells a Proctor Desktop build whether the server is available and whether that build can work with it. When the server can't decide, the answer is not compatible. The build details are what Desktop reports about itself, and the server does not verify the binary. Every well-formed request gets 200, even for an unsupported build or while the server is unavailable. Malformed parameters get a Problem Details error. The response never reveals the installation's identity, sign-in settings, identity providers, build details or update locations.
       x-proctor-auth: public
       x-proctor-error-codes:
         - request.invalid
-        - desktop_compatibility_policy.revision_conflict
-        - desktop_compatibility_policy.unavailable
       security: []
       x-proctor-idempotency: none
       parameters:
         - name: desktop_release
           in: query
           required: true
-          description: Canonical semantic release declared by Proctor Desktop, without a leading v.
+          description: Desktop's semantic version, such as `1.4.2`, without a leading `v`.
           schema:
             type: string
             minLength: 5
@@ -34,7 +32,7 @@ paths:
         - name: desktop_build_id
           in: query
           required: true
-          description: Canonical signed-build identity declared by Proctor Desktop.
+          description: The build ID of this signed Desktop build.
           schema:
             type: string
             minLength: 1
@@ -43,7 +41,7 @@ paths:
         - name: platform
           in: query
           required: true
-          description: Bounded target selector. Initially recognized targets use darwin, win32, or linux; another syntactically valid value receives unsupported_target.
+          description: Desktop's operating system, such as `darwin`, `win32` or `linux`. Any other well-formed value gets `unsupported_target`.
           schema:
             type: string
             minLength: 1
@@ -52,7 +50,7 @@ paths:
         - name: architecture
           in: query
           required: true
-          description: Bounded target selector. Initially recognized architectures use arm64 or x64; another syntactically valid value receives unsupported_target.
+          description: Desktop's processor architecture, such as `arm64` or `x64`. Any other well-formed value gets `unsupported_target`.
           schema:
             type: string
             minLength: 1
@@ -61,7 +59,7 @@ paths:
         - name: realtime_protocol
           in: query
           required: true
-          description: Positive realtime protocol version declared by Proctor Desktop.
+          description: The realtime protocol version Desktop speaks, 1 or higher.
           schema:
             type: integer
             minimum: 1
@@ -70,8 +68,6 @@ paths:
           $ref: '#/components/responses/SystemPingOK'
         "400":
           $ref: '#/components/responses/BadRequest'
-        "409":
-          $ref: '#/components/responses/Conflict'
         "503":
           $ref: '#/components/responses/ServiceUnavailable'
   /api/v1/system/version:
@@ -81,7 +77,7 @@ paths:
       tags:
         - System
       description: >-
-        Returns the release version and immutable build provenance for the currently serving node. The response contains no runtime configuration, credentials, dependency addresses, or installation identity.
+        Returns the version and build details of the server node that answers. It contains no configuration, credentials, service addresses or installation identity.
       x-proctor-auth: public
       x-proctor-error-codes: []
       security: []
@@ -92,7 +88,7 @@ paths:
 components:
   responses:
     SystemPingOK:
-      description: Request-specific availability and Desktop compatibility result
+      description: Availability and compatibility for the Desktop build in the request
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -105,17 +101,26 @@ components:
             server_time: '2026-08-28T10:11:12Z'
             availability: ready
             reason: ready
-            compatibility: unsupported_target
-            compatibility_reason: unsupported_target
+            compatibility: update_required
+            compatibility_reason: release_too_old
+            minimum_desktop_release: 1.4.0
+            maximum_desktop_release: 1.6.2
+            minimum_realtime_protocol: 2
+            maximum_realtime_protocol: 3
     BuildInfoOK:
       description: Build information
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/BuildInfoResponse'
+          example:
+            version: 1.6.2
+            commit: 3f1c9a2be47d08e6a5c3b19f0d72e84a6b5c1d09
+            build_time: '2026-08-20T14:03:11Z'
+            go_version: go1.25.3
   schemas:
     SystemPingResponse:
-      description: Safe product availability and compatibility projection for one declared Desktop build.
+      description: Whether the server is available, and whether the Desktop build in the request can use it.
       type: object
       additionalProperties: false
       required:
@@ -129,12 +134,16 @@ components:
         schema_version:
           type: integer
           const: 1
+          description: Version of this response format. Always 1.
         server_time:
           type: string
           format: date-time
-          description: Authoritative serving-node time in RFC 3339 format.
+          description: The server's current time, in RFC 3339 format.
         availability:
           type: string
+          description: >-
+            Whether the server is open for use: `ready`, `maintenance` (closed by an administrator) or
+            `temporarily_unavailable`.
           enum:
             - ready
             - maintenance
@@ -145,17 +154,21 @@ components:
             - ready
             - maintenance
             - temporarily_unavailable
-          description: Stable safe reason for the product availability state.
+          description: Why the server has this availability. Today it always matches `availability`.
         administrator_message:
           type: string
           maxLength: 500
-          description: Optional bounded plain-text Institution administrator message.
+          description: Plain-text message from the Institution's administrators. Omitted when there is none.
         retry_at:
           type: string
           format: date-time
-          description: Optional later server-selected time at which Desktop may retry.
+          description: Time after which Desktop may try again, set by the administrators. Omitted when there is none.
         compatibility:
           type: string
+          description: >-
+            Whether this build can use the server: `compatible`, `update_required` (the build is too old or
+            revoked), `server_incompatible` (the server can't serve this build, or can't decide right now), or
+            `unsupported_target` (no build exists for this platform and architecture).
           enum:
             - compatible
             - update_required
@@ -173,21 +186,25 @@ components:
             - build_unrecognized
             - unsupported_target
             - compatibility_unavailable
-          description: Stable safe reason for the compatibility result.
+          description: The specific reason for `compatibility`.
         minimum_desktop_release:
           type: string
           maxLength: 64
+          description: Oldest Desktop release this server accepts for the platform and architecture. Omitted with `unsupported_target` or `compatibility_unavailable`.
         maximum_desktop_release:
           type: string
           maxLength: 64
+          description: Newest Desktop release this server knows for the platform and architecture. Omitted with `unsupported_target` or `compatibility_unavailable`.
         minimum_realtime_protocol:
           type: integer
           minimum: 1
+          description: Oldest realtime protocol version this server accepts for the platform and architecture. Omitted with `unsupported_target` or `compatibility_unavailable`.
         maximum_realtime_protocol:
           type: integer
           minimum: 1
+          description: Newest realtime protocol version this server accepts for the platform and architecture. Omitted with `unsupported_target` or `compatibility_unavailable`.
     BuildInfoResponse:
-      description: Public build provenance for the serving Proctor binary.
+      description: Version and build details of the server binary that answered.
       type: object
       additionalProperties: false
       required:
@@ -198,13 +215,13 @@ components:
       properties:
         version:
           type: string
-          description: Proctor release or development version string.
+          description: Proctor release version, or a development version string.
         commit:
           type: string
-          description: Source revision embedded at build time.
+          description: Source commit the binary was built from.
         build_time:
           type: string
-          description: Build timestamp embedded in the binary.
+          description: When the binary was built, as recorded at build time.
         go_version:
           type: string
-          description: Go toolchain version used to build the binary.
+          description: Version of Go used to build the binary.

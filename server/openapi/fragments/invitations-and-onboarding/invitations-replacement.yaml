@@ -13,7 +13,9 @@ paths:
       operationId: replaceInvitation
       summary: Supersede a pending Invitation with a changed immutable package
       description: >-
-        Revision-fences and revokes the pending Invitation, then issues a new immutable package and one-time claim with the requested changes. The old claim cannot accept the replacement and durable history links both records.
+        Replaces a pending Invitation with a new one that has the changes you ask for. If the revision you send still
+        matches, the request revokes the Invitation and issues a new one with a new one-time claim. The old claim
+        cannot accept the new Invitation, and the history links the two.
       tags:
         - Invitations and onboarding
       x-proctor-auth: principal_required
@@ -67,7 +69,7 @@ paths:
 components:
   requestBodies:
     ReplaceInvitation:
-      description: Exact pending revision and complete immutable package for the replacement Invitation.
+      description: The pending Invitation's current revision and the complete terms of the new Invitation.
       required: true
       content:
         application/json:
@@ -81,7 +83,7 @@ components:
             suggested_username: student-one
   responses:
     InvitationAdministrationCreated:
-      description: Replacement Invitation created and prior Invitation superseded
+      description: The new Invitation. The Invitation it replaced is now `superseded`.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -89,6 +91,26 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/InvitationAdministrationResponse'
+          example:
+            id: o514k1ahcaicsys1cko4q4s3y8
+            purpose: student_class
+            state: pending
+            class_id: ybndrfg8ejkmcpqxot1uwisza3
+            academic_period_id: p6y6sf8ac6m5if373fkkebj7j6
+            start_at: '2026-09-01T00:00:00Z'
+            expires_at: '2026-08-29T14:00:00Z'
+            email: student.one@example.edu
+            inviter_user_id: rpn96r4g3jfk3t41u4dus44bzc
+            created_at: '2026-08-22T14:00:00Z'
+            updated_at: '2026-08-22T14:00:00Z'
+            revision: 1
+            delivery:
+              template_key: access.student_class_invitation
+              state: queued
+              masked_recipient: s***@example.edu
+              created_at: '2026-08-22T14:00:00Z'
+              updated_at: '2026-08-22T14:00:00Z'
+              deadline: '2026-08-23T14:00:00Z'
   schemas:
     ReplaceInvitationRequest:
       type: object
@@ -102,6 +124,7 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: The pending Invitation's current `revision`.
         purpose:
           type: string
           enum:
@@ -109,23 +132,33 @@ components:
             - teacher_academic_unit
             - academic_unit_role
             - institution_role
+          description: The purpose of the new Invitation.
         email:
           type: string
           format: email
+          description: The address to send the new Invitation to.
         class_id:
           $ref: '#/components/schemas/ID'
+          description: The Class of a `student_class` Invitation.
         academic_unit_id:
           $ref: '#/components/schemas/ID'
+          description: The Academic Unit of a `teacher_academic_unit` or `academic_unit_role` Invitation.
         institution_id:
           $ref: '#/components/schemas/ID'
+          description: The Institution of an `institution_role` Invitation.
         role_id:
           $ref: '#/components/schemas/ID'
+          description: The Role the new Invitation grants, for every purpose except `student_class`.
         start_at:
           type: string
           format: date-time
+          description: >-
+            When the relationship the new Invitation grants starts. Omit it for the default: the Academic Period's
+            start for a student Class Invitation, otherwise the time of issue.
         end_at:
           type: string
           format: date-time
+          description: When that relationship ends; it must be after the start. Omit it for no end.
         expires_in_days:
           type:
             - integer
@@ -133,22 +166,31 @@ components:
           minimum: 1
           maximum: 30
           description: >-
-            Whole days until the replacement's claim expires, from 1 to 30. Omitted or null keeps the replaced Invitation's own lifetime, rounded to whole days. A value outside the range is rejected with invitation.invalid.
+            How many whole days the new Invitation can be accepted for, from 1 to 30. Omit it or send null to keep
+            the replaced Invitation's own lifetime, rounded to whole days. A value outside the range is refused with
+            invitation.invalid.
         suggested_username:
           type: string
           maxLength: 64
+          description: A username to suggest. The invitee chooses their own username when accepting.
         suggested_display_name:
           type: string
           maxLength: 512
+          description: The name used to greet the invitee in the Invitation email.
         suggested_first_name:
           type: string
           maxLength: 256
+          description: A first name to suggest for the new account.
         suggested_last_name:
           type: string
           maxLength: 256
+          description: A last name to suggest for the new account.
         suggested_locale:
           type: string
           maxLength: 35
+          description: The language of the Invitation email, as a language tag such as `en`.
         suggested_timezone:
           type: string
           maxLength: 64
+          description: >-
+            The time zone the new account gets if the invitee gives none when accepting, such as `Europe/Paris`.

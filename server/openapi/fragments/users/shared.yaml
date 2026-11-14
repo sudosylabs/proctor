@@ -13,3 +13,20 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/UserProfileResponse'
+          example:
+            id: wj3drgzdpnf54rxf5d8qd3dqne
+            created_at: '2026-02-03T08:15:00Z'
+            updated_at: '2026-08-01T09:30:00Z'
+            username: amina.diallo
+            email: amina.diallo@example.edu
+            email_verified: true
+            display_name: Amina Diallo
+            first_name: Amina
+            last_name: Diallo
+            locale: en
+            timezone: Europe/Paris
+            last_login_at: '2026-08-01T09:12:44Z'
+            last_activity_at: '2026-08-01T09:28:03Z'
+            profile_picture_url: /api/v1/users/wj3drgzdpnf54rxf5d8qd3dqne/profile-picture?v=14
+            profile_picture_changed_at: '2026-06-12T14:05:00Z'
+            profile_picture_kind: custom

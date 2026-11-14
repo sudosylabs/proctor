@@ -13,8 +13,8 @@ paths:
       tags:
         - Jobs
       description: >-
-        Lists only Job types deliberately exposed through the public administration contract and authorized for the current principal, newest first by creation unless `order=asc` asks for oldest first. Private payloads, claims, worker identities, and infrastructure errors are omitted from every projection.
-        The first page, read without a cursor, also reports `total`: the Jobs the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
+        Lists the Jobs the caller may see, limited to the Job types the public API exposes. Results are newest first by creation time, or oldest first with `order=asc`. Private payloads, worker details and infrastructure errors are never included.
+        The first page, read without a cursor, also reports `total`: the number of Jobs that match the filters and that the caller may see, across all pages. The count is exact below 10,000. At 10,000 it stops and `total_is_lower_bound` is true. Later pages carry no total, so keep the one from the first page.
       x-proctor-auth: principal_required
       x-proctor-error-codes:
         - authorization.denied
@@ -49,14 +49,15 @@ paths:
           in: query
           schema:
             type: string
-          description: Opaque continuation emitted by the preceding page for the same filters.
+          description: >-
+            The `next_cursor` value from the previous page. Send the same filters and order with it. Treat it as an unreadable token: don't parse it or build one.
         - name: status
           in: query
           schema:
             type: array
             items:
               $ref: '#/components/schemas/JobStatus'
-          description: Optional set of durable lifecycle states to include.
+          description: Return only Jobs in these states. Repeat the parameter to include several. Omit it to include every state.
         - name: order
           in: query
           required: false
@@ -91,14 +92,14 @@ paths:
         required: true
         schema:
           $ref: '#/components/schemas/ID'
-        description: The allowlisted durable Job to retrieve.
+        description: ID of the Job to return.
     get:
       operationId: getJob
       summary: Get one allowlisted durable Job
       tags:
         - Jobs
       description: >-
-        Returns the safe current projection of one authorized, allowlisted durable Job. A Job outside the caller's permitted scope or public type allowlist is concealed through the documented not-found or authorization behavior.
+        Returns the current state of one Job. If the caller may not see the Job, or its type isn't exposed through the public API, the request fails with the documented not-found or authorization error, so the Job stays hidden.
       x-proctor-auth: principal_required
       x-proctor-error-codes:
         - authorization.denied
@@ -137,18 +138,45 @@ paths:
 components:
   responses:
     JobListOK:
-      description: Safe durable Job collection
+      description: One page of Jobs.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/JobListResponse'
           example:
-            items: []
-            total: 0
+            items:
+              - id: wj3drgzdpnf54rxf5d8qd3dqne
+                type: exam_export.build
+                status: succeeded
+                created_at: '2026-08-01T09:00:00Z'
+                updated_at: '2026-08-01T09:04:12Z'
+                available_at: '2026-08-01T09:00:00Z'
+                started_at: '2026-08-01T09:00:05Z'
+                completed_at: '2026-08-01T09:04:12Z'
+                attempt_count: 1
+                maximum_attempts: 5
+                revision: 6
+                created_by_user_id: 14j8umgczgrdp95w77zuxmxfu9
+                created_by_display_name: Ada Okafor
+                subject: Introduction to Databases final
+              - id: ih1r84kij94nrwis97rft6rduh
+                type: retention.expire
+                status: failed
+                created_at: '2026-08-01T02:00:00Z'
+                updated_at: '2026-08-01T02:19:40Z'
+                available_at: '2026-08-01T02:15:00Z'
+                started_at: '2026-08-01T02:15:02Z'
+                completed_at: '2026-08-01T02:19:40Z'
+                public_error_code: retention.unavailable
+                attempt_count: 3
+                maximum_attempts: 3
+                revision: 9
+            next_cursor: eyJjcmVhdGVkX2F0IjoiMjAyNi0wOC0wMVQwMjowMDowMFoifQ
+            total: 214
             total_is_lower_bound: false
   schemas:
     JobListResponse:
-      description: One bounded page of safe durable Job projections.
+      description: One page of Jobs.
       type: object
       additionalProperties: false
       required:
@@ -158,16 +186,17 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/JobResponse'
+          description: Jobs on this page, in the requested order.
         next_cursor:
           type: string
-          description: Opaque continuation for the next page, omitted after the final page.
+          description: Token to pass as `cursor` to read the next page. Treat it as unreadable. Omitted on the last page.
         total:
           type: integer
           minimum: 0
           maximum: 10000
           description: >-
-            Jobs matching the filters and the caller's visibility across every page, present only on the
-            first page. At 10,000 counting stops and `total_is_lower_bound` is true.
+            Number of Jobs, across all pages, that match the filters and that the caller may see. Present only on
+            the first page. Counting stops at 10,000, and then `total_is_lower_bound` is true.
         total_is_lower_bound:
           type: boolean
-          description: True when `total` reached the 10,000 bound and there may be more. Present with `total`.
+          description: True when `total` reached the 10,000 limit and there may be more Jobs. Present whenever `total` is.

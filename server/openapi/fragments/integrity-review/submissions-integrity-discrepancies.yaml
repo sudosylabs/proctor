@@ -14,7 +14,10 @@ paths:
       summary: List bounded late records retained after integrity collection ended
       tags:
         - Integrity review
-      description: Late records are explicit discrepancies and never alter a finalized or released Review inventory.
+      description: >-
+        Lists the Discrepancies of one Submission: integrity records that arrived after collection ended,
+        and gaps the server could not close. They are kept separately and never change a Review that was
+        already finalized or released.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -45,13 +48,15 @@ paths:
             minimum: 1
             maximum: 200
             default: 50
-          description: Maximum number of retained Discrepancies to return.
+          description: Maximum number of Discrepancies to return.
         - name: cursor
           in: query
           schema:
             type: string
-            description: Opaque Discrepancy identity cursor.
-          description: Opaque continuation emitted by the preceding Discrepancy page.
+            description: A page cursor.
+          description: >-
+            The `next_cursor` from the previous page. Pass it back unchanged and do not parse or build it
+            yourself.
       responses:
         "200":
           $ref: '#/components/responses/ExamIntegrityDiscrepancyListOK'
@@ -70,7 +75,7 @@ paths:
 components:
   responses:
     ExamIntegrityDiscrepancyListOK:
-      description: Bounded manager-authorized post-collection discrepancies
+      description: One page of Discrepancies.
       headers:
         Cache-Control:
           schema:
@@ -81,12 +86,32 @@ components:
           schema:
             $ref: '#/components/schemas/ExamIntegrityDiscrepancyListResponse'
           example:
-            items: []
+            items:
+              - id: id9tzepftxa3h5uben569yr37h
+                exam_attempt_id: 6xoche483hwrx5rpu8jzjoe7qg
+                participation_id: o87yi4tenx8kodmcuup1hmtsbo
+                generation: 2
+                kind: late_focus_loss
+                focus_loss_signal_id: 4z3cy1rp9cucq7qo1g9mq94dj3
+                sequence: 4
+                duration_milliseconds: 3200
+                source: window_blur
+                missing_before: 0
+                received_at: '2026-12-14T10:48:15Z'
+              - id: xgqjjg7fnyeqnueo58grucaoqy
+                exam_attempt_id: 6xoche483hwrx5rpu8jzjoe7qg
+                participation_id: o87yi4tenx8kodmcuup1hmtsbo
+                generation: 2
+                kind: correction_acknowledgement_missing
+                correction_revision_id: 889766ufjgio6kbpzjbufozksq
+                unresolved_count: 1
+                received_at: '2026-12-14T10:48:09Z'
   schemas:
     ExamIntegrityDiscrepancyResponse:
       description: >-
-        Bounded manager-only uncertainty associated with a sealed Submission. Kind-specific fields are present only for
-        their named kind; the record is not evidence, a misconduct finding, a score, or a grade.
+        One uncertainty about a sealed Submission's integrity data, visible only to managers. Members that
+        belong to one `kind` appear only for that kind. A Discrepancy is not evidence, a finding of
+        misconduct, a score or a grade.
       type: object
       additionalProperties: false
       required:
@@ -99,14 +124,18 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/ID'
+          description: The Discrepancy's ID.
         exam_attempt_id:
           $ref: '#/components/schemas/ID'
+          description: The Attempt the record belongs to.
         participation_id:
           $ref: '#/components/schemas/ID'
+          description: The Participation the record came from.
         generation:
           type: integer
           format: int64
           minimum: 1
+          description: The generation of that Participation.
         kind:
           type: string
           enum:
@@ -114,18 +143,24 @@ components:
             - focus_loss_gap
             - browser_activity_gap
             - correction_acknowledgement_missing
+          description: >-
+            `late_focus_loss` is a focus-loss signal that arrived after collection ended. `focus_loss_gap`
+            and `browser_activity_gap` mean focus-loss or browser activity data is missing.
+            `correction_acknowledgement_missing` means a required correction was never acknowledged.
         focus_loss_signal_id:
           $ref: '#/components/schemas/ID'
+          description: The late focus-loss signal. Only for `late_focus_loss`.
         sequence:
           type: integer
           format: int64
           minimum: 1
+          description: The signal's sequence number. Only for `late_focus_loss`.
         duration_milliseconds:
           type: integer
           format: int64
           minimum: 1
           maximum: 86400000
-          description: Reported focus-loss duration in milliseconds.
+          description: How long focus was lost, in milliseconds. Only for `late_focus_loss`.
         source:
           type: string
           enum:
@@ -133,20 +168,28 @@ components:
             - document_hidden
             - fullscreen_exited
             - window_blur
+          description: What the client reported as the cause of the focus loss. Only for `late_focus_loss`, when reported.
         missing_before:
           type: integer
           format: int64
           minimum: 0
-          description: Number of missing monotonic signals observed before this late record.
+          description: >-
+            How many earlier sequence numbers were missing when this late signal arrived. Only for
+            `late_focus_loss`.
         correction_revision_id:
           $ref: '#/components/schemas/ID'
+          description: The correction that was never acknowledged. Only for `correction_acknowledgement_missing`.
         browser_activity_source_session_id:
           type: string
           format: uuid
+          description: The browser session with missing activity. Only for `browser_activity_gap`.
         final_sequence:
           type: integer
           format: int64
           minimum: 1
+          description: >-
+            The last sequence number the browser session declared, when it declared one. Only for
+            `browser_activity_gap`.
         gap_reason:
           type: string
           enum:
@@ -158,16 +201,22 @@ components:
             - spool_key_unavailable
             - delivery_incomplete
             - prior_source_gap
+          description: >-
+            Why data is missing. The first three values apply to `focus_loss_gap`; the others apply to
+            `browser_activity_gap`.
         unresolved_count:
           type: integer
           format: int64
           minimum: 1
-          description: Bounded aggregate represented by this terminal discrepancy.
+          description: >-
+            How many unresolved items this Discrepancy stands for. Present for every kind except
+            `late_focus_loss`; always 1 for `correction_acknowledgement_missing`.
         received_at:
           type: string
           format: date-time
+          description: When the server recorded the Discrepancy.
     ExamIntegrityDiscrepancyListResponse:
-      description: One bounded page of post-collection integrity Discrepancies.
+      description: One page of Discrepancies for a Submission.
       type: object
       additionalProperties: false
       required:
@@ -176,8 +225,11 @@ components:
         items:
           type: array
           maxItems: 200
+          description: The Discrepancies on this page, at most `limit`.
           items:
             $ref: '#/components/schemas/ExamIntegrityDiscrepancyResponse'
         next_cursor:
           type: string
-          description: Opaque continuation for the next page, omitted after the final page.
+          description: >-
+            Pass this as `cursor` to get the next page. Omitted on the last page. Don't parse or
+            build it yourself.

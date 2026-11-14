@@ -4063,7 +4063,7 @@
   },
   {
     "id": "session.revocation.expired",
-    "translation": "Expired."
+    "translation": "The session expired."
   },
   {
     "id": "session.revocation.external_identity_unlinked",

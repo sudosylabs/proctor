@@ -15,8 +15,8 @@ paths:
           in: query
           required: false
           description: >-
-            Order by name, then identity, ascending (`asc`, the default) or descending (`desc`). A cursor continues
-            only the direction that produced it.
+            Sort by name, then by identifier, ascending (`asc`, the default) or descending (`desc`). A cursor works
+            only with the direction that produced it.
           schema:
             type: string
             enum:
@@ -30,7 +30,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Lists active Classes directly assigned to one authorized Programme Level. The collection returns structural Class metadata and excludes rosters, candidate Attempts, and permission grants. Items are ordered by name, then identity, in the `dir` direction. The first page, read without a cursor, also reports `total`: the Classes the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's. Each item carries `student_count`, the Class's current members stopped at 10,000 with `student_count_is_lower_bound`, only when the caller holds class.members.view on this Programme Level; otherwise both are omitted.
+        Lists the active Classes of one Programme Level. Each item describes the Class itself and leaves out its roster, candidate Attempts and permission grants. Items are ordered by name, then by identifier, in the `dir` direction. The first page, read without a cursor, also reports `total`, the number of Classes across every page. It is exact below 10,000. At 10,000 counting stops and `total_is_lower_bound` is true. Later pages carry no total, so keep the first page's. Each item carries `student_count`, the Class's current members counted up to 10,000, with `student_count_is_lower_bound`, but only when the caller holds class.members.view on this Programme Level. Otherwise both are omitted.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -72,7 +72,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Creates one concrete student roster under the Programme Level in the route and one eligible Academic Period in the body. Creation performs owner and period checks but does not enroll any student automatically.
+        Creates a Class, a group of students, under the Programme Level in the path and in the Academic Period named in the body. Proctor checks the Programme Level and the Academic Period before creating it. No student is enrolled automatically.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -120,7 +120,7 @@ paths:
 components:
   requestBodies:
     CreateClass:
-      description: Academic Period and canonical presentation for a new Class under the route Programme Level.
+      description: The Academic Period, machine name and display text for a new Class under the Programme Level in the path.
       required: true
       content:
         application/json:
@@ -138,9 +138,19 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ClassResponse'
+          example:
+            revision: 1
+            id: 6xoche483hwrx5rpu8jzjoe7qg
+            created_at: '2026-08-05T08:30:00Z'
+            updated_at: '2026-08-05T08:30:00Z'
+            programme_level_id: iqcx3qc9sbbt6ocshszfqgq6ci
+            academic_period_id: sjebyge5cpbop1xwo4eds74ejb
+            name: cs-level-100-a
+            display_name: Computer Science Level 100 — A
+            description: First-year Class A.
   schemas:
     CreateClassRequest:
-      description: Academic Period and presentation for a concrete student roster.
+      description: The Academic Period and display fields for a new Class.
       type: object
       additionalProperties: false
       required:
@@ -150,9 +160,16 @@ components:
       properties:
         academic_period_id:
           $ref: '#/components/schemas/ID'
+          description: The Academic Period the Class runs in.
         name:
           type: string
+          description: >-
+            Machine name: lowercase letters, digits, hyphens and underscores, starting with a letter or digit, at
+            most 64 characters. It must be unique among active Classes with the same Programme Level and Academic
+            Period.
         display_name:
           type: string
+          description: Name shown to people, 1 to 128 characters.
         description:
           type: string
+          description: Optional longer text shown to people, up to 1,024 characters.

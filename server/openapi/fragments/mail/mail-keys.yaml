@@ -13,7 +13,7 @@ paths:
       tags:
         - Mail
       description: >-
-        Returns non-secret key identifiers and active encrypted-payload reference counts needed to plan or verify key rotation. Strong recent authentication is required, and no key bytes, wrapping material, ciphertext, recipients, or message content are exposed.
+        Returns the IDs of the mail payload encryption keys and how many stored encrypted payloads still use each one. Use it to plan a key rotation or check that one finished. The caller must have signed in recently with strong authentication. Key IDs aren't secret. The response never includes key bytes, wrapping keys, ciphertext, recipients or message content.
       x-proctor-auth: strong_recent_session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -53,7 +53,7 @@ paths:
 components:
   responses:
     MailKeyStateOK:
-      description: Safe mail payload-key identities and active reference counts
+      description: Mail payload key IDs and how many stored payloads use each one.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -61,9 +61,17 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/MailKeyStateResponse'
+          example:
+            primary_key_id: 7d3e9a10c4b2f6e8a1d5c7b9e3f20a46
+            required_primary_key_id: 7d3e9a10c4b2f6e8a1d5c7b9e3f20a46
+            active:
+              - key_id: 7d3e9a10c4b2f6e8a1d5c7b9e3f20a46
+                active_references: 1284
+              - key_id: 2b8f4c6a0e1d3957b2c4e6f8a0b1c3d5
+                active_references: 37
   schemas:
     MailPayloadKeyUsage:
-      description: Safe usage count for one configured mail payload-encryption key.
+      description: How many stored encrypted mail payloads use one configured key.
       type: object
       additionalProperties: false
       required:
@@ -73,14 +81,14 @@ components:
         key_id:
           type: string
           pattern: ^[0-9a-f]{32}$
-          description: Non-secret 128-bit key identifier encoded as lowercase hexadecimal.
+          description: ID of the key, a 128-bit value in lowercase hexadecimal. It isn't secret.
         active_references:
           type: integer
           format: int64
           minimum: 1
-          description: Number of active encrypted mail payloads that still reference this key.
+          description: Number of stored encrypted mail payloads that are still encrypted with this key.
     MailKeyStateResponse:
-      description: Safe key identities and references used to govern mail payload rotation.
+      description: Which keys encrypt mail payloads, and how many payloads each key still covers.
       type: object
       additionalProperties: false
       required:
@@ -90,14 +98,15 @@ components:
         primary_key_id:
           type: string
           pattern: ^[0-9a-f]{32}$
-          description: Identifier of the key currently used for new encrypted payloads.
+          description: ID of the key this server uses to encrypt new payloads.
         required_primary_key_id:
           type: string
           pattern: ^[0-9a-f]{32}$
-          description: Configuration-required primary identifier when a mismatch must be resolved.
+          description: >-
+            ID of the primary key that the most recent key rotation recorded. New payloads must be encrypted with it, so a configured primary key that differs has to be resolved. Omitted before the first rotation.
         active:
           type: array
           maxItems: 9
           items:
             $ref: '#/components/schemas/MailPayloadKeyUsage'
-          description: Bounded keys with at least one active encrypted-payload reference.
+          description: Keys that still encrypt at least one stored payload, at most nine.

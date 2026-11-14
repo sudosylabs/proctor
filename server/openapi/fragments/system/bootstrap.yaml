@@ -13,7 +13,7 @@ paths:
       tags:
         - System
       description: >-
-        Reports whether this installation has completed its one-time bootstrap transition. The public projection exposes only the initialized flag, so callers can choose the bootstrap or ordinary sign-in entry path without learning Institution or administrator details.
+        Reports whether this installation has been set up yet. The response holds only that flag, so a client can choose between the setup screen and the normal sign-in page without learning anything about the Institution or its administrators.
       x-proctor-auth: public
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -32,7 +32,7 @@ paths:
       tags:
         - System
       description: >-
-        Atomically creates the installation's single Institution, first administrator, initial built-in role and binding, and initial Access Policy. The operator-provided bootstrap secret is accepted only before initialization; concurrent or repeated attempts cannot replace the established installation.
+        Sets up a new installation in one step. It creates the single Institution, the first administrator, the built-in System Administrator Role and its Role Binding, and the first Access Policy. The bootstrap secret from the operator works only before setup. Once one request succeeds, later or simultaneous requests can't replace the installation.
       x-proctor-auth: public
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -69,7 +69,7 @@ components:
   requestBodies:
     BootstrapInstallation:
       description: >-
-        The initial Institution and administrator identity plus the operator-controlled one-time bootstrap secret and administrator password.
+        The Institution, the first administrator's profile and password, and the one-time bootstrap secret from the operator.
       required: true
       content:
         application/json:
@@ -86,8 +86,8 @@ components:
               display_name: Initial Administrator
               locale: en
               timezone: Europe/Paris
-            password: <strong-bootstrap-password>
-            bootstrap_secret: <operator-provided-bootstrap-secret>
+            password: example-passphrase-not-for-use-7Q2m
+            bootstrap_secret: example-bootstrap-secret-4f9c2e7a
   responses:
     InstallationStatusOK:
       description: Installation status
@@ -103,9 +103,71 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/InstallationBootstrapResult'
+          example:
+            state:
+              initialized_at: '2026-08-01T09:00:00Z'
+              institution_id: p6y6sf8ac6m5if373fkkebj7j6
+              administrator_user_id: sjebyge5cpbop1xwo4eds74ejb
+            institution:
+              id: p6y6sf8ac6m5if373fkkebj7j6
+              created_at: '2026-08-01T09:00:00Z'
+              updated_at: '2026-08-01T09:00:00Z'
+              name: northbridge-university
+              display_name: Northbridge University
+              description: Examination services
+              exam_capacity:
+                resource_maximum_count: 10
+                resource_maximum_bytes: 10485760
+                workspace_maximum_entries: 500
+                workspace_maximum_file_bytes: 10485760
+                workspace_maximum_total_bytes: 52428800
+            administrator:
+              id: sjebyge5cpbop1xwo4eds74ejb
+              created_at: '2026-08-01T09:00:00Z'
+              updated_at: '2026-08-01T09:00:00Z'
+              username: initial-admin
+              email: initial-admin@example.edu
+              email_verified: false
+              display_name: Initial Administrator
+              first_name: ''
+              last_name: ''
+              locale: en
+              timezone: Europe/Paris
+              profile_picture_url: /api/v1/users/sjebyge5cpbop1xwo4eds74ejb/profile-picture
+              profile_picture_kind: default
+            role:
+              id: hmyjmj68dw6gdxctnghbrhwcth
+              created_at: '2026-08-01T09:00:00Z'
+              updated_at: '2026-08-01T09:00:00Z'
+              name: system_admin
+              display_name: System Administrator
+              description: Protected administrator role for this Proctor installation.
+              permissions:
+                - institution.manage
+                - role.manage
+                - role_binding.manage
+                - user.manage
+              built_in: true
+            role_binding:
+              id: 6xoche483hwrx5rpu8jzjoe7qg
+              created_at: '2026-08-01T09:00:00Z'
+              updated_at: '2026-08-01T09:00:00Z'
+              user_id: sjebyge5cpbop1xwo4eds74ejb
+              role_id: hmyjmj68dw6gdxctnghbrhwcth
+              scope_type: institution
+              scope_id: p6y6sf8ac6m5if373fkkebj7j6
+              start_at: '2026-08-01T09:00:00Z'
+            access_policy:
+              id: 39kqk53i4cswfzbi7hbai1r8qg
+              revision: 1
+              local_login_enabled: true
+              public_registration_enabled: false
+              invitation_admission_enabled: true
+              invitation_local_credential_enabled: true
+              desktop_authorization_enabled: true
   schemas:
     InstallationStatusResponse:
-      description: Safe public bootstrap state for one installation.
+      description: Whether the installation has been set up.
       type: object
       additionalProperties: false
       required:
@@ -113,9 +175,9 @@ components:
       properties:
         initialized:
           type: boolean
-          description: True after the one-time installation bootstrap transaction has committed.
+          description: True once bootstrap has succeeded.
     BootstrapInstitutionRequest:
-      description: Human and canonical identity for the installation's single Institution.
+      description: The installation's single Institution.
       type: object
       additionalProperties: false
       required:
@@ -124,15 +186,15 @@ components:
       properties:
         name:
           type: string
-          description: Canonical machine name for the Institution.
+          description: Short machine name for the Institution.
         display_name:
           type: string
-          description: Human-facing Institution name.
+          description: Name shown to people.
         description:
           type: string
-          description: Optional human-facing description of the Institution.
+          description: Optional free-text description of the Institution.
     BootstrapAdministratorRequest:
-      description: Profile fields for the first Institution administrator account.
+      description: Profile of the first administrator account.
       type: object
       additionalProperties: false
       required:
@@ -141,26 +203,28 @@ components:
       properties:
         username:
           type: string
-          description: Canonical sign-in and mention name for the first administrator.
+          description: Sign-in name for the first administrator.
         email:
           type: string
           format: email
-          description: Email address owned by the first administrator.
+          description: The first administrator's own email address.
         display_name:
           type: string
-          description: Optional human-facing administrator name.
+          description: Optional name shown to other people.
         first_name:
           type: string
+          description: Optional given name.
         last_name:
           type: string
+          description: Optional family name.
         locale:
           type: string
-          description: Optional locale used for localized presentation.
+          description: Optional language tag, such as `en`. Defaults to `en`.
         timezone:
           type: string
-          description: Optional IANA time-zone name for the administrator.
+          description: Optional time zone name, such as `Europe/Paris`. Defaults to `UTC`.
     BootstrapInstallationRequest:
-      description: Complete input to the one-time installation bootstrap transaction.
+      description: Everything needed to set up the installation.
       type: object
       additionalProperties: false
       required:
@@ -175,16 +239,16 @@ components:
           $ref: '#/components/schemas/BootstrapAdministratorRequest'
         password:
           type: string
-          description: Initial administrator password; accepted only by bootstrap and never returned.
+          description: The first administrator's password. Only bootstrap accepts it, and it is never returned.
           writeOnly: true
         bootstrap_secret:
           type: string
           minLength: 1
           maxLength: 512
           writeOnly: true
-          description: Operator-controlled one-time secret proving authority to initialize this deployment.
+          description: The one-time secret the operator configured, which proves you may set up this installation.
     InstallationStateResponse:
-      description: Durable identities and commit time established by bootstrap.
+      description: When setup happened and the IDs it created.
       type: object
       additionalProperties: false
       required:
@@ -195,13 +259,15 @@ components:
         initialized_at:
           type: string
           format: date-time
-          description: Time at which bootstrap committed.
+          description: Time bootstrap succeeded.
         institution_id:
           $ref: '#/components/schemas/ID'
+          description: The Institution that was created.
         administrator_user_id:
           $ref: '#/components/schemas/ID'
+          description: The first administrator's User.
     InstallationBootstrapResult:
-      description: Resources atomically created by the successful bootstrap transition.
+      description: Everything bootstrap created. A successful response always has every member.
       type: object
       additionalProperties: false
       properties:
@@ -211,14 +277,17 @@ components:
           $ref: '#/components/schemas/InstitutionResponse'
         administrator:
           $ref: '#/components/schemas/UserProfileResponse'
+          description: The first administrator's profile.
         role:
           $ref: '#/components/schemas/RoleResponse'
+          description: The built-in System Administrator Role.
         role_binding:
           $ref: '#/components/schemas/RoleBindingResponse'
+          description: The grant of the System Administrator Role to the first administrator, at the Institution.
         access_policy:
           $ref: '#/components/schemas/InitialAccessPolicyResponse'
     InitialAccessPolicyResponse:
-      description: Initial admission and sign-in policy created during bootstrap.
+      description: The first Access Policy, which controls how people sign in and join.
       type: object
       additionalProperties: false
       required:
@@ -235,13 +304,19 @@ components:
         revision:
           type: integer
           format: int64
+          description: Version number of the policy. It is 1 after bootstrap.
         local_login_enabled:
           type: boolean
+          description: Whether people can sign in with a Proctor password. True after bootstrap.
         public_registration_enabled:
           type: boolean
+          description: Whether people can sign themselves up. False after bootstrap.
         invitation_admission_enabled:
           type: boolean
+          description: Whether Invitations can admit people. True after bootstrap.
         invitation_local_credential_enabled:
           type: boolean
+          description: Whether accepting an Invitation can set a Proctor password. True after bootstrap.
         desktop_authorization_enabled:
           type: boolean
+          description: Whether Proctor Desktop can sign in through the browser. True after bootstrap.

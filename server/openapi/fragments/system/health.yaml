@@ -13,7 +13,7 @@ paths:
       tags:
         - System
       description: >-
-        Reports whether this process is alive and able to serve the health handler. It does not prove that dependencies are ready or that the node should receive application traffic.
+        Reports whether this server process is running and can answer. It does not mean the services it depends on are ready, or that the node should get traffic.
       x-proctor-auth: public
       x-proctor-error-codes:
         - health.not_live
@@ -31,7 +31,7 @@ paths:
       tags:
         - System
       description: >-
-        Reports whether this node and its required dependencies are ready to serve application traffic. Orchestrators should remove a failing node from service while continuing to use liveness to decide whether the process needs replacement.
+        Reports whether this node and the services it needs are ready for traffic. When it fails, stop sending traffic to the node, and use the liveness check to decide whether to restart it.
       x-proctor-auth: public
       x-proctor-error-codes:
         - health.not_ready
@@ -50,9 +50,11 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/HealthResponse'
+          example:
+            status: ok
   schemas:
     HealthResponse:
-      description: Minimal successful health-check projection.
+      description: A passed health check.
       type: object
       additionalProperties: false
       required:
@@ -60,6 +62,6 @@ components:
       properties:
         status:
           type: string
-          description: The literal successful health state.
+          description: Always `ok`. A failed check returns 503 with a Problem Details body instead.
           enum:
             - ok

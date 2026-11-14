@@ -13,9 +13,9 @@ paths:
       tags:
         - Roles and access
       description: >-
-        Lists bounded durable audit facts visible through the caller's Institution or Academic Unit authority, newest first unless `order=asc` asks for oldest first. The projection omits raw parameters, prior state, result payloads, credentials, protected content, and unsafe internal failures.
-        The first page, read without a cursor, also reports `total`: the audit Events the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
-        Each Event also carries a `summary` sentence in the language `Accept-Language` selects, falling back to the installation language and then English, beside the stable codes it is written from. It names the actor, the User the Event is about, and a User, Academic Unit, or Class resource by their current names only when the caller could see that record now through `user.view` or `class.members.view`, `academic_unit.view`, or `class.view`; otherwise it uses a generic noun such as "a user" or "a class". An Academic Unit auditor's summary names the action alone, never the recorded operation or the User the Event is about.
+        Lists the audit Events you can see through Institution-wide or Academic Unit audit permissions, newest first unless `order=asc` asks for oldest first. Events never include the raw request parameters, earlier state, results, credentials, protected content or internal error details.
+        The first page (read without a cursor) also has `total`, the number of matching Events across all pages. It is exact up to 10,000. Above that it shows 10,000 and `total_is_lower_bound` is true. Later pages have no total, so keep the one from the first page.
+        Each Event also has a `summary` sentence, written from its codes, in the language `Accept-Language` picks. It falls back to the installation language and then English. It names the actor, the User the Event is about, and a User, Academic Unit or Class resource by their current names only if you could see that record now, through `user.view` or `class.members.view`, `academic_unit.view` or `class.view`. Otherwise it uses a general phrase such as "a user" or "a class". For an Academic Unit auditor the summary names only the action, never the recorded operation or the User the Event is about.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -50,12 +50,12 @@ paths:
           in: query
           schema:
             type: string
-          description: Opaque continuation emitted by the preceding page for the same filters.
+          description: The `next_cursor` from the previous page, sent back unchanged with the same filters.
         - name: actor_id
           in: query
           schema:
             $ref: '#/components/schemas/ID'
-          description: Return only Events attributed to this actor User.
+          description: Return only Events where this User performed the action.
         - name: subject_user_id
           in: query
           schema:
@@ -71,9 +71,9 @@ paths:
             items:
               $ref: '#/components/schemas/AuditAction'
           description: >-
-            Return only Events with one of these exact stable actions. Repeat the parameter for up to 32 actions.
-            An Academic Unit auditor still reads only the academic actions its authority allows, so naming any other
-            action matches nothing.
+            Return only Events with one of these actions. Repeat the parameter for up to 32 actions. An Academic
+            Unit auditor still sees only the academic actions they are allowed to, so any other action matches
+            nothing.
         - name: status
           in: query
           schema:
@@ -83,8 +83,7 @@ paths:
               - success
               - fail
           description: >-
-            Return only Events in this durable outcome state: an `attempt` whose outcome is not yet recorded, a
-            `success`, or a `fail`.
+            Return only Events with this outcome: `attempt` (no outcome recorded yet), `success` or `fail`.
         - name: kind
           in: query
           schema:
@@ -95,30 +94,29 @@ paths:
           description: >-
             Return only Events whose action changes something (`change`: a mutation, a sign-in or other
             authentication, a credential issued or revoked, mail sent) or only looks (`read`: a view, a search, a
-            list, or an export). Every audit action is one of the two. It narrows `action` and the caller's
-            visibility rather than adding to them, so an Academic Unit auditor still reads only its own academic
-            actions.
+            list, or an export). Every audit action is one of the two. It only narrows `action` and what you can
+            see, so an Academic Unit auditor still sees only their own academic actions.
         - name: resource_type
           in: query
           schema:
             $ref: '#/components/schemas/ResourceType'
-          description: Exact resource type to filter; resource_id is required when present.
+          description: Return only Events about resources of this type. Send it together with `resource_id`.
         - name: resource_id
           in: query
           schema:
             $ref: '#/components/schemas/ID'
-          description: Exact resource identity to filter; resource_type is required when present.
+          description: Return only Events about the resource with this ID. Send it together with `resource_type`.
         - name: created_after
           in: query
           required: false
-          description: Return only Events recorded at or after this RFC 3339 instant.
+          description: Return only Events recorded at or after this RFC 3339 time.
           schema:
             type: string
             format: date-time
         - name: created_before
           in: query
           required: false
-          description: Return only Events recorded before this RFC 3339 instant; it must be later than `created_after`.
+          description: Return only Events recorded before this RFC 3339 time. It must be later than `created_after`.
           schema:
             type: string
             format: date-time
@@ -126,7 +124,7 @@ paths:
           in: query
           required: false
           description: >-
-            Read newest first (`desc`, the default) or oldest first (`asc`). A cursor continues only the order
+            Read newest first (`desc`, the default) or oldest first (`asc`). A cursor works only with the order
             that produced it.
           schema:
             type: string
@@ -175,7 +173,7 @@ components:
             total_is_lower_bound: false
   schemas:
     AuditEventResponse:
-      description: Safe durable audit fact visible to the authorized caller.
+      description: One audit record you can see, without sensitive detail.
       type: object
       additionalProperties: false
       required:
@@ -192,26 +190,29 @@ components:
         created_at:
           type: string
           format: date-time
-          description: Time when the audit Attempt was created.
+          description: Time the Event was recorded.
         updated_at:
           type: string
           format: date-time
-          description: Time of the latest durable audit status change.
+          description: Time the Event's outcome was last updated.
         actor_id:
           type: string
-          description: User that initiated the action, omitted for actor-less system transitions.
+          description: The User who performed the action. Omitted for actions the system took on its own.
         session_id:
           type: string
-          description: Safe Session identity associated with the action when retained; never a credential.
+          description: >-
+            The Session the action was made in, when recorded. It is an ID, never a credential. Omitted for
+            Academic Unit auditors.
         action:
           type: string
           anyOf:
             - $ref: '#/components/schemas/AuditAction'
             - type: string
-          description: Stable permission-style name of the attempted action.
+          description: The action that was attempted, named like a permission, such as `class.members.manage`.
         resource:
           type: object
           additionalProperties: false
+          description: The record the action was about.
           required:
             - type
             - id
@@ -221,49 +222,57 @@ components:
               anyOf:
                 - $ref: '#/components/schemas/ResourceType'
                 - type: string
-              description: Stable resource type acted upon.
+              description: Type of the record.
             id:
               $ref: '#/components/schemas/ID'
+              description: ID of the record.
         scope_type:
           type: string
-          description: Authorization scope type under which the action was evaluated.
+          description: Kind of scope the permission check used, when the action belongs to a scope.
         scope_id:
           type: string
-          description: Authorization scope identity, when the action has a scoped owner.
+          description: The scope the permission check used, when the action belongs to a scope.
         status:
           type: string
-          description: Durable outcome state of the audited Attempt.
+          description: Outcome of the action, `attempt` (not recorded yet), `success` or `fail`.
         request_id:
           type: string
-          description: Safe request correlation value when the action originated over a request transport.
+          description: >-
+            ID of the request that caused the action, when it came in over HTTP or WebSocket. Omitted for Academic
+            Unit auditors.
         node_id:
           type: string
+          description: The server node that handled the action. Omitted for Academic Unit auditors.
         client_type:
           type: string
+          description: Kind of client the actor used, such as `web` or `desktop`. Omitted for Academic Unit auditors.
         authentication_method:
           type: string
+          description: How the actor signed in, such as `password`. Omitted for Academic Unit auditors.
         ip_address:
           type: string
+          description: The client's IP address, when recorded. Omitted for Academic Unit auditors.
         user_agent:
           type: string
+          description: The client's User-Agent header, up to 512 characters. Omitted for Academic Unit auditors.
         error_code:
           type: string
-          description: Stable safe failure category for an unsuccessful action; internal detail is omitted.
+          description: Error code of a failed action. Internal error details are never included.
         summary:
           type: string
           maxLength: 2048
           description: >-
-            One sentence describing the Event in the negotiated language, for display only; clients that need to
-            reason about the Event read its codes. People and records appear by name only when the caller could see
-            them now, and an unfinished or failed Event says so.
+            One sentence describing the Event in the request's language, for display only. Programs should read
+            the Event's codes instead. People and records appear by name only if you could see them now, and an
+            unfinished or failed Event says so.
         reason:
           type: string
           maxLength: 500
           description: >-
-            Reason recorded when an account was disabled, present only on that event, only when one was given, and
-            only for Institution-wide audit readers.
+            Reason given when an account was disabled. Present only on that Event, only when a reason was given,
+            and only for Institution-wide audit readers.
     AuditListResponse:
-      description: One bounded page of authorized audit Events.
+      description: One page of audit Events you can see.
       type: object
       additionalProperties: false
       required:
@@ -271,18 +280,19 @@ components:
       properties:
         items:
           type: array
+          description: The Events on this page.
           items:
             $ref: '#/components/schemas/AuditEventResponse'
         next_cursor:
           type: string
-          description: Opaque continuation for the next page, omitted after the final page.
+          description: Token for the next page. Send it back unchanged as `cursor`. Omitted on the last page.
         total:
           type: integer
           minimum: 0
           maximum: 10000
           description: >-
-            Audit Events matching the filters and the caller's visibility across every page, present only on the
-            first page. At 10,000 counting stops and `total_is_lower_bound` is true.
+            Number of Events that match the filters and that you can see, across all pages. Sent on the first
+            page only. Counting stops at 10,000, and then `total_is_lower_bound` is true.
         total_is_lower_bound:
           type: boolean
-          description: True when `total` reached the 10,000 bound and there may be more. Present with `total`.
+          description: True when `total` reached 10,000 and there may be more. Sent with `total`.

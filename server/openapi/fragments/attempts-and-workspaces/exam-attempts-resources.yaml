@@ -15,7 +15,7 @@ paths:
       summary: Render a current protected Exam resource inline
       tags:
         - Attempts and workspaces
-      description: Requires the active session-bound Attempt credential and Connection. It is not a public or export URL.
+      description: Sends one current Exam Resource inline to the candidate. The request needs the active Attempt credential bound to the Session and an open Connection. This is not a public or export URL.
       x-proctor-auth: session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:

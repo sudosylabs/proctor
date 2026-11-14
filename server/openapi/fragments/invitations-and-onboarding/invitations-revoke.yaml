@@ -13,7 +13,9 @@ paths:
       operationId: revokeInvitation
       summary: Revoke a pending Invitation
       description: >-
-        Revision-fences and revokes one pending Invitation so its claim and browser transaction can no longer be accepted. The operation retains immutable package and audit history and does not undo an Invitation already accepted.
+        If the revision you send still matches, revokes the pending Invitation, so its claim and any browser
+        acceptance in progress can no longer be used. The Invitation's terms and audit history are kept. Revoking
+        does not undo an Invitation that was already accepted.
       tags:
         - Invitations and onboarding
       x-proctor-auth: principal_required

@@ -15,7 +15,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Searches Classes whose Programme hierarchy is owned by the authorized Academic Unit, using bounded stable traversal. Results expose Class structure only and never enroll students or grant Class-scoped permission. Items are ordered by name, then identity, in the `dir` direction. The first page, read without a cursor, also reports `total`: the Classes the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's. Each item carries `student_count`, the Class's current members stopped at 10,000 with `student_count_is_lower_bound`, only when the caller holds class.members.view on this Academic Unit; otherwise both are omitted.
+        Searches the active Classes under the active Programmes this Academic Unit owns directly. The caller needs class.view on the Academic Unit. Results describe the Classes only: they never enroll students or give the caller permission on a Class. Items are ordered by name, then by identifier, in the `dir` direction. The first page, read without a cursor, also reports `total`, the number of Classes the filters match across every page. It is exact below 10,000. At 10,000 counting stops and `total_is_lower_bound` is true. Later pages carry no total, so keep the first page's. Each item carries `student_count`, the Class's current members counted up to 10,000, with `student_count_is_lower_bound`, but only when the caller holds class.members.view on this Academic Unit. Otherwise both are omitted.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -40,15 +40,15 @@ paths:
         - name: q
           in: query
           required: false
-          description: Literal case-insensitive substring matched against name and display name.
+          description: Text to find in the Class name or display name, matched literally and ignoring case.
           schema:
             type: string
         - name: dir
           in: query
           required: false
           description: >-
-            Order by name, then identity, ascending (`asc`, the default) or descending (`desc`). A cursor continues
-            only the direction that produced it.
+            Sort by name, then by identifier, ascending (`asc`, the default) or descending (`desc`). A cursor works
+            only with the direction that produced it.
           schema:
             type: string
             enum:

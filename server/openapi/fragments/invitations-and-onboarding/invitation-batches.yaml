@@ -13,7 +13,10 @@ paths:
       tags:
         - Invitations and onboarding
       description: >-
-        Executes one to 200 independent Invitation rows in order. Each row retains ordinary authorization, audit, mail atomicity, and idempotency semantics.
+        Applies one Invitation operation to 1 to 200 items, in order, in a single request. Each item runs on its
+        own, with the same authorization, audit and retry behavior as the matching single Invitation endpoint, and
+        its email is queued together with the Invitation change. One failed item does not stop the others. Item keys
+        must be unique within the request; repeated keys fail those items with `request.invalid`.
       x-proctor-auth: principal_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -63,7 +66,7 @@ paths:
 components:
   requestBodies:
     RunInvitationBatch:
-      description: One homogeneous Invitation operation, exact scope, and at most 200 independently keyed items.
+      description: One Invitation operation, the scope it runs in, and 1 to 200 items, each with its own key.
       required: true
       content:
         application/json:
@@ -78,7 +81,7 @@ components:
                 email: student.one@example.edu
   responses:
     InvitationBatchOK:
-      description: Ordered bounded per-item Invitation outcomes
+      description: The outcome of every item, in request order, with counts by outcome.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -86,6 +89,18 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/InvitationBatchResponse'
+          example:
+            operation: student_class.create
+            items:
+              - index: 0
+                status: succeeded
+                invitation_id: fmnz3hququgwpxa1hfh4or1w6e
+              - index: 1
+                status: failed
+                error_code: invitation.conflict
+            succeeded: 1
+            no_op: 0
+            failed: 1
   schemas:
     InvitationBatchItemRequest:
       type: object
@@ -96,41 +111,68 @@ components:
         key:
           type: string
           pattern: ^[A-Za-z0-9._~-]{1,128}$
+          description: >-
+            Your key for this item, unique within the request. Together with the request's Idempotency-Key it lets
+            you retry the item safely.
         invitation_id:
           $ref: '#/components/schemas/ID'
+          description: The Invitation to resend or revoke. Required for `resend` and `revoke`, and not allowed otherwise.
         expected_revision:
           type: integer
           format: int64
           minimum: 1
+          description: >-
+            The Invitation's current `revision`. Required for `resend` and `revoke`, and not allowed otherwise.
         email:
           type: string
           format: email
+          description: The address to invite. Required for the `.create` operations, and not allowed for `resend` and `revoke`.
         role_id:
           $ref: '#/components/schemas/ID'
+          description: >-
+            The Role the Invitation grants. Required for `teacher_academic_unit.create`, `academic_unit_role.create`
+            and `institution_role.create`, and not allowed for other operations.
         start_at:
           type: string
           format: date-time
+          description: >-
+            When the relationship the Invitation grants starts, for the `.create` operations. Omit it for that kind
+            of Invitation's default start.
         end_at:
           type: string
           format: date-time
+          description: >-
+            When the relationship the Invitation grants ends, for the `.create` operations. It must be after the
+            start. Omit it for no end.
         suggested_username:
           type: string
           maxLength: 64
+          description: >-
+            A username to suggest; the invitee chooses their own when accepting. Only for `student_class.create` and `teacher_academic_unit.create`.
         suggested_display_name:
           type: string
           maxLength: 512
+          description: >-
+            The name used to greet the invitee in the Invitation email. Only for `student_class.create` and `teacher_academic_unit.create`.
         suggested_first_name:
           type: string
           maxLength: 256
+          description: A first name to suggest for the new account. Only for `student_class.create` and `teacher_academic_unit.create`.
         suggested_last_name:
           type: string
           maxLength: 256
+          description: A last name to suggest for the new account. Only for `student_class.create` and `teacher_academic_unit.create`.
         suggested_locale:
           type: string
           maxLength: 35
+          description: >-
+            The language of the Invitation email, as a language tag such as `en`. Only for `student_class.create` and `teacher_academic_unit.create`.
         suggested_timezone:
           type: string
           maxLength: 64
+          description: >-
+            The time zone the new account gets if the invitee gives none when accepting, such as `Europe/Paris`.
+            Only for `student_class.create` and `teacher_academic_unit.create`.
     InvitationBatchRequest:
       type: object
       additionalProperties: false
@@ -142,6 +184,7 @@ components:
       properties:
         operation:
           type: string
+          description: The one Invitation operation applied to every item.
           enum:
             - student_class.create
             - teacher_academic_unit.create
@@ -151,22 +194,29 @@ components:
             - revoke
         scope_type:
           type: string
+          description: >-
+            The kind of scope the batch is authorized at: `class` for `student_class.create`, `academic_unit` for
+            `teacher_academic_unit.create` and `academic_unit_role.create`, `institution` for
+            `institution_role.create`, and any of the three for `resend` and `revoke`.
           enum:
             - institution
             - academic_unit
             - class
         scope_id:
           $ref: '#/components/schemas/ID'
+          description: The Institution, Academic Unit or Class the batch runs in.
         items:
           type: array
           minItems: 1
           maxItems: 200
+          description: The items to process, from 1 to 200.
           items:
             $ref: '#/components/schemas/InvitationBatchItemRequest'
     InvitationBatchErrorCode:
       type: string
       description: >-
-        Stable safe failure code of one Invitation batch item. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+        Why one Invitation batch item failed. New codes may be added later, so show an unknown code as a generic
+        failure.
       enum:
         - request.invalid
         - resource.not_found
@@ -198,19 +248,25 @@ components:
           type: integer
           minimum: 0
           maximum: 199
+          description: The item's position in the request, starting at 0.
         status:
           type: string
           enum:
             - succeeded
             - no_op
             - failed
+          description: >-
+            `succeeded` when the item made its change, `no_op` when its outcome was already recorded, for example by
+            an earlier request with the same keys, and `failed` when it could not be applied.
         invitation_id:
           $ref: '#/components/schemas/ID'
+          description: The Invitation the item issued, resent or revoked. Omitted when the item failed.
         error_code:
           type: string
           anyOf:
             - $ref: '#/components/schemas/InvitationBatchErrorCode'
             - type: string
+          description: Why the item failed. Present only when `status` is `failed`.
     InvitationBatchResponse:
       type: object
       additionalProperties: false
@@ -223,6 +279,7 @@ components:
       properties:
         operation:
           type: string
+          description: The operation the batch ran.
           enum:
             - student_class.create
             - teacher_academic_unit.create
@@ -234,17 +291,21 @@ components:
           type: array
           minItems: 1
           maxItems: 200
+          description: One outcome for each request item, in request order.
           items:
             $ref: '#/components/schemas/InvitationBatchItemResponse'
         succeeded:
           type: integer
           minimum: 0
           maximum: 200
+          description: How many items succeeded.
         no_op:
           type: integer
           minimum: 0
           maximum: 200
+          description: How many items changed nothing because their outcome was already recorded.
         failed:
           type: integer
           minimum: 0
           maximum: 200
+          description: How many items failed.

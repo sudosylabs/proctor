@@ -11,7 +11,7 @@ paths:
       operationId: refreshSession
       summary: Rotate refresh credentials
       description: >-
-        Atomically rotates the current Session's refresh credential and returns a fresh access/refresh pair or browser cookies. A Desktop-bound refresh credential must use the DPoP authorization scheme and a fresh proof bound to its registered key and current server nonce. Reuse of a consumed refresh credential is treated as replay and invalidates the affected Session family.
+        Replaces the current Session's refresh credential with a new one in a single step and returns a new access and refresh token pair. If the request used the refresh cookie, the new credentials are set as cookies and the body leaves out tokens. A Desktop refresh credential must use the DPoP authorization scheme with a new proof signed by the Desktop's registered key and carrying the server's current nonce. Each refresh credential works once. Sending a used one again is treated as a replay and revokes the Session it belongs to.
       x-codeSamples:
         - lang: Shell
           label: Rotate a native-client refresh token

@@ -13,16 +13,16 @@ paths:
       tags:
         - Administration
       description: >-
-        Returns bounded counts for administration navigation badges. `pending_invitations` counts pending
-        Invitations that have not expired; `failed_jobs` counts operator-visible Jobs that failed in the last seven
-        days; `failed_mail_deliveries` counts mail deliveries in the `failed` terminal state (suppressed and
-        canceled deliveries are not failures); `open_onboarding_imports` counts unexpired administrative onboarding
-        imports still uploading, parsing, awaiting commit, or executing, excluding student progressions. Each count
-        runs the authorization and visibility of its resource's own list, which records its authorization decision
-        as that list does, so it counts only what the caller could list. A count the caller may not list is omitted
-        together with its `_is_lower_bound` flag; an unavailable count fails the request rather than reading as
-        zero. Counting stops at 1,000, where the count is 1,000 and its flag is true. Only an interactive Session may
-        read the summary.
+        Returns the counts shown as badges in administration navigation. `pending_invitations` counts pending
+        Invitations that have not expired. `failed_jobs` counts operator-visible Jobs that failed in the last seven
+        days. `failed_mail_deliveries` counts mail deliveries that ended in the `failed` state. Suppressed and
+        canceled deliveries are not failures. `open_onboarding_imports` counts unexpired administrative onboarding
+        imports that are still uploading, parsing, waiting to be committed or running, not counting student
+        progressions. Each count applies the same permission and visibility checks as its resource's own list, and
+        records the permission decision the same way, so it counts only what the caller could list. A count the
+        caller may not list is left out, together with its `_is_lower_bound` flag. If a count can't be read, the
+        request fails rather than reporting zero. Counting stops at 1,000: the count is then 1,000 and its flag is
+        true. Only an interactive Session may read the counts.
       x-proctor-auth: session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -66,7 +66,7 @@ paths:
 components:
   responses:
     AdministrationCountsOK:
-      description: Bounded administration counts the caller may see
+      description: The administration counts the caller may see, each capped at 1,000
       headers:
         Cache-Control:
           $ref: '#/components/headers/PrivateNoStore'
@@ -96,7 +96,7 @@ components:
           description: Pending, unexpired Invitations within the caller's Invitation visibility.
         pending_invitations_is_lower_bound:
           type: boolean
-          description: True when `pending_invitations` reached the 1,000 bound. Present with `pending_invitations`.
+          description: True when `pending_invitations` reached 1,000 and there may be more. Present with `pending_invitations`.
         failed_jobs:
           type: integer
           minimum: 0
@@ -104,15 +104,15 @@ components:
           description: Operator-visible Jobs that failed and were last updated in the last seven days.
         failed_jobs_is_lower_bound:
           type: boolean
-          description: True when `failed_jobs` reached the 1,000 bound. Present with `failed_jobs`.
+          description: True when `failed_jobs` reached 1,000 and there may be more. Present with `failed_jobs`.
         failed_mail_deliveries:
           type: integer
           minimum: 0
           maximum: 1000
-          description: Mail deliveries in the `failed` terminal state.
+          description: Mail deliveries that ended in the `failed` state. Suppressed and canceled deliveries are not counted.
         failed_mail_deliveries_is_lower_bound:
           type: boolean
-          description: True when `failed_mail_deliveries` reached the 1,000 bound. Present with `failed_mail_deliveries`.
+          description: True when `failed_mail_deliveries` reached 1,000 and there may be more. Present with `failed_mail_deliveries`.
         open_onboarding_imports:
           type: integer
           minimum: 0
@@ -122,4 +122,4 @@ components:
             onboarding import visibility. Student progressions are not counted.
         open_onboarding_imports_is_lower_bound:
           type: boolean
-          description: True when `open_onboarding_imports` reached the 1,000 bound. Present with `open_onboarding_imports`.
+          description: True when `open_onboarding_imports` reached 1,000 and there may be more. Present with `open_onboarding_imports`.

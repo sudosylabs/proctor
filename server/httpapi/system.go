@@ -70,7 +70,7 @@ func systemResourceWithApplication(
 			Method: http.MethodGet,
 			Path:   "/system/ping",
 			Auth:   route.AuthPublic,
-			Errors: []string{"request.invalid", "desktop_compatibility_policy.revision_conflict", "desktop_compatibility_policy.unavailable"},
+			Errors: []string{"request.invalid"},
 			Handle: h.ping,
 		},
 		route.Endpoint{
@@ -144,8 +144,10 @@ func (h systemHandlers) ping(request route.Request) (route.Result, error) {
 		request.Invocation(),
 		query,
 	)
+	// Only a malformed query fails the request. Every other evaluation error
+	// becomes a 200 that reports compatibility as unavailable.
 	if apperror.Is(evaluationErr, "request.invalid") {
-		return route.Result{}, evaluationErr
+		return route.Result{}, route.InvalidRequest(nil)
 	}
 
 	responseTime := model.TimeUTC(h.now())

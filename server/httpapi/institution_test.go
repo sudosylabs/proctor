@@ -190,7 +190,7 @@ func TestInstitutionOpenAPIDocument(t *testing.T) {
 			Description string `json:"description"`
 		}
 		require.NoError(t, json.Unmarshal(patchSchema.Properties[propertyName], &property))
-		assert.Contains(t, property.Description, "Omitted or null leaves the value unchanged", "%s semantics", propertyName)
-		assert.Contains(t, property.Description, "empty string is present", "%s semantics", propertyName)
+		assert.Contains(t, property.Description, "Omitted or null leaves it unchanged", "%s semantics", propertyName)
+		assert.Contains(t, property.Description, "An empty string", "%s semantics", propertyName)
 	}
 }

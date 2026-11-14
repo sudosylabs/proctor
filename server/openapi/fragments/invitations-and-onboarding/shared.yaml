@@ -13,17 +13,17 @@ components:
       required: true
       schema:
         $ref: '#/components/schemas/ID'
-      description: The Invitation identifier.
+      description: The ID of the Invitation.
     OnboardingImportID:
       name: onboarding_import_id
       in: path
       required: true
       schema:
         $ref: '#/components/schemas/ID'
-      description: The staged onboarding import identifier.
+      description: The ID of the onboarding import.
   requestBodies:
     MutateInvitation:
-      description: Exact current Invitation revision for resend or revocation.
+      description: The Invitation's current revision. The request is refused if the Invitation has changed since.
       required: true
       content:
         application/json:
@@ -33,7 +33,7 @@ components:
             expected_revision: 3
   responses:
     InvitationAdministrationOK:
-      description: Authorized safe Invitation administration view
+      description: The Invitation as administrators see it. It never includes the claim.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -41,8 +41,30 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/InvitationAdministrationResponse'
+          example:
+            id: ccrzmhoygspnzijnponpyw4zmu
+            purpose: student_class
+            state: pending
+            class_id: sjebyge5cpbop1xwo4eds74ejb
+            academic_period_id: p6y6sf8ac6m5if373fkkebj7j6
+            start_at: '2026-09-01T00:00:00Z'
+            expires_at: '2026-08-27T10:00:00Z'
+            email: student.one@example.edu
+            inviter_user_id: rpn96r4g3jfk3t41u4dus44bzc
+            created_at: '2026-08-20T10:00:00Z'
+            updated_at: '2026-08-20T10:00:03Z'
+            revision: 1
+            delivery:
+              template_key: access.student_class_invitation
+              state: accepted
+              masked_recipient: s***@example.edu
+              created_at: '2026-08-20T10:00:00Z'
+              updated_at: '2026-08-20T10:00:03Z'
+              deadline: '2026-08-21T10:00:00Z'
+              accepted_at: '2026-08-20T10:00:03Z'
     OnboardingImportAccepted:
-      description: Onboarding import accepted for asynchronous work
+      description: >-
+        The onboarding import. Its validation or commit now runs in the background; poll the import to follow it.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -50,8 +72,27 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/OnboardingImportResponse'
+          example:
+            id: grofpg49hmqe47x811ttzoochx
+            mode: student_class
+            state: parsing
+            scope_type: class
+            scope_id: sjebyge5cpbop1xwo4eds74ejb
+            total_rows: 0
+            valid_rows: 0
+            invalid_rows: 0
+            succeeded_rows: 0
+            no_op_rows: 0
+            failed_rows: 0
+            skipped_rows: 0
+            parse_job_id: mxxj1cwr3oxqg7ngy6qhzn1q8d
+            created_at: '2026-08-18T13:30:00Z'
+            updated_at: '2026-08-18T13:30:00Z'
+            expires_at: '2026-08-25T13:30:00Z'
+            revision: 1
+            file_name: chemistry-roster.csv
     OnboardingImportOK:
-      description: Authorized safe onboarding preview or report projection
+      description: The onboarding import, with its preview rows or, once committed, its result rows.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -59,6 +100,42 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/OnboardingImportResponse'
+          example:
+            id: grofpg49hmqe47x811ttzoochx
+            mode: student_class
+            state: preview_ready
+            scope_type: class
+            scope_id: sjebyge5cpbop1xwo4eds74ejb
+            preview_digest: 43bb00d0ce7790a53b91256b370c887b24791a5539a6fbfb70c5870e8c91ae5d
+            ignored_headers:
+              - notes
+            rows:
+              - row: 1
+                reference: '1'
+                operation: student_class.create
+                status: valid
+              - row: 2
+                reference: '2'
+                operation: student_class.create
+                status: valid
+              - row: 3
+                reference: '3'
+                operation: student_class.create
+                status: invalid
+                preview_code: request.invalid
+            total_rows: 3
+            valid_rows: 2
+            invalid_rows: 1
+            succeeded_rows: 0
+            no_op_rows: 0
+            failed_rows: 0
+            skipped_rows: 0
+            parse_job_id: mxxj1cwr3oxqg7ngy6qhzn1q8d
+            created_at: '2026-08-18T13:30:00Z'
+            updated_at: '2026-08-18T13:30:02Z'
+            expires_at: '2026-08-25T13:30:00Z'
+            revision: 2
+            file_name: chemistry-roster.csv
   schemas:
     IssueScopedRoleInvitationRequest:
       type: object
@@ -70,14 +147,18 @@ components:
         email:
           type: string
           format: email
+          description: The email address of the existing User to invite.
         role_id:
           $ref: '#/components/schemas/ID'
+          description: The Role the Invitation grants. You must be allowed to delegate it at this scope.
         start_at:
           type: string
           format: date-time
+          description: When the Role Binding starts once accepted. Omit it to start when the Invitation is issued.
         end_at:
           type: string
           format: date-time
+          description: When the Role Binding ends; it must be after the start. Omit it for no end.
         expires_in_days:
           type:
             - integer
@@ -85,7 +166,8 @@ components:
           minimum: 1
           maximum: 30
           description: >-
-            Whole days until the claim expires, from 1 to 30. Omitted or null selects 7. A value outside the range is rejected with invitation.invalid.
+            How many whole days the Invitation can be accepted for, from 1 to 30. Omit it or send null for 7 days. A
+            value outside the range is refused with invitation.invalid.
     InvitationMutationRequest:
       type: object
       additionalProperties: false
@@ -96,9 +178,11 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: The Invitation's `revision` as you last read it.
     InvitationDeliveryResponse:
       type: object
       additionalProperties: false
+      description: The latest email delivery of an Invitation. The recipient address is shown only masked.
       required:
         - template_key
         - state
@@ -109,6 +193,7 @@ components:
       properties:
         template_key:
           type: string
+          description: The email template used, such as `access.student_class_invitation`.
         state:
           type: string
           enum:
@@ -118,28 +203,42 @@ components:
             - failed
             - suppressed
             - canceled
+          description: >-
+            Where the delivery stands: `queued` or `sending` while it is being sent, `accepted` once the mail server
+            took the message, `failed` when it gave up, `suppressed` when the message was deliberately not sent, or
+            `canceled`.
         masked_recipient:
           type: string
+          description: The recipient address with most of its local part hidden, such as `s***@example.edu`.
         created_at:
           type: string
           format: date-time
+          description: When the delivery was queued.
         updated_at:
           type: string
           format: date-time
+          description: When the delivery last changed.
         deadline:
           type: string
           format: date-time
+          description: The time after which the delivery is no longer attempted.
         accepted_at:
           type: string
           format: date-time
+          description: When the mail server accepted the message. Present only once accepted.
         public_failure_code:
           type: string
           anyOf:
             - $ref: '#/components/schemas/MailFailureCode'
             - type: string
+          description: >-
+            Why the latest attempt failed. Present after a failed attempt, including while the delivery is retried.
     InvitationAdministrationResponse:
       type: object
       additionalProperties: false
+      description: >-
+        An Invitation as administrators see it, with its recipient, lifecycle and latest delivery. It never includes
+        the claim, the rendered email or mail provider details.
       required:
         - id
         - purpose
@@ -154,6 +253,7 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/ID'
+          description: The ID of the Invitation.
         purpose:
           type: string
           enum:
@@ -161,6 +261,10 @@ components:
             - teacher_academic_unit
             - academic_unit_role
             - institution_role
+          description: >-
+            What accepting the Invitation does. `student_class` creates a student account and Class enrollment, and
+            `teacher_academic_unit` creates a teacher account with an Academic Unit membership and Role.
+            `academic_unit_role` and `institution_role` give an existing User a Role at that scope.
         state:
           type: string
           enum:
@@ -169,49 +273,73 @@ components:
             - revoked
             - expired
             - superseded
+          description: >-
+            `pending` until the Invitation is accepted, revoked, expires, or is replaced by a new one
+            (`superseded`).
         class_id:
           $ref: '#/components/schemas/ID'
+          description: The Class a student Class Invitation enrolls the student in. Present only for `student_class`.
         academic_period_id:
           $ref: '#/components/schemas/ID'
+          description: The Academic Period of that Class. Present only for `student_class`.
         academic_unit_id:
           $ref: '#/components/schemas/ID'
+          description: >-
+            The Academic Unit a teacher or Academic Unit Role Invitation applies to. Present only for those purposes.
         role_id:
           $ref: '#/components/schemas/ID'
+          description: The Role the Invitation grants. Present for every purpose except `student_class`.
         role_actions:
           type: array
+          description: The actions the Role allowed when the Invitation was issued, as recorded in the Invitation.
           items:
             type: string
         start_at:
           type: string
           format: date-time
+          description: >-
+            When the relationship the Invitation grants starts. When the issuer gave no start, a student Class
+            Invitation starts with its Academic Period and every other Invitation starts when it was issued.
         end_at:
           type: string
           format: date-time
+          description: When the relationship the Invitation grants ends. Omitted when it has no end.
         expires_at:
           type: string
           format: date-time
+          description: When the Invitation can no longer be accepted.
         email:
           type: string
           format: email
+          description: The address the Invitation was sent to.
         inviter_user_id:
           $ref: '#/components/schemas/ID'
+          description: The User who issued the Invitation.
         accepted_user_id:
           $ref: '#/components/schemas/ID'
+          description: The User who accepted the Invitation. Present only once accepted.
         created_at:
           type: string
           format: date-time
+          description: When the Invitation was issued.
         updated_at:
           type: string
           format: date-time
+          description: When the Invitation last changed.
         revision:
           type: integer
           format: int64
           minimum: 1
+          description: >-
+            The Invitation's revision, which goes up each time it changes. Send it as `expected_revision` to resend,
+            revoke or replace the Invitation.
         delivery:
           $ref: '#/components/schemas/InvitationDeliveryResponse'
+          description: The latest email delivery of the Invitation. Omitted when there is none.
     InvitationResponse:
       type: object
       additionalProperties: false
+      description: A newly issued Invitation. It never includes the claim or the recipient's mailbox details.
       required:
         - id
         - purpose
@@ -221,6 +349,7 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/ID'
+          description: The ID of the Invitation.
         purpose:
           type: string
           enum:
@@ -228,6 +357,10 @@ components:
             - teacher_academic_unit
             - academic_unit_role
             - institution_role
+          description: >-
+            What accepting the Invitation does. `student_class` creates a student account and Class enrollment, and
+            `teacher_academic_unit` creates a teacher account with an Academic Unit membership and Role.
+            `academic_unit_role` and `institution_role` give an existing User a Role at that scope.
         state:
           type: string
           enum:
@@ -236,30 +369,45 @@ components:
             - revoked
             - expired
             - superseded
+          description: >-
+            `pending` until the Invitation is accepted, revoked, expires, or is replaced by a new one
+            (`superseded`).
         class_id:
           $ref: '#/components/schemas/ID'
+          description: The Class a student Class Invitation enrolls the student in. Present only for `student_class`.
         academic_period_id:
           $ref: '#/components/schemas/ID'
+          description: The Academic Period of that Class. Present only for `student_class`.
         academic_unit_id:
           $ref: '#/components/schemas/ID'
+          description: >-
+            The Academic Unit a teacher or Academic Unit Role Invitation applies to. Present only for those purposes.
         role_id:
           $ref: '#/components/schemas/ID'
+          description: The Role the Invitation grants. Present for every purpose except `student_class`.
         role_actions:
           type: array
+          description: The actions the Role allowed when the Invitation was issued, as recorded in the Invitation.
           items:
             type: string
         start_at:
           type: string
           format: date-time
+          description: >-
+            When the relationship the Invitation grants starts. When the issuer gave no start, a student Class
+            Invitation starts with its Academic Period and every other Invitation starts when it was issued.
         end_at:
           type: string
           format: date-time
+          description: When the relationship the Invitation grants ends. Omitted when it has no end.
         expires_at:
           type: string
           format: date-time
+          description: When the Invitation can no longer be accepted.
     InvitationAcceptanceResponse:
       type: object
       additionalProperties: false
+      description: The account and the relationships that accepting the Invitation created.
       required:
         - user_id
         - invitation_id
@@ -267,15 +415,24 @@ components:
       properties:
         user_id:
           $ref: '#/components/schemas/ID'
+          description: The User who accepted. For a student or teacher Invitation, this is the new account.
         invitation_id:
           $ref: '#/components/schemas/ID'
+          description: The accepted Invitation.
         affiliation_id:
           $ref: '#/components/schemas/ID'
+          description: The Affiliation acceptance created. Present for student Class and teacher Academic Unit Invitations.
         class_member_id:
           $ref: '#/components/schemas/ID'
+          description: The Class enrollment acceptance created. Present for student Class Invitations.
         academic_unit_member_id:
           $ref: '#/components/schemas/ID'
+          description: The Academic Unit membership acceptance created. Present for teacher Academic Unit Invitations.
         role_binding_id:
           $ref: '#/components/schemas/ID'
+          description: >-
+            The Role Binding acceptance created. Present for teacher Academic Unit, Academic Unit Role and Institution
+            Role Invitations.
         replayed:
           type: boolean
+          description: True when this request repeated an acceptance that had already succeeded, and the stored outcome was returned.

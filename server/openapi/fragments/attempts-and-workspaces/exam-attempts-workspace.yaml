@@ -12,8 +12,7 @@ paths:
     get:
       operationId: listCandidateExamWorkspace
       summary: List one protected candidate Workspace page
-      description: >-
-        Lists a stable page of files and directories in the active candidate Workspace after validating the Session-bound Attempt credential and open Connection. Pagination is pinned to a Workspace cursor so clients can detect when a full manifest refresh is required.
+      description: Lists one page of the files and directories in the candidate's active Attempt Workspace. The request needs the Attempt credential bound to the Session and an open Connection. Every page is tied to the Workspace Cursor of the first page. If the Workspace changes while you page through it, the response tells you to start again from the first page.
       tags:
         - Attempts and workspaces
       x-proctor-auth: session_required
@@ -44,7 +43,7 @@ paths:
         - name: limit
           in: query
           required: false
-          description: Maximum number of Workspace entries to return from the cursor-pinned manifest page.
+          description: Largest number of Workspace entries to return on this page.
           schema:
             type: integer
             minimum: 1
@@ -54,7 +53,7 @@ paths:
           in: query
           required: false
           description: >-
-            Opaque cursor over ascending canonical path and Workspace entry identity; clients return it unchanged.
+            Cursor from next_cursor of the previous page. Send it back unchanged. Don't build or parse it yourself.
           schema:
             type: string
       responses:
@@ -77,7 +76,7 @@ paths:
 components:
   responses:
     CandidateExamWorkspaceListOK:
-      description: Bounded protected candidate Workspace manifest page
+      description: One page of the Attempt Workspace file list.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -85,8 +84,25 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/CandidateExamWorkspaceListResponse'
+          example:
+            workspace_id: wj3drgzdpnf54rxf5d8qd3dqne
+            workspace_cursor: 14
+            items:
+              - id: ih1r84kij94nrwis97rft6rduh
+                kind: directory
+                path: answers
+              - id: 14j8umgczgrdp95w77zuxmxfu9
+                kind: file
+                path: answers/main.go
+                content_version: W8zNIQt3uL4FFQKoKGwRDIOYQ_
+                media_type: text/x-go
+                size: 2184
+                sha256: 6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b
+            next_cursor: eyJ3b3Jrc3BhY2VfY3Vyc29yIjoxNCwiYWZ0ZXJfZW50cnlfaWQiOiIxNGo4dW1nY3pncmRwOTV3Nzd6dXhteGZ1OSJ9
+            refresh_required: false
   schemas:
     CandidateExamWorkspaceListResponse:
+      description: One page of the files and directories in the Attempt Workspace.
       type: object
       additionalProperties: false
       required:
@@ -96,20 +112,22 @@ components:
         - refresh_required
       properties:
         workspace_id:
+          description: ID of the Attempt Workspace.
           $ref: '#/components/schemas/ID'
         workspace_cursor:
+          description: Workspace Cursor this page reflects. Use it as workspace_cursor when you list changes made after this listing.
           type: integer
           format: int64
           minimum: 0
         items:
+          description: Files and directories on this page, in ascending path order. Empty when refresh_required is true.
           type: array
           maxItems: 200
           items:
             $ref: '#/components/schemas/CandidateExamWorkspaceItemResponse'
         next_cursor:
           type: string
-          description: >-
-            Opaque cursor containing only the pinned Workspace cursor and last Entry identity; no Workspace path enters the URL.
+          description: Cursor for the next page. Omitted on the last page. Send it back unchanged as cursor. It holds no Workspace path.
         refresh_required:
           type: boolean
-          description: True with an empty page when the pinned manifest cursor advanced; restart from the first page.
+          description: True when the Workspace changed after the first page was read. The page is then empty, and you must start again from the first page.

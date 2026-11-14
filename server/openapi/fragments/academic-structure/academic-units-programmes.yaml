@@ -15,7 +15,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Lists active Programmes directly owned by one authorized Academic Unit, optionally narrowed by the documented search input. The collection does not include Programmes owned by descendants unless requested through those Units. The first page, read without a cursor, also reports `total`: the Programmes the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
+        Lists the active Programmes this Academic Unit owns directly, optionally narrowed by `q`. Programmes of Units further down are not included. List them through those Units. The first page, read without a cursor, also reports `total`, the number of Programmes the filters match across every page. It is exact below 10,000. At 10,000 counting stops and `total_is_lower_bound` is true. Later pages carry no total, so keep the first page's.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -40,7 +40,7 @@ paths:
         - name: q
           in: query
           required: false
-          description: Literal case-insensitive substring matched against name and display name.
+          description: Text to find in the Programme name or display name, matched literally and ignoring case.
           schema:
             type: string
         - $ref: '#/components/parameters/PageLimit'
@@ -66,7 +66,7 @@ paths:
       tags:
         - Academic structure
       description: >-
-        Creates one Programme under the exact Academic Unit in the route after rechecking current management authority. Programme creation does not create levels, Classes, enrollments, Roles, or Role Bindings.
+        Creates a Programme owned by the Academic Unit in the path. The caller's management permission is checked again when the request is handled. Creating a Programme does not create Programme Levels, Classes, enrollments, Roles or Role Bindings.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -114,7 +114,7 @@ paths:
 components:
   requestBodies:
     CreateProgramme:
-      description: Canonical and human-facing presentation for a Programme owned by the route Academic Unit.
+      description: The machine name and display text for a Programme owned by the Academic Unit in the path.
       required: true
       content:
         application/json:
@@ -131,15 +131,44 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ProgrammeResponse'
+          example:
+            revision: 1
+            id: g63dcrphk8idgyjgzbrpajosz6
+            created_at: '2026-08-02T09:30:00Z'
+            updated_at: '2026-08-02T09:30:00Z'
+            academic_unit_id: 14j8umgczgrdp95w77zuxmxfu9
+            name: bsc-computer-science
+            display_name: BSc Computer Science
+            description: Undergraduate computer science programme.
     ProgrammeListOK:
       description: Programme collection
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ProgrammeListResponse'
+          example:
+            items:
+              - revision: 1
+                id: g63dcrphk8idgyjgzbrpajosz6
+                created_at: '2026-08-02T09:30:00Z'
+                updated_at: '2026-08-02T09:30:00Z'
+                academic_unit_id: 14j8umgczgrdp95w77zuxmxfu9
+                name: bsc-computer-science
+                display_name: BSc Computer Science
+                description: Undergraduate computer science programme.
+              - revision: 2
+                id: 889766ufjgio6kbpzjbufozksq
+                created_at: '2026-08-02T09:40:00Z'
+                updated_at: '2026-08-15T13:05:00Z'
+                academic_unit_id: 14j8umgczgrdp95w77zuxmxfu9
+                name: msc-data-science
+                display_name: MSc Data Science
+                description: Taught postgraduate programme in data science.
+            total: 2
+            total_is_lower_bound: false
   schemas:
     ProgrammeListResponse:
-      description: One page of the collection in its stable order.
+      description: One page of Programmes, ordered by name and then by identifier. Only the first page carries the total.
       type: object
       additionalProperties: false
       required:
@@ -149,6 +178,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProgrammeResponse'
+          description: The Programmes on this page.
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
         total:
@@ -156,13 +186,13 @@ components:
           minimum: 0
           maximum: 10000
           description: >-
-            Programmes matching the filters across every page, present only on the first page. At 10,000 counting
-            stops and `total_is_lower_bound` is true.
+            How many Programmes match the filters across every page. Present only on the first page. Counting stops
+            at 10,000, and then `total_is_lower_bound` is true.
         total_is_lower_bound:
           type: boolean
-          description: True when `total` reached the 10,000 bound and there may be more. Present with `total`.
+          description: True when `total` reached 10,000 and there may be more. Present with `total`.
     CreateProgrammeRequest:
-      description: Canonical and human-facing fields for a new Programme.
+      description: The machine name and display text for a new Programme.
       type: object
       additionalProperties: false
       required:
@@ -171,7 +201,12 @@ components:
       properties:
         name:
           type: string
+          description: >-
+            Machine name: lowercase letters, digits, hyphens and underscores, starting with a letter or digit, at
+            most 64 characters. It must be unique among the Academic Unit's active Programmes.
         display_name:
           type: string
+          description: Name shown to people, 1 to 128 characters.
         description:
           type: string
+          description: Optional longer text shown to people, up to 1,024 characters.

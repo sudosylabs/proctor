@@ -13,12 +13,7 @@ paths:
     get:
       operationId: nativeDeliveryStatus
       summary: Read native delivery settlement
-      description: >-
-        Requires the owning User and a currently valid Session for the registered key bound at
-        admission. Live sources also require exact Connection continuity. After server-owned
-        closure, historical delivery never revives interaction or extends the upload deadline. Exact
-        replay rechecks ownership. Receipts attest only stored batches; terminal omissions advance
-        settlement without fabricating content. Source status is bounded at 16 KiB.
+      description: Returns the delivery status of one native security stream. The caller must be the User who owns the stream, with a valid Session for the registered key bound at admission. While the stream is live, the request also needs the current Connection headers. After the server closes the stream, uploading history never reopens the Attempt for interaction or moves the upload deadline. Receipts confirm only batches the server stored. Positions the client gave up on count as settled, but the server never makes up content for them. The status is at most 16 KiB.
       tags:
         - Attempts and workspaces
       x-proctor-auth: session_required
@@ -84,12 +79,7 @@ paths:
     get:
       operationId: nativeDeliveryReceipt
       summary: Recover an exact native batch receipt
-      description: >-
-        Requires the owning User and a currently valid Session for the registered key bound at
-        admission. Live sources also require exact Connection continuity. After server-owned
-        closure, historical delivery never revives interaction or extends the upload deadline. Exact
-        replay rechecks ownership. Receipts attest only stored batches; terminal omissions advance
-        settlement without fabricating content. Source status is bounded at 16 KiB.
+      description: Returns the receipt for one stored batch of a native security stream. The caller must be the User who owns the stream, with a valid Session for the registered key bound at admission. While the stream is live, the request also needs the current Connection headers. Receipts exist only for batches the server stored, never for positions declared missing.
       tags:
         - Attempts and workspaces
       x-proctor-auth: session_required
@@ -154,14 +144,7 @@ paths:
     post:
       operationId: declareNativeDeliveryGaps
       summary: Declare permanently unavailable native batches
-      description: >-
-        Requires the owning User and a currently valid Session for the registered key bound at
-        admission. Live sources also require exact Connection continuity. After server-owned
-        closure, historical delivery never revives interaction or extends the upload deadline. Exact
-        replay rechecks ownership. Receipts attest only stored batches; terminal omissions advance
-        settlement without fabricating content. At most 8 KiB, 1..32 disjoint nonadjacent ranges
-        within the current 1024-position receive window. Declaration revision and exact canonical
-        metadata charge commit atomically.
+      description: Declares batch positions of a native security stream that the client can never deliver. The caller must be the User who owns the stream, with a valid Session for the registered key bound at admission. While the stream is live, the request also needs the current Connection headers. A declaration is at most 8 KiB and holds 1 to 32 separate ranges that don't touch, all inside the current window of 1,024 positions. The server records the declaration and charges its size against the metadata limit in one step. Declared positions count as settled, but they never get a receipt. A retry with the same Idempotency-Key returns the first result after the server checks ownership again.
       tags:
         - Attempts and workspaces
       x-proctor-auth: session_required
@@ -234,13 +217,7 @@ paths:
     post:
       operationId: sealNativeDelivery
       summary: Declare the final boundary of a closed native stream
-      description: >-
-        Requires the owning User and a currently valid Session for the registered key bound at
-        admission. Live sources also require exact Connection continuity. After server-owned
-        closure, historical delivery never revives interaction or extends the upload deadline. Exact
-        replay rechecks ownership. Receipts attest only stored batches; terminal omissions advance
-        settlement without fabricating content. At most 2 KiB. Only after closure. The final tail is
-        bounded by known-at-close plus 1024 and remaining lifetime positions.
+      description: Declares the last batch position of a native security stream after the server has closed it. The caller must be the User who owns the stream, with a valid Session for the registered key bound at admission. The request is at most 2 KiB. The final position may be at most 1,024 past the position the server knew of at closing, and must fit in the positions the Attempt has left. It must be sent before the upload deadline.
       tags:
         - Attempts and workspaces
       x-proctor-auth: session_required
@@ -313,13 +290,7 @@ paths:
     post:
       operationId: updateNativeDeliverySummary
       summary: Report cumulative unretained native records
-      description: >-
-        Requires the owning User and a currently valid Session for the registered key bound at
-        admission. Live sources also require exact Connection continuity. After server-owned
-        closure, historical delivery never revives interaction or extends the upload deadline. Exact
-        replay rechecks ownership. Receipts attest only stored batches; terminal omissions advance
-        settlement without fabricating content. At most 2 KiB. Changed summaries at most once per
-        five seconds except the one final summary; incomplete counts never become complete.
+      description: Reports how many native records the client produced but could not deliver. The caller must be the User who owns the stream, with a valid Session for the registered key bound at admission. While the stream is live, the request also needs the current Connection headers. The request is at most 2 KiB. Counts are cumulative. A changed summary may be sent at most once every five seconds, except for one final summary. A count marked incomplete can never later be marked complete.
       tags:
         - Attempts and workspaces
       x-proctor-auth: session_required
@@ -391,17 +362,7 @@ paths:
     post:
       operationId: appendNativeDelivery
       summary: Append minimized native security evidence
-      description: >-
-        Atomically accepts one closed batch under its original verified release, matrix, policy,
-        source instances, and Participation generation. Live delivery requires exact Connection
-        continuity; closed streams use current owning registered-key authentication until the fixed
-        upload deadline. Exact retries preserve the submitted prior acknowledgement and recover the
-        original receipt. Out-of-order records wait behind recoverable holes; terminal gaps preserve
-        unresolved openers. Native conditions do not automatically create Flags, warnings or
-        suspension. Lifetime quotas include pending bytes, envelopes, receipts and bounded metadata.
-        Repair has reserved headroom. Native append is limited across Sessions and transports to two
-        requests per second with burst eight; replay consumes allowance. A 429 response supplies
-        Retry-After.
+      description: Stores one native security batch, in a single step, under the release, capability matrix, policy, source instances and Participation Generation it was produced with. While the stream is live, the request needs the current Connection headers. After the stream closes, the owning registered key can still upload until the fixed upload deadline. A retry must send the same prior_acknowledgement and content, and returns the original receipt. Records that arrive out of order wait until the earlier positions arrive or are declared missing. Native conditions never create Integrity Flags, warnings or a Suspension on their own. Lifetime limits count pending bytes, envelopes, receipts and metadata, with space set aside for repairs. Uploads are limited to two requests per second with bursts of eight, across all Sessions and transports, and retries count. A 429 response includes Retry-After.
       tags:
         - Attempts and workspaces
       x-proctor-auth: session_required
@@ -483,6 +444,7 @@ paths:
 components:
   schemas:
     SequenceRange:
+      description: An inclusive range of sequence numbers.
       type: object
       additionalProperties: false
       required:
@@ -490,16 +452,19 @@ components:
         - last
       properties:
         first:
+          description: First sequence number in the range.
           type: integer
           format: int64
           minimum: 1
           maximum: 9007199254740991
         last:
+          description: Last sequence number in the range. It is never less than first.
           type: integer
           format: int64
           minimum: 1
           maximum: 9007199254740991
     DeclareDeliveryGaps:
+      description: Positions the client can never deliver, and why.
       type: object
       additionalProperties: false
       required:
@@ -510,33 +475,39 @@ components:
         - reason
       properties:
         declaration_id:
+          description: ID the client chooses for this declaration. Sending the same declaration again with the same ID returns the first receipt.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         expected_revision:
+          description: The declaration_revision the client last saw for this source. The request fails if another declaration was recorded since.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         allocated_through_sequence:
+          description: Highest sequence number the client has given out for this source so far.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         ranges:
+          description: Ranges of positions that will never be delivered, in ascending order. Ranges may not overlap or touch.
           type: array
           items:
             $ref: '#/components/schemas/SequenceRange'
           maxItems: 32
           minItems: 1
         reason:
+          description: Why the positions are lost. spool_corrupt and spool_lost mean the local store was damaged or lost. local_capacity_exhausted means the local store ran out of space.
           type: string
           enum:
             - spool_corrupt
             - spool_lost
             - local_capacity_exhausted
     DeliveryGapReceipt:
+      description: Receipt for a recorded gap declaration.
       type: object
       additionalProperties: false
       required:
@@ -546,24 +517,29 @@ components:
         - settled_through_sequence
       properties:
         declaration_id:
+          description: ID the client gave the declaration.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         request_digest:
+          description: SHA-256 digest of the declaration as the server recorded it, prefixed with sha256:.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
         declaration_revision:
+          description: Declaration revision of the source after this declaration. Send it as expected_revision in the next declaration.
           type: integer
           format: int64
           minimum: 1
           maximum: 9007199254740991
         settled_through_sequence:
+          description: Highest position up to which every position is now either received or declared missing.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
     FinalDeliveryDeclaration:
+      description: The last position a closed source produced.
       type: object
       additionalProperties: false
       required:
@@ -572,16 +548,19 @@ components:
         - final_sequence
       properties:
         declaration_id:
+          description: ID the client chooses for this declaration. Sending the same declaration again with the same ID returns the first result.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         expected_revision:
+          description: The declaration_revision the client last saw for this source. The request fails if another declaration was recorded since.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         final_sequence:
+          description: Last position the source produced. It may not be lower than the positions already allocated or the position the server knew of at closing.
           type: integer
           format: int64
           minimum: 0
@@ -589,17 +568,16 @@ components:
     DeliveryClosure:
       type: object
       additionalProperties: false
-      description: >-
-        Delivery closure. An open delivery carries only unknown_tail false; a closed one carries
-        closed_at, close_reason, known_at_close and upload_expires_at, plus the final sequence,
-        declaration and boundary origin when they are known. Absent members are omitted, never null.
+      description: Whether and how the server closed a delivery source. An open source has only unknown_tail, set to false. A closed source also has closed_at, close_reason, known_at_close and upload_expires_at, plus final_sequence, final_declaration_id and final_boundary_origin once the final position is known. Members without a value are left out, never null.
       required:
         - unknown_tail
       properties:
         closed_at:
+          description: When the server closed the source. Omitted while it is open.
           type: string
           format: date-time
         close_reason:
+          description: Why the server closed the source. policy_correction, runtime_reset and browser_disabled apply only to browser sources.
           type: string
           enum:
             - submission
@@ -612,31 +590,38 @@ components:
             - runtime_reset
             - browser_disabled
         known_at_close:
+          description: Highest position the server knew of when it closed the source.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         final_sequence:
+          description: Last position of the source. Present once the client declares it or the upload deadline passes.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         final_declaration_id:
+          description: ID of the client declaration that set final_sequence. Present only when final_boundary_origin is client_declared.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         final_boundary_origin:
+          description: client_declared when the client sealed the source. server_known when the upload deadline passed first and the server used known_at_close.
           type: string
           enum:
             - client_declared
             - server_known
         unknown_tail:
+          description: True when the client never declared the final position of a closed source, so positions after the last known one may be missing. False for an open source and after the client seals it.
           type: boolean
         upload_expires_at:
+          description: Deadline for uploading history for the closed source. It is at most 24 hours after closed_at and can't change.
           type: string
           format: date-time
     UnretainedDeliverySummary:
+      description: Cumulative counts of records the client produced but could not deliver.
       type: object
       additionalProperties: false
       required:
@@ -645,24 +630,30 @@ components:
         - count_complete
       properties:
         summary_sequence:
+          description: Number of this summary. Each changed summary uses a higher number.
           type: integer
           format: int64
           minimum: 1
           maximum: 9007199254740991
         unretained_record_count:
+          description: Total number of records produced but not delivered so far.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         count_complete:
+          description: Whether the count is exact. Once a summary is incomplete, later summaries can't be complete.
           type: boolean
         first_unretained_at:
+          description: When the first undelivered record was produced, by the client clock. Omitted when unknown.
           type: string
           format: date-time
         last_unretained_at:
+          description: When the most recent undelivered record was produced, by the client clock. Omitted when unknown.
           type: string
           format: date-time
     NativeBatchReceipt:
+      description: Receipt for one stored native batch.
       type: object
       additionalProperties: false
       required:
@@ -672,22 +663,27 @@ components:
         - received_at
       properties:
         stream_id:
+          description: ID of the native security stream.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         batch_sequence:
+          description: Sequence number of the stored batch.
           type: integer
           format: int64
           minimum: 1
           maximum: 9007199254740991
         request_digest:
+          description: SHA-256 digest of the stored batch, prefixed with sha256:.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
         received_at:
+          description: When the server stored the batch.
           type: string
           format: date-time
     NativeSecurityStreamStatus:
+      description: Delivery status of one native security stream.
       type: object
       additionalProperties: false
       required:
@@ -708,58 +704,71 @@ components:
         - summary
       properties:
         highest_contiguous_batch_sequence:
+          description: Highest batch sequence such that every batch from 1 up to it has been received.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         settled_through_batch_sequence:
+          description: Highest batch sequence such that every batch up to it has been received or declared missing.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         highest_seen_batch_sequence:
+          description: Highest batch sequence the server has received.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         missing_batch_ranges:
+          description: Up to the first 32 ranges of batch positions that are neither received nor declared missing, in ascending order.
           type: array
           items:
             $ref: '#/components/schemas/SequenceRange'
           maxItems: 32
         missing_ranges_truncated:
+          description: True when there are more missing ranges than missing_batch_ranges lists.
           type: boolean
         server_time:
+          description: Server time when the status was read.
           type: string
           format: date-time
         stream_id:
+          description: ID of the native security stream.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         allocated_through_sequence:
+          description: Highest batch position reserved for the stream so far.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         terminal_missing_through_sequence:
+          description: Positions up to this one that were not received are permanently missing, for example after the upload deadline passed. Zero when there is no such cutoff.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         closure:
+          description: Whether and how the server closed the stream.
           $ref: '#/components/schemas/DeliveryClosure'
         declaration_revision:
+          description: Number of gap and final declarations recorded for the stream. Send it as expected_revision in the next declaration.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         detail_mode:
+          description: collecting while individual records are kept. summary_only after a delivery limit was reached or detailed delivery was stopped, when only summary counts are kept.
           type: string
           enum:
             - collecting
             - summary_only
         budget_scope:
+          description: Whether the Participation limit or the lifetime Attempt limit caused summary_only. Null while collecting.
           type:
             - string
             - 'null'
@@ -768,6 +777,7 @@ components:
             - attempt
             - null
         summary_only_reason:
+          description: Which limit was reached, or local_loss_inventory_exhausted when the client stopped detailed delivery. Null while collecting.
           type:
             - string
             - 'null'
@@ -779,6 +789,7 @@ components:
             - local_loss_inventory_exhausted
             - null
         summary:
+          description: The latest summary of undelivered records. Null until the client sends one.
           type:
             - object
             - 'null'
@@ -789,24 +800,30 @@ components:
             - count_complete
           properties:
             summary_sequence:
+              description: Number of this summary. Each changed summary uses a higher number.
               type: integer
               format: int64
               minimum: 1
               maximum: 9007199254740991
             unretained_record_count:
+              description: Total number of records produced but not delivered so far.
               type: integer
               format: int64
               minimum: 0
               maximum: 9007199254740991
             count_complete:
+              description: Whether the count is exact.
               type: boolean
             first_unretained_at:
+              description: When the first undelivered record was produced, by the client clock. Omitted when unknown.
               type: string
               format: date-time
             last_unretained_at:
+              description: When the most recent undelivered record was produced, by the client clock. Omitted when unknown.
               type: string
               format: date-time
     NativeSourceRange:
+      description: The sequence numbers of one native source that an occurrence draws on.
       type: object
       additionalProperties: false
       required:
@@ -816,6 +833,7 @@ components:
         - last_sequence
       properties:
         source_id:
+          description: The native source that produced the observations.
           type: string
           enum:
             - display-topology
@@ -830,21 +848,25 @@ components:
             - network-configuration
             - media-device
         source_instance_id:
+          description: ID of the running instance of that source. It changes when the source resets.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         first_sequence:
+          description: First source sequence number the occurrence uses.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         last_sequence:
+          description: Last source sequence number the occurrence uses. It is never less than first_sequence.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
     NativeOccurrence:
+      description: One condition a native detector observed on the candidate's device.
       type: object
       additionalProperties: false
       required:
@@ -864,74 +886,89 @@ components:
         - source_ranges
       properties:
         kind:
+          description: Record type. Always occurrence.
           type: string
           enum:
             - occurrence
         occurrence_id:
+          description: ID the client gives this occurrence. Later records for the same occurrence reuse it.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         condition_id:
+          description: ID of the condition from the detector catalog of the Desktop release.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         detector_id:
+          description: ID of the detector that reported the condition.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         detector_version:
+          description: Version of that detector.
           type: integer
           format: int64
           minimum: 1
           maximum: 9007199254740991
         capability_id:
+          description: ID of the native capability the detector belongs to.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         mode:
+          description: Whether the capability only observes or also enforces.
           type: string
           enum:
             - observe
             - enforce
         status:
+          description: opened for the first report, repeated when it is seen again, and recovered when the condition has ended.
           type: string
           enum:
             - opened
             - repeated
             - recovered
         first_observed_at:
+          description: When the condition was first observed, by the client clock.
           type: string
           format: date-time
         last_confirmed_at:
+          description: When the condition was last confirmed, by the client clock. Client clocks can go backwards, so order comes from sequence numbers, not timestamps.
           type: string
           format: date-time
         repeat_count:
+          description: How many times the condition has been reported for this occurrence.
           type: integer
           format: int64
           minimum: 1
           maximum: 9007199254740991
         certainty:
+          description: How complete the observations behind this occurrence are.
           type: string
           enum:
             - complete
             - partial
             - unknown
         gap_count:
+          description: Number of gaps in the observations behind this occurrence. It never goes down.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         source_ranges:
+          description: Source sequence ranges the occurrence draws on, one per source, in source catalog order.
           type: array
           items:
             $ref: '#/components/schemas/NativeSourceRange'
           minItems: 1
           maxItems: 11
     NativeCoverageTransition:
+      description: A change in what a native source covers.
       type: object
       additionalProperties: false
       required:
@@ -941,15 +978,19 @@ components:
         - reason
       properties:
         kind:
+          description: Record type. Always coverage_transition.
           type: string
           enum:
             - coverage_transition
         source:
+          description: Coverage of the source after the change.
           $ref: '#/components/schemas/NativeSourceCoverage'
         occurred_at:
+          description: When the change happened, by the client clock.
           type: string
           format: date-time
         reason:
+          description: Why coverage changed.
           type: string
           enum:
             - initial
@@ -958,6 +999,7 @@ components:
             - reconciled
             - stopped
     NativeSourceReset:
+      description: A native source started a new instance.
       type: object
       additionalProperties: false
       required:
@@ -971,15 +1013,18 @@ components:
         - occurred_at
       properties:
         kind:
+          description: Record type. Always source_reset.
           type: string
           enum:
             - source_reset
         reset_id:
+          description: ID the client gives this reset.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         source_id:
+          description: The native source that reset.
           type: string
           enum:
             - display-topology
@@ -994,30 +1039,36 @@ components:
             - network-configuration
             - media-device
         previous_source_instance_id:
+          description: ID of the source instance before the reset.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         previous_final_sequence:
+          description: Last sequence number of the previous instance.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         new_source_instance_id:
+          description: ID of the source instance after the reset.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         reason:
+          description: Why the source reset.
           type: string
           enum:
             - restart
             - resume
             - permission_changed
         occurred_at:
+          description: When the reset happened, by the client clock.
           type: string
           format: date-time
     NativeSourceGap:
+      description: Sequence numbers a native source lost before they could be delivered.
       type: object
       additionalProperties: false
       required:
@@ -1030,10 +1081,12 @@ components:
         - occurred_at
       properties:
         kind:
+          description: Record type. Always source_gap.
           type: string
           enum:
             - source_gap
         source_id:
+          description: The native source that lost observations.
           type: string
           enum:
             - display-topology
@@ -1048,30 +1101,36 @@ components:
             - network-configuration
             - media-device
         source_instance_id:
+          description: ID of the source instance that lost them.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         first_missing_sequence:
+          description: First lost source sequence number.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         last_missing_sequence:
+          description: Last lost source sequence number.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         reason:
+          description: Why the observations were lost.
           type: string
           enum:
             - overflow
             - source_loss
             - corruption
         occurred_at:
+          description: When the loss was detected, by the client clock.
           type: string
           format: date-time
     NativeRecord:
+      description: One record in a native security batch. kind says which type it is.
       oneOf:
         - $ref: '#/components/schemas/NativeOccurrence'
         - $ref: '#/components/schemas/NativeCoverageTransition'
@@ -1085,6 +1144,7 @@ components:
           source_reset: '#/components/schemas/NativeSourceReset'
           source_gap: '#/components/schemas/NativeSourceGap'
     NativeSecurityBatch:
+      description: One batch of native security records.
       type: object
       additionalProperties: false
       required:
@@ -1100,52 +1160,63 @@ components:
         - records
       properties:
         stream_id:
+          description: ID of the native security stream the batch belongs to.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         batch_sequence:
+          description: Position of this batch in the stream, starting at 1.
           type: integer
           format: int64
           minimum: 1
           maximum: 9007199254740991
         prior_acknowledgement:
+          description: highest_contiguous_batch_sequence from the last acknowledgement the client had when it first sent this batch. It can't be higher than the server's value. Keep it the same on retries.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         participation_id:
+          description: ID of the Attempt Participation that produced the batch.
           $ref: '#/components/schemas/ID'
         generation:
+          description: Participation Generation that produced the batch.
           type: integer
           format: int64
           minimum: 1
           maximum: 9007199254740991
         security_session_id:
+          description: ID of the security session on the Desktop that produced the batch.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         policy_digest:
+          description: SHA-256 digest of the native security policy in force, prefixed with sha256:.
           type: string
           pattern: ^sha256:[0-9a-f]{64}$
         application_release_id:
+          description: ID of the verified Desktop release that produced the batch.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         matrix_id:
+          description: ID of the capability matrix of that release.
           type: string
           minLength: 1
           maxLength: 128
           pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
         records:
+          description: The records in this batch, 1 to 64.
           type: array
           items:
             $ref: '#/components/schemas/NativeRecord'
           minItems: 1
           maxItems: 64
     NativeSecurityAcknowledgement:
+      description: Receipt for a stored batch, with the stream's current delivery progress.
       type: object
       additionalProperties: false
       required:
@@ -1158,30 +1229,37 @@ components:
         - server_time
       properties:
         receipt:
+          description: Receipt for the stored batch.
           $ref: '#/components/schemas/NativeBatchReceipt'
         highest_contiguous_batch_sequence:
+          description: Highest batch sequence such that every batch from 1 up to it has been received.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         settled_through_batch_sequence:
+          description: Highest batch sequence such that every batch up to it has been received or declared missing.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         highest_seen_batch_sequence:
+          description: Highest batch sequence the server has received.
           type: integer
           format: int64
           minimum: 0
           maximum: 9007199254740991
         missing_batch_ranges:
+          description: Up to the first 32 ranges of batch positions that are neither received nor declared missing, in ascending order.
           type: array
           items:
             $ref: '#/components/schemas/SequenceRange'
           maxItems: 32
         missing_ranges_truncated:
+          description: True when there are more missing ranges than missing_batch_ranges lists.
           type: boolean
         server_time:
+          description: Server time when the batch was acknowledged.
           type: string
           format: date-time
   parameters:
@@ -1189,14 +1267,14 @@ components:
       name: stream_id
       in: path
       required: true
-      description: Server-created native delivery stream identifier.
+      description: ID of the native security stream, created by the server.
       schema:
         $ref: '#/components/schemas/ID'
     NativeBatchSequence:
       name: batch_sequence
       in: path
       required: true
-      description: Exact retained batch sequence.
+      description: Batch sequence number of the stored batch whose receipt you want.
       schema:
         type: integer
         format: int64
@@ -1206,11 +1284,7 @@ components:
       name: X-Proctor-Attempt-Credential
       in: header
       required: false
-      description: >-
-        Sensitive canonical 32-byte Raw URL-safe base64 continuity credential for the active
-        Participation. Never log, persist, cache, or place this value in a URL. Required together
-        while the source is live. May be omitted after server-owned closure; omission never
-        establishes historical authority.
+      description: 'Continuity credential of the active Participation: 32 bytes as URL-safe base64 without padding. It is secret. Never log it, store it, cache it or put it in a URL. Send it together with X-Proctor-Attempt-Connection-ID while the source is live. You may leave it out after the server has closed the source, but leaving it out never grants access to history.'
       schema:
         type: string
         minLength: 43
@@ -1220,17 +1294,12 @@ components:
       name: X-Proctor-Attempt-Connection-ID
       in: header
       required: false
-      description: >-
-        The durable open Attempt Connection bound to the current authenticated Session. Required
-        together while the source is live. May be omitted after server-owned closure; omission never
-        establishes historical authority.
+      description: ID of the open Attempt Connection bound to the current Session. Send it together with X-Proctor-Attempt-Credential while the source is live. You may leave it out after the server has closed the source, but leaving it out never grants access to history.
       schema:
         $ref: '#/components/schemas/ID'
   requestBodies:
     DeclareDeliveryGaps:
-      description: >-
-        Closed bounded native delivery control; unknown, missing, duplicate, and invalid members are
-        rejected.
+      description: Positions that will never be delivered. Unknown, missing, repeated and invalid members are rejected.
       required: true
       content:
         application/json:
@@ -1245,9 +1314,7 @@ components:
                 last: 3
             reason: spool_lost
     FinalDeliveryDeclaration:
-      description: >-
-        Closed bounded native delivery control; unknown, missing, duplicate, and invalid members are
-        rejected.
+      description: The final position of a closed source. Unknown, missing, repeated and invalid members are rejected.
       required: true
       content:
         application/json:
@@ -1258,9 +1325,7 @@ components:
             expected_revision: 1
             final_sequence: 4
     UnretainedDeliverySummary:
-      description: >-
-        Closed bounded native delivery control; unknown, missing, duplicate, and invalid members are
-        rejected.
+      description: Cumulative counts of records the client produced but could not deliver. Unknown, missing, repeated and invalid members are rejected.
       required: true
       content:
         application/json:
@@ -1274,16 +1339,14 @@ components:
             last_unretained_at: '2026-09-08T01:00:01Z'
     NativeSecurityBatch:
       required: true
-      description: >-
-        Exact original native batch, 1..64 closed records and at most 256 KiB. Retries preserve
-        prior_acknowledgement and all canonical content.
+      description: 'The original native batch, unchanged: 1 to 64 records and at most 256 KiB. A retry must send the same prior_acknowledgement and the same content.'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/NativeSecurityBatch'
   responses:
     NativeSecurityStreamStatusOK:
-      description: Authoritative native delivery result. This projection never grants interaction.
+      description: Current delivery status of the native stream. It grants no permission to interact with the Attempt.
       headers:
         Cache-Control:
           schema:
@@ -1293,8 +1356,31 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/NativeSecurityStreamStatus'
+          example:
+            highest_contiguous_batch_sequence: 41
+            settled_through_batch_sequence: 43
+            highest_seen_batch_sequence: 45
+            missing_batch_ranges:
+              - first: 44
+                last: 44
+            missing_ranges_truncated: false
+            server_time: '2026-08-01T10:05:00Z'
+            stream_id: hmyjmj68dw6gdxctnghbrhwcth
+            allocated_through_sequence: 45
+            terminal_missing_through_sequence: 0
+            closure:
+              closed_at: '2026-08-01T10:00:00Z'
+              close_reason: submission
+              known_at_close: 45
+              unknown_tail: true
+              upload_expires_at: '2026-08-02T10:00:00Z'
+            declaration_revision: 1
+            detail_mode: collecting
+            budget_scope: null
+            summary_only_reason: null
+            summary: null
     NativeBatchReceiptOK:
-      description: Authoritative native delivery result. This projection never grants interaction.
+      description: Receipt for the stored batch. It grants no permission to interact with the Attempt.
       headers:
         Cache-Control:
           schema:
@@ -1304,8 +1390,13 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/NativeBatchReceipt'
+          example:
+            stream_id: hmyjmj68dw6gdxctnghbrhwcth
+            batch_sequence: 41
+            request_digest: sha256:6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b
+            received_at: '2026-08-01T09:58:12Z'
     DeliveryGapReceiptOK:
-      description: Authoritative native delivery result. This projection never grants interaction.
+      description: Receipt for the gap declaration. It grants no permission to interact with the Attempt.
       headers:
         Cache-Control:
           schema:
@@ -1315,8 +1406,13 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/DeliveryGapReceipt'
+          example:
+            declaration_id: loss-0001
+            request_digest: sha256:d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35
+            declaration_revision: 1
+            settled_through_sequence: 43
     NativeDeliveryExpired:
-      description: The immutable source upload deadline has expired.
+      description: The upload deadline for this source has passed and can't be extended.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -1325,16 +1421,14 @@ components:
           schema:
             $ref: '#/components/schemas/ProblemDetails'
           example:
-            type: /problems/idempotency-conflict
-            title: Request conflict
-            status: 409
-            detail: The idempotency key was already used with different input.
-            code: idempotency.conflict
-            request_id: req_docs_conflict
+            type: https://docs.example.edu/problems/exam.delivery.upload_expired
+            title: Gone
+            status: 410
+            detail: The delivery upload expired before it was committed.
+            code: exam.delivery.upload_expired
+            request_id: req_docs_gone
     NativeSecurityAcknowledgementOK:
-      description: >-
-        Exact retained batch receipt with current actual and settled progression. Pending records
-        are not interpreted until earlier positions are received or terminal.
+      description: Receipt for the stored batch, with the stream's current delivery progress. Records waiting behind missing positions are not processed until those positions arrive or are declared missing.
       headers:
         Cache-Control:
           schema:
@@ -1344,3 +1438,17 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/NativeSecurityAcknowledgement'
+          example:
+            receipt:
+              stream_id: hmyjmj68dw6gdxctnghbrhwcth
+              batch_sequence: 45
+              request_digest: sha256:4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce
+              received_at: '2026-08-01T09:59:40Z'
+            highest_contiguous_batch_sequence: 41
+            settled_through_batch_sequence: 43
+            highest_seen_batch_sequence: 45
+            missing_batch_ranges:
+              - first: 44
+                last: 44
+            missing_ranges_truncated: false
+            server_time: '2026-08-01T09:59:40Z'

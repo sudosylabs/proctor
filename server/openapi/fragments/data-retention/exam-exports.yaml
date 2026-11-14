@@ -12,21 +12,21 @@ paths:
       tags:
         - Data retention
       description: >-
-        Requires an interactive Session and the separate exam.records.export permission through the current
-        Exam Manager and exact Academic Unit membership, or its scoped override. Ordinary Submission view
-        authority is also required for every selected Submission; Sitting exports additionally require Sitting
-        view. Integrity exports additionally require current exact Exam Manager membership and the dedicated
-        Browser Activity view permission on creation, replay, metadata read and download. The general export
-        override cannot bypass these history checks. Candidate self-access is excluded. Personal Access Tokens
-        are forbidden. Select work, integrity, or both explicitly. The entire selected scope is frozen
-        atomically; no partial Sitting archive is returned. Initial limits are 200 Submissions, 50,000
-        workspace entries, 50,000 structured records, 8 GiB original bytes and 64 MiB structured JSON.
-        Exceeding a limit rejects the request. A configured export period from 1 through 7 days is required;
-        zero leaves exports unconfigured and must be changed explicitly before creation. Expiry starts at
-        request creation, with at most 24 hours for construction. Audit, finite Job and exact category source
-        protections commit together. Retries return the same export and never extend its expiry. The archive
-        contains original workspace files, structured records, a manifest and SHA-256 hashes.
-        Re-import is not supported.
+        Needs an interactive Session and the separate `exam.records.export` permission, held through current
+        Exam Manager status and membership of the exact Academic Unit, or through its scoped override. The
+        caller also needs ordinary view access to every selected Submission, and a Sitting export also needs
+        Sitting view access. An integrity export also needs current Exam Manager status on this exact Exam and
+        the dedicated Browser Activity view permission. These are checked when the export is created,
+        replayed, read and downloaded, and the general export override can't bypass them. Candidates can't
+        export their own records. Personal Access Tokens are rejected. Choose work, integrity or both
+        explicitly. The whole selected scope is captured at once, so a Sitting archive is never partial. The
+        limits are 200 Submissions, 50,000 workspace entries, 50,000 structured records, 8 GiB of original
+        files and 64 MiB of structured JSON. A request over any limit is rejected. The policy's export
+        lifetime must be set to 1 to 7 days. While it is 0, exports can't be created until someone changes it.
+        The expiry counts from when the request is made, and the archive must be built within 24 hours. The
+        audit record, the build Job and the protection of the selected source records are saved together. A
+        retry returns the same export and never extends its expiry. The archive holds the original workspace
+        files, structured records, a manifest and SHA-256 hashes. Archives can't be imported back.
       x-proctor-auth: session_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -91,16 +91,17 @@ paths:
       tags:
         - Data retention
       description: >-
-        Requires an interactive Session and the separate exam.records.export permission through the current
-        Exam Manager and exact Academic Unit membership, or its scoped override. Ordinary Submission view
-        authority is also required for every selected Submission; Sitting exports additionally require Sitting
-        view. Integrity exports additionally require current exact Exam Manager membership and the dedicated
-        Browser Activity view permission on creation, replay, metadata read and download. The general export
-        override cannot bypass these history checks. Candidate self-access is excluded. Personal Access Tokens
-        are forbidden. Only the requesting User may inspect this export. Current credentials, ordinary read
-        authority and exact scope are rechecked. Returns queued, ready, failed or expired state; an expired
-        archive never returns its content hash or a usable artifact selector. The advertised expiry is fixed
-        even when policy later changes. There are no storage keys or public download URLs.
+        Needs an interactive Session and the separate `exam.records.export` permission, held through current
+        Exam Manager status and membership of the exact Academic Unit, or through its scoped override. The
+        caller also needs ordinary view access to every selected Submission, and a Sitting export also needs
+        Sitting view access. An integrity export also needs current Exam Manager status on this exact Exam and
+        the dedicated Browser Activity view permission. These are checked when the export is created,
+        replayed, read and downloaded, and the general export override can't bypass them. Candidates can't
+        export their own records. Personal Access Tokens are rejected. Only the User who requested the export
+        can read it. Credentials, ordinary read access and the exact scope are checked again on every read.
+        The state is `queued`, `ready`, `failed` or `expired`. An expired export never returns its content
+        hash or anything that could fetch the archive. The expiry shown is fixed, even if the policy changes
+        later. No storage keys or public download URLs are returned.
       x-proctor-auth: session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -152,19 +153,21 @@ paths:
       tags:
         - Data retention
       description: >-
-        Requires an interactive Session and the separate exam.records.export permission through the current
-        Exam Manager and exact Academic Unit membership, or its scoped override. Ordinary Submission view
-        authority is also required for every selected Submission; Sitting exports additionally require Sitting
-        view. Integrity exports additionally require current exact Exam Manager membership and the dedicated
-        Browser Activity view permission on creation, replay, metadata read and download. The general export
-        override cannot bypass these history checks. Candidate self-access is excluded. Personal Access Tokens
-        are forbidden. Only the requesting User may download a ready, unexpired archive under current
-        credentials and ordinary read authority. Returns an application/zip attachment with private, no-store
-        caching and a safe filename. No presigned or public URL is issued. The ETag and archive_sha256
-        metadata give the complete ZIP SHA-256; manifest.json lists each data member size and SHA-256. Hashes
-        detect changes and are not a signature. Expiry denies new downloads but does not terminate an
-        already-open stream. Physical cleanup separately observes current-key absence; it cannot certify
-        secure media erasure, operator-controlled backups, historical versions or replicas.
+        Needs an interactive Session and the separate `exam.records.export` permission, held through current
+        Exam Manager status and membership of the exact Academic Unit, or through its scoped override. The
+        caller also needs ordinary view access to every selected Submission, and a Sitting export also needs
+        Sitting view access. An integrity export also needs current Exam Manager status on this exact Exam and
+        the dedicated Browser Activity view permission. These are checked when the export is created,
+        replayed, read and downloaded, and the general export override can't bypass them. Candidates can't
+        export their own records. Personal Access Tokens are rejected. Only the User who requested the export
+        can download it, while it is ready and unexpired, with current credentials and ordinary read access.
+        The response is an `application/zip` attachment with private, no-store caching and a safe file name.
+        No presigned or public URL is issued. The `ETag` header and the `archive_sha256` field give the
+        SHA-256 of the whole ZIP, and `manifest.json` lists the size and SHA-256 of each data file. Hashes
+        detect changes but aren't a signature. Expiry blocks new downloads but doesn't cut off a download
+        already in progress. Cleanup later checks that the archive is gone from current storage. It can't
+        certify secure erasure of the storage media, or removal from backups, earlier object versions or
+        replicas that operators manage.
       x-proctor-auth: session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -220,21 +223,21 @@ paths:
       tags:
         - Data retention
       description: >-
-        Requires an interactive Session and the separate exam.records.export permission through the current
-        Exam Manager and exact Academic Unit membership, or its scoped override. Ordinary Submission view
-        authority is also required for every selected Submission; Sitting exports additionally require Sitting
-        view. Integrity exports additionally require current exact Exam Manager membership and the dedicated
-        Browser Activity view permission on creation, replay, metadata read and download. The general export
-        override cannot bypass these history checks. Candidate self-access is excluded. Personal Access Tokens
-        are forbidden. Select work, integrity, or both explicitly. The entire selected scope is frozen
-        atomically; no partial Sitting archive is returned. Initial limits are 200 Submissions, 50,000
-        workspace entries, 50,000 structured records, 8 GiB original bytes and 64 MiB structured JSON.
-        Exceeding a limit rejects the request. A configured export period from 1 through 7 days is required;
-        zero leaves exports unconfigured and must be changed explicitly before creation. Expiry starts at
-        request creation, with at most 24 hours for construction. Audit, finite Job and exact category source
-        protections commit together. Retries return the same export and never extend its expiry. The archive
-        contains original workspace files, structured records, a manifest and SHA-256 hashes.
-        Re-import is not supported.
+        Needs an interactive Session and the separate `exam.records.export` permission, held through current
+        Exam Manager status and membership of the exact Academic Unit, or through its scoped override. The
+        caller also needs ordinary view access to every selected Submission, and a Sitting export also needs
+        Sitting view access. An integrity export also needs current Exam Manager status on this exact Exam and
+        the dedicated Browser Activity view permission. These are checked when the export is created,
+        replayed, read and downloaded, and the general export override can't bypass them. Candidates can't
+        export their own records. Personal Access Tokens are rejected. Choose work, integrity or both
+        explicitly. The whole selected scope is captured at once, so a Sitting archive is never partial. The
+        limits are 200 Submissions, 50,000 workspace entries, 50,000 structured records, 8 GiB of original
+        files and 64 MiB of structured JSON. A request over any limit is rejected. The policy's export
+        lifetime must be set to 1 to 7 days. While it is 0, exports can't be created until someone changes it.
+        The expiry counts from when the request is made, and the archive must be built within 24 hours. The
+        audit record, the build Job and the protection of the selected source records are saved together. A
+        retry returns the same export and never extends its expiry. The archive holds the original workspace
+        files, structured records, a manifest and SHA-256 hashes. Archives can't be imported back.
       x-proctor-auth: session_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -300,16 +303,17 @@ paths:
       tags:
         - Data retention
       description: >-
-        Requires an interactive Session and the separate exam.records.export permission through the current
-        Exam Manager and exact Academic Unit membership, or its scoped override. Ordinary Submission view
-        authority is also required for every selected Submission; Sitting exports additionally require Sitting
-        view. Integrity exports additionally require current exact Exam Manager membership and the dedicated
-        Browser Activity view permission on creation, replay, metadata read and download. The general export
-        override cannot bypass these history checks. Candidate self-access is excluded. Personal Access Tokens
-        are forbidden. Only the requesting User may inspect this export. Current credentials, ordinary read
-        authority and exact scope are rechecked. Returns queued, ready, failed or expired state; an expired
-        archive never returns its content hash or a usable artifact selector. The advertised expiry is fixed
-        even when policy later changes. There are no storage keys or public download URLs.
+        Needs an interactive Session and the separate `exam.records.export` permission, held through current
+        Exam Manager status and membership of the exact Academic Unit, or through its scoped override. The
+        caller also needs ordinary view access to every selected Submission, and a Sitting export also needs
+        Sitting view access. An integrity export also needs current Exam Manager status on this exact Exam and
+        the dedicated Browser Activity view permission. These are checked when the export is created,
+        replayed, read and downloaded, and the general export override can't bypass them. Candidates can't
+        export their own records. Personal Access Tokens are rejected. Only the User who requested the export
+        can read it. Credentials, ordinary read access and the exact scope are checked again on every read.
+        The state is `queued`, `ready`, `failed` or `expired`. An expired export never returns its content
+        hash or anything that could fetch the archive. The expiry shown is fixed, even if the policy changes
+        later. No storage keys or public download URLs are returned.
       x-proctor-auth: session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -362,19 +366,21 @@ paths:
       tags:
         - Data retention
       description: >-
-        Requires an interactive Session and the separate exam.records.export permission through the current
-        Exam Manager and exact Academic Unit membership, or its scoped override. Ordinary Submission view
-        authority is also required for every selected Submission; Sitting exports additionally require Sitting
-        view. Integrity exports additionally require current exact Exam Manager membership and the dedicated
-        Browser Activity view permission on creation, replay, metadata read and download. The general export
-        override cannot bypass these history checks. Candidate self-access is excluded. Personal Access Tokens
-        are forbidden. Only the requesting User may download a ready, unexpired archive under current
-        credentials and ordinary read authority. Returns an application/zip attachment with private, no-store
-        caching and a safe filename. No presigned or public URL is issued. The ETag and archive_sha256
-        metadata give the complete ZIP SHA-256; manifest.json lists each data member size and SHA-256. Hashes
-        detect changes and are not a signature. Expiry denies new downloads but does not terminate an
-        already-open stream. Physical cleanup separately observes current-key absence; it cannot certify
-        secure media erasure, operator-controlled backups, historical versions or replicas.
+        Needs an interactive Session and the separate `exam.records.export` permission, held through current
+        Exam Manager status and membership of the exact Academic Unit, or through its scoped override. The
+        caller also needs ordinary view access to every selected Submission, and a Sitting export also needs
+        Sitting view access. An integrity export also needs current Exam Manager status on this exact Exam and
+        the dedicated Browser Activity view permission. These are checked when the export is created,
+        replayed, read and downloaded, and the general export override can't bypass them. Candidates can't
+        export their own records. Personal Access Tokens are rejected. Only the User who requested the export
+        can download it, while it is ready and unexpired, with current credentials and ordinary read access.
+        The response is an `application/zip` attachment with private, no-store caching and a safe file name.
+        No presigned or public URL is issued. The `ETag` header and the `archive_sha256` field give the
+        SHA-256 of the whole ZIP, and `manifest.json` lists the size and SHA-256 of each data file. Hashes
+        detect changes but aren't a signature. Expiry blocks new downloads but doesn't cut off a download
+        already in progress. Cleanup later checks that the archive is gone from current storage. It can't
+        certify secure erasure of the storage media, or removal from backups, earlier object versions or
+        replicas that operators manage.
       x-proctor-auth: session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -430,14 +436,14 @@ components:
       name: exam_export_id
       in: path
       required: true
-      description: The opaque export request identity, within its exact Sitting or Submission route scope.
+      description: ID of the export. It belongs to the Sitting or Submission named in the path.
       schema:
         $ref: '#/components/schemas/ID'
   requestBodies:
     CreateExamExport:
       description: >-
-        Explicit whole-request category selection; omitted, empty, duplicate or unknown categories are
-        rejected.
+        Which categories to export, chosen for the whole request. A missing, empty, duplicate or unknown
+        category is rejected.
       required: true
       content:
         application/json:
@@ -449,7 +455,9 @@ components:
               - integrity
   responses:
     ExamExportAccepted:
-      description: A fixed-expiry export request was accepted; poll its exact scoped resource.
+      description: >-
+        The export request was accepted with a fixed expiry. Poll the export at its own URL, under the same
+        Sitting or Submission, to see when it is ready.
       headers:
         Cache-Control:
           $ref: '#/components/headers/PrivateNoStore'
@@ -458,21 +466,22 @@ components:
           schema:
             $ref: '#/components/schemas/ExamExportResponse'
           example:
-            id: yyyyyyyyyyyyyyyyyyyyyyyyyy
-            exam_id: bbbbbbbbbbbbbbbbbbbbbbbbbb
-            exam_sitting_id: nnnnnnnnnnnnnnnnnnnnnnnnnn
+            id: rpn96r4g3jfk3t41u4dus44bzc
+            exam_id: xpq79ar61ncrjiouey6d9tgp91
+            exam_sitting_id: 17778cuf6b17rhtapprfjozet8
             categories:
               - work
+              - integrity
             state: queued
-            policy_revision: 2
+            policy_revision: 3
             created_at: '2026-09-01T12:00:00Z'
-            expires_at: '2026-09-02T12:00:00Z'
+            expires_at: '2026-09-04T12:00:00Z'
             construction_deadline: '2026-09-02T12:00:00Z'
-            submission_count: 1
-            file_count: 1
-            source_bytes: 128
+            submission_count: 42
+            file_count: 1260
+            source_bytes: 734003200
     ExamExportOK:
-      description: Requester-only export metadata under current ordinary record authority.
+      description: The export's details. Only the requester sees them, and only while they still have ordinary access to the records.
       headers:
         Cache-Control:
           $ref: '#/components/headers/PrivateNoStore'
@@ -481,35 +490,40 @@ components:
           schema:
             $ref: '#/components/schemas/ExamExportResponse'
           example:
-            id: yyyyyyyyyyyyyyyyyyyyyyyyyy
-            exam_id: bbbbbbbbbbbbbbbbbbbbbbbbbb
-            exam_sitting_id: nnnnnnnnnnnnnnnnnnnnnnnnnn
+            id: rpn96r4g3jfk3t41u4dus44bzc
+            exam_id: xpq79ar61ncrjiouey6d9tgp91
+            exam_sitting_id: 17778cuf6b17rhtapprfjozet8
             categories:
               - work
-            state: queued
-            policy_revision: 2
+              - integrity
+            state: ready
+            policy_revision: 3
             created_at: '2026-09-01T12:00:00Z'
-            expires_at: '2026-09-02T12:00:00Z'
+            expires_at: '2026-09-04T12:00:00Z'
             construction_deadline: '2026-09-02T12:00:00Z'
-            submission_count: 1
-            file_count: 1
-            source_bytes: 128
+            ready_at: '2026-09-01T12:18:40Z'
+            submission_count: 42
+            file_count: 1260
+            source_bytes: 734003200
+            archive_size_bytes: 741392384
+            archive_sha256: 5d41a2b8c9e0f17263a4b5c6d7e8f9011a2b3c4d5e6f708192a3b4c5d6e7f809
     ExamExportArchive:
       description: >-
-        Verified temporary ZIP archive; every new download is authorized and expiry checked. No public storage
-        URL or backend identity is exposed.
+        The temporary ZIP archive, checked against its hash. Each new download is authorized and checked for
+        expiry. No public storage URL or storage backend detail is exposed.
       headers:
         Cache-Control:
           $ref: '#/components/headers/PrivateNoStore'
         ETag:
-          description: Quoted SHA-256 of the complete ZIP.
+          description: SHA-256 of the whole ZIP, in double quotes.
           schema:
             type: string
         Content-Disposition:
-          description: Attachment with a safe server-generated filename.
+          description: Marks the response as an attachment, with a safe file name chosen by the server.
           schema:
             type: string
         X-Content-Type-Options:
+          description: Always `nosniff`, so browsers don't guess a different content type.
           schema:
             type: string
             const: nosniff
@@ -519,7 +533,7 @@ components:
             type: string
             format: binary
     ExamExportGone:
-      description: The fixed advertised archive expiry has passed; new downloads are denied.
+      description: The export's fixed expiry has passed, so new downloads are refused.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -528,7 +542,7 @@ components:
           schema:
             $ref: '#/components/schemas/ProblemDetails'
           example:
-            type: /problems/exam-export-expired
+            type: https://docs.example.edu/problems/exam.export.expired
             title: Export expired
             status: 410
             detail: The temporary export has expired.
@@ -536,6 +550,7 @@ components:
             request_id: req_docs_export_expired
   schemas:
     CreateExamExportRequest:
+      description: Categories to include in a new export.
       type: object
       additionalProperties: false
       required:
@@ -553,10 +568,11 @@ components:
               - integrity
               - browser_activity
           description: >-
-            Work and/or integrity, or Browser Activity alone. Browser Activity requires exact current Exam
-            Manager membership and the dedicated history permission; generic exports contain no ordinary
-            browsing URLs.
+            What to export: work, integrity, or both, or Browser Activity on its own. Browser Activity needs
+            current Exam Manager status on this exact Exam and the dedicated history permission. Other exports
+            never contain browsing URLs.
     ExamExportResponse:
+      description: A request for a temporary export archive, and its state.
       type: object
       additionalProperties: false
       required:
@@ -575,12 +591,16 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/ID'
+          description: ID of the export.
         exam_id:
           $ref: '#/components/schemas/ID'
+          description: Exam the exported records belong to.
         exam_sitting_id:
           $ref: '#/components/schemas/ID'
+          description: Sitting the exported records belong to.
         submission_id:
           $ref: '#/components/schemas/ID'
+          description: Submission that was exported. Present only for a Submission export.
         categories:
           type: array
           minItems: 1
@@ -593,9 +613,9 @@ components:
               - integrity
               - browser_activity
           description: >-
-            Work and/or integrity, or Browser Activity alone. Browser Activity requires exact current Exam
-            Manager membership and the dedicated history permission; generic exports contain no ordinary
-            browsing URLs.
+            What to export: work, integrity, or both, or Browser Activity on its own. Browser Activity needs
+            current Exam Manager status on this exact Exam and the dedicated history permission. Other exports
+            never contain browsing URLs.
         state:
           type: string
           enum:
@@ -603,40 +623,58 @@ components:
             - ready
             - failed
             - expired
+          description: >-
+            `queued` while the archive is being built, `ready` when it can be downloaded, `failed` if building
+            failed, and `expired` after `expires_at`.
         policy_revision:
           type: integer
           format: int64
           minimum: 1
+          description: Retention policy revision whose export lifetime set the expiry.
         created_at:
           type: string
           format: date-time
+          description: Time the export was requested. The expiry counts from this time.
         expires_at:
           type: string
           format: date-time
+          description: >-
+            Time after which the archive can't be downloaded. It is fixed when the export is requested.
         construction_deadline:
           type: string
           format: date-time
+          description: >-
+            Latest time the archive can finish building. It is at most 24 hours after the request and never
+            after `expires_at`.
         ready_at:
           type: string
           format: date-time
+          description: Time the archive became ready. Omitted unless the export is ready.
         submission_count:
           type: integer
           minimum: 1
           maximum: 200
+          description: Number of Submissions in the export.
         file_count:
           type: integer
           minimum: 0
           maximum: 50000
+          description: Number of workspace entries in the export.
         source_bytes:
           type: integer
           format: int64
           minimum: 0
           maximum: 8589934592
+          description: Total size, in bytes, of the original files being exported.
         archive_size_bytes:
           type: integer
           format: int64
           minimum: 1
           maximum: 8724152320
+          description: Size of the finished ZIP, in bytes. Present only while the export is ready.
         archive_sha256:
           type: string
           pattern: ^[0-9a-f]{64}$
+          description: >-
+            SHA-256 of the finished ZIP, in lowercase hexadecimal. It matches the `ETag` of the download.
+            Present only while the export is ready.

@@ -13,7 +13,7 @@ paths:
       tags:
         - Access policy
       description: >-
-        Returns the complete revisioned Institution policy that narrows the immutable verified Desktop build catalog embedded in this server release. The policy cannot authorize an unknown build and contains no update feed or executable destination.
+        Returns the Institution's whole Desktop Compatibility Policy. This server release ships with a fixed list of verified Proctor Desktop builds, and the policy can only narrow that list: it can't allow a build the server doesn't know. It holds no update feed and no download location.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -57,7 +57,7 @@ paths:
       tags:
         - Access policy
       description: >-
-        Completely replaces the policy under an optimistic revision fence. The operation requires a strong recent interactive system-administrator Session, an Idempotency-Key, and durable audit. Revoked build identities and administrator message text are excluded from ordinary audit payloads.
+        Replaces the whole policy. Send the `revision` you read as `expected_revision`. If the policy has changed since, the request fails and nothing changes. The request needs a recent, strongly authenticated interactive system administrator Session and an Idempotency-Key, and it fails if the change can't be audited. Revoked build IDs and the administrator message are left out of ordinary audit records.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -124,7 +124,9 @@ components:
   requestBodies:
     ReplaceDesktopCompatibilityPolicy:
       required: true
-      description: Complete revision-fenced replacement. Every policy setting is required, including empty values.
+      description: >-
+        The whole new policy, with the `expected_revision` it is based on. Every setting is required, even when it
+        is empty.
       content:
         application/json:
           schema:
@@ -139,7 +141,7 @@ components:
             retry_at: '2026-08-28T11:00:00Z'
   responses:
     DesktopCompatibilityPolicyOK:
-      description: Current revisioned Desktop Compatibility Policy
+      description: The current Desktop Compatibility Policy
       headers:
         Cache-Control:
           $ref: '#/components/headers/PrivateNoStore'
@@ -172,10 +174,15 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: >-
+            The `revision` of the policy you based this replacement on. If the policy has changed since, the request
+            fails with `desktop_compatibility_policy.revision_conflict`.
         minimum_desktop_release:
           type: string
           maxLength: 64
-          description: Empty for no Institution minimum, otherwise a canonical semantic release without a leading v.
+          description: >-
+            The oldest Proctor Desktop release the Institution accepts, written as a plain semantic version such as
+            `1.4.0`, with no leading `v`. Older releases are refused. Send an empty string for no Institution minimum.
         revoked_desktop_build_ids:
           type: array
           maxItems: 256
@@ -185,19 +192,29 @@ components:
             minLength: 1
             maxLength: 128
             pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*$'
+          description: >-
+            Desktop build IDs to refuse even though this server release lists them as verified. Send an empty list
+            to revoke none.
         administrator_message:
           type: string
           maxLength: 500
-          description: Trimmed bounded plain text with control characters rejected.
+          description: >-
+            Plain text, up to 500 characters, that the server sends to Proctor Desktop with its compatibility status. Leading and
+            trailing spaces are removed, and control characters are rejected. Send an empty string for no message.
         availability:
           type: string
           enum:
             - ready
             - maintenance
+          description: >-
+            `ready` lets Proctor Desktop sign in and start Attempts. `maintenance` refuses Desktop sign-in and Attempt
+            entry until you set it back to `ready`.
         retry_at:
           type: string
           format: date-time
-          description: Optional retry time; omit it for none, and always while availability is ready. Null is invalid.
+          description: >-
+            Optional. When Proctor Desktop should try again during maintenance. Leave it out for no retry time, and
+            always leave it out while `availability` is `ready`. Null is rejected.
     DesktopCompatibilityPolicyResponse:
       type: object
       additionalProperties: false
@@ -214,9 +231,12 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: >-
+            Goes up with every change. Send it as `expected_revision` when you replace the policy.
         minimum_desktop_release:
           type: string
           maxLength: 64
+          description: The oldest Proctor Desktop release the Institution accepts. Empty when the Institution sets no minimum.
         revoked_desktop_build_ids:
           type: array
           maxItems: 256
@@ -225,21 +245,28 @@ components:
             type: string
             minLength: 1
             maxLength: 128
+          description: Desktop build IDs refused even though this server release lists them as verified.
         administrator_message:
           type: string
           maxLength: 500
+          description: Plain text the server sends to Proctor Desktop with its compatibility status. Empty when there is no message.
         availability:
           type: string
           enum:
             - ready
             - maintenance
+          description: >-
+            `ready` while Proctor Desktop may sign in and start Attempts. `maintenance` while Desktop sign-in and
+            Attempt entry are refused.
         retry_at:
           type: string
           format: date-time
-          description: Present only while availability is maintenance and a retry time is set.
+          description: When Proctor Desktop should try again. Present only during maintenance when a retry time is set.
         created_at:
           type: string
           format: date-time
+          description: When the policy was created.
         updated_at:
           type: string
           format: date-time
+          description: When the policy last changed.

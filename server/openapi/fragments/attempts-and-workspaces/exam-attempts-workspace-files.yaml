@@ -14,8 +14,7 @@ paths:
       summary: Stage and acknowledge one Workspace file
       tags:
         - Attempts and workspaces
-      description: >-
-        Stages and acknowledges one file in the active candidate Attempt Workspace. The request is metadata-first multipart, bounded by both hard API limits and the admitted Revision, and requires the Session-bound Attempt credential, open Connection, active Participation generation, content digest, and an Idempotency-Key.
+      description: Uploads one new file to the candidate's active Attempt Workspace. The request is multipart, with the metadata part first. Its size is limited both by the API and by the Exam Revision the Attempt uses. It needs the Attempt credential bound to the Session, an open Connection, the active Participation Generation, a SHA-256 digest of the content, and an Idempotency-Key.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -80,8 +79,7 @@ paths:
                 contentType: application/json
               content:
                 contentType: application/octet-stream
-        description: >-
-          Exactly two multipart parts in order: strict JSON metadata first, followed by bounded file content. The Attempt credential and Connection remain headers, never form fields.
+        description: 'Exactly two multipart parts, in order: the JSON metadata, then the file content. The Attempt credential and Connection go in headers, never in form fields.'
       responses:
         "201":
           $ref: '#/components/responses/CandidateWorkspaceMutationCreated'
@@ -108,8 +106,7 @@ paths:
       summary: Render a protected candidate Workspace file inline
       tags:
         - Attempts and workspaces
-      description: >-
-        Streams one protected active Workspace file only after rechecking the authenticated Session, Attempt credential, open Connection, current Participation, and readable Attempt state. It never exposes a VFS or object-store identity. Private no-store caching, nosniff, ETag, and conditional 304 behavior apply.
+      description: Streams one file from the active Workspace. Before it sends anything, the server checks the Session, the Attempt credential, the open Connection, the current Participation, and that the Attempt can still be read. The response never reveals where the file is stored. Responses are private and not cached (no-store), use nosniff, carry an ETag, and return 304 when the content has not changed.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -174,8 +171,7 @@ paths:
     put:
       operationId: replaceCandidateExamWorkspaceFile
       summary: Replace one exact Workspace file content state
-      description: >-
-        Replaces the content of one Workspace file only when its expected path and content version still match the acknowledged state. The metadata-first multipart upload, digest, active Participation generation, open Connection, and Idempotency-Key are validated before the new content is acknowledged.
+      description: Replaces the content of one Workspace file, but only when its expected path and Workspace Content Version still match. The server checks the multipart upload (metadata part first), the digest, the active Participation Generation, the open Connection and the Idempotency-Key before it accepts the new content.
       x-codeSamples:
         - lang: Shell
           label: Replace acknowledged Workspace content
@@ -233,7 +229,7 @@ paths:
         - $ref: '#/components/parameters/RequiredIdempotencyKey'
       requestBody:
         required: true
-        description: Contains strict replacement metadata first and bounded file content second; both parts describe the same exact content state and are validated before acknowledgement.
+        description: The replacement metadata first, then the file content. Both parts must describe the same content, and the server checks them before it accepts the change.
         content:
           multipart/form-data:
             schema:
@@ -275,41 +271,42 @@ components:
       properties:
         participation_id:
           $ref: '#/components/schemas/ID'
-          description: The active Participation identifier returned by the successful Attempt connection.
+          description: ID of the active Attempt Participation, returned when the candidate connected to the Attempt.
         generation:
           type: integer
           format: int64
           minimum: 1
-          description: The active Participation connection generation.
+          description: Participation Generation of the active Participation. A write from an older generation is rejected.
         path:
           $ref: '#/components/schemas/StarterWorkspacePath'
-          description: The canonical destination path within the Attempt Workspace.
+          description: Workspace Path of the new file. Its parent directory must already exist and nothing may exist at the path yet.
         media_type:
           type: string
           minLength: 1
           maxLength: 255
-          description: The declared media type of the file content.
+          description: Media type of the file content.
         size:
           type: integer
           format: int64
           minimum: 0
           maximum: 104857600
-          description: The exact content byte length, bounded by the admission Revision and the hard API limit.
+          description: Exact length of the content in bytes. It must fit both the limit of the Exam Revision and the API limit.
         sha256:
           $ref: '#/components/schemas/SHA256'
-          description: The lowercase SHA-256 digest of the uploaded content.
+          description: Lowercase hexadecimal SHA-256 digest of the content. The server rejects the upload if the content does not match.
     CandidateWorkspaceFileUploadMultipart:
       type: object
       additionalProperties: false
       required:
         - metadata
         - content
-      description: >-
-        Exactly two parts in order: strict JSON metadata first, then bounded file content. The complete request is limited to 100 MiB plus 64 KiB.
+      description: 'Exactly two parts, in order: the JSON metadata, then the file content. The whole request may be at most 100 MiB plus 64 KiB.'
       properties:
         metadata:
+          description: JSON metadata that describes the file. It must be the first part.
           $ref: '#/components/schemas/CandidateWorkspaceFileUploadMetadata'
         content:
+          description: The file content. It must be the second part and match the size and digest in metadata.
           type: string
           format: binary
     ReplaceCandidateWorkspaceFileMetadata:
@@ -326,42 +323,44 @@ components:
       properties:
         participation_id:
           $ref: '#/components/schemas/ID'
-          description: Active Participation identifier returned when the candidate connected to this Attempt.
+          description: ID of the active Attempt Participation, returned when the candidate connected to the Attempt.
         generation:
           type: integer
           format: int64
           minimum: 1
-          description: Active Participation generation, used to reject writes from superseded client generations.
+          description: Participation Generation of the active Participation. A write from an older generation is rejected.
         expected_path:
           $ref: '#/components/schemas/StarterWorkspacePath'
-          description: Canonical path the file must still occupy before its content can be replaced.
+          description: Path the file must still have before its content can be replaced.
         expected_content_version:
           $ref: '#/components/schemas/WorkspaceContentVersion'
-          description: Last acknowledged file content version; a mismatch fails instead of overwriting concurrent work.
+          description: Workspace Content Version the client last received for this file. If the file changed since then, the request fails instead of overwriting the newer content.
         media_type:
           type: string
           minLength: 1
           maxLength: 255
-          description: Declared media type of the replacement file content.
+          description: Media type of the replacement content.
         size:
           type: integer
           format: int64
           minimum: 0
           maximum: 104857600
-          description: Exact byte length of the replacement content, bounded by the admitted Revision and hard API limit.
+          description: Exact length of the replacement content in bytes. It must fit both the limit of the Exam Revision and the API limit.
         sha256:
           $ref: '#/components/schemas/SHA256'
-          description: Lowercase SHA-256 digest of the replacement content used to verify the upload.
+          description: Lowercase hexadecimal SHA-256 digest of the replacement content. The server rejects the upload if the content does not match.
     ReplaceCandidateWorkspaceFileMultipart:
       type: object
       additionalProperties: false
       required:
         - metadata
         - content
-      description: Exactly two ordered parts containing strict JSON replacement metadata followed by bounded binary content.
+      description: 'Exactly two parts, in order: the JSON replacement metadata, then the file content.'
       properties:
         metadata:
+          description: JSON metadata that describes the replacement. It must be the first part.
           $ref: '#/components/schemas/ReplaceCandidateWorkspaceFileMetadata'
         content:
+          description: The replacement file content. It must be the second part and match the size and digest in metadata.
           type: string
           format: binary

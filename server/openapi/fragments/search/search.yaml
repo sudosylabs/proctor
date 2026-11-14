@@ -13,7 +13,7 @@ paths:
       tags:
         - Search
       description: >-
-        Finds Exams by Draft title, Classes by name or display name, and Users by directory fields, each as a literal case-insensitive substring of the trimmed q. Every type is authorized, audited, and scoped exactly as its own list: active Exams the caller may see in the Exam catalog, unarchived Classes within the caller's class.view scope, and enabled Users visible in the User directory. A requested type the caller may not list contributes no items; the request is denied only when the caller may list none of the requested types. Items are grouped by type in the order exam, class, user, each group in its own list order and holding at most limit items. Search answers one bounded page and never continues: next_cursor is always omitted and cursor is rejected. Email addresses are never returned, and the query text is kept out of logs and audit records.
+        Finds Exams by Draft title, Classes by name or display name, and Users by directory fields. Each match contains the trimmed `q` as literal text, ignoring case. Each type is checked, audited and limited exactly as its own list is: active Exams the caller may see in the Exam catalog, unarchived Classes within the caller's class.view scope, and enabled Users visible in the User directory. A requested type the caller may not list adds no items. The request is denied only when the caller may list none of the requested types. Items are grouped by type in the order exam, class, user. Each group keeps its own list's order and holds at most `limit` items. Search returns a single page and never continues: `next_cursor` is always omitted and `cursor` is rejected. Email addresses are never returned, and the search text is kept out of logs and audit records.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -41,7 +41,7 @@ paths:
         - name: q
           in: query
           required: true
-          description: Search text of 2 to 100 characters after trimming, matched as a literal case-insensitive substring.
+          description: The text to find, 2 to 100 characters after surrounding spaces are removed. It is matched literally, ignoring case.
           schema:
             type: string
             minLength: 2
@@ -51,7 +51,7 @@ paths:
           required: false
           style: form
           explode: true
-          description: Repeated result type filter, such as types=exam&types=user. Omit it to search every type; a type may not repeat.
+          description: The result types to search, repeated once per type, such as `types=exam&types=user`. Leave it out to search every type. A type may appear only once.
           schema:
             type: array
             minItems: 1
@@ -62,7 +62,7 @@ paths:
         - name: limit
           in: query
           required: false
-          description: Maximum number of items of each type.
+          description: The most items to return for each type.
           schema:
             type: integer
             minimum: 1
@@ -71,7 +71,7 @@ paths:
         - name: cursor
           in: query
           required: false
-          description: Not accepted. Search answers one bounded page and never issues next_cursor, so any cursor is rejected with request.invalid.
+          description: Not accepted. Search returns a single page and never issues `next_cursor`, so any cursor is rejected with `request.invalid`.
           schema:
             type: string
             minLength: 1
@@ -94,7 +94,7 @@ paths:
 components:
   responses:
     SearchOK:
-      description: Matches of each requested type within the caller's list visibility.
+      description: Matches of each requested type that the caller could see in that type's own list.
       content:
         application/json:
           schema:
@@ -102,15 +102,15 @@ components:
           example:
             items:
               - type: exam
-                id: ybndrfg8ejkmcpqxot1uwisza3
+                id: nybc6xhg593upqice3sdeyro5k
                 title: Algorithms midterm
-                academic_unit_id: ybndrfg8ejkmcpqxot1uwisza4
+                academic_unit_id: 14j8umgczgrdp95w77zuxmxfu9
               - type: class
-                id: ybndrfg8ejkmcpqxot1uwisza5
+                id: 6xoche483hwrx5rpu8jzjoe7qg
                 display_name: Algorithms, group A
-                programme_level_id: ybndrfg8ejkmcpqxot1uwisza6
+                programme_level_id: p6y6sf8ac6m5if373fkkebj7j6
               - type: user
-                id: ybndrfg8ejkmcpqxot1uwisza7
+                id: dfa1x1n7mkthyoziwxnupsmyia
                 display_name: Ada Example
                 username: ada.example
   schemas:
@@ -120,9 +120,9 @@ components:
         - exam
         - class
         - user
-      description: Kind of search result.
+      description: The kind of search result.
     SearchResponse:
-      description: At most limit matches of each requested type, grouped by type. Search never continues, so next_cursor is always omitted.
+      description: Up to `limit` matches of each requested type, grouped by type. Search never continues, so `next_cursor` is always omitted.
       type: object
       additionalProperties: false
       required:
@@ -132,8 +132,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SearchItem'
+          description: The matches, Exams first, then Classes, then Users.
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
+          description: Never present. Search does not continue past its single page.
     SearchItem:
       description: One search match, discriminated by type.
       oneOf:
@@ -159,13 +161,16 @@ components:
         type:
           type: string
           const: exam
+          description: Always `exam` for an Exam match.
         id:
           $ref: '#/components/schemas/ID'
+          description: The Exam identifier.
         title:
           type: string
-          description: Current Draft title.
+          description: The title of the Exam's current Draft.
         academic_unit_id:
           $ref: '#/components/schemas/ID'
+          description: The Academic Unit that owns the Exam.
     SearchClassItem:
       description: An unarchived Class within the caller's class.view scope.
       type: object
@@ -179,12 +184,16 @@ components:
         type:
           type: string
           const: class
+          description: Always `class` for a Class match.
         id:
           $ref: '#/components/schemas/ID'
+          description: The Class identifier.
         display_name:
           type: string
+          description: The Class name shown to people.
         programme_level_id:
           $ref: '#/components/schemas/ID'
+          description: The Programme Level the Class belongs to.
     SearchUserItem:
       description: A User visible in the caller's User directory. The email address is never included.
       type: object
@@ -198,9 +207,13 @@ components:
         type:
           type: string
           const: user
+          description: Always `user` for a User match.
         id:
           $ref: '#/components/schemas/ID'
+          description: The User identifier.
         display_name:
           type: string
+          description: The User's name as shown to people.
         username:
           type: string
+          description: The User's username.

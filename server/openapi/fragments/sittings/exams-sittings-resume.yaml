@@ -16,7 +16,10 @@ paths:
       tags:
         - Sittings
       description: >-
-        Resumes one paused Sitting under its exact revision fence after rechecking the Exam and delivery window. It does not renew expired candidate Participation credentials; affected candidates must complete the ordinary reconnect or re-allow flow.
+        Resumes a paused Sitting. Send the Sitting's current revision; the request fails if it changed
+        since you read it. The server checks the Exam and the delivery window again first. Resuming does
+        not renew candidate Participation credentials that expired during the pause. Those candidates
+        reconnect, or are re-allowed, as usual.
       x-proctor-auth: principal_required
       x-proctor-idempotency: required
       x-proctor-error-codes:
@@ -73,7 +76,7 @@ paths:
 components:
   requestBodies:
     ResumeExamSitting:
-      description: Exact current Sitting revision and private rationale for resuming delivery.
+      description: The Sitting's current revision and a private reason for resuming.
       required: true
       content:
         application/json:

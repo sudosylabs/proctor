@@ -16,7 +16,7 @@ paths:
       operationId: listExamDraftStarterWorkspace
       summary: List the complete Starter Workspace manifest for an Exam Draft
       description: >-
-        Returns the complete canonical manifest of files and directories that will seed each candidate Workspace from a published Revision. File metadata includes content versions and digests, while protected bytes remain behind the inline content route.
+        Returns every file and directory in the Draft's Starter Workspace, sorted by path. When the Draft is published, these entries become the starting files of each candidate's Workspace. Files include their content version, size and digest. Read the content through the separate content operation.
       tags:
         - Examinations
       x-proctor-auth: principal_required
@@ -61,7 +61,7 @@ paths:
       operationId: createExamDraftStarterWorkspaceDirectory
       summary: Create an empty directory in an Exam Draft Starter Workspace
       description: >-
-        Creates one empty directory at a canonical logical path when the expected Draft revision still matches. Parent existence, path conflicts, entry limits, and the Idempotency-Key are validated before the manifest changes.
+        Creates one empty directory at the path you give. The change is made only if expected_revision still matches the Draft's current revision. The parent directory must exist, nothing may already use the path, and the Starter Workspace must have room for another entry.
       tags:
         - Examinations
       x-proctor-auth: principal_required
@@ -125,7 +125,7 @@ paths:
       operationId: createExamDraftStarterWorkspaceFile
       summary: Upload a file into an Exam Draft Starter Workspace
       description: >-
-        Adds one protected file at a canonical logical path using a metadata-first multipart upload. The expected Draft revision, parent path, declared digest and optional size, total Workspace limits, and Idempotency-Key are checked before acknowledgement.
+        Adds one file at the path you give. Send the metadata part first, then the content. The upload is accepted only if expected_revision still matches the Draft's current revision, the parent directory exists, the content matches the digest and any size you declared, and the Starter Workspace stays within its limits. Send an Idempotency-Key so a retry can't add the file twice.
       x-codeSamples:
         - lang: Shell
           label: Add a Starter Workspace file
@@ -178,7 +178,7 @@ paths:
         - $ref: '#/components/parameters/RequiredIdempotencyKey'
       requestBody:
         required: true
-        description: Contains strict file metadata first and bounded protected content second; the path, size, and SHA-256 digest are validated before the file is acknowledged.
+        description: A metadata part followed by a content part. The path, size and SHA-256 digest are checked before the file is saved.
         content:
           multipart/form-data:
             schema:
@@ -215,7 +215,7 @@ paths:
       operationId: moveExamDraftStarterWorkspaceEntry
       summary: Rename or move one Starter Workspace entry by logical path
       description: >-
-        Atomically renames or moves the exact file or directory to a new canonical path at the expected Draft revision. Missing parents, path collisions, invalid descendant moves, and no-op changes are rejected without partial mutation.
+        Renames or moves one file or directory to a new path in a single step. The change is made only if expected_revision still matches the Draft's current revision. The request fails, and nothing changes, if the new parent doesn't exist, the path is taken, a directory would move inside itself, or the path is the same as before.
       tags:
         - Examinations
       x-proctor-auth: principal_required
@@ -277,7 +277,7 @@ paths:
       operationId: removeExamDraftStarterWorkspaceEntry
       summary: Remove a Starter Workspace entry or guarded directory subtree
       description: >-
-        Removes the exact Starter Workspace entry when the expected Draft revision still matches. Non-empty directories require recursive to be true, which atomically removes the directory and every descendant and advances the Draft revision once. A stale Draft revision rejects the entire command. Published Revisions retain the immutable Workspace snapshot they already captured.
+        Removes one file or directory from the Starter Workspace. The change is made only if expected_revision still matches the Draft's current revision. To remove a directory that isn't empty, set recursive to true. The directory and everything in it are then removed in one step, and the Draft revision goes up by one. Revisions you already published keep their copy of the Starter Workspace.
       tags:
         - Examinations
       x-proctor-auth: principal_required
@@ -342,7 +342,7 @@ paths:
       tags:
         - Examinations
       description: >-
-        Returns only an authorized in-application content stream. This route is not a public URL or download/export capability and never exposes an object key.
+        Returns the file's content for display inside the application, after checking your access. It is not a public link and not a download or export, and it never reveals where the file is stored. Content that a browser would run as an active page is served as plain text.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -367,7 +367,7 @@ paths:
         - name: If-None-Match
           in: header
           required: false
-          description: One or more entity tags from an earlier protected-content response; a match returns 304 without a body.
+          description: The ETag from an earlier response for this file. If it still matches, the server returns 304 with no body.
           schema:
             type: string
       responses:
@@ -391,7 +391,7 @@ paths:
       operationId: replaceExamDraftStarterWorkspaceFileContent
       summary: Replace one Starter Workspace file's content
       description: >-
-        Replaces the exact file content only when both the expected Draft revision and acknowledged content version still match. The metadata-first multipart upload, digest, size limits, entry kind, and Idempotency-Key are validated before committing a new content version.
+        Replaces the content of one file. The upload is accepted only if expected_revision still matches the Draft's current revision and expected_content_version still matches the file's current content version. Send the metadata part first, then the content. The entry must be a file, and the content must match its digest and fit the size limits. The file then gets a new content version.
       x-codeSamples:
         - lang: Shell
           label: Replace a Starter Workspace file
@@ -443,7 +443,7 @@ paths:
         - $ref: '#/components/parameters/RequiredIdempotencyKey'
       requestBody:
         required: true
-        description: Contains strict replacement metadata first and bounded protected content second; the expected content version prevents overwriting concurrent authoring work.
+        description: A metadata part followed by a content part. expected_content_version stops you from overwriting someone else's newer upload.
         content:
           multipart/form-data:
             schema:
@@ -480,11 +480,11 @@ components:
       required: true
       schema:
         $ref: '#/components/schemas/ID'
-      description: The Exam Draft starter Workspace entry identifier.
+      description: The ID of a file or directory in the Draft's Starter Workspace.
   requestBodies:
     CreateExamStarterWorkspaceDirectory:
       required: true
-      description: Supplies the expected Draft revision and canonical path for the new empty directory.
+      description: The Draft revision you last saw, and the path of the new directory.
       content:
         application/json:
           schema:
@@ -494,7 +494,7 @@ components:
             path: starter/tests
     MoveExamStarterWorkspaceEntry:
       required: true
-      description: Supplies the expected Draft revision and new canonical path for the exact entry identified in the route.
+      description: The Draft revision you last saw, and the new path for the entry.
       content:
         application/json:
           schema:
@@ -504,16 +504,17 @@ components:
             path: starter/src/main.go
     RemoveExamStarterWorkspaceEntry:
       required: true
-      description: Supplies the last observed Draft revision required to remove the exact path entry safely.
+      description: The Draft revision you last saw, and whether to remove a directory's contents too.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/RemoveExamStarterWorkspaceEntryRequest'
           example:
             expected_revision: 6
+            recursive: true
   responses:
     ExamStarterWorkspaceEntryOK:
-      description: Exam Draft Starter Workspace entry changed
+      description: The file or directory after the change.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -521,8 +522,19 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ExamStarterWorkspaceEntryResponse'
+          example:
+            id: x1rc8ozumg5kbqd3pnhe7twya9
+            kind: file
+            path: starter/src/main.go
+            content_version: Qm3vT8kLp2Xw9sRj4nB7cYd1Ze
+            media_type: text/plain
+            size: 192
+            sha256: 2873f79a86c0d8b3335cd7731b0ecf7dd4301eb19a82ef7a1cba7589b5252261
+            created_at: '2026-07-28T13:00:00Z'
+            updated_at: '2026-08-02T10:40:00Z'
+            draft_revision: 7
     ExamStarterWorkspaceEntryCreated:
-      description: Exam Draft Starter Workspace entry created
+      description: The new file or directory.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -530,13 +542,20 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ExamStarterWorkspaceEntryResponse'
+          example:
+            id: 5wbtnqe1kd3uagz7rmxyho9pc4
+            kind: directory
+            path: starter/tests
+            created_at: '2026-07-28T12:55:00Z'
+            updated_at: '2026-07-28T12:55:00Z'
+            draft_revision: 3
     ExamStarterWorkspaceEntryRemoved:
-      description: Exam Draft Starter Workspace entry removed
+      description: The entry was removed. There is no response body.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
     ExamStarterWorkspaceListOK:
-      description: Complete Exam Draft Starter Workspace manifest
+      description: The Draft's Starter Workspace entries, sorted by path.
       headers:
         Cache-Control:
           $ref: '#/components/headers/NoStore'
@@ -544,17 +563,41 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ExamStarterWorkspaceListResponse'
+          example:
+            items:
+              - id: 9eqk4xtm1wzbn5dryo3agh7cpu
+                kind: directory
+                path: starter
+                created_at: '2026-07-28T12:50:00Z'
+                updated_at: '2026-07-28T12:50:00Z'
+              - id: x1rc8ozumg5kbqd3pnhe7twya9
+                kind: file
+                path: starter/main.go
+                content_version: Hk7pW2qZr9Ty4Lm3Xc8Vb1Nd6s
+                media_type: text/plain
+                size: 128
+                sha256: 2873f79a86c0d8b3335cd7731b0ecf7dd4301eb19a82ef7a1cba7589b5252261
+                created_at: '2026-07-28T13:00:00Z'
+                updated_at: '2026-07-28T13:00:00Z'
+              - id: 5wbtnqe1kd3uagz7rmxyho9pc4
+                kind: directory
+                path: starter/tests
+                created_at: '2026-07-28T12:55:00Z'
+                updated_at: '2026-07-28T12:55:00Z'
     ExamStarterWorkspaceProtectedContent:
-      description: Authorized inline Starter Workspace file content; not a public URL or export response
+      description: The file content, for display inside the application. This is not a public link or an export.
       headers:
         ETag:
+          description: The file's SHA-256 digest in quotes. Send it as If-None-Match to check for changes.
           schema:
             type: string
         Cache-Control:
+          description: The content must not be stored by any cache.
           schema:
             type: string
             const: private, no-store
         X-Content-Type-Options:
+          description: Stops browsers from guessing a different content type.
           schema:
             type: string
             const: nosniff
@@ -564,16 +607,19 @@ components:
             type: string
             format: binary
     ExamStarterWorkspaceContentNotModified:
-      description: Protected Starter Workspace content has not changed
+      description: The file has not changed since the ETag you sent.
       headers:
         ETag:
+          description: The file's SHA-256 digest in quotes.
           schema:
             type: string
         Cache-Control:
+          description: The content must not be stored by any cache.
           schema:
             type: string
             const: private, no-store
         X-Content-Type-Options:
+          description: Stops browsers from guessing a different content type.
           schema:
             type: string
             const: nosniff
@@ -589,10 +635,13 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: The Draft revision you last saw. If the Draft has changed since, the request fails with a conflict.
         path:
           $ref: '#/components/schemas/StarterWorkspacePath'
+          description: Where to create the directory. Its parent directory must already exist.
     ExamStarterWorkspaceFileUploadMetadata:
       type: object
+      description: The metadata part of a new Starter Workspace file upload.
       additionalProperties: false
       required:
         - expected_revision
@@ -605,22 +654,27 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: The Draft revision you last saw. If the Draft has changed since, the upload fails with a conflict.
         path:
           $ref: '#/components/schemas/StarterWorkspacePath'
+          description: Where to put the file. Its parent directory must already exist.
         media_type:
           type: string
           minLength: 1
           maxLength: 255
+          description: The file's media type, such as text/plain.
         size:
           type: integer
           format: int64
           minimum: -1
           maximum: 104857600
-          description: A value of -1 means the client did not declare a size; the streamed body remains bounded to 100 MiB.
+          description: The length of the content, in bytes. Send -1 if you don't know it. The content may never be larger than 100 MiB.
         sha256:
           $ref: '#/components/schemas/SHA256'
+          description: The SHA-256 digest of the content, as lowercase hex.
     ExamStarterWorkspaceFileReplacementMetadata:
       type: object
+      description: The metadata part of a Starter Workspace file replacement.
       additionalProperties: false
       required:
         - expected_revision
@@ -633,48 +687,56 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: Last observed mutable Draft revision, used to reject replacement against newer authoring state.
+          description: The Draft revision you last saw. If the Draft has changed since, the upload fails with a conflict.
         expected_content_version:
           $ref: '#/components/schemas/WorkspaceContentVersion'
-          description: Last acknowledged file content version, used to prevent lost updates to the same path entry.
+          description: >-
+            The file's content_version you last saw. If someone has replaced the content since, the upload fails, so
+            you don't overwrite their change.
         media_type:
           type: string
           minLength: 1
           maxLength: 255
+          description: The media type of the new content, such as text/plain.
         size:
           type: integer
           format: int64
           minimum: -1
           maximum: 104857600
-          description: A value of -1 means the client did not declare a size; the streamed body remains bounded to 100 MiB.
+          description: The length of the new content, in bytes. Send -1 if you don't know it. The content may never be larger than 100 MiB.
         sha256:
           $ref: '#/components/schemas/SHA256'
+          description: The SHA-256 digest of the new content, as lowercase hex.
     ExamStarterWorkspaceFileUploadMultipart:
       type: object
       additionalProperties: false
       required:
         - metadata
         - content
-      description: 'Exactly two parts in order: metadata first as application/json (maximum 32768 bytes), then content.'
+      description: 'Exactly two parts, in this order: metadata as application/json (up to 32,768 bytes), then content.'
       properties:
         metadata:
           $ref: '#/components/schemas/ExamStarterWorkspaceFileUploadMetadata'
+          description: The upload details, sent as the first part.
         content:
           type: string
           format: binary
+          description: The file content.
     ExamStarterWorkspaceFileReplacementMultipart:
       type: object
       additionalProperties: false
       required:
         - metadata
         - content
-      description: 'Exactly two parts in order: metadata first as application/json (maximum 32768 bytes), then content.'
+      description: 'Exactly two parts, in this order: metadata as application/json (up to 32,768 bytes), then content.'
       properties:
         metadata:
           $ref: '#/components/schemas/ExamStarterWorkspaceFileReplacementMetadata'
+          description: The upload details, sent as the first part.
         content:
           type: string
           format: binary
+          description: The new file content.
     MoveExamStarterWorkspaceEntryRequest:
       type: object
       additionalProperties: false
@@ -686,8 +748,10 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: The Draft revision you last saw. If the Draft has changed since, the request fails with a conflict.
         path:
           $ref: '#/components/schemas/StarterWorkspacePath'
+          description: The entry's new path. Its parent directory must already exist.
     RemoveExamStarterWorkspaceEntryRequest:
       type: object
       additionalProperties: false
@@ -698,12 +762,16 @@ components:
           type: integer
           format: int64
           minimum: 1
+          description: The Draft revision you last saw. If the Draft has changed since, the request fails with a conflict.
         recursive:
           type: boolean
           default: false
-          description: Remove this directory and every descendant atomically under the expected Draft revision. Omit for a file or ordinary empty-directory removal.
+          description: >-
+            Set to true to remove a directory and everything in it, in one step. Leave it out to remove a file or an
+            empty directory.
     ExamStarterWorkspaceEntryResponse:
       type: object
+      description: One file or directory in the Draft's Starter Workspace, returned after a change.
       additionalProperties: false
       required:
         - id
@@ -715,36 +783,46 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/ID'
+          description: The entry ID.
         kind:
           type: string
           enum:
             - file
             - directory
+          description: Whether the entry is a file or a directory.
         path:
           $ref: '#/components/schemas/StarterWorkspacePath'
+          description: The entry's path in the Starter Workspace.
         content_version:
           $ref: '#/components/schemas/WorkspaceContentVersion'
+          description: The file's current content version. Send it as expected_content_version when you replace the file. Files only.
         media_type:
           type: string
           minLength: 1
           maxLength: 255
+          description: The file's media type. Files only.
         size:
           type: integer
           format: int64
           minimum: 0
           maximum: 104857600
+          description: The file's length, in bytes. Files only.
         sha256:
           $ref: '#/components/schemas/SHA256'
+          description: The SHA-256 digest of the file's content, as lowercase hex. Files only.
         created_at:
           type: string
           format: date-time
+          description: When the entry was created.
         updated_at:
           type: string
           format: date-time
+          description: When the entry last changed.
         draft_revision:
           type: integer
           format: int64
           minimum: 1
+          description: The Draft's revision after this change. Send it as expected_revision with your next Draft change.
       oneOf:
         - properties:
             kind:
@@ -769,6 +847,7 @@ components:
                   - sha256
     ExamStarterWorkspaceListItemResponse:
       type: object
+      description: One file or directory in the Draft's Starter Workspace.
       additionalProperties: false
       required:
         - id
@@ -779,32 +858,41 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/ID'
+          description: The entry ID.
         kind:
           type: string
           enum:
             - file
             - directory
+          description: Whether the entry is a file or a directory.
         path:
           $ref: '#/components/schemas/StarterWorkspacePath'
+          description: The entry's path in the Starter Workspace.
         content_version:
           $ref: '#/components/schemas/WorkspaceContentVersion'
+          description: The file's current content version. Send it as expected_content_version when you replace the file. Files only.
         media_type:
           type: string
           minLength: 1
           maxLength: 255
+          description: The file's media type. Files only.
         size:
           type: integer
           format: int64
           minimum: 0
           maximum: 104857600
+          description: The file's length, in bytes. Files only.
         sha256:
           $ref: '#/components/schemas/SHA256'
+          description: The SHA-256 digest of the file's content, as lowercase hex. Files only.
         created_at:
           type: string
           format: date-time
+          description: When the entry was created.
         updated_at:
           type: string
           format: date-time
+          description: When the entry last changed.
       oneOf:
         - properties:
             kind:
@@ -836,7 +924,9 @@ components:
         items:
           type: array
           maxItems: 500
+          description: The entries on this page, sorted by path.
           items:
             $ref: '#/components/schemas/ExamStarterWorkspaceListItemResponse'
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
+          description: Send this back as cursor to get the next page. Omitted on the last page.

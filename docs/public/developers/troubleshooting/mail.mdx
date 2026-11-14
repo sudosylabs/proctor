@@ -36,7 +36,7 @@ second mail occurrence.
 | `Accepted` | SMTP accepted the finished DATA transaction | Mailpit locally, or delivery further along outside Proctor |
 | `Failed` | The delivery failed for good | The outcome and the attempt history |
 | `Suppressed` | A policy stops the message from being sent, on purpose | The reason it was suppressed. Don't force it through |
-| `Canceled` | The delivery work was cancelled | The decision that cancelled it, and who owns that decision |
+| `Canceled` | The delivery work was canceled | The decision that canceled it, and who owns that decision |
 
 `Accepted` doesn't prove the message reached an inbox. On the other hand, if
 Mailpit is empty and no Delivery was saved, the failure happened before SMTP.

@@ -63,7 +63,7 @@ Each row commits on its own, as one complete unit, and rows don't depend on
 each other. If a later row hits a conflict, the import ends as
 `completed_with_errors`. Rows that already succeeded are not rolled back.
 
-Cancelling stops new rows from starting and lets a row that is already
+Canceling stops new rows from starting and lets a row that is already
 committing finish. It never rolls back finished work.
 
 To recover, you undo effects yourself:

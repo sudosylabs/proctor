@@ -25,7 +25,7 @@ state names, error codes, attempt numbers and times.
 | `CancelRequested` | The cancellation is saved, but the worker hasn't finished it | The worker's checkpoint and how it handles cancellation |
 | `Succeeded` | The final outcome is committed | Check the result where it is owned, rather than running the work again |
 | `Failed` | The retry policy, or an operator, ended the run | Attempt history and the failure code |
-| `Canceled` | Cancellation finished, and the Job is done | Who cancelled it, and the documented cancellation path |
+| `Canceled` | Cancellation finished, and the Job is done | Who canceled it, and the documented cancellation path |
 
 Proctor runs each Job at least once, and possibly more. A worker can stop after
 it has changed something outside Proctor but before it saves its outcome. Job

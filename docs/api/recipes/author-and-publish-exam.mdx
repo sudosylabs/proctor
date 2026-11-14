@@ -57,16 +57,15 @@ revision by adding one to a stale value.
 
 Replace the Browser Policy with
 <Link to="/api/reference/configure-exam-draft-browser-policy">Configure Draft Browser Policy</Link>.
-An enabled policy has schema version 1, one start rule, and between 1 and 64
-HTTPS rules. Each rule sets a closed host match, a path prefix, whether
-redirects are allowed, and what happens to a blocked navigation, which is
-recorded.
+An enabled policy has one start rule and between 1 and 128 rules. Each rule
+sets an origin, how its host matches, a path prefix, whether redirects are
+allowed, and what happens to a blocked navigation. HTTPS rules set
+`institution_http_exception` to `false`.
 
 ```json
 {
   "expected_revision": 4,
   "browser_policy": {
-    "schema_version": 1,
     "enabled": true,
     "start_rule_id": "reference",
     "rules": [{
@@ -75,7 +74,8 @@ recorded.
       "path_prefix": "/algorithms/",
       "host_match": "exact",
       "allow_redirects": false,
-      "blocked_navigation_outcome": "record"
+      "blocked_navigation_outcome": "record",
+      "institution_http_exception": false
     }]
   }
 }

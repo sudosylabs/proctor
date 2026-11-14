@@ -93,8 +93,15 @@ and middleware. Three things differ:
 `plugin.Guard`, its path prefix, credential requirement, error codes, check
 and rate key. A route is mounted at `/plugins/<id><guard prefix>/<path>`.
 The handler runs after the rate limit (a node-local token bucket per plugin
-and guard subject; `plugin.route.rate_limited`) and the guard. Its answer is
-validated before anything is written. The transport mints
+and guard subject; `plugin.route.rate_limited`) and the guard. Each guard
+returns an admission that knows how to open the call's audit, because only the
+guard knows its subject. Operation `plugin.route.call` records the plugin,
+method and route template, never the body, query or socket messages. The
+audit opens before the handler, and a refusal to open it is
+`audit.unavailable`. It closes with the status or error code; a socket's single
+record closes when the socket ends. A plain call whose audit cannot close
+reports the audit failure, not success. Its answer is validated before anything
+is written. The transport mints
 `plugin.route.unavailable` and `plugin.route.conflict` itself; they are
 `transport` codes in the catalog.
 

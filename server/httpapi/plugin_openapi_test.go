@@ -44,6 +44,7 @@ paths:
         - exam.attempt.invalid
         - exam.attempt.unavailable
         - exam.attempt.registered_desktop_required
+        - audit.unavailable
         - plugin.route.rate_limited
         - plugin.route.unavailable
         - plugin.route.conflict

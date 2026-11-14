@@ -24,6 +24,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/httpapi/route"
 	"github.com/sudosylabs/proctor/server/logging"
+	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/plugin"
 )
 
@@ -79,6 +80,24 @@ type PluginSockets interface {
 // call.
 type PluginGuardApplication interface {
 	VerifyCandidateAttemptAccess(context.Context, invocation.Invocation, attempt.CandidateAccess) (attempt.VerifiedCandidateAccess, error)
+	BeginPluginRouteCall(context.Context, invocation.Invocation, attempt.PluginRouteCall) (model.AuditEventID, error)
+	EndPluginRouteCall(context.Context, invocation.Invocation, model.AuditEventID, attempt.PluginRouteOutcome) error
+}
+
+// pluginAdmission is what a guard proved about one request: the access the
+// plugin handler sees, and how to open the call's audit, which only the
+// guard knows the subject of.
+type pluginAdmission struct {
+	access plugin.Access
+	begin  func(ctx context.Context, call pluginCall) (model.AuditEventID, error)
+}
+
+// pluginCall names the mounted route a request reached.
+type pluginCall struct {
+	plugin string
+	method string
+	route  string
+	socket bool
 }
 
 // pluginGuard is how the core runs one plugin.Guard: the path prefix its
@@ -89,7 +108,7 @@ type pluginGuard struct {
 	prefix string
 	auth   route.AuthRequirement
 	errors []string
-	verify func(context.Context, PluginGuardApplication, route.Request) (plugin.Access, error)
+	verify func(context.Context, PluginGuardApplication, route.Request) (pluginAdmission, error)
 	// rateKey names whose budget a request spends.
 	rateKey func(route.Request) string
 }
@@ -112,27 +131,35 @@ var pluginGuards = map[plugin.Guard]pluginGuard{
 
 // verifyCandidateAttemptAccess runs the candidate Attempt routes' check and
 // returns only the identifiers it proved.
-func verifyCandidateAttemptAccess(ctx context.Context, application PluginGuardApplication, request route.Request) (plugin.Access, error) {
+func verifyCandidateAttemptAccess(ctx context.Context, application PluginGuardApplication, request route.Request) (pluginAdmission, error) {
 	access, err := candidateAccess(request)
 	if err != nil {
-		return nil, err
+		return pluginAdmission{}, err
 	}
-	verified, err := application.VerifyCandidateAttemptAccess(ctx, request.Invocation(), access)
+	inv := request.Invocation()
+	verified, err := application.VerifyCandidateAttemptAccess(ctx, inv, access)
 	if err != nil {
-		return nil, err
+		return pluginAdmission{}, err
 	}
-	return plugin.CandidateAttemptAccess{
-		AttemptID:       verified.AttemptID.String(),
-		ParticipationID: verified.ParticipationID.String(),
-		Generation:      verified.Generation,
-		CandidateUserID: verified.CandidateUserID.String(),
+	return pluginAdmission{
+		access: plugin.CandidateAttemptAccess{
+			AttemptID:       verified.AttemptID.String(),
+			ParticipationID: verified.ParticipationID.String(),
+			Generation:      verified.Generation,
+			CandidateUserID: verified.CandidateUserID.String(),
+		},
+		begin: func(ctx context.Context, call pluginCall) (model.AuditEventID, error) {
+			return application.BeginPluginRouteCall(ctx, inv, attempt.PluginRouteCall{
+				Access: verified, PluginID: model.PluginID(call.plugin), Method: call.method, Route: call.route, Socket: call.socket,
+			})
+		},
 	}, nil
 }
 
 // The codes every plugin route can answer with besides its guard's.
 var (
-	pluginRouteErrors       = []string{"plugin.route.rate_limited", "plugin.route.unavailable", "plugin.route.conflict"}
-	pluginSocketRouteErrors = []string{"plugin.route.rate_limited", "websocket.origin.invalid", "websocket.unavailable"}
+	pluginRouteErrors       = []string{"audit.unavailable", "plugin.route.rate_limited", "plugin.route.unavailable", "plugin.route.conflict"}
+	pluginSocketRouteErrors = []string{"audit.unavailable", "plugin.route.rate_limited", "websocket.origin.invalid", "websocket.unavailable"}
 )
 
 const (
@@ -275,29 +302,61 @@ type servedPluginRoute struct {
 }
 
 // admit spends the rate budget and runs the guard.
-func (s servedPluginRoute) admit(request route.Request) (plugin.Access, error) {
+func (s servedPluginRoute) admit(request route.Request) (pluginAdmission, error) {
 	if !s.handlers.limiter.allow(s.plugin + "\x00" + s.guard.rateKey(request)) {
-		return nil, apperror.New("plugin.route.rate_limited")
+		return pluginAdmission{}, apperror.New("plugin.route.rate_limited")
 	}
 	return s.guard.verify(request.Context, s.handlers.application, request)
 }
 
+// call names this route for audit by its mounted template, never the
+// request path.
+func (s servedPluginRoute) call(socket bool) pluginCall {
+	return pluginCall{plugin: s.plugin, method: s.route.Method, route: PluginRoutePath(s.plugin, s.route), socket: socket}
+}
+
+// handle audits the call around the plugin handler: the audit opens after the
+// guard admits the request and before any plugin code runs, and a call whose
+// audit cannot close does not report success.
 func (s servedPluginRoute) handle(request route.Request) (route.Result, error) {
-	access, err := s.admit(request)
+	admission, err := s.admit(request)
 	if err != nil {
 		return route.Result{}, err
 	}
+	auditID, err := admission.begin(request.Context, s.call(false))
+	if err != nil {
+		return route.Result{}, err
+	}
+
+	result, status, err := s.serve(request, admission.access)
+	outcome := attempt.PluginRouteOutcome{Status: status}
+	if err != nil {
+		outcome = attempt.PluginRouteOutcome{ErrorCode: apperror.CodeOf(err, "plugin.route.unavailable")}
+	}
+	if endErr := s.handlers.application.EndPluginRouteCall(request.Context, request.Invocation(), auditID, outcome); endErr != nil {
+		if err != nil {
+			return route.Result{}, err
+		}
+		return route.Result{}, endErr
+	}
+	return result, err
+}
+
+// serve reads the request, runs the plugin handler and checks its response.
+// It reports the status a successful call answers with.
+func (s servedPluginRoute) serve(request route.Request, access plugin.Access) (route.Result, int, error) {
 	var body []byte
+	var err error
 	if request.HTTP.Body != nil {
 		if body, err = io.ReadAll(request.HTTP.Body); err != nil {
-			return route.Result{}, route.InvalidRequest(err)
+			return route.Result{}, 0, route.InvalidRequest(err)
 		}
 	}
 	contentType := ""
 	if header := request.HTTP.Header.Get("Content-Type"); header != "" {
 		mediaType, _, parseErr := mime.ParseMediaType(header)
 		if parseErr != nil {
-			return route.Result{}, route.InvalidRequest(parseErr)
+			return route.Result{}, 0, route.InvalidRequest(parseErr)
 		}
 		contentType = mediaType
 	}
@@ -309,9 +368,13 @@ func (s servedPluginRoute) handle(request route.Request) (route.Result, error) {
 		Body:        body,
 	})
 	if err != nil {
-		return route.Result{}, s.failure(request.Context, err)
+		return route.Result{}, 0, s.failure(request.Context, err)
 	}
-	return s.result(request.Context, response)
+	result, err := s.result(request.Context, response)
+	if err != nil {
+		return route.Result{}, 0, err
+	}
+	return result, response.Status, nil
 }
 
 // failure maps a handler's error. Only the named plugin errors choose the
@@ -355,16 +418,57 @@ func (s servedPluginRoute) result(ctx context.Context, response plugin.Response)
 	return route.JSON(response.Status, json.RawMessage(bytes.Clone(trimmed))), nil
 }
 
+// upgrade audits a socket from the moment it is admitted until it ends: one
+// record per socket, never per message.
 func (s servedPluginRoute) upgrade(writer http.ResponseWriter, request route.Request) error {
-	access, err := s.admit(request)
+	admission, err := s.admit(request)
 	if err != nil {
 		return err
 	}
+	auditID, err := admission.begin(request.Context, s.call(true))
+	if err != nil {
+		return err
+	}
+	ended := false
+	end := func(outcome attempt.PluginRouteOutcome) {
+		if ended {
+			return
+		}
+		ended = true
+		if endErr := s.handlers.application.EndPluginRouteCall(
+			context.WithoutCancel(request.Context), request.Invocation(), auditID, outcome,
+		); endErr != nil {
+			s.handlers.logger.WarnContext(request.Context, "could not close a plugin socket's audit",
+				logging.String("plugin", s.plugin), logging.String("route", s.route.Path), logging.Err(endErr))
+		}
+	}
 	allowMissingOrigin := route.CredentialSourceOf(request.Context) == route.CredentialBearer
-	return s.handlers.sockets.ServePluginSocket(writer, request.HTTP, allowMissingOrigin,
+	err = s.handlers.sockets.ServePluginSocket(writer, request.HTTP, allowMissingOrigin,
 		func(ctx context.Context, socket plugin.Socket) PluginSocketOutcome {
-			return s.serveSocket(ctx, request, access, socket)
+			outcome := s.serveSocket(ctx, request, admission.access, socket)
+			end(attempt.PluginRouteOutcome{End: pluginSocketEnd(outcome)})
+			return outcome
 		})
+	if !ended {
+		code := "websocket.unavailable"
+		if err != nil {
+			code = apperror.CodeOf(err, "websocket.unavailable")
+		}
+		end(attempt.PluginRouteOutcome{ErrorCode: code})
+	}
+	return err
+}
+
+// pluginSocketEnd names how a socket ended in its audit.
+func pluginSocketEnd(outcome PluginSocketOutcome) string {
+	switch outcome {
+	case PluginSocketAccessEnded:
+		return "access_ended"
+	case PluginSocketFailed:
+		return "failed"
+	default:
+		return "done"
+	}
 }
 
 // serveSocket runs the plugin's socket handler and reruns the guard every

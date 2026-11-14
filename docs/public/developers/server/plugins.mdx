@@ -212,7 +212,16 @@ and candidate IDs, never the credentials.
 
 Before the handler runs, the core authenticates the request, spends a rate
 budget per Session and plugin, bounds the body (64 KiB by default, at most
-1 MiB), and runs the guard. Every refusal is Problem Details. A handler
+1 MiB), and runs the guard. Every refusal is Problem Details.
+
+Every call the guard admits is audited as the candidate's, against the
+Attempt's Sitting and Class. The record names the plugin, the method and the
+mounted route template, never the body, the query or a socket's messages. The
+audit opens before any plugin code runs, and a call whose audit cannot open
+is refused with `audit.unavailable`. A plain call's audit closes with its
+status or error code, and a call whose audit cannot close does not report
+success. A socket has one record, which closes with how the socket ended. A
+request the guard refuses is not a call, so it leaves no record. A handler
 answers 200, 201, 202 or 204 with at most 1 MiB of JSON. It returns
 `plugin.ErrBadRequest` for a 400 or `plugin.ErrRouteConflict` for a 409. Any
 other error, a panic or an invalid answer is `plugin.route.unavailable`, and

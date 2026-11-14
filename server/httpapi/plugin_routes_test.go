@@ -66,12 +66,63 @@ func (f *fakePluginRoutes) set(routes ...PluginRoute) {
 	}
 }
 
-// fakePluginGuards answers the candidate guard with verified or err.
+// fakePluginGuards answers the candidate guard with verified or err, and
+// records the audit of every call it admits.
 type fakePluginGuards struct {
 	mu       sync.Mutex
 	verified attempt.VerifiedCandidateAccess
 	err      error
 	calls    []attempt.CandidateAccess
+	// beginErr refuses opening an audit; endErr refuses closing one.
+	beginErr error
+	endErr   error
+	audits   []attempt.PluginRouteCall
+	outcomes []attempt.PluginRouteOutcome
+	// handled counts audits opened when the handler ran, so a test can
+	// prove the audit opened first.
+	order []string
+}
+
+func (g *fakePluginGuards) BeginPluginRouteCall(
+	_ context.Context,
+	_ invocation.Invocation,
+	call attempt.PluginRouteCall,
+) (model.AuditEventID, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.beginErr != nil {
+		return "", g.beginErr
+	}
+	g.audits = append(g.audits, call)
+	g.order = append(g.order, "audit.begin")
+	return model.NewAuditEventID(), nil
+}
+
+func (g *fakePluginGuards) EndPluginRouteCall(
+	_ context.Context,
+	_ invocation.Invocation,
+	_ model.AuditEventID,
+	outcome attempt.PluginRouteOutcome,
+) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.outcomes = append(g.outcomes, outcome)
+	g.order = append(g.order, "audit.end")
+	return g.endErr
+}
+
+func (g *fakePluginGuards) note(step string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.order = append(g.order, step)
+}
+
+func (g *fakePluginGuards) audited() ([]attempt.PluginRouteCall, []attempt.PluginRouteOutcome, []string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return append([]attempt.PluginRouteCall(nil), g.audits...),
+		append([]attempt.PluginRouteOutcome(nil), g.outcomes...),
+		append([]string(nil), g.order...)
 }
 
 func (g *fakePluginGuards) VerifyCandidateAttemptAccess(
@@ -469,6 +520,11 @@ func TestAPluginSocketUpgradesBehindTheGuardAndEchoesFrames(t *testing.T) {
 		require.Equal(t, gorilla.BinaryMessage, kind)
 		require.Equal(t, frame, echoed)
 	}
+	audits, outcomes, _ := guards.audited()
+	require.Len(t, audits, 1, "one audit per socket, never per message")
+	require.True(t, audits[0].Socket)
+	require.Equal(t, "/plugins/execution/exam-attempts/{exam_attempt_id}/terminal", audits[0].Route)
+	require.Empty(t, outcomes, "a socket's audit stays open while the socket does")
 
 	refused := http.Header{"Authorization": {"Bearer test"}}
 	_, response, err = gorilla.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+base+"/terminal", refused)
@@ -492,6 +548,15 @@ func TestAPluginSocketUpgradesBehindTheGuardAndEchoesFrames(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, explode(), "a failed plugin's routes are unmounted")
 	_, _, err = conn.ReadMessage()
 	require.Error(t, err, "the open socket ends with its failed plugin")
+	require.Eventually(t, func() bool {
+		_, outcomes, _ := guards.audited()
+		for _, outcome := range outcomes {
+			if outcome.End != "" {
+				return true
+			}
+		}
+		return false
+	}, 5*time.Second, 10*time.Millisecond, "the socket's audit closes when the socket ends")
 }
 
 func TestAPluginSocketEndsWhenItsGuardNoLongerPasses(t *testing.T) {
@@ -532,4 +597,95 @@ func TestEveryGuardHasACoreEntry(t *testing.T) {
 		require.NotNil(t, entry.rateKey)
 	}
 	require.Len(t, pluginGuards, 1, "a new guard is added to this test and to plugin.Guard.Valid together")
+}
+
+func TestPluginRouteCallsAreAuditedAroundTheHandler(t *testing.T) {
+	t.Parallel()
+
+	fixture := newPluginRouteFixture(t, nil)
+	fixture.source.set(executionRoute(plugin.Route{
+		Method: http.MethodPost, Path: "flush", Guard: plugin.GuardCandidateAttemptAccess,
+		Handler: func(context.Context, plugin.Access, plugin.Request) (plugin.Response, error) {
+			fixture.guards.note("handler")
+			return plugin.Response{Status: http.StatusAccepted, Body: json.RawMessage(`{"workspace_cursor":9}`)}, nil
+		},
+	}))
+
+	recorder := fixture.serve(candidatePluginRequest(http.MethodPost, fixture.path("flush"), nil))
+	require.Equal(t, http.StatusAccepted, recorder.Code, recorder.Body.String())
+
+	audits, outcomes, order := fixture.guards.audited()
+	require.Equal(t, []string{"audit.begin", "handler", "audit.end"}, order, "the audit opens before any plugin code runs")
+	require.Len(t, audits, 1)
+	require.Equal(t, fixture.verified, audits[0].Access, "the audit names what the guard proved")
+	require.Equal(t, model.PluginID("execution"), audits[0].PluginID)
+	require.Equal(t, http.MethodPost, audits[0].Method)
+	require.Equal(t, "/plugins/execution/exam-attempts/{exam_attempt_id}/flush", audits[0].Route,
+		"the route is the mounted template, never the request path")
+	require.False(t, audits[0].Socket)
+	require.Equal(t, []attempt.PluginRouteOutcome{{Status: http.StatusAccepted}}, outcomes)
+}
+
+func TestPluginRouteAuditRecordsFailuresAndRefusesWithoutAudit(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a failing handler closes its audit with the code it answered", func(t *testing.T) {
+		t.Parallel()
+		fixture := newPluginRouteFixture(t, nil)
+		fixture.source.set(executionRoute(plugin.Route{
+			Method: http.MethodPost, Path: "flush", Guard: plugin.GuardCandidateAttemptAccess,
+			Handler: func(context.Context, plugin.Access, plugin.Request) (plugin.Response, error) {
+				return plugin.Response{}, plugin.ErrRouteConflict
+			},
+		}))
+		recorder := fixture.serve(candidatePluginRequest(http.MethodPost, fixture.path("flush"), nil))
+		require.Equal(t, "plugin.route.conflict", pluginProblemCode(t, recorder))
+		_, outcomes, _ := fixture.guards.audited()
+		require.Equal(t, []attempt.PluginRouteOutcome{{ErrorCode: "plugin.route.conflict"}}, outcomes)
+	})
+
+	t.Run("a request the guard refuses is not a route call", func(t *testing.T) {
+		t.Parallel()
+		fixture := newPluginRouteFixture(t, nil)
+		fixture.guards.fail(apperror.New("exam.attempt.unavailable"))
+		fixture.source.set(executionRoute(plugin.Route{
+			Method: http.MethodPost, Path: "flush", Guard: plugin.GuardCandidateAttemptAccess,
+			Handler: func(context.Context, plugin.Access, plugin.Request) (plugin.Response, error) {
+				t.Error("the handler ran without a guard")
+				return plugin.Response{Status: http.StatusNoContent}, nil
+			},
+		}))
+		fixture.serve(candidatePluginRequest(http.MethodPost, fixture.path("flush"), nil))
+		audits, _, _ := fixture.guards.audited()
+		require.Empty(t, audits)
+	})
+
+	t.Run("no audit, no call", func(t *testing.T) {
+		t.Parallel()
+		fixture := newPluginRouteFixture(t, nil)
+		fixture.guards.beginErr = apperror.New("audit.unavailable")
+		fixture.source.set(executionRoute(plugin.Route{
+			Method: http.MethodPost, Path: "flush", Guard: plugin.GuardCandidateAttemptAccess,
+			Handler: func(context.Context, plugin.Access, plugin.Request) (plugin.Response, error) {
+				t.Error("the handler ran without an audit")
+				return plugin.Response{Status: http.StatusNoContent}, nil
+			},
+		}))
+		recorder := fixture.serve(candidatePluginRequest(http.MethodPost, fixture.path("flush"), nil))
+		require.Equal(t, "audit.unavailable", pluginProblemCode(t, recorder))
+	})
+
+	t.Run("a call whose audit cannot close does not report success", func(t *testing.T) {
+		t.Parallel()
+		fixture := newPluginRouteFixture(t, nil)
+		fixture.guards.endErr = apperror.New("audit.unavailable")
+		fixture.source.set(executionRoute(plugin.Route{
+			Method: http.MethodPost, Path: "flush", Guard: plugin.GuardCandidateAttemptAccess,
+			Handler: func(context.Context, plugin.Access, plugin.Request) (plugin.Response, error) {
+				return plugin.Response{Status: http.StatusNoContent}, nil
+			},
+		}))
+		recorder := fixture.serve(candidatePluginRequest(http.MethodPost, fixture.path("flush"), nil))
+		require.Equal(t, "audit.unavailable", pluginProblemCode(t, recorder))
+	})
 }

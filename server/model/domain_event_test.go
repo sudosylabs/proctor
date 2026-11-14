@@ -96,7 +96,7 @@ func TestDomainEventValidateRejectsInvalidState(t *testing.T) {
 func TestParticipationAndSittingEventDataIsStrict(t *testing.T) {
 	participation := `"attempt_id":"` + NewExamAttemptID().String() + `","participation_id":"` +
 		NewAttemptParticipationID().String() + `","generation":3,"sitting_id":"` + NewExamSittingID().String() +
-		`","exam_id":"` + NewExamID().String() + `"`
+		`","exam_id":"` + NewExamID().String() + `","exam_revision_id":"` + NewExamRevisionID().String() + `"`
 	sitting := `"sitting_id":"` + NewExamSittingID().String() + `","exam_id":"` + NewExamID().String() + `"`
 	tests := []struct {
 		name  string

@@ -17,6 +17,7 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/plugin"
 	"github.com/sudosylabs/proctor/server/plugin/cas"
+	"github.com/sudosylabs/proctor/server/plugin/execution"
 	"github.com/sudosylabs/proctor/server/plugin/oidc"
 	"github.com/sudosylabs/proctor/server/plugin/zipexport"
 	"github.com/sudosylabs/proctor/server/pluginhost"
@@ -30,7 +31,26 @@ func builtinPlugins() []plugin.Plugin {
 		cas.NewPlugin(),
 		oidc.NewPlugin(),
 		zipexport.NewPlugin(),
+		execution.NewPlugin(execution.Options{}),
 	}
+}
+
+// withTestPlugins returns the built-in plugins with each extra plugin in
+// place of the built-in of the same ID, and the rest of extra after them.
+func withTestPlugins(builtin, extra []plugin.Plugin) []plugin.Plugin {
+	plugins := append([]plugin.Plugin(nil), builtin...)
+	for _, added := range extra {
+		replaced := false
+		for index, existing := range plugins[:len(builtin)] {
+			if existing.Manifest().ID == added.Manifest().ID {
+				plugins[index], replaced = added, true
+			}
+		}
+		if !replaced {
+			plugins = append(plugins, added)
+		}
+	}
+	return plugins
 }
 
 // pluginRuntime is what the plugins' record store, workers' leases and
@@ -81,7 +101,7 @@ func activatePlugins(
 	recorder pluginhost.Recorder,
 	extra []plugin.Plugin,
 ) (*pluginhost.Host, int64, error) {
-	plugins := append(builtinPlugins(), extra...)
+	plugins := withTestPlugins(builtinPlugins(), extra)
 	known := pluginIDSet(plugins, func(p plugin.Plugin) string { return p.Manifest().ID })
 	for id := range cfg.Plugins {
 		if _, ok := known[id]; !ok {

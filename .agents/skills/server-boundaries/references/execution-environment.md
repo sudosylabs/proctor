@@ -42,6 +42,8 @@ This file holds only the rules that must not drift.
   - It always syncs itself.
   - Its Attempt Workspace copy decides what is stored. The guest filter is only
     an optimization.
+  - Without the file, or while it does not parse, Proctor's default patterns
+    apply. No file is ever seeded into a Starter or Attempt Workspace.
   - execenv never hardcodes its name.
 
 ## Transport and evidence

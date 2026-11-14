@@ -774,6 +774,21 @@ The Gorilla WebSocket dependency is separately licensed under the BSD
 The Prometheus Go client dependency is separately licensed under the Apache
 License 2.0.
 
+execenv dependency
+------------------
+
+The execution plugin in `server/plugin/execution` uses
+`github.com/sudosylabs/execenv` (its root, `remote`, `ignore` and, in tests,
+`memory` packages), licensed under the Apache License 2.0. Its NOTICE reads:
+
+    execenv
+    Copyright 2026 SudoSy Labs
+
+    Licensed under the Apache License, Version 2.0.
+
+The dependency remains governed by its own license; see
+LICENSES/Apache-2.0.txt. No execenv source is copied into Proctor.
+
 IBM Plex font software
 ----------------------
 

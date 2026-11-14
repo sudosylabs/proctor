@@ -2,7 +2,7 @@
 title: Design the Execution Environment
 description: How the terminal plugin gives a candidate a real shell over their Attempt Workspace on execenv, while the core keeps authority over files, Submission and evidence.
 audience: developer
-maturity: planned
+maturity: preview
 slug: /developers/server/execution-environment/
 ---
 
@@ -22,8 +22,9 @@ When it is on, it must not weaken anything the core guarantees:
   authorization or audit;
 - the core verifies everything the plugin hands it.
 
-This page records the design the owner settled. It is planned work: nothing
-here is built yet. Proctor and execenv are both in active development, so where
+This page records the design the owner settled. The plugin seams and the
+plugin itself are built; [What is built](#what-is-built) says which parts are
+still to come. Proctor and execenv are both in active development, so where
 this design changes a contract, the old form is removed, not kept alongside.
 
 ## What execenv gives us, and what it does not
@@ -173,11 +174,11 @@ Every Attempt Workspace has a `/workspace/.proctorignore` in gitignore syntax.
 - **Who controls it.** The candidate can edit it, and nothing about containers
   belongs in it. Its one job is to name paths that stay on the grant and are
   never forwarded to the server or the editor.
-- **Defaults.** If the author's Starter Workspace has none, publishing the Exam
-  adds Proctor's default, which plays the part of a standard `.gitignore`. It
-  lists `node_modules/`, `.venv/`, `__pycache__/`, `target/`, `build/`, `dist/`,
-  `*.o`, `*.class` and similar build output. The file is added at publication,
-  never at admission.
+- **Defaults.** Until the candidate or the author adds the file, Proctor's
+  default patterns apply, playing the part of a standard `.gitignore`. They
+  list `node_modules/`, `.venv/`, `__pycache__/`, `target/`, `build/`, `dist/`,
+  `*.o`, `*.class` and similar build output. Nothing is added to the Starter or
+  Attempt Workspace; the defaults also apply while the file does not parse.
 - **The git rule.** A pattern only stops *new* paths from being forwarded.
   Anything already in the Attempt Workspace keeps syncing: a starter file, a
   file saved in the editor, or one harvested earlier. A careless `*.py` can
@@ -380,9 +381,47 @@ An `environment` origin on a file is review context, not an accusation.
 1. **Apply Workspace Batch,** with the cleanup fixes above.
 2. **An origin field on the journal.**
 3. **The rule that refuses disabling the plugin while it is in use.**
-4. **Checks at publication:**
-   - the capacity policy against execenv's limits;
-   - the default `.proctorignore`.
+4. **A check at publication** of the capacity policy against execenv's
+   limits.
+
+## What is built
+
+The plugin is `server/plugin/execution`, on every seam above. It follows this
+design with these differences and gaps:
+
+- **Defaults.** The default ignore patterns are execenv's fallback and the
+  plugin's own check, never a file in the Workspace.
+- **One binding per generation.** The core binds a grant ID and epoch once,
+  so the plugin names the generation in the binding's epoch. The same grant,
+  and its shell, then serve the candidate's next generation after a
+  reconnect.
+- **Harvest cadence.** The quiet window applies to the Attempt's guest
+  changes as a whole rather than to each path, so changes are stored in the
+  order the guest made them.
+- **Flush.** execenv serves no observations while a grant is frozen, so the
+  flush harvests first and freezes right after; a change made in between is
+  not in the answer.
+- **A guest the Workspace cannot bring back in line.** execenv projects a
+  change onto a path only when the guest still holds what was projected
+  there. When the candidate's editor and terminal change the same file
+  before the terminal's change is stored, the Workspace keeps the editor's
+  and the grant is replaced with a new incarnation, recorded as a restart.
+- **Gaps need a binding.** The wait for capacity and a restart are recorded
+  once the next binding exists. Nothing can be recorded after the
+  generation's binding ends, so changes not yet stored at time-up are lost
+  without a record.
+- **Terminal input** is recorded as bounded records of at most 32 KiB of
+  input each, not yet as chunks in VFS.
+
+Still to come:
+
+- pre-warming grants when a Sitting opens;
+- the drain two seconds before the scheduled end;
+- the capacity policy check at publication;
+- per-Attempt harvest budgets and a per-node bound on concurrent harvests;
+- telling the candidate in the terminal when a path stays on the grant or a
+  change is refused;
+- Desktop's terminal pane and its use of the flush route.
 
 ## Open risks
 

@@ -2373,7 +2373,8 @@ CREATE TRIGGER exam_attempt_participations_guard
 CREATE FUNCTION attempt_participation_event_data(participation exam_attempt_participations) RETURNS jsonb
 LANGUAGE sql STABLE AS $$
     SELECT jsonb_build_object('attempt_id', a.id, 'participation_id', participation.id,
-        'generation', participation.generation, 'sitting_id', a.exam_sitting_id, 'exam_id', a.exam_id)
+        'generation', participation.generation, 'sitting_id', a.exam_sitting_id, 'exam_id', a.exam_id,
+        'exam_revision_id', a.admission_revision_id)
       FROM exam_attempts a
      WHERE a.id = participation.exam_attempt_id
 $$;

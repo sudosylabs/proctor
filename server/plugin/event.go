@@ -79,13 +79,15 @@ type ExamAttemptSubmitted struct {
 
 // ExamAttemptParticipationStarted is the Data of
 // TopicExamAttemptParticipationStarted. Generation is the new generation; it
-// is the one an environment binding names.
+// is the one an environment binding names. ExamRevisionID is the Revision the
+// Attempt was admitted to, whose sections ExamSections.Get reads.
 type ExamAttemptParticipationStarted struct {
 	AttemptID       string `json:"attempt_id"`
 	ParticipationID string `json:"participation_id"`
 	Generation      int64  `json:"generation"`
 	SittingID       string `json:"sitting_id"`
 	ExamID          string `json:"exam_id"`
+	ExamRevisionID  string `json:"exam_revision_id"`
 }
 
 // ParticipationEndReason says why a Participation generation ended. The list
@@ -120,6 +122,7 @@ type ExamAttemptParticipationEnded struct {
 	Generation      int64                  `json:"generation"`
 	SittingID       string                 `json:"sitting_id"`
 	ExamID          string                 `json:"exam_id"`
+	ExamRevisionID  string                 `json:"exam_revision_id"`
 	Reason          ParticipationEndReason `json:"reason"`
 }
 

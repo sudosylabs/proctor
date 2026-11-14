@@ -29,6 +29,7 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
+	github.com/sudosylabs/execenv v0.3.2-0.20261114222258-f1874cc85135
 	github.com/sudosylabs/proctor/packages/cache v0.0.0-20261111213109-79e3170a5027
 	github.com/sudosylabs/proctor/packages/mail v0.0.0-20261111210501-268c5a24e5c4
 	github.com/sudosylabs/proctor/packages/vfs v0.0.0-20261111210501-268c5a24e5c4

@@ -69,9 +69,10 @@ documents only its plugin decodes and validates, handed over in
 | Plugin routes | built | Serve HTTP routes and binary WebSocket routes under the API's `plugins/<id>/` prefix, each behind one guard from a closed core list |
 | Attempt Workspace access | built for the execution plugin | Bind an execution environment to an Attempt and read and write its Workspace on the candidate's behalf |
 
-The first plugin to need most of the seams that are still missing is the
-terminal. [Design the Execution Environment](execution-environment.mdx)
-records which seams it needs and why.
+The execution environment, `server/plugin/execution`, is the first plugin to
+use most of these seams; [it is described below](#the-execution-environment).
+[Design the Execution Environment](execution-environment.mdx) records why it
+needs each one.
 
 Native capabilities live in the core's registry, which the signed Desktop
 release supplies: each capability's fields, reasons, stability time and fact
@@ -277,7 +278,9 @@ with their own digest and inside the content digest, and a live correction
 keeps them unchanged. From then on nothing asks the plugin: admission and
 everything after it read the frozen section. A plugin reads its own frozen
 sections back by Revision ID with `Host.ExamSections().Get`, which never
-reaches another plugin's section or the Draft.
+reaches another plugin's section or the Draft. The Participation events name
+the Revision the Attempt was admitted to as `exam_revision_id`, so a handler
+can read the section that applies.
 
 ## Settings
 
@@ -298,3 +301,33 @@ settings in place by implementing `plugin.Reconfigurer`; otherwise the host
 restarts it with them. Secrets never go through the API. They stay in the configuration file under
 `Plugins.<id>.Secrets`, which is always redacted. See
 [Plugins configuration](../../reference/configuration/plugins.mdx).
+
+## The execution environment
+
+The `execution` plugin gives a candidate a shell beside the editor, on
+execenv hosts listed in its secrets (see
+[Plugins configuration](../../reference/configuration/plugins.mdx)). It is
+off by default and uses only the seams above:
+
+- **Section.** `{"image": "...", "record_input": false}`. The network is
+  always none. The section is accepted only while a usable host offers the
+  image.
+- **Events.** A Participation that starts on a Revision with the section
+  creates the grant's record, kind `grant`, key `attempt/<attempt_id>`. Its
+  end freezes the grant for a reconnect, and a Submission, a manager ending
+  the Attempt or the Sitting closing revokes it. A Sitting's pause and resume
+  freeze and thaw its grants.
+- **Worker.** Every node runs the `grants` worker, which holds the lease of
+  each live grant nobody holds. The owner places the grant, binds it to the
+  current generation, projects the Attempt Workspace journal into it,
+  harvests guest changes in batches through the binding, and stores the
+  process log as `execution.process` evidence before it acknowledges it.
+  Every execenv control carries a fence revision the owner takes from the
+  record, so a stale owner is refused. A lost grant, or one whose guest the
+  Workspace cannot bring back in line, is replaced by a new incarnation and
+  recorded as an `execution.environment_restarted` gap.
+- **Routes.** `GET .../terminal` is the binary terminal socket, served by any
+  node attaching to the host itself, and `POST .../flush` freezes the grant
+  after a last harvest and answers with the Workspace cursor to submit with.
+  Both run behind `candidate_attempt_access`; the plugin documents them in
+  `server/plugin/execution/openapi/`.

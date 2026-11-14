@@ -47371,6 +47371,206 @@
         "x-proctor-idempotency": "none"
       }
     },
+    "/api/v1/plugins/execution/exam-attempts/{exam_attempt_id}/flush": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        }
+      ],
+      "post": {
+        "description": "Freezes the candidate's execution environment after saving its last file changes to the Attempt Workspace, and answers with the Workspace cursor that holds them, which the candidate then submits with. It waits up to 20 seconds. The environment thaws again 30 seconds later unless the Attempt ends first. 409 means no environment is live for the Attempt; 503 means the flush could not finish, and the candidate can still submit what was saved. The request has no body.",
+        "operationId": "flushExecutionEnvironment",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "workspace_cursor": 42
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "workspace_cursor": {
+                      "description": "The Attempt Workspace cursor that holds every change the environment had written. Submit with it.",
+                      "format": "int64",
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "workspace_cursor"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The environment is frozen and its changes are in the Attempt Workspace",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/NoStore"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Flush the execution environment before submitting",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "source": "curl --fail-with-body \\\n  --request POST \\\n  --url 'https://proctor.example.edu/api/v1/plugins/execution/exam-attempts/\u003cexam-attempt-id\u003e/flush' \\\n  --header 'Authorization: DPoP \u003cdesktop-session-access-credential\u003e' \\\n  --header 'DPoP: \u003cfresh-proof-for-this-post-target-and-current-nonce\u003e' \\\n  --header 'X-Proctor-Attempt-Credential: \u003cattempt-credential\u003e' \\\n  --header 'X-Proctor-Attempt-Connection-ID: \u003cattempt-connection-id\u003e'"
+          }
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "audit.unavailable",
+          "plugin.route.rate_limited",
+          "plugin.route.unavailable",
+          "plugin.route.conflict",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "none",
+        "x-proctor-plugin": "execution"
+      }
+    },
+    "/api/v1/plugins/execution/exam-attempts/{exam_attempt_id}/terminal": {
+      "get": {
+        "description": "Upgrades to a binary WebSocket that carries the candidate's terminal in their execution environment. Any node serves it by attaching to the environment's host itself. The first message is JSON, {\"op\":\"attach\",\"cols\":80,\"rows\":24,\"resume\":null,\"takeover\":false}; resume names a terminal and the offset of the next output byte the client has not seen, and takeover replaces another attached client. Every later message starts with one type byte: 0x00 carries terminal bytes and 0x01 a JSON control. The client sends input as 0x00 and {\"op\":\"resize\",\"cols\",\"rows\"} or {\"op\":\"hangup\"} as 0x01. The server sends output as 0x00 and, as 0x01, {\"op\":\"attached\",\"terminal\",\"start\"} once attached, {\"op\":\"waiting\"} while no environment is live, and {\"op\":\"ended\",\"reason\"} when the terminal ends, for example exited, superseded, busy or environment_restarted. When the Exam records terminal input, the server records what the client sends, with its timing and window changes, as sealed evidence before forwarding it; output is never recorded. Messages are at most 64 KiB, and the core closes the socket with code 4003 once the candidate's Attempt access no longer holds.",
+        "operationId": "connectExecutionTerminal",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CandidateAttemptCredential"
+          },
+          {
+            "$ref": "#/components/parameters/CandidateAttemptConnectionID"
+          }
+        ],
+        "responses": {
+          "101": {
+            "description": "Switching Protocols"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Open the candidate's terminal",
+        "tags": [
+          "Attempts and workspaces"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "source": "websocat --binary \\\n  --header='Authorization: DPoP \u003cdesktop-session-access-credential\u003e' \\\n  --header='DPoP: \u003cfresh-proof-for-this-get-target-and-current-nonce\u003e' \\\n  --header='X-Proctor-Attempt-Credential: \u003cattempt-credential\u003e' \\\n  --header='X-Proctor-Attempt-Connection-ID: \u003cattempt-connection-id\u003e' \\\n  'wss://proctor.example.edu/api/v1/plugins/execution/exam-attempts/\u003cexam-attempt-id\u003e/terminal'"
+          }
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "resource.not_found",
+          "exam.attempt.invalid",
+          "exam.attempt.unavailable",
+          "exam.attempt.registered_desktop_required",
+          "audit.unavailable",
+          "plugin.route.rate_limited",
+          "websocket.origin.invalid",
+          "websocket.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none",
+        "x-proctor-plugin": "execution"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ExamAttemptID"
+        }
+      ]
+    },
     "/api/v1/plugins/{plugin_id}/settings": {
       "parameters": [
         {

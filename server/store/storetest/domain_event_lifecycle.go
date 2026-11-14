@@ -44,7 +44,7 @@ func TestLifecycleDomainEvents(t *testing.T, ss store.Store, find LifecycleDomai
 	participationData := map[string]any{
 		"attempt_id": connected.Attempt.ID.String(), "participation_id": connected.Participation.ID.String(),
 		"generation": float64(connected.Participation.Generation), "sitting_id": fixture.sitting.ID.String(),
-		"exam_id": fixture.examID.String(),
+		"exam_id": fixture.examID.String(), "exam_revision_id": fixture.revisionID.String(),
 	}
 	started := requireOneLifecycleEvent(t, ctx, ss, find, model.DomainEventTopicExamAttemptParticipationStarted,
 		"participation_id", connected.Participation.ID.String(), participationData)

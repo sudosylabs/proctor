@@ -90,18 +90,20 @@ func (d examAttemptSubmittedData) valid() bool {
 }
 
 // examAttemptParticipationData is the canonical Data of
-// DomainEventTopicExamAttemptParticipationStarted.
+// DomainEventTopicExamAttemptParticipationStarted. ExamRevisionID is the
+// Revision the Attempt was admitted to, whose frozen plugin sections apply.
 type examAttemptParticipationData struct {
 	AttemptID       ExamAttemptID          `json:"attempt_id"`
 	ParticipationID AttemptParticipationID `json:"participation_id"`
 	Generation      int64                  `json:"generation"`
 	SittingID       ExamSittingID          `json:"sitting_id"`
 	ExamID          ExamID                 `json:"exam_id"`
+	ExamRevisionID  ExamRevisionID         `json:"exam_revision_id"`
 }
 
 func (d examAttemptParticipationData) valid() bool {
 	return d.AttemptID.IsValid() && d.ParticipationID.IsValid() && d.Generation > 0 && securitySafeInt(d.Generation) &&
-		d.SittingID.IsValid() && d.ExamID.IsValid()
+		d.SittingID.IsValid() && d.ExamID.IsValid() && d.ExamRevisionID.IsValid()
 }
 
 // examAttemptParticipationEndedData is the canonical Data of
@@ -113,12 +115,14 @@ type examAttemptParticipationEndedData struct {
 	Generation      int64                         `json:"generation"`
 	SittingID       ExamSittingID                 `json:"sitting_id"`
 	ExamID          ExamID                        `json:"exam_id"`
+	ExamRevisionID  ExamRevisionID                `json:"exam_revision_id"`
 	Reason          AttemptParticipationEndReason `json:"reason"`
 }
 
 func (d examAttemptParticipationEndedData) valid() bool {
 	return examAttemptParticipationData{AttemptID: d.AttemptID, ParticipationID: d.ParticipationID,
-		Generation: d.Generation, SittingID: d.SittingID, ExamID: d.ExamID}.valid() && d.Reason.IsValid()
+		Generation: d.Generation, SittingID: d.SittingID, ExamID: d.ExamID, ExamRevisionID: d.ExamRevisionID}.valid() &&
+		d.Reason.IsValid()
 }
 
 // examSittingData is the canonical Data of the Sitting topics.

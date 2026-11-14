@@ -103,8 +103,8 @@ func WithDesktopBuildCatalog(builds ...model.DesktopBuildTuple) Option {
 	}
 }
 
-// WithPlugins activates plugins after the built-in ones, as if they were
-// compiled in.
+// WithPlugins activates plugins as if they were compiled in: one with a
+// built-in plugin's ID replaces it, and the others follow the built-in ones.
 func WithPlugins(plugins ...plugin.Plugin) Option {
 	return func(options *setupOptions) {
 		options.plugins = append(options.plugins, plugins...)

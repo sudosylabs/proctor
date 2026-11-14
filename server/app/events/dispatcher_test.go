@@ -78,9 +78,10 @@ func TestEveryDomainEventTopicHasItsPluginTopic(t *testing.T) {
 // decoding and the published plugin documents.
 func TestTriggerWrittenDataDecodesAsThePluginDocument(t *testing.T) {
 	attemptID, participationID := model.NewExamAttemptID(), model.NewAttemptParticipationID()
-	sittingID, examID := model.NewExamSittingID(), model.NewExamID()
+	sittingID, examID, revisionID := model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID()
 	started := `{"attempt_id":"` + attemptID.String() + `","participation_id":"` + participationID.String() +
-		`","generation":2,"sitting_id":"` + sittingID.String() + `","exam_id":"` + examID.String() + `"}`
+		`","generation":2,"sitting_id":"` + sittingID.String() + `","exam_id":"` + examID.String() +
+		`","exam_revision_id":"` + revisionID.String() + `"}`
 	ended := started[:len(started)-1] + `,"reason":"lease_expired"}`
 	sitting := `{"sitting_id":"` + sittingID.String() + `","exam_id":"` + examID.String() + `"}`
 	tests := []struct {
@@ -91,10 +92,11 @@ func TestTriggerWrittenDataDecodesAsThePluginDocument(t *testing.T) {
 	}{
 		{model.DomainEventTopicExamAttemptParticipationStarted, started, &plugin.ExamAttemptParticipationStarted{},
 			&plugin.ExamAttemptParticipationStarted{AttemptID: attemptID.String(), ParticipationID: participationID.String(),
-				Generation: 2, SittingID: sittingID.String(), ExamID: examID.String()}},
+				Generation: 2, SittingID: sittingID.String(), ExamID: examID.String(), ExamRevisionID: revisionID.String()}},
 		{model.DomainEventTopicExamAttemptParticipationEnded, ended, &plugin.ExamAttemptParticipationEnded{},
 			&plugin.ExamAttemptParticipationEnded{AttemptID: attemptID.String(), ParticipationID: participationID.String(),
-				Generation: 2, SittingID: sittingID.String(), ExamID: examID.String(), Reason: plugin.ParticipationEndLeaseExpired}},
+				Generation: 2, SittingID: sittingID.String(), ExamID: examID.String(), ExamRevisionID: revisionID.String(),
+				Reason: plugin.ParticipationEndLeaseExpired}},
 		{model.DomainEventTopicExamSittingPaused, sitting, &plugin.ExamSittingChanged{},
 			&plugin.ExamSittingChanged{SittingID: sittingID.String(), ExamID: examID.String()}},
 		{model.DomainEventTopicExamSittingResumed, sitting, &plugin.ExamSittingChanged{},

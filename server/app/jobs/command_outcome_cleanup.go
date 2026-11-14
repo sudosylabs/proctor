@@ -30,7 +30,15 @@ type CommandOutcomeCleanupResult struct {
 	Deleted int64 `json:"deleted"`
 }
 
-type commandOutcomeCleanupHandler struct{ outcomes store.CommandOutcomeStore }
+type commandOutcomeCleanupHandler struct {
+	outcomes      store.CommandOutcomeStore
+	continuations store.JobStore
+	now           func() time.Time
+}
+
+// commandOutcomeCleanupContinuationDelay spaces successors so a backlog of
+// expired outcomes drains steadily without a tight chain of Jobs.
+const commandOutcomeCleanupContinuationDelay = time.Second
 
 func (h commandOutcomeCleanupHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
 	var command CommandOutcomeCleanupCommand
@@ -46,8 +54,42 @@ func (h commandOutcomeCleanupHandler) Run(ctx context.Context, execution job.Exe
 		return job.RetryableFailure("dependency.unavailable", err)
 	}
 
+	// A full batch may leave more behind. One successor, permanently
+	// deduplicated on this Job, keeps draining; a retry or an unknown enqueue
+	// outcome cannot fork the chain, and it ends at the first short batch.
+	if deleted >= int64(command.BatchSize) {
+		if err = h.enqueueContinuation(ctx, execution.Job, command); err != nil {
+			return job.RetryableFailure("dependency.unavailable", err)
+		}
+	}
+
 	document, err := json.Marshal(CommandOutcomeCleanupResult{Deleted: deleted})
 	return job.Outcome{Kind: job.OutcomeSucceeded, Result: document, Err: err}
+}
+
+func (h commandOutcomeCleanupHandler) enqueueContinuation(ctx context.Context, parent *model.Job, command CommandOutcomeCleanupCommand) error {
+	document, err := json.Marshal(command)
+	if err != nil {
+		return err
+	}
+
+	at := model.TimeUTC(h.now())
+	successor, err := model.NewJobWithDedupePolicy(
+		model.NewJobID(),
+		model.JobTypeCommandOutcomeCleanup,
+		document,
+		"command-outcome-cleanup:after:"+parent.ID.String(),
+		model.JobDedupePermanent,
+		at,
+		at.Add(commandOutcomeCleanupContinuationDelay),
+		5,
+	)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = h.continuations.Enqueue(ctx, &store.JobEnqueue{Job: successor})
+	return err
 }
 
 type commandOutcomeCleanupProposer struct {
@@ -89,10 +131,10 @@ func commandOutcomeCleanupDescriptor(handler job.Handler) job.Descriptor {
 }
 
 // NewCommandOutcomeCleanup registers the deletion of expired command
-// outcomes, proposed daily.
+// outcomes, proposed daily and continued while full batches remain.
 func NewCommandOutcomeCleanup(outcomes store.CommandOutcomeStore, jobs store.JobStore, now func() time.Time) job.Registration {
 	return job.Registration{
-		Descriptor: commandOutcomeCleanupDescriptor(commandOutcomeCleanupHandler{outcomes: outcomes}),
+		Descriptor: commandOutcomeCleanupDescriptor(commandOutcomeCleanupHandler{outcomes: outcomes, continuations: jobs, now: now}),
 		Recurrence: &job.Recurrence{Name: "command-outcome-cleanup", Proposer: commandOutcomeCleanupProposer{jobs: jobs, now: now}},
 	}
 }
